@@ -5,6 +5,7 @@
 #include "net/nettune.h"
 #include "game/mapfog.h"
 #include "game/quickicons.h"
+#include "game/noteicons.h"
 #include "game/zoomview.h"
 #include "core/crashlog.h"
 #include "app/overlay.h"
@@ -701,6 +702,7 @@ int __fastcall HookGameUpdate(void *game)
 	CrashLogLoadingEnd();
 	g_updateTicks += ZoomFogGameThreadTick();
 	QuickIconsGameThreadTick();
+	NoteIconsGameTick();
 	ZoomViewGameTick();
 	ControlsGameTick();
 	if (g_updateDepth > 0 && g_updateDepth <= kUpdateMaxDepth) g_updateStack[g_updateDepth - 1].nested = true;

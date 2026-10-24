@@ -53,6 +53,7 @@
 #include "net/spectator.h"
 #include "game/mapfog.h"
 #include "game/quickicons.h"
+#include "game/noteicons.h"
 #include "game/zoomview.h"
 #include "game/cheats.h"
 #include "net/onlinesaves.h"
@@ -214,6 +215,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 		InstallCheats(knownExe);
 		InstallZoomFog(knownExe);
 		InstallQuickIcons(knownExe);
+		InstallNoteIcons(knownExe);
 		InstallZoomView(knownExe);
 		InstallSavesUi(knownExe);
 		CheckCompatibilityLayers();
