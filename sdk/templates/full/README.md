@@ -33,7 +33,7 @@ Every folder the game reads from a mod, each with a note about what goes in it. 
 | `data\mod\` | Your own scripts, called from events and classes. [guide](../../scripts.md) | yes |
 | `patches\data\` | Patches over the game's files, with the same path and name. [guide](../../patches.md) | depends on the file |
 | `events\` | Event scripts: OnGameStart.vs, OnObjectDie.vs and so on. [guide](../../scripts.md) | yes |
-| `civs\` | New civilizations: <id>.json, one per civilization (index 10 to 99). Its units and buildings go in data/classes and its orders in data/commands; clone-civilization.js writes all of it. [guide](../../civilizations.md) | yes |
+| `civs\` | New civilizations: <id>.json, one per civilization (omit index for automatic assignment; explicit 10–127 is an optional legacy override). Its units and buildings go in data/classes and its orders in data/commands; clone-civilization.js writes all of it. [guide](../../civilizations.md) | yes |
 | `specials\` | New unit specials: *.json. [guide](../../specials.md) | yes |
 | `options\` | Lobby switches: *.json. [guide](../../options.md) | yes |
 | `scenarios\` | Skirmish and multiplayer maps (.bfhp). | yes |

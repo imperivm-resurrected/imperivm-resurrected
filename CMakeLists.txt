@@ -158,6 +158,9 @@ if(IMPERIVM_BUILD_TESTS)
 	imperivm_test(test_rletail src/mods/rletail.cpp)
 	imperivm_test(test_hidefiles src/mods/hidefiles.cpp)
 	imperivm_test(test_civroom src/game/civroom.cpp)
+	imperivm_test(test_civsets src/mods/civsets.cpp)
+	imperivm_test(test_civprefix src/game/civprefix.cpp)
+	imperivm_test(test_civindices src/mods/civindices.cpp)
 	imperivm_test(test_techplan src/game/techplan.cpp)
 	imperivm_test(test_unitcatalog src/game/unitcatalog.cpp)
 	imperivm_test(test_hpfs src/core/hpfs.cpp)
@@ -177,6 +180,7 @@ if(IMPERIVM_BUILD_TESTS)
 
 	find_program(NODE_EXE node)
 	if(NODE_EXE)
+		add_test(NAME sdk_civprefix COMMAND "${NODE_EXE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_civprefix.js")
 		set(TSV "${CMAKE_CURRENT_BINARY_DIR}/translations.tsv")
 		add_custom_command(OUTPUT "${TSV}"
 			COMMAND "${NODE_EXE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/export-translations-tsv.js" "${TSV}"

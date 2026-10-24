@@ -323,16 +323,22 @@ if (optionBits > 8) warn('options', 0, `the options of this mod take ${optionBit
 }
 
 // --- civilizations ----------------------------------------------------------------------------------------------------
-const myCivs = new Set(), civIndexes = new Map(), baseOverrides = new Map();
+const myCivs = new Set(), civIndexes = new Map(), baseOverrides = new Map(), civPrefixes = new Map();
+const GAME_PREFIXES = [...'grcimbet'];
 for (const f of files.filter(f => /^civs\/[^/]+\.json$/i.test(f))) {
 	let j;
 	try { j = modernKeys(JSON.parse(read(f))); } catch (e) { error(f, 0, 'not valid JSON: ' + e.message); continue; }
-	if (!ID_RE.test(j.id || '')) error(f, 0, `the id "${j.id}" is not valid (letters, digits and _; must start with a letter; up to 24)`);
-	else myCivs.add(lower(j.id));
-	const idx = Number(j.index);
-	if (!(idx >= 10 && idx <= 99)) error(f, 0, '"index" is missing or not between 10 and 99');
-	else if (civIndexes.has(idx)) error(f, 0, `index ${idx} is already used by ${civIndexes.get(idx)}`);
-	else civIndexes.set(idx, f);
+	if (!j || typeof j !== 'object' || Array.isArray(j)) { error(f, 0, 'not an object'); continue; }
+	const id = j.id === undefined || j.id === '' ? path.basename(f).replace(/\.json$/i, '') : j.id;
+	if (typeof id !== 'string' || !ID_RE.test(id)) error(f, 0, `the id "${id}" is not valid (letters, digits and _; must start with a letter; up to 24)`);
+	else if (myCivs.has(lower(id))) error(f, 0, `id "${id}" is already used by another civilization in this mod`);
+	else myCivs.add(lower(id));
+	const idx = j.index;
+	if (idx !== undefined) {
+		if (!Number.isInteger(idx) || idx < 10 || idx > 127) error(f, 0, '"index" must be a whole number between 10 and 127');
+		else if (civIndexes.has(idx)) error(f, 0, `index ${idx} is already used by ${civIndexes.get(idx)}`);
+		else civIndexes.set(idx, f);
+	}
 	if (!GAME_CIVS.includes(j.base || 'Gaul')) error(f, 0, `unknown "base": ${j.base} (${GAME_CIVS.join(', ')})`);
 	const biome = j.biome;
 	if (biome !== undefined && !GAME_CIVS.includes(biome)) error(f, 0, `unknown "bioma": ${biome} (${GAME_CIVS.join(', ')})`);
@@ -355,7 +361,20 @@ for (const f of files.filter(f => /^civs\/[^/]+\.json$/i.test(f))) {
 		}
 	}
 	const letter = j.letter;
-	if (letter !== undefined && !/^[A-Za-z0-9]$/.test(String(letter))) error(f, 0, '"letra" is a single letter or digit');
+	if (letter !== undefined) {
+		if (typeof letter !== 'string' || !/^(?:[A-Za-z0-9]|[A-Z][A-Za-z0-9]{1,3})$/.test(letter)) {
+			error(f, 0, '"letter" must be 1 to 4 characters (uppercase letter then letters or digits; a single letter or digit also works)');
+		}
+		else {
+			const prefix = lower(letter), baseIndex = GAME_CIVS.indexOf(j.base || 'Gaul');
+			const reserved = GAME_PREFIXES.indexOf(prefix);
+			if (reserved >= 0 && reserved !== baseIndex) error(f, 0, `prefix "${letter}" is already used by ${GAME_CIVS[reserved]} from the original game`);
+			else if (prefix !== GAME_PREFIXES[baseIndex]) {
+				if (civPrefixes.has(prefix)) error(f, 0, `prefix "${letter}" is already used by ${civPrefixes.get(prefix)}`);
+				else civPrefixes.set(prefix, `${id} in ${f}`);
+			}
+		}
+	}
 	// With "sustituyeBase", the letter and the template become those of the game's base civilization for the whole game
 	if (j.replacesBase === true && GAME_CIVS.includes(j.base || 'Gaul')) {
 		const b = j.base || 'Gaul';
@@ -438,7 +457,7 @@ for (const f of files.filter(f => /^specials\/[^/]+\.json$/i.test(f))) {
 }
 
 // --- classes ----------------------------------------------------------------------------------------------------------
-function checkClassFile(f, text, source) {
+function checkClassFile(f, text, _source) {
 	text = text.replace(/<!--[\s\S]*?-->/g, c => c.replace(/[^\n]/g, " ")); // commented-out lines do not count; the blanks keep the line numbers
 	const header = text.match(/<class\b[^>]*>/);
 	if (!header) { warn(f, 0, 'there is no <class> tag'); return; }
@@ -618,7 +637,7 @@ for (const f of files.filter(f => /\.vs$/i.test(f) && !/^patches\//i.test(f))) {
 // --- encoding and references (failures the game does not report) ------------------------------------------------------------
 // The game reads class XMLs as UTF-8: an accented letter saved as Latin-1 makes the class not load, with no warning other than a line in its log
 const readBuf = rel => fs.readFileSync(path.join(modDir, rel));
-const validUtf8 = buf => { try { new TextDecoder('utf-8', { fatal: true }).decode(buf); return true; } catch (e) { return false; } };
+const validUtf8 = buf => { try { new TextDecoder('utf-8', { fatal: true }).decode(buf); return true; } catch { return false; } };
 for (const f of files.filter(f => /\.(xml|vs|json|ini)$/i.test(f))) {
 	if (validUtf8(readBuf(f))) continue;
 	if (/^data\/classes\/.+\.sc\.xml$/i.test(f)) error(f, 0, 'not in UTF-8 (accented letters in Latin-1): the game cannot read the class and it does not load. Save it as UTF-8');
@@ -677,7 +696,8 @@ for (const f of files.filter(f => /^data\/commands\/[^/]+\.xml$/i.test(f))) {
 }
 for (const f of files.filter(f => /^civs\/[^/]+\.json$/i.test(f))) {
 	let j;
-	try { j = modernKeys(JSON.parse(read(f))); } catch (e) { continue; }
+	try { j = modernKeys(JSON.parse(read(f))); } catch { continue; }
+	if (!j || typeof j !== 'object' || Array.isArray(j)) continue;
 	if (j.ai === true && j.variant !== true) {
 		if (!j.alias && !j.ownAi) warn(f, 0, '"ia": true without an "alias" table: the game\'s AI scripts will not find your classes or commands. The cloning tool generates it');
 	}
@@ -821,7 +841,7 @@ for (const f of files.filter(f => /\.ent\.xml$/i.test(f))) {
 		const frameTags = [...m[0].matchAll(/<frame\b[^>]*>/g)];
 		if (frames > 64) error(f, line, `frames="${frames}": the engine allows 64 at most`);
 		if (frames && frameTags.length && frameTags.length !== frames) warn(f, line, `the animation says frames="${frames}" but has ${frameTags.length} <frame>`);
-		frameTags.forEach((t, k) => {
+		frameTags.forEach(t => {
 			const fi = Number((t[0].match(/\bidx\s*=\s*"(\d+)"/) || [])[1]);
 			if (frames && (fi < 1 || fi > frames)) error(f, line, `<frame idx="${fi}" outside 1..${frames}: the game does not load the entity`);
 		});

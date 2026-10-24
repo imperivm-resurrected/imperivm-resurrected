@@ -17,6 +17,9 @@
 #include "net/mpsave.h"
 #include "net/rejoin.h"
 #include "mods/savelib.h"
+#include "mods/mods.h"
+#include "core/uiport.h"
+#include "i18n/tr.h"
 #include "addr/engine.h"
 #include "addr/state.h"
 #include "addr/net.h"
@@ -239,6 +242,13 @@ std::string GameFolder()
 int __cdecl HookSaveGameToFile(const char *path)
 {
 	const int r = g_origSaveGameToFile(path);
+	// The binary is closed now: a required index table must describe these completed bytes.
+	if (r == 0 && path && !ModsOnSaveWritten(path, InMultiplayer())) {
+		LogE("saves", "could not write required save metadata for %s", path);
+		static const std::string error = Tr("Could not write the save metadata. Automatic civilizations require it: fix the file permissions or free disk space, then save again.");
+		UiToast(error, true);
+		return static_cast<int>(reinterpret_cast<uintptr_t>(error.c_str()));
+	}
 	if (InMultiplayer() && path) {
 		int me = 0, x = 0, y = 0;
 		if (LocalCamera(me, x, y)) MpSaveSetPlayerCamera(me, x, y);
@@ -293,10 +303,11 @@ int __fastcall HookStartNetwork(void *game, void *edx, int arg)
 	void *stream = gs ? OpenSaveStream(path.c_str(), size) : nullptr;
 	if (!stream) {
 		*reinterpret_cast<unsigned *>(addr::kPersistVersion) = oldVersion;
-		LogW("match", "online game: could not open the saved game \"%s\"; starting normally", path.c_str());
-		const int r0 = g_origStartNetwork(game, edx, arg);
+		LogW("match", "online game: could not open the saved game \"%s\"; no new game was started", path.c_str());
 		if (RejoinPendingLoad()) RejoinAfterLoad(game, false);
-		return r0;
+		// The native StartGame ABI returns a nullable error string, not a success boolean.
+		static const std::string error = Tr("Could not open the saved game. No new game was started.");
+		return static_cast<int>(reinterpret_cast<uintptr_t>(error.c_str()));
 	}
 	const int local = *reinterpret_cast<int *>(gs + 0xd74);
 	*reinterpret_cast<int *>(gs + 0xdac) = 1;

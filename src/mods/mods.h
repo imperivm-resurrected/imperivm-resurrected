@@ -161,8 +161,9 @@ void ModsPatchExeAtExit(int largeAddress);
 bool ModsExeIsLargeAddressAware();
 void ModsOpenFolder(const std::string &folder);
 
-void ModsOnSaveWritten(const std::string &gamePath, bool online = false);
+bool ModsOnSaveWritten(const std::string &gamePath, bool online = false);
 std::string ModsCheckSaveOnLoad(const std::string &gamePath);
+std::string ModsCheckCivIndices(const std::string &gamePath);
 
 struct ModNeed {
 	std::string folder, id, name, version;

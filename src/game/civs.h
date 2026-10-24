@@ -11,6 +11,7 @@ struct Civ {
 	std::string id;
 	std::string constant;
 	int index = 0;
+	bool automaticIndex = false;
 	int base = 0;
 	std::string internalName;
 	std::string letterUp, letterLow;
@@ -27,7 +28,14 @@ struct Civ {
 	std::string folder;
 	std::vector<std::pair<std::string, std::string>> names;
 	std::string modFolder;
+	// The id of the content pack (its set in a room). The folder can differ between computers; the id does not.
+	std::string modId;
 };
+
+inline constexpr char kGameCivPrefixes[] = "grcimbet";
+bool CivSetPrefix(Civ &c, const std::string &prefix);
+// Returns the owner's civilization index, or -1 when the prefix is available.
+int CivPrefixClash(const Civ &c, const std::vector<const Civ *> &accepted);
 
 void CivsRebuild();
 const Civ *CivByIndex(int index);
@@ -55,6 +63,13 @@ void CivsRegisterConstants(void *engine);
 void CivsOnRoomShown(void *dlg);
 const char *CivsRoomSeparator();
 std::vector<int> CivsRoomOrder(int items);
+// Whether the room's sets (CivRoomSets) allow the civilization. "Random" is always allowed.
+bool CivsRoomAllows(int race);
+struct CivSet {
+	std::string id, name;
+};
+// The sets the host can pick for a room: the game's, and one per content pack that has civilizations.
+std::vector<CivSet> CivsSets();
 int CivsRoomReplacement(int item, int items);
 int CivsRaceOfRoomItem(int item);
 int CivsRoomItemOfRace(int race);

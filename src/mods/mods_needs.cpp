@@ -8,8 +8,10 @@
 #include "core/legacy.h"
 #include "i18n/tr.h"
 #include "core/log.h"
+#include "core/sha256.h"
 #include "core/pathsafe.h"
 #include "mods/modvars.h"
+#include "mods/civindices.h"
 #include "addr/engine.h"
 
 #include "mods/mods_internal.h"
@@ -142,6 +144,28 @@ ModProfile ModsLooseProfileWith(const std::vector<std::string> &folders)
 		if (cosmetic && std::find(p.mods.begin(), p.mods.end(), f) == p.mods.end()) p.mods.push_back(f);
 	}
 	return p;
+}
+
+std::string ModsCheckCivIndices(const std::string &gamePath)
+{
+	const bool absolute = gamePath.size() > 1 && (gamePath[1] == ':' || gamePath[0] == '\\' || gamePath[0] == '/');
+	const std::string file = absolute ? gamePath : GameDir() + "\\" + gamePath;
+	Json side;
+	ReadJsonFile(file + ".mods.json", side);
+	const Json *table = side.Get("civIndices");
+	switch (CivIndicesCheckSaved(table, side.GetString("civSaveHash"), table ? HashFile(file) : "")) {
+	case CivIndicesStatus::Missing:
+		return Tr("This saved game has no civilization index table. Activate its original content profile; automatic civilizations require the .mods.json file beside the save.");
+	case CivIndicesStatus::Invalid:
+		return Tr("This saved game has an invalid civilization index table. Restore its .mods.json file before loading it.");
+	case CivIndicesStatus::Mismatch:
+		return Tr("The enabled civilizations do not match this saved game's index table. Activate its original content profile before loading it.");
+	case CivIndicesStatus::DifferentFile:
+		return Tr("The civilization index table belongs to a different or incomplete save file. Restore its matching .mods.json file, or save again.");
+	case CivIndicesStatus::Compatible:
+		return "";
+	}
+	return "";
 }
 
 std::string ModsCheckSaveOnLoad(const std::string &gamePath)

@@ -8,6 +8,7 @@
 #include "MinHook.h"
 #include "core/log.h"
 #include "ui/modui.h"
+#include "mods/civsets.h"
 #include "net/rejoin.h"
 #include "net/spectator.h"
 #include "addr/state.h"
@@ -187,6 +188,11 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 		for (const OnlineMember &m : g_s.room.members) {
 			if (m.me && m.owner) roomOwner = true;
 		}
+		if (g_s.room.id) g_s.skirmishCivs = false;
+		if (g_s.room.id && !roomOwner) CivRoomSetsSet(CivSetsSplit(g_s.room.info.civSets));
+		else if (!g_s.skirmishCivs && !g_s.room.id && !g_s.connecting && !g_s.autoHost && !g_flow.hostPending && !g_flow.inJoin && !g_autoJoin.active && !RejoinBusy()) {
+			CivRoomSetsSet({});
+		}
 		if (g_s.recoverWaitHost && !g_s.room.id) {
 			bool joined = false;
 			for (const OnlineLobby &l : g_s.lobbies) {
@@ -277,6 +283,10 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 		}
 		GameRoomSnapshot snap = GameRoomGet();
 		const bool justClosed = !snap.active && g_s.game.active && (g_s.startingCover || (g_s.gameWasActive && !g_s.leftByUser));
+		if (snap.active && !snap.online && !g_s.game.active && !g_s.room.id) {
+			CivRoomSetsSet({}); // a new skirmish starts with every set allowed
+			g_s.skirmishCivs = true;
+		}
 		if (!justClosed) g_s.game = std::move(snap);
 		ApplyPredicted(g_s.game, g_s.predicted);
 		ApplySeatDisplay(g_s.game);
@@ -354,6 +364,7 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 	g_s.hits = std::move(r.hits);
 	g_s.syncGeom = g_syncGeomOut;
 	g_s.createModsGeom = g_createModsGeomOut;
+	g_s.createCivGeom = g_createCivGeomOut;
 	const bool overlay = OverlayActive(st);
 	g_s.pickGeom = g_pickGeomOut;
 	g_s.optGeom = overlay ? ListGeom() : g_optGeomOut;

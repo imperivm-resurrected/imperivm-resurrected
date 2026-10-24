@@ -12,6 +12,7 @@
 #include "core/log.h"
 #include "mods/downloads.h"
 #include "mods/mods.h"
+#include "mods/civindices.h"
 #include "net/mpsave.h"
 #include "net/rejoin.h"
 #include "net/scenvalue.h"
@@ -163,6 +164,7 @@ struct MapIn {
 	std::string handledSave;
 	bool isSave = false;
 	std::string path, part;
+	Json saveMetadata;
 	HANDLE file = INVALID_HANDLE_VALUE;
 };
 MapIn g_mapIn;
@@ -345,6 +347,27 @@ void CheckRoomSave()
 	OnlineMapStatus st;
 	if (f.size() >= 3 && !f[0].empty()) {
 		st.name = f[0];
+		Json metadata = Json::MakeObject();
+		if ((f.size() > 3 && (!Json::Parse(f[3], metadata) || metadata.type != Json::Object)) ||
+			CivIndicesCheck(metadata.Get("civIndices")) != CivIndicesStatus::Compatible ||
+			(metadata.Get("civIndices") && metadata.GetString("civSaveHash").size() != 64)) {
+			st.state = 2;
+			st.error = Tr("The room's saved game has a missing or incompatible civilization index table.");
+			std::lock_guard<std::mutex> lock(g_lock);
+			g_share.saveStatus = st;
+			return;
+		}
+		if (const Json *rules = metadata.Get("rules")) {
+			if (rules->type != Json::Number || !(rules->num >= 0 && rules->num <= 4294967295.0) || rules->num != static_cast<unsigned>(rules->num)) {
+				st.state = 2;
+				st.error = Tr("The room's saved game metadata is invalid.");
+				std::lock_guard<std::mutex> lock(g_lock);
+				g_share.saveStatus = st;
+				return;
+			}
+		}
+		else metadata.Set("rules", Json::MakeNumber(ReadLobby(g_lobby).rules));
+		g_mapIn.saveMetadata = metadata;
 		const uint64_t size = _strtoui64(f[1].c_str(), nullptr, 10);
 		uint64_t mySize = 0;
 		std::string myHash;
@@ -355,8 +378,12 @@ void CheckRoomSave()
 			ShareSend(g_mapIn.host, kShMapReq, kSaveTransferPath, strlen(kSaveTransferPath));
 			LogD("match", "online game: requesting the saved game \"%s\" from the host", f[0].c_str());
 		}
-		else {
+		else if (WriteJsonFile(ScenarioFile(kSaveTransferPath) + ".mods.json", metadata) && ModsCheckCivIndices(ScenarioFile(kSaveTransferPath)).empty()) {
 			st.ready = true;
+		}
+		else {
+			st.state = 2;
+			st.error = Tr("Could not save the civilization index table.");
 		}
 	}
 	std::lock_guard<std::mutex> lock(g_lock);
@@ -369,7 +396,23 @@ void PublishSave(const std::string &file, const std::string &name)
 	g_savePublishedFile = file;
 	uint64_t size = 0;
 	std::string hash, value;
-	if (!file.empty() && FileFingerprint(file, size, hash)) value = name + "\t" + std::to_string(size) + "\t" + hash;
+	if (!file.empty() && FileFingerprint(file, size, hash)) {
+		Json side;
+		ReadJsonFile(file + ".mods.json", side);
+		if (!ModsCheckCivIndices(file).empty()) {
+			Notice(Tr("This saved game has a missing or incompatible civilization index table. Activate its original content profile and restore its .mods.json file."));
+			g_savePublishedFile.clear();
+		}
+		else {
+			Json metadata = Json::MakeObject();
+			if (const Json *table = side.Get("civIndices")) {
+				metadata.Set("civIndices", *table);
+				metadata.Set("civSaveHash", Json::MakeString(side.GetString("civSaveHash")));
+			}
+			if (const Json *rules = side.Get("rules")) metadata.Set("rules", *rules);
+			value = name + "\t" + std::to_string(size) + "\t" + hash + "\t" + metadata.Dump();
+		}
+	}
 	S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, "save", value.c_str());
 	std::string cams;
 	FILE *f = nullptr;
@@ -430,6 +473,17 @@ bool ClientOnMapMessage(uint64 peer, const uint8_t *data, size_t len)
 		if (!MoveFileExA(g_mapIn.part.c_str(), g_mapIn.path.c_str(), MOVEFILE_REPLACE_EXISTING)) {
 			MapFailed("could not save the scenario");
 			return true;
+		}
+		if (g_mapIn.isSave && !WriteJsonFile(g_mapIn.path + ".mods.json", g_mapIn.saveMetadata)) {
+			MapFailed(Tr("Could not save the civilization index table."));
+			return true;
+		}
+		if (g_mapIn.isSave) {
+			const std::string problem = ModsCheckCivIndices(g_mapIn.path);
+			if (!problem.empty()) {
+				MapFailed(problem);
+				return true;
+			}
 		}
 		LogI("room", "scenarios: received %s", g_mapIn.path.c_str());
 		if (!g_mapIn.isSave && !g_mapIn.handled.empty()) {

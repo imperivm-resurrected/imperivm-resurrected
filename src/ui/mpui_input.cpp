@@ -78,6 +78,7 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 			const POINT at = {g_s.mouseX, g_s.mouseY};
 			ListMove(g_s.syncList, g_s.syncGeom, at);
 			ListMove(g_s.createModsList, g_s.createModsGeom, at);
+			ListMove(g_s.createCivList, g_s.createCivGeom, at);
 		}
 		if (g_s.edit.dragging && g_s.mouseDown && g_s.focus != kNoField) {
 			FieldGeom geom;
@@ -98,7 +99,7 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		POINT pt = {g_s.mouseX, g_s.mouseY};
 		g_s.tabAction = -1;
 		if (g_s.syncConfirm && ListDown(g_s.syncList, g_s.syncGeom, pt)) return true;
-		if (!g_s.syncConfirm && g_s.view == kViewCreate && ListDown(g_s.createModsList, g_s.createModsGeom, pt)) return true;
+		if (!g_s.syncConfirm && g_s.view == kViewCreate && (ListDown(g_s.createModsList, g_s.createModsGeom, pt) || ListDown(g_s.createCivList, g_s.createCivGeom, pt))) return true;
 		if (g_s.game.picker && !SaveMapPicking(g_s)) {
 			if (ListDown(g_s.pick, g_s.pickGeom, pt)) return true;
 		}
@@ -144,7 +145,13 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 			ListWheel(g_s.syncList, g_s.syncGeom, POINT{g_s.mouseX, g_s.mouseY}, GET_WHEEL_DELTA_WPARAM(wp));
 			return true;
 		}
-		if (g_s.view == kViewCreate && !g_s.dropOpen && ListWheel(g_s.createModsList, g_s.createModsGeom, POINT{g_s.mouseX, g_s.mouseY}, GET_WHEEL_DELTA_WPARAM(wp))) return true;
+		if (g_s.view == kViewCreate && !g_s.dropOpen) {
+			const POINT at = {g_s.mouseX, g_s.mouseY};
+			if (ListWheel(g_s.createModsList, g_s.createModsGeom, at, GET_WHEEL_DELTA_WPARAM(wp)) ||
+				ListWheel(g_s.createCivList, g_s.createCivGeom, at, GET_WHEEL_DELTA_WPARAM(wp), 1)) {
+				return true;
+			}
+		}
 	}
 		{
 			std::lock_guard<std::mutex> lock(g_chat.mx);
@@ -182,6 +189,7 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		ListUp(g_s.chat);
 		ListUp(g_s.syncList);
 		ListUp(g_s.createModsList);
+		ListUp(g_s.createCivList);
 		g_s.pressTime = GetTickCount();
 		return true;
 	case WM_RBUTTONDOWN:

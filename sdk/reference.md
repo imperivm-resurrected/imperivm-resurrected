@@ -78,10 +78,10 @@ Guide: [Civilizations](civilizations.md).
 | Field | Type | Default | Required | What it does |
 |---|---|---|---|---|
 | `id` | text | file name | No | Letters, numbers and `_`; starts with a letter; up to 24. Stored in lowercase. In scripts it's the constant as you write it, with a capital first letter (`Dacia`, `RomeImperial`) |
-| `index` | integer 10-99 | — | Yes | The civilization's number |
+| `index` | integer 10–127 | engine-assigned | No | Advanced legacy override; preserve published explicit numbers. Omit for automatic assignment; `null`, strings and fractions are invalid |
 | `base` | text | `Gaul` | No | Game civilization it inherits from: `Gaul`, `RepublicanRome`, `Carthage`, `Iberia`, `ImperialRome`, `Britain`, `Egypt`, `Germany` (also `Rome`, `Roman`, `Briton`) |
 | `name` | text, or object per language | the `id`, capitalized | No | Name in the lobby |
-| `letter` | one letter | the base's | No | Prefix for classes and orders |
+| `letter` | text, 1–4 characters | the base's | No | Uppercase letter followed by letters/digits (`Dac`); legacy single letters and digits still work. Uppercase API preserves suffix case; lowercase API lowers the whole prefix. See [prefix convention](civilizations.md#prefix-convention) |
 | `template` | text | empty | No | Prefix of your city and village templates |
 | `internalName` | text | the base's | No | Name the game uses to look for interface files. Also valid in `race=` if it's not the base's |
 | `folder` | text | the base's | No | Name in the selection texts |
@@ -94,7 +94,9 @@ Guide: [Civilizations](civilizations.md).
 | `replacesBase` | boolean | `false` | No | The base doesn't show in the lobby: this civilization takes its place and its share of the random draw |
 
 - `race="<id>"` in a class's `<properties>` uses the civilization by its `id` or its `internalName`.
-- Repeated `id` or `index`: the one from the mod that comes first wins; the others are ignored with a warning.
+- A new civilization is independent by default: without `replacesBase`, the base remains selectable. `variant` is a separate opt-in for sharing the base's script identity.
+- Explicit indices are reserved first; remaining civilizations, sorted by normalized (lowercase) `id`, receive the lowest free indices from 10–127 (118 slots in theory; tested only with a few civilizations, and the room list may fit fewer). No allocation ledger is persisted. Saves with automatic civilizations require the `.mods.json` index table and the same effective mapping; missing or mismatched tables fail closed. Restore the original profile/content, not a renumbered set. Multiplayer compatibility includes the mapping. See [numeric indices and saved games](civilizations.md#numeric-indices-and-saved-games).
+- Repeated `id`, explicit `index` or own prefix: the one from the mod that comes first wins; the others are ignored with a warning. Prefixes compare case-insensitively; game prefixes are reserved, except when inheriting your own base's prefix without cloning its classes.
 - English aliases: `index`, `name`, `letter`, `template`, `internalName`, `folder`, `random`, `biome`, `ai`, `ownAi`.
 
 ## 4. `specials\*.json`
@@ -233,7 +235,7 @@ Guide: [Scripts](scripts.md#mod_-functions). The current API is 6; it's part of 
 | `Mod_GetOption(str id)` : `bool` | 6 |
 | `Mod_GetOptionValue(str id)` : `int` | 6 |
 
-Script constants: each mod civilization's `id` with a capital first letter (value = its `index`) and each mod unit special's `id` (value = its `bit`).
+Script constants: each mod civilization's `id` with a capital first letter (value = its effective engine-assigned or explicit `index`) and each mod unit special's `id` (value = its `bit`).
 
 ## 9. `imperivm-mod.ini`
 
@@ -255,8 +257,8 @@ It's in the game folder. It's read at startup.
 | Values in an option list | 2 to 16 | Code |
 | Option `id` | up to 32; letters, numbers, `_`, `-` | Code |
 | Civilization and unit special `id` | up to 24; letters, numbers, `_`; starts with a letter | Code |
-| Civilization `index` | 10 to 99 | Code |
-| Civilization `letter` | 1 character | Code |
+| Civilization `index` | 10 to 127 (118 slots in theory; tested only with a few) | Signed bytes in the random-map parameters (99 was policy). Above 127 is unsupported |
+| Civilization `letter` | 1 to 4 characters | Code |
 | Unit special `bit` | 36 to 63 | Code |
 | `bit` in `Mod_HasSpecial` and `Mod_SetSpecial` | 0 to 63 (out of range: `false` / does nothing) | Code |
 | Mod variable name | up to 64 characters | Code |

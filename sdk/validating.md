@@ -24,7 +24,7 @@ An error is something the game would reject or that will fail. A warning is a su
 - **`mod.json`**: broken JSON, a category that isn't GameBanana's, wrongly typed texts (errors). Missing `id`, `name`, `version` or `category`, an old category name, tags that are badly written, in the old form or not used by the game, a map without a players tag and a campaign, translation or audio pack without a language tag (warnings).
 - **Files**: executable and system script extensions (error: the mod wouldn't load) and paths with `..`. An odd but harmless extension (`.psd`, `.gif`, `.zip`…) only gives a warning: the mod loads, the file just takes up space.
 - **Maps (`.bfhp`)**: the kind the map itself states (scenario, adventure or conquest) against the folder it is in. An adventure or a conquest in `scenarios\` doesn't show up in the Scenarios list; a loose map at the root is placed when installing (warnings).
-- **`civs\*.json`**: an invalid `id`, `index` outside 10–99 or duplicated, a `base` that doesn't exist, a `letter` longer than one letter, an unknown `biome`, a misspelled `template` or one without its file. With `"ai": true` and no `alias` table it warns, and it checks that the `alias` points to classes and commands the mod has.
+- **`civs\*.json`**: a declaration that isn't an object, an invalid or duplicate `id` (case-insensitive; defaults to the file name), an explicit `index` that isn't an integer from 10–127 or is duplicated (omitted indices are valid, including several in the same pack; `null` is not omission), a `base` that doesn't exist, an invalid 1–4-character prefix in `letter`, a case-insensitive prefix clash or another base's reserved game prefix, an unknown `biome`, a misspelled `template` or one without its file. Variants may inherit their own base's prefix. With `"ai": true` and no `alias` table it warns, and it checks that the `alias` points to classes and commands the mod has.
 - **`specials\*.json`**: an invalid `id` or one that's a game unit special, a `bit` outside 36–63 or duplicated.
 - **`options\*.json`**: the bit allocation (8 fit across all mods).
 - **XML patches**: malformed XML (the patch wouldn't apply at all), an operation without `select`, a misspelled selector, tags that aren't operations. A selector that doesn't start with `/` or `//` is an error even though the DLL would accept it.
@@ -50,6 +50,8 @@ WARNING  data/classes/G.sc.xml:2  unknown unit special "Zzz": the game ignores i
 ```
 
 ## What it doesn't do
+
+It checks one mod folder at a time, not the other mods in a player's profile. It cannot guarantee that an explicit `index`, `id` or prefix is free across every pack; consult the [prefix registry](prefixes.md) for prefixes only and test the packs together. Automatic indices are assigned by the engine, not the validator; it does not simulate the active profile's allocation or check save-sidecar mappings. Runtime conflicts also appear on the content manager's cards.
 
 It doesn't apply patches or run scripts: you only see that in the game (use `Dump=` from [Patches](patches.md) to see the result, and `Logs\imperivm\imperivm-mod.log` for runtime errors). It doesn't judge image quality either.
 

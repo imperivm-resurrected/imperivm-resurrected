@@ -8,7 +8,9 @@
 #include "game/autosave.h"
 #include "core/config.h"
 #include "core/log.h"
+#include "core/sha256.h"
 #include "mods/modvars.h"
+#include "mods/civindices.h"
 #include "net/mpsave.h"
 #include "net/steamnet.h"
 #include "i18n/tr.h"
@@ -424,11 +426,21 @@ void BackTick()
 		if (g_blobs.wire.magic != kWireMagic || g_blobs.wire.slot < 0 || g_blobs.wire.slot > 7 || sizeof(WireState) + blobs + g_blobs.wire.settingsSize > g_blobs.wireRaw.size()) {
 			return BackFail("corrupted state");
 		}
+		if (room.info.gameplayKey != SteamOwnGameplayKey()) return BackFail(Tr("Rejoining requires the same civilizations and gameplay content as the room."));
 		if (g_blobs.save.size() != g_blobs.wire.saveSize) return BackFail("incomplete save");
 		const std::string settings = g_blobs.wireRaw.substr(sizeof(WireState) + blobs, g_blobs.wire.settingsSize);
 		if (!WriteFileAll(DiskPath(kBackSave), g_blobs.save) || !WriteFileAll(DiskPath(kBackSettings), settings)) {
 			return BackFail("could not write the game");
 		}
+		Json side = Json::MakeObject();
+		side.Set("rules", Json::MakeNumber(room.info.rules));
+		if (CivIndicesAutomatic()) {
+			const std::string hash = HashFile(DiskPath(kBackSave));
+			if (hash.empty()) return BackFail(Tr("Could not save the civilization index table."));
+			side.Set("civIndices", CivIndicesToJson());
+			side.Set("civSaveHash", Json::MakeString(hash));
+		}
+		if (!WriteJsonFile(DiskPath(kBackSave) + ".mods.json", side)) return BackFail(Tr("Could not save the civilization index table."));
 		if (!LoadSettings(kBackSettings, g_blobs.wire.slot)) return BackFail("could not read the game settings");
 		MpSaveSetPendingLoad(kBackSave);
 		g_session.pendingLoad = true;

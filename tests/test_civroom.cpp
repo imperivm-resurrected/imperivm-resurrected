@@ -61,6 +61,48 @@ void ComboWithoutTheModItems()
 	CHECK_EQ(CivRoomReplacement(civs, 0, 9), -1);
 }
 
+void RoomSetsHideCivs()
+{
+	const std::vector<RoomCiv> civs = {{kGaul, false, false}, {kRepublicanRome, true, true}, {kRepublicanRome, true, false}};
+	const std::vector<int> expected = {11, 1, 2, 3, 4, 5, 6, 7, 8};
+	CHECK(CivRoomOrder(civs, 13) == expected);
+	CHECK_EQ(CivRoomReplacement(civs, 0, 13), 11);
+}
+
+void WithoutTheGame()
+{
+	const std::vector<RoomCiv> civs = {{kGaul, false}, {kRepublicanRome, true}};
+	const std::vector<int> expected = {11, 8, 10};
+	CHECK(CivRoomOrder(civs, 12, false) == expected);
+	CHECK(CivRoomOrder({{kGaul, false}}, 11, false) == std::vector<int>({8, 10}));
+	const std::vector<RoomCiv> none = {{kGaul, false, false}};
+	CHECK(CivRoomOrder(none, 11, false) == Range(9));
+}
+
+RandomCiv Random(int index, int base, bool replaces, bool allowed = true)
+{
+	RandomCiv c;
+	c.index = index;
+	c.base = base;
+	c.replacesBase = replaces;
+	c.allowed = allowed;
+	return c;
+}
+
+void RandomGroups()
+{
+	const std::vector<RandomCiv> civs = {Random(10, kGaul, false), Random(11, kRepublicanRome, true), Random(12, kRepublicanRome, true, false)};
+	const std::vector<std::vector<int>> all = CivRandomGroups(civs, false, true);
+	CHECK_EQ(all.size(), static_cast<size_t>(9));
+	CHECK(all[1] == std::vector<int>({11}));
+	CHECK(all[0] == std::vector<int>({0}));
+	CHECK(all[8] == std::vector<int>({10}));
+	const std::vector<std::vector<int>> onlyMods = CivRandomGroups(civs, false, false);
+	CHECK_EQ(onlyMods.size(), static_cast<size_t>(2));
+	CHECK(CivRandomGroups({Random(10, kGaul, false, false)}, false, false).empty());
+	CHECK(CivRandomGroups(civs, true, false).empty());
+}
+
 }
 
 int main()
@@ -70,5 +112,8 @@ int main()
 	ReplacedBaseGivesItsPlace();
 	GaulReplacedInTheMiddle();
 	ComboWithoutTheModItems();
+	RoomSetsHideCivs();
+	WithoutTheGame();
+	RandomGroups();
 	return test::Summary("civroom");
 }

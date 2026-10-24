@@ -22,6 +22,7 @@ AutoJoinState g_autoJoin;
 std::string SaveLabel(const SaveEntry &e) { return Tr("Load: ") + e.name + (e.online ? Tr(" (online)") : ""); }
 
 ListGeom g_createModsGeomOut;
+ListGeom g_createCivGeomOut;
 }
 
 namespace mpui_impl {

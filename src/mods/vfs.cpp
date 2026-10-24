@@ -15,6 +15,7 @@
 #include "hooks/hookcount.h"
 #include "hooks/builtinfixes.h"
 #include "core/config.h"
+#include "core/uiport.h"
 #include "mods/lang.h"
 #include "core/log.h"
 #include "mods/mods.h"
@@ -706,6 +707,27 @@ void *__cdecl OpenImpl(const char *path, unsigned mode, void *err)
 	}
 	const std::string rel = Normalize(path);
 	const bool reading = (mode & 2) == 0;
+	const bool saveFile = rel.size() > 4 && (rel.compare(rel.size() - 4, 4, ".snr") == 0 ||
+		rel.compare(rel.size() - 4, 4, ".adv") == 0 || rel.compare(rel.size() - 4, 4, ".con") == 0 || rel == "profiles/lastconquest.usr");
+	const bool externalSave = saveFile && rel.compare(0, 6, "packs/") != 0 && rel.compare(0, 12, "currentgame/") != 0;
+	if (reading && externalSave) {
+		const std::string problem = ModsCheckCivIndices(rel);
+		if (!problem.empty()) {
+			bool notify = false;
+			{
+				std::lock_guard<std::mutex> lock(g_lock);
+				static std::map<std::string, DWORD> warned;
+				const auto old = warned.find(rel);
+				notify = old == warned.end() || GetTickCount() - old->second > 30000;
+				if (notify) warned[rel] = GetTickCount();
+			}
+			if (notify) {
+				LogW("saves", "%s: %s", rel.c_str(), problem.c_str());
+				UiToast(problem, true);
+			}
+			return nullptr;
+		}
+	}
 	int variantW = 0, variantH = 0;
 	if (reading && TemplateVariant(rel, variantW, variantH)) return OpenSizedTemplate(path, variantW, variantH, mode, err);
 
@@ -804,22 +826,15 @@ void *__cdecl OpenImpl(const char *path, unsigned mode, void *err)
 			}
 		}
 	}
-	const bool saveFile = rel.size() > 4 && (rel.compare(rel.size() - 4, 4, ".snr") == 0 ||
-		rel.compare(rel.size() - 4, 4, ".adv") == 0 || rel.compare(rel.size() - 4, 4, ".con") == 0);
-	if (f && saveFile && rel.compare(0, 6, "packs/") != 0 && rel.compare(0, 12, "currentgame/") != 0) {
-		if (!reading) {
-			ModsOnSaveWritten(rel, GameIsMultiplayer());
-		}
-		else {
-			SaveSessionOnLoad(rel);
-			ModVarsPendingFromSave(rel);
-			static std::map<std::string, DWORD> warned;
-			const std::string warning = SaveSessionLoadsIgnored() ? "" : ModsCheckSaveOnLoad(rel);
-			std::lock_guard<std::mutex> lock(g_lock);
-			if (!warning.empty() && GetTickCount() - warned[rel] > 30000) {
-				warned[rel] = GetTickCount();
-				LogW("vfs", "saved game %s: %s", rel.c_str(), warning.c_str());
-			}
+	if (f && reading && externalSave) {
+		SaveSessionOnLoad(rel);
+		ModVarsPendingFromSave(rel);
+		static std::map<std::string, DWORD> warned;
+		const std::string warning = SaveSessionLoadsIgnored() ? "" : ModsCheckSaveOnLoad(rel);
+		std::lock_guard<std::mutex> lock(g_lock);
+		if (!warning.empty() && GetTickCount() - warned[rel] > 30000) {
+			warned[rel] = GetTickCount();
+			LogW("vfs", "saved game %s: %s", rel.c_str(), warning.c_str());
 		}
 	}
 	if (f && reading && ShouldDump(rel)) {

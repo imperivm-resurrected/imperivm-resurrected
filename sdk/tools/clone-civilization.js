@@ -1,6 +1,7 @@
 // Clones a game civilization as a new civilization in a mod (Imperivm Resurrected SDK).
 //
-//   node clone-civilization.js <DATA folder of the extracted data.pak> <mod folder> <id> <letter> [base=Gaul] [index=10] [--all-orders]
+//   node clone-civilization.js <DATA> <mod folder> <id> [letter] [base=Gaul] [index] [--all-orders]
+//   node clone-civilization.js <DATA> <mod folder> <id> [--letter Dac] [--base Gaul] [--index 10] [--all-orders]
 //
 // With --all-orders every order of the base's classes is copied under a name of its own ("<order> <Id>"), not only the ones that name
 // a class. Use it when the copy must change what a shared order costs or does without touching the base's.
@@ -12,16 +13,33 @@
 //   patches\data\commands\*.xml        adds the new classes to the shared orders (repair, upgrades...)
 const fs = require('fs'), path = require('path');
 
-const CLONE_ALL = process.argv.includes('--all-orders');  // also copy the orders that name no class (research, repair...), not only patch them
-const [dataDir, modDir, id, letter, base = 'Gaul', indexArg = '10'] = process.argv.slice(2).filter(a => !a.startsWith('--'));
-if (!dataDir || !modDir || !id || !letter) {
-	console.error('usage: node clone-civilization.js <DATA> <mod folder> <id> <letter> [base=Gaul] [index=10]');
-	process.exit(1);
+const fail = message => { console.error(message); process.exit(1); };
+const opt = {}, positional = [];
+const args = process.argv.slice(2);
+for (let i = 0; i < args.length; i++) {
+	const a = args[i];
+	if (a === '--all-orders') opt.allOrders = true;
+	else if (['--letter', '--base', '--index'].includes(a)) {
+		if (!args[i + 1] || args[i + 1].startsWith('--')) fail('missing value for ' + a);
+		opt[a.slice(2)] = args[++i];
+	}
+	else if (a.startsWith('--')) fail('unknown option: ' + a);
+	else positional.push(a);
 }
-if (!/^[A-Za-z][A-Za-z0-9_]{0,23}$/.test(id) || !/^[A-Za-z0-9]$/.test(letter)) {
-	console.error('invalid id or letter'); process.exit(1);
+const CLONE_ALL = opt.allOrders;
+const [dataDir, modDir, id, positionalLetter, positionalBase, positionalIndex] = positional;
+if (!dataDir || !modDir || !id || positional.length > 6) {
+	fail('usage: node clone-civilization.js <DATA> <mod folder> <id> [letter] [base=Gaul] [index]\n' +
+		'       node clone-civilization.js <DATA> <mod folder> <id> [--letter Dac] [--base Gaul] [--index 10] [--all-orders]');
 }
-const L = letter.toUpperCase(), l = letter.toLowerCase();
+if (opt.letter !== undefined && positionalLetter !== undefined) fail('use either a positional letter or --letter, not both');
+if (!/^[A-Za-z][A-Za-z0-9_]{0,23}$/.test(id)) fail('invalid id');
+const derived = id.replace(/_/g, '').slice(0, 3).toLowerCase();
+const letter = opt.letter ?? positionalLetter ?? (derived[0].toUpperCase() + derived.slice(1));
+const base = opt.base ?? positionalBase ?? 'Gaul', indexArg = opt.index ?? positionalIndex;
+if (!/^(?:[A-Za-z0-9]|[A-Z][A-Za-z0-9]{1,3})$/.test(letter)) fail('invalid letter: use 1 to 4 characters (uppercase letter then letters or digits; a single letter or digit also works)');
+if (indexArg !== undefined && (!Number.isInteger(Number(indexArg)) || Number(indexArg) < 10 || Number(indexArg) > 127)) fail('index must be a whole number from 10 to 127');
+const L = letter[0].toUpperCase() + letter.slice(1), l = letter.toLowerCase();
 const Id = id[0].toUpperCase() + id.slice(1);
 
 // Letter of each game civilization and the name of its generic hero
@@ -33,11 +51,20 @@ const BASES = {
 };
 if (!BASES[base]) { console.error('unknown base: ' + base); process.exit(1); }
 const bl = BASES[base].letter, blow = bl.toLowerCase();
+const reserved = Object.entries(BASES).find(([, b]) => b.letter === L);
+if (reserved) fail(`prefix "${L}" belongs to ${reserved[0]}: cloning with it would overwrite game classes; choose a different --letter (for example ${L}ac)`);
+const registry = fs.readFileSync(path.join(__dirname, '..', 'prefixes.md'), 'utf8');
+for (const m of registry.matchAll(/^\| `([^`]+)` \| ([^|]+) \| ([^|]+) \|/gm)) {
+	if (m[1].toLowerCase() === l) console.warn(`WARNING: prefix "${L}" is registered to ${m[2].trim()} from ${m[3].trim()}; choose a different --letter before publishing. Keeping "${L}" (no alternative chosen).`);
+}
 
 const read = f => fs.readFileSync(f, 'latin1');
 const ci = (dir, name) => fs.readdirSync(dir).find(f => f.toLowerCase() === name.toLowerCase());
-const classesDir = path.join(dataDir, ci(dataDir, 'classes'));
-const commandsDir = path.join(dataDir, ci(dataDir, 'commands'));
+if (!fs.existsSync(dataDir) || !fs.statSync(dataDir).isDirectory()) fail('DATA folder not found: first run tools/extract-data.js and pass its DATA folder');
+const classesName = ci(dataDir, 'classes'), commandsName = ci(dataDir, 'commands');
+if (!classesName || !commandsName) fail('the DATA folder must contain classes and commands: use the DATA folder from tools/extract-data.js');
+const classesDir = path.join(dataDir, classesName);
+const commandsDir = path.join(dataDir, commandsName);
 
 // 1. Base classes: id -> file text. It is copied whole: the game does NOT inherit things like the entity from the parent,
 // and a class without an entity is created with no model and disappears
@@ -86,22 +113,9 @@ for (const [cid, text] of classes) {
 	if (alias && rename.has(cid)) aliasOf.set(alias, cid);
 }
 
-// 2. New classes: copies of the originals with a different id and a different civilization. The image and entity paths do not change
-fs.mkdirSync(path.join(modDir, 'data', 'classes'), { recursive: true });
-for (const [oldId, newId] of rename) {
-	let xml = classes.get(oldId);
-	xml = xml.replace(/(<class\b[^>]*?\bid\s*=\s*")[^"]*"/, '$1' + newId + '"');
-	xml = xml.replace(/(<class\b[^>]*?\bparent\s*=\s*")([^"]*)"/, (s, p, par) => p + (rename.get(par) || par) + '"');
-	xml = xml.split('race="' + base + '"').join('race="' + Id + '"');
-	// The altid is a unique alias ("Barrack", "Village"...) that scripts and the AI use to find a civilization's "barracks": the game
-	// registers it for a single class. If the copy repeats it, either the copy's AI or the original's stops seeing its buildings
-	xml = xml.replace(/(<class\b[^>]*?)\s+altid\s*=\s*"[^"]*"/, '$1');
-	// Walls, gates and towers place their sentries with sentry_class_name="GSentry1": in the copy, those of the copy
-	xml = xml.replace(/(\bsentry_class_name\s*=\s*")([^"]*)"/g, (s, a, v) => a + (rename.get(v) || v) + '"');
-	fs.writeFileSync(path.join(modDir, 'data', 'classes', newId + '.sc.xml'), xml, 'latin1');
-}
+if (!rename.size) fail(`no classes to clone for ${base}: check the extracted DATA folder`);
 
-// 3. Orders
+// 2. Orders
 const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const alt = [...rename.keys()].sort((a, b) => b.length - a.length).map(esc).join('|');
 const classRe = new RegExp('\\b(' + alt + ')\\b', 'g');
@@ -144,7 +158,7 @@ for (const f of fs.readdirSync(commandsDir)) {
 			c = c.replace(/(\bname\s*=\s*")[^"]*"/, '$1' + nn + '"');
 			const srcTxt = mine.map(s => '\t<src obj="' + rename.get(s) + '"/>').join('\n');
 			// Only the param and sclass classes are changed: the images (button, queueicon...), the help and the texts are the base's
-			c = c.replace(/(\b(?:param|sclass)\s*=\s*")([^"]*)"/g, (s, a, v) => a + mapIds(v) + '"');
+			c = c.replace(/(\b(?:param|sclass)\s*=\s*")([^"]*)"/g, (_s, a, v) => a + mapIds(v) + '"');
 			c = c.replace(/<\/cmd>$/, srcTxt + '\n</cmd>');
 			cloned.push(c);
 			aliasOrders[name] = nn;
@@ -156,6 +170,29 @@ for (const f of fs.readdirSync(commandsDir)) {
 			nShared++;
 		}
 	}
+}
+const outputs = [
+	...Array.from(rename.values(), name => path.join(modDir, 'data', 'classes', name + '.sc.xml')),
+	path.join(modDir, 'data', 'commands', Id + '.xml'),
+	...Array.from(shared.keys(), name => path.join(modDir, 'patches', 'data', 'commands', name)),
+	path.join(modDir, 'civs', id.toLowerCase() + '.json'),
+];
+const existing = new Set(fs.existsSync(modDir) ? fs.readdirSync(modDir, { recursive: true }).map(name => name.toLowerCase()) : []);
+for (const file of outputs) {
+	if (existing.has(path.relative(modDir, file).toLowerCase())) fail(`refusing to overwrite ${file}: generate into a fresh folder, then merge your changes manually`);
+}
+
+// 3. New classes: copy the entity and image paths unchanged.
+fs.mkdirSync(path.join(modDir, 'data', 'classes'), { recursive: true });
+for (const [oldId, newId] of rename) {
+	let xml = classes.get(oldId);
+	xml = xml.replace(/(<class\b[^>]*?\bid\s*=\s*")[^"]*"/, '$1' + newId + '"');
+	xml = xml.replace(/(<class\b[^>]*?\bparent\s*=\s*")([^"]*)"/, (_s, p, par) => p + (rename.get(par) || par) + '"');
+	xml = xml.split('race="' + base + '"').join('race="' + Id + '"');
+	// An altid belongs to one class only; duplicating it hides the original from the AI.
+	xml = xml.replace(/(<class\b[^>]*?)\s+altid\s*=\s*"[^"]*"/, '$1');
+	xml = xml.replace(/(\bsentry_class_name\s*=\s*")([^"]*)"/g, (_s, a, v) => a + (rename.get(v) || v) + '"');
+	fs.writeFileSync(path.join(modDir, 'data', 'classes', newId + '.sc.xml'), xml, 'latin1');
 }
 fs.mkdirSync(path.join(modDir, 'data', 'commands'), { recursive: true });
 fs.writeFileSync(path.join(modDir, 'data', 'commands', Id + '.xml'),
@@ -171,7 +208,7 @@ for (const [f, list] of shared) {
 // 4. Declaration
 fs.mkdirSync(path.join(modDir, 'civs'), { recursive: true });
 fs.writeFileSync(path.join(modDir, 'civs', id.toLowerCase() + '.json'), JSON.stringify({
-	id: id.toLowerCase(), index: Number(indexArg), base, name: { spanish: Id, english: Id, italian: Id }, letter: L, ai: true,
+	id: id.toLowerCase(), ...(indexArg === undefined ? {} : { index: Number(indexArg) }), base, name: { spanish: Id, english: Id, italian: Id }, letter: L, ai: true,
 		// With "ia": true the AI plays the civilization using the game's scripts, which see the base: these tables translate what they ask for
 		// (base classes and orders) into what was cloned. Do not delete them if you enable "ia"
 		alias: { classes: Object.fromEntries(rename), commands: aliasOrders },

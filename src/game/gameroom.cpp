@@ -16,6 +16,7 @@
 #include "game/gameroom.h"
 #include "game/gamemodes.h"
 #include "hooks/gamefiles.h"
+#include "mods/civsets.h"
 #include "mods/mods.h"
 #include "mods/modoptions.h"
 #include "mods/modvars.h"
@@ -127,7 +128,7 @@ std::vector<std::string> ComboItems(void *combo)
 	if (!list) return out;
 	const unsigned count = *reinterpret_cast<unsigned *>(list + 0x58);
 	char *items = *reinterpret_cast<char **>(list + 0x94);
-	for (unsigned i = 0; items && i < count && i < 64; i++) {
+	for (unsigned i = 0; items && i < count && i < 128; i++) {
 		const char *text = *reinterpret_cast<const char **>(items + i * 0x14);
 		out.push_back(text ? text : "");
 	}
@@ -827,19 +828,31 @@ void EnforceModeRaces()
 	if (!g_dlg || *reinterpret_cast<int *>(static_cast<char *>(g_dlg) + 0x9c) == 0 || NetMultiplayerSaveLoading()) return;
 	if (!reinterpret_cast<IntThis_t>(addr::kIsHostOrOffline)(g_dlg)) return;
 	const GameMode *mode = CurrentMode();
-	if (!mode || mode->civs.empty()) return;
+	if (mode && mode->civs.empty()) mode = nullptr;
+	const bool sets = !CivRoomSets().empty();
+	if (!mode && !sets) return;
 	char *choice = static_cast<char *>(g_dlg) + 0xa8;
 	for (int i = 0; i < 8; i++) {
 		const char *name = nullptr;
 		int type = 0, color = 0, ready = 0, race = 0, team = 0xff, extra = 0;
 		if (!reinterpret_cast<GetSlotInfo_t>(addr::kGetSlotInfo)(g_dlg, nullptr, i, &name, &type, &color, &ready, &race, &team, &extra) || (type != 1 && type != 3)) continue;
 		const int now = CivsRaceOfRoomItem(static_cast<unsigned char>(choice[i]));
-		if (now < 0 || GameModeAllows(*mode, now)) continue;
-		const int item = CivsRoomItemOfRace(GameModeFirstAllowed(*mode, false));
+		if (now < 0 || ((!mode || GameModeAllows(*mode, now)) && (!sets || CivsRoomAllows(now)))) continue;
+		int item = -1;
+		for (int shown : CivsRoomOrder(10 + static_cast<int>(CivsList().size()))) {
+			const int race = CivsRaceOfRoomItem(shown);
+			if (race >= 0 && (!mode || GameModeAllows(*mode, race)) && CivsRoomAllows(race)) {
+				item = shown;
+				break;
+			}
+		}
+		if (item < 0 && mode) item = CivsRoomItemOfRace(GameModeFirstAllowed(*mode, false));
 		if (item < 0) continue;
-		LogI("room", "slot %d: the mode \"%s\" does not allow civilization %d; it is changed to %d", i + 1, mode->key.c_str(), now, CivsRaceOfRoomItem(item));
+		LogI("room", "slot %d: the room does not allow civilization %d; it is changed to %d", i + 1, now, CivsRaceOfRoomItem(item));
 		choice[i] = static_cast<char>(item);
 		reinterpret_cast<UpdateRow_t>(addr::kUpdateSlotRow)(g_dlg, nullptr, static_cast<unsigned>(i));
+		// The dropdown is what the room shows and sends; changing the stored choice alone does not move it.
+		SelectCombo(Combo(g_dlg, ((i + 1) << 12) | 0x22), item);
 	}
 }
 

@@ -120,6 +120,7 @@ void OnCallback(int id, const void *data)
 		set("pw", g_creating.password.empty() ? "" : Fnv(g_creating.password));
 		set("vis", std::to_string(g_creating.visibility));
 		set("key", OwnKey());
+		if (!g_creating.civSets.empty()) set("civsets", g_creating.civSets);
 		PublishMods("");
 		set("irver", ModVersionText());
 		set(("k:" + std::to_string(g_steam.me)).c_str(), "1");

@@ -44,6 +44,7 @@ struct OnlineLobby {
 	bool friendHost = false;
 	std::string optionsText;
 	unsigned rules = 0;
+	std::string civSets;
 	std::string saveName;
 	std::vector<std::string> playerNames;
 	std::vector<OnlineSlot> slots;
@@ -94,7 +95,7 @@ struct OnlineRoom {
 };
 
 struct OnlineCreateSettings {
-	std::string name, map, mode, password;
+	std::string name, map, mode, password, civSets;
 	int maxPlayers = 4;
 	int visibility = 0;
 	bool spectators = true;
@@ -182,6 +183,7 @@ bool SteamTakeCreateFailed();
 void SteamBroadcastCamera(int player, int x, int y);
 void SteamPublishOptions(const std::string &text);
 void SteamPublishRules(unsigned rules);
+void SteamPublishCivSets(const std::string &value);
 void SteamPublishSlots(const std::string &text);
 void SteamPublishSaveColors(const std::string &text);
 std::string SteamTakeNotice();

@@ -6,9 +6,12 @@
 #include "hooks/audio.h"
 #include "i18n/tr.h"
 #include "core/log.h"
+#include "core/sha256.h"
 #include "mods/gbref.h"
 #include "mods/modoptions.h"
 #include "mods/modvars.h"
+#include "mods/civindices.h"
+#include "mods/civsets.h"
 
 #include "mods/mods_internal.h"
 
@@ -116,9 +119,11 @@ void ModsOpenFolder(const std::string &folder)
 	ShellExecuteA(nullptr, "open", "explorer.exe", args.c_str(), nullptr, SW_SHOWNORMAL);
 }
 
-void ModsOnSaveWritten(const std::string &gamePath, bool online)
+bool ModsOnSaveWritten(const std::string &gamePath, bool online)
 {
-	const std::string side = GameDir() + "\\" + gamePath + ".mods.json";
+	const bool absolute = gamePath.size() > 1 && (gamePath[1] == ':' || gamePath[0] == '\\' || gamePath[0] == '/');
+	const std::string file = absolute ? gamePath : GameDir() + "\\" + gamePath;
+	const std::string side = file + ".mods.json";
 	const ModProfile p = ModsMountedProfile();
 	Json j = Json::MakeObject();
 	j.Set("profile", Json::MakeString(p.name));
@@ -141,6 +146,12 @@ void ModsOnSaveWritten(const std::string &gamePath, bool online)
 		mods.arr.push_back(e);
 	}
 	j.Set("mods", mods);
+	if (CivIndicesAutomatic()) {
+		const std::string hash = HashFile(file);
+		if (hash.empty()) return false;
+		j.Set("civIndices", CivIndicesToJson());
+		j.Set("civSaveHash", Json::MakeString(hash));
+	}
 	if (const int secs = SaveLibGameSeconds(); secs >= 0) j.Set("seconds", Json::MakeNumber(secs));
 	{
 		int states[8];
@@ -153,14 +164,12 @@ void ModsOnSaveWritten(const std::string &gamePath, bool online)
 	}
 	if (online) j.Set("online", Json::MakeBool(true));
 	if (const unsigned rules = ModRulesActive()) j.Set("rules", Json::MakeNumber(static_cast<double>(rules)));
+	if (const std::vector<std::string> sets = CivRoomSets(); !sets.empty()) j.Set("civSets", Json::MakeString(CivSetsJoin(sets)));
 	j.Set("session", Json::MakeString(SaveSessionCurrent()));
 		if (ModVarsCount() > 0) j.Set("variables", ModVarsToJson());
 	{
 		const size_t slash = gamePath.find_last_of("/\\");
 		if (SaveLibIsAutosaveName(gamePath.substr(slash == std::string::npos ? 0 : slash + 1))) j.Set("autosave", Json::MakeBool(true));
 	}
-	std::string dir = side.substr(0, side.find_last_of('\\'));
-	if (IsDir(dir)) {
-		WriteJsonFile(side, j);
-	}
+	return WriteJsonFile(side, j);
 }

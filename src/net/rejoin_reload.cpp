@@ -6,11 +6,13 @@
 #include <algorithm>
 #include "MinHook.h"
 #include "core/log.h"
+#include "core/sha256.h"
 #include "game/autosave.h"
 #include "i18n/tr.h"
 #include "core/framefreeze.h"
 #include "core/json.h"
 #include "mods/modoptions.h"
+#include "mods/civindices.h"
 #include "net/mpsave.h"
 #include "net/steamnet.h"
 #include "addr/state.h"
@@ -155,6 +157,9 @@ void WaitAcksTick()
 void StartTick()
 {
 	if (Game() || !*reinterpret_cast<void **>(addr::kMenuFrame)) return;
+	if (SteamCurrentRoom().info.gameplayKey != SteamOwnGameplayKey()) {
+		return ReloadCancel(Tr("Rejoining requires the same civilizations and gameplay content as the room."), true);
+	}
 	const int slot = MySlot(g_reload.wire);
 	if (slot < 0) return ReloadCancel("your spot in the game could not be found", false);
 	uint64_t blobs = 0;
@@ -163,11 +168,15 @@ void StartTick()
 	if (!WriteFileAll(DiskPath(kReloadSave), g_reload.save) || !WriteFileAll(DiskPath(kReloadSettings), settings)) {
 		return ReloadCancel("could not write the game", false);
 	}
-	if (g_reload.rules) {
-		Json side = Json::MakeObject();
-		side.Set("rules", Json::MakeNumber(static_cast<double>(g_reload.rules)));
-		WriteJsonFile(DiskPath(kReloadSave) + ".mods.json", side);
+	Json side = Json::MakeObject();
+	side.Set("rules", Json::MakeNumber(static_cast<double>(g_reload.rules)));
+	if (CivIndicesAutomatic()) {
+		const std::string hash = HashFile(DiskPath(kReloadSave));
+		if (hash.empty()) return ReloadCancel(Tr("Could not save the civilization index table."), true);
+		side.Set("civIndices", CivIndicesToJson());
+		side.Set("civSaveHash", Json::MakeString(hash));
 	}
+	if (!WriteJsonFile(DiskPath(kReloadSave) + ".mods.json", side)) return ReloadCancel(Tr("Could not save the civilization index table."), true);
 	g_blobs.wire = g_reload.wire;
 	if (!LoadSettings(kReloadSettings, slot)) return ReloadCancel("could not read the game settings", false);
 	MpSaveSetPendingLoad(kReloadSave);

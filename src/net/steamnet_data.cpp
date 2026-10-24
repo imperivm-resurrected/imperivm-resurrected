@@ -10,6 +10,7 @@
 #include "core/log.h"
 #include "i18n/tr.h"
 #include "mods/mods.h"
+#include "mods/civindices.h"
 #include "net/modlist.h"
 #include "net/scenvalue.h"
 
@@ -92,7 +93,8 @@ std::string EncodeMods(const std::string &scenModId, int &optional)
 std::string OwnKey()
 {
 	const std::string h = ModsProfileGameplayHash(ModsMountedProfile());
-	return h.substr(0, 16);
+	const Json indices = CivIndicesToJson();
+	return indices.obj.empty() ? h.substr(0, 16) : Fnv(h + "\n" + indices.Dump());
 }
 
 bool IsBanned(uint64 lobby, uint64 id)
@@ -139,6 +141,7 @@ OnlineLobby ReadLobby(uint64 id)
 	l.cams = Data(id, "cams");
 	l.optionsText = Data(id, "opts");
 	l.rules = static_cast<unsigned>(strtoul(Data(id, "rules").c_str(), nullptr, 16));
+	l.civSets = Data(id, "civsets");
 	{
 		const std::string colors = Data(id, "savecolors");
 		for (size_t p = 0; !colors.empty() && p <= colors.size();) {

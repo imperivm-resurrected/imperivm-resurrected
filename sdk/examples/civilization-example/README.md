@@ -1,13 +1,13 @@
 # Example: civilization
 
-Dacia: a new civilization (index 10, letter `D`) cloned from Gaul with [`tools/clone-civilization.js`](../../tools/clone-civilization.js).
+Dacia: a new civilization (legacy explicit index 10, letter `D`) cloned from Gaul with [`tools/clone-civilization.js`](../../tools/clone-civilization.js). For a new pack, start without a numeric index:
 
 ```
-node extract-data.js "<game folder>" <output folder>
-node clone-civilization.js <output folder>\DATA <mod folder> Dacia D Gaul 10
+node tools/extract-data.js "<game folder>" "<output folder>"
+node tools/clone-civilization.js "<output folder>\DATA" "<new mod folder>" dacia
 ```
 
-`extract-data.js` extracts `data.pak` to `<output folder>\DATA`, the folder the tool asks for.
+Run those commands from the SDK root, with a fresh output folder based on the [civilization template](../../templates/civilization). `extract-data.js` extracts `data.pak` to `<output folder>\DATA`, the folder the tool asks for. The command derives `Dac`, defaults to Gaul and omits `index` for automatic assignment. Choose `--letter Dac2` to override the prefix. The checked-in example deliberately keeps its published `D` and explicit index 10 unchanged. To reproduce those legacy identifiers, use `Dacia D Gaul 10` instead of `dacia` (or `dacia --letter D --index 10`); explicit indices are an advanced optional legacy setting, not a slot new authors must pick. See [Cloning a civilization](../../civilizations.md#cloning-a-civilization). The generated civilization is independent: it does not set `variant` or `replacesBase`, so Gaul stays selectable.
 
 | File | What it is |
 |---|---|
@@ -19,4 +19,4 @@ node clone-civilization.js <output folder>\DATA <mod folder> Dacia D Gaul 10
 
 Dacia shows up in the multiplayer lobby dropdowns. It changes gameplay: every player has the mod. In `Logs\imperivm\imperivm-mod.log` (lines tagged `civilizations`) you can see it get registered and, with `LogChannels=civilizations:debug` under `[Debug]` in `imperivm-mod.ini`, which player is playing it.
 
-See [Civilizations](../../civilizations.md).
+Automatic indices and multi-character prefixes require the matching new DLL build. Keep the save's `.mods.json` index table and the original profile/content: automatic numbers can change when civilizations are added or removed, and mapping mismatches prevent loading. See [Civilizations](../../civilizations.md#numeric-indices-and-saved-games).
