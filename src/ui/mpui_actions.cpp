@@ -630,11 +630,17 @@ void DoAction(int action, int arg)
 	case kCivSetToggle: {
 		const std::vector<CivSet> sets = CivsSets();
 		if (arg < 0 || arg >= static_cast<int>(sets.size())) break;
+		// In a skirmish there is no "Create game" screen: the room's own rows edit the sets the game reads.
+		const bool skirmish = g_s.game.active && !g_s.game.online;
+		const std::vector<std::string> now = skirmish ? CivRoomSets() : g_s.createCivSets;
 		std::vector<std::string> chosen;
 		for (const CivSet &s : sets) {
-			if (CivSetsAllow(g_s.createCivSets, s.id) != (s.id == sets[arg].id)) chosen.push_back(s.id);
+			if (CivSetsAllow(now, s.id) != (s.id == sets[arg].id)) chosen.push_back(s.id);
 		}
-		if (!chosen.empty()) g_s.createCivSets = chosen.size() == sets.size() ? std::vector<std::string>() : chosen;
+		if (chosen.empty()) break;
+		if (chosen.size() == sets.size()) chosen.clear();
+		if (skirmish) CivRoomSetsSet(chosen);
+		else g_s.createCivSets = chosen;
 		break;
 	}
 	case kPlayersPrev: g_s.createPlayers = std::max(2, g_s.createPlayers - 1); break;
@@ -812,6 +818,7 @@ void FieldKey(UINT msg, WPARAM wp)
 void OpenMpMenu(bool checkRecover)
 {
 	g_s.open = true;
+	g_s.skirmishCivs = false;
 	g_s.view = kViewList;
 	g_s.mods = ModsList();
 	g_s.profiles = ModsProfileNames();

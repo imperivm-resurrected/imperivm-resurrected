@@ -519,6 +519,17 @@ void PaintGameRoom(Painter &p, const State &st)
 				}
 			}
 
+			if (!g.online) {
+				const std::vector<CivSet> known = CivsSets();
+				if (known.size() > 1) {
+					const std::vector<std::string> sets = CivRoomSets();
+					section("CIVILIZATIONS");
+					for (size_t i = 0; i < known.size(); i++) {
+						toggleRow(known[i].name.c_str(), CivSetsAllow(sets, known[i].id), canEdit, kCivSetToggle, static_cast<int>(i), nullptr);
+					}
+				}
+			}
+
 			if (!host && st.map.state == 1) {
 				const uint64_t total = std::max<uint64_t>(1, st.map.total);
 				const int pct = static_cast<int>(std::min<uint64_t>(100, st.map.got * 100 / total));

@@ -191,6 +191,7 @@ struct State {
 	std::vector<std::string> profiles;
 	ProfileSummary createProfileInfo;
 	std::vector<std::string> createCivSets;
+	bool skirmishCivs = false; // the skirmish room owns CivRoomSets until the multiplayer menu opens
 	int createVisibility = 0;
 	int createSpec = 1;
 	bool syncConfirm = false;
