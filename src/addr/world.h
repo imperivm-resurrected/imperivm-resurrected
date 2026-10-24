@@ -80,6 +80,7 @@ inline constexpr uintptr_t kGetLevelFromExp = 0x005d28c0;
 inline constexpr uintptr_t kSentryFlagsByte = 0x005d332b;
 inline constexpr uintptr_t kClearCurseBless = 0x005d4800;
 inline constexpr uintptr_t kUnitOnDeathFinish = 0x005db230;
+inline constexpr uintptr_t kUnitSetPosition = 0x005d39e0;
 inline constexpr uintptr_t kCollectHeroFirstUnit = 0x005de853;
 inline constexpr uintptr_t kCollectMageFirstUnit = 0x005de8f7;
 inline constexpr uintptr_t kCollectMageMember = 0x005de96f;
