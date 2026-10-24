@@ -8,6 +8,8 @@
 namespace {
 const int kComboRace[9] = {1, 4, 0, 3, 2, 7, 6, 5, 8};
 const int kFirstModItem = 10;
+const int kRandomRace = 8;
+const int kRandomItem = 8;
 }
 
 std::vector<int> CivRoomOrder(const std::vector<RoomCiv> &civs, int items, bool gameAllowed)
@@ -26,12 +28,13 @@ std::vector<int> CivRoomOrder(const std::vector<RoomCiv> &civs, int items, bool 
 			placed[i] = true;
 			replaced = true;
 		}
-		if (!replaced && gameAllowed) order.push_back(item);
+		// Random (the last of the nine) is not a civilization of the game: it is there whatever the room allows.
+		if (!replaced && (gameAllowed || kComboRace[item] == kRandomRace)) order.push_back(item);
 	}
 	for (size_t i = 0; i < civs.size(); i++) {
 		if (!placed[i] && civs[i].allowed) order.push_back(kFirstModItem + static_cast<int>(i));
 	}
-	if (order.empty()) return CivRoomOrder(civs, items);
+	if (std::all_of(order.begin(), order.end(), [](int item) { return item == kRandomItem; })) return CivRoomOrder(civs, items);
 	return order;
 }
 

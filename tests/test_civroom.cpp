@@ -72,8 +72,9 @@ void RoomSetsHideCivs()
 void WithoutTheGame()
 {
 	const std::vector<RoomCiv> civs = {{kGaul, false}, {kRepublicanRome, true}};
-	const std::vector<int> expected = {11, 10};
+	const std::vector<int> expected = {11, 8, 10};
 	CHECK(CivRoomOrder(civs, 12, false) == expected);
+	CHECK(CivRoomOrder({{kGaul, false}}, 11, false) == std::vector<int>({8, 10}));
 	const std::vector<RoomCiv> none = {{kGaul, false, false}};
 	CHECK(CivRoomOrder(none, 11, false) == Range(9));
 }
