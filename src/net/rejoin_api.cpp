@@ -26,6 +26,8 @@ void InstallRejoin(bool knownExe)
 	ok = HookAt(addr::kStartThread, reinterpret_cast<void *>(&HookStartThread), reinterpret_cast<void **>(&g_orig.startThread)) && ok;
 	ok = HookAt(addr::kRescheduleThread, reinterpret_cast<void *>(&HookRescheduleThread), reinterpret_cast<void **>(&g_orig.reschedule)) && ok;
 	ok = HookAt(addr::kStopThread, reinterpret_cast<void *>(&HookStopThread), reinterpret_cast<void **>(&g_orig.stopThread)) && ok;
+	ok = HookAt(addr::kDeleteThread, reinterpret_cast<void *>(&HookDeleteThread), reinterpret_cast<void **>(&g_orig.deleteThread)) && ok;
+	ok = HookAt(addr::kSetThreadTime, reinterpret_cast<void *>(&HookSetThreadTime), reinterpret_cast<void **>(&g_orig.setThreadTime)) && ok;
 	ok = HookAt(addr::kRandomRange, reinterpret_cast<void *>(&HookRandomRange), reinterpret_cast<void **>(&g_orig.randomRange)) && ok;
 	ok = HookAt(addr::kAiUpdate, reinterpret_cast<void *>(&HookAiUpdate), reinterpret_cast<void **>(&g_orig.aiUpdate)) && ok;
 	ok = HookAt(addr::kAiAddOrder, reinterpret_cast<void *>(&HookAiAddOrder), reinterpret_cast<void **>(&g_orig.aiAddOrder)) && ok;

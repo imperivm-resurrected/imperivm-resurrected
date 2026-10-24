@@ -115,7 +115,7 @@ static void Fingerprint()
 	CHECK(three != two);
 	CHECK_EQ(RulesFingerprint({{"mod-a", "aaaa"}, {"mod-b", ""}}), "");
 	CHECK_EQ(RulesFingerprint({{"mod-a", ""}}), "");
-	CHECK_EQ(empty, HashString(std::string(kGameId) + "|sim:2|esq:2|"));
+	CHECK_EQ(empty, HashString(std::string(kGameId) + "|sim:3|esq:2|"));
 }
 
 int main()

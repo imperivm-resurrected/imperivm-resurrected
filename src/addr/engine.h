@@ -38,6 +38,7 @@ inline constexpr uintptr_t kDeleteThread = 0x00687ce0;
 inline constexpr uintptr_t kLinkThread = 0x00688060;
 inline constexpr uintptr_t kRescheduleThread = 0x006880f0;
 inline constexpr uintptr_t kStartThread = 0x00688150;
+inline constexpr uintptr_t kSetThreadTime = 0x00688260;
 inline constexpr uintptr_t kLocFormatV = 0x006897a0;
 inline constexpr uintptr_t kLocFormat = 0x00689c90;
 inline constexpr uintptr_t kEnvGetInt = 0x006ac740;
