@@ -141,6 +141,7 @@ OnlineLobby ReadLobby(uint64 id)
 	l.cams = Data(id, "cams");
 	l.optionsText = Data(id, "opts");
 	l.rules = static_cast<unsigned>(strtoul(Data(id, "rules").c_str(), nullptr, 16));
+	l.civSets = Data(id, "civsets");
 	{
 		const std::string colors = Data(id, "savecolors");
 		for (size_t p = 0; !colors.empty() && p <= colors.size();) {

@@ -49,7 +49,7 @@ enum Action {
 	kPickRow, kPickOk, kPickCancel,
 	kRecoverYes, kRecoverNo, kRejoinCancel, kRejoinClose,
 	kGKick, kGKickJoining, kDiscord, kPassOk, kPassCancel, kGSeat, kGMove, kGMoveTo, kGSwapAsk, kSwapAccept, kSwapDecline, kDropYes, kDropNo, kPassShow, kGSiteToggle, kGRuleToggle, kSpectate, kReturnGame,
-	kFieldPickSearch, kPickDelete, kPickDeleteYes, kPickDeleteNo, kGResync,
+	kFieldPickSearch, kPickDelete, kPickDeleteYes, kPickDeleteNo, kGResync, kCivSetToggle,
 };
 
 typedef int(__cdecl *HostGame_t)(int, unsigned, int);
@@ -122,6 +122,7 @@ struct ProfileSummary {
 };
 
 extern ListGeom g_createModsGeomOut;
+extern ListGeom g_createCivGeomOut;
 std::vector<ListLine> BuildModLines(const std::vector<ModRow> &rows, const std::string &emptyText);
 int PaintLinesInline(Painter &p, const std::vector<ListLine> &lines, int x, int y, int w, int rowH);
 struct State {
@@ -189,6 +190,7 @@ struct State {
 	std::string createProfile;
 	std::vector<std::string> profiles;
 	ProfileSummary createProfileInfo;
+	std::vector<std::string> createCivSets;
 	int createVisibility = 0;
 	int createSpec = 1;
 	bool syncConfirm = false;
@@ -203,6 +205,8 @@ struct State {
 	ListGeom syncGeom;
 	ListState createModsList;
 	ListGeom createModsGeom;
+	ListState createCivList;
+	ListGeom createCivGeom;
 	int syncPhase = 0;
 	DWORD syncStart = 0;
 	std::string syncError;

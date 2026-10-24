@@ -11,6 +11,7 @@
 #include "mods/modoptions.h"
 #include "mods/modvars.h"
 #include "mods/civindices.h"
+#include "mods/civsets.h"
 
 #include "mods/mods_internal.h"
 
@@ -163,6 +164,7 @@ bool ModsOnSaveWritten(const std::string &gamePath, bool online)
 	}
 	if (online) j.Set("online", Json::MakeBool(true));
 	if (const unsigned rules = ModRulesActive()) j.Set("rules", Json::MakeNumber(static_cast<double>(rules)));
+	if (const std::vector<std::string> sets = CivRoomSets(); !sets.empty()) j.Set("civSets", Json::MakeString(CivSetsJoin(sets)));
 	j.Set("session", Json::MakeString(SaveSessionCurrent()));
 		if (ModVarsCount() > 0) j.Set("variables", ModVarsToJson());
 	{

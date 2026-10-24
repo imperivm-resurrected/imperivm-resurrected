@@ -6,6 +6,7 @@
 #include "core/names.h"
 #include "mods/modoptions.h"
 #include "game/civs.h"
+#include "mods/civsets.h"
 #include "net/rejoin.h"
 
 #include "ui/mpui_internal.h"
@@ -470,13 +471,44 @@ void PaintCreate(Painter &p, const State &st)
 	p.Text(lx, y, 140, 30, "Content", kDim);
 	Combo(p, st, fx, y, fw, 30, ModsProfileLabel(st.createProfile), kDropProfile, 0, st.profiles.size() > 1);
 	y += 38;
+	// The sets are those of the content that is loaded now; a game that is loaded keeps the ones it was saved with.
+	const std::vector<CivSet> civSets = CivsSets();
+	const bool showCivSets = civSets.size() > 1 && st.createProfile == ModsMountedProfile().name && st.createSave < 0;
 	{
 		const std::vector<ListLine> lines = BuildModLines(st.createProfileInfo.rows, "None: the original game.");
-		const int rows = std::min<int>(6, static_cast<int>(lines.size()));
+		const int rows = std::min<int>(showCivSets ? 3 : 6, static_cast<int>(lines.size()));
 		g_createModsGeomOut = ListGeom();
 		ListState ls = st.createModsList;
 		ListPaint(p, fx, y, fw, rows * 22 + 8, lines, ls, g_createModsGeomOut, 3, 22);
 		y += rows * 22 + 14;
+	}
+	if (showCivSets) {
+		const int rowH = 24, total = static_cast<int>(civSets.size()), visible = std::min(3, total), bh = visible * rowH + 8;
+		ListState ls = st.createCivList;
+		ls.scroll = std::max(0, std::min(ls.scroll, ListMaxScroll(total, visible)));
+		p.Font(0);
+		p.Text(lx, y, 140, 30, "Civilizations", kDim);
+		p.Fill(fx, y, fw, bh, pal::well);
+		p.Frame(fx, y, fw, bh, pal::line);
+		const int textW = fw - 16 - (total > visible ? 12 : 0);
+		for (int i = 0; i < visible; i++) {
+			const CivSet &s = civSets[ls.scroll + i];
+			const bool on = CivSetsAllow(st.createCivSets, s.id);
+			const int ry = y + 4 + i * rowH, cb = 16, cy = ry + (rowH - cb) / 2;
+			if (p.Hover(fx + 2, ry, textW + 12, rowH, mx, my)) p.Fill(fx + 2, ry, textW + 12, rowH, pal::wellRaised);
+			p.Fill(fx + 10, cy, cb, cb, pal::dialog);
+			p.Frame(fx + 10, cy, cb, cb, on ? kGold : pal::line);
+			if (on) p.Fill(fx + 14, cy + 4, cb - 8, cb - 8, kGold);
+			p.Font(3);
+			p.Text(fx + 10 + cb + 10, ry, textW - cb - 12, rowH, s.name, on ? kText : kDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			p.AddHit(fx + 2, ry, textW + 12, rowH, kCivSetToggle, ls.scroll + i);
+		}
+		g_createCivGeomOut = ListGeom();
+		RECT area = p.R(fx, y, fw, bh);
+		OffsetRect(&area, p.ox, p.oy);
+		g_createCivGeomOut.area = area;
+		ScrollbarPaint(p, fx + fw - 10, y + 3, bh - 6, total, visible, ls, g_createCivGeomOut, mx, my);
+		y += bh + 14;
 	}
 	if (st.createSave >= 0 && st.createSave < static_cast<int>(st.saves.size())) {
 		const ModNeeds &needs = CreateSaveNeeds(st.saves[st.createSave].vfsPath, st.createProfile);

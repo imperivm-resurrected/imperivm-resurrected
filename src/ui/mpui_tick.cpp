@@ -7,6 +7,7 @@
 #include "core/log.h"
 #include "core/names.h"
 #include "ui/modui.h"
+#include "mods/civsets.h"
 #include "mods/modoptions.h"
 #include "net/netdrop.h"
 #include "net/rejoin.h"
@@ -172,8 +173,9 @@ void MpUiGameThreadTick()
 						g_s.saveMapError.clear();
 						{
 							Json side;
-							const unsigned saved = ReadJsonFile(g_s.hostSave.file + ".mods.json", side)
-								? static_cast<unsigned>(side.GetNumber("rules", 0)) & (kRuleFreeAttach | kRuleLockDiplomacy | kRuleCheats | ModOptionsMask()) : 0;
+							const bool read = ReadJsonFile(g_s.hostSave.file + ".mods.json", side);
+							if (read) CivRoomSetsSet(CivSetsSplit(side.GetString("civSets")));
+							const unsigned saved = read ? static_cast<unsigned>(side.GetNumber("rules", 0)) & (kRuleFreeAttach | kRuleLockDiplomacy | kRuleCheats | ModOptionsMask()) : 0;
 							if (saved) {
 								GameRoomSetRules(saved);
 								LogD("saves", "saved game: mod rules 0x%x", saved);
@@ -258,6 +260,7 @@ void MpUiGameThreadTick()
 				}
 				SteamPublishOptions(opts);
 				SteamPublishRules(snap.randomMap ? snap.rules : snap.rules & ~kSeasonBits);
+				SteamPublishCivSets(CivSetsJoin(CivRoomSets()));
 				{
 					std::string slotsText;
 					for (int i = 0; i < 8; i++) {

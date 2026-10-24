@@ -9,7 +9,9 @@
 #include "core/names.h"
 #include "game/mappreview.h"
 #include "ui/modui.h"
+#include "mods/civsets.h"
 #include "mods/modoptions.h"
+#include "game/civs.h"
 #include "net/rejoin.h"
 
 #include "ui/mpui_internal.h"
@@ -229,6 +231,8 @@ void DoAction(int action, int arg)
 			if (arg >= 0 && arg < static_cast<int>(g_s.profiles.size())) {
 				g_s.createProfile = g_s.profiles[arg];
 				g_s.createProfileInfo = ProfileSummaryFor(g_s.createProfile), g_s.createModsList = ListState();
+				g_s.createCivSets.clear();
+				g_s.createCivList = ListState();
 				const std::string chosen = g_s.createSave >= 0 && g_s.createSave < static_cast<int>(g_s.saves.size()) ? g_s.saves[g_s.createSave].vfsPath : "";
 				g_s.saves = ListSaves();
 				g_s.createSave = -1;
@@ -498,6 +502,7 @@ void DoAction(int action, int arg)
 			g_s.passInput.clear();
 			g_s.nameInput = Tr("Game of ") + g_s.player;
 			g_s.createProfile = ModsMountedProfile().name;
+			g_s.createCivSets.clear();
 			DoAction(kCreateOk, 0);
 		}
 		else if (!r.host) {
@@ -622,6 +627,16 @@ void DoAction(int action, int arg)
 		g_s.searchStart = GetTickCount();
 		g_s.found = false;
 		break;
+	case kCivSetToggle: {
+		const std::vector<CivSet> sets = CivsSets();
+		if (arg < 0 || arg >= static_cast<int>(sets.size())) break;
+		std::vector<std::string> chosen;
+		for (const CivSet &s : sets) {
+			if (CivSetsAllow(g_s.createCivSets, s.id) != (s.id == sets[arg].id)) chosen.push_back(s.id);
+		}
+		if (!chosen.empty()) g_s.createCivSets = chosen.size() == sets.size() ? std::vector<std::string>() : chosen;
+		break;
+	}
 	case kPlayersPrev: g_s.createPlayers = std::max(2, g_s.createPlayers - 1); break;
 	case kPlayersNext: g_s.createPlayers = std::min(8, g_s.createPlayers + 1); break;
 	case kMapPrev: g_s.createMap = (g_s.createMap + 4) % 5; break;
@@ -672,6 +687,8 @@ void DoAction(int action, int arg)
 		s.name = g_s.nameInput.empty() ? Tr("Game of ") + g_s.player : g_s.nameInput;
 		s.map = "Chosen in the room";
 		s.mode = "Elimination";
+		s.civSets = CivSetsJoin(g_s.createCivSets);
+		CivRoomSetsSet(g_s.createCivSets);
 		if (g_s.createVisibility == 1 && g_s.passInput.empty()) {
 			ModUiToast("Enter the room password.");
 			FocusField(kPassField);
@@ -799,6 +816,7 @@ void OpenMpMenu(bool checkRecover)
 	g_s.mods = ModsList();
 	g_s.profiles = ModsProfileNames();
 	g_s.createProfile = ModsMountedProfile().name;
+	g_s.createCivSets.clear();
 	g_s.createProfileInfo = ProfileSummaryFor(g_s.createProfile), g_s.createModsList = ListState();
 	g_s.saves = ListSaves();
 	g_s.createSave = -1;

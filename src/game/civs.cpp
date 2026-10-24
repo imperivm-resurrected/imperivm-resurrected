@@ -7,6 +7,7 @@
 #include "hooks/hookcount.h"
 #include "game/civs.h"
 #include "game/civroom.h"
+#include "mods/civsets.h"
 #include "game/gamemodes.h"
 #include "game/specials.h"
 #include "core/json.h"
@@ -231,6 +232,24 @@ int __cdecl HookGetPlayerRace(int *pSP)
 
 std::vector<const Civ *> SortedCivs();
 
+bool GameInRoom()
+{
+	return CivSetsAllow(CivRoomSets(), kCivSetGame);
+}
+
+// A civilization that comes from no content pack (the civs folder of the mod itself) is not in any set: it is always allowed.
+bool CivInRoom(const Civ &c)
+{
+	return c.modId.empty() || CivSetsAllow(CivRoomSets(), c.modId);
+}
+
+std::vector<RandomCiv> RandomCivs(const std::vector<const Civ *> &civs, bool filter)
+{
+	std::vector<RandomCiv> out;
+	for (const Civ *c : civs) out.push_back({c->index, c->base, c->replacesBase, c->random, c->ai, !filter || CivInRoom(*c)});
+	return out;
+}
+
 const unsigned char kRandomDrawOriginal[21] = {0x8b, 0x93, 0xa0, 0x12, 0x00, 0x00, 0x8d, 0x8b, 0xa0, 0x12, 0x00, 0x00, 0x6a,
 	0x07, 0x6a, 0x00, 0xff, 0x52, 0x14, 0x8b, 0xc8};
 
@@ -240,10 +259,6 @@ int __cdecl PickRandomRace(char *game, char *frame)
 	const int slot = *reinterpret_cast<int *>(frame - 0x18);
 	const bool isAi = gs && slot >= 0 && slot < 8 && *reinterpret_cast<const int *>(gs + 0xa4 + slot * 0xc0 + 8) == 1;
 	const std::vector<const Civ *> civs = SortedCivs();
-	std::vector<const Civ *> pool;
-	for (const Civ *c : civs) {
-		if (c->random && !c->replacesBase && (!isAi || c->ai)) pool.push_back(c);
-	}
 	void *rng = game + 0x12a0;
 	void **vt = *reinterpret_cast<void ***>(rng);
 	auto rand = reinterpret_cast<int(__fastcall *)(void *, void *, int, int)>(vt[0x14 / 4]);
@@ -255,22 +270,14 @@ int __cdecl PickRandomRace(char *game, char *frame)
 			return race;
 		}
 	}
-	const int r = rand(rng, nullptr, 0, 7 + static_cast<int>(pool.size()));
-	const Civ *civ = nullptr;
-	if (r < 8) {
-		std::vector<const Civ *> share;
-		for (const Civ *c : civs) {
-			if (c->random && c->replacesBase && c->base == r && (!isAi || c->ai)) share.push_back(c);
-		}
-		if (share.empty()) return r;
-		civ = share[rand(rng, nullptr, 0, static_cast<int>(share.size()) - 1)];
-	}
-	else {
-		civ = pool[r - 8];
-	}
+	std::vector<std::vector<int>> groups = CivRandomGroups(RandomCivs(civs, true), isAi, GameInRoom());
+	if (groups.empty()) groups = CivRandomGroups(RandomCivs(civs, false), isAi, true);
+	const std::vector<int> &group = groups[rand(rng, nullptr, 0, static_cast<int>(groups.size()) - 1)];
+	const Civ *first = group[0] >= 10 ? FindByIndex(group[0]) : nullptr;
+	const int race = first && first->replacesBase ? group[rand(rng, nullptr, 0, static_cast<int>(group.size()) - 1)] : group[0];
 	static int logged = 0;
-	if (logged++ < 20) LogD("civilizations", "random civilization of player %d%s -> %s (%d)", slot, isAi ? " (AI)" : "", civ->id.c_str(), civ->index);
-	return civ->index;
+	if (logged++ < 20) LogD("civilizations", "random civilization of player %d%s -> %d", slot, isAi ? " (AI)" : "", race);
+	return race;
 }
 
 bool PatchRandomDraw()
@@ -649,6 +656,10 @@ void LoadCivFile(const std::string &folder, const std::string &path, const std::
 	}
 	auto civ = std::make_unique<Civ>();
 	civ->modFolder = folder;
+	if (!folder.empty()) {
+		ModInfo owner;
+		civ->modId = ModsFind(folder, owner) && !owner.id.empty() ? owner.id : folder;
+	}
 	std::string spelled = j.GetString("id");
 	if (spelled.empty()) spelled = fileName.substr(0, fileName.rfind('.'));
 	civ->id = Lower(spelled);
@@ -965,14 +976,40 @@ namespace {
 std::vector<RoomCiv> RoomCivs()
 {
 	std::vector<RoomCiv> out;
-	for (const Civ *c : SortedCivs()) out.push_back({c->base, c->replacesBase});
+	for (const Civ *c : SortedCivs()) out.push_back({c->base, c->replacesBase, CivInRoom(*c)});
 	return out;
 }
 }
 
 std::vector<int> CivsRoomOrder(int items)
 {
-	return CivRoomOrder(RoomCivs(), items);
+	return CivRoomOrder(RoomCivs(), items, GameInRoom());
+}
+
+bool CivsRoomAllows(int race)
+{
+	if (race == 8) return true;
+	if (race >= 10) {
+		const Civ *c = FindByIndex(race);
+		return !c || CivInRoom(*c);
+	}
+	if (GameInRoom()) return true;
+	for (const Civ *other : SortedCivs()) {
+		if (other->replacesBase && other->base == race && CivInRoom(*other)) return true;
+	}
+	return false;
+}
+
+std::vector<CivSet> CivsSets()
+{
+	std::vector<CivSet> out = {{kCivSetGame, Tr("Game")}};
+	for (const Civ *c : SortedCivs()) {
+		if (c->modId.empty()) continue;
+		if (std::any_of(out.begin(), out.end(), [&](const CivSet &s) { return s.id == c->modId; })) continue;
+		ModInfo m;
+		out.push_back({c->modId, ModsFind(c->modFolder, m) && !m.name.empty() ? m.name : c->modFolder});
+	}
+	return out;
 }
 
 int CivsRoomReplacement(int item, int items)

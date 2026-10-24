@@ -4,6 +4,8 @@
 #include "ui/textedit.h"
 #include "MinHook.h"
 #include "core/names.h"
+#include "game/civs.h"
+#include "mods/civsets.h"
 #include "mods/modoptions.h"
 #include "net/rejoin.h"
 #include "net/spectator.h"
@@ -504,6 +506,17 @@ void PaintGameRoom(Painter &p, const State &st)
 			if (g.online) {
 				section("CONTENT");
 				y = PaintLinesInline(p, OnlineLobbyLines(st, st.room.info, false), ix, y, iw, 20) + 4;
+				// The sets the room offers: every one the content has, or the ones the host left. Nothing to say when only the game has civilizations.
+				const std::vector<CivSet> known = CivsSets();
+				const std::vector<std::string> sets = CivRoomSets();
+				std::vector<ListLine> lines;
+				for (const CivSet &s : known) {
+					if (CivSetsAllow(sets, s.id)) lines.push_back({"\xE2\x80\xA2  " + s.name, kText, false});
+				}
+				if (known.size() > 1 && !lines.empty()) {
+					section("CIVILIZATIONS");
+					y = PaintLinesInline(p, lines, ix, y, iw, 20) + 4;
+				}
 			}
 
 			if (!host && st.map.state == 1) {

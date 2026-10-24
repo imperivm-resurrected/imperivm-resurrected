@@ -316,6 +316,20 @@ void SteamPublishRules(unsigned rules)
 	});
 }
 
+void SteamPublishCivSets(const std::string &value)
+{
+	if (!SteamOnlineReady()) return;
+	Post([value] {
+		static std::string last;
+		static uint64 lastLobby = 0;
+		if (!g_lobby || S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) != g_steam.me) return;
+		if (value == last && g_lobby == lastLobby) return;
+		last = value;
+		lastLobby = g_lobby;
+		S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, "civsets", value.c_str());
+	});
+}
+
 void SteamPublishSlots(const std::string &text)
 {
 	if (!SteamOnlineReady()) return;
