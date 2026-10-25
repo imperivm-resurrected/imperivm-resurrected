@@ -26,6 +26,7 @@ inline constexpr uintptr_t kSquadizeNextUnit = 0x00447584;
 inline constexpr uintptr_t kThreadLookIsDead = 0x0044779e;
 inline constexpr uintptr_t kAiUpdate = 0x00448dd0;
 inline constexpr uintptr_t kAiAddOrder = 0x004494c0;
+constexpr uintptr_t kConquestRaceLimits[] = {0x004ccbe9, 0x00505e17, 0x00506562};
 inline constexpr uintptr_t kCatapultByRace = 0x004e3b30;
 inline constexpr uintptr_t kDiplomacyExecute = 0x004e5f80;
 inline constexpr uintptr_t kQueryGetResults = 0x004f9490;

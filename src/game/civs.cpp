@@ -306,6 +306,28 @@ bool PatchRandomDraw()
 	return true;
 }
 
+// A conquest territory's race (the "interface" of its <territory>, kept at +0x74 of the conquest data and copied to the player's race when the
+// battle starts) is only taken when it is 0-7: the game's 8 races. Each of the three checks is `cmp eax, 8; jge skip`; `cmp eax, 127; jg skip` lets
+// through the index of any civilization (10-127). The site is the 8. 8 and 9 pass too, and are no civilization: a conquest that writes them is wrong.
+bool PatchConquestRaceLimit()
+{
+	static const unsigned char kOriginal[4] = {0x83, 0xf8, 0x08, 0x7d}, kPatched[4] = {0x83, 0xf8, 0x7f, 0x7f};
+	bool ok = true;
+	for (const uintptr_t site : addr::kConquestRaceLimits) {
+		auto at = reinterpret_cast<unsigned char *>(site) - 2;
+		if (memcmp(at, kPatched, sizeof(kPatched)) == 0) continue;
+		DWORD old = 0;
+		if (memcmp(at, kOriginal, sizeof(kOriginal)) != 0 || !VirtualProtect(at, sizeof(kPatched), PAGE_EXECUTE_READWRITE, &old)) {
+			ok = false;
+			continue;
+		}
+		memcpy(at, kPatched, sizeof(kPatched));
+		VirtualProtect(at, sizeof(kPatched), old, &old);
+		FlushInstructionCache(GetCurrentProcess(), at, sizeof(kPatched));
+	}
+	return ok;
+}
+
 int g_classLogged = 0;
 
 const char *__fastcall HookClassStartElement(void *self, void *edx, unsigned p1, unsigned *element)
@@ -469,6 +491,11 @@ void *__fastcall HookPlaceTown(void *self, void *edx, void *grid, float scale, u
 	if (player >= 1 && player <= 8) {
 		if (g_genActive) race = g_genRaces[player - 1];
 		else if (const char *gs = *reinterpret_cast<char **>(addr::kGameSettings)) race = *reinterpret_cast<const signed char *>(gs + 0x5c + (player - 1));
+		// a conquest sets the race of its player in the entry only (CVXGameAdv::StartGame), not in the list at +0x5c that the room fills
+		if (!g_genActive && race < 10) {
+			const int entry = CivsPlayerCiv(player);
+			if (entry >= 10) race = entry;
+		}
 		if (race >= 10) civ = FindByIndex(race);
 	}
 	static int logged = 0;
@@ -1119,6 +1146,7 @@ void InstallCivs(bool knownExe)
 		}
 	}
 	if (!PatchRandomDraw()) LogW("civilizations", "could not change the random civilization draw (the code is not the expected one)");
+	if (!PatchConquestRaceLimit()) LogW("civilizations", "could not let a conquest territory use the race of a civilization (the code is not the expected one)");
 	g_hooked = true;
 	ApplyNeutralPrefixes();
 	LogI("civilizations", "hooked");
