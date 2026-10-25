@@ -825,7 +825,7 @@ bool LockedByMode(int id)
 
 void EnforceModeRaces()
 {
-	if (!g_dlg || *reinterpret_cast<int *>(static_cast<char *>(g_dlg) + 0x9c) == 0 || NetMultiplayerSaveLoading()) return;
+	if (!g_dlg || NetMultiplayerSaveLoading()) return;
 	if (!reinterpret_cast<IntThis_t>(addr::kIsHostOrOffline)(g_dlg)) return;
 	const GameMode *mode = CurrentMode();
 	if (mode && mode->civs.empty()) mode = nullptr;
@@ -836,6 +836,8 @@ void EnforceModeRaces()
 		const char *name = nullptr;
 		int type = 0, color = 0, ready = 0, race = 0, team = 0xff, extra = 0;
 		if (!reinterpret_cast<GetSlotInfo_t>(addr::kGetSlotInfo)(g_dlg, nullptr, i, &name, &type, &color, &ready, &race, &team, &extra) || (type != 1 && type != 3)) continue;
+		// A scenario map fixes the civilization of its slots (EnforceFixedRaces); the others follow the room's sets and mode.
+		if (*reinterpret_cast<int *>(static_cast<char *>(g_dlg) + 0x9c) == 0 && g_scenarioRace[i] >= 0) continue;
 		const int now = CivsRaceOfRoomItem(static_cast<unsigned char>(choice[i]));
 		if (now < 0 || ((!mode || GameModeAllows(*mode, now)) && (!sets || CivsRoomAllows(now)))) continue;
 		int item = -1;
