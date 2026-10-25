@@ -55,6 +55,7 @@
 #include "game/quickicons.h"
 #include "game/noteicons.h"
 #include "game/zoomview.h"
+#include "game/viewgrid.h"
 #include "game/cheats.h"
 #include "net/onlinesaves.h"
 #include "ui/savesui.h"
@@ -217,6 +218,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 		InstallQuickIcons(knownExe);
 		InstallNoteIcons(knownExe);
 		InstallZoomView(knownExe);
+		InstallViewGrid(knownExe);
 		InstallSavesUi(knownExe);
 		CheckCompatibilityLayers();
 		if (knownExe && GetConfig().largeAddress && !ModsExeIsLargeAddressAware()) ModsPatchExeAtExit(1);

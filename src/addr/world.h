@@ -100,6 +100,7 @@ inline constexpr uintptr_t kSetPlacementFlag = 0x005e7070;
 inline constexpr uintptr_t kApplySelection = 0x005e7910;
 inline constexpr uintptr_t kClearSelection = 0x005e7e50;
 inline constexpr uintptr_t kInitForPlayer = 0x005e80c0;
+inline constexpr uintptr_t kScrollRowsCountJump = 0x00607e71;
 inline constexpr uintptr_t kLoadRleFile = 0x0060ca20;
 inline constexpr uintptr_t kCreateEntityImage = 0x0060cb20;
 inline constexpr uintptr_t kZoomMapHide = 0x0060e5a0;
@@ -108,6 +109,10 @@ inline constexpr uintptr_t kZoomFogOverlay = 0x006154a0;
 inline constexpr uintptr_t kRebuild = 0x00616c40;
 inline constexpr uintptr_t kScreenToMap = 0x006243b0;
 inline constexpr uintptr_t kVisibleMgrInvalidateRect = 0x00625d80;
+inline constexpr uintptr_t kDirtyGridRowsJump = 0x00625dcf;
+inline constexpr uintptr_t kVisibleMgrSetViewRect = 0x006265c0;
+inline constexpr uintptr_t kViewScrollSurfaceJump = 0x00626843;
+inline constexpr uintptr_t kCollectDirtyFilterJump = 0x00626cf8;
 inline constexpr uintptr_t kCenterOn = 0x00627300;
 inline constexpr uintptr_t kMapViewOnKey = 0x00627ef0;
 inline constexpr uintptr_t kReleaseCachedFile = 0x0067d2a0;
@@ -150,6 +155,7 @@ inline constexpr uintptr_t kAiInitted = 0x008c8e58;
 inline constexpr uintptr_t kScrollToken = 0x009bdb78;
 inline constexpr uintptr_t kScrollBits = 0x009bdb84;
 inline constexpr uintptr_t kZoomMapGlobal = 0x009d2cc0;
+inline constexpr uintptr_t kRedrawWholeView = 0x00a782e0;
 inline constexpr uintptr_t kQuickIconBarGlobal = 0x00a7ac3c;
 
 }
