@@ -233,6 +233,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 		LogI("boot", "mod ready in %lu ms", static_cast<unsigned long>(GetTickCount() - bootStart));
 	}
 	else if (reason == DLL_PROCESS_DETACH) {
+		DisplayRestoreMonitor();
 		ShutdownRender();
 		LogShutdown();
 	}
