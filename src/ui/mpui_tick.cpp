@@ -338,7 +338,7 @@ void MpUiGameThreadTick()
 		if (SteamTakeJoinRefused()) {
 			if (g_s.syncPhase == 1) {
 				g_s.syncPhase = 4;
-				g_s.syncError = "You have been kicked from the room.";
+				g_s.syncError = Tr("You have been kicked from the room.");
 			}
 			if (g_s.connecting || g_autoJoin.active || g_flow.inJoin) AbortJoin();
 		}

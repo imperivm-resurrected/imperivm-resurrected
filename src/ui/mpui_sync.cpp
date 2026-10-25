@@ -57,14 +57,14 @@ void StartSyncCheck(const OnlineLobby lobby, const std::map<std::string, std::st
 			hash = ModsProfileGameplayHash(p);
 			if (hash.empty()) Sleep(200);
 		}
-		if (error.empty() && hash.empty()) error = "the content could not be checked";
+		if (error.empty() && hash.empty()) error = Tr("the content could not be checked");
 		if (error.empty() && !lobby.gameplayKey.empty() && hash.substr(0, 16) != lobby.gameplayKey) {
-			error = "the received content does not match the host's";
+			error = Tr("the received content does not match the host's");
 		}
 		if (error.empty()) {
 			const ModProfile loose = ModsLooseProfileWith(p.mods);
 			p.name = loose.name;
-			if (!ModsSaveProfile(loose)) error = "the profile could not be saved";
+			if (!ModsSaveProfile(loose)) error = Tr("the profile could not be saved");
 		}
 		if (error.empty() && update) {
 			for (const OnlineMod &m : lobby.mods) {
@@ -161,7 +161,7 @@ void SyncTick()
 		}
 		else if (GetTickCount() - g_s.syncStart > 20000) {
 			g_s.syncPhase = 4;
-			g_s.syncError = "Could not join the room.";
+			g_s.syncError = Tr("Could not join the room.");
 		}
 		break;
 	case 2:
@@ -191,7 +191,7 @@ void SyncTick()
 		UpdateSpeed(g_s.dl.got);
 		if (g_s.dl.failed) {
 			g_s.syncPhase = 4;
-			g_s.syncError = g_s.dl.error == "you were kicked from the room" ? "You have been kicked from the room: the content download has stopped."
+			g_s.syncError = g_s.dl.error == "you were kicked from the room" ? Tr("You have been kicked from the room: the content download has stopped.")
 				: Tr("Could not receive the content: ") + g_s.dl.error + ".";
 		}
 		else if (g_s.dl.done) {
@@ -207,7 +207,7 @@ void SyncTick()
 		if (g_syncResult.empty()) break;
 		if (g_s.room.id != g_s.syncLobby.id) {
 			g_s.syncPhase = 4;
-			g_s.syncError = "You are no longer in the room (you were kicked or it was closed).";
+			g_s.syncError = Tr("You are no longer in the room (you were kicked or it was closed).");
 			break;
 		}
 		if (g_syncResult.compare(0, 3, "ok:") == 0) {
