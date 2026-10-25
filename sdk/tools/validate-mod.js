@@ -27,13 +27,14 @@ const LEGACY_DIRECTIVES = { principio: 'top', final: 'bottom', antes: 'before', 
 const fs = require('fs'), path = require('path');
 
 const args = process.argv.slice(2);
-const modDir = args.find(a => !a.startsWith('--') && !['--data', '--game'].includes(args[args.indexOf(a) - 1]));
+const modDir = args.find(a => !a.startsWith('--') && !['--data', '--game', '--mods'].includes(args[args.indexOf(a) - 1]));
+const modsIdx = args.indexOf('--mods');
 const dataIdx = args.indexOf('--data');
 const dataDir = dataIdx >= 0 ? args[dataIdx + 1] : null;
 const gameIdx = args.indexOf('--game');
 const gameDir = gameIdx >= 0 ? args[gameIdx + 1] : null;  // game folder: the names of the graphics .pak files are read (read-only)
 if (!modDir || !fs.existsSync(modDir) || !fs.statSync(modDir).isDirectory()) {
-	console.error('usage: node validate-mod.js <mod folder> [--data <DATA folder of the extracted data.pak>] [--game <game folder>]');
+	console.error('usage: node validate-mod.js <mod folder> [--data <DATA folder of the extracted data.pak>] [--game <game folder>] [--mods <folder with the mods it requires>]');
 	process.exit(2);
 }
 
@@ -96,6 +97,44 @@ function gameFile(rel) {
 	}
 	return cur;
 }
+
+// --- the mods this one requires -----------------------------------------------------------------------------------------
+// What mod.json "requires" is the mod's to use: its classes, entities, sprites, scripts and civilizations are not missing. Each required mod is
+// looked up (by folder name or by the "id" of its mod.json, and what it requires in turn) in --mods <folder>, in <game>\mods with --game, and next
+// to this mod's folder.
+const depRoots = [...(modsIdx >= 0 ? [args[modsIdx + 1]] : []), ...(gameDir ? [path.join(gameDir, 'mods')] : []), path.dirname(path.resolve(modDir))]
+	.filter(d => d && fs.existsSync(d) && fs.statSync(d).isDirectory());
+const depFiles = new Set(), depClassIds = new Set(), depCivs = new Set(), depNotFound = [];
+function loadDeps(ids, seen = new Set()) {
+	for (const id of ids) {
+		if (typeof id !== 'string' || seen.has(lower(id))) continue;
+		seen.add(lower(id));
+		let dir = null, json = null;
+		for (const root of depRoots) {
+			for (const e of fs.readdirSync(root, { withFileTypes: true })) {
+				const p = path.join(root, e.name);
+				if (path.resolve(p) === path.resolve(modDir) || !fs.statSync(p, { throwIfNoEntry: false })?.isDirectory()) continue;  // (a link to a folder counts)
+				let j = null;
+				try { j = modernKeys(JSON.parse(fs.readFileSync(path.join(p, 'mod.json'), 'utf8').replace(/^\uFEFF/, ''))); } catch { /* no mod.json */ }
+				if (lower(e.name) === lower(id) || (j && typeof j.id === 'string' && lower(j.id) === lower(id))) { dir = p; json = j; break; }
+			}
+			if (dir) break;
+		}
+		if (!dir) { depNotFound.push(id); continue; }
+		for (const f of walk(dir)) {
+			depFiles.add(lower(f));
+			if (/^data\/classes\/.+\.sc\.xml$/i.test(f)) {
+				const h = fs.readFileSync(path.join(dir, f), 'latin1').match(/<class\b[^>]*>/);
+				for (const x of (h && h[0].match(/\b(?:id|altid)\s*=\s*"([^"]+)"/g)) || []) depClassIds.add(lower(x.replace(/^[a-z]+\s*=\s*"|"$/gi, '')));
+			}
+			else if (/^civs\/[^/]+\.json$/i.test(f)) {
+				try { const c = modernKeys(JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8').replace(/^\uFEFF/, ''))); if (typeof c.id === 'string') depCivs.add(lower(c.id)); } catch { /* not valid: its own validation says so */ }
+			}
+		}
+		if (json && Array.isArray(json.requires)) loadDeps(json.requires, seen);
+	}
+}
+const hasDep = rel => depFiles.has(lower(rel));
 
 // --- XML: well-formedness check ----------------------------------------------------------------------------------------
 function checkXml(text) {
@@ -164,6 +203,10 @@ else {
 	try {
 		const m = modernKeys(JSON.parse(read('mod.json')));
 		for (const k of ['id', 'name', 'version']) if (!m[k]) warn('mod.json', 0, `"${k}" is missing`);
+		if (Array.isArray(m.requires)) {
+			loadDeps(m.requires);
+			for (const id of depNotFound) warn('mod.json', 0, `requires "${id}": its folder was not found in ${depRoots.join(', ') || 'any folder (use --mods <folder>)'}: what it provides is not checked, and a class, entity or sprite taken from it may be reported as missing`);
+		}
 		// name and description: a text, or an object with one text per language
 		for (const k of ['name', 'description']) {
 			const v = m[k];
@@ -316,6 +359,7 @@ if (optionBits > 8) warn('options', 0, `the options of this mod take ${optionBit
 			walkClasses(path.join(dataDir, classDir));
 		}
 		for (const x of files.filter(x => /^data\/classes\/.*\.sc\.xml$/i.test(x))) addClassFile(read(x));
+		depClassIds.forEach(c => known.add(c));
 		const missing = new Map();
 		read(tf).split('\n').forEach((l, i) => { const m = /class="([^"]+)"/.exec(l); if (m && !known.has(m[1].toLowerCase()) && !missing.has(m[1])) missing.set(m[1], i + 1); });
 		for (const [c, line] of missing) error(tf, line, `the class "${c}" exists neither in the game nor in the mod: the random map would not be generated`);
@@ -435,7 +479,7 @@ for (const f of files.filter(f => /^modes\/[^/]+\.json$/i.test(f))) {
 	if (j.civilizations !== undefined) {
 		if (!Array.isArray(j.civilizations)) error(f, 0, '"civilizations" is a list of civilizations');
 		else for (const c of j.civilizations) {
-			const known = typeof c === 'string' && (GAME_CIVS.some(g => lower(g) === lower(c)) || ['rome', 'roman', 'briton'].includes(lower(c)) || myCivs.has(lower(c)));
+			const known = typeof c === 'string' && (GAME_CIVS.some(g => lower(g) === lower(c)) || ['rome', 'roman', 'briton'].includes(lower(c)) || myCivs.has(lower(c)) || depCivs.has(lower(c)));
 			if (!known) warn(f, 0, `"${c}" is not a civilization of the game or of this mod (if it belongs to another mod, that one has to be active)`);
 		}
 	}
@@ -463,7 +507,7 @@ function checkClassFile(f, text, _source) {
 	if (!header) { warn(f, 0, 'there is no <class> tag'); return; }
 	if (!/\bid\s*=\s*"[^"]+"/.test(header[0])) error(f, lineOf(text, header.index), '<class> without an id');
 	for (const m of text.matchAll(/\brace\s*=\s*"([^"]*)"/g)) {
-		if (!GAME_CIVS.includes(m[1]) && !myCivs.has(lower(m[1])) && !['None', 'Random', 'Mutable'].includes(m[1]))
+		if (!GAME_CIVS.includes(m[1]) && !myCivs.has(lower(m[1])) && !depCivs.has(lower(m[1])) && !['None', 'Random', 'Mutable'].includes(m[1]))
 			warn(f, lineOf(text, m.index), `race="${m[1]}" is not a civilization of the game or of this mod`);
 	}
 	for (const m of text.matchAll(/\bunit_specials\s*=\s*"([^"]*)"/g)) {
@@ -477,7 +521,7 @@ function checkClassFile(f, text, _source) {
 	if (dataDir) {
 		for (const m of text.matchAll(/<(?:method|behavior)\b[^>]*?\b(?:vs|script|verify|onfinish)\s*=\s*"([^"]+)"/g)) {
 			const rel = m[1].replace(/\\/g, '/');
-			if (!has(rel) && !gameFile(rel)) error(f, lineOf(text, m.index), `the script ${rel} is neither in the mod nor in the game`);
+			if (!has(rel) && !hasDep(rel) && !gameFile(rel)) error(f, lineOf(text, m.index), `the script ${rel} is neither in the mod nor in the game`);
 		}
 	}
 }
@@ -511,7 +555,7 @@ for (const f of files.filter(f => /^patches\//i.test(f))) {
 	const target = f.slice('patches/'.length);
 	const ext = lower(path.extname(f));
 	if (ext !== '.xml' && ext !== '.ini' && ext !== '.vs') { error(f, 0, 'only .xml, .ini and .vs files can be patched'); continue; }
-	if (dataDir && /^data\//i.test(target) && !gameFile(target)) warn(f, 0, `the game has no ${target}: the patch will not be applied`);
+	if (dataDir && /^data\//i.test(target) && !gameFile(target) && !hasDep(target)) warn(f, 0, `the game has no ${target}: the patch will not be applied`);
 	const text = read(f);
 	if (ext === '.ini') {
 		// The engine only recognizes comments that take up the whole line: a ';' after a key or a section breaks the patch
@@ -654,7 +698,7 @@ for (const f of files.filter(f => /^data\/classes\/.+\.sc\.xml$/i.test(f))) {
 }
 let gameClassIds = null;
 function classExists(id) {
-	if (myClassIds.has(lower(id))) return true;
+	if (myClassIds.has(lower(id)) || depClassIds.has(lower(id))) return true;
 	if (!dataDir) return null;  // unknown
 	if (!gameClassIds) {
 		gameClassIds = new Set();
@@ -773,7 +817,7 @@ for (const f of files.filter(f => /\.ent\.xml$/i.test(f))) {
 	const passFile = ent && (ent[0].match(/\bpass_file\s*=\s*"([^"]*)"/) || [])[1];
 	if (passFile) {
 		const pf = (dir + '/' + passFile).replace(/^\.\//, '');
-		if (!has(pf) && gameHas(pf) !== true) warn(f, lineOf(text, ent.index), `pass_file="${passFile}": ${pf} is not there (the footprint would be empty and the building would take up no space)`);
+		if (!has(pf) && !hasDep(pf) && gameHas(pf) !== true) warn(f, lineOf(text, ent.index), `pass_file="${passFile}": ${pf} is not there (the footprint would be empty and the building would take up no space)`);
 	}
 	// images
 	const images = new Map(); // idx -> {rows, columns, file}
@@ -792,7 +836,9 @@ for (const f of files.filter(f => /\.ent\.xml$/i.test(f))) {
 		const base = (dir + '/' + file).replace(/^\.\//, '').replace(/\.rle$/i, '');
 		// the game tries: the path as is (.rle/.bmp), .rle, .rle.mmp, .mmp, .bmp
 		const inMod = ['.rle', '.bmp'].some(ext => has(base + ext)) || has(base) || ['.rle.mmp', '.mmp'].some(ext => has(base + ext));
-		const inGame = gameHas(base + '.rle.mmp') === true || gameHas(base + '.rle') === true || gameHas(base + '.bmp') === true;
+		// (what a required mod ships counts as the game's: it is there when this one is active)
+		const inGame = gameHas(base + '.rle.mmp') === true || gameHas(base + '.rle') === true || gameHas(base + '.bmp') === true
+			|| ['.rle', '.bmp', '.rle.mmp', '.mmp', ''].some(ext => hasDep(base + ext));
 		if (!inMod && !inGame) {
 			const msg = `the image ${base}.rle (or .bmp) does not exist in the mod${gameDir ? ' or in the game' : ''}: the game HANGS when loading the class`;
 			if (modOwnsSprites || gameDir) error(f, line, msg); else warn(f, line, msg + ' (unless it is one of the game\'s own images; --game checks that)');
@@ -868,7 +914,7 @@ for (const [id, c] of classHeaders) {
 	const e = (c.header.match(/\bentity\s*=\s*"([^"]*)"/) || [])[1];
 	if (!e) continue;
 	const rel = e.replace(/\\/g, '/');
-	if (has(rel)) continue;
+	if (has(rel) || hasDep(rel)) continue;
 	if (gameHas(rel) === false) error(c.file, 0, `the class ${id}: entity="${e}" exists neither in the mod nor in the game`);
 }
 

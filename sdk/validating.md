@@ -15,6 +15,12 @@ With `--game <game folder>` (read-only) it checks the names in `Units.pak`, `Bui
 node tools/validate-mod.js <mod folder> --data <DATA> --game "C:\Program Files (x86)\Steam\steamapps\common\Imperivm - Great Battles of Rome HD"
 ```
 
+If the mod's `mod.json` has `requires`, what those mods ship counts as there: their classes, entities, sprites, scripts, civilizations and the files your patches change are not reported as missing. It looks for each required mod, by folder name or by the `id` in its `mod.json` (and for what that one requires in turn), in the folder you give with `--mods <folder>`, in `<game folder>\mods` when you use `--game`, and next to your mod's folder. A required mod it doesn't find gives a warning, and whatever you take from it may then be reported as missing:
+
+```
+node tools/validate-mod.js <mod folder> --data <DATA> --game "<game folder>" --mods <folder with the mods it requires>
+```
+
 It exits with code 1 if there are errors, 0 if there are only warnings or nothing, and 2 if you call it wrong. You can use that to automate it.
 
 An error is something the game would reject or that will fail. A warning is a suspicion: something the game ignores or that you probably didn't mean.
