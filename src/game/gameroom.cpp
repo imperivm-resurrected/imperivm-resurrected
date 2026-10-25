@@ -839,6 +839,13 @@ void EnforceModeRaces()
 		// A scenario map fixes the civilization of its slots (EnforceFixedRaces); the others follow the room's sets and mode.
 		if (*reinterpret_cast<int *>(static_cast<char *>(g_dlg) + 0x9c) == 0 && g_scenarioRace[i] >= 0) continue;
 		const int now = CivsRaceOfRoomItem(static_cast<unsigned char>(choice[i]));
+		{
+			static int traced = 0;
+			if (traced < 30 && now >= 10 && sets && !CivsRoomAllows(now)) {
+				traced++;
+				LogD("room", "trace: slot %d item %d civ %d not allowed (type %d); order[0]=%d", i + 1, static_cast<int>(static_cast<unsigned char>(choice[i])), now, type, CivsRoomOrder(10 + static_cast<int>(CivsList().size())).empty() ? -1 : CivsRoomOrder(10 + static_cast<int>(CivsList().size()))[0]);
+			}
+		}
 		if (now < 0 || ((!mode || GameModeAllows(*mode, now)) && (!sets || CivsRoomAllows(now)))) continue;
 		int item = -1;
 		for (int shown : CivsRoomOrder(10 + static_cast<int>(CivsList().size()))) {
@@ -852,6 +859,7 @@ void EnforceModeRaces()
 		if (item < 0) continue;
 		LogI("room", "slot %d: the room does not allow civilization %d; it is changed to %d", i + 1, now, CivsRaceOfRoomItem(item));
 		choice[i] = static_cast<char>(item);
+		LogD("room", "trace: slot %d choice set to item %d, selecting it in the dropdown", i + 1, item);
 		reinterpret_cast<UpdateRow_t>(addr::kUpdateSlotRow)(g_dlg, nullptr, static_cast<unsigned>(i));
 		// The dropdown is what the room shows and sends; changing the stored choice alone does not move it.
 		SelectCombo(Combo(g_dlg, ((i + 1) << 12) | 0x22), item);
