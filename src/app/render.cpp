@@ -148,14 +148,23 @@ VSOut VS(uint id : SV_VertexID) {
 }
 float4 PS(VSOut i) : SV_Target {
 	float2 uv = i.uv;
-	if (info.z > 0) {
-		float2 texel = uv * info.xy;
-		float2 base = floor(texel);
-		float2 d = texel - base - 0.5;
-		float range = 0.5 - 0.5 / info.z;
-		uv = (base + (d - clamp(d, -range, range)) * info.z + 0.5) / info.xy;
+	float4 c;
+	if (info.z < 0) {
+		// Shrinking: one pixel covers up to two texels, so four bilinear taps spread over them average all of
+		// them; a single tap would skip some and leave text and edges jagged.
+		float2 o = -info.z * 0.25 / info.xy;
+		c = (tex.Sample(smp, uv - o) + tex.Sample(smp, uv + o) + tex.Sample(smp, uv + float2(o.x, -o.y)) + tex.Sample(smp, uv + float2(-o.x, o.y))) * 0.25;
 	}
-	float4 c = tex.Sample(smp, uv);
+	else {
+		if (info.z > 0) {
+			float2 texel = uv * info.xy;
+			float2 base = floor(texel);
+			float2 d = texel - base - 0.5;
+			float range = 0.5 - 0.5 / info.z;
+			uv = (base + (d - clamp(d, -range, range)) * info.z + 0.5) / info.xy;
+		}
+		c = tex.Sample(smp, uv);
+	}
 	c.rgb = saturate(c.rgb * info.w);
 	return c;
 }
@@ -454,7 +463,7 @@ DWORD WINAPI RenderThread(LPVOID)
 			r[3] = h;
 			r[4] = static_cast<float>(fw);
 			r[5] = static_cast<float>(fh);
-			r[6] = s > 1.0f ? static_cast<float>(static_cast<int>(s)) : 0.0f;
+			r[6] = s > 1.0f ? static_cast<float>(static_cast<int>(s)) : s < 1.0f ? -1.0f / s : 0.0f;
 			r[7] = GetConfig().brightness / 100.0f;
 			ctx->Unmap(cb, 0);
 		}
