@@ -35,6 +35,8 @@ The folder of the game's conquest has these files:
 | `global.bmp` | 1024x768, 16-bit. |
 | `Shield<Name>.bmp` | 74x79, 16-bit, one per territory (`ShieldSpain.bmp` for `Spain`), and `ShieldArrow.bmp`. |
 
+The `territories.xml` stored inside the conquest's `.bfhp` has more per territory (`visualname`, `mapname`, `description`, `bonus`...). Its `interface` says which civilization the player plays when they choose that territory: 0 to 7 for the game's civilizations (Gaul, RepublicanRome, Carthage, Iberia, ImperialRome, Britain, Egypt, Germany) or the `index` of a [civilization](civilizations.md) of a mod (10 to 127). Needs the DLL build that has this; the original 1.0 release only reads 0 to 7.
+
 The territories of the game's conquest are `Spain`, `Britain`, `Gaul`, `Italy`, `Carthage`, `Egypt` and `Germany`. To make yours, copy the folder of the game (`<game folder>\ConquestMaps\1 - GBR europe`) and change it: it is the quickest way to get `index` and `state` right. The [conquest template](templates/conquest) has the layout and a trimmed `territories.xml`.
 
 ## Cutscenes
