@@ -608,10 +608,14 @@ std::string SteamScenarioModName()
 	return f.size() >= 6 && !f[3].empty() ? f[5] : std::string();
 }
 
-std::string SteamVersionMismatch(const std::string &roomVersion)
+std::string SteamVersionMismatch(const std::string &roomVersion, const std::string &roomRulesLevel)
 {
 	const std::string mine = ModVersionText();
-	if (roomVersion == mine) return "";
+	if (roomVersion == mine) {
+		if (roomRulesLevel.empty() || roomRulesLevel == ModsRulesLevel()) return "";
+		LogW("steam", "the room uses %s %s and this build %s", mine.c_str(), roomRulesLevel.c_str(), ModsRulesLevel().c_str());
+		return TrFmt("That room uses another build of Imperivm Resurrected %s. Both must install the same build.", {mine});
+	}
 	if (roomVersion.empty()) {
 		return "That room uses an old version of Imperivm Resurrected (before 0.29). The host has to update to play "
 			   "with you.";

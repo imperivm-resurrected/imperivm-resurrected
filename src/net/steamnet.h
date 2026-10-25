@@ -55,7 +55,7 @@ struct OnlineLobby {
 	int optionalMods = 0;
 	int myNumber = 0;
 	bool modsRequiredOnly = false;
-	std::string version;
+	std::string version, rulesLevel;
 	bool spectate = false;
 	uint64_t specLobby = 0;
 	bool specOnly = false;
@@ -151,7 +151,7 @@ void SteamJoinLobby(uint64_t id, const std::string &password, bool forContentSyn
 void SteamLeaveLobby(uint32_t onlyIfMembership = 0);
 uint32_t SteamMembership();
 OnlineRoom SteamCurrentRoom();
-std::string SteamVersionMismatch(const std::string &roomVersion);
+std::string SteamVersionMismatch(const std::string &roomVersion, const std::string &roomRulesLevel = std::string());
 std::vector<std::string> SteamMissingScenario();
 std::string SteamScenarioModName();
 void SteamReportDownloadProgress(uint64_t got, uint64_t total);

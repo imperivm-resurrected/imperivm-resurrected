@@ -122,6 +122,7 @@ void OnCallback(int id, const void *data)
 		set("key", OwnKey());
 		PublishMods("");
 		set("irver", ModVersionText());
+		set("irlvl", ModsRulesLevel());
 		set(("k:" + std::to_string(g_steam.me)).c_str(), "1");
 		LogI("steam", "room \"%s\" created (%llu)", g_creating.name.c_str(), g_lobby);
 		LogI("steam", "room created");
@@ -222,7 +223,7 @@ void OnCallback(int id, const void *data)
 			Notice("Wrong password");
 			return;
 		}
-		const std::string mismatch = SteamVersionMismatch(Data(lobby, "irver"));
+		const std::string mismatch = SteamVersionMismatch(Data(lobby, "irver"), Data(lobby, "irlvl"));
 		if (!mismatch.empty()) {
 			S.SteamAPI_ISteamMatchmaking_LeaveLobby(g_steam.mm, lobby);
 			LogW("steam", "not entering the room: %s", mismatch.c_str());

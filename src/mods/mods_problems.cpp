@@ -196,3 +196,8 @@ std::string ModsProfileGameplayHash(const ModProfile &p)
 	}
 	return RulesFingerprint(parts);
 }
+
+std::string ModsRulesLevel()
+{
+	return std::string(kGameId) + "/sim" + std::to_string(kSimLevel) + "/esq" + std::to_string(kRulesSchema) + "/api" + std::to_string(kScriptApiVersion);
+}

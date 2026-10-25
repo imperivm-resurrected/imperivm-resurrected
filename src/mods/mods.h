@@ -171,6 +171,7 @@ void ModsApplyPendingSwaps();
 
 std::vector<std::string> ModsProblems(const ModProfile &p);
 std::string ModsProfileGameplayHash(const ModProfile &p);
+std::string ModsRulesLevel();
 
 void ModsRestartGame(int largeAddress = -1, const std::string &args = "");
 void ModsPatchExeAtExit(int largeAddress);
