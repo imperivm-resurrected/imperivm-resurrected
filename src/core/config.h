@@ -21,8 +21,9 @@ struct Config {
 	int monitor = 0;
 	int resolutionW = 0;
 	int resolutionH = 0;
-	bool allResolutions = true;
-	bool extendedView = true;
+	int resolutionScreenW = 0;
+	int resolutionScreenH = 0;
+	bool extendedView = false;
 	bool showPerf = false;
 	bool showNet = false;
 	int panelX = 1000;

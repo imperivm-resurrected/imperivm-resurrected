@@ -32,7 +32,13 @@ std::vector<std::string> DisplayMonitorLabels();
 
 void DisplayTargetSize(int &w, int &h);
 
+void DisplayRestoreMonitor();
+
+bool DisplayMonitorHasMode(int w, int h);
+
 std::vector<POINT> DisplayExtendedSizes();
+
+std::vector<POINT> DisplayWindowsSizes();
 
 bool DisplayModeAllowed(int w, int h);
 

@@ -9,6 +9,7 @@
 #include <algorithm>
 #include "core/log.h"
 #include "i18n/tr.h"
+#include "mods/downloads.h"
 #include "mods/mods.h"
 #include "mods/civindices.h"
 #include "net/modlist.h"
@@ -85,7 +86,9 @@ std::string EncodeMods(const std::string &scenModId, int &optional)
 	std::vector<ModInfo> mounted;
 	for (const std::string &folder : ModsMountedProfile().mods) {
 		ModInfo m;
-		if (ModsFind(folder, m)) mounted.push_back(m);
+		if (!ModsFind(folder, m)) continue;
+		m.gbFile = DlInstalledGbFile(m);
+		mounted.push_back(m);
 	}
 	return EncodeModList(mounted, scenModId, optional);
 }
@@ -173,6 +176,7 @@ OnlineLobby ReadLobby(uint64 id)
 	l.myNumber = atoi(Data(id, ("k:" + std::to_string(g_steam.me)).c_str()).c_str());
 	l.modsRequiredOnly = Data(id, "modsv") == "2";
 	l.version = Data(id, "irver");
+	l.rulesLevel = Data(id, "irlvl");
 	l.spectate = Data(id, "spec") == "1";
 	l.specLobby = _strtoui64(Data(id, "sl").c_str(), nullptr, 10);
 	l.specDelay = atoi(Data(id, l.spectate ? "delay" : "sd").c_str());

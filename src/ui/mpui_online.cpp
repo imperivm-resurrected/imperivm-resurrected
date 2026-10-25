@@ -190,7 +190,7 @@ void TryJoinNow(const OnlineLobby &lobby, const std::string &password, bool watc
 		ModUiToast("That game has already started: you can't join midway.");
 		return;
 	}
-	const std::string mismatch = SteamVersionMismatch(g.version);
+	const std::string mismatch = SteamVersionMismatch(g.version, g.rulesLevel);
 	if (!mismatch.empty()) {
 		ModUiToast(mismatch, true);
 		return;

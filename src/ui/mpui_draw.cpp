@@ -357,6 +357,10 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 		r.p.pressAction = st.pressAction;
 		r.p.pressArg = st.pressArg;
 	}
+	// Only the lists painted in this frame may take clicks: a scrollbar left from
+	// another view would catch them where it used to be.
+	g_detail.geomOut = ListGeom();
+	g_chat.geomOut = ListGeom();
 	PaintScreen(r.p, st);
 	WakeGameThread();
 	r.End(250);
@@ -367,7 +371,7 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 	g_s.createCivGeom = g_createCivGeomOut;
 	const bool overlay = OverlayActive(st);
 	g_s.pickGeom = g_pickGeomOut;
-	g_s.optGeom = overlay ? ListGeom() : g_optGeomOut;
+	g_s.optGeom = overlay || !st.game.active ? ListGeom() : g_optGeomOut;
 	g_s.detailGeom = overlay ? ListGeom() : g_detail.geomOut;
 	g_s.chatGeom = overlay ? ListGeom() : g_chat.geomOut;
 }

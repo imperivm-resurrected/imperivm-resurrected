@@ -13,6 +13,7 @@
 #include "ui/savesui.h"
 #include "addr/state.h"
 #include "addr/ui.h"
+#include "game/loadcurtain.h"
 
 #include "ui/mpui_internal.h"
 
@@ -105,6 +106,7 @@ int __cdecl HookShowModalMenu(void *winos, const char *ini, const char *text, in
 		return 0;
 	}
 	LogD("lobby", "game message: (%s) %s", ini ? ini : "?", text ? text : "");
+	LoadCurtainLift("a message of the game");
 	bool wasOpen = false;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);

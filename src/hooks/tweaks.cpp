@@ -12,6 +12,7 @@
 #include "hooks/hookcount.h"
 #include "core/config.h"
 #include "hooks/displaymode.h"
+#include "hooks/respick.h"
 #include "core/log.h"
 #include "hooks/tweaks.h"
 #include "addr/engine.h"
@@ -86,13 +87,11 @@ void RepaintClosedMenusWhole()
 }
 
 typedef bool(__cdecl *InitResolutionList_t)();
-typedef int(__cdecl *VfsFileExists_t)(const char *);
 typedef void(__cdecl *LoadScrollSettings_t)();
 
 typedef void *(__cdecl *ChangeDisplayModeTo_t)(DWORD, DWORD, unsigned, int);
 
 InitResolutionList_t g_origInitResolutionList = nullptr;
-VfsFileExists_t g_origFileExists = nullptr;
 LoadScrollSettings_t g_origLoadScroll = nullptr;
 ChangeDisplayModeTo_t g_origChangeDisplayModeTo = nullptr;
 
@@ -104,68 +103,12 @@ void *__cdecl HookChangeDisplayModeTo(DWORD w, DWORD h, unsigned freq, int testO
 	return g_origChangeDisplayModeTo(w, h, freq, testOnly);
 }
 
-int __cdecl FileExistsDuringResolutionList(const char *path)
-{
-	uintptr_t ret = reinterpret_cast<uintptr_t>(_ReturnAddress());
-	if (GetConfig().allResolutions && path && _stricmp(path, "screenshots/screenshots.ini") == 0 && ret >= addr::kInitResolutionList &&
-		ret < addr::kInitResolutionListEnd) {
-		return 1;
-	}
-	return g_origFileExists(path);
-}
-
 typedef void(__fastcall *PushBack_t)(void *vec, void *edx, const POINT *p);
-
-bool ResolutionListed(int w, int h)
-{
-	auto begin = *reinterpret_cast<POINT **>(addr::kResolutionList + 4);
-	auto end = *reinterpret_cast<POINT **>(addr::kResolutionList + 8);
-	for (POINT *p = begin; p && p < end; p++) {
-		if (p->x == w && p->y == h) {
-			return true;
-		}
-	}
-	return false;
-}
-
-void AddNativeResolution()
-{
-	int dw = 0, dh = 0;
-	DisplayTargetSize(dw, dh);
-	if (dw <= 0 || dh <= 0 || dw > 4096 || dh > 2304 || ResolutionListed(dw, dh)) {
-		return;
-	}
-	POINT p = {dw, dh};
-	reinterpret_cast<PushBack_t>(addr::kVectorPointPushBack)(reinterpret_cast<void *>(addr::kResolutionList), nullptr, &p);
-	LogD("display", "resolutions: the monitor's added, %dx%d", dw, dh);
-}
-
-void RemoveUnavailableResolutions()
-{
-	auto &begin = *reinterpret_cast<POINT **>(addr::kResolutionList + 4);
-	auto &end = *reinterpret_cast<POINT **>(addr::kResolutionList + 8);
-	if (!begin) return;
-	POINT *keep = begin;
-	for (POINT *p = begin; p < end; p++) {
-		if (DisplayModeAllowed(p->x, p->y)) *keep++ = *p;
-		else LogD("display", "resolutions: %dx%d is not offered (the monitor is smaller)", p->x, p->y);
-	}
-	if (keep != begin) end = keep;
-}
-
-void AddExtendedViewResolutions()
-{
-	for (POINT p : DisplayExtendedSizes()) {
-		if (ResolutionListed(p.x, p.y)) continue;
-		reinterpret_cast<PushBack_t>(addr::kVectorPointPushBack)(reinterpret_cast<void *>(addr::kResolutionList), nullptr, &p);
-		LogD("display", "extended view: added %dx%d", p.x, p.y);
-	}
-}
 
 typedef void(__fastcall *OptionsBlock_t)(unsigned *block);
 OptionsBlock_t g_origSaveOptions = nullptr;
 const int kResolutionSlot = 0xd;
-int g_resolutionAtStart = -1;
+POINT g_sizeAtStart = {};
 
 int ResolutionCount()
 {
@@ -183,64 +126,105 @@ int ResolutionIndexOf(int w, int h)
 	return -1;
 }
 
+std::vector<ResSize> ResolutionSizes()
+{
+	std::vector<ResSize> sizes;
+	auto begin = *reinterpret_cast<POINT **>(addr::kResolutionList + 4);
+	for (int i = 0, n = ResolutionCount(); i < n; i++) sizes.push_back({begin[i].x, begin[i].y});
+	return sizes;
+}
+
+ResSize ScreenSize()
+{
+	ResSize s;
+	DisplayTargetSize(s.w, s.h);
+	return s;
+}
+
+void SetResolutionIndex(int index)
+{
+	if (index < 0) return;
+	*reinterpret_cast<int *>(addr::kCurrentResolutionIndex) = index;
+	const POINT size = (*reinterpret_cast<POINT **>(addr::kResolutionList + 4))[index];
+	g_sizeAtStart = size;
+}
+
 void UseSavedResolution()
 {
-	static bool done = false;
-	if (done || ResolutionCount() == 0) return;
-	done = true;
 	const Config &c = GetConfig();
-	int &current = *reinterpret_cast<int *>(addr::kCurrentResolutionIndex);
-	const int stored = current;
-	const int saved = c.resolutionW > 0 ? ResolutionIndexOf(c.resolutionW, c.resolutionH) : -1;
-	int monitorW = 0, monitorH = 0;
-	DisplayTargetSize(monitorW, monitorH);
-	const int wanted = saved >= 0 ? saved : ResolutionIndexOf(monitorW, monitorH);
-	if (wanted >= 0) current = wanted;
-	g_resolutionAtStart = current;
-	LogI("display", "resolution at start: Settings.ini has the position %d, the mod's saved size is %dx%d (%s), the monitor is %dx%d, position used %d of %d",
-		stored, c.resolutionW, c.resolutionH, c.resolutionW <= 0 ? "none" : saved >= 0 ? "in the list" : "not in the list", monitorW, monitorH, current,
-		ResolutionCount());
+	const ResSize screen = ScreenSize();
+	const ResPick pick = PickStartResolution(ResolutionSizes(), {c.resolutionW, c.resolutionH}, {c.resolutionScreenW, c.resolutionScreenH}, screen,
+		DisplayMonitorHasMode(c.resolutionW, c.resolutionH));
+	SetResolutionIndex(pick.index);
+	static const char *const kWhy[] = {"the saved size", "the screen's own size", "the first of the list", "none"};
+	LogI("display", "resolution at start: saved %dx%d (chosen on a %dx%d screen), the screen is %dx%d -> %ldx%ld, %s", c.resolutionW, c.resolutionH,
+		c.resolutionScreenW, c.resolutionScreenH, screen.w, screen.h, g_sizeAtStart.x, g_sizeAtStart.y, kWhy[static_cast<int>(pick.why)]);
 }
 
 void __fastcall HookSaveOptions(unsigned *block)
 {
 	const int index = static_cast<int>(block[kResolutionSlot]);
-	if (index >= 0 && index < ResolutionCount() && index != g_resolutionAtStart) {
+	if (index >= 0 && index < ResolutionCount()) {
 		const POINT size = (*reinterpret_cast<POINT **>(addr::kResolutionList + 4))[index];
-		Config &c = MutableConfig();
-		if (c.resolutionW != size.x || c.resolutionH != size.y) {
+		if (size.x != g_sizeAtStart.x || size.y != g_sizeAtStart.y) {
+			const ResSize screen = ScreenSize();
+			Config &c = MutableConfig();
 			c.resolutionW = size.x;
 			c.resolutionH = size.y;
+			c.resolutionScreenW = screen.w;
+			c.resolutionScreenH = screen.h;
 			SaveConfig();
-			LogI("display", "resolution saved by size: %dx%d", size.x, size.y);
+			LogI("display", "resolution saved by size: %ldx%ld, chosen on a %dx%d screen", size.x, size.y, screen.w, screen.h);
+			g_sizeAtStart = size;
 		}
-		g_resolutionAtStart = index;
 	}
 	g_origSaveOptions(block);
 }
 
+// The game's list is a fixed table of 2017 sizes plus the 16-bit modes up to 2048x1536 that Windows
+// reports, so wide and large screens never found theirs: the list is built from the monitor's own modes.
+void ReplaceResolutionList()
+{
+	std::vector<ResSize> windows, extended;
+	for (POINT p : DisplayWindowsSizes()) windows.push_back({p.x, p.y});
+	if (GetConfig().extendedView && DisplayFakesModeChange()) {
+		for (POINT p : DisplayExtendedSizes()) extended.push_back({p.x, p.y});
+	}
+	const std::vector<ResSize> sizes = BuildResolutionList(windows, ScreenSize(), extended, DisplayFakesModeChange() && !DisplayIsWindowed());
+	auto &begin = *reinterpret_cast<POINT **>(addr::kResolutionList + 4);
+	auto &end = *reinterpret_cast<POINT **>(addr::kResolutionList + 8);
+	if (begin) end = begin;
+	for (ResSize size : sizes) {
+		const POINT p = {size.w, size.h};
+		reinterpret_cast<PushBack_t>(addr::kVectorPointPushBack)(reinterpret_cast<void *>(addr::kResolutionList), nullptr, &p);
+	}
+	static size_t logged = 0;
+	if (!sizes.empty() && logged != sizes.size()) {
+		logged = sizes.size();
+		LogI("display", "resolutions: %u sizes from the %u modes of the monitor, %dx%d down to %dx%d", static_cast<unsigned>(sizes.size()),
+			static_cast<unsigned>(windows.size()), sizes.front().w, sizes.front().h, sizes.back().w, sizes.back().h);
+	}
+}
+
 bool __cdecl HookInitResolutionList()
 {
-	auto slot = reinterpret_cast<VfsFileExists_t *>(addr::kPfnVfsFileExists);
-	g_origFileExists = *slot;
-	*slot = &FileExistsDuringResolutionList;
-	bool ok = g_origInitResolutionList();
-	*slot = g_origFileExists;
-
-	AddNativeResolution();
-	if (GetConfig().extendedView && DisplayFakesModeChange()) {
-		AddExtendedViewResolutions();
+	static bool started = false;
+	int keepW = 0, keepH = 0;
+	const bool keep = started && TweaksIntendedResolution(keepW, keepH);
+	g_origInitResolutionList();
+	ReplaceResolutionList();
+	// The list is built again each time the options open, for the screen of that moment: the position
+	// chosen before would point to another size if the screen or the list changed.
+	if (!started && ResolutionCount() > 0) {
+		started = true;
+		UseSavedResolution();
 	}
-
-	RemoveUnavailableResolutions();
-	auto begin = *reinterpret_cast<POINT **>(addr::kResolutionList + 4);
-	auto end = *reinterpret_cast<POINT **>(addr::kResolutionList + 8);
-	UseSavedResolution();
-	LogI("display", "resolutions in the menu: %d", begin ? static_cast<int>(end - begin) : 0);
-	for (POINT *p = begin; p && p < end; p++) {
-		LogD("display", "resolution %ldx%ld", p->x, p->y);
+	else if (keep) {
+		const int at = KeepResolution(ResolutionSizes(), {keepW, keepH}, ScreenSize());
+		if (at >= 0) *reinterpret_cast<int *>(addr::kCurrentResolutionIndex) = at;
+		else LogW("display", "resolution %dx%d is no longer in the list and the screen's own size is not either", keepW, keepH);
 	}
-	return ok;
+	return ResolutionCount() > 0;
 }
 
 const unsigned kSmoothAlign = 4;
@@ -592,7 +576,7 @@ void InstallTweaks(bool knownExe)
 		reinterpret_cast<void **>(&g_origLoadScroll), "LoadScrollSettings");
 	HookAt(addr::kLoadConfigIni, reinterpret_cast<void *>(&HookLoadConfigIni), reinterpret_cast<void **>(&g_origLoadConfigIni),
 		"LoadConfigIni");
-	LogI("boot", "tweaks: installed (AllResolutions=%d, ScrollSpeed=%.2f)", GetConfig().allResolutions, GetConfig().scrollSpeed);
+	LogI("boot", "tweaks: installed (ScrollSpeed=%.2f)", GetConfig().scrollSpeed);
 }
 
 bool TweaksIntendedResolution(int &w, int &h)

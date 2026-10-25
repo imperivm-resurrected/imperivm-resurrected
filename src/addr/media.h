@@ -11,7 +11,6 @@ inline constexpr uintptr_t kCurrentDisplayModeIndex = 0x00676bd0;
 inline constexpr uintptr_t kUpdateChannelVolumes = 0x006b0810;
 inline constexpr uintptr_t kSaveGameOptionsToIni = 0x006e73e0;
 inline constexpr uintptr_t kInitResolutionList = 0x006e8420;
-inline constexpr uintptr_t kInitResolutionListEnd = 0x006e8590;
 inline constexpr uintptr_t kChangeDisplayModeTo = 0x00747220;
 inline constexpr uintptr_t kWindowHandler = 0x00747a80;
 inline constexpr uintptr_t kVtblFileStream = 0x007d81f8;

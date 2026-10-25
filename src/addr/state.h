@@ -18,6 +18,7 @@ inline constexpr uintptr_t kPausedMenu = 0x0099700c;
 inline constexpr uintptr_t kSyncHashes = 0x009a7054;
 inline constexpr uintptr_t kMap = 0x009a721c;
 inline constexpr uintptr_t kDecorEntities = 0x009a7a78;
+inline constexpr uintptr_t kNoteManager = 0x009bdaa8;
 inline constexpr uintptr_t kPlayerProfile = 0x009bdac0;
 inline constexpr uintptr_t kLoadStream = 0x009bdaf8;
 inline constexpr uintptr_t kPersistVersion = 0x009bdafc;

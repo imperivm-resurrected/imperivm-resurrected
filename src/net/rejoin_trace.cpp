@@ -49,7 +49,6 @@ uint32_t PositionsHash() { return *reinterpret_cast<uint32_t *>(addr::kSyncState
 
 bool KeepLocalOutOfPositionsHash(void *obj, uint32_t before)
 {
-	const uint16_t kFirstLocalHandle = 40000;
 	const char *o = static_cast<const char *>(obj);
 	const uint16_t handle = *reinterpret_cast<const uint16_t *>(o + 8);
 	if (handle < kFirstLocalHandle || PositionsHash() == before) return false;
@@ -63,20 +62,56 @@ bool KeepLocalOutOfPositionsHash(void *obj, uint32_t before)
 	return true;
 }
 
+uint32_t *ThreadsChecksum(void *owner)
+{
+	char *mgr = owner ? *reinterpret_cast<char **>(static_cast<char *>(owner) + 0x18) : nullptr;
+	return mgr ? *reinterpret_cast<uint32_t **>(mgr + 0x28) : nullptr;
+}
+
+bool KeepLocalOutOfThreadsHash(void *owner, uint32_t *checksum, uint32_t before)
+{
+	if (!checksum || *checksum == before) return false;
+	const char *o = static_cast<const char *>(owner);
+	const uint16_t handle = *reinterpret_cast<const uint16_t *>(o + 8);
+	if (handle < kFirstLocalHandle) return false;
+	*checksum = before;
+	static bool logged = false;
+	if (!logged) {
+		logged = true;
+		LogI("match", "threads fingerprint: a local object (handle %u, class vtable %08x) used the shared timers and was left out, as the game does with its own effects",
+			handle, *reinterpret_cast<const uint32_t *>(o));
+	}
+	return true;
+}
+
+void RecordMove(int tick, uint16_t handle, char kind, uint32_t vt, uint32_t x, uint32_t y, void *from, uint32_t after)
+{
+	if (g_moves.size() != kMovesRing) g_moves.assign(kMovesRing, MoveRec{});
+	if (tick < g_movesLastTick) g_movesNext = g_movesCount = 0;
+	g_movesLastTick = tick;
+	g_moves[g_movesNext] = {tick, handle, kind, vt, x, y, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(from)), after};
+	g_movesNext = (g_movesNext + 1) % kMovesRing;
+	if (g_movesCount < kMovesRing) g_movesCount++;
+}
+
+void TimerPush(char kind, void *owner, uint32_t id, uint32_t due, uint32_t before, void *from)
+{
+	uint32_t *checksum = ThreadsChecksum(owner);
+	if (!checksum || *checksum == before || !InOnlineGame()) return;
+	char *t = Transport();
+	const char *o = static_cast<const char *>(owner);
+	RecordMove(t ? *reinterpret_cast<int *>(t + 0x54) : -1, *reinterpret_cast<const uint16_t *>(o + 8), kind, *reinterpret_cast<const uint32_t *>(o), id, due, from,
+		*checksum);
+}
+
 void MovePush(char kind, void *obj, uint32_t before, void *from)
 {
 	const uint32_t after = PositionsHash();
 	if (after == before || !InOnlineGame()) return;
 	char *t = Transport();
-	const int tick = t ? *reinterpret_cast<int *>(t + 0x54) : -1;
-	if (g_moves.size() != kMovesRing) g_moves.assign(kMovesRing, MoveRec{});
-	if (tick < g_movesLastTick) g_movesNext = g_movesCount = 0;
-	g_movesLastTick = tick;
 	const char *o = static_cast<const char *>(obj);
-	g_moves[g_movesNext] = {tick, *reinterpret_cast<const uint16_t *>(o + 8), kind, *reinterpret_cast<const uint32_t *>(o),
-		*reinterpret_cast<const uint32_t *>(o + 0x24), *reinterpret_cast<const uint32_t *>(o + 0x28), static_cast<uint32_t>(reinterpret_cast<uintptr_t>(from)), after};
-	g_movesNext = (g_movesNext + 1) % kMovesRing;
-	if (g_movesCount < kMovesRing) g_movesCount++;
+	RecordMove(t ? *reinterpret_cast<int *>(t + 0x54) : -1, *reinterpret_cast<const uint16_t *>(o + 8), kind, *reinterpret_cast<const uint32_t *>(o),
+		*reinterpret_cast<const uint32_t *>(o + 0x24), *reinterpret_cast<const uint32_t *>(o + 0x28), from, after);
 }
 
 bool WriteMoves(int from)
@@ -85,7 +120,8 @@ bool WriteMoves(int from)
 	EnsureLogDir();
 	FILE *f = _fsopen(DiskPath(kMovesFile).c_str(), "wb", _SH_DENYWR);
 	if (!f) return false;
-	fprintf(f, "# objects that changed the positions fingerprint (slots) since tick %d: tick kind(M moved, R removed) handle class-vtable x y caller fingerprint-after\n", from);
+	fprintf(f, "# objects that changed the positions (slots) or timers (threads) fingerprint since tick %d\n", from);
+	fprintf(f, "# tick kind handle class-vtable x y caller fingerprint-after; kinds: M moved, R removed (x y = position); timers S start, C reschedule, P stop, D delete, T time (x = timer id, y = time)\n");
 	const size_t first = (g_movesNext + kMovesRing - g_movesCount) % kMovesRing;
 	for (size_t k = 0; k < g_movesCount; k++) {
 		const MoveRec &r = g_moves[(first + k) % kMovesRing];
@@ -190,20 +226,49 @@ namespace rejoin_impl {
 void *__fastcall HookStartThread(void *owner, void *edx, uint32_t id, uint32_t due)
 {
 	TraceThreadEvent('S', owner, id, due, _ReturnAddress());
-	return g_orig.startThread(owner, edx, id, due);
+	uint32_t *checksum = ThreadsChecksum(owner);
+	const uint32_t before = checksum ? *checksum : 0;
+	void *r = g_orig.startThread(owner, edx, id, due);
+	if (!KeepLocalOutOfThreadsHash(owner, checksum, before)) TimerPush('S', owner, id, due, before, _ReturnAddress());
+	return r;
 }
 
 
 void *__fastcall HookRescheduleThread(void *owner, void *edx, uint32_t *thread, uint32_t due)
 {
 	TraceThreadEvent('R', owner, thread ? thread[4] : 0, due, _ReturnAddress());
-	return g_orig.reschedule(owner, edx, thread, due);
+	uint32_t *checksum = ThreadsChecksum(owner);
+	const uint32_t before = checksum ? *checksum : 0;
+	void *r = g_orig.reschedule(owner, edx, thread, due);
+	if (!KeepLocalOutOfThreadsHash(owner, checksum, before)) TimerPush('C', owner, thread ? thread[4] : 0, due, before, _ReturnAddress());
+	return r;
 }
 
 void *__fastcall HookStopThread(void *owner, void *edx, uint32_t id)
 {
 	TraceThreadEvent('P', owner, id, 0xffffffff, _ReturnAddress());
-	return g_orig.stopThread(owner, edx, id);
+	uint32_t *checksum = ThreadsChecksum(owner);
+	const uint32_t before = checksum ? *checksum : 0;
+	void *r = g_orig.stopThread(owner, edx, id);
+	if (!KeepLocalOutOfThreadsHash(owner, checksum, before)) TimerPush('P', owner, id, 0xffffffff, before, _ReturnAddress());
+	return r;
+}
+
+void __fastcall HookDeleteThread(void *owner, void *edx, uint32_t id)
+{
+	uint32_t *checksum = ThreadsChecksum(owner);
+	const uint32_t before = checksum ? *checksum : 0;
+	g_orig.deleteThread(owner, edx, id);
+	if (!KeepLocalOutOfThreadsHash(owner, checksum, before)) TimerPush('D', owner, id, 0xffffffff, before, _ReturnAddress());
+}
+
+int __fastcall HookSetThreadTime(void *owner, void *edx, uint32_t id, uint32_t due)
+{
+	uint32_t *checksum = ThreadsChecksum(owner);
+	const uint32_t before = checksum ? *checksum : 0;
+	const int r = g_orig.setThreadTime(owner, edx, id, due);
+	if (!KeepLocalOutOfThreadsHash(owner, checksum, before)) TimerPush('T', owner, id, due, before, _ReturnAddress());
+	return r;
 }
 
 

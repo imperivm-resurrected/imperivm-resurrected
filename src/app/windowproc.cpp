@@ -10,6 +10,7 @@
 #include "game/autosave.h"
 #include "game/cheats.h"
 #include "game/controls.h"
+#include "game/loadcurtain.h"
 #include "game/zoomview.h"
 #include "hooks/audio.h"
 #include "hooks/displaymode.h"
@@ -39,6 +40,8 @@ LRESULT GameWindowHandler(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 		return 0;
 	}
 	MpUiSetGameWindow(hwnd);
+	// A screen that waits for the player is not a loading one.
+	if ((msg == WM_LBUTTONDOWN || msg == WM_RBUTTONDOWN || msg == WM_KEYDOWN) && LoadCurtainUp()) LoadCurtainLift("the player acts");
 	if (OverlayHandleMouse(hwnd, msg, wp, lp)) return 0;
 	bool uiHandled = false;
 	Guard("interface message", [&] {

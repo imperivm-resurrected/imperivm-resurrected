@@ -16,7 +16,9 @@
 #include "hooks/builtinfixes.h"
 #include "core/config.h"
 #include "core/uiport.h"
+#include "core/sha256.h"
 #include "mods/lang.h"
+#include "mods/menuart.h"
 #include "core/log.h"
 #include "mods/mods.h"
 #include "mods/modvars.h"
@@ -330,6 +332,11 @@ std::vector<char> ReadAllAndClose(void *file)
 	return data;
 }
 
+void CloseGameFile(void *file)
+{
+	reinterpret_cast<CFileDelete_t>((*reinterpret_cast<void ***>(file))[0x8 / 4])(file, nullptr, 1);
+}
+
 void *OpenMergedCredits(void *original, const char *path, unsigned mode, void *err)
 {
 	std::vector<char> data = ReadAllAndClose(original);
@@ -418,64 +425,111 @@ bool SetTemplateSize(std::string &text, int w, int h)
 	return changed;
 }
 
-const int kArtWidth = 1920;
-const int kArtHeight = 1080;
-const int kFrameWidth = 1366;
-const int kFrameHeight = 768;
-
-std::string FittedMenuArt()
+std::string FitMenuArtNow(const std::string &image, int w, int h)
 {
-	const std::string cache = "_cache/menu-art-" + std::to_string(kFrameWidth) + "x" + std::to_string(kFrameHeight) + ".bmp";
+	std::vector<char> raw;
+	if (!ReadGameFile(image.c_str(), 1, raw)) return "";
+	const std::vector<unsigned char> src(raw.begin(), raw.end());
+	const std::string cache = "_cache/menu-art/" + HashString(std::string(raw.begin(), raw.end())).substr(0, 16) + "-" + std::to_string(w) + "x" +
+		std::to_string(h) + ".bmp";
 	const std::string out = DiskPath("imperivm-resurrected", cache);
 	if (GetFileAttributesA(out.c_str()) != INVALID_FILE_ATTRIBUTES) return "imperivm-resurrected/" + cache;
-	FILE *in = nullptr;
-	if (fopen_s(&in, DiskPath("Currentlang", "MENUBACKGROUND.BMP").c_str(), "rb") != 0 || !in) return "";
-	std::vector<unsigned char> src;
-	unsigned char block[65536];
-	for (size_t got; (got = fread(block, 1, sizeof(block), in)) > 0;) src.insert(src.end(), block, block + got);
-	fclose(in);
-	auto u32 = [&](size_t at) { return at + 4 <= src.size() ? *reinterpret_cast<const unsigned *>(&src[at]) : 0u; };
-	if (src.size() < 54 || src[0] != 'B' || src[1] != 'M' || static_cast<int>(u32(18)) != kArtWidth || static_cast<int>(u32(22)) != kArtHeight ||
-		*reinterpret_cast<const unsigned short *>(&src[28]) != 24 || u32(30) != 0) {
-		return "";
-	}
-	const size_t offset = u32(10), srcStride = (static_cast<size_t>(kArtWidth) * 3 + 3) & ~static_cast<size_t>(3);
-	if (offset + srcStride * kArtHeight > src.size()) return "";
-	const size_t dstStride = (static_cast<size_t>(kFrameWidth) * 3 + 3) & ~static_cast<size_t>(3);
-	std::vector<unsigned char> dst(54 + dstStride * kFrameHeight, 0);
-	memcpy(dst.data(), src.data(), 54);
-	*reinterpret_cast<unsigned *>(&dst[2]) = static_cast<unsigned>(dst.size());
-	*reinterpret_cast<unsigned *>(&dst[10]) = 54;
-	*reinterpret_cast<unsigned *>(&dst[14]) = 40;
-	*reinterpret_cast<int *>(&dst[18]) = kFrameWidth;
-	*reinterpret_cast<int *>(&dst[22]) = kFrameHeight;
-	*reinterpret_cast<unsigned *>(&dst[34]) = static_cast<unsigned>(dstStride * kFrameHeight);
-	for (int y = 0; y < kFrameHeight; y++) {
-		const int y0 = y * kArtHeight / kFrameHeight, y1 = (std::max)(y0 + 1, (y + 1) * kArtHeight / kFrameHeight);
-		for (int x = 0; x < kFrameWidth; x++) {
-			const int x0 = x * kArtWidth / kFrameWidth, x1 = (std::max)(x0 + 1, (x + 1) * kArtWidth / kFrameWidth);
-			unsigned sum[3] = {0, 0, 0};
-			for (int sy = y0; sy < y1; sy++) {
-				for (int sx = x0; sx < x1; sx++) {
-					const unsigned char *p = &src[offset + srcStride * sy + sx * 3];
-					sum[0] += p[0];
-					sum[1] += p[1];
-					sum[2] += p[2];
-				}
-			}
-			const unsigned count = static_cast<unsigned>((y1 - y0) * (x1 - x0));
-			unsigned char *q = &dst[54 + dstStride * y + x * 3];
-			q[0] = static_cast<unsigned char>(sum[0] / count);
-			q[1] = static_cast<unsigned char>(sum[1] / count);
-			q[2] = static_cast<unsigned char>(sum[2] / count);
-		}
-	}
+	std::vector<unsigned char> fitted;
+	if (!ScaleBmpToCover(src, w, h, fitted)) return "";
 	MakeDirsFor(out);
 	FILE *file = nullptr;
 	if (fopen_s(&file, out.c_str(), "wb") != 0 || !file) return "";
-	const bool ok = fwrite(dst.data(), 1, dst.size(), file) == dst.size();
+	const bool ok = fwrite(fitted.data(), 1, fitted.size(), file) == fitted.size();
 	fclose(file);
-	return ok ? "imperivm-resurrected/" + cache : "";
+	if (!ok) return "";
+	LogI("display", "menu background: %s fitted to the %dx%d screen", image.c_str(), w, h);
+	return "imperivm-resurrected/" + cache;
+}
+
+thread_local bool t_probingLayout = false;
+
+// The game's template defines the screen's edges from Larghezza and Altezza, so the mod sets them to the
+// screen and the menus that lean on those edges (the game's, the Caesar Mod's) follow it. A main menu that
+// fills the screen without leaning on any edge is laid out in pixels of the template's 1920x1080 and
+// centered by the game (the Community Mod's buttons and the strip cut from its background): resizing the
+// template or its background would move those pieces apart.
+bool MenusFollowScreen()
+{
+	if (t_probingLayout) return true;
+	static std::mutex lock;
+	static int follows = -1;
+	std::lock_guard<std::mutex> guard(lock);
+	if (follows < 0) {
+		t_probingLayout = true;
+		std::vector<char> menu, tmpl;
+		const bool fixed = ReadGameFile("menuini/mainmenu.ini", 1, menu) && ReadGameFile("menuini/template.ini", 1, tmpl) &&
+			MenuLayoutIsFixed(std::string(menu.begin(), menu.end()), std::string(tmpl.begin(), tmpl.end()));
+		t_probingLayout = false;
+		follows = fixed ? 0 : 1;
+		LogI("display", "menu layout: %s", fixed ? "the main menu is laid out in fixed pixels, so the menus keep the size and background of their template"
+												  : "the menus follow the screen's size");
+	}
+	return follows == 1;
+}
+
+std::string FittedMenuArt(const std::string &image, int w, int h)
+{
+	static std::mutex lock;
+	static std::map<std::string, std::string> done;
+	const std::string key = image + "|" + std::to_string(w) + "x" + std::to_string(h);
+	std::lock_guard<std::mutex> guard(lock);
+	auto it = done.find(key);
+	if (it == done.end()) it = done.emplace(key, FitMenuArtNow(image, w, h)).first;
+	return it->second;
+}
+
+// The bars of the game's interface (gameres/cmdbar/*.bmp, gameres/infobar/<people>/*.bmp) are pictures 2048 px wide:
+// a wider screen is left unpainted past them. They are served 4096 px wide, also for a later change of resolution.
+const int kWideBars = 4096;
+
+bool IsBarArt(const std::string &rel)
+{
+	if (rel.size() < 5 || rel.compare(rel.size() - 4, 4, ".bmp") != 0) return false;
+	if (rel.compare(0, 15, "gameres/cmdbar/") == 0) return rel.find('/', 15) == std::string::npos;
+	if (rel.compare(0, 16, "gameres/infobar/") != 0) return false;
+	const size_t people = rel.find('/', 16);
+	return people != std::string::npos && rel.find('/', people + 1) == std::string::npos;
+}
+
+void *OpenBarArt(void *original, const std::string &rel, const char *path, unsigned mode, void *err)
+{
+	int w = GetSystemMetrics(SM_CXSCREEN), h = GetSystemMetrics(SM_CYSCREEN);
+	TweaksIntendedResolution(w, h);
+	if (!original || w <= 2048 || w > kWideBars) return original;
+	static std::mutex lock;
+	static std::map<std::string, std::string> done;
+	std::lock_guard<std::mutex> guard(lock);
+	auto it = done.find(path);
+	if (it != done.end() && it->second.empty()) return original;
+	if (it == done.end()) {
+		const std::vector<char> raw = ReadAllAndClose(original);
+		const std::vector<unsigned char> src(raw.begin(), raw.end());
+		const std::string cache = "_cache/bar-art/" + HashString(std::string(raw.begin(), raw.end())).substr(0, 16) + "-" + std::to_string(kWideBars) + ".bmp";
+		const std::string out = DiskPath("imperivm-resurrected", cache);
+		std::vector<unsigned char> wide;
+		bool ready = DiskFileExists(out);
+		if (!ready && ExtendBarBmp(src, kWideBars, wide)) {
+			MakeDirsFor(out);
+			FILE *file = nullptr;
+			if (fopen_s(&file, out.c_str(), "wb") == 0 && file) {
+				ready = fwrite(wide.data(), 1, wide.size(), file) == wide.size();
+				fclose(file);
+			}
+			if (ready) LogI("display", "interface bar: %s extended to %d px", rel.c_str(), kWideBars);
+		}
+		it = done.emplace(path, ready ? "imperivm-resurrected/" + cache : std::string()).first;
+		if (!ready) return g_origOpen(path, mode, err);
+	}
+	else {
+		CloseGameFile(original);
+	}
+	if (void *f = g_origOpen(it->second.c_str(), mode, err)) return f;
+	return g_origOpen(path, mode, err);
 }
 
 bool IsMenuIni(const std::string &rel)
@@ -507,18 +561,26 @@ void *OpenCached(const std::string &cache, const std::string &text, const char *
 	return g_origOpen(path, mode, err);
 }
 
-bool FitMainMenu(std::string &text, int w, int h)
+bool IsBarIni(const std::string &rel)
 {
-	const std::string rect = "RectWH = -276, -153, 1920, 1080";
-	const size_t at = text.find(rect);
-	if ((w >= kArtWidth && h >= kArtHeight) || at == std::string::npos) return false;
-	const std::string image = FittedMenuArt();
-	if (image.empty()) return false;
-	text.replace(at, rect.size(), "RectWH = 0, 0, 1366, 768");
-	const std::string name = "Currentlang/MenuBackgroind.bmp, 30, 10";
-	const size_t pic = text.find(name);
-	if (pic != std::string::npos) text.replace(pic, name.size(), image + ", 0, 0");
-	return true;
+	if (rel.size() < 5 || rel.compare(rel.size() - 4, 4, ".ini") != 0) return false;
+	for (const char *folder : {"data/interface/cmdbar/", "data/interface/infobar/", "gameini/cmdbar/", "gameini/infobar/"}) {
+		if (rel.compare(0, strlen(folder), folder) == 0) return true;
+	}
+	return false;
+}
+
+void *OpenBarIni(void *original, const std::string &rel, const char *path, unsigned mode, void *err)
+{
+	int w = GetSystemMetrics(SM_CXSCREEN), h = GetSystemMetrics(SM_CYSCREEN);
+	TweaksIntendedResolution(w, h);
+	if (!original || w <= 2048 || w > kWideBars) return original;
+	const std::vector<char> raw = ReadAllAndClose(original);
+	std::string text(raw.begin(), raw.end());
+	WidenBarRects(text, 2048, kWideBars);
+	std::string leaf = rel;
+	std::replace(leaf.begin(), leaf.end(), '/', '_');
+	return OpenCached("_cache/bar-ini/" + leaf, text, path, mode, err);
 }
 
 bool NameTemplateBySize(std::string &text, int w, int h)
@@ -547,16 +609,16 @@ bool NameTemplateBySize(std::string &text, int w, int h)
 
 void *OpenMenuIni(void *original, const std::string &rel, const char *path, unsigned mode, void *err)
 {
-	if (!original) return original;
+	if (!original || !MenusFollowScreen()) return original;
 	int w = GetSystemMetrics(SM_CXSCREEN), h = GetSystemMetrics(SM_CYSCREEN);
 	TweaksIntendedResolution(w, h);
 	const std::vector<char> raw = ReadAllAndClose(original);
 	std::string text(raw.begin(), raw.end());
-	const bool fitted = (rel == "menuini/mainmenu.ini" || rel == "data/interface/menu/mainmenu.ini") && FitMainMenu(text, w, h);
-	const bool named = w >= 640 && h >= 480 && NameTemplateBySize(text, w, h);
-	if (!fitted && !named) return g_origOpen(path, mode, err);
-	if (fitted) LogI("display", "main menu: the background is fitted to the 1366x768 frame (the screen is %dx%d)", w, h);
 	const size_t slash = rel.find_last_of('/');
+	const bool back = rel.compare(slash + 1, 8, "menuback") == 0;
+	if (back) FitFullFrameImages(text, [&](const std::string &image) { return FittedMenuArt(image, w, h); });
+	if (w >= 640 && h >= 480) NameTemplateBySize(text, w, h);
+	// Served from the text read even when nothing changed: it may already carry a patch.
 	return OpenCached("_cache/menuini/" + std::to_string(w) + "x" + std::to_string(h) + "/" + rel.substr(slash + 1), text, path, mode, err);
 }
 
@@ -578,12 +640,12 @@ void *OpenSizedTemplate(const char *path, int w, int h, unsigned mode, void *err
 
 void *OpenMenuTemplate(void *original, const char *path, unsigned mode, void *err)
 {
-	if (!original) return original;
+	if (!original || !MenusFollowScreen()) return original;
 	int w = GetSystemMetrics(SM_CXSCREEN), h = GetSystemMetrics(SM_CYSCREEN);
 	TweaksIntendedResolution(w, h);
 	const std::vector<char> raw = ReadAllAndClose(original);
 	std::string text(raw.begin(), raw.end());
-	if (w < 640 || h < 480 || !SetTemplateSize(text, w, h)) return g_origOpen(path, mode, err);
+	if (w >= 640 && h >= 480) SetTemplateSize(text, w, h);
 	static std::string logged;
 	const std::string size = std::to_string(w) + "x" + std::to_string(h);
 	if (logged != size) {
@@ -747,6 +809,8 @@ void *__cdecl OpenImpl(const char *path, unsigned mode, void *err)
 		if (f) {
 			if (rel == "currentlang/game.loc.xml") f = OpenMergedLoc(f, alt.c_str(), mode, err);
 			if (PatchHas(rel)) f = OpenPatched(f, rel, alt.c_str(), mode, err);
+			if (reading && IsBarArt(rel)) f = OpenBarArt(f, rel, alt.c_str(), mode, err);
+			if (reading && IsBarIni(rel)) f = OpenBarIni(f, rel, alt.c_str(), mode, err);
 			return f;
 		}
 	}
@@ -789,6 +853,8 @@ void *__cdecl OpenImpl(const char *path, unsigned mode, void *err)
 	if (reading && PatchHas(rel)) f = OpenPatched(f, rel, opened.c_str(), mode, err);
 	if (reading && (rel == "menuini/template.ini" || rel == "data/interface/menu/template.ini")) f = OpenMenuTemplate(f, opened.c_str(), mode, err);
 	if (reading && f && IsMenuIni(rel) && rel.find("template") == std::string::npos) f = OpenMenuIni(f, rel, opened.c_str(), mode, err);
+	if (reading && f && IsBarArt(rel)) f = OpenBarArt(f, rel, opened.c_str(), mode, err);
+	if (reading && f && IsBarIni(rel)) f = OpenBarIni(f, rel, opened.c_str(), mode, err);
 	if (GetConfig().logFiles) {
 		LogD("vfs", "opens %s (mode %x)%s", rel.c_str(), mode, f ? "" : " -> does not exist");
 	}

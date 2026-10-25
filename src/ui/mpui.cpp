@@ -176,9 +176,17 @@ namespace {
 const ModInfo *ExactMod(const State &st, const OnlineMod &m)
 {
 	for (const ModInfo &i : st.mods) {
-		if (_stricmp(i.id.c_str(), m.id.c_str()) == 0 && i.version == m.version) return &i;
+		if (_stricmp(i.id.c_str(), m.id.c_str()) == 0 && i.version == m.version && ModsCompareRoomCopy(i, m.copyKey) != RoomCopy::kOther) return &i;
 	}
 	return nullptr;
+}
+
+bool OtherCopy(const State &st, const OnlineMod &m)
+{
+	for (const ModInfo &i : st.mods) {
+		if (_stricmp(i.id.c_str(), m.id.c_str()) == 0 && i.version == m.version) return true;
+	}
+	return false;
 }
 }
 }
@@ -206,8 +214,12 @@ std::vector<ModRow> OnlineModRows(const State &st, const std::vector<OnlineMod> 
 		r.kind = m.kind;
 		if (withStatus) {
 			const bool have = ExactMod(st, m) != nullptr;
-			const ModInfo *old = have ? nullptr : OlderInstalled(st, m);
-			r.status = have ? Tr("you have it") : old ? Tr("you have ") + old->version + " \xC2\xB7 " + HumanBytes(m.bytes) : HumanBytes(m.bytes);
+			const bool other = !have && OtherCopy(st, m);
+			const ModInfo *old = have || other ? nullptr : OlderInstalled(st, m);
+			r.status = have ? Tr("you have it")
+				: other ? Tr("you have another copy") + " \xC2\xB7 " + HumanBytes(m.bytes)
+				: old ? Tr("you have ") + old->version + " \xC2\xB7 " + HumanBytes(m.bytes)
+				: HumanBytes(m.bytes);
 			r.color = have ? kOk : kGold;
 		}
 		rows.push_back(r);

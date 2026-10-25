@@ -6,16 +6,11 @@
 #include <mutex>
 #include <map>
 
-#include "MinHook.h"
-#include "hooks/hookcount.h"
+#include "hooks/gameload.h"
 #include "core/log.h"
 #include "mods/modvars.h"
-#include "addr/world.h"
 
 namespace {
-typedef int(__cdecl *LoadGameFromFile_t)(const char *path);
-LoadGameFromFile_t g_origLoadGameFromFile = nullptr;
-
 const size_t kMaxKeyLength = 64;
 const size_t kMaxVars = 1024;
 
@@ -36,9 +31,8 @@ std::string GameDir()
 	return path;
 }
 
-int __cdecl HookLoadGameFromFile(const char *path)
+void AfterGameLoad(int)
 {
-	const int r = g_origLoadGameFromFile(path);
 	Json pending;
 	bool valid;
 	{
@@ -52,7 +46,6 @@ int __cdecl HookLoadGameFromFile(const char *path)
 	else ModVarsClear();
 	const int n = ModVarsCount();
 	if (n) LogI("content", "mod variables: %d recovered from the loaded game", n);
-	return r;
 }
 
 }
@@ -146,10 +139,10 @@ void ModVarsPendingFromSave(const std::string &gamePath)
 void InstallModVars(bool knownExe)
 {
 	if (!knownExe) return;
-	if (HookCreate(reinterpret_cast<void *>(addr::kLoadGameFromFile), reinterpret_cast<void *>(&HookLoadGameFromFile), reinterpret_cast<void **>(&g_origLoadGameFromFile)) != MH_OK ||
-		HookEnable(reinterpret_cast<void *>(addr::kLoadGameFromFile)) != MH_OK) {
+	if (!InstallGameLoadHook(knownExe)) {
 		LogE("content", "mod variables: could not hook LoadGameFromFile (they will not be recovered when loading a game)");
 		return;
 	}
+	OnGameLoaded(&AfterGameLoad);
 	LogI("content", "mod variables: hooked");
 }

@@ -83,7 +83,6 @@ const IniRename kIniRenames[] = {
 	{"Pantalla", "VentanaAncho", "Display", "WindowWidth"},
 	{"Pantalla", "VentanaAlto", "Display", "WindowHeight"},
 	{"Pantalla", "AtraparRaton", "Display", "TrapMouse"},
-	{"Pantalla", "TodasLasResoluciones", "Display", "AllResolutions"},
 	{"Pantalla", "VistaAmpliada", "Display", "ExtendedView"},
 	{"Pantalla", "MostrarRendimiento", "Display", "ShowPerformance"},
 	{"Pantalla", "MostrarRed", "Display", "ShowNetwork"},
