@@ -48,6 +48,7 @@ struct ModInfo {
 	std::vector<std::string> incompatible;
 	std::string sourceUrl;
 	uint64_t gbId = 0;
+	uint64_t gbFile = 0;
 	std::vector<std::string> loadAfter;
 	std::vector<std::string> loadBefore;
 	std::vector<std::string> tags;
@@ -87,6 +88,21 @@ inline bool ModsIsMod(const ModInfo &m, const std::string &id, uint64_t gbId)
 inline bool ModsSameMod(const ModInfo &a, const ModInfo &b)
 {
 	return ModsIsMod(a, b.id, b.gbId);
+}
+
+// A room gives the start of each gameplay mod's fingerprint: two copies with the same version can still have other files.
+inline std::string ModsRoomCopyKey(const std::string &gameplayHash)
+{
+	return gameplayHash.substr(0, 16);
+}
+
+enum class RoomCopy { kSame, kOther, kNotHashed };
+
+inline RoomCopy ModsCompareRoomCopy(const ModInfo &have, const std::string &roomKey)
+{
+	if (roomKey.empty()) return RoomCopy::kSame;
+	if (have.gameplay && have.gameplayHash.empty()) return RoomCopy::kNotHashed;
+	return have.gameplayHash.size() >= roomKey.size() && have.gameplayHash.compare(0, roomKey.size(), roomKey) == 0 ? RoomCopy::kSame : RoomCopy::kOther;
 }
 
 struct ModChoice {

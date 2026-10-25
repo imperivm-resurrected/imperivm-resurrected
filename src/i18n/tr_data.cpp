@@ -541,6 +541,7 @@ extern const TrRow kTrRows[] = {
 	{"They are activated when you create it (the game must restart).", "Al crearla se activan (hay que reiniciar el juego).", "Si attivano alla creazione (bisogna riavviare il gioco)."},
 	{"Create room", "Crear la sala", "Crea stanza"},
 	{"you have it", "lo tienes", "ce l'hai"},
+	{"you have another copy", "tienes otra copia", "ne hai un'altra copia"},
 	{"you have ", "tienes la ", "hai la "},
 	{"They will be downloaded from GameBanana; whatever isn't there, the host sends you through Steam", "Se bajarán de GameBanana; lo que no esté allí te lo manda el anfitrión por Steam", "Verranno scaricati da GameBanana; ciò che non c'è te lo manda l'host tramite Steam"},
 	{"Download separately leaves your version as it is and uses the room's only for this game. Update my version replaces it on restart (the old one is kept as a backup in mods\\_downloads\\backup).", "Descargar aparte deja tu versión como está y usa la de la sala solo para esta partida. Actualizar mi versión la sustituye al reiniciar (la anterior queda de copia en mods\\_downloads\\backup).", "Scarica a parte lascia la tua versione com'è e usa quella della stanza solo per questa partita. Aggiorna la mia versione la sostituisce al riavvio (quella precedente resta come copia in mods\\_downloads\\backup)."},

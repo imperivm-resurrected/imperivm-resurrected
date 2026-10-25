@@ -9,6 +9,7 @@
 #include <algorithm>
 #include "core/log.h"
 #include "i18n/tr.h"
+#include "mods/downloads.h"
 #include "mods/mods.h"
 #include "net/modlist.h"
 #include "net/scenvalue.h"
@@ -84,7 +85,9 @@ std::string EncodeMods(const std::string &scenModId, int &optional)
 	std::vector<ModInfo> mounted;
 	for (const std::string &folder : ModsMountedProfile().mods) {
 		ModInfo m;
-		if (ModsFind(folder, m)) mounted.push_back(m);
+		if (!ModsFind(folder, m)) continue;
+		m.gbFile = DlInstalledGbFile(m);
+		mounted.push_back(m);
 	}
 	return EncodeModList(mounted, scenModId, optional);
 }

@@ -108,7 +108,46 @@ static void Legacy()
 	if (list.size() == 1) {
 		CHECK_EQ(list[0].kind, 1);
 		CHECK(!list[0].gameplay);
+		CHECK_EQ(list[0].gbFile, 0ull);
 	}
+}
+
+static void GbFile()
+{
+	ModInfo m = Mod("rules", kModRules);
+	m.gbId = 730058;
+	m.gbFile = 1856737;
+	int optional = 0;
+	const std::vector<OnlineMod> list = DecodeModList(EncodeModList({m}, "", optional));
+	CHECK_EQ(list.size(), size_t(1));
+	if (list.size() == 1) {
+		CHECK_EQ(list[0].gbId, 730058ull);
+		CHECK_EQ(list[0].gbFile, 1856737ull);
+	}
+}
+
+static void CopyKey()
+{
+	ModInfo host = Mod("cm", kModRules);
+	host.gameplayHash = "0123456789abcdef0123456789abcdef";
+	int optional = 0;
+	const std::vector<OnlineMod> list = DecodeModList(EncodeModList({host, Mod("skins", kModCosmetic), Mod("cosm", kModCosmetic)}, "COSM", optional));
+	CHECK_EQ(list.size(), size_t(2));
+	if (list.size() != 2) return;
+	CHECK_EQ(list[0].copyKey, "0123456789abcdef");
+	CHECK_EQ(list[1].copyKey, "");
+	CHECK_EQ(DecodeModList("old\tOld\t1.0\t1\t5\t0\t0\t2\t0\n")[0].copyKey, "");
+
+	ModInfo mine = host;
+	CHECK(ModsCompareRoomCopy(mine, list[0].copyKey) == RoomCopy::kSame);
+	mine.gameplayHash = "fedcba9876543210fedcba9876543210";
+	CHECK(ModsCompareRoomCopy(mine, list[0].copyKey) == RoomCopy::kOther);
+	CHECK(ModsCompareRoomCopy(mine, "") == RoomCopy::kSame);
+	mine.gameplayHash.clear();
+	CHECK(ModsCompareRoomCopy(mine, list[0].copyKey) == RoomCopy::kNotHashed);
+	mine.gameplay = false;
+	CHECK(ModsCompareRoomCopy(mine, list[0].copyKey) == RoomCopy::kOther);
+	CHECK(ModsCompareRoomCopy(Mod("cosm", kModCosmetic), list[1].copyKey) == RoomCopy::kSame);
 }
 
 static void Malformed()
@@ -127,6 +166,8 @@ int main()
 	Nothing();
 	Forbidden();
 	Legacy();
+	GbFile();
+	CopyKey();
 	Malformed();
 	return test::Summary("modlist");
 }

@@ -1115,7 +1115,7 @@ bool InstallArchiveNow(const std::string &archive, const CatalogEntry &info, con
 		const bool sameMod = (!id.empty() && _stricmp(m.id.c_str(), id.c_str()) == 0) || (info.gbId && m.gbId == info.gbId);
 		if (!sameMod) continue;
 		if (info.aside) {
-			if (m.version == version) {
+			if (m.version == version && !info.otherCopy) {
 				DeleteTree(tmp);
 				msg = name + " " + version + Tr(" is already installed");
 				return true;
@@ -1276,6 +1276,12 @@ void Enqueue(const Job &job)
 	g_cv.notify_one();
 }
 
+}
+
+uint64_t DlInstalledGbFile(const ModInfo &m)
+{
+	uint64_t file = 0, date = 0;
+	return m.gbId && InstalledSource(m.folder, m.gbId, file, date) ? file : 0;
 }
 
 void DlRefreshCatalogs()
@@ -1975,11 +1981,15 @@ std::mutex g_roomLock;
 RoomModStatus g_room;
 std::atomic<bool> g_roomCancel{false};
 
-bool FindInstalledExact(uint64_t gbId, const std::string &id, const std::string &version, std::string &folder)
+bool IsRoomVersion(const ModInfo &m, const RoomModRequest &r)
+{
+	return ((r.gbId && m.gbId == r.gbId) || _stricmp(m.id.c_str(), r.id.c_str()) == 0) && m.version == r.version;
+}
+
+bool FindInstalledCopy(const RoomModRequest &r, std::string &folder, const std::set<std::string> &skip = {})
 {
 	for (const ModInfo &m : ModsList()) {
-		const bool same = (gbId && m.gbId == gbId) || _stricmp(m.id.c_str(), id.c_str()) == 0;
-		if (same && m.version == version) {
+		if (IsRoomVersion(m, r) && !skip.count(m.folder) && ModsCompareRoomCopy(m, r.copyKey) != RoomCopy::kOther) {
 			folder = m.folder;
 			return true;
 		}
@@ -2006,10 +2016,14 @@ void RoomModsThread(std::vector<RoomModRequest> reqs)
 			g_room.what = r.id;
 		}
 		std::string folder;
-		if (FindInstalledExact(r.gbId, r.id, r.version, folder)) {
+		if (FindInstalledCopy(r, folder)) {
 			std::lock_guard<std::mutex> lock(g_roomLock);
 			g_room.installed[r.id] = folder;
 			continue;
+		}
+		std::set<std::string> otherCopies;
+		for (const ModInfo &m : ModsList()) {
+			if (IsRoomVersion(m, r)) otherCopies.insert(m.folder);
 		}
 		if (!r.gbId) {
 			RoomFail(r.id, "not installed from GameBanana");
@@ -2022,13 +2036,19 @@ void RoomModsThread(std::vector<RoomModRequest> reqs)
 		}();
 		const GbFile *file = nullptr;
 		for (const GbFile &f : files.files) {
-			if (CompareVersions(f.version, r.version) == 0) {
-				file = &f;
-				break;
-			}
+			if (r.gbFile && f.id == r.gbFile) file = &f;
+		}
+		for (const GbFile &f : files.files) {
+			if (!file && CompareVersions(f.version, r.version) == 0) file = &f;
 		}
 		if (!file) {
 			RoomFail(r.id, !files.error.empty() ? files.error : "GameBanana does not have version " + r.version);
+			continue;
+		}
+		bool haveThatFile = false;
+		for (const ModInfo &m : ModsList()) haveThatFile = haveThatFile || (otherCopies.count(m.folder) && DlInstalledGbFile(m) == file->id);
+		if (haveThatFile) {
+			RoomFail(r.id, "the file of GameBanana is the copy already installed, not the host's");
 			continue;
 		}
 		GbMod mod;
@@ -2042,7 +2062,10 @@ void RoomModsThread(std::vector<RoomModRequest> reqs)
 		e.bytes = file->bytes;
 		e.url = "https://gamebanana.com/dl/" + std::to_string(file->id);
 		e.md5 = file->md5;
+		e.fileId = file->id;
+		e.fileDate = file->date;
 		e.aside = true;
+		e.otherCopy = !otherCopies.empty();
 		const uint64_t bytes = file->bytes;
 		uint64_t before;
 		{
@@ -2069,7 +2092,7 @@ void RoomModsThread(std::vector<RoomModRequest> reqs)
 		}
 		doneBytes += bytes;
 		if (g_roomCancel) break;
-		if (FindInstalledExact(r.gbId, r.id, r.version, folder)) {
+		if (FindInstalledCopy(r, folder, otherCopies)) {
 			std::lock_guard<std::mutex> lock(g_roomLock);
 			g_room.installed[r.id] = folder;
 		}

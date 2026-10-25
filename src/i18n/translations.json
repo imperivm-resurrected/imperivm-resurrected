@@ -534,6 +534,7 @@
 {"en":"They are activated when you create it (the game must restart).","es":"Al crearla se activan (hay que reiniciar el juego).","it":"Si attivano alla creazione (bisogna riavviare il gioco)."},
 {"en":"Create room","es":"Crear la sala","it":"Crea stanza"},
 {"en":"you have it","es":"lo tienes","it":"ce l'hai"},
+{"en":"you have another copy","es":"tienes otra copia","it":"ne hai un'altra copia"},
 {"en":"you have ","es":"tienes la ","it":"hai la "},
 {"en":"They will be downloaded from GameBanana; whatever isn't there, the host sends you through Steam","es":"Se bajarán de GameBanana; lo que no esté allí te lo manda el anfitrión por Steam","it":"Verranno scaricati da GameBanana; ciò che non c'è te lo manda l'host tramite Steam"},
 {"en":"Download separately leaves your version as it is and uses the room's only for this game. Update my version replaces it on restart (the old one is kept as a backup in mods\\_downloads\\backup).","es":"Descargar aparte deja tu versión como está y usa la de la sala solo para esta partida. Actualizar mi versión la sustituye al reiniciar (la anterior queda de copia en mods\\_downloads\\backup).","it":"Scarica a parte lascia la tua versione com'è e usa quella della stanza solo per questa partita. Aggiorna la mia versione la sostituisce al riavvio (quella precedente resta come copia in mods\\_downloads\\backup)."},

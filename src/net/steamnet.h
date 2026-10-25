@@ -17,6 +17,8 @@ struct OnlineMod {
 	uint64_t bytes = 0;
 	bool redistributable = false;
 	uint64_t gbId = 0;
+	uint64_t gbFile = 0;
+	std::string copyKey;
 };
 
 struct OnlineSlot {

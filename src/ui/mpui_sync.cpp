@@ -12,6 +12,27 @@ using namespace mpui_impl;
 
 namespace mpui_impl {
 namespace {
+bool CopiesStillHashing(const std::vector<ModInfo> &mods, const std::vector<OnlineMod> &room)
+{
+	for (const OnlineMod &m : room) {
+		for (const ModInfo &i : mods) {
+			if (_stricmp(i.id.c_str(), m.id.c_str()) == 0 && i.version == m.version && ModsCompareRoomCopy(i, m.copyKey) == RoomCopy::kNotHashed) return true;
+		}
+	}
+	return false;
+}
+
+std::string FolderOfCopy(const std::vector<ModInfo> &mods, const OnlineMod &m)
+{
+	std::string same, any;
+	for (const ModInfo &i : mods) {
+		if (_stricmp(i.id.c_str(), m.id.c_str()) != 0 || i.version != m.version) continue;
+		if (same.empty() && ModsCompareRoomCopy(i, m.copyKey) == RoomCopy::kSame) same = i.folder;
+		any = i.folder;
+	}
+	return same.empty() ? any : same;
+}
+
 void StartSyncCheck(const OnlineLobby lobby, const std::map<std::string, std::string> installed, bool update)
 {
 	g_s.rate.Reset();
@@ -27,10 +48,7 @@ void StartSyncCheck(const OnlineLobby lobby, const std::map<std::string, std::st
 				p.mods.push_back(it->second);
 				continue;
 			}
-			std::string folder;
-			for (const ModInfo &i : mods) {
-				if (_stricmp(i.id.c_str(), m.id.c_str()) == 0 && i.version == m.version) folder = i.folder;
-			}
+			const std::string folder = FolderOfCopy(mods, m);
 			if (folder.empty()) error = Tr("missing ") + m.name + " " + m.version;
 			p.mods.push_back(folder);
 		}
@@ -105,7 +123,7 @@ void StartSyncReceive(const std::vector<OnlineMod> &missing)
 	g_s.syncRetryHost = false;
 	g_s.rate.Reset();
 	for (const OnlineMod &m : missing) {
-		if (m.gbId) io.push_back({m.id, m.gbId, m.version});
+		if (m.gbId) io.push_back({m.id, m.gbId, m.version, m.gbFile, m.copyKey});
 		else g_s.syncHostList.push_back(m);
 	}
 	g_s.syncPhase = 2;
@@ -129,6 +147,8 @@ void SyncTick()
 	switch (g_s.syncPhase) {
 	case 1:
 		if (g_s.room.id == g_s.syncLobby.id) {
+			g_s.mods = ModsList();
+			if (CopiesStillHashing(g_s.mods, g_s.syncLobby.mods) && GetTickCount() - g_s.syncStart < 120000) break;
 			const std::vector<OnlineMod> missing = MissingMods(g_s, g_s.syncLobby);
 			if (missing.empty()) {
 				g_s.syncPhase = 3;
