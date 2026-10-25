@@ -491,6 +491,11 @@ void *__fastcall HookPlaceTown(void *self, void *edx, void *grid, float scale, u
 	if (player >= 1 && player <= 8) {
 		if (g_genActive) race = g_genRaces[player - 1];
 		else if (const char *gs = *reinterpret_cast<char **>(addr::kGameSettings)) race = *reinterpret_cast<const signed char *>(gs + 0x5c + (player - 1));
+		// a conquest sets the race of its player in the entry only (CVXGameAdv::StartGame), not in the list at +0x5c that the room fills
+		if (!g_genActive && race < 10) {
+			const int entry = CivsPlayerCiv(player);
+			if (entry >= 10) race = entry;
+		}
 		if (race >= 10) civ = FindByIndex(race);
 	}
 	static int logged = 0;
