@@ -56,8 +56,12 @@ void LoadConfig()
 		g_config.resolutionW = resW;
 		g_config.resolutionH = resH;
 	}
-	g_config.allResolutions = GetPrivateProfileIntA("Display", "AllResolutions", 1, path) != 0;
-	g_config.extendedView = GetPrivateProfileIntA("Display", "ExtendedView", 1, path) != 0;
+	GetPrivateProfileStringA("Display", "ResolutionScreen", "", buf, sizeof(buf), path);
+	if (sscanf_s(buf, "%dx%d", &resW, &resH) == 2 && resW > 0 && resH > 0 && resW <= 16384 && resH <= 16384) {
+		g_config.resolutionScreenW = resW;
+		g_config.resolutionScreenH = resH;
+	}
+	g_config.extendedView = GetPrivateProfileIntA("Display", "ExtendedView", 0, path) != 0;
 	g_config.showPerf = GetPrivateProfileIntA("Display", "ShowPerformance", 0, path) != 0;
 	g_config.showNet = GetPrivateProfileIntA("Display", "ShowNetwork", 0, path) != 0;
 	g_config.panelX = (std::max)(0, (std::min)(1000, static_cast<int>(GetPrivateProfileIntA("Display", "PanelX", 1000, path))));
@@ -101,10 +105,10 @@ void LoadConfig()
 	g_config.dumpAtStartup = dumpStart;
 
 	LogI("boot", "config: Render(Enabled=%d VSync=%d Brightness=%d FakeModeChange=%d) Display(Mode=%s "
-		"%dx%d TrapMouse=%d AllResolutions=%d) Game(ScrollSpeed=%.2f Autosave=%d every %d min, %d slots) Online(RejoinMode=%s)",
+		"%dx%d TrapMouse=%d ExtendedView=%d) Game(ScrollSpeed=%.2f Autosave=%d every %d min, %d slots) Online(RejoinMode=%s)",
 		g_config.renderEnabled, g_config.vsync, g_config.brightness, g_config.fakeModeChange,
 		g_config.windowed ? "windowed" : "fullscreen", g_config.windowW, g_config.windowH, g_config.trapMouse,
-		g_config.allResolutions, g_config.scrollSpeed, g_config.autosave, g_config.autosaveMinutes,
+		g_config.extendedView, g_config.scrollSpeed, g_config.autosave, g_config.autosaveMinutes,
 		g_config.autosaveSlots, g_config.rejoinReload ? "reload" : "hot");
 }
 
@@ -126,6 +130,10 @@ void SaveConfig()
 	WritePrivateProfileStringA("Display", "Monitor", std::to_string(g_config.monitor).c_str(), path);
 	if (g_config.resolutionW > 0) {
 		WritePrivateProfileStringA("Display", "Resolution", (std::to_string(g_config.resolutionW) + "x" + std::to_string(g_config.resolutionH)).c_str(), path);
+	}
+	if (g_config.resolutionScreenW > 0) {
+		WritePrivateProfileStringA("Display", "ResolutionScreen",
+			(std::to_string(g_config.resolutionScreenW) + "x" + std::to_string(g_config.resolutionScreenH)).c_str(), path);
 	}
 	WritePrivateProfileStringA("Render", "VSync", g_config.vsync ? "1" : "0", path);
 	WritePrivateProfileStringA("Render", "Scaling", nullptr, path);

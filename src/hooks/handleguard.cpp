@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <intrin.h>
 
 #include "hooks/handleguard.h"
 #include "MinHook.h"
@@ -12,6 +13,7 @@
 #include "core/log.h"
 #include "addr/script.h"
 #include "addr/world.h"
+#include "addr/state.h"
 
 namespace {
 typedef char *(__fastcall *IsKindOf_t)(char *object, void *unused, const char *className);
@@ -35,12 +37,13 @@ void *g_mageMemberCont = nullptr, *g_mageMemberNext = nullptr;
 void *g_memberCont = nullptr, *g_memberNext = nullptr;
 
 enum Site { kSiteEvalAttach, kSiteHeroSkills, kSiteAddSquadUnits, kSiteFirstUnit, kSiteSquadize, kSiteThreadLook, kSiteCommandDef,
-	kSiteHasFreedom, kSiteCollect, kSiteCount };
+	kSiteHasFreedom, kSiteCollect, kSiteSetPosition, kSiteCount };
 const char *const kSiteNames[kSiteCount] = {"Squad.EvalAttach with a leader that is not a unit or has no squad",
 	"Hero.TSAdvHeroSkills on an object that is not a hero", "an army member that is not a unit while adding squads to a target",
 	"a squad whose first member is not a unit", "a unit that cannot join a squad while grouping units",
 	"a squad member that is not a unit while a squad looks around", "the command parameters of an object whose command queue is empty",
-	"Unit.HasFreedom on an object that is not a unit", "a squad member that is not a unit in GetPlayerUnits"};
+	"Unit.HasFreedom on an object that is not a unit", "a squad member that is not a unit in GetPlayerUnits",
+	"moving a unit out of a building that is no longer there"};
 volatile LONG g_rejected[kSiteCount] = {};
 
 void Rejected(Site site)
@@ -130,6 +133,34 @@ int __cdecl HookHasFreedom(int *sp)
 		return 0;
 	}
 	return g_origHasFreedom(sp);
+}
+
+typedef void(__fastcall *SetPosition_t)(char *unit, void *edx, void *pos, int a, int b);
+SetPosition_t g_origSetPosition = nullptr;
+const unsigned kUnitHandle = 0x08;
+const unsigned kUnitHolder = 0x154;
+const uint16_t kNoHolder = 0xffff;
+
+char *Handle(uint16_t handle)
+{
+	return reinterpret_cast<char **>(addr::kHandleTable)[handle];
+}
+
+void ForgetMissingHolder(char *unit, void *from)
+{
+	uint16_t &field = *reinterpret_cast<uint16_t *>(unit + kUnitHolder);
+	if (field == kNoHolder || Handle(field)) return;
+	Rejected(kSiteSetPosition);
+	LogW("game", "objects: unit %u (class vtable %08x) pointed to building %u, which does not exist; it is now outside (from %08x)",
+		static_cast<unsigned>(*reinterpret_cast<uint16_t *>(unit + kUnitHandle)), *reinterpret_cast<uint32_t *>(unit), static_cast<unsigned>(field),
+		static_cast<unsigned>(reinterpret_cast<uintptr_t>(from)));
+	field = kNoHolder;
+}
+
+void __fastcall HookSetPosition(char *unit, void *edx, void *pos, int a, int b)
+{
+	if (unit) ForgetMissingHolder(unit, _ReturnAddress());
+	g_origSetPosition(unit, edx, pos, a, b);
 }
 
 int __fastcall DeadUnlessUnit(char *obj, Site site)
@@ -355,6 +386,7 @@ void InstallHandleGuard(bool knownExe)
 		{"GetCurrentScriptCommandDef", Hook(addr::kScriptCommandDefQueueRead, reinterpret_cast<void *>(&HookCommandDef), &g_commandDefCont)},
 		{"AIHook_OnUnitRemoved", Hook(addr::kOnUnitRemoved, reinterpret_cast<void *>(&HookOnUnitRemoved), reinterpret_cast<void **>(&g_origOnUnitRemoved))},
 		{"CVXUnit::OnDeathFinish", Hook(addr::kUnitOnDeathFinish, reinterpret_cast<void *>(&HookOnDeathFinish), reinterpret_cast<void **>(&g_origOnDeathFinish))},
+		{"CVXUnit::SetPosition", Hook(addr::kUnitSetPosition, reinterpret_cast<void *>(&HookSetPosition), reinterpret_cast<void **>(&g_origSetPosition))},
 	};
 	int ok = 0;
 	for (const Entry &e : done) {

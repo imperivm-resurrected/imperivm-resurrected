@@ -31,6 +31,7 @@ struct CatalogEntry {
 	std::vector<std::string> tags;
 	std::string replaceFolder;
 	bool aside = false;
+	bool otherCopy = false;
 };
 
 struct DownloadStatus {
@@ -130,6 +131,8 @@ struct RoomModRequest {
 	std::string id;
 	uint64_t gbId = 0;
 	std::string version;
+	uint64_t gbFile = 0;
+	std::string copyKey;
 };
 struct RoomModStatus {
 	bool active = false, done = false;
@@ -142,6 +145,7 @@ struct RoomModStatus {
 	std::vector<std::string> failed;
 	std::string note;
 };
+uint64_t DlInstalledGbFile(const ModInfo &m);
 void RoomModsFromGb(const std::vector<RoomModRequest> &mods);
 RoomModStatus RoomModsStatus();
 void RoomModsCancel();

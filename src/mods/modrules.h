@@ -9,7 +9,7 @@ namespace mods_impl {
 
 const char kGameId[] = "gbr-hd-1.0";
 
-const int kSimLevel = 2;
+const int kSimLevel = 3;
 
 const int kRulesSchema = 2;
 

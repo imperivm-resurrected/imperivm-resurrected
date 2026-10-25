@@ -53,7 +53,10 @@
 #include "net/spectator.h"
 #include "game/mapfog.h"
 #include "game/quickicons.h"
+#include "game/noteicons.h"
 #include "game/zoomview.h"
+#include "game/viewgrid.h"
+#include "game/loadcurtain.h"
 #include "game/cheats.h"
 #include "net/onlinesaves.h"
 #include "ui/savesui.h"
@@ -214,7 +217,10 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 		InstallCheats(knownExe);
 		InstallZoomFog(knownExe);
 		InstallQuickIcons(knownExe);
+		InstallNoteIcons(knownExe);
 		InstallZoomView(knownExe);
+		InstallViewGrid(knownExe);
+		InstallLoadCurtain(knownExe);
 		InstallSavesUi(knownExe);
 		CheckCompatibilityLayers();
 		if (knownExe && GetConfig().largeAddress && !ModsExeIsLargeAddressAware()) ModsPatchExeAtExit(1);
@@ -231,6 +237,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 		LogI("boot", "mod ready in %lu ms", static_cast<unsigned long>(GetTickCount() - bootStart));
 	}
 	else if (reason == DLL_PROCESS_DETACH) {
+		DisplayRestoreMonitor();
 		ShutdownRender();
 		LogShutdown();
 	}

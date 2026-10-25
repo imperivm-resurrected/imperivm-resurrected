@@ -45,6 +45,8 @@ std::vector<OnlineMod> DecodeModList(const std::string &text)
 			m.gbId = f.size() >= 7 ? _strtoui64(f[6].c_str(), nullptr, 10) : 0;
 			m.kind = f.size() >= 8 ? atoi(f[7].c_str()) : (m.gameplay ? 2 : 0);
 			m.gameplay = m.kind == 2;
+			m.gbFile = f.size() >= 9 ? _strtoui64(f[8].c_str(), nullptr, 10) : 0;
+			if (f.size() >= 10) m.copyKey = f[9];
 			out.push_back(m);
 		}
 	}
@@ -72,7 +74,8 @@ std::string EncodeModList(const std::vector<ModInfo> &mounted, const std::string
 			continue;
 		}
 		out += m.id + "\t" + m.name + "\t" + m.version + "\t" + (m.gameplay ? "1" : "0") + "\t" + std::to_string(m.totalBytes) + "\t" +
-			(m.redistributable && m.forbidden.empty() ? "1" : "0") + "\t" + std::to_string(m.gbId) + "\t" + std::to_string(m.kind) + "\n";
+			(m.redistributable && m.forbidden.empty() ? "1" : "0") + "\t" + std::to_string(m.gbId) + "\t" + std::to_string(m.kind) + "\t" + std::to_string(m.gbFile) + "\t" +
+			ModsRoomCopyKey(m.gameplayHash) + "\n";
 	}
 	return out;
 }

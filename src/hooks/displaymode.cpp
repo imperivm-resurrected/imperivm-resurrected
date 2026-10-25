@@ -37,6 +37,7 @@ MoveWindow_t g_origMoveWindow = nullptr;
 GetClientRect_t g_origGetClientRect = nullptr;
 GetCursorPos_t g_origGetCursorPos = nullptr;
 ClipCursor_t g_origClipCursor = nullptr;
+bool g_gameClips = false;
 SetWindowLongA_t g_origSetWindowLong = nullptr;
 
 bool g_faking = false;
@@ -229,23 +230,40 @@ void PlaceWindow()
 	LogGeometry(Windowed() ? "windowed" : "full screen");
 }
 
+bool MonitorHasMode(int w, int h);
+bool SwitchMonitorTo(int w, int h);
+
 bool FakeMode(int w, int h, DWORD bpp, bool testOnly)
 {
 	if (!Enabled()) {
 		return false;
 	}
-	if (!DisplayModeAllowed(w, h)) {
-		return false;
+	int homeW = 0, homeH = 0;
+	DisplayTargetSize(homeW, homeH);
+	// A size the monitor has but larger than the one Windows keeps can only be shown by switching the
+	// monitor to it, as games always did; any other size is drawn as asked and scaled to the monitor.
+	if ((w > homeW || h > homeH) && !Windowed() && MonitorHasMode(w, h)) {
+		if (testOnly) {
+			return true;
+		}
+		if (!SwitchMonitorTo(w, h)) {
+			return false;
+		}
 	}
-	if (testOnly) {
-		return true;
+	else {
+		if (!DisplayModeAllowed(w, h)) {
+			return false;
+		}
+		if (testOnly) {
+			return true;
+		}
+		DisplayRestoreMonitor();
 	}
 	g_faking = true;
 	g_logW = w;
 	g_logH = h;
 	g_logBpp = bpp ? bpp : 16;
-	LogD("display", "the game requests %dx%d %lubpp -> faked mode, the monitor stays at %dx%d", w, h, g_logBpp,
-		DesktopW(), DesktopH());
+	LogD("display", "the game requests %dx%d %lubpp -> drawn at that size on the monitor at %dx%d", w, h, g_logBpp, DesktopW(), DesktopH());
 	PlaceWindow();
 	return true;
 }
@@ -262,6 +280,7 @@ LONG WINAPI HookChangeDisplaySettingsA(DEVMODEA *mode, DWORD flags)
 {
 	if (!mode) {
 		g_faking = false;
+		DisplayRestoreMonitor();
 		if (!Enabled()) return g_origChange(nullptr, flags);
 		LogD("display", "restore mode -> not needed, the monitor never changed");
 		return DISP_CHANGE_SUCCESSFUL;
@@ -317,6 +336,48 @@ void PrepareModes()
 	g_modesReady = true;
 	LogI("display", "Windows lists %d display modes%s (%lu ms; kept for the next lists)", static_cast<int>(g_modes.size()),
 		has16 ? "" : ", none of 16 bits: the game is offered the 32-bit ones as 16", GetTickCount() - t0);
+}
+
+bool g_monitorSwitched = false;
+
+bool MonitorHasMode(int w, int h)
+{
+	if (w > 4096 || h > 2304) return false;
+	PrepareModes();
+	std::lock_guard<std::mutex> lock(g_modesMx);
+	for (const DEVMODEA &m : g_modes) {
+		if (static_cast<int>(m.dmPelsWidth) == w && static_cast<int>(m.dmPelsHeight) == h) return true;
+	}
+	return false;
+}
+
+bool SwitchMonitorTo(int w, int h)
+{
+	const RECT now = TargetMonitor();
+	if (now.right - now.left == w && now.bottom - now.top == h) return true;
+	DEVMODEA best = {};
+	{
+		PrepareModes();
+		std::lock_guard<std::mutex> lock(g_modesMx);
+		for (const DEVMODEA &m : g_modes) {
+			if (static_cast<int>(m.dmPelsWidth) != w || static_cast<int>(m.dmPelsHeight) != h || m.dmBitsPerPel < 24) continue;
+			if (!best.dmPelsWidth || m.dmDisplayFrequency > best.dmDisplayFrequency) best = m;
+		}
+	}
+	if (!best.dmPelsWidth) return false;
+	best.dmSize = sizeof(best);
+	best.dmDriverExtra = 0;
+	best.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT | DM_BITSPERPEL | DM_DISPLAYFREQUENCY;
+	const std::string device = TargetDevice();
+	// CDS_FULLSCREEN: Windows does not store it, so its own resolution is still the one it starts with.
+	const LONG result = ChangeDisplaySettingsExA(device.empty() ? nullptr : device.c_str(), &best, nullptr, CDS_FULLSCREEN, nullptr);
+	if (result != DISP_CHANGE_SUCCESSFUL) {
+		LogW("display", "the monitor could not be switched to %dx%d (code %ld)", w, h, result);
+		return false;
+	}
+	g_monitorSwitched = true;
+	LogI("display", "the monitor is switched to %dx%d at %lu Hz while the game uses it", w, h, best.dmDisplayFrequency);
+	return true;
 }
 
 BOOL CopyMode(DWORD index, DEVMODEA *mode, bool as16)
@@ -436,6 +497,7 @@ BOOL WINAPI HookGetCursorPos(LPPOINT pt)
 
 BOOL WINAPI HookClipCursor(const RECT *rc)
 {
+	g_gameClips = rc != nullptr;
 	if (rc && (Windowed() || !GetConfig().trapMouse)) {
 		return g_origClipCursor(nullptr);
 	}
@@ -461,7 +523,18 @@ BOOL WINAPI HookClipCursor(const RECT *rc)
 LRESULT CALLBACK GameWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
 	if (msg == WM_LBUTTONDOWN) LogClick(lp);
-	if (msg == WM_SIZE || msg == WM_DISPLAYCHANGE || msg == WM_DPICHANGED) LogGeometry("window changed");
+	if (msg == WM_DESTROY) DisplayRestoreMonitor();
+	if (msg == WM_SIZE || msg == WM_DISPLAYCHANGE || msg == WM_DPICHANGED) {
+		LogGeometry("window changed");
+		// The game clips the cursor to the window it has when it starts; the mod resizes the window
+		// right after, and the clip would keep the old size until the game clips again.
+		if (g_gameClips && GetForegroundWindow() == hwnd) {
+			RECT r;
+			g_origGetClientRect(hwnd, &r);
+			MapWindowPoints(hwnd, nullptr, reinterpret_cast<POINT *>(&r), 2);
+			HookClipCursor(&r);
+		}
+	}
 	if (msg == WM_DISPLAYCHANGE) {
 		std::lock_guard<std::mutex> lock(g_modesMx);
 		g_modesReady = false;
@@ -641,11 +714,46 @@ std::vector<POINT> DisplayExtendedSizes()
 	return sizes;
 }
 
+std::vector<POINT> DisplayWindowsSizes()
+{
+	PrepareModes();
+	std::vector<POINT> sizes;
+	std::lock_guard<std::mutex> lock(g_modesMx);
+	for (const DEVMODEA &m : g_modes) {
+		const POINT p = {static_cast<LONG>(m.dmPelsWidth), static_cast<LONG>(m.dmPelsHeight)};
+		if (std::find_if(sizes.begin(), sizes.end(), [&](const POINT &q) { return q.x == p.x && q.y == p.y; }) == sizes.end()) sizes.push_back(p);
+	}
+	return sizes;
+}
+
 void DisplayTargetSize(int &w, int &h)
 {
 	const RECT monitor = TargetMonitor();
 	w = monitor.right - monitor.left;
 	h = monitor.bottom - monitor.top;
+	if (!g_monitorSwitched) return;
+	const std::string device = TargetDevice();
+	DEVMODEA home = {};
+	home.dmSize = sizeof(home);
+	const auto enumerate = g_origEnum ? g_origEnum : &EnumDisplaySettingsA;
+	if (enumerate(device.empty() ? nullptr : device.c_str(), ENUM_REGISTRY_SETTINGS, &home) && home.dmPelsWidth && home.dmPelsHeight) {
+		w = static_cast<int>(home.dmPelsWidth);
+		h = static_cast<int>(home.dmPelsHeight);
+	}
+}
+
+bool DisplayMonitorHasMode(int w, int h)
+{
+	return !Windowed() && MonitorHasMode(w, h);
+}
+
+void DisplayRestoreMonitor()
+{
+	if (!g_monitorSwitched) return;
+	g_monitorSwitched = false;
+	const std::string device = TargetDevice();
+	ChangeDisplaySettingsExA(device.empty() ? nullptr : device.c_str(), nullptr, nullptr, 0, nullptr);
+	LogI("display", "the monitor is back to its own resolution");
 }
 
 std::vector<std::string> DisplayMonitorLabels()

@@ -10,6 +10,9 @@ namespace {
 const size_t kMinNameLength = 3;
 const char kSteamIdPrefix[] = "7656119";
 const size_t kSteamIdLength = 17;
+// A player called like the game or a service would erase those words from
+// every line, paths included, and the report would be unreadable.
+const char *const kNotNames[] = {"imperivm", "resurrected", "steam", "discord", "gamebanana", "windows"};
 
 char Lower(char c)
 {
@@ -78,6 +81,9 @@ void LogRedactor::AddName(const std::string &name, const std::string &label)
 	if (name.size() < kMinNameLength) return;
 	std::string lower = name;
 	for (char &c : lower) c = Lower(c);
+	for (const char *word : kNotNames) {
+		if (lower == word) return;
+	}
 	for (const Known &k : names_) {
 		if (k.lower == lower) return;
 	}

@@ -208,6 +208,10 @@ typedef void *(__fastcall *StopThread_t)(void *owner, void *edx, uint32_t id);
 
 void *__fastcall HookRescheduleThread(void *owner, void *edx, uint32_t *thread, uint32_t due);
 void *__fastcall HookStopThread(void *owner, void *edx, uint32_t id);
+typedef void(__fastcall *DeleteThreadHook_t)(void *owner, void *edx, uint32_t id);
+void __fastcall HookDeleteThread(void *owner, void *edx, uint32_t id);
+typedef int(__fastcall *SetThreadTime_t)(void *owner, void *edx, uint32_t id, uint32_t due);
+int __fastcall HookSetThreadTime(void *owner, void *edx, uint32_t id, uint32_t due);
 typedef int(__fastcall *RandomRange_t)(void *rng, void *edx, int lo, int hi);
 
 int __fastcall HookRandomRange(void *rng, void *edx, int lo, int hi);
@@ -347,7 +351,11 @@ void __fastcall HookRemoveFromMap(void *self);
 const int kMovesTicksWritten = 40;
 const char kMovesFile[] = "logs/imperivm/rejoin/moves.txt";
 uint32_t PositionsHash();
+const uint16_t kFirstLocalHandle = 40000;
 bool KeepLocalOutOfPositionsHash(void *obj, uint32_t before);
+uint32_t *ThreadsChecksum(void *owner);
+bool KeepLocalOutOfThreadsHash(void *owner, uint32_t *checksum, uint32_t before);
+void TimerPush(char kind, void *owner, uint32_t id, uint32_t due, uint32_t before, void *from);
 void MovePush(char kind, void *obj, uint32_t before, void *from);
 bool WriteMoves(int from);
 typedef void(__cdecl *TraceTileLine_t)(int, int, int, int, void *);
@@ -363,6 +371,8 @@ struct HookOriginals {
 	StartThread_t startThread = nullptr;
 	RescheduleThread_t reschedule = nullptr;
 	StopThread_t stopThread = nullptr;
+	DeleteThreadHook_t deleteThread = nullptr;
+	SetThreadTime_t setThreadTime = nullptr;
 	RandomRange_t randomRange = nullptr;
 	AiUpdate_t aiUpdate = nullptr;
 	AiAddOrder_t aiAddOrder = nullptr;

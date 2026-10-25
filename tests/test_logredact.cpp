@@ -49,6 +49,16 @@ void Names()
 	CHECK_EQ(r.Apply("Maria"), std::string("<player1>"));
 }
 
+void GameWords()
+{
+	LogRedactor r;
+	r.AddName("Imperivm");
+	r.AddName("STEAM");
+	r.AddName("Maria");
+	CHECK_EQ(r.Apply("Imperivm Resurrected 1.0.1, Logs\\imperivm\\ and steam: room of Imperivm with Maria"),
+		std::string("Imperivm Resurrected 1.0.1, Logs\\imperivm\\ and steam: room of Imperivm with <player1>"));
+}
+
 void LongestNameFirst()
 {
 	LogRedactor r;
@@ -123,6 +133,7 @@ int main()
 	SteamIds();
 	Addresses();
 	Names();
+	GameWords();
 	LongestNameFirst();
 	NonAscii();
 	UserName();
