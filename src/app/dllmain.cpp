@@ -56,6 +56,7 @@
 #include "game/noteicons.h"
 #include "game/zoomview.h"
 #include "game/viewgrid.h"
+#include "game/loadcurtain.h"
 #include "game/cheats.h"
 #include "net/onlinesaves.h"
 #include "ui/savesui.h"
@@ -219,6 +220,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 		InstallNoteIcons(knownExe);
 		InstallZoomView(knownExe);
 		InstallViewGrid(knownExe);
+		InstallLoadCurtain(knownExe);
 		InstallSavesUi(knownExe);
 		CheckCompatibilityLayers();
 		if (knownExe && GetConfig().largeAddress && !ModsExeIsLargeAddressAware()) ModsPatchExeAtExit(1);

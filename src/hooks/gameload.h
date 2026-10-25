@@ -3,7 +3,9 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #pragma once
 
+typedef void (*GameLoadingFn)();
 typedef void (*GameLoadedFn)(int result);
 
 bool InstallGameLoadHook(bool knownExe);
+void OnGameLoading(GameLoadingFn fn);
 void OnGameLoaded(GameLoadedFn fn);

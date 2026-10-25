@@ -15,17 +15,21 @@ namespace {
 typedef int(__cdecl *LoadGameFromFile_t)(const char *path);
 LoadGameFromFile_t g_origLoadGameFromFile = nullptr;
 std::mutex g_lock;
+std::vector<GameLoadingFn> g_before;
 std::vector<GameLoadedFn> g_listeners;
 bool g_installed = false, g_ok = false;
 
 int __cdecl HookLoadGameFromFile(const char *path)
 {
-	const int result = g_origLoadGameFromFile(path);
+	std::vector<GameLoadingFn> before;
 	std::vector<GameLoadedFn> listeners;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
+		before = g_before;
 		listeners = g_listeners;
 	}
+	for (GameLoadingFn fn : before) fn();
+	const int result = g_origLoadGameFromFile(path);
 	for (GameLoadedFn fn : listeners) fn(result);
 	return result;
 }
@@ -40,6 +44,12 @@ bool InstallGameLoadHook(bool knownExe)
 	void *target = reinterpret_cast<void *>(addr::kLoadGameFromFile);
 	g_ok = HookCreate(target, reinterpret_cast<void *>(&HookLoadGameFromFile), reinterpret_cast<void **>(&g_origLoadGameFromFile)) == MH_OK && HookEnable(target) == MH_OK;
 	return g_ok;
+}
+
+void OnGameLoading(GameLoadingFn fn)
+{
+	std::lock_guard<std::mutex> lock(g_lock);
+	g_before.push_back(fn);
 }
 
 void OnGameLoaded(GameLoadedFn fn)

@@ -29,6 +29,7 @@
 #include "hooks/media.h"
 #include "app/overlay.h"
 #include "game/cheats.h"
+#include "game/loadcurtain.h"
 #include "game/mapfog.h"
 #include "app/render.h"
 #include "hooks/tweaks.h"
@@ -346,6 +347,10 @@ DWORD WINAPI RenderThread(LPVOID)
 			continue;
 		}
 		movieBlack = false;
+		if (!video && LoadCurtainUp()) {
+			Sleep(5);
+			continue;
+		}
 		if (!newFrame && !haveFrame) {
 			Sleep(5);
 			continue;
