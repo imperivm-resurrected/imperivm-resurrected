@@ -108,6 +108,7 @@ void PaintHeader(Painter &p, const State &st)
 		p.Fill(16, 66, kW - 32, 1, pal::line);
 		return;
 	}
+	DrawPatronRowGlow(p, 12, 10, 760, 56, PatronOf(SteamOwnId()).tier);
 	if (!PaintAvatar(p, 20, 16, 44, SteamOwnId())) {
 		p.Fill(20, 16, 44, 44, pal::lineDim);
 		p.Font(2);
