@@ -338,14 +338,17 @@ void UpdateRoom()
 		for (const OnlineMember &m : room.members) {
 			if (!m.me && !has(g_room.members, m.id)) {
 				notice(m.name + Tr(" has joined the room"));
-				UiSoundPlay(2);
 				if (PatronOf(m.id).tier != PatronTier::None) {
 					notice(PatronJoinedNotice(m.name));
 					room.chat.back().patron = true;
 					room.chat.back().id = m.id;
 					room.chat.back().who = m.name;
+					UiSoundPlay(3);
 				}
-				else PatronsAnnounceLater(room.id, m.id, m.name);
+				else {
+					UiSoundPlay(2);
+					PatronsAnnounceLater(room.id, m.id, m.name);
+				}
 			}
 		}
 		for (const OnlineMember &m : g_room.members) {

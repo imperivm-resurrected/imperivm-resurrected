@@ -7,6 +7,7 @@
 #include "core/guard.h"
 #include "core/json.h"
 #include "core/log.h"
+#include "hooks/dmshim.h"
 #include "i18n/tr.h"
 #include "mods/downloads.h"
 #include "net/steamnet.h"
@@ -86,6 +87,7 @@ void Lookup(std::vector<uint64_t> ids)
 	}
 	// Outside g_mx: the room lock is taken after it in UpdateRoom, never before.
 	for (const Pending &n : notices) SteamAddPatronJoined(n.room, n.id, n.name);
+	if (!notices.empty()) UiSoundPlay(3);
 }
 
 }
