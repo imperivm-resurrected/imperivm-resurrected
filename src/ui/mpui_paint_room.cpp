@@ -9,6 +9,7 @@
 #include "net/spectator.h"
 
 #include "ui/mpui_internal.h"
+#include "ui/patronui.h"
 #include "game/gamemodes.h"
 
 using namespace mpui_impl;
@@ -120,9 +121,16 @@ void PaintGameRoom(Painter &p, const State &st)
 			if (i % 2) p.Fill(px + 1, rowY, pw - 2, rowH - 2, rowAlt);
 			p.Frame(px + 12, y + 7, 24, 22, pal::edge);
 			p.Font(0);
-			const int tx = PaintAvatar(p, px + 48, y + 5, 26, g_flow.arrivingIds[i]) ? px + 82 : px + 48;
-			p.Text(tx, y, (g.host ? pw - 150 : pw - 60) - (tx - px - 48), 36, arriving[i], kText,
-				DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			int tx = PaintAvatar(p, px + 48, y + 5, 26, g_flow.arrivingIds[i]) ? px + 82 : px + 48;
+			const PatronTier arrivingTier = PatronOf(g_flow.arrivingIds[i]).tier;
+			if (arrivingTier != PatronTier::None) {
+				DrawPatronLaurel(p, tx, y + 7, 22, arrivingTier);
+				tx += 26;
+			}
+			const UINT rowFmt = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS;
+			const int arrivingW = (g.host ? pw - 150 : pw - 60) - (tx - px - 48);
+			if (arrivingTier != PatronTier::None) DrawPatronName(p, tx, y, arrivingW, 36, arriving[i], arrivingTier, rowFmt);
+			else p.Text(tx, y, arrivingW, 36, arriving[i], kText, rowFmt);
 			if (g.host) p.Button(px + pw - 94, y + 6, 74, 24, "Kick", kGKickJoining, i, mx, my, true, false, 0);
 			continue;
 		}
@@ -168,14 +176,22 @@ void PaintGameRoom(Painter &p, const State &st)
 			const std::string label = SlotLabel(s);
 			p.Font(s.local ? 1 : 0);
 			const bool kickable = g.host && g.online && s.type == 3 && !s.local;
-			const bool avatar = (s.local || (g.online && s.type == 3)) &&
-				PaintAvatar(p, px + 48, y + 5, 26, s.local ? SteamOwnId() : MemberIdByName(st, s.name));
-			const int tx = avatar ? px + 80 : px + 48;
+			const bool human = s.local || (g.online && s.type == 3);
+			const uint64_t who = human ? (s.local ? SteamOwnId() : MemberIdByName(st, s.name)) : 0;
+			const bool avatar = human && PaintAvatar(p, px + 48, y + 5, 26, who);
+			int tx = avatar ? px + 80 : px + 48;
+			const PatronTier tier = who ? PatronOf(who).tier : PatronTier::None;
+			if (tier != PatronTier::None) {
+				DrawPatronLaurel(p, tx, y + 7, 22, tier);
+				tx += 26;
+			}
 			const bool seat = s.type == 1 && !s.local;
 			const bool hostMoves = g.host && s.type == 3;
 			const bool asks = !g.host && g.online && s.type == 3 && !s.local;
 			const int nameW = kickable && hostMoves ? 76 : kickable ? 128 : (seat || asks || (hostMoves && s.local)) ? 144 : 206;
-			p.Text(tx, y, nameW - (tx - px - 48), 36, label, s.local ? kGold : kText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			const UINT nameFmt = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS;
+			if (tier != PatronTier::None) DrawPatronName(p, tx, y, nameW - (tx - px - 48), 36, label, tier, nameFmt);
+			else p.Text(tx, y, nameW - (tx - px - 48), 36, label, s.local ? kGold : kText, nameFmt);
 			if (kickable && !movingRows) p.Button(px + 180, y + 6, 74, 24, "Kick", kGKick, i, mx, my, true, false, 0);
 			if (seat && !movingRows) p.Button(px + 196, y + 6, 60, 24, "Take", kGSeat, i, mx, my, true, false, 0);
 		}

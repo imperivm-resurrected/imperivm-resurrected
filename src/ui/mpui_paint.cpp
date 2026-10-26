@@ -9,6 +9,7 @@
 #include "net/rejoin.h"
 
 #include "ui/mpui_internal.h"
+#include "ui/patronui.h"
 
 using namespace mpui_impl;
 
@@ -849,6 +850,8 @@ void PaintDropList(Painter &p, const State &st)
 
 namespace mpui_impl {
 namespace {
+const int kChatLaurel = 15;
+
 COLORREF ChatColor(uint64_t id, bool me)
 {
 	static const COLORREF kNames[] = {RGB(120, 190, 235), RGB(140, 205, 120), RGB(232, 140, 110), RGB(196, 152, 236),
@@ -924,7 +927,8 @@ void PaintChatLog(Painter &p, const State &st, int x, int y, int w, int h)
 			p.Font(1);
 			const float nameW = p.TextWidthExact(l.who + ":");
 			p.Font(3);
-			it.indent = static_cast<int>(std::ceil(timeW + 6 + nameW + 6));
+			const int laurelW = PatronOf(l.id).tier != PatronTier::None ? kChatLaurel + 3 : 0;
+			it.indent = static_cast<int>(std::ceil(timeW + 6 + laurelW + nameW + 6));
 			it.lines = p.WrapLines(l.text, it.indent, textW);
 			it.h = static_cast<int>(it.lines.size()) * lineH;
 		}
@@ -956,8 +960,14 @@ void PaintChatLog(Painter &p, const State &st, int x, int y, int w, int h)
 		const bool me = l.id == SteamOwnId();
 		p.Font(3);
 		p.Text(x + pad, py, it.timeW, 18, ChatTime(l.minute), kDim, DT_LEFT | DT_TOP | DT_SINGLELINE);
+		int nameX = x + pad + it.timeW + 6;
+		const PatronTier tier = PatronOf(l.id).tier;
+		if (tier != PatronTier::None) {
+			DrawPatronLaurel(p, nameX, py + 1, kChatLaurel, tier);
+			nameX += kChatLaurel + 3;
+		}
 		p.Font(1);
-		p.Text(x + pad + it.timeW + 6, py, textW - it.timeW - 6, 18, l.who + ":", ChatNameColor(st, l, me), DT_LEFT | DT_TOP | DT_SINGLELINE);
+		p.Text(nameX, py, x + pad + textW - nameX, 18, l.who + ":", ChatNameColor(st, l, me), DT_LEFT | DT_TOP | DT_SINGLELINE);
 		p.Font(3);
 		for (size_t k = 0; k < it.lines.size(); k++) {
 			const int shift = k == 0 ? it.indent : 0;

@@ -872,6 +872,7 @@ extern const TrRow kTrRows[] = {
 	{"Steam relay", "relay de Steam", "relay di Steam"},
 	{" has joined the room", " ha entrado en la sala", " è entrato nella stanza"},
 	{" has left the room", " ha salido de la sala", " è uscito dalla stanza"},
+	{"%s supports Imperivm Resurrected. Thank you!", "%s apoya Imperivm Resurrected. ¡Gracias!", "%s sostiene Imperivm Resurrected. Grazie!"},
 	{"Steam could not create the room (code ", "Steam no dejó crear la sala (código ", "Steam non ha permesso di creare la stanza (codice "},
 	{"Couldn't join the room (full, closed, or it no longer exists)", "No se pudo entrar en la sala (llena, cerrada o ya no existe)", "Impossibile entrare nella stanza (piena, chiusa o non esiste più)"},
 	{"Wrong password", "Contraseña incorrecta", "Password errata"},

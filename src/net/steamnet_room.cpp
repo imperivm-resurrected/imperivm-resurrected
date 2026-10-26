@@ -10,6 +10,7 @@
 #include "hooks/dmshim.h"
 #include "game/gameroom.h"
 #include "net/vnet.h"
+#include "net/patrons.h"
 #include "i18n/tr.h"
 #include "addr/state.h"
 
@@ -308,6 +309,11 @@ void UpdateRoom()
 		}
 	}
 	VnetSetPeers(myK, peers);
+	{
+		std::vector<uint64_t> ids;
+		for (const OnlineMember &m : room.members) ids.push_back(m.id);
+		PatronsWatch(ids);
+	}
 	std::lock_guard<std::mutex> lock(g_lock);
 	const bool same = g_room.id == room.id;
 	room.chat = same ? g_room.chat : std::vector<OnlineChatLine>();
@@ -333,6 +339,8 @@ void UpdateRoom()
 			if (!m.me && !has(g_room.members, m.id)) {
 				notice(m.name + Tr(" has joined the room"));
 				UiSoundPlay(2);
+				if (PatronOf(m.id).tier != PatronTier::None) notice(PatronJoinedNotice(m.name));
+				else PatronsAnnounceLater(room.id, m.id, m.name);
 			}
 		}
 		for (const OnlineMember &m : g_room.members) {

@@ -213,6 +213,21 @@ OnlineRoom SteamCurrentRoom()
 	return room;
 }
 
+void SteamAddRoomNotice(uint64_t room, const std::string &text)
+{
+	OnlineChatLine l;
+	l.system = true;
+	l.text = text;
+	SYSTEMTIME now;
+	GetLocalTime(&now);
+	l.minute = now.wHour * 60 + now.wMinute;
+	std::lock_guard<std::mutex> lock(g_lock);
+	if (!room || g_room.id != room) return;
+	g_room.chat.push_back(l);
+	g_room.chatSerial++;
+	if (g_room.chat.size() > 300) g_room.chat.erase(g_room.chat.begin());
+}
+
 void SteamSendChat(const std::string &text)
 {
 	if (!SteamOnlineReady() || text.empty()) return;

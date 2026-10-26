@@ -865,6 +865,7 @@
 {"en":"Steam relay","es":"relay de Steam","it":"relay di Steam"},
 {"en":" has joined the room","es":" ha entrado en la sala","it":" è entrato nella stanza"},
 {"en":" has left the room","es":" ha salido de la sala","it":" è uscito dalla stanza"},
+{"en":"%s supports Imperivm Resurrected. Thank you!","es":"%s apoya Imperivm Resurrected. ¡Gracias!","it":"%s sostiene Imperivm Resurrected. Grazie!"},
 {"en":"Steam could not create the room (code ","es":"Steam no dejó crear la sala (código ","it":"Steam non ha permesso di creare la stanza (codice "},
 {"en":"Couldn't join the room (full, closed, or it no longer exists)","es":"No se pudo entrar en la sala (llena, cerrada o ya no existe)","it":"Impossibile entrare nella stanza (piena, chiusa o non esiste più)"},
 {"en":"Wrong password","es":"Contraseña incorrecta","it":"Password errata"},

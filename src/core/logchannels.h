@@ -6,4 +6,4 @@
 inline constexpr const char *kLogChannels[] = {
 	"boot", "crash", "render", "display", "audio", "video", "perf", "controls", "options", "ui", "content", "content-share", "patch",
 	"language", "vfs", "download", "update", "saves", "autosave", "civilizations", "specials", "script", "event", "cheats", "game", "steam",
-	"lobby", "room", "match", "net", "rejoin", "spectator", "discord", "session", "clock", "context", "log", "report"};
+	"lobby", "room", "match", "net", "rejoin", "spectator", "discord", "patrons", "session", "clock", "context", "log", "report"};
