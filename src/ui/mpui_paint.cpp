@@ -961,12 +961,16 @@ void PaintChatLog(Painter &p, const State &st, int x, int y, int w, int h)
 		const OnlineChatLine &l = chat[i];
 		if (it.y + it.h < top || it.y > top + h) continue;
 		const int py = y + it.y - top;
+		// Patron lines, their join line and what they write, sit on a band like the bar of the website:
+		// a tint of the laurel across the whole box and a stripe of it on the left.
+		auto patronBand = [&](PatronTier t, int top, int height) {
+			const PatronColors c = PatronColorsOf(t);
+			p.Fill(x + 1, top, w - 2, height, PatronBlend(RGB(12, 9, 6), c.laurel, 14));
+			p.Fill(x + 1, top, 3, height, c.laurel);
+		};
 		const PatronTier joinedTier = l.system && l.patron ? PatronOf(l.id).tier : PatronTier::None;
 		if (joinedTier != PatronTier::None) {
-			// Like the bar of the website: a tint of the laurel, a stripe on the left, the laurel and the name in colour.
-			const PatronColors c = PatronColorsOf(joinedTier);
-			p.Fill(x + 1, py - 2, w - barW - 4, it.h, PatronBlend(RGB(12, 9, 6), c.laurel, 16));
-			p.Fill(x + 1, py - 2, 3, it.h, c.laurel);
+			patronBand(joinedTier, py - 2, it.h);
 			p.Font(1);
 			const int nameX = x + pad + 2 + kChatLaurel + 4, nameW = std::min(p.TextWidth(l.who), textW / 2);
 			DrawPatron(p, x + pad + 2, py + 2, kChatLaurel, nameX, py + 1, nameW, lineH, l.who, joinedTier, DT_LEFT | DT_TOP | DT_SINGLELINE);
@@ -982,10 +986,11 @@ void PaintChatLog(Painter &p, const State &st, int x, int y, int w, int h)
 			continue;
 		}
 		const bool me = l.id == SteamOwnId();
+		const PatronTier tier = PatronOf(l.id).tier;
+		if (tier != PatronTier::None) patronBand(tier, py - 2, it.h + 2);
 		p.Font(3);
 		p.Text(x + pad, py, it.timeW, 18, ChatTime(l.minute), kDim, DT_LEFT | DT_TOP | DT_SINGLELINE);
 		const int laurelX = x + pad + it.timeW + 6;
-		const PatronTier tier = PatronOf(l.id).tier;
 		p.Font(1);
 		if (tier != PatronTier::None) {
 			const int nameX = laurelX + kChatLaurel + 3;
