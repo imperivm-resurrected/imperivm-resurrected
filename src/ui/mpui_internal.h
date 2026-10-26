@@ -319,6 +319,7 @@ std::string SpectatorText(bool enabled, int delay);
 bool RoomHasNoSeat(const State &st);
 std::vector<int> Visible(const State &st);
 const ModInfo *OlderInstalled(const State &st, const OnlineMod &m);
+std::string MapTypeLabel(const std::string &item);
 std::string LobbyMapLabel(const OnlineLobby &g);
 uint64_t LobbyPlayerId(const OnlineLobby &g, const std::string &name);
 std::vector<ListLine> OnlineLobbyLines(const State &st, const OnlineLobby &g, bool withStatus);

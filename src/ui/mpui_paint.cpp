@@ -276,7 +276,8 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis)
 			from = to + 1;
 			if (line.empty()) continue;
 			const size_t colon = line.find(": ");
-			const std::string value = colon == std::string::npos ? std::string() : line.substr(colon + 2);
+			const std::string key = colon == std::string::npos ? line : line.substr(0, colon);
+			const std::string value = colon == std::string::npos ? std::string() : key == "Map type" ? MapTypeLabel(line.substr(colon + 2)) : line.substr(colon + 2);
 			const bool yes = value == "yes", no = value == "no";
 			p.Text(x, y, (yes || no) ? w - Painter::kToggleW - 10 : w / 2, 20, colon == std::string::npos ? line : line.substr(0, colon), kDim,
 				DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
@@ -794,8 +795,12 @@ std::vector<std::string> DropItems(const State &st, int &sel)
 		return st.dropKind == kDropRace ? s.raceNames : s.nameItems;
 	}
 	if (idx >= 0 && idx < static_cast<int>(st.game.options.size())) {
-		sel = st.game.options[idx].sel;
-		return st.game.options[idx].items;
+		const GameRoomOption &o = st.game.options[idx];
+		sel = o.sel;
+		if (o.id != 0x1000) return o.items;
+		std::vector<std::string> items;
+		for (const std::string &item : o.items) items.push_back(MapTypeLabel(item));
+		return items;
 	}
 	return {};
 }

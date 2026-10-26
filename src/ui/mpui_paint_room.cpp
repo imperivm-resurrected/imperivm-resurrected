@@ -437,8 +437,7 @@ void PaintGameRoom(Painter &p, const State &st)
 					const std::string scenario = host ? (g.scenario.empty() ? "" : g.scenario.substr(g.scenario.find_last_of("/\\") + 1))
 													  : (pub.count("Scenario") ? pub["Scenario"] : "");
 					if (!scenario.empty()) v = Tr("Scenario: ") + scenario;
-					const std::string prefix = "Random map: ";
-					if (v.compare(0, prefix.size(), prefix) == 0) v = Tr("Random: ") + v.substr(prefix.size());
+					else v = MapTypeLabel(v);
 				}
 				row(label, v, false, enabled && index >= 0, true, kDropOption, index < 0 ? 0 : index, help);
 			};

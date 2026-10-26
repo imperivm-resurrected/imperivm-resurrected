@@ -642,7 +642,6 @@ extern const TrRow kTrRows[] = {
 	{"The host is choosing the map and options.", "El anfitrión está eligiendo el mapa y las opciones.", "L'host sta scegliendo la mappa e le opzioni."},
 	{"Scenario", "Escenario", "="},
 	{"Random map: ", "Mapa aleatorio: ", "Mappa casuale: "},
-	{"Random: ", "Aleatorio: ", "Casuale: "},
 	{"Preset", "Preajuste", "="},
 	{"Custom setup", "Personalizada", "Personalizzata"},
 	{"Size", "Tamaño", "Dimensioni"},

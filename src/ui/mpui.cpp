@@ -230,6 +230,14 @@ std::vector<ModRow> OnlineModRows(const State &st, const std::vector<OnlineMod> 
 }
 
 namespace mpui_impl {
+// The game names its random maps "Random map: Continent", in its own language; the list of map types
+// already says they are random, so only the part after the colon is shown.
+std::string MapTypeLabel(const std::string &item)
+{
+	const size_t colon = item.find(": ");
+	return colon == std::string::npos ? item : item.substr(colon + 2);
+}
+
 // The map chosen in the room, from the options the host publishes: the scenario, or the random map type
 // without its "Random map: " part. Rooms made outside the room screen only have the name given at creation.
 std::string LobbyMapLabel(const OnlineLobby &g)
@@ -243,8 +251,7 @@ std::string LobbyMapLabel(const OnlineLobby &g)
 		if (line.compare(0, 10, "Map type: ") == 0) type = line.substr(10);
 		a = b + 1;
 	}
-	const size_t colon = type.rfind(": ");
-	if (!type.empty()) return colon == std::string::npos ? type : type.substr(colon + 2);
+	if (!type.empty()) return MapTypeLabel(type);
 	return g.map.empty() || g.map == "Chosen in the room" ? Tr("In the room") : g.map;
 }
 
