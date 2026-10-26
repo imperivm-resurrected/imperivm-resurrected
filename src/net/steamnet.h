@@ -48,6 +48,8 @@ struct OnlineLobby {
 	unsigned rules = 0;
 	std::string saveName;
 	std::vector<std::string> playerNames;
+	// SteamIDs in the order of playerNames; empty in rooms made with versions before 1.0.3.
+	std::vector<uint64_t> playerIds;
 	std::vector<OnlineSlot> slots;
 	std::vector<int> saveColors;
 	std::vector<int> saveRaces;

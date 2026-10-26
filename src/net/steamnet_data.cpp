@@ -163,6 +163,14 @@ OnlineLobby ReadLobby(uint64 id)
 			if (to > from) l.playerNames.push_back(list.substr(from, to - from));
 			from = to + 1;
 		}
+		const std::string ids = Data(id, "pids");
+		for (size_t p = 0; p < ids.size();) {
+			size_t q = ids.find(',', p);
+			if (q == std::string::npos) q = ids.size();
+			l.playerIds.push_back(_strtoui64(ids.substr(p, q - p).c_str(), nullptr, 10));
+			p = q + 1;
+		}
+		if (l.playerIds.size() != l.playerNames.size()) l.playerIds.clear();
 	}
 	{
 		const std::string save = Data(id, "save");

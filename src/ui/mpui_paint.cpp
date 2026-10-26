@@ -234,7 +234,12 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis)
 			n++;
 			const bool human = s.type == 3, ai = s.type == 1;
 			p.Text(x, y, 24, 20, std::to_string(n), kDim);
-			p.Text(x + 26, y, w - 26 - 80, 20, human ? s.name : ai ? (s.name.empty() ? "AI" : s.name) : "Free", human ? kText : kDim);
+			const PatronInfo patron = human ? PatronOf(LobbyPlayerId(g, s.name)) : PatronInfo();
+			if (patron.tier != PatronTier::None) {
+				DrawPatron(p, x + 26, y + 2, 16, x + 46, y, w - 46 - 80, 20, s.name, patron.tier, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+				PatronHotspot(p, x + 26, y + 2, 16, patron, st.mouseX, st.mouseY, kPatronLink);
+			}
+			else p.Text(x + 26, y, w - 26 - 80, 20, human ? s.name : ai ? (s.name.empty() ? "AI" : s.name) : "Free", human ? kText : kDim);
 			if (human && !hostShown && PlayerNameMatches(s.name, g.host)) {
 				hostShown = true;
 				p.Text(x + w - 90, y, 90, 20, "host", kDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
@@ -250,7 +255,12 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis)
 		for (int i = 0; i < std::max(g.maxPlayers, static_cast<int>(g.playerNames.size())); i++) {
 			const bool taken = i < static_cast<int>(g.playerNames.size());
 			p.Text(x, y, 24, 20, std::to_string(i + 1), kDim);
-			p.Text(x + 26, y, w - 26, 20, taken ? g.playerNames[i] : "Free", taken ? kText : kDim);
+			const PatronInfo patron = taken ? PatronOf(LobbyPlayerId(g, g.playerNames[i])) : PatronInfo();
+			if (patron.tier != PatronTier::None) {
+				DrawPatron(p, x + 26, y + 2, 16, x + 46, y, w - 46 - 80, 20, g.playerNames[i], patron.tier, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+				PatronHotspot(p, x + 26, y + 2, 16, patron, st.mouseX, st.mouseY, kPatronLink);
+			}
+			else p.Text(x + 26, y, w - 26, 20, taken ? g.playerNames[i] : "Free", taken ? kText : kDim);
 			if (taken && i == 0) p.Text(x + w - 90, y, 90, 20, "host", kDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 			y += 22;
 		}
@@ -355,6 +365,15 @@ void PaintList(Painter &p, const State &st)
 		}
 	}
 	const std::vector<int> vis = Visible(st);
+	{
+		std::vector<uint64_t> ids;
+		for (int i : vis) {
+			const OnlineLobby &g = st.lobbies[i];
+			if (g.owner) ids.push_back(g.owner);
+			ids.insert(ids.end(), g.playerIds.begin(), g.playerIds.end());
+		}
+		PatronsWatch(ids);
+	}
 	if (vis.empty()) {
 		p.Font(0);
 		const std::string empty = !st.ready ? (st.status.empty() ? "Connecting to Steam..." : st.status)
@@ -375,12 +394,19 @@ void PaintList(Painter &p, const State &st)
 		if (g.password) DrawLock(p, cx[0] + 4, y + (rowH - 16) / 2, kGold);
 		p.Text(cx[0] + 2 + (g.password ? 20 : 0), y, cx[1] - cx[0] - 8 - (g.password ? 20 : 0), rowH, g.name, kText);
 		p.Font(3);
-		cell(1, g.friendHost ? g.host + Tr("  (friend)") : g.host, g.friendHost ? kGold : kDim);
+		const PatronInfo hostPatron = PatronOf(g.owner);
+		if (hostPatron.tier != PatronTier::None) {
+			const int hx = cx[1] + 2, hw = cx[2] - cx[1] - 8, ly = y + (rowH - 16) / 2;
+			DrawPatron(p, hx, ly, 16, hx + 20, y, hw - 20, rowH, g.friendHost ? g.host + Tr("  (friend)") : g.host, hostPatron.tier,
+				DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			PatronHotspot(p, hx, ly, 16, hostPatron, mx, my, kPatronLink);
+		}
+		else cell(1, g.friendHost ? g.host + Tr("  (friend)") : g.host, g.friendHost ? kGold : kDim);
 		char watching[48];
 		snprintf(watching, sizeof(watching), "In game  ·  %d watching", g.spectators);
 		cell(2, g.playing ? (g.spectators > 0 ? std::string(watching) : std::string("In game")) : std::to_string(g.players) + " / " + std::to_string(g.maxPlayers),
 			g.players < g.maxPlayers && !g.playing ? kText : kDim);
-		cell(3, g.map.empty() ? "In the room" : g.map, kDim);
+		cell(3, LobbyMapLabel(g), kDim);
 		COLORREF color;
 		const std::string mods = ModsColumn(st, g, color);
 		cell(4, mods, color);
