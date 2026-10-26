@@ -81,6 +81,8 @@ struct OnlineChatLine {
 	std::string who, text;
 	int minute = 0;
 	bool system = false;
+	// A system line saying that a patron joined; id and who are the patron's.
+	bool patron = false;
 };
 
 struct OnlineRoom {
@@ -151,8 +153,8 @@ void SteamJoinLobby(uint64_t id, const std::string &password, bool forContentSyn
 void SteamLeaveLobby(uint32_t onlyIfMembership = 0);
 uint32_t SteamMembership();
 OnlineRoom SteamCurrentRoom();
-// A line of the room chat that no player wrote. Dropped if the room has changed since.
-void SteamAddRoomNotice(uint64_t room, const std::string &text);
+// The chat line for a patron who joined, once their lookup has finished. Dropped if the room has changed since.
+void SteamAddPatronJoined(uint64_t room, uint64_t id, const std::string &name);
 std::string SteamVersionMismatch(const std::string &roomVersion, const std::string &roomRulesLevel = std::string());
 std::vector<std::string> SteamMissingScenario();
 std::string SteamScenarioModName();

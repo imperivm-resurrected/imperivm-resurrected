@@ -12,6 +12,7 @@ struct PatronColors {
 };
 
 PatronColors PatronColorsOf(PatronTier tier);
+COLORREF PatronBlend(COLORREF from, COLORREF to, int percent);
 // The laurel of the honour roll in a square of `size` at (x, y), then the name in the colour of the tier.
 // On the top three a slanted light sweeps across both now and then, as on the website.
 void DrawPatron(ui::Painter &p, int x, int y, int size, int nameX, int nameY, int nameW, int nameH, const std::string &name,

@@ -98,12 +98,6 @@ HBITMAP LaurelBitmap(int size, COLORREF color)
 	return bmp;
 }
 
-COLORREF Mix(COLORREF a, COLORREF b, int percent)
-{
-	return RGB(GetRValue(a) + (GetRValue(b) - GetRValue(a)) * percent / 100, GetGValue(a) + (GetGValue(b) - GetGValue(a)) * percent / 100,
-		GetBValue(a) + (GetBValue(b) - GetBValue(a)) * percent / 100);
-}
-
 void BlitLaurel(ui::Painter &p, int x, int y, int size, COLORREF color)
 {
 	const RECT r = p.R(x, y, size, size);
@@ -118,6 +112,12 @@ void BlitLaurel(ui::Painter &p, int x, int y, int size, COLORREF color)
 	DeleteDC(mem);
 }
 
+}
+
+COLORREF PatronBlend(COLORREF from, COLORREF to, int percent)
+{
+	return RGB(GetRValue(from) + (GetRValue(to) - GetRValue(from)) * percent / 100,
+		GetGValue(from) + (GetGValue(to) - GetGValue(from)) * percent / 100, GetBValue(from) + (GetBValue(to) - GetBValue(from)) * percent / 100);
 }
 
 PatronColors PatronColorsOf(PatronTier tier)
@@ -166,8 +166,8 @@ void DrawPatron(ui::Painter &p, int x, int y, int size, int nameX, int nameY, in
 		else SelectClipRgn(p.dc, band);
 		DeleteObject(current);
 		DeleteObject(band);
-		BlitLaurel(p, x, y, size, Mix(c.laurel, c.light, pass.percent));
-		p.Text(nameX, nameY, nameW, nameH, name, Mix(c.name, c.light, pass.percent), fmt);
+		BlitLaurel(p, x, y, size, PatronBlend(c.laurel, c.light, pass.percent));
+		p.Text(nameX, nameY, nameW, nameH, name, PatronBlend(c.name, c.light, pass.percent), fmt);
 		RestoreDC(p.dc, saved);
 	}
 }

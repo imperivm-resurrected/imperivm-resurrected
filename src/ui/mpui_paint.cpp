@@ -920,7 +920,11 @@ void PaintChatLog(Painter &p, const State &st, int x, int y, int w, int h)
 		Item it;
 		it.indent = 0;
 		it.lineH = lineH;
-		if (l.system) {
+		if (l.system && l.patron && PatronOf(l.id).tier != PatronTier::None) {
+			it.text = l.text;
+			it.h = lineH + 8;
+		}
+		else if (l.system) {
 			it.text = "\xE2\x80\x94 " + l.text;
 			p.Font(3);
 			it.h = p.Measure(textW, it.text);
@@ -954,6 +958,20 @@ void PaintChatLog(Painter &p, const State &st, int x, int y, int w, int h)
 		const OnlineChatLine &l = chat[i];
 		if (it.y + it.h < top || it.y > top + h) continue;
 		const int py = y + it.y - top;
+		const PatronTier joinedTier = l.system && l.patron ? PatronOf(l.id).tier : PatronTier::None;
+		if (joinedTier != PatronTier::None) {
+			// Like the bar of the website: a tint of the laurel, a stripe on the left, the laurel and the name in colour.
+			const PatronColors c = PatronColorsOf(joinedTier);
+			p.Fill(x + 1, py - 2, w - barW - 4, it.h, PatronBlend(RGB(12, 9, 6), c.laurel, 16));
+			p.Fill(x + 1, py - 2, 3, it.h, c.laurel);
+			p.Font(1);
+			const int nameX = x + pad + 2 + kChatLaurel + 4, nameW = std::min(p.TextWidth(l.who), textW / 2);
+			DrawPatron(p, x + pad + 2, py + 2, kChatLaurel, nameX, py + 1, nameW, lineH, l.who, joinedTier, DT_LEFT | DT_TOP | DT_SINGLELINE);
+			const std::string rest = l.text.compare(0, l.who.size(), l.who) == 0 ? l.text.substr(l.who.size()) : " " + l.text;
+			p.Font(3);
+			p.Text(nameX + nameW, py + 1, x + pad + textW - nameX - nameW, lineH, rest, kText, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS);
+			continue;
+		}
 		if (l.system) {
 			p.Font(3);
 			p.TextWrapped(x + pad, py, textW, it.h + 2, it.text, kDim);

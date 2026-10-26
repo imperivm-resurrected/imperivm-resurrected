@@ -30,7 +30,7 @@ struct Entry {
 };
 
 struct Pending {
-	uint64_t room;
+	uint64_t room, id;
 	std::string name;
 };
 
@@ -85,7 +85,7 @@ void Lookup(std::vector<uint64_t> ids)
 		}
 	}
 	// Outside g_mx: the room lock is taken after it in UpdateRoom, never before.
-	for (const Pending &n : notices) SteamAddRoomNotice(n.room, PatronJoinedNotice(n.name));
+	for (const Pending &n : notices) SteamAddPatronJoined(n.room, n.id, n.name);
 }
 
 }
@@ -119,7 +119,7 @@ void PatronsWatch(const std::vector<uint64_t> &ids)
 void PatronsAnnounceLater(uint64_t room, uint64_t id, const std::string &name)
 {
 	std::lock_guard<std::mutex> lock(g_mx);
-	g_announce[id] = {room, name};
+	g_announce[id] = {room, id, name};
 }
 
 std::string PatronJoinedNotice(const std::string &name)

@@ -10,6 +10,7 @@
 #include "mods/mods.h"
 #include "i18n/tr.h"
 
+#include "net/patrons.h"
 #include "net/steamnet_internal.h"
 #include "core/version.h"
 
@@ -213,11 +214,14 @@ OnlineRoom SteamCurrentRoom()
 	return room;
 }
 
-void SteamAddRoomNotice(uint64_t room, const std::string &text)
+void SteamAddPatronJoined(uint64_t room, uint64_t id, const std::string &name)
 {
 	OnlineChatLine l;
 	l.system = true;
-	l.text = text;
+	l.patron = true;
+	l.id = id;
+	l.who = name;
+	l.text = PatronJoinedNotice(name);
 	SYSTEMTIME now;
 	GetLocalTime(&now);
 	l.minute = now.wHour * 60 + now.wMinute;
