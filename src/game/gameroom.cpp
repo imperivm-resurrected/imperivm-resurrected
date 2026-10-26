@@ -838,7 +838,10 @@ void EnforceModeRaces()
 		if (!reinterpret_cast<GetSlotInfo_t>(addr::kGetSlotInfo)(g_dlg, nullptr, i, &name, &type, &color, &ready, &race, &team, &extra) || (type != 1 && type != 3)) continue;
 		// A scenario map fixes the civilization of its slots (EnforceFixedRaces); the others follow the room's sets and mode.
 		if (*reinterpret_cast<int *>(static_cast<char *>(g_dlg) + 0x9c) == 0 && g_scenarioRace[i] >= 0) continue;
-		const int now = CivsRaceOfRoomItem(static_cast<unsigned char>(choice[i]));
+		// The stored choice only follows the game's own civilizations: for a mod's it stays at 0 while the dropdown holds the real item.
+		void *combo = Combo(g_dlg, ((i + 1) << 12) | 0x22);
+		const int shownItem = ComboSel(combo);
+		const int now = CivsRaceOfRoomItem(shownItem >= 0 ? shownItem : static_cast<unsigned char>(choice[i]));
 		if (now < 0 || ((!mode || GameModeAllows(*mode, now)) && (!sets || CivsRoomAllows(now)))) continue;
 		int item = -1;
 		for (int shown : CivsRoomOrder(10 + static_cast<int>(CivsList().size()))) {
@@ -854,7 +857,7 @@ void EnforceModeRaces()
 		choice[i] = static_cast<char>(item);
 		reinterpret_cast<UpdateRow_t>(addr::kUpdateSlotRow)(g_dlg, nullptr, static_cast<unsigned>(i));
 		// The dropdown is what the room shows and sends; changing the stored choice alone does not move it.
-		SelectCombo(Combo(g_dlg, ((i + 1) << 12) | 0x22), item);
+		SelectCombo(combo, item);
 	}
 }
 
