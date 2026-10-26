@@ -22,3 +22,16 @@ void PatronsWatch(const std::vector<uint64_t> &ids);
 // For a player who has just joined and whose lookup has not finished: the notice is posted to the room when it does.
 void PatronsAnnounceLater(uint64_t room, uint64_t id, const std::string &name);
 std::string PatronJoinedNotice(const std::string &name, PatronTier tier);
+
+struct PatronRollEntry {
+	int place = 0;
+	std::string name;
+	double amount = 0;
+	bool hideAmount = false;
+	PatronTier tier = PatronTier::None;
+};
+
+// The honour roll as the website shows it, read in the background at most every five minutes.
+void PatronsRollRefresh();
+// state: 0 not read yet, 1 read, -1 could not be read.
+std::vector<PatronRollEntry> PatronsRoll(int &state);

@@ -223,7 +223,9 @@ struct Tip {
 };
 Tip g_tip;
 
-std::string Roman(int n)
+}
+
+std::string PatronRoman(int n)
 {
 	static const std::pair<int, const char *> kMap[] = {{1000, "M"}, {900, "CM"}, {500, "D"}, {400, "CD"}, {100, "C"}, {90, "XC"},
 		{50, "L"}, {40, "XL"}, {10, "X"}, {9, "IX"}, {5, "V"}, {4, "IV"}, {1, "I"}};
@@ -235,8 +237,6 @@ std::string Roman(int n)
 		}
 	}
 	return out;
-}
-
 }
 
 void DrawPatronRowGlow(ui::Painter &p, int x, int y, int w, int h, PatronTier tier)
@@ -272,7 +272,7 @@ void PaintPatronTip(ui::Painter &p, int screenW, int screenH)
 	const PatronColors c = PatronColorsOf(g_tip.info.tier);
 	const bool dev = g_tip.info.tier == PatronTier::Dev;
 	const std::string title = Tr(dev ? "Developer of Imperivm Resurrected" : "Patron of Imperivm Resurrected");
-	const std::string place = !dev && g_tip.info.place > 0 ? TrFmt("Place %s on the honour roll", {Roman(g_tip.info.place)}) : std::string();
+	const std::string place = !dev && g_tip.info.place > 0 ? TrFmt("Place %s on the honour roll", {PatronRoman(g_tip.info.place)}) : std::string();
 	const std::string call = Tr(dev ? "Click to support the mod" : "Click to support the mod and get your own laurel");
 	p.Font(1);
 	int w = p.TextWidth(title);

@@ -19,6 +19,8 @@
 namespace {
 
 const char kLookupUrl[] = "https://api.imperivmresurrected.com/v1/patrons/lookup?ids=";
+const char kRollUrl[] = "https://api.imperivmresurrected.com/v1/patrons";
+const DWORD kRollKeepMs = 5 * 60 * 1000;
 const size_t kMaxPerLookup = 16;
 const DWORD kKeepMs = 15 * 60 * 1000;
 // After a failed lookup, so a server that is down is not asked every second.
@@ -40,6 +42,51 @@ std::map<uint64_t, Entry> g_cache;
 std::map<uint64_t, Pending> g_announce;
 bool g_busy = false;
 DWORD g_failedAt = 0;
+
+std::vector<PatronRollEntry> g_roll;
+int g_rollState = 0;
+bool g_rollBusy = false;
+DWORD g_rollAt = 0;
+
+PatronTier TierOfPlace(int place)
+{
+	if (place == 1) return PatronTier::Gold;
+	if (place == 2) return PatronTier::Silver;
+	if (place == 3) return PatronTier::Bronze;
+	return place <= 10 ? PatronTier::Top10 : PatronTier::Patron;
+}
+
+void ReadRoll()
+{
+	Json j;
+	const std::string err = DlHttpGetJson(kRollUrl, j);
+	const Json *list = err.empty() ? j.Get("patrons") : nullptr;
+	std::vector<PatronRollEntry> roll;
+	if (list) {
+		for (const Json &p : list->arr) {
+			PatronRollEntry e;
+			e.place = static_cast<int>(p.GetNumber("place"));
+			e.name = p.GetString("name");
+			e.hideAmount = p.GetBool("hideAmount");
+			e.amount = p.GetNumber("amount");
+			e.tier = TierOfPlace(e.place);
+			if (e.place > 0 && !e.name.empty()) roll.push_back(e);
+		}
+	}
+	else {
+		LogW("patrons", "could not read the honour roll (%s)", err.empty() ? "unexpected answer" : err.c_str());
+	}
+	std::lock_guard<std::mutex> lock(g_mx);
+	g_rollBusy = false;
+	g_rollAt = GetTickCount();
+	if (list) {
+		g_roll = roll;
+		g_rollState = 1;
+	}
+	else if (g_rollState == 0) {
+		g_rollState = -1;
+	}
+}
 
 PatronTier TierFromName(const std::string &s)
 {
@@ -117,6 +164,23 @@ void PatronsWatch(const std::vector<uint64_t> &ids)
 		g_failedAt = 0;
 	}
 	SafeThread(Lookup, wanted).detach();
+}
+
+void PatronsRollRefresh()
+{
+	{
+		std::lock_guard<std::mutex> lock(g_mx);
+		if (g_rollBusy || (g_rollAt && GetTickCount() - g_rollAt < kRollKeepMs)) return;
+		g_rollBusy = true;
+	}
+	SafeThread(ReadRoll).detach();
+}
+
+std::vector<PatronRollEntry> PatronsRoll(int &state)
+{
+	std::lock_guard<std::mutex> lock(g_mx);
+	state = g_rollState;
+	return g_roll;
 }
 
 void PatronsAnnounceLater(uint64_t room, uint64_t id, const std::string &name)

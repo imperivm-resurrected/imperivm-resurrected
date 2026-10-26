@@ -26,3 +26,4 @@ void DrawPatronRowGlow(ui::Painter &p, int x, int y, int w, int h, PatronTier ti
 void PatronHotspot(ui::Painter &p, int x, int y, int size, const PatronInfo &info, int mx, int my, int action);
 void PaintPatronTip(ui::Painter &p, int screenW, int screenH);
 void OpenPatronPage();
+std::string PatronRoman(int n);

@@ -14,9 +14,11 @@
 #include <vector>
 
 #include "net/discord.h"
+#include "net/patrons.h"
 #include "core/guard.h"
 #include "core/log.h"
 #include "ui/modui.h"
+#include "ui/patronui.h"
 #include "ui/report.h"
 #include "ui/support.h"
 #include "ui/textedit.h"
@@ -33,7 +35,7 @@ const char kGitHub[] = "https://github.com/THIONG";
 const char kLinkedIn[] = "https://www.linkedin.com/in/saulrodriguezg/";
 const char kDiscordUser[] = "thiong";
 
-enum Action { kNone = 0, kClose, kOpenLogs, kMakeReport, kCopyBase = 100, kOpenBase = 200 };
+enum Action { kNone = 0, kClose, kOpenLogs, kMakeReport, kWholeRoll, kCopyBase = 100, kOpenBase = 200 };
 
 struct Row {
 	std::string label, value;
@@ -74,13 +76,34 @@ void BuildRows(std::vector<Row> &donate, std::vector<Row> &contact)
 	contact.push_back({"Discord", kDiscordUser, false, kDiscordUser});
 }
 
-const int kPanelW = 560, kRowH = 58, kSectionH = 36, kProblemRows = 2;
+// The honour roll on the left, what was here before on the right.
+const int kPanelW = 980, kRollX = 28, kRollW = 380, kSideX = 448, kSideW = kPanelW - kSideX - 28;
+const int kRowH = 58, kSectionH = 36, kProblemRows = 2, kTop = 24 + 36 + 44;
+const int kRollRowH = 36, kRollShown = 10;
 
 int PanelHeight(const std::vector<Row> &donate, const std::vector<Row> &contact)
 {
-	int h = 24 + 36 + 44;
-	for (const std::vector<Row> *rows : {&donate, &contact}) h += kSectionH + kRowH * static_cast<int>(rows->size());
-	return h + kSectionH + kRowH * kProblemRows + 76;
+	int side = kTop;
+	for (const std::vector<Row> *rows : {&donate, &contact}) side += kSectionH + kRowH * static_cast<int>(rows->size());
+	side += kSectionH + kRowH * kProblemRows;
+	const int roll = kTop + kSectionH + kRollRowH * kRollShown + 30 + 48;
+	return std::max(side, roll) + 76;
+}
+
+std::string Euros(double amount)
+{
+	char text[32];
+	if (amount == static_cast<double>(static_cast<long long>(amount))) {
+		sprintf_s(text, "%lld \xE2\x82\xAC", static_cast<long long>(amount));
+		return text;
+	}
+	sprintf_s(text, "%.2f \xE2\x82\xAC", amount);
+	// The decimal mark of the player's Windows, as the website writes it in their language.
+	wchar_t mark[4] = {};
+	if (GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SDECIMAL, mark, 4) > 0 && mark[0] == L',') {
+		if (char *dot = strchr(text, '.')) *dot = ',';
+	}
+	return text;
 }
 
 void OpenLink(const std::string &url)
@@ -224,13 +247,50 @@ void SupportDrawPanel(uint32_t *buf, int w, int h)
 	}
 	if (copied >= 0 && GetTickCount() - copiedAt > 2000) copied = -1;
 	PaintWindowFrame(p, kPanelW, H);
-	const int x = 28, w2 = kPanelW - 56;
 	int y = 20;
-	PaintTitle(p, x, y, w2, "Support the project");
+	PaintTitle(p, kRollX, y, kPanelW - 56, "Support the project");
 	y += 40;
 	p.Font(3);
-	p.TextWrapped(x, y, w2, 40, "Imperivm Resurrected is free. If you like it, you can help keep it going.", kDim);
+	p.TextWrapped(kRollX, y, kPanelW - 56, 40, "Imperivm Resurrected is free. If you like it, you can help keep it going.", kDim);
 	y += 44;
+	{
+		PatronsRollRefresh();
+		int state = 0;
+		const std::vector<PatronRollEntry> roll = PatronsRoll(state);
+		int ry = y;
+		p.Font(1);
+		p.Text(kRollX, ry + 4, kRollW, 22, "Honour roll", kText);
+		p.Fill(kRollX, ry + 28, kRollW, 1, pal::lineDim);
+		ry += kSectionH;
+		if (roll.empty()) {
+			p.Font(3);
+			p.TextWrapped(kRollX, ry + 6, kRollW, 60, state == 0 ? "Loading..." : "No patrons yet. Be the first!", kDim);
+		}
+		const UINT fmt = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS;
+		for (size_t i = 0; i < roll.size() && static_cast<int>(i) < kRollShown; i++) {
+			const PatronRollEntry &e = roll[i];
+			DrawPatronRowGlow(p, kRollX, ry, kRollW, kRollRowH - 2, e.tier);
+			p.Font(1);
+			p.Text(kRollX + 4, ry, 40, kRollRowH, PatronRoman(e.place), kDim, fmt);
+			const std::string amount = e.hideAmount ? std::string() : Euros(e.amount);
+			p.Font(3);
+			const int amountW = amount.empty() ? 0 : p.TextWidth(amount) + 8;
+			p.Font(e.place <= 3 ? 1 : 0);
+			DrawPatron(p, kRollX + 46, ry + (kRollRowH - 22) / 2, 22, kRollX + 74, ry, kRollW - 74 - amountW, kRollRowH, e.name, e.tier, fmt);
+			if (!amount.empty()) {
+				p.Font(3);
+				p.Text(kRollX + kRollW - amountW, ry, amountW, kRollRowH, amount, kText, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+			}
+			ry += kRollRowH;
+		}
+		if (static_cast<int>(roll.size()) > kRollShown) {
+			p.Font(3);
+			p.Text(kRollX, ry + 4, kRollW, 22, TrFmt("and %s more", {std::to_string(roll.size() - kRollShown)}), kDim);
+			ry += 30;
+		}
+		p.Button(kRollX, ry + 10, 220, 34, "See the whole roll", kWholeRoll, 0, mx, my, true, false);
+	}
+	const int x = kSideX, w2 = kSideW;
 	int index = 0;
 	auto header = [&](const char *title) {
 		p.Font(1);
@@ -319,6 +379,10 @@ bool SupportHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		}
 		if (action == kMakeReport) {
 			ReportStart();
+			return;
+		}
+		if (action == kWholeRoll) {
+			OpenLink(Tr("https://imperivmresurrected.com/en/supporters.html"));
 			return;
 		}
 		if (action >= kCopyBase) {
