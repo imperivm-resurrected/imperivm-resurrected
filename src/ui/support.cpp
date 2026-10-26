@@ -96,13 +96,12 @@ std::string Euros(double amount)
 		sprintf_s(text, "%lld \xE2\x82\xAC", static_cast<long long>(amount));
 		return text;
 	}
-	sprintf_s(text, "%.2f \xE2\x82\xAC", amount);
-	// The decimal mark of the player's Windows, as the website writes it in their language.
-	wchar_t mark[4] = {};
-	if (GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SDECIMAL, mark, 4) > 0 && mark[0] == L',') {
-		if (char *dot = strchr(text, '.')) *dot = ',';
-	}
-	return text;
+	const long long cents = static_cast<long long>(amount * 100 + 0.5);
+	char units[24], hundredths[8];
+	sprintf_s(units, "%lld", cents / 100);
+	sprintf_s(hundredths, "%02lld", cents % 100);
+	// The decimal mark of the game's language, as the website writes it.
+	return TrFmt("%s.%s \xE2\x82\xAC", {units, hundredths});
 }
 
 void OpenLink(const std::string &url)
@@ -316,11 +315,16 @@ void SupportDrawPanel(uint32_t *buf, int w, int h)
 		y += 44;
 		// The top three as a teaser: a click goes to the whole roll.
 		if (!roll.empty()) {
-			const int n = static_cast<int>(std::min<size_t>(3, roll.size())), gap = 10, cw = (w2 - gap * 2) / 3;
-			for (int i = 0; i < n; i++) {
-				const int cx = x + i * (cw + gap);
-				PodiumCard(p, cx, y, cw, kPodiumMiniH - 8, roll[i], 26, false);
-				p.AddHit(cx, y, cw, kPodiumMiniH - 8, kTabRoll, 0);
+			// As on the podium: the first in the middle and a little bigger.
+			const int gap = 10, side = (w2 - gap * 2) * 31 / 100, middle = w2 - gap * 2 - side * 2;
+			const int order[3] = {1, 0, 2};
+			for (int slot = 0; slot < 3; slot++) {
+				const int i = order[slot];
+				if (i >= static_cast<int>(roll.size())) continue;
+				const int cx = slot == 0 ? x : slot == 1 ? x + side + gap : x + side + gap + middle + gap;
+				const int cw = slot == 1 ? middle : side, top = slot == 1 ? 0 : 8;
+				PodiumCard(p, cx, y + top, cw, kPodiumMiniH - 8 - top, roll[i], slot == 1 ? 30 : 24, false);
+				p.AddHit(cx, y + top, cw, kPodiumMiniH - 8 - top, kTabRoll, 0);
 			}
 		}
 		else {

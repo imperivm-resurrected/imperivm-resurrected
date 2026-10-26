@@ -146,7 +146,7 @@ void DrawPatron(ui::Painter &p, int x, int y, int size, int nameX, int nameY, in
 {
 	if (tier == PatronTier::None) return;
 	const PatronColors c = PatronColorsOf(tier);
-	BlitLaurel(p, x, y, size, c.laurel);
+	if (size > 0) BlitLaurel(p, x, y, size, c.laurel);
 	p.Text(nameX, nameY, nameW, nameH, name, c.name, fmt);
 	if (!PatronShines(tier)) return;
 
@@ -175,7 +175,7 @@ void DrawPatron(ui::Painter &p, int x, int y, int size, int nameX, int nameY, in
 		else SelectClipRgn(p.dc, band);
 		DeleteObject(current);
 		DeleteObject(band);
-		BlitLaurel(p, x, y, size, PatronBlend(c.laurel, c.light, pass.percent));
+		if (size > 0) BlitLaurel(p, x, y, size, PatronBlend(c.laurel, c.light, pass.percent));
 		p.Text(nameX, nameY, nameW, nameH, name, PatronBlend(c.name, c.light, pass.percent), fmt);
 		RestoreDC(p.dc, saved);
 	}
