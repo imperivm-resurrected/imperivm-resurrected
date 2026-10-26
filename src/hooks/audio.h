@@ -4,3 +4,5 @@
 #pragma once
 
 void AudioSetBackgroundMute(bool mute);
+// While the game runs under something drawn over it, like a spectator catching up with the live game.
+void AudioSetCoverMute(bool mute);

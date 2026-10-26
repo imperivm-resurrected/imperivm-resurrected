@@ -13,6 +13,7 @@
 
 #include "MinHook.h"
 #include "hooks/hookcount.h"
+#include "hooks/audio.h"
 #include "game/civs.h"
 #include "game/controls.h"
 #include "net/spectator.h"
@@ -259,7 +260,10 @@ enum : uint8_t {
 };
 static_assert(kSpectatorMessages.Has(kSpHello) && kSpectatorMessages.Has(kSpResend), "spectator messages out of their range");
 const DWORD kResendWaitMs = 6000;
-const DWORD kCoverMaxMs = 60000;
+// The cover over a catch-up only gives up when the game stops getting closer to live: a long game
+// on a slow computer can take minutes and must not be shown fast-forwarding.
+const DWORD kCoverStallMs = 30000;
+const DWORD kCoverMaxMs = 10 * 60 * 1000;
 const size_t kChunk = 48 * 1024;
 const size_t kCaptureChunk = 128;
 const size_t kTicksMsgMax = 192 * 1024;
@@ -584,7 +588,8 @@ struct Viewer {
 	size_t buckets = 0;
 	DWORD resendAt = 0, mismatchSince = 0;
 	bool covering = false;
-	DWORD coverSince = 0;
+	DWORD coverSince = 0, coverMovedAt = 0;
+	uint32_t coverTick = 0;
 	std::string error;
 	DWORD lastRoom = 0;
 	uint8_t *game = nullptr;
@@ -715,16 +720,26 @@ void SetStatus(const std::string &s)
 	g_status = s;
 }
 
+const char *const kHashNames[kBucketHashCount] = {"object positions", "checksums", "sync 3", "sync 4", "sync 5", "commands", "fire and smoke", "sync 8"};
+
+// Which of the game's sync hashes differ, and for how many buckets: a single hash that keeps differing while the
+// object positions match is a value the replay computes differently, not a game that went its own way.
 struct ReplayCheck {
 	unsigned matched = 0, differed = 0;
-	bool reported = false;
+	unsigned byHash[kBucketHashCount] = {};
+	bool reported = false, positionsReported = false;
 };
 ReplayCheck g_check;
 
 void ReplayCheckSummary()
 {
 	if (!g_check.matched && !g_check.differed) return;
-	LogI("spectator", "the replay matched the game in %u buckets and differed in %u", g_check.matched, g_check.differed);
+	std::string by;
+	for (int i = 0; i < kBucketHashCount; i++) {
+		if (g_check.byHash[i]) by += (by.empty() ? "" : ", ") + std::string(kHashNames[i]) + " " + std::to_string(g_check.byHash[i]);
+	}
+	LogI("spectator", "the replay matched the game in %u buckets and differed in %u%s%s%s", g_check.matched, g_check.differed, by.empty() ? "" : " (",
+		by.c_str(), by.empty() ? "" : ")");
 	g_check = ReplayCheck();
 }
 
@@ -738,6 +753,7 @@ void ViewerReset()
 	g_viewing = false;
 	g_watching = false;
 	g_covering = false;
+	AudioSetCoverMute(false);
 	g_progress = -1;
 	std::lock_guard<std::mutex> lock(g_viewMx);
 	g_status.clear();
@@ -894,8 +910,10 @@ void ViewerAdopt(uint8_t *game)
 	g_v.phase = kViewing;
 	g_v.flow = kFlowWaiting;
 	g_v.covering = true;
-	g_v.coverSince = GetTickCount();
+	g_v.coverSince = g_v.coverMovedAt = GetTickCount();
 	g_covering = true;
+	// The game runs at full speed under the cover to reach the live game; its sound would play all of that.
+	AudioSetCoverMute(true);
 	const size_t n = BucketCount(game);
 	if (n != g_v.buckets) LogD("spectator", "the replay has %u buckets and %u were expected", static_cast<unsigned>(n), static_cast<unsigned>(g_v.buckets));
 	g_v.buckets = n;
@@ -1331,9 +1349,17 @@ void __fastcall HookRunTicks(void *timer, void *edx, unsigned target)
 		g_origRunTicks(timer, edx, want);
 	}
 	if (g_v.covering) {
-		if (g_v.flow == kFlowLive || g_v.ended || GetTickCount() - g_v.coverSince > kCoverMaxMs) {
+		const DWORD now = GetTickCount();
+		if (cur > g_v.coverTick) {
+			g_v.coverTick = cur;
+			g_v.coverMovedAt = now;
+		}
+		const bool stalled = now - g_v.coverMovedAt > kCoverStallMs || now - g_v.coverSince > kCoverMaxMs;
+		if (stalled && g_v.flow != kFlowLive && !g_v.ended) LogW("spectator", "the catch-up stopped advancing; showing the game as it is");
+		if (g_v.flow == kFlowLive || g_v.ended || stalled) {
 			g_v.covering = false;
 			g_covering = false;
+			AudioSetCoverMute(false);
 			g_progress = -1;
 			SetStatus("");
 		}
@@ -1623,18 +1649,23 @@ void __fastcall HookPlaybackTick(void *pump)
 	if (!buckets || before >= BucketCount(game)) return;
 	const uint32_t *recorded = reinterpret_cast<const uint32_t *>(buckets + before * kBucketSize + kBucketHashes);
 	const uint32_t *now = reinterpret_cast<const uint32_t *>(addr::kSyncHashes);
-	static const char *const kNames[kBucketHashCount] = {"object positions", "checksums", "sync 3", "sync 4", "sync 5", "commands", "fire and smoke", "sync 8"};
 	unsigned mask = 0;
 	if (!DifferingHashes(recorded, now, mask)) return;
 	std::string different;
 	for (int i = 0; i < kBucketHashCount; i++) {
-		if (mask & (1u << i)) different += (different.empty() ? "" : ", ") + std::string(kNames[i]);
+		if (!(mask & (1u << i))) continue;
+		different += (different.empty() ? "" : ", ") + std::string(kHashNames[i]);
+		g_check.byHash[i]++;
 	}
 	if (different.empty()) {
 		g_check.matched++;
 		return;
 	}
 	g_check.differed++;
+	if ((mask & 1u) && !g_check.positionsReported) {
+		g_check.positionsReported = true;
+		if (g_check.reported) LogW("spectator", "object positions differ from tick %u (bucket %u)", BucketTickAt(game, before), before);
+	}
 	if (!g_check.reported) {
 		g_check.reported = true;
 		LogW("spectator", "the replay no longer matches the game at tick %u (bucket %u, %u buckets matched before): differs in %s", BucketTickAt(game, before), before,
