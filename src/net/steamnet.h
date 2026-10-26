@@ -83,7 +83,7 @@ struct OnlineChatLine {
 	std::string who, text;
 	int minute = 0;
 	bool system = false;
-	// A system line saying that a patron joined; id and who are the patron's.
+	// A system line saying that a patron joined. Join lines also carry the id and name of who joined.
 	bool patron = false;
 };
 

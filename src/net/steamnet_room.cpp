@@ -341,12 +341,13 @@ void UpdateRoom()
 		};
 		for (const OnlineMember &m : room.members) {
 			if (!m.me && !has(g_room.members, m.id)) {
-				notice(m.name + Tr(" has joined the room"));
-				if (PatronOf(m.id).tier != PatronTier::None) {
-					notice(PatronJoinedNotice(m.name, PatronOf(m.id).tier));
+				// A patron gets one line, with their laurel, instead of the usual one.
+				const PatronTier tier = PatronOf(m.id).tier;
+				notice(tier != PatronTier::None ? PatronJoinedNotice(m.name, tier) : m.name + Tr(" has joined the room"));
+				room.chat.back().id = m.id;
+				room.chat.back().who = m.name;
+				if (tier != PatronTier::None) {
 					room.chat.back().patron = true;
-					room.chat.back().id = m.id;
-					room.chat.back().who = m.name;
 					UiSoundPlay(3);
 				}
 				else {
