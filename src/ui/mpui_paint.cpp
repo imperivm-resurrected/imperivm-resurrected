@@ -9,6 +9,7 @@
 #include "net/rejoin.h"
 
 #include "ui/mpui_internal.h"
+#include "ui/patronui.h"
 
 using namespace mpui_impl;
 
@@ -107,6 +108,8 @@ void PaintHeader(Painter &p, const State &st)
 		p.Fill(16, 66, kW - 32, 1, pal::line);
 		return;
 	}
+	// Lined up with the rule under the header, which it ends on.
+	DrawPatronRowGlow(p, 16, 12, 760, 54, PatronOf(SteamOwnId()).tier);
 	if (!PaintAvatar(p, 20, 16, 44, SteamOwnId())) {
 		p.Fill(20, 16, 44, 44, pal::lineDim);
 		p.Font(2);
@@ -114,7 +117,12 @@ void PaintHeader(Painter &p, const State &st)
 	}
 	p.Frame(20, 16, 44, 44, kGold);
 	p.Font(1);
-	p.Text(74, 14, 300, 24, st.player, kText);
+	const PatronTier ownTier = PatronOf(SteamOwnId()).tier;
+	if (ownTier != PatronTier::None) {
+		DrawPatron(p, 74, 15, 22, 100, 14, 274, 24, st.player, ownTier, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+		PatronHotspot(p, 74, 15, 22, PatronOf(SteamOwnId()), mx, my, kPatronLink);
+	}
+	else p.Text(74, 14, 300, 24, st.player, kText);
 	p.Font(3);
 	p.Text(74, 38, 400, 20, Tr("Content profile: ") + ModsProfileLabel(ModsMountedProfile().name), kDim);
 	if (!st.ready) {
@@ -228,7 +236,12 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis)
 			n++;
 			const bool human = s.type == 3, ai = s.type == 1;
 			p.Text(x, y, 24, 20, std::to_string(n), kDim);
-			p.Text(x + 26, y, w - 26 - 80, 20, human ? s.name : ai ? (s.name.empty() ? "AI" : s.name) : "Free", human ? kText : kDim);
+			const PatronInfo patron = human ? PatronOf(LobbyPlayerId(g, s.name)) : PatronInfo();
+			if (patron.tier != PatronTier::None) {
+				DrawPatron(p, x + 26, y + 2, 16, x + 46, y, w - 46 - 80, 20, s.name, patron.tier, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+				PatronHotspot(p, x + 26, y + 2, 16, patron, st.mouseX, st.mouseY, kPatronLink);
+			}
+			else p.Text(x + 26, y, w - 26 - 80, 20, human ? s.name : ai ? (s.name.empty() ? "AI" : s.name) : "Free", human ? kText : kDim);
 			if (human && !hostShown && PlayerNameMatches(s.name, g.host)) {
 				hostShown = true;
 				p.Text(x + w - 90, y, 90, 20, "host", kDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
@@ -244,7 +257,12 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis)
 		for (int i = 0; i < std::max(g.maxPlayers, static_cast<int>(g.playerNames.size())); i++) {
 			const bool taken = i < static_cast<int>(g.playerNames.size());
 			p.Text(x, y, 24, 20, std::to_string(i + 1), kDim);
-			p.Text(x + 26, y, w - 26, 20, taken ? g.playerNames[i] : "Free", taken ? kText : kDim);
+			const PatronInfo patron = taken ? PatronOf(LobbyPlayerId(g, g.playerNames[i])) : PatronInfo();
+			if (patron.tier != PatronTier::None) {
+				DrawPatron(p, x + 26, y + 2, 16, x + 46, y, w - 46 - 80, 20, g.playerNames[i], patron.tier, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+				PatronHotspot(p, x + 26, y + 2, 16, patron, st.mouseX, st.mouseY, kPatronLink);
+			}
+			else p.Text(x + 26, y, w - 26, 20, taken ? g.playerNames[i] : "Free", taken ? kText : kDim);
 			if (taken && i == 0) p.Text(x + w - 90, y, 90, 20, "host", kDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 			y += 22;
 		}
@@ -260,7 +278,8 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis)
 			from = to + 1;
 			if (line.empty()) continue;
 			const size_t colon = line.find(": ");
-			const std::string value = colon == std::string::npos ? std::string() : line.substr(colon + 2);
+			const std::string key = colon == std::string::npos ? line : line.substr(0, colon);
+			const std::string value = colon == std::string::npos ? std::string() : key == "Map type" ? MapTypeLabel(line.substr(colon + 2)) : line.substr(colon + 2);
 			const bool yes = value == "yes", no = value == "no";
 			p.Text(x, y, (yes || no) ? w - Painter::kToggleW - 10 : w / 2, 20, colon == std::string::npos ? line : line.substr(0, colon), kDim,
 				DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
@@ -349,6 +368,15 @@ void PaintList(Painter &p, const State &st)
 		}
 	}
 	const std::vector<int> vis = Visible(st);
+	{
+		std::vector<uint64_t> ids;
+		for (int i : vis) {
+			const OnlineLobby &g = st.lobbies[i];
+			if (g.owner) ids.push_back(g.owner);
+			ids.insert(ids.end(), g.playerIds.begin(), g.playerIds.end());
+		}
+		PatronsWatch(ids);
+	}
 	if (vis.empty()) {
 		p.Font(0);
 		const std::string empty = !st.ready ? (st.status.empty() ? "Connecting to Steam..." : st.status)
@@ -369,12 +397,19 @@ void PaintList(Painter &p, const State &st)
 		if (g.password) DrawLock(p, cx[0] + 4, y + (rowH - 16) / 2, kGold);
 		p.Text(cx[0] + 2 + (g.password ? 20 : 0), y, cx[1] - cx[0] - 8 - (g.password ? 20 : 0), rowH, g.name, kText);
 		p.Font(3);
-		cell(1, g.friendHost ? g.host + Tr("  (friend)") : g.host, g.friendHost ? kGold : kDim);
+		const PatronInfo hostPatron = PatronOf(g.owner);
+		if (hostPatron.tier != PatronTier::None) {
+			const int hx = cx[1] + 2, hw = cx[2] - cx[1] - 8, ly = y + (rowH - 16) / 2;
+			DrawPatron(p, hx, ly, 16, hx + 20, y, hw - 20, rowH, g.friendHost ? g.host + Tr("  (friend)") : g.host, hostPatron.tier,
+				DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			PatronHotspot(p, hx, ly, 16, hostPatron, mx, my, kPatronLink);
+		}
+		else cell(1, g.friendHost ? g.host + Tr("  (friend)") : g.host, g.friendHost ? kGold : kDim);
 		char watching[48];
 		snprintf(watching, sizeof(watching), "In game  ·  %d watching", g.spectators);
 		cell(2, g.playing ? (g.spectators > 0 ? std::string(watching) : std::string("In game")) : std::to_string(g.players) + " / " + std::to_string(g.maxPlayers),
 			g.players < g.maxPlayers && !g.playing ? kText : kDim);
-		cell(3, g.map.empty() ? "In the room" : g.map, kDim);
+		cell(3, LobbyMapLabel(g), kDim);
 		COLORREF color;
 		const std::string mods = ModsColumn(st, g, color);
 		cell(4, mods, color);
@@ -762,8 +797,12 @@ std::vector<std::string> DropItems(const State &st, int &sel)
 		return st.dropKind == kDropRace ? s.raceNames : s.nameItems;
 	}
 	if (idx >= 0 && idx < static_cast<int>(st.game.options.size())) {
-		sel = st.game.options[idx].sel;
-		return st.game.options[idx].items;
+		const GameRoomOption &o = st.game.options[idx];
+		sel = o.sel;
+		if (o.id != 0x1000) return o.items;
+		std::vector<std::string> items;
+		for (const std::string &item : o.items) items.push_back(MapTypeLabel(item));
+		return items;
 	}
 	return {};
 }
@@ -849,6 +888,8 @@ void PaintDropList(Painter &p, const State &st)
 
 namespace mpui_impl {
 namespace {
+const int kChatLaurel = 15;
+
 COLORREF ChatColor(uint64_t id, bool me)
 {
 	static const COLORREF kNames[] = {RGB(120, 190, 235), RGB(140, 205, 120), RGB(232, 140, 110), RGB(196, 152, 236),
@@ -915,7 +956,11 @@ void PaintChatLog(Painter &p, const State &st, int x, int y, int w, int h)
 		Item it;
 		it.indent = 0;
 		it.lineH = lineH;
-		if (l.system) {
+		if (l.system && l.patron && PatronOf(l.id).tier != PatronTier::None) {
+			it.text = l.text;
+			it.h = lineH + 8;
+		}
+		else if (l.system) {
 			it.text = "\xE2\x80\x94 " + l.text;
 			p.Font(3);
 			it.h = p.Measure(textW, it.text);
@@ -924,7 +969,8 @@ void PaintChatLog(Painter &p, const State &st, int x, int y, int w, int h)
 			p.Font(1);
 			const float nameW = p.TextWidthExact(l.who + ":");
 			p.Font(3);
-			it.indent = static_cast<int>(std::ceil(timeW + 6 + nameW + 6));
+			const int laurelW = PatronOf(l.id).tier != PatronTier::None ? kChatLaurel + 3 : 0;
+			it.indent = static_cast<int>(std::ceil(timeW + 6 + laurelW + nameW + 6));
 			it.lines = p.WrapLines(l.text, it.indent, textW);
 			it.h = static_cast<int>(it.lines.size()) * lineH;
 		}
@@ -948,16 +994,43 @@ void PaintChatLog(Painter &p, const State &st, int x, int y, int w, int h)
 		const OnlineChatLine &l = chat[i];
 		if (it.y + it.h < top || it.y > top + h) continue;
 		const int py = y + it.y - top;
+		// Patron lines, their join line and what they write, sit on a band like the bar of the website:
+		// a tint of the laurel across the whole box and a stripe of it on the left.
+		auto patronBand = [&](PatronTier t, int top, int height) {
+			const PatronColors c = PatronColorsOf(t);
+			p.Fill(x + 1, top, w - 2, height, PatronBlend(RGB(12, 9, 6), c.laurel, 14));
+			p.Fill(x + 1, top, 3, height, c.laurel);
+		};
+		const PatronTier joinedTier = l.system && l.patron ? PatronOf(l.id).tier : PatronTier::None;
+		if (joinedTier != PatronTier::None) {
+			patronBand(joinedTier, py - 2, it.h);
+			p.Font(1);
+			const int nameX = x + pad + 2 + kChatLaurel + 4, nameW = std::min(p.TextWidth(l.who), textW / 2);
+			DrawPatron(p, x + pad + 2, py + 2, kChatLaurel, nameX, py + 1, nameW, lineH, l.who, joinedTier, DT_LEFT | DT_TOP | DT_SINGLELINE);
+			if (py + 2 >= y && py + 2 + kChatLaurel <= y + h) PatronHotspot(p, x + pad + 2, py + 2, kChatLaurel, PatronOf(l.id), st.mouseX, st.mouseY, kPatronLink);
+			const std::string rest = l.text.compare(0, l.who.size(), l.who) == 0 ? l.text.substr(l.who.size()) : " " + l.text;
+			p.Font(3);
+			p.Text(nameX + nameW, py + 1, x + pad + textW - nameX - nameW, lineH, rest, kText, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS);
+			continue;
+		}
 		if (l.system) {
 			p.Font(3);
 			p.TextWrapped(x + pad, py, textW, it.h + 2, it.text, kDim);
 			continue;
 		}
 		const bool me = l.id == SteamOwnId();
+		const PatronTier tier = PatronOf(l.id).tier;
+		if (tier != PatronTier::None) patronBand(tier, py - 2, it.h + 2);
 		p.Font(3);
 		p.Text(x + pad, py, it.timeW, 18, ChatTime(l.minute), kDim, DT_LEFT | DT_TOP | DT_SINGLELINE);
+		const int laurelX = x + pad + it.timeW + 6;
 		p.Font(1);
-		p.Text(x + pad + it.timeW + 6, py, textW - it.timeW - 6, 18, l.who + ":", ChatNameColor(st, l, me), DT_LEFT | DT_TOP | DT_SINGLELINE);
+		if (tier != PatronTier::None) {
+			const int nameX = laurelX + kChatLaurel + 3;
+			DrawPatron(p, laurelX, py + 1, kChatLaurel, nameX, py, x + pad + textW - nameX, 18, l.who + ":", tier, DT_LEFT | DT_TOP | DT_SINGLELINE);
+			if (py + 1 >= y && py + 1 + kChatLaurel <= y + h) PatronHotspot(p, laurelX, py + 1, kChatLaurel, PatronOf(l.id), st.mouseX, st.mouseY, kPatronLink);
+		}
+		else p.Text(laurelX, py, textW - it.timeW - 6, 18, l.who + ":", ChatNameColor(st, l, me), DT_LEFT | DT_TOP | DT_SINGLELINE);
 		p.Font(3);
 		for (size_t k = 0; k < it.lines.size(); k++) {
 			const int shift = k == 0 ? it.indent : 0;

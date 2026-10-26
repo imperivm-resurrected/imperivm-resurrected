@@ -48,6 +48,8 @@ struct OnlineLobby {
 	unsigned rules = 0;
 	std::string saveName;
 	std::vector<std::string> playerNames;
+	// SteamIDs in the order of playerNames; empty in rooms made with versions before 1.0.3.
+	std::vector<uint64_t> playerIds;
 	std::vector<OnlineSlot> slots;
 	std::vector<int> saveColors;
 	std::vector<int> saveRaces;
@@ -81,6 +83,8 @@ struct OnlineChatLine {
 	std::string who, text;
 	int minute = 0;
 	bool system = false;
+	// A system line saying that a patron joined. Join lines also carry the id and name of who joined.
+	bool patron = false;
 };
 
 struct OnlineRoom {
@@ -151,6 +155,8 @@ void SteamJoinLobby(uint64_t id, const std::string &password, bool forContentSyn
 void SteamLeaveLobby(uint32_t onlyIfMembership = 0);
 uint32_t SteamMembership();
 OnlineRoom SteamCurrentRoom();
+// The chat line for a patron who joined, once their lookup has finished. Dropped if the room has changed since.
+void SteamAddPatronJoined(uint64_t room, uint64_t id, const std::string &name);
 std::string SteamVersionMismatch(const std::string &roomVersion, const std::string &roomRulesLevel = std::string());
 std::vector<std::string> SteamMissingScenario();
 std::string SteamScenarioModName();

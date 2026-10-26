@@ -14,9 +14,11 @@
 #include <vector>
 
 #include "net/discord.h"
+#include "net/patrons.h"
 #include "core/guard.h"
 #include "core/log.h"
 #include "ui/modui.h"
+#include "ui/patronui.h"
 #include "ui/report.h"
 #include "ui/support.h"
 #include "ui/textedit.h"
@@ -28,12 +30,13 @@ using namespace ui;
 namespace {
 
 const char kPaypal[] = "https://paypal.me/imperivmresurrected";
-const char kBtc[] = "bc1q58tsfh2h6yaqt7zlpqu08ykjrg8vf40wme0lzn";
+const char kBizum[] = "640 27 76 02";
+const char kBtc[] ="bc1q58tsfh2h6yaqt7zlpqu08ykjrg8vf40wme0lzn";
 const char kGitHub[] = "https://github.com/THIONG";
 const char kLinkedIn[] = "https://www.linkedin.com/in/saulrodriguezg/";
 const char kDiscordUser[] = "thiong";
 
-enum Action { kNone = 0, kClose, kOpenLogs, kMakeReport, kCopyBase = 100, kOpenBase = 200 };
+enum Action { kNone = 0, kClose, kOpenLogs, kMakeReport, kWholeRoll, kTabSupport, kTabRoll, kCopyBase = 100, kOpenBase = 200 };
 
 struct Row {
 	std::string label, value;
@@ -50,6 +53,9 @@ int g_mx = -1, g_my = -1;
 bool g_swallowUp = false, g_escArmed = false;
 std::vector<Hit> g_hits;
 int g_tabAction = -1;
+// 0 the ways to support, 1 the honour roll.
+int g_tab = 0;
+int g_rollScroll = 0, g_rollScrollMax = 0;
 
 void TabStep(bool back)
 {
@@ -68,19 +74,38 @@ void BuildRows(std::vector<Row> &donate, std::vector<Row> &contact)
 		const std::string shown = scheme == std::string::npos ? url : url.substr(scheme + 3);
 		donate.push_back({"PayPal", shown, true, url});
 	}
+	std::string bizum = kBizum;
+	bizum.erase(std::remove(bizum.begin(), bizum.end(), ' '), bizum.end());
+	donate.push_back({"Bizum", kBizum, false, bizum});
 	donate.push_back({"Bitcoin address", kBtc, false, kBtc});
 	contact.push_back({"GitHub", "github.com/THIONG", true, kGitHub});
 	contact.push_back({"LinkedIn", "linkedin.com/in/saulrodriguezg", true, kLinkedIn});
 	contact.push_back({"Discord", kDiscordUser, false, kDiscordUser});
 }
 
-const int kPanelW = 560, kRowH = 58, kSectionH = 36, kProblemRows = 2;
+const int kPanelW = 640, kRowH = 58, kSectionH = 36, kProblemRows = 2;
+const int kTabRowY = 64, kContentY = 112, kPodiumMiniH = 78, kPodiumH = 168, kRollRowH = 38;
 
 int PanelHeight(const std::vector<Row> &donate, const std::vector<Row> &contact)
 {
-	int h = 24 + 36 + 44;
+	int h = kContentY + 44 + kPodiumMiniH + 16;
 	for (const std::vector<Row> *rows : {&donate, &contact}) h += kSectionH + kRowH * static_cast<int>(rows->size());
 	return h + kSectionH + kRowH * kProblemRows + 76;
+}
+
+std::string Euros(double amount)
+{
+	char text[32];
+	if (amount == static_cast<double>(static_cast<long long>(amount))) {
+		sprintf_s(text, "%lld \xE2\x82\xAC", static_cast<long long>(amount));
+		return text;
+	}
+	const long long cents = static_cast<long long>(amount * 100 + 0.5);
+	char units[24], hundredths[8];
+	sprintf_s(units, "%lld", cents / 100);
+	sprintf_s(hundredths, "%02lld", cents % 100);
+	// The decimal mark of the game's language, as the website writes it.
+	return TrFmt("%s.%s \xE2\x82\xAC", {units, hundredths});
 }
 
 void OpenLink(const std::string &url)
@@ -199,11 +224,50 @@ void SupportDrawCorner(uint32_t *buf, int w, int h, const RECT &d)
 	if (hover) ModUiDrawHoverCard(buf, w, h, "Support the project", RGB(231, 76, 60), g_heart.right + size / 3, (g_heart.top + g_heart.bottom) / 2);
 }
 
+namespace {
+
+// One card of the podium: laurel, place, name with its light and amount.
+void PodiumCard(Painter &p, int x, int y, int w, int h, const PatronRollEntry &e, int laurel, bool big)
+{
+	const PatronColors c = PatronColorsOf(e.tier);
+	p.Fill(x, y, w, h, PatronBlend(RGB(24, 19, 13), c.laurel, 12));
+	p.Fill(x, y, w, 3, c.laurel);
+	const UINT center = DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS;
+	int cy = y + (big ? 14 : 8);
+	p.Font(big ? 2 : 1);
+	const std::string place = PatronRoman(e.place);
+	if (big) {
+		DrawPatron(p, x + (w - laurel) / 2, cy, laurel, x, cy + laurel + 2, w, 30, place, e.tier, center);
+		cy += laurel + 34;
+	}
+	else {
+		const int lx = x + 10;
+		DrawPatron(p, lx, y + (h - laurel) / 2, laurel, lx + laurel + 8, y + 6, w - laurel - 26, 26, e.name, e.tier,
+			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Font(3);
+		p.Text(lx + laurel + 8, y + h - 34, w - laurel - 26, 22, place + (e.hideAmount ? std::string() : "  \xC2\xB7  " + Euros(e.amount)), kDim,
+			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		return;
+	}
+	p.Font(1);
+	DrawPatron(p, x, cy, 0, x + 8, cy, w - 16, 26, e.name, e.tier, center);
+	cy += 28;
+	if (!e.hideAmount) {
+		p.Font(3);
+		p.Text(x, cy, w, 22, Euros(e.amount), kText, center);
+	}
+}
+
+}
+
 void SupportDrawPanel(uint32_t *buf, int w, int h)
 {
+	int tab, scroll;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
 		if (!g_open) return;
+		tab = g_tab;
+		scroll = g_rollScroll;
 	}
 	std::vector<Row> donate, contact;
 	BuildRows(donate, contact);
@@ -227,48 +291,146 @@ void SupportDrawPanel(uint32_t *buf, int w, int h)
 	const int x = 28, w2 = kPanelW - 56;
 	int y = 20;
 	PaintTitle(p, x, y, w2, "Support the project");
-	y += 40;
-	p.Font(3);
-	p.TextWrapped(x, y, w2, 40, "Imperivm Resurrected is free. If you like it, you can help keep it going.", kDim);
-	y += 44;
-	int index = 0;
-	auto header = [&](const char *title) {
-		p.Font(1);
-		p.Text(x, y + 4, w2, 22, title, kText);
-		p.Fill(x, y + 28, w2, 1, pal::lineDim);
-		y += kSectionH;
-	};
-	auto section = [&](const char *title, const std::vector<Row> &rows) {
-		header(title);
-		for (const Row &r : rows) {
-			p.Font(3);
-			p.Text(x, y, 200, 18, r.label, kDim);
-			p.Font(0);
-			p.Text(x, y + 20, w2 - 130, 24, r.value, kText);
-			const bool done = copied == index;
-			p.Button(x + w2 - 110, y + 6, 110, 32, r.open ? "Open link" : done ? "Copied" : "Copy", (r.open ? kOpenBase : kCopyBase) + index, 0, mx, my,
-				true, done);
-			y += kRowH;
-			index++;
+
+	PatronsRollRefresh();
+	int state = 0;
+	const std::vector<PatronRollEntry> roll = PatronsRoll(state);
+
+	// Tabs
+	{
+		int tx = x;
+		const char *const labels[2] = {"Support", "Honour roll"};
+		for (int i = 0; i < 2; i++) {
+			p.Font(1);
+			const int tw = p.TextWidth(labels[i]) + 28;
+			const bool active = tab == i, hov = !active && p.Hover(tx, kTabRowY, tw, 34, mx, my);
+			p.Text(tx, kTabRowY, tw, 34, labels[i], active ? kGold : hov ? kText : kDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			if (active) p.Fill(tx + 6, kTabRowY + 32, tw - 12, 3, kGold);
+			p.AddHit(tx, kTabRowY, tw, 34, i == 0 ? kTabSupport : kTabRoll, 0);
+			tx += tw + 8;
 		}
-	};
-	section("Donations", donate);
-	section("Contact", contact);
-	p.Font(1);
-	int bw = 110;
-	for (const char *label : {"Open folder", "Create report", "Creating..."}) bw = std::max(bw, p.TextWidth(label) + 32);
-	auto problemRow = [&](const char *label, const char *value, const char *button, int action, bool enabled) {
+		p.Fill(x, kTabRowY + 35, w2, 1, pal::lineDim);
+	}
+	y = kContentY;
+
+	if (tab == 0) {
 		p.Font(3);
-		p.Text(x, y, 200, 18, label, kDim);
-		p.Font(0);
-		p.Text(x, y + 20, w2 - bw - 20, 24, value, kText);
-		p.Button(x + w2 - bw, y + 6, bw, 32, button, action, 0, mx, my, enabled);
-		y += kRowH;
-	};
-	header("Report a problem");
-	problemRow("Logs folder", "Logs\\imperivm", "Open folder", kOpenLogs, true);
-	const bool busy = ReportBusy();
-	problemRow("Problem report", "Zip with logs and system info", busy ? "Creating..." : "Create report", kMakeReport, !busy);
+		p.TextWrapped(x, y, w2, 40, "Imperivm Resurrected is free. If you like it, you can help keep it going.", kDim);
+		y += 44;
+		// The top three as a teaser: a click goes to the whole roll.
+		if (!roll.empty()) {
+			// As on the podium: the first in the middle and a little bigger.
+			const int gap = 10, side = (w2 - gap * 2) * 31 / 100, middle = w2 - gap * 2 - side * 2;
+			const int order[3] = {1, 0, 2};
+			for (int slot = 0; slot < 3; slot++) {
+				const int i = order[slot];
+				if (i >= static_cast<int>(roll.size())) continue;
+				const int cx = slot == 0 ? x : slot == 1 ? x + side + gap : x + side + gap + middle + gap;
+				const int cw = slot == 1 ? middle : side, top = slot == 1 ? 0 : 8;
+				PodiumCard(p, cx, y + top, cw, kPodiumMiniH - 8 - top, roll[i], slot == 1 ? 30 : 24, false);
+				p.AddHit(cx, y + top, cw, kPodiumMiniH - 8 - top, kTabRoll, 0);
+			}
+		}
+		else {
+			p.Font(3);
+			p.Text(x, y, w2, kPodiumMiniH - 8, state == 0 ? "Loading..." : "No patrons yet. Be the first!", kDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+		}
+		y += kPodiumMiniH + 16;
+		int index = 0;
+		auto header = [&](const char *title) {
+			p.Font(1);
+			p.Text(x, y + 4, w2, 22, title, kText);
+			p.Fill(x, y + 28, w2, 1, pal::lineDim);
+			y += kSectionH;
+		};
+		auto section = [&](const char *title, const std::vector<Row> &rows) {
+			header(title);
+			for (const Row &r : rows) {
+				p.Font(3);
+				p.Text(x, y, 200, 18, r.label, kDim);
+				p.Font(0);
+				p.Text(x, y + 20, w2 - 130, 24, r.value, kText);
+				const bool done = copied == index;
+				p.Button(x + w2 - 110, y + 6, 110, 32, r.open ? "Open link" : done ? "Copied" : "Copy", (r.open ? kOpenBase : kCopyBase) + index, 0, mx, my,
+					true, done);
+				y += kRowH;
+				index++;
+			}
+		};
+		section("Donations", donate);
+		section("Contact", contact);
+		p.Font(1);
+		int bw = 110;
+		for (const char *label : {"Open folder", "Create report", "Creating..."}) bw = std::max(bw, p.TextWidth(label) + 32);
+		auto problemRow = [&](const char *label, const char *value, const char *button, int action, bool enabled) {
+			p.Font(3);
+			p.Text(x, y, 200, 18, label, kDim);
+			p.Font(0);
+			p.Text(x, y + 20, w2 - bw - 20, 24, value, kText);
+			p.Button(x + w2 - bw, y + 6, bw, 32, button, action, 0, mx, my, enabled);
+			y += kRowH;
+		};
+		header("Report a problem");
+		problemRow("Logs folder", "Logs\\imperivm", "Open folder", kOpenLogs, true);
+		const bool busy = ReportBusy();
+		problemRow("Problem report", "Zip with logs and system info", busy ? "Creating..." : "Create report", kMakeReport, !busy);
+	}
+	else {
+		int maxScroll = 0;
+		if (roll.empty()) {
+			p.Font(3);
+			p.TextWrapped(x, y + 10, w2, 60, state == 0 ? "Loading..." : "No patrons yet. Be the first!", kDim);
+		}
+		else {
+			// The podium as on the website: first in the middle and highest, second on the left, third on the right.
+			const int gap = 12, cw = (w2 - gap * 2) / 3;
+			const int order[3] = {1, 0, 2}, lift[3] = {18, 0, 30};
+			for (int slot = 0; slot < 3; slot++) {
+				const int i = order[slot];
+				if (i >= static_cast<int>(roll.size())) continue;
+				PodiumCard(p, x + slot * (cw + gap), y + lift[slot], cw, kPodiumH - lift[slot], roll[i], i == 0 ? 54 : 44, true);
+			}
+			y += kPodiumH + 14;
+			// The rest in a list that scrolls with the wheel.
+			const int listH = H - 76 - y, rows = static_cast<int>(roll.size()) - 3;
+			maxScroll = std::max(0, rows * kRollRowH - listH);
+			scroll = std::max(0, std::min(scroll, maxScroll));
+			p.Clip(x, y, w2, listH);
+			const UINT fmt = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS;
+			for (int i = 3; i < static_cast<int>(roll.size()); i++) {
+				const int ry = y + (i - 3) * kRollRowH - scroll;
+				if (ry + kRollRowH < y || ry > y + listH) continue;
+				const PatronRollEntry &e = roll[i];
+				if (i % 2) p.Fill(x, ry, w2, kRollRowH, RGB(30, 24, 17));
+				p.Font(1);
+				p.Text(x + 6, ry, 52, kRollRowH, PatronRoman(e.place), kDim, fmt);
+				const std::string amount = e.hideAmount ? std::string() : Euros(e.amount);
+				p.Font(3);
+				const int amountW = amount.empty() ? 0 : p.TextWidth(amount) + 12;
+				p.Font(0);
+				DrawPatron(p, x + 60, ry + (kRollRowH - 22) / 2, 22, x + 90, ry, w2 - 90 - amountW - (maxScroll ? 12 : 0), kRollRowH, e.name, e.tier, fmt);
+				if (!amount.empty()) {
+					p.Font(3);
+					p.Text(x + w2 - amountW - (maxScroll ? 12 : 0), ry, amountW, kRollRowH, amount, kText, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+				}
+			}
+			p.Unclip();
+			if (maxScroll > 0) {
+				const int trackH = listH, thumbH = std::max(30, trackH * listH / (listH + maxScroll));
+				const int thumbY = y + (trackH - thumbH) * scroll / maxScroll;
+				p.Fill(x + w2 - 5, y, 4, trackH, pal::lineDim);
+				p.Fill(x + w2 - 5, thumbY, 4, thumbH, kGold);
+			}
+			else if (rows <= 0) {
+				p.Font(3);
+				p.Text(x, y, w2, 30, "Only three patrons so far: there is room for yours.", kDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+			}
+		}
+		p.Button(x, H - 60, 220, 38, "See it on the website", kWholeRoll, 0, mx, my, true, false);
+		std::lock_guard<std::mutex> lock(g_lock);
+		g_rollScroll = scroll;
+		g_rollScrollMax = maxScroll;
+	}
 	p.Button(kPanelW - 28 - 140, H - 60, 140, 38, "Close", kClose, 0, mx, my, true, true);
 	r.End();
 	std::lock_guard<std::mutex> lock(g_lock);
@@ -295,6 +457,8 @@ bool SupportHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 			const POINT pt = {static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))};
 			if (PtInRect(&g_heart, pt)) {
 				g_open = true;
+				g_tab = 0;
+				g_rollScroll = 0;
 				g_tabAction = -1;
 				g_swallowUp = true;
 				g_copied = -1;
@@ -319,6 +483,15 @@ bool SupportHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		}
 		if (action == kMakeReport) {
 			ReportStart();
+			return;
+		}
+		if (action == kTabSupport || action == kTabRoll) {
+			g_tab = action == kTabRoll ? 1 : 0;
+			g_rollScroll = 0;
+			return;
+		}
+		if (action == kWholeRoll) {
+			OpenLink(Tr("https://imperivmresurrected.com/en/supporters.html"));
 			return;
 		}
 		if (action >= kCopyBase) {
@@ -382,6 +555,11 @@ bool SupportHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 	case WM_MBUTTONDOWN:
 	case WM_MBUTTONUP:
 	case WM_MOUSEWHEEL:
+		if (g_tab == 1) {
+			g_rollScroll -= GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA * kRollRowH * 2;
+			g_rollScroll = std::max(0, std::min(g_rollScroll, g_rollScrollMax));
+		}
+		return true;
 		return true;
 	default:
 		return false;

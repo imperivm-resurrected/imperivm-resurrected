@@ -10,6 +10,7 @@
 #include "hooks/dmshim.h"
 #include "game/gameroom.h"
 #include "net/vnet.h"
+#include "net/patrons.h"
 #include "i18n/tr.h"
 #include "addr/state.h"
 
@@ -101,17 +102,21 @@ void PublishPlayerList()
 {
 	if (!g_lobby || S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) != g_steam.me) return;
 	const int n = S.SteamAPI_ISteamMatchmaking_GetNumLobbyMembers(g_steam.mm, g_lobby);
-	std::string list = Name(g_steam.me);
+	std::string list = Name(g_steam.me), ids = std::to_string(g_steam.me);
 	for (int i = 0; i < n; i++) {
 		const uint64 m = S.SteamAPI_ISteamMatchmaking_GetLobbyMemberByIndex(g_steam.mm, g_lobby, i);
-		if (m != g_steam.me) list += "\n" + Name(m);
+		if (m == g_steam.me) continue;
+		list += "\n" + Name(m);
+		ids += "," + std::to_string(m);
 	}
 	static std::string last;
 	static uint64 lastLobby = 0;
-	if (list == last && lastLobby == g_lobby) return;
-	last = list;
+	if (list + ids == last && lastLobby == g_lobby) return;
+	last = list + ids;
 	lastLobby = g_lobby;
 	S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, "plist", list.c_str());
+	// So the room list can show who is a patron; the names alone cannot say it.
+	S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, "pids", ids.c_str());
 }
 
 std::map<uint64, DWORD> g_sentDoneAt;
@@ -308,6 +313,11 @@ void UpdateRoom()
 		}
 	}
 	VnetSetPeers(myK, peers);
+	{
+		std::vector<uint64_t> ids;
+		for (const OnlineMember &m : room.members) ids.push_back(m.id);
+		PatronsWatch(ids);
+	}
 	std::lock_guard<std::mutex> lock(g_lock);
 	const bool same = g_room.id == room.id;
 	room.chat = same ? g_room.chat : std::vector<OnlineChatLine>();
@@ -331,8 +341,19 @@ void UpdateRoom()
 		};
 		for (const OnlineMember &m : room.members) {
 			if (!m.me && !has(g_room.members, m.id)) {
-				notice(m.name + Tr(" has joined the room"));
-				UiSoundPlay(2);
+				// A patron gets one line, with their laurel, instead of the usual one.
+				const PatronTier tier = PatronOf(m.id).tier;
+				notice(tier != PatronTier::None ? PatronJoinedNotice(m.name, tier) : m.name + Tr(" has joined the room"));
+				room.chat.back().id = m.id;
+				room.chat.back().who = m.name;
+				if (tier != PatronTier::None) {
+					room.chat.back().patron = true;
+					UiSoundPlay(3);
+				}
+				else {
+					UiSoundPlay(2);
+					PatronsAnnounceLater(room.id, m.id, m.name);
+				}
 			}
 		}
 		for (const OnlineMember &m : g_room.members) {
@@ -493,7 +514,7 @@ void MirrorSpectators()
 	if (g_spectate.wanted && !g_spectate.lobby && !g_spectate.creating && g_lobby) OpenSpectators(g_spectate.delay, g_spectate.visibility);
 	if (!g_spectate.lobby) return;
 	if (!g_lobby || S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) != g_steam.me) return;
-	static const char *const kCopy[] = {"name", "host", "hostid", "map", "mode", "key", "scen", "pw", "vis", "irver", "mods", "slots", "plist", "opts", "rules", "save", "playing", "modsv", "nopt"};
+	static const char *const kCopy[] = {"name", "host", "hostid", "map", "mode", "key", "scen", "pw", "vis", "irver", "mods", "slots", "plist", "pids", "opts", "rules", "save", "playing", "modsv", "nopt"};
 	for (const char *k : kCopy) SpecSet(k, Data(g_lobby, k));
 	SpecSet("main", std::to_string(g_lobby));
 	SpecSet("delay", std::to_string(g_spectate.delay));

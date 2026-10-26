@@ -6,6 +6,7 @@
 
 #include "ui/textedit.h"
 #include "MinHook.h"
+#include "core/names.h"
 
 #include "ui/mpui_internal.h"
 
@@ -145,7 +146,7 @@ std::vector<int> Visible(const State &st)
 		if (st.filter == 6 && (g.playing || g.players >= g.maxPlayers)) continue;
 		if (st.filter == 7 && !(g.playing && g.specLobby)) continue;
 		if (!st.searchInput.empty() && !Contains(g.name, st.searchInput) && !Contains(g.host, st.searchInput) &&
-			!Contains(g.map, st.searchInput)) {
+			!Contains(LobbyMapLabel(g), st.searchInput)) {
 			continue;
 		}
 		out.push_back(static_cast<int>(i));
@@ -155,7 +156,7 @@ std::vector<int> Visible(const State &st)
 		switch (st.sortCol) {
 		case 1: return g.host;
 		case 2: sprintf_s(num, "%03d", g.maxPlayers - g.players); return num;
-		case 3: return g.map;
+		case 3: return LobbyMapLabel(g);
 		case 4: sprintf_s(num, "%03d", static_cast<int>(g.mods.size())); return num;
 		default: return g.name;
 		}
@@ -229,6 +230,40 @@ std::vector<ModRow> OnlineModRows(const State &st, const std::vector<OnlineMod> 
 }
 
 namespace mpui_impl {
+// The game names its random maps "Random map: Continent", in its own language; the list of map types
+// already says they are random, so only the part after the colon is shown.
+std::string MapTypeLabel(const std::string &item)
+{
+	const size_t colon = item.find(": ");
+	return colon == std::string::npos ? item : item.substr(colon + 2);
+}
+
+// The map chosen in the room, from the options the host publishes: the scenario, or the random map type
+// without its "Random map: " part. Rooms made outside the room screen only have the name given at creation.
+std::string LobbyMapLabel(const OnlineLobby &g)
+{
+	std::string type;
+	for (size_t a = 0; a < g.optionsText.size();) {
+		size_t b = g.optionsText.find('\n', a);
+		if (b == std::string::npos) b = g.optionsText.size();
+		const std::string line = g.optionsText.substr(a, b - a);
+		if (line.compare(0, 10, "Scenario: ") == 0 && line.size() > 10) return line.substr(10);
+		if (line.compare(0, 10, "Map type: ") == 0) type = line.substr(10);
+		a = b + 1;
+	}
+	if (!type.empty()) return MapTypeLabel(type);
+	return g.map.empty() || g.map == "Chosen in the room" ? Tr("In the room") : g.map;
+}
+
+uint64_t LobbyPlayerId(const OnlineLobby &g, const std::string &name)
+{
+	if (g.owner && PlayerNameMatches(name, g.host)) return g.owner;
+	for (size_t i = 0; i < g.playerIds.size(); i++) {
+		if (PlayerNameMatches(name, g.playerNames[i])) return g.playerIds[i];
+	}
+	return 0;
+}
+
 std::vector<ListLine> OnlineLobbyLines(const State &st, const OnlineLobby &g, bool withStatus)
 {
 	std::vector<ModRow> rows = OnlineModRows(st, g.mods, withStatus);
@@ -236,11 +271,6 @@ std::vector<ListLine> OnlineLobbyLines(const State &st, const OnlineLobby &g, bo
 		for (ModRow &r : rows) r.kind = 2;
 	}
 	std::vector<ListLine> lines = BuildModLines(rows, "None: the original game");
-	if (g.optionalMods > 0) {
-		const int n = g.optionalMods;
-		lines.push_back({n == 1 ? std::string("1 optional pack from the host: no need to download it")
-							: TrFmt("%d optional packs from the host: no need to download them", {std::to_string(n)}), kDim, false});
-	}
 	return lines;
 }
 
