@@ -264,11 +264,6 @@ std::vector<ListLine> OnlineLobbyLines(const State &st, const OnlineLobby &g, bo
 		for (ModRow &r : rows) r.kind = 2;
 	}
 	std::vector<ListLine> lines = BuildModLines(rows, "None: the original game");
-	if (g.optionalMods > 0) {
-		const int n = g.optionalMods;
-		lines.push_back({n == 1 ? std::string("1 optional pack from the host: no need to download it")
-							: TrFmt("%d optional packs from the host: no need to download them", {std::to_string(n)}), kDim, false});
-	}
 	return lines;
 }
 
