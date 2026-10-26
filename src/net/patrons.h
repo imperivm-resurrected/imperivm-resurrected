@@ -14,6 +14,7 @@ struct PatronInfo {
 	PatronTier tier = PatronTier::None;
 };
 
+// Called from UpdateRoom while it holds the room lock: these never take it.
 PatronInfo PatronOf(uint64_t id);
 // Looks up the ids that are not known yet, or were looked up too long ago, in the background.
 void PatronsWatch(const std::vector<uint64_t> &ids);
