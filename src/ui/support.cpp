@@ -30,7 +30,8 @@ using namespace ui;
 namespace {
 
 const char kPaypal[] = "https://paypal.me/imperivmresurrected";
-const char kBtc[] = "bc1q58tsfh2h6yaqt7zlpqu08ykjrg8vf40wme0lzn";
+const char kBizum[] = "640 27 76 02";
+const char kBtc[] ="bc1q58tsfh2h6yaqt7zlpqu08ykjrg8vf40wme0lzn";
 const char kGitHub[] = "https://github.com/THIONG";
 const char kLinkedIn[] = "https://www.linkedin.com/in/saulrodriguezg/";
 const char kDiscordUser[] = "thiong";
@@ -73,6 +74,9 @@ void BuildRows(std::vector<Row> &donate, std::vector<Row> &contact)
 		const std::string shown = scheme == std::string::npos ? url : url.substr(scheme + 3);
 		donate.push_back({"PayPal", shown, true, url});
 	}
+	std::string bizum = kBizum;
+	bizum.erase(std::remove(bizum.begin(), bizum.end(), ' '), bizum.end());
+	donate.push_back({"Bizum", kBizum, false, bizum});
 	donate.push_back({"Bitcoin address", kBtc, false, kBtc});
 	contact.push_back({"GitHub", "github.com/THIONG", true, kGitHub});
 	contact.push_back({"LinkedIn", "linkedin.com/in/saulrodriguezg", true, kLinkedIn});
