@@ -9,8 +9,15 @@
 #include "core/config.h"
 #include "core/log.h"
 
-void AudioSetBackgroundMute(bool mute)
+#include <atomic>
+
+namespace {
+
+std::atomic<bool> g_background{false}, g_cover{false};
+
+void ApplyMute()
 {
+	const bool mute = g_background || g_cover;
 	HRESULT init = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 	IMMDeviceEnumerator *enumerator = nullptr;
 	IMMDevice *device = nullptr;
@@ -35,4 +42,17 @@ void AudioSetBackgroundMute(bool mute)
 	if (SUCCEEDED(init)) {
 		CoUninitialize();
 	}
+}
+
+}
+
+void AudioSetBackgroundMute(bool mute)
+{
+	g_background = mute;
+	ApplyMute();
+}
+
+void AudioSetCoverMute(bool mute)
+{
+	if (g_cover.exchange(mute) != mute) ApplyMute();
 }
