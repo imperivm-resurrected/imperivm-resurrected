@@ -189,7 +189,7 @@ void DecorateIcon(void *icon, void *surface)
 		const int top = 0x12, bottom = 0x33, height = bottom - top + 1;
 		const int filled = static_cast<int>(static_cast<long long>(experience - lower) * height / (upper - lower));
 		Block(surface, x + 0x2e, y + top, x + 0x30, y + bottom, 0x0842);
-		if (filled > 0) Block(surface, x + 0x2e, y + bottom - std::min(height, filled) + 1, x + 0x30, y + bottom, 0x02bf);
+		if (filled > 0) Block(surface, x + 0x2e, y + bottom - std::min(height, filled) + 1, x + 0x30, y + bottom, 0x7ec3);
 	}
 	const int points = reinterpret_cast<SkillPoints_t>(addr::kHeroAvailableSkillPoints)(hero);
 	const bool blinkOn = points > 0 && ((GetTickCount() / kBlinkMs) & 1) == 0;
