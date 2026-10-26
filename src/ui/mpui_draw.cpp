@@ -14,6 +14,7 @@
 
 #include "game/mappreview.h"
 #include "ui/mpui_internal.h"
+#include "ui/patronui.h"
 
 using namespace mpui_impl;
 
@@ -352,6 +353,7 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 	g_detail.geomOut = ListGeom();
 	g_chat.geomOut = ListGeom();
 	PaintScreen(r.p, st);
+	PaintPatronTip(r.p, kW, kH);
 	WakeGameThread();
 	r.End(250);
 	std::lock_guard<std::mutex> lock(g_lock);

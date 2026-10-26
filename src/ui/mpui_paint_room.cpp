@@ -122,17 +122,26 @@ void PaintGameRoom(Painter &p, const State &st)
 			p.Frame(px + 12, y + 7, 24, 22, pal::edge);
 			p.Font(0);
 			int tx = PaintAvatar(p, px + 48, y + 5, 26, g_flow.arrivingIds[i]) ? px + 82 : px + 48;
-			const PatronTier arrivingTier = PatronOf(g_flow.arrivingIds[i]).tier;
-			if (arrivingTier != PatronTier::None) tx += 26;
+			const PatronInfo arrivingPatron = PatronOf(g_flow.arrivingIds[i]);
+			const PatronTier arrivingTier = arrivingPatron.tier;
+			const int arrivingLaurel = PatronLaurelSize(arrivingTier);
+			if (arrivingTier != PatronTier::None) tx += arrivingLaurel + 4;
 			const UINT rowFmt = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS;
 			const int arrivingW = (g.host ? pw - 150 : pw - 60) - (tx - px - 48);
-			if (arrivingTier != PatronTier::None) DrawPatron(p, tx - 26, y + 7, 22, tx, y, arrivingW, 36, arriving[i], arrivingTier, rowFmt);
+			if (arrivingTier != PatronTier::None) {
+				const int lx = tx - arrivingLaurel - 4, ly = y + (36 - arrivingLaurel) / 2;
+				DrawPatron(p, lx, ly, arrivingLaurel, tx, y, arrivingW, 36, arriving[i], arrivingTier, rowFmt);
+				PatronHotspot(p, lx, ly, arrivingLaurel, arrivingPatron, mx, my, kPatronLink);
+			}
 			else p.Text(tx, y, arrivingW, 36, arriving[i], kText, rowFmt);
 			if (g.host) p.Button(px + pw - 94, y + 6, 74, 24, "Kick", kGKickJoining, i, mx, my, true, false, 0);
 			continue;
 		}
 		if (s.local) p.Fill(px + 1, rowY, pw - 2, rowH - 2, RGB(56, 44, 28));
 		else if (i % 2) p.Fill(px + 1, rowY, pw - 2, rowH - 2, rowAlt);
+		if (s.used && (s.local || (g.online && s.type == 3))) {
+			DrawPatronRowGlow(p, px + 1, rowY, pw - 2, rowH - 2, PatronOf(s.local ? SteamOwnId() : MemberIdByName(st, s.name)).tier);
+		}
 		if (s.used) {
 			const bool colorEditable = !load && (s.local || (g.host && s.type == 1)) && !SlotFrozen(g, s);
 			p.Fill(px + 12, y + 7, 24, 22, PlayerColor(g, s.color));
@@ -177,14 +186,20 @@ void PaintGameRoom(Painter &p, const State &st)
 			const uint64_t who = human ? (s.local ? SteamOwnId() : MemberIdByName(st, s.name)) : 0;
 			const bool avatar = human && PaintAvatar(p, px + 48, y + 5, 26, who);
 			int tx = avatar ? px + 80 : px + 48;
-			const PatronTier tier = who ? PatronOf(who).tier : PatronTier::None;
-			if (tier != PatronTier::None) tx += 26;
+			const PatronInfo patron = who ? PatronOf(who) : PatronInfo();
+			const PatronTier tier = patron.tier;
+			const int laurel = PatronLaurelSize(tier);
+			if (tier != PatronTier::None) tx += laurel + 4;
 			const bool seat = s.type == 1 && !s.local;
 			const bool hostMoves = g.host && s.type == 3;
 			const bool asks = !g.host && g.online && s.type == 3 && !s.local;
 			const int nameW = kickable && hostMoves ? 76 : kickable ? 128 : (seat || asks || (hostMoves && s.local)) ? 144 : 206;
 			const UINT nameFmt = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS;
-			if (tier != PatronTier::None) DrawPatron(p, tx - 26, y + 7, 22, tx, y, nameW - (tx - px - 48), 36, label, tier, nameFmt);
+			if (tier != PatronTier::None) {
+				const int lx = tx - laurel - 4, ly = y + (36 - laurel) / 2;
+				DrawPatron(p, lx, ly, laurel, tx, y, nameW - (tx - px - 48), 36, label, tier, nameFmt);
+				PatronHotspot(p, lx, ly, laurel, patron, mx, my, kPatronLink);
+			}
 			else p.Text(tx, y, nameW - (tx - px - 48), 36, label, s.local ? kGold : kText, nameFmt);
 			if (kickable && !movingRows) p.Button(px + 180, y + 6, 74, 24, "Kick", kGKick, i, mx, my, true, false, 0);
 			if (seat && !movingRows) p.Button(px + 196, y + 6, 60, 24, "Take", kGSeat, i, mx, my, true, false, 0);

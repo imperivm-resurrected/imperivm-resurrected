@@ -116,7 +116,10 @@ void PaintHeader(Painter &p, const State &st)
 	p.Frame(20, 16, 44, 44, kGold);
 	p.Font(1);
 	const PatronTier ownTier = PatronOf(SteamOwnId()).tier;
-	if (ownTier != PatronTier::None) DrawPatron(p, 74, 15, 22, 100, 14, 274, 24, st.player, ownTier, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+	if (ownTier != PatronTier::None) {
+		DrawPatron(p, 74, 15, 22, 100, 14, 274, 24, st.player, ownTier, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+		PatronHotspot(p, 74, 15, 22, PatronOf(SteamOwnId()), mx, my, kPatronLink);
+	}
 	else p.Text(74, 14, 300, 24, st.player, kText);
 	p.Font(3);
 	p.Text(74, 38, 400, 20, Tr("Content profile: ") + ModsProfileLabel(ModsMountedProfile().name), kDim);
@@ -967,6 +970,7 @@ void PaintChatLog(Painter &p, const State &st, int x, int y, int w, int h)
 			p.Font(1);
 			const int nameX = x + pad + 2 + kChatLaurel + 4, nameW = std::min(p.TextWidth(l.who), textW / 2);
 			DrawPatron(p, x + pad + 2, py + 2, kChatLaurel, nameX, py + 1, nameW, lineH, l.who, joinedTier, DT_LEFT | DT_TOP | DT_SINGLELINE);
+			if (py + 2 >= y && py + 2 + kChatLaurel <= y + h) PatronHotspot(p, x + pad + 2, py + 2, kChatLaurel, PatronOf(l.id), st.mouseX, st.mouseY, kPatronLink);
 			const std::string rest = l.text.compare(0, l.who.size(), l.who) == 0 ? l.text.substr(l.who.size()) : " " + l.text;
 			p.Font(3);
 			p.Text(nameX + nameW, py + 1, x + pad + textW - nameX - nameW, lineH, rest, kText, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS);
@@ -986,6 +990,7 @@ void PaintChatLog(Painter &p, const State &st, int x, int y, int w, int h)
 		if (tier != PatronTier::None) {
 			const int nameX = laurelX + kChatLaurel + 3;
 			DrawPatron(p, laurelX, py + 1, kChatLaurel, nameX, py, x + pad + textW - nameX, 18, l.who + ":", tier, DT_LEFT | DT_TOP | DT_SINGLELINE);
+			if (py + 1 >= y && py + 1 + kChatLaurel <= y + h) PatronHotspot(p, laurelX, py + 1, kChatLaurel, PatronOf(l.id), st.mouseX, st.mouseY, kPatronLink);
 		}
 		else p.Text(laurelX, py, textW - it.timeW - 6, 18, l.who + ":", ChatNameColor(st, l, me), DT_LEFT | DT_TOP | DT_SINGLELINE);
 		p.Font(3);

@@ -17,3 +17,10 @@ COLORREF PatronBlend(COLORREF from, COLORREF to, int percent);
 // On the top three a slanted light sweeps across both now and then, as on the website.
 void DrawPatron(ui::Painter &p, int x, int y, int size, int nameX, int nameY, int nameW, int nameH, const std::string &name,
 	PatronTier tier, UINT fmt);
+int PatronLaurelSize(PatronTier tier);
+// Behind the row of a top-three patron.
+void DrawPatronRowGlow(ui::Painter &p, int x, int y, int w, int h, PatronTier tier);
+// Click area and tooltip of a laurel. The tooltip is drawn by PaintPatronTip after everything else, so nothing covers it.
+void PatronHotspot(ui::Painter &p, int x, int y, int size, const PatronInfo &info, int mx, int my, int action);
+void PaintPatronTip(ui::Painter &p, int screenW, int screenH);
+void OpenPatronPage();

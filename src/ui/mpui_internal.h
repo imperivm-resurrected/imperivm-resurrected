@@ -49,7 +49,7 @@ enum Action {
 	kPickRow, kPickOk, kPickCancel,
 	kRecoverYes, kRecoverNo, kRejoinCancel, kRejoinClose,
 	kGKick, kGKickJoining, kDiscord, kPassOk, kPassCancel, kGSeat, kGMove, kGMoveTo, kGSwapAsk, kSwapAccept, kSwapDecline, kDropYes, kDropNo, kPassShow, kGSiteToggle, kGRuleToggle, kSpectate, kReturnGame,
-	kFieldPickSearch, kPickDelete, kPickDeleteYes, kPickDeleteNo, kGResync,
+	kFieldPickSearch, kPickDelete, kPickDeleteYes, kPickDeleteNo, kGResync, kPatronLink,
 };
 
 typedef int(__cdecl *HostGame_t)(int, unsigned, int);

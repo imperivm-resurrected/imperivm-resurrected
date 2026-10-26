@@ -2,6 +2,9 @@
 // Copyright (C) 2026 THIONG
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include "ui/patronui.h"
+#include "i18n/tr.h"
+
+#include <shellapi.h>
 
 #include <algorithm>
 #include <cmath>
@@ -170,4 +173,122 @@ void DrawPatron(ui::Painter &p, int x, int y, int size, int nameX, int nameY, in
 		p.Text(nameX, nameY, nameW, nameH, name, PatronBlend(c.name, c.light, pass.percent), fmt);
 		RestoreDC(p.dc, saved);
 	}
+}
+
+int PatronLaurelSize(PatronTier tier)
+{
+	return tier == PatronTier::Gold || tier == PatronTier::Silver || tier == PatronTier::Bronze ? 26 : 22;
+}
+
+namespace {
+
+// A soft band of the laurel's colour that fades to the right, as on the rows of the website.
+HBITMAP GlowBitmap(int width, COLORREF color)
+{
+	static std::map<std::pair<int, COLORREF>, HBITMAP> cache;
+	const auto key = std::make_pair(width, color);
+	auto it = cache.find(key);
+	if (it != cache.end()) return it->second;
+	BITMAPINFO bi = {};
+	bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
+	bi.bmiHeader.biWidth = width;
+	bi.bmiHeader.biHeight = -1;
+	bi.bmiHeader.biPlanes = 1;
+	bi.bmiHeader.biBitCount = 32;
+	bi.bmiHeader.biCompression = BI_RGB;
+	void *bits = nullptr;
+	HBITMAP bmp = CreateDIBSection(nullptr, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+	if (bmp && bits) {
+		uint32_t *px = static_cast<uint32_t *>(bits);
+		for (int i = 0; i < width; i++) {
+			const double f = 1.0 - static_cast<double>(i) / width;
+			const uint32_t a = static_cast<uint32_t>(64 * f * f);
+			px[i] = (a << 24) | ((GetRValue(color) * a / 255) << 16) | ((GetGValue(color) * a / 255) << 8) | (GetBValue(color) * a / 255);
+		}
+	}
+	cache[key] = bmp;
+	return bmp;
+}
+
+struct Tip {
+	bool show = false;
+	int x = 0, y = 0;
+	PatronInfo info;
+};
+Tip g_tip;
+
+std::string Roman(int n)
+{
+	static const std::pair<int, const char *> kMap[] = {{1000, "M"}, {900, "CM"}, {500, "D"}, {400, "CD"}, {100, "C"}, {90, "XC"},
+		{50, "L"}, {40, "XL"}, {10, "X"}, {9, "IX"}, {5, "V"}, {4, "IV"}, {1, "I"}};
+	std::string out;
+	for (const auto &m : kMap) {
+		while (n >= m.first) {
+			out += m.second;
+			n -= m.first;
+		}
+	}
+	return out;
+}
+
+}
+
+void DrawPatronRowGlow(ui::Painter &p, int x, int y, int w, int h, PatronTier tier)
+{
+	if (tier != PatronTier::Gold && tier != PatronTier::Silver && tier != PatronTier::Bronze) return;
+	const RECT r = p.R(x, y, w * 3 / 4, h);
+	const int pw = std::max(1, static_cast<int>(r.right - r.left));
+	HBITMAP bmp = GlowBitmap(pw, PatronColorsOf(tier).laurel);
+	if (!bmp) return;
+	HDC mem = CreateCompatibleDC(p.dc);
+	HGDIOBJ old = SelectObject(mem, bmp);
+	BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+	GdiAlphaBlend(p.dc, r.left, r.top, pw, r.bottom - r.top, mem, 0, 0, pw, 1, blend);
+	SelectObject(mem, old);
+	DeleteDC(mem);
+}
+
+void PatronHotspot(ui::Painter &p, int x, int y, int size, const PatronInfo &info, int mx, int my, int action)
+{
+	if (info.tier == PatronTier::None) return;
+	p.AddHit(x, y, size, size, action, 0);
+	if (!p.Hover(x, y, size, size, mx, my)) return;
+	g_tip.show = true;
+	g_tip.x = x;
+	g_tip.y = y + size + 6;
+	g_tip.info = info;
+}
+
+void PaintPatronTip(ui::Painter &p, int screenW, int screenH)
+{
+	if (!g_tip.show) return;
+	g_tip.show = false;
+	const PatronColors c = PatronColorsOf(g_tip.info.tier);
+	const std::string title = Tr("Patron of Imperivm Resurrected");
+	const std::string place = g_tip.info.place > 0 ? TrFmt("Place %s on the honour roll", {Roman(g_tip.info.place)}) : std::string();
+	const std::string call = Tr("Click to support the mod and get your own laurel");
+	p.Font(1);
+	int w = p.TextWidth(title);
+	p.Font(3);
+	w = std::max({w, p.TextWidth(place), p.TextWidth(call)}) + 24;
+	const int h = place.empty() ? 58 : 78;
+	const int x = std::max(4, std::min(g_tip.x, screenW - w - 4));
+	const int y = g_tip.y + h > screenH - 4 ? std::max(4, g_tip.y - h - 40) : g_tip.y;
+	p.Fill(x, y, w, h, RGB(20, 16, 11));
+	p.Frame(x, y, w, h, c.laurel);
+	p.Fill(x, y, 3, h, c.laurel);
+	p.Font(1);
+	p.Text(x + 12, y + 8, w - 20, 20, title, c.name, DT_LEFT | DT_TOP | DT_SINGLELINE);
+	p.Font(3);
+	int line = y + 30;
+	if (!place.empty()) {
+		p.Text(x + 12, line, w - 20, 18, place, RGB(233, 220, 188), DT_LEFT | DT_TOP | DT_SINGLELINE);
+		line += 20;
+	}
+	p.Text(x + 12, line, w - 20, 18, call, RGB(163, 149, 122), DT_LEFT | DT_TOP | DT_SINGLELINE);
+}
+
+void OpenPatronPage()
+{
+	ShellExecuteA(nullptr, "open", Tr("https://imperivmresurrected.com/en/supporters.html").c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 }
