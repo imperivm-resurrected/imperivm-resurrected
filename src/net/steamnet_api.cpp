@@ -221,7 +221,7 @@ void SteamAddPatronJoined(uint64_t room, uint64_t id, const std::string &name)
 	l.patron = true;
 	l.id = id;
 	l.who = name;
-	l.text = PatronJoinedNotice(name);
+	l.text = PatronJoinedNotice(name, PatronOf(id).tier);
 	SYSTEMTIME now;
 	GetLocalTime(&now);
 	l.minute = now.wHour * 60 + now.wMinute;

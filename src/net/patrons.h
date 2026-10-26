@@ -7,7 +7,8 @@
 #include <vector>
 
 // Players who support the mod, read from the honour roll of imperivmresurrected.com by SteamID.
-enum class PatronTier { None, Gold, Silver, Bronze, Top10, Patron };
+// Dev is the team of the mod, shown with its own laurel whether or not they are on the roll.
+enum class PatronTier { None, Gold, Silver, Bronze, Top10, Patron, Dev };
 
 struct PatronInfo {
 	int place = 0;
@@ -20,4 +21,4 @@ PatronInfo PatronOf(uint64_t id);
 void PatronsWatch(const std::vector<uint64_t> &ids);
 // For a player who has just joined and whose lookup has not finished: the notice is posted to the room when it does.
 void PatronsAnnounceLater(uint64_t room, uint64_t id, const std::string &name);
-std::string PatronJoinedNotice(const std::string &name);
+std::string PatronJoinedNotice(const std::string &name, PatronTier tier);

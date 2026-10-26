@@ -48,6 +48,7 @@ PatronTier TierFromName(const std::string &s)
 	if (s == "bronze") return PatronTier::Bronze;
 	if (s == "top10") return PatronTier::Top10;
 	if (s == "patron") return PatronTier::Patron;
+	if (s == "dev") return PatronTier::Dev;
 	return PatronTier::None;
 }
 
@@ -124,7 +125,8 @@ void PatronsAnnounceLater(uint64_t room, uint64_t id, const std::string &name)
 	g_announce[id] = {room, id, name};
 }
 
-std::string PatronJoinedNotice(const std::string &name)
+std::string PatronJoinedNotice(const std::string &name, PatronTier tier)
 {
+	if (tier == PatronTier::Dev) return TrFmt("%s, developer of Imperivm Resurrected, has joined.", {name});
 	return TrFmt("%s supports Imperivm Resurrected. Thank you!", {name});
 }

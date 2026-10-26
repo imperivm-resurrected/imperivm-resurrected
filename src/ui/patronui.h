@@ -12,6 +12,8 @@ struct PatronColors {
 };
 
 PatronColors PatronColorsOf(PatronTier tier);
+// The top three and the team: bigger laurel, a light across the name and a band behind the row.
+bool PatronShines(PatronTier tier);
 COLORREF PatronBlend(COLORREF from, COLORREF to, int percent);
 // The laurel of the honour roll in a square of `size` at (x, y), then the name in the colour of the tier.
 // On the top three a slanted light sweeps across both now and then, as on the website.

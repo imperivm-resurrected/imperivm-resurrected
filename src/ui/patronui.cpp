@@ -117,6 +117,11 @@ void BlitLaurel(ui::Painter &p, int x, int y, int size, COLORREF color)
 
 }
 
+bool PatronShines(PatronTier tier)
+{
+	return tier == PatronTier::Gold || tier == PatronTier::Silver || tier == PatronTier::Bronze || tier == PatronTier::Dev;
+}
+
 COLORREF PatronBlend(COLORREF from, COLORREF to, int percent)
 {
 	return RGB(GetRValue(from) + (GetRValue(to) - GetRValue(from)) * percent / 100,
@@ -130,6 +135,7 @@ PatronColors PatronColorsOf(PatronTier tier)
 	case PatronTier::Gold: return {RGB(0xc9, 0x9a, 0x2e), RGB(0xe0, 0xb5, 0x4a), RGB(0xff, 0xf4, 0xc8)};
 	case PatronTier::Silver: return {RGB(0x9a, 0xa0, 0xa6), RGB(0xc9, 0xce, 0xd4), RGB(0xff, 0xff, 0xff)};
 	case PatronTier::Bronze: return {RGB(0xb0, 0x70, 0x3c), RGB(0xcf, 0x8a, 0x55), RGB(0xf0, 0xb9, 0x8a)};
+	case PatronTier::Dev: return {RGB(0x9b, 0x6b, 0xe0), RGB(0xc8, 0xa6, 0xf5), RGB(0xf3, 0xea, 0xff)};
 	case PatronTier::Top10: return {RGB(0xe5, 0x53, 0x4b), RGB(0xf0, 0x8a, 0x84), RGB(0xf0, 0x8a, 0x84)};
 	default: return {RGB(0xa3, 0x95, 0x7a), RGB(0xe9, 0xdc, 0xbc), RGB(0xe9, 0xdc, 0xbc)};
 	}
@@ -142,7 +148,7 @@ void DrawPatron(ui::Painter &p, int x, int y, int size, int nameX, int nameY, in
 	const PatronColors c = PatronColorsOf(tier);
 	BlitLaurel(p, x, y, size, c.laurel);
 	p.Text(nameX, nameY, nameW, nameH, name, c.name, fmt);
-	if (tier != PatronTier::Gold && tier != PatronTier::Silver && tier != PatronTier::Bronze) return;
+	if (!PatronShines(tier)) return;
 
 	const int textW = std::min(nameW, p.TextWidth(name));
 	const int left = x, right = nameX + textW;
@@ -177,7 +183,7 @@ void DrawPatron(ui::Painter &p, int x, int y, int size, int nameX, int nameY, in
 
 int PatronLaurelSize(PatronTier tier)
 {
-	return tier == PatronTier::Gold || tier == PatronTier::Silver || tier == PatronTier::Bronze ? 26 : 22;
+	return PatronShines(tier) ? 26 : 22;
 }
 
 namespace {
@@ -235,7 +241,7 @@ std::string Roman(int n)
 
 void DrawPatronRowGlow(ui::Painter &p, int x, int y, int w, int h, PatronTier tier)
 {
-	if (tier != PatronTier::Gold && tier != PatronTier::Silver && tier != PatronTier::Bronze) return;
+	if (!PatronShines(tier)) return;
 	const RECT r = p.R(x, y, w * 3 / 4, h);
 	const int pw = std::max(1, static_cast<int>(r.right - r.left));
 	HBITMAP bmp = GlowBitmap(pw, PatronColorsOf(tier).laurel);
@@ -264,9 +270,10 @@ void PaintPatronTip(ui::Painter &p, int screenW, int screenH)
 	if (!g_tip.show) return;
 	g_tip.show = false;
 	const PatronColors c = PatronColorsOf(g_tip.info.tier);
-	const std::string title = Tr("Patron of Imperivm Resurrected");
-	const std::string place = g_tip.info.place > 0 ? TrFmt("Place %s on the honour roll", {Roman(g_tip.info.place)}) : std::string();
-	const std::string call = Tr("Click to support the mod and get your own laurel");
+	const bool dev = g_tip.info.tier == PatronTier::Dev;
+	const std::string title = Tr(dev ? "Developer of Imperivm Resurrected" : "Patron of Imperivm Resurrected");
+	const std::string place = !dev && g_tip.info.place > 0 ? TrFmt("Place %s on the honour roll", {Roman(g_tip.info.place)}) : std::string();
+	const std::string call = Tr(dev ? "Click to support the mod" : "Click to support the mod and get your own laurel");
 	p.Font(1);
 	int w = p.TextWidth(title);
 	p.Font(3);
