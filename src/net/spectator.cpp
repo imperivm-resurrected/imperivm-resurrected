@@ -260,7 +260,10 @@ enum : uint8_t {
 };
 static_assert(kSpectatorMessages.Has(kSpHello) && kSpectatorMessages.Has(kSpResend), "spectator messages out of their range");
 const DWORD kResendWaitMs = 6000;
-const DWORD kCoverMaxMs = 60000;
+// The cover over a catch-up only gives up when the game stops getting closer to live: a long game
+// on a slow computer can take minutes and must not be shown fast-forwarding.
+const DWORD kCoverStallMs = 30000;
+const DWORD kCoverMaxMs = 10 * 60 * 1000;
 const size_t kChunk = 48 * 1024;
 const size_t kCaptureChunk = 128;
 const size_t kTicksMsgMax = 192 * 1024;
@@ -585,7 +588,8 @@ struct Viewer {
 	size_t buckets = 0;
 	DWORD resendAt = 0, mismatchSince = 0;
 	bool covering = false;
-	DWORD coverSince = 0;
+	DWORD coverSince = 0, coverMovedAt = 0;
+	uint32_t coverTick = 0;
 	std::string error;
 	DWORD lastRoom = 0;
 	uint8_t *game = nullptr;
@@ -896,7 +900,7 @@ void ViewerAdopt(uint8_t *game)
 	g_v.phase = kViewing;
 	g_v.flow = kFlowWaiting;
 	g_v.covering = true;
-	g_v.coverSince = GetTickCount();
+	g_v.coverSince = g_v.coverMovedAt = GetTickCount();
 	g_covering = true;
 	// The game runs at full speed under the cover to reach the live game; its sound would play all of that.
 	AudioSetCoverMute(true);
@@ -1335,7 +1339,14 @@ void __fastcall HookRunTicks(void *timer, void *edx, unsigned target)
 		g_origRunTicks(timer, edx, want);
 	}
 	if (g_v.covering) {
-		if (g_v.flow == kFlowLive || g_v.ended || GetTickCount() - g_v.coverSince > kCoverMaxMs) {
+		const DWORD now = GetTickCount();
+		if (cur > g_v.coverTick) {
+			g_v.coverTick = cur;
+			g_v.coverMovedAt = now;
+		}
+		const bool stalled = now - g_v.coverMovedAt > kCoverStallMs || now - g_v.coverSince > kCoverMaxMs;
+		if (stalled && g_v.flow != kFlowLive && !g_v.ended) LogW("spectator", "the catch-up stopped advancing; showing the game as it is");
+		if (g_v.flow == kFlowLive || g_v.ended || stalled) {
 			g_v.covering = false;
 			g_covering = false;
 			AudioSetCoverMute(false);
