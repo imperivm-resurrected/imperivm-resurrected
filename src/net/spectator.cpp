@@ -720,16 +720,26 @@ void SetStatus(const std::string &s)
 	g_status = s;
 }
 
+const char *const kHashNames[kBucketHashCount] = {"object positions", "checksums", "sync 3", "sync 4", "sync 5", "commands", "fire and smoke", "sync 8"};
+
+// Which of the game's sync hashes differ, and for how many buckets: a single hash that keeps differing while the
+// object positions match is a value the replay computes differently, not a game that went its own way.
 struct ReplayCheck {
 	unsigned matched = 0, differed = 0;
-	bool reported = false;
+	unsigned byHash[kBucketHashCount] = {};
+	bool reported = false, positionsReported = false;
 };
 ReplayCheck g_check;
 
 void ReplayCheckSummary()
 {
 	if (!g_check.matched && !g_check.differed) return;
-	LogI("spectator", "the replay matched the game in %u buckets and differed in %u", g_check.matched, g_check.differed);
+	std::string by;
+	for (int i = 0; i < kBucketHashCount; i++) {
+		if (g_check.byHash[i]) by += (by.empty() ? "" : ", ") + std::string(kHashNames[i]) + " " + std::to_string(g_check.byHash[i]);
+	}
+	LogI("spectator", "the replay matched the game in %u buckets and differed in %u%s%s%s", g_check.matched, g_check.differed, by.empty() ? "" : " (",
+		by.c_str(), by.empty() ? "" : ")");
 	g_check = ReplayCheck();
 }
 
@@ -1639,18 +1649,23 @@ void __fastcall HookPlaybackTick(void *pump)
 	if (!buckets || before >= BucketCount(game)) return;
 	const uint32_t *recorded = reinterpret_cast<const uint32_t *>(buckets + before * kBucketSize + kBucketHashes);
 	const uint32_t *now = reinterpret_cast<const uint32_t *>(addr::kSyncHashes);
-	static const char *const kNames[kBucketHashCount] = {"object positions", "checksums", "sync 3", "sync 4", "sync 5", "commands", "fire and smoke", "sync 8"};
 	unsigned mask = 0;
 	if (!DifferingHashes(recorded, now, mask)) return;
 	std::string different;
 	for (int i = 0; i < kBucketHashCount; i++) {
-		if (mask & (1u << i)) different += (different.empty() ? "" : ", ") + std::string(kNames[i]);
+		if (!(mask & (1u << i))) continue;
+		different += (different.empty() ? "" : ", ") + std::string(kHashNames[i]);
+		g_check.byHash[i]++;
 	}
 	if (different.empty()) {
 		g_check.matched++;
 		return;
 	}
 	g_check.differed++;
+	if ((mask & 1u) && !g_check.positionsReported) {
+		g_check.positionsReported = true;
+		if (g_check.reported) LogW("spectator", "object positions differ from tick %u (bucket %u)", BucketTickAt(game, before), before);
+	}
 	if (!g_check.reported) {
 		g_check.reported = true;
 		LogW("spectator", "the replay no longer matches the game at tick %u (bucket %u, %u buckets matched before): differs in %s", BucketTickAt(game, before), before,
