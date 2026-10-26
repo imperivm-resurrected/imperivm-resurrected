@@ -39,6 +39,10 @@ const unsigned kSlotIsPaused = 22;
 
 const unsigned kSlotSetPaused = 16;
 
+// Leaves the game for the menu at once (+0x68). The game's own quit in an online game opens the
+// "End multiplayer" dialog and sends a CVXPlayerWantsToQuit, which only ends in this call a tick later.
+const unsigned kSlotLeaveGame = 26;
+
 enum : uint8_t { kRjReq = 20, kRjAccept, kRjDeny, kRjState, kRjFile, kRjFileEnd, kRjReady, kRjGo, kRjCancel, kRjWait, kRjThreads, kRjDump, kRjObjects, kRjRawUnused, kRjReport, kRjQueries, kRjAi, kRjSquads, kRjModVars, kRjHandles };
 static_assert(kRejoinMessages.Has(kRjReq) && kRejoinMessages.Has(kRjHandles), "rejoin messages out of their range");
 

@@ -6,7 +6,6 @@
 #include <algorithm>
 #include "MinHook.h"
 #include "core/log.h"
-#include "game/autosave.h"
 #include "i18n/tr.h"
 #include "core/framefreeze.h"
 #include "core/json.h"
@@ -332,7 +331,9 @@ void ReloadTick()
 			if (!g_reload.quitAsked) {
 				g_reload.quitAsked = true;
 				LogI("rejoin", "reload: leaving the game to load it again");
-				AutosaveQuitWithoutSaving();
+				// Not through the game's quit: its command waits for a tick, and the game is stopped here for the reload.
+				void *game = Game();
+				reinterpret_cast<ThisOnly_t>(Vt(game)[kSlotLeaveGame])(game);
 			}
 			return;
 		}
