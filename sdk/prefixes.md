@@ -23,7 +23,7 @@ Class names start with the prefix followed by an uppercase letter: `GaTownhall` 
 
 ## Community mods
 
-Snapshot of `community-mods/ported`: 20 civilization declarations, with all existing prefixes unchanged.
+Snapshot of `community-mods/ported`: 28 civilization declarations, with all existing prefixes unchanged.
 
 | Prefix | Civilization | Pack |
 |---|---|---|
@@ -47,3 +47,11 @@ Snapshot of `community-mods/ported`: 20 civilization declarations, with all exis
 | `U` | Iberia (`iberia18`) | Greek Civilization Mod 1.8 |
 | `V` | Egypt (`egypt18`) | Greek Civilization Mod 1.8 |
 | `F` | Germany (`germany18`) | Greek Civilization Mod 1.8 |
+| `Mga` | Gaul (`mgaul`) | Mediterranevm (alpha) |
+| `Mro` | Republican Rome (`mrome`) | Mediterranevm (alpha) |
+| `Mim` | Imperial Rome (`mimperial`) | Mediterranevm (alpha) |
+| `Mca` | Carthage (`mcarthage`) | Mediterranevm (alpha) |
+| `Mbr` | Britain (`mbritain`) | Mediterranevm (alpha) |
+| `Mib` | Iberia (`miberia`) | Mediterranevm (alpha) |
+| `Meg` | Egypt (`megypt`) | Mediterranevm (alpha) |
+| `Mge` | Germany (`mgermany`) | Mediterranevm (alpha) |

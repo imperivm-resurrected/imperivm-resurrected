@@ -825,8 +825,12 @@ bool LockedByMode(int id)
 
 void EnforceModeRaces()
 {
-	if (!g_dlg || NetMultiplayerSaveLoading()) return;
-	if (!reinterpret_cast<IntThis_t>(addr::kIsHostOrOffline)(g_dlg)) return;
+	if (!g_dlg) return;
+	static int skipped = 0;
+	if (NetMultiplayerSaveLoading() || !reinterpret_cast<IntThis_t>(addr::kIsHostOrOffline)(g_dlg)) {
+		if (!CivRoomSets().empty() && skipped++ < 3) LogD("room", "trace: EnforceModeRaces skipped (save loading or not the host)");
+		return;
+	}
 	const GameMode *mode = CurrentMode();
 	if (mode && mode->civs.empty()) mode = nullptr;
 	const bool sets = !CivRoomSets().empty();
@@ -840,10 +844,12 @@ void EnforceModeRaces()
 		if (*reinterpret_cast<int *>(static_cast<char *>(g_dlg) + 0x9c) == 0 && g_scenarioRace[i] >= 0) continue;
 		const int now = CivsRaceOfRoomItem(static_cast<unsigned char>(choice[i]));
 		{
-			static int traced = 0;
-			if (traced < 30 && now >= 10 && sets && !CivsRoomAllows(now)) {
+			static int traced = 0, last[8] = {-2, -2, -2, -2, -2, -2, -2, -2};
+			const int raw = static_cast<unsigned char>(choice[i]);
+			if (traced < 60 && sets && last[i] != raw) {
+				last[i] = raw;
 				traced++;
-				LogD("room", "trace: slot %d item %d civ %d not allowed (type %d); order[0]=%d", i + 1, static_cast<int>(static_cast<unsigned char>(choice[i])), now, type, CivsRoomOrder(10 + static_cast<int>(CivsList().size())).empty() ? -1 : CivsRoomOrder(10 + static_cast<int>(CivsList().size()))[0]);
+				LogD("room", "trace: slot %d type %d choice %d dropdown %d civ %d allowed %d sets %d", i + 1, type, raw, ComboSel(Combo(g_dlg, ((i + 1) << 12) | 0x22)), now, now < 0 ? -1 : CivsRoomAllows(now) ? 1 : 0, static_cast<int>(CivRoomSets().size()));
 			}
 		}
 		if (now < 0 || ((!mode || GameModeAllows(*mode, now)) && (!sets || CivsRoomAllows(now)))) continue;
