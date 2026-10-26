@@ -13,6 +13,7 @@
 
 #include "MinHook.h"
 #include "hooks/hookcount.h"
+#include "hooks/audio.h"
 #include "game/civs.h"
 #include "game/controls.h"
 #include "net/spectator.h"
@@ -738,6 +739,7 @@ void ViewerReset()
 	g_viewing = false;
 	g_watching = false;
 	g_covering = false;
+	AudioSetCoverMute(false);
 	g_progress = -1;
 	std::lock_guard<std::mutex> lock(g_viewMx);
 	g_status.clear();
@@ -896,6 +898,8 @@ void ViewerAdopt(uint8_t *game)
 	g_v.covering = true;
 	g_v.coverSince = GetTickCount();
 	g_covering = true;
+	// The game runs at full speed under the cover to reach the live game; its sound would play all of that.
+	AudioSetCoverMute(true);
 	const size_t n = BucketCount(game);
 	if (n != g_v.buckets) LogD("spectator", "the replay has %u buckets and %u were expected", static_cast<unsigned>(n), static_cast<unsigned>(g_v.buckets));
 	g_v.buckets = n;
@@ -1334,6 +1338,7 @@ void __fastcall HookRunTicks(void *timer, void *edx, unsigned target)
 		if (g_v.flow == kFlowLive || g_v.ended || GetTickCount() - g_v.coverSince > kCoverMaxMs) {
 			g_v.covering = false;
 			g_covering = false;
+			AudioSetCoverMute(false);
 			g_progress = -1;
 			SetStatus("");
 		}

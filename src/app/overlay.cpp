@@ -669,8 +669,8 @@ void TakeSample(int fps, bool net)
 		const NetTurnSecond turn = NetTuneTakeSecond();
 		sm.turnAvg = turn.avgMs;
 		sm.turnMax = turn.maxMs;
-		sm.lagMs = SpectatorLagMs();
-		sm.delaySec = SpectatorDelaySec();
+		sm.lagMs = SpectatorCovering() ? -1 : SpectatorLagMs();
+		sm.delaySec = SpectatorCovering() ? 0 : SpectatorDelaySec();
 		for (const NetPeerStat &n : SteamNetStats()) {
 			sm.peers.push_back({n.id, n.connected ? n.ping : -1, n.quality >= 0 ? static_cast<float>((1.0 - n.quality) * 100.0) : -1.0f});
 		}
