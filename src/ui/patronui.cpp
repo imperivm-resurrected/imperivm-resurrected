@@ -98,32 +98,17 @@ HBITMAP LaurelBitmap(int size, COLORREF color)
 	return bmp;
 }
 
-COLORREF Lighter(COLORREF c, int percent)
+COLORREF Mix(COLORREF a, COLORREF b, int percent)
 {
-	return RGB(GetRValue(c) + (255 - GetRValue(c)) * percent / 100, GetGValue(c) + (255 - GetGValue(c)) * percent / 100,
-		GetBValue(c) + (255 - GetBValue(c)) * percent / 100);
+	return RGB(GetRValue(a) + (GetRValue(b) - GetRValue(a)) * percent / 100, GetGValue(a) + (GetGValue(b) - GetGValue(a)) * percent / 100,
+		GetBValue(a) + (GetBValue(b) - GetBValue(a)) * percent / 100);
 }
 
-}
-
-COLORREF PatronColor(PatronTier tier)
+void BlitLaurel(ui::Painter &p, int x, int y, int size, COLORREF color)
 {
-	switch (tier) {
-	case PatronTier::Gold: return RGB(236, 188, 76);
-	case PatronTier::Silver: return RGB(204, 210, 218);
-	case PatronTier::Bronze: return RGB(218, 142, 86);
-	case PatronTier::Top10: return RGB(232, 96, 88);
-	case PatronTier::Patron: return RGB(196, 178, 140);
-	default: return RGB(255, 255, 255);
-	}
-}
-
-void DrawPatronLaurel(ui::Painter &p, int x, int y, int size, PatronTier tier)
-{
-	if (tier == PatronTier::None) return;
 	const RECT r = p.R(x, y, size, size);
 	const int px = std::max(8, static_cast<int>(r.right - r.left));
-	HBITMAP bmp = LaurelBitmap(px, PatronColor(tier));
+	HBITMAP bmp = LaurelBitmap(px, color);
 	if (!bmp) return;
 	HDC mem = CreateCompatibleDC(p.dc);
 	HGDIOBJ old = SelectObject(mem, bmp);
@@ -133,21 +118,56 @@ void DrawPatronLaurel(ui::Painter &p, int x, int y, int size, PatronTier tier)
 	DeleteDC(mem);
 }
 
-void DrawPatronName(ui::Painter &p, int x, int y, int w, int h, const std::string &name, PatronTier tier, UINT fmt)
+}
+
+PatronColors PatronColorsOf(PatronTier tier)
 {
-	const COLORREF base = PatronColor(tier);
-	p.Text(x, y, w, h, name, base, fmt);
+	// The colours of the honour roll on the website.
+	switch (tier) {
+	case PatronTier::Gold: return {RGB(0xc9, 0x9a, 0x2e), RGB(0xe0, 0xb5, 0x4a), RGB(0xff, 0xf4, 0xc8)};
+	case PatronTier::Silver: return {RGB(0x9a, 0xa0, 0xa6), RGB(0xc9, 0xce, 0xd4), RGB(0xff, 0xff, 0xff)};
+	case PatronTier::Bronze: return {RGB(0xb0, 0x70, 0x3c), RGB(0xcf, 0x8a, 0x55), RGB(0xf0, 0xb9, 0x8a)};
+	case PatronTier::Top10: return {RGB(0xe5, 0x53, 0x4b), RGB(0xf0, 0x8a, 0x84), RGB(0xf0, 0x8a, 0x84)};
+	default: return {RGB(0xa3, 0x95, 0x7a), RGB(0xe9, 0xdc, 0xbc), RGB(0xe9, 0xdc, 0xbc)};
+	}
+}
+
+void DrawPatron(ui::Painter &p, int x, int y, int size, int nameX, int nameY, int nameW, int nameH, const std::string &name,
+	PatronTier tier, UINT fmt)
+{
+	if (tier == PatronTier::None) return;
+	const PatronColors c = PatronColorsOf(tier);
+	BlitLaurel(p, x, y, size, c.laurel);
+	p.Text(nameX, nameY, nameW, nameH, name, c.name, fmt);
 	if (tier != PatronTier::Gold && tier != PatronTier::Silver && tier != PatronTier::Bronze) return;
-	const int textW = std::min(w, p.TextWidth(name));
-	const int band = 16, sweepMs = 1400, periodMs = 3600;
+
+	const int textW = std::min(nameW, p.TextWidth(name));
+	const int left = x, right = nameX + textW;
+	const int top = std::min(y, nameY), bottom = std::max(y + size, nameY + nameH);
+	const int slant = (bottom - top) / 2, soft = 30;
+	const int travel = right - left + soft * 2 + slant;
+	const int sweepMs = 600 + travel * 7, periodMs = sweepMs + 2600;
 	const int t = static_cast<int>(GetTickCount() % periodMs);
 	if (t >= sweepMs) return;
-	const int at = x - band + (textW + band) * t / sweepMs;
-	const RECT clip = p.R(std::max(x, at), y, std::min(at + band, x + textW) - std::max(x, at), h);
-	if (clip.right <= clip.left) return;
-	// IntersectClipRect inside SaveDC keeps whatever clip the caller already set, like the chat box.
-	const int saved = SaveDC(p.dc);
-	IntersectClipRect(p.dc, clip.left, clip.top, clip.right, clip.bottom);
-	p.Text(x, y, w, h, name, Lighter(base, 70), fmt);
-	RestoreDC(p.dc, saved);
+	// Centre of the band at the bottom edge; the top is `slant` further right, so it leans like the one on the website.
+	const int centre = left - soft - slant + travel * t / sweepMs;
+	struct Pass {
+		int width, percent;
+	};
+	for (const Pass pass : {Pass{soft, 45}, Pass{10, 100}}) {
+		const POINT pts[4] = {{p.S(centre - pass.width / 2), p.S(bottom)}, {p.S(centre + pass.width / 2), p.S(bottom)},
+			{p.S(centre + pass.width / 2 + slant), p.S(top)}, {p.S(centre - pass.width / 2 + slant), p.S(top)}};
+		HRGN band = CreatePolygonRgn(pts, 4, WINDING);
+		if (!band) return;
+		const int saved = SaveDC(p.dc);
+		// Keep the clip the caller set, like the chat box; a DC without one takes the band as it is.
+		HRGN current = CreateRectRgn(0, 0, 0, 0);
+		if (GetClipRgn(p.dc, current) == 1) ExtSelectClipRgn(p.dc, band, RGN_AND);
+		else SelectClipRgn(p.dc, band);
+		DeleteObject(current);
+		DeleteObject(band);
+		BlitLaurel(p, x, y, size, Mix(c.laurel, c.light, pass.percent));
+		p.Text(nameX, nameY, nameW, nameH, name, Mix(c.name, c.light, pass.percent), fmt);
+		RestoreDC(p.dc, saved);
+	}
 }

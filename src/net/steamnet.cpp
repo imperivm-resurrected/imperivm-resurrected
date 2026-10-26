@@ -11,6 +11,7 @@
 #include "net/rejoin.h"
 #include "net/spectator.h"
 #include "net/vnet.h"
+#include "net/patrons.h"
 
 #include "net/steamnet_internal.h"
 #include "core/uiport.h"
@@ -327,6 +328,7 @@ void SteamThread()
 	g_steam.mm = S.SteamAPI_SteamMatchmaking_v009();
 	g_steam.msgs = S.SteamAPI_SteamNetworkingMessages_SteamAPI_v002();
 	g_steam.me = S.SteamAPI_ISteamUser_GetSteamID(S.SteamAPI_SteamUser_v023());
+	PatronsWatch({g_steam.me});
 	S.SteamAPI_ISteamNetworkingUtils_InitRelayNetworkAccess(S.SteamAPI_SteamNetworkingUtils_SteamAPI_v004());
 	{
 		ISteamNetworkingUtils *u = S.SteamAPI_SteamNetworkingUtils_SteamAPI_v004();

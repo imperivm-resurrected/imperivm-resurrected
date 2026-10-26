@@ -115,7 +115,9 @@ void PaintHeader(Painter &p, const State &st)
 	}
 	p.Frame(20, 16, 44, 44, kGold);
 	p.Font(1);
-	p.Text(74, 14, 300, 24, st.player, kText);
+	const PatronTier ownTier = PatronOf(SteamOwnId()).tier;
+	if (ownTier != PatronTier::None) DrawPatron(p, 74, 15, 22, 100, 14, 274, 24, st.player, ownTier, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+	else p.Text(74, 14, 300, 24, st.player, kText);
 	p.Font(3);
 	p.Text(74, 38, 400, 20, Tr("Content profile: ") + ModsProfileLabel(ModsMountedProfile().name), kDim);
 	if (!st.ready) {
@@ -960,14 +962,14 @@ void PaintChatLog(Painter &p, const State &st, int x, int y, int w, int h)
 		const bool me = l.id == SteamOwnId();
 		p.Font(3);
 		p.Text(x + pad, py, it.timeW, 18, ChatTime(l.minute), kDim, DT_LEFT | DT_TOP | DT_SINGLELINE);
-		int nameX = x + pad + it.timeW + 6;
+		const int laurelX = x + pad + it.timeW + 6;
 		const PatronTier tier = PatronOf(l.id).tier;
-		if (tier != PatronTier::None) {
-			DrawPatronLaurel(p, nameX, py + 1, kChatLaurel, tier);
-			nameX += kChatLaurel + 3;
-		}
 		p.Font(1);
-		p.Text(nameX, py, x + pad + textW - nameX, 18, l.who + ":", ChatNameColor(st, l, me), DT_LEFT | DT_TOP | DT_SINGLELINE);
+		if (tier != PatronTier::None) {
+			const int nameX = laurelX + kChatLaurel + 3;
+			DrawPatron(p, laurelX, py + 1, kChatLaurel, nameX, py, x + pad + textW - nameX, 18, l.who + ":", tier, DT_LEFT | DT_TOP | DT_SINGLELINE);
+		}
+		else p.Text(laurelX, py, textW - it.timeW - 6, 18, l.who + ":", ChatNameColor(st, l, me), DT_LEFT | DT_TOP | DT_SINGLELINE);
 		p.Font(3);
 		for (size_t k = 0; k < it.lines.size(); k++) {
 			const int shift = k == 0 ? it.indent : 0;
