@@ -592,6 +592,9 @@ struct Viewer {
 	uint32_t coverTick = 0;
 	std::string error;
 	DWORD lastRoom = 0;
+	// The spectator room this broadcast belongs to, and whether the player has left it (cancel, another room).
+	uint64_t room = 0;
+	bool left = false, quitAsked = false;
 	uint8_t *game = nullptr;
 	bool timeshift = false;
 	int contentWait = 0;
@@ -997,6 +1000,7 @@ void ViewerTick(std::deque<Msg> &msgs)
 					}
 				}
 				if (g_v.host) {
+					g_v.room = room.id;
 					g_v.phase = kHello;
 					g_v.helloAt = 0;
 					g_watching = true;
@@ -1014,6 +1018,17 @@ void ViewerTick(std::deque<Msg> &msgs)
 		}
 		else if (!inSpec && !game) {
 			ViewerReset();
+		}
+		else if (room.id != g_v.room && !g_v.left) {
+			// Cancelled while the broadcast loads, or already in another room: the replay must stop here without
+			// leaving the room the player is in now.
+			g_v.left = true;
+			LogI("spectator", "the player left the spectator room; stopping the broadcast");
+			if (!g_v.ended) Send(g_v.host, kSpBye);
+			if (g_v.phase < kLoading) {
+				ViewerReset();
+				return;
+			}
 		}
 		else if (inSpec && g_v.phase == kViewing && !g_v.ended) {
 			bool hostThere = false;
@@ -1060,16 +1075,23 @@ void ViewerTick(std::deque<Msg> &msgs)
 		}
 		break;
 	case kLoading:
-		if (game && IsDemo()) ViewerAdopt(game);
+		if (g_v.left && static_cast<int>(now - g_v.loadAt) > 40000) ViewerReset();
+		else if (game && IsDemo()) ViewerAdopt(game);
 		else if (static_cast<int>(now - g_v.loadAt) > 40000) ViewerFail("The game could not load the received game.");
 		break;
 	case kViewing:
 		if (g_sk.reloading) break;
 		if (!game || !IsDemo()) {
-			if (!g_v.ended) Send(g_v.host, kSpBye);
-			SteamLeaveLobby();
+			if (!g_v.left) {
+				if (!g_v.ended) Send(g_v.host, kSpBye);
+				SteamLeaveLobby();
+			}
 			ViewerReset();
 			break;
+		}
+		if (g_v.left && !g_v.quitAsked) {
+			g_v.quitAsked = true;
+			QuitToMenu();
 		}
 		break;
 	default: break;
