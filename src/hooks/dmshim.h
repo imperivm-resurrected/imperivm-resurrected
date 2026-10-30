@@ -6,5 +6,6 @@
 void InstallModernAudio(bool knownExe);
 #include <windows.h>
 bool DmShimCreate(REFCLSID clsid, LPVOID *out);
+// 0 chat message, 1 invitation, 2 someone joins, 3 a patron joins.
 void UiSoundPlay(int kind);
 bool DmShimPausePath(void *path, bool pause);

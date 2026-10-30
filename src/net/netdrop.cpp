@@ -11,6 +11,7 @@
 #include <cstdint>
 
 #include "net/netdrop.h"
+#include "net/spectator.h"
 #include "MinHook.h"
 #include "hooks/hookcount.h"
 #include "core/log.h"
@@ -157,7 +158,14 @@ void __cdecl HookCreateAI(int player, char *profile, short difficulty)
 		LogI("game", "ai: CreatePlayerAI(player %d, human=%d, previous AI %p) from %p%s", player, *reinterpret_cast<int *>(slot + 0x290),
 			*reinterpret_cast<void **>(slot + 0x88), _ReturnAddress(), g_inSplit > 0 ? " [dropped]" : "");
 	}
-	if (g_inSplit > 0 && game && player >= 0 && player < 16 && !reinterpret_cast<IsDemo_t>(addr::kIsDemoPlayback)()) {
+	// A live broadcast is the replay of a game played with this rule, so its drops must not bring the AI either, or
+	// the spectator's copy drifts from the game. Saved replays keep the game's behaviour: they may come from without the mod.
+	const bool demo = reinterpret_cast<IsDemo_t>(addr::kIsDemoPlayback)() != 0;
+	if (g_inSplit > 0 && demo && SpectatorViewing() && game && player >= 0 && player < 16) {
+		LogI("match", "broadcast: player %d dropped in the game; the AI does not replace them", player);
+		return;
+	}
+	if (g_inSplit > 0 && game && player >= 0 && player < 16 && !demo) {
 		char *slot = static_cast<char *>(game) + player * 800 + 0x12cc;
 		const std::string name = StripAiSuffix(slot + 0x90);
 		bool first;

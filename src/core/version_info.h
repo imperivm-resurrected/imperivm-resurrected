@@ -3,5 +3,5 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #pragma once
 
-#define IMPERIVM_VERSION_TEXT "1.0.2"
-#define IMPERIVM_VERSION_NUMBER 1, 0, 2, 0
+#define IMPERIVM_VERSION_TEXT "1.0.3"
+#define IMPERIVM_VERSION_NUMBER 1, 0, 3, 0

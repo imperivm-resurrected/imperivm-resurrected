@@ -15,6 +15,7 @@
 #include "net/rejoin.h"
 
 #include "ui/mpui_internal.h"
+#include "ui/patronui.h"
 
 using namespace mpui_impl;
 
@@ -479,6 +480,9 @@ void DoAction(int action, int arg)
 		}
 		break;
 	}
+	case kPatronLink:
+		OpenPatronPage();
+		break;
 	case kGKick: {
 		const std::string name = g_s.game.slots[arg & 7].name;
 		const uint64_t victim = MemberIdByName(g_s, name, true);

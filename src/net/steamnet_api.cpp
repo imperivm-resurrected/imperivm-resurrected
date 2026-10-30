@@ -10,6 +10,7 @@
 #include "mods/mods.h"
 #include "i18n/tr.h"
 
+#include "net/patrons.h"
 #include "net/steamnet_internal.h"
 #include "core/version.h"
 
@@ -211,6 +212,34 @@ OnlineRoom SteamCurrentRoom()
 		}
 	}
 	return room;
+}
+
+void SteamAddPatronJoined(uint64_t room, uint64_t id, const std::string &name)
+{
+	OnlineChatLine l;
+	l.system = true;
+	l.patron = true;
+	l.id = id;
+	l.who = name;
+	l.text = PatronJoinedNotice(name, PatronOf(id).tier);
+	SYSTEMTIME now;
+	GetLocalTime(&now);
+	l.minute = now.wHour * 60 + now.wMinute;
+	std::lock_guard<std::mutex> lock(g_lock);
+	if (!room || g_room.id != room) return;
+	// The usual join line went out before the lookup answered: it becomes the patron's line.
+	for (auto it = g_room.chat.rbegin(); it != g_room.chat.rend(); ++it) {
+		if (it->system && !it->patron && it->id == id) {
+			it->patron = true;
+			it->who = name;
+			it->text = l.text;
+			g_room.chatSerial++;
+			return;
+		}
+	}
+	g_room.chat.push_back(l);
+	g_room.chatSerial++;
+	if (g_room.chat.size() > 300) g_room.chat.erase(g_room.chat.begin());
 }
 
 void SteamSendChat(const std::string &text)
