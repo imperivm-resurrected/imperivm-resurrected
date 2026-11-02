@@ -622,6 +622,8 @@ void *OpenMenuIni(void *original, const std::string &rel, const char *path, unsi
 	return OpenCached("_cache/menuini/" + std::to_string(w) + "x" + std::to_string(h) + "/" + rel.substr(slash + 1), text, path, mode, err);
 }
 
+void *__cdecl OpenImpl(const char *path, unsigned mode, void *err);
+
 void *OpenSizedTemplate(const char *path, int w, int h, unsigned mode, void *err)
 {
 	std::string base = path;
@@ -629,7 +631,8 @@ void *OpenSizedTemplate(const char *path, int w, int h, unsigned mode, void *err
 	const size_t at = base.find(tag);
 	if (at == std::string::npos) return g_origOpen(path, mode, err);
 	base.erase(at, tag.size());
-	void *original = g_origOpen(base.c_str(), mode, err);
+	// Through the whole open path, not g_origOpen: the template of a mod (its chosen file, its patch) is the one to resize.
+	void *original = OpenImpl(base.c_str(), mode, err);
 	if (!original) return original;
 	const std::vector<char> raw = ReadAllAndClose(original);
 	std::string text(raw.begin(), raw.end());
