@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "ui/ornaments.h"
 #include "ui/uikit.h"
 
 namespace optionsui {
@@ -40,11 +41,9 @@ struct Card {
 	std::vector<Row> rows;
 };
 
-enum PageIcon { kIconScreen, kIconSound, kIconGame, kIconSystem, kIconKeys };
-
 struct Page {
 	std::string title, subtitle, blurb;
-	PageIcon icon = kIconScreen;
+	Ornament icon = kOrnamentScreen;
 	int leftW = 409;
 	std::vector<Card> left, right;
 };

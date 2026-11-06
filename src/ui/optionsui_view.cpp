@@ -88,57 +88,12 @@ Row ActionRow(const char *label, int id, const char *button, const char *hint = 
 
 COLORREF RowText(const Row &r) { return r.enabled || r.kind == kRowToggleSlider ? kText : kDim; }
 
-void PaintLine(Painter &p, int x1, int y1, int x2, int y2, COLORREF c) { p.Line(x1, y1, x2, y2, c, 1); }
-
-void PaintIcon(Painter &p, PageIcon icon, int x, int y, COLORREF c)
-{
-	switch (icon) {
-	case kIconScreen:
-		p.Frame(x + 1, y + 3, 24, 16, c);
-		p.Fill(x + 12, y + 19, 2, 4, c);
-		p.Fill(x + 7, y + 23, 12, 1, c);
-		break;
-	case kIconSound:
-		p.Frame(x + 2, y + 9, 5, 8, c);
-		PaintLine(p, x + 7, y + 9, x + 14, y + 4, c);
-		PaintLine(p, x + 7, y + 16, x + 14, y + 21, c);
-		p.Fill(x + 14, y + 4, 1, 18, c);
-		p.Fill(x + 18, y + 9, 1, 8, c);
-		p.Fill(x + 21, y + 7, 1, 12, c);
-		p.Fill(x + 24, y + 5, 1, 16, c);
-		break;
-	case kIconGame:
-		PaintLine(p, x + 8, y + 18, x + 22, y + 3, c);
-		PaintLine(p, x + 10, y + 20, x + 24, y + 5, c);
-		PaintLine(p, x + 22, y + 3, x + 24, y + 5, c);
-		PaintLine(p, x + 5, y + 15, x + 13, y + 23, c);
-		PaintLine(p, x + 7, y + 21, x + 2, y + 25, c);
-		break;
-	case kIconSystem:
-		p.Frame(x + 8, y + 8, 10, 10, c);
-		p.Fill(x + 12, y + 2, 2, 5, c);
-		p.Fill(x + 12, y + 19, 2, 5, c);
-		p.Fill(x + 2, y + 12, 5, 2, c);
-		p.Fill(x + 19, y + 12, 5, 2, c);
-		PaintLine(p, x + 5, y + 5, x + 8, y + 8, c);
-		PaintLine(p, x + 21, y + 5, x + 18, y + 8, c);
-		PaintLine(p, x + 5, y + 21, x + 8, y + 18, c);
-		PaintLine(p, x + 21, y + 21, x + 18, y + 18, c);
-		break;
-	case kIconKeys:
-		p.Frame(x + 1, y + 6, 24, 15, c);
-		for (int i = 0; i < 4; i++) p.Fill(x + 5 + i * 5, y + 10, 2, 2, c);
-		p.Fill(x + 7, y + 15, 12, 2, c);
-		break;
-	}
-}
-
-constexpr int kNavX = 12, kNavW = 208, kNavH = 56, kNavTop = 92, kNavRight = kNavX + kNavW;
+constexpr int kNavX = 12, kNavW = 208, kNavH = 56, kNavTop = 92, kNavRight = kNavX + kNavW, kNavIcon = 30;
 constexpr int kContentX = 240, kContentRight = kScreenW - 18, kContentTop = 132;
 constexpr int kFooterTop = 622, kFooterButtonsY = 632, kFooterButtonH = 36;
 constexpr int kRowH = 40, kCardHead = 30, kCardGap = 12, kCardPad = 14, kComboW = 180, kSliderW = 150, kValueW = 44;
 
-void PaintNavItem(Painter &p, int y, const std::string &title, const std::string &subtitle, PageIcon icon, bool active, int action, int arg, int mx, int my)
+void PaintNavItem(Painter &p, int y, const std::string &title, const std::string &subtitle, Ornament icon, bool active, int action, int arg, int mx, int my)
 {
 	const bool hot = !active && p.Hover(kNavX, y, kNavW, kNavH, mx, my);
 	if (active) {
@@ -148,8 +103,8 @@ void PaintNavItem(Painter &p, int y, const std::string &title, const std::string
 	else if (hot) {
 		p.FillH(kNavX, y, kNavW, kNavH, RGB(50, 38, 22), pal::panel);
 	}
-	const COLORREF iconColor = active ? pal::goldLight : hot ? kGold : kDim;
-	PaintIcon(p, icon, kNavX + 18, y + 15, iconColor);
+	const COLORREF iconColor = active ? pal::goldLight : hot ? kGold : pal::bronze;
+	PaintOrnament(p, icon, kNavX + 15, y + (kNavH - kNavIcon) / 2, kNavIcon, kNavIcon, iconColor);
 	p.Font(1);
 	p.Text(kNavX + 56, y + 9, kNavW - 62, 20, title, active ? pal::goldLight : hot ? kText : RGB(214, 200, 164));
 	p.Font(3);
@@ -272,7 +227,7 @@ std::vector<Page> BuildPages(const Values &v)
 		page.title = "Display";
 		page.subtitle = "Image and panels";
 		page.blurb = "How the game looks on your monitor.";
-		page.icon = kIconScreen;
+		page.icon = kOrnamentScreen;
 		Row mode;
 		mode.label = "Mode";
 		mode.kind = kRowSegment;
@@ -291,7 +246,7 @@ std::vector<Page> BuildPages(const Values &v)
 		page.title = "Sound";
 		page.subtitle = "Volume and alerts";
 		page.blurb = "Turn each kind of sound on or off and set its volume.";
-		page.icon = kIconSound;
+		page.icon = kOrnamentSound;
 		page.leftW = 500;
 		page.left.push_back({"Volume", {ToggleSlider(v, "Music", kMusicOn, kMusicVolume, 1, 100), ToggleSlider(v, "Sound effects", kEffectsOn, kEffectsVolume, 1, 100),
 			Toggle(v, "Nature sounds", kNatureOn, "Uses the volume of the sound effects"), ToggleSlider(v, "Unit speech", kSpeechOn, kSpeechVolume, 1, 100),
@@ -305,7 +260,7 @@ std::vector<Page> BuildPages(const Values &v)
 		page.title = "Game";
 		page.subtitle = "Pace and saves";
 		page.blurb = "How you play and how your games are saved.";
-		page.icon = kIconGame;
+		page.icon = kOrnamentSwords;
 		page.left.push_back({"Pace", {Slider(v, "Game speed", kGameSpeed, 1, 100), Slider(v, "Scroll speed", kScrollSpeed, 1, 100), Toggle(v, "Smooth camera", kSmoothCamera, "Moves the view in small steps")}});
 		page.left.push_back({"Interface", {Combo(v, "Language", kLanguage, "", true)}});
 		const bool autosave = Check(v, kAutosave);
@@ -318,7 +273,7 @@ std::vector<Page> BuildPages(const Values &v)
 		page.title = "System";
 		page.subtitle = "Updates and logs";
 		page.blurb = "Updates of the mod, and what to do when something fails.";
-		page.icon = kIconSystem;
+		page.icon = kOrnamentGear;
 		page.left.push_back({"Updates", {Combo(v, "Updates", kUpdates)}});
 		page.right.push_back({"If something fails", {ActionRow("Logs folder", kOpenLogs, "Open folder"), ActionRow("Problem report", kCreateReport, "Create", "A zip with your private data hidden")}});
 		pages.push_back(page);
@@ -338,7 +293,7 @@ void PaintOptionsScreen(Painter &p, const View &v)
 		const Page &page = pages[i];
 		PaintNavItem(p, navY, page.title, page.subtitle, page.icon, static_cast<int>(i) == current, kActPage, static_cast<int>(i), v.mouseX, v.mouseY);
 	}
-	PaintNavItem(p, kFooterTop - kNavH - 8, "Controls", "Keys and shortcuts", kIconKeys, false, kActControls, 0, v.mouseX, v.mouseY);
+	PaintNavItem(p, kFooterTop - kNavH - 8, "Controls", "Keys and shortcuts", kOrnamentKeys, false, kActControls, 0, v.mouseX, v.mouseY);
 	p.Fill(kNavRight, kNavTop - 2, 1, kFooterTop - kNavTop - 2, pal::lineDim);
 
 	const Page &page = pages[current];
