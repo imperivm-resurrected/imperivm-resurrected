@@ -100,12 +100,10 @@ void PaintHeader(Painter &p, const State &st)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	if (st.game.active) {
-		p.Font(2);
 		const std::string title = !st.game.online ? "Skirmish"
 								: st.room.id      ? st.room.info.name
 												  : "Local network game";
-		p.Text(16, 14, kW - 32, 44, title, kGold, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-		p.Fill(16, 66, kW - 32, 1, pal::line);
+		PaintWindowHeader(p, kW, title, 1);
 		return;
 	}
 	// Lined up with the rule under the header, which it ends on.
@@ -133,7 +131,7 @@ void PaintHeader(Painter &p, const State &st)
 		p.Text(500, 14, 480, 22, n == 1 ? "1 open room" : std::to_string(n) + Tr(" open rooms"), kDim,
 			DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 	}
-	p.Fill(16, 66, kW - 32, 1, pal::line);
+	PaintOrnateRule(p, 66, kW);
 	PaintTabs(p, 20, 72,
 		{{"Games", kListView, 0, st.view == kViewList, true},
 			{"Create game", kCreate, 0, st.view == kViewCreate, true},
@@ -156,8 +154,7 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const int dx = 632, dw = kW - dx - 16, dy = 172, dh = 396;
-	p.Fill(dx, dy, dw, dh, pal::wellRaised);
-	p.Frame(dx, dy, dw, dh, pal::line);
+	PaintCard(p, dx, dy, dw, dh);
 	{
 		std::lock_guard<std::mutex> lock(g_chat.mx);
 		g_detail.rect = p.R(dx, dy, dw, dh);
@@ -420,8 +417,7 @@ void PaintList(Painter &p, const State &st)
 void PaintRanked(Painter &p, const State &st)
 {
 	const int mx = st.mouseX, my = st.mouseY;
-	p.Fill(16, 132, 380, 430, pal::wellRaised);
-	p.Frame(16, 132, 380, 430, pal::line);
+	PaintCard(p, 16, 132, 380, 430);
 	p.Fill(150, 184, 112, 112, RGB(70, 54, 24));
 	p.Frame(150, 184, 112, 112, kGold);
 	p.Frame(156, 190, 100, 100, pal::line);
@@ -472,8 +468,7 @@ void PaintCreate(Painter &p, const State &st)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const int x = 190, w = 620, y0 = 134, h = 478;
-	p.Fill(x, y0, w, h, pal::wellRaised);
-	p.Frame(x, y0, w, h, pal::line);
+	PaintCard(p, x, y0, w, h);
 	const int lx = x + 24, fx = x + 170, fw = w - 194;
 	int y = y0 + 22;
 	p.Font(0);

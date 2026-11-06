@@ -23,12 +23,11 @@ void PaintGameRoom(Painter &p, const State &st)
 	const int mx = st.mouseX, my = st.mouseY;
 	const GameRoomSnapshot &g = st.game;
 	const bool load = g.online && (g.host ? !st.hostSave.name.empty() : !st.room.info.saveName.empty());
-	const COLORREF panel = pal::wellRaised, line = pal::line, rowAlt = pal::dialog;
+	const COLORREF line = pal::line, rowAlt = pal::dialog;
 
 	const int rowH = g.online ? 37 : 50;
 	const int px = 16, pw = kPlayersW, py = 78, ph = 52 + 8 * rowH + 8;
-	p.Fill(px, py, pw, ph, panel);
-	p.Frame(px, py, pw, ph, line);
+	PaintCard(p, px, py, pw, ph);
 	p.Font(1);
 	p.Text(px + 14, py + 6, 200, 24, "Players", kGold);
 	int humans = 0, readyCount = 0;
@@ -291,8 +290,7 @@ void PaintGameRoom(Painter &p, const State &st)
 
 	const GameRoomSlot &me = g.slots[g.localSlot & 7];
 	const int ox = kPlayersW + 16, ow = kW - ox - 16, oy = py, oh = ph;
-	p.Fill(ox, oy, ow, oh, panel);
-	p.Frame(ox, oy, ow, oh, line);
+	PaintCard(p, ox, oy, ow, oh);
 	{
 		std::map<std::string, std::string> pub;
 		for (size_t a = 0; a < st.room.info.optionsText.size();) {

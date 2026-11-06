@@ -1187,8 +1187,7 @@ int PaintPlayers(Painter &p, const MpSaveInfo &info, const std::vector<int> &sta
 
 void PaintDetailBody(Painter &p, State &st)
 {
-	p.Fill(kDX, kDY, kDW, kDH, pal::wellRaised);
-	p.Frame(kDX, kDY, kDW, kDH, pal::line);
+	PaintCard(p, kDX, kDY, kDW, kDH);
 	if (st.sel.size() > 1) {
 		const DelPlan plan = PlanDelete(st);
 		uint64_t bytes = 0;
@@ -1331,7 +1330,7 @@ void PaintPanel(Painter &p, State &st)
 	const bool save = st.mode == 1;
 	PaintTitle(p, 20, 12, 300, save ? "Save game" : "Load game");
 	p.Font(3);
-	PaintRule(p, 54, kDesignW);
+	PaintOrnateRule(p, 52, kDesignW);
 
 	if (save) {
 		std::string kind = kTabNames[st.tab];

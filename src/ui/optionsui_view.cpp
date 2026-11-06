@@ -205,8 +205,7 @@ void PaintRow(Painter &p, const Row &r, const View &v, int x, int y, int w, RECT
 int PaintCard(Painter &p, const Card &c, const View &v, int x, int y, int w, RECT &dropAnchor, std::vector<std::string> &dropItems, int &dropSel)
 {
 	const int h = kCardHead + static_cast<int>(c.rows.size()) * kRowH + 4;
-	p.FillV(x, y, w, h, RGB(36, 28, 18), RGB(25, 19, 13));
-	p.Frame(x, y, w, h, pal::lineDim);
+	PaintCard(p, x, y, w, h);
 	p.Font(4);
 	p.Text(x + kCardPad, y + 7, w - kCardPad * 2, 18, c.title, kGold);
 	int ry = y + kCardHead;
