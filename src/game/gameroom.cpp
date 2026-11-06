@@ -6,6 +6,7 @@
 
 #include <deque>
 #include <functional>
+#include <map>
 #include <mutex>
 #include <algorithm>
 
@@ -20,6 +21,7 @@
 #include "mods/modoptions.h"
 #include "mods/modvars.h"
 #include "game/netlink.h"
+#include "game/roomprefs.h"
 #include "core/log.h"
 #include "core/names.h"
 #include "addr/engine.h"
@@ -72,6 +74,30 @@ unsigned LoadRoomFlags(const char *key, unsigned def)
 void SaveRoomFlags(const char *key, unsigned value)
 {
 	WritePrivateProfileStringA("Room", key, std::to_string(value).c_str(), RoomIniPath().c_str());
+}
+
+const char kModOptionsSection[] = "RoomModOptions";
+const char kOptionsSection[] = "RoomOptions";
+
+unsigned LoadRoomRules()
+{
+	const std::string ini = RoomIniPath();
+	std::map<std::string, int> values;
+	for (const ModOption &o : ModOptions()) {
+		const int value = static_cast<int>(GetPrivateProfileIntA(kModOptionsSection, o.id.c_str(), -1, ini.c_str()));
+		if (value >= 0) values[o.id] = value;
+	}
+	const UINT saved = GetPrivateProfileIntA("Room", "Rules", -1, ini.c_str());
+	return RoomRulesFromSaved(ModOptions(), saved != 0xFFFFFFFFu, saved, kRuleBaseMask, values);
+}
+
+void SaveRoomRules(unsigned rules)
+{
+	SaveRoomFlags("Rules", rules);
+	const std::string ini = RoomIniPath();
+	for (const ModOption &o : ModOptions()) {
+		WritePrivateProfileStringA(kModOptionsSection, o.id.c_str(), std::to_string(ModOptionGet(o, rules)).c_str(), ini.c_str());
+	}
 }
 typedef int(__fastcall *GetGameOptions_t)(void *dlg);
 PickerOnShow_t g_origPickerOnShow = nullptr;
@@ -252,6 +278,9 @@ std::vector<int> DisplayOrder(int id, const std::vector<std::string> &items)
 }
 
 bool g_optionsLogged = false;
+void *g_optionsSeenFor = nullptr;
+void *g_optionsRestoredFor = nullptr;
+std::map<int, std::string> g_savedOptions;
 
 int PickerCount(void *picker)
 {
@@ -482,19 +511,6 @@ void TakeSnapshot()
 			}
 			if (!g_optionsLogged && !s.options.empty()) {
 				g_optionsLogged = true;
-				if (!NetMultiplayerSaveLoading()) {
-					void *gold = Combo(opts, 0x1005);
-					const std::vector<std::string> real = ComboItems(gold);
-					int def = -1;
-					for (size_t i = 0; i < real.size(); i++) {
-						if (_stricmp(real[i].c_str(), "Por defecto") == 0 || _stricmp(real[i].c_str(), "Default") == 0) def = static_cast<int>(i);
-					}
-					const int now = ComboSel(gold);
-					if (def >= 0 && def != now) {
-						LogD("room", "starting gold set to \"%s\" (was \"%s\")", real[def].c_str(), now >= 0 && now < static_cast<int>(real.size()) ? real[now].c_str() : "?");
-						SelectCombo(gold, def);
-					}
-				}
 				for (const GameRoomOption &o : s.options) {
 					if (o.checkbox) {
 						LogI("room", "options: 0x%x %s = %s", o.id, o.label.c_str(), o.value ? "yes" : "no");
@@ -575,8 +591,10 @@ void __fastcall HookOnShow(void *dlg)
 	CivsOnRoomShown(dlg);
 	g_dlg = dlg;
 	g_optionsLogged = false;
+	g_optionsSeenFor = nullptr;
+	g_optionsRestoredFor = nullptr;
 	g_siteFlags = LoadRoomFlags("Sites", 0) & kSiteMask;
-	g_ruleFlags = LoadRoomFlags("Rules", ModOptionsDefaults()) & kRuleMask;
+	g_ruleFlags = LoadRoomRules();
 	LogI("room", "open (managed by the mod's interface)");
 }
 
@@ -822,6 +840,100 @@ bool LockedByMode(int id)
 	return true;
 }
 
+const int kSharedSupportOption = 0x1009;
+const int kMapTypeOption = 0x1000;
+const int kStartingGoldOption = 0x1005;
+
+std::string OptionKey(int id)
+{
+	char key[16];
+	sprintf_s(key, "%x", id);
+	return key;
+}
+
+std::string LoadRoomOption(int id)
+{
+	char value[1024] = {};
+	GetPrivateProfileStringA(kOptionsSection, OptionKey(id).c_str(), "", value, sizeof(value), RoomIniPath().c_str());
+	return RoomPrefDecode(value);
+}
+
+void SelectDefaultGold(void *gold)
+{
+	const std::vector<std::string> items = ComboItems(gold);
+	for (size_t i = 0; i < items.size(); i++) {
+		if (_stricmp(items[i].c_str(), "Por defecto") != 0 && _stricmp(items[i].c_str(), "Default") != 0) continue;
+		if (ComboSel(gold) != static_cast<int>(i)) SelectCombo(gold, static_cast<int>(i));
+		return;
+	}
+}
+
+void RestoreRoomOption(void *opts, const OptionDef &d)
+{
+	const std::string saved = LoadRoomOption(d.id);
+	if (d.checkbox) {
+		void *button = Button(opts, d.id);
+		if (button && !saved.empty() && Checked(button) != (saved == "1")) ToggleCheck(button);
+		return;
+	}
+	void *combo = Combo(opts, d.id);
+	if (!combo) return;
+	if (saved.empty()) {
+		if (d.id == kStartingGoldOption) SelectDefaultGold(combo);
+		return;
+	}
+	// Item 0 of the map type is the predefined map, which depends on the scenario the game is still holding from this session.
+	if (d.id == kMapTypeOption && ComboSel(combo) == 0) return;
+	const int index = RoomPrefItemIndex(ComboItems(combo), saved);
+	if (index < 0 || index == ComboSel(combo)) return;
+	if (d.id == kMapSizeCombo) {
+		void *typeCombo = Combo(opts, kMapTypeOption);
+		bool fits[kMapSizes];
+		if (!typeCombo || !SizesOfMapType(opts, typeCombo, ComboSel(typeCombo), fits) || index >= kMapSizes || !fits[index]) return;
+	}
+	SelectCombo(combo, index);
+}
+
+void SaveRoomOption(void *opts, const OptionDef &d)
+{
+	std::string value;
+	if (d.checkbox) {
+		void *button = Button(opts, d.id);
+		if (!button) return;
+		value = Checked(button) ? "1" : "0";
+	}
+	else {
+		void *combo = Combo(opts, d.id);
+		const std::vector<std::string> items = ComboItems(combo);
+		const int selected = ComboSel(combo);
+		if (selected < 0 || selected >= static_cast<int>(items.size())) return;
+		if (d.id == kMapTypeOption && selected == 0) return;
+		value = items[selected];
+	}
+	std::string &last = g_savedOptions[d.id];
+	if (last == value) return;
+	last = value;
+	WritePrivateProfileStringA(kOptionsSection, OptionKey(d.id).c_str(), RoomPrefEncode(value).c_str(), RoomIniPath().c_str());
+}
+
+// Waits one tick after the room opens: a room for a saved game only says so after the first one, and its options are not the player's.
+void RoomOptionsTick()
+{
+	void *opts = *reinterpret_cast<void **>(addr::kGameOptionsDialog);
+	if (!g_dlg || !opts || !reinterpret_cast<IntThis_t>(addr::kIsHostOrOffline)(g_dlg) || NetMultiplayerSaveLoading() || NetRejoinLoading()) return;
+	if (g_optionsSeenFor != g_dlg) {
+		g_optionsSeenFor = g_dlg;
+		return;
+	}
+	const bool restore = g_optionsRestoredFor != g_dlg;
+	g_optionsRestoredFor = g_dlg;
+	for (const OptionDef &d : kOptions) {
+		if (d.id == kSharedSupportOption || GameModeLocksOption(CurrentMode(), d.id)) continue;
+		if (restore) RestoreRoomOption(opts, d);
+		else SaveRoomOption(opts, d);
+	}
+}
+
 void EnforceModeRaces()
 {
 	if (!g_dlg || *reinterpret_cast<int *>(static_cast<char *>(g_dlg) + 0x9c) == 0 || NetMultiplayerSaveLoading()) return;
@@ -980,6 +1092,7 @@ void GameRoomTick()
 		for (int &t : g_typeTarget) t = -1;
 	}
 	TakeSnapshot();
+	RoomOptionsTick();
 	bool busy = false;
 	for (int t : g_typeTarget) busy = busy || t >= 0;
 	std::lock_guard<std::mutex> lock(g_lock);
@@ -1104,6 +1217,16 @@ void GameRoomSetOption(int id, int index)
 	});
 }
 
+int GameRoomLoadSetting(const char *key, int def)
+{
+	return static_cast<int>(LoadRoomFlags(key, static_cast<unsigned>(def)));
+}
+
+void GameRoomSaveSetting(const char *key, int value)
+{
+	SaveRoomFlags(key, static_cast<unsigned>(value));
+}
+
 void GameRoomSetSiteFlags(unsigned bits)
 {
 	Queue([bits] {
@@ -1120,7 +1243,7 @@ void GameRoomSetRules(unsigned bits)
 {
 	Queue([bits] {
 		g_ruleFlags = bits & kRuleMask;
-		SaveRoomFlags("Rules", g_ruleFlags);
+		if (!NetMultiplayerSaveLoading()) SaveRoomRules(g_ruleFlags);
 		void *opts = *reinterpret_cast<void **>(addr::kGameOptionsDialog);
 		typedef void(__fastcall *OnApply_t)(void *opts);
 		if (opts) reinterpret_cast<OnApply_t>(addr::kOnApplyOptions)(opts);

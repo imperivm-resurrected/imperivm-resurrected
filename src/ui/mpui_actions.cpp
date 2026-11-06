@@ -221,6 +221,7 @@ void DoAction(int action, int arg)
 		}
 		else if (g_s.dropKind == kDropSpectators) {
 			g_s.createSpec = std::max(0, std::min(4, arg));
+			GameRoomSaveSetting("Spectators", g_s.createSpec);
 			if (g_s.room.id && g_s.room.owner) {
 				static const int kDelays[] = {0, 30, 60, 120, 0};
 				SteamSetSpectators(g_s.createSpec != 0, kDelays[g_s.createSpec]);
@@ -799,6 +800,7 @@ void OpenMpMenu(bool checkRecover)
 	g_s.createProfileInfo = ProfileSummaryFor(g_s.createProfile), g_s.createModsList = ListState();
 	g_s.saves = ListSaves();
 	g_s.createSave = -1;
+	g_s.createSpec = std::max(0, std::min(4, GameRoomLoadSetting("Spectators", g_s.createSpec)));
 	if (checkRecover) CheckRecover();
 	g_s.ownKey = SteamOwnGameplayKey();
 	g_s.lastRefresh = 0;
