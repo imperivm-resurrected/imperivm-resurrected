@@ -473,4 +473,5 @@ struct HostAfterGameState {
 extern HostAfterGameState g_hostAfter;
 void StepSaveMap(const GameRoomSnapshot &snap);
 extern std::vector<uint32_t> g_bg;
+bool MainMenuOnTop();
 void WakeGameThread();
