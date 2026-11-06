@@ -81,6 +81,7 @@ struct SteamSignals {
 	bool kickedHandled = false;
 	std::atomic<bool> kicked{false};
 	std::atomic<bool> joinRefused{false};
+	std::atomic<bool> wrongPassword{false};
 	std::atomic<bool> createFailed{false};
 };
 extern SteamSignals g_signal;

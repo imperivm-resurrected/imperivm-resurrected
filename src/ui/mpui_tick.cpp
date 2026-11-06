@@ -342,6 +342,7 @@ void MpUiGameThreadTick()
 			}
 			if (g_s.connecting || g_autoJoin.active || g_flow.inJoin) AbortJoin();
 		}
+		if (SteamTakeWrongPassword() && g_s.syncPhase == 1) g_s.syncPhase = 0;
 		if (SteamTakeCreateFailed()) {
 			if (g_s.autoHost || g_s.connecting || g_flow.inJoin) AbortJoin();
 		}

@@ -38,6 +38,7 @@ struct OnlineLobby {
 	uint64_t scenMapSize = 0;
 	int players = 0, maxPlayers = 0;
 	bool password = false;
+	std::string passwordHash;
 	int visibility = 0;
 	bool hosting = false;
 	bool playing = false;
@@ -152,6 +153,7 @@ OnlineMapStatus SteamSaveStatus();
 
 void SteamCreateLobby(const OnlineCreateSettings &s);
 void SteamJoinLobby(uint64_t id, const std::string &password, bool forContentSync = false);
+bool SteamPasswordMatches(const OnlineLobby &lobby, const std::string &password);
 void SteamLeaveLobby(uint32_t onlyIfMembership = 0);
 uint32_t SteamMembership();
 OnlineRoom SteamCurrentRoom();
@@ -186,6 +188,7 @@ void SteamSetMemberLimit(int n);
 bool SteamTakeSwap(uint64_t &from, std::string &text);
 bool SteamTakeKicked();
 bool SteamTakeJoinRefused();
+bool SteamTakeWrongPassword();
 bool SteamTakeCreateFailed();
 void SteamBroadcastCamera(int player, int x, int y);
 void SteamPublishOptions(const std::string &text);
