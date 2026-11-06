@@ -1480,5 +1480,7 @@
 {"en":"Previous","es":"Anterior","it":"Precedente"},
 {"en":"Next","es":"Siguiente","it":"Successivo"},
 {"en":"%s-%s of %s","es":"%s-%s de %s","it":"%s-%s di %s"},
-{"en":"Page %s of %s","es":"Página %s de %s","it":"Pagina %s di %s"}
+{"en":"Page %s of %s","es":"Página %s de %s","it":"Pagina %s di %s"},
+{"en":"That map is no longer installed: choose another one.","es":"Ese mapa ya no está instalado: elige otro.","it":"Quella mappa non è più installata: scegline un'altra."},
+{"en":"The map \"%s\" is no longer installed: a random map was chosen instead.","es":"El mapa \"%s\" ya no está instalado: se ha elegido un mapa aleatorio.","it":"La mappa \"%s\" non è più installata: è stata scelta una mappa casuale."}
 ]

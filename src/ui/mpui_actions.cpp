@@ -355,6 +355,11 @@ void DoAction(int action, int arg)
 	}
 	case kGStart: {
 		const GameRoomSnapshot snap = GameRoomGet();
+		if (snap.scenarioMissing) {
+			LogW("room", "not starting: the chosen scenario \"%s\" no longer exists", snap.scenario.c_str());
+			ModUiToast("That map is no longer installed: choose another one.");
+			break;
+		}
 		{
 			std::string without;
 			int positions = 0;

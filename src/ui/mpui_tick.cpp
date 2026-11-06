@@ -285,7 +285,14 @@ void MpUiGameThreadTick()
 			if (!g_s.gameWasOnline && g_s.closedByUser) g_s.open = false;
 			else if (!g_s.closedByUser) g_s.startingCover = true;
 		}
-		if (g_s.gameClosedAt && (GetTickCount() - g_s.gameClosedAt > (g_s.startingCover ? 20000u : 1500u) ||
+		// When the game gives up on starting a match it opens a menu instead: the lobby online, the main menu otherwise (CVXUIMultiplayerGame::StartGame).
+		const bool startRefused = g_s.startingCover && g_s.gameClosedAt && *reinterpret_cast<void **>(addr::kGame) == nullptr &&
+			(g_s.gameWasOnline ? static_cast<int>(g_flow.lastLobbyUpdate - g_s.gameClosedAt) > 0 : g_mainMenu != nullptr);
+		if (startRefused) LogW("lobby", "the room closed but the game did not start; back to the menu");
+		if (const std::string replaced = GameRoomTakeReplacedScenario(); !replaced.empty()) {
+			ModUiToast(TrFmt("The map \"%s\" is no longer installed: a random map was chosen instead.", {replaced}), true);
+		}
+		if (g_s.gameClosedAt && (startRefused || GetTickCount() - g_s.gameClosedAt > (g_s.startingCover ? 20000u : 1500u) ||
 									*reinterpret_cast<void **>(addr::kGame) != nullptr)) {
 			g_s.gameClosedAt = 0;
 			const bool playing = *reinterpret_cast<void **>(addr::kGame) != nullptr;

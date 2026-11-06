@@ -65,6 +65,7 @@ struct GameRoomSnapshot {
 	uint32_t colors[12] = {};
 	std::string optionsText;
 	std::string scenario;
+	bool scenarioMissing = false;
 	std::string mode;
 	bool picker = false;
 	std::vector<std::string> pickerItems;
@@ -77,6 +78,7 @@ void GameRoomInstall(bool knownExe);
 void GameRoomTick();
 GameRoomSnapshot GameRoomGet();
 bool GameRoomActive();
+std::string GameRoomTakeReplacedScenario();
 
 void GameRoomSetRace(int slot, int index);
 void GameRoomSetSlotItem(int slot, int index);

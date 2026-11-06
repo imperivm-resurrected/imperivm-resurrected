@@ -1488,5 +1488,7 @@ extern const TrRow kTrRows[] = {
 	{"Next", "Siguiente", "Successivo"},
 	{"%s-%s of %s", "%s-%s de %s", "%s-%s di %s"},
 	{"Page %s of %s", "Página %s de %s", "Pagina %s di %s"},
+	{"That map is no longer installed: choose another one.", "Ese mapa ya no está instalado: elige otro.", "Quella mappa non è più installata: scegline un'altra."},
+	{"The map \"%s\" is no longer installed: a random map was chosen instead.", "El mapa \"%s\" ya no está instalado: se ha elegido un mapa aleatorio.", "La mappa \"%s\" non è più installata: è stata scelta una mappa casuale."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);
