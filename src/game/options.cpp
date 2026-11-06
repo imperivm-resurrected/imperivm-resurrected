@@ -2,6 +2,7 @@
 // Copyright (C) 2026 THIONG
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include <windows.h>
+#include <atomic>
 #include <string>
 #include <vector>
 #include <cstdint>
@@ -180,9 +181,20 @@ template <size_t N> std::vector<std::string> Items(const char *(&labels)[N])
 	return items;
 }
 
+std::atomic<void *> g_openDialog{nullptr};
+PopulateControls_t g_origDtor = nullptr;
+
+void __fastcall HookDtor(void *dlg)
+{
+	void *expected = dlg;
+	g_openDialog.compare_exchange_strong(expected, nullptr);
+	g_origDtor(dlg);
+}
+
 void __fastcall HookPopulateControls(void *dlg)
 {
 	g_origPopulate(dlg);
+	g_openDialog = dlg;
 	static const Config kFactory;
 	const Config &c = g_useDefaults ? kFactory : GetConfig();
 	if (!g_useDefaults) g_brightOriginal = c.brightness;
@@ -345,6 +357,78 @@ bool HookAt(uintptr_t addr, void *detour, void **orig, const char *what)
 
 }
 
+void *OptionsDialogOpen()
+{
+	return g_openDialog;
+}
+
+bool OptionsReadCheck(int id, bool fallback)
+{
+	void *dlg = g_openDialog;
+	return dlg ? GetCheck(dlg, id, fallback) : fallback;
+}
+
+void OptionsClick(int id)
+{
+	void *dlg = g_openDialog;
+	void *button = dlg ? FindCheck(dlg, id) : nullptr;
+	if (!button) return;
+	typedef void(__fastcall * SendNotify_t)(void *ctrl, void *edx, int target, unsigned msg, int id, int value, int extra);
+	char *b = static_cast<char *>(button);
+	reinterpret_cast<SendNotify_t>((*reinterpret_cast<void ***>(button))[0x6c / 4])(button, nullptr, *reinterpret_cast<int *>(b + 0x34), kMsgButtonClick,
+		*reinterpret_cast<int *>(b + 0x30), *reinterpret_cast<short *>(b + 0x7e), 0);
+}
+
+void OptionsWriteCheck(int id, bool value)
+{
+	void *dlg = g_openDialog;
+	if (!dlg) return;
+	SetCheck(dlg, id, value);
+	OptionsClick(id);
+}
+
+int OptionsReadScroll(int id, int fallback)
+{
+	void *dlg = g_openDialog;
+	return dlg ? GetScroll(dlg, id, fallback) : fallback;
+}
+
+void OptionsWriteScroll(int id, int value)
+{
+	void *dlg = g_openDialog;
+	void *scroll = dlg ? FindScroll(dlg, id) : nullptr;
+	if (scroll) reinterpret_cast<SetValue_t>((*reinterpret_cast<void ***>(scroll))[0x70 / 4])(scroll, nullptr, value, 1);
+}
+
+int OptionsReadCombo(int id)
+{
+	void *dlg = g_openDialog;
+	return dlg ? GetComboIndex(dlg, id) : -1;
+}
+
+std::vector<std::string> OptionsComboItems(int id)
+{
+	std::vector<std::string> out;
+	void *dlg = g_openDialog;
+	void *combo = dlg ? FindCombo(dlg, id) : nullptr;
+	char *list = combo ? *reinterpret_cast<char **>(static_cast<char *>(combo) + 0x64) : nullptr;
+	if (!list) return out;
+	const unsigned count = *reinterpret_cast<unsigned *>(list + 0x58);
+	const char *items = *reinterpret_cast<const char **>(list + 0x94);
+	for (unsigned i = 0; items && i < count && i < 128; i++) {
+		const char *text = *reinterpret_cast<const char *const *>(items + i * 0x14);
+		out.push_back(text ? text : "");
+	}
+	return out;
+}
+
+void OptionsWriteCombo(int id, int index)
+{
+	void *dlg = g_openDialog;
+	void *combo = dlg ? FindCombo(dlg, id) : nullptr;
+	if (combo) reinterpret_cast<ComboSetSelected_t>(addr::kComboSetSelected)(combo, nullptr, index, 1);
+}
+
 void InstallOptionsHooks(bool knownExe)
 {
 	if (!knownExe) {
@@ -353,6 +437,7 @@ void InstallOptionsHooks(bool knownExe)
 	bool ok = HookAt(addr::kPopulateControls, reinterpret_cast<void *>(&HookPopulateControls),
 				  reinterpret_cast<void **>(&g_origPopulate), "CVXUIOptions::PopulateControls") &&
 		HookAt(addr::kOptionsOnMessage, reinterpret_cast<void *>(&HookOnMessage), reinterpret_cast<void **>(&g_origOnMessage),
-			"CVXUIOptions::OnMessage");
+			"CVXUIOptions::OnMessage") &&
+		HookAt(addr::kOptionsDtor, reinterpret_cast<void *>(&HookDtor), reinterpret_cast<void **>(&g_origDtor), "CVXUIOptions destructor");
 	LogAt(ok ? kLogInfo : kLogError, "options", "game menu %s", ok ? "connected to the mod's options" : "not connected");
 }

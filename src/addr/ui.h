@@ -63,6 +63,7 @@ inline constexpr uintptr_t kOnRefreshClicked = 0x006e3f20;
 inline constexpr uintptr_t kLobbyUpdate = 0x006e4cd0;
 inline constexpr uintptr_t kPopulateControls = 0x006e75d0;
 inline constexpr uintptr_t kReadControls = 0x006e78a0;
+inline constexpr uintptr_t kOptionsDtor = 0x006e7ae0;
 inline constexpr uintptr_t kApplyGameOptions = 0x006e7ff0;
 inline constexpr uintptr_t kOptionsOnMessage = 0x006e8240;
 inline constexpr uintptr_t kShowOptions = 0x006e9140;

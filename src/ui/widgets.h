@@ -191,6 +191,18 @@ inline int PaintWindowHeader(Painter &p, int w, const std::string &title)
 	return kWindowHeaderH;
 }
 
+constexpr int kBigToggleW = 44, kBigToggleH = 22;
+
+inline void PaintBigToggle(Painter &p, int x, int y, bool on, bool enabled, bool hot)
+{
+	if (on && enabled) p.FillV(x, y, kBigToggleW, kBigToggleH, RGB(84, 50, 17), RGB(124, 80, 28));
+	else p.Fill(x, y, kBigToggleW, kBigToggleH, on ? RGB(70, 56, 34) : pal::well);
+	p.Frame(x, y, kBigToggleW, kBigToggleH, !enabled ? pal::disabledEdge : hot ? pal::focus : on ? kGold : pal::edge);
+	const int knobW = 18, kx = on ? x + kBigToggleW - knobW - 3 : x + 3;
+	if (on && enabled) p.FillV(kx, y + 3, knobW, kBigToggleH - 6, RGB(250, 226, 160), RGB(205, 160, 72));
+	else p.FillV(kx, y + 3, knobW, kBigToggleH - 6, RGB(150, 134, 104), RGB(98, 86, 66));
+}
+
 inline void PaintSlider(Painter &p, int x, int y, int w, int h, float fraction, bool enabled, bool hot)
 {
 	constexpr int trackH = 5;
