@@ -163,9 +163,19 @@ void SteamJoinLobby(uint64_t id, const std::string &password, bool forContentSyn
 	});
 }
 
+bool SteamPasswordMatches(const OnlineLobby &lobby, const std::string &password)
+{
+	return lobby.passwordHash.empty() || Fnv(password) == lobby.passwordHash;
+}
+
 bool SteamTakeJoinRefused()
 {
 	return g_signal.joinRefused.exchange(false);
+}
+
+bool SteamTakeWrongPassword()
+{
+	return g_signal.wrongPassword.exchange(false);
 }
 
 bool SteamTakeCreateFailed()
