@@ -85,6 +85,8 @@ void GameRoomKick(int slot);
 void GameRoomPlayerLeft(const std::string &name);
 void GameRoomSetSiteFlags(unsigned bits);
 void GameRoomSetRules(unsigned bits);
+int GameRoomLoadSetting(const char *key, int def);
+void GameRoomSaveSetting(const char *key, int value);
 void GameRoomRefreshChoices();
 
 void GameRulesOnGameStart();
