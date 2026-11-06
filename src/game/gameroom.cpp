@@ -252,6 +252,25 @@ std::vector<int> DisplayOrder(int id, const std::vector<std::string> &items)
 }
 
 bool g_optionsLogged = false;
+void *g_scenarioSeenFor = nullptr;
+void *g_scenarioCheckedFor = nullptr;
+std::string g_replacedScenario;
+
+// The same check as the game's when it starts a match: CVXUIMultiplayerGame::StartGame gives up if the file is not there.
+bool ScenarioFileMissing(const std::string &scenario)
+{
+	typedef int(__cdecl *VfsFileExists_t)(const char *path);
+	static std::string lastScenario;
+	static DWORD lastCheck = 0;
+	static bool lastMissing = false;
+	const DWORD now = GetTickCount();
+	if (scenario != lastScenario || now - lastCheck > 500) {
+		lastScenario = scenario;
+		lastCheck = now;
+		lastMissing = reinterpret_cast<VfsFileExists_t>(addr::kVfsFileExists)((scenario + ".bfhp").c_str()) == 0;
+	}
+	return lastMissing;
+}
 
 int PickerCount(void *picker)
 {
@@ -545,6 +564,7 @@ void TakeSnapshot()
 			const char *path = static_cast<const char *>(g_dlg) + 0x114;
 			s.scenario.assign(path, strnlen(path, 260));
 			if (!s.scenario.empty()) s.optionsText += "Scenario: " + ScenarioName(s.scenario) + "\n";
+			s.scenarioMissing = s.host && ScenarioFileMissing(s.scenario);
 		}
 		if (g_picker) {
 			s.picker = true;
@@ -575,6 +595,8 @@ void __fastcall HookOnShow(void *dlg)
 	CivsOnRoomShown(dlg);
 	g_dlg = dlg;
 	g_optionsLogged = false;
+	g_scenarioSeenFor = nullptr;
+	g_scenarioCheckedFor = nullptr;
 	g_siteFlags = LoadRoomFlags("Sites", 0) & kSiteMask;
 	g_ruleFlags = LoadRoomFlags("Rules", ModOptionsDefaults()) & kRuleMask;
 	LogI("room", "open (managed by the mod's interface)");
@@ -822,6 +844,34 @@ bool LockedByMode(int id)
 	return true;
 }
 
+// The game keeps the scenario chosen in an earlier room of this session, even if a content pack that brought it is gone by now.
+// Waits one tick after the room opens: a room for a saved game only says so after the first one, and it chooses its own map.
+void ReplaceMissingScenario()
+{
+	if (!g_dlg || g_scenarioCheckedFor == g_dlg || NetMultiplayerSaveLoading() || NetRejoinLoading()) return;
+	if (g_scenarioSeenFor != g_dlg) {
+		g_scenarioSeenFor = g_dlg;
+		return;
+	}
+	g_scenarioCheckedFor = g_dlg;
+	std::string scenario;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		if (!g_snap.scenarioMissing || g_snap.scenario.empty()) return;
+		scenario = g_snap.scenario;
+	}
+	void *opts = *reinterpret_cast<void **>(addr::kGameOptionsDialog);
+	void *mapType = Combo(opts, 0x1000);
+	if (!opts || !mapType || ComboItems(mapType).size() < 2) {
+		LogW("room", "the chosen scenario \"%s\" no longer exists and there is no random map to use instead", scenario.c_str());
+		return;
+	}
+	SelectCombo(mapType, 1);
+	LogI("room", "the chosen scenario \"%s\" no longer exists; a random map is chosen instead", scenario.c_str());
+	std::lock_guard<std::mutex> lock(g_lock);
+	g_replacedScenario = ScenarioName(scenario);
+}
+
 void EnforceModeRaces()
 {
 	if (!g_dlg || *reinterpret_cast<int *>(static_cast<char *>(g_dlg) + 0x9c) == 0 || NetMultiplayerSaveLoading()) return;
@@ -980,6 +1030,7 @@ void GameRoomTick()
 		for (int &t : g_typeTarget) t = -1;
 	}
 	TakeSnapshot();
+	ReplaceMissingScenario();
 	bool busy = false;
 	for (int t : g_typeTarget) busy = busy || t >= 0;
 	std::lock_guard<std::mutex> lock(g_lock);
@@ -996,6 +1047,14 @@ bool GameRoomActive()
 {
 	std::lock_guard<std::mutex> lock(g_lock);
 	return g_snap.active;
+}
+
+std::string GameRoomTakeReplacedScenario()
+{
+	std::lock_guard<std::mutex> lock(g_lock);
+	std::string name;
+	name.swap(g_replacedScenario);
+	return name;
 }
 
 void GameRoomSetRace(int slot, int index)
