@@ -14,7 +14,7 @@ const path = require('path');
 const SRC = path.resolve(__dirname, '..', 'src');
 const BASELINE = path.join(__dirname, 'layering-baseline.txt');
 const RANK = { addr: 0, core: 1, i18n: 1, hooks: 2, mods: 3, game: 4, net: 5, ui: 6, app: 7 };
-const REUSABLE = [/^core\//, /^i18n\/tr(_data)?\.(h|cpp)$/, /^ui\/(uikit|widgets|listbox|textedit|richtext)\.(h|cpp)$/];
+const REUSABLE = [/^core\//, /^i18n\/tr(_data)?\.(h|cpp)$/, /^ui\/(uikit|widgets|listbox|textedit|richtext|ornaments)\.(h|cpp)$/];
 const isReusable = (rel) => REUSABLE.some((re) => re.test(rel));
 
 function walk(dir, rel, out) {

@@ -42,7 +42,7 @@ CardState g_card;
 Painter CardPainter(HDC dc, float s)
 {
 	Painter p{dc, s, 0, 0, nullptr};
-	for (int i = 0; i < 5; i++) p.fonts[i] = g_fonts[i];
+	for (int i = 0; i < kFontCount; i++) p.fonts[i] = g_fonts[i];
 	return p;
 }
 

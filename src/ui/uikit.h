@@ -34,12 +34,14 @@ inline std::wstring W(const std::string &s)
 	return w;
 }
 
+constexpr int kFontCount = 6;
+
 struct Painter {
 	HDC dc;
 	float s;
 	int ox, oy;
 	std::vector<Hit> *hits;
-	HFONT fonts[5] = {};
+	HFONT fonts[kFontCount] = {};
 	int pressAction = -1, pressArg = 0;
 	int focusAction = -1, focusArg = 0;
 	bool noHover = false;
@@ -51,9 +53,44 @@ struct Painter {
 	void Fill(int x, int y, int w, int h, COLORREF c)
 	{
 		RECT r = R(x, y, w, h);
+		// Below scale 1 a thin line can round to no width at all, and frames lose a side.
+		if (w > 0 && r.right <= r.left) r.right = r.left + 1;
+		if (h > 0 && r.bottom <= r.top) r.bottom = r.top + 1;
 		HBRUSH b = CreateSolidBrush(c);
 		FillRect(dc, &r, b);
 		DeleteObject(b);
+	}
+	void FillGradient(int x, int y, int w, int h, COLORREF from, COLORREF to, ULONG mode)
+	{
+		const RECT r = R(x, y, w, h);
+		TRIVERTEX v[2] = {};
+		v[0].x = r.left;
+		v[0].y = r.top;
+		v[0].Red = static_cast<COLOR16>(GetRValue(from) << 8);
+		v[0].Green = static_cast<COLOR16>(GetGValue(from) << 8);
+		v[0].Blue = static_cast<COLOR16>(GetBValue(from) << 8);
+		v[1].x = r.right;
+		v[1].y = r.bottom;
+		v[1].Red = static_cast<COLOR16>(GetRValue(to) << 8);
+		v[1].Green = static_cast<COLOR16>(GetGValue(to) << 8);
+		v[1].Blue = static_cast<COLOR16>(GetBValue(to) << 8);
+		GRADIENT_RECT rect = {0, 1};
+		GdiGradientFill(dc, v, 2, &rect, 1, mode);
+	}
+	void FillV(int x, int y, int w, int h, COLORREF top, COLORREF bottom) { FillGradient(x, y, w, h, top, bottom, GRADIENT_FILL_RECT_V); }
+	void FillH(int x, int y, int w, int h, COLORREF left, COLORREF right) { FillGradient(x, y, w, h, left, right, GRADIENT_FILL_RECT_H); }
+	void Diamond(int cx, int cy, int radius, COLORREF c)
+	{
+		const int x = S(cx), y = S(cy), r = S(radius);
+		POINT pts[4] = {{x, y - r}, {x + r, y}, {x, y + r}, {x - r, y}};
+		HBRUSH b = CreateSolidBrush(c);
+		HPEN pen = CreatePen(PS_SOLID, 1, c);
+		HGDIOBJ ob = SelectObject(dc, b), op = SelectObject(dc, pen);
+		Polygon(dc, pts, 4);
+		SelectObject(dc, ob);
+		SelectObject(dc, op);
+		DeleteObject(b);
+		DeleteObject(pen);
 	}
 	void ArrowUp(int x, int y, int w, int h, COLORREF c)
 	{
@@ -291,25 +328,33 @@ struct Painter {
 	static const int kToggleW = 26, kToggleH = 13;
 	void Toggle(int x, int y, bool on, bool enabled, bool hover)
 	{
-		const COLORREF track = on ? (enabled ? RGB(122, 92, 36) : RGB(84, 66, 36)) : RGB(36, 29, 20);
-		const COLORREF edge = !enabled ? RGB(90, 76, 56) : hover ? RGB(255, 236, 170) : on ? RGB(214, 170, 84) : RGB(120, 96, 60);
-		Fill(x, y, kToggleW, kToggleH, track);
+		const COLORREF edge = !enabled ? RGB(90, 76, 56) : hover ? RGB(255, 236, 170) : on ? RGB(212, 169, 78) : RGB(120, 96, 60);
+		if (on && enabled) FillV(x, y, kToggleW, kToggleH, RGB(84, 50, 17), RGB(124, 80, 28));
+		else Fill(x, y, kToggleW, kToggleH, on ? RGB(70, 56, 34) : RGB(12, 8, 5));
 		Frame(x, y, kToggleW, kToggleH, edge);
-		const int kx = on ? x + kToggleW - kToggleH + 2 : x + 2;
-		Fill(kx, y + 2, kToggleH - 4, kToggleH - 4, on ? (enabled ? RGB(255, 226, 150) : RGB(190, 170, 130)) : RGB(150, 130, 100));
+		const int kx = on ? x + kToggleW - kToggleH + 2 : x + 2, knob = kToggleH - 4;
+		if (on && enabled) FillV(kx, y + 2, knob, knob, RGB(250, 226, 160), RGB(205, 160, 72));
+		else Fill(kx, y + 2, knob, knob, on ? RGB(190, 170, 130) : RGB(140, 122, 94));
 	}
 	void Button(int x, int y, int w, int h, const std::string &label, int action, int arg, int mx, int my,
 		bool enabled = true, bool strong = false, int font = 1)
 	{
 		const bool hov = enabled && Hover(x, y, w, h, mx, my);
 		const bool down = enabled && action == pressAction && arg == pressArg;
-		COLORREF bg = !enabled ? RGB(48, 40, 32)
-					: down    ? (strong ? RGB(92, 60, 18) : RGB(38, 30, 20))
-					: strong  ? (hov ? RGB(150, 104, 40) : RGB(122, 82, 30))
-							  : (hov ? RGB(92, 72, 48) : RGB(66, 52, 36));
-		Fill(x, y, w, h, bg);
-		Frame(x, y, w, h, !enabled ? RGB(90, 76, 56) : down ? RGB(255, 236, 170) : RGB(200, 160, 80));
-		if (down) Fill(x + 1, y + 1, w - 2, 1, RGB(20, 15, 10));
+		if (!enabled) {
+			Fill(x, y, w, h, RGB(44, 37, 29));
+		}
+		else if (down) {
+			FillV(x, y, w, h, strong ? RGB(84, 56, 18) : RGB(26, 19, 11), strong ? RGB(112, 76, 26) : RGB(44, 34, 21));
+		}
+		else if (strong) {
+			FillV(x, y, w, h, hov ? RGB(190, 138, 56) : RGB(168, 119, 44), hov ? RGB(134, 94, 34) : RGB(112, 77, 26));
+		}
+		else {
+			FillV(x, y, w, h, hov ? RGB(82, 63, 38) : RGB(62, 47, 28), hov ? RGB(54, 41, 24) : RGB(36, 27, 16));
+		}
+		Frame(x, y, w, h, !enabled ? RGB(90, 76, 56) : down || hov ? RGB(250, 226, 160) : strong ? RGB(226, 184, 96) : RGB(150, 116, 60));
+		if (enabled) Fill(x + 1, y + 1, w - 2, 1, down ? RGB(16, 11, 7) : strong ? RGB(226, 186, 104) : RGB(92, 73, 46));
 		Font(font);
 		Text(x, y + (down ? 1 : 0), w, h, label, enabled ? RGB(240, 226, 180) : RGB(130, 118, 96), DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		if (enabled) AddHit(x, y, w, h, action, arg);
@@ -349,7 +394,8 @@ const COLORREF kText = RGB(232, 216, 160), kDim = RGB(160, 146, 116), kGold = RG
 			   kBad = RGB(236, 110, 90), kOk = RGB(140, 200, 120);
 
 namespace pal {
-constexpr COLORREF panel = RGB(28, 22, 16), dialog = RGB(30, 24, 17), well = RGB(18, 14, 10), wellRaised = RGB(24, 19, 14),
+constexpr COLORREF goldLight = RGB(243, 217, 143), bronze = RGB(127, 98, 48), panelTop = RGB(42, 31, 18), dialogTop = RGB(46, 34, 20);
+constexpr COLORREF panel = RGB(24, 18, 12), dialog = RGB(27, 21, 14), well = RGB(14, 10, 7), wellRaised = RGB(22, 17, 12),
 				   shadow = RGB(8, 6, 4), line = RGB(110, 84, 44), lineDim = RGB(70, 54, 34), divider = RGB(90, 70, 40),
 				   edge = RGB(150, 116, 60), edgeHot = RGB(230, 196, 120), edgeStrong = RGB(200, 160, 80), focus = RGB(255, 236, 170),
 				   field = RGB(34, 27, 19), fieldHover = RGB(58, 46, 32), fieldOpen = RGB(46, 36, 24), rowHover = RGB(66, 52, 36),
@@ -397,7 +443,7 @@ struct Canvas {
 	}
 };
 
-inline HFONT g_fonts[5] = {};
+inline HFONT g_fonts[kFontCount] = {};
 inline float g_fontScale = 0;
 
 inline void EnsureFonts(float s)
@@ -415,6 +461,7 @@ inline void EnsureFonts(float s)
 	g_fonts[2] = make(22, FW_BOLD, L"Georgia");
 	g_fonts[3] = make(13, FW_NORMAL, L"Segoe UI");
 	g_fonts[4] = make(13, FW_SEMIBOLD, L"Segoe UI");
+	g_fonts[5] = make(30, FW_NORMAL, L"Georgia");
 	g_fontScale = s;
 }
 
