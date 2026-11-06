@@ -90,7 +90,7 @@ void LoadConfig()
 		g_config.autosaveSlots = 3;
 	}
 	g_config.crashFix = GetPrivateProfileIntA("Game", "CrashFix", 1, path) != 0;
-	g_config.smoothScroll = true;
+	g_config.smoothScroll = GetPrivateProfileIntA("Game", "SmoothScroll", 1, path) != 0;
 
 	g_config.modOverrides = GetPrivateProfileIntA("Mods", "Override", 1, path) != 0;
 	g_config.logFiles = GetPrivateProfileIntA("Debug", "LogFiles", 0, path) != 0;

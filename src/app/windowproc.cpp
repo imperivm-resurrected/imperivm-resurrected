@@ -19,6 +19,7 @@
 #include "ui/controlsui.h"
 #include "ui/modui.h"
 #include "ui/mpui.h"
+#include "ui/optionsui.h"
 #include "ui/savesui.h"
 #include "ui/support.h"
 #include "ui/updateui.h"
@@ -46,7 +47,7 @@ LRESULT GameWindowHandler(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 	bool uiHandled = false;
 	Guard("interface message", [&] {
 		uiHandled = UpdateUiHandleMessage(msg, wp, lp) || ControlsUiHandleMessage(msg, wp, lp) || SupportHandleMessage(msg, wp, lp) ||
-			ModUiHandleCornerMessage(msg, wp, lp) || SavesUiHandleMessage(msg, wp, lp) || ModUiHandleMessage(msg, wp, lp) || MpUiHandleMessage(msg, wp, lp);
+			OptionsUiHandleMessage(msg, wp, lp) || ModUiHandleCornerMessage(msg, wp, lp) || SavesUiHandleMessage(msg, wp, lp) || ModUiHandleMessage(msg, wp, lp) || MpUiHandleMessage(msg, wp, lp);
 	});
 	if (uiHandled) return 0;
 	if (msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST) {
