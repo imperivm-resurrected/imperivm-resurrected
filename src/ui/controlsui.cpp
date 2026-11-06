@@ -1010,7 +1010,7 @@ void ControlsUiDraw(uint32_t *buf, int w, int h)
 		p.Text(sx + 280 - 28, 22, 28, 30, "×", hov ? pal::focus : kDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		p.AddHit(sx + 280 - 28, 22, 28, 30, kClearSearch);
 	}
-	p.Fill(16, kTop - 10, kW - 32, 1, pal::lineDim);
+	PaintOrnateRule(p, kTop - 10, kW);
 
 	g_captureCell = {};
 	const bool keyboard = st.view == 1;

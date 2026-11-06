@@ -161,18 +161,41 @@ inline void PaintOrnament(Painter &p, Ornament ornament, int x, int y, int w, in
 constexpr int kWindowHeaderH = 84;
 
 // The title between laurels over an ornate rule. Returns where the content can start.
-inline int PaintWindowHeader(Painter &p, int w, const std::string &title)
+inline int PaintWindowHeader(Painter &p, int w, const std::string &title, int letterSpacing = 6)
 {
+	constexpr int branchW = 66, branchH = 42, gap = 30, margin = 24;
 	p.Font(5);
-	SetTextCharacterExtra(p.dc, p.S(6));
+	SetTextCharacterExtra(p.dc, p.S(letterSpacing));
 	const int textW = p.TextWidth(title);
-	p.Text(0, 12, w, 48, title, pal::goldLight, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-	SetTextCharacterExtra(p.dc, 0);
-	constexpr int branchW = 66, branchH = 42, gap = 30;
-	PaintOrnament(p, kOrnamentLaurel, (w - textW) / 2 - gap - branchW, 15, branchW, branchH, pal::goldLight);
-	PaintOrnament(p, kOrnamentLaurel, (w + textW) / 2 + gap, 15, branchW, branchH, pal::goldLight, true);
+	// A room's name can be long: it gets the width of the laurels and the spacing of its letters when it needs them.
+	if (textW <= w - 2 * (branchW + gap + margin)) {
+		// DT_CENTER ignores the spacing and would push the title to the right.
+		p.Text((w - textW + letterSpacing) / 2, 12, textW + margin, 48, title, pal::goldLight, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+		SetTextCharacterExtra(p.dc, 0);
+		PaintOrnament(p, kOrnamentLaurel, (w - textW) / 2 - gap - branchW, 15, branchW, branchH, pal::goldLight);
+		PaintOrnament(p, kOrnamentLaurel, (w + textW) / 2 + gap, 15, branchW, branchH, pal::goldLight, true);
+	}
+	else {
+		SetTextCharacterExtra(p.dc, 0);
+		p.Text(margin, 12, w - 2 * margin, 48, title, pal::goldLight, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	}
 	PaintOrnament(p, kOrnamentRule, 18, 62, w - 36, 12, kGold);
 	return kWindowHeaderH;
+}
+
+inline void PaintOrnateRule(Painter &p, int centerY, int w, int h = 10)
+{
+	PaintOrnament(p, kOrnamentRule, 18, centerY - h / 2, w - 36, h, kGold);
+}
+
+// The glow stays at the top so that rows striped over the card keep one contrast from top to bottom.
+inline void PaintCard(Painter &p, int x, int y, int w, int h)
+{
+	constexpr int glow = 44;
+	const COLORREF body = RGB(25, 19, 13);
+	p.FillV(x, y, w, std::min(h, glow), RGB(36, 28, 18), body);
+	if (h > glow) p.Fill(x, y + glow, w, h - glow, body);
+	p.Frame(x, y, w, h, pal::lineDim);
 }
 
 constexpr int kBigToggleW = 44, kBigToggleH = 22;
@@ -205,7 +228,7 @@ inline void PaintSlider(Painter &p, int x, int y, int w, int h, float fraction, 
 inline void PaintTitle(Painter &p, int x, int y, int w, const std::string &title)
 {
 	p.Font(2);
-	p.Text(x, y, w, 36, title, kGold);
+	p.Text(x, y, w, 36, title, pal::goldLight);
 }
 
 inline void PaintRule(Painter &p, int y, int w, COLORREF c = pal::line)
@@ -374,6 +397,7 @@ inline Dialog DialogBegin(Painter &p, int canvasW, int canvasH, int w, int h, co
 	PaintFrameCorners(p, d.x, d.y, w, h, 14);
 	p.Font(2);
 	p.Text(d.x + d.pad + titleIndent, d.y + 16, w - d.pad * 2 - titleIndent, 32, title, titleColor, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	PaintOrnament(p, kOrnamentRule, d.x + 14, d.y + 47, w - 28, 8, kGold);
 	return d;
 }
 
