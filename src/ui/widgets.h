@@ -114,27 +114,11 @@ inline void PaintWindowFrame(Painter &p, int w, int h)
 	PaintFrameCorners(p, 0, 0, w, h);
 }
 
-inline void PaintMeander(Painter &p, int x, int y, int w, COLORREF c = pal::line)
+// Premultiplied 32-bit bitmaps for GdiAlphaBlend, one per ornament, size, side and colour; there are only a handful.
+inline HBITMAP OrnamentBitmap(Ornament ornament, int w, int h, bool flip, COLORREF color)
 {
-	constexpr int tile = 24;
-	const int count = w / tile;
-	x += (w - count * tile) / 2;
-	for (int i = 0; i < count; i++, x += tile) {
-		p.Fill(x, y + 11, tile, 1, c);
-		p.Fill(x + 19, y + 2, 1, 10, c);
-		p.Fill(x + 6, y + 2, 14, 1, c);
-		p.Fill(x + 6, y + 2, 1, 7, c);
-		p.Fill(x + 6, y + 8, 9, 1, c);
-		p.Fill(x + 14, y + 5, 1, 4, c);
-		p.Fill(x + 10, y + 5, 5, 1, c);
-	}
-}
-
-// Premultiplied 32-bit bitmaps for GdiAlphaBlend, one per size, side and colour; there are only a handful.
-inline HBITMAP LaurelBranchBitmap(int w, int h, bool flip, COLORREF color)
-{
-	static std::map<std::tuple<int, int, bool, COLORREF>, HBITMAP> cache;
-	const auto key = std::make_tuple(w, h, flip, color);
+	static std::map<std::tuple<Ornament, int, int, bool, COLORREF>, HBITMAP> cache;
+	const auto key = std::make_tuple(ornament, w, h, flip, color);
 	const auto it = cache.find(key);
 	if (it != cache.end()) return it->second;
 	BITMAPINFO bi = {};
@@ -147,7 +131,7 @@ inline HBITMAP LaurelBranchBitmap(int w, int h, bool flip, COLORREF color)
 	void *bits = nullptr;
 	HBITMAP bmp = CreateDIBSection(nullptr, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
 	if (bmp && bits) {
-		const std::vector<uint8_t> mask = LaurelBranchMask(w, h);
+		const std::vector<uint8_t> mask = OrnamentMask(ornament, w, h);
 		uint32_t *px = static_cast<uint32_t *>(bits);
 		for (int y = 0; y < h; y++) {
 			for (int x = 0; x < w; x++) {
@@ -160,11 +144,11 @@ inline HBITMAP LaurelBranchBitmap(int w, int h, bool flip, COLORREF color)
 	return bmp;
 }
 
-inline void PaintLaurelBranch(Painter &p, int x, int y, int w, int h, bool flip, COLORREF color = pal::goldLight)
+inline void PaintOrnament(Painter &p, Ornament ornament, int x, int y, int w, int h, COLORREF color, bool flip = false)
 {
 	const RECT r = p.R(x, y, w, h);
 	const int pw = r.right - r.left, ph = r.bottom - r.top;
-	HBITMAP bmp = pw > 0 && ph > 0 ? LaurelBranchBitmap(pw, ph, flip, color) : nullptr;
+	HBITMAP bmp = pw > 0 && ph > 0 ? OrnamentBitmap(ornament, pw, ph, flip, color) : nullptr;
 	if (!bmp) return;
 	HDC mem = CreateCompatibleDC(p.dc);
 	HGDIOBJ old = SelectObject(mem, bmp);
@@ -176,7 +160,7 @@ inline void PaintLaurelBranch(Painter &p, int x, int y, int w, int h, bool flip,
 
 constexpr int kWindowHeaderH = 84;
 
-// The title between laurels over a Greek key band. Returns where the content can start.
+// The title between laurels over an ornate rule. Returns where the content can start.
 inline int PaintWindowHeader(Painter &p, int w, const std::string &title)
 {
 	p.Font(5);
@@ -185,9 +169,9 @@ inline int PaintWindowHeader(Painter &p, int w, const std::string &title)
 	p.Text(0, 12, w, 48, title, pal::goldLight, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 	SetTextCharacterExtra(p.dc, 0);
 	constexpr int branchW = 66, branchH = 42, gap = 30;
-	PaintLaurelBranch(p, (w - textW) / 2 - gap - branchW, 15, branchW, branchH, false);
-	PaintLaurelBranch(p, (w + textW) / 2 + gap, 15, branchW, branchH, true);
-	PaintMeander(p, 18, 64, w - 36);
+	PaintOrnament(p, kOrnamentLaurel, (w - textW) / 2 - gap - branchW, 15, branchW, branchH, pal::goldLight);
+	PaintOrnament(p, kOrnamentLaurel, (w + textW) / 2 + gap, 15, branchW, branchH, pal::goldLight, true);
+	PaintOrnament(p, kOrnamentRule, 18, 62, w - 36, 12, kGold);
 	return kWindowHeaderH;
 }
 
