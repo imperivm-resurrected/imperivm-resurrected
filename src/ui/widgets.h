@@ -6,11 +6,14 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <map>
 #include <string>
+#include <tuple>
 #include <vector>
 #include <cstdint>
 
 #include "ui/listbox.h"
+#include "ui/ornaments.h"
 #include "ui/textedit.h"
 #include "ui/uikit.h"
 
@@ -80,11 +83,127 @@ struct PanelRender {
 	}
 };
 
+// dirX and dirY say where the corner opens: +1 to the right or down, -1 to the left or up.
+inline void PaintCorner(Painter &p, int x, int y, int dirX, int dirY, int size = 22)
+{
+	const auto bar = [&](int ax, int ay, int w, int h, COLORREF c) {
+		p.Fill(dirX > 0 ? x + ax : x - ax - w, dirY > 0 ? y + ay : y - ay - h, w, h, c);
+	};
+	bar(0, 0, size, 2, pal::goldLight);
+	bar(0, 0, 2, size, pal::goldLight);
+	bar(6, 6, size - 10, 1, kGold);
+	bar(6, 6, 1, size - 10, kGold);
+	p.Diamond(x + dirX * 6, y + dirY * 6, 3, pal::goldLight);
+}
+
+inline void PaintFrameCorners(Painter &p, int x, int y, int w, int h, int size = 22)
+{
+	PaintCorner(p, x, y, 1, 1, size);
+	PaintCorner(p, x + w, y, -1, 1, size);
+	PaintCorner(p, x, y + h, 1, -1, size);
+	PaintCorner(p, x + w, y + h, -1, -1, size);
+}
+
 inline void PaintWindowFrame(Painter &p, int w, int h)
 {
-	p.Fill(0, 0, w, h, pal::panel);
+	const int glow = std::min(h, 120);
+	p.FillV(0, 0, w, glow, pal::panelTop, pal::panel);
+	p.Fill(0, glow, w, h - glow, pal::panel);
 	p.Frame(0, 0, w, h, kGold);
-	p.Frame(3, 3, w - 6, h - 6, pal::line);
+	p.Frame(4, 4, w - 8, h - 8, pal::lineDim);
+	PaintFrameCorners(p, 0, 0, w, h);
+}
+
+inline void PaintMeander(Painter &p, int x, int y, int w, COLORREF c = pal::line)
+{
+	constexpr int tile = 24;
+	const int count = w / tile;
+	x += (w - count * tile) / 2;
+	for (int i = 0; i < count; i++, x += tile) {
+		p.Fill(x, y + 11, tile, 1, c);
+		p.Fill(x + 19, y + 2, 1, 10, c);
+		p.Fill(x + 6, y + 2, 14, 1, c);
+		p.Fill(x + 6, y + 2, 1, 7, c);
+		p.Fill(x + 6, y + 8, 9, 1, c);
+		p.Fill(x + 14, y + 5, 1, 4, c);
+		p.Fill(x + 10, y + 5, 5, 1, c);
+	}
+}
+
+// Premultiplied 32-bit bitmaps for GdiAlphaBlend, one per size, side and colour; there are only a handful.
+inline HBITMAP LaurelBranchBitmap(int w, int h, bool flip, COLORREF color)
+{
+	static std::map<std::tuple<int, int, bool, COLORREF>, HBITMAP> cache;
+	const auto key = std::make_tuple(w, h, flip, color);
+	const auto it = cache.find(key);
+	if (it != cache.end()) return it->second;
+	BITMAPINFO bi = {};
+	bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
+	bi.bmiHeader.biWidth = w;
+	bi.bmiHeader.biHeight = -h;
+	bi.bmiHeader.biPlanes = 1;
+	bi.bmiHeader.biBitCount = 32;
+	bi.bmiHeader.biCompression = BI_RGB;
+	void *bits = nullptr;
+	HBITMAP bmp = CreateDIBSection(nullptr, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+	if (bmp && bits) {
+		const std::vector<uint8_t> mask = LaurelBranchMask(w, h);
+		uint32_t *px = static_cast<uint32_t *>(bits);
+		for (int y = 0; y < h; y++) {
+			for (int x = 0; x < w; x++) {
+				const uint32_t a = mask[static_cast<size_t>(y) * w + (flip ? w - 1 - x : x)];
+				px[static_cast<size_t>(y) * w + x] = (a << 24) | ((GetRValue(color) * a / 255) << 16) | ((GetGValue(color) * a / 255) << 8) | (GetBValue(color) * a / 255);
+			}
+		}
+	}
+	cache[key] = bmp;
+	return bmp;
+}
+
+inline void PaintLaurelBranch(Painter &p, int x, int y, int w, int h, bool flip, COLORREF color = pal::goldLight)
+{
+	const RECT r = p.R(x, y, w, h);
+	const int pw = r.right - r.left, ph = r.bottom - r.top;
+	HBITMAP bmp = pw > 0 && ph > 0 ? LaurelBranchBitmap(pw, ph, flip, color) : nullptr;
+	if (!bmp) return;
+	HDC mem = CreateCompatibleDC(p.dc);
+	HGDIOBJ old = SelectObject(mem, bmp);
+	BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+	GdiAlphaBlend(p.dc, r.left, r.top, pw, ph, mem, 0, 0, pw, ph, blend);
+	SelectObject(mem, old);
+	DeleteDC(mem);
+}
+
+constexpr int kWindowHeaderH = 84;
+
+// The title between laurels over a Greek key band. Returns where the content can start.
+inline int PaintWindowHeader(Painter &p, int w, const std::string &title)
+{
+	p.Font(5);
+	SetTextCharacterExtra(p.dc, p.S(6));
+	const int textW = p.TextWidth(title);
+	p.Text(0, 12, w, 48, title, pal::goldLight, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	SetTextCharacterExtra(p.dc, 0);
+	constexpr int branchW = 66, branchH = 42, gap = 30;
+	PaintLaurelBranch(p, (w - textW) / 2 - gap - branchW, 15, branchW, branchH, false);
+	PaintLaurelBranch(p, (w + textW) / 2 + gap, 15, branchW, branchH, true);
+	PaintMeander(p, 18, 64, w - 36);
+	return kWindowHeaderH;
+}
+
+inline void PaintSlider(Painter &p, int x, int y, int w, int h, float fraction, bool enabled, bool hot)
+{
+	constexpr int trackH = 5;
+	const int cy = y + h / 2, filled = static_cast<int>(w * std::max(0.0f, std::min(1.0f, fraction)));
+	p.Fill(x, cy - trackH / 2, w, trackH, pal::well);
+	p.Frame(x, cy - trackH / 2, w, trackH, pal::lineDim);
+	if (filled > 0) {
+		if (enabled) p.FillH(x, cy - trackH / 2, filled, trackH, pal::bronze, pal::goldLight);
+		else p.Fill(x, cy - trackH / 2, filled, trackH, pal::disabledEdge);
+	}
+	if (!enabled) return;
+	p.Diamond(x + filled, cy, hot ? 8 : 7, RGB(62, 44, 14));
+	p.Diamond(x + filled, cy, hot ? 7 : 6, hot ? pal::focus : pal::goldLight);
 }
 
 inline void PaintTitle(Painter &p, int x, int y, int w, const std::string &title)
@@ -214,7 +333,7 @@ inline void PaintTabs(Painter &p, int x, int y, const std::vector<TabSpec> &tabs
 {
 	for (const TabSpec &t : tabs) {
 		const bool hov = t.enabled && p.Hover(x, y, tabW, h, mx, my);
-		if (t.active) p.Fill(x, y, tabW, h, RGB(48, 38, 26));
+		if (t.active) p.FillV(x, y, tabW, h, RGB(30, 22, 14), RGB(64, 46, 25));
 		else if (hov) p.Fill(x, y, tabW, h, RGB(38, 30, 21));
 		p.Font(1);
 		p.Text(x, y, tabW, h - 4, t.label, !t.enabled ? RGB(110, 96, 76) : t.active ? kGold : hov ? kText : kDim,
@@ -253,8 +372,10 @@ inline Dialog DialogBegin(Painter &p, int canvasW, int canvasH, int w, int h, co
 	p.hits->clear();
 	p.noHover = false;
 	p.Fill(d.x + 6, d.y + 6, w, h, pal::shadow);
-	p.Fill(d.x, d.y, w, h, pal::dialog);
+	p.FillV(d.x, d.y, w, std::min(h, 72), pal::dialogTop, pal::dialog);
+	if (h > 72) p.Fill(d.x, d.y + 72, w, h - 72, pal::dialog);
 	p.Frame(d.x, d.y, w, h, kGold);
+	PaintFrameCorners(p, d.x, d.y, w, h, 14);
 	p.Font(2);
 	p.Text(d.x + d.pad + titleIndent, d.y + 16, w - d.pad * 2 - titleIndent, 32, title, titleColor, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	return d;
@@ -315,7 +436,8 @@ inline void PaintAlertIcon(Painter &p, int x, int y, bool severe, int size = 16)
 inline void PaintProgress(Painter &p, int x, int y, int w, int h, float fraction)
 {
 	p.Fill(x, y, w, h, pal::well);
-	p.Fill(x, y, static_cast<int>(w * std::max(0.0f, std::min(1.0f, fraction))), h, kGold);
+	const int filled = static_cast<int>(w * std::max(0.0f, std::min(1.0f, fraction)));
+	if (filled > 0) p.FillV(x, y, filled, h, pal::goldLight, pal::bronze);
 }
 
 inline void PaintBusyBar(Painter &p, int x, int y, int w, int h, DWORD now)
