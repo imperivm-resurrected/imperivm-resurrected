@@ -316,9 +316,7 @@ std::vector<Page> BuildPages(const Values &v)
 		page.subtitle = "Updates and logs";
 		page.blurb = "Updates of the mod, and what to do when something fails.";
 		page.icon = kOrnamentGear;
-		// The options screen only replaces the game's when the executable is the known Steam one (InstallOptionsHooks).
-		page.left.push_back({"About", {Info("Mod version", kModVersion, ModVersionText(), IsBetaVersion(ModVersionText()) ? "Beta" : ""),
-			Info("Game executable", kGameExe, "Recognised (Steam)")}});
+		page.left.push_back({"About", {Info("Mod version", kModVersion, ModVersionText(), IsBetaVersion(ModVersionText()) ? "Beta" : "")}});
 		Row check = ActionRow("New version", kCheckUpdates, "Check now");
 		const auto status = v.texts.find(kCheckUpdates);
 		if (status != v.texts.end()) check.hint = status->second;
@@ -326,8 +324,6 @@ std::vector<Page> BuildPages(const Values &v)
 		page.left.push_back({"Updates", {Combo(v, "Updates", kUpdates), check}});
 		page.right.push_back({"If something fails", {Combo(v, "Log detail", kLogLevel, "Detailed helps to find a problem"), ActionRow("Logs folder", kOpenLogs, "Open folder"),
 			ActionRow("Problem report", kCreateReport, "Create", "A zip with your private data hidden")}});
-		page.right.push_back({"Advanced", {Toggle(v, "Replacement files", kModOverrides, "Game files in the imperivm-resurrected folder", true),
-			Toggle(v, "Crash protection", kCrashFix, "Avoids some known crashes of the game", true)}});
 		pages.push_back(page);
 	}
 	return pages;
