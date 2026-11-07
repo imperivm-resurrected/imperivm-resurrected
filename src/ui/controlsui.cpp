@@ -35,7 +35,7 @@ const DWORD kUndoMs = 15000;
 enum Action {
 	kNone = 0, kClose, kNav, kCell, kRowReset, kSearchField, kClearSearch, kSwap, kAssignAnyway,
 	kCancelPending, kModeLetter, kModePosition, kPresetOpen, kPresetPick, kUndo, kViewList, kViewKeys, kKbKey, kKbLayer, kKbGo,
-	kBarLetters, kCopyConfig, kPasteConfig, kBoxMode,
+	kBarLetters, kCopyConfig, kPasteConfig, kBoxMode, kResetAll, kResetAllYes,
 };
 const int kSearchAction = 7301;
 
@@ -60,6 +60,7 @@ struct State {
 	Ref capture;
 	Ref pend;
 	bool pendReset = false;
+	bool confirmResetAll = false;
 	ControlKey pendKey;
 	std::vector<Ref> pendWith;
 	bool presetOpen = false;
@@ -87,6 +88,11 @@ struct State {
 std::mutex g_lock;
 State g_s;
 Canvas g_canvas;
+
+bool Asking(const State &st)
+{
+	return st.pend.row >= 0 || st.confirmResetAll;
+}
 
 ControlKey KeyOf(const ControlInfo &r, int slot)
 {
@@ -470,7 +476,7 @@ void DrawRow(Painter &p, const State &st, int row, int y, int listTop, int listB
 	if (y + rowH <= listTop || y >= listBottom) return;
 	const Columns c = Cols();
 	const bool off = st.grid && r.order;
-	const bool active = !st.presetOpen && st.pend.row < 0;
+	const bool active = !st.presetOpen && !Asking(st);
 	const bool inList = active && my >= p.oy + p.S(listTop) && my < p.oy + p.S(listBottom);
 	const bool hov = inList && p.Hover(kListX, y, kListW - 12, rowH, mx, my);
 	if (hov) p.Fill(kListX + 2, y, kListW - 16, rowH, RGB(40, 32, 22));
@@ -1162,13 +1168,14 @@ void ControlsUiDraw(uint32_t *buf, int w, int h)
 	p.ArrowDown(24 + 220 - 20, fy + 12 + 15, 9, 5, RGB(240, 226, 180));
 	p.Button(24 + 220 + 12, fy + 12, 96, 34, "Export", kCopyConfig, 0, mx, my, true, false, 4);
 	p.Button(24 + 220 + 12 + 96 + 8, fy + 12, 96, 34, "Import", kPasteConfig, 0, mx, my, true, false, 4);
+	p.Button(24 + 220 + 12 + (96 + 8) * 2, fy + 12, 110, 34, "Reset all", kResetAll, 0, mx, my, true, false, 4);
 	p.Button(kW - 24 - 130, fy + 12, 130, 34, "Close", kClose, 0, mx, my, true, true);
 	const bool canUndo = !st.undo.empty() && GetTickCount() - st.undoAt < kUndoMs;
 	const int undoX = kW - 24 - 130 - 12 - 110;
 	if (canUndo) p.Button(undoX, fy + 12, 110, 34, "Undo", kUndo, 0, mx, my, true, false, 4);
 	std::string status;
 	COLORREF statusColor = kText;
-	if (st.capture.row < 0 && !st.presetOpen && st.pend.row < 0) {
+	if (st.capture.row < 0 && !st.presetOpen && !Asking(st)) {
 		const POINT pt = {mx, my};
 		for (const Hit &hh : hits) {
 			if (!PtInRect(&hh.r, pt)) continue;
@@ -1186,10 +1193,30 @@ void ControlsUiDraw(uint32_t *buf, int w, int h)
 			else if (hh.action == kPasteConfig) {
 				status = "Loads the controls you copied from another player.";
 			}
+			else if (hh.action == kResetAll) {
+				status = "Puts every key back as in the original game.";
+			}
 			else if (hh.action == kRowReset && hh.arg >= 0 && hh.arg < static_cast<int>(st.rows.size())) {
 				status = Tr("Back to the game's key: ") + KeyText(st.rows[hh.arg].def) + ".";
 			}
 		}
+	}
+	if (st.confirmResetAll) {
+		const int cw = 560, chh = 78, cx = (kW - cw) / 2, cyy = fy - chh - 8;
+		p.Fill(cx + 4, cyy + 4, cw, chh, RGB(10, 8, 5));
+		p.Fill(cx, cyy, cw, chh, RGB(40, 31, 20));
+		p.Frame(cx, cyy, cw, chh, kGold);
+		p.Font(0);
+		p.Text(cx + 14, cyy + 8, cw - 28, 24, "Put every key back as in the original game?", kText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Font(3);
+		p.Text(cx + 14, cyy + 30, cw - 28, 18, "Your keys and command modes go back to the game's. You can undo it for a few seconds.", kDim,
+			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		int bx = cx + cw - 14;
+		const int by = cyy + chh - 36, bh = 28;
+		bx -= 100;
+		p.Button(bx, by, 100, bh, "Cancel", kCancelPending, 0, mx, my, true, false, 4);
+		bx -= 158;
+		p.Button(bx, by, 150, bh, "Reset all", kResetAllYes, 0, mx, my, true, true, 4);
 	}
 	if (st.presetOpen) DrawPresets(p, st, mx, my, fy + 4);
 
@@ -1332,7 +1359,7 @@ void Activate(State &st, int action, int arg, POINT pt)
 	if (action == kSearchAction) action = kSearchField;
 	if (action == kCopyConfig || action == kPasteConfig) {
 		st.presetOpen = false;
-		if (st.pend.row >= 0) return;
+		if (Asking(st)) return;
 		if (action == kCopyConfig) {
 			const std::string text = ControlsExport();
 			if (text.empty()) {
@@ -1369,6 +1396,7 @@ void Activate(State &st, int action, int arg, POINT pt)
 		return;
 	}
 	if (st.pend.row >= 0 && action != kSwap && action != kAssignAnyway && action != kCancelPending) return;
+	if (st.confirmResetAll && action != kResetAllYes && action != kCancelPending) return;
 	if (action != kSearchField) st.searchFocus = false;
 	const bool sameCell = action == kCell && CellRef(arg).row == st.capture.row && CellRef(arg).slot == st.capture.slot;
 	if (st.capture.row >= 0 && !sameCell) st.capture = Ref();
@@ -1453,6 +1481,17 @@ void Activate(State &st, int action, int arg, POINT pt)
 	case kCancelPending:
 		st.pend = Ref();
 		st.pendReset = false;
+		st.confirmResetAll = false;
+		break;
+	case kResetAll:
+		st.confirmResetAll = true;
+		break;
+	case kResetAllYes:
+		st.confirmResetAll = false;
+		BeginChange(st);
+		ControlsResetAll();
+		Refresh(st);
+		SetStatus(st, "Every key is back as in the original game. If you want yours back, Undo.", false);
 		break;
 	case kModeLetter:
 	case kModePosition:
@@ -1512,6 +1551,7 @@ bool TabAllowed(const State &st, int a)
 	if (a == kNone) return false;
 	if (st.presetOpen) return a == kPresetPick;
 	if (st.pend.row >= 0) return a == kSwap || a == kAssignAnyway || a == kCancelPending;
+	if (st.confirmResetAll) return a == kResetAllYes || a == kCancelPending;
 	return true;
 }
 
@@ -1623,12 +1663,12 @@ bool ControlsUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		{
 			const POINT at = {static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))};
 			st.tabAction = -1;
-			if (!st.presetOpen && st.pend.row < 0 && st.capture.row < 0 &&
+			if (!st.presetOpen && !Asking(st) && st.capture.row < 0 &&
 				(st.view == 1 ? ListDown(st.kbList, st.kbGeom, at) : ListDown(st.list, st.listGeom, at))) {
 				return true;
 			}
 			int hitArg = 0;
-			const bool onSearch = HitAt(st, at, hitArg) == kSearchAction && st.pend.row < 0 && !st.presetOpen;
+			const bool onSearch = HitAt(st, at, hitArg) == kSearchAction && !Asking(st) && !st.presetOpen;
 			Click(st, at);
 			if (onSearch && st.searchFocus) {
 				if (msg == WM_LBUTTONDBLCLK) EditSelectWord(st.search, st.edit);
@@ -1644,7 +1684,7 @@ bool ControlsUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 	case WM_RBUTTONDOWN: {
 		int arg = 0;
 		const POINT pt = {static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))};
-		if (st.pend.row < 0 && !st.presetOpen && HitAt(st, pt, arg) == kCell) TryAssign(st, CellRef(arg), ControlKey());
+		if (!Asking(st) && !st.presetOpen && HitAt(st, pt, arg) == kCell) TryAssign(st, CellRef(arg), ControlKey());
 		return true;
 	}
 	case WM_MOUSEWHEEL:
@@ -1653,7 +1693,7 @@ bool ControlsUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 			st.kbList.scroll = std::max(0, std::min(st.kbList.scroll, st.kbGeom.maxScroll));
 			return true;
 		}
-		if (st.pend.row < 0 && !st.presetOpen) {
+		if (!Asking(st) && !st.presetOpen) {
 			st.list.scroll -= GET_WHEEL_DELTA_WPARAM(wp) * 64 / WHEEL_DELTA;
 			st.list.scroll = std::max(0, std::min(st.list.scroll, st.listGeom.maxScroll));
 		}
@@ -1683,7 +1723,7 @@ bool ControlsUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 			else if (st.tabAction >= 0 && !(lp & (1 << 30)) && (wp == VK_RETURN || wp == VK_SPACE)) KeyActivate(st, wp == VK_SPACE);
 			return true;
 		}
-		if (st.pend.row >= 0) {
+		if (Asking(st)) {
 			if (st.tabAction >= 0 && !(lp & (1 << 30)) && (wp == VK_RETURN || wp == VK_SPACE)) KeyActivate(st, wp == VK_SPACE);
 			return true;
 		}
@@ -1720,6 +1760,7 @@ bool ControlsUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 				st.pend = Ref();
 				st.pendReset = false;
 			}
+			else if (st.confirmResetAll) st.confirmResetAll = false;
 			else if (!st.search.empty()) {
 				st.search.clear();
 				st.edit = EditState();
@@ -1733,7 +1774,7 @@ bool ControlsUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 			st.eatChar = false;
 			return true;
 		}
-		if (st.capture.row >= 0 || st.pend.row >= 0 || st.presetOpen) return true;
+		if (st.capture.row >= 0 || Asking(st) || st.presetOpen) return true;
 		if (!st.searchFocus && wp >= 32 && wp != 127) {
 			st.view = 0;
 			st.searchFocus = true;

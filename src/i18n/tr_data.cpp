@@ -1556,5 +1556,10 @@ extern const TrRow kTrRows[] = {
 	{"Game files in the imperivm-resurrected folder", "Archivos del juego en la carpeta imperivm-resurrected", "File del gioco nella cartella imperivm-resurrected"},
 	{"Crash protection", "Protección contra cierres", "Protezione dai crash"},
 	{"Avoids some known crashes of the game", "Evita algunos cierres conocidos del juego", "Evita alcuni crash noti del gioco"},
+	{"Reset all", "Restablecer todo", "Ripristina tutto"},
+	{"Puts every key back as in the original game.", "Deja todas las teclas como en el juego original.", "Rimette tutti i tasti come nel gioco originale."},
+	{"Put every key back as in the original game?", "¿Dejar todas las teclas como en el juego original?", "Rimettere tutti i tasti come nel gioco originale?"},
+	{"Your keys and command modes go back to the game's. You can undo it for a few seconds.", "Tus teclas y modos de órdenes vuelven a los del juego. Puedes deshacerlo durante unos segundos.", "Tasti e modalità dei comandi tornano a quelli del gioco. Puoi annullare per qualche secondo."},
+	{"Every key is back as in the original game. If you want yours back, Undo.", "Todas las teclas están como en el juego original. Si quieres las tuyas, Deshacer.", "Tutti i tasti sono come nel gioco originale. Se rivuoi i tuoi, Annulla."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);
