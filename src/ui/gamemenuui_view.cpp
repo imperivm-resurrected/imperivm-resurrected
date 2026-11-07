@@ -575,19 +575,6 @@ void PaintSummary(Painter &p, const View &v, const std::vector<const StatsPlayer
 }
 }
 
-void PaintMainMenu(Painter &p, const View &v, int w, int h)
-{
-	constexpr int kPadX = 18, kPadY = 16, kGap = 5;
-	PaintWindowFrame(p, w, h);
-	const int count = std::max(1, static_cast<int>(v.rows.size()));
-	const int pitch = (h - kPadY * 2 + kGap) / count;
-	int y = kPadY;
-	for (const Row &r : v.rows) {
-		p.Button(kPadX, y, w - kPadX * 2, pitch - kGap, r.label, kActButton, r.id, v.mouseX, v.mouseY, r.enabled);
-		y += pitch;
-	}
-}
-
 int MenuHeight(const View &v)
 {
 	int h = kWindowHeaderH + kBottomPad - kButtonGap + static_cast<int>(v.notes.size()) * kNoteH;

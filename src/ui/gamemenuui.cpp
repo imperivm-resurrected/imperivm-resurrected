@@ -3,11 +3,9 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include "ui/gamemenuui.h"
 
-#include <algorithm>
 #include <memory>
 #include <mutex>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "core/log.h"
@@ -56,23 +54,7 @@ const RowSpec kEndRows[] = {
 	{kNativeQuitReplay, "Quit", false, false},
 };
 
-const RowSpec kMainRows[] = {
-	{0x1002, "Tutorial", false, false},
-	{0x1009, "Great Battles", false, false},
-	{0x1060, "Conquest", false, false},
-	{0x1010, "Single player", false, false},
-	{0x1003, "Multiplayer", false, false},
-	{0x1012, "Imperivm League", false, false},
-	{0x1011, "Change player", false, false},
-	{0x1004, "Load game", false, false},
-	{0x1008, "Editor", false, false},
-	{0x1041, "Additional content", false, false},
-	{0x1005, "Options", false, false},
-	{0x1006, "Credits", false, false},
-	{kNativeBack, "Quit", false, false},
-};
-
-enum Screen { kScreenNone, kScreenMenu, kScreenEnd, kScreenStats, kScreenConfirm, kScreenMain };
+enum Screen { kScreenNone, kScreenMenu, kScreenEnd, kScreenStats, kScreenConfirm };
 
 struct State {
 	Screen screen = kScreenNone;
@@ -109,15 +91,6 @@ std::vector<Row> ReadRows(void *dlg, const RowSpec (&specs)[N], bool onlyVisible
 	return rows;
 }
 
-// Once per reason: when the panel does not come, the log has to say why.
-void NoteMainMenu(const char *reason)
-{
-	static const char *last = nullptr;
-	if (last == reason) return;
-	last = reason;
-	LogI("ui", "main menu panel not drawn: %s", reason);
-}
-
 // A screen with no buttons would leave the player with nothing to press: the game's own takes over.
 Screen CurrentScreen(void *&dlg)
 {
@@ -132,38 +105,7 @@ Screen CurrentScreen(void *&dlg)
 	if (dlg) return ReadRows(dlg, kEndRows, true).empty() ? kScreenNone : kScreenEnd;
 	dlg = GameMenuVisible();
 	if (dlg) return ReadRows(dlg, kMenuRows, false).empty() ? kScreenNone : kScreenMenu;
-	if (MpUiMainMenuVisible()) {
-		dlg = MpUiMainMenuDialog();
-		if (dlg && DialogOnTop(dlg)) {
-			if (!ReadRows(dlg, kMainRows, true).empty()) return kScreenMain;
-			NoteMainMenu("it shows none of its buttons");
-		}
-		else NoteMainMenu("another dialog is in front");
-	}
-	dlg = nullptr;
 	return kScreenNone;
-}
-
-void ReadMainMenu(void *dlg, View &v)
-{
-	constexpr int kMarginX = 14, kMarginY = 12;
-	v.rows = ReadRows(dlg, kMainRows, true);
-	std::vector<std::pair<int, Row>> placed;
-	RECT all = {};
-	bool first = true;
-	for (const Row &row : v.rows) {
-		RECT rect = {};
-		if (!NativeButtonRect(dlg, row.id, rect)) continue;
-		placed.push_back({rect.top, row});
-		if (first) all = rect;
-		else UnionRect(&all, &all, &rect);
-		first = false;
-	}
-	std::stable_sort(placed.begin(), placed.end(), [](const std::pair<int, Row> &a, const std::pair<int, Row> &b) { return a.first < b.first; });
-	v.rows.clear();
-	for (const std::pair<int, Row> &item : placed) v.rows.push_back(item.second);
-	InflateRect(&all, kMarginX, kMarginY);
-	v.mainPanel = all;
 }
 
 void ReadStatistics(void *dlg, View &v)
@@ -252,7 +194,7 @@ void GameMenuUiGameTick()
 		const bool changed = screen != g_s.screen || dlg != g_s.dlg;
 		if (!changed && GetTickCount() - g_s.lastRead < kReadEveryMs) return;
 		if (changed) {
-			LogI("ui", "game menu screen: %d -> %d", static_cast<int>(g_s.screen), static_cast<int>(screen));
+			LogD("ui", "game menu screen: %d -> %d", static_cast<int>(g_s.screen), static_cast<int>(screen));
 			g_s.hits.clear();
 			g_s.mouseDown = false;
 			opened = screen == kScreenStats;
@@ -264,7 +206,6 @@ void GameMenuUiGameTick()
 	else if (screen == kScreenEnd) ReadEndMenu(dlg, fresh);
 	else if (screen == kScreenConfirm) fresh.question = ConfirmText();
 	else if (screen == kScreenStats) ReadStatistics(dlg, fresh);
-	else if (screen == kScreenMain) ReadMainMenu(dlg, fresh);
 	std::lock_guard<std::mutex> lock(g_lock);
 	fresh.mouseX = g_s.view.mouseX;
 	fresh.mouseY = g_s.view.mouseY;
@@ -295,21 +236,6 @@ void GameMenuUiDraw(uint32_t *buf, int w, int h)
 		mouseDown = g_s.mouseDown;
 	}
 	if (screen == kScreenNone) return;
-	if (screen == kScreenMain) {
-		const float scale = std::max(1.0f, h / 1080.0f);
-		const int panelW = static_cast<int>((view.mainPanel.right - view.mainPanel.left) / scale), panelH = static_cast<int>((view.mainPanel.bottom - view.mainPanel.top) / scale);
-		if (panelW <= 0 || panelH <= 0) return;
-		PanelRender r(g_canvas, buf, w, h);
-		if (!r.Begin(panelW, panelH, 0, false, scale)) return;
-		r.ox = r.p.ox = view.mainPanel.left;
-		r.oy = r.p.oy = view.mainPanel.top;
-		r.Press(previous, mouseDown, {view.mouseX, view.mouseY});
-		PaintMainMenu(r.p, view, panelW, panelH);
-		r.End();
-		std::lock_guard<std::mutex> lock(g_lock);
-		if (g_s.screen == screen) g_s.hits = std::move(r.hits);
-		return;
-	}
 	const int designW = screen == kScreenConfirm ? kConfirmW : screen == kScreenStats ? kStatsW : kMenuW;
 	const int designH = screen == kScreenConfirm ? kConfirmH : screen == kScreenStats ? kStatsH : MenuHeight(view);
 	PanelRender r(g_canvas, buf, w, h);
@@ -344,13 +270,6 @@ bool GameMenuUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		return false;
 	}
 	const POINT at = {static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))};
-	// The main menu is only its panel: outside it, and for the keys, the game goes on as always.
-	if (screen == kScreenMain) {
-		if (msg != WM_MOUSEMOVE && !(msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST)) return false;
-		std::lock_guard<std::mutex> lock(g_lock);
-		const bool inside = PtInRect(&g_s.view.mainPanel, at) != 0;
-		if (msg != WM_MOUSEMOVE && !inside) return false;
-	}
 	int clickId = 0;
 	bool consumed = true;
 	switch (msg) {
