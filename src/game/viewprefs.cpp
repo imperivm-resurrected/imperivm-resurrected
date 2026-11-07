@@ -30,3 +30,16 @@ bool HealthBarsKeep(int filter, bool hero, bool mine)
 	if (filter == kBarsMine) return mine;
 	return true;
 }
+
+int ZoomRefreshPresetMs(int preset)
+{
+	static const int kMs[kZoomRefreshPresetCount] = {16, 33, 100};
+	return preset >= 0 && preset < kZoomRefreshPresetCount ? kMs[preset] : kMs[0];
+}
+
+int ZoomRefreshPreset(int ms)
+{
+	if (ms <= 0) return 2;
+	if (ms <= 24) return 0;
+	return ms <= 66 ? 1 : 2;
+}

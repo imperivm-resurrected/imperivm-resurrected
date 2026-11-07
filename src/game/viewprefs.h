@@ -16,3 +16,9 @@ int HealthBarsFilter(int start);
 // cycling the modes with Ctrl gives the game's own ones back.
 bool HealthBarsFilterHolds(int nativeMode);
 bool HealthBarsKeep(int filter, bool hero, bool mine);
+
+// How often the zoom map is drawn again while it is open ([Map] RefreshMs): smooth, normal, light.
+inline constexpr int kZoomRefreshPresetCount = 3;
+int ZoomRefreshPresetMs(int preset);
+// The preset closest to a pause in ms; 0 (only when the game redraws it) is the lightest.
+int ZoomRefreshPreset(int ms);

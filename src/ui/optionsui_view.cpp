@@ -286,6 +286,10 @@ std::vector<Page> BuildPages(const Values &v)
 		const bool autosave = Check(v, kAutosave);
 		page.right.push_back({"Autosave", {Toggle(v, "Autosave", kAutosave), Combo(v, "Every", kAutosaveEvery, "", false, autosave), Combo(v, "Copies", kAutosaveCopies, "", false, autosave),
 			Toggle(v, "Save when leaving the game", kSaveOnExit)}});
+		Row refresh = Combo(v, "Map refresh", kZoomRefresh, "Light uses less of the computer");
+		refresh.items = {"Smooth", "Normal", "Light"};
+		page.right.push_back({"Big map", {Toggle(v, "Group icons", kZoomGroupIcons, "More groups, hero levels and box selection"),
+			Toggle(v, "Fog of war", kZoomFog, "Darkens what your units do not see"), refresh}});
 		pages.push_back(page);
 	}
 	{

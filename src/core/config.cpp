@@ -154,6 +154,9 @@ void SaveConfig()
 	WritePrivateProfileStringA("Game", "SmoothScroll", g_config.smoothScroll ? "1" : "0", path);
 	WritePrivateProfileStringA("Game", "HealthBars", std::to_string(g_config.healthBarsAtStart).c_str(), path);
 	WritePrivateProfileStringA("Game", "PauseInBackground", g_config.pauseInBackground ? "1" : "0", path);
+	WritePrivateProfileStringA("Map", "ZoomExtras", g_config.zoomExtras ? "1" : "0", path);
+	WritePrivateProfileStringA("Map", "FogVisible", g_config.zoomFog ? "1" : "0", path);
+	WritePrivateProfileStringA("Map", "RefreshMs", std::to_string(g_config.zoomRefreshMs).c_str(), path);
 	WritePrivateProfileStringA("Display", "ShowPerformance", g_config.showPerf ? "1" : "0", path);
 	WritePrivateProfileStringA("Display", "ShowNetwork", g_config.showNet ? "1" : "0", path);
 	WritePrivateProfileStringA("Display", "PanelX", std::to_string(g_config.panelX).c_str(), path);
