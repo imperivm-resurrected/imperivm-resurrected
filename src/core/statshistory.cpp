@@ -287,6 +287,29 @@ int StatsBestPlayer(const StatsHistory &history, const std::vector<StatsPlayerIn
 	return best;
 }
 
+StatsWindow StatsZoom(StatsWindow window, double a, double b, uint32_t minSpan, StatsWindow limits)
+{
+	if (a > b) std::swap(a, b);
+	a = std::max(0.0, std::min(1.0, a));
+	b = std::max(0.0, std::min(1.0, b));
+	const double length = window.to > window.from ? static_cast<double>(window.to - window.from) : 0.0;
+	StatsWindow out;
+	out.from = window.from + static_cast<uint32_t>(length * a);
+	out.to = window.from + static_cast<uint32_t>(length * b);
+	const uint32_t total = limits.to > limits.from ? limits.to - limits.from : 0;
+	minSpan = std::min(minSpan, total);
+	if (out.to - out.from < minSpan) {
+		const uint32_t missing = minSpan - (out.to - out.from);
+		out.from = out.from - limits.from > missing / 2 ? out.from - missing / 2 : limits.from;
+		out.to = out.from + minSpan;
+	}
+	if (out.to > limits.to) {
+		out.from -= out.to - limits.to;
+		out.to = limits.to;
+	}
+	return out;
+}
+
 const StatSample *StatsSampleAt(const std::vector<StatSample> &samples, uint32_t ms)
 {
 	if (samples.empty()) return nullptr;

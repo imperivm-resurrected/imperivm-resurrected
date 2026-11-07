@@ -1562,8 +1562,6 @@
 {"en":"Captured","es":"Capturado","it":"Catturato"},
 {"en":"Other","es":"Otro","it":"Altro"},
 {"en":"Total gold","es":"Oro total","it":"Oro totale"},
-{"en":"Chart","es":"Gráfica","it":"Grafico"},
-{"en":"Table","es":"Tabla","it":"Tabella"},
 {"en":"All game","es":"Toda la partida","it":"Tutta la partita"},
 {"en":"Last 10 min","es":"Últimos 10 min","it":"Ultimi 10 min"},
 {"en":"Last 5 min","es":"Últimos 5 min","it":"Ultimi 5 min"},
@@ -1573,7 +1571,6 @@
 {"en":"Game time: ","es":"Tiempo de juego: ","it":"Tempo di gioco: "},
 {"en":"No player matches the filters.","es":"Ningún jugador coincide con los filtros.","it":"Nessun giocatore corrisponde ai filtri."},
 {"en":"No data for this period yet.","es":"Aún no hay datos de este periodo.","it":"Ancora nessun dato per questo periodo."},
-{"en":"Not enough history to draw yet. The Table view has the totals.","es":"Aún no hay historial para dibujar. La vista Tabla tiene los totales.","it":"Non c'è ancora una cronologia da disegnare. La vista Tabella ha i totali."},
 {"en":"Summary","es":"Resumen","it":"Riepilogo"},
 {"en":"Teams","es":"Equipos","it":"Squadre"},
 {"en":"Winner: ","es":"Ganador: ","it":"Vincitore: "},
@@ -1586,5 +1583,8 @@
 {"en":"Key moments","es":"Momentos clave","it":"Momenti chiave"},
 {"en":"%s was eliminated","es":"%s fue eliminado","it":"%s è stato eliminato"},
 {"en":"Nobody has been eliminated yet.","es":"Todavía no han eliminado a nadie.","it":"Ancora nessuno è stato eliminato."},
-{"en":"Eliminated","es":"Eliminado","it":"Eliminato"}
+{"en":"Eliminated","es":"Eliminado","it":"Eliminato"},
+{"en":"Not enough history to draw yet.","es":"Aún no hay historial para dibujar.","it":"Non c'è ancora una cronologia da disegnare."},
+{"en":"Drag over the chart to zoom in","es":"Arrastra sobre la gráfica para ampliar","it":"Trascina sul grafico per ingrandire"},
+{"en":"Right click to see it all","es":"Clic derecho para verla entera","it":"Clic destro per vederlo tutto"}
 ]

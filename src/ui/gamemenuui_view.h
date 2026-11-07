@@ -12,8 +12,8 @@
 
 namespace gamemenuui {
 
-enum Action { kActNone, kActButton, kActYes, kActNo, kActCategory, kActView, kActMetric, kActRange, kActGroup, kActPlayer, kActSort };
-enum StatsViewKind { kViewSummary, kViewChart, kViewTable, kViewTeams };
+enum Action { kActNone, kActButton, kActYes, kActNo, kActCategory, kActView, kActMetric, kActRange, kActGroup, kActPlayer, kActChartArea };
+enum StatsViewKind { kViewSummary, kViewPlayers, kViewTeams };
 
 struct Row {
 	int id = 0;
@@ -26,8 +26,10 @@ struct Row {
 struct StatsFilters {
 	int view = kViewSummary, category = 0, metric = 0, range = 0, group = 0;
 	uint32_t hidden = 0;
-	int sortColumn = -1;
 	bool sortAscending = false;
+	StatsWindow zoom;
+	// While the mouse is selecting a part of the chart, in pixels of the screen.
+	int dragStartX = -1, dragLeft = 0, dragRight = 0;
 };
 
 struct View {
@@ -49,5 +51,6 @@ int MenuHeight(const View &v);
 void PaintMenu(ui::Painter &p, const View &v);
 void PaintConfirm(ui::Painter &p, const View &v);
 void PaintStatistics(ui::Painter &p, const View &v);
+void FinishChartDrag(View &v, int mouseX);
 
 }

@@ -1569,8 +1569,6 @@ extern const TrRow kTrRows[] = {
 	{"Captured", "Capturado", "Catturato"},
 	{"Other", "Otro", "Altro"},
 	{"Total gold", "Oro total", "Oro totale"},
-	{"Chart", "Gráfica", "Grafico"},
-	{"Table", "Tabla", "Tabella"},
 	{"All game", "Toda la partida", "Tutta la partita"},
 	{"Last 10 min", "Últimos 10 min", "Ultimi 10 min"},
 	{"Last 5 min", "Últimos 5 min", "Ultimi 5 min"},
@@ -1580,7 +1578,6 @@ extern const TrRow kTrRows[] = {
 	{"Game time: ", "Tiempo de juego: ", "Tempo di gioco: "},
 	{"No player matches the filters.", "Ningún jugador coincide con los filtros.", "Nessun giocatore corrisponde ai filtri."},
 	{"No data for this period yet.", "Aún no hay datos de este periodo.", "Ancora nessun dato per questo periodo."},
-	{"Not enough history to draw yet. The Table view has the totals.", "Aún no hay historial para dibujar. La vista Tabla tiene los totales.", "Non c'è ancora una cronologia da disegnare. La vista Tabella ha i totali."},
 	{"Summary", "Resumen", "Riepilogo"},
 	{"Teams", "Equipos", "Squadre"},
 	{"Winner: ", "Ganador: ", "Vincitore: "},
@@ -1594,5 +1591,8 @@ extern const TrRow kTrRows[] = {
 	{"%s was eliminated", "%s fue eliminado", "%s è stato eliminato"},
 	{"Nobody has been eliminated yet.", "Todavía no han eliminado a nadie.", "Ancora nessuno è stato eliminato."},
 	{"Eliminated", "Eliminado", "Eliminato"},
+	{"Not enough history to draw yet.", "Aún no hay historial para dibujar.", "Non c'è ancora una cronologia da disegnare."},
+	{"Drag over the chart to zoom in", "Arrastra sobre la gráfica para ampliar", "Trascina sul grafico per ingrandire"},
+	{"Right click to see it all", "Clic derecho para verla entera", "Clic destro per vederlo tutto"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

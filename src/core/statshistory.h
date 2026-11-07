@@ -94,6 +94,12 @@ int StatsWinningTeam(const StatsHistory &history, const std::vector<StatsPlayerI
 // Who has the highest last value of a metric, above zero; -1 if nobody.
 int StatsBestPlayer(const StatsHistory &history, const std::vector<StatsPlayerInfo> &players, StatMetric metric);
 
+struct StatsWindow {
+	uint32_t from = 0, to = 0;
+};
+// The part of a window between two fractions of its width, in either order and at least minSpan long, always inside the limits.
+StatsWindow StatsZoom(StatsWindow window, double a, double b, uint32_t minSpan, StatsWindow limits);
+
 // The last sample at or before the time, or the first one if they all come later. Null if there are none.
 const StatSample *StatsSampleAt(const std::vector<StatSample> &samples, uint32_t ms);
 
