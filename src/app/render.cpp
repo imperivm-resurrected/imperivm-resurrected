@@ -23,6 +23,7 @@
 #include "ui/modui.h"
 #include "ui/mpui.h"
 #include "ui/optionsui.h"
+#include "ui/battlesui.h"
 #include "net/netdrop.h"
 #include "net/rejoin.h"
 #include "net/spectator.h"
@@ -371,8 +372,8 @@ DWORD WINAPI RenderThread(LPVOID)
 		}
 		const bool overlay = GetConfig().showPerf || GetConfig().showNet;
 		if (newFrame && !MpUiNeedsDraw()) MpUiObserveFrame(local.data(), fw, fh);
-		const bool needSaves = SavesUiNeedsDraw(), needMods = ModUiNeedsDraw(), needMp = MpUiNeedsDraw(), needControls = ControlsUiNeedsDraw(), needOptions = OptionsUiNeedsDraw();
-		const bool ui = !video && (needSaves || needMods || needMp || needControls || needOptions);
+		const bool needSaves = SavesUiNeedsDraw(), needMods = ModUiNeedsDraw(), needMp = MpUiNeedsDraw(), needControls = ControlsUiNeedsDraw(), needOptions = OptionsUiNeedsDraw(), needBattles = BattlesUiNeedsDraw();
+		const bool ui = !video && (needSaves || needMods || needMp || needControls || needOptions || needBattles);
 		if (ui && (newFrame || now - lastUiDraw >= 33)) {
 			if (!newFrame) {
 				{
@@ -384,6 +385,7 @@ DWORD WINAPI RenderThread(LPVOID)
 				ControlsDrawBarKeys(local.data(), fw, fh);
 			}
 			Guard("interface drawing", [&] {
+				if (needBattles) BattlesUiDraw(local.data(), fw, fh);
 				MpUiDraw(local.data(), fw, fh);
 				SavesUiDraw(local.data(), fw, fh);
 				if (needOptions) OptionsUiDraw(local.data(), fw, fh);
@@ -518,6 +520,7 @@ int WINAPI HookSetDIBitsToDevice(HDC hdc, int xDest, int yDest, DWORD w, DWORD h
 	CheatsFrameTick();
 	MpUiGameThreadTick();
 	OptionsUiGameTick();
+	BattlesUiGameTick();
 	RejoinGameThreadTick();
 	SpectatorGameThreadTick();
 	ZoomFogNoteImage();

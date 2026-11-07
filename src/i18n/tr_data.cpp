@@ -1536,5 +1536,13 @@ extern const TrRow kTrRows[] = {
 	{"Keys and shortcuts", "Teclas y atajos", "Tasti e scorciatoie"},
 	{"Changes not applied", "Cambios sin aplicar", "Modifiche non applicate"},
 	{"The game will restart to change the sound system.", "El juego se reiniciará para cambiar el sistema de sonido.", "Il gioco si riavvierà per cambiare il sistema audio."},
+	{"Great Battles", "Grandes batallas", "Grandi battaglie"},
+	{"Custom adventures", "Aventuras personalizadas", "Avventure personalizzate"},
+	{"The great victories of Rome", "Las grandes victorias de Roma", "Le grandi vittorie di Roma"},
+	{"Rome's enemies fight for freedom", "Los enemigos de Roma se rebelan", "I nemici di Roma si ribellano"},
+	{"Watch intro", "Ver la intro", "Guarda l'intro"},
+	{"Difficulty", "Dificultad", "Difficoltà"},
+	{"There are no adventures here.", "Aquí no hay aventuras.", "Qui non ci sono avventure."},
+	{"There are no conquests here.", "Aquí no hay conquistas.", "Qui non ci sono conquiste."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);
