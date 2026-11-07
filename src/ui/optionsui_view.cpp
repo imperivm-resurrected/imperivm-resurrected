@@ -5,6 +5,8 @@
 
 #include <algorithm>
 
+#include "core/logcore.h"
+#include "core/version.h"
 #include "ui/widgets.h"
 
 using namespace ui;
@@ -98,6 +100,17 @@ Row ActionRow(const char *label, int id, const char *button, const char *hint = 
 	r.kind = kRowAction;
 	r.id = id;
 	r.action = button;
+	return r;
+}
+
+Row Info(const char *label, int id, const std::string &text, const std::string &badge = "")
+{
+	Row r;
+	r.label = label;
+	r.kind = kRowInfo;
+	r.id = id;
+	r.text = text;
+	r.badge = badge;
 	return r;
 }
 
@@ -214,6 +227,18 @@ void PaintRow(Painter &p, const Row &r, const View &v, int x, int y, int w, RECT
 		p.Button(bx, y + 6, bw, 28, r.action, kActRow, r.id, v.mouseX, v.mouseY, r.enabled, false, 0);
 		break;
 	}
+	case kRowInfo: {
+		p.Font(0);
+		const int textW = std::min(w / 2, p.TextWidth(r.text) + 4);
+		int tx = right - textW;
+		p.Text(tx, y + 8, textW, 22, r.text, pal::goldLight, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+		if (!r.badge.empty()) {
+			tx -= 8 + 54;
+			PaintBadge(p, tx, y + 11, 54, 16, r.badge, RGB(70, 46, 18), RGB(236, 186, 110));
+		}
+		PaintRowLabel(p, r, x, y, tx - x - 8);
+		break;
+	}
 	}
 }
 
@@ -291,6 +316,9 @@ std::vector<Page> BuildPages(const Values &v)
 		page.subtitle = "Updates and logs";
 		page.blurb = "Updates of the mod, and what to do when something fails.";
 		page.icon = kOrnamentGear;
+		// The options screen only replaces the game's when the executable is the known Steam one (InstallOptionsHooks).
+		page.left.push_back({"About", {Info("Mod version", kModVersion, ModVersionText(), IsBetaVersion(ModVersionText()) ? "Beta" : ""),
+			Info("Game executable", kGameExe, "Recognised (Steam)")}});
 		page.left.push_back({"Updates", {Combo(v, "Updates", kUpdates)}});
 		page.right.push_back({"If something fails", {ActionRow("Logs folder", kOpenLogs, "Open folder"), ActionRow("Problem report", kCreateReport, "Create", "A zip with your private data hidden")}});
 		pages.push_back(page);

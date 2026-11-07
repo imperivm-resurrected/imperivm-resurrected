@@ -1534,5 +1534,10 @@ extern const TrRow kTrRows[] = {
 	{"Keys and shortcuts", "Teclas y atajos", "Tasti e scorciatoie"},
 	{"Changes not applied", "Cambios sin aplicar", "Modifiche non applicate"},
 	{"The game will restart to change the sound system.", "El juego se reiniciará para cambiar el sistema de sonido.", "Il gioco si riavvierà per cambiare il sistema audio."},
+	{"About", "Acerca de", "Informazioni"},
+	{"Mod version", "Versión del mod", "Versione della mod"},
+	{"Beta", "Beta", "Beta"},
+	{"Game executable", "Ejecutable del juego", "Eseguibile del gioco"},
+	{"Recognised (Steam)", "Reconocido (Steam)", "Riconosciuto (Steam)"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

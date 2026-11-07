@@ -151,7 +151,7 @@ struct Command {
 	Values values;
 };
 
-bool IsExtra(int id) { return id >= kPanelCompact && id <= kModernAudio; }
+bool IsExtra(int id) { return id >= 0x9000 && id < 0x9100; }
 
 int HitAt(const State &st, POINT at, int &arg, RECT *rect = nullptr)
 {
