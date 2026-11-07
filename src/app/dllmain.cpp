@@ -32,6 +32,7 @@
 #include "game/gamemenu.h"
 #include "game/gamestats.h"
 #include "game/options.h"
+#include "game/profiles.h"
 #include "hooks/dmshim.h"
 #include "hooks/audio.h"
 #include "mods/mods.h"
@@ -237,6 +238,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 		InstallOptionsHooks(knownExe);
 		InstallGameMenuHooks(knownExe);
 		InstallGameStats(knownExe);
+		InstallProfileHooks(knownExe);
 		InstallControls(knownExe);
 		InstallModernAudio(knownExe);
 		InstallSoundLevels(knownExe);
