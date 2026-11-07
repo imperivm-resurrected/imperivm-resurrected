@@ -358,7 +358,8 @@ HRESULT WINAPI HookCoCreateInstance(REFCLSID clsid, LPUNKNOWN outer, DWORD ctx, 
 }
 
 const unsigned kIsPausedSlot = 22;
-const unsigned short kTypeMusic = 1, kTypeUI = 6;
+// A conversation pauses the match while it is on screen and moves on when its voice (type 9) stops playing.
+const unsigned short kTypeMusic = 1, kTypeUI = 6, kTypeConversation = 9;
 
 typedef void(__fastcall *SetVolume_t)(void *channel, void *edx, long volume);
 typedef void(__fastcall *ThisOnly_t)(void *self);
@@ -412,7 +413,7 @@ void MediaFrameTick()
 			char *ch = *reinterpret_cast<char **>(mgr + 0x18 + i * 4);
 			if (!ch || !*reinterpret_cast<void **>(ch + 8)) continue;
 			const unsigned short type = *reinterpret_cast<unsigned short *>(ch + 0xc);
-			if (type == kTypeMusic || type == kTypeUI) continue;
+			if (type == kTypeMusic || type == kTypeUI || type == kTypeConversation) continue;
 			void *path = *reinterpret_cast<void **>(ch + 4);
 			if (DmShimPausePath(path, true)) {
 				g_pausedPaths.push_back(path);
