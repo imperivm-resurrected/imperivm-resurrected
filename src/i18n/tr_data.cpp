@@ -1665,7 +1665,7 @@ extern const TrRow kTrRows[] = {
 	{"Best unit", "Mejor unidad", "Unità migliore"},
 	{"Recent games", "Últimas partidas", "Ultime partite"},
 	{"Kills per game", "Bajas por partida", "Uccisioni per partita"},
-	{"Won", "Ganada", "Vinta"},
+	{"Defeat", "Derrota", "Sconfitta"},
 	{"W", "V", "V"},
 	{"L", "D", "S"},
 	{"No games recorded yet.", "Aún no hay partidas registradas.", "Ancora nessuna partita registrata."},
