@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "game/battlelist.h"
@@ -340,16 +341,20 @@ void PaintBattlesScreen(Painter &p, int screenW, const View &v, PaintOut &out)
 {
 	const int W = screenW;
 	PaintWindowFrame(p, W, kScreenH);
-	PaintWindowHeader(p, W, Upper("Great Battles"));
+	// The Conquest button of the main menu opens the same screen with only the conquests: it has no tabs.
+	const bool conquests = v.snap.tab == kBattlesTabConquests;
+	PaintWindowHeader(p, W, Upper(conquests ? "Conquests" : "Great Battles"));
 
-	const char *labels[kBattlesTabCount] = {"Great Battles", "Conquests", "Custom adventures"};
-	p.Font(1);
-	int tabW = 190;
-	for (const char *l : labels) tabW = std::max(tabW, p.TextWidth(l) + 48);
-	std::vector<TabSpec> tabs;
-	for (int i = 0; i < kBattlesTabCount; i++) tabs.push_back({labels[i], kActTab, i, v.snap.tab == i, !v.snap.starting && !v.snap.switching});
-	const int tabsW = tabW * kBattlesTabCount + 6 * (kBattlesTabCount - 1);
-	PaintTabs(p, (W - tabsW) / 2, kTabsY, tabs, v.mouseX, v.mouseY, tabW, kTabsH);
+	if (!conquests) {
+		const std::pair<int, const char *> kTabs[] = {{kBattlesTabGreat, "Great Battles"}, {kBattlesTabCustom, "Custom adventures"}};
+		p.Font(1);
+		int tabW = 190;
+		for (const auto &t : kTabs) tabW = std::max(tabW, p.TextWidth(t.second) + 48);
+		std::vector<TabSpec> tabs;
+		for (const auto &t : kTabs) tabs.push_back({t.second, kActTab, t.first, v.snap.tab == t.first, !v.snap.starting && !v.snap.switching});
+		const int count = static_cast<int>(tabs.size()), tabsW = tabW * count + 6 * (count - 1);
+		PaintTabs(p, (W - tabsW) / 2, kTabsY, tabs, v.mouseX, v.mouseY, tabW, kTabsH);
+	}
 	p.Fill(kMargin, kTabsY + kTabsH, W - kMargin * 2, 1, pal::lineDim);
 
 	const int listW = std::max(320, std::min(420, W * 30 / 100));

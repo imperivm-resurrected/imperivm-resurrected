@@ -180,6 +180,13 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, Command &cmd)
 
 void BattlesUiGameTick()
 {
+	static bool told = false;
+	if (!told) {
+		told = true;
+		BattlesOnDescription([] {
+			if (BattlesScreenWanted() && !BattlesIntroPlaying()) Refresh();
+		});
+	}
 	// The screen comes back as it was after the intro.
 	if (BattlesIntroPlaying()) return;
 	if (!BattlesScreenWanted()) {
