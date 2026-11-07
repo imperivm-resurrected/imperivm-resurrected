@@ -270,7 +270,7 @@ std::vector<Page> BuildPages(const Values &v)
 			ToggleSlider(v, "Sound effects", kEffectsOn, kEffectsVolume, 1, 100), nature, ToggleSlider(v, "Unit speech", kSpeechOn, kSpeechVolume, 1, 100),
 			ToggleSlider(v, "Conversations", kConversationsOn, kConversationVolume, 1, 100), ToggleSlider(v, "Cutscenes", kMovieOn, kMovieVolume, 0, 100)}});
 		page.right.push_back({"Output", {Combo(v, "Device", kOutputDevice)}});
-		page.right.push_back({"Behaviour", {Toggle(v, "Mute in the background", kMuteBackground, "When you switch to another window"),
+		page.right.push_back({"Behaviour", {Toggle(v, "Mute in the background", kMuteBackground),
 			Toggle(v, "Chat and invitation alerts", kAlerts)}});
 		pages.push_back(page);
 	}
