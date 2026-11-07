@@ -60,6 +60,8 @@ struct GameRoomSnapshot {
 	unsigned siteFlags = 0;
 	unsigned rules = 0;
 	int localSlot = 0;
+	// Values of GameRoomSlot::team: 0 is no team, 1..teamChoices-1 are the teams.
+	int teamChoices = 5;
 	GameRoomSlot slots[8];
 	std::vector<GameRoomOption> options;
 	uint32_t colors[12] = {};
@@ -90,6 +92,9 @@ void GameRoomRefreshChoices();
 void GameRulesOnGameStart();
 void GameRulesOnGameEnd();
 void GameRoomCycleTeam(int slot);
+// Team 0 is no team, 1..teamChoices-1 a team. Only the slot's own player, or the host for an AI, and not while the local
+// player is ready in a network room: the same rows the native team button allows.
+void GameRoomSetTeam(int slot, int team);
 void GameRoomSetBonus(int slot, int index);
 void GameRoomToggleReady();
 void GameRoomStart();

@@ -144,6 +144,14 @@ bool Checked(void *button)
 	return button && *reinterpret_cast<short *>(static_cast<char *>(button) + 0x7e) == 1;
 }
 
+const int kDefaultTeamChoices = 5;
+
+int TeamChoices(void *teamButton)
+{
+	const short rows = teamButton ? *reinterpret_cast<short *>(static_cast<char *>(teamButton) + 0x7c) : 0;
+	return rows > 1 && rows <= 16 ? rows : kDefaultTeamChoices;
+}
+
 void Click(void *button)
 {
 	if (!button) return;
@@ -397,6 +405,7 @@ void TakeSnapshot()
 		s.online = *reinterpret_cast<void **>(static_cast<char *>(g_dlg) + 0x8228) != nullptr;
 		s.bonuses = RoomBonuses(g_dlg);
 		s.localSlot = reinterpret_cast<IntThis_t>(addr::kGetLocalSlot)(g_dlg);
+		s.teamChoices = TeamChoices(Button(g_dlg, (((s.localSlot & 7) + 1) << 12) | 0x32));
 		memcpy(s.colors, reinterpret_cast<const void *>(addr::kPlayerColorTable), sizeof(s.colors));
 		for (int i = 0; i < 8; i++) {
 			GameRoomSlot &slot = s.slots[i];
@@ -1027,6 +1036,70 @@ void GameRoomSetSlotType(int slot, int type)
 void GameRoomCycleTeam(int slot)
 {
 	Queue([slot] { Click(Button(g_dlg, ((slot + 1) << 12) | 0x32)); });
+}
+
+// The native team button of a row (id row<<12 | 0x32) is a CUIButton whose frame is the team: CUIButton::SetFrame
+// (vtable +0x70, 00661020, ret 8) keeps frame % rows (+0x7c) in +0x7e. Its click handler in
+// CVXUIMultiplayerGame::OnMessage (006dd6f0) stores that frame in the row (+0x2c of the local array, or +0x68 of the
+// CNGameShell player with +8 set), sends SendPlayerInfo and redraws; GameRoomSetTeam does the same with the chosen frame.
+void GameRoomSetTeam(int slot, int team)
+{
+	Queue([slot, team] {
+		typedef void(__fastcall * SendPlayerInfo_t)(void *, void *, int, unsigned, int);
+		typedef void(__fastcall * UpdateSlotRow_t)(void *, void *, unsigned);
+		if (!g_dlg || slot < 0 || slot > 7) return;
+		const char *name = nullptr;
+		int type = 0, color = 0, ready = 0, race = 0, current = 0, extra = 0;
+		if (!reinterpret_cast<GetSlotInfo_t>(addr::kGetSlotInfo)(g_dlg, nullptr, slot, &name, &type, &color, &ready, &race, &current, &extra) ||
+			(type != 1 && type != 3)) {
+			LogD("room", "team of slot %d not changed: the slot is empty", slot + 1);
+			return;
+		}
+		char *d = static_cast<char *>(g_dlg);
+		char *shell = *reinterpret_cast<char **>(d + 0x8228);
+		const bool host = reinterpret_cast<IntThis_t>(addr::kIsHostOrOffline)(g_dlg) != 0;
+		const bool local = slot == reinterpret_cast<IntThis_t>(addr::kGetLocalSlot)(g_dlg);
+		if (!local && !(host && type == 1)) {
+			LogW("room", "team of slot %d not changed: only its player, or the host for an AI, can change it", slot + 1);
+			return;
+		}
+		if (shell && *reinterpret_cast<int *>(d + 0x78)) {
+			LogD("room", "team of slot %d not changed: the rows are locked while you are ready", slot + 1);
+			return;
+		}
+		if (SlotHandshaking(slot)) {
+			LogW("room", "team of slot %d not changed: a player is joining it", slot + 1);
+			return;
+		}
+		void *button = Button(g_dlg, ((slot + 1) << 12) | 0x32);
+		const int choices = TeamChoices(button);
+		if (team < 0 || team >= choices) {
+			LogW("room", "team %d for slot %d is out of range (0 = none, 1..%d)", team, slot + 1, choices - 1);
+			return;
+		}
+		if (team == current) return;
+		const int player = static_cast<int>(*reinterpret_cast<signed char *>(d + 0xa0 + slot));
+		if (shell) {
+			char *rec = *reinterpret_cast<char **>(shell + 8) + player * 0x21;
+			if (!*reinterpret_cast<int *>(rec + 4)) return;
+		}
+		if (button) {
+			void **vt = *reinterpret_cast<void ***>(button);
+			reinterpret_cast<SetValue_t>(vt[0x70 / 4])(button, nullptr, team, 1);
+		}
+		if (!shell) {
+			*reinterpret_cast<int *>(player * 0x34 + *reinterpret_cast<char **>(d + 0x174) + 0x2c) = team;
+		}
+		else {
+			char *rec = *reinterpret_cast<char **>(shell + 8) + player * 0x21;
+			*reinterpret_cast<int *>(rec + 8) = 1;
+			*reinterpret_cast<int *>(*reinterpret_cast<char **>(rec) + 0x68) = team;
+			reinterpret_cast<SendPlayerInfo_t>(addr::kSendPlayerInfo)(shell, nullptr, player, 0xffff, 0);
+		}
+		reinterpret_cast<ThisOnly_t>(addr::kUpdatePlayerCounts)(g_dlg);
+		reinterpret_cast<UpdateSlotRow_t>(addr::kUpdateSlotRow)(g_dlg, nullptr, static_cast<unsigned>(slot));
+		LogI("room", "slot %d: team %d -> %d", slot + 1, current, team);
+	});
 }
 
 void GameRoomSetBonus(int slot, int index)
