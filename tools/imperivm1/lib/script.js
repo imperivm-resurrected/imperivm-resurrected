@@ -273,6 +273,32 @@ function rewriteDruidCommands(src, decide) {
 	return { src: join(tokens), counts, skipped };
 }
 
+// Conversation.Run() statements wait until no other conversation is running and mark one as running while they play.
+// The sequences of a map start together, and in Great Battles of Rome a conversation started by one sequence cuts the
+// one another sequence is playing (Kormaris: seq15's opening conversation cuts seq0's goddess after 3.5 s). The wait
+// gives up after 60 s, so a conversation that never clears the mark cannot block the others for good.
+const QUEUE_KEY = '/I1/ConversationBusy';
+const QUEUE_VARS = 'int i1cv_w;\n';
+function queueConversations(src) {
+	const conversations = new Set();
+	for (const m of src.matchAll(/\bConversation\b([^;(]*);/g)) for (const n of m[1].split(',')) if (n.trim()) conversations.add(n.trim());
+	if (!conversations.size) return { src, count: 0 };
+	const tokens = tokenize(src);
+	let count = 0;
+	for (const c of methodCalls(tokens, 'Run')) {
+		const receiver = join(tokens.slice(c.start, c.dot)).trim();
+		const semi = nextCode(tokens, c.close + 1);
+		if (!conversations.has(receiver) || c.close !== nextCode(tokens, c.open + 1) || semi >= tokens.length || tokens[semi].text !== ';') continue;
+		const code =
+			`{ i1cv_w = 0; while (EnvReadInt("${QUEUE_KEY}") == 1 && i1cv_w < 600) { Sleep(100); i1cv_w += 1; } ` +
+			`EnvWriteInt("${QUEUE_KEY}", 1); ${receiver}.Run(); EnvWriteInt("${QUEUE_KEY}", 0); }`;
+		tokens.splice(c.start, semi - c.start + 1, { type: 'other', text: code });
+		count++;
+	}
+	if (!count) return { src, count };
+	return { src: insertDeclarations(join(tokens), QUEUE_VARS), count };
+}
+
 // Calls of a free function with one argument: `replace(arg)` returns the new argument text, or null to turn the statement
 // into a comment.
 function rewriteCall(src, name, replace) {
@@ -314,6 +340,7 @@ module.exports = {
 	expandReduceGroup,
 	rewriteRituals,
 	rewriteDruidCommands,
+	queueConversations,
 	rewriteCall,
 	insertDeclarations,
 };

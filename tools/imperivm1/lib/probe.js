@@ -31,7 +31,7 @@ const holder = (u) => [
 const laraxLine = (tag) => {
 	const l = 'NO_Larax.obj';
 	return [
-		`i1p_s = "I1PROBE ${tag} t=" + GetTime() + " larax player=" + ${l}.player + " health=" + ${l}.health + " command=" + ${l}.command + " x=" + ${l}.pos.x + " y=" + ${l}.pos.y;`,
+		`i1p_s = "I1PROBE ${tag} t=" + GetTime() + " larax player=" + ${l}.player + " health=" + ${l}.health + " command=" + ${l}.command + " x=" + ${l}.pos.x + " y=" + ${l}.pos.y + " rh_x=" + ${l}.posRH.x + " rh_y=" + ${l}.posRH.y;`,
 		...holder(l),
 		flag('alive', `${l}.IsAlive()`),
 		flag('haspath', `${l}.AsUnit().HasPath()`),
@@ -47,7 +47,7 @@ const laraxLine = (tag) => {
 const teutonLine = (tag, o) => {
 	const l = 'NO_Larax.obj';
 	return [
-		`i1p_s = "I1PROBE ${tag} class=" + ${o}.class() + " player=" + ${o}.player + " health=" + ${o}.health + " command=" + ${o}.command + " dist=" + ${o}.DistTo(${l}) + " x=" + ${o}.pos.x + " y=" + ${o}.pos.y;`,
+		`i1p_s = "I1PROBE ${tag} class=" + ${o}.class() + " player=" + ${o}.player + " health=" + ${o}.health + " command=" + ${o}.command + " dist=" + ${o}.DistTo(${l}) + " x=" + ${o}.pos.x + " y=" + ${o}.pos.y + " rh_x=" + ${o}.posRH.x + " rh_y=" + ${o}.posRH.y + " radius=" + ${o}.radius + " range=" + ${o}.range + " min_range=" + ${o}.min_range;`,
 		...holder(o),
 		flag('alive', `${o}.IsAlive()`),
 		flag('visible', `${o}.IsVisible()`),
@@ -62,7 +62,7 @@ const teutonLine = (tag, o) => {
 
 // The combat numbers of one object `o` (an Obj expression), in i1p_t, and the groups of the opening it belongs to.
 const statsLine = (tag, o) => [
-	`i1p_t = "I1PROBE ${tag} class=" + ${o}.class() + " name=" + ${o}.name + " player=" + ${o}.player + " attack=" + ${o}.attack + " damage=" + ${o}.damage + " health=" + ${o}.health + " maxhealth=" + ${o}.maxhealth + " stamina=" + ${o}.stamina + " x=" + ${o}.pos.x + " y=" + ${o}.pos.y;`,
+	`i1p_t = "I1PROBE ${tag} class=" + ${o}.class() + " name=" + ${o}.name + " player=" + ${o}.player + " attack=" + ${o}.attack + " damage=" + ${o}.damage + " health=" + ${o}.health + " maxhealth=" + ${o}.maxhealth + " stamina=" + ${o}.stamina + " x=" + ${o}.pos.x + " y=" + ${o}.pos.y + " rh_x=" + ${o}.posRH.x + " rh_y=" + ${o}.posRH.y + " radius=" + ${o}.radius + " range=" + ${o}.range + " min_range=" + ${o}.min_range;`,
 	`if (${o}.IsInGroup("M1_Q_Victims1")) i1p_t = i1p_t + " in_victims1=1"; else i1p_t = i1p_t + " in_victims1=0";`,
 	`if (${o}.IsInGroup("M1_Q_StandingGround")) i1p_t = i1p_t + " in_standing_ground=1"; else i1p_t = i1p_t + " in_standing_ground=0";`,
 	'Mod_Log(i1p_t);',
@@ -104,6 +104,7 @@ const targetLines = (tag) => [
 	'for (i1p_j = 0; i1p_j < i1p_w.count && i1p_n < 3; i1p_j += 1) {',
 	'\tif (i1p_w[i1p_j].IsValid() && i1p_w[i1p_j].IsAlive() && i1p_w[i1p_j].player == 2) {',
 	...indent(targetLine(`${tag} target ally unit`, 'i1p_w[i1p_j]'), 2),
+	...indent(statsLine(`${tag} stats ally unit`, 'i1p_w[i1p_j]'), 2),
 	'\t\ti1p_n += 1;',
 	'\t}',
 	'}',
@@ -168,6 +169,8 @@ const PROBES = [
 	['Maps/11937/Sequences/seq0.vs', /^NO_Larax\.SetCommand\("hold_position"\);/m, 'after', laraxLine('seq0 after hold_position')],
 	['Maps/11937/Sequences/seq0.vs', /^C_Conv\.Init\("TheGodess"\);/m, 'before', ['Mod_LogInt("I1PROBE seq0 goddess conversation starts, t", GetTime());']],
 	['Maps/11937/Sequences/seq0.vs', /^C_Conv\.Run\(\);/m, 'after', ['Mod_LogInt("I1PROBE seq0 goddess conversation ended, t", GetTime());', ...laraxLine('seq0 after goddess')]],
+	['Maps/11937/Sequences/seq15.vs', /^C_Conv\.Init\("OpeningConversation"\);/m, 'before', ['Mod_LogInt("I1PROBE seq15 opening conversation starts, t", GetTime());']],
+	['Maps/11937/Sequences/seq15.vs', /^C_Conv\.Run\(\);/m, 'after', ['Mod_LogInt("I1PROBE seq15 opening conversation ended, t", GetTime());']],
 	['Maps/11937/Sequences/seq15.vs', /^WaitEmptyQuery\s*\(\s*M1_Q_Victims1/m, 'before', seq15Loop()],
 ];
 

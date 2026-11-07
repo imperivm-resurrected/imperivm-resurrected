@@ -551,6 +551,12 @@ function convertAdventure(input) {
 				s = probed;
 				report.add('Probe', `${p}: I1PROBE diagnostics added (Mod_Log, needs Imperivm Resurrected)`);
 			}
+			// Test of the probe build: conversations wait for each other, as they seem to in Imperivm I.
+			if (input.probe) {
+				const q = S.queueConversations(s);
+				s = q.src;
+				if (q.count) report.count('Probe', 'Conversation.Run() calls made to wait for the running conversation', q.count);
+			}
 			out.set(p, bytes(s));
 		} else {
 			out.set(p, buf);
