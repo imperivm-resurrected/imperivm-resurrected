@@ -19,3 +19,5 @@ int OptionsReadCombo(int id);
 std::vector<std::string> OptionsComboItems(int id);
 void OptionsWriteCombo(int id, int index);
 void OptionsClick(int id);
+// Fills the resolution list for a monitor, mode and extended view not applied yet, keeping the size shown if it is there.
+void OptionsPreviewResolutions(int monitor, bool windowed, bool extendedView);

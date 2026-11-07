@@ -19,4 +19,7 @@ ResPick PickStartResolution(const std::vector<ResSize> &list, ResSize saved, Res
 
 std::vector<ResSize> BuildResolutionList(const std::vector<ResSize> &windows, ResSize screen, const std::vector<ResSize> &extended, bool monitorModesBeyondScreen = false);
 
+// The sizes of the monitor whose window, frame included, fits in its work area, plus the current one.
+std::vector<ResSize> BuildWindowSizeList(const std::vector<ResSize> &windows, ResSize area, ResSize current);
+
 int KeepResolution(const std::vector<ResSize> &list, ResSize size, ResSize screen);

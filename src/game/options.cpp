@@ -43,6 +43,7 @@ const int kIdReset = 0x1115;
 const int kIdControls = 0x111B;
 const int kIdLanguage = 0x111C;
 const int kIdMonitor = 0x111D;
+const int kIdResolution = 0x1004;
 const int kIdUpdate = 0x111E;
 std::vector<std::string> g_langCodes;
 const int kGameDefaults[13] = {0, 0, 0, 1, 1, 1, 1, 1, 14, 50, 50, 50, 50};
@@ -187,7 +188,7 @@ PopulateControls_t g_origDtor = nullptr;
 void __fastcall HookDtor(void *dlg)
 {
 	void *expected = dlg;
-	g_openDialog.compare_exchange_strong(expected, nullptr);
+	if (g_openDialog.compare_exchange_strong(expected, nullptr)) TweaksPreviewResolutions(nullptr);
 	g_origDtor(dlg);
 }
 
@@ -268,7 +269,11 @@ void ApplyModOptions(void *dlg)
 	sel = GetComboIndex(dlg, kIdUpdate);
 	if (sel >= 0 && sel < 3) UpdaterModeSet(sel);
 	sel = GetComboIndex(dlg, kIdMonitor);
-	if (sel >= 0 && sel < static_cast<int>(DisplayMonitorLabels().size())) c.monitor = sel;
+	if (sel >= 0 && sel < static_cast<int>(DisplayMonitorLabels().size()) && sel != c.monitor) {
+		// A monitor switched to a larger mode goes back while it is still the chosen one.
+		DisplayRestoreMonitor();
+		c.monitor = sel;
+	}
 	c.brightness = (std::max)(kBrightMin, (std::min)(kBrightMax, GetScroll(dlg, kIdBrightCombo, c.brightness)));
 	c.movieVolume = GetScroll(dlg, kIdMovieScroll, c.movieVolume);
 	c.movieMute = !GetCheck(dlg, kIdMovieMute, !c.movieMute);
@@ -436,6 +441,26 @@ std::vector<std::string> OptionsComboItems(int id)
 		out.push_back(text ? text : "");
 	}
 	return out;
+}
+
+void OptionsPreviewResolutions(int monitor, bool windowed, bool extendedView)
+{
+	void *dlg = g_openDialog;
+	if (!dlg) return;
+	std::vector<ResSize> list = TweaksResolutionList();
+	const int before = GetComboIndex(dlg, kIdResolution);
+	const ResSize shown = before >= 0 && before < static_cast<int>(list.size()) ? list[before] : ResSize{};
+	const ResolutionChoice choice = {monitor, windowed, extendedView};
+	TweaksPreviewResolutions(&choice);
+	list = TweaksResolutionList();
+	ResSize screen;
+	DisplayMonitorSize(monitor, screen.w, screen.h);
+	const int kept = KeepResolution(list, shown, screen);
+	std::vector<std::string> labels;
+	for (const ResSize &size : list) labels.push_back(std::to_string(size.w) + " x " + std::to_string(size.h));
+	FillCombo(dlg, kIdResolution, labels, kept >= 0 ? kept : 0);
+	LogD("options", "resolutions for monitor %d (%s%s): %u sizes", monitor + 1, windowed ? "window" : "full screen", extendedView ? ", extended view" : "",
+		static_cast<unsigned>(list.size()));
 }
 
 void OptionsWriteCombo(int id, int index)

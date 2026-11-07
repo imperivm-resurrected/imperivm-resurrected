@@ -4,6 +4,9 @@
 #include "ui/optionsui.h"
 
 #include <algorithm>
+#include <cstdio>
+#include <cstdlib>
+#include <iterator>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -13,6 +16,8 @@
 #include "core/uiport.h"
 #include "game/options.h"
 #include "game/viewprefs.h"
+#include "hooks/displaymode.h"
+#include "hooks/respick.h"
 #include "i18n/tr.h"
 #include "ui/modui.h"
 #include "ui/optionsui_view.h"
@@ -44,8 +49,120 @@ std::mutex g_lock;
 State g_s;
 Canvas g_canvas;
 
+const char *const kScalingLabels[] = {"Sharp", "Smooth", "Pixel-exact"};
+const int kFpsLimits[] = {0, 30, 60, 120, 144, 240};
+const char *const kFpsLabels[] = {"No limit", "30", "60", "120", "144", "240"};
+
+int FpsIndex(int fps)
+{
+	int best = 0;
+	for (int i = 0; i < static_cast<int>(sizeof(kFpsLimits) / sizeof(kFpsLimits[0])); i++) {
+		if (abs(kFpsLimits[i] - fps) < abs(kFpsLimits[best] - fps)) best = i;
+	}
+	return best;
+}
+
+int ComboIndex(const Values &v, int id, int count)
+{
+	const auto it = v.combos.find(id);
+	return it != v.combos.end() && it->second >= 0 && it->second < count ? it->second : -1;
+}
+
+std::string SizeLabel(ResSize s)
+{
+	return std::to_string(s.w) + " x " + std::to_string(s.h);
+}
+
+bool SelectedSize(const Values &v, int id, ResSize &size)
+{
+	const auto items = v.items.find(id);
+	const auto sel = v.combos.find(id);
+	if (items == v.items.end() || sel == v.combos.end() || sel->second < 0 || sel->second >= static_cast<int>(items->second.size())) return false;
+	return sscanf_s(items->second[sel->second].c_str(), "%d x %d", &size.w, &size.h) == 2;
+}
+
+int MonitorShown(const Values &v)
+{
+	const auto it = v.combos.find(kMonitor);
+	return it == v.combos.end() ? GetConfig().monitor : it->second;
+}
+
+// The window sizes are the monitor's own that fit in its work area, plus the size the window has now.
+void SetWindowSizes(Values &v, int monitor, ResSize current)
+{
+	std::vector<ResSize> modes;
+	for (POINT p : DisplayWindowsSizes(monitor)) modes.push_back({p.x, p.y});
+	ResSize area;
+	DisplayWindowArea(monitor, area.w, area.h);
+	std::vector<std::string> &items = v.items[kWindowSize];
+	items.clear();
+	for (ResSize s : BuildWindowSizeList(modes, area, current)) items.push_back(SizeLabel(s));
+	const auto at = std::find(items.begin(), items.end(), SizeLabel(current));
+	v.combos[kWindowSize] = at == items.end() ? -1 : static_cast<int>(at - items.begin());
+}
+
+void SetDisplayExtras(Values &v, const Config &c)
+{
+	SetWindowSizes(v, MonitorShown(v), {c.windowW, c.windowH});
+	v.checks[kExtendedView] = c.extendedView;
+	v.items[kFpsLimit] = std::vector<std::string>(std::begin(kFpsLabels), std::end(kFpsLabels));
+	v.combos[kFpsLimit] = FpsIndex(c.fpsLimit);
+	v.items[kImageScaling] = std::vector<std::string>(std::begin(kScalingLabels), std::end(kScalingLabels));
+	v.combos[kImageScaling] = c.imageScaling;
+}
+
+void CopyDisplayExtras(Values &to, const Values &from)
+{
+	for (int id : {kWindowSize, kFpsLimit, kImageScaling}) {
+		const auto sel = from.combos.find(id);
+		if (sel != from.combos.end()) to.combos[id] = sel->second;
+		const auto items = from.items.find(id);
+		if (items != from.items.end()) to.items[id] = items->second;
+	}
+	for (int id : {kExtendedView}) {
+		const auto it = from.checks.find(id);
+		if (it != from.checks.end()) to.checks[id] = it->second;
+	}
+}
+
+void ApplyDisplayLive(const Values &v)
+{
+	ResSize window;
+	if (SelectedSize(v, kWindowSize, window)) DisplaySetWindowSize(window.w, window.h);
+	const int fps = ComboIndex(v, kFpsLimit, static_cast<int>(sizeof(kFpsLimits) / sizeof(kFpsLimits[0])));
+	if (fps >= 0) MutableConfig().fpsLimit = kFpsLimits[fps];
+	const int scaling = ComboIndex(v, kImageScaling, static_cast<int>(sizeof(kScalingLabels) / sizeof(kScalingLabels[0])));
+	if (scaling >= 0) MutableConfig().imageScaling = scaling;
+}
+
+void CommitDisplayExtras(Config &c, const Values &v)
+{
+	const auto extended = v.checks.find(kExtendedView);
+	if (extended != v.checks.end()) c.extendedView = extended->second;
+	ResSize window;
+	if (SelectedSize(v, kWindowSize, window)) {
+		c.windowW = window.w;
+		c.windowH = window.h;
+	}
+	const int fps = ComboIndex(v, kFpsLimit, static_cast<int>(sizeof(kFpsLimits) / sizeof(kFpsLimits[0])));
+	if (fps >= 0) c.fpsLimit = kFpsLimits[fps];
+	const int scaling = ComboIndex(v, kImageScaling, static_cast<int>(sizeof(kScalingLabels) / sizeof(kScalingLabels[0])));
+	if (scaling >= 0) c.imageScaling = scaling;
+}
+
+void ApplyDisplayFromView()
+{
+	Values values;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		values = g_s.view.values;
+	}
+	ApplyDisplayLive(values);
+}
+
 void SetExtras(Values &v, const Config &c)
 {
+	SetDisplayExtras(v, c);
 	v.checks[kPanelCompact] = c.panelCompact;
 	v.checks[kSmoothCamera] = c.smoothScroll;
 	v.checks[kModernAudio] = c.modernAudio;
@@ -86,6 +203,7 @@ void CopyExtras(Values &to, const Values &from)
 		const auto it = from.combos.find(id);
 		if (it != from.combos.end()) to.combos[id] = it->second;
 	}
+	CopyDisplayExtras(to, from);
 	// The panel changes as it is edited, so the setting is the truth; its own mouse controls change it too.
 	to.checks[kPanelCompact] = GetConfig().panelCompact;
 	to.scrolls[kPanelOpacity] = GetConfig().panelOpacity;
@@ -157,6 +275,7 @@ bool CommitExtras(const Values &v)
 	c.zoomFog = check(kZoomFog, c.zoomFog);
 	const auto refresh = v.combos.find(kZoomRefresh);
 	if (refresh != v.combos.end() && refresh->second != ZoomRefreshPreset(c.zoomRefreshMs)) c.zoomRefreshMs = ZoomRefreshPresetMs(refresh->second);
+	CommitDisplayExtras(c, v);
 	SaveConfig();
 	return c.modernAudio != audioBefore;
 }
@@ -209,6 +328,34 @@ int SliderValue(const State &st, int id, const RECT &hit, int mouseX)
 
 RECT g_dragRect = {};
 
+// The resolution list follows the monitor and mode picked here before they are applied.
+void PreviewResolutions()
+{
+	int monitor = 0;
+	bool windowed = false, extended = false;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		const Values &v = g_s.view.values;
+		const auto combo = v.combos.find(kMonitor);
+		monitor = combo == v.combos.end() ? GetConfig().monitor : combo->second;
+		const auto check = [&](int id, bool fallback) {
+			const auto it = v.checks.find(id);
+			return it == v.checks.end() ? fallback : it->second;
+		};
+		windowed = check(kWindowed, GetConfig().windowed);
+		extended = check(kExtendedView, GetConfig().extendedView);
+	}
+	OptionsPreviewResolutions(monitor, windowed, extended);
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		Values &v = g_s.view.values;
+		ResSize window = {GetConfig().windowW, GetConfig().windowH};
+		SelectedSize(v, kWindowSize, window);
+		SetWindowSizes(v, monitor, window);
+	}
+	Refresh();
+}
+
 void SetSlider(int id, int value)
 {
 	if (IsExtra(id)) {
@@ -226,10 +373,13 @@ void Execute(const Command &cmd)
 	switch (cmd.action) {
 	case kActToggle:
 		if (IsExtra(cmd.arg)) {
-			std::lock_guard<std::mutex> lock(g_lock);
-			bool &on = g_s.view.values.checks[cmd.arg];
-			on = !on;
-			g_s.view.dirty = !(g_s.view.values == g_s.baseline);
+			{
+				std::lock_guard<std::mutex> lock(g_lock);
+				bool &on = g_s.view.values.checks[cmd.arg];
+				on = !on;
+				g_s.view.dirty = !(g_s.view.values == g_s.baseline);
+			}
+			if (cmd.arg == kExtendedView) PreviewResolutions();
 		}
 		else {
 			OptionsWriteCheck(cmd.arg, !OptionsReadCheck(cmd.arg, false));
@@ -244,17 +394,21 @@ void Execute(const Command &cmd)
 	case kActSegment:
 		OptionsWriteCheck(cmd.arg >> 4, (cmd.arg & 15) != 0);
 		Refresh();
+		if (cmd.arg >> 4 == kWindowed) PreviewResolutions();
 		break;
 	case kActPick:
 		if (IsExtra(cmd.value)) {
-			std::lock_guard<std::mutex> lock(g_lock);
-			g_s.view.values.combos[cmd.value] = cmd.arg;
-			g_s.view.dirty = !(g_s.view.values == g_s.baseline);
+			{
+				std::lock_guard<std::mutex> lock(g_lock);
+				g_s.view.values.combos[cmd.value] = cmd.arg;
+				g_s.view.dirty = !(g_s.view.values == g_s.baseline);
+			}
+			ApplyDisplayFromView();
+			break;
 		}
-		else {
-			OptionsWriteCombo(cmd.value, cmd.arg);
-			Refresh();
-		}
+		OptionsWriteCombo(cmd.value, cmd.arg);
+		Refresh();
+		if (cmd.value == kMonitor) PreviewResolutions();
 		break;
 	case kActRow:
 		if (cmd.arg == kOpenLogs) ReportOpenLogsFolder();
@@ -268,8 +422,10 @@ void Execute(const Command &cmd)
 			SetExtras(g_s.view.values, Config());
 			ApplyPanelLive(g_s.view.values);
 		}
+		ApplyDisplayFromView();
 		OptionsWriteScroll(kBrightness, OptionsReadScroll(kBrightness, 100));
 		Refresh();
+		PreviewResolutions();
 		ApplyPanelFromView();
 		break;
 	}
@@ -291,11 +447,14 @@ void Execute(const Command &cmd)
 		break;
 	}
 	case kActCancel: {
+		Values baseline;
 		{
 			std::lock_guard<std::mutex> lock(g_lock);
 			g_s.closedAt = GetTickCount();
 			ApplyPanelLive(g_s.baseline);
+			baseline = g_s.baseline;
 		}
+		ApplyDisplayLive(baseline);
 		OptionsClick(kNativeCancel);
 		break;
 	}
