@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <iterator>
 
 #include "ui/widgets.h"
@@ -121,67 +122,6 @@ void PaintRail(Painter &p, const View &v, const std::vector<const StatsPlayerInf
 	}
 }
 
-void PaintTable(Painter &p, const View &v, const std::vector<const StatsPlayerInfo *> &players, int top)
-{
-	constexpr int kHeadH = 36, kRowH = 44, kNameW = 170, kColGap = 14, kPadIn = 16;
-	const Category &category = kCategories[v.stats.category];
-	std::vector<const StatsPlayerInfo *> rows;
-	for (const StatsPlayerInfo *info : players) {
-		if (Shown(v, *info)) rows.push_back(info);
-	}
-	const auto value = [&](const StatsPlayerInfo *info, int column) {
-		const std::vector<StatSample> &samples = v.statsData->history.Samples(info->index);
-		return samples.empty() ? 0 : samples.back().values[category.metrics[column].id];
-	};
-	if (v.stats.sortColumn >= 0) {
-		std::stable_sort(rows.begin(), rows.end(), [&](const StatsPlayerInfo *a, const StatsPlayerInfo *b) {
-			const int va = value(a, v.stats.sortColumn), vb = value(b, v.stats.sortColumn);
-			return v.stats.sortAscending ? va < vb : va > vb;
-		});
-	}
-	PaintCard(p, kMainX, top, kMainW, kHeadH + std::max(1, static_cast<int>(rows.size())) * kRowH + 6);
-	const int colX = kMainX + kPadIn + kNameW, colW = (kMainW - kPadIn * 2 - kNameW - kColGap * 3) / 4;
-	int best[4] = {};
-	for (const StatsPlayerInfo *info : rows) {
-		for (int c = 0; c < 4; c++) best[c] = std::max(best[c], value(info, c));
-	}
-	p.Font(4);
-	p.Text(kMainX + kPadIn, top + 8, kNameW, 20, "Player", kGold);
-	for (int c = 0; c < 4; c++) {
-		const int x = colX + c * (colW + kColGap);
-		const bool sorted = v.stats.sortColumn == c, hot = p.Hover(x, top, colW, kHeadH, v.mouseX, v.mouseY);
-		p.Font(4);
-		p.Text(x, top + 8, colW - 14, 20, category.metrics[c].label, sorted || hot ? pal::goldLight : kGold, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		if (sorted) {
-			if (v.stats.sortAscending) p.ArrowUp(x + colW - 11, top + 14, 9, 7, pal::goldLight);
-			else p.ArrowDown(x + colW - 11, top + 14, 9, 7, pal::goldLight);
-		}
-		p.AddHit(x, top, colW, kHeadH, kActSort, c);
-	}
-	int y = top + kHeadH;
-	if (rows.empty()) {
-		p.Font(0);
-		p.Text(kMainX + kPadIn, y, kMainW - kPadIn * 2, kRowH, "No player matches the filters.", kDim);
-	}
-	for (const StatsPlayerInfo *info : rows) {
-		p.Fill(kMainX + 14, y, kMainW - 28, 1, RGB(48, 37, 23));
-		p.Fill(kMainX + kPadIn, y + 14, 16, 16, ColorOf(*info));
-		p.Frame(kMainX + kPadIn, y + 14, 16, 16, RGB(10, 8, 6));
-		p.Font(0);
-		p.Text(kMainX + kPadIn + 24, y + 2, kNameW - 30, kRowH - 4, info->name, info->local ? pal::goldLight : kText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		for (int c = 0; c < 4; c++) {
-			const int x = colX + c * (colW + kColGap), number = value(info, c), percent = best[c] > 0 ? number * 100 / best[c] : 0;
-			const bool leader = number > 0 && number == best[c];
-			p.Font(leader ? 1 : 0);
-			p.Text(x, y + 5, colW, 22, StatsFormatShort(number), leader ? pal::goldLight : kText);
-			p.Fill(x, y + 31, colW, 5, pal::well);
-			const int filled = colW * std::max(0, std::min(100, percent)) / 100;
-			if (filled > 0) p.FillH(x, y + 31, filled, 5, pal::bronze, leader ? pal::goldLight : kGold);
-		}
-		y += kRowH;
-	}
-}
-
 // Antialiased, which GDI lines are not: the canvas is a DIB and each pixel near the line takes its share of the colour.
 struct Surface {
 	uint32_t *bits = nullptr;
@@ -224,6 +164,27 @@ struct Surface {
 	}
 };
 
+StatsWindow ChartLimits(const View &v)
+{
+	StatsWindow limits;
+	limits.to = v.statsData->history.LastMs();
+	limits.from = limits.to;
+	for (const StatsPlayerInfo *info : ListedPlayers(v)) {
+		const std::vector<StatSample> &samples = v.statsData->history.Samples(info->index);
+		if (!samples.empty()) limits.from = std::min(limits.from, samples.front().ms);
+	}
+	return limits;
+}
+
+StatsWindow ChartWindow(const View &v)
+{
+	if (v.stats.zoom.to > v.stats.zoom.from) return v.stats.zoom;
+	StatsWindow window = ChartLimits(v);
+	const uint32_t span = kRangeMs[v.stats.range];
+	if (span && window.to - window.from > span) window.from = window.to - span;
+	return window;
+}
+
 struct Series {
 	std::string name;
 	COLORREF color = 0;
@@ -244,22 +205,15 @@ void PaintLines(Painter &p, const View &v, const std::vector<Series> &series, in
 {
 	PaintCard(p, kMainX, top, kMainW, bottom - top);
 	const int plotX = kMainX + 62, plotW = kMainW - 62 - 18, plotY = top + 16, plotH = bottom - top - 16 - 32;
-	uint32_t first = 0xffffffffu, now = 0;
-	for (const Series &s : series) {
-		if (s.points.empty()) continue;
-		first = std::min(first, s.points.front().ms);
-		now = std::max(now, s.points.back().ms);
-	}
-	const uint32_t span = kRangeMs[v.stats.range];
-	const uint32_t from = std::max(first == 0xffffffffu ? 0 : first, span && now > span ? now - span : 0);
-	const uint32_t length = std::max<uint32_t>(now > from ? now - from : 0, 1000);
+	const StatsWindow window = ChartWindow(v);
+	const uint32_t from = window.from, length = std::max<uint32_t>(window.to > from ? window.to - from : 0, 1000);
 
 	int maximum = 0;
 	size_t mostPoints = 0;
 	for (const Series &s : series) {
 		size_t points = 0;
 		for (const StatsPoint &point : s.points) {
-			if (point.ms < from) continue;
+			if (point.ms < from || point.ms > window.to) continue;
 			maximum = std::max(maximum, point.value);
 			points++;
 		}
@@ -267,7 +221,7 @@ void PaintLines(Painter &p, const View &v, const std::vector<Series> &series, in
 	}
 	if (series.empty() || mostPoints < 2) {
 		p.Font(0);
-		p.Text(plotX, plotY, plotW, plotH, series.empty() ? "No player matches the filters." : "Not enough history to draw yet. The Table view has the totals.", kDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.Text(plotX, plotY, plotW, plotH, series.empty() ? "No player matches the filters." : "Not enough history to draw yet.", kDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		return;
 	}
 	const StatsAxis axis = StatsNiceAxis(maximum);
@@ -301,7 +255,7 @@ void PaintLines(Painter &p, const View &v, const std::vector<Series> &series, in
 		const float width = (s->thick ? 2.6f : 1.8f) * p.s;
 		const StatsPoint *previous = nullptr;
 		for (const StatsPoint &point : s->points) {
-			if (point.ms < from) continue;
+			if (point.ms < from || point.ms > window.to) continue;
 			if (previous && direct) surface.Segment(xOf(previous->ms) * p.s, yOf(previous->value) * p.s, xOf(point.ms) * p.s, yOf(point.value) * p.s, width, color);
 			previous = &point;
 		}
@@ -313,20 +267,36 @@ void PaintLines(Painter &p, const View &v, const std::vector<Series> &series, in
 	bool anyMark = false;
 	for (const Series &s : series) {
 		for (const StatsPoint &mark : s.marks) {
-			if (mark.ms < from) continue;
+			if (mark.ms < from || mark.ms > window.to) continue;
 			anyMark = true;
 			const int x = static_cast<int>(xOf(mark.ms)), y = static_cast<int>(yOf(mark.value));
 			p.Diamond(x, y, 7, RGB(14, 10, 7));
 			p.Diamond(x, y, 5, LineColor(s.color));
 		}
 	}
+	p.Font(3);
 	if (anyMark) {
-		p.Diamond(plotX + plotW - 90, plotY + 10, 5, pal::goldLight);
-		p.Font(3);
-		p.Text(plotX + plotW - 80, plotY, 80, 20, "Eliminated", kDim);
+		p.Diamond(plotX + plotW - 90, plotY + 6, 5, pal::goldLight);
+		p.Text(plotX + plotW - 80, plotY - 4, 80, 20, "Eliminated", kDim);
 	}
+	const bool zoomed = v.stats.zoom.to > v.stats.zoom.from;
+	p.Text(plotX + 6, plotY - 4, plotW - 110, 20, zoomed ? "Right click to see it all" : "Drag over the chart to zoom in", kDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	p.AddHit(plotX, plotY, plotW, plotH, kActChartArea, 0);
 
 	const int mouseX = static_cast<int>((v.mouseX - p.ox) / p.s), mouseY = static_cast<int>((v.mouseY - p.oy) / p.s);
+	if (v.stats.dragStartX >= 0) {
+		const int startX = static_cast<int>((v.stats.dragStartX - p.ox) / p.s);
+		const int bandLeft = std::max(plotX, std::min(startX, mouseX)), bandRight = std::min(plotX + plotW, std::max(startX, mouseX));
+		if (direct) {
+			surface.Open(p.dc);
+			for (int y = p.S(plotY); y < p.S(plotY + plotH); y++) {
+				for (int x = p.S(bandLeft); x < p.S(bandRight); x++) surface.Blend(x, y, kGold, 0.22f);
+			}
+		}
+		p.Fill(bandLeft, plotY, 1, plotH, kGold);
+		p.Fill(bandRight, plotY, 1, plotH, kGold);
+		return;
+	}
 	if (mouseX < plotX || mouseX > plotX + plotW || mouseY < plotY || mouseY > plotY + plotH) return;
 	const uint32_t at = from + static_cast<uint32_t>(static_cast<uint64_t>(length) * (mouseX - plotX) / plotW);
 	p.Fill(mouseX, plotY, 1, plotH, RGB(150, 122, 70));
@@ -342,17 +312,17 @@ void PaintLines(Painter &p, const View &v, const std::vector<Series> &series, in
 		if (found) lines.push_back({&s, value});
 	}
 	std::stable_sort(lines.begin(), lines.end(), [](const Line &a, const Line &b) { return a.value > b.value; });
-	constexpr int kTipW = 230, kTipRow = 22;
+	constexpr int kTipW = 230, kTipRow = 20;
 	const int tipH = 30 + static_cast<int>(lines.size()) * kTipRow + 6;
 	const int tipX = mouseX + 14 + kTipW > plotX + plotW ? mouseX - 14 - kTipW : mouseX + 14;
-	const int tipY = std::max(plotY, std::min(mouseY - tipH / 2, plotY + plotH - tipH));
+	const int tipY = std::max(92, std::min(mouseY - tipH / 2, plotY + plotH - tipH));
 	p.Fill(tipX, tipY, kTipW, tipH, pal::dialog);
 	p.Frame(tipX, tipY, kTipW, tipH, kGold);
 	p.Font(3);
 	p.Text(tipX + 10, tipY + 5, kTipW - 20, 20, StatsFormatTime(at), pal::goldLight);
 	int rowY = tipY + 28;
 	for (const Line &line : lines) {
-		p.Fill(tipX + 10, rowY + 5, 11, 11, line.series->color);
+		p.Fill(tipX + 10, rowY + 4, 11, 11, line.series->color);
 		p.Text(tipX + 27, rowY, kTipW - 27 - 66, kTipRow, line.series->name, kText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.Text(tipX + kTipW - 64, rowY, 54, kTipRow, StatsFormatShort(line.value), pal::goldLight, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 		rowY += kTipRow;
@@ -366,38 +336,6 @@ std::vector<StatsPlayerInfo> ShownPlayers(const View &v, const std::vector<const
 		if (Shown(v, *info)) shown.push_back(*info);
 	}
 	return shown;
-}
-
-void PaintPlayerChart(Painter &p, const View &v, const std::vector<const StatsPlayerInfo *> &players, int top, int bottom)
-{
-	const StatMetric metric = kCategories[v.stats.category].metrics[v.stats.metric].id;
-	const StatsHistory &history = v.statsData->history;
-	const std::vector<StatsPlayerInfo> shown = ShownPlayers(v, players);
-	const std::vector<StatsElimination> eliminations = StatsEliminations(history, shown);
-	std::vector<Series> series;
-	for (const StatsPlayerInfo &info : shown) {
-		Series s;
-		s.name = info.name;
-		s.color = ColorOf(info);
-		s.thick = info.local;
-		for (const StatSample &sample : history.Samples(info.index)) {
-			StatsPoint point;
-			point.ms = sample.ms;
-			point.value = sample.values[metric];
-			s.points.push_back(point);
-		}
-		for (const StatsElimination &e : eliminations) {
-			if (e.player != info.index) continue;
-			if (const StatSample *sample = StatsSampleAt(history.Samples(info.index), e.ms)) {
-				StatsPoint mark;
-				mark.ms = e.ms;
-				mark.value = sample->values[metric];
-				s.marks.push_back(mark);
-			}
-		}
-		series.push_back(s);
-	}
-	PaintLines(p, v, series, top, bottom);
 }
 
 std::string TeamName(const StatsTeam &team)
@@ -415,59 +353,129 @@ bool TeamHasLocal(const StatsTeam &team)
 	return std::any_of(team.members.begin(), team.members.end(), [](const StatsPlayerInfo &info) { return info.local; });
 }
 
-void PaintTeams(Painter &p, const View &v, const std::vector<const StatsPlayerInfo *> &players, int top, int bottom)
+// One row of the board: a player, or a team with all its members.
+struct BoardRow {
+	std::string name;
+	COLORREF color = 0;
+	bool mine = false, out = false;
+	std::vector<StatsPlayerInfo> members;
+	int values[4] = {};
+};
+
+// The table on top says the totals; the chart below shows how the selected column got there.
+void PaintBoard(Painter &p, const View &v, std::vector<BoardRow> rows, bool marks, int top, int bottom)
 {
-	constexpr int kHeadH = 32, kRowH = 30, kNameW = 190, kColGap = 14, kPadIn = 16;
+	constexpr int kHeadH = 32, kRowH = 29, kNameW = 190, kColGap = 14, kPadIn = 16;
 	const Category &category = kCategories[v.stats.category];
 	const StatsHistory &history = v.statsData->history;
-	const std::vector<StatsTeam> teams = StatsTeams(ShownPlayers(v, players));
-	const auto value = [&](const StatsTeam &team, int column) {
-		std::vector<int> values;
-		for (const StatsPlayerInfo &info : team.members) {
-			const std::vector<StatSample> &samples = history.Samples(info.index);
-			if (!samples.empty()) values.push_back(samples.back().values[category.metrics[column].id]);
-		}
-		return StatsCombine(category.metrics[column].id, values);
-	};
-	const int tableH = kHeadH + std::max(1, static_cast<int>(teams.size())) * kRowH + 4;
+	const int selected = v.stats.metric;
+	std::stable_sort(rows.begin(), rows.end(), [&](const BoardRow &a, const BoardRow &b) {
+		return v.stats.sortAscending ? a.values[selected] < b.values[selected] : a.values[selected] > b.values[selected];
+	});
+	const int tableH = kHeadH + std::max(1, static_cast<int>(rows.size())) * kRowH + 4;
 	PaintCard(p, kMainX, top, kMainW, tableH);
 	const int colX = kMainX + kPadIn + kNameW, colW = (kMainW - kPadIn * 2 - kNameW - kColGap * 3) / 4;
 	int best[4] = {};
-	for (const StatsTeam &team : teams) {
-		for (int c = 0; c < 4; c++) best[c] = std::max(best[c], value(team, c));
+	for (const BoardRow &row : rows) {
+		for (int c = 0; c < 4; c++) best[c] = std::max(best[c], row.values[c]);
 	}
-	p.Font(4);
-	p.Text(kMainX + kPadIn, top + 7, kNameW, 20, "Teams", kGold);
-	for (int c = 0; c < 4; c++) p.Text(colX + c * (colW + kColGap), top + 7, colW, 20, category.metrics[c].label, kGold, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	for (int c = 0; c < 4; c++) {
+		const int x = colX + c * (colW + kColGap);
+		const bool on = c == selected, hot = !on && p.Hover(x - 6, top, colW + 12, kHeadH, v.mouseX, v.mouseY);
+		if (on) p.FillV(x - 6, top + 1, colW + 12, tableH - 2, RGB(62, 46, 24), RGB(36, 28, 18));
+		else if (hot) p.Fill(x - 6, top + 1, colW + 12, kHeadH - 2, RGB(44, 34, 24));
+		p.Font(4);
+		p.Text(x, top + 7, colW - 14, 20, category.metrics[c].label, on || hot ? pal::goldLight : kGold, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		if (on) {
+			if (v.stats.sortAscending) p.ArrowUp(x + colW - 11, top + 13, 9, 7, pal::goldLight);
+			else p.ArrowDown(x + colW - 11, top + 13, 9, 7, pal::goldLight);
+		}
+		p.AddHit(x - 6, top, colW + 12, kHeadH, kActMetric, c);
+	}
 	int y = top + kHeadH;
-	for (const StatsTeam &team : teams) {
+	if (rows.empty()) {
+		p.Font(0);
+		p.Text(kMainX + kPadIn, y, kMainW - kPadIn * 2, kRowH, "No player matches the filters.", kDim);
+	}
+	std::vector<Series> series;
+	for (const BoardRow &row : rows) {
 		p.Fill(kMainX + 14, y, kMainW - 28, 1, RGB(48, 37, 23));
-		p.Fill(kMainX + kPadIn, y + 8, 14, 14, ColorOf(team.members.front()));
+		p.Fill(kMainX + kPadIn, y + 8, 14, 14, row.color);
 		p.Frame(kMainX + kPadIn, y + 8, 14, 14, RGB(10, 8, 6));
 		p.Font(3);
-		p.Text(kMainX + kPadIn + 20, y, kNameW - 26, kRowH, TeamName(team), TeamHasLocal(team) ? pal::goldLight : kText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(kMainX + kPadIn + 20, y, kNameW - 26, kRowH, row.name, row.out ? kDim : row.mine ? pal::goldLight : kText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		for (int c = 0; c < 4; c++) {
-			const int x = colX + c * (colW + kColGap), number = value(team, c), percent = best[c] > 0 ? number * 100 / best[c] : 0;
-			const bool leader = number > 0 && number == best[c];
+			const int x = colX + c * (colW + kColGap), percent = best[c] > 0 ? row.values[c] * 100 / best[c] : 0;
+			const bool leader = row.values[c] > 0 && row.values[c] == best[c];
 			p.Font(3);
-			p.Text(x, y + 2, colW, 18, StatsFormatShort(number), leader ? pal::goldLight : kText);
+			p.Text(x, y + 2, colW, 18, StatsFormatShort(row.values[c]), leader ? pal::goldLight : kText);
 			p.Fill(x, y + 21, colW, 4, pal::well);
 			const int filled = colW * std::max(0, std::min(100, percent)) / 100;
 			if (filled > 0) p.FillH(x, y + 21, filled, 4, pal::bronze, leader ? pal::goldLight : kGold);
 		}
 		y += kRowH;
-	}
-	const StatMetric metric = category.metrics[v.stats.metric].id;
-	std::vector<Series> series;
-	for (const StatsTeam &team : teams) {
+
 		Series s;
-		s.name = TeamName(team);
-		s.color = ColorOf(team.members.front());
-		s.thick = TeamHasLocal(team);
-		s.points = StatsTeamSeries(history, team.members, metric);
+		s.name = row.name;
+		s.color = row.color;
+		s.thick = row.mine;
+		const StatMetric metric = category.metrics[selected].id;
+		s.points = StatsTeamSeries(history, row.members, metric);
+		if (marks) {
+			for (const StatsElimination &e : StatsEliminations(history, row.members)) {
+				bool found = false;
+				StatsPoint mark;
+				mark.ms = e.ms;
+				mark.value = ValueAt(s.points, e.ms, found);
+				if (found) s.marks.push_back(mark);
+			}
+		}
 		series.push_back(s);
 	}
 	PaintLines(p, v, series, top + tableH + 8, bottom);
+}
+
+void PaintPlayers(Painter &p, const View &v, const std::vector<const StatsPlayerInfo *> &players, int top, int bottom)
+{
+	const Category &category = kCategories[v.stats.category];
+	std::vector<BoardRow> rows;
+	for (const StatsPlayerInfo &info : ShownPlayers(v, players)) {
+		BoardRow row;
+		row.name = info.name;
+		row.color = ColorOf(info);
+		row.mine = info.local;
+		row.out = !StatsStillInGame(v.statsData->history, info.index);
+		row.members.push_back(info);
+		const std::vector<StatSample> &samples = v.statsData->history.Samples(info.index);
+		for (int c = 0; c < 4 && !samples.empty(); c++) row.values[c] = samples.back().values[category.metrics[c].id];
+		rows.push_back(row);
+	}
+	PaintBoard(p, v, rows, true, top, bottom);
+}
+
+void PaintTeams(Painter &p, const View &v, const std::vector<const StatsPlayerInfo *> &players, int top, int bottom)
+{
+	const Category &category = kCategories[v.stats.category];
+	std::vector<BoardRow> rows;
+	for (const StatsTeam &team : StatsTeams(ShownPlayers(v, players))) {
+		BoardRow row;
+		row.name = TeamName(team);
+		row.color = ColorOf(team.members.front());
+		row.mine = TeamHasLocal(team);
+		row.members = team.members;
+		row.out = true;
+		for (const StatsPlayerInfo &info : team.members) row.out = row.out && !StatsStillInGame(v.statsData->history, info.index);
+		for (int c = 0; c < 4; c++) {
+			std::vector<int> values;
+			for (const StatsPlayerInfo &info : team.members) {
+				const std::vector<StatSample> &samples = v.statsData->history.Samples(info.index);
+				if (!samples.empty()) values.push_back(samples.back().values[category.metrics[c].id]);
+			}
+			row.values[c] = StatsCombine(category.metrics[c].id, values);
+		}
+		rows.push_back(row);
+	}
+	PaintBoard(p, v, rows, false, top, bottom);
 }
 
 void PaintSummary(Painter &p, const View &v, const std::vector<const StatsPlayerInfo *> &players, int top, int bottom)
@@ -590,6 +598,17 @@ void PaintConfirm(Painter &p, const View &v)
 	p.Button(x + kButtonW + kButtonsGap, kButtonsY, kButtonW, kButtonH, "No", kActNo, 0, v.mouseX, v.mouseY);
 }
 
+void FinishChartDrag(View &v, int mouseX)
+{
+	const int startX = v.stats.dragStartX, left = v.stats.dragLeft, right = v.stats.dragRight;
+	v.stats.dragStartX = -1;
+	constexpr int kMinDragPixels = 8;
+	if (!v.statsData || startX < 0 || right <= left || std::abs(mouseX - startX) < kMinDragPixels) return;
+	const double width = right - left;
+	const uint32_t minSpan = v.statsData->history.IntervalMs() * 3;
+	v.stats.zoom = StatsZoom(ChartWindow(v), (startX - left) / width, (mouseX - left) / width, minSpan, ChartLimits(v));
+}
+
 void PaintStatistics(Painter &p, const View &v)
 {
 	PaintWindowFrame(p, kStatsW, kStatsH);
@@ -599,35 +618,38 @@ void PaintStatistics(Painter &p, const View &v)
 	PaintRail(p, v, players);
 	p.Fill(kPad + kRailW + 7, 92, 1, kFooterY - 92 - 8, pal::lineDim);
 
-	constexpr int kViewW = 92, kRangeW = 112, kChipH = 28, kChipsY = 92, kTabsY = 126, kTabH = 34, kMetricsY = 168, kChartTop = 204, kBottom = kFooterY - 10;
-	static const char *const kViewLabels[] = {"Summary", "Chart", "Table", "Teams"};
-	for (int i = 0; i < 4; i++) Chip(p, kMainX + i * (kViewW + 6), kChipsY, kViewW, kChipH, kViewLabels[i], v.stats.view == i, kActView, i, v);
+	constexpr int kViewW = 100, kRangeW = 112, kChipH = 28, kChipsY = 92, kTabsY = 126, kTabH = 34, kBoardTop = 168, kBottom = kFooterY - 10;
 	const bool hasData = v.statsData && !v.statsData->history.Empty();
-	const bool summary = v.stats.view == kViewSummary;
+	// Without allies a team is just a player, and this view would repeat the previous one.
+	bool anyTeam = false;
+	if (hasData) {
+		for (const StatsTeam &team : StatsTeams(v.statsData->players)) anyTeam = anyTeam || team.members.size() > 1;
+	}
+	static const char *const kViewLabels[] = {"Summary", "Players", "Teams"};
+	const int viewCount = anyTeam ? 3 : 2, view = !anyTeam && v.stats.view == kViewTeams ? kViewPlayers : v.stats.view;
+	for (int i = 0; i < viewCount; i++) Chip(p, kMainX + i * (kViewW + 6), kChipsY, kViewW, kChipH, kViewLabels[i], view == i, kActView, i, v);
 
 	if (!hasData) {
 		p.Font(0);
 		p.Text(kMainX, 200, kMainW, 60, "No data for this period yet.", kDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 	}
-	else if (summary) {
+	else if (view == kViewSummary) {
 		PaintSummary(p, v, players, kTabsY + 4, kBottom);
 	}
 	else {
+		const bool zoomed = v.stats.zoom.to > v.stats.zoom.from;
+		for (int i = 0; i < 3; i++) Chip(p, kMainX + kMainW - (3 - i) * kRangeW - (2 - i) * 6, kChipsY, kRangeW, kChipH, kRangeLabels[i], !zoomed && v.stats.range == i, kActRange, i, v);
+		if (zoomed) {
+			const std::string selection = StatsFormatTime(v.stats.zoom.from) + " - " + StatsFormatTime(v.stats.zoom.to);
+			p.Font(3);
+			p.Text(kMainX + viewCount * (kViewW + 6), kChipsY, kMainW - viewCount * (kViewW + 6) - 3 * (kRangeW + 6), kChipH, selection, pal::goldLight, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		}
 		std::vector<TabSpec> tabs;
 		for (int i = 0; i < static_cast<int>(std::size(kCategories)); i++) tabs.push_back({kCategories[i].name, kActCategory, i, v.stats.category == i, true});
 		PaintTabs(p, kMainX, kTabsY, tabs, v.mouseX, v.mouseY, (kMainW - 6 * 4) / 5, kTabH);
 		p.Fill(kMainX, kTabsY + kTabH, kMainW, 1, pal::line);
-		if (v.stats.view == kViewTable) {
-			PaintTable(p, v, players, kMetricsY + 2);
-		}
-		else {
-			for (int i = 0; i < 3; i++) Chip(p, kMainX + kMainW - (3 - i) * kRangeW - (2 - i) * 6, kChipsY, kRangeW, kChipH, kRangeLabels[i], v.stats.range == i, kActRange, i, v);
-			const Category &category = kCategories[v.stats.category];
-			const int metricW = (kMainW - 6 * 3) / 4;
-			for (int i = 0; i < 4; i++) Chip(p, kMainX + i * (metricW + 6), kMetricsY, metricW, kChipH, category.metrics[i].label, v.stats.metric == i, kActMetric, i, v);
-			if (v.stats.view == kViewTeams) PaintTeams(p, v, players, kChartTop, kBottom);
-			else PaintPlayerChart(p, v, players, kChartTop, kBottom);
-		}
+		if (view == kViewTeams) PaintTeams(p, v, players, kBoardTop, kBottom);
+		else PaintPlayers(p, v, players, kBoardTop, kBottom);
 	}
 
 	p.Fill(18, kFooterY, kStatsW - 36, 1, pal::line);

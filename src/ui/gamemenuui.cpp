@@ -127,21 +127,19 @@ void ApplyStatsClick(StatsFilters &f, int action, int arg)
 	case kActCategory:
 		f.category = arg;
 		f.metric = 0;
-		f.sortColumn = -1;
+		f.sortAscending = false;
 		break;
 	case kActView: f.view = arg; break;
-	case kActMetric: f.metric = arg; break;
-	case kActRange: f.range = arg; break;
+	case kActMetric:
+		f.sortAscending = f.metric == arg && !f.sortAscending;
+		f.metric = arg;
+		break;
+	case kActRange:
+		f.range = arg;
+		f.zoom = StatsWindow();
+		break;
 	case kActGroup: f.group = arg; break;
 	case kActPlayer: f.hidden ^= 1u << arg; break;
-	case kActSort:
-		if (f.sortColumn != arg) {
-			f.sortColumn = arg;
-			f.sortAscending = false;
-		}
-		else if (!f.sortAscending) f.sortAscending = true;
-		else f.sortColumn = -1;
-		break;
 	default: break;
 	}
 }
@@ -165,11 +163,12 @@ void ReadEndMenu(void *dlg, View &v)
 	}
 }
 
-int HitAt(const State &st, POINT at, int &arg)
+int HitAt(const State &st, POINT at, int &arg, RECT *rect = nullptr)
 {
 	for (auto it = st.hits.rbegin(); it != st.hits.rend(); ++it) {
 		if (!PtInRect(&it->r, at)) continue;
 		arg = it->arg;
+		if (rect) *rect = it->r;
 		return it->action;
 	}
 	return kActNone;
@@ -260,6 +259,7 @@ bool GameMenuUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		g_swallowUp = false;
 		std::lock_guard<std::mutex> lock(g_lock);
 		g_s.mouseDown = false;
+		FinishChartDrag(g_s.view, static_cast<short>(LOWORD(lp)));
 		return true;
 	}
 	void *dlg = nullptr;
@@ -290,11 +290,22 @@ bool GameMenuUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		g_s.mouseDown = true;
 		g_swallowUp = true;
 		int arg = 0;
-		const int action = HitAt(g_s, at, arg);
-		if (action == kActButton) clickId = arg;
+		RECT rect = {};
+		const int action = HitAt(g_s, at, arg, &rect);
+		if (action == kActChartArea) {
+			g_s.view.stats.dragStartX = at.x;
+			g_s.view.stats.dragLeft = rect.left;
+			g_s.view.stats.dragRight = rect.right;
+		}
+		else if (action == kActButton) clickId = arg;
 		else if (action == kActYes) clickId = kNativeYes;
 		else if (action == kActNo) clickId = kNativeNo;
 		else if (screen == kScreenStats) ApplyStatsClick(g_s.view.stats, action, arg);
+		break;
+	}
+	case WM_RBUTTONDOWN: {
+		std::lock_guard<std::mutex> lock(g_lock);
+		if (screen == kScreenStats) g_s.view.stats.zoom = StatsWindow();
 		break;
 	}
 	case WM_KEYDOWN:

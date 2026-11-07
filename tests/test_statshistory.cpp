@@ -318,8 +318,52 @@ static void SavedTeamsComeBackAndOldFilesCountAsInGame()
 	CHECK(StatsStillInGame(read, 5));
 }
 
+static StatsWindow Window(uint32_t from, uint32_t to)
+{
+	StatsWindow w;
+	w.from = from;
+	w.to = to;
+	return w;
+}
+
+static void ZoomsIntoTheSelection()
+{
+	const StatsWindow limits = Window(1000, 101000);
+	StatsWindow z = StatsZoom(limits, 0.25, 0.75, 1000, limits);
+	CHECK_EQ(z.from, 26000u);
+	CHECK_EQ(z.to, 76000u);
+	z = StatsZoom(limits, 0.75, 0.25, 1000, limits);
+	CHECK_EQ(z.from, 26000u);
+	CHECK_EQ(z.to, 76000u);
+	z = StatsZoom(Window(26000, 76000), 0.0, 0.5, 1000, limits);
+	CHECK_EQ(z.from, 26000u);
+	CHECK_EQ(z.to, 51000u);
+	z = StatsZoom(limits, -3.0, 9.0, 1000, limits);
+	CHECK_EQ(z.from, 1000u);
+	CHECK_EQ(z.to, 101000u);
+}
+
+static void ZoomKeepsAMinimumSpanInsideTheLimits()
+{
+	const StatsWindow limits = Window(1000, 101000);
+	StatsWindow z = StatsZoom(limits, 0.5, 0.5, 30000, limits);
+	CHECK_EQ(z.to - z.from, 30000u);
+	CHECK(z.from >= 1000u);
+	z = StatsZoom(limits, 1.0, 1.0, 30000, limits);
+	CHECK_EQ(z.to, 101000u);
+	CHECK_EQ(z.from, 71000u);
+	z = StatsZoom(limits, 0.0, 0.0, 30000, limits);
+	CHECK_EQ(z.from, 1000u);
+	CHECK_EQ(z.to, 31000u);
+	z = StatsZoom(Window(1000, 3000), 0.0, 1.0, 30000, Window(1000, 3000));
+	CHECK_EQ(z.from, 1000u);
+	CHECK_EQ(z.to, 3000u);
+}
+
 int main()
 {
+	ZoomsIntoTheSelection();
+	ZoomKeepsAMinimumSpanInsideTheLimits();
 	GroupsAlliesOfAllies();
 	GroupsPlayersByTeam();
 	CombinesEachMetricItsWay();
