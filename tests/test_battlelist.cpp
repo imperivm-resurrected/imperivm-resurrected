@@ -110,6 +110,25 @@ void IntrosFollowTheBattleFolder()
 	CHECK(BattleIntroPattern("Zama").empty());
 }
 
+void AdventuresAreSortedByGame()
+{
+	CHECK_EQ(BattleGameOf("adventures/Imperivm I - La guerra de las Galias"), kBattleGameImperivm1);
+	CHECK_EQ(BattleGameOf("adventures\\Imperivm II - Hispania.bfhp"), kBattleGameImperivm2);
+	CHECK_EQ(BattleGameOf("Imperivm II - Hispania"), kBattleGameImperivm2);
+	CHECK_EQ(BattleGameOf("adventures/imperivm i - galia"), kBattleGameImperivm1);
+	CHECK_EQ(BattleGameOf("adventures/Imperivm III - Roma"), kBattleGameOther);
+	CHECK_EQ(BattleGameOf("adventures/Imperivm I-Galia"), kBattleGameOther);
+	CHECK_EQ(BattleGameOf("adventures/Imperivm IIGalia"), kBattleGameOther);
+	CHECK_EQ(BattleGameOf("adventures/Tutorial"), kBattleGameOther);
+	CHECK_EQ(BattleGameOf("adventures/Imperivm I - Galia/Tutorial"), kBattleGameOther);
+	CHECK_EQ(BattleGameOf(""), kBattleGameOther);
+	CHECK_EQ(BattleTitleWithoutGame("Imperivm I - La guerra de las Galias"), std::string("La guerra de las Galias"));
+	CHECK_EQ(BattleTitleWithoutGame("Imperivm II - Hispania"), std::string("Hispania"));
+	CHECK_EQ(BattleTitleWithoutGame("Imperivm III - Roma"), std::string("Imperivm III - Roma"));
+	CHECK_EQ(BattleTitleWithoutGame("Imperivm I - "), std::string("Imperivm I -"));
+	CHECK_EQ(BattleTitleWithoutGame("Tutorial"), std::string("Tutorial"));
+}
+
 void DescriptionsGetRealLineBreaks()
 {
 	CHECK_EQ(BattleDescriptionText("Year 204BC\\n\\nEach victory\r\n"), std::string("Year 204BC\n\nEach victory"));
@@ -126,6 +145,7 @@ int main()
 	BrokenFilesAreRejected();
 	TitlesLoseTheirYear();
 	IntrosFollowTheBattleFolder();
+	AdventuresAreSortedByGame();
 	DescriptionsGetRealLineBreaks();
 	return test::Summary("battlelist");
 }

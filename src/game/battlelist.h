@@ -26,5 +26,14 @@ BattleTitle SplitBattleTitle(const std::string &title);
 // "*_Intro_Great_B_Zama.avi". Empty for the other adventures, which have no intro of their own.
 std::string BattleIntroPattern(const std::string &adventurePath);
 
+enum BattleGame { kBattleGameOther, kBattleGameImperivm1, kBattleGameImperivm2 };
+
+// Which game an adventure comes from, by its file name: the converted campaigns of the first two games are installed as
+// "Imperivm I - <name>" and "Imperivm II - <name>". Anything else is the player's own.
+BattleGame BattleGameOf(const std::string &adventurePath);
+
+// "Imperivm I - La guerra de las Galias" without the game's name, which its tab already shows; other titles stay whole.
+std::string BattleTitleWithoutGame(const std::string &title);
+
 // The adventure's text keeps the "\n" of its file as two characters.
 std::string BattleDescriptionText(const std::string &raw);

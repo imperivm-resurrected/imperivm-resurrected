@@ -110,6 +110,26 @@ std::string BattleIntroPattern(const std::string &adventurePath)
 	return std::string("*_Intro_Great_") + kind + "_" + file.substr(under + 1) + ".avi";
 }
 
+BattleGame BattleGameOf(const std::string &adventurePath)
+{
+	const size_t slash = adventurePath.find_last_of("/\\");
+	const std::string file = slash == std::string::npos ? adventurePath : adventurePath.substr(slash + 1);
+	// The whole prefix with its spaced dash, so that "Imperivm II - " is never taken for "Imperivm I".
+	if (_strnicmp(file.c_str(), "Imperivm I - ", 13) == 0) return kBattleGameImperivm1;
+	if (_strnicmp(file.c_str(), "Imperivm II - ", 14) == 0) return kBattleGameImperivm2;
+	return kBattleGameOther;
+}
+
+std::string BattleTitleWithoutGame(const std::string &title)
+{
+	const std::string t = Trim(title);
+	for (const char *prefix : {"Imperivm I - ", "Imperivm II - "}) {
+		const size_t n = strlen(prefix);
+		if (t.size() > n && _strnicmp(t.c_str(), prefix, n) == 0) return Trim(t.substr(n));
+	}
+	return t;
+}
+
 std::string BattleDescriptionText(const std::string &raw)
 {
 	std::string out;

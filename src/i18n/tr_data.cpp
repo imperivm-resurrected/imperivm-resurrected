@@ -1701,5 +1701,7 @@ extern const TrRow kTrRows[] = {
 	{"Watch intro", "Ver la intro", "Guarda l'intro"},
 	{"There are no adventures here.", "Aquí no hay aventuras.", "Qui non ci sono avventure."},
 	{"There are no conquests here.", "Aquí no hay conquistas.", "Qui non ci sono conquiste."},
+	{"No Imperivm I campaign is installed yet.", "Todavía no hay ninguna campaña de Imperivm I instalada.", "Non è ancora installata nessuna campagna di Imperivm I."},
+	{"No Imperivm II campaign is installed yet.", "Todavía no hay ninguna campaña de Imperivm II instalada.", "Non è ancora installata nessuna campagna di Imperivm II."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);
