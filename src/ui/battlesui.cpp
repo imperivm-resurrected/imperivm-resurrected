@@ -95,7 +95,9 @@ void MoveSelection(View &v, int step, Command &cmd)
 	const BattlesSnapshot &s = v.snap;
 	std::vector<std::pair<int, int>> order;
 	for (int list : s.tab == kBattlesTabGreat ? std::vector<int>{kBattlesVictories, kBattlesDefeats} : std::vector<int>{kBattlesOthers}) {
-		for (size_t i = 0; i < s.lists[list].size(); i++) order.push_back({list, static_cast<int>(i)});
+		for (size_t i = 0; i < s.lists[list].size(); i++) {
+			if (BattlesInTab(s.tab, list, s.lists[list][i].path)) order.push_back({list, static_cast<int>(i)});
+		}
 	}
 	if (order.empty()) return;
 	int at = -1;

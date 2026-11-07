@@ -36,6 +36,28 @@ std::string Upper(const std::string &text)
 	return out;
 }
 
+// The names of the games stay as they are in every language.
+const char *TabName(int tab)
+{
+	switch (tab) {
+	case kBattlesTabImperivm1: return "Imperivm I";
+	case kBattlesTabImperivm2: return "Imperivm II";
+	case kBattlesTabGreat: return "Imperivm III";
+	case kBattlesTabConquests: return "Conquests";
+	default: return "Custom adventures";
+	}
+}
+
+const char *EmptyText(int tab)
+{
+	switch (tab) {
+	case kBattlesTabImperivm1: return "No Imperivm I campaign is installed yet.";
+	case kBattlesTabImperivm2: return "No Imperivm II campaign is installed yet.";
+	case kBattlesTabConquests: return "There are no conquests here.";
+	default: return "There are no adventures here.";
+	}
+}
+
 std::vector<Line> BuildLines(const BattlesSnapshot &s)
 {
 	std::vector<Line> lines;
@@ -46,8 +68,9 @@ std::vector<Line> BuildLines(const BattlesSnapshot &s)
 		lines.push_back(h);
 		const std::vector<BattlesEntry> &entries = s.lists[list];
 		for (size_t i = 0; i < entries.size(); i++) {
+			if (!BattlesInTab(s.tab, list, entries[i].path)) continue;
 			Line r;
-			r.text = SplitBattleTitle(entries[i].title).name;
+			r.text = SplitBattleTitle(BattleTitleWithoutGame(entries[i].title)).name;
 			r.list = list;
 			r.index = static_cast<int>(i);
 			r.number = numbered ? static_cast<int>(i) + 1 : 0;
@@ -59,7 +82,7 @@ std::vector<Line> BuildLines(const BattlesSnapshot &s)
 		group("Rome's enemies fight for freedom", kBattlesDefeats, true);
 	}
 	else {
-		group(s.tab == kBattlesTabConquests ? "Conquests" : "Custom adventures", kBattlesOthers, false);
+		group(TabName(s.tab), kBattlesOthers, false);
 	}
 	return lines;
 }
@@ -274,15 +297,14 @@ void PaintDetail(Painter &p, int x, int y, int w, int h, const View &v, PaintOut
 	out.desc = ListGeom();
 	if (s.selList < 0 || s.selIndex < 0 || s.selIndex >= static_cast<int>(s.lists[s.selList].size())) {
 		bool empty = true;
-		for (const std::vector<BattlesEntry> &l : s.lists) empty = empty && l.empty();
+		for (const Line &l : BuildLines(s)) empty = empty && l.header;
 		if (s.open && empty) {
 			p.Font(0);
-			p.Text(x, y + h / 2 - 20, w, 40, s.tab == kBattlesTabConquests ? "There are no conquests here." : "There are no adventures here.", kDim,
-				DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			p.Text(x, y + h / 2 - 20, w, 40, EmptyText(s.tab), kDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		}
 		return;
 	}
-	const BattleTitle title = SplitBattleTitle(s.lists[s.selList][s.selIndex].title);
+	const BattleTitle title = SplitBattleTitle(BattleTitleWithoutGame(s.lists[s.selList][s.selIndex].title));
 	const int innerX = x + kPad, innerW = w - kPad * 2, innerTop = y + kPad, innerBottom = y + h - kPad;
 	const int buttonsY = innerBottom - kButtonH;
 	if (w >= kWideCard) {
@@ -346,10 +368,12 @@ void PaintBattlesScreen(Painter &p, int screenW, const View &v, PaintOut &out)
 	PaintWindowHeader(p, W, Upper(conquests ? "Conquests" : "Great Battles"));
 
 	if (!conquests) {
-		const std::pair<int, const char *> kTabs[] = {{kBattlesTabGreat, "Great Battles"}, {kBattlesTabCustom, "Custom adventures"}};
+		const std::pair<int, const char *> kTabs[] = {{kBattlesTabImperivm1, TabName(kBattlesTabImperivm1)}, {kBattlesTabImperivm2, TabName(kBattlesTabImperivm2)},
+			{kBattlesTabGreat, TabName(kBattlesTabGreat)}, {kBattlesTabCustom, TabName(kBattlesTabCustom)}};
 		p.Font(1);
-		int tabW = 190;
-		for (const auto &t : kTabs) tabW = std::max(tabW, p.TextWidth(t.second) + 48);
+		int tabW = 160;
+		for (const auto &t : kTabs) tabW = std::max(tabW, p.TextWidth(t.second) + 40);
+		tabW = std::min(tabW, (W - kMargin * 2 - 18) / 4);
 		std::vector<TabSpec> tabs;
 		for (const auto &t : kTabs) tabs.push_back({t.second, kActTab, t.first, v.snap.tab == t.first, !v.snap.starting && !v.snap.switching});
 		const int count = static_cast<int>(tabs.size()), tabsW = tabW * count + 6 * (count - 1);

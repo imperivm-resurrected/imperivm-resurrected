@@ -64,6 +64,8 @@ std::atomic<DWORD> g_switchAt{0};
 std::atomic<int> g_switchTab{kBattlesTabGreat};
 std::atomic<bool> g_playing{false};
 bool g_pendingCustom = false;
+// The tab of the game's custom mode, which shows Imperivm I, Imperivm II or the player's own adventures out of the same list.
+int g_customTab = kBattlesTabCustom;
 void *g_startedOn = nullptr;
 std::string g_introFile;
 // The game writes the description when a list tells it about a new choice: until then it still shows the last one.
@@ -115,7 +117,7 @@ int DialogTab(void *dlg)
 {
 	const char *d = static_cast<const char *>(dlg);
 	if (*reinterpret_cast<const int *>(d + 0x64)) return kBattlesTabConquests;
-	return *reinterpret_cast<const int *>(d + 0x60) ? kBattlesTabGreat : kBattlesTabCustom;
+	return *reinterpret_cast<const int *>(d + 0x60) ? kBattlesTabGreat : g_customTab;
 }
 
 void Click(void *dlg, int id)
@@ -142,13 +144,22 @@ void Select(void *dlg, int list, int index)
 	reinterpret_cast<SelectItem_t>((*reinterpret_cast<void ***>(l))[0x88 / 4])(l, nullptr, static_cast<unsigned>(index), 1, 1, 1);
 }
 
+std::string PathAt(void *list, int index)
+{
+	const char *items = list ? *reinterpret_cast<char *const *>(static_cast<char *>(list) + 0x94) : nullptr;
+	const char *path = items && index >= 0 && static_cast<unsigned>(index) < Count(list) ? *reinterpret_cast<const char *const *>(items + index * 0x14 + 0xc) : nullptr;
+	return path ? path : "";
+}
+
+// A choice left in the custom list by another tab does not count in this one.
 void SelectionOf(void *dlg, int tab, int &list, int &index)
 {
 	list = index = -1;
 	const int candidates[2] = {tab == kBattlesTabGreat ? kBattlesVictories : kBattlesOthers, tab == kBattlesTabGreat ? kBattlesDefeats : -1};
 	for (int c : candidates) {
-		const int at = c >= 0 ? Current(List(dlg, c)) : -1;
-		if (at >= 0) {
+		void *l = c >= 0 ? List(dlg, c) : nullptr;
+		const int at = Current(l);
+		if (at >= 0 && BattlesInTab(tab, c, PathAt(l, at))) {
 			list = c;
 			index = at;
 			return;
@@ -165,11 +176,13 @@ void Reselect(void *dlg)
 	if (list < 0) {
 		const int candidates[2] = {tab == kBattlesTabGreat ? kBattlesVictories : kBattlesOthers, tab == kBattlesTabGreat ? kBattlesDefeats : -1};
 		for (int c : candidates) {
-			if (c >= 0 && Count(List(dlg, c))) {
+			void *l = c >= 0 ? List(dlg, c) : nullptr;
+			for (unsigned i = 0, n = Count(l); list < 0 && i < n; i++) {
+				if (!BattlesInTab(tab, c, PathAt(l, static_cast<int>(i)))) continue;
 				list = c;
-				index = 0;
-				break;
+				index = static_cast<int>(i);
 			}
+			if (list >= 0) break;
 		}
 	}
 	if (list >= 0) Select(dlg, list, index);
@@ -238,7 +251,8 @@ void SwitchTo(bool conquests, int tab)
 	void *menu = frame ? reinterpret_cast<OperatorNew_t>(addr::kOperatorNew)(kMenuSize) : nullptr;
 	if (!menu) return;
 	reinterpret_cast<MenuCtor_t>(addr::kPreAdventureCtor)(menu, nullptr, conquests ? 1 : 0, 1);
-	g_pendingCustom = tab == kBattlesTabCustom;
+	g_pendingCustom = BattlesTabUsesCustomList(tab);
+	if (g_pendingCustom) g_customTab = tab;
 	g_switchTab = tab;
 	g_switchAt = GetTickCount();
 	reinterpret_cast<SwitchMenu_t>(addr::kMenuSwitchMenu)(frame, nullptr, menu);
@@ -268,6 +282,7 @@ int __fastcall HookOnShow(void *dlg)
 	if (r) return r;
 	g_dlg = dlg;
 	g_switchAt = 0;
+	if (!g_pendingCustom) g_customTab = kBattlesTabCustom;
 	g_descList = g_descIndex = -1;
 	g_startedOn = nullptr;
 	if (g_pendingCustom && DialogTab(dlg) == kBattlesTabGreat) reinterpret_cast<UpdateModeControls_t>(addr::kPreAdventureUpdateModeControls)(dlg, nullptr, 0);
@@ -403,8 +418,11 @@ void BattlesSetTab(int tab)
 		SwitchTo(tab == kBattlesTabConquests, tab);
 		return;
 	}
+	if (BattlesTabUsesCustomList(tab)) g_customTab = tab;
 	// What the screen's own Custom and Great Battles buttons do, without waiting for their message.
-	reinterpret_cast<UpdateModeControls_t>(addr::kPreAdventureUpdateModeControls)(dlg, nullptr, tab == kBattlesTabGreat ? 1 : 0);
+	if ((tab == kBattlesTabGreat) != (now == kBattlesTabGreat)) {
+		reinterpret_cast<UpdateModeControls_t>(addr::kPreAdventureUpdateModeControls)(dlg, nullptr, tab == kBattlesTabGreat ? 1 : 0);
+	}
 	Reselect(dlg);
 }
 
