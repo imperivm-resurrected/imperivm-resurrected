@@ -1,9 +1,10 @@
 // Diagnostics for testing the converted campaign in the game (convert.js --probe). They write "I1PROBE ..." lines to
 // Logs\imperivm\imperivm-mod.log through Imperivm Resurrected's Mod_Log, so they need the mod. They only observe: no
-// command is given that the campaign does not give.
+// command is given that the campaign does not give. The probe build also leaves player0.xml (the start player) with
+// Imperivm I's control="Both" (see adventure.js).
 //
 // Kormaris (map 11937):
-//   seq0, right after Larax is looked up, before any command: Larax's state ("seq0 start").
+//   seq0, right after Larax is looked up, before any command: Larax's state and one Teuton's ("seq0 start").
 //   seq0, right after his "hold_position": the same ("seq0 after hold_position").
 //   seq0, around the goddess conversation: the time before and after C_Conv.Run(), to see whether it was played.
 //   seq15, after the Teutons are sent at him, every 2 s for 30 s: Larax, his best target, each Teuton and the diplomacy.
@@ -35,9 +36,37 @@ const laraxLine = (tag) => {
 		flag('haspath', `${l}.AsUnit().HasPath()`),
 		flag('visible', `${l}.IsVisible()`),
 		flag('ai', `IsAIPlayer(${l}.player)`),
+		`i1p_s = i1p_s + " sight=" + ${l}.sight + " units_in_sight=" + ObjsInSight(${l}, "Unit").count + " visible_units_in_sight=" + VisibleObjsInSight(${l}, "Unit").count;`,
+		flag('enemies_in_sight', `${l}.AsUnit().EnemiesInSight()`),
 		'Mod_Log(i1p_s);',
 	];
 };
+
+// One line about a Teuton `o` (an Obj variable): position, holder, and whether Larax's player sees it.
+const teutonLine = (tag, o) => {
+	const l = 'NO_Larax.obj';
+	return [
+		`i1p_s = "I1PROBE ${tag} class=" + ${o}.class() + " player=" + ${o}.player + " health=" + ${o}.health + " command=" + ${o}.command + " dist=" + ${o}.DistTo(${l}) + " x=" + ${o}.pos.x + " y=" + ${o}.pos.y;`,
+		...holder(o),
+		flag('alive', `${o}.IsAlive()`),
+		flag('visible', `${o}.IsVisible()`),
+		flag('explored_p', `IsExplored(${o}.pos, ${l}.player)`),
+		flag('explored_p_minus_1', `IsExplored(${o}.pos, ${l}.player - 1)`),
+		flag('enemy_of_larax', `${o}.IsEnemy(${l})`),
+		flag('valid_target_for_larax', `${l}.IsValidTarget(${o})`),
+		`i1p_s = i1p_s + " sight=" + ${o}.sight + " units_in_its_sight=" + ObjsInSight(${o}, "Unit").count + " visible_units_in_its_sight=" + VisibleObjsInSight(${o}, "Unit").count;`,
+		'Mod_Log(i1p_s);',
+	];
+};
+
+// At the start of seq0: the first Teuton of M1_Q_Victims1.
+const firstTeuton = (tag) => [
+	'i1p_v = M1_Q_Victims1.GetObjList();',
+	'if (i1p_v.count > 0) {',
+	'\ti1p_o = i1p_v[0];',
+	...indent(teutonLine(tag, 'i1p_o'), 1),
+	'}',
+];
 
 const indent = (lines, n) => lines.map((l) => '\t'.repeat(n) + l);
 
@@ -64,15 +93,9 @@ function seq15Loop() {
 		'\tMod_Log(i1p_s);',
 		'\tfor (i1p_i = 0; i1p_i < i1p_v.count; i1p_i += 1) {',
 		'\t\ti1p_o = i1p_v[i1p_i];',
-		'\t\ti1p_s = "I1PROBE teuton " + i1p_i;',
 		'\t\tif (i1p_o.IsValid()) {',
-		`\t\t\ti1p_s = i1p_s + " class=" + i1p_o.class() + " player=" + i1p_o.player + " health=" + i1p_o.health + " command=" + i1p_o.command + " dist=" + i1p_o.DistTo(${l}) + " x=" + i1p_o.pos.x + " y=" + i1p_o.pos.y;`,
-		...indent(holder('i1p_o'), 3),
-		`\t\t\t${flag('alive', 'i1p_o.IsAlive()')}`,
-		`\t\t\t${flag('enemy_of_larax', `i1p_o.IsEnemy(${l})`)}`,
-		`\t\t\t${flag('valid_target_for_larax', `${l}.IsValidTarget(i1p_o)`)}`,
-		'\t\t} else i1p_s = i1p_s + " invalid";',
-		'\t\tMod_Log(i1p_s);',
+		...indent(teutonLine('teuton', 'i1p_o'), 3),
+		'\t\t} else Mod_LogInt("I1PROBE teuton invalid", i1p_i);',
 		'\t}',
 		'\tSleep(2000);',
 		'}',
@@ -82,7 +105,7 @@ function seq15Loop() {
 
 // Where each probe goes: [file, anchor, 'before' | 'after' the anchor's line, lines].
 const PROBES = [
-	['Maps/11937/Sequences/seq0.vs', /^NO_Larax\s*=\s*GetNamedObj\("Larax"\);/m, 'after', laraxLine('seq0 start')],
+	['Maps/11937/Sequences/seq0.vs', /^NO_Larax\s*=\s*GetNamedObj\("Larax"\);/m, 'after', [...laraxLine('seq0 start'), ...firstTeuton('seq0 start teuton')]],
 	['Maps/11937/Sequences/seq0.vs', /^NO_Larax\.SetCommand\("hold_position"\);/m, 'after', laraxLine('seq0 after hold_position')],
 	['Maps/11937/Sequences/seq0.vs', /^C_Conv\.Init\("TheGodess"\);/m, 'before', ['Mod_LogInt("I1PROBE seq0 goddess conversation starts, t", GetTime());']],
 	['Maps/11937/Sequences/seq0.vs', /^C_Conv\.Run\(\);/m, 'after', ['Mod_LogInt("I1PROBE seq0 goddess conversation ended, t", GetTime());', ...laraxLine('seq0 after goddess')]],
