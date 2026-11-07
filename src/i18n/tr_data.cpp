@@ -1591,10 +1591,5 @@ extern const TrRow kTrRows[] = {
 	{"Not enough history to draw yet.", "Aún no hay historial para dibujar.", "Non c'è ancora una cronologia da disegnare."},
 	{"Drag over the chart to zoom in", "Arrastra sobre la gráfica para ampliar", "Trascina sul grafico per ingrandire"},
 	{"See the whole game", "Ver toda la partida", "Vedi tutta la partita"},
-	{"Tutorial", "Aprendizaje", "Tutorial"},
-	{"Great Battles", "Grandes batallas", "Grandi battaglie"},
-	{"Change player", "Cambiar jugador", "Cambia giocatore"},
-	{"Editor", "Editor", "Editor"},
-	{"Credits", "Créditos", "Riconoscimenti"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

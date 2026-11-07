@@ -14,7 +14,6 @@ void MpUiRejoinInGame();
 void InstallMpUi(bool knownExe);
 bool MpUiIsOpen();
 bool MpUiMainMenuVisible();
-void *MpUiMainMenuDialog();
 bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp);
 bool MpUiNeedsDraw();
 void MpUiDraw(uint32_t *buf, int w, int h);
