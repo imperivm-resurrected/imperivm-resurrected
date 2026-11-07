@@ -506,9 +506,10 @@ function convertAdventure(input) {
 				report.count('Player races', `${v} -> ${M.RACES[v]}`);
 				return M.RACES[v];
 			}).text;
-			// Test of the probe build: the start player keeps Imperivm I's "Both" (did the goddess's voices need it?).
-			const keepControl = input.probe && /^player0\.xml$/i.test(p);
-			if (keepControl) report.add('Probe', 'player0.xml keeps control="Both" (the start player), the others get "Computer"');
+			// Test of the probe build: every player keeps Imperivm I's control, as before 4cdb48f (the goddess's voices
+			// played then).
+			const keepControl = !!input.probe;
+			if (keepControl) report.count('Probe', 'player files keep Imperivm I\'s control ("Both")');
 			t = X.mapAttribute(t, 'control', (v) => {
 				if (keepControl || !M.PLAYER_CONTROL[v]) return v;
 				report.count('Player control', `${v} -> ${M.PLAYER_CONTROL[v]}`);
