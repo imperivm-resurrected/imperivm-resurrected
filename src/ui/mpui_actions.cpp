@@ -190,8 +190,8 @@ void DoAction(int action, int arg)
 		break;
 	case kGDropOpen:
 		g_s.dropOpen = true;
-		g_s.dropKind = arg & 0xf;
-		g_s.dropIndex = arg >> 4;
+		g_s.dropKind = arg & kDropKindMask;
+		g_s.dropIndex = arg >> kDropKindBits;
 		{
 			int sel = -1;
 			const int count = static_cast<int>(DropItems(g_s, sel).size());
@@ -398,7 +398,7 @@ void DoAction(int action, int arg)
 		}
 		GameRoomToggleOption(arg);
 		break;
-	case kGColor: DoAction(kGDropOpen, kDropColor | ((arg & 7) << 4)); break;
+	case kGColor: DoAction(kGDropOpen, DropArg(kDropColor, arg & 7)); break;
 	case kGKickJoining:
 		if (arg >= 0 && arg < 8 && g_flow.arrivingIds[arg]) SteamKick(g_flow.arrivingIds[arg]);
 		break;

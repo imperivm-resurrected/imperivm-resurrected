@@ -54,7 +54,7 @@ void DropKeyMove(WPARAM vk)
 void DropFocusCombo()
 {
 	g_s.tabAction = kGDropOpen;
-	g_s.tabArg = g_s.dropKind | (g_s.dropIndex << 4);
+	g_s.tabArg = DropArg(g_s.dropKind, g_s.dropIndex);
 }
 
 bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)

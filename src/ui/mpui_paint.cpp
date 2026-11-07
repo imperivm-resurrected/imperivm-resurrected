@@ -812,7 +812,7 @@ RECT g_dropAnchor = {};
 void Combo(Painter &p, const State &st, int x, int y, int w, int h, const std::string &text, int kind, int index, bool enabled)
 {
 	PaintCombo(p, x, y, w, h, text, st.dropOpen && st.dropKind == kind && st.dropIndex == index, enabled, st.mouseX, st.mouseY, kGDropOpen,
-		kind | (index << 4), &g_dropAnchor);
+		DropArg(kind, index), &g_dropAnchor);
 }
 
 void PaintPickCombo(Painter &p, const State &st, int x, int y, int w, int h, const std::string &text)

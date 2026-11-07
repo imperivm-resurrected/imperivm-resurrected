@@ -371,7 +371,7 @@ void PaintGameRoom(Painter &p, const State &st)
 			auto row = [&](const char *label, const std::string &value, bool special, bool enabled, bool drop, int action, int arg,
 						   const char *help) {
 				const bool hovAny = hoverRow(enabled, label, help), hov = hovAny && enabled;
-				const bool open = drop && st.dropOpen && st.dropKind == (action & 15) && st.dropIndex == arg;
+				const bool open = drop && st.dropOpen && st.dropKind == action && st.dropIndex == arg;
 				if (hovAny || open) rowHover(enabled || open);
 				p.Fill(ix, y + rowH - 1, iw, 1, RGB(40, 31, 21));
 				p.Font(3);
@@ -382,7 +382,7 @@ void PaintGameRoom(Painter &p, const State &st)
 					DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 				if (drop && enabled) p.ArrowDown(ix + iw - 9, y + rowH / 2 - 2, 8, 4, hov || open ? pal::focus : kGold);
 				if (enabled && shown(rowH)) {
-					if (drop) p.AddHit(ix - 4, y, iw + 8, rowH, kGDropOpen, (action & 15) | (arg << 4));
+					if (drop) p.AddHit(ix - 4, y, iw + 8, rowH, kGDropOpen, DropArg(action, arg));
 					else p.AddHit(ix - 4, y, iw + 8, rowH, action, arg);
 				}
 				if (open) g_dropAnchor = {valX - 60, y, ix + iw, y + rowH};

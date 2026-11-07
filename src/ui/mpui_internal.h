@@ -93,6 +93,14 @@ enum { kPredTeam, kPredRace, kPredAi, kPredReady, kPredOptSel, kPredOptVal, kPre
 
 enum { kDropRace, kDropAi, kDropOption, kDropColor, kDropSlot, kDropSites, kDropModOption, kDropPreset, kDropFilter, kDropPlayers, kDropProfile, kDropVisibility, kDropSaveGame, kDropSpectators, kDropPickSort, kDropBonus };
 
+// The argument of kGDropOpen: the kind in the low bits and the slot or option index above them.
+const int kDropKindBits = 5, kDropKindMask = (1 << kDropKindBits) - 1;
+
+inline int DropArg(int kind, int index)
+{
+	return kind | (index << kDropKindBits);
+}
+
 struct SaveEntry {
 	std::string name, vfsPath, file;
 	uint64_t time = 0;
