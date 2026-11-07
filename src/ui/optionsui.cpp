@@ -22,6 +22,7 @@
 #include "hooks/dmshim.h"
 #include "hooks/soundlevels.h"
 #include "i18n/tr.h"
+#include "mods/updater.h"
 #include "ui/modui.h"
 #include "ui/optionsui_view.h"
 #include "ui/report.h"
@@ -176,8 +177,55 @@ void SetDevices(Values &v, const std::string &wanted)
 	v.disabled[kOutputDevice] = !DmShimReady();
 }
 
+void SetSystemExtras(Values &v, const Config &c)
+{
+	v.combos[kLogLevel] = c.logLevel <= kLogDebug ? 1 : 0;
+	v.items[kLogLevel] = {"Normal", "Detailed"};
+	v.checks[kModOverrides] = c.modOverrides;
+	v.checks[kCrashFix] = c.crashFix;
+}
+
+void CopySystemExtras(Values &to, const Values &from)
+{
+	for (int id : {kLogLevel}) {
+		const auto combo = from.combos.find(id);
+		if (combo != from.combos.end()) to.combos[id] = combo->second;
+		const auto items = from.items.find(id);
+		if (items != from.items.end()) to.items[id] = items->second;
+	}
+	for (int id : {kModOverrides, kCrashFix}) {
+		const auto it = from.checks.find(id);
+		if (it != from.checks.end()) to.checks[id] = it->second;
+	}
+}
+
+// Returns whether a change needs a restart. "Normal" and "Detailed" keep a level set by hand in the ini (trace, warn) until they are changed.
+bool CommitSystemExtras(const Values &v)
+{
+	Config &c = MutableConfig();
+	bool changed = false;
+	const auto level = v.combos.find(kLogLevel);
+	if (level != v.combos.end() && (level->second == 1) != (c.logLevel <= kLogDebug)) {
+		c.logLevel = level->second == 1 ? kLogDebug : kLogInfo;
+		LogSetLevel(c.logLevel);
+		changed = true;
+	}
+	bool restart = false;
+	const auto commit = [&](int id, bool &setting) {
+		const auto it = v.checks.find(id);
+		if (it == v.checks.end() || it->second == setting) return;
+		setting = it->second;
+		changed = restart = true;
+	};
+	commit(kModOverrides, c.modOverrides);
+	commit(kCrashFix, c.crashFix);
+	if (changed) SaveConfig();
+	return restart;
+}
+
 void SetExtras(Values &v, const Config &c)
 {
+	SetSystemExtras(v, c);
 	SetDisplayExtras(v, c);
 	v.checks[kPanelCompact] = c.panelCompact;
 	v.checks[kSmoothCamera] = c.smoothScroll;
@@ -212,8 +260,29 @@ Values ReadNative()
 	return v;
 }
 
+// The update panel only draws on the main menu, which is hidden while this screen is open, so the result goes in the row.
+void SetUpdateStatus(Values &v)
+{
+	const UpdaterInfo info = UpdaterGetInfo();
+	std::string text;
+	switch (info.state) {
+	case UpdaterInfo::kAvailable: text = TrFmt("Version %s is out: see the main menu", {info.newVersion}); break;
+	case UpdaterInfo::kDownloading: text = TrFmt("Downloading %s...", {info.newVersion}) + " " + std::to_string(info.percent) + " %"; break;
+	case UpdaterInfo::kReady: text = TrFmt("Version %s installed: restart the game", {info.newVersion}); break;
+	case UpdaterInfo::kFailed: text = Tr("Couldn't update: see the main menu"); break;
+	default:
+		if (info.check == UpdaterInfo::kChecking) text = Tr("Checking...");
+		else if (info.check == UpdaterInfo::kUpToDate) text = Tr("You have the latest version");
+		else if (info.check == UpdaterInfo::kCheckFailed) text = Tr("Couldn't check. Try again later");
+		break;
+	}
+	v.texts[kCheckUpdates] = text;
+	v.disabled[kCheckUpdates] = info.check == UpdaterInfo::kChecking || info.state == UpdaterInfo::kDownloading || info.state == UpdaterInfo::kReady;
+}
+
 void CopyExtras(Values &to, const Values &from)
 {
+	CopySystemExtras(to, from);
 	for (int id : {kSmoothCamera, kPauseInBackground, kZoomGroupIcons, kZoomFog}) {
 		const auto it = from.checks.find(id);
 		if (it != from.checks.end()) to.checks[id] = it->second;
@@ -292,6 +361,7 @@ void Refresh(bool setBaseline = false)
 	void *dlg = OptionsDialogOpen();
 	if (!dlg) return;
 	Values fresh = ReadNative();
+	SetUpdateStatus(fresh);
 	std::lock_guard<std::mutex> lock(g_lock);
 	if (g_s.dlg != dlg) {
 		g_s = State();
@@ -486,6 +556,10 @@ void Execute(const Command &cmd)
 	case kActRow:
 		if (cmd.arg == kOpenLogs) ReportOpenLogsFolder();
 		else if (cmd.arg == kCreateReport) ReportStart();
+		else if (cmd.arg == kCheckUpdates) {
+			UpdaterCheckNow();
+			Refresh();
+		}
 		break;
 	case kActControls: OptionsClick(kNativeControls); break;
 	case kActReset: {
@@ -504,18 +578,22 @@ void Execute(const Command &cmd)
 		break;
 	}
 	case kActApply: {
+		const bool restart = CommitSystemExtras(cmd.values);
 		CommitExtras(cmd.values);
 		OptionsClick(kNativeApply);
 		Refresh(true);
+		if (restart) UiAskRestart(Tr("The game will restart to apply the change."));
 		break;
 	}
 	case kActOk: {
+		const bool restart = CommitSystemExtras(cmd.values);
 		CommitExtras(cmd.values);
 		{
 			std::lock_guard<std::mutex> lock(g_lock);
 			g_s.closedAt = GetTickCount();
 		}
 		OptionsClick(kNativeOk);
+		if (restart) UiAskRestart(Tr("The game will restart to apply the change."));
 		break;
 	}
 	case kActCancel: {

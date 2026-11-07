@@ -21,9 +21,10 @@ enum ControlId {
 	kHealthBars = 0x9030, kPauseInBackground = 0x9031, kZoomGroupIcons = 0x9032, kZoomFog = 0x9033, kZoomRefresh = 0x9034,
 	kWindowSize = 0x9010, kExtendedView = 0x9011, kFpsLimit = 0x9012, kImageScaling = 0x9013,
 	kMasterVolume = 0x9020, kNatureVolume = 0x9021, kConversationVolume = 0x9022, kOutputDevice = 0x9023,
+	kModVersion = 0x9040, kGameExe = 0x9041, kLogLevel = 0x9042, kModOverrides = 0x9043, kCrashFix = 0x9044, kCheckUpdates = 0x9103,
 };
 
-enum RowKind { kRowToggle, kRowSlider, kRowToggleSlider, kRowCombo, kRowSegment, kRowAction };
+enum RowKind { kRowToggle, kRowSlider, kRowToggleSlider, kRowCombo, kRowSegment, kRowAction, kRowInfo };
 
 struct Row {
 	std::string label, hint;
@@ -36,6 +37,7 @@ struct Row {
 	std::vector<std::string> items;
 	int selected = -1;
 	std::string action;
+	std::string text, badge;
 	bool restart = false;
 	bool enabled = true;
 };
@@ -58,6 +60,7 @@ struct Values {
 	std::map<int, int> combos;
 	std::map<int, std::vector<std::string>> items;
 	std::map<int, bool> disabled;
+	std::map<int, std::string> texts;
 	bool operator==(const Values &o) const { return checks == o.checks && scrolls == o.scrolls && combos == o.combos; }
 };
 

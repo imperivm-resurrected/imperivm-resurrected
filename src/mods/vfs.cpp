@@ -39,6 +39,8 @@ typedef const char *(__fastcall *CFileRead_t)(void *self, void *edx, void *buf, 
 typedef void(__fastcall *CFileDelete_t)(void *self, void *edx, int flags);
 
 std::string g_gameDir;
+// Read once: the options can change the setting, and it waits for a restart so that no session mixes both kinds of file.
+bool g_overrides = true;
 std::mutex g_lock;
 std::set<std::string> g_dumped;
 std::set<std::string> g_reportedOverrides;
@@ -772,7 +774,7 @@ void *__cdecl OpenImpl(const char *path, unsigned mode, void *err)
 	if (reading && TemplateVariant(rel, variantW, variantH)) return OpenSizedTemplate(path, variantW, variantH, mode, err);
 
 	bool overridden = false;
-	if (reading && GetConfig().modOverrides) {
+	if (reading && g_overrides) {
 		const long long t0 = Ticks();
 		overridden = DiskFileExists(DiskPath("imperivm-resurrected", rel));
 		g_existTicks += Ticks() - t0;
@@ -925,11 +927,12 @@ void InstallVfsHooks(bool knownExe)
 	GetModuleFileNameA(nullptr, exe, MAX_PATH);
 	g_gameDir = exe;
 	g_gameDir.erase(g_gameDir.find_last_of('\\'));
+	g_overrides = GetConfig().modOverrides;
 
 	if (HookCreate(reinterpret_cast<void *>(addr::kVfsOpenCompressedAware), reinterpret_cast<void *>(&HookVfsOpen),
 			reinterpret_cast<void **>(&g_origOpen)) == MH_OK &&
 		HookEnable(reinterpret_cast<void *>(addr::kVfsOpenCompressedAware)) == MH_OK) {
-		LogD("vfs", "hooked (replacement from imperivm-resurrected\\ %s, dump: %s)", GetConfig().modOverrides ? "active" : "disabled",
+		LogD("vfs", "hooked (replacement from imperivm-resurrected\\ %s, dump: %s)", g_overrides ? "active" : "disabled",
 			GetConfig().dumpFiles.empty() ? "-" : GetConfig().dumpFiles.c_str());
 	}
 	else {

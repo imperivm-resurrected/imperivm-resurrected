@@ -5,6 +5,8 @@
 
 #include <string>
 
+#include "core/log.h"
+
 struct Config {
 	bool renderEnabled = true;
 	bool vsync = true;
@@ -54,6 +56,7 @@ struct Config {
 
 	bool modOverrides = true;
 
+	LogLevel logLevel = kLogInfo;
 	bool logFiles = false;
 	bool rejoinTrace = false;
 	bool rejoinReload = true;
