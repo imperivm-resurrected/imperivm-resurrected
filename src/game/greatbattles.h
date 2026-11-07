@@ -40,6 +40,8 @@ void *BattlesDialogOpen();
 bool BattlesScreenWanted();
 bool BattlesIntroPlaying();
 BattlesSnapshot BattlesRead();
+// Called on the game thread once the game has written the description of a new choice.
+void BattlesOnDescription(void (*callback)());
 void BattlesSelect(int list, int index);
 void BattlesSetDifficulty(int index);
 void BattlesSetTab(int tab);

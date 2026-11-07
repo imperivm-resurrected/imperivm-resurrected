@@ -68,6 +68,8 @@ void *g_startedOn = nullptr;
 std::string g_introFile;
 // The game writes the description when a list tells it about a new choice: until then it still shows the last one.
 int g_descList = -1, g_descIndex = -1;
+// The menu only repaints when something moves, so the screen is told when the text changes.
+void (*g_onDescription)() = nullptr;
 std::map<std::string, std::shared_ptr<const BattleImage>> g_images;
 std::map<std::string, std::string> g_intros;
 
@@ -290,6 +292,7 @@ unsigned __fastcall HookOnMessage(void *dlg, void *edx, int *msg)
 			if (id != kListIds[i] || Current(sender) < 0) continue;
 			g_descList = i;
 			g_descIndex = Current(sender);
+			if (g_onDescription) g_onDescription();
 		}
 	}
 	return r;
@@ -370,6 +373,11 @@ BattlesSnapshot BattlesRead()
 	}
 	if (!s.image) s.image = Image(fallback);
 	return s;
+}
+
+void BattlesOnDescription(void (*callback)())
+{
+	g_onDescription = callback;
 }
 
 void BattlesSelect(int list, int index)
