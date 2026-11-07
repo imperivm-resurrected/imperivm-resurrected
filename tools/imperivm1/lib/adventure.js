@@ -506,12 +506,8 @@ function convertAdventure(input) {
 				report.count('Player races', `${v} -> ${M.RACES[v]}`);
 				return M.RACES[v];
 			}).text;
-			// Test of the probe build: every player keeps Imperivm I's control, as before 4cdb48f (the goddess's voices
-			// played then).
-			const keepControl = !!input.probe;
-			if (keepControl) report.count('Probe', 'player files keep Imperivm I\'s control ("Both")');
 			t = X.mapAttribute(t, 'control', (v) => {
-				if (keepControl || !M.PLAYER_CONTROL[v]) return v;
+				if (!M.PLAYER_CONTROL[v]) return v;
 				report.count('Player control', `${v} -> ${M.PLAYER_CONTROL[v]}`);
 				return M.PLAYER_CONTROL[v];
 			}).text;
@@ -524,7 +520,18 @@ function convertAdventure(input) {
 			out.set(p, bytes(convertMapXml(text(buf))));
 			report.count('Maps', 'map.xml given persist_state="1"');
 		} else if (/^Maps\/[^/]+\/map\.obj\.xml$/i.test(p)) {
-			out.set(p, bytes(convertObjects(text(buf), classes, gbr, report, p)));
+			let objs = convertObjects(text(buf), classes, gbr, report, p);
+			// Test of the probe build: Imperivm I marks its party members with flag 0x80000; Great Battles of Rome, at
+			// creation, hands objects with it to the game's party handler (0x5DB53D, the one SetParty(false) calls).
+			if (input.probe) {
+				objs = X.mapAttribute(objs, 'flags', (v) => {
+					const f = parseInt(v, 16);
+					if (!/^0x[0-9a-f]+$/i.test(v) || !(f & 0x80000)) return v;
+					report.count('Probe', 'flag 0x80000 (Imperivm I party) cleared on map objects');
+					return '0x' + ((f & ~0x80000) >>> 0).toString(16).toUpperCase();
+				}).text;
+			}
+			out.set(p, bytes(objs));
 		} else if (/Terrain\.terrain\.grid$/i.test(p)) {
 			const r = G.widenTerrain(buf, terrain);
 			out.set(p, r.buf);

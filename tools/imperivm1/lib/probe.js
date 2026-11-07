@@ -1,7 +1,7 @@
 // Diagnostics for testing the converted campaign in the game (convert.js --probe). They write "I1PROBE ..." lines to
 // Logs\imperivm\imperivm-mod.log through Imperivm Resurrected's Mod_Log, so they need the mod. They only observe: no
-// command is given that the campaign does not give. The probe build also leaves every player file with
-// Imperivm I's control="Both" (see adventure.js).
+// command is given that the campaign does not give. The probe build also clears Imperivm I's party flag (0x80000)
+// from the map objects (see adventure.js).
 //
 // Kormaris (map 11937):
 //   seq0, right after Larax is looked up, before any command: Larax's state and one Teuton's ("seq0 start").
