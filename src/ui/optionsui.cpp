@@ -54,23 +54,55 @@ void SetExtras(Values &v, const Config &c)
 Values ReadNative()
 {
 	Values v;
-	for (int id : kNativeChecks) v.checks[id] = OptionsReadCheck(id, false);
-	for (int id : kNativeScrolls) v.scrolls[id] = OptionsReadScroll(id, 0);
+	for (int id : kNativeChecks) {
+		v.checks[id] = OptionsReadCheck(id, false);
+		v.disabled[id] = !OptionsControlEnabled(id);
+	}
+	for (int id : kNativeScrolls) {
+		v.scrolls[id] = OptionsReadScroll(id, 0);
+		v.disabled[id] = !OptionsControlEnabled(id);
+	}
 	for (int id : kNativeCombos) {
 		v.combos[id] = OptionsReadCombo(id);
 		v.items[id] = OptionsComboItems(id);
+		v.disabled[id] = !OptionsControlEnabled(id);
 	}
 	return v;
 }
 
 void CopyExtras(Values &to, const Values &from)
 {
-	for (int id : {kPanelCompact, kSmoothCamera, kModernAudio}) {
+	for (int id : {kSmoothCamera, kModernAudio}) {
 		const auto it = from.checks.find(id);
 		if (it != from.checks.end()) to.checks[id] = it->second;
 	}
-	const auto opacity = from.scrolls.find(kPanelOpacity);
-	if (opacity != from.scrolls.end()) to.scrolls[kPanelOpacity] = opacity->second;
+	// The panel changes as it is edited, so the setting is the truth; its own mouse controls change it too.
+	to.checks[kPanelCompact] = GetConfig().panelCompact;
+	to.scrolls[kPanelOpacity] = GetConfig().panelOpacity;
+}
+
+void ApplyPanelLive(const Values &v)
+{
+	Config &c = MutableConfig();
+	const auto check = [&](int id, bool fallback) {
+		const auto it = v.checks.find(id);
+		return it == v.checks.end() ? fallback : it->second;
+	};
+	c.showPerf = check(kShowPerf, c.showPerf);
+	c.showNet = check(kShowNet, c.showNet);
+	c.panelCompact = check(kPanelCompact, c.panelCompact);
+	const auto opacity = v.scrolls.find(kPanelOpacity);
+	if (opacity != v.scrolls.end()) c.panelOpacity = opacity->second;
+}
+
+void ApplyPanelFromView()
+{
+	Values values;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		values = g_s.view.values;
+	}
+	ApplyPanelLive(values);
 }
 
 void Refresh(bool setBaseline = false)
@@ -186,8 +218,12 @@ void Execute(const Command &cmd)
 			OptionsWriteCheck(cmd.arg, !OptionsReadCheck(cmd.arg, false));
 			Refresh();
 		}
+		ApplyPanelFromView();
 		break;
-	case kActSlider: SetSlider(cmd.arg, cmd.value); break;
+	case kActSlider:
+		SetSlider(cmd.arg, cmd.value);
+		ApplyPanelFromView();
+		break;
 	case kActSegment:
 		OptionsWriteCheck(cmd.arg >> 4, (cmd.arg & 15) != 0);
 		Refresh();
@@ -206,8 +242,11 @@ void Execute(const Command &cmd)
 		{
 			std::lock_guard<std::mutex> lock(g_lock);
 			SetExtras(g_s.view.values, Config());
+			ApplyPanelLive(g_s.view.values);
 		}
+		OptionsWriteScroll(kBrightness, OptionsReadScroll(kBrightness, 100));
 		Refresh();
+		ApplyPanelFromView();
 		break;
 	}
 	case kActApply: {
@@ -231,6 +270,7 @@ void Execute(const Command &cmd)
 		{
 			std::lock_guard<std::mutex> lock(g_lock);
 			g_s.closedAt = GetTickCount();
+			ApplyPanelLive(g_s.baseline);
 		}
 		OptionsClick(kNativeCancel);
 		break;

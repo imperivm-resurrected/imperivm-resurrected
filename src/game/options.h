@@ -14,6 +14,7 @@ bool OptionsReadCheck(int id, bool fallback);
 void OptionsWriteCheck(int id, bool value);
 int OptionsReadScroll(int id, int fallback);
 void OptionsWriteScroll(int id, int value);
+bool OptionsControlEnabled(int id);
 int OptionsReadCombo(int id);
 std::vector<std::string> OptionsComboItems(int id);
 void OptionsWriteCombo(int id, int index);
