@@ -186,6 +186,11 @@ const int kShareChunk = 64 * 1024;
 enum : uint8_t { kShReq = 1, kShFile = 2, kShData = 3, kShModEnd = 4, kShDeny = 5, kShDone = 6, kShMapReq = 7, kShMapFile = 8, kShMapEnd = 9, kShCam = 10, kShSeat = 11, kShSwap = 12, kShProgress = 13, kShMapHave = 14 };
 static_assert(kContentMessages.Has(kShReq) && kContentMessages.Has(kShMapHave), "content messages out of their range");
 
+// The start countdown of the game room, from the host to the other players: "<seq> <ms>" and "<seq>".
+enum : uint8_t { kRmCountdown = kRoomMessages.first, kRmCountdownCancel };
+static_assert(kRoomMessages.Has(kRmCountdownCancel), "room messages out of their range");
+void RoomOnMessage(uint64 peer, uint8_t type, const std::string &text);
+
 struct RejoinOut {
 	uint64 peer;
 	uint8_t type;

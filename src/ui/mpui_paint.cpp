@@ -99,13 +99,6 @@ uint64_t MemberIdByName(const State &st, const std::string &name, bool skipMe)
 void PaintHeader(Painter &p, const State &st)
 {
 	const int mx = st.mouseX, my = st.mouseY;
-	if (st.game.active) {
-		const std::string title = !st.game.online ? "Skirmish"
-								: st.room.id      ? st.room.info.name
-												  : "Local network game";
-		PaintWindowHeader(p, kW, title, 1);
-		return;
-	}
 	// Lined up with the rule under the header, which it ends on.
 	DrawPatronRowGlow(p, 16, 12, 760, 54, PatronOf(SteamOwnId()).tier);
 	if (!PaintAvatar(p, 20, 16, 44, SteamOwnId())) {
@@ -839,6 +832,13 @@ std::vector<std::string> DropItems(const State &st, int &sel)
 {
 	sel = -1;
 	const int idx = st.dropIndex;
+	if (st.dropKind == kDropTeam) {
+		const int team = st.game.slots[idx & 7].team;
+		sel = team > 0 && team <= kRoomTeams ? team : 0;
+		std::vector<std::string> items = {Tr("No team")};
+		for (int t = 1; t <= kRoomTeams; t++) items.push_back(TrFmt("Team %d", {std::to_string(t)}));
+		return items;
+	}
 	if (st.dropKind == kDropBonus) {
 		sel = st.game.slots[idx & 7].bonus;
 		std::vector<std::string> names;
@@ -942,7 +942,7 @@ RECT g_dropAnchor = {};
 void Combo(Painter &p, const State &st, int x, int y, int w, int h, const std::string &text, int kind, int index, bool enabled)
 {
 	PaintCombo(p, x, y, w, h, text, st.dropOpen && st.dropKind == kind && st.dropIndex == index, enabled, st.mouseX, st.mouseY, kGDropOpen,
-		kind | (index << 4), &g_dropAnchor);
+		DropArg(kind, index), &g_dropAnchor);
 }
 
 void PaintPickCombo(Painter &p, const State &st, int x, int y, int w, int h, const std::string &text)

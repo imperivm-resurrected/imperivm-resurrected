@@ -1605,5 +1605,22 @@
 {"en":"Puts every key back as in the original game.","es":"Deja todas las teclas como en el juego original.","it":"Rimette tutti i tasti come nel gioco originale."},
 {"en":"Put every key back as in the original game?","es":"¿Dejar todas las teclas como en el juego original?","it":"Rimettere tutti i tasti come nel gioco originale?"},
 {"en":"Your keys and command modes go back to the game's. You can undo it for a few seconds.","es":"Tus teclas y modos de órdenes vuelven a los del juego. Puedes deshacerlo durante unos segundos.","it":"Tasti e modalità dei comandi tornano a quelli del gioco. Puoi annullare per qualche secondo."},
-{"en":"Every key is back as in the original game. If you want yours back, Undo.","es":"Todas las teclas están como en el juego original. Si quieres las tuyas, Deshacer.","it":"Tutti i tasti sono come nel gioco originale. Se rivuoi i tuoi, Annulla."}
+{"en":"Every key is back as in the original game. If you want yours back, Undo.","es":"Todas las teclas están como en el juego original. Si quieres las tuyas, Deshacer.","it":"Tutti i tasti sono come nel gioco originale. Se rivuoi i tuoi, Annulla."},
+{"en":"Ready?","es":"¿Listo?","it":"Pronto?"},
+{"en":"Civilization","es":"Civilización","it":"Civiltà"},
+{"en":"Color","es":"Color","it":"Colore"},
+{"en":"No team","es":"Sin equipo","it":"Nessuna squadra"},
+{"en":"Team %d","es":"Equipo %d","it":"Squadra %d"},
+{"en":"Waiting for a player...","es":"Esperando a un jugador...","it":"In attesa di un giocatore..."},
+{"en":"Joining the room...","es":"Entrando en la sala...","it":"Sta entrando nella stanza..."},
+{"en":"Downloading content: %d %%","es":"Descargando contenido: %d %%","it":"Scarica i contenuti: %d %%"},
+{"en":"Restarting the game with the content...","es":"Reiniciando el juego con el contenido...","it":"Riavvia il gioco con i contenuti..."},
+{"en":"%d of %d ready","es":"%d de %d listos","it":"%d su %d pronti"},
+{"en":"Everyone is ready. Click to cancel","es":"Todos están listos. Pulsa para cancelar","it":"Sono tutti pronti. Clicca per annullare"},
+{"en":"Online","es":"En línea","it":"="},
+{"en":"Local network","es":"Red local","it":"Rete locale"},
+{"en":"Room name","es":"Nombre de la sala","it":"Nome della stanza"},
+{"en":"Press Enter to rename the room","es":"Pulsa Intro para cambiar el nombre","it":"Premi Invio per rinominare la stanza"},
+{"en":"Only the host can change the options.","es":"Solo el anfitrión puede cambiar las opciones.","it":"Solo l'host può cambiare le opzioni."},
+{"en":"Positions","es":"Posiciones","it":"Posizioni"}
 ]

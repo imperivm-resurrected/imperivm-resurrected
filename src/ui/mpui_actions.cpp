@@ -25,7 +25,7 @@ void DoAction(int action, int arg)
 		return;
 	}
 	if (action != kChatFocus && action != kFieldName && action != kFieldPass && action != kChatSend &&
-		action != kFieldJoinPass && action != kJoin && action != kFieldSearch && action != kPassShow) {
+		action != kFieldJoinPass && action != kJoin && action != kFieldSearch && action != kPassShow && action != kFieldRoomName) {
 		g_s.focus = kNoField;
 	}
 	switch (action) {
@@ -192,8 +192,8 @@ void DoAction(int action, int arg)
 		break;
 	case kGDropOpen:
 		g_s.dropOpen = true;
-		g_s.dropKind = arg & 0xf;
-		g_s.dropIndex = arg >> 4;
+		g_s.dropKind = arg & kDropKindMask;
+		g_s.dropIndex = arg >> kDropKindBits;
 		{
 			int sel = -1;
 			const int count = static_cast<int>(DropItems(g_s, sel).size());
@@ -245,6 +245,13 @@ void DoAction(int action, int arg)
 			g_s.game.slots[idx & 7].color = arg;
 			Predict(kPredColor, idx & 7, arg);
 			GameRoomSetColor(idx & 7, arg);
+		}
+		else if (g_s.dropKind == kDropTeam) {
+			if (arg >= 0 && arg <= kRoomTeams) {
+				SetTeamTo(idx & 7, arg);
+				g_s.game.slots[idx & 7].team = arg;
+				Predict(kPredTeam, idx & 7, arg);
+			}
 		}
 		else if (g_s.dropKind == kDropBonus) {
 			g_s.game.slots[idx & 7].bonus = arg;
@@ -349,6 +356,10 @@ void DoAction(int action, int arg)
 		break;
 	}
 	case kGReady: {
+		if (g_s.game.host && CountdownLeftMs() >= 0) {
+			GameRoomCountdownCancel();
+			break;
+		}
 		GameRoomSlot &me = g_s.game.slots[g_s.game.localSlot & 7];
 		me.ready = !me.ready;
 		Predict(kPredReady, g_s.game.localSlot & 7, me.ready);
@@ -383,6 +394,15 @@ void DoAction(int action, int arg)
 		break;
 	}
 	case kGCancel: LeaveGameRoom(); break;
+	case kFieldRoomName:
+		if (!g_s.game.host || !g_s.room.id) break;
+		if (g_s.focus != kRoomNameField) g_s.roomNameInput = g_s.room.info.name;
+		FocusField(kRoomNameField);
+		break;
+	case kGTab:
+		g_s.roomTab = arg == 1 ? 1 : 0;
+		g_s.dropOpen = false;
+		break;
 	case kGResync:
 		LogI("lobby", "leaving the room to download the content of its map and come back");
 		g_s.forcePackLobby = g_s.room.id;
@@ -406,7 +426,7 @@ void DoAction(int action, int arg)
 		}
 		GameRoomToggleOption(arg);
 		break;
-	case kGColor: DoAction(kGDropOpen, kDropColor | ((arg & 7) << 4)); break;
+	case kGColor: DoAction(kGDropOpen, DropArg(kDropColor, arg & 7)); break;
 	case kGKickJoining:
 		if (arg >= 0 && arg < 8 && g_flow.arrivingIds[arg]) SteamKick(g_flow.arrivingIds[arg]);
 		break;
@@ -733,6 +753,7 @@ std::string &FocusedText()
 	case kJoinPassField: return g_s.joinPassInput;
 	case kSearchField: return g_s.searchInput;
 	case kPickSearchField: return g_s.pickSearch;
+	case kRoomNameField: return g_s.roomNameInput;
 	default: return g_s.passInput;
 	}
 }
@@ -741,14 +762,14 @@ int FieldOfAction(int action)
 {
 	return action == kChatFocus ? kChatField : action == kFieldName ? kNameField : action == kFieldPass ? kPassField
 		: action == kFieldJoinPass ? kJoinPassField : action == kFieldSearch ? kSearchField
-		: action == kFieldPickSearch ? kPickSearchField : kNoField;
+		: action == kFieldPickSearch ? kPickSearchField : action == kFieldRoomName ? kRoomNameField : kNoField;
 }
 
 int ActionOfField(int field)
 {
 	return field == kChatField ? kChatFocus : field == kNameField ? kFieldName : field == kPassField ? kFieldPass
 		: field == kJoinPassField ? kFieldJoinPass : field == kSearchField ? kFieldSearch
-		: field == kPickSearchField ? kFieldPickSearch : -1;
+		: field == kPickSearchField ? kFieldPickSearch : field == kRoomNameField ? kFieldRoomName : -1;
 }
 
 void FocusField(int field)
@@ -799,6 +820,10 @@ void FieldKey(UINT msg, WPARAM wp)
 		if (g_s.focus == kPickSearchField) DoAction(kPickOk, 0);
 		else if (g_s.focus == kChatField) DoAction(kChatSend, 0);
 		else if (g_s.focus == kJoinPassField) DoAction(kPassOk, 0);
+		else if (g_s.focus == kRoomNameField) {
+			if (!g_s.roomNameInput.empty() && g_s.roomNameInput != g_s.room.info.name) RenameRoom(g_s.roomNameInput);
+			g_s.focus = kNoField;
+		}
 		else g_s.focus = kNoField;
 	}
 	else if (wp == VK_ESCAPE) {

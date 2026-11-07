@@ -210,6 +210,7 @@ void __fastcall HookMainMenuDtor(void *dlg)
 void InstallMpUi(bool knownExe)
 {
 	if (!knownExe) return;
+	StartRoomCountdown();
 	void *target = reinterpret_cast<void *>(addr::kMainMenuOnMessage);
 	if (HookCreate(target, reinterpret_cast<void *>(&HookMainMenuOnMessage), reinterpret_cast<void **>(&g_origMainMenu)) ==
 			MH_OK &&

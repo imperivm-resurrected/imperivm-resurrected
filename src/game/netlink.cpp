@@ -33,3 +33,18 @@ bool NetIsLockstepHost()
 {
 	return g_link.isLockstepHost && g_link.isLockstepHost();
 }
+
+bool NetSendRoomCountdown(unsigned seq, int ms)
+{
+	return g_link.sendRoomCountdown && g_link.sendRoomCountdown(seq, ms);
+}
+
+std::string NetRoomName()
+{
+	return g_link.roomName ? g_link.roomName() : std::string();
+}
+
+bool NetRenameRoom(const std::string &name)
+{
+	return g_link.renameRoom && g_link.renameRoom(name);
+}

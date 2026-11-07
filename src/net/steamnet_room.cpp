@@ -318,7 +318,7 @@ void UpdateRoom()
 		for (const OnlineMember &m : room.members) ids.push_back(m.id);
 		PatronsWatch(ids);
 	}
-	std::lock_guard<std::mutex> lock(g_lock);
+	std::unique_lock<std::mutex> lock(g_lock);
 	const bool same = g_room.id == room.id;
 	room.chat = same ? g_room.chat : std::vector<OnlineChatLine>();
 	room.chatSerial = same ? g_room.chatSerial : 0;
@@ -361,7 +361,13 @@ void UpdateRoom()
 		}
 		while (room.chat.size() > 300) room.chat.erase(room.chat.begin());
 	}
+	const bool renamed = same && !room.owner && !g_room.info.name.empty() && !room.info.name.empty() && g_room.info.name != room.info.name;
 	g_room = room;
+	lock.unlock();
+	if (renamed) {
+		LogI("steam", "the host renamed the room to \"%s\"", room.info.name.c_str());
+		SetPresence();
+	}
 }
 
 void AddChatLine(uint64_t id, const std::string &who, const std::string &text)
@@ -574,4 +580,79 @@ void MergeSpectateLobbies(std::vector<OnlineLobby> &list)
 	}
 	list = std::move(rest);
 }
+}
+
+namespace steamnet_impl {
+void RoomOnMessage(uint64 peer, uint8_t type, const std::string &text)
+{
+	unsigned seq = 0;
+	int ms = 0;
+	if (type == kRmCountdown && sscanf_s(text.c_str(), "%u %d", &seq, &ms) == 2) {
+		const int ping = NetStatOf(peer).ping;
+		const int lag = ping > 0 ? (std::min)(ping / 2, 1000) : 0;
+		ms = (std::max)(0, (std::min)(ms, 60000) - lag);
+		LogD("room", "countdown %u from the host: %d ms (ping %d)", seq, ms, ping);
+		GameRoomCountdownReceived(seq, ms);
+		UiWakeGameThread();
+	}
+	else if (type == kRmCountdownCancel && sscanf_s(text.c_str(), "%u", &seq) == 1) {
+		GameRoomCountdownReceived(seq, -1);
+		UiWakeGameThread();
+	}
+}
+}
+
+bool SteamSendRoomCountdown(unsigned seq, int ms)
+{
+	if (!SteamOnlineReady()) return false;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		if (!g_room.id || !g_room.owner) return false;
+	}
+	char text[32];
+	if (ms >= 0) sprintf_s(text, "%u %d", seq, ms);
+	else sprintf_s(text, "%u", seq);
+	const uint8_t type = ms >= 0 ? kRmCountdown : kRmCountdownCancel;
+	const std::string data = text;
+	Post([type, data] {
+		if (!g_lobby || S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) != g_steam.me) return;
+		const int n = S.SteamAPI_ISteamMatchmaking_GetNumLobbyMembers(g_steam.mm, g_lobby);
+		for (int i = 0; i < n; i++) {
+			const uint64 m = S.SteamAPI_ISteamMatchmaking_GetLobbyMemberByIndex(g_steam.mm, g_lobby, i);
+			if (m != g_steam.me) g_share.rejoinOut.push_back({m, type, data});
+		}
+		PumpRejoinOut();
+	});
+	return true;
+}
+
+std::string SteamCurrentRoomName()
+{
+	if (g_leave.active) return std::string();
+	std::lock_guard<std::mutex> lock(g_lock);
+	return g_room.id ? g_room.info.name : std::string();
+}
+
+bool SteamRenameRoom(const std::string &name)
+{
+	if (!SteamOnlineReady() || name.empty()) return false;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		if (!g_room.id || !g_room.owner) return false;
+	}
+	Post([name] {
+		if (!g_lobby || S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) != g_steam.me) {
+			LogW("steam", "the room was not renamed: this PC no longer owns it");
+			return;
+		}
+		const std::string before = Data(g_lobby, "name");
+		if (before == name) return;
+		S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, "name", name.c_str());
+		g_creating.name = name;
+		LogI("steam", "room \"%s\" renamed to \"%s\"", before.c_str(), name.c_str());
+		SetPresence();
+		UpdateRoom();
+		MirrorSpectators();
+	});
+	return true;
 }
