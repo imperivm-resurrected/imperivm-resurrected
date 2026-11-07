@@ -2,7 +2,10 @@
 // Copyright (C) 2026 THIONG
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include <cmath>
+#include <cstdio>
 #include <functional>
+#include <initializer_list>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -45,53 +48,105 @@ struct ShapeBuffer {
 };
 ShapeBuffer g_shape;
 
-// Fills what `inside` covers: a signed distance in design units, positive inside, smoothed over one pixel.
-void PaintShape(Painter &p, int x, int y, int w, int h, COLORREF top, COLORREF bottom, int alpha, const std::function<float(float, float)> &inside)
+// Shapes that look the same from one frame to the next are drawn once; a room has a few dozen of them.
+std::map<std::string, HBITMAP> g_shapeCache;
+
+HBITMAP NewBitmap(int w, int h, uint32_t *&bits)
+{
+	BITMAPINFO bi = {};
+	bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
+	bi.bmiHeader.biWidth = w;
+	bi.bmiHeader.biHeight = -h;
+	bi.bmiHeader.biPlanes = 1;
+	bi.bmiHeader.biBitCount = 32;
+	bi.bmiHeader.biCompression = BI_RGB;
+	void *raw = nullptr;
+	HBITMAP bmp = CreateDIBSection(nullptr, &bi, DIB_RGB_COLORS, &raw, nullptr, 0);
+	if (bmp && !raw) {
+		DeleteObject(bmp);
+		bmp = nullptr;
+	}
+	bits = static_cast<uint32_t *>(raw);
+	return bmp;
+}
+
+// Fills what `inside` covers: a signed distance in design units, positive inside, smoothed over one pixel. A shape with a `name`
+// is kept and drawn again from the cache, so `name` must hold everything `inside` depends on, relative to the box.
+void PaintShape(Painter &p, int x, int y, int w, int h, COLORREF top, COLORREF bottom, int alpha, const std::function<float(float, float)> &inside,
+	const std::string &name = std::string(), int fade = 255)
 {
 	const RECT r = p.R(x, y, w, h);
 	const int pw = r.right - r.left, ph = r.bottom - r.top;
-	if (pw <= 0 || ph <= 0 || alpha <= 0) return;
-	if (pw > g_shape.w || ph > g_shape.h) {
-		if (g_shape.bmp) DeleteObject(g_shape.bmp);
-		g_shape = ShapeBuffer();
-		const int bw = std::max(pw, 64), bh = std::max(ph, 64);
-		BITMAPINFO bi = {};
-		bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
-		bi.bmiHeader.biWidth = bw;
-		bi.bmiHeader.biHeight = -bh;
-		bi.bmiHeader.biPlanes = 1;
-		bi.bmiHeader.biBitCount = 32;
-		bi.bmiHeader.biCompression = BI_RGB;
-		void *bits = nullptr;
-		g_shape.bmp = CreateDIBSection(nullptr, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
-		if (!g_shape.bmp || !bits) {
-			if (g_shape.bmp) DeleteObject(g_shape.bmp);
-			g_shape = ShapeBuffer();
-			return;
-		}
-		g_shape.bits = static_cast<uint32_t *>(bits);
-		g_shape.w = bw;
-		g_shape.h = bh;
-	}
+	if (pw <= 0 || ph <= 0 || alpha <= 0 || fade <= 0) return;
 	alpha = std::min(255, alpha);
-	const float inv = 1.0f / p.s;
-	for (int py = 0; py < ph; py++) {
-		const COLORREF c = Mix(top, bottom, ph > 1 ? py * 100 / (ph - 1) : 0);
-		const uint32_t cr = GetRValue(c), cg = GetGValue(c), cb = GetBValue(c);
-		uint32_t *row = g_shape.bits + static_cast<size_t>(py) * g_shape.w;
-		const float fy = (r.top + py + 0.5f) * inv;
-		for (int px = 0; px < pw; px++) {
-			const float d = inside((r.left + px + 0.5f) * inv, fy) * p.s + 0.5f;
-			const uint32_t a = d <= 0.0f ? 0 : d >= 1.0f ? static_cast<uint32_t>(alpha) : static_cast<uint32_t>(d * alpha);
-			row[px] = (a << 24) | ((cr * a / 255) << 16) | ((cg * a / 255) << 8) | (cb * a / 255);
+	std::string key;
+	HBITMAP bmp = nullptr;
+	uint32_t *bits = nullptr;
+	int stride = 0;
+	if (!name.empty()) {
+		char tail[112];
+		sprintf_s(tail, "|%d|%d|%.3f|%.2f|%.2f|%06x|%06x|%d", pw, ph, p.s, r.left - x * p.s, r.top - y * p.s, static_cast<unsigned>(top),
+			static_cast<unsigned>(bottom), alpha);
+		key = name + tail;
+		const auto it = g_shapeCache.find(key);
+		if (it != g_shapeCache.end()) bmp = it->second;
+	}
+	if (!bmp) {
+		if (!key.empty()) {
+			if (g_shapeCache.size() >= 256) {
+				for (const auto &kv : g_shapeCache) DeleteObject(kv.second);
+				g_shapeCache.clear();
+			}
+			bmp = NewBitmap(pw, ph, bits);
+			if (!bmp) return;
+			stride = pw;
+			g_shapeCache[key] = bmp;
 		}
+		else {
+			if (pw > g_shape.w || ph > g_shape.h) {
+				if (g_shape.bmp) DeleteObject(g_shape.bmp);
+				g_shape = ShapeBuffer();
+				const int bw = std::max(pw, 64), bh = std::max(ph, 64);
+				g_shape.bmp = NewBitmap(bw, bh, g_shape.bits);
+				if (!g_shape.bmp) return;
+				g_shape.w = bw;
+				g_shape.h = bh;
+			}
+			bmp = g_shape.bmp;
+			bits = g_shape.bits;
+			stride = g_shape.w;
+		}
+		const float inv = 1.0f / p.s;
+		for (int py = 0; py < ph; py++) {
+			const COLORREF c = Mix(top, bottom, ph > 1 ? py * 100 / (ph - 1) : 0);
+			const uint32_t cr = GetRValue(c), cg = GetGValue(c), cb = GetBValue(c);
+			uint32_t *row = bits + static_cast<size_t>(py) * stride;
+			const float fy = (r.top + py + 0.5f) * inv;
+			for (int px = 0; px < pw; px++) {
+				const float d = inside((r.left + px + 0.5f) * inv, fy) * p.s + 0.5f;
+				const uint32_t a = d <= 0.0f ? 0 : d >= 1.0f ? static_cast<uint32_t>(alpha) : static_cast<uint32_t>(d * alpha);
+				row[px] = (a << 24) | ((cr * a / 255) << 16) | ((cg * a / 255) << 8) | (cb * a / 255);
+			}
+		}
+		GdiFlush();
 	}
 	HDC mem = CreateCompatibleDC(p.dc);
-	HGDIOBJ old = SelectObject(mem, g_shape.bmp);
-	BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+	HGDIOBJ old = SelectObject(mem, bmp);
+	BLENDFUNCTION blend = {AC_SRC_OVER, 0, static_cast<BYTE>(std::min(255, fade)), AC_SRC_ALPHA};
 	GdiAlphaBlend(p.dc, r.left, r.top, pw, ph, mem, 0, 0, pw, ph, blend);
 	SelectObject(mem, old);
 	DeleteDC(mem);
+}
+
+std::string ShapeName(const char *kind, std::initializer_list<float> values)
+{
+	std::string out = kind;
+	char part[24];
+	for (float v : values) {
+		sprintf_s(part, "|%.2f", v);
+		out += part;
+	}
+	return out;
 }
 
 float SegmentDistance(float x, float y, float ax, float ay, float bx, float by)
@@ -102,46 +157,70 @@ float SegmentDistance(float x, float y, float ax, float ay, float bx, float by)
 	return std::hypot(wx - vx * t, wy - vy * t);
 }
 
-void PaintDisc(Painter &p, float cx, float cy, float radius, COLORREF top, COLORREF bottom, int alpha = 255)
+void PaintDisc(Painter &p, float cx, float cy, float radius, COLORREF top, COLORREF bottom, int alpha = 255, bool keep = true)
 {
 	const int x = static_cast<int>(std::floor(cx - radius - 1)), y = static_cast<int>(std::floor(cy - radius - 1));
 	const int size = static_cast<int>(std::ceil(radius * 2 + 3));
-	PaintShape(p, x, y, size, size, top, bottom, alpha, [=](float px, float py) { return radius - std::hypot(px - cx, py - cy); });
+	PaintShape(p, x, y, size, size, top, bottom, alpha, [=](float px, float py) { return radius - std::hypot(px - cx, py - cy); },
+		keep ? ShapeName("disc", {radius, cx - x, cy - y}) : std::string());
 }
 
 // A ring of `width` that runs clockwise from the top over `fraction` of the turn.
-void PaintRing(Painter &p, float cx, float cy, float radius, float width, COLORREF c, int alpha = 255, float fraction = 1.0f)
+void PaintRing(Painter &p, float cx, float cy, float radius, float width, COLORREF c, int alpha = 255, float fraction = 1.0f, bool keep = true)
 {
 	const float outer = radius + width / 2 + 1;
 	const int x = static_cast<int>(std::floor(cx - outer)), y = static_cast<int>(std::floor(cy - outer)), size = static_cast<int>(std::ceil(outer * 2 + 1));
 	const float end = fraction * 6.2831853f;
-	PaintShape(p, x, y, size, size, c, c, alpha, [=](float px, float py) {
-		const float dx = px - cx, dy = py - cy, dist = std::hypot(dx, dy);
-		float d = width / 2 - std::fabs(dist - radius);
-		if (fraction < 1.0f) {
-			float a = std::atan2(dx, -dy);
-			if (a < 0) a += 6.2831853f;
-			d = std::min(d, std::min(a, end - a) * radius);
-		}
-		return d;
-	});
+	PaintShape(
+		p, x, y, size, size, c, c, alpha,
+		[=](float px, float py) {
+			const float dx = px - cx, dy = py - cy, dist = std::hypot(dx, dy);
+			float d = width / 2 - std::fabs(dist - radius);
+			if (fraction < 1.0f) {
+				float a = std::atan2(dx, -dy);
+				if (a < 0) a += 6.2831853f;
+				d = std::min(d, std::min(a, end - a) * radius);
+			}
+			return d;
+		},
+		keep && fraction >= 1.0f ? ShapeName("ring", {radius, width, cx - x, cy - y}) : std::string());
 }
 
-void PaintCheckMark(Painter &p, float cx, float cy, float size, float width, COLORREF c, int alpha = 255)
+// Light that fades out over `spread` around a circle. `fade` dims all of it at once, so it can breathe without being drawn again.
+void PaintHalo(Painter &p, float cx, float cy, float radius, float spread, COLORREF c, int fade)
+{
+	const float outer = radius + spread;
+	const int x = static_cast<int>(std::floor(cx - outer)), y = static_cast<int>(std::floor(cy - outer)), size = static_cast<int>(std::ceil(outer * 2 + 1));
+	const float s = p.s;
+	PaintShape(
+		p, x, y, size, size, c, c, 255,
+		[=](float px, float py) {
+			const float t = std::max(0.0f, std::min(1.0f, 1.0f - (std::hypot(px - cx, py - cy) - radius) / spread));
+			return (t * t - 0.5f) / s;
+		},
+		ShapeName("halo", {radius, spread, cx - x, cy - y}), fade);
+}
+
+void PaintCheckMark(Painter &p, float cx, float cy, float size, float width, COLORREF c, bool keep = true)
 {
 	const float ax = cx - size * 0.42f, ay = cy + size * 0.02f, bx = cx - size * 0.12f, by = cy + size * 0.30f, ex = cx + size * 0.44f, ey = cy - size * 0.30f;
 	const int x = static_cast<int>(std::floor(cx - size)), y = static_cast<int>(std::floor(cy - size)), box = static_cast<int>(std::ceil(size * 2));
-	PaintShape(p, x, y, box, box, c, c, alpha,
-		[=](float px, float py) { return width / 2 - std::min(SegmentDistance(px, py, ax, ay, bx, by), SegmentDistance(px, py, bx, by, ex, ey)); });
+	PaintShape(
+		p, x, y, box, box, c, c, 255,
+		[=](float px, float py) { return width / 2 - std::min(SegmentDistance(px, py, ax, ay, bx, by), SegmentDistance(px, py, bx, by, ex, ey)); },
+		keep ? ShapeName("check", {size, width, cx - x, cy - y}) : std::string());
 }
 
 void PaintCross(Painter &p, float cx, float cy, float size, float width, COLORREF c)
 {
 	const float h = size / 2;
 	const int x = static_cast<int>(std::floor(cx - size)), y = static_cast<int>(std::floor(cy - size)), box = static_cast<int>(std::ceil(size * 2));
-	PaintShape(p, x, y, box, box, c, c, 255, [=](float px, float py) {
-		return width / 2 - std::min(SegmentDistance(px, py, cx - h, cy - h, cx + h, cy + h), SegmentDistance(px, py, cx - h, cy + h, cx + h, cy - h));
-	});
+	PaintShape(
+		p, x, y, box, box, c, c, 255,
+		[=](float px, float py) {
+			return width / 2 - std::min(SegmentDistance(px, py, cx - h, cy - h, cx + h, cy + h), SegmentDistance(px, py, cx - h, cy + h, cx + h, cy - h));
+		},
+		ShapeName("cross", {size, width, cx - x, cy - y}));
 }
 
 // Where each column of the player table starts; the player's column takes what the others leave.
@@ -330,12 +409,28 @@ void PaintWho(Painter &p, const State &st, int x, int cy, int w, uint64_t who, c
 	}
 }
 
-void PaintReadyCheck(Painter &p, int cx, int cy, bool ready, bool hot)
+const DWORD kPopMs = 380, kAppearMs = 360, kHoverMs = 120;
+
+// How big a check is while it pops in: it grows past its size and settles back.
+float PopScale(DWORD since)
+{
+	if (since >= kPopMs) return 1.0f;
+	const float u = since / static_cast<float>(kPopMs);
+	return u < 0.55f ? 0.35f + 0.9f * (u / 0.55f) : 1.25f - 0.25f * ((u - 0.55f) / 0.45f);
+}
+
+void PaintReadyCheck(Painter &p, int cx, int cy, bool ready, bool hot, DWORD since)
 {
 	const float r = 10.5f, fx = static_cast<float>(cx), fy = static_cast<float>(cy);
 	if (ready) {
-		PaintDisc(p, fx, fy, r, hot ? RGB(150, 206, 120) : RGB(124, 184, 96), hot ? RGB(84, 140, 64) : RGB(64, 116, 50));
-		PaintCheckMark(p, fx, fy, 12.0f, 2.6f, RGB(20, 34, 16));
+		const float k = PopScale(since);
+		if (since < kPopMs) {
+			const float u = since / static_cast<float>(kPopMs);
+			PaintRing(p, fx, fy, r * (1.0f + 0.9f * u), 2.0f, RGB(150, 206, 120), static_cast<int>(200 * (1.0f - u)), 1.0f, false);
+		}
+		const bool still = since >= kPopMs;
+		PaintDisc(p, fx, fy, r * k, hot ? RGB(150, 206, 120) : RGB(124, 184, 96), hot ? RGB(84, 140, 64) : RGB(64, 116, 50), 255, still);
+		PaintCheckMark(p, fx, fy, 12.0f * k, 2.6f * std::min(1.0f, k), RGB(20, 34, 16), still);
 	}
 	else {
 		PaintRing(p, fx, fy, r - 0.5f, 1.6f, hot ? pal::focus : pal::edge);
@@ -358,7 +453,42 @@ struct TableCtx {
 	bool moving = false;
 };
 
-void PaintSlotRow(Painter &p, const State &st, const TableCtx &t, int i, const Arrival &arrival, int rowY, int rowH)
+// What changed in the table since the last frame, so new rows and new ready checks can be animated.
+struct RoomAnimState {
+	DWORD lastPaint = 0;
+	std::string who[8];
+	DWORD appearAt[8] = {};
+	bool ready[8] = {};
+	DWORD readyAt[8] = {};
+	int hoverRow = -1;
+	DWORD hoverAt = 0;
+};
+RoomAnimState g_anim;
+
+void TrackRows(const GameRoomSnapshot &g, const Arrival arriving[8])
+{
+	const DWORD now = GetTickCount();
+	// After a while away (another tab, or the room just opened) everything is already there: nothing is new.
+	const bool fresh = now - g_anim.lastPaint > 1000;
+	g_anim.lastPaint = now;
+	for (int i = 0; i < 8; i++) {
+		const GameRoomSlot &s = g.slots[i];
+		const std::string who = !arriving[i].Empty() ? arriving[i].name : !s.used ? std::string() : s.type == 1 ? std::string("#ai") : s.name;
+		const bool same = who == g_anim.who[i] || (!who.empty() && !g_anim.who[i].empty() && PlayerNameMatches(who, g_anim.who[i]));
+		if (!same) g_anim.appearAt[i] = fresh || who.empty() ? 0 : now;
+		g_anim.who[i] = who;
+		const bool ready = s.used && s.ready;
+		if (ready && !g_anim.ready[i]) g_anim.readyAt[i] = fresh ? 0 : now;
+		g_anim.ready[i] = ready;
+	}
+}
+
+DWORD Since(DWORD at)
+{
+	return at ? GetTickCount() - at : 0xffffffffu;
+}
+
+void PaintSlotRow(Painter &p, const State &st, const TableCtx &t, int i, const Arrival &arrival, int rowY, int rowH, int hoverPercent)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const GameRoomSnapshot &g = st.game;
@@ -370,19 +500,18 @@ void PaintSlotRow(Painter &p, const State &st, const TableCtx &t, int i, const A
 	const bool human = s.used && (s.local || (g.online && s.type == 3));
 	const uint64_t who = !arrival.Empty() ? arrival.id : human ? (s.local ? SteamOwnId() : MemberIdByName(st, s.name)) : 0;
 
-	if (s.local && s.used) {
-		p.Fill(t.x + 1, rowY, t.w - 2, rowH, RGB(46, 36, 22));
-		p.Fill(t.x + 1, rowY, 3, rowH, kGold);
-	}
-	if (hovered) p.Fill(t.x + 4, rowY, t.w - 5, rowH, s.local && s.used ? RGB(62, 49, 31) : RGB(40, 31, 21));
+	const bool mine = s.local && s.used;
+	if (mine) p.Fill(t.x + 1, rowY, t.w - 2, rowH, RGB(46, 36, 22));
+	if (hovered) p.Fill(t.x + 1, rowY, t.w - 2, rowH, Mix(mine ? RGB(46, 36, 22) : RGB(25, 19, 13), mine ? RGB(62, 49, 31) : RGB(42, 33, 22), hoverPercent));
+	if (mine) p.Fill(t.x + 1, rowY, 3, rowH, kGold);
 	if (human) DrawPatronRowGlow(p, t.x + 1, rowY, t.w - 2, rowH, PatronOf(who).tier);
 	p.Fill(t.x + 8, rowY + rowH - 1, t.w - 16, 1, kRowLine);
 	if (moving && i == st.moveFrom) p.Frame(t.x + 2, rowY, t.w - 4, rowH, kGold);
 
-	// The seat buttons end the player's column, or open the empty part of a free slot's row. On a player's row they show under the
+	// The seat buttons end the player's column, or sit in the empty part of a free slot's row. On a player's row they show under the
 	// mouse, and always while the host moves a player.
 	const bool compact = !s.used && arrival.Empty();
-	const int seatW = 62, seatX = compact ? c.team : c.player + c.playerW - seatW;
+	const int seatW = 62, seatX = compact ? c.civ : c.player + c.playerW - seatW;
 	std::string seatLabel;
 	int seatAction = 0;
 	bool seatStrong = false, seatAlways = false;
@@ -429,7 +558,7 @@ void PaintSlotRow(Painter &p, const State &st, const TableCtx &t, int i, const A
 			p.Button(seatX, cy - 11, seatW, 22, seatLabel, seatAction, i, mx, my, true, seatStrong, 3);
 		}
 	};
-	const int nameRight = compact ? c.team - 12 : seatShown ? seatX - 8 : c.player + c.playerW;
+	const int nameRight = compact ? c.civ - 12 : seatShown ? seatX - 8 : c.player + c.playerW;
 	const UINT line = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS;
 
 	if (!arrival.Empty()) {
@@ -552,7 +681,7 @@ void PaintSlotRow(Painter &p, const State &st, const TableCtx &t, int i, const A
 		else {
 			const bool toggles = s.local && (t.f.mapReady || s.ready) && !(st.map.needsPack && !g.host);
 			const bool hot = toggles && p.Hover(rx - 13, cy - 13, 26, 26, mx, my);
-			PaintReadyCheck(p, rx, cy, s.ready, hot);
+			PaintReadyCheck(p, rx, cy, s.ready, hot, Since(g_anim.readyAt[i]));
 			if (toggles) p.AddHit(rx - 13, cy - 13, 26, 26, kGReady, 0);
 		}
 	}
@@ -583,15 +712,34 @@ void PaintPlayerTable(Painter &p, const State &st, const RoomFacts &f, int x, in
 
 	Arrival arriving[8];
 	PlaceArrivals(st, f, arriving);
+	TrackRows(g, arriving);
 	const int playerH = g.online ? 36 : 46, compactH = g.online ? 30 : 38;
-	int rowY = y + kTableHeadH + 2;
+	int rowY = y + kTableHeadH + 2, hovered = -1;
 	for (int i = 0; i < 8; i++) {
 		const GameRoomSlot &s = g.slots[i];
 		if (!s.exists && !s.used && arriving[i].Empty()) continue;
 		const int rowH = s.used || !arriving[i].Empty() ? playerH : compactH;
-		PaintSlotRow(p, st, t, i, arriving[i], rowY, rowH);
+		if (p.Hover(x + 1, rowY, w - 2, rowH, st.mouseX, st.mouseY)) hovered = i;
+		if (hovered == i && g_anim.hoverRow != i) g_anim.hoverAt = GetTickCount();
+		const int hoverPercent = static_cast<int>(std::min<DWORD>(kHoverMs, Since(g_anim.hoverAt)) * 100 / kHoverMs);
+		const DWORD appear = Since(g_anim.appearAt[i]);
+		if (appear >= kAppearMs) {
+			PaintSlotRow(p, st, t, i, arriving[i], rowY, rowH, hoverPercent);
+		}
+		else {
+			// A new player slides in from the left and fades in over the card.
+			const float u = appear / static_cast<float>(kAppearMs), ease = 1.0f - (1.0f - u) * (1.0f - u) * (1.0f - u);
+			const int dx = static_cast<int>((1.0f - ease) * 28.0f);
+			TableCtx shifted = t;
+			for (int *col : {&shifted.c.player, &shifted.c.team, &shifted.c.civ, &shifted.c.color, &shifted.c.bonus, &shifted.c.ready, &shifted.c.kick}) *col -= dx;
+			p.Clip(x + 1, rowY, w - 2, rowH);
+			PaintSlotRow(p, st, shifted, i, arriving[i], rowY, rowH, hoverPercent);
+			PaintShape(p, x + 1, rowY, w - 2, rowH, RGB(25, 19, 13), RGB(25, 19, 13), static_cast<int>((1.0f - ease) * 255), [](float, float) { return 100.0f; });
+			p.Unclip();
+		}
 		rowY += rowH;
 	}
+	g_anim.hoverRow = hovered;
 }
 
 void PaintRoomHeader(Painter &p, const State &st, const RoomFacts &f)
@@ -800,6 +948,11 @@ void PaintReadyBlock(Painter &p, const State &st, const RoomFacts &f, int x, int
 	const bool hot = enabled && p.Hover(cx - radius, cy - radius, radius * 2, radius * 2, mx, my);
 	const bool down = enabled && st.mouseDown && st.pressAction == action;
 	const float fx = static_cast<float>(cx), fy = static_cast<float>(cy + (down ? 1 : 0)), fr = static_cast<float>(radius);
+	if (look == kAsk || look == kStart) {
+		// A slow breath of light around the button while it waits for the click.
+		const float pulse = 0.5f + 0.5f * std::sin(GetTickCount() % 2400 * 6.2831853f / 2400.0f);
+		PaintHalo(p, fx, fy, fr - 2, 16.0f, pal::goldLight, static_cast<int>((look == kStart ? 90 : 55) + 60 * pulse));
+	}
 	PaintDisc(p, fx, fy + 3, fr + 1, pal::shadow, pal::shadow, 160);
 	PaintDisc(p, fx, fy, fr, pal::goldLight, pal::bronze);
 	switch (look) {
@@ -825,12 +978,14 @@ void PaintReadyBlock(Painter &p, const State &st, const RoomFacts &f, int x, int
 		p.Font(2);
 		p.Text(cx - radius, textY - 16, radius * 2, 32, "Start", ink, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		break;
-	case kIsReady:
-		PaintCheckMark(p, fx, fy - 9, radius * 0.62f, 5.0f, RGB(170, 226, 140));
+	case kIsReady: {
+		const DWORD since = Since(g_anim.readyAt[g.localSlot & 7]);
+		PaintCheckMark(p, fx, fy - 9, radius * 0.62f * PopScale(since), 5.0f, RGB(170, 226, 140), since >= kPopMs);
 		p.Font(1);
 		p.Text(cx - radius, textY + 12, radius * 2, 22, "Ready", RGB(200, 236, 180), DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		caption = g.host && !f.block.label.empty() ? f.block.label : count;
 		break;
+	}
 	case kCount: {
 		const float done = 1.0f - std::max(0, std::min(5000, left)) / 5000.0f;
 		PaintRing(p, fx, fy, fr - 9.0f, 4.0f, pal::goldLight, 255, done);
