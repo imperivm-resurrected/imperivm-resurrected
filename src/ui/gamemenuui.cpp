@@ -109,6 +109,15 @@ std::vector<Row> ReadRows(void *dlg, const RowSpec (&specs)[N], bool onlyVisible
 	return rows;
 }
 
+// Once per reason: when the panel does not come, the log has to say why.
+void NoteMainMenu(const char *reason)
+{
+	static const char *last = nullptr;
+	if (last == reason) return;
+	last = reason;
+	LogI("ui", "main menu panel not drawn: %s", reason);
+}
+
 // A screen with no buttons would leave the player with nothing to press: the game's own takes over.
 Screen CurrentScreen(void *&dlg)
 {
@@ -125,7 +134,11 @@ Screen CurrentScreen(void *&dlg)
 	if (dlg) return ReadRows(dlg, kMenuRows, false).empty() ? kScreenNone : kScreenMenu;
 	if (MpUiMainMenuVisible()) {
 		dlg = MpUiMainMenuDialog();
-		if (dlg && DialogOnTop(dlg) && !ReadRows(dlg, kMainRows, true).empty()) return kScreenMain;
+		if (dlg && DialogOnTop(dlg)) {
+			if (!ReadRows(dlg, kMainRows, true).empty()) return kScreenMain;
+			NoteMainMenu("it shows none of its buttons");
+		}
+		else NoteMainMenu("another dialog is in front");
 	}
 	dlg = nullptr;
 	return kScreenNone;
@@ -239,7 +252,7 @@ void GameMenuUiGameTick()
 		const bool changed = screen != g_s.screen || dlg != g_s.dlg;
 		if (!changed && GetTickCount() - g_s.lastRead < kReadEveryMs) return;
 		if (changed) {
-			LogD("ui", "game menu screen: %d -> %d", static_cast<int>(g_s.screen), static_cast<int>(screen));
+			LogI("ui", "game menu screen: %d -> %d", static_cast<int>(g_s.screen), static_cast<int>(screen));
 			g_s.hits.clear();
 			g_s.mouseDown = false;
 			opened = screen == kScreenStats;
