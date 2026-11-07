@@ -192,6 +192,9 @@ void SteamPublishOptions(const std::string &text);
 void SteamPublishRules(unsigned rules);
 void SteamPublishSlots(const std::string &text);
 void SteamPublishSaveColors(const std::string &text);
+// The host sends the start countdown (ms >= 0) or its cancellation (ms < 0) to the other members of its Steam room. False when
+// this PC is not the owner of a Steam room.
+bool SteamSendRoomCountdown(unsigned seq, int ms);
 std::string SteamTakeNotice();
 std::string SteamOwnGameplayKey();
 RoomContent SteamRoomContent(const OnlineLobby &lobby, const std::string &ownKey, bool strictMap = false, bool watching = false);
