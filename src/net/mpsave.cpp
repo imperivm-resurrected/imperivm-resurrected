@@ -13,6 +13,7 @@
 #include "MinHook.h"
 #include "hooks/hookcount.h"
 #include "core/log.h"
+#include "game/gamestats.h"
 #include "hooks/gamestate.h"
 #include "net/mpsave.h"
 #include "net/rejoin.h"
@@ -239,6 +240,13 @@ std::string GameFolder()
 int __cdecl HookSaveGameToFile(const char *path)
 {
 	const int r = g_origSaveGameToFile(path);
+	if (r == 0 && path) {
+		std::string saved = GameFolder() + "\\" + path;
+		for (char &c : saved) {
+			if (c == '/') c = '\\';
+		}
+		GameStatsWriteFile(saved);
+	}
 	if (InMultiplayer() && path) {
 		int me = 0, x = 0, y = 0;
 		if (LocalCamera(me, x, y)) MpSaveSetPlayerCamera(me, x, y);

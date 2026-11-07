@@ -1580,5 +1580,7 @@ extern const TrRow kTrRows[] = {
 	{"Game time: ", "Tiempo de juego: ", "Tempo di gioco: "},
 	{"No player matches the filters.", "Ningún jugador coincide con los filtros.", "Nessun giocatore corrisponde ai filtri."},
 	{"No data for this period yet.", "Aún no hay datos de este periodo.", "Ancora nessun dato per questo periodo."},
+	{"Not enough history to draw yet. The Table view has the totals.", "Aún no hay historial para dibujar. La vista Tabla tiene los totales.", "Non c'è ancora una cronologia da disegnare. La vista Tabella ha i totali."},
+	{"This game was saved without history: it starts at ", "Esta partida se guardó sin historial: empieza en ", "Questa partita è stata salvata senza cronologia: inizia a "},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

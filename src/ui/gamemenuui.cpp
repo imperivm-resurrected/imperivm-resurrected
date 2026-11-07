@@ -23,7 +23,7 @@ using namespace gamemenuui;
 
 namespace {
 
-const int kNativeYes = 0x1002, kNativeNo = 0x1003, kNativeBack = 0x1007, kNativeQuit = 0x1006, kNativeQuitReplay = 0x100b;
+const int kNativeLoad = 0x1001, kNativeYes = 0x1002, kNativeNo = 0x1003, kNativeBack = 0x1007, kNativeQuit = 0x1006, kNativeQuitReplay = 0x100b;
 const int kTitleId = 0x1007f, kEndMessageId = 0x1009, kRatingIds[] = {0x100c, 0x100d};
 const DWORD kReadEveryMs = 120;
 const size_t kChartNeedsSamples = 3;
@@ -158,6 +158,11 @@ void ReadEndMenu(void *dlg, View &v)
 	if (v.title.empty()) v.title = "MENU";
 	v.titleSpacing = 1;
 	v.rows = ReadRows(dlg, kEndRows, true);
+	if (GameHasSeveralHumans()) {
+		for (Row &row : v.rows) {
+			if (row.id == kNativeLoad) row.enabled = false;
+		}
+	}
 	const std::string message = NativeText(dlg, kEndMessageId);
 	if (!message.empty()) v.notes.push_back(message);
 	for (int id : kRatingIds) {
@@ -304,6 +309,7 @@ bool GameMenuUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		break;
 	}
 	// The game's dialog can close itself and call back into the mod: no lock here.
-	if (clickId) NativeButtonClick(dlg, clickId);
+	if (clickId == kNativeLoad && screen == kScreenEnd) EndMenuLoadGame(dlg);
+	else if (clickId) NativeButtonClick(dlg, clickId);
 	return consumed;
 }

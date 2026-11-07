@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+// Saved histories store values in this order: new metrics go at the end, before the count.
 enum StatMetric {
 	kStatScore, kStatMilitary, kStatDevelopment, kStatArmyStrength,
 	kStatUnitsAlive, kStatUnitsBuilt, kStatUnitsMax, kStatLevelMax,
@@ -22,6 +23,13 @@ struct StatSample {
 
 constexpr int kStatMaxPlayers = 16;
 
+struct StatsPlayerInfo {
+	int index = 0;
+	std::string name;
+	uint32_t rgb = 0;
+	bool human = false, local = false, ally = false;
+};
+
 // What a game's players did over time. Keeps a bounded number of samples: when one player reaches the limit
 // every other sample of all of them goes, and samples are taken half as often from then on.
 class StatsHistory {
@@ -35,14 +43,25 @@ public:
 	uint32_t IntervalMs() const { return kBaseIntervalMs << halvings_; }
 	uint32_t LastMs() const { return lastMs_; }
 	bool Empty() const { return !hasSamples_; }
+	// Drops what comes after a time, as when a history is older than its save says.
+	void TrimAfter(uint32_t ms);
+	int Halvings() const { return halvings_; }
+	void SetHalvings(int halvings);
 
 private:
+	friend bool StatsDecode(const std::string &data, StatsHistory &history, std::vector<StatsPlayerInfo> &players);
+	static constexpr int kMaxHalvings = 16;
+	void AddRestored(int player, const StatSample &sample);
 	void Halve();
 	std::vector<StatSample> samples_[kStatMaxPlayers];
 	int halvings_ = 0;
 	uint32_t lastMs_ = 0;
 	bool hasSamples_ = false;
 };
+
+// What goes in a save's .stats file. Decoding checks everything, as the file can be damaged or from another version.
+std::string StatsEncode(const StatsHistory &history, const std::vector<StatsPlayerInfo> &players);
+bool StatsDecode(const std::string &data, StatsHistory &history, std::vector<StatsPlayerInfo> &players);
 
 // The last sample at or before the time, or the first one if they all come later. Null if there are none.
 const StatSample *StatsSampleAt(const std::vector<StatSample> &samples, uint32_t ms);
