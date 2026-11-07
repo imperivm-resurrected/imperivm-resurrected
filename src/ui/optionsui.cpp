@@ -48,7 +48,6 @@ std::mutex g_lock;
 State g_s;
 Canvas g_canvas;
 
-const char *const kScalingLabels[] = {"Sharp", "Smooth", "Pixel-exact"};
 const int kFpsLimits[] = {0, 30, 60, 120, 144, 240};
 const char *const kFpsLabels[] = {"No limit", "30", "60", "120", "144", "240"};
 
@@ -103,24 +102,17 @@ void SetWindowSizes(Values &v, int monitor, ResSize current)
 void SetDisplayExtras(Values &v, const Config &c)
 {
 	SetWindowSizes(v, MonitorShown(v), {c.windowW, c.windowH});
-	v.checks[kExtendedView] = c.extendedView;
 	v.items[kFpsLimit] = std::vector<std::string>(std::begin(kFpsLabels), std::end(kFpsLabels));
 	v.combos[kFpsLimit] = FpsIndex(c.fpsLimit);
-	v.items[kImageScaling] = std::vector<std::string>(std::begin(kScalingLabels), std::end(kScalingLabels));
-	v.combos[kImageScaling] = c.imageScaling;
 }
 
 void CopyDisplayExtras(Values &to, const Values &from)
 {
-	for (int id : {kWindowSize, kFpsLimit, kImageScaling}) {
+	for (int id : {kWindowSize, kFpsLimit}) {
 		const auto sel = from.combos.find(id);
 		if (sel != from.combos.end()) to.combos[id] = sel->second;
 		const auto items = from.items.find(id);
 		if (items != from.items.end()) to.items[id] = items->second;
-	}
-	for (int id : {kExtendedView}) {
-		const auto it = from.checks.find(id);
-		if (it != from.checks.end()) to.checks[id] = it->second;
 	}
 }
 
@@ -130,14 +122,10 @@ void ApplyDisplayLive(const Values &v)
 	if (SelectedSize(v, kWindowSize, window)) DisplaySetWindowSize(window.w, window.h);
 	const int fps = ComboIndex(v, kFpsLimit, static_cast<int>(sizeof(kFpsLimits) / sizeof(kFpsLimits[0])));
 	if (fps >= 0) MutableConfig().fpsLimit = kFpsLimits[fps];
-	const int scaling = ComboIndex(v, kImageScaling, static_cast<int>(sizeof(kScalingLabels) / sizeof(kScalingLabels[0])));
-	if (scaling >= 0) MutableConfig().imageScaling = scaling;
 }
 
 void CommitDisplayExtras(Config &c, const Values &v)
 {
-	const auto extended = v.checks.find(kExtendedView);
-	if (extended != v.checks.end()) c.extendedView = extended->second;
 	ResSize window;
 	if (SelectedSize(v, kWindowSize, window)) {
 		c.windowW = window.w;
@@ -145,8 +133,6 @@ void CommitDisplayExtras(Config &c, const Values &v)
 	}
 	const int fps = ComboIndex(v, kFpsLimit, static_cast<int>(sizeof(kFpsLimits) / sizeof(kFpsLimits[0])));
 	if (fps >= 0) c.fpsLimit = kFpsLimits[fps];
-	const int scaling = ComboIndex(v, kImageScaling, static_cast<int>(sizeof(kScalingLabels) / sizeof(kScalingLabels[0])));
-	if (scaling >= 0) c.imageScaling = scaling;
 }
 
 void ApplyDisplayFromView()
@@ -326,7 +312,7 @@ void PreviewResolutions()
 			return it == v.checks.end() ? fallback : it->second;
 		};
 		windowed = check(kWindowed, GetConfig().windowed);
-		extended = check(kExtendedView, GetConfig().extendedView);
+		extended = GetConfig().extendedView;
 	}
 	OptionsPreviewResolutions(monitor, windowed, extended);
 	{
@@ -362,7 +348,6 @@ void Execute(const Command &cmd)
 				on = !on;
 				g_s.view.dirty = !(g_s.view.values == g_s.baseline);
 			}
-			if (cmd.arg == kExtendedView) PreviewResolutions();
 		}
 		else {
 			OptionsWriteCheck(cmd.arg, !OptionsReadCheck(cmd.arg, false));

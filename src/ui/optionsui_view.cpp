@@ -252,8 +252,8 @@ std::vector<Page> BuildPages(const Values &v)
 		mode.selected = Check(v, kWindowed) ? 1 : 0;
 		const bool windowed = Check(v, kWindowed);
 		page.left.push_back({"Size and mode", {Combo(v, "Monitor", kMonitor), mode, Combo(v, "Resolution", kResolution), Combo(v, "Window size", kWindowSize, "", false, windowed),
-			Toggle(v, "Extended view", kExtendedView, "Adds larger sizes that show more of the map"), Toggle(v, "Trap the mouse", kTrapMouse, "The cursor stays inside the game window")}});
-		page.right.push_back({"Image", {Combo(v, "Image scaling", kImageScaling, "How it is enlarged"), Slider(v, "Brightness", kBrightness, 80, 130), Toggle(v, "Vertical sync", kVSync, "Avoids tearing in the image"),
+			Toggle(v, "Trap the mouse", kTrapMouse, "The cursor stays inside the game window")}});
+		page.right.push_back({"Image", {Slider(v, "Brightness", kBrightness, 80, 130), Toggle(v, "Vertical sync", kVSync, "Avoids tearing in the image"),
 			Combo(v, "FPS limit", kFpsLimit)}});
 		Row compact = Toggle(v, "Compact panel", kPanelCompact), opacity = Slider(v, "Panel opacity", kPanelOpacity, 30, 100);
 		compact.enabled = opacity.enabled = Check(v, kShowPerf) || Check(v, kShowNet);
