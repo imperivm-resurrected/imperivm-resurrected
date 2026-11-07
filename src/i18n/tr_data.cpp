@@ -1551,5 +1551,10 @@ extern const TrRow kTrRows[] = {
 	{"Normal", "=", "Normale"},
 	{"Detailed", "Detallado", "Dettagliato"},
 	{"The game will restart to apply the change.", "El juego se reiniciará para aplicar el cambio.", "Il gioco si riavvierà per applicare la modifica."},
+	{"Advanced", "Avanzado", "Avanzate"},
+	{"Replacement files", "Archivos de sustitución", "File sostitutivi"},
+	{"Game files in the imperivm-resurrected folder", "Archivos del juego en la carpeta imperivm-resurrected", "File del gioco nella cartella imperivm-resurrected"},
+	{"Crash protection", "Protección contra cierres", "Protezione dai crash"},
+	{"Avoids some known crashes of the game", "Evita algunos cierres conocidos del juego", "Evita alcuni crash noti del gioco"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

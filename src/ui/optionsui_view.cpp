@@ -326,6 +326,8 @@ std::vector<Page> BuildPages(const Values &v)
 		page.left.push_back({"Updates", {Combo(v, "Updates", kUpdates), check}});
 		page.right.push_back({"If something fails", {Combo(v, "Log detail", kLogLevel, "Detailed helps to find a problem"), ActionRow("Logs folder", kOpenLogs, "Open folder"),
 			ActionRow("Problem report", kCreateReport, "Create", "A zip with your private data hidden")}});
+		page.right.push_back({"Advanced", {Toggle(v, "Replacement files", kModOverrides, "Game files in the imperivm-resurrected folder", true),
+			Toggle(v, "Crash protection", kCrashFix, "Avoids some known crashes of the game", true)}});
 		pages.push_back(page);
 	}
 	return pages;

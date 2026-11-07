@@ -48,6 +48,8 @@ void SetSystemExtras(Values &v, const Config &c)
 {
 	v.combos[kLogLevel] = c.logLevel <= kLogDebug ? 1 : 0;
 	v.items[kLogLevel] = {"Normal", "Detailed"};
+	v.checks[kModOverrides] = c.modOverrides;
+	v.checks[kCrashFix] = c.crashFix;
 }
 
 void CopySystemExtras(Values &to, const Values &from)
@@ -57,6 +59,10 @@ void CopySystemExtras(Values &to, const Values &from)
 		if (combo != from.combos.end()) to.combos[id] = combo->second;
 		const auto items = from.items.find(id);
 		if (items != from.items.end()) to.items[id] = items->second;
+	}
+	for (int id : {kModOverrides, kCrashFix}) {
+		const auto it = from.checks.find(id);
+		if (it != from.checks.end()) to.checks[id] = it->second;
 	}
 }
 
@@ -71,8 +77,17 @@ bool CommitSystemExtras(const Values &v)
 		LogSetLevel(c.logLevel);
 		changed = true;
 	}
+	bool restart = false;
+	const auto commit = [&](int id, bool &setting) {
+		const auto it = v.checks.find(id);
+		if (it == v.checks.end() || it->second == setting) return;
+		setting = it->second;
+		changed = restart = true;
+	};
+	commit(kModOverrides, c.modOverrides);
+	commit(kCrashFix, c.crashFix);
 	if (changed) SaveConfig();
-	return false;
+	return restart;
 }
 
 void SetExtras(Values &v, const Config &c)

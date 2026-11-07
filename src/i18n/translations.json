@@ -1543,5 +1543,10 @@
 {"en":"Detailed helps to find a problem","es":"Detallado ayuda a encontrar un problema","it":"Dettagliato aiuta a trovare un problema"},
 {"en":"Normal","es":"=","it":"Normale"},
 {"en":"Detailed","es":"Detallado","it":"Dettagliato"},
-{"en":"The game will restart to apply the change.","es":"El juego se reiniciará para aplicar el cambio.","it":"Il gioco si riavvierà per applicare la modifica."}
+{"en":"The game will restart to apply the change.","es":"El juego se reiniciará para aplicar el cambio.","it":"Il gioco si riavvierà per applicare la modifica."},
+{"en":"Advanced","es":"Avanzado","it":"Avanzate"},
+{"en":"Replacement files","es":"Archivos de sustitución","it":"File sostitutivi"},
+{"en":"Game files in the imperivm-resurrected folder","es":"Archivos del juego en la carpeta imperivm-resurrected","it":"File del gioco nella cartella imperivm-resurrected"},
+{"en":"Crash protection","es":"Protección contra cierres","it":"Protezione dai crash"},
+{"en":"Avoids some known crashes of the game","es":"Evita algunos cierres conocidos del juego","it":"Evita alcuni crash noti del gioco"}
 ]
