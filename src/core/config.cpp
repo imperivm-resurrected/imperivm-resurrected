@@ -48,6 +48,10 @@ void LoadConfig()
 	g_config.windowed = _stricmp(buf, "windowed") == 0;
 	g_config.windowW = GetPrivateProfileIntA("Display", "WindowWidth", 1600, path);
 	g_config.windowH = GetPrivateProfileIntA("Display", "WindowHeight", 900, path);
+	if (g_config.windowW < 320 || g_config.windowH < 240 || g_config.windowW > 16384 || g_config.windowH > 16384) {
+		g_config.windowW = 1600;
+		g_config.windowH = 900;
+	}
 	g_config.trapMouse = GetPrivateProfileIntA("Display", "TrapMouse", 1, path) != 0;
 	g_config.monitor = (std::max)(0, (std::min)(15, static_cast<int>(GetPrivateProfileIntA("Display", "Monitor", 0, path))));
 	GetPrivateProfileStringA("Display", "Resolution", "", buf, sizeof(buf), path);
@@ -126,6 +130,8 @@ void SaveConfig()
 		strcpy_s(slash + 1, MAX_PATH - (slash + 1 - path), "imperivm-mod.ini");
 	}
 	WritePrivateProfileStringA("Display", "Mode", g_config.windowed ? "windowed" : "fullscreen", path);
+	WritePrivateProfileStringA("Display", "WindowWidth", std::to_string(g_config.windowW).c_str(), path);
+	WritePrivateProfileStringA("Display", "WindowHeight", std::to_string(g_config.windowH).c_str(), path);
 	WritePrivateProfileStringA("Display", "TrapMouse", g_config.trapMouse ? "1" : "0", path);
 	WritePrivateProfileStringA("Display", "Monitor", std::to_string(g_config.monitor).c_str(), path);
 	if (g_config.resolutionW > 0) {

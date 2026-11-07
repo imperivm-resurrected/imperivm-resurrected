@@ -72,6 +72,17 @@ std::vector<ResSize> BuildResolutionList(const std::vector<ResSize> &windows, Re
 	return out;
 }
 
+std::vector<ResSize> BuildWindowSizeList(const std::vector<ResSize> &windows, ResSize area, ResSize current)
+{
+	std::vector<ResSize> out;
+	for (ResSize s : windows) {
+		if (s.w > 0 && s.h > 0 && s.w <= area.w && s.h <= area.h && IndexOf(out, s) < 0) out.push_back(s);
+	}
+	if (current.w > 0 && current.h > 0 && IndexOf(out, current) < 0) out.push_back(current);
+	std::sort(out.begin(), out.end(), LargerFirst);
+	return out;
+}
+
 int KeepResolution(const std::vector<ResSize> &list, ResSize size, ResSize screen)
 {
 	const int at = IndexOf(list, size);

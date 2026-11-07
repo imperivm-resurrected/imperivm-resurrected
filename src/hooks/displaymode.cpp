@@ -237,13 +237,18 @@ void PlaceWindow()
 	if (!g_gameWnd || !g_faking) {
 		return;
 	}
-	if (Windowed()) {
+	if (Windowed() && IsZoomed(g_gameWnd)) {
+		g_origSetWindowLong(g_gameWnd, GWL_STYLE, kWindowedStyle | WS_MAXIMIZE);
+	}
+	else if (Windowed()) {
 		g_origSetWindowLong(g_gameWnd, GWL_STYLE, kWindowedStyle);
 		RECT r = {0, 0, GetConfig().windowW, GetConfig().windowH};
 		AdjustWindowRectEx(&r, kWindowedStyle, FALSE, 0);
-		int w = r.right - r.left, h = r.bottom - r.top;
-		const RECT mr = TargetMonitor();
-		g_origSetWindowPos(g_gameWnd, HWND_NOTOPMOST, mr.left + (mr.right - mr.left - w) / 2, mr.top + (mr.bottom - mr.top - h) / 2, w, h,
+		// Centred in the part of the monitor the taskbar leaves, and never larger than it.
+		const RECT wa = MonitorAt(-1).work;
+		const int w = static_cast<int>((std::min)(r.right - r.left, wa.right - wa.left));
+		const int h = static_cast<int>((std::min)(r.bottom - r.top, wa.bottom - wa.top));
+		g_origSetWindowPos(g_gameWnd, HWND_NOTOPMOST, wa.left + (wa.right - wa.left - w) / 2, wa.top + (wa.bottom - wa.top - h) / 2, w, h,
 			SWP_NOACTIVATE | SWP_FRAMECHANGED);
 	}
 	else {
@@ -561,6 +566,18 @@ LRESULT CALLBACK GameWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 			HookClipCursor(&r);
 		}
 	}
+	// A window the player resizes by hand keeps that size, also after the game changes its mode.
+	if (msg == WM_EXITSIZEMOVE && Windowed() && !IsZoomed(hwnd) && !IsIconic(hwnd)) {
+		RECT r = {};
+		g_origGetClientRect(hwnd, &r);
+		Config &c = MutableConfig();
+		if (r.right > 0 && r.bottom > 0 && (r.right != c.windowW || r.bottom != c.windowH)) {
+			c.windowW = r.right;
+			c.windowH = r.bottom;
+			SaveConfig();
+			LogI("display", "window resized by hand to %ldx%ld", r.right, r.bottom);
+		}
+	}
 	if (msg == WM_DISPLAYCHANGE) {
 		std::lock_guard<std::mutex> lock(g_modesMx);
 		g_modesReady = false;
@@ -776,6 +793,27 @@ std::vector<POINT> DisplayWindowsSizes(int monitor)
 	std::lock_guard<std::mutex> lock(g_modesMx);
 	g_otherSizes[device] = sizes;
 	return sizes;
+}
+
+void DisplayWindowArea(int monitor, int &w, int &h)
+{
+	const RECT wa = MonitorAt(monitor).work;
+	RECT frame = {0, 0, 0, 0};
+	AdjustWindowRectEx(&frame, kWindowedStyle, FALSE, 0);
+	w = (wa.right - wa.left) - (frame.right - frame.left);
+	h = (wa.bottom - wa.top) - (frame.bottom - frame.top);
+}
+
+void DisplaySetWindowSize(int w, int h)
+{
+	if (w <= 0 || h <= 0) return;
+	Config &c = MutableConfig();
+	if (c.windowW == w && c.windowH == h) return;
+	c.windowW = w;
+	c.windowH = h;
+	if (!g_gameWnd || !Windowed()) return;
+	if (IsZoomed(g_gameWnd)) ShowWindow(g_gameWnd, SW_RESTORE);
+	PlaceWindow();
 }
 
 void DisplayMonitorSize(int monitor, int &w, int &h)

@@ -245,12 +245,15 @@ std::vector<Page> BuildPages(const Values &v)
 		page.icon = kOrnamentScreen;
 		Row mode;
 		mode.label = "Mode";
+		mode.hint = "Alt+Enter switches";
 		mode.kind = kRowSegment;
 		mode.id = kWindowed;
 		mode.items = {"Full screen", "Window"};
 		mode.selected = Check(v, kWindowed) ? 1 : 0;
-		page.left.push_back({"Image", {Combo(v, "Resolution", kResolution), Combo(v, "Monitor", kMonitor), mode, Slider(v, "Brightness", kBrightness, 80, 130), Toggle(v, "Vertical sync", kVSync, "Avoids tearing in the image"),
+		const bool windowed = Check(v, kWindowed);
+		page.left.push_back({"Size and mode", {Combo(v, "Monitor", kMonitor), mode, Combo(v, "Resolution", kResolution), Combo(v, "Window size", kWindowSize, "", false, windowed),
 			Toggle(v, "Trap the mouse", kTrapMouse, "The cursor stays inside the game window")}});
+		page.right.push_back({"Image", {Slider(v, "Brightness", kBrightness, 80, 130), Toggle(v, "Vertical sync", kVSync, "Avoids tearing in the image")}});
 		Row compact = Toggle(v, "Compact panel", kPanelCompact), opacity = Slider(v, "Panel opacity", kPanelOpacity, 30, 100);
 		compact.enabled = opacity.enabled = Check(v, kShowPerf) || Check(v, kShowNet);
 		page.right.push_back({"Performance panel", {Toggle(v, "Show FPS and memory", kShowPerf), Toggle(v, "Network statistics", kShowNet), compact, opacity}});

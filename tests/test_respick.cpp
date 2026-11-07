@@ -116,6 +116,19 @@ static void Monitor4k()
 	CHECK(Same(BuildResolutionList(k4k, {1280, 720}, {}), {{1280, 720}}));
 }
 
+static void WindowSizes()
+{
+	// A 4K monitor with the taskbar at the bottom: 3840x2160 and 4096x2160 do not fit with the frame.
+	const std::vector<ResSize> sizes = BuildWindowSizeList(k4k, {3824, 2049}, {1600, 900});
+	CHECK_EQ(static_cast<int>(sizes.size()), 24);
+	CHECK(sizes.front().w == 3200 && sizes.front().h == 1800);
+	CHECK(sizes.back().w == 640 && sizes.back().h == 480);
+	CHECK(Same(BuildWindowSizeList({{1920, 1080}, {1600, 900}, {1600, 900}, {1280, 720}}, {1904, 1001}, {1500, 800}), {{1600, 900}, {1500, 800}, {1280, 720}}));
+	CHECK(Same(BuildWindowSizeList({{1920, 1080}, {1280, 720}}, {1904, 1001}, {1280, 720}), {{1280, 720}}));
+	CHECK(Same(BuildWindowSizeList({{1920, 1080}}, {1904, 1001}, {2560, 1440}), {{2560, 1440}}));
+	CHECK(Same(BuildWindowSizeList({}, {1904, 1001}, {}), {}));
+}
+
 int main()
 {
 	Saved();
@@ -125,5 +138,6 @@ int main()
 	Build();
 	MonitorModes();
 	Monitor4k();
+	WindowSizes();
 	return test::Summary("respick");
 }

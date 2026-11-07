@@ -4,6 +4,7 @@
 #include "ui/optionsui.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -12,6 +13,8 @@
 #include "core/log.h"
 #include "core/uiport.h"
 #include "game/options.h"
+#include "hooks/displaymode.h"
+#include "hooks/respick.h"
 #include "i18n/tr.h"
 #include "ui/modui.h"
 #include "ui/optionsui_view.h"
@@ -43,8 +46,82 @@ std::mutex g_lock;
 State g_s;
 Canvas g_canvas;
 
+std::string SizeLabel(ResSize s)
+{
+	return std::to_string(s.w) + " x " + std::to_string(s.h);
+}
+
+bool SelectedSize(const Values &v, int id, ResSize &size)
+{
+	const auto items = v.items.find(id);
+	const auto sel = v.combos.find(id);
+	if (items == v.items.end() || sel == v.combos.end() || sel->second < 0 || sel->second >= static_cast<int>(items->second.size())) return false;
+	return sscanf_s(items->second[sel->second].c_str(), "%d x %d", &size.w, &size.h) == 2;
+}
+
+int MonitorShown(const Values &v)
+{
+	const auto it = v.combos.find(kMonitor);
+	return it == v.combos.end() ? GetConfig().monitor : it->second;
+}
+
+// The window sizes are the monitor's own that fit in its work area, plus the size the window has now.
+void SetWindowSizes(Values &v, int monitor, ResSize current)
+{
+	std::vector<ResSize> modes;
+	for (POINT p : DisplayWindowsSizes(monitor)) modes.push_back({p.x, p.y});
+	ResSize area;
+	DisplayWindowArea(monitor, area.w, area.h);
+	std::vector<std::string> &items = v.items[kWindowSize];
+	items.clear();
+	for (ResSize s : BuildWindowSizeList(modes, area, current)) items.push_back(SizeLabel(s));
+	const auto at = std::find(items.begin(), items.end(), SizeLabel(current));
+	v.combos[kWindowSize] = at == items.end() ? -1 : static_cast<int>(at - items.begin());
+}
+
+void SetDisplayExtras(Values &v, const Config &c)
+{
+	SetWindowSizes(v, MonitorShown(v), {c.windowW, c.windowH});
+}
+
+void CopyDisplayExtras(Values &to, const Values &from)
+{
+	for (int id : {kWindowSize}) {
+		const auto sel = from.combos.find(id);
+		if (sel != from.combos.end()) to.combos[id] = sel->second;
+		const auto items = from.items.find(id);
+		if (items != from.items.end()) to.items[id] = items->second;
+	}
+}
+
+void ApplyDisplayLive(const Values &v)
+{
+	ResSize window;
+	if (SelectedSize(v, kWindowSize, window)) DisplaySetWindowSize(window.w, window.h);
+}
+
+void CommitDisplayExtras(Config &c, const Values &v)
+{
+	ResSize window;
+	if (SelectedSize(v, kWindowSize, window)) {
+		c.windowW = window.w;
+		c.windowH = window.h;
+	}
+}
+
+void ApplyDisplayFromView()
+{
+	Values values;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		values = g_s.view.values;
+	}
+	ApplyDisplayLive(values);
+}
+
 void SetExtras(Values &v, const Config &c)
 {
+	SetDisplayExtras(v, c);
 	v.checks[kPanelCompact] = c.panelCompact;
 	v.checks[kSmoothCamera] = c.smoothScroll;
 	v.checks[kModernAudio] = c.modernAudio;
@@ -76,6 +153,7 @@ void CopyExtras(Values &to, const Values &from)
 		const auto it = from.checks.find(id);
 		if (it != from.checks.end()) to.checks[id] = it->second;
 	}
+	CopyDisplayExtras(to, from);
 	// The panel changes as it is edited, so the setting is the truth; its own mouse controls change it too.
 	to.checks[kPanelCompact] = GetConfig().panelCompact;
 	to.scrolls[kPanelOpacity] = GetConfig().panelOpacity;
@@ -140,6 +218,7 @@ bool CommitExtras(const Values &v)
 	c.modernAudio = check(kModernAudio, c.modernAudio);
 	const auto opacity = v.scrolls.find(kPanelOpacity);
 	if (opacity != v.scrolls.end()) c.panelOpacity = opacity->second;
+	CommitDisplayExtras(c, v);
 	SaveConfig();
 	return c.modernAudio != audioBefore;
 }
@@ -151,7 +230,7 @@ struct Command {
 	Values values;
 };
 
-bool IsExtra(int id) { return id >= kPanelCompact && id <= kModernAudio; }
+bool IsExtra(int id) { return id >= 0x9000 && id < 0x9100; }
 
 int HitAt(const State &st, POINT at, int &arg, RECT *rect = nullptr)
 {
@@ -210,6 +289,13 @@ void PreviewResolutions()
 		extended = GetConfig().extendedView;
 	}
 	OptionsPreviewResolutions(monitor, windowed, extended);
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		Values &v = g_s.view.values;
+		ResSize window = {GetConfig().windowW, GetConfig().windowH};
+		SelectedSize(v, kWindowSize, window);
+		SetWindowSizes(v, monitor, window);
+	}
 	Refresh();
 }
 
@@ -251,6 +337,15 @@ void Execute(const Command &cmd)
 		if (cmd.arg >> 4 == kWindowed) PreviewResolutions();
 		break;
 	case kActPick:
+		if (IsExtra(cmd.value)) {
+			{
+				std::lock_guard<std::mutex> lock(g_lock);
+				g_s.view.values.combos[cmd.value] = cmd.arg;
+				g_s.view.dirty = !(g_s.view.values == g_s.baseline);
+			}
+			ApplyDisplayFromView();
+			break;
+		}
 		OptionsWriteCombo(cmd.value, cmd.arg);
 		Refresh();
 		if (cmd.value == kMonitor) PreviewResolutions();
@@ -267,6 +362,7 @@ void Execute(const Command &cmd)
 			SetExtras(g_s.view.values, Config());
 			ApplyPanelLive(g_s.view.values);
 		}
+		ApplyDisplayFromView();
 		OptionsWriteScroll(kBrightness, OptionsReadScroll(kBrightness, 100));
 		Refresh();
 		PreviewResolutions();
@@ -291,11 +387,14 @@ void Execute(const Command &cmd)
 		break;
 	}
 	case kActCancel: {
+		Values baseline;
 		{
 			std::lock_guard<std::mutex> lock(g_lock);
 			g_s.closedAt = GetTickCount();
 			ApplyPanelLive(g_s.baseline);
+			baseline = g_s.baseline;
 		}
+		ApplyDisplayLive(baseline);
 		OptionsClick(kNativeCancel);
 		break;
 	}
