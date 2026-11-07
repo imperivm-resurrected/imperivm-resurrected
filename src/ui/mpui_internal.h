@@ -451,6 +451,7 @@ const int kRoomTeams = 4;
 void SetTeamTo(int slot, int team);
 int CountdownLeftMs();
 void RenameRoom(const std::string &name);
+void StartRoomCountdown();
 extern ListGeom g_syncGeomOut;
 void PaintSyncConfirm(Painter &p, const State &st);
 void PaintSyncProgress(Painter &p, const State &st);

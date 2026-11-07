@@ -1,27 +1,41 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 THIONG
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
+#include <mutex>
 #include <string>
 
+#include "game/gameroom.h"
 #include "ui/mpui_internal.h"
 
 namespace mpui_impl {
-// wired to GameRoomSetTeam once feat/room-countdown lands: until then the game's team button is pressed until it shows the team.
+namespace {
+// GameRoomTick calls it on the game thread without the room lock; the countdown waits while someone is joining or downloading.
+bool StartGateBlocked()
+{
+	const GameRoomSnapshot snap = GameRoomGet();
+	std::lock_guard<std::mutex> lock(g_lock);
+	return !StartBlocker(g_s, snap).toast.empty();
+}
+}
+
 void SetTeamTo(int slot, int team)
 {
-	const int from = g_s.game.slots[slot & 7].team;
-	const int current = from > 0 && from <= kRoomTeams ? from : 0;
-	for (int k = (team - current + kRoomTeams + 1) % (kRoomTeams + 1); k > 0; k--) GameRoomCycleTeam(slot & 7);
+	GameRoomSetTeam(slot & 7, team);
 }
 
-// The start countdown comes with feat/room-countdown; -1 means there is none.
 int CountdownLeftMs()
 {
-	return -1;
+	return GameRoomCountdownLeftMs();
 }
 
-// Renaming the room comes with feat/room-countdown.
-void RenameRoom(const std::string &)
+void RenameRoom(const std::string &name)
 {
+	GameRoomRename(name);
+}
+
+void StartRoomCountdown()
+{
+	GameRoomSetStartGate(&StartGateBlocked);
+	GameRoomSetAutoStart(true);
 }
 }
