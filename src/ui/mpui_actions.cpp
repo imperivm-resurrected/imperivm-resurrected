@@ -110,11 +110,13 @@ void DoAction(int action, int arg)
 			break;
 		}
 		g_s.passPrompt = false;
+		g_s.passShow = false;
 		TryJoin(g_s.passLobby, g_s.joinPassInput, g_s.passWatch);
 		g_s.joinPassInput.clear();
 		break;
 	case kPassCancel:
 		g_s.passPrompt = false;
+		g_s.passShow = false;
 		g_s.joinPassInput.clear();
 		g_s.focus = kNoField;
 		break;
