@@ -1562,9 +1562,6 @@
 {"en":"Captured","es":"Capturado","it":"Catturato"},
 {"en":"Other","es":"Otro","it":"Altro"},
 {"en":"Total gold","es":"Oro total","it":"Oro totale"},
-{"en":"All game","es":"Toda la partida","it":"Tutta la partita"},
-{"en":"Last 10 min","es":"Últimos 10 min","it":"Ultimi 10 min"},
-{"en":"Last 5 min","es":"Últimos 5 min","it":"Ultimi 5 min"},
 {"en":"Humans","es":"Humanos","it":"Umani"},
 {"en":"My team","es":"Mi equipo","it":"La mia squadra"},
 {"en":"Rivals","es":"Rivales","it":"Rivali"},
@@ -1586,5 +1583,5 @@
 {"en":"Eliminated","es":"Eliminado","it":"Eliminato"},
 {"en":"Not enough history to draw yet.","es":"Aún no hay historial para dibujar.","it":"Non c'è ancora una cronologia da disegnare."},
 {"en":"Drag over the chart to zoom in","es":"Arrastra sobre la gráfica para ampliar","it":"Trascina sul grafico per ingrandire"},
-{"en":"Right click to see it all","es":"Clic derecho para verla entera","it":"Clic destro per vederlo tutto"}
+{"en":"See the whole game","es":"Ver toda la partida","it":"Vedi tutta la partita"}
 ]

@@ -45,8 +45,6 @@ const Category kCategories[] = {
 	{"Gold", {{kStatGoldTaxes, "From taxes"}, {kStatGoldCaptured, "Captured"}, {kStatGoldOther, "Other"}, {kStatGoldTotal, "Total gold"}}},
 };
 
-const uint32_t kRangeMs[] = {0, 10 * 60000, 5 * 60000};
-const char *const kRangeLabels[] = {"All game", "Last 10 min", "Last 5 min"};
 const char *const kGroupLabels[] = {"All", "Humans", "My team", "Rivals"};
 
 constexpr int kPad = 24, kRailW = 216, kMainX = kPad + kRailW + 16, kMainW = kStatsW - kMainX - kPad, kFooterY = 622;
@@ -178,11 +176,7 @@ StatsWindow ChartLimits(const View &v)
 
 StatsWindow ChartWindow(const View &v)
 {
-	if (v.stats.zoom.to > v.stats.zoom.from) return v.stats.zoom;
-	StatsWindow window = ChartLimits(v);
-	const uint32_t span = kRangeMs[v.stats.range];
-	if (span && window.to - window.from > span) window.from = window.to - span;
-	return window;
+	return v.stats.zoom.to > v.stats.zoom.from ? v.stats.zoom : ChartLimits(v);
 }
 
 struct Series {
@@ -204,7 +198,9 @@ int ValueAt(const std::vector<StatsPoint> &points, uint32_t ms, bool &found)
 void PaintLines(Painter &p, const View &v, const std::vector<Series> &series, int top, int bottom)
 {
 	PaintCard(p, kMainX, top, kMainW, bottom - top);
-	const int plotX = kMainX + 62, plotW = kMainW - 62 - 18, plotY = top + 16, plotH = bottom - top - 16 - 32;
+	// A strip above the plot for its notes, so that no line ever runs under them.
+	constexpr int kNotesH = 24;
+	const int plotX = kMainX + 62, plotW = kMainW - 62 - 18, plotY = top + 12 + kNotesH, plotH = bottom - plotY - 32, notesY = top + 7;
 	const StatsWindow window = ChartWindow(v);
 	const uint32_t from = window.from, length = std::max<uint32_t>(window.to > from ? window.to - from : 0, 1000);
 
@@ -276,11 +272,10 @@ void PaintLines(Painter &p, const View &v, const std::vector<Series> &series, in
 	}
 	p.Font(3);
 	if (anyMark) {
-		p.Diamond(plotX + plotW - 90, plotY + 6, 5, pal::goldLight);
-		p.Text(plotX + plotW - 80, plotY - 4, 80, 20, "Eliminated", kDim);
+		p.Diamond(plotX + plotW - 90, notesY + 10, 5, pal::goldLight);
+		p.Text(plotX + plotW - 80, notesY, 80, 20, "Eliminated", kDim);
 	}
-	const bool zoomed = v.stats.zoom.to > v.stats.zoom.from;
-	p.Text(plotX + 6, plotY - 4, plotW - 110, 20, zoomed ? "Right click to see it all" : "Drag over the chart to zoom in", kDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	p.Text(plotX, notesY, plotW - 110, 20, "Drag over the chart to zoom in", kDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	p.AddHit(plotX, plotY, plotW, plotH, kActChartArea, 0);
 
 	const int mouseX = static_cast<int>((v.mouseX - p.ox) / p.s), mouseY = static_cast<int>((v.mouseY - p.oy) / p.s);
@@ -375,10 +370,21 @@ void PaintBoard(Painter &p, const View &v, std::vector<BoardRow> rows, bool mark
 	const int tableH = kHeadH + std::max(1, static_cast<int>(rows.size())) * kRowH + 4;
 	PaintCard(p, kMainX, top, kMainW, tableH);
 	const int colX = kMainX + kPadIn + kNameW, colW = (kMainW - kPadIn * 2 - kNameW - kColGap * 3) / 4;
-	int best[4] = {};
+	int best[4] = {}, lowest[4] = {};
+	for (int c = 0; c < 4 && !rows.empty(); c++) lowest[c] = rows.front().values[c];
 	for (const BoardRow &row : rows) {
-		for (int c = 0; c < 4; c++) best[c] = std::max(best[c], row.values[c]);
+		for (int c = 0; c < 4; c++) {
+			best[c] = std::max(best[c], row.values[c]);
+			lowest[c] = std::min(lowest[c], row.values[c]);
+		}
 	}
+	const auto leads = [&](const BoardRow &row, int c) {
+		if (rows.size() < 2 || best[c] == lowest[c]) return false;
+		const StatMetric metric = category.metrics[c].id;
+		// For these, having less is what is good.
+		if (metric == kStatLost || metric == kStatDamageTaken) return row.values[c] == lowest[c];
+		return row.values[c] == best[c];
+	};
 	for (int c = 0; c < 4; c++) {
 		const int x = colX + c * (colW + kColGap);
 		const bool on = c == selected, hot = !on && p.Hover(x - 6, top, colW + 12, kHeadH, v.mouseX, v.mouseY);
@@ -408,10 +414,14 @@ void PaintBoard(Painter &p, const View &v, std::vector<BoardRow> rows, bool mark
 		p.Text(kMainX + kPadIn + 20, y, kNameW - 26, kRowH, row.name, row.out ? kDim : row.mine ? pal::goldLight : kText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		for (int c = 0; c < 4; c++) {
 			const int x = colX + c * (colW + kColGap), percent = best[c] > 0 ? row.values[c] * 100 / best[c] : 0;
-			const bool leader = row.values[c] > 0 && row.values[c] == best[c];
-			p.Font(3);
-			p.Text(x, y + 2, colW, 18, StatsFormatShort(row.values[c]), leader ? pal::goldLight : kText);
-			p.Fill(x, y + 21, colW, 4, pal::well);
+			const bool leader = leads(row, c);
+			if (leader) {
+				p.FillV(x - 6, y + 1, colW + 12, kRowH - 2, RGB(112, 80, 28), RGB(70, 50, 20));
+				p.Frame(x - 6, y + 1, colW + 12, kRowH - 2, kGold);
+			}
+			p.Font(leader ? 1 : 3);
+			p.Text(x, y + 2, colW, 18, StatsFormatShort(row.values[c]), leader ? RGB(255, 240, 190) : kText);
+			p.Fill(x, y + 21, colW, 4, leader ? RGB(40, 28, 10) : pal::well);
 			const int filled = colW * std::max(0, std::min(100, percent)) / 100;
 			if (filled > 0) p.FillH(x, y + 21, filled, 4, pal::bronze, leader ? pal::goldLight : kGold);
 		}
@@ -620,7 +630,7 @@ void PaintStatistics(Painter &p, const View &v)
 	PaintRail(p, v, players);
 	p.Fill(kPad + kRailW + 7, 92, 1, kFooterY - 92 - 8, pal::lineDim);
 
-	constexpr int kViewW = 100, kRangeW = 112, kChipH = 28, kChipsY = 92, kTabsY = 126, kTabH = 34, kBoardTop = 168, kBottom = kFooterY - 10;
+	constexpr int kViewW = 100, kZoomOutW = 190, kChipH = 28, kChipsY = 92, kTabsY = 126, kTabH = 34, kBoardTop = 168, kBottom = kFooterY - 10;
 	const bool hasData = v.statsData && !v.statsData->history.Empty();
 	// Without allies a team is just a player, and this view would repeat the previous one.
 	bool anyTeam = false;
@@ -639,12 +649,12 @@ void PaintStatistics(Painter &p, const View &v)
 		PaintSummary(p, v, players, kTabsY + 4, kBottom);
 	}
 	else {
-		const bool zoomed = v.stats.zoom.to > v.stats.zoom.from;
-		for (int i = 0; i < 3; i++) Chip(p, kMainX + kMainW - (3 - i) * kRangeW - (2 - i) * 6, kChipsY, kRangeW, kChipH, kRangeLabels[i], !zoomed && v.stats.range == i, kActRange, i, v);
-		if (zoomed) {
+		if (v.stats.zoom.to > v.stats.zoom.from) {
+			const int buttonX = kMainX + kMainW - kZoomOutW;
 			const std::string selection = StatsFormatTime(v.stats.zoom.from) + " - " + StatsFormatTime(v.stats.zoom.to);
 			p.Font(3);
-			p.Text(kMainX + viewCount * (kViewW + 6), kChipsY, kMainW - viewCount * (kViewW + 6) - 3 * (kRangeW + 6), kChipH, selection, pal::goldLight, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			p.Text(kMainX + viewCount * (kViewW + 6), kChipsY, buttonX - 10 - kMainX - viewCount * (kViewW + 6), kChipH, selection, pal::goldLight, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+			Chip(p, buttonX, kChipsY, kZoomOutW, kChipH, "See the whole game", false, kActZoomOut, 0, v);
 		}
 		std::vector<TabSpec> tabs;
 		for (int i = 0; i < static_cast<int>(std::size(kCategories)); i++) tabs.push_back({kCategories[i].name, kActCategory, i, v.stats.category == i, true});

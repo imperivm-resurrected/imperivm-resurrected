@@ -134,10 +134,7 @@ void ApplyStatsClick(StatsFilters &f, int action, int arg)
 		f.sortAscending = f.metric == arg && !f.sortAscending;
 		f.metric = arg;
 		break;
-	case kActRange:
-		f.range = arg;
-		f.zoom = StatsWindow();
-		break;
+	case kActZoomOut: f.zoom = StatsWindow(); break;
 	case kActGroup: f.group = arg; break;
 	case kActPlayer: f.hidden ^= 1u << arg; break;
 	default: break;

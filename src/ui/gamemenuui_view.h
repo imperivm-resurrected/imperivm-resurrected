@@ -12,7 +12,7 @@
 
 namespace gamemenuui {
 
-enum Action { kActNone, kActButton, kActYes, kActNo, kActCategory, kActView, kActMetric, kActRange, kActGroup, kActPlayer, kActChartArea };
+enum Action { kActNone, kActButton, kActYes, kActNo, kActCategory, kActView, kActMetric, kActZoomOut, kActGroup, kActPlayer, kActChartArea };
 enum StatsViewKind { kViewSummary, kViewPlayers, kViewTeams };
 
 struct Row {
@@ -24,7 +24,7 @@ struct Row {
 };
 
 struct StatsFilters {
-	int view = kViewSummary, category = 0, metric = 0, range = 0, group = 0;
+	int view = kViewSummary, category = 0, metric = 0, group = 0;
 	uint32_t hidden = 0;
 	bool sortAscending = false;
 	StatsWindow zoom;
