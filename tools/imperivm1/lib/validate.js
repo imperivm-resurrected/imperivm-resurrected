@@ -7,6 +7,8 @@ const G = require('./grid');
 const KEYWORDS = new Set(['if', 'else', 'while', 'for', 'do', 'return', 'switch', 'case', 'break', 'continue', 'sizeof']);
 // Members of the built-in types (point, rect...) that are not in the list of registered functions.
 const BUILTIN_MEMBERS = new Set(['x', 'y', 'Set', 'left', 'top', 'right', 'bottom']);
+// Imperivm Resurrected's own script functions (sdk/scripts.md) that the --probe diagnostics use.
+const MOD_FUNCTIONS = new Set(['Mod_Log', 'Mod_LogInt']);
 
 // files: Map path -> Buffer of the converted adventure. ctx: {gbr, i1Classes, customItems}.
 // Returns {errors: [], warnings: [], stats: {}}.
@@ -89,7 +91,7 @@ function validateAdventure(files, ctx) {
 		stats.scripts++;
 		for (const c of S.listCalls(src)) {
 			if (KEYWORDS.has(c.name)) continue;
-			const known = c.method ? ctx.gbr.methods.has(c.name) || ctx.gbr.functions.has(c.name) || BUILTIN_MEMBERS.has(c.name) : ctx.gbr.functions.has(c.name);
+			const known = c.method ? ctx.gbr.methods.has(c.name) || ctx.gbr.functions.has(c.name) || BUILTIN_MEMBERS.has(c.name) : ctx.gbr.functions.has(c.name) || MOD_FUNCTIONS.has(c.name);
 			if (known) continue;
 			const k = (c.method ? '.' : '') + c.name;
 			if (!missing.has(k)) missing.set(k, new Set());

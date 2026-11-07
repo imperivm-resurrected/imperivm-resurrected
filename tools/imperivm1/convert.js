@@ -1,7 +1,7 @@
 // Converts the campaign of Imperivm I ("Celtic Kings Adventure") into an adventure for Great Battles of Rome HD.
 //
 //   node tools/imperivm1/convert.js --i1 "<Imperivm I folder>" --gbr "<Great Battles of Rome folder>" --out <folder>
-//        [--name "<adventure name>"] [--dry-run] [--keep-class <I1 class>]... [--movies] [--unpacked]
+//        [--name "<adventure name>"] [--dry-run] [--keep-class <I1 class>]... [--movies] [--unpacked] [--probe]
 //
 //   --i1          the Imperivm I install (read only): adventures\Celtic Kings Adventure.bfhp, data.pak, assets.pak, local.pak
 //   --gbr         the Great Battles of Rome install (read only): Packs\data.pak, MapObjects.pak and UI.pak
@@ -12,6 +12,8 @@
 //   --movies      also converts the two movies of Imperivm I (Packs\data*.bfhp, MPEG-1) into <out>\Movies\ and plays them
 //                 from movies\ (they have to be copied to the game's Movies folder); without it, the calls are commented out
 //   --unpacked    also writes the files of the adventure, unpacked, to <out>\unpacked\
+//   --probe       adds diagnostics to the Kormaris opening that write "I1PROBE ..." lines to
+//                 Logs\imperivm\imperivm-mod.log (they need Imperivm Resurrected's Mod_Log); for testing only
 //
 // The output is a conversion of your own copy of the game, for your own use: do not redistribute it.
 'use strict';
@@ -41,6 +43,7 @@ function parseArgs(argv) {
 		else if (a === '--dry-run') opts.dryRun = true;
 		else if (a === '--movies') opts.movies = true;
 		else if (a === '--unpacked') opts.unpacked = true;
+		else if (a === '--probe') opts.probe = true;
 		else throw new Error(`unknown option ${a}`);
 	}
 	if (!opts.i1 || !opts.gbr || !opts.out) throw new Error('--i1, --gbr and --out are required');
@@ -87,6 +90,7 @@ function main() {
 		name: opts.name,
 		keep: opts.keep,
 		movies: movies && new Map([...movies].map(([k, v]) => [k, v.name])),
+		probe: opts.probe,
 	});
 	const { report } = result;
 	if (movies) {

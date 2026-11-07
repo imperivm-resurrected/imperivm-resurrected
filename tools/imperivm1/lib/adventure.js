@@ -7,6 +7,7 @@ const S = require('./script');
 const X = require('./xml');
 const G = require('./grid');
 const M = require('./mapping');
+const { addProbe } = require('./probe');
 
 const EOL = '\r\n';
 const LANGS = ['English', 'Spanish', 'Italian'];
@@ -533,7 +534,13 @@ function convertAdventure(input) {
 				report.add('Dropped', `${p}: not run by any sequences.xml (left over from the map's development)`);
 				continue;
 			}
-			out.set(p, bytes(convertScript(text(buf), ctx, p)));
+			let s = convertScript(text(buf), ctx, p);
+			const probed = input.probe ? addProbe(p, s) : null;
+			if (probed) {
+				s = probed;
+				report.add('Probe', `${p}: I1PROBE diagnostics added (Mod_Log, needs Imperivm Resurrected)`);
+			}
+			out.set(p, bytes(s));
 		} else {
 			out.set(p, buf);
 			report.count('Copied as they are', /\.[a-z0-9]+$/i.exec(base) ? /\.[a-z0-9]+$/i.exec(base)[0].toLowerCase() : base);
