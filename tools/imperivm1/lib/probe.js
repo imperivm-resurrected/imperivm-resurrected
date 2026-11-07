@@ -13,7 +13,7 @@
 
 const S = require('./script');
 
-const DECLARATIONS = 'ObjList i1p_v, i1p_w;\nObj i1p_o, i1p_b;\nint i1p_k, i1p_i, i1p_p, i1p_j, i1p_n;\nstr i1p_s;\nSettlement i1p_h;\n';
+const DECLARATIONS = 'ObjList i1p_v, i1p_w;\nObj i1p_o, i1p_b, i1p_c;\nint i1p_k, i1p_i, i1p_p, i1p_j, i1p_n;\nstr i1p_s, i1p_t;\nSettlement i1p_h;\n';
 
 // "if (cond) s = s + ' name=1'; else s = s + ' name=0';" since a bool does not convert to a string.
 const flag = (name, cond) => `if (${cond}) i1p_s = i1p_s + " ${name}=1"; else i1p_s = i1p_s + " ${name}=0";`;
@@ -60,10 +60,20 @@ const teutonLine = (tag, o) => {
 	];
 };
 
-// The target searches of one unit `o` (an Obj expression): which of them find a target, and its command.
+// The combat numbers of one object `o` (an Obj expression), in i1p_t, and the groups of the opening it belongs to.
+const statsLine = (tag, o) => [
+	`i1p_t = "I1PROBE ${tag} class=" + ${o}.class() + " name=" + ${o}.name + " player=" + ${o}.player + " attack=" + ${o}.attack + " damage=" + ${o}.damage + " health=" + ${o}.health + " maxhealth=" + ${o}.maxhealth + " stamina=" + ${o}.stamina + " x=" + ${o}.pos.x + " y=" + ${o}.pos.y;`,
+	`if (${o}.IsInGroup("M1_Q_Victims1")) i1p_t = i1p_t + " in_victims1=1"; else i1p_t = i1p_t + " in_victims1=0";`,
+	`if (${o}.IsInGroup("M1_Q_StandingGround")) i1p_t = i1p_t + " in_standing_ground=1"; else i1p_t = i1p_t + " in_standing_ground=0";`,
+	'Mod_Log(i1p_t);',
+];
+
+// The target searches of one unit `o` (an Obj expression): which of them find a target, and its command. The target
+// BestTargetForPos finds gets a stats line of its own.
 const targetLine = (tag, o) => [
 	`i1p_s = "I1PROBE ${tag} class=" + ${o}.class() + " player=" + ${o}.player + " command=" + ${o}.command + " dist_to_larax=" + ${o}.DistTo(NO_Larax.obj);`,
 	`i1p_b = ${o}.AsUnit().BestTargetForPos();`,
+	'i1p_c = i1p_b;',
 	'if (i1p_b.IsValid()) i1p_s = i1p_s + " forpos=" + i1p_b.class() + "/" + i1p_b.player; else i1p_s = i1p_s + " forpos=none";',
 	`i1p_b = ${o}.AsUnit().BestTargetInSquadSight();`,
 	'if (i1p_b.IsValid()) i1p_s = i1p_s + " squadsight=" + i1p_b.class() + "/" + i1p_b.player; else i1p_s = i1p_s + " squadsight=none";',
@@ -72,6 +82,9 @@ const targetLine = (tag, o) => [
 	flag('enemy_in_squad_sight', `${o}.AsUnit().IsEnemyInSquadSight()`),
 	flag('enemies_in_sight', `${o}.AsUnit().EnemiesInSight()`),
 	'Mod_Log(i1p_s);',
+	'if (i1p_c.IsValid()) {',
+	...statsLine(`${tag} forpos target`, 'i1p_c').map((l) => '\t' + l),
+	'}',
 ];
 
 // The target searches of Larax, of up to 3 other units of his player, of up to 3 units of player 2 (his Gaul allies) in
@@ -121,6 +134,7 @@ function seq15Loop() {
 		'Mod_LogInt("I1PROBE seq15 start, Teutons in M1_Q_Victims1", i1p_v.count);',
 		'for (i1p_k = 0; i1p_k < 15; i1p_k += 1) {',
 		...indent(laraxLine('seq15'), 1),
+		...indent(statsLine('stats larax', 'NO_Larax.obj'), 1),
 		`\ti1p_b = ${l}.AsUnit().BestTargetForPos();`,
 		'\ti1p_s = "I1PROBE best target";',
 		`\t${flag('valid', 'i1p_b.IsValid()')}`,
@@ -138,6 +152,7 @@ function seq15Loop() {
 		'\t\ti1p_o = i1p_v[i1p_i];',
 		'\t\tif (i1p_o.IsValid()) {',
 		...indent(teutonLine('teuton', 'i1p_o'), 3),
+		...indent(statsLine('stats victims1 rider', 'i1p_o'), 3),
 		'\t\t} else Mod_LogInt("I1PROBE teuton invalid", i1p_i);',
 		'\t}',
 		...indent(targetLines('seq15'), 1),
