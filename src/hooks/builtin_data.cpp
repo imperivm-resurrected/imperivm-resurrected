@@ -27,6 +27,13 @@ const BuiltinText kPatches[] = {
 		"\t<set select=\"/class\" entity_winter=\"Buildings/RTownhall/RTownhall_w.ent.xml\"/>\n"
 		"</patch>\n",
 		"b06962a1cb46ea51b78de0b9adabc5a3620ec6a598b1d9671fdc97974ff2ff04"},
+	{"data/subai/hero_hold_position.vs",
+		"@replace if(u.IsAlive())\n"
+		"\t// BestTargetForPos only takes targets inside the hero's own reach (17), while melee units hit from up to 40:\n"
+		"\t// a hero holding position stood still under their blows. Those close enough to hit him are answered too.\n"
+		"\tif(!u.IsValid()) u = .BestTargetInRange(.pos, 100);\n"
+		"\tif(u.IsAlive())\n",
+		"f9e76d98893e61b9a4bdfef000482251182259ca704c594826e7b96915e79a5a"},
 	{"menuini/gameoptions.ini",
 		"[GameOptions Objects]\n"
 		"+ModMovieMuteCheck\n"
