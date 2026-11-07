@@ -1497,6 +1497,8 @@
 {"en":"Size and mode","es":"Tamaño y modo","it":"Dimensioni e modalità"},
 {"en":"Alt+Enter switches","es":"Alt+Intro alterna","it":"Alt+Invio alterna"},
 {"en":"Window size","es":"Tamaño de la ventana","it":"Dimensioni della finestra"},
+{"en":"Extended view","es":"Vista ampliada","it":"Vista estesa"},
+{"en":"Adds larger sizes that show more of the map","es":"Añade tamaños mayores que muestran más mapa","it":"Aggiunge dimensioni maggiori che mostrano più mappa"},
 {"en":"Sound","es":"Sonido","it":"Audio"},
 {"en":"Volume and alerts","es":"Volumen y avisos","it":"Volume e avvisi"},
 {"en":"Turn each kind of sound on or off and set its volume.","es":"Activa o apaga cada tipo de sonido y ajusta su volumen.","it":"Attiva o disattiva ogni tipo di suono e regola il volume."},

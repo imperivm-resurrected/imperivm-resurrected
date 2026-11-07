@@ -82,6 +82,7 @@ void SetWindowSizes(Values &v, int monitor, ResSize current)
 void SetDisplayExtras(Values &v, const Config &c)
 {
 	SetWindowSizes(v, MonitorShown(v), {c.windowW, c.windowH});
+	v.checks[kExtendedView] = c.extendedView;
 }
 
 void CopyDisplayExtras(Values &to, const Values &from)
@@ -91,6 +92,10 @@ void CopyDisplayExtras(Values &to, const Values &from)
 		if (sel != from.combos.end()) to.combos[id] = sel->second;
 		const auto items = from.items.find(id);
 		if (items != from.items.end()) to.items[id] = items->second;
+	}
+	for (int id : {kExtendedView}) {
+		const auto it = from.checks.find(id);
+		if (it != from.checks.end()) to.checks[id] = it->second;
 	}
 }
 
@@ -102,6 +107,8 @@ void ApplyDisplayLive(const Values &v)
 
 void CommitDisplayExtras(Config &c, const Values &v)
 {
+	const auto extended = v.checks.find(kExtendedView);
+	if (extended != v.checks.end()) c.extendedView = extended->second;
 	ResSize window;
 	if (SelectedSize(v, kWindowSize, window)) {
 		c.windowW = window.w;
@@ -286,7 +293,7 @@ void PreviewResolutions()
 			return it == v.checks.end() ? fallback : it->second;
 		};
 		windowed = check(kWindowed, GetConfig().windowed);
-		extended = GetConfig().extendedView;
+		extended = check(kExtendedView, GetConfig().extendedView);
 	}
 	OptionsPreviewResolutions(monitor, windowed, extended);
 	{
@@ -316,10 +323,13 @@ void Execute(const Command &cmd)
 	switch (cmd.action) {
 	case kActToggle:
 		if (IsExtra(cmd.arg)) {
-			std::lock_guard<std::mutex> lock(g_lock);
-			bool &on = g_s.view.values.checks[cmd.arg];
-			on = !on;
-			g_s.view.dirty = !(g_s.view.values == g_s.baseline);
+			{
+				std::lock_guard<std::mutex> lock(g_lock);
+				bool &on = g_s.view.values.checks[cmd.arg];
+				on = !on;
+				g_s.view.dirty = !(g_s.view.values == g_s.baseline);
+			}
+			if (cmd.arg == kExtendedView) PreviewResolutions();
 		}
 		else {
 			OptionsWriteCheck(cmd.arg, !OptionsReadCheck(cmd.arg, false));

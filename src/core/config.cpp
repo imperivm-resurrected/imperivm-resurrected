@@ -133,6 +133,7 @@ void SaveConfig()
 	WritePrivateProfileStringA("Display", "WindowWidth", std::to_string(g_config.windowW).c_str(), path);
 	WritePrivateProfileStringA("Display", "WindowHeight", std::to_string(g_config.windowH).c_str(), path);
 	WritePrivateProfileStringA("Display", "TrapMouse", g_config.trapMouse ? "1" : "0", path);
+	WritePrivateProfileStringA("Display", "ExtendedView", g_config.extendedView ? "1" : "0", path);
 	WritePrivateProfileStringA("Display", "Monitor", std::to_string(g_config.monitor).c_str(), path);
 	if (g_config.resolutionW > 0) {
 		WritePrivateProfileStringA("Display", "Resolution", (std::to_string(g_config.resolutionW) + "x" + std::to_string(g_config.resolutionH)).c_str(), path);
