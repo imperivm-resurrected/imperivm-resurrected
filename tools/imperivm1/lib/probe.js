@@ -8,6 +8,7 @@
 //   seq0, around the goddess conversation: the time before and after C_Conv.Run(), to see whether it was played.
 //   seq15, after the Teutons are sent at him, every 2 s for 30 s: Larax, his best target, each Teuton and the diplomacy,
 //   and the target searches of Larax, up to 3 other units of his player, up to 3 Gaul allies and one Teuton.
+//   seq18, after the prisoners and guards are spawned into S_Prizon, every second for 30 s: the prison and its prisoners.
 'use strict';
 
 const S = require('./script');
@@ -162,12 +163,39 @@ function seq15Loop() {
 	];
 }
 
+// seq18 (the prison): every second for 30 s after the prisoners and their guards are spawned into S_Prizon, the two
+// groups, the settlement and each prisoner.
+function prisonLoop() {
+	const p = 'i1p_w[i1p_j]';
+	return [
+		'// I1PROBE: diagnostics added by convert.js --probe',
+		'for (i1p_k = 0; i1p_k < 30; i1p_k += 1) {',
+		'\ti1p_h = GetSettlement("S_Prizon");',
+		'\ti1p_s = "I1PROBE prison t=" + GetTime() + " prisoners=" + M1_Q_Prisoners.count + " guards=" + M1_Q_PrisonGuards.count;',
+		'\tif (i1p_h.IsValid()) i1p_s = i1p_s + " sett_player=" + i1p_h.player + " food=" + i1p_h.food + " gold=" + i1p_h.gold + " population=" + i1p_h.population + " max_population=" + i1p_h.max_population + " units=" + i1p_h.UnitsCount() + " loyalty=" + i1p_h.loyalty; else i1p_s = i1p_s + " sett=invalid";',
+		`\t${flag('independent', 'i1p_h.IsIndependent()')}`,
+		'\tMod_Log(i1p_s);',
+		'\ti1p_w = M1_Q_Prisoners.GetObjList();',
+		'\tfor (i1p_j = 0; i1p_j < i1p_w.count; i1p_j += 1) {',
+		`\t\ti1p_s = "I1PROBE prisoner " + i1p_j + " class=" + ${p}.class() + " player=" + ${p}.player + " health=" + ${p}.health + " command=" + ${p}.command + " x=" + ${p}.pos.x + " y=" + ${p}.pos.y;`,
+		...indent(holder(p), 2),
+		`\t\t${flag('alive', `${p}.IsAlive()`)}`,
+		`\t\t${flag('visible', `${p}.IsVisible()`)}`,
+		'\t\tMod_Log(i1p_s);',
+		'\t}',
+		'\tSleep(1000);',
+		'}',
+		'Mod_Log("I1PROBE prison end");',
+	];
+}
+
 // Where each probe goes: [file, anchor, 'before' | 'after' the anchor's line, lines].
 const PROBES = [
 	['Maps/11937/Sequences/seq0.vs', /^NO_Larax\s*=\s*GetNamedObj\("Larax"\);/m, 'after', [...laraxLine('seq0 start'), ...firstTeuton('seq0 start teuton'), ...targetLines('seq0 start')]],
 	['Maps/11937/Sequences/seq0.vs', /^NO_Larax\.SetCommand\("hold_position"\);/m, 'after', laraxLine('seq0 after hold_position')],
 	['Maps/11937/Sequences/seq0.vs', /^C_Conv\.Init\("TheGodess"\);/m, 'before', ['Mod_LogInt("I1PROBE seq0 goddess conversation starts, t", GetTime());']],
 	['Maps/11937/Sequences/seq0.vs', /^C_Conv\.Run\(\);/m, 'after', ['Mod_LogInt("I1PROBE seq0 goddess conversation ended, t", GetTime());', ...laraxLine('seq0 after goddess')]],
+	['Maps/11937/Sequences/seq18.vs', /^SpawnGroupInHolder\("M1_Q_PrisonGuards", "S_Prizon"\);/m, 'after', prisonLoop()],
 	['Maps/11937/Sequences/seq15.vs', /^C_Conv\.Init\("OpeningConversation"\);/m, 'before', ['Mod_LogInt("I1PROBE seq15 opening conversation starts, t", GetTime());']],
 	['Maps/11937/Sequences/seq15.vs', /^C_Conv\.Run\(\);/m, 'after', ['Mod_LogInt("I1PROBE seq15 opening conversation ended, t", GetTime());']],
 	['Maps/11937/Sequences/seq15.vs', /^WaitEmptyQuery\s*\(\s*M1_Q_Victims1/m, 'before', seq15Loop()],
