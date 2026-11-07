@@ -4,7 +4,6 @@
 #include "ui/optionsui.h"
 
 #include <algorithm>
-#include <cstdio>
 #include <cstdlib>
 #include <iterator>
 #include <mutex>
@@ -15,8 +14,6 @@
 #include "core/log.h"
 #include "core/uiport.h"
 #include "game/options.h"
-#include "hooks/displaymode.h"
-#include "hooks/respick.h"
 #include "hooks/audio.h"
 #include "hooks/dmshim.h"
 #include "hooks/soundlevels.h"
@@ -52,7 +49,6 @@ std::mutex g_lock;
 State g_s;
 Canvas g_canvas;
 
-const char *const kScalingLabels[] = {"Sharp", "Smooth", "Pixel-exact"};
 const int kFpsLimits[] = {0, 30, 60, 120, 144, 240};
 const char *const kFpsLabels[] = {"No limit", "30", "60", "120", "144", "240"};
 
@@ -71,86 +67,32 @@ int ComboIndex(const Values &v, int id, int count)
 	return it != v.combos.end() && it->second >= 0 && it->second < count ? it->second : -1;
 }
 
-std::string SizeLabel(ResSize s)
-{
-	return std::to_string(s.w) + " x " + std::to_string(s.h);
-}
-
-bool SelectedSize(const Values &v, int id, ResSize &size)
-{
-	const auto items = v.items.find(id);
-	const auto sel = v.combos.find(id);
-	if (items == v.items.end() || sel == v.combos.end() || sel->second < 0 || sel->second >= static_cast<int>(items->second.size())) return false;
-	return sscanf_s(items->second[sel->second].c_str(), "%d x %d", &size.w, &size.h) == 2;
-}
-
-int MonitorShown(const Values &v)
-{
-	const auto it = v.combos.find(kMonitor);
-	return it == v.combos.end() ? GetConfig().monitor : it->second;
-}
-
-// The window sizes are the monitor's own that fit in its work area, plus the size the window has now.
-void SetWindowSizes(Values &v, int monitor, ResSize current)
-{
-	std::vector<ResSize> modes;
-	for (POINT p : DisplayWindowsSizes(monitor)) modes.push_back({p.x, p.y});
-	ResSize area;
-	DisplayWindowArea(monitor, area.w, area.h);
-	std::vector<std::string> &items = v.items[kWindowSize];
-	items.clear();
-	for (ResSize s : BuildWindowSizeList(modes, area, current)) items.push_back(SizeLabel(s));
-	const auto at = std::find(items.begin(), items.end(), SizeLabel(current));
-	v.combos[kWindowSize] = at == items.end() ? -1 : static_cast<int>(at - items.begin());
-}
-
 void SetDisplayExtras(Values &v, const Config &c)
 {
-	SetWindowSizes(v, MonitorShown(v), {c.windowW, c.windowH});
-	v.checks[kExtendedView] = c.extendedView;
 	v.items[kFpsLimit] = std::vector<std::string>(std::begin(kFpsLabels), std::end(kFpsLabels));
 	v.combos[kFpsLimit] = FpsIndex(c.fpsLimit);
-	v.items[kImageScaling] = std::vector<std::string>(std::begin(kScalingLabels), std::end(kScalingLabels));
-	v.combos[kImageScaling] = c.imageScaling;
 }
 
 void CopyDisplayExtras(Values &to, const Values &from)
 {
-	for (int id : {kWindowSize, kFpsLimit, kImageScaling}) {
+	for (int id : {kFpsLimit}) {
 		const auto sel = from.combos.find(id);
 		if (sel != from.combos.end()) to.combos[id] = sel->second;
 		const auto items = from.items.find(id);
 		if (items != from.items.end()) to.items[id] = items->second;
 	}
-	for (int id : {kExtendedView}) {
-		const auto it = from.checks.find(id);
-		if (it != from.checks.end()) to.checks[id] = it->second;
-	}
 }
 
 void ApplyDisplayLive(const Values &v)
 {
-	ResSize window;
-	if (SelectedSize(v, kWindowSize, window)) DisplaySetWindowSize(window.w, window.h);
 	const int fps = ComboIndex(v, kFpsLimit, static_cast<int>(sizeof(kFpsLimits) / sizeof(kFpsLimits[0])));
 	if (fps >= 0) MutableConfig().fpsLimit = kFpsLimits[fps];
-	const int scaling = ComboIndex(v, kImageScaling, static_cast<int>(sizeof(kScalingLabels) / sizeof(kScalingLabels[0])));
-	if (scaling >= 0) MutableConfig().imageScaling = scaling;
 }
 
 void CommitDisplayExtras(Config &c, const Values &v)
 {
-	const auto extended = v.checks.find(kExtendedView);
-	if (extended != v.checks.end()) c.extendedView = extended->second;
-	ResSize window;
-	if (SelectedSize(v, kWindowSize, window)) {
-		c.windowW = window.w;
-		c.windowH = window.h;
-	}
 	const int fps = ComboIndex(v, kFpsLimit, static_cast<int>(sizeof(kFpsLimits) / sizeof(kFpsLimits[0])));
 	if (fps >= 0) c.fpsLimit = kFpsLimits[fps];
-	const int scaling = ComboIndex(v, kImageScaling, static_cast<int>(sizeof(kScalingLabels) / sizeof(kScalingLabels[0])));
-	if (scaling >= 0) c.imageScaling = scaling;
 }
 
 void ApplyDisplayFromView()
@@ -460,16 +402,9 @@ void PreviewResolutions()
 			return it == v.checks.end() ? fallback : it->second;
 		};
 		windowed = check(kWindowed, GetConfig().windowed);
-		extended = check(kExtendedView, GetConfig().extendedView);
+		extended = GetConfig().extendedView;
 	}
 	OptionsPreviewResolutions(monitor, windowed, extended);
-	{
-		std::lock_guard<std::mutex> lock(g_lock);
-		Values &v = g_s.view.values;
-		ResSize window = {GetConfig().windowW, GetConfig().windowH};
-		SelectedSize(v, kWindowSize, window);
-		SetWindowSizes(v, monitor, window);
-	}
 	Refresh();
 }
 
@@ -496,7 +431,6 @@ void Execute(const Command &cmd)
 				on = !on;
 				g_s.view.dirty = !(g_s.view.values == g_s.baseline);
 			}
-			if (cmd.arg == kExtendedView) PreviewResolutions();
 		}
 		else {
 			OptionsWriteCheck(cmd.arg, !OptionsReadCheck(cmd.arg, false));

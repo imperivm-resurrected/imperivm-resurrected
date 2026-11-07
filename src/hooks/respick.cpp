@@ -52,7 +52,7 @@ ResPick PickStartResolution(const std::vector<ResSize> &list, ResSize saved, Res
 // - above 4096x2304: the largest image the mod has ever let the game draw, in every version; the game
 //   paints each frame in software and a larger one was never tried.
 // - above the size Windows uses for the monitor, unless allowed: in full screen the mod switches the
-//   monitor to that mode, which a window cannot do, so in a window they are only extended view sizes.
+//   monitor to that mode; a window cannot, and in a window the list is the one of BuildWindowResolutionList.
 const int kMinW = 1024, kMinH = 768, kMaxW = 4096, kMaxH = 2304;
 
 std::vector<ResSize> BuildResolutionList(const std::vector<ResSize> &windows, ResSize screen, const std::vector<ResSize> &extended, bool monitorModesBeyondScreen)
@@ -72,14 +72,16 @@ std::vector<ResSize> BuildResolutionList(const std::vector<ResSize> &windows, Re
 	return out;
 }
 
-std::vector<ResSize> BuildWindowSizeList(const std::vector<ResSize> &windows, ResSize area, ResSize current)
+std::vector<ResSize> BuildWindowResolutionList(const std::vector<ResSize> &windows, ResSize screen, ResSize area)
 {
+	const std::vector<ResSize> all = BuildResolutionList(windows, screen, {});
 	std::vector<ResSize> out;
-	for (ResSize s : windows) {
-		if (s.w > 0 && s.h > 0 && s.w <= area.w && s.h <= area.h && IndexOf(out, s) < 0) out.push_back(s);
+	for (ResSize s : all) {
+		if (s.w <= area.w && s.h <= area.h) out.push_back(s);
 	}
-	if (current.w > 0 && current.h > 0 && IndexOf(out, current) < 0) out.push_back(current);
-	std::sort(out.begin(), out.end(), LargerFirst);
+	// A screen too small for any size the game takes, with the frame and the taskbar, still gets its own:
+	// the window is then kept inside the work area and the image shrunk a little.
+	if (out.empty() && !all.empty()) out.push_back(all.front());
 	return out;
 }
 

@@ -46,9 +46,6 @@ void DisplayMonitorSize(int monitor, int &w, int &h);
 // The largest inner size a window has in the monitor's work area.
 void DisplayWindowArea(int monitor, int &w, int &h);
 
-// Sets the window's inner size, at once if the game is in a window; SaveConfig keeps it.
-void DisplaySetWindowSize(int w, int h);
-
 bool DisplayModeAllowed(int w, int h);
 
 bool DisplayFakesModeChange();

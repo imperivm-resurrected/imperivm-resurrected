@@ -46,12 +46,6 @@ void LoadConfig()
 
 	GetPrivateProfileStringA("Display", "Mode", "fullscreen", buf, sizeof(buf), path);
 	g_config.windowed = _stricmp(buf, "windowed") == 0;
-	g_config.windowW = GetPrivateProfileIntA("Display", "WindowWidth", 1600, path);
-	g_config.windowH = GetPrivateProfileIntA("Display", "WindowHeight", 900, path);
-	if (g_config.windowW < 320 || g_config.windowH < 240 || g_config.windowW > 16384 || g_config.windowH > 16384) {
-		g_config.windowW = 1600;
-		g_config.windowH = 900;
-	}
 	g_config.trapMouse = GetPrivateProfileIntA("Display", "TrapMouse", 1, path) != 0;
 	g_config.monitor = (std::max)(0, (std::min)(15, static_cast<int>(GetPrivateProfileIntA("Display", "Monitor", 0, path))));
 	GetPrivateProfileStringA("Display", "Resolution", "", buf, sizeof(buf), path);
@@ -128,9 +122,9 @@ void LoadConfig()
 	g_config.dumpAtStartup = dumpStart;
 
 	LogI("boot", "config: Render(Enabled=%d VSync=%d Brightness=%d FakeModeChange=%d) Display(Mode=%s "
-		"%dx%d TrapMouse=%d ExtendedView=%d) Game(ScrollSpeed=%.2f Autosave=%d every %d min, %d slots) Online(RejoinMode=%s)",
+		"Resolution=%dx%d TrapMouse=%d ExtendedView=%d) Game(ScrollSpeed=%.2f Autosave=%d every %d min, %d slots) Online(RejoinMode=%s)",
 		g_config.renderEnabled, g_config.vsync, g_config.brightness, g_config.fakeModeChange,
-		g_config.windowed ? "windowed" : "fullscreen", g_config.windowW, g_config.windowH, g_config.trapMouse,
+		g_config.windowed ? "windowed" : "fullscreen", g_config.resolutionW, g_config.resolutionH, g_config.trapMouse,
 		g_config.extendedView, g_config.scrollSpeed, g_config.autosave, g_config.autosaveMinutes,
 		g_config.autosaveSlots, g_config.rejoinReload ? "reload" : "hot");
 }
@@ -149,8 +143,9 @@ void SaveConfig()
 		strcpy_s(slash + 1, MAX_PATH - (slash + 1 - path), "imperivm-mod.ini");
 	}
 	WritePrivateProfileStringA("Display", "Mode", g_config.windowed ? "windowed" : "fullscreen", path);
-	WritePrivateProfileStringA("Display", "WindowWidth", std::to_string(g_config.windowW).c_str(), path);
-	WritePrivateProfileStringA("Display", "WindowHeight", std::to_string(g_config.windowH).c_str(), path);
+	// In a window the resolution is the window's size; the old keys are left out.
+	WritePrivateProfileStringA("Display", "WindowWidth", nullptr, path);
+	WritePrivateProfileStringA("Display", "WindowHeight", nullptr, path);
 	WritePrivateProfileStringA("Display", "TrapMouse", g_config.trapMouse ? "1" : "0", path);
 	WritePrivateProfileStringA("Display", "ExtendedView", g_config.extendedView ? "1" : "0", path);
 	WritePrivateProfileStringA("Display", "Monitor", std::to_string(g_config.monitor).c_str(), path);

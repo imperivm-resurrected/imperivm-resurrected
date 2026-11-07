@@ -201,7 +201,15 @@ void ReplaceResolutionList()
 	}
 	ResSize screen;
 	DisplayMonitorSize(choice.monitor, screen.w, screen.h);
-	const std::vector<ResSize> sizes = BuildResolutionList(windows, screen, extended, DisplayFakesModeChange() && !choice.windowed);
+	std::vector<ResSize> sizes;
+	if (DisplayFakesModeChange() && choice.windowed) {
+		ResSize area;
+		DisplayWindowArea(choice.monitor, area.w, area.h);
+		sizes = BuildWindowResolutionList(windows, screen, area);
+	}
+	else {
+		sizes = BuildResolutionList(windows, screen, extended, DisplayFakesModeChange());
+	}
 	auto &begin = *reinterpret_cast<POINT **>(addr::kResolutionList + 4);
 	auto &end = *reinterpret_cast<POINT **>(addr::kResolutionList + 8);
 	if (begin) end = begin;
@@ -235,8 +243,9 @@ bool __cdecl HookInitResolutionList()
 	}
 	else if (keep) {
 		const int at = KeepResolution(ResolutionSizes(), {keepW, keepH}, ScreenSize());
-		if (at >= 0) *reinterpret_cast<int *>(addr::kCurrentResolutionIndex) = at;
-		else LogW("display", "resolution %dx%d is no longer in the list and the screen's own size is not either", keepW, keepH);
+		// Not in the list (a window too small for it): no position, so whatever is chosen changes the mode.
+		*reinterpret_cast<int *>(addr::kCurrentResolutionIndex) = at;
+		if (at < 0) LogI("display", "resolution %dx%d is not in this list and the screen's own size is not either", keepW, keepH);
 	}
 	return ResolutionCount() > 0;
 }
