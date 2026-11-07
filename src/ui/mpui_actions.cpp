@@ -487,6 +487,24 @@ void DoAction(int action, int arg)
 	case kPatronLink:
 		OpenPatronPage();
 		break;
+	case kProfile: {
+		uint64_t who = 0;
+		if (arg >= kProfileRoomSlot) {
+			const GameRoomSlot &s = g_s.game.slots[(arg - kProfileRoomSlot) & 7];
+			who = s.local ? SteamOwnId() : MemberIdByName(g_s, s.name);
+		}
+		else {
+			const std::vector<int> vis = Visible(g_s);
+			if (g_s.selected >= 0 && g_s.selected < static_cast<int>(vis.size())) {
+				const OnlineLobby &g = g_s.lobbies[vis[g_s.selected]];
+				const int i = arg >= kProfileLobbyName ? arg - kProfileLobbyName : arg - kProfileLobbySlot;
+				if (arg >= kProfileLobbyName && i < static_cast<int>(g.playerNames.size())) who = LobbyPlayerId(g, g.playerNames[i]);
+				else if (arg < kProfileLobbyName && i < static_cast<int>(g.slots.size())) who = LobbyPlayerId(g, g.slots[i].name);
+			}
+		}
+		SteamOpenProfile(who);
+		break;
+	}
 	case kGKick: {
 		const std::string name = g_s.game.slots[arg & 7].name;
 		const uint64_t victim = MemberIdByName(g_s, name, true);

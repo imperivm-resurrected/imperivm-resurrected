@@ -49,7 +49,7 @@ enum Action {
 	kPickRow, kPickOk, kPickCancel,
 	kRecoverYes, kRecoverNo, kRejoinCancel, kRejoinClose,
 	kGKick, kGKickJoining, kDiscord, kPassOk, kPassCancel, kGSeat, kGMove, kGMoveTo, kGSwapAsk, kSwapAccept, kSwapDecline, kDropYes, kDropNo, kPassShow, kGSiteToggle, kGRuleToggle, kSpectate, kReturnGame,
-	kFieldPickSearch, kPickDelete, kPickDeleteYes, kPickDeleteNo, kGResync, kPatronLink,
+	kFieldPickSearch, kPickDelete, kPickDeleteYes, kPickDeleteNo, kGResync, kPatronLink, kProfile,
 };
 
 typedef int(__cdecl *HostGame_t)(int, unsigned, int);
@@ -422,6 +422,9 @@ void PaintField(Painter &p, const State &st, int x, int y, int w, int h, const s
 bool PaintAvatar(Painter &p, int x, int y, int size, uint64_t id);
 std::string SaveSlotNameFromOptions(const std::string &opts, int i);
 uint64_t MemberIdByName(const State &st, const std::string &name, bool skipMe = false);
+// The argument of kProfile says where the player was clicked.
+const int kProfileLobbySlot = 0, kProfileLobbyName = 0x1000, kProfileRoomSlot = 0x2000;
+void ProfileHotspot(ui::Painter &p, const State &st, int x, int y, int w, int h, const std::string &name, int arg);
 void PaintHeader(Painter &p, const State &st);
 void PaintPassPrompt(Painter &p, const State &st);
 void PaintList(Painter &p, const State &st);
