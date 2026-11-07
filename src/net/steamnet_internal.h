@@ -27,6 +27,7 @@
 	X(SteamAPI_ISteamUser_GetSteamID) X(SteamAPI_SteamFriends_v018) X(SteamAPI_ISteamFriends_GetPersonaName) \
 	X(SteamAPI_ISteamFriends_GetFriendPersonaName) X(SteamAPI_ISteamFriends_SetRichPresence)               \
 	X(SteamAPI_ISteamFriends_ClearRichPresence) X(SteamAPI_ISteamFriends_ActivateGameOverlayInviteDialog)  \
+	X(SteamAPI_ISteamFriends_ActivateGameOverlayToUser) X(SteamAPI_ISteamUtils_IsOverlayEnabled)           \
 	X(SteamAPI_SteamUtils_v011) X(SteamAPI_ISteamUtils_GetAppID) X(SteamAPI_SteamApps_v009)                \
 	X(SteamAPI_ISteamApps_GetLaunchCommandLine) X(SteamAPI_SteamMatchmaking_v009)                          \
 	X(SteamAPI_ISteamMatchmaking_CreateLobby) X(SteamAPI_ISteamMatchmaking_SetLobbyData)                   \

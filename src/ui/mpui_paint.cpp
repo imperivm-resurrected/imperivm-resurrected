@@ -242,6 +242,10 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis)
 				PatronHotspot(p, x + 26, y + 2, 16, patron, st.mouseX, st.mouseY, kPatronLink);
 			}
 			else p.Text(x + 26, y, w - 26 - 80, 20, human ? s.name : ai ? (s.name.empty() ? "AI" : s.name) : "Free", human ? kText : kDim);
+			if (human && LobbyPlayerId(g, s.name)) {
+				const int nameX = patron.tier != PatronTier::None ? x + 46 : x + 26;
+				ProfileHotspot(p, st, nameX, y, w - (nameX - x) - 80, 20, s.name, kProfileLobbySlot + static_cast<int>(&s - g.slots.data()));
+			}
 			if (human && !hostShown && PlayerNameMatches(s.name, g.host)) {
 				hostShown = true;
 				p.Text(x + w - 90, y, 90, 20, "host", kDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
@@ -263,6 +267,10 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis)
 				PatronHotspot(p, x + 26, y + 2, 16, patron, st.mouseX, st.mouseY, kPatronLink);
 			}
 			else p.Text(x + 26, y, w - 26, 20, taken ? g.playerNames[i] : "Free", taken ? kText : kDim);
+			if (taken && LobbyPlayerId(g, g.playerNames[i])) {
+				const int nameX = patron.tier != PatronTier::None ? x + 46 : x + 26;
+				ProfileHotspot(p, st, nameX, y, w - (nameX - x) - 80, 20, g.playerNames[i], kProfileLobbyName + i);
+			}
 			if (taken && i == 0) p.Text(x + w - 90, y, 90, 20, "host", kDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 			y += 22;
 		}
@@ -323,6 +331,15 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis)
 }
 
 namespace mpui_impl {
+// The name underlines under the mouse, as a link does, and a click opens the player's Steam profile.
+void ProfileHotspot(Painter &p, const State &st, int x, int y, int w, int h, const std::string &name, int arg)
+{
+	const int textW = std::min(w, p.TextWidth(name));
+	if (textW <= 0) return;
+	p.AddHit(x, y, textW, h, kProfile, arg);
+	if (p.Hover(x, y, textW, h, st.mouseX, st.mouseY)) p.Fill(x, y + h / 2 + 9, textW, 1, kGold);
+}
+
 void PaintPassPrompt(Painter &p, const State &st)
 {
 	const int mx = st.mouseX, my = st.mouseY;

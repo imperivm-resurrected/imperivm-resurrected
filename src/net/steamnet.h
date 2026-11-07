@@ -163,6 +163,8 @@ std::string SteamScenarioModName();
 void SteamReportDownloadProgress(uint64_t got, uint64_t total);
 void SteamSendChat(const std::string &text);
 void SteamInviteFriends();
+// In the Steam overlay, or in the Steam client when the overlay is off.
+void SteamOpenProfile(uint64_t id);
 void SteamSetHosting(bool hosting);
 void SteamSetPlaying(bool playing);
 void SteamPublishWatchers(int count);

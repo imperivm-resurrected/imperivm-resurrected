@@ -201,6 +201,10 @@ void PaintGameRoom(Painter &p, const State &st)
 				PatronHotspot(p, lx, ly, laurel, patron, mx, my, kPatronLink);
 			}
 			else p.Text(tx, y, nameW - (tx - px - 48), 36, label, s.local ? kGold : kText, nameFmt);
+			if (who) {
+				if (avatar) p.AddHit(px + 48, y + 5, 26, 26, kProfile, kProfileRoomSlot + i);
+				ProfileHotspot(p, st, tx, y, nameW - (tx - px - 48), 36, label, kProfileRoomSlot + i);
+			}
 			if (kickable && !movingRows) p.Button(px + 180, y + 6, 74, 24, "Kick", kGKick, i, mx, my, true, false, 0);
 			if (seat && !movingRows) p.Button(px + 196, y + 6, 60, 24, "Take", kGSeat, i, mx, my, true, false, 0);
 		}
