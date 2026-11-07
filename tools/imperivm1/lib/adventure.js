@@ -505,6 +505,11 @@ function convertAdventure(input) {
 				report.count('Player races', `${v} -> ${M.RACES[v]}`);
 				return M.RACES[v];
 			}).text;
+			t = X.mapAttribute(t, 'control', (v) => {
+				if (!M.PLAYER_CONTROL[v]) return v;
+				report.count('Player control', `${v} -> ${M.PLAYER_CONTROL[v]}`);
+				return M.PLAYER_CONTROL[v];
+			}).text;
 			out.set(p, bytes(t));
 		} else if (/^itemsCustom\.xml$/i.test(p)) {
 			continue;

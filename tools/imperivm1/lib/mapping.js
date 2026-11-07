@@ -44,6 +44,13 @@ const RACES = {
 	Roman: 'RepublicanRome',
 };
 
+// Who controls each player (playerN.xml). Imperivm I's campaign marks all 16 players "Both"; every adventure of Great
+// Battles of Rome marks them "Computer" and gives the human its player from start_player and the scripts' SetPlayer.
+// gbr.exe reads Human = 0, Computer = 1, Both = 2, Rescue = 3.
+const PLAYER_CONTROL = {
+	Both: 'Computer',
+};
+
 // Script functions that Great Battles of Rome registers under another name, with the same parameters.
 const FUNCTION_RENAMES = {
 	PlaceEx: '_PlaceEx',
@@ -106,4 +113,4 @@ const STAMINA = {
 	CVXTownHall: 20,
 };
 
-module.exports = { ADVENTURE_TEXTS, STAMINA, CLASS_SUBSTITUTES, RACES, FUNCTION_RENAMES, RESEARCH_RENAMES, TIMED_RITUALS, TERRAIN_FALLBACKS, GAME_PROPERTIES };
+module.exports = { ADVENTURE_TEXTS, STAMINA, PLAYER_CONTROL, CLASS_SUBSTITUTES, RACES, FUNCTION_RENAMES, RESEARCH_RENAMES, TIMED_RITUALS, TERRAIN_FALLBACKS, GAME_PROPERTIES };
