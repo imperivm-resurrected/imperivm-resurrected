@@ -1686,5 +1686,12 @@
 {"en":"Name of the new player","es":"Nombre del nuevo jugador","it":"Nome del nuovo giocatore"},
 {"en":"Create a player to start.","es":"Crea un jugador para empezar.","it":"Crea un giocatore per iniziare."},
 {"en":"Choose a player.","es":"Elige un jugador.","it":"Scegli un giocatore."},
-{"en":"Couldn't read this player's statistics.","es":"No se han podido leer las estadísticas de este jugador.","it":"Impossibile leggere le statistiche di questo giocatore."}
+{"en":"Couldn't read this player's statistics.","es":"No se han podido leer las estadísticas de este jugador.","it":"Impossibile leggere le statistiche di questo giocatore."},
+{"en":"Great Battles","es":"Grandes batallas","it":"Grandi battaglie"},
+{"en":"Custom adventures","es":"Aventuras personalizadas","it":"Avventure personalizzate"},
+{"en":"The great victories of Rome","es":"Las grandes victorias de Roma","it":"Le grandi vittorie di Roma"},
+{"en":"Rome's enemies fight for freedom","es":"Los enemigos de Roma se rebelan","it":"I nemici di Roma si ribellano"},
+{"en":"Watch intro","es":"Ver la intro","it":"Guarda l'intro"},
+{"en":"There are no adventures here.","es":"Aquí no hay aventuras.","it":"Qui non ci sono avventure."},
+{"en":"There are no conquests here.","es":"Aquí no hay conquistas.","it":"Qui non ci sono conquiste."}
 ]

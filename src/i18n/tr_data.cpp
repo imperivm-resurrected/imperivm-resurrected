@@ -1694,5 +1694,12 @@ extern const TrRow kTrRows[] = {
 	{"Create a player to start.", "Crea un jugador para empezar.", "Crea un giocatore per iniziare."},
 	{"Choose a player.", "Elige un jugador.", "Scegli un giocatore."},
 	{"Couldn't read this player's statistics.", "No se han podido leer las estadísticas de este jugador.", "Impossibile leggere le statistiche di questo giocatore."},
+	{"Great Battles", "Grandes batallas", "Grandi battaglie"},
+	{"Custom adventures", "Aventuras personalizadas", "Avventure personalizzate"},
+	{"The great victories of Rome", "Las grandes victorias de Roma", "Le grandi vittorie di Roma"},
+	{"Rome's enemies fight for freedom", "Los enemigos de Roma se rebelan", "I nemici di Roma si ribellano"},
+	{"Watch intro", "Ver la intro", "Guarda l'intro"},
+	{"There are no adventures here.", "Aquí no hay aventuras.", "Qui non ci sono avventure."},
+	{"There are no conquests here.", "Aquí no hay conquistas.", "Qui non ci sono conquiste."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);
