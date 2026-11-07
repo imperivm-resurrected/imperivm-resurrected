@@ -520,18 +520,7 @@ function convertAdventure(input) {
 			out.set(p, bytes(convertMapXml(text(buf))));
 			report.count('Maps', 'map.xml given persist_state="1"');
 		} else if (/^Maps\/[^/]+\/map\.obj\.xml$/i.test(p)) {
-			let objs = convertObjects(text(buf), classes, gbr, report, p);
-			// Test of the probe build: Imperivm I marks its party members with flag 0x80000; Great Battles of Rome, at
-			// creation, hands objects with it to the game's party handler (0x5DB53D, the one SetParty(false) calls).
-			if (input.probe) {
-				objs = X.mapAttribute(objs, 'flags', (v) => {
-					const f = parseInt(v, 16);
-					if (!/^0x[0-9a-f]+$/i.test(v) || !(f & 0x80000)) return v;
-					report.count('Probe', 'flag 0x80000 (Imperivm I party) cleared on map objects');
-					return '0x' + ((f & ~0x80000) >>> 0).toString(16).toUpperCase();
-				}).text;
-			}
-			out.set(p, bytes(objs));
+			out.set(p, bytes(convertObjects(text(buf), classes, gbr, report, p)));
 		} else if (/Terrain\.terrain\.grid$/i.test(p)) {
 			const r = G.widenTerrain(buf, terrain);
 			out.set(p, r.buf);
@@ -551,12 +540,10 @@ function convertAdventure(input) {
 				s = probed;
 				report.add('Probe', `${p}: I1PROBE diagnostics added (Mod_Log, needs Imperivm Resurrected)`);
 			}
-			// Test of the probe build: conversations wait for each other, as they seem to in Imperivm I.
-			if (input.probe) {
-				const q = S.queueConversations(s);
-				s = q.src;
-				if (q.count) report.count('Probe', 'Conversation.Run() calls made to wait for the running conversation', q.count);
-			}
+			// After the probe, whose anchors are the original Run() lines.
+			const q = S.queueConversations(s);
+			s = q.src;
+			if (q.count) report.count('Conversations', 'Conversation.Run() calls made to wait for the running one, as in Imperivm I', q.count);
 			out.set(p, bytes(s));
 		} else {
 			out.set(p, buf);

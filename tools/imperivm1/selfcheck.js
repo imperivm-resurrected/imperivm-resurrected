@@ -107,6 +107,14 @@ function check(cond, what) {
 	check(r5.src.includes('if (x) /* PlayMovie("a") (Imperivm I only) */;'), 'an if body stays a statement');
 	check(r5.src.includes('b = /* PlayMovie("c") (Imperivm I only) */ false;'), 'a movie call inside an expression becomes false');
 
+	const conv = '//void\nConversation C_Conv , c_once;\nint n;\nC_Conv.Init("A");\nC_Conv.Run();\nif (n) c_once.Run();\nother.Run();\n';
+	const rq = S.queueConversations(conv);
+	check(rq.count === 2, 'two conversation runs queued');
+	check(/^\/\/void\nint i1cv_w;\nConversation C_Conv , c_once;/.test(rq.src), 'queue variable declared after the signature');
+	check(rq.src.includes('{ i1cv_w = 0; while (EnvReadInt("/I1/ConversationBusy") == 1 && i1cv_w < 600) { Sleep(100); i1cv_w += 1; } EnvWriteInt("/I1/ConversationBusy", 1); C_Conv.Run(); EnvWriteInt("/I1/ConversationBusy", 0); }'), 'a run waits, marks and clears');
+	check(rq.src.includes('if (n) { i1cv_w = 0;') && rq.src.includes('other.Run();'), 'a run in an if stays its body; other objects are left alone');
+	check(S.queueConversations('//void\nint n;\nx.Run();\n').count === 0, 'scripts without conversations are left alone');
+
 	const r6 = S.replaceStringLiterals('a("TeutonWolf"); b(\'TeutonWolf\'); c("TeutonWolfX"); // "TeutonWolf"', { TeutonWolf: 'TTeutonWolf' });
 	check(r6.hits.TeutonWolf === 2 && r6.src.includes('"TTeutonWolf"') && r6.src.includes("'TTeutonWolf'") && r6.src.includes('"TeutonWolfX"') && r6.src.includes('// "TeutonWolf"'), 'class names replaced only in whole string literals');
 }

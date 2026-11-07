@@ -274,9 +274,10 @@ function rewriteDruidCommands(src, decide) {
 }
 
 // Conversation.Run() statements wait until no other conversation is running and mark one as running while they play.
-// The sequences of a map start together, and in Great Battles of Rome a conversation started by one sequence cuts the
-// one another sequence is playing (Kormaris: seq15's opening conversation cuts seq0's goddess after 3.5 s). The wait
-// gives up after 60 s, so a conversation that never clears the mark cannot block the others for good.
+// The sequences of a map run together; Imperivm I plays their conversations one after another, while in Great Battles
+// of Rome a conversation started by one sequence cuts the one another sequence is playing (in Kormaris, seq15 starts
+// its opening conversation 3.5 s into seq0's goddess). The wait gives up after 60 s, so a conversation that never
+// clears the mark cannot block the others for good.
 const QUEUE_KEY = '/I1/ConversationBusy';
 const QUEUE_VARS = 'int i1cv_w;\n';
 function queueConversations(src) {
