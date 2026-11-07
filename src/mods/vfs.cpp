@@ -39,7 +39,7 @@ typedef const char *(__fastcall *CFileRead_t)(void *self, void *edx, void *buf, 
 typedef void(__fastcall *CFileDelete_t)(void *self, void *edx, int flags);
 
 std::string g_gameDir;
-// Read once: the options can change the setting, and it waits for a restart so that no session mixes both kinds of file.
+// Read once at start, so that one session never serves both kinds of file.
 bool g_overrides = true;
 std::mutex g_lock;
 std::set<std::string> g_dumped;

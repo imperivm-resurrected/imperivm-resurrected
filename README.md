@@ -16,7 +16,7 @@ online play with no port forwarding, one-click mods, rebindable controls and man
 - **Online through Steam**, with no port forwarding or VPN: rooms, invitations to friends, chat and rejoining if someone drops.
 - **One-click mods** from inside the game, with profiles, versions and dependencies. Mods are published on
   [GameBanana](https://gamebanana.com/games/26069).
-- **Rebindable controls**: any key of the game and of the commands, with presets.
+- **Rebindable controls**: any key of the game and of the commands.
 - **Modern display**: Direct3D 11, current resolutions, window or full screen without flicker, and the Steam overlay.
 - **Modern sound**, autosave, a performance panel and fixes for crashes of the original game.
 - **A problem report** built into the game, with private data hidden.

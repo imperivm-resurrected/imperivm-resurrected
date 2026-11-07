@@ -180,8 +180,6 @@ void SetSystemExtras(Values &v, const Config &c)
 {
 	v.combos[kLogLevel] = c.logLevel <= kLogDebug ? 1 : 0;
 	v.items[kLogLevel] = {"Normal", "Detailed"};
-	v.checks[kModOverrides] = c.modOverrides;
-	v.checks[kCrashFix] = c.crashFix;
 }
 
 void CopySystemExtras(Values &to, const Values &from)
@@ -192,34 +190,17 @@ void CopySystemExtras(Values &to, const Values &from)
 		const auto items = from.items.find(id);
 		if (items != from.items.end()) to.items[id] = items->second;
 	}
-	for (int id : {kModOverrides, kCrashFix}) {
-		const auto it = from.checks.find(id);
-		if (it != from.checks.end()) to.checks[id] = it->second;
-	}
 }
 
-// Returns whether a change needs a restart. "Normal" and "Detailed" keep a level set by hand in the ini (trace, warn) until they are changed.
-bool CommitSystemExtras(const Values &v)
+// "Normal" and "Detailed" keep a level set by hand in the ini (trace, warn) until they are changed.
+void CommitSystemExtras(const Values &v)
 {
 	Config &c = MutableConfig();
-	bool changed = false;
 	const auto level = v.combos.find(kLogLevel);
-	if (level != v.combos.end() && (level->second == 1) != (c.logLevel <= kLogDebug)) {
-		c.logLevel = level->second == 1 ? kLogDebug : kLogInfo;
-		LogSetLevel(c.logLevel);
-		changed = true;
-	}
-	bool restart = false;
-	const auto commit = [&](int id, bool &setting) {
-		const auto it = v.checks.find(id);
-		if (it == v.checks.end() || it->second == setting) return;
-		setting = it->second;
-		changed = restart = true;
-	};
-	commit(kModOverrides, c.modOverrides);
-	commit(kCrashFix, c.crashFix);
-	if (changed) SaveConfig();
-	return restart;
+	if (level == v.combos.end() || (level->second == 1) == (c.logLevel <= kLogDebug)) return;
+	c.logLevel = level->second == 1 ? kLogDebug : kLogInfo;
+	LogSetLevel(c.logLevel);
+	SaveConfig();
 }
 
 void SetExtras(Values &v, const Config &c)
@@ -572,22 +553,20 @@ void Execute(const Command &cmd)
 		break;
 	}
 	case kActApply: {
-		const bool restart = CommitSystemExtras(cmd.values);
+		CommitSystemExtras(cmd.values);
 		CommitExtras(cmd.values);
 		OptionsClick(kNativeApply);
 		Refresh(true);
-		if (restart) UiAskRestart(Tr("The game will restart to apply the change."));
 		break;
 	}
 	case kActOk: {
-		const bool restart = CommitSystemExtras(cmd.values);
+		CommitSystemExtras(cmd.values);
 		CommitExtras(cmd.values);
 		{
 			std::lock_guard<std::mutex> lock(g_lock);
 			g_s.closedAt = GetTickCount();
 		}
 		OptionsClick(kNativeOk);
-		if (restart) UiAskRestart(Tr("The game will restart to apply the change."));
 		break;
 	}
 	case kActCancel: {
