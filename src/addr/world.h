@@ -95,6 +95,7 @@ inline constexpr uintptr_t kBeginBoxSelect = 0x005e1330;
 inline constexpr uintptr_t kCommitPendingSelection = 0x005e1380;
 inline constexpr uintptr_t kInfobarSwitch = 0x005e18f0;
 inline constexpr uintptr_t kPostCloseGameMenu = 0x005e19b0;
+inline constexpr uintptr_t kToggleGameMenu = 0x005e1a20;
 inline constexpr uintptr_t kLoadCornerImages = 0x005e2120;
 inline constexpr uintptr_t kEndBoxSelect = 0x005e3180;
 inline constexpr uintptr_t kSetInterfaceHidden = 0x005e31e0;
