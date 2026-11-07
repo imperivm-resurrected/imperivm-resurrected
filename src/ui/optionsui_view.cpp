@@ -24,6 +24,12 @@ int Scroll(const Values &v, int id)
 	return it == v.scrolls.end() ? 0 : it->second;
 }
 
+bool Disabled(const Values &v, int id)
+{
+	const auto it = v.disabled.find(id);
+	return it != v.disabled.end() && it->second;
+}
+
 Row Toggle(const Values &v, const char *label, int id, const char *hint = "", bool restart = false)
 {
 	Row r;
@@ -33,6 +39,7 @@ Row Toggle(const Values &v, const char *label, int id, const char *hint = "", bo
 	r.id = id;
 	r.on = Check(v, id);
 	r.restart = restart;
+	r.enabled = !Disabled(v, id);
 	return r;
 }
 
@@ -46,7 +53,15 @@ Row Slider(const Values &v, const char *label, int id, int min, int max, const c
 	r.value = Scroll(v, id);
 	r.min = min;
 	r.max = max;
+	r.enabled = !Disabled(v, id);
 	return r;
+}
+
+// The game turns its slider into a pace with value * 0x8fd / 100 + 700, where 1000 is the normal speed.
+int GameSpeedPercent(int value)
+{
+	const int percent = (value * 0x8fd / 100 + 700) / 10;
+	return (percent + 2) / 5 * 5;
 }
 
 Row ToggleSlider(const Values &v, const char *label, int toggleId, int id, int min, int max)
@@ -55,7 +70,7 @@ Row ToggleSlider(const Values &v, const char *label, int toggleId, int id, int m
 	r.kind = kRowToggleSlider;
 	r.toggleId = toggleId;
 	r.on = Check(v, toggleId);
-	r.enabled = r.on;
+	r.enabled = r.on && !Disabled(v, id);
 	return r;
 }
 
@@ -71,7 +86,7 @@ Row Combo(const Values &v, const char *label, int id, const char *hint = "", boo
 	const auto sel = v.combos.find(id);
 	r.selected = sel == v.combos.end() ? -1 : sel->second;
 	r.restart = restart;
-	r.enabled = enabled;
+	r.enabled = enabled && !Disabled(v, id);
 	return r;
 }
 
@@ -134,7 +149,7 @@ void PaintSliderControl(Painter &p, const Row &r, const View &v, int x, int y, i
 	const bool hot = r.enabled && (v.dragId == r.id || p.Hover(x - kSliderMargin, y + 4, w + kSliderMargin * 2, kRowH - 8, v.mouseX, v.mouseY));
 	PaintSlider(p, x, y + 10, w, 20, f, r.enabled, hot);
 	p.Font(3);
-	p.Text(x + w + 8, y + 10, kValueW - 8, 20, std::to_string(r.value) + " %", r.enabled ? pal::goldLight : kDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+	p.Text(x + w + 8, y + 10, kValueW - 8, 20, std::to_string(r.shown >= 0 ? r.shown : r.value) + " %", r.enabled ? pal::goldLight : kDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 	if (r.enabled) p.AddHit(x - kSliderMargin, y + 4, w + kSliderMargin * 2, kRowH - 8, kActSlider, r.id);
 }
 
@@ -233,11 +248,11 @@ std::vector<Page> BuildPages(const Values &v)
 		mode.id = kWindowed;
 		mode.items = {"Full screen", "Window"};
 		mode.selected = Check(v, kWindowed) ? 1 : 0;
-		page.left.push_back({"Image", {Combo(v, "Resolution", kResolution), Combo(v, "Monitor", kMonitor), mode, Toggle(v, "Vertical sync", kVSync, "Avoids tearing in the image"),
+		page.left.push_back({"Image", {Combo(v, "Resolution", kResolution), Combo(v, "Monitor", kMonitor), mode, Slider(v, "Brightness", kBrightness, 80, 130), Toggle(v, "Vertical sync", kVSync, "Avoids tearing in the image"),
 			Toggle(v, "Trap the mouse", kTrapMouse, "The cursor stays inside the game window")}});
-		page.right.push_back({"Brightness", {Slider(v, "Brightness", kBrightness, 80, 130, "Changes right away")}});
-		page.right.push_back({"Performance panel", {Toggle(v, "Show FPS and memory", kShowPerf), Toggle(v, "Network statistics", kShowNet), Toggle(v, "Compact panel", kPanelCompact),
-			Slider(v, "Panel opacity", kPanelOpacity, 30, 100)}});
+		Row compact = Toggle(v, "Compact panel", kPanelCompact), opacity = Slider(v, "Panel opacity", kPanelOpacity, 30, 100);
+		compact.enabled = opacity.enabled = Check(v, kShowPerf) || Check(v, kShowNet);
+		page.right.push_back({"Performance panel", {Toggle(v, "Show FPS and memory", kShowPerf), Toggle(v, "Network statistics", kShowNet), compact, opacity}});
 		pages.push_back(page);
 	}
 	{
@@ -260,7 +275,9 @@ std::vector<Page> BuildPages(const Values &v)
 		page.subtitle = "Pace and saves";
 		page.blurb = "How you play and how your games are saved.";
 		page.icon = kOrnamentSwords;
-		page.left.push_back({"Pace", {Slider(v, "Game speed", kGameSpeed, 1, 100), Slider(v, "Scroll speed", kScrollSpeed, 1, 100), Toggle(v, "Smooth camera", kSmoothCamera, "Moves the view in small steps")}});
+		Row speed = Slider(v, "Game speed", kGameSpeed, 1, 100);
+		speed.shown = GameSpeedPercent(speed.value);
+		page.left.push_back({"Pace", {speed, Slider(v, "Scroll speed", kScrollSpeed, 1, 100), Toggle(v, "Smooth camera", kSmoothCamera)}});
 		page.left.push_back({"Interface", {Combo(v, "Language", kLanguage, "", true)}});
 		const bool autosave = Check(v, kAutosave);
 		page.right.push_back({"Autosave", {Toggle(v, "Autosave", kAutosave), Combo(v, "Every", kAutosaveEvery, "", false, autosave), Combo(v, "Copies", kAutosaveCopies, "", false, autosave),
@@ -292,7 +309,7 @@ void PaintOptionsScreen(Painter &p, const View &v)
 		const Page &page = pages[i];
 		PaintNavItem(p, navY, page.title, page.subtitle, page.icon, static_cast<int>(i) == current, kActPage, static_cast<int>(i), v.mouseX, v.mouseY);
 	}
-	PaintNavItem(p, kFooterTop - kNavH - 8, "Controls", "Keys and shortcuts", kOrnamentKeys, false, kActControls, 0, v.mouseX, v.mouseY);
+	PaintNavItem(p, navY, "Controls", "Keys and shortcuts", kOrnamentKeys, false, kActControls, 0, v.mouseX, v.mouseY);
 	p.Fill(kNavRight, kNavTop - 2, 1, kFooterTop - kNavTop - 2, pal::lineDim);
 
 	const Page &page = pages[current];

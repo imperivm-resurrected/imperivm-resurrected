@@ -29,6 +29,7 @@ struct Row {
 	int toggleId = 0;
 	bool on = false;
 	int value = 0, min = 0, max = 100;
+	int shown = -1;
 	std::vector<std::string> items;
 	int selected = -1;
 	std::string action;
@@ -53,6 +54,7 @@ struct Values {
 	std::map<int, int> scrolls;
 	std::map<int, int> combos;
 	std::map<int, std::vector<std::string>> items;
+	std::map<int, bool> disabled;
 	bool operator==(const Values &o) const { return checks == o.checks && scrolls == o.scrolls && combos == o.combos; }
 };
 

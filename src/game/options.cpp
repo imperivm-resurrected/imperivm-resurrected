@@ -397,7 +397,23 @@ void OptionsWriteScroll(int id, int value)
 {
 	void *dlg = g_openDialog;
 	void *scroll = dlg ? FindScroll(dlg, id) : nullptr;
-	if (scroll) reinterpret_cast<SetValue_t>((*reinterpret_cast<void ***>(scroll))[0x70 / 4])(scroll, nullptr, value, 1);
+	if (!scroll) return;
+	if (id == kIdBrightCombo) {
+		value = (std::max)(kBrightMin, (std::min)(kBrightMax, (value + 2) / 5 * 5));
+		MutableConfig().brightness = value;
+	}
+	reinterpret_cast<SetValue_t>((*reinterpret_cast<void ***>(scroll))[0x70 / 4])(scroll, nullptr, value, 1);
+	// Setting the value sends no message to the dialog, and reading the controls is what applies the sound at once.
+	reinterpret_cast<void(__fastcall *)(void *)>(addr::kReadControls)(dlg);
+}
+
+bool OptionsControlEnabled(int id)
+{
+	void *dlg = g_openDialog;
+	if (!dlg) return false;
+	void *control = reinterpret_cast<GetChild_t>((*reinterpret_cast<void ***>(dlg))[0x7c / 4])(dlg, nullptr, id, *reinterpret_cast<const char **>(addr::kClassNameCWindow));
+	if (!control) return true;
+	return !reinterpret_cast<bool(__fastcall *)(void *, void *, unsigned)>(addr::kWindowHasFlags)(control, nullptr, 0x200);
 }
 
 int OptionsReadCombo(int id)
