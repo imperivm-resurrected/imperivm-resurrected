@@ -1506,6 +1506,8 @@ extern const TrRow kTrRows[] = {
 	{"Window size", "Tamaño de la ventana", "Dimensioni della finestra"},
 	{"Extended view", "Vista ampliada", "Vista estesa"},
 	{"Adds larger sizes that show more of the map", "Añade tamaños mayores que muestran más mapa", "Aggiunge dimensioni maggiori che mostrano più mappa"},
+	{"FPS limit", "Límite de FPS", "Limite di FPS"},
+	{"No limit", "Sin límite", "Nessun limite"},
 	{"Sound", "Sonido", "Audio"},
 	{"Volume and alerts", "Volumen y avisos", "Volume e avvisi"},
 	{"Turn each kind of sound on or off and set its volume.", "Activa o apaga cada tipo de sonido y ajusta su volumen.", "Attiva o disattiva ogni tipo di suono e regola il volume."},

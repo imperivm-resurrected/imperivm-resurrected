@@ -66,6 +66,7 @@ void LoadConfig()
 		g_config.resolutionScreenH = resH;
 	}
 	g_config.extendedView = GetPrivateProfileIntA("Display", "ExtendedView", 0, path) != 0;
+	g_config.fpsLimit = (std::max)(0, (std::min)(1000, static_cast<int>(GetPrivateProfileIntA("Render", "FpsLimit", 0, path))));
 	g_config.showPerf = GetPrivateProfileIntA("Display", "ShowPerformance", 0, path) != 0;
 	g_config.showNet = GetPrivateProfileIntA("Display", "ShowNetwork", 0, path) != 0;
 	g_config.panelX = (std::max)(0, (std::min)(1000, static_cast<int>(GetPrivateProfileIntA("Display", "PanelX", 1000, path))));
@@ -143,6 +144,7 @@ void SaveConfig()
 			(std::to_string(g_config.resolutionScreenW) + "x" + std::to_string(g_config.resolutionScreenH)).c_str(), path);
 	}
 	WritePrivateProfileStringA("Render", "VSync", g_config.vsync ? "1" : "0", path);
+	WritePrivateProfileStringA("Render", "FpsLimit", std::to_string(g_config.fpsLimit).c_str(), path);
 	WritePrivateProfileStringA("Render", "Scaling", nullptr, path);
 	WritePrivateProfileStringA("Render", "Filter", nullptr, path);
 	WritePrivateProfileStringA("Render", "Brightness", std::to_string(g_config.brightness).c_str(), path);

@@ -14,6 +14,7 @@
 #include "hooks/hookcount.h"
 #include "core/config.h"
 #include "core/framefreeze.h"
+#include "core/framepace.h"
 #include "game/controls.h"
 #include "ui/controlsui.h"
 #include "core/guard.h"
@@ -203,6 +204,20 @@ void LogGpu(ID3D11Device *dev, D3D_FEATURE_LEVEL level)
 	if (dxgi) dxgi->Release();
 }
 
+// The FPS limit only spaces out the images this thread shows; the game runs and draws at its own pace.
+void WaitTicks(int64_t ticks, int64_t freq, HANDLE timer)
+{
+	if (ticks <= 0) return;
+	LARGE_INTEGER now;
+	QueryPerformanceCounter(&now);
+	const int64_t end = now.QuadPart + ticks;
+	LARGE_INTEGER due;
+	due.QuadPart = -(ticks * 10000000 / freq);
+	if (timer && due.QuadPart < 0 && SetWaitableTimer(timer, &due, 0, nullptr, nullptr, FALSE)) WaitForSingleObject(timer, 100);
+	else if (ticks * 1000 / freq > 1) Sleep(static_cast<DWORD>(ticks * 1000 / freq - 1));
+	while (QueryPerformanceCounter(&now) && now.QuadPart < end) Sleep(0);
+}
+
 template <class T> void SafeRelease(T *&p)
 {
 	if (p) {
@@ -284,6 +299,11 @@ DWORD WINAPI RenderThread(LPVOID)
 	LogGpu(dev, featureLevel);
 	LogOverlayStatus("at Direct3D creation");
 
+	// CREATE_WAITABLE_TIMER_HIGH_RESOLUTION: Windows 10 1803 and later; older ones fall back to Sleep.
+	HANDLE paceTimer = CreateWaitableTimerExW(nullptr, nullptr, 0x2, TIMER_ALL_ACCESS);
+	LARGE_INTEGER paceFreq;
+	QueryPerformanceFrequency(&paceFreq);
+	int64_t paceDeadline = 0;
 	bool haveFrame = false;
 	int fw = 0, fh = 0;
 	int fps = 0, framesThisSecond = 0;
@@ -488,8 +508,18 @@ DWORD WINAPI RenderThread(LPVOID)
 		ctx->PSSetShaderResources(0, 1, &srv);
 		ctx->PSSetSamplers(0, 1, &sampler);
 		ctx->Draw(4, 0);
+		const int limit = GetConfig().fpsLimit;
+		if (limit > 0) {
+			LARGE_INTEGER now;
+			QueryPerformanceCounter(&now);
+			WaitTicks(FramePaceWait(paceDeadline, now.QuadPart, FrameInterval(paceFreq.QuadPart, limit)), paceFreq.QuadPart, paceTimer);
+		}
+		else {
+			paceDeadline = 0;
+		}
 		swap->Present(vsync ? 1 : 0, 0);
 	}
+	if (paceTimer) CloseHandle(paceTimer);
 	return 0;
 }
 

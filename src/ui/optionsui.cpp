@@ -5,6 +5,8 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
+#include <iterator>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -46,6 +48,24 @@ std::mutex g_lock;
 State g_s;
 Canvas g_canvas;
 
+const int kFpsLimits[] = {0, 30, 60, 120, 144, 240};
+const char *const kFpsLabels[] = {"No limit", "30", "60", "120", "144", "240"};
+
+int FpsIndex(int fps)
+{
+	int best = 0;
+	for (int i = 0; i < static_cast<int>(sizeof(kFpsLimits) / sizeof(kFpsLimits[0])); i++) {
+		if (abs(kFpsLimits[i] - fps) < abs(kFpsLimits[best] - fps)) best = i;
+	}
+	return best;
+}
+
+int ComboIndex(const Values &v, int id, int count)
+{
+	const auto it = v.combos.find(id);
+	return it != v.combos.end() && it->second >= 0 && it->second < count ? it->second : -1;
+}
+
 std::string SizeLabel(ResSize s)
 {
 	return std::to_string(s.w) + " x " + std::to_string(s.h);
@@ -83,11 +103,13 @@ void SetDisplayExtras(Values &v, const Config &c)
 {
 	SetWindowSizes(v, MonitorShown(v), {c.windowW, c.windowH});
 	v.checks[kExtendedView] = c.extendedView;
+	v.items[kFpsLimit] = std::vector<std::string>(std::begin(kFpsLabels), std::end(kFpsLabels));
+	v.combos[kFpsLimit] = FpsIndex(c.fpsLimit);
 }
 
 void CopyDisplayExtras(Values &to, const Values &from)
 {
-	for (int id : {kWindowSize}) {
+	for (int id : {kWindowSize, kFpsLimit}) {
 		const auto sel = from.combos.find(id);
 		if (sel != from.combos.end()) to.combos[id] = sel->second;
 		const auto items = from.items.find(id);
@@ -103,6 +125,8 @@ void ApplyDisplayLive(const Values &v)
 {
 	ResSize window;
 	if (SelectedSize(v, kWindowSize, window)) DisplaySetWindowSize(window.w, window.h);
+	const int fps = ComboIndex(v, kFpsLimit, static_cast<int>(sizeof(kFpsLimits) / sizeof(kFpsLimits[0])));
+	if (fps >= 0) MutableConfig().fpsLimit = kFpsLimits[fps];
 }
 
 void CommitDisplayExtras(Config &c, const Values &v)
@@ -114,6 +138,8 @@ void CommitDisplayExtras(Config &c, const Values &v)
 		c.windowW = window.w;
 		c.windowH = window.h;
 	}
+	const int fps = ComboIndex(v, kFpsLimit, static_cast<int>(sizeof(kFpsLimits) / sizeof(kFpsLimits[0])));
+	if (fps >= 0) c.fpsLimit = kFpsLimits[fps];
 }
 
 void ApplyDisplayFromView()
