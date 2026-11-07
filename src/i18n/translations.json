@@ -1528,5 +1528,11 @@
 {"en":"A zip with your private data hidden","es":"Un zip con tus datos privados ocultos","it":"Uno zip con i tuoi dati privati nascosti"},
 {"en":"Keys and shortcuts","es":"Teclas y atajos","it":"Tasti e scorciatoie"},
 {"en":"Changes not applied","es":"Cambios sin aplicar","it":"Modifiche non applicate"},
-{"en":"The game will restart to change the sound system.","es":"El juego se reiniciará para cambiar el sistema de sonido.","it":"Il gioco si riavvierà per cambiare il sistema audio."}
+{"en":"The game will restart to change the sound system.","es":"El juego se reiniciará para cambiar el sistema de sonido.","it":"Il gioco si riavvierà per cambiare il sistema audio."},
+{"en":"MENU","es":"MENÚ","it":"MENU"},
+{"en":"Back to game","es":"Volver a la partida","it":"Torna alla partita"},
+{"en":"Surrender","es":"Rendirse","it":"Arrenditi"},
+{"en":"Quit","es":"Salir","it":"Esci"},
+{"en":"Yes","es":"Sí","it":"Sì"},
+{"en":"No","es":"No","it":"No"}
 ]
