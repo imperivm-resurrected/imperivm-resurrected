@@ -5,38 +5,68 @@
 
 #include "game/viewprefs.h"
 
-static void HealthBarsStart()
+static HealthBarsChoice Choice(int owners, bool heroesOnly)
 {
-	CHECK_EQ(HealthBarsClampStart(-1), static_cast<int>(kBarsHidden));
-	CHECK_EQ(HealthBarsClampStart(4), static_cast<int>(kBarsHidden));
-	CHECK_EQ(HealthBarsClampStart(3), static_cast<int>(kBarsMine));
-	CHECK_EQ(HealthBarsNativeMode(kBarsHidden), 0);
-	CHECK_EQ(HealthBarsNativeMode(kBarsAll), 1);
-	CHECK_EQ(HealthBarsNativeMode(kBarsHeroes), 1);
-	CHECK_EQ(HealthBarsNativeMode(kBarsMine), 1);
-	CHECK_EQ(HealthBarsNativeMode(9), 0);
-	CHECK_EQ(HealthBarsFilter(kBarsHidden), static_cast<int>(kBarsAll));
-	CHECK_EQ(HealthBarsFilter(kBarsAll), static_cast<int>(kBarsAll));
-	CHECK_EQ(HealthBarsFilter(kBarsHeroes), static_cast<int>(kBarsHeroes));
-	CHECK_EQ(HealthBarsFilter(kBarsMine), static_cast<int>(kBarsMine));
+	HealthBarsChoice c;
+	c.owners = owners;
+	c.heroesOnly = heroesOnly;
+	return c;
 }
 
-static void HealthBarsFilterRules()
+static void ModeAndFilter()
 {
+	CHECK_EQ(HealthBarsClampOwners(-1), static_cast<int>(kBarsNone));
+	CHECK_EQ(HealthBarsClampOwners(4), static_cast<int>(kBarsNone));
+	CHECK_EQ(HealthBarsClampOwners(3), static_cast<int>(kBarsEnemies));
+	CHECK_EQ(HealthBarsNativeMode(Choice(kBarsNone, true)), 0);
+	CHECK_EQ(HealthBarsNativeMode(Choice(kBarsAll, false)), 1);
+	CHECK_EQ(HealthBarsNativeMode(Choice(kBarsMine, false)), 1);
+	CHECK_EQ(HealthBarsNativeMode(Choice(kBarsEnemies, true)), 1);
+	CHECK_EQ(HealthBarsNativeMode(Choice(9, false)), 0);
+	CHECK(!HealthBarsFilters(Choice(kBarsNone, true)));
+	CHECK(!HealthBarsFilters(Choice(kBarsAll, false)));
+	CHECK(HealthBarsFilters(Choice(kBarsAll, true)));
+	CHECK(HealthBarsFilters(Choice(kBarsMine, false)));
+	CHECK(HealthBarsFilters(Choice(kBarsEnemies, false)));
 	CHECK(HealthBarsFilterHolds(0));
 	CHECK(HealthBarsFilterHolds(1));
 	CHECK(!HealthBarsFilterHolds(2));
 	CHECK(!HealthBarsFilterHolds(3));
-	CHECK(HealthBarsKeep(kBarsAll, false, false));
-	CHECK(HealthBarsKeep(kBarsHeroes, true, false));
-	CHECK(!HealthBarsKeep(kBarsHeroes, false, true));
-	CHECK(HealthBarsKeep(kBarsMine, false, true));
-	CHECK(!HealthBarsKeep(kBarsMine, true, false));
+}
+
+static void Sides()
+{
+	CHECK(HealthBarsSide(true, true, true) == UnitSide::kMine);
+	CHECK(HealthBarsSide(true, false, false) == UnitSide::kMine);
+	CHECK(HealthBarsSide(false, true, true) == UnitSide::kAlly);
+	CHECK(HealthBarsSide(false, true, false) == UnitSide::kEnemy);
+	CHECK(HealthBarsSide(false, false, true) == UnitSide::kEnemy);
+}
+
+static void Keep()
+{
+	const UnitSide sides[] = {UnitSide::kMine, UnitSide::kAlly, UnitSide::kEnemy};
+	for (UnitSide side : sides) {
+		CHECK(HealthBarsKeep(Choice(kBarsAll, false), false, side));
+		CHECK(HealthBarsKeep(Choice(kBarsAll, true), true, side));
+		CHECK(!HealthBarsKeep(Choice(kBarsAll, true), false, side));
+	}
+	CHECK(HealthBarsKeep(Choice(kBarsMine, false), false, UnitSide::kMine));
+	CHECK(!HealthBarsKeep(Choice(kBarsMine, false), false, UnitSide::kAlly));
+	CHECK(!HealthBarsKeep(Choice(kBarsMine, false), true, UnitSide::kEnemy));
+	CHECK(HealthBarsKeep(Choice(kBarsMine, true), true, UnitSide::kMine));
+	CHECK(!HealthBarsKeep(Choice(kBarsMine, true), false, UnitSide::kMine));
+	CHECK(HealthBarsKeep(Choice(kBarsEnemies, false), false, UnitSide::kEnemy));
+	CHECK(!HealthBarsKeep(Choice(kBarsEnemies, false), false, UnitSide::kAlly));
+	CHECK(!HealthBarsKeep(Choice(kBarsEnemies, false), true, UnitSide::kMine));
+	CHECK(HealthBarsKeep(Choice(kBarsEnemies, true), true, UnitSide::kEnemy));
+	CHECK(!HealthBarsKeep(Choice(kBarsEnemies, true), false, UnitSide::kEnemy));
 }
 
 int main()
 {
-	HealthBarsStart();
-	HealthBarsFilterRules();
+	ModeAndFilter();
+	Sides();
+	Keep();
 	return test::Summary("viewprefs");
 }

@@ -1530,6 +1530,7 @@ extern const TrRow kTrRows[] = {
 	{"All units", "Todas las unidades", "Tutte le unità"},
 	{"Heroes only", "Solo héroes", "Solo eroi"},
 	{"My units", "Mis unidades", "Le mie unità"},
+	{"Enemy units", "Unidades enemigas", "Unità nemiche"},
 	{"Pause in the background", "Pausar en segundo plano", "Pausa in secondo piano"},
 	{"Single player, when you switch to another window", "Un jugador, al cambiar a otra ventana", "Giocatore singolo, quando passi a un'altra finestra"},
 	{"System", "Sistema", "Sistema"},

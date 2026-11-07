@@ -5,6 +5,7 @@
 
 #include <windows.h>
 
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <unordered_map>
@@ -143,6 +144,22 @@ const IniValue kIniValues[] = {
 
 const char kMissing[] = "\x01";
 
+// [Game] HealthBars (0 none, 1 all, 2 heroes, 3 your units) became HealthBarOwners (0 none, 1 all, 2 yours, 3 enemies) and HealthBarHeroesOnly.
+void MigrateHealthBars(const std::string &path)
+{
+	char value[16], probe[8];
+	GetPrivateProfileStringA("Game", "HealthBars", kMissing, value, sizeof(value), path.c_str());
+	if (value[0] == kMissing[0] && !value[1]) return;
+	GetPrivateProfileStringA("Game", "HealthBarOwners", kMissing, probe, sizeof(probe), path.c_str());
+	if (probe[0] == kMissing[0] && !probe[1]) {
+		static const char *const kOwners[] = {"0", "1", "1", "2"};
+		const int old = atoi(value);
+		WritePrivateProfileStringA("Game", "HealthBarOwners", old >= 0 && old <= 3 ? kOwners[old] : "0", path.c_str());
+		WritePrivateProfileStringA("Game", "HealthBarHeroesOnly", old == 2 ? "1" : "0", path.c_str());
+	}
+	WritePrivateProfileStringA("Game", "HealthBars", nullptr, path.c_str());
+}
+
 void MigrateIni(const std::string &path)
 {
 	if (!Exists(path)) return;
@@ -169,6 +186,7 @@ void MigrateIni(const std::string &path)
 		char keys[8];
 		if (GetPrivateProfileStringA(section, nullptr, "", keys, sizeof(keys), path.c_str()) == 0) WritePrivateProfileStringA(section, nullptr, nullptr, path.c_str());
 	}
+	MigrateHealthBars(path);
 }
 
 void MigrateProfilesFolder(const std::string &profiles)

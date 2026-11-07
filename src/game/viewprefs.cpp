@@ -3,20 +3,20 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include "game/viewprefs.h"
 
-int HealthBarsClampStart(int value)
+int HealthBarsClampOwners(int value)
 {
-	return value >= kBarsHidden && value < kBarsStartCount ? value : kBarsHidden;
+	return value >= kBarsNone && value < kBarsOwnersCount ? value : kBarsNone;
 }
 
-int HealthBarsNativeMode(int start)
+int HealthBarsNativeMode(const HealthBarsChoice &choice)
 {
-	return HealthBarsClampStart(start) == kBarsHidden ? 0 : 1;
+	return HealthBarsClampOwners(choice.owners) == kBarsNone ? 0 : 1;
 }
 
-int HealthBarsFilter(int start)
+bool HealthBarsFilters(const HealthBarsChoice &choice)
 {
-	const int s = HealthBarsClampStart(start);
-	return s == kBarsHeroes || s == kBarsMine ? s : kBarsAll;
+	const int owners = HealthBarsClampOwners(choice.owners);
+	return owners != kBarsNone && (owners != kBarsAll || choice.heroesOnly);
 }
 
 bool HealthBarsFilterHolds(int nativeMode)
@@ -24,9 +24,18 @@ bool HealthBarsFilterHolds(int nativeMode)
 	return nativeMode == 0 || nativeMode == 1;
 }
 
-bool HealthBarsKeep(int filter, bool hero, bool mine)
+UnitSide HealthBarsSide(bool mine, bool known, bool allied)
 {
-	if (filter == kBarsHeroes) return hero;
-	if (filter == kBarsMine) return mine;
-	return true;
+	if (mine) return UnitSide::kMine;
+	return known && allied ? UnitSide::kAlly : UnitSide::kEnemy;
+}
+
+bool HealthBarsKeep(const HealthBarsChoice &choice, bool hero, UnitSide side)
+{
+	if (choice.heroesOnly && !hero) return false;
+	switch (HealthBarsClampOwners(choice.owners)) {
+	case kBarsMine: return side == UnitSide::kMine;
+	case kBarsEnemies: return side == UnitSide::kEnemy;
+	default: return true;
+	}
 }

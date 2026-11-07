@@ -58,7 +58,7 @@ int main()
 	Touch(d + "\\imperivm-resurrected\\discord.png", "new");
 	Touch(d + "\\imperivm-resurrected\\civs\\shipped.json", "shipped");
 	const std::string ini = d + "\\imperivm-mod.ini";
-	Touch(ini, "[Render]\r\nEscalado=suave\r\nBrillo=120\r\nEnabled=1\r\n[Pantalla]\r\nModo=ventana\r\nVentanaAncho=1280\r\n[Juego]\r\nAutoguardadoMinutos=15\r\n[Mods]\r\nPerfil=Sin perfil\r\n[Actualizaciones]\r\nModo=no\r\n[Online]\r\nPartidaEnCurso=abc\r\n");
+	Touch(ini, "[Render]\r\nEscalado=suave\r\nBrillo=120\r\nEnabled=1\r\n[Pantalla]\r\nModo=ventana\r\nVentanaAncho=1280\r\n[Juego]\r\nAutoguardadoMinutos=15\r\n[Mods]\r\nPerfil=Sin perfil\r\n[Actualizaciones]\r\nModo=no\r\n[Online]\r\nPartidaEnCurso=abc\r\n[Game]\r\nHealthBars=2\r\n");
 	Touch(d + "\\controles.ini", "[General]\r\nOrdenes=cuadricula\r\nLetrasEnLaBarra=0\r\n[Teclas]\r\nguardado_rapido=Ctrl+S\r\nmenu=F10\r\n[Ordenes]\r\nM=K\r\n");
 	Touch(d + "\\mods\\_perfiles\\Sin perfil.json", "{}");
 	Touch(d + "\\mods\\_descargas\\respaldo\\a.txt");
@@ -79,6 +79,8 @@ int main()
 	Check(Ini(ini, "Updates", "Mode") == "off", "updates mode");
 	Check(Ini(ini, "Online", "GameInProgress") == "abc", "online key");
 	Check(Ini(ini, "Pantalla", "Modo") == "<none>", "old section removed");
+	Check(Ini(ini, "Game", "HealthBarOwners") == "1" && Ini(ini, "Game", "HealthBarHeroesOnly") == "1", "health bars of heroes: every owner, heroes only");
+	Check(Ini(ini, "Game", "HealthBars") == "<none>", "old health bars key removed");
 	Check(Exists(d + "\\controls.ini") && !Exists(d + "\\controles.ini"), "controls file renamed");
 	Check(Ini(d + "\\controls.ini", "Keys", "quick_save") == "Ctrl+S", "control id");
 	Check(Ini(d + "\\controls.ini", "Keys", "menu") == "F10", "control id kept");
@@ -94,5 +96,11 @@ int main()
 	Check(Exists(d + "\\imperivm-resurrected\\civs\\shipped.json"), "files already in the new folder kept");
 	Check(!Exists(d + "\\mod\\civs") && !Exists(d + "\\mod\\keep.txt"), "merged files left the old folder");
 	Check(Exists(d + "\\mod\\discord.png"), "a file that already exists in the new folder is not overwritten");
+	Touch(ini, "[Game]\r\nHealthBars=3\r\n");
+	LegacyMigrate();
+	Check(Ini(ini, "Game", "HealthBarOwners") == "2" && Ini(ini, "Game", "HealthBarHeroesOnly") == "0", "health bars of your units");
+	Touch(ini, "[Game]\r\nHealthBars=1\r\nHealthBarOwners=3\r\n");
+	LegacyMigrate();
+	Check(Ini(ini, "Game", "HealthBarOwners") == "3" && Ini(ini, "Game", "HealthBars") == "<none>", "the new key wins over the old one");
 	return test::Summary("legacy");
 }
