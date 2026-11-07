@@ -35,7 +35,7 @@ struct State {
 	Values baseline;
 	std::vector<Hit> hits;
 	float scale = 1.0f;
-	bool mouseDown = false;
+	bool mouseDown = false, escArmed = false, enterArmed = false;
 	DWORD lastRead = 0, closedAt = 0;
 };
 
@@ -353,14 +353,22 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, Command &cmd)
 	case WM_KEYDOWN:
 		if (wp == VK_ESCAPE) {
 			if (v.dropId) v.dropId = 0;
-			else cmd.action = kActCancel;
+			else g_s.escArmed = true;
 		}
-		else if (wp == VK_RETURN && !v.dropId) {
+		else if (wp == VK_RETURN && !v.dropId) g_s.enterArmed = true;
+		return true;
+	// On the release: the game opens its menu when Esc comes up, so closing on the press would open it behind.
+	case WM_KEYUP:
+		if (wp == VK_ESCAPE && g_s.escArmed) {
+			g_s.escArmed = false;
+			cmd.action = kActCancel;
+		}
+		else if (wp == VK_RETURN && g_s.enterArmed) {
+			g_s.enterArmed = false;
 			cmd.action = kActOk;
 			cmd.values = v.values;
 		}
 		return true;
-	case WM_KEYUP:
 	case WM_CHAR:
 		return true;
 	default:
