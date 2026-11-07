@@ -1506,6 +1506,7 @@ extern const TrRow kTrRows[] = {
 	{"Window size", "Tamaño de la ventana", "Dimensioni della finestra"},
 	{"FPS limit", "Límite de FPS", "Limite di FPS"},
 	{"No limit", "Sin límite", "Nessun limite"},
+	{"Off with vertical sync", "Inactivo con sincronía vertical", "Inattivo con sincronia verticale"},
 	{"Sound", "Sonido", "Audio"},
 	{"Volume and alerts", "Volumen y avisos", "Volume e avvisi"},
 	{"Turn each kind of sound on or off and set its volume.", "Activa o apaga cada tipo de sonido y ajusta su volumen.", "Attiva o disattiva ogni tipo di suono e regola il volume."},

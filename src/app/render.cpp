@@ -510,7 +510,8 @@ DWORD WINAPI RenderThread(LPVOID)
 		ctx->PSSetShaderResources(0, 1, &srv);
 		ctx->PSSetSamplers(0, 1, &sampler);
 		ctx->Draw(4, 0);
-		const int limit = GetConfig().fpsLimit;
+		// With vertical sync the monitor sets the pace and the limit is left out.
+		const int limit = vsync ? 0 : GetConfig().fpsLimit;
 		if (limit > 0) {
 			LARGE_INTEGER now;
 			QueryPerformanceCounter(&now);

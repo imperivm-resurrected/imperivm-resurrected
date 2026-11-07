@@ -253,8 +253,9 @@ std::vector<Page> BuildPages(const Values &v)
 		const bool windowed = Check(v, kWindowed);
 		page.left.push_back({"Size and mode", {Combo(v, "Monitor", kMonitor), mode, Combo(v, "Resolution", kResolution), Combo(v, "Window size", kWindowSize, "", false, windowed),
 			Toggle(v, "Trap the mouse", kTrapMouse, "The cursor stays inside the game window")}});
+		const bool vsync = Check(v, kVSync);
 		page.right.push_back({"Image", {Slider(v, "Brightness", kBrightness, 80, 130), Toggle(v, "Vertical sync", kVSync, "Avoids tearing in the image"),
-			Combo(v, "FPS limit", kFpsLimit)}});
+			Combo(v, "FPS limit", kFpsLimit, vsync ? "Off with vertical sync" : "", false, !vsync)}});
 		Row compact = Toggle(v, "Compact panel", kPanelCompact), opacity = Slider(v, "Panel opacity", kPanelOpacity, 30, 100);
 		compact.enabled = opacity.enabled = Check(v, kShowPerf) || Check(v, kShowNet);
 		page.right.push_back({"Performance panel", {Toggle(v, "Show FPS and memory", kShowPerf), Toggle(v, "Network statistics", kShowNet), compact, opacity}});

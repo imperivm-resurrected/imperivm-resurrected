@@ -1499,6 +1499,7 @@
 {"en":"Window size","es":"Tamaño de la ventana","it":"Dimensioni della finestra"},
 {"en":"FPS limit","es":"Límite de FPS","it":"Limite di FPS"},
 {"en":"No limit","es":"Sin límite","it":"Nessun limite"},
+{"en":"Off with vertical sync","es":"Inactivo con sincronía vertical","it":"Inattivo con sincronia verticale"},
 {"en":"Sound","es":"Sonido","it":"Audio"},
 {"en":"Volume and alerts","es":"Volumen y avisos","it":"Volume e avvisi"},
 {"en":"Turn each kind of sound on or off and set its volume.","es":"Activa o apaga cada tipo de sonido y ajusta su volumen.","it":"Attiva o disattiva ogni tipo di suono e regola il volume."},
