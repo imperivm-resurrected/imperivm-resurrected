@@ -45,6 +45,8 @@ struct Painter {
 	int pressAction = -1, pressArg = 0;
 	int focusAction = -1, focusArg = 0;
 	bool noHover = false;
+	// Names of players and texts the game already translated are drawn as they are: a player called "Spartacus" stays so.
+	bool raw = false;
 
 	int S(int v) const { return static_cast<int>(v * s + 0.5f); }
 	RECT R(int x, int y, int w, int h) const { return {S(x), S(y), S(x + w), S(y + h)}; }
@@ -216,14 +218,14 @@ struct Painter {
 	{
 		RECT r = R(x, y, w, h);
 		SetTextColor(dc, c);
-		std::wstring ws = W(Tr(t));
+		std::wstring ws = W(raw ? t : Tr(t));
 		DrawTextW(dc, ws.c_str(), static_cast<int>(ws.size()), &r, fmt | DT_NOPREFIX | DT_END_ELLIPSIS);
 	}
 	int TextWrapped(int x, int y, int w, int h, const std::string &t, COLORREF c)
 	{
 		RECT r = R(x, y, w, h);
 		SetTextColor(dc, c);
-		std::wstring ws = W(Tr(t));
+		std::wstring ws = W(raw ? t : Tr(t));
 		RECT calc = r;
 		DrawTextW(dc, ws.c_str(), static_cast<int>(ws.size()), &calc, DT_WORDBREAK | DT_NOPREFIX | DT_CALCRECT);
 		DrawTextW(dc, ws.c_str(), static_cast<int>(ws.size()), &r, DT_WORDBREAK | DT_NOPREFIX | DT_END_ELLIPSIS);
@@ -232,20 +234,20 @@ struct Painter {
 	int Measure(int w, const std::string &t)
 	{
 		RECT r = {0, 0, S(w), 0};
-		std::wstring ws = W(Tr(t));
+		std::wstring ws = W(raw ? t : Tr(t));
 		DrawTextW(dc, ws.c_str(), static_cast<int>(ws.size()), &r, DT_WORDBREAK | DT_NOPREFIX | DT_CALCRECT);
 		return static_cast<int>((r.bottom - r.top) / s + 0.99f);
 	}
 	int TextWidth(const std::string &t)
 	{
-		const std::wstring ws = W(Tr(t));
+		const std::wstring ws = W(raw ? t : Tr(t));
 		SIZE sz = {};
 		GetTextExtentPoint32W(dc, ws.c_str(), static_cast<int>(ws.size()), &sz);
 		return static_cast<int>(sz.cx / s + 0.99f);
 	}
 	float TextWidthExact(const std::string &t)
 	{
-		const std::wstring ws = W(Tr(t));
+		const std::wstring ws = W(raw ? t : Tr(t));
 		SIZE sz = {};
 		GetTextExtentPoint32W(dc, ws.c_str(), static_cast<int>(ws.size()), &sz);
 		return static_cast<float>(sz.cx) / s;
