@@ -1541,5 +1541,9 @@
 {"en":"%d of %d ready","es":"%d de %d listos","it":"%d su %d pronti"},
 {"en":"Everyone is ready. Click to cancel","es":"Todos están listos. Pulsa para cancelar","it":"Sono tutti pronti. Clicca per annullare"},
 {"en":"Online","es":"En línea","it":"="},
-{"en":"Local network","es":"Red local","it":"Rete locale"}
+{"en":"Local network","es":"Red local","it":"Rete locale"},
+{"en":"Room name","es":"Nombre de la sala","it":"Nome della stanza"},
+{"en":"Press Enter to rename the room","es":"Pulsa Intro para cambiar el nombre","it":"Premi Invio per rinominare la stanza"},
+{"en":"Only the host can change the options.","es":"Solo el anfitrión puede cambiar las opciones.","it":"Solo l'host può cambiare le opzioni."},
+{"en":"Positions","es":"Posiciones","it":"Posizioni"}
 ]

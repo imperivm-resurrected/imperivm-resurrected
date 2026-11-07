@@ -635,7 +635,9 @@ void PaintRoomHeader(Painter &p, const State &st, const RoomFacts &f)
 	p.Fill(16, kRoomTabsTop + kRoomTabsH, kW - 32, 1, pal::lineDim);
 }
 
-void PaintMapThumb(Painter &p, const State &st, int x, int y, int size)
+}
+
+void PaintMapThumb(Painter &p, const State &st, int x, int y, int size, bool markers)
 {
 	const GameRoomSnapshot &g = st.game;
 	p.Fill(x, y, size, size, pal::well);
@@ -646,7 +648,16 @@ void PaintMapThumb(Painter &p, const State &st, int x, int y, int size)
 			iw = size * d->image.w / d->image.h;
 			ih = size;
 		}
-		p.Image(x + (size - iw) / 2, y + (size - ih) / 2, iw, ih, d->image.bgra.data(), d->image.w, d->image.h);
+		const int ix = x + (size - iw) / 2, iy = y + (size - ih) / 2;
+		p.Image(ix, iy, iw, ih, d->image.bgra.data(), d->image.w, d->image.h);
+		for (const MapPlayer &pl : d->info.players) {
+			if (!markers || !pl.hasStart || !pl.human || d->info.units <= 0) continue;
+			const float cx = ix + static_cast<float>(pl.x) * iw / d->info.units, cy = iy + static_cast<float>(pl.y) * ih / d->info.units;
+			const bool seated = pl.slot >= 0 && pl.slot < 8 && g.slots[pl.slot].used;
+			PaintDisc(p, cx, cy, 6.5f, RGB(10, 8, 6), RGB(10, 8, 6));
+			const COLORREF c = seated ? PlayerColor(g, g.slots[pl.slot].color) : RGB((pl.color >> 16) & 255, (pl.color >> 8) & 255, pl.color & 255);
+			PaintDisc(p, cx, cy, 5.0f, c, c);
+		}
 	}
 	else {
 		p.FillV(x + 1, y + 1, size - 2, size - 2, RGB(36, 28, 18), RGB(18, 14, 9));
@@ -699,13 +710,15 @@ std::string RoomNotice(const State &st, COLORREF &color)
 	return text;
 }
 
+namespace {
+
 void PaintSummary(Painter &p, const State &st, int x, int y, int w, int h)
 {
 	const bool hot = p.Hover(x, y, w, h, st.mouseX, st.mouseY);
 	PaintCard(p, x, y, w, h);
 	if (hot) p.Frame(x, y, w, h, pal::edge);
 	const int thumb = std::min(128, h - 24);
-	PaintMapThumb(p, st, x + 12, y + 12, thumb);
+	PaintMapThumb(p, st, x + 12, y + 12, thumb, false);
 	const int tx = x + 12 + thumb + 14, tw = x + w - 14 - tx;
 	int ty = y + 10;
 	p.Font(1);

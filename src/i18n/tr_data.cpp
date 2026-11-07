@@ -1549,5 +1549,9 @@ extern const TrRow kTrRows[] = {
 	{"Everyone is ready. Click to cancel", "Todos están listos. Pulsa para cancelar", "Sono tutti pronti. Clicca per annullare"},
 	{"Online", "En línea", "="},
 	{"Local network", "Red local", "Rete locale"},
+	{"Room name", "Nombre de la sala", "Nome della stanza"},
+	{"Press Enter to rename the room", "Pulsa Intro para cambiar el nombre", "Premi Invio per rinominare la stanza"},
+	{"Only the host can change the options.", "Solo el anfitrión puede cambiar las opciones.", "Solo l'host può cambiare le opzioni."},
+	{"Positions", "Posiciones", "Posizioni"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

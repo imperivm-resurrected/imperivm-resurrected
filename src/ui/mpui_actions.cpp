@@ -25,7 +25,7 @@ void DoAction(int action, int arg)
 		return;
 	}
 	if (action != kChatFocus && action != kFieldName && action != kFieldPass && action != kChatSend &&
-		action != kFieldJoinPass && action != kJoin && action != kFieldSearch && action != kPassShow) {
+		action != kFieldJoinPass && action != kJoin && action != kFieldSearch && action != kPassShow && action != kFieldRoomName) {
 		g_s.focus = kNoField;
 	}
 	switch (action) {
@@ -382,6 +382,11 @@ void DoAction(int action, int arg)
 		break;
 	}
 	case kGCancel: LeaveGameRoom(); break;
+	case kFieldRoomName:
+		if (!g_s.game.host || !g_s.room.id) break;
+		if (g_s.focus != kRoomNameField) g_s.roomNameInput = g_s.room.info.name;
+		FocusField(kRoomNameField);
+		break;
 	case kGTab:
 		g_s.roomTab = arg == 1 ? 1 : 0;
 		g_s.dropOpen = false;
@@ -718,6 +723,7 @@ std::string &FocusedText()
 	case kJoinPassField: return g_s.joinPassInput;
 	case kSearchField: return g_s.searchInput;
 	case kPickSearchField: return g_s.pickSearch;
+	case kRoomNameField: return g_s.roomNameInput;
 	default: return g_s.passInput;
 	}
 }
@@ -726,14 +732,14 @@ int FieldOfAction(int action)
 {
 	return action == kChatFocus ? kChatField : action == kFieldName ? kNameField : action == kFieldPass ? kPassField
 		: action == kFieldJoinPass ? kJoinPassField : action == kFieldSearch ? kSearchField
-		: action == kFieldPickSearch ? kPickSearchField : kNoField;
+		: action == kFieldPickSearch ? kPickSearchField : action == kFieldRoomName ? kRoomNameField : kNoField;
 }
 
 int ActionOfField(int field)
 {
 	return field == kChatField ? kChatFocus : field == kNameField ? kFieldName : field == kPassField ? kFieldPass
 		: field == kJoinPassField ? kFieldJoinPass : field == kSearchField ? kFieldSearch
-		: field == kPickSearchField ? kFieldPickSearch : -1;
+		: field == kPickSearchField ? kFieldPickSearch : field == kRoomNameField ? kFieldRoomName : -1;
 }
 
 void FocusField(int field)
@@ -784,6 +790,10 @@ void FieldKey(UINT msg, WPARAM wp)
 		if (g_s.focus == kPickSearchField) DoAction(kPickOk, 0);
 		else if (g_s.focus == kChatField) DoAction(kChatSend, 0);
 		else if (g_s.focus == kJoinPassField) DoAction(kPassOk, 0);
+		else if (g_s.focus == kRoomNameField) {
+			if (!g_s.roomNameInput.empty() && g_s.roomNameInput != g_s.room.info.name) RenameRoom(g_s.roomNameInput);
+			g_s.focus = kNoField;
+		}
 		else g_s.focus = kNoField;
 	}
 	else if (wp == VK_ESCAPE) {

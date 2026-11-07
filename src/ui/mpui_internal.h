@@ -49,7 +49,7 @@ enum Action {
 	kPickRow, kPickOk, kPickCancel,
 	kRecoverYes, kRecoverNo, kRejoinCancel, kRejoinClose,
 	kGKick, kGKickJoining, kDiscord, kPassOk, kPassCancel, kGSeat, kGMove, kGMoveTo, kGSwapAsk, kSwapAccept, kSwapDecline, kDropYes, kDropNo, kPassShow, kGSiteToggle, kGRuleToggle, kSpectate, kReturnGame,
-	kFieldPickSearch, kPickDelete, kPickDeleteYes, kPickDeleteNo, kGResync, kPatronLink, kGTab,
+	kFieldPickSearch, kPickDelete, kPickDeleteYes, kPickDeleteNo, kGResync, kPatronLink, kGTab, kFieldRoomName,
 };
 
 typedef int(__cdecl *HostGame_t)(int, unsigned, int);
@@ -87,7 +87,7 @@ struct JoinFlowState {
 extern JoinFlowState g_flow;
 enum View { kViewList, kViewRanked, kViewCreate };
 
-enum Field { kNoField, kChatField, kNameField, kPassField, kJoinPassField, kSearchField, kPickSearchField };
+enum Field { kNoField, kChatField, kNameField, kPassField, kJoinPassField, kSearchField, kPickSearchField, kRoomNameField };
 
 enum { kPredTeam, kPredRace, kPredAi, kPredReady, kPredOptSel, kPredOptVal, kPredColor };
 
@@ -299,6 +299,7 @@ struct State {
 	float uiScale = 1.0f;
 	int dropKind = 0, dropIndex = 0, dropScroll = 0;
 	int roomTab = 0;
+	std::string roomNameInput;
 };
 
 extern std::mutex g_lock;
@@ -441,6 +442,8 @@ std::map<std::string, std::string> PublishedOptions(const State &st);
 std::string RoomOptionText(const State &st, int id, const char *published);
 std::string RoomMapLabel(const State &st);
 void PaintGameTab(Painter &p, const State &st, int top);
+void PaintMapThumb(Painter &p, const State &st, int x, int y, int size, bool markers);
+std::string RoomNotice(const State &st, COLORREF &color);
 
 const int kRoomTeams = 4;
 
