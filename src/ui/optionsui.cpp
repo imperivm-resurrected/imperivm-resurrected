@@ -50,6 +50,7 @@ void SetExtras(Values &v, const Config &c)
 	v.checks[kModernAudio] = c.modernAudio;
 	v.scrolls[kPanelOpacity] = c.panelOpacity;
 	v.combos[kHealthBars] = c.healthBarsAtStart;
+	v.checks[kPauseInBackground] = c.pauseInBackground;
 }
 
 Values ReadNative()
@@ -73,7 +74,7 @@ Values ReadNative()
 
 void CopyExtras(Values &to, const Values &from)
 {
-	for (int id : {kSmoothCamera, kModernAudio}) {
+	for (int id : {kSmoothCamera, kModernAudio, kPauseInBackground}) {
 		const auto it = from.checks.find(id);
 		if (it != from.checks.end()) to.checks[id] = it->second;
 	}
@@ -147,6 +148,7 @@ bool CommitExtras(const Values &v)
 	if (opacity != v.scrolls.end()) c.panelOpacity = opacity->second;
 	const auto bars = v.combos.find(kHealthBars);
 	if (bars != v.combos.end()) c.healthBarsAtStart = bars->second;
+	c.pauseInBackground = check(kPauseInBackground, c.pauseInBackground);
 	SaveConfig();
 	return c.modernAudio != audioBefore;
 }

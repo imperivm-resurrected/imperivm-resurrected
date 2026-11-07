@@ -45,6 +45,7 @@ struct Config {
 	bool crashFix = true;
 	bool smoothScroll = true;
 	int healthBarsAtStart = 0;
+	bool pauseInBackground = false;
 	bool zoomExtras = true;
 	bool zoomFog = true;
 	int zoomRefreshMs = 16;

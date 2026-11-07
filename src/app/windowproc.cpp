@@ -14,6 +14,7 @@
 #include "game/zoomview.h"
 #include "hooks/audio.h"
 #include "hooks/displaymode.h"
+#include "hooks/tweaks.h"
 #include "net/rejoin.h"
 #include "net/spectator.h"
 #include "ui/controlsui.h"
@@ -85,6 +86,7 @@ LRESULT GameWindowHandler(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 	if (msg == WM_ACTIVATEAPP && GetConfig().muteInBackground && !g_closing) {
 		AudioSetBackgroundMute(wp == FALSE);
 	}
+	if (msg == WM_ACTIVATEAPP && !g_closing) Guard("background pause", [&] { TweaksWindowActive(wp != FALSE); });
 	if (msg == WM_CLOSE || msg == WM_DESTROY || (msg == WM_SYSCOMMAND && (wp & 0xfff0) == SC_CLOSE)) {
 		if (!g_closing) LogI("display", "window: closing (message 0x%x)", msg);
 		g_closing = true;
