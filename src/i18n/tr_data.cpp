@@ -1546,5 +1546,10 @@ extern const TrRow kTrRows[] = {
 	{"Couldn't update: see the main menu", "No se pudo actualizar: mira el menú principal", "Aggiornamento non riuscito: vedi il menu principale"},
 	{"You have the latest version", "Tienes la última versión", "Hai l'ultima versione"},
 	{"Couldn't check. Try again later", "No se pudo comprobar. Prueba más tarde", "Controllo non riuscito. Riprova più tardi"},
+	{"Log detail", "Detalle del registro", "Dettaglio del registro"},
+	{"Detailed helps to find a problem", "Detallado ayuda a encontrar un problema", "Dettagliato aiuta a trovare un problema"},
+	{"Normal", "=", "Normale"},
+	{"Detailed", "Detallado", "Dettagliato"},
+	{"The game will restart to apply the change.", "El juego se reiniciará para aplicar el cambio.", "Il gioco si riavvierà per applicare la modifica."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

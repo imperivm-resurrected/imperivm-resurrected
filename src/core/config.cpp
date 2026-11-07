@@ -93,6 +93,8 @@ void LoadConfig()
 	g_config.smoothScroll = GetPrivateProfileIntA("Game", "SmoothScroll", 1, path) != 0;
 
 	g_config.modOverrides = GetPrivateProfileIntA("Mods", "Override", 1, path) != 0;
+	GetPrivateProfileStringA("Debug", "LogLevel", "info", buf, sizeof(buf), path);
+	if (!ParseLogLevel(buf, g_config.logLevel)) g_config.logLevel = kLogInfo;
 	g_config.logFiles = GetPrivateProfileIntA("Debug", "LogFiles", 0, path) != 0;
 	g_config.rejoinTrace = GetPrivateProfileIntA("Debug", "RejoinTrace", IsBetaVersion(ModVersionText()) ? 1 : 0, path) != 0;
 	GetPrivateProfileStringA("Online", "RejoinMode", "reload", buf, sizeof(buf), path);
@@ -156,4 +158,5 @@ void SaveConfig()
 	WritePrivateProfileStringA("Sound", "MuteInBackground", g_config.muteInBackground ? "1" : "0", path);
 	WritePrivateProfileStringA("Sound", "ModernAudio", g_config.modernAudio ? "1" : "0", path);
 	WritePrivateProfileStringA("Sound", "OnlineAlerts", g_config.onlineAlerts ? "1" : "0", path);
+	WritePrivateProfileStringA("Debug", "LogLevel", LogLevelName(g_config.logLevel), path);
 }

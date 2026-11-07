@@ -44,8 +44,40 @@ std::mutex g_lock;
 State g_s;
 Canvas g_canvas;
 
+void SetSystemExtras(Values &v, const Config &c)
+{
+	v.combos[kLogLevel] = c.logLevel <= kLogDebug ? 1 : 0;
+	v.items[kLogLevel] = {"Normal", "Detailed"};
+}
+
+void CopySystemExtras(Values &to, const Values &from)
+{
+	for (int id : {kLogLevel}) {
+		const auto combo = from.combos.find(id);
+		if (combo != from.combos.end()) to.combos[id] = combo->second;
+		const auto items = from.items.find(id);
+		if (items != from.items.end()) to.items[id] = items->second;
+	}
+}
+
+// Returns whether a change needs a restart. "Normal" and "Detailed" keep a level set by hand in the ini (trace, warn) until they are changed.
+bool CommitSystemExtras(const Values &v)
+{
+	Config &c = MutableConfig();
+	bool changed = false;
+	const auto level = v.combos.find(kLogLevel);
+	if (level != v.combos.end() && (level->second == 1) != (c.logLevel <= kLogDebug)) {
+		c.logLevel = level->second == 1 ? kLogDebug : kLogInfo;
+		LogSetLevel(c.logLevel);
+		changed = true;
+	}
+	if (changed) SaveConfig();
+	return false;
+}
+
 void SetExtras(Values &v, const Config &c)
 {
+	SetSystemExtras(v, c);
 	v.checks[kPanelCompact] = c.panelCompact;
 	v.checks[kSmoothCamera] = c.smoothScroll;
 	v.checks[kModernAudio] = c.modernAudio;
@@ -93,6 +125,7 @@ void SetUpdateStatus(Values &v)
 
 void CopyExtras(Values &to, const Values &from)
 {
+	CopySystemExtras(to, from);
 	for (int id : {kSmoothCamera, kModernAudio}) {
 		const auto it = from.checks.find(id);
 		if (it != from.checks.end()) to.checks[id] = it->second;
@@ -251,6 +284,12 @@ void Execute(const Command &cmd)
 		Refresh();
 		break;
 	case kActPick:
+		if (IsExtra(cmd.value)) {
+			std::lock_guard<std::mutex> lock(g_lock);
+			g_s.view.values.combos[cmd.value] = cmd.arg;
+			g_s.view.dirty = !(g_s.view.values == g_s.baseline);
+			break;
+		}
 		OptionsWriteCombo(cmd.value, cmd.arg);
 		Refresh();
 		break;
@@ -276,13 +315,16 @@ void Execute(const Command &cmd)
 		break;
 	}
 	case kActApply: {
+		const bool restart = CommitSystemExtras(cmd.values);
 		const bool audio = CommitExtras(cmd.values);
 		OptionsClick(kNativeApply);
 		Refresh(true);
 		if (audio) UiAskRestart(Tr("The game will restart to change the sound system."));
+		else if (restart) UiAskRestart(Tr("The game will restart to apply the change."));
 		break;
 	}
 	case kActOk: {
+		const bool restart = CommitSystemExtras(cmd.values);
 		const bool audio = CommitExtras(cmd.values);
 		{
 			std::lock_guard<std::mutex> lock(g_lock);
@@ -290,6 +332,7 @@ void Execute(const Command &cmd)
 		}
 		OptionsClick(kNativeOk);
 		if (audio) UiAskRestart(Tr("The game will restart to change the sound system."));
+		else if (restart) UiAskRestart(Tr("The game will restart to apply the change."));
 		break;
 	}
 	case kActCancel: {

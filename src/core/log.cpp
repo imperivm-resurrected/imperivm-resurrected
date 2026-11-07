@@ -63,6 +63,7 @@ std::string g_previous;
 bool g_ownsLock = false;
 DWORD g_started = 0;
 volatile LONG g_shut = 0;
+LogSettings g_settings;
 
 std::string GameDirectory()
 {
@@ -96,12 +97,6 @@ LogSettings ReadSettings(const std::string &gameDir)
 	return settings;
 }
 
-const char *LevelName(LogLevel level)
-{
-	static const char *const kNames[] = {"trace", "debug", "info", "warn", "error", "fatal"};
-	return kNames[level];
-}
-
 void WriteHeader(const LogFilesState &state, const LogSettings &settings)
 {
 	SYSTEMTIME s;
@@ -119,8 +114,8 @@ void WriteHeader(const LogFilesState &state, const LogSettings &settings)
 	LogI("session", "system: %s; %s; language %s", DescribeCpu().c_str(), DescribeMemory().c_str(), DescribeLanguage().c_str());
 	for (const std::string &monitor : DescribeMonitors()) LogI("display", "%s", monitor.c_str());
 	std::string channels;
-	for (const auto &c : settings.channels) channels += (channels.empty() ? "" : ", ") + c.first + ":" + LevelName(c.second);
-	LogI("session", "log level %s%s%s; the last %d sessions are kept in Logs\\imperivm\\", LevelName(settings.level), channels.empty() ? "" : " with ",
+	for (const auto &c : settings.channels) channels += (channels.empty() ? "" : ", ") + c.first + ":" + LogLevelName(c.second);
+	LogI("session", "log level %s%s%s; the last %d sessions are kept in Logs\\imperivm\\", LogLevelName(settings.level), channels.empty() ? "" : " with ",
 		channels.c_str(), kLogFilesKept);
 }
 
@@ -135,7 +130,8 @@ void LogInit()
 	g_previous = state.previousLog;
 	if (!g_sink.Open(g_current)) return;
 	g_core = new LogCore(&g_sink, Now, [] { return static_cast<unsigned>(GetCurrentThreadId()); }, GetCurrentThreadId());
-	const LogSettings settings = ReadSettings(g_paths.gameDir);
+	g_settings = ReadSettings(g_paths.gameDir);
+	const LogSettings &settings = g_settings;
 	g_core->Configure(settings);
 	if (!state.otherInstance) g_ownsLock = WriteSessionLock(g_paths);
 	WriteHeader(state, settings);
@@ -208,6 +204,20 @@ void LogOnce(LogLevel level, const char *channel, const char *fmt, ...)
 bool LogEnabled(LogLevel level, const char *channel)
 {
 	return g_core && g_core->Enabled(level, channel);
+}
+
+const char *LogLevelName(LogLevel level)
+{
+	static const char *const kNames[] = {"trace", "debug", "info", "warn", "error", "fatal"};
+	return kNames[level];
+}
+
+void LogSetLevel(LogLevel level)
+{
+	if (!g_core || level == g_settings.level) return;
+	g_settings.level = level;
+	g_core->Configure(g_settings);
+	LogI("session", "log level %s", LogLevelName(level));
 }
 
 void LogDumpContext(const char *reason)

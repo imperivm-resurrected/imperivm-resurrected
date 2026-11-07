@@ -1538,5 +1538,10 @@
 {"en":"Version %s installed: restart the game","es":"Versión %s instalada: reinicia el juego","it":"Versione %s installata: riavvia il gioco"},
 {"en":"Couldn't update: see the main menu","es":"No se pudo actualizar: mira el menú principal","it":"Aggiornamento non riuscito: vedi il menu principale"},
 {"en":"You have the latest version","es":"Tienes la última versión","it":"Hai l'ultima versione"},
-{"en":"Couldn't check. Try again later","es":"No se pudo comprobar. Prueba más tarde","it":"Controllo non riuscito. Riprova più tardi"}
+{"en":"Couldn't check. Try again later","es":"No se pudo comprobar. Prueba más tarde","it":"Controllo non riuscito. Riprova più tardi"},
+{"en":"Log detail","es":"Detalle del registro","it":"Dettaglio del registro"},
+{"en":"Detailed helps to find a problem","es":"Detallado ayuda a encontrar un problema","it":"Dettagliato aiuta a trovare un problema"},
+{"en":"Normal","es":"=","it":"Normale"},
+{"en":"Detailed","es":"Detallado","it":"Dettagliato"},
+{"en":"The game will restart to apply the change.","es":"El juego se reiniciará para aplicar el cambio.","it":"Il gioco si riavvierà per applicare la modifica."}
 ]
