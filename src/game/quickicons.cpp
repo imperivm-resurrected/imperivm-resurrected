@@ -16,6 +16,7 @@
 #include "addr/script.h"
 #include "addr/state.h"
 #include "addr/world.h"
+#include "core/config.h"
 #include "core/log.h"
 #include "game/quickicons.h"
 
@@ -219,13 +220,7 @@ void __fastcall HookIconDraw(void *self, void *edx, void *surface, int unused)
 	}
 }
 
-bool ExtrasEnabled()
-{
-	char path[MAX_PATH] = {};
-	GetModuleFileNameA(nullptr, path, MAX_PATH);
-	if (char *slash = strrchr(path, 0x5c)) strcpy_s(slash + 1, MAX_PATH - (slash + 1 - path), "imperivm-mod.ini");
-	return GetPrivateProfileIntA("Map", "ZoomExtras", 1, path) != 0;
-}
+bool ExtrasEnabled() { return GetConfig().zoomExtras; }
 
 bool IsExtraIndex(int index) { return index >= kRealCount || index == -1; }
 

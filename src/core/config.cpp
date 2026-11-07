@@ -91,6 +91,9 @@ void LoadConfig()
 	}
 	g_config.crashFix = GetPrivateProfileIntA("Game", "CrashFix", 1, path) != 0;
 	g_config.smoothScroll = GetPrivateProfileIntA("Game", "SmoothScroll", 1, path) != 0;
+	g_config.zoomExtras = GetPrivateProfileIntA("Map", "ZoomExtras", 1, path) != 0;
+	g_config.zoomFog = GetPrivateProfileIntA("Map", "FogVisible", 1, path) != 0;
+	g_config.zoomRefreshMs = (std::max)(0, (std::min)(1000, static_cast<int>(GetPrivateProfileIntA("Map", "RefreshMs", 16, path))));
 
 	g_config.modOverrides = GetPrivateProfileIntA("Mods", "Override", 1, path) != 0;
 	g_config.logFiles = GetPrivateProfileIntA("Debug", "LogFiles", 0, path) != 0;

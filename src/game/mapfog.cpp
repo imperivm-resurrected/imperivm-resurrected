@@ -12,6 +12,7 @@
 #include "MinHook.h"
 #include "hooks/hookcount.h"
 
+#include "core/config.h"
 #include "core/log.h"
 #include "game/mapfog.h"
 #include "addr/engine.h"
@@ -516,11 +517,8 @@ long long ZoomFogGameThreadTick()
 void InstallZoomFog(bool knownExe)
 {
 	if (!knownExe) return;
-	char path[MAX_PATH] = {};
-	GetModuleFileNameA(nullptr, path, MAX_PATH);
-	if (char *slash = strrchr(path, '\\')) strcpy_s(slash + 1, MAX_PATH - (slash + 1 - path), "imperivm-mod.ini");
-	g_enabled = GetPrivateProfileIntA("Map", "FogVisible", 1, path) != 0;
-	g_refreshMs = static_cast<DWORD>(std::max(0, std::min(1000, static_cast<int>(GetPrivateProfileIntA("Map", "RefreshMs", 16, path)))));
+	g_enabled = GetConfig().zoomFog;
+	g_refreshMs = static_cast<DWORD>(GetConfig().zoomRefreshMs);
 	const bool ok = HookCreate(reinterpret_cast<void *>(addr::kRebuild), reinterpret_cast<void *>(&HookRebuild), reinterpret_cast<void **>(&g_origRebuild)) == MH_OK &&
 		HookEnable(reinterpret_cast<void *>(addr::kRebuild)) == MH_OK;
 	const bool okCenter = HookCreate(reinterpret_cast<void *>(addr::kCenterOn), reinterpret_cast<void *>(&HookCenterOn), reinterpret_cast<void **>(&g_origCenterOn)) == MH_OK &&

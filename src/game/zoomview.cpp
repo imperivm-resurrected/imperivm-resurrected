@@ -16,6 +16,7 @@
 #include "addr/state.h"
 #include "addr/ui.h"
 #include "addr/world.h"
+#include "core/config.h"
 #include "core/log.h"
 #include "game/controls.h"
 #include "game/mapfog.h"
@@ -59,13 +60,7 @@ const int kMessageLeftDown = 0x111, kMessageLeftDouble = 0x113, kMessageRightDow
 template <typename T>
 T &At(void *p, int off) { return *reinterpret_cast<T *>(static_cast<char *>(p) + off); }
 
-bool ExtrasEnabled()
-{
-	char path[MAX_PATH] = {};
-	GetModuleFileNameA(nullptr, path, MAX_PATH);
-	if (char *slash = strrchr(path, 0x5c)) strcpy_s(slash + 1, MAX_PATH - (slash + 1 - path), "imperivm-mod.ini");
-	return GetPrivateProfileIntA("Map", "ZoomExtras", 1, path) != 0;
-}
+bool ExtrasEnabled() { return GetConfig().zoomExtras; }
 
 bool ZoomOpen() { return g_geo.valid && GetTickCount() - g_geo.tick < kOpenWindowMs; }
 
