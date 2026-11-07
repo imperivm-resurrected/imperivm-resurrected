@@ -15,7 +15,6 @@
 #include "core/log.h"
 #include "core/uiport.h"
 #include "game/options.h"
-#include "game/viewprefs.h"
 #include "hooks/displaymode.h"
 #include "hooks/respick.h"
 #include "hooks/audio.h"
@@ -230,11 +229,9 @@ void SetExtras(Values &v, const Config &c)
 	v.checks[kPanelCompact] = c.panelCompact;
 	v.checks[kSmoothCamera] = c.smoothScroll;
 	v.scrolls[kPanelOpacity] = c.panelOpacity;
-	v.combos[kHealthBars] = c.healthBarsAtStart;
+	v.combos[kHealthBars] = c.healthBarOwners;
+	v.checks[kHealthBarHeroes] = c.healthBarHeroesOnly;
 	v.checks[kPauseInBackground] = c.pauseInBackground;
-	v.checks[kZoomGroupIcons] = c.zoomExtras;
-	v.checks[kZoomFog] = c.zoomFog;
-	v.combos[kZoomRefresh] = ZoomRefreshPreset(c.zoomRefreshMs);
 	v.scrolls[kMasterVolume] = c.masterVolume;
 	v.scrolls[kNatureVolume] = c.natureVolume;
 	v.scrolls[kConversationVolume] = c.conversationVolume;
@@ -283,11 +280,11 @@ void SetUpdateStatus(Values &v)
 void CopyExtras(Values &to, const Values &from)
 {
 	CopySystemExtras(to, from);
-	for (int id : {kSmoothCamera, kPauseInBackground, kZoomGroupIcons, kZoomFog}) {
+	for (int id : {kSmoothCamera, kPauseInBackground, kHealthBarHeroes}) {
 		const auto it = from.checks.find(id);
 		if (it != from.checks.end()) to.checks[id] = it->second;
 	}
-	for (int id : {kHealthBars, kZoomRefresh}) {
+	for (int id : {kHealthBars}) {
 		const auto it = from.combos.find(id);
 		if (it != from.combos.end()) to.combos[id] = it->second;
 	}
@@ -410,12 +407,9 @@ void CommitExtras(const Values &v)
 	const auto opacity = v.scrolls.find(kPanelOpacity);
 	if (opacity != v.scrolls.end()) c.panelOpacity = opacity->second;
 	const auto bars = v.combos.find(kHealthBars);
-	if (bars != v.combos.end()) c.healthBarsAtStart = bars->second;
+	if (bars != v.combos.end()) c.healthBarOwners = bars->second;
+	c.healthBarHeroesOnly = check(kHealthBarHeroes, c.healthBarHeroesOnly);
 	c.pauseInBackground = check(kPauseInBackground, c.pauseInBackground);
-	c.zoomExtras = check(kZoomGroupIcons, c.zoomExtras);
-	c.zoomFog = check(kZoomFog, c.zoomFog);
-	const auto refresh = v.combos.find(kZoomRefresh);
-	if (refresh != v.combos.end() && refresh->second != ZoomRefreshPreset(c.zoomRefreshMs)) c.zoomRefreshMs = ZoomRefreshPresetMs(refresh->second);
 	CommitDisplayExtras(c, v);
 	ApplySoundLive(v);
 	CommitDevice(v);

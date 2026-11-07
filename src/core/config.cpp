@@ -106,7 +106,8 @@ void LoadConfig()
 	}
 	g_config.crashFix = GetPrivateProfileIntA("Game", "CrashFix", 1, path) != 0;
 	g_config.smoothScroll = GetPrivateProfileIntA("Game", "SmoothScroll", 1, path) != 0;
-	g_config.healthBarsAtStart = (std::max)(0, (std::min)(3, static_cast<int>(GetPrivateProfileIntA("Game", "HealthBars", 0, path))));
+	g_config.healthBarOwners = (std::max)(0, (std::min)(3, static_cast<int>(GetPrivateProfileIntA("Game", "HealthBarOwners", 0, path))));
+	g_config.healthBarHeroesOnly = GetPrivateProfileIntA("Game", "HealthBarHeroesOnly", 0, path) != 0;
 	g_config.pauseInBackground = GetPrivateProfileIntA("Game", "PauseInBackground", 0, path) != 0;
 	g_config.zoomExtras = GetPrivateProfileIntA("Map", "ZoomExtras", 1, path) != 0;
 	g_config.zoomFog = GetPrivateProfileIntA("Map", "FogVisible", 1, path) != 0;
@@ -175,11 +176,9 @@ void SaveConfig()
 	WritePrivateProfileStringA("Game", "AutosaveSlots", std::to_string(g_config.autosaveSlots).c_str(), path);
 	WritePrivateProfileStringA("Game", "AutosaveOnExit", g_config.autosaveOnExit ? "1" : "0", path);
 	WritePrivateProfileStringA("Game", "SmoothScroll", g_config.smoothScroll ? "1" : "0", path);
-	WritePrivateProfileStringA("Game", "HealthBars", std::to_string(g_config.healthBarsAtStart).c_str(), path);
+	WritePrivateProfileStringA("Game", "HealthBarOwners", std::to_string(g_config.healthBarOwners).c_str(), path);
+	WritePrivateProfileStringA("Game", "HealthBarHeroesOnly", g_config.healthBarHeroesOnly ? "1" : "0", path);
 	WritePrivateProfileStringA("Game", "PauseInBackground", g_config.pauseInBackground ? "1" : "0", path);
-	WritePrivateProfileStringA("Map", "ZoomExtras", g_config.zoomExtras ? "1" : "0", path);
-	WritePrivateProfileStringA("Map", "FogVisible", g_config.zoomFog ? "1" : "0", path);
-	WritePrivateProfileStringA("Map", "RefreshMs", std::to_string(g_config.zoomRefreshMs).c_str(), path);
 	WritePrivateProfileStringA("Game", "CrashFix", g_config.crashFix ? "1" : "0", path);
 	WritePrivateProfileStringA("Mods", "Override", g_config.modOverrides ? "1" : "0", path);
 	WritePrivateProfileStringA("Display", "ShowPerformance", g_config.showPerf ? "1" : "0", path);
