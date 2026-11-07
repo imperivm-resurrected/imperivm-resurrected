@@ -329,7 +329,8 @@ void PaintPassPrompt(Painter &p, const State &st)
 	const Dialog d = DialogBegin(p, kW, kH, 480, 214, "Password-protected room", kGold, 26);
 	DrawLock(p, d.x + 24, d.y + 22, kGold);
 	DialogText(p, d, 58, "\"" + st.passLobby.name + Tr("\", hosted by ") + st.passLobby.host + Tr(". Enter the password to join."), kDim, 3);
-	PaintField(p, st, d.x + 24, d.y + 104, d.w - 48, 34, st.joinPassInput, "Password", st.focus == kJoinPassField, kFieldJoinPass, true);
+	PaintField(p, st, d.x + 24, d.y + 104, d.w - 48 - 98, 34, st.joinPassInput, "Password", st.focus == kJoinPassField, kFieldJoinPass, !st.passShow);
+	p.Button(d.x + d.w - 24 - 90, d.y + 104, 90, 34, st.passShow ? "Hide" : "Show", kPassShow, 0, mx, my);
 	DialogButtons(p, d, {{"OK", kPassOk, 0, true}, {"Cancel", kPassCancel}}, mx, my);
 }
 

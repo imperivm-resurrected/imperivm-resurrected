@@ -201,6 +201,7 @@ void TryJoinNow(const OnlineLobby &lobby, const std::string &password, bool watc
 		g_s.passLobby = g;
 		g_s.passWatch = watch;
 		g_s.passPrompt = true;
+		g_s.passShow = false;
 		g_s.joinPassInput.clear();
 		FocusField(kJoinPassField);
 		return;
