@@ -356,10 +356,6 @@ void DoAction(int action, int arg)
 		break;
 	}
 	case kGReady: {
-		if (g_s.game.host && CountdownLeftMs() >= 0) {
-			GameRoomCountdownCancel();
-			break;
-		}
 		GameRoomSlot &me = g_s.game.slots[g_s.game.localSlot & 7];
 		me.ready = !me.ready;
 		Predict(kPredReady, g_s.game.localSlot & 7, me.ready);

@@ -717,7 +717,7 @@ void PaintPlayerTable(Painter &p, const State &st, const RoomFacts &f, int x, in
 	Arrival arriving[8];
 	PlaceArrivals(st, f, arriving);
 	TrackRows(g, arriving);
-	const int playerH = g.online ? 36 : 46, compactH = g.online ? 30 : 38;
+	const int playerH = g.online ? 36 : 42, compactH = g.online ? 30 : 38;
 	int rowY = y + kTableHeadH + 2, hovered = -1;
 	for (int i = 0; i < 8; i++) {
 		const GameRoomSlot &s = g.slots[i];
@@ -888,13 +888,16 @@ void PaintSummary(Painter &p, const State &st, int x, int y, int w, int h)
 	const std::string notice = RoomNotice(st, noticeColor);
 	const int noticeH = notice.empty() ? 0 : 36;
 	p.Font(3);
+	const int columns = tw > 440 ? 2 : 1, colGap = 24, colW = (tw - (columns - 1) * colGap) / columns, top = ty;
+	int shown = 0;
 	for (const Line &l : kLines) {
-		if (ty + 18 > y + h - 8 - noticeH) break;
+		const int lx = tx + (shown % columns) * (colW + colGap), ly = top + (shown / columns) * 19;
+		if (ly + 18 > y + h - 8 - noticeH) break;
 		const std::string v = RoomOptionText(st, l.id, l.published);
-		p.Text(tx, ty, tw, 18, l.label, kDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-		p.Text(tx, ty, tw, 18, v.empty() ? std::string("—") : v, kText, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		p.Fill(tx, ty + 18, tw, 1, kRowLine);
-		ty += 19;
+		p.Text(lx, ly, colW, 18, l.label, kDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+		p.Text(lx, ly, colW, 18, v.empty() ? std::string("—") : v, kText, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Fill(lx, ly + 18, colW, 1, kRowLine);
+		shown++;
 	}
 	if (!notice.empty()) {
 		p.Clip(tx, y + h - 8 - noticeH, tw, noticeH);
@@ -904,26 +907,13 @@ void PaintSummary(Painter &p, const State &st, int x, int y, int w, int h)
 	p.AddHit(x, y, w, h, kGTab, 1);
 }
 
-void PaintRulesCard(Painter &p, const State &st, int x, int y, int w, int h)
+// The largest of the button fonts that fits the text in the disc.
+void FitFont(Painter &p, const char *text, int width)
 {
-	const bool hot = p.Hover(x, y, w, h, st.mouseX, st.mouseY);
-	PaintCard(p, x, y, w, h);
-	if (hot) p.Frame(x, y, w, h, pal::edge);
-	struct Rule {
-		const char *label;
-		int id;
-		bool inverted;
-	};
-	static const Rule kRules[] = {{"Fog of war", 0x1007, true}, {"Explored map", 0x1008, false}, {"Shared control", 0x100a, false}, {"Bonuses", 0x10a7, true}};
-	const int colW = (w - 36) / 2;
-	p.Font(3);
-	for (int k = 0; k < 4; k++) {
-		const int rx = x + 14 + (k % 2) * (colW + 8), ry = y + 14 + (k / 2) * 30;
-		const bool on = (RoomOptionText(st, kRules[k].id, "") == "yes") != kRules[k].inverted;
-		p.Toggle(rx, ry + 3, on, false, false);
-		p.Text(rx + Painter::kToggleW + 8, ry, colW - Painter::kToggleW - 8, 20, kRules[k].label, on ? kText : kDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	for (int font : {2, 1, 3}) {
+		p.Font(font);
+		if (p.TextWidth(text) <= width) return;
 	}
-	p.AddHit(x, y, w, h, kGTab, 1);
 }
 
 void PaintReadyBlock(Painter &p, const State &st, const RoomFacts &f, int x, int y, int w, int h)
@@ -941,11 +931,11 @@ void PaintReadyBlock(Painter &p, const State &st, const RoomFacts &f, int x, int
 	const int left = CountdownLeftMs();
 	Look look = kAsk;
 	int action = kGReady;
-	if (!g.online || (g.host && f.allReady && f.canStart && left < 0)) {
+	if (left >= 0) look = kCount;
+	else if (!g.online) {
 		look = kStart;
 		action = kGStart;
 	}
-	else if (left >= 0) look = kCount;
 	else if (me.ready) look = kIsReady;
 	else if (!f.mapReady) look = kWait;
 	const bool enabled = look != kWait;
@@ -974,12 +964,12 @@ void PaintReadyBlock(Painter &p, const State &st, const RoomFacts &f, int x, int
 	const std::string count = TrFmt("%d of %d ready", {std::to_string(f.readyCount), std::to_string(f.humans)});
 	switch (look) {
 	case kAsk:
-		p.Font(2);
+		FitFont(p, "Ready?", radius * 2 - 16);
 		p.Text(cx - radius, textY - 16, radius * 2, 32, "Ready?", ink, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		caption = count;
 		break;
 	case kStart:
-		p.Font(2);
+		FitFont(p, "Start", radius * 2 - 16);
 		p.Text(cx - radius, textY - 16, radius * 2, 32, "Start", ink, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		break;
 	case kIsReady: {
@@ -1006,10 +996,6 @@ void PaintReadyBlock(Painter &p, const State &st, const RoomFacts &f, int x, int
 	}
 	if (enabled) p.AddHit(cx - radius, cy - radius, radius * 2, radius * 2, action, 0);
 	if (!g.online) return;
-	if (look == kStart) {
-		p.Button(cx - 60, captionY + 2, 120, 26, "Not ready", kGReady, 0, mx, my, true, false, 3);
-		return;
-	}
 	if (!caption.empty() && captionH > 10) {
 		p.Font(3);
 		p.Clip(x, captionY, w, captionH);
@@ -1035,15 +1021,21 @@ void PaintChatBlock(Painter &p, const State &st, int x, int y, int w, int h)
 void PaintRoomTab(Painter &p, const State &st, const RoomFacts &f)
 {
 	const GameRoomSnapshot &g = st.game;
-	const int playerH = g.online ? 36 : 46;
+	const int playerH = g.online ? 36 : 42;
 	const int tableH = kTableHeadH + 2 + 8 * playerH + 6;
 	PaintPlayerTable(p, st, f, 16, kTableTop, kW - 32, tableH);
 	const int by = kTableTop + tableH + 10, bh = kH - 16 - by;
 	const int sideW = 360, gap = 12;
-	PaintSummary(p, st, 16, by, sideW, bh);
-	PaintReadyBlock(p, st, f, 16 + sideW + gap, by, kW - 32 - 2 * (sideW + gap), bh);
-	if (g.online) PaintChatBlock(p, st, kW - 16 - sideW, by, sideW, bh);
-	else PaintRulesCard(p, st, kW - 16 - sideW, by, sideW, bh);
+	const int readyW = kW - 32 - 2 * (sideW + gap);
+	if (g.online) {
+		PaintChatBlock(p, st, 16, by, sideW, bh);
+		PaintReadyBlock(p, st, f, 16 + sideW + gap, by, readyW, bh);
+		PaintSummary(p, st, kW - 16 - sideW, by, sideW, bh);
+	}
+	else {
+		PaintSummary(p, st, 16, by, kW - 32 - readyW - gap, bh);
+		PaintReadyBlock(p, st, f, kW - 16 - readyW, by, readyW, bh);
+	}
 }
 
 void PaintRoomDialogs(Painter &p, const State &st)
