@@ -278,29 +278,141 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis)
 
 	section("Options");
 	{
-		size_t from = 0;
-		while (from < g.optionsText.size()) {
+		// Same rows, labels and order as the room's "Game options" panel (mpui_paint_room.cpp), read from the text the host publishes.
+		std::map<std::string, std::string> pub;
+		std::vector<std::string> published;
+		for (size_t from = 0; from < g.optionsText.size();) {
 			size_t to = g.optionsText.find('\n', from);
 			if (to == std::string::npos) to = g.optionsText.size();
 			const std::string line = g.optionsText.substr(from, to - from);
 			from = to + 1;
-			if (line.empty()) continue;
 			const size_t colon = line.find(": ");
-			const std::string key = colon == std::string::npos ? line : line.substr(0, colon);
-			const std::string value = colon == std::string::npos ? std::string() : key == "Map type" ? MapTypeLabel(line.substr(colon + 2)) : line.substr(colon + 2);
-			const bool yes = value == "yes", no = value == "no";
-			p.Text(x, y, (yes || no) ? w - Painter::kToggleW - 10 : w / 2, 20, colon == std::string::npos ? line : line.substr(0, colon), kDim,
-				DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-			if (yes || no) p.Toggle(x + w - Painter::kToggleW, y + (20 - Painter::kToggleH) / 2, yes, true, false);
-			else if (colon != std::string::npos) p.Text(x + w / 2, y, w - w / 2, 20, value, kText, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
-			y += 22;
+			if (colon == std::string::npos) continue;
+			const std::string key = line.substr(0, colon);
+			if (!pub.count(key)) published.push_back(key);
+			pub[key] = line.substr(colon + 2);
 		}
-		const bool watchable = g.specLobby != 0;
-		std::string spec = SpectatorText(watchable, g.specDelay);
-		if (watchable && g.playing && g.spectators > 0) spec += "  ·  " + std::to_string(g.spectators) + Tr(" watching");
-		p.Text(x, y, w / 2, 20, "Spectators", kDim);
-		p.Text(x + w / 2, y, w - w / 2, 20, spec, watchable ? kText : kDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		y += 22;
+		const bool load = !g.saveName.empty();
+		std::set<std::string> used = {"Shared support", "Scenario"};
+		auto take = [&](const std::string &key, std::string &out) {
+			used.insert(key);
+			const auto it = pub.find(key);
+			if (it == pub.end()) return false;
+			out = it->second;
+			return true;
+		};
+		auto heading = [&](const char *title) {
+			y += 4;
+			p.Font(3);
+			p.Text(x, y, w, 15, title, pal::section, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+			y += 18;
+		};
+		auto valueRow = [&](const std::string &label, const std::string &value, COLORREF color) {
+			p.Text(x, y, w / 2, 20, label, kDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			p.Text(x + w / 2, y, w - w / 2, 20, value, color, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			y += 22;
+		};
+		auto toggleRow = [&](const std::string &label, bool on) {
+			p.Text(x, y, w - Painter::kToggleW - 10, 20, label, on ? kText : kDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			p.Toggle(x + w - Painter::kToggleW, y + (20 - Painter::kToggleH) / 2, on, true, false);
+			y += 22;
+		};
+		auto comboRow = [&](const char *label, const char *key) {
+			std::string v;
+			if (take(key, v)) valueRow(label, v.empty() ? "—" : v, kText);
+		};
+		auto checkRow = [&](const char *label, const char *key, bool inverted) {
+			std::string v;
+			if (take(key, v)) toggleRow(label, (v == "yes") != inverted);
+		};
+		auto yes = [&](const char *key) {
+			const auto it = pub.find(key);
+			return it != pub.end() && it->second == "yes";
+		};
+		static const struct {
+			unsigned bit;
+			const char *key, *name;
+		} kSites[] = {{kSiteRuins, "No ruins", "Ruins"}, {kSiteCaves, "No caves", "Caves"}, {kSiteItems, "No item sites", "Items"},
+			{kSiteStrongholds, "No neutral strongholds", "Strongholds"}};
+		bool randomMap = false;
+		unsigned sites = 0;
+		for (const auto &site : kSites) {
+			randomMap = randomMap || pub.count(site.key) != 0;
+			if (yes(site.key)) sites |= site.bit;
+		}
+		const unsigned rules = (yes("Hidden civilizations") ? kRuleBlindPick : 0) | (yes("Free unit attachment") ? kRuleFreeAttach : 0) |
+			(yes("Diplomacy locked") ? kRuleLockDiplomacy : 0) | (yes("Cheats") ? kRuleCheats : 0);
+		const std::vector<ModOption> &mods = ModOptions();
+
+		if (!load && pub.count("Starting gold")) {
+			const int preset = MatchPreset(sites, rules, [&](int, const char *key) {
+				const auto it = pub.find(key);
+				return it == pub.end() ? std::string("—") : it->second;
+			});
+			valueRow("Preset", preset >= 0 ? kPresets[preset].name : "Custom setup", preset != 0 ? kSpecial : kText);
+		}
+		if (!pub.empty()) {
+			heading("MAP");
+			{
+				std::string v, scenario;
+				if (take("Map type", v)) valueRow("Map type", take("Scenario", scenario) && !scenario.empty() ? Tr("Scenario: ") + scenario : MapTypeLabel(v), kText);
+			}
+			comboRow("Size", "Map size");
+			for (const auto &site : kSites) used.insert(site.key);
+			if (!load) {
+				std::string removed;
+				for (const auto &site : kSites) {
+					if (sites & site.bit) removed += (removed.empty() ? "" : ", ") + Tr(site.name);
+				}
+				valueRow("Remove from map", !randomMap ? Tr("Only on random maps") : removed.empty() ? Tr("None") : removed,
+					!randomMap ? kDim : removed.empty() ? kText : kSpecial);
+			}
+			for (const ModOption &mo : mods) {
+				if (mo.id != kSeasonOptionId) continue;
+				std::string v;
+				const bool has = take(mo.name, v);
+				if (load) continue;
+				if (!randomMap) valueRow(mo.name, Tr("Only on random maps"), kDim);
+				else if (has) valueRow(mo.name, v, !mo.values.empty() && v != mo.values[0] ? kSpecial : kText);
+			}
+		}
+		heading("GAME");
+		comboRow("Mode", "Game type");
+		comboRow("Limit", "Limit");
+		comboRow("Population", "Population");
+		comboRow("Starting gold", "Starting gold");
+		{
+			const bool watchable = g.specLobby != 0;
+			std::string spec = SpectatorText(watchable, g.specDelay);
+			if (watchable && g.playing && g.spectators > 0) spec += "  ·  " + std::to_string(g.spectators) + Tr(" watching");
+			valueRow("Spectators", spec, watchable ? kText : kDim);
+		}
+		if (!pub.empty()) {
+			heading("RULES");
+			checkRow("Fog of war", "No fog", true);
+			checkRow("Explored map", "Map pre-explored", false);
+			checkRow("Shared control", "Shared control", false);
+			checkRow("Bonuses", "Disable bonuses", true);
+			if (!load) checkRow("Hide civilizations", "Hidden civilizations", false);
+			else used.insert("Hidden civilizations");
+			checkRow("Free unit attachment", "Free unit attachment", false);
+			checkRow("Lock diplomacy", "Diplomacy locked", false);
+			checkRow("Allow cheats", "Cheats", false);
+			for (const ModOption &mo : mods) {
+				if (mo.id == kSeasonOptionId) continue;
+				std::string v;
+				if (!take(mo.name, v)) continue;
+				if (mo.values.empty()) toggleRow(mo.name, v == "yes");
+				else valueRow(mo.name, v, v != mo.values[0] ? kSpecial : kText);
+			}
+			// Options of mods this PC doesn't have, as the host wrote them.
+			for (const std::string &key : published) {
+				if (used.count(key)) continue;
+				const std::string &v = pub[key];
+				if (v == "yes" || v == "no") toggleRow(key, v == "yes");
+				else valueRow(key, v, kText);
+			}
+		}
 	}
 	p.Unclip();
 
