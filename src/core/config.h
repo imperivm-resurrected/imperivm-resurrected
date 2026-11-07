@@ -52,6 +52,11 @@ struct Config {
 	bool rejoinReload = true;
 	std::string dumpFiles;
 	std::string dumpAtStartup;
+
+	int masterVolume = 100;
+	int natureVolume = -1;
+	int conversationVolume = 100;
+	std::string outputDevice;
 };
 
 const Config &GetConfig();
