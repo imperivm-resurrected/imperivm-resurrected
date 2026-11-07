@@ -35,6 +35,7 @@ inline constexpr uintptr_t kSaveRequest = 0x00a87350;
 inline constexpr uintptr_t kLoadRequest = 0x00a87354;
 inline constexpr uintptr_t kReplayRequest = 0x00a87358;
 inline constexpr uintptr_t kLoadingSavedGame = 0x00a87390;
+inline constexpr uintptr_t kConstIni = 0x00a877b4;
 inline constexpr uintptr_t kGameSettings = 0x00a87c48;
 
 }

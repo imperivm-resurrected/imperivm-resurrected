@@ -30,6 +30,7 @@
 #include "mods/updater.h"
 #include "mods/vfs.h"
 #include "game/options.h"
+#include "game/profiles.h"
 #include "hooks/dmshim.h"
 #include "mods/mods.h"
 #include "mods/netmods.h"
@@ -230,6 +231,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 		StartSteamOnline();
 		StartDiscordPresence();
 		InstallOptionsHooks(knownExe);
+		InstallProfileHooks(knownExe);
 		InstallControls(knownExe);
 		InstallModernAudio(knownExe);
 		HookBatchEnd();
