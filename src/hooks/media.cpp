@@ -366,6 +366,8 @@ typedef int(__fastcall *IsPaused_t)(void *game);
 
 bool g_muted = false;
 std::vector<void *> g_pausedPaths;
+bool g_musicMuted = false;
+std::vector<void *> g_pausedMusic;
 
 }
 
@@ -432,6 +434,27 @@ void MediaFrameTick()
 		reinterpret_cast<ThisOnly_t>(addr::kUpdateChannelVolumes)(mgr);
 		g_muted = false;
 	}
+}
+
+void MediaPauseMusic(bool pause)
+{
+	char *mgr = *reinterpret_cast<char **>(addr::kSoundManager);
+	if (!mgr || pause == g_musicMuted) return;
+	if (pause) {
+		for (int i = 0; i < 0x40; i++) {
+			char *ch = *reinterpret_cast<char **>(mgr + 0x18 + i * 4);
+			if (!ch || !*reinterpret_cast<void **>(ch + 8) || *reinterpret_cast<unsigned short *>(ch + 0xc) != kTypeMusic) continue;
+			void *path = *reinterpret_cast<void **>(ch + 4);
+			if (DmShimPausePath(path, true)) g_pausedMusic.push_back(path);
+			else reinterpret_cast<SetVolume_t>(addr::kChannelSetVolume)(ch, nullptr, -9600);
+		}
+	}
+	else {
+		for (void *path : g_pausedMusic) DmShimPausePath(path, false);
+		g_pausedMusic.clear();
+		reinterpret_cast<ThisOnly_t>(addr::kUpdateChannelVolumes)(mgr);
+	}
+	g_musicMuted = pause;
 }
 
 bool MediaMovieShowing()
