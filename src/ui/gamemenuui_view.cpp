@@ -400,6 +400,8 @@ void PaintBoard(Painter &p, const View &v, std::vector<BoardRow> rows, bool mark
 	std::vector<Series> series;
 	for (const BoardRow &row : rows) {
 		p.Fill(kMainX + 14, y, kMainW - 28, 1, RGB(48, 37, 23));
+		// The highlight of the selected column is as light as the line, which would vanish on it.
+		p.Fill(colX + selected * (colW + kColGap) - 6, y, colW + 12, 1, RGB(104, 80, 44));
 		p.Fill(kMainX + kPadIn, y + 8, 14, 14, row.color);
 		p.Frame(kMainX + kPadIn, y + 8, 14, 14, RGB(10, 8, 6));
 		p.Font(3);
