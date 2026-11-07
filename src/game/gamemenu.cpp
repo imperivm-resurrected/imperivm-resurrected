@@ -14,7 +14,9 @@
 #include "hooks/hookcount.h"
 
 namespace {
-const unsigned kMsgButtonClick = 0x12345604, kFlagVisible = 2, kFlagDisabled = 0x200;
+const unsigned kMsgButtonClick = 0x12345604, kFlagVisible = 2, kFlagBusy = 0x100, kFlagDisabled = 0x200;
+const size_t kTextBuffer = 0x98, kStatsCount = 0x60, kStatsPlayers = 0x64, kPlayerSize = 800, kPlayersStart = 0x12cc, kPlayerColor = 0x314;
+const int kMaxText = 512, kMaxPlayers = 16;
 
 typedef int(__fastcall *IsKindOf_t)(void *obj, void *edx, const char *cls);
 typedef bool(__fastcall *HasFlags_t)(void *window, void *edx, unsigned flags);
@@ -33,22 +35,69 @@ int __fastcall HookConfirmSetup(void *dlg, void *edx, const char *text, void *ow
 	return g_origConfirmSetup(dlg, edx, text, owner);
 }
 
-bool IsVisibleGameMenu(char *w)
+bool HasFlags(void *window, unsigned flags)
+{
+	return reinterpret_cast<HasFlags_t>(addr::kWindowHasFlags)(window, nullptr, flags);
+}
+
+bool IsVisibleOfKind(char *w, uintptr_t nameAddr)
 {
 	__try {
 		char *obj = w + 4 + *reinterpret_cast<int *>(*reinterpret_cast<char **>(w + 4) + 4);
-		const char *cls = *reinterpret_cast<const char *const *>(addr::kClassNameCVXUIGameMenu);
+		const char *cls = *reinterpret_cast<const char *const *>(nameAddr);
 		if (reinterpret_cast<IsKindOf_t>((*reinterpret_cast<void ***>(obj))[1])(obj, nullptr, cls) == 0) return false;
-		return reinterpret_cast<HasFlags_t>(addr::kWindowHasFlags)(w, nullptr, kFlagVisible);
+		return HasFlags(w, kFlagVisible);
 	}
 	__except (EXCEPTION_EXECUTE_HANDLER) {
 		return false;
 	}
 }
 
-void *FindButton(void *dlg, int id)
+void *VisibleWindowOfKind(uintptr_t nameAddr)
 {
-	return reinterpret_cast<GetChild_t>((*reinterpret_cast<void ***>(dlg))[0x7c / 4])(dlg, nullptr, id, *reinterpret_cast<const char **>(addr::kClassNameCUIButton));
+	char *root = *reinterpret_cast<char **>(addr::kUIRoot);
+	if (!root) return nullptr;
+	int guard = 0;
+	for (char *w = *reinterpret_cast<char **>(root + 0x20); w && guard < 64; w = *reinterpret_cast<char **>(w + 0x18), guard++) {
+		if (IsVisibleOfKind(w, nameAddr)) return w;
+	}
+	return nullptr;
+}
+
+void *FindChild(void *dlg, int id, uintptr_t classAddr)
+{
+	return reinterpret_cast<GetChild_t>((*reinterpret_cast<void ***>(dlg))[0x7c / 4])(dlg, nullptr, id, *reinterpret_cast<const char **>(classAddr));
+}
+
+int ReadWide(void *text, wchar_t *out, int size)
+{
+	int count = 0;
+	__try {
+		const wchar_t *from = *reinterpret_cast<const wchar_t **>(static_cast<char *>(text) + kTextBuffer);
+		while (from && from[count] && count < size - 1) {
+			out[count] = from[count];
+			count++;
+		}
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		count = 0;
+	}
+	out[count] = 0;
+	return count;
+}
+
+unsigned ReadPlayerColor(void *dlg, int row)
+{
+	__try {
+		const int player = *reinterpret_cast<int *>(static_cast<char *>(dlg) + kStatsPlayers + row * 4);
+		char *game = *reinterpret_cast<char **>(addr::kGame);
+		if (!game || player < 0 || player >= kMaxPlayers) return 0;
+		const unsigned v = *reinterpret_cast<unsigned *>(game + player * kPlayerSize + kPlayersStart + kPlayerColor);
+		return ((v >> 10 & 0x1f) * 255 / 31) << 16 | ((v >> 5 & 0x1f) * 255 / 31) << 8 | ((v & 0x1f) * 255 / 31);
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return 0;
+	}
 }
 }
 
@@ -61,16 +110,11 @@ void InstallGameMenuHooks(bool knownExe)
 	}
 }
 
-void *GameMenuVisible()
-{
-	char *root = *reinterpret_cast<char **>(addr::kUIRoot);
-	if (!root) return nullptr;
-	int guard = 0;
-	for (char *w = *reinterpret_cast<char **>(root + 0x20); w && guard < 64; w = *reinterpret_cast<char **>(w + 0x18), guard++) {
-		if (IsVisibleGameMenu(w)) return w;
-	}
-	return nullptr;
-}
+void *GameMenuVisible() { return VisibleWindowOfKind(addr::kClassNameCVXUIGameMenu); }
+
+void *EndMenuVisible() { return VisibleWindowOfKind(addr::kClassNameCVXUIEndGameMenu); }
+
+void *StatisticsOpen() { return *reinterpret_cast<void **>(addr::kStatisticsDlg); }
 
 void *ConfirmOpen()
 {
@@ -84,19 +128,43 @@ std::string ConfirmText()
 	return g_confirmText;
 }
 
-bool NativeButtonEnabled(void *dlg, int id, bool &enabled)
+NativeButtonState NativeButton(void *dlg, int id)
 {
-	void *button = FindButton(dlg, id);
-	if (!button) return false;
-	enabled = !reinterpret_cast<HasFlags_t>(addr::kWindowHasFlags)(button, nullptr, kFlagDisabled);
-	return true;
+	NativeButtonState state;
+	void *button = FindChild(dlg, id, addr::kClassNameCUIButton);
+	if (!button) return state;
+	state.exists = true;
+	state.visible = HasFlags(button, kFlagVisible);
+	state.enabled = !HasFlags(button, kFlagDisabled) && !HasFlags(button, kFlagBusy);
+	return state;
 }
 
 void NativeButtonClick(void *dlg, int id)
 {
-	void *button = FindButton(dlg, id);
+	void *button = FindChild(dlg, id, addr::kClassNameCUIButton);
 	if (!button) return;
 	char *b = static_cast<char *>(button);
 	reinterpret_cast<SendNotify_t>((*reinterpret_cast<void ***>(button))[0x6c / 4])(button, nullptr, *reinterpret_cast<int *>(b + 0x34), kMsgButtonClick,
 		*reinterpret_cast<int *>(b + 0x30), *reinterpret_cast<short *>(b + 0x7e), 0);
+}
+
+std::string NativeText(void *dlg, int id)
+{
+	void *text = FindChild(dlg, id, addr::kClassNameCUITextW);
+	if (!text || !HasFlags(text, kFlagVisible)) return std::string();
+	wchar_t wide[kMaxText];
+	if (ReadWide(text, wide, kMaxText) == 0) return std::string();
+	char utf8[kMaxText * 3];
+	const int n = WideCharToMultiByte(CP_UTF8, 0, wide, -1, utf8, sizeof(utf8), nullptr, nullptr);
+	return n > 0 ? std::string(utf8) : std::string();
+}
+
+int StatisticsPlayerCount(void *dlg)
+{
+	return *reinterpret_cast<int *>(static_cast<char *>(dlg) + kStatsCount);
+}
+
+unsigned StatisticsPlayerColor(void *dlg, int row)
+{
+	return ReadPlayerColor(dlg, row);
 }

@@ -84,6 +84,7 @@ inline constexpr uintptr_t kClassNameCUISList = 0x00829e18;
 inline constexpr uintptr_t kClassNameCUIScroll = 0x0082a300;
 inline constexpr uintptr_t kClassNameCUITextW = 0x0082a308;
 inline constexpr uintptr_t kClassNameCVXUIConfirm = 0x0082e7c4;
+inline constexpr uintptr_t kClassNameCVXUIEndGameMenu = 0x0082e7e8;
 inline constexpr uintptr_t kClassNameCVXUIGameMenu = 0x0082e808;
 inline constexpr uintptr_t kClassNameCVXUIOptions = 0x0082ef54;
 inline constexpr uintptr_t kPlayerColorTable = 0x009d152c;
