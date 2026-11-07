@@ -108,6 +108,18 @@ bool ReadPlayer(const char *game, int index, RawPlayer &out)
 	}
 }
 
+bool ReadAllied(const char *game, int a, int b)
+{
+	__try {
+		const char *first = game + kPlayersStart + a * kPlayerSize, *second = game + kPlayersStart + b * kPlayerSize;
+		const int firstId = Field<int>(first, kPlayerId), secondId = Field<int>(second, kPlayerId);
+		return (Field<unsigned char>(first, kPlayerDiplomacy + secondId * 4) & 1) != 0 && (Field<unsigned char>(second, kPlayerDiplomacy + firstId * 4) & 1) != 0;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return false;
+	}
+}
+
 bool ReadRecord(const char *game, int index, StatSample &s, int &killRatio, int &storedStrength)
 {
 	__try {
@@ -142,11 +154,14 @@ bool ReadRecord(const char *game, int index, StatSample &s, int &killRatio, int 
 
 void Sample(const char *game, uint32_t clock)
 {
+	bool active[kStatMaxPlayers] = {};
 	for (int index = 0; index < kStatMaxPlayers; index++) {
 		RawPlayer raw;
 		if (!ReadPlayer(game, index, raw) || !raw.active) continue;
+		active[index] = true;
 		StatSample s;
 		s.ms = clock;
+		s.values[kStatInGame] = raw.playing ? 1 : 0;
 		int killRatio = 100, strength = 0;
 		if (!ReadRecord(game, index, s, killRatio, strength)) continue;
 		// A player out of the game keeps the strength the game stored when they lost; the totals would find nothing.
@@ -168,6 +183,17 @@ void Sample(const char *game, uint32_t clock)
 		info.local = raw.local;
 		info.ally = raw.ally;
 		g_seen[index] = true;
+	}
+	bool allied[kStatMaxPlayers][kStatMaxPlayers] = {};
+	for (int a = 0; a < kStatMaxPlayers; a++) {
+		for (int b = a + 1; active[a] && b < kStatMaxPlayers; b++) {
+			if (active[b]) allied[a][b] = ReadAllied(game, a, b);
+		}
+	}
+	int teams[kStatMaxPlayers];
+	StatsGroupTeams(active, allied, teams);
+	for (int index = 0; index < kStatMaxPlayers; index++) {
+		if (active[index]) g_info[index].team = teams[index];
 	}
 	g_lastSample = clock;
 	g_sampled = true;

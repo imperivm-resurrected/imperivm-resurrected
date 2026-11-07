@@ -108,7 +108,7 @@ std::string StatsEncode(const StatsHistory &history, const std::vector<StatsPlay
 	for (const StatsPlayerInfo &info : players) {
 		PutU32(out, static_cast<uint32_t>(info.index));
 		PutU32(out, info.rgb);
-		PutU32(out, (info.human ? 1u : 0u) | (info.local ? 2u : 0u) | (info.ally ? 4u : 0u));
+		PutU32(out, (info.human ? 1u : 0u) | (info.local ? 2u : 0u) | (info.ally ? 4u : 0u) | static_cast<uint32_t>(info.team) << 8);
 		const std::string name = info.name.substr(0, kMaxName);
 		PutU32(out, static_cast<uint32_t>(name.size()));
 		out += name;
@@ -144,11 +144,14 @@ bool StatsDecode(const std::string &data, StatsHistory &history, std::vector<Sta
 		info.human = (flags & 1) != 0;
 		info.local = (flags & 2) != 0;
 		info.ally = (flags & 4) != 0;
+		const uint32_t team = flags >> 8;
+		info.team = team < kStatMaxPlayers ? static_cast<int>(team) : 0;
 		uint32_t previous = 0;
 		for (uint32_t i = 0; i < samples; i++) {
 			StatSample s;
 			if (!r.U32(s.ms) || (i && s.ms <= previous)) return false;
 			previous = s.ms;
+			s.values[kStatInGame] = 1;
 			for (uint32_t m = 0; m < metrics; m++) {
 				uint32_t value = 0;
 				if (!r.U32(value)) return false;
@@ -162,6 +165,126 @@ bool StatsDecode(const std::string &data, StatsHistory &history, std::vector<Sta
 	history = read;
 	players = readPlayers;
 	return true;
+}
+
+void StatsGroupTeams(const bool active[kStatMaxPlayers], const bool allied[kStatMaxPlayers][kStatMaxPlayers], int teams[kStatMaxPlayers])
+{
+	for (int i = 0; i < kStatMaxPlayers; i++) teams[i] = i;
+	bool changed = true;
+	while (changed) {
+		changed = false;
+		for (int a = 0; a < kStatMaxPlayers; a++) {
+			for (int b = a + 1; b < kStatMaxPlayers; b++) {
+				if (!active[a] || !active[b] || !allied[a][b] || teams[a] == teams[b]) continue;
+				const int low = std::min(teams[a], teams[b]);
+				teams[a] = teams[b] = low;
+				changed = true;
+			}
+		}
+	}
+}
+
+std::vector<StatsTeam> StatsTeams(const std::vector<StatsPlayerInfo> &players)
+{
+	std::vector<StatsTeam> teams;
+	for (const StatsPlayerInfo &info : players) {
+		auto it = std::find_if(teams.begin(), teams.end(), [&](const StatsTeam &t) { return t.id == info.team; });
+		if (it == teams.end()) {
+			teams.push_back(StatsTeam());
+			teams.back().id = info.team;
+			it = teams.end() - 1;
+		}
+		it->members.push_back(info);
+	}
+	return teams;
+}
+
+int StatsCombine(StatMetric metric, const std::vector<int> &values)
+{
+	if (values.empty()) return 0;
+	if (metric == kStatLevelMax) return *std::max_element(values.begin(), values.end());
+	long long total = 0;
+	for (const int value : values) total += value;
+	if (metric == kStatMilitary) total /= static_cast<long long>(values.size());
+	return static_cast<int>(total);
+}
+
+std::vector<StatsPoint> StatsTeamSeries(const StatsHistory &history, const std::vector<StatsPlayerInfo> &members, StatMetric metric)
+{
+	std::vector<uint32_t> times;
+	for (const StatsPlayerInfo &info : members) {
+		for (const StatSample &s : history.Samples(info.index)) times.push_back(s.ms);
+	}
+	std::sort(times.begin(), times.end());
+	times.erase(std::unique(times.begin(), times.end()), times.end());
+	std::vector<StatsPoint> points;
+	points.reserve(times.size());
+	for (const uint32_t ms : times) {
+		std::vector<int> values;
+		for (const StatsPlayerInfo &info : members) {
+			if (const StatSample *s = StatsSampleAt(history.Samples(info.index), ms)) values.push_back(s->values[metric]);
+		}
+		StatsPoint point;
+		point.ms = ms;
+		point.value = StatsCombine(metric, values);
+		points.push_back(point);
+	}
+	return points;
+}
+
+std::vector<StatsElimination> StatsEliminations(const StatsHistory &history, const std::vector<StatsPlayerInfo> &players)
+{
+	std::vector<StatsElimination> out;
+	for (const StatsPlayerInfo &info : players) {
+		bool wasIn = false;
+		for (const StatSample &s : history.Samples(info.index)) {
+			if (s.values[kStatInGame]) {
+				wasIn = true;
+			}
+			else if (wasIn) {
+				StatsElimination e;
+				e.player = info.index;
+				e.ms = s.ms;
+				out.push_back(e);
+				break;
+			}
+		}
+	}
+	std::stable_sort(out.begin(), out.end(), [](const StatsElimination &a, const StatsElimination &b) { return a.ms < b.ms; });
+	return out;
+}
+
+bool StatsStillInGame(const StatsHistory &history, int player)
+{
+	const std::vector<StatSample> &samples = history.Samples(player);
+	return !samples.empty() && samples.back().values[kStatInGame] != 0;
+}
+
+int StatsWinningTeam(const StatsHistory &history, const std::vector<StatsPlayerInfo> &players)
+{
+	const std::vector<StatsTeam> teams = StatsTeams(players);
+	int alive = -1, count = 0;
+	for (const StatsTeam &team : teams) {
+		for (const StatsPlayerInfo &info : team.members) {
+			if (!StatsStillInGame(history, info.index)) continue;
+			alive = team.id;
+			count++;
+			break;
+		}
+	}
+	return count == 1 && teams.size() > 1 ? alive : -1;
+}
+
+int StatsBestPlayer(const StatsHistory &history, const std::vector<StatsPlayerInfo> &players, StatMetric metric)
+{
+	int best = -1, top = 0;
+	for (const StatsPlayerInfo &info : players) {
+		const std::vector<StatSample> &samples = history.Samples(info.index);
+		if (samples.empty() || samples.back().values[metric] <= top) continue;
+		top = samples.back().values[metric];
+		best = info.index;
+	}
+	return best;
 }
 
 const StatSample *StatsSampleAt(const std::vector<StatSample> &samples, uint32_t ms)

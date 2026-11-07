@@ -12,7 +12,8 @@
 
 namespace gamemenuui {
 
-enum Action { kActNone, kActButton, kActYes, kActNo, kActCategory, kActChart, kActMetric, kActRange, kActGroup, kActPlayer, kActSort };
+enum Action { kActNone, kActButton, kActYes, kActNo, kActCategory, kActView, kActMetric, kActRange, kActGroup, kActPlayer, kActSort };
+enum StatsViewKind { kViewSummary, kViewChart, kViewTable, kViewTeams };
 
 struct Row {
 	int id = 0;
@@ -23,8 +24,7 @@ struct Row {
 };
 
 struct StatsFilters {
-	int category = 0, metric = 0, range = 0, group = 0;
-	bool chart = true;
+	int view = kViewSummary, category = 0, metric = 0, range = 0, group = 0;
 	uint32_t hidden = 0;
 	int sortColumn = -1;
 	bool sortAscending = false;

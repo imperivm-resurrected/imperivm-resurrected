@@ -1581,5 +1581,18 @@ extern const TrRow kTrRows[] = {
 	{"No player matches the filters.", "Ningún jugador coincide con los filtros.", "Nessun giocatore corrisponde ai filtri."},
 	{"No data for this period yet.", "Aún no hay datos de este periodo.", "Ancora nessun dato per questo periodo."},
 	{"Not enough history to draw yet. The Table view has the totals.", "Aún no hay historial para dibujar. La vista Tabla tiene los totales.", "Non c'è ancora una cronologia da disegnare. La vista Tabella ha i totali."},
+	{"Summary", "Resumen", "Riepilogo"},
+	{"Teams", "Equipos", "Squadre"},
+	{"Winner: ", "Ganador: ", "Vincitore: "},
+	{"No winner yet", "Aún sin ganador", "Ancora nessun vincitore"},
+	{"Best score", "Mejor puntuación", "Punteggio migliore"},
+	{"Most kills", "Más bajas causadas", "Più uccisioni"},
+	{"Most damage", "Más daño causado", "Più danni"},
+	{"Most gold", "Más oro", "Più oro"},
+	{"Ranking", "Clasificación", "Classifica"},
+	{"Key moments", "Momentos clave", "Momenti chiave"},
+	{"%s was eliminated", "%s fue eliminado", "%s è stato eliminato"},
+	{"Nobody has been eliminated yet.", "Todavía no han eliminado a nadie.", "Ancora nessuno è stato eliminato."},
+	{"Eliminated", "Eliminado", "Eliminato"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

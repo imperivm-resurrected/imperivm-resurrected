@@ -26,7 +26,6 @@ namespace {
 const int kNativeLoad = 0x1001, kNativeYes = 0x1002, kNativeNo = 0x1003, kNativeBack = 0x1007, kNativeQuit = 0x1006, kNativeQuitReplay = 0x100b;
 const int kTitleId = 0x1007f, kEndMessageId = 0x1009, kRatingIds[] = {0x100c, 0x100d};
 const DWORD kReadEveryMs = 120;
-const size_t kChartNeedsSamples = 3;
 
 struct RowSpec {
 	int id;
@@ -119,12 +118,7 @@ void ReadStatistics(void *dlg, View &v)
 StatsFilters OpeningFilters()
 {
 	GameStatsSampleNow();
-	StatsFilters filters;
-	const std::shared_ptr<const StatsSnapshot> data = GameStatsSnapshot();
-	bool enough = false;
-	for (const StatsPlayerInfo &info : data->players) enough = enough || data->history.Samples(info.index).size() >= kChartNeedsSamples;
-	filters.chart = enough;
-	return filters;
+	return StatsFilters();
 }
 
 void ApplyStatsClick(StatsFilters &f, int action, int arg)
@@ -135,7 +129,7 @@ void ApplyStatsClick(StatsFilters &f, int action, int arg)
 		f.metric = 0;
 		f.sortColumn = -1;
 		break;
-	case kActChart: f.chart = arg != 0; break;
+	case kActView: f.view = arg; break;
 	case kActMetric: f.metric = arg; break;
 	case kActRange: f.range = arg; break;
 	case kActGroup: f.group = arg; break;
