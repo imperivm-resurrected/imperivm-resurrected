@@ -29,6 +29,7 @@
 #include "hooks/tweaks.h"
 #include "mods/updater.h"
 #include "mods/vfs.h"
+#include "game/gamemenu.h"
 #include "game/options.h"
 #include "hooks/dmshim.h"
 #include "mods/mods.h"
@@ -230,6 +231,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 		StartSteamOnline();
 		StartDiscordPresence();
 		InstallOptionsHooks(knownExe);
+		InstallGameMenuHooks(knownExe);
 		InstallControls(knownExe);
 		InstallModernAudio(knownExe);
 		HookBatchEnd();

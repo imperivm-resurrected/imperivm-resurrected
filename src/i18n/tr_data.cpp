@@ -1538,5 +1538,11 @@ extern const TrRow kTrRows[] = {
 	{"Keys and shortcuts", "Teclas y atajos", "Tasti e scorciatoie"},
 	{"Changes not applied", "Cambios sin aplicar", "Modifiche non applicate"},
 	{"The game will restart to change the sound system.", "El juego se reiniciará para cambiar el sistema de sonido.", "Il gioco si riavvierà per cambiare il sistema audio."},
+	{"MENU", "MENÚ", "MENU"},
+	{"Back to game", "Volver a la partida", "Torna alla partita"},
+	{"Surrender", "Rendirse", "Arrenditi"},
+	{"Quit", "Salir", "Esci"},
+	{"Yes", "Sí", "Sì"},
+	{"No", "No", "No"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

@@ -28,6 +28,7 @@ inline constexpr uintptr_t kLanguageSettings = 0x00a6a618;
 inline constexpr uintptr_t kUiLocalization = 0x00a77e94;
 inline constexpr uintptr_t kSoundManager = 0x00a78420;
 inline constexpr uintptr_t kUIRoot = 0x00a7abf0;
+inline constexpr uintptr_t kConfirmDlg = 0x00a83134;
 inline constexpr uintptr_t kMenuFrame = 0x00a8336c;
 inline constexpr uintptr_t kWinOs = 0x00a87340;
 inline constexpr uintptr_t kEditorMode = 0x00a8734c;
