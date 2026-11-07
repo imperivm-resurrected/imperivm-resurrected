@@ -115,6 +115,15 @@ function check(cond, what) {
 	check(rq.src.includes('if (n) { i1cv_w = 0;') && rq.src.includes('other.Run();'), 'a run in an if stays its body; other objects are left alone');
 	check(S.queueConversations('//void\nint n;\nx.Run();\n').count === 0, 'scripts without conversations are left alone');
 
+	const hs = '//void\nif (x) SpawnGroupInHolder("G1", "S");\nSpawnGroupInHolder("G2", "S");\nSpawnGroupInHolder("G1", "T").SetCommand("move", p);\n\tNO_P.SetPlayer(1);\nMoveToArea(G1, "A");\n';
+	const ho = S.ownHolderSpawns(hs, 'G1', 4);
+	check(ho.count === 1 && ho.src.includes('if (x) { SpawnGroupInHolder("G1", "S"); Group("G1").SetPlayer(4); }'), 'a spawn into a holder is given to the owner in the same statement');
+	check(ho.src.includes('SpawnGroupInHolder("G2", "S");') && ho.src.includes('SpawnGroupInHolder("G1", "T").SetCommand('), 'other groups and spawns inside expressions are left alone');
+	const hb = S.insertAtLine(ho.src, /^\s*NO_P\.SetPlayer\(1\);/m, 'after', 'Group("G1").SetPlayer(1);');
+	check(hb.includes('\tNO_P.SetPlayer(1);\n\tGroup("G1").SetPlayer(1);\nMoveToArea'), 'the group is handed back after the anchor, with its indentation');
+	check(S.insertAtLine(hs, /^MoveToArea/m, 'before', 'X();').includes('X();\nMoveToArea'), 'a line can go before the anchor');
+	check(S.insertAtLine(hs, /^Nothing/m, 'after', 'X();') === null, 'a missing anchor is reported');
+
 	const r6 = S.replaceStringLiterals('a("TeutonWolf"); b(\'TeutonWolf\'); c("TeutonWolfX"); // "TeutonWolf"', { TeutonWolf: 'TTeutonWolf' });
 	check(r6.hits.TeutonWolf === 2 && r6.src.includes('"TTeutonWolf"') && r6.src.includes("'TTeutonWolf'") && r6.src.includes('"TeutonWolfX"') && r6.src.includes('// "TeutonWolf"'), 'class names replaced only in whole string literals');
 }

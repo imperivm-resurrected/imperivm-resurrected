@@ -476,6 +476,50 @@ function convertAdventure(input) {
 		}
 		namedByMap.set(m[1], named);
 	}
+	// Groups spawned into a settlement of another player (see M.HOLDER_SPAWNS).
+	const settlementOwner = new Map();
+	const groupPlayers = new Map();
+	for (const [p, buf] of files) {
+		const m = /^Maps\/([^/]+)\/map\.obj\.xml$/i.exec(p);
+		if (!m) continue;
+		const t = text(buf);
+		const owner = new Map();
+		for (const o of t.matchAll(/<scriptobj\s+class="[^"]*"\s+num="(\d+)"([^>]*)>/g)) owner.set(o[1], (/\splayer="(\d+)"/.exec(o[2]) || [])[1]);
+		for (const s of t.matchAll(/<settlement\b([^>]*)>/g)) {
+			const n = /\sname="([^"]+)"/.exec(s[1]);
+			if (n) settlementOwner.set(`${m[1]}/${n[1]}`, (/\splayer="(\d+)"/.exec(s[1]) || [])[1]);
+		}
+		for (const g of t.matchAll(/<group\s+name="([^"]*)"\s+type="\d+">([\s\S]*?)<\/group>/g)) {
+			groupPlayers.set(`${m[1]}/${g[1]}`, [...new Set([...g[2].matchAll(/num="(\d+)"/g)].map((n) => owner.get(n[1])).filter(Boolean))]);
+		}
+	}
+	const holderSpawns = new Map();
+	for (const [p, buf] of files) {
+		const m = /^Maps\/([^/]+)\/Sequences\/([^/]+\.vs)$/i.exec(p);
+		if (!m || !referenced.has(lower(p))) continue;
+		for (const c of text(buf).matchAll(/SpawnGroupInHolder\s*\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\)/g)) {
+			const key = `${m[1]}/${c[1]}`;
+			const players = groupPlayers.get(key);
+			const sett = settlementOwner.get(`${m[1]}/${c[2]}`);
+			if (!players || !sett || players.every((x) => x === sett)) continue;
+			if (!holderSpawns.has(key)) holderSpawns.set(key, { map: m[1], group: c[1], settlement: c[2], sett, players, files: new Set() });
+			holderSpawns.get(key).files.add(m[2]);
+		}
+	}
+	for (const [key, s] of holderSpawns) {
+		const what = `map ${s.map}: ${s.group} (player ${s.players.join('/')}) into ${s.settlement} (player ${s.sett})`;
+		if (M.HOLDER_SPAWNS[key]) report.add('Groups spawned into another player\'s settlement', `${what}: changed, ${M.HOLDER_SPAWNS[key].why}`);
+		else if (M.HOLDER_SPAWNS_KEPT[key]) report.add('Groups spawned into another player\'s settlement', `${what}: kept, ${M.HOLDER_SPAWNS_KEPT[key]}`);
+		else report.add('Check warnings', `${what}: not reviewed; Great Battles of Rome's outpost guard may order them out`);
+	}
+	ctx.holderRules = (p) => {
+		const m = /^Maps\/([^/]+)\/Sequences\/([^/]+\.vs)$/i.exec(p);
+		if (!m) return [];
+		return Object.entries(M.HOLDER_SPAWNS)
+			.filter(([key]) => key.split('/')[0] === m[1])
+			.map(([key, rule]) => ({ group: key.split('/')[1], rule, file: m[2], spawnsHere: holderSpawns.has(key) && holderSpawns.get(key).files.has(m[2]) }));
+	};
+
 	// Class of the receiver of a command in a script: a named object, directly (GetNamedObj("X")) or through a variable.
 	ctx.receiverClass = (receiver, src, where) => {
 		const map = /^Maps\/([^/]+)\//i.exec(where);
@@ -535,6 +579,20 @@ function convertAdventure(input) {
 				continue;
 			}
 			let s = convertScript(text(buf), ctx, p);
+			for (const { group, rule, file, spawnsHere } of ctx.holderRules(p)) {
+				if (spawnsHere) {
+					const r = S.ownHolderSpawns(s, group, rule.owner);
+					s = r.src;
+					report.count('Groups spawned into another player\'s settlement', `${p}: ${group} given to player ${rule.owner} as it spawns`, r.count);
+				}
+				for (const [backFile, anchor, where, player] of rule.back) {
+					if (lower(backFile) !== lower(file)) continue;
+					const next = S.insertAtLine(s, anchor, where, `Group("${group}").SetPlayer(${player});`);
+					if (next === null) throw new Error(`${p}: the place to hand ${group} back was not found (${anchor})`);
+					s = next;
+					report.count('Groups spawned into another player\'s settlement', `${p}: ${group} set to player ${player} ${where} ${anchor.source.replace(/^\^\\s\*/, '').replace(/\\/g, '')}`);
+				}
+			}
 			const probed = input.probe ? addProbe(p, s) : null;
 			if (probed) {
 				s = probed;

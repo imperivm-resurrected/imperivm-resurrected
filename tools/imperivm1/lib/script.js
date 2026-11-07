@@ -300,6 +300,43 @@ function queueConversations(src) {
 	return { src: insertDeclarations(join(tokens), QUEUE_VARS), count };
 }
 
+// SpawnGroupInHolder("group", ...); statements -> { SpawnGroupInHolder("group", ...); Group("group").SetPlayer(owner); }
+// The new units change player before the script yields, so no other script (the outpost's guard) sees them in between.
+function ownHolderSpawns(src, group, owner) {
+	const tokens = tokenize(src);
+	let count = 0;
+	for (let i = tokens.length - 1; i >= 0; i--) {
+		if (tokens[i].type !== 'ident' || tokens[i].text !== 'SpawnGroupInHolder') continue;
+		const p = prevCode(tokens, i - 1);
+		if (p >= 0 && tokens[p].text === '.') continue;
+		const open = nextCode(tokens, i + 1);
+		if (open >= tokens.length || tokens[open].text !== '(') continue;
+		const first = nextCode(tokens, open + 1);
+		if (tokens[first].type !== 'string' || tokens[first].text.slice(1, -1) !== group) continue;
+		const close = closingParen(tokens, open);
+		const semi = nextCode(tokens, close + 1);
+		if (close < 0 || semi >= tokens.length || tokens[semi].text !== ';') continue;
+		const call = join(tokens.slice(i, semi + 1));
+		tokens.splice(i, semi - i + 1, { type: 'other', text: `{ ${call} Group("${group}").SetPlayer(${owner}); }` });
+		count++;
+	}
+	return { src: join(tokens), count };
+}
+
+// Inserts `line` before or after the first line that matches `anchor`, with that line's indentation.
+function insertAtLine(src, anchor, where, line) {
+	const m = anchor.exec(src);
+	if (!m) return null;
+	const eol = src.includes('\r\n') ? '\r\n' : '\n';
+	const start = src.lastIndexOf('\n', m.index + (m[0].match(/^\s*/)[0].length)) + 1;
+	const indent = /^[ \t]*/.exec(src.slice(start))[0];
+	const endNl = src.indexOf('\n', start);
+	const end = endNl < 0 ? src.length : endNl + 1;
+	if (where === 'before') return src.slice(0, start) + indent + line + eol + src.slice(start);
+	const tail = endNl < 0 ? eol : '';
+	return src.slice(0, end) + tail + indent + line + eol + src.slice(end);
+}
+
 // Calls of a free function with one argument: `replace(arg)` returns the new argument text, or null to turn the statement
 // into a comment.
 function rewriteCall(src, name, replace) {
@@ -342,6 +379,8 @@ module.exports = {
 	rewriteRituals,
 	rewriteDruidCommands,
 	queueConversations,
+	ownHolderSpawns,
+	insertAtLine,
 	rewriteCall,
 	insertDeclarations,
 };
