@@ -304,7 +304,7 @@ void PaintChart(Painter &p, const Card &c, int x, int y, int w, int h)
 	p.Text(x, y, w, 16, "Kills per game", kDim);
 	const int legendY = y + 4;
 	int lx = x + w;
-	for (const auto &item : {std::make_pair("Lost", kLostColor), std::make_pair("Won", kWonColor)}) {
+	for (const auto &item : {std::make_pair("Defeat", kLostColor), std::make_pair("Victory", kWonColor)}) {
 		const int tw = p.TextWidth(item.first);
 		lx -= tw;
 		p.Text(lx, y, tw + 2, 16, item.first, kDim);
