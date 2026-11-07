@@ -91,6 +91,7 @@ void LoadConfig()
 	}
 	g_config.crashFix = GetPrivateProfileIntA("Game", "CrashFix", 1, path) != 0;
 	g_config.smoothScroll = GetPrivateProfileIntA("Game", "SmoothScroll", 1, path) != 0;
+	g_config.healthBarsAtStart = (std::max)(0, (std::min)(3, static_cast<int>(GetPrivateProfileIntA("Game", "HealthBars", 0, path))));
 	g_config.zoomExtras = GetPrivateProfileIntA("Map", "ZoomExtras", 1, path) != 0;
 	g_config.zoomFog = GetPrivateProfileIntA("Map", "FogVisible", 1, path) != 0;
 	g_config.zoomRefreshMs = (std::max)(0, (std::min)(1000, static_cast<int>(GetPrivateProfileIntA("Map", "RefreshMs", 16, path))));
@@ -150,6 +151,7 @@ void SaveConfig()
 	WritePrivateProfileStringA("Game", "AutosaveSlots", std::to_string(g_config.autosaveSlots).c_str(), path);
 	WritePrivateProfileStringA("Game", "AutosaveOnExit", g_config.autosaveOnExit ? "1" : "0", path);
 	WritePrivateProfileStringA("Game", "SmoothScroll", g_config.smoothScroll ? "1" : "0", path);
+	WritePrivateProfileStringA("Game", "HealthBars", std::to_string(g_config.healthBarsAtStart).c_str(), path);
 	WritePrivateProfileStringA("Display", "ShowPerformance", g_config.showPerf ? "1" : "0", path);
 	WritePrivateProfileStringA("Display", "ShowNetwork", g_config.showNet ? "1" : "0", path);
 	WritePrivateProfileStringA("Display", "PanelX", std::to_string(g_config.panelX).c_str(), path);

@@ -56,6 +56,7 @@
 #include "game/noteicons.h"
 #include "game/zoomview.h"
 #include "game/viewgrid.h"
+#include "game/healthbars.h"
 #include "game/loadcurtain.h"
 #include "game/cheats.h"
 #include "net/onlinesaves.h"
@@ -220,6 +221,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 		InstallNoteIcons(knownExe);
 		InstallZoomView(knownExe);
 		InstallViewGrid(knownExe);
+		InstallHealthBars(knownExe);
 		InstallLoadCurtain(knownExe);
 		InstallSavesUi(knownExe);
 		CheckCompatibilityLayers();

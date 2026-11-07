@@ -6,3 +6,5 @@
 void InstallLoadCurtain(bool knownExe);
 bool LoadCurtainUp();
 void LoadCurtainLift(const char *why);
+// Called on the game thread each time the game makes the view of a match (CVXMapView), right after it is built.
+void LoadCurtainOnMatchView(void (*callback)());

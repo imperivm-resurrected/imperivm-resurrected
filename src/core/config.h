@@ -44,6 +44,7 @@ struct Config {
 	int autosaveSlots = 3;
 	bool crashFix = true;
 	bool smoothScroll = true;
+	int healthBarsAtStart = 0;
 	bool zoomExtras = true;
 	bool zoomFog = true;
 	int zoomRefreshMs = 16;

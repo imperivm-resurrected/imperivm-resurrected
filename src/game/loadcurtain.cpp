@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <vector>
 
 #include "MinHook.h"
 #include "hooks/hookcount.h"
@@ -37,6 +38,7 @@ LoadReplay_t g_origLoadReplay = nullptr;
 MainMenuLoop_t g_origMainMenuLoop = nullptr;
 MapViewCtor_t g_origMapViewCtor = nullptr;
 MapViewRender_t g_origMapViewRender = nullptr;
+std::vector<void (*)()> g_onMatchView;
 
 void Lower(const char *why)
 {
@@ -77,7 +79,9 @@ int __fastcall HookConquestMap(void *ecx, void *edx)
 void *__fastcall HookMapViewCtor(void *self, void *edx, void *a, void *b, void *c, int d)
 {
 	Lower("the view of a match is created");
-	return g_origMapViewCtor(self, edx, a, b, c, d);
+	void *view = g_origMapViewCtor(self, edx, a, b, c, d);
+	for (void (*callback)() : g_onMatchView) callback();
+	return view;
 }
 
 // The frame of the first paint is copied to the screen after the paint: the next paint starts once it has been shown whole.
@@ -106,6 +110,11 @@ bool LoadCurtainUp()
 void LoadCurtainLift(const char *why)
 {
 	if (g_up.exchange(false)) LogI("render", "loading curtain: lifted after %lu ms (%s)", GetTickCount() - g_since, why);
+}
+
+void LoadCurtainOnMatchView(void (*callback)())
+{
+	g_onMatchView.push_back(callback);
 }
 
 void InstallLoadCurtain(bool knownExe)

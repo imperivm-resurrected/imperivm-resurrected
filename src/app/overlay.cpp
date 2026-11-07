@@ -3,6 +3,7 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include "net/spectator.h"
 #include "net/nettune.h"
+#include "game/healthbars.h"
 #include "game/mapfog.h"
 #include "game/quickicons.h"
 #include "game/noteicons.h"
@@ -702,6 +703,7 @@ int __fastcall HookGameUpdate(void *game)
 	CrashLogLoadingEnd();
 	g_updateTicks += ZoomFogGameThreadTick();
 	QuickIconsGameThreadTick();
+	HealthBarsGameTick();
 	NoteIconsGameTick();
 	ZoomViewGameTick();
 	ControlsGameTick();

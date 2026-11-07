@@ -24,6 +24,7 @@ inline constexpr uintptr_t kLoadStream = 0x009bdaf8;
 inline constexpr uintptr_t kPersistVersion = 0x009bdafc;
 inline constexpr uintptr_t kSelectionManager = 0x009c0938;
 inline constexpr uintptr_t kVisibleMgr = 0x009edd18;
+inline constexpr uintptr_t kHealthBarMode = 0x009edd20;
 inline constexpr uintptr_t kLanguageSettings = 0x00a6a618;
 inline constexpr uintptr_t kUiLocalization = 0x00a77e94;
 inline constexpr uintptr_t kSoundManager = 0x00a78420;

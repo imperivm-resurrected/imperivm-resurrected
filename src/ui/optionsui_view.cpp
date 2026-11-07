@@ -279,7 +279,9 @@ std::vector<Page> BuildPages(const Values &v)
 		Row speed = Slider(v, "Game speed", kGameSpeed, 1, 100);
 		speed.shown = GameSpeedPercent(speed.value);
 		page.left.push_back({"Pace", {speed, Slider(v, "Scroll speed", kScrollSpeed, 1, 100), Toggle(v, "Smooth camera", kSmoothCamera)}});
-		page.left.push_back({"Interface", {Combo(v, "Language", kLanguage, "", true)}});
+		Row bars = Combo(v, "Health bars", kHealthBars, "When a match starts");
+		bars.items = {"No bars", "All units", "Heroes only", "My units"};
+		page.left.push_back({"Interface", {Combo(v, "Language", kLanguage, "", true), bars}});
 		const bool autosave = Check(v, kAutosave);
 		page.right.push_back({"Autosave", {Toggle(v, "Autosave", kAutosave), Combo(v, "Every", kAutosaveEvery, "", false, autosave), Combo(v, "Copies", kAutosaveCopies, "", false, autosave),
 			Toggle(v, "Save when leaving the game", kSaveOnExit)}});
