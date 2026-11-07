@@ -155,6 +155,10 @@ void SteamJoinLobby(uint64_t id, const std::string &password, bool forContentSyn
 void SteamLeaveLobby(uint32_t onlyIfMembership = 0);
 uint32_t SteamMembership();
 OnlineRoom SteamCurrentRoom();
+// The name of the current Steam room, without copying the whole room; empty outside one.
+std::string SteamCurrentRoomName();
+// The owner renames its Steam room (lobby data "name", mirrored to the spectator room). False when it owns none.
+bool SteamRenameRoom(const std::string &name);
 // The chat line for a patron who joined, once their lookup has finished. Dropped if the room has changed since.
 void SteamAddPatronJoined(uint64_t room, uint64_t id, const std::string &name);
 std::string SteamVersionMismatch(const std::string &roomVersion, const std::string &roomRulesLevel = std::string());
@@ -192,6 +196,9 @@ void SteamPublishOptions(const std::string &text);
 void SteamPublishRules(unsigned rules);
 void SteamPublishSlots(const std::string &text);
 void SteamPublishSaveColors(const std::string &text);
+// The host sends the start countdown (ms >= 0) or its cancellation (ms < 0) to the other members of its Steam room. False when
+// this PC is not the owner of a Steam room.
+bool SteamSendRoomCountdown(unsigned seq, int ms);
 std::string SteamTakeNotice();
 std::string SteamOwnGameplayKey();
 RoomContent SteamRoomContent(const OnlineLobby &lobby, const std::string &ownKey, bool strictMap = false, bool watching = false);

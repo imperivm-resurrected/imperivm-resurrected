@@ -15,6 +15,7 @@ inline constexpr MessageRange kContentMessages{1, 19};
 inline constexpr MessageRange kRejoinMessages{20, 39};
 inline constexpr MessageRange kSpectatorMessages{40, 59};
 inline constexpr MessageRange kReloadMessages{60, 79};
+inline constexpr MessageRange kRoomMessages{80, 99};
 
 static_assert(kContentMessages.Before(kRejoinMessages) && kRejoinMessages.Before(kSpectatorMessages) &&
-	kSpectatorMessages.Before(kReloadMessages), "the message ranges of the share channel overlap");
+	kSpectatorMessages.Before(kReloadMessages) && kReloadMessages.Before(kRoomMessages), "the message ranges of the share channel overlap");
