@@ -7,8 +7,20 @@
 void InstallGameMenuHooks(bool knownExe);
 
 void *GameMenuVisible();
+void *EndMenuVisible();
+void *StatisticsOpen();
 void *ConfirmOpen();
 std::string ConfirmText();
 
-bool NativeButtonEnabled(void *dlg, int id, bool &enabled);
+struct NativeButtonState {
+	bool exists = false, visible = false, enabled = false;
+};
+NativeButtonState NativeButton(void *dlg, int id);
 void NativeButtonClick(void *dlg, int id);
+
+// Empty when the control is missing or hidden.
+std::string NativeText(void *dlg, int id);
+
+int StatisticsPlayerCount(void *dlg);
+// 0xRRGGBB, 0 if it cannot be read.
+unsigned StatisticsPlayerColor(void *dlg, int row);

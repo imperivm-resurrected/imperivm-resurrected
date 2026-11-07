@@ -1542,5 +1542,11 @@ extern const TrRow kTrRows[] = {
 	{"Quit", "Salir", "Esci"},
 	{"Yes", "Sí", "Sì"},
 	{"No", "No", "No"},
+	{"STATISTICS", "ESTADÍSTICAS", "STATISTICHE"},
+	{"Statistics", "Estadísticas", "Statistiche"},
+	{"Continue", "Continuar", "Continua"},
+	{"Resources", "Recursos", "Risorse"},
+	{"Gold production", "Producción de oro", "Produzione d'oro"},
+	{"Scores", "Puntuación", "Punteggi"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

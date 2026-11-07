@@ -1534,5 +1534,11 @@
 {"en":"Surrender","es":"Rendirse","it":"Arrenditi"},
 {"en":"Quit","es":"Salir","it":"Esci"},
 {"en":"Yes","es":"Sí","it":"Sì"},
-{"en":"No","es":"No","it":"No"}
+{"en":"No","es":"No","it":"No"},
+{"en":"STATISTICS","es":"ESTADÍSTICAS","it":"STATISTICHE"},
+{"en":"Statistics","es":"Estadísticas","it":"Statistiche"},
+{"en":"Continue","es":"Continuar","it":"Continua"},
+{"en":"Resources","es":"Recursos","it":"Risorse"},
+{"en":"Gold production","es":"Producción de oro","it":"Produzione d'oro"},
+{"en":"Scores","es":"Puntuación","it":"Punteggi"}
 ]
