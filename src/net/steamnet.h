@@ -155,6 +155,10 @@ void SteamJoinLobby(uint64_t id, const std::string &password, bool forContentSyn
 void SteamLeaveLobby(uint32_t onlyIfMembership = 0);
 uint32_t SteamMembership();
 OnlineRoom SteamCurrentRoom();
+// The name of the current Steam room, without copying the whole room; empty outside one.
+std::string SteamCurrentRoomName();
+// The owner renames its Steam room (lobby data "name", mirrored to the spectator room). False when it owns none.
+bool SteamRenameRoom(const std::string &name);
 // The chat line for a patron who joined, once their lookup has finished. Dropped if the room has changed since.
 void SteamAddPatronJoined(uint64_t room, uint64_t id, const std::string &name);
 std::string SteamVersionMismatch(const std::string &roomVersion, const std::string &roomRulesLevel = std::string());

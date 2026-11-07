@@ -68,6 +68,9 @@ struct GameRoomSnapshot {
 	std::string optionsText;
 	std::string scenario;
 	std::string mode;
+	// The Steam room's name (lobby data "name"); in a local network game, the name the host announces to the LAN browsers.
+	// Empty for a guest of a local network game and in a game without network.
+	std::string roomName;
 	bool picker = false;
 	std::vector<std::string> pickerItems;
 	std::string pickerDescription;
@@ -121,6 +124,10 @@ void GameRoomToggleOption(int id);
 void GameRoomCycleColor(int slot, int dir);
 void GameRoomSetColor(int slot, int color);
 void GameRoomSwapSlots(int a, int b);
+// Host only. Cleaned like the creation dialog's name (RoomNameClean). In a Steam room it changes the lobby's name, which the
+// room list, the players, the spectator room and the Steam/Discord presence show; in a local network game, the name the
+// host announces to the LAN browsers (63 bytes at most).
+void GameRoomRename(const std::string &name);
 void GameRoomUseOnlineName(const std::string &name);
 void GameRoomRestoreProfileName();
 bool GameRoomOnlineNameActive();

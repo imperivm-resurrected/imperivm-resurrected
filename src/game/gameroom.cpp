@@ -22,6 +22,7 @@
 #include "mods/modvars.h"
 #include "game/netlink.h"
 #include "game/roomcountdown.h"
+#include "game/roomname.h"
 #include "core/log.h"
 #include "core/names.h"
 #include "addr/engine.h"
@@ -388,6 +389,45 @@ const std::vector<BonusDef> &RoomBonuses(void *dlg)
 	return g_bonusDefs;
 }
 
+// CNGameShell+0x10 points to the description a host sends to the LAN browsers; it starts with the game name, char[0x40]
+// copied with Utf8CopyTruncated in CNGameShell::CNGameShell_Host (0064d1a0). Only read on the host, whose shell built it.
+const size_t kLanDescName = 0x40;
+
+bool LanNameRead(void *shell, char *buf)
+{
+	buf[0] = 0;
+	__try {
+		const char *desc = *reinterpret_cast<const char *const *>(static_cast<char *>(shell) + 0x10);
+		if (!desc) return false;
+		size_t n = 0;
+		while (n + 1 < kLanDescName && desc[n]) {
+			buf[n] = desc[n];
+			n++;
+		}
+		buf[n] = 0;
+		return true;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		buf[0] = 0;
+		return false;
+	}
+}
+
+bool LanNameWrite(void *shell, const char *name)
+{
+	__try {
+		char *desc = *reinterpret_cast<char **>(static_cast<char *>(shell) + 0x10);
+		if (!desc) return false;
+		size_t n = strnlen(name, kLanDescName - 1);
+		memset(desc, 0, kLanDescName);
+		memcpy(desc, name, n);
+		return true;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return false;
+	}
+}
+
 bool SlotHandshaking(int row)
 {
 	if (!g_dlg || row < 0 || row > 7) return false;
@@ -413,6 +453,11 @@ void TakeSnapshot()
 			}
 		}
 		s.online = *reinterpret_cast<void **>(static_cast<char *>(g_dlg) + 0x8228) != nullptr;
+		s.roomName = s.online ? NetRoomName() : std::string();
+		if (s.online && s.host && s.roomName.empty()) {
+			char lan[kLanDescName];
+			if (LanNameRead(*reinterpret_cast<void **>(static_cast<char *>(g_dlg) + 0x8228), lan)) s.roomName = lan;
+		}
 		s.bonuses = RoomBonuses(g_dlg);
 		s.localSlot = reinterpret_cast<IntThis_t>(addr::kGetLocalSlot)(g_dlg);
 		s.teamChoices = TeamChoices(Button(g_dlg, (((s.localSlot & 7) + 1) << 12) | 0x32));
@@ -1160,6 +1205,33 @@ void GameRoomTick()
 		g_snap.busy = busy || !g_actions.empty();
 	}
 	CountdownTick();
+}
+
+void GameRoomRename(const std::string &name)
+{
+	Queue([name] {
+		if (!reinterpret_cast<IntThis_t>(addr::kIsHostOrOffline)(g_dlg)) {
+			LogW("room", "not renamed: only the host can rename the room");
+			return;
+		}
+		void *shell = *reinterpret_cast<void **>(static_cast<char *>(g_dlg) + 0x8228);
+		if (!shell) {
+			LogD("room", "not renamed: a game without network has no room name");
+			return;
+		}
+		const std::string online = RoomNameClean(name, kRoomNameMaxBytes);
+		if (online.empty()) {
+			LogW("room", "not renamed: the name is empty");
+			return;
+		}
+		if (NetRenameRoom(online)) {
+			LogI("room", "renaming the Steam room to \"%s\"", online.c_str());
+			return;
+		}
+		const std::string lan = RoomNameClean(name, kLanRoomNameMaxBytes);
+		if (LanNameWrite(shell, lan.c_str())) LogI("room", "local network game renamed to \"%s\"", lan.c_str());
+		else LogW("room", "the local network game could not be renamed");
+	});
 }
 
 int GameRoomCountdownLeftMs()
