@@ -57,29 +57,33 @@ void __cdecl HookApplySoundOptions(int *options)
 	ApplyLevels();
 }
 
+// The modern audio can play on a device that is not the default one: the session of the process is muted on all of them.
 void ApplyMute()
 {
 	const bool mute = g_background || g_cover;
 	HRESULT init = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 	IMMDeviceEnumerator *enumerator = nullptr;
-	IMMDevice *device = nullptr;
-	IAudioSessionManager *manager = nullptr;
-	ISimpleAudioVolume *volume = nullptr;
-
+	IMMDeviceCollection *devices = nullptr;
+	UINT count = 0, done = 0;
 	if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator),
 			reinterpret_cast<void **>(&enumerator))) &&
-		SUCCEEDED(enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &device)) &&
-		SUCCEEDED(device->Activate(__uuidof(IAudioSessionManager), CLSCTX_ALL, nullptr,
-			reinterpret_cast<void **>(&manager))) &&
-		SUCCEEDED(manager->GetSimpleAudioVolume(nullptr, FALSE, &volume))) {
-		volume->SetMute(mute ? TRUE : FALSE, nullptr);
+		SUCCEEDED(enumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &devices)) && SUCCEEDED(devices->GetCount(&count))) {
+		for (UINT i = 0; i < count; i++) {
+			IMMDevice *device = nullptr;
+			IAudioSessionManager *manager = nullptr;
+			ISimpleAudioVolume *volume = nullptr;
+			if (SUCCEEDED(devices->Item(i, &device)) &&
+				SUCCEEDED(device->Activate(__uuidof(IAudioSessionManager), CLSCTX_ALL, nullptr, reinterpret_cast<void **>(&manager))) &&
+				SUCCEEDED(manager->GetSimpleAudioVolume(nullptr, FALSE, &volume)) && SUCCEEDED(volume->SetMute(mute ? TRUE : FALSE, nullptr))) {
+				done++;
+			}
+			if (volume) volume->Release();
+			if (manager) manager->Release();
+			if (device) device->Release();
+		}
 	}
-	else {
-		LogW("audio", "sound: could not access the process audio session");
-	}
-	if (volume) volume->Release();
-	if (manager) manager->Release();
-	if (device) device->Release();
+	if (!done) LogW("audio", "sound: could not access the process audio session");
+	if (devices) devices->Release();
 	if (enumerator) enumerator->Release();
 	if (SUCCEEDED(init)) {
 		CoUninitialize();

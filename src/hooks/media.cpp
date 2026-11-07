@@ -22,6 +22,7 @@
 #include "hooks/displaymode.h"
 #include "core/log.h"
 #include "hooks/media.h"
+#include "hooks/soundlevels.h"
 #include "addr/state.h"
 #include "addr/media.h"
 
@@ -43,9 +44,8 @@ std::atomic<DWORD> g_movieSince{0};
 
 long MovieVolume()
 {
-	const int pct = GetConfig().movieMute ? 0 : GetConfig().movieVolume;
-	if (pct <= 0) return -10000;
-	return std::max(-10000L, static_cast<long>(2000.0 * std::log10(pct / 100.0)));
+	const Config &c = GetConfig();
+	return SoundMovieVolume(c.movieVolume, c.movieMute, c.masterVolume);
 }
 
 RECT GameScreenRect(HWND game)
