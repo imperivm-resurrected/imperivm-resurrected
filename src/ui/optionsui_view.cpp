@@ -263,11 +263,15 @@ std::vector<Page> BuildPages(const Values &v)
 		page.blurb = "Turn each kind of sound on or off and set its volume.";
 		page.icon = kOrnamentSound;
 		page.leftW = 500;
-		page.left.push_back({"Volume", {ToggleSlider(v, "Music", kMusicOn, kMusicVolume, 1, 100), ToggleSlider(v, "Sound effects", kEffectsOn, kEffectsVolume, 1, 100),
-			Toggle(v, "Nature sounds", kNatureOn, "Uses the volume of the sound effects"), ToggleSlider(v, "Unit speech", kSpeechOn, kSpeechVolume, 1, 100),
-			Toggle(v, "Conversations", kConversationsOn, "Uses the volume of the unit speech"), ToggleSlider(v, "Cutscenes", kMovieOn, kMovieVolume, 0, 100)}});
+		// Below 1 nature sounds follow the effects volume.
+		Row nature = ToggleSlider(v, "Nature sounds", kNatureOn, kNatureVolume, 1, 100);
+		if (nature.value < 1) nature.value = std::max(1, Scroll(v, kEffectsVolume));
+		page.left.push_back({"Volume", {Slider(v, "General volume", kMasterVolume, 0, 100), ToggleSlider(v, "Music", kMusicOn, kMusicVolume, 1, 100),
+			ToggleSlider(v, "Sound effects", kEffectsOn, kEffectsVolume, 1, 100), nature, ToggleSlider(v, "Unit speech", kSpeechOn, kSpeechVolume, 1, 100),
+			ToggleSlider(v, "Conversations", kConversationsOn, kConversationVolume, 1, 100), ToggleSlider(v, "Cutscenes", kMovieOn, kMovieVolume, 0, 100)}});
+		page.right.push_back({"Output", {Combo(v, "Device", kOutputDevice)}});
 		page.right.push_back({"Behaviour", {Toggle(v, "Mute in the background", kMuteBackground, "When you switch to another window"),
-			Toggle(v, "Chat and invitation alerts", kAlerts), Toggle(v, "Modern audio", kModernAudio, "Replaces the original sound system", true)}});
+			Toggle(v, "Chat and invitation alerts", kAlerts)}});
 		pages.push_back(page);
 	}
 	{
