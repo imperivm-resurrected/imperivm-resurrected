@@ -12,6 +12,7 @@
 #include "core/log.h"
 #include "core/uiport.h"
 #include "game/options.h"
+#include "game/viewprefs.h"
 #include "i18n/tr.h"
 #include "ui/modui.h"
 #include "ui/optionsui_view.h"
@@ -49,6 +50,11 @@ void SetExtras(Values &v, const Config &c)
 	v.checks[kSmoothCamera] = c.smoothScroll;
 	v.checks[kModernAudio] = c.modernAudio;
 	v.scrolls[kPanelOpacity] = c.panelOpacity;
+	v.combos[kHealthBars] = c.healthBarsAtStart;
+	v.checks[kPauseInBackground] = c.pauseInBackground;
+	v.checks[kZoomGroupIcons] = c.zoomExtras;
+	v.checks[kZoomFog] = c.zoomFog;
+	v.combos[kZoomRefresh] = ZoomRefreshPreset(c.zoomRefreshMs);
 }
 
 Values ReadNative()
@@ -72,9 +78,13 @@ Values ReadNative()
 
 void CopyExtras(Values &to, const Values &from)
 {
-	for (int id : {kSmoothCamera, kModernAudio}) {
+	for (int id : {kSmoothCamera, kModernAudio, kPauseInBackground, kZoomGroupIcons, kZoomFog}) {
 		const auto it = from.checks.find(id);
 		if (it != from.checks.end()) to.checks[id] = it->second;
+	}
+	for (int id : {kHealthBars, kZoomRefresh}) {
+		const auto it = from.combos.find(id);
+		if (it != from.combos.end()) to.combos[id] = it->second;
 	}
 	// The panel changes as it is edited, so the setting is the truth; its own mouse controls change it too.
 	to.checks[kPanelCompact] = GetConfig().panelCompact;
@@ -140,6 +150,13 @@ bool CommitExtras(const Values &v)
 	c.modernAudio = check(kModernAudio, c.modernAudio);
 	const auto opacity = v.scrolls.find(kPanelOpacity);
 	if (opacity != v.scrolls.end()) c.panelOpacity = opacity->second;
+	const auto bars = v.combos.find(kHealthBars);
+	if (bars != v.combos.end()) c.healthBarsAtStart = bars->second;
+	c.pauseInBackground = check(kPauseInBackground, c.pauseInBackground);
+	c.zoomExtras = check(kZoomGroupIcons, c.zoomExtras);
+	c.zoomFog = check(kZoomFog, c.zoomFog);
+	const auto refresh = v.combos.find(kZoomRefresh);
+	if (refresh != v.combos.end() && refresh->second != ZoomRefreshPreset(c.zoomRefreshMs)) c.zoomRefreshMs = ZoomRefreshPresetMs(refresh->second);
 	SaveConfig();
 	return c.modernAudio != audioBefore;
 }
@@ -151,7 +168,7 @@ struct Command {
 	Values values;
 };
 
-bool IsExtra(int id) { return id >= kPanelCompact && id <= kModernAudio; }
+bool IsExtra(int id) { return id >= 0x9000 && id < 0x9100; }
 
 int HitAt(const State &st, POINT at, int &arg, RECT *rect = nullptr)
 {
@@ -229,8 +246,15 @@ void Execute(const Command &cmd)
 		Refresh();
 		break;
 	case kActPick:
-		OptionsWriteCombo(cmd.value, cmd.arg);
-		Refresh();
+		if (IsExtra(cmd.value)) {
+			std::lock_guard<std::mutex> lock(g_lock);
+			g_s.view.values.combos[cmd.value] = cmd.arg;
+			g_s.view.dirty = !(g_s.view.values == g_s.baseline);
+		}
+		else {
+			OptionsWriteCombo(cmd.value, cmd.arg);
+			Refresh();
+		}
 		break;
 	case kActRow:
 		if (cmd.arg == kOpenLogs) ReportOpenLogsFolder();

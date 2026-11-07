@@ -12,6 +12,7 @@
 #include "MinHook.h"
 #include "hooks/hookcount.h"
 
+#include "core/config.h"
 #include "core/log.h"
 #include "game/mapfog.h"
 #include "addr/engine.h"
@@ -31,12 +32,12 @@ typedef int(__fastcall *PixelPtr_t)(void *bitmap, void *edx, int x, int y);
 typedef void(__fastcall *CenterOn_t)(void *view, void *edx, int *pos, int *x);
 CenterOn_t g_origCenterOn = nullptr;
 Rebuild_t g_origRebuild = nullptr;
-bool g_enabled = true;
+bool g_fogFailed = false;
+bool FogOn() { return !g_fogFailed && GetConfig().zoomFog; }
 int g_calls = 0;
 void *g_zoomThis = nullptr;
 DWORD g_lastNatural = 0;
 bool g_forcing = false;
-DWORD g_refreshMs = 16;
 int g_exploredN = 0, g_visibleN = 0;
 
 struct FogCache {
@@ -276,7 +277,7 @@ int SafeDarken(void *zoom)
 		return Darken(zoom);
 	}
 	__except (EXCEPTION_EXECUTE_HANDLER) {
-		g_enabled = false;
+		g_fogFailed = true;
 		return -2;
 	}
 }
@@ -346,7 +347,7 @@ int SafeFogWideColumns(void *zoom, int x0, int y0, int x1, int y1)
 
 bool CopyCachedFog(void *zoom, int x0, int y0, int x1, int y1)
 {
-	if (!g_enabled || !g_cache.valid || zoom != g_cache.zoom) return false;
+	if (!FogOn() || !g_cache.valid || zoom != g_cache.zoom) return false;
 	char *dst = At<char *>(zoom, 0x14), *src = At<char *>(zoom, 0x18);
 	if (!dst || src != g_cache.src || At<int>(dst, 8) != g_cache.w || At<int>(dst, 0xc) != g_cache.h || At<short>(dst, 0x10) != 16) return false;
 	if (x0 < 0 || y0 < 0 || x1 >= g_cache.w || y1 >= g_cache.h || x0 > x1 || y0 > y1) return false;
@@ -430,7 +431,7 @@ void *__fastcall HookRebuild(void *self)
 	}
 	g_overlayFromCache = false;
 	void *r = g_origRebuild(self);
-	if (!g_enabled || r != nullptr) return r;
+	if (!FogOn() || r != nullptr) return r;
 	const DWORD t0 = GetTickCount();
 	const int asked = SafeDarken(self);
 	if (asked < 0) g_cache.valid = false;
@@ -467,7 +468,8 @@ void ZoomFogNoteImage() { g_images++; }
 
 long long ZoomFogGameThreadTick()
 {
-	if (!g_zoomThis || !g_origRebuild || g_refreshMs == 0 || g_forcing) return 0;
+	const int refreshMs = GetConfig().zoomRefreshMs;
+	if (!g_zoomThis || !g_origRebuild || refreshMs <= 0 || g_forcing) return 0;
 	static LARGE_INTEGER freq = {}, lastForced = {}, statStart = {};
 	static int forced = 0, logged = 0, imagesAtStart = 0;
 	static unsigned long long spent = 0;
@@ -494,7 +496,7 @@ long long ZoomFogGameThreadTick()
 		spent = 0;
 		imagesAtStart = g_images;
 	}
-	if ((now.QuadPart - lastForced.QuadPart) * 1000 / freq.QuadPart < static_cast<long long>(g_refreshMs)) return 0;
+	if ((now.QuadPart - lastForced.QuadPart) * 1000 / freq.QuadPart < refreshMs) return 0;
 	lastForced = now;
 	g_forcing = true;
 	ForceRebuild(g_zoomThis);
@@ -516,11 +518,6 @@ long long ZoomFogGameThreadTick()
 void InstallZoomFog(bool knownExe)
 {
 	if (!knownExe) return;
-	char path[MAX_PATH] = {};
-	GetModuleFileNameA(nullptr, path, MAX_PATH);
-	if (char *slash = strrchr(path, '\\')) strcpy_s(slash + 1, MAX_PATH - (slash + 1 - path), "imperivm-mod.ini");
-	g_enabled = GetPrivateProfileIntA("Map", "FogVisible", 1, path) != 0;
-	g_refreshMs = static_cast<DWORD>(std::max(0, std::min(1000, static_cast<int>(GetPrivateProfileIntA("Map", "RefreshMs", 16, path)))));
 	const bool ok = HookCreate(reinterpret_cast<void *>(addr::kRebuild), reinterpret_cast<void *>(&HookRebuild), reinterpret_cast<void **>(&g_origRebuild)) == MH_OK &&
 		HookEnable(reinterpret_cast<void *>(addr::kRebuild)) == MH_OK;
 	const bool okCenter = HookCreate(reinterpret_cast<void *>(addr::kCenterOn), reinterpret_cast<void *>(&HookCenterOn), reinterpret_cast<void **>(&g_origCenterOn)) == MH_OK &&
@@ -529,7 +526,7 @@ void InstallZoomFog(bool knownExe)
 		HookEnable(reinterpret_cast<void *>(addr::kZoomFogOverlay)) == MH_OK;
 	LogAt(okCenter ? kLogInfo : kLogError, "game", "camera: CenterOn protection without zoom map %s", okCenter ? "ready" : "NOT available");
 	LogAt(okWide ? kLogInfo : kLogError, "game", "zoom map: screens wider than 2048 px %s", okWide ? "protected" : "NOT protected");
-	LogAt(ok ? kLogInfo : kLogError, "game", "zoom map fog: %s", ok ? (g_enabled ? "ready" : "disabled in the .ini") : "NOT available");
+	LogAt(ok ? kLogInfo : kLogError, "game", "zoom map fog: %s", ok ? (GetConfig().zoomFog ? "ready" : "ready, turned off in the options") : "NOT available");
 }
 
 bool ZoomBitmapSize(int *width, int *height)

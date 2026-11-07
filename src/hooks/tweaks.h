@@ -10,4 +10,6 @@ bool TweaksIntendedResolution(int &w, int &h);
 void TweaksApplySmoothScroll();
 void TweaksFrameTick();
 bool TweaksOnlyHumanOnline(void *game);
+// The game window goes to the background or comes back (WM_ACTIVATEAPP), on the game thread.
+void TweaksWindowActive(bool active);
 void TweaksOnConfigLoaded(void (*callback)());

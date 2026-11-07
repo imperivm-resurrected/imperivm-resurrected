@@ -16,6 +16,7 @@
 #include "addr/state.h"
 #include "addr/ui.h"
 #include "addr/world.h"
+#include "core/config.h"
 #include "core/log.h"
 #include "game/controls.h"
 #include "game/mapfog.h"
@@ -59,13 +60,7 @@ const int kMessageLeftDown = 0x111, kMessageLeftDouble = 0x113, kMessageRightDow
 template <typename T>
 T &At(void *p, int off) { return *reinterpret_cast<T *>(static_cast<char *>(p) + off); }
 
-bool ExtrasEnabled()
-{
-	char path[MAX_PATH] = {};
-	GetModuleFileNameA(nullptr, path, MAX_PATH);
-	if (char *slash = strrchr(path, 0x5c)) strcpy_s(slash + 1, MAX_PATH - (slash + 1 - path), "imperivm-mod.ini");
-	return GetPrivateProfileIntA("Map", "ZoomExtras", 1, path) != 0;
-}
+bool ExtrasEnabled() { return GetConfig().zoomExtras; }
 
 bool ZoomOpen() { return g_geo.valid && GetTickCount() - g_geo.tick < kOpenWindowMs; }
 
@@ -185,7 +180,7 @@ void PreviewBox(int x0, int y0, int x1, int y1, bool force);
 void __fastcall HookZoomDraw(void *self, void *edx, void *surface, int unused)
 {
 	g_origDraw(self, edx, surface, unused);
-	if (g_failed) return;
+	if (g_failed || !ExtrasEnabled()) return;
 	__try {
 		CaptureGeometry(self, surface);
 		QuickIconsDraw(surface, g_geo.winX, g_geo.winY);
@@ -288,7 +283,7 @@ bool InsideBitmap(int x, int y) { return x >= g_geo.left && x <= g_geo.right && 
 bool ZoomViewHandleMouse(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
 	if (g_failed) return false;
-	if (!ZoomOpen()) {
+	if (!ZoomOpen() || !ExtrasEnabled()) {
 		if (g_boxOpen) EndBox();
 		if (g_drag.pending || g_drag.dragging) ResetDrag();
 		g_swallowLeftUp = g_swallowRightUp = false;
@@ -377,16 +372,11 @@ void ZoomViewGameTick()
 void InstallZoomView(bool knownExe)
 {
 	if (!knownExe) return;
-	if (!ExtrasEnabled()) {
-		g_failed = true;
-		LogI("game", "zoom map extras: disabled in the .ini");
-		return;
-	}
 	const bool ok = HookCreate(reinterpret_cast<void *>(addr::kZoomMapOnDraw), reinterpret_cast<void *>(&HookZoomDraw), reinterpret_cast<void **>(&g_origDraw)) == MH_OK &&
 		HookEnable(reinterpret_cast<void *>(addr::kZoomMapOnDraw)) == MH_OK;
 	const bool hideOk = HookCreate(reinterpret_cast<void *>(addr::kZoomMapHide), reinterpret_cast<void *>(&HookZoomHide), reinterpret_cast<void **>(&g_origHide)) == MH_OK &&
 		HookEnable(reinterpret_cast<void *>(addr::kZoomMapHide)) == MH_OK;
 	if (!hideOk) LogW("game", "zoom map: could not hook Hide; a box selection in progress is ended when the map stops being drawn");
 	if (!ok) g_failed = true;
-	LogAt(ok ? kLogInfo : kLogError, "game", "zoom map extras (group icons and box selection): %s", ok ? "ready" : "NOT available");
+	LogAt(ok ? kLogInfo : kLogError, "game", "zoom map extras (group icons and box selection): %s", ok ? (ExtrasEnabled() ? "ready" : "ready, turned off in the options") : "NOT available");
 }

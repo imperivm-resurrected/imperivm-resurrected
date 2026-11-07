@@ -18,6 +18,7 @@ enum ControlId {
 	kMuteBackground = 0x1105, kShowPerf = 0x1106, kAutosave = 0x1109, kAutosaveEvery = 0x110A, kBrightness = 0x110C, kMovieVolume = 0x1110, kMovieOn = 0x1111,
 	kAlerts = 0x1113, kAutosaveCopies = 0x1116, kSaveOnExit = 0x1119, kShowNet = 0x111A, kLanguage = 0x111C, kMonitor = 0x111D, kUpdates = 0x111E,
 	kPanelCompact = 0x9001, kPanelOpacity = 0x9002, kSmoothCamera = 0x9003, kModernAudio = 0x9004, kOpenLogs = 0x9101, kCreateReport = 0x9102,
+	kHealthBars = 0x9030, kPauseInBackground = 0x9031, kZoomGroupIcons = 0x9032, kZoomFog = 0x9033, kZoomRefresh = 0x9034,
 };
 
 enum RowKind { kRowToggle, kRowSlider, kRowToggleSlider, kRowCombo, kRowSegment, kRowAction };

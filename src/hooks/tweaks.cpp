@@ -12,6 +12,8 @@
 #include "hooks/hookcount.h"
 #include "core/config.h"
 #include "hooks/displaymode.h"
+#include "hooks/focuspause.h"
+#include "hooks/gamestate.h"
 #include "hooks/respick.h"
 #include "core/log.h"
 #include "hooks/tweaks.h"
@@ -380,12 +382,24 @@ bool OnlyHumanOnline(char *game)
 		!reinterpret_cast<IsMultiHumans_t>(addr::kMultiHumans)();
 }
 
-void SetPausedNow(char *game, int paused, bool quiet = true)
+// CVXBasicGame::SetPaused is slot 16 of every kind of match and IsPaused slot 22; quiet leaves out the pause notice.
+void CallSetPaused(char *game, int paused, bool quiet)
 {
 	typedef void(__fastcall *SetPaused_t)(void *game, void *edx, int paused);
 	g_quietPause = quiet;
 	reinterpret_cast<SetPaused_t>((*reinterpret_cast<void ***>(game))[16])(game, nullptr, paused);
 	g_quietPause = false;
+}
+
+bool GamePaused(char *game)
+{
+	typedef int(__fastcall *IsPaused_t)(void *game);
+	return reinterpret_cast<IsPaused_t>((*reinterpret_cast<void ***>(game))[22])(game) != 0;
+}
+
+void SetPausedNow(char *game, int paused, bool quiet = true)
+{
+	CallSetPaused(game, paused, quiet);
 	static DWORD logged = 0;
 	if (GetTickCount() - logged > 60000) {
 		logged = GetTickCount();
@@ -431,6 +445,30 @@ void __fastcall HookRequestToggle(void *game, void *edx, int param)
 		return SetPausedNow(static_cast<char *>(game), paused ? 0 : 1, false);
 	}
 	g_origRequestToggle(game, edx, param);
+}
+
+FocusPause g_focusPause;
+
+enum FocusStep { kFocusNothing, kFocusPaused, kFocusResumed, kFocusFailed };
+
+FocusStep FocusChanged(bool active)
+{
+	__try {
+		char *game = *reinterpret_cast<char **>(addr::kGame);
+		const bool usable = game && !*reinterpret_cast<int *>(addr::kEditorMode);
+		if (!active) {
+			if (!g_focusPause.Leave(GetConfig().pauseInBackground, usable ? game : nullptr, usable && GameIsMultiplayer(), usable && GamePaused(game))) return kFocusNothing;
+			CallSetPaused(game, 1, true);
+			return kFocusPaused;
+		}
+		if (!g_focusPause.Return(game, game && GamePaused(game))) return kFocusNothing;
+		CallSetPaused(game, 0, true);
+		return kFocusResumed;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		g_focusPause = FocusPause();
+		return kFocusFailed;
+	}
 }
 
 typedef void(__cdecl *ShowPausedMenu_t)();
@@ -516,6 +554,16 @@ __declspec(naked) void HookTownhallSettlement()
 void TweaksOnConfigLoaded(void (*callback)())
 {
 	ConfigLoadedCallbacks().push_back(callback);
+}
+
+void TweaksWindowActive(bool active)
+{
+	switch (FocusChanged(active)) {
+	case kFocusPaused: LogI("game", "pause: the match waits while the window is in the background"); break;
+	case kFocusResumed: LogI("game", "pause: the window is back, the match goes on"); break;
+	case kFocusFailed: LogE("game", "pause: ERROR pausing or resuming the match with the window"); break;
+	default: break;
+	}
 }
 
 bool TweaksOnlyHumanOnline(void *game)
