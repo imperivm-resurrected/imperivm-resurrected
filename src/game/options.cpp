@@ -269,7 +269,7 @@ void ApplyModOptions(void *dlg)
 	if (sel >= 0 && sel < 3) UpdaterModeSet(sel);
 	sel = GetComboIndex(dlg, kIdMonitor);
 	if (sel >= 0 && sel < static_cast<int>(DisplayMonitorLabels().size())) c.monitor = sel;
-	c.brightness = (std::max)(kBrightMin, (std::min)(kBrightMax, (GetScroll(dlg, kIdBrightCombo, c.brightness) + 2) / 5 * 5));
+	c.brightness = (std::max)(kBrightMin, (std::min)(kBrightMax, GetScroll(dlg, kIdBrightCombo, c.brightness)));
 	c.movieVolume = GetScroll(dlg, kIdMovieScroll, c.movieVolume);
 	c.movieMute = !GetCheck(dlg, kIdMovieMute, !c.movieMute);
 	SaveConfig();
@@ -291,7 +291,7 @@ unsigned __fastcall HookOnMessage(void *dlg, void *edx, int *msg)
 {
 	const unsigned kind = static_cast<unsigned>(msg[0x10 / 4]);
 	if (kind >= 0x23432301 && kind <= 0x23432304) {
-		const int v = (std::max)(kBrightMin, (std::min)(kBrightMax, (GetScroll(dlg, kIdBrightCombo, GetConfig().brightness) + 2) / 5 * 5));
+		const int v = (std::max)(kBrightMin, (std::min)(kBrightMax, GetScroll(dlg, kIdBrightCombo, GetConfig().brightness)));
 		if (v != GetConfig().brightness) MutableConfig().brightness = v;
 	}
 	if (static_cast<unsigned>(msg[0x10 / 4]) == kMsgButtonClick) {
@@ -399,7 +399,7 @@ void OptionsWriteScroll(int id, int value)
 	void *scroll = dlg ? FindScroll(dlg, id) : nullptr;
 	if (!scroll) return;
 	if (id == kIdBrightCombo) {
-		value = (std::max)(kBrightMin, (std::min)(kBrightMax, (value + 2) / 5 * 5));
+		value = (std::max)(kBrightMin, (std::min)(kBrightMax, value));
 		MutableConfig().brightness = value;
 	}
 	reinterpret_cast<SetValue_t>((*reinterpret_cast<void ***>(scroll))[0x70 / 4])(scroll, nullptr, value, 1);
