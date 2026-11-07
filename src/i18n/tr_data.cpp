@@ -1528,7 +1528,6 @@ extern const TrRow kTrRows[] = {
 	{"Device", "Dispositivo", "Dispositivo"},
 	{"Default device", "Dispositivo predeterminado", "Dispositivo predefinito"},
 	{"Behaviour", "Comportamiento", "Comportamento"},
-	{"When you switch to another window", "Al cambiar a otra ventana", "Quando passi a un’altra finestra"},
 	{"Restarts", "Reinicia", "Riavvia"},
 	{"Pace and saves", "Ritmo y guardado", "Ritmo e salvataggi"},
 	{"How you play and how your games are saved.", "Cómo juegas y cómo se guardan tus partidas.", "Come giochi e come si salvano le partite."},
