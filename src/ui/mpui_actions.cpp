@@ -243,6 +243,13 @@ void DoAction(int action, int arg)
 			Predict(kPredColor, idx & 7, arg);
 			GameRoomSetColor(idx & 7, arg);
 		}
+		else if (g_s.dropKind == kDropTeam) {
+			if (arg >= 0 && arg <= kRoomTeams) {
+				SetTeamTo(idx & 7, arg);
+				g_s.game.slots[idx & 7].team = arg;
+				Predict(kPredTeam, idx & 7, arg);
+			}
+		}
 		else if (g_s.dropKind == kDropBonus) {
 			g_s.game.slots[idx & 7].bonus = arg;
 			GameRoomSetBonus(idx & 7, arg);
@@ -375,6 +382,10 @@ void DoAction(int action, int arg)
 		break;
 	}
 	case kGCancel: LeaveGameRoom(); break;
+	case kGTab:
+		g_s.roomTab = arg == 1 ? 1 : 0;
+		g_s.dropOpen = false;
+		break;
 	case kGResync:
 		LogI("lobby", "leaving the room to download the content of its map and come back");
 		g_s.forcePackLobby = g_s.room.id;

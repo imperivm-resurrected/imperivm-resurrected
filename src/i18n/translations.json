@@ -1528,5 +1528,18 @@
 {"en":"A zip with your private data hidden","es":"Un zip con tus datos privados ocultos","it":"Uno zip con i tuoi dati privati nascosti"},
 {"en":"Keys and shortcuts","es":"Teclas y atajos","it":"Tasti e scorciatoie"},
 {"en":"Changes not applied","es":"Cambios sin aplicar","it":"Modifiche non applicate"},
-{"en":"The game will restart to change the sound system.","es":"El juego se reiniciará para cambiar el sistema de sonido.","it":"Il gioco si riavvierà per cambiare il sistema audio."}
+{"en":"The game will restart to change the sound system.","es":"El juego se reiniciará para cambiar el sistema de sonido.","it":"Il gioco si riavvierà per cambiare il sistema audio."},
+{"en":"Ready?","es":"¿Listo?","it":"Pronto?"},
+{"en":"Civilization","es":"Civilización","it":"Civiltà"},
+{"en":"Color","es":"Color","it":"Colore"},
+{"en":"No team","es":"Sin equipo","it":"Nessuna squadra"},
+{"en":"Team %d","es":"Equipo %d","it":"Squadra %d"},
+{"en":"Waiting for a player...","es":"Esperando a un jugador...","it":"In attesa di un giocatore..."},
+{"en":"Joining the room...","es":"Entrando en la sala...","it":"Sta entrando nella stanza..."},
+{"en":"Downloading content: %d %%","es":"Descargando contenido: %d %%","it":"Scarica i contenuti: %d %%"},
+{"en":"Restarting the game with the content...","es":"Reiniciando el juego con el contenido...","it":"Riavvia il gioco con i contenuti..."},
+{"en":"%d of %d ready","es":"%d de %d listos","it":"%d su %d pronti"},
+{"en":"Everyone is ready. Click to cancel","es":"Todos están listos. Pulsa para cancelar","it":"Sono tutti pronti. Clicca per annullare"},
+{"en":"Online","es":"En línea","it":"="},
+{"en":"Local network","es":"Red local","it":"Rete locale"}
 ]

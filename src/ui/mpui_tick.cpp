@@ -53,6 +53,7 @@ void MpUiGameThreadTick()
 			if (!g_s.gameWasActive) {
 				LogI("lobby", "game room ready");
 				g_s.createSave = -1;
+				g_s.roomTab = 0;
 			}
 			g_s.open = true;
 			g_s.connecting = false;

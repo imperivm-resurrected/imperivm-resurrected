@@ -49,7 +49,7 @@ enum Action {
 	kPickRow, kPickOk, kPickCancel,
 	kRecoverYes, kRecoverNo, kRejoinCancel, kRejoinClose,
 	kGKick, kGKickJoining, kDiscord, kPassOk, kPassCancel, kGSeat, kGMove, kGMoveTo, kGSwapAsk, kSwapAccept, kSwapDecline, kDropYes, kDropNo, kPassShow, kGSiteToggle, kGRuleToggle, kSpectate, kReturnGame,
-	kFieldPickSearch, kPickDelete, kPickDeleteYes, kPickDeleteNo, kGResync, kPatronLink,
+	kFieldPickSearch, kPickDelete, kPickDeleteYes, kPickDeleteNo, kGResync, kPatronLink, kGTab,
 };
 
 typedef int(__cdecl *HostGame_t)(int, unsigned, int);
@@ -91,7 +91,7 @@ enum Field { kNoField, kChatField, kNameField, kPassField, kJoinPassField, kSear
 
 enum { kPredTeam, kPredRace, kPredAi, kPredReady, kPredOptSel, kPredOptVal, kPredColor };
 
-enum { kDropRace, kDropAi, kDropOption, kDropColor, kDropSlot, kDropSites, kDropModOption, kDropPreset, kDropFilter, kDropPlayers, kDropProfile, kDropVisibility, kDropSaveGame, kDropSpectators, kDropPickSort, kDropBonus };
+enum { kDropRace, kDropAi, kDropOption, kDropColor, kDropSlot, kDropSites, kDropModOption, kDropPreset, kDropFilter, kDropPlayers, kDropProfile, kDropVisibility, kDropSaveGame, kDropSpectators, kDropPickSort, kDropBonus, kDropTeam };
 
 // The argument of kGDropOpen: the kind in the low bits and the slot or option index above them.
 const int kDropKindBits = 5, kDropKindMask = (1 << kDropKindBits) - 1;
@@ -298,6 +298,7 @@ struct State {
 	int resizeCol = -1, resizeStartX = 0, resizeStartW = 0;
 	float uiScale = 1.0f;
 	int dropKind = 0, dropIndex = 0, dropScroll = 0;
+	int roomTab = 0;
 };
 
 extern std::mutex g_lock;
@@ -436,6 +437,17 @@ void PaintList(Painter &p, const State &st);
 void PaintRanked(Painter &p, const State &st);
 void PaintCreate(Painter &p, const State &st);
 void PaintChat(Painter &p, const State &st);
+std::map<std::string, std::string> PublishedOptions(const State &st);
+std::string RoomOptionText(const State &st, int id, const char *published);
+std::string RoomMapLabel(const State &st);
+void PaintGameTab(Painter &p, const State &st, int top);
+
+const int kRoomTeams = 4;
+
+// What the room screen asks of the room that the game does not do yet; mpui_room_link.cpp keeps them together.
+void SetTeamTo(int slot, int team);
+int CountdownLeftMs();
+void RenameRoom(const std::string &name);
 extern ListGeom g_syncGeomOut;
 void PaintSyncConfirm(Painter &p, const State &st);
 void PaintSyncProgress(Painter &p, const State &st);

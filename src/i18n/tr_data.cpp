@@ -1536,5 +1536,18 @@ extern const TrRow kTrRows[] = {
 	{"Keys and shortcuts", "Teclas y atajos", "Tasti e scorciatoie"},
 	{"Changes not applied", "Cambios sin aplicar", "Modifiche non applicate"},
 	{"The game will restart to change the sound system.", "El juego se reiniciará para cambiar el sistema de sonido.", "Il gioco si riavvierà per cambiare il sistema audio."},
+	{"Ready?", "¿Listo?", "Pronto?"},
+	{"Civilization", "Civilización", "Civiltà"},
+	{"Color", "Color", "Colore"},
+	{"No team", "Sin equipo", "Nessuna squadra"},
+	{"Team %d", "Equipo %d", "Squadra %d"},
+	{"Waiting for a player...", "Esperando a un jugador...", "In attesa di un giocatore..."},
+	{"Joining the room...", "Entrando en la sala...", "Sta entrando nella stanza..."},
+	{"Downloading content: %d %%", "Descargando contenido: %d %%", "Scarica i contenuti: %d %%"},
+	{"Restarting the game with the content...", "Reiniciando el juego con el contenido...", "Riavvia il gioco con i contenuti..."},
+	{"%d of %d ready", "%d de %d listos", "%d su %d pronti"},
+	{"Everyone is ready. Click to cancel", "Todos están listos. Pulsa para cancelar", "Sono tutti pronti. Clicca per annullare"},
+	{"Online", "En línea", "="},
+	{"Local network", "Red local", "Rete locale"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);
