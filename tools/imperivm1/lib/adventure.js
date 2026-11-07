@@ -120,6 +120,16 @@ function classResolver(i1, gbr, keep, report) {
 			const c = [...gbr.classes.values()].find((x) => lower(x.id) === lower(id) || (x.altid && lower(x.altid) === lower(id)));
 			return c ? c.displayName : null;
 		},
+		gbrCpp(id) {
+			if (!this.cppById) {
+				this.cppById = new Map();
+				for (const c of gbr.classes.values()) {
+					this.cppById.set(lower(c.id), c.cpp);
+					if (c.altid && !this.cppById.has(lower(c.altid))) this.cppById.set(lower(c.altid), c.cpp);
+				}
+			}
+			return this.cppById.get(lower(id)) || null;
+		},
 	};
 }
 
@@ -199,6 +209,15 @@ function convertObjects(src, classes, gbr, report, where) {
 	});
 	rewriteClass('class');
 	rewriteClass('classoffirstbuilding');
+	t = t.replace(/(<scriptobj\b)([^>]*?)(\/?>)/g, (all, open, attrs, end) => {
+		const m = /\sclass="([^"]*)"/.exec(attrs);
+		if (!m || /\sstamina="/.test(attrs)) return all;
+		const stamina = M.STAMINA[classes.gbrCpp(m[1])];
+		if (stamina === undefined) return all;
+		const at = /(\shealthperc="[^"]*")/.test(attrs) ? /(\shealthperc="[^"]*")/ : /(\snum="[^"]*")/;
+		report.count('Map objects given stamina, as in Great Battles of Rome\'s maps', `stamina="${stamina}"`);
+		return open + attrs.replace(at, `$1${EOL}\tstamina="${stamina}"`) + end;
+	});
 	t = X.mapAttribute(t, 'icon', (v) => convertAssetPath(v, gbr, report, where)).text;
 	t = X.mapAttribute(t, 'Icon', (v) => convertAssetPath(v, gbr, report, where)).text;
 	return t;
@@ -364,6 +383,33 @@ function retranslate(src, pick, sound) {
 		});
 		return `<translationtableentry${a}/>`;
 	});
+}
+
+// The game keys a translation table by `text`: an entry with an empty text, or a text already in the table, is refused
+// ("KeyTextIsAlreadyInTheTable" in vxlog.log). Keeps the first entry of each text. Returns {src, empty, duplicate}.
+function cleanTable(src) {
+	const seen = new Set();
+	let empty = 0;
+	let duplicate = 0;
+	const out = src.replace(/<translationtableentry\b([^>]*?)\/>/g, (all, attrs) => {
+		const t = /\stext="([^"]*)"/.exec(attrs);
+		if (!t || !t[1]) {
+			empty++;
+			return '';
+		}
+		if (seen.has(t[1])) {
+			duplicate++;
+			return '';
+		}
+		seen.add(t[1]);
+		return all;
+	});
+	return { src: out, empty, duplicate };
+}
+
+// Sets the result of the entry with this id ("adventure name", "adventure description").
+function setResult(src, id, value) {
+	return src.replace(new RegExp(`(<translationtableentry\\b[^>]*\\sid="${id}"[^>]*?\\sresult=")[^"]*(")`), (all, a, b) => a + X.entityEscape(value) + b);
 }
 
 function convertAdventure(input) {
@@ -543,6 +589,14 @@ function convertAdventure(input) {
 		'MAPS/NOTES.XML': 'Maps/notes.xml',
 	};
 	let voices = 0;
+	const rootNotes = new Set();
+	if (es.has('NOTES.XML')) for (const m of es.get('NOTES.XML').toString('utf8').matchAll(/\stext="([^"]*)"/g)) rootNotes.add(m[1]);
+	const put = (lang, dest, src) => {
+		const c = cleanTable(src);
+		if (c.empty) report.count('Translation tables', `${lang}: entries without text dropped`, c.empty);
+		if (c.duplicate) report.count('Translation tables', `${lang}: repeated texts dropped (the game keeps one per text)`, c.duplicate);
+		out.set(`Local/${lang}/${dest}`, Buffer.from(c.src, 'utf8'));
+	};
 	for (const [p, buf] of es) {
 		let dest = targets[p];
 		let m;
@@ -558,17 +612,44 @@ function convertAdventure(input) {
 			continue;
 		}
 		const src = adventureEntry(buf.toString('utf8'));
+		// Imperivm I repeats every note of the adventure in MAPS/NOTES.XML; Great Battles of Rome's adventures leave it empty.
+		if (dest === 'Maps/notes.xml' && [...src.matchAll(/\stext="([^"]*)"/g)].every((m) => rootNotes.has(m[1]))) {
+			for (const lang of LANGS) out.set(`Local/${lang}/${dest}`, bytes('<translationtable/>' + EOL));
+			report.add('Translation tables', 'Maps/notes.xml left empty: Imperivm I repeats there the notes of notes.xml');
+			continue;
+		}
 		const spanish = (t, r) => (r && r !== '(translate)' ? r : t);
-		out.set(`Local/Spanish/${dest}`, Buffer.from(retranslate(src, spanish, soundPath), 'utf8'));
-		out.set(`Local/English/${dest}`, Buffer.from(retranslate(src, (t) => t, soundPath), 'utf8'));
-		out.set(`Local/Italian/${dest}`, Buffer.from(retranslate(src, (t) => t, () => null), 'utf8'));
+		let es1 = retranslate(src, spanish, soundPath);
+		let it1 = retranslate(src, (t) => t, () => null);
+		if (dest === 'adventure.loc.xml') {
+			const d = /<translationtableentry\b[^>]*\sid="adventure description"[^>]*\/>/.exec(es1);
+			const translated = d && /\sresult="([^"]*)"/.exec(d[0]);
+			const textOf = d && /\stext="([^"]*)"/.exec(d[0]);
+			if (!translated || !textOf || translated[1] === textOf[1]) {
+				es1 = setResult(es1, 'adventure description', M.ADVENTURE_TEXTS.Spanish.description);
+				report.add('Translation tables', 'Spanish description of the adventure written by the converter (none in local.pak)');
+			} else {
+				report.add('Translation tables', 'Spanish name and description of the adventure: the description is Imperivm I\'s own (local.pak)');
+			}
+			es1 = setResult(es1, 'adventure name', name);
+			it1 = setResult(setResult(it1, 'adventure description', M.ADVENTURE_TEXTS.Italian.description), 'adventure name', M.ADVENTURE_TEXTS.Italian.name);
+			report.add('Translation tables', 'Italian name and description of the adventure written by the converter (Imperivm I has no Italian texts)');
+		}
+		put('Spanish', dest, es1);
+		put('English', dest, retranslate(src, (t) => t, soundPath));
+		put('Italian', dest, it1);
 	}
 	report.add('Texts and voices', `Spanish texts from local.pak; English and Italian use the English text of the adventure`);
 	report.add('Texts and voices', `${voices} Spanish voices under Local/Spanish and Local/English (Imperivm I has no English voices); Italian has text only`);
 	for (const lang of LANGS) {
 		if (![...out.keys()].some((k) => lower(k) === lower(`Local/${lang}/itemsCustom.loc.xml`))) out.set(`Local/${lang}/itemsCustom.loc.xml`, bytes('<translationtable/>' + EOL));
 	}
-	return { files: out, report, mapNames, customItems, terrain, decors, classes };
+	// Every adventure of Great Battles of Rome has these two folders, empty. Without "Conversations" the game cannot load
+	// CurrentGame/conversations when a map starts ("Empty or invalid directory specified for CVXConvRegistry::Load" in
+	// vxlog.log), and the code that loads the map's conversations throws when that load fails.
+	const dirs = ['Conversations', 'Resources'];
+	report.add('Adventure', 'empty Conversations and Resources folders, as in Great Battles of Rome\'s adventures');
+	return { files: out, dirs, report, mapNames, customItems, terrain, decors, classes };
 }
 
-module.exports = { convertAdventure, Report, terrainRemap, retranslate, convertNotes, convertMapXml, convertItems };
+module.exports = { convertAdventure, Report, terrainRemap, retranslate, cleanTable, convertNotes, convertMapXml, convertItems };

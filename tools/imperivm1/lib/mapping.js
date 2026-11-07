@@ -76,4 +76,34 @@ const GAME_PROPERTIES = {
 	user_interface: '5',
 };
 
-module.exports = { CLASS_SUBSTITUTES, RACES, FUNCTION_RENAMES, RESEARCH_RENAMES, TIMED_RITUALS, TERRAIN_FALLBACKS, GAME_PROPERTIES };
+// Name and description of the adventure in the list, where Imperivm I has no text of its own: the Spanish description
+// only when local.pak lacks one, and the Italian ones always (Imperivm I has no Italian texts).
+const ADVENTURE_TEXTS = {
+	Spanish: {
+		description: 'La campaña de Imperivm I: el joven galo Lárax contra los teutones que arrasaron Kormaris.',
+	},
+	Italian: {
+		name: 'Imperivm I - La guerra delle Gallie',
+		description: 'La campagna di Imperivm I: il giovane gallo Larax contro i teutoni che hanno raso al suolo Kormaris.',
+	},
+};
+
+// Stamina of the objects on the map: Great Battles of Rome's maps give 10 to every unit and 20 to every building, and
+// Imperivm I's have none (by the class's cpp_class).
+const STAMINA = {
+	CVXUnit: 10,
+	CVXHero: 10,
+	CVXDruid: 10,
+	CVXFlyingUnit: 10,
+	CVXShip: 10,
+	CVXWagon: 10,
+	CVXBuilding: 20,
+	CVXBarrack: 20,
+	CVXGate: 20,
+	CVXOutpost: 20,
+	CVXTavern: 20,
+	CVXTeleport: 20,
+	CVXTownHall: 20,
+};
+
+module.exports = { ADVENTURE_TEXTS, STAMINA, CLASS_SUBSTITUTES, RACES, FUNCTION_RENAMES, RESEARCH_RENAMES, TIMED_RITUALS, TERRAIN_FALLBACKS, GAME_PROPERTIES };

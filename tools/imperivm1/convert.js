@@ -97,12 +97,13 @@ function main() {
 
 	console.log('checking...');
 	const check = validateAdventure(result.files, { gbr, i1Classes: i1.classes, customItems: result.customItems });
-	const pkg = writeHpfs(result.files);
-	// The written package must read back to exactly the same files.
+	const pkg = writeHpfs(result.files, 512, result.dirs);
+	// The written package must read back to exactly the same files, and have the empty folders.
 	const back = readHpfs(pkg);
 	const backFiles = new Map(back.entries.filter((e) => !e.directory).map((e) => [e.path, e.data]));
 	let roundTrip = backFiles.size === result.files.size;
 	for (const [p, buf] of result.files) if (!backFiles.has(p) || !backFiles.get(p).equals(buf)) roundTrip = false;
+	for (const d of result.dirs) if (!back.entries.some((e) => e.directory && e.path === d)) roundTrip = false;
 	if (!roundTrip) check.errors.push('the written package does not read back to the same files');
 	const stats = check.stats;
 	report.add(
@@ -131,6 +132,7 @@ function main() {
 			for (const v of movies.values()) fs.copyFileSync(v.file, path.join(opts.out, 'Movies', v.name));
 		}
 		if (opts.unpacked) {
+			for (const d of result.dirs) fs.mkdirSync(path.join(opts.out, 'unpacked', ...d.split('/')), { recursive: true });
 			for (const [p, buf] of result.files) {
 				const dest = path.join(opts.out, 'unpacked', ...p.split('/'));
 				fs.mkdirSync(path.dirname(dest), { recursive: true });

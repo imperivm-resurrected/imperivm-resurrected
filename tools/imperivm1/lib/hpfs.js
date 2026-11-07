@@ -78,9 +78,19 @@ function readHpfs(buf) {
 
 // files: Map or array of [path, Buffer] with '/' separated paths. Folders are created from the paths. The root folder is
 // the first stream (page 1), as in the game's packages.
-function writeHpfs(files, pageSize = 512) {
+// `dirs` lists folders to create even when no file is in them ("Conversations", "Maps/1/Sequences").
+function writeHpfs(files, pageSize = 512, dirs = []) {
 	const perPage = pageSize / 4;
 	const root = { children: new Map() };
+	for (const d of dirs) {
+		let node = root;
+		for (const part of d.split('/').filter(Boolean)) {
+			const key = part.toLowerCase();
+			if (!node.children.has(key)) node.children.set(key, { name: part, children: new Map() });
+			node = node.children.get(key);
+			if (!node.children) throw new Error(`${d}: a file is in the way`);
+		}
+	}
 	// Names are matched without case, as the game looks them up: "Maps" and "maps" are one folder.
 	for (const [path, data] of files instanceof Map ? files : new Map(files)) {
 		const parts = path.split('/');

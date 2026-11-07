@@ -6,7 +6,7 @@ const G = require('./lib/grid');
 const S = require('./lib/script');
 const X = require('./lib/xml');
 const B = require('./lib/bmp');
-const { retranslate, convertNotes, convertMapXml } = require('./lib/adventure');
+const { retranslate, cleanTable, convertNotes, convertMapXml } = require('./lib/adventure');
 
 let failures = 0;
 let checks = 0;
@@ -43,6 +43,8 @@ function check(cond, what) {
 	check(dirs.filter((d) => d.toLowerCase() === 'maps').length === 1, 'HPFS merges folders that differ in case');
 	const root = back.entries.filter((e) => !e.path.includes('/')).map((e) => e.path);
 	check(root.join(',') === 'empty.txt,game.xml,Local,Maps', 'HPFS sorts names without case: ' + root.join(','));
+	const withDirs = readHpfs(writeHpfs(new Map([['game.xml', Buffer.from('x')]]), 512, ['Conversations', 'Resources']));
+	check(['Conversations', 'Resources'].every((d) => withDirs.entries.some((e) => e.directory && e.path === d)), 'HPFS keeps empty folders');
 	let threw = false;
 	try {
 		writeHpfs(new Map([['a.xml', Buffer.alloc(1)], ['A.XML', Buffer.alloc(1)]]));
@@ -128,6 +130,8 @@ function check(cond, what) {
 	const en = retranslate(loc, (t) => t, (p) => p.replace('Map1', '7').toLowerCase());
 	check(en.includes('result="Hi"') && en.includes('sound="7/conversations/cnv0_phrase0.wav"'), 'translation table to English with the voice path of the map id');
 	check(!retranslate(loc, (t, r) => r, () => null).includes('sound='), 'voice attribute dropped');
+	const table = cleanTable('<translationtable><translationtableentry text="" result=""/><translationtableentry text="A" result="1"/><translationtableentry text="A" result="2"/><translationtableentry text="B" result="3"/></translationtable>');
+	check(table.empty === 1 && table.duplicate === 1 && table.src === '<translationtable><translationtableentry text="A" result="1"/><translationtableentry text="B" result="3"/></translationtable>', 'translation table without empty or repeated texts');
 	const notes = convertNotes('\t<notes>\r\n\t\t<note\r\n\t\t\tid="Go."\r\n\t\t\ttext="Go there."\r\n\t\t\ticon="assets/entities/notifications/note.rle"\r\n\t\t\tmap="Map1"\r\n\t\t\tlocationx="5"\r\n\t\t\tlocationy="6"/>\r\n\t</notes>\r\n', { hasGameres: () => false }, { add() {}, count() {} }, 'Notes.xml');
 	const n = X.parseXml(notes).root.children[0].attrs;
 	check(n.get('title') === 'Go.' && n.get('show_on_minimap') === '1' && n.get('icon') === '', 'notes get a title and show_on_minimap, and lose the Imperivm I icon');
