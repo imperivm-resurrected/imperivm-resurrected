@@ -13,6 +13,7 @@ enum StatMetric {
 	kStatKilled, kStatLost, kStatDamageDealt, kStatDamageTaken,
 	kStatGoldHeld, kStatFoodHeld, kStatGoldSpent, kStatFoodSpent,
 	kStatGoldTaxes, kStatGoldCaptured, kStatGoldOther, kStatGoldTotal,
+	kStatInGame,  // 1 while the player has not lost; files from before it count as 1
 	kStatMetricCount
 };
 
@@ -28,6 +29,7 @@ struct StatsPlayerInfo {
 	std::string name;
 	uint32_t rgb = 0;
 	bool human = false, local = false, ally = false;
+	int team = 0;  // the lowest player index among the allies
 };
 
 // What a game's players did over time. Keeps a bounded number of samples: when one player reaches the limit
@@ -62,6 +64,35 @@ private:
 // What goes in a save's .stats file. Decoding checks everything, as the file can be damaged or from another version.
 std::string StatsEncode(const StatsHistory &history, const std::vector<StatsPlayerInfo> &players);
 bool StatsDecode(const std::string &data, StatsHistory &history, std::vector<StatsPlayerInfo> &players);
+
+// Allies of allies are one team, named by its lowest player index.
+void StatsGroupTeams(const bool active[kStatMaxPlayers], const bool allied[kStatMaxPlayers][kStatMaxPlayers], int teams[kStatMaxPlayers]);
+
+struct StatsTeam {
+	int id = 0;
+	std::vector<StatsPlayerInfo> members;
+};
+std::vector<StatsTeam> StatsTeams(const std::vector<StatsPlayerInfo> &players);
+
+// How the values of a team's players add up: the best level, the average kill ratio, and the sum of the rest.
+int StatsCombine(StatMetric metric, const std::vector<int> &values);
+struct StatsPoint {
+	uint32_t ms = 0;
+	int value = 0;
+};
+std::vector<StatsPoint> StatsTeamSeries(const StatsHistory &history, const std::vector<StatsPlayerInfo> &members, StatMetric metric);
+
+struct StatsElimination {
+	int player = 0;
+	uint32_t ms = 0;
+};
+// In order of time. A player already out in their first sample has no known moment and is not listed.
+std::vector<StatsElimination> StatsEliminations(const StatsHistory &history, const std::vector<StatsPlayerInfo> &players);
+bool StatsStillInGame(const StatsHistory &history, int player);
+// The team that is left when all the others have lost, or -1.
+int StatsWinningTeam(const StatsHistory &history, const std::vector<StatsPlayerInfo> &players);
+// Who has the highest last value of a metric, above zero; -1 if nobody.
+int StatsBestPlayer(const StatsHistory &history, const std::vector<StatsPlayerInfo> &players, StatMetric metric);
 
 // The last sample at or before the time, or the first one if they all come later. Null if there are none.
 const StatSample *StatsSampleAt(const std::vector<StatSample> &samples, uint32_t ms);

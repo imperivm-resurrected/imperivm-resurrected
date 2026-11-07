@@ -183,8 +183,151 @@ static void TrimsWhatComesAfter()
 	CHECK(h.Empty());
 }
 
+static StatsPlayerInfo Player(int index, int team, const char *name = "x")
+{
+	StatsPlayerInfo info;
+	info.index = index;
+	info.team = team;
+	info.name = name;
+	return info;
+}
+
+static StatSample Value(uint32_t ms, StatMetric metric, int value, bool inGame = true)
+{
+	StatSample s;
+	s.ms = ms;
+	s.values[metric] = value;
+	s.values[kStatInGame] = inGame ? 1 : 0;
+	return s;
+}
+
+static void GroupsAlliesOfAllies()
+{
+	bool active[kStatMaxPlayers] = {};
+	bool allied[kStatMaxPlayers][kStatMaxPlayers] = {};
+	for (int i = 0; i < 6; i++) active[i] = true;
+	allied[1][3] = allied[3][5] = true;
+	int teams[kStatMaxPlayers];
+	StatsGroupTeams(active, allied, teams);
+	CHECK_EQ(teams[0], 0);
+	CHECK_EQ(teams[1], 1);
+	CHECK_EQ(teams[3], 1);
+	CHECK_EQ(teams[5], 1);
+	CHECK_EQ(teams[2], 2);
+	CHECK_EQ(teams[4], 4);
+}
+
+static void GroupsPlayersByTeam()
+{
+	const std::vector<StatsTeam> teams = StatsTeams({Player(0, 0), Player(1, 1), Player(2, 0), Player(3, 3)});
+	CHECK_EQ(static_cast<int>(teams.size()), 3);
+	CHECK_EQ(teams[0].id, 0);
+	CHECK_EQ(static_cast<int>(teams[0].members.size()), 2);
+	CHECK_EQ(teams[0].members[1].index, 2);
+	CHECK_EQ(teams[2].id, 3);
+}
+
+static void CombinesEachMetricItsWay()
+{
+	CHECK_EQ(StatsCombine(kStatKilled, {}), 0);
+	CHECK_EQ(StatsCombine(kStatKilled, {3, 4}), 7);
+	CHECK_EQ(StatsCombine(kStatLevelMax, {3, 9, 4}), 9);
+	CHECK_EQ(StatsCombine(kStatMilitary, {100, 50}), 75);
+}
+
+static void AddsTeamSeriesAcrossMembers()
+{
+	StatsHistory h;
+	h.Add(0, Value(1000, kStatKilled, 1));
+	h.Add(0, Value(2000, kStatKilled, 2));
+	h.Add(1, Value(2000, kStatKilled, 10));
+	h.Add(1, Value(3000, kStatKilled, 20));
+	const std::vector<StatsPoint> points = StatsTeamSeries(h, {Player(0, 0), Player(1, 0)}, kStatKilled);
+	CHECK_EQ(static_cast<int>(points.size()), 3);
+	CHECK_EQ(points[0].value, 11);
+	CHECK_EQ(points[1].value, 12);
+	CHECK_EQ(points[2].ms, 3000u);
+	CHECK_EQ(points[2].value, 22);
+}
+
+static void FindsEliminationsInOrder()
+{
+	StatsHistory h;
+	h.Add(0, Value(1000, kStatScore, 1));
+	h.Add(0, Value(5000, kStatScore, 1, false));
+	h.Add(0, Value(6000, kStatScore, 1, false));
+	h.Add(1, Value(1000, kStatScore, 1));
+	h.Add(1, Value(2000, kStatScore, 1, false));
+	h.Add(2, Value(1000, kStatScore, 1));
+	h.Add(3, Value(1000, kStatScore, 1, false));
+	const std::vector<StatsElimination> out = StatsEliminations(h, {Player(0, 0), Player(1, 1), Player(2, 2), Player(3, 3)});
+	CHECK_EQ(static_cast<int>(out.size()), 2);
+	CHECK_EQ(out[0].player, 1);
+	CHECK_EQ(out[0].ms, 2000u);
+	CHECK_EQ(out[1].player, 0);
+	CHECK(StatsStillInGame(h, 2));
+	CHECK(!StatsStillInGame(h, 3));
+	CHECK(!StatsStillInGame(h, 9));
+}
+
+static void KnowsTheWinner()
+{
+	const std::vector<StatsPlayerInfo> players = {Player(0, 0), Player(1, 0), Player(2, 2)};
+	StatsHistory h;
+	h.Add(0, Value(1000, kStatScore, 1));
+	h.Add(1, Value(1000, kStatScore, 1));
+	h.Add(2, Value(1000, kStatScore, 1));
+	CHECK_EQ(StatsWinningTeam(h, players), -1);
+	h.Add(2, Value(2000, kStatScore, 1, false));
+	CHECK_EQ(StatsWinningTeam(h, players), 0);
+	h.Add(1, Value(2000, kStatScore, 1, false));
+	CHECK_EQ(StatsWinningTeam(h, players), 0);
+	h.Add(0, Value(2000, kStatScore, 1, false));
+	CHECK_EQ(StatsWinningTeam(h, players), -1);
+	CHECK_EQ(StatsWinningTeam(h, {Player(0, 0)}), -1);
+}
+
+static void FindsTheBest()
+{
+	const std::vector<StatsPlayerInfo> players = {Player(0, 0), Player(1, 1), Player(2, 2)};
+	StatsHistory h;
+	CHECK_EQ(StatsBestPlayer(h, players, kStatKilled), -1);
+	h.Add(0, Value(1000, kStatKilled, 0));
+	CHECK_EQ(StatsBestPlayer(h, players, kStatKilled), -1);
+	h.Add(1, Value(1000, kStatKilled, 5));
+	h.Add(2, Value(1000, kStatKilled, 5));
+	CHECK_EQ(StatsBestPlayer(h, players, kStatKilled), 1);
+	h.Add(2, Value(2000, kStatKilled, 8));
+	CHECK_EQ(StatsBestPlayer(h, players, kStatKilled), 2);
+}
+
+static void SavedTeamsComeBackAndOldFilesCountAsInGame()
+{
+	std::vector<StatsPlayerInfo> players = {Player(5, 3, "a")}, back;
+	StatsHistory h, read;
+	h.Add(5, Value(1000, kStatScore, 9, false));
+	std::string data = StatsEncode(h, players);
+	CHECK(StatsDecode(data, read, back));
+	CHECK_EQ(back[0].team, 3);
+	CHECK(!StatsStillInGame(read, 5));
+	// The same file as a version without the last metric wrote it.
+	const size_t metricCountAt = 8;
+	data[metricCountAt] = static_cast<char>(kStatMetricCount - 1);
+	data.erase(data.size() - 4);
+	CHECK(StatsDecode(data, read, back));
+	CHECK(StatsStillInGame(read, 5));
+}
+
 int main()
 {
+	GroupsAlliesOfAllies();
+	GroupsPlayersByTeam();
+	CombinesEachMetricItsWay();
+	AddsTeamSeriesAcrossMembers();
+	FindsEliminationsInOrder();
+	KnowsTheWinner();
+	FindsTheBest();
+	SavedTeamsComeBackAndOldFilesCountAsInGame();
 	SavedHistoryComesBack();
 	DamagedHistoryIsRefused();
 	EmptyHistoryRoundTrips();

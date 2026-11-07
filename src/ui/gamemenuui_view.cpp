@@ -224,46 +224,50 @@ struct Surface {
 	}
 };
 
-uint32_t FirstSampleMs(const View &v, const std::vector<const StatsPlayerInfo *> &players)
+struct Series {
+	std::string name;
+	COLORREF color = 0;
+	bool thick = false;
+	std::vector<StatsPoint> points;
+	std::vector<StatsPoint> marks;
+};
+
+int ValueAt(const std::vector<StatsPoint> &points, uint32_t ms, bool &found)
 {
-	uint32_t first = v.statsData->history.LastMs();
-	for (const StatsPlayerInfo *info : players) {
-		const std::vector<StatSample> &samples = v.statsData->history.Samples(info->index);
-		if (!samples.empty()) first = std::min(first, samples.front().ms);
-	}
-	return first;
+	const auto after = std::upper_bound(points.begin(), points.end(), ms, [](uint32_t t, const StatsPoint &s) { return t < s.ms; });
+	found = !points.empty();
+	if (!found) return 0;
+	return after == points.begin() ? points.front().value : (after - 1)->value;
 }
 
-void PaintChart(Painter &p, const View &v, const std::vector<const StatsPlayerInfo *> &players, int top)
+void PaintLines(Painter &p, const View &v, const std::vector<Series> &series, int top, int bottom)
 {
-	const Category &category = kCategories[v.stats.category];
-	const StatMetric metric = category.metrics[v.stats.metric].id;
-	const int bottom = kFooterY - 10;
 	PaintCard(p, kMainX, top, kMainW, bottom - top);
-
 	const int plotX = kMainX + 62, plotW = kMainW - 62 - 18, plotY = top + 16, plotH = bottom - top - 16 - 32;
-	const StatsHistory &history = v.statsData->history;
-	const uint32_t now = history.LastMs(), span = kRangeMs[v.stats.range];
-	const uint32_t from = std::max(FirstSampleMs(v, players), span && now > span ? now - span : 0);
-	const uint32_t length = std::max<uint32_t>(now - from, 1000);
+	uint32_t first = 0xffffffffu, now = 0;
+	for (const Series &s : series) {
+		if (s.points.empty()) continue;
+		first = std::min(first, s.points.front().ms);
+		now = std::max(now, s.points.back().ms);
+	}
+	const uint32_t span = kRangeMs[v.stats.range];
+	const uint32_t from = std::max(first == 0xffffffffu ? 0 : first, span && now > span ? now - span : 0);
+	const uint32_t length = std::max<uint32_t>(now > from ? now - from : 0, 1000);
 
-	std::vector<const StatsPlayerInfo *> shown;
 	int maximum = 0;
 	size_t mostPoints = 0;
-	for (const StatsPlayerInfo *info : players) {
-		if (!Shown(v, *info)) continue;
-		shown.push_back(info);
+	for (const Series &s : series) {
 		size_t points = 0;
-		for (const StatSample &s : history.Samples(info->index)) {
-			if (s.ms < from) continue;
-			maximum = std::max(maximum, s.values[metric]);
+		for (const StatsPoint &point : s.points) {
+			if (point.ms < from) continue;
+			maximum = std::max(maximum, point.value);
 			points++;
 		}
 		mostPoints = std::max(mostPoints, points);
 	}
-	if (shown.empty() || mostPoints < 2) {
+	if (series.empty() || mostPoints < 2) {
 		p.Font(0);
-		p.Text(plotX, plotY, plotW, plotH, shown.empty() ? "No player matches the filters." : "Not enough history to draw yet. The Table view has the totals.", kDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.Text(plotX, plotY, plotW, plotH, series.empty() ? "No player matches the filters." : "Not enough history to draw yet. The Table view has the totals.", kDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		return;
 	}
 	const StatsAxis axis = StatsNiceAxis(maximum);
@@ -289,27 +293,37 @@ void PaintChart(Painter &p, const View &v, const std::vector<const StatsPlayerIn
 
 	Surface surface;
 	const bool direct = surface.Open(p.dc);
-	std::vector<const StatsPlayerInfo *> ordered = shown;
-	std::stable_sort(ordered.begin(), ordered.end(), [](const StatsPlayerInfo *a, const StatsPlayerInfo *b) { return !a->local && b->local; });
-	for (const StatsPlayerInfo *info : ordered) {
-		const COLORREF color = LineColor(ColorOf(*info));
-		const float width = (info->local ? 2.6f : 1.8f) * p.s;
-		const std::vector<StatSample> &samples = history.Samples(info->index);
-		const StatSample *previous = nullptr;
-		for (const StatSample &s : samples) {
-			if (s.ms < from) {
-				previous = &s;
-				continue;
-			}
-			if (previous && previous->ms >= from && direct) {
-				surface.Segment(xOf(previous->ms) * p.s, yOf(previous->values[metric]) * p.s, xOf(s.ms) * p.s, yOf(s.values[metric]) * p.s, width, color);
-			}
-			previous = &s;
+	std::vector<const Series *> ordered;
+	for (const Series &s : series) ordered.push_back(&s);
+	std::stable_sort(ordered.begin(), ordered.end(), [](const Series *a, const Series *b) { return !a->thick && b->thick; });
+	for (const Series *s : ordered) {
+		const COLORREF color = LineColor(s->color);
+		const float width = (s->thick ? 2.6f : 1.8f) * p.s;
+		const StatsPoint *previous = nullptr;
+		for (const StatsPoint &point : s->points) {
+			if (point.ms < from) continue;
+			if (previous && direct) surface.Segment(xOf(previous->ms) * p.s, yOf(previous->value) * p.s, xOf(point.ms) * p.s, yOf(point.value) * p.s, width, color);
+			previous = &point;
 		}
-		if (previous && previous->ms >= from && direct) {
-			const float px = xOf(previous->ms) * p.s, py = yOf(previous->values[metric]) * p.s;
+		if (previous && direct) {
+			const float px = xOf(previous->ms) * p.s, py = yOf(previous->value) * p.s;
 			surface.Segment(px, py, px, py, width * 2.2f, color);
 		}
+	}
+	bool anyMark = false;
+	for (const Series &s : series) {
+		for (const StatsPoint &mark : s.marks) {
+			if (mark.ms < from) continue;
+			anyMark = true;
+			const int x = static_cast<int>(xOf(mark.ms)), y = static_cast<int>(yOf(mark.value));
+			p.Diamond(x, y, 7, RGB(14, 10, 7));
+			p.Diamond(x, y, 5, LineColor(s.color));
+		}
+	}
+	if (anyMark) {
+		p.Diamond(plotX + plotW - 90, plotY + 10, 5, pal::goldLight);
+		p.Font(3);
+		p.Text(plotX + plotW - 80, plotY, 80, 20, "Eliminated", kDim);
 	}
 
 	const int mouseX = static_cast<int>((v.mouseX - p.ox) / p.s), mouseY = static_cast<int>((v.mouseY - p.oy) / p.s);
@@ -318,16 +332,17 @@ void PaintChart(Painter &p, const View &v, const std::vector<const StatsPlayerIn
 	p.Fill(mouseX, plotY, 1, plotH, RGB(150, 122, 70));
 
 	struct Line {
-		const StatsPlayerInfo *info;
+		const Series *series;
 		int value;
 	};
 	std::vector<Line> lines;
-	for (const StatsPlayerInfo *info : shown) {
-		const StatSample *s = StatsSampleAt(history.Samples(info->index), at);
-		if (s) lines.push_back({info, s->values[metric]});
+	for (const Series &s : series) {
+		bool found = false;
+		const int value = ValueAt(s.points, at, found);
+		if (found) lines.push_back({&s, value});
 	}
 	std::stable_sort(lines.begin(), lines.end(), [](const Line &a, const Line &b) { return a.value > b.value; });
-	constexpr int kTipW = 210, kTipRow = 22;
+	constexpr int kTipW = 230, kTipRow = 22;
 	const int tipH = 30 + static_cast<int>(lines.size()) * kTipRow + 6;
 	const int tipX = mouseX + 14 + kTipW > plotX + plotW ? mouseX - 14 - kTipW : mouseX + 14;
 	const int tipY = std::max(plotY, std::min(mouseY - tipH / 2, plotY + plotH - tipH));
@@ -337,10 +352,205 @@ void PaintChart(Painter &p, const View &v, const std::vector<const StatsPlayerIn
 	p.Text(tipX + 10, tipY + 5, kTipW - 20, 20, StatsFormatTime(at), pal::goldLight);
 	int rowY = tipY + 28;
 	for (const Line &line : lines) {
-		p.Fill(tipX + 10, rowY + 5, 11, 11, ColorOf(*line.info));
-		p.Text(tipX + 27, rowY, kTipW - 27 - 66, kTipRow, line.info->name, kText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Fill(tipX + 10, rowY + 5, 11, 11, line.series->color);
+		p.Text(tipX + 27, rowY, kTipW - 27 - 66, kTipRow, line.series->name, kText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.Text(tipX + kTipW - 64, rowY, 54, kTipRow, StatsFormatShort(line.value), pal::goldLight, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 		rowY += kTipRow;
+	}
+}
+
+std::vector<StatsPlayerInfo> ShownPlayers(const View &v, const std::vector<const StatsPlayerInfo *> &players)
+{
+	std::vector<StatsPlayerInfo> shown;
+	for (const StatsPlayerInfo *info : players) {
+		if (Shown(v, *info)) shown.push_back(*info);
+	}
+	return shown;
+}
+
+void PaintPlayerChart(Painter &p, const View &v, const std::vector<const StatsPlayerInfo *> &players, int top, int bottom)
+{
+	const StatMetric metric = kCategories[v.stats.category].metrics[v.stats.metric].id;
+	const StatsHistory &history = v.statsData->history;
+	const std::vector<StatsPlayerInfo> shown = ShownPlayers(v, players);
+	const std::vector<StatsElimination> eliminations = StatsEliminations(history, shown);
+	std::vector<Series> series;
+	for (const StatsPlayerInfo &info : shown) {
+		Series s;
+		s.name = info.name;
+		s.color = ColorOf(info);
+		s.thick = info.local;
+		for (const StatSample &sample : history.Samples(info.index)) {
+			StatsPoint point;
+			point.ms = sample.ms;
+			point.value = sample.values[metric];
+			s.points.push_back(point);
+		}
+		for (const StatsElimination &e : eliminations) {
+			if (e.player != info.index) continue;
+			if (const StatSample *sample = StatsSampleAt(history.Samples(info.index), e.ms)) {
+				StatsPoint mark;
+				mark.ms = e.ms;
+				mark.value = sample->values[metric];
+				s.marks.push_back(mark);
+			}
+		}
+		series.push_back(s);
+	}
+	PaintLines(p, v, series, top, bottom);
+}
+
+std::string TeamName(const StatsTeam &team)
+{
+	std::string name;
+	for (const StatsPlayerInfo &info : team.members) {
+		if (!name.empty()) name += " + ";
+		name += info.name;
+	}
+	return name;
+}
+
+bool TeamHasLocal(const StatsTeam &team)
+{
+	return std::any_of(team.members.begin(), team.members.end(), [](const StatsPlayerInfo &info) { return info.local; });
+}
+
+void PaintTeams(Painter &p, const View &v, const std::vector<const StatsPlayerInfo *> &players, int top, int bottom)
+{
+	constexpr int kHeadH = 32, kRowH = 30, kNameW = 190, kColGap = 14, kPadIn = 16;
+	const Category &category = kCategories[v.stats.category];
+	const StatsHistory &history = v.statsData->history;
+	const std::vector<StatsTeam> teams = StatsTeams(ShownPlayers(v, players));
+	const auto value = [&](const StatsTeam &team, int column) {
+		std::vector<int> values;
+		for (const StatsPlayerInfo &info : team.members) {
+			const std::vector<StatSample> &samples = history.Samples(info.index);
+			if (!samples.empty()) values.push_back(samples.back().values[category.metrics[column].id]);
+		}
+		return StatsCombine(category.metrics[column].id, values);
+	};
+	const int tableH = kHeadH + std::max(1, static_cast<int>(teams.size())) * kRowH + 4;
+	PaintCard(p, kMainX, top, kMainW, tableH);
+	const int colX = kMainX + kPadIn + kNameW, colW = (kMainW - kPadIn * 2 - kNameW - kColGap * 3) / 4;
+	int best[4] = {};
+	for (const StatsTeam &team : teams) {
+		for (int c = 0; c < 4; c++) best[c] = std::max(best[c], value(team, c));
+	}
+	p.Font(4);
+	p.Text(kMainX + kPadIn, top + 7, kNameW, 20, "Teams", kGold);
+	for (int c = 0; c < 4; c++) p.Text(colX + c * (colW + kColGap), top + 7, colW, 20, category.metrics[c].label, kGold, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	int y = top + kHeadH;
+	for (const StatsTeam &team : teams) {
+		p.Fill(kMainX + 14, y, kMainW - 28, 1, RGB(48, 37, 23));
+		p.Fill(kMainX + kPadIn, y + 8, 14, 14, ColorOf(team.members.front()));
+		p.Frame(kMainX + kPadIn, y + 8, 14, 14, RGB(10, 8, 6));
+		p.Font(3);
+		p.Text(kMainX + kPadIn + 20, y, kNameW - 26, kRowH, TeamName(team), TeamHasLocal(team) ? pal::goldLight : kText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		for (int c = 0; c < 4; c++) {
+			const int x = colX + c * (colW + kColGap), number = value(team, c), percent = best[c] > 0 ? number * 100 / best[c] : 0;
+			const bool leader = number > 0 && number == best[c];
+			p.Font(3);
+			p.Text(x, y + 2, colW, 18, StatsFormatShort(number), leader ? pal::goldLight : kText);
+			p.Fill(x, y + 21, colW, 4, pal::well);
+			const int filled = colW * std::max(0, std::min(100, percent)) / 100;
+			if (filled > 0) p.FillH(x, y + 21, filled, 4, pal::bronze, leader ? pal::goldLight : kGold);
+		}
+		y += kRowH;
+	}
+	const StatMetric metric = category.metrics[v.stats.metric].id;
+	std::vector<Series> series;
+	for (const StatsTeam &team : teams) {
+		Series s;
+		s.name = TeamName(team);
+		s.color = ColorOf(team.members.front());
+		s.thick = TeamHasLocal(team);
+		s.points = StatsTeamSeries(history, team.members, metric);
+		series.push_back(s);
+	}
+	PaintLines(p, v, series, top + tableH + 8, bottom);
+}
+
+void PaintSummary(Painter &p, const View &v, const std::vector<const StatsPlayerInfo *> &players, int top, int bottom)
+{
+	const StatsHistory &history = v.statsData->history;
+	std::vector<StatsPlayerInfo> all;
+	for (const StatsPlayerInfo *info : players) all.push_back(*info);
+	const std::vector<StatsPlayerInfo> shown = ShownPlayers(v, players);
+
+	constexpr int kBannerH = 58;
+	PaintCard(p, kMainX, top, kMainW, kBannerH);
+	const int winner = StatsWinningTeam(history, all);
+	std::string title = Tr("No winner yet");
+	for (const StatsTeam &team : StatsTeams(all)) {
+		if (team.id == winner) title = Tr("Winner: ") + TeamName(team);
+	}
+	p.Font(2);
+	p.Text(kMainX + 16, top, kMainW - 32, kBannerH, title, winner >= 0 ? pal::goldLight : kDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+
+	static const struct {
+		const char *label;
+		StatMetric metric;
+	} kAwards[] = {{"Best score", kStatScore}, {"Most kills", kStatKilled}, {"Largest army", kStatUnitsMax}, {"Most damage", kStatDamageDealt}, {"Most gold", kStatGoldTotal}, {"Highest level", kStatLevelMax}};
+	constexpr int kAwardGap = 10, kAwardH = 66;
+	const int awardW = (kMainW - kAwardGap * 2) / 3;
+	for (int i = 0; i < 6; i++) {
+		const int x = kMainX + (i % 3) * (awardW + kAwardGap), y = top + kBannerH + kAwardGap + (i / 3) * (kAwardH + kAwardGap);
+		PaintCard(p, x, y, awardW, kAwardH);
+		p.Font(4);
+		p.Text(x + 12, y + 7, awardW - 24, 18, kAwards[i].label, kGold, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		const int best = StatsBestPlayer(history, shown, kAwards[i].metric);
+		for (const StatsPlayerInfo &info : shown) {
+			if (info.index != best) continue;
+			p.Fill(x + 12, y + 37, 13, 13, ColorOf(info));
+			p.Font(3);
+			p.Text(x + 31, y + 32, awardW - 31 - 66, 24, info.name, info.local ? pal::goldLight : kText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			p.Font(1);
+			p.Text(x + awardW - 70, y + 32, 58, 24, StatsFormatShort(history.Samples(best).back().values[kAwards[i].metric]), pal::goldLight, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+		}
+	}
+
+	const int listY = top + kBannerH + kAwardGap + 2 * (kAwardH + kAwardGap), listH = bottom - listY, listW = (kMainW - kAwardGap) / 2;
+	constexpr int kListRow = 24, kListHead = 30;
+	PaintCard(p, kMainX, listY, listW, listH);
+	p.Font(4);
+	p.Text(kMainX + 12, listY + 7, listW - 24, 18, "Ranking", kGold);
+	std::vector<StatsPlayerInfo> ranking = shown;
+	const auto score = [&](const StatsPlayerInfo &info) {
+		const std::vector<StatSample> &samples = history.Samples(info.index);
+		return samples.empty() ? 0 : samples.back().values[kStatScore];
+	};
+	std::stable_sort(ranking.begin(), ranking.end(), [&](const StatsPlayerInfo &a, const StatsPlayerInfo &b) { return score(a) > score(b); });
+	int rowY = listY + kListHead, place = 1;
+	for (const StatsPlayerInfo &info : ranking) {
+		if (rowY + kListRow > listY + listH) break;
+		const bool in = StatsStillInGame(history, info.index);
+		p.Font(3);
+		p.Text(kMainX + 12, rowY, 20, kListRow, std::to_string(place++), kDim);
+		p.Fill(kMainX + 34, rowY + 6, 12, 12, ColorOf(info));
+		p.Text(kMainX + 52, rowY, listW - 52 - 62, kListRow, info.name, !in ? kDim : info.local ? pal::goldLight : kText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(kMainX + listW - 60, rowY, 48, kListRow, StatsFormatShort(score(info)), in ? pal::goldLight : kDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+		rowY += kListRow;
+	}
+
+	const int momentsX = kMainX + listW + kAwardGap;
+	PaintCard(p, momentsX, listY, listW, listH);
+	p.Font(4);
+	p.Text(momentsX + 12, listY + 7, listW - 24, 18, "Key moments", kGold);
+	const std::vector<StatsElimination> eliminations = StatsEliminations(history, all);
+	const int fits = (listH - kListHead) / kListRow;
+	rowY = listY + kListHead;
+	p.Font(3);
+	if (eliminations.empty()) p.Text(momentsX + 12, rowY, listW - 24, kListRow, "Nobody has been eliminated yet.", kDim);
+	const size_t skip = eliminations.size() > static_cast<size_t>(fits) ? eliminations.size() - fits : 0;
+	for (size_t i = skip; i < eliminations.size(); i++) {
+		const StatsElimination &e = eliminations[i];
+		for (const StatsPlayerInfo &info : all) {
+			if (info.index != e.player) continue;
+			p.Text(momentsX + 12, rowY, 58, kListRow, StatsFormatTime(e.ms), pal::goldLight);
+			p.Fill(momentsX + 72, rowY + 6, 12, 12, ColorOf(info));
+			p.Text(momentsX + 90, rowY, listW - 100, kListRow, TrFmt("%s was eliminated", {info.name}), kText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		}
+		rowY += kListRow;
 	}
 }
 }
@@ -389,37 +599,41 @@ void PaintStatistics(Painter &p, const View &v)
 	PaintRail(p, v, players);
 	p.Fill(kPad + kRailW + 7, 92, 1, kFooterY - 92 - 8, pal::lineDim);
 
-	std::vector<TabSpec> tabs;
-	for (int i = 0; i < static_cast<int>(std::size(kCategories)); i++) tabs.push_back({kCategories[i].name, kActCategory, i, v.stats.category == i, true});
-	const int tabW = (kMainW - 6 * 4) / 5;
-	PaintTabs(p, kMainX, 88, tabs, v.mouseX, v.mouseY, tabW, 36);
-	p.Fill(kMainX, 124, kMainW, 1, pal::line);
+	constexpr int kViewW = 92, kRangeW = 112, kChipH = 28, kChipsY = 92, kTabsY = 126, kTabH = 34, kMetricsY = 168, kChartTop = 204, kBottom = kFooterY - 10;
+	static const char *const kViewLabels[] = {"Summary", "Chart", "Table", "Teams"};
+	for (int i = 0; i < 4; i++) Chip(p, kMainX + i * (kViewW + 6), kChipsY, kViewW, kChipH, kViewLabels[i], v.stats.view == i, kActView, i, v);
+	const bool hasData = v.statsData && !v.statsData->history.Empty();
+	const bool summary = v.stats.view == kViewSummary;
 
-	constexpr int kViewW = 92, kRangeW = 112, kChipH = 28;
-	Chip(p, kMainX, 134, kViewW, kChipH, "Chart", v.stats.chart, kActChart, 1, v);
-	Chip(p, kMainX + kViewW + 6, 134, kViewW, kChipH, "Table", !v.stats.chart, kActChart, 0, v);
-
-	if (!v.statsData || v.statsData->history.Empty()) {
+	if (!hasData) {
 		p.Font(0);
 		p.Text(kMainX, 200, kMainW, 60, "No data for this period yet.", kDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 	}
-	else if (v.stats.chart) {
-		for (int i = 0; i < 3; i++) {
-			Chip(p, kMainX + kMainW - (3 - i) * kRangeW - (2 - i) * 6, 134, kRangeW, kChipH, kRangeLabels[i], v.stats.range == i, kActRange, i, v);
-		}
-		const Category &category = kCategories[v.stats.category];
-		const int metricW = (kMainW - 6 * 3) / 4;
-		for (int i = 0; i < 4; i++) Chip(p, kMainX + i * (metricW + 6), 170, metricW, kChipH, category.metrics[i].label, v.stats.metric == i, kActMetric, i, v);
-		PaintChart(p, v, players, 206);
+	else if (summary) {
+		PaintSummary(p, v, players, kTabsY + 4, kBottom);
 	}
 	else {
-		PaintTable(p, v, players, 172);
+		std::vector<TabSpec> tabs;
+		for (int i = 0; i < static_cast<int>(std::size(kCategories)); i++) tabs.push_back({kCategories[i].name, kActCategory, i, v.stats.category == i, true});
+		PaintTabs(p, kMainX, kTabsY, tabs, v.mouseX, v.mouseY, (kMainW - 6 * 4) / 5, kTabH);
+		p.Fill(kMainX, kTabsY + kTabH, kMainW, 1, pal::line);
+		if (v.stats.view == kViewTable) {
+			PaintTable(p, v, players, kMetricsY + 2);
+		}
+		else {
+			for (int i = 0; i < 3; i++) Chip(p, kMainX + kMainW - (3 - i) * kRangeW - (2 - i) * 6, kChipsY, kRangeW, kChipH, kRangeLabels[i], v.stats.range == i, kActRange, i, v);
+			const Category &category = kCategories[v.stats.category];
+			const int metricW = (kMainW - 6 * 3) / 4;
+			for (int i = 0; i < 4; i++) Chip(p, kMainX + i * (metricW + 6), kMetricsY, metricW, kChipH, category.metrics[i].label, v.stats.metric == i, kActMetric, i, v);
+			if (v.stats.view == kViewTeams) PaintTeams(p, v, players, kChartTop, kBottom);
+			else PaintPlayerChart(p, v, players, kChartTop, kBottom);
+		}
 	}
 
 	p.Fill(18, kFooterY, kStatsW - 36, 1, pal::line);
 	if (v.statsData) {
 		p.Font(0);
-		p.Text(kPad + 4, kFooterY + 10, 240, 40, Tr("Game time: ") + StatsFormatTime(v.statsData->history.LastMs()), kDim);
+		p.Text(kPad + 4, kFooterY + 10, 400, 40, Tr("Game time: ") + StatsFormatTime(v.statsData->history.LastMs()), kDim);
 	}
 	p.Button(kStatsW - kPad - 160, kFooterY + 10, 160, 40, "Close", kActButton, kStatsClose, v.mouseX, v.mouseY, true, true);
 }
