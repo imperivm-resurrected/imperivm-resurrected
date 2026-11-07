@@ -12,7 +12,6 @@
 #include "core/log.h"
 #include "core/uiport.h"
 #include "game/options.h"
-#include "game/viewprefs.h"
 #include "i18n/tr.h"
 #include "ui/modui.h"
 #include "ui/optionsui_view.h"
@@ -52,9 +51,6 @@ void SetExtras(Values &v, const Config &c)
 	v.scrolls[kPanelOpacity] = c.panelOpacity;
 	v.combos[kHealthBars] = c.healthBarsAtStart;
 	v.checks[kPauseInBackground] = c.pauseInBackground;
-	v.checks[kZoomGroupIcons] = c.zoomExtras;
-	v.checks[kZoomFog] = c.zoomFog;
-	v.combos[kZoomRefresh] = ZoomRefreshPreset(c.zoomRefreshMs);
 }
 
 Values ReadNative()
@@ -78,11 +74,11 @@ Values ReadNative()
 
 void CopyExtras(Values &to, const Values &from)
 {
-	for (int id : {kSmoothCamera, kModernAudio, kPauseInBackground, kZoomGroupIcons, kZoomFog}) {
+	for (int id : {kSmoothCamera, kModernAudio, kPauseInBackground}) {
 		const auto it = from.checks.find(id);
 		if (it != from.checks.end()) to.checks[id] = it->second;
 	}
-	for (int id : {kHealthBars, kZoomRefresh}) {
+	for (int id : {kHealthBars}) {
 		const auto it = from.combos.find(id);
 		if (it != from.combos.end()) to.combos[id] = it->second;
 	}
@@ -153,10 +149,6 @@ bool CommitExtras(const Values &v)
 	const auto bars = v.combos.find(kHealthBars);
 	if (bars != v.combos.end()) c.healthBarsAtStart = bars->second;
 	c.pauseInBackground = check(kPauseInBackground, c.pauseInBackground);
-	c.zoomExtras = check(kZoomGroupIcons, c.zoomExtras);
-	c.zoomFog = check(kZoomFog, c.zoomFog);
-	const auto refresh = v.combos.find(kZoomRefresh);
-	if (refresh != v.combos.end() && refresh->second != ZoomRefreshPreset(c.zoomRefreshMs)) c.zoomRefreshMs = ZoomRefreshPresetMs(refresh->second);
 	SaveConfig();
 	return c.modernAudio != audioBefore;
 }

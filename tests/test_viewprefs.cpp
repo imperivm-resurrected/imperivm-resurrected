@@ -34,23 +34,9 @@ static void HealthBarsFilterRules()
 	CHECK(!HealthBarsKeep(kBarsMine, true, false));
 }
 
-static void ZoomRefresh()
-{
-	CHECK_EQ(ZoomRefreshPresetMs(0), 16);
-	CHECK_EQ(ZoomRefreshPresetMs(1), 33);
-	CHECK_EQ(ZoomRefreshPresetMs(2), 100);
-	CHECK_EQ(ZoomRefreshPresetMs(7), 16);
-	for (int preset = 0; preset < kZoomRefreshPresetCount; preset++) CHECK_EQ(ZoomRefreshPreset(ZoomRefreshPresetMs(preset)), preset);
-	CHECK_EQ(ZoomRefreshPreset(0), 2);
-	CHECK_EQ(ZoomRefreshPreset(1), 0);
-	CHECK_EQ(ZoomRefreshPreset(50), 1);
-	CHECK_EQ(ZoomRefreshPreset(1000), 2);
-}
-
 int main()
 {
 	HealthBarsStart();
 	HealthBarsFilterRules();
-	ZoomRefresh();
 	return test::Summary("viewprefs");
 }
