@@ -1,83 +1,108 @@
 // Diagnostics for testing the converted campaign in the game (convert.js --probe). They write "I1PROBE ..." lines to
-// Logs\imperivm\imperivm-mod.log through Imperivm Resurrected's Mod_Log, so they need the mod.
+// Logs\imperivm\imperivm-mod.log through Imperivm Resurrected's Mod_Log, so they need the mod. They only observe: no
+// command is given that the campaign does not give.
 //
-// The Kormaris opening (map 11937, seq15): three Teutons are sent at Larax and the script waits for them to die. Every 2
-// seconds for 30 seconds the probe logs Larax, his best target, each of the Teutons and the diplomacy between their
-// players; after 15 seconds it orders Larax to attack the first Teuton still alive.
+// Kormaris (map 11937):
+//   seq0, right after Larax is looked up, before any command: Larax's state ("seq0 start").
+//   seq0, right after his "hold_position": the same ("seq0 after hold_position").
+//   seq0, around the goddess conversation: the time before and after C_Conv.Run(), to see whether it was played.
+//   seq15, after the Teutons are sent at him, every 2 s for 30 s: Larax, his best target, each Teuton and the diplomacy.
 'use strict';
 
 const S = require('./script');
 
-// "if (cond) s = s + ' name=1'; else s = s + ' name=0';" for a bool, since a bool does not convert to a string.
+const DECLARATIONS = 'ObjList i1p_v;\nObj i1p_o, i1p_b;\nint i1p_k, i1p_i, i1p_p;\nstr i1p_s;\nSettlement i1p_h;\n';
+
+// "if (cond) s = s + ' name=1'; else s = s + ' name=0';" since a bool does not convert to a string.
 const flag = (name, cond) => `if (${cond}) i1p_s = i1p_s + " ${name}=1"; else i1p_s = i1p_s + " ${name}=0";`;
 
-function kormarisProbe() {
-	const larax = 'NO_Larax.obj';
-	const lines = [
+// Appends to i1p_s whether the unit `u` (an Obj expression) is in a holder, and the holder's settlement.
+const holder = (u) => [
+	flag('inholder', `${u}.AsUnit().InHolder()`),
+	`if (${u}.AsUnit().InHolder()) {`,
+	`\ti1p_h = ${u}.AsUnit().GetHolderSett();`,
+	`\tif (i1p_h.IsValid()) i1p_s = i1p_s + " holder_sett=" + i1p_h.name + " holder_sett_player=" + i1p_h.player; else i1p_s = i1p_s + " holder_sett=invalid";`,
+	'}',
+];
+
+// One line about Larax: tag, time, player, health, command, position, holder, alive, path, visible, AI.
+const laraxLine = (tag) => {
+	const l = 'NO_Larax.obj';
+	return [
+		`i1p_s = "I1PROBE ${tag} t=" + GetTime() + " larax player=" + ${l}.player + " health=" + ${l}.health + " command=" + ${l}.command + " x=" + ${l}.pos.x + " y=" + ${l}.pos.y;`,
+		...holder(l),
+		flag('alive', `${l}.IsAlive()`),
+		flag('haspath', `${l}.AsUnit().HasPath()`),
+		flag('visible', `${l}.IsVisible()`),
+		flag('ai', `IsAIPlayer(${l}.player)`),
+		'Mod_Log(i1p_s);',
+	];
+};
+
+const indent = (lines, n) => lines.map((l) => '\t'.repeat(n) + l);
+
+function seq15Loop() {
+	const l = 'NO_Larax.obj';
+	return [
 		'// I1PROBE: diagnostics added by convert.js --probe',
 		'i1p_v = M1_Q_Victims1.GetObjList();',
-		'Mod_LogInt("I1PROBE start, Teutons in M1_Q_Victims1", i1p_v.count);',
+		'Mod_LogInt("I1PROBE seq15 start, Teutons in M1_Q_Victims1", i1p_v.count);',
 		'for (i1p_k = 0; i1p_k < 15; i1p_k += 1) {',
-		`\ti1p_p = ${larax}.player;`,
-		`\ti1p_s = "I1PROBE t=" + GetTime() + " larax player=" + i1p_p + " health=" + ${larax}.health + " command=" + ${larax}.command;`,
-		`\t${flag('alive', `${larax}.IsAlive()`)}`,
-		`\t${flag('haspath', `${larax}.AsUnit().HasPath()`)}`,
-		`\t${flag('visible', `${larax}.IsVisible()`)}`,
-		`\t${flag('ai', 'IsAIPlayer(i1p_p)')}`,
-		'\tMod_Log(i1p_s);',
-		`\ti1p_b = ${larax}.AsUnit().BestTargetForPos();`,
+		...indent(laraxLine('seq15'), 1),
+		`\ti1p_b = ${l}.AsUnit().BestTargetForPos();`,
 		'\ti1p_s = "I1PROBE best target";',
 		`\t${flag('valid', 'i1p_b.IsValid()')}`,
 		'\tif (i1p_b.IsValid()) i1p_s = i1p_s + " player=" + i1p_b.player + " class=" + i1p_b.class();',
 		'\tMod_Log(i1p_s);',
+		`\ti1p_p = ${l}.player;`,
 		'\ti1p_s = "I1PROBE diplomacy larax-4";',
 		`\t${flag('ceasefire', 'DiplGetCeaseFire(i1p_p, 4)')}`,
 		`\t${flag('ceasefire_back', 'DiplGetCeaseFire(4, i1p_p)')}`,
 		`\t${flag('allied', 'DiplAreAllied(i1p_p, 4)')}`,
 		`\t${flag('sharecontrol', 'DiplGetShareControl(i1p_p, 4)')}`,
-		`\t${flag('sharesupport', 'DiplGetShareSupport(i1p_p, 4)')}`,
 		`\t${flag('ai4', 'IsAIPlayer(4)')}`,
-		`\t${flag('ceasefire12', 'DiplGetCeaseFire(1, 2)')}`,
-		`\t${flag('ceasefire14', 'DiplGetCeaseFire(1, 4)')}`,
 		'\tMod_Log(i1p_s);',
 		'\tfor (i1p_i = 0; i1p_i < i1p_v.count; i1p_i += 1) {',
 		'\t\ti1p_o = i1p_v[i1p_i];',
 		'\t\ti1p_s = "I1PROBE teuton " + i1p_i;',
 		'\t\tif (i1p_o.IsValid()) {',
-		`\t\t\ti1p_s = i1p_s + " class=" + i1p_o.class() + " player=" + i1p_o.player + " health=" + i1p_o.health + " command=" + i1p_o.command + " dist=" + i1p_o.DistTo(${larax});`,
+		`\t\t\ti1p_s = i1p_s + " class=" + i1p_o.class() + " player=" + i1p_o.player + " health=" + i1p_o.health + " command=" + i1p_o.command + " dist=" + i1p_o.DistTo(${l}) + " x=" + i1p_o.pos.x + " y=" + i1p_o.pos.y;`,
+		...indent(holder('i1p_o'), 3),
 		`\t\t\t${flag('alive', 'i1p_o.IsAlive()')}`,
-		`\t\t\t${flag('enemy_of_larax', `i1p_o.IsEnemy(${larax})`)}`,
-		`\t\t\t${flag('larax_sees_enemy', `${larax}.IsEnemy(i1p_o)`)}`,
-		`\t\t\t${flag('valid_target_for_larax', `${larax}.IsValidTarget(i1p_o)`)}`,
-		`\t\t\t${flag('larax_valid_target_for_it', `i1p_o.IsValidTarget(${larax})`)}`,
+		`\t\t\t${flag('enemy_of_larax', `i1p_o.IsEnemy(${l})`)}`,
+		`\t\t\t${flag('valid_target_for_larax', `${l}.IsValidTarget(i1p_o)`)}`,
 		'\t\t} else i1p_s = i1p_s + " invalid";',
 		'\t\tMod_Log(i1p_s);',
 		'\t}',
-		'\tif (i1p_k == 7) {',
-		'\t\tfor (i1p_i = 0; i1p_i < i1p_v.count; i1p_i += 1) {',
-		'\t\t\tif (i1p_v[i1p_i].IsAlive()) {',
-		'\t\t\t\tMod_LogInt("I1PROBE ordering Larax to attack teuton", i1p_i);',
-		'\t\t\t\tNO_Larax.obj.SetCommand("attack", i1p_v[i1p_i]);',
-		'\t\t\t\tbreak;',
-		'\t\t\t}',
-		'\t\t}',
-		'\t}',
 		'\tSleep(2000);',
 		'}',
-		'Mod_Log("I1PROBE end");',
+		'Mod_Log("I1PROBE seq15 end");',
 	];
-	return lines.join('\r\n') + '\r\n';
 }
 
-const DECLARATIONS = 'ObjList i1p_v;\nObj i1p_o, i1p_b;\nint i1p_k, i1p_i, i1p_p;\nstr i1p_s;\n';
+// Where each probe goes: [file, anchor, 'before' | 'after' the anchor's line, lines].
+const PROBES = [
+	['Maps/11937/Sequences/seq0.vs', /^NO_Larax\s*=\s*GetNamedObj\("Larax"\);/m, 'after', laraxLine('seq0 start')],
+	['Maps/11937/Sequences/seq0.vs', /^NO_Larax\.SetCommand\("hold_position"\);/m, 'after', laraxLine('seq0 after hold_position')],
+	['Maps/11937/Sequences/seq0.vs', /^C_Conv\.Init\("TheGodess"\);/m, 'before', ['Mod_LogInt("I1PROBE seq0 goddess conversation starts, t", GetTime());']],
+	['Maps/11937/Sequences/seq0.vs', /^C_Conv\.Run\(\);/m, 'after', ['Mod_LogInt("I1PROBE seq0 goddess conversation ended, t", GetTime());', ...laraxLine('seq0 after goddess')]],
+	['Maps/11937/Sequences/seq15.vs', /^WaitEmptyQuery\s*\(\s*M1_Q_Victims1/m, 'before', seq15Loop()],
+];
 
-// Adds the probe to the script of `path` when it is one the probe knows. Returns the new source, or null.
+// Adds the probes of `path` to its script. Returns the new source, or null when the probe has nothing for this file.
 function addProbe(path, src) {
-	if (!/^Maps\/11937\/Sequences\/seq15\.vs$/i.test(path)) return null;
-	const at = src.search(/WaitEmptyQuery\s*\(\s*M1_Q_Victims1/);
-	if (at < 0) throw new Error(`${path}: the place for the probe was not found`);
-	const lineStart = src.lastIndexOf('\n', at) + 1;
-	return S.insertDeclarations(src.slice(0, lineStart) + kormarisProbe() + src.slice(lineStart), DECLARATIONS);
+	const mine = PROBES.filter(([file]) => file.toLowerCase() === path.toLowerCase());
+	if (!mine.length) return null;
+	let out = src;
+	for (const [, anchor, where, lines] of mine) {
+		const m = anchor.exec(out);
+		if (!m) throw new Error(`${path}: the place for a probe was not found (${anchor})`);
+		const lineStart = out.lastIndexOf('\n', m.index) + 1;
+		const lineEnd = out.indexOf('\n', m.index) + 1 || out.length;
+		const at = where === 'before' ? lineStart : lineEnd;
+		out = out.slice(0, at) + lines.join('\r\n') + '\r\n' + out.slice(at);
+	}
+	return S.insertDeclarations(out, DECLARATIONS);
 }
 
 module.exports = { addProbe };
