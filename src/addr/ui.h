@@ -79,6 +79,7 @@ inline constexpr uintptr_t kPickerOnShow = 0x006f9de0;
 inline constexpr uintptr_t kClassNameCWindow = 0x00826c1c;
 inline constexpr uintptr_t kClassNameCUIButton = 0x00829df4;
 inline constexpr uintptr_t kClassNameCUIComboBox = 0x00829df8;
+inline constexpr uintptr_t kClassNameCUIDialog = 0x00829e04;
 inline constexpr uintptr_t kClassNameCUIImgButton = 0x00829e14;
 inline constexpr uintptr_t kClassNameCUISList = 0x00829e18;
 inline constexpr uintptr_t kClassNameCUIScroll = 0x0082a300;

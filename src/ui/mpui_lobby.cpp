@@ -26,6 +26,12 @@ bool MpUiMainMenuVisible()
 	return true;
 }
 
+void *MpUiMainMenuDialog()
+{
+	std::lock_guard<std::mutex> lock(g_lock);
+	return g_mainMenu;
+}
+
 bool MpUiIsOpen()
 {
 	std::lock_guard<std::mutex> lock(g_lock);

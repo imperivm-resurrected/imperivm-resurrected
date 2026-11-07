@@ -17,7 +17,7 @@
 
 namespace {
 const unsigned kMsgButtonClick = 0x12345604, kFlagVisible = 2, kFlagBusy = 0x100, kFlagDisabled = 0x200;
-const size_t kTextBuffer = 0x98, kStatsCount = 0x60, kStatsPlayers = 0x64;
+const size_t kTextBuffer = 0x98, kStatsCount = 0x60, kStatsPlayers = 0x64, kWindowRect = 0x10;
 const int kMaxText = 512, kEndMenuLoad = 0x1001, kLoadKindScenario = 3, kLoadFromEndMenu = 3;
 
 typedef int(__fastcall *IsKindOf_t)(void *obj, void *edx, const char *cls);
@@ -150,6 +150,35 @@ void EndMenuLoadGame(void *dlg)
 	}
 	if (*reinterpret_cast<void **>(addr::kSelectionManager)) reinterpret_cast<void(__cdecl *)()>(addr::kPostCloseGameMenu)();
 	reinterpret_cast<const char *(__cdecl *)(int, int)>(addr::kShowLoadDialog)(kLoadKindScenario, kLoadFromEndMenu);
+}
+
+bool NativeButtonRect(void *dlg, int id, RECT &rect)
+{
+	void *button = FindChild(dlg, id, addr::kClassNameCUIButton);
+	if (!button) return false;
+	const char *own = static_cast<const char *>(button), *parent = static_cast<const char *>(dlg);
+	const short *mine = reinterpret_cast<const short *>(own + kWindowRect), *base = reinterpret_cast<const short *>(parent + kWindowRect);
+	rect = {base[0] + mine[0], base[1] + mine[1], base[0] + mine[2], base[1] + mine[3]};
+	return true;
+}
+
+bool DialogOnTop(void *dlg)
+{
+	char *root = *reinterpret_cast<char **>(addr::kUIRoot);
+	if (!root) return false;
+	int guard = 0;
+	// The list starts with the window in front, the first one the game asks about a click.
+	for (char *w = *reinterpret_cast<char **>(root + 0x20); w && guard < 64; w = *reinterpret_cast<char **>(w + 0x18), guard++) {
+		if (w == dlg) return true;
+		if (IsVisibleOfKind(w, addr::kClassNameCUIDialog)) return false;
+	}
+	return false;
+}
+
+void ToggleGameMenu()
+{
+	void *manager = *reinterpret_cast<void **>(addr::kSelectionManager);
+	if (manager) reinterpret_cast<void(__fastcall *)(void *)>(addr::kToggleGameMenu)(manager);
 }
 
 std::string NativeText(void *dlg, int id)

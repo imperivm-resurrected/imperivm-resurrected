@@ -575,6 +575,19 @@ void PaintSummary(Painter &p, const View &v, const std::vector<const StatsPlayer
 }
 }
 
+void PaintMainMenu(Painter &p, const View &v, int w, int h)
+{
+	constexpr int kPadX = 18, kPadY = 16, kGap = 5;
+	PaintWindowFrame(p, w, h);
+	const int count = std::max(1, static_cast<int>(v.rows.size()));
+	const int pitch = (h - kPadY * 2 + kGap) / count;
+	int y = kPadY;
+	for (const Row &r : v.rows) {
+		p.Button(kPadX, y, w - kPadX * 2, pitch - kGap, r.label, kActButton, r.id, v.mouseX, v.mouseY, r.enabled);
+		y += pitch;
+	}
+}
+
 int MenuHeight(const View &v)
 {
 	int h = kWindowHeaderH + kBottomPad - kButtonGap + static_cast<int>(v.notes.size()) * kNoteH;
@@ -669,7 +682,7 @@ void PaintStatistics(Painter &p, const View &v)
 		p.Font(0);
 		p.Text(kPad + 4, kFooterY + 10, 400, 40, Tr("Game time: ") + StatsFormatTime(v.statsData->history.LastMs()), kDim);
 	}
-	p.Button(kStatsW - kPad - 160, kFooterY + 10, 160, 40, "Close", kActButton, kStatsClose, v.mouseX, v.mouseY, true, true);
+	p.Button(kStatsW - kPad - 160, kFooterY + 10, 160, 40, "Back", kActButton, kStatsClose, v.mouseX, v.mouseY, true, true);
 }
 
 }

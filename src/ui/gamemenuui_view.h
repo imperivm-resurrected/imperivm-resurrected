@@ -42,6 +42,8 @@ struct View {
 	StatsFilters stats;
 	std::vector<int> statsPlayers;
 	std::shared_ptr<const StatsSnapshot> statsData;
+	// Where the panel of the main menu goes, in pixels of the frame.
+	RECT mainPanel = {};
 };
 
 constexpr int kMenuW = 460, kConfirmW = 560, kConfirmH = 220, kStatsW = 1040, kStatsH = 680;
@@ -51,6 +53,7 @@ int MenuHeight(const View &v);
 void PaintMenu(ui::Painter &p, const View &v);
 void PaintConfirm(ui::Painter &p, const View &v);
 void PaintStatistics(ui::Painter &p, const View &v);
+void PaintMainMenu(ui::Painter &p, const View &v, int w, int h);
 void FinishChartDrag(View &v, int mouseX);
 
 }
