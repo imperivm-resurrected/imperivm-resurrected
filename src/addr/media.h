@@ -8,7 +8,10 @@ namespace addr {
 
 inline constexpr uintptr_t kChannelSetVolume = 0x00637260;
 inline constexpr uintptr_t kCurrentDisplayModeIndex = 0x00676bd0;
+inline constexpr uintptr_t kSoundSetTypeVolume = 0x006af940;
+inline constexpr uintptr_t kSoundEnableType = 0x006af960;
 inline constexpr uintptr_t kUpdateChannelVolumes = 0x006b0810;
+inline constexpr uintptr_t kApplySoundOptions = 0x006e7210;
 inline constexpr uintptr_t kSaveGameOptionsToIni = 0x006e73e0;
 inline constexpr uintptr_t kInitResolutionList = 0x006e8420;
 inline constexpr uintptr_t kChangeDisplayModeTo = 0x00747220;

@@ -18,6 +18,7 @@
 #include "hooks/dmshim.h"
 #include "core/log.h"
 #include "hooks/gamefiles.h"
+#include "hooks/soundlevels.h"
 #include "addr/media.h"
 
 namespace {
@@ -30,6 +31,13 @@ const DWORD kSegEnd = 1;
 
 ma_engine g_engine;
 bool g_engineReady = false;
+// The engine plays through a device of the mod's own, so the output can change without rebuilding the sounds.
+ma_context g_context;
+ma_device g_device;
+bool g_contextReady = false, g_deviceReady = false;
+std::mutex g_deviceMx;
+std::string g_deviceName;
+std::atomic<bool> g_deviceStopping{false}, g_deviceLost{false};
 std::recursive_mutex g_mx;
 HANDLE g_wakeDispatcher = nullptr;
 HANDLE g_dispatcher = nullptr;
@@ -315,15 +323,113 @@ HRESULT __stdcall PerfGetNotificationPMsg(FakePerf *self, BYTE **out)
 HRESULT __stdcall PerfAddNotificationType(FakePerf *, REFGUID) { return S_OK; }
 HRESULT __stdcall PerfCloseDown(FakePerf *) { StopAllVoices(); return S_OK; }
 
+void DeviceData(ma_device *, void *out, const void *, ma_uint32 frames)
+{
+	ma_engine_read_pcm_frames(&g_engine, out, frames, nullptr);
+}
+
+void DeviceNotification(const ma_device_notification *n)
+{
+	if (n->type != ma_device_notification_type_stopped || g_deviceStopping) return;
+	g_deviceLost = true;
+	if (g_wakeDispatcher) SetEvent(g_wakeDispatcher);
+}
+
+struct DeviceList {
+	std::vector<std::string> names;
+	std::vector<ma_device_id> ids;
+};
+
+DeviceList ListDevices()
+{
+	DeviceList list;
+	ma_device_info *infos = nullptr;
+	ma_uint32 count = 0;
+	if (!g_contextReady || ma_context_get_devices(&g_context, &infos, &count, nullptr, nullptr) != MA_SUCCESS) return list;
+	for (ma_uint32 i = 0; i < count; i++) {
+		list.names.push_back(infos[i].name);
+		list.ids.push_back(infos[i].id);
+	}
+	return list;
+}
+
+// With g_deviceMx held. An empty name, or one that is not connected, is the default device.
+bool OpenDevice(const std::string &wanted)
+{
+	const DeviceList list = ListDevices();
+	const int index = SoundPickDevice(list.names, wanted);
+	if (!wanted.empty() && index < 0) LogW("audio", "modern audio: the output device \"%s\" is not connected, using the default one", wanted.c_str());
+	for (int attempt = index; ; attempt = -1) {
+		ma_device_config dc = ma_device_config_init(ma_device_type_playback);
+		dc.playback.pDeviceID = attempt >= 0 ? &list.ids[attempt] : nullptr;
+		dc.playback.format = ma_format_f32;
+		dc.playback.channels = g_engineReady ? ma_engine_get_channels(&g_engine) : 0;
+		dc.sampleRate = g_engineReady ? ma_engine_get_sample_rate(&g_engine) : 0;
+		dc.dataCallback = &DeviceData;
+		dc.notificationCallback = &DeviceNotification;
+		dc.noPreSilencedOutputBuffer = MA_TRUE;
+		dc.noClip = MA_TRUE;
+		if (ma_device_init(&g_context, &dc, &g_device) == MA_SUCCESS) {
+			g_deviceReady = true;
+			g_deviceName = attempt >= 0 ? list.names[attempt] : std::string();
+			LogI("audio", "modern audio: output to %s", attempt >= 0 ? list.names[attempt].c_str() : "the default device");
+			return true;
+		}
+		if (attempt < 0) break;
+		LogW("audio", "modern audio: could not open \"%s\", trying the default device", list.names[attempt].c_str());
+	}
+	g_deviceReady = false;
+	g_deviceName.clear();
+	LogE("audio", "modern audio: could not open an output device");
+	return false;
+}
+
+// With g_deviceMx held.
+void SwitchDevice(const std::string &wanted)
+{
+	if (g_deviceReady) {
+		g_deviceStopping = true;
+		ma_device_uninit(&g_device);
+		g_deviceStopping = false;
+		g_deviceReady = false;
+	}
+	if (OpenDevice(wanted) && ma_device_start(&g_device) != MA_SUCCESS) LogE("audio", "modern audio: the output device does not start");
+}
+
+void CheckLostDevice()
+{
+	if (!g_deviceLost.exchange(false)) return;
+	std::lock_guard<std::mutex> lock(g_deviceMx);
+	// The default device follows Windows by itself; a chosen one that goes away is replaced by the default one.
+	if (!g_engineReady || g_deviceName.empty()) return;
+	LogW("audio", "modern audio: \"%s\" stopped, switching to the default device", g_deviceName.c_str());
+	SwitchDevice("");
+}
+
 HRESULT __stdcall PerfInitAudio(FakePerf *, void **, void **, HWND, DWORD, DWORD, DWORD, void *)
 {
+	std::lock_guard<std::mutex> lock(g_deviceMx);
 	if (g_engineReady) return S_OK;
+	if (!g_contextReady) {
+		if (ma_context_init(nullptr, 0, nullptr, &g_context) != MA_SUCCESS) {
+			LogE("audio", "modern audio: could not start miniaudio");
+			return E_FAIL;
+		}
+		g_contextReady = true;
+	}
+	if (!OpenDevice(GetConfig().outputDevice)) return E_FAIL;
 	ma_engine_config cfg = ma_engine_config_init();
+	cfg.pDevice = &g_device;
 	if (ma_engine_init(&cfg, &g_engine) != MA_SUCCESS) {
 		LogE("audio", "modern audio: could not start miniaudio");
+		g_deviceStopping = true;
+		ma_device_uninit(&g_device);
+		g_deviceStopping = false;
+		g_deviceReady = false;
 		return E_FAIL;
 	}
 	g_engineReady = true;
+	ma_engine_set_volume(&g_engine, SoundMasterGain(GetConfig().masterVolume));
 	LogI("audio", "modern audio: miniaudio ready (%u Hz, %u channels)", ma_engine_get_sample_rate(&g_engine),
 		ma_engine_get_channels(&g_engine));
 	return S_OK;
@@ -453,6 +559,7 @@ DWORD WINAPI DispatcherThread(LPVOID)
 {
 	while (!g_quit) {
 		WaitForSingleObject(g_wakeDispatcher, 50);
+		CheckLostDevice();
 		std::lock_guard<std::recursive_mutex> lock(g_mx);
 		bool signal = false;
 		for (size_t i = 0; i < g_active.size();) {
@@ -562,6 +669,31 @@ void InstallModernAudio(bool knownExe)
 	BuildVtables();
 	g_shimEnabled = true;
 	LogI("audio", "modern audio: enabled (miniaudio instead of DirectMusic)");
+}
+
+bool DmShimReady()
+{
+	std::lock_guard<std::mutex> lock(g_deviceMx);
+	return g_engineReady;
+}
+
+void DmShimSetMasterVolume(int percent)
+{
+	std::lock_guard<std::mutex> lock(g_deviceMx);
+	if (g_engineReady) ma_engine_set_volume(&g_engine, SoundMasterGain(percent));
+}
+
+std::vector<std::string> DmShimOutputDevices()
+{
+	std::lock_guard<std::mutex> lock(g_deviceMx);
+	return ListDevices().names;
+}
+
+void DmShimSetOutputDevice(const std::string &name)
+{
+	std::lock_guard<std::mutex> lock(g_deviceMx);
+	if (!g_engineReady || (g_deviceReady && name == g_deviceName)) return;
+	SwitchDevice(name);
 }
 
 bool DmShimPausePath(void *path, bool pause)

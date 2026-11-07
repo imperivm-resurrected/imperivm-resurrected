@@ -20,6 +20,7 @@ enum ControlId {
 	kPanelCompact = 0x9001, kPanelOpacity = 0x9002, kSmoothCamera = 0x9003, kModernAudio = 0x9004, kOpenLogs = 0x9101, kCreateReport = 0x9102,
 	kHealthBars = 0x9030, kPauseInBackground = 0x9031, kZoomGroupIcons = 0x9032, kZoomFog = 0x9033, kZoomRefresh = 0x9034,
 	kWindowSize = 0x9010, kExtendedView = 0x9011, kFpsLimit = 0x9012, kImageScaling = 0x9013,
+	kMasterVolume = 0x9020, kNatureVolume = 0x9021, kConversationVolume = 0x9022, kOutputDevice = 0x9023,
 };
 
 enum RowKind { kRowToggle, kRowSlider, kRowToggleSlider, kRowCombo, kRowSegment, kRowAction };

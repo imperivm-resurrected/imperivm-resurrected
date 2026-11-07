@@ -33,6 +33,7 @@
 #include "game/gamestats.h"
 #include "game/options.h"
 #include "hooks/dmshim.h"
+#include "hooks/audio.h"
 #include "mods/mods.h"
 #include "mods/netmods.h"
 #include "mods/downloads.h"
@@ -238,6 +239,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 		InstallGameStats(knownExe);
 		InstallControls(knownExe);
 		InstallModernAudio(knownExe);
+		InstallSoundLevels(knownExe);
 		HookBatchEnd();
 		LogHookSummary();
 		LogI("boot", "mod ready in %lu ms", static_cast<unsigned long>(GetTickCount() - bootStart));

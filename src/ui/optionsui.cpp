@@ -18,6 +18,9 @@
 #include "game/viewprefs.h"
 #include "hooks/displaymode.h"
 #include "hooks/respick.h"
+#include "hooks/audio.h"
+#include "hooks/dmshim.h"
+#include "hooks/soundlevels.h"
 #include "i18n/tr.h"
 #include "ui/modui.h"
 #include "ui/optionsui_view.h"
@@ -160,18 +163,34 @@ void ApplyDisplayFromView()
 	ApplyDisplayLive(values);
 }
 
+const int kSoundScrolls[] = {kMasterVolume, kNatureVolume, kConversationVolume};
+const char *const kDefaultDevice = "Default device";
+
+void SetDevices(Values &v, const std::string &wanted)
+{
+	const std::vector<std::string> names = DmShimOutputDevices();
+	std::vector<std::string> &items = v.items[kOutputDevice];
+	items.assign(1, kDefaultDevice);
+	items.insert(items.end(), names.begin(), names.end());
+	v.combos[kOutputDevice] = SoundPickDevice(names, wanted) + 1;
+	v.disabled[kOutputDevice] = !DmShimReady();
+}
+
 void SetExtras(Values &v, const Config &c)
 {
 	SetDisplayExtras(v, c);
 	v.checks[kPanelCompact] = c.panelCompact;
 	v.checks[kSmoothCamera] = c.smoothScroll;
-	v.checks[kModernAudio] = c.modernAudio;
 	v.scrolls[kPanelOpacity] = c.panelOpacity;
 	v.combos[kHealthBars] = c.healthBarsAtStart;
 	v.checks[kPauseInBackground] = c.pauseInBackground;
 	v.checks[kZoomGroupIcons] = c.zoomExtras;
 	v.checks[kZoomFog] = c.zoomFog;
 	v.combos[kZoomRefresh] = ZoomRefreshPreset(c.zoomRefreshMs);
+	v.scrolls[kMasterVolume] = c.masterVolume;
+	v.scrolls[kNatureVolume] = c.natureVolume;
+	v.scrolls[kConversationVolume] = c.conversationVolume;
+	SetDevices(v, c.outputDevice);
 }
 
 Values ReadNative()
@@ -195,7 +214,7 @@ Values ReadNative()
 
 void CopyExtras(Values &to, const Values &from)
 {
-	for (int id : {kSmoothCamera, kModernAudio, kPauseInBackground, kZoomGroupIcons, kZoomFog}) {
+	for (int id : {kSmoothCamera, kPauseInBackground, kZoomGroupIcons, kZoomFog}) {
 		const auto it = from.checks.find(id);
 		if (it != from.checks.end()) to.checks[id] = it->second;
 	}
@@ -204,6 +223,16 @@ void CopyExtras(Values &to, const Values &from)
 		if (it != from.combos.end()) to.combos[id] = it->second;
 	}
 	CopyDisplayExtras(to, from);
+	for (int id : kSoundScrolls) {
+		const auto it = from.scrolls.find(id);
+		if (it != from.scrolls.end()) to.scrolls[id] = it->second;
+	}
+	const auto combo = from.combos.find(kOutputDevice);
+	if (combo != from.combos.end()) to.combos[kOutputDevice] = combo->second;
+	const auto items = from.items.find(kOutputDevice);
+	if (items != from.items.end()) to.items[kOutputDevice] = items->second;
+	const auto disabled = from.disabled.find(kOutputDevice);
+	if (disabled != from.disabled.end()) to.disabled[kOutputDevice] = disabled->second;
 	// The panel changes as it is edited, so the setting is the truth; its own mouse controls change it too.
 	to.checks[kPanelCompact] = GetConfig().panelCompact;
 	to.scrolls[kPanelOpacity] = GetConfig().panelOpacity;
@@ -221,6 +250,31 @@ void ApplyPanelLive(const Values &v)
 	c.panelCompact = check(kPanelCompact, c.panelCompact);
 	const auto opacity = v.scrolls.find(kPanelOpacity);
 	if (opacity != v.scrolls.end()) c.panelOpacity = opacity->second;
+}
+
+// The volumes are heard while they are dragged; Cancel puts back the ones of the baseline.
+void ApplySoundLive(const Values &v)
+{
+	Config &c = MutableConfig();
+	const auto scroll = [&](int id, int fallback) {
+		const auto it = v.scrolls.find(id);
+		return it == v.scrolls.end() ? fallback : it->second;
+	};
+	c.masterVolume = SoundMasterPercent(scroll(kMasterVolume, c.masterVolume));
+	c.natureVolume = scroll(kNatureVolume, c.natureVolume);
+	c.conversationVolume = SoundTypeVolume(scroll(kConversationVolume, c.conversationVolume), c.conversationVolume);
+	DmShimSetMasterVolume(c.masterVolume);
+	SoundLevelsApply();
+}
+
+void ApplySoundFromView()
+{
+	Values values;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		values = g_s.view.values;
+	}
+	ApplySoundLive(values);
 }
 
 void ApplyPanelFromView()
@@ -255,17 +309,34 @@ void Refresh(bool setBaseline = false)
 	g_s.lastRead = GetTickCount();
 }
 
-bool CommitExtras(const Values &v)
+// A device that is not connected shows as the default one: it is only replaced when the player picks another.
+void CommitDevice(const Values &v)
+{
+	Values baseline;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		baseline = g_s.baseline;
+	}
+	const auto now = v.combos.find(kOutputDevice);
+	const auto before = baseline.combos.find(kOutputDevice);
+	const auto items = v.items.find(kOutputDevice);
+	if (now == v.combos.end() || items == v.items.end() || (before != baseline.combos.end() && before->second == now->second)) return;
+	const int index = now->second;
+	const std::string name = index > 0 && index < static_cast<int>(items->second.size()) ? items->second[index] : std::string();
+	MutableConfig().outputDevice = name;
+	LogI("options", "sound output: %s", name.empty() ? "default device" : name.c_str());
+	DmShimSetOutputDevice(name);
+}
+
+void CommitExtras(const Values &v)
 {
 	Config &c = MutableConfig();
 	const auto check = [&](int id, bool fallback) {
 		const auto it = v.checks.find(id);
 		return it == v.checks.end() ? fallback : it->second;
 	};
-	const bool audioBefore = c.modernAudio;
 	c.panelCompact = check(kPanelCompact, c.panelCompact);
 	c.smoothScroll = check(kSmoothCamera, c.smoothScroll);
-	c.modernAudio = check(kModernAudio, c.modernAudio);
 	const auto opacity = v.scrolls.find(kPanelOpacity);
 	if (opacity != v.scrolls.end()) c.panelOpacity = opacity->second;
 	const auto bars = v.combos.find(kHealthBars);
@@ -276,8 +347,9 @@ bool CommitExtras(const Values &v)
 	const auto refresh = v.combos.find(kZoomRefresh);
 	if (refresh != v.combos.end() && refresh->second != ZoomRefreshPreset(c.zoomRefreshMs)) c.zoomRefreshMs = ZoomRefreshPresetMs(refresh->second);
 	CommitDisplayExtras(c, v);
+	ApplySoundLive(v);
+	CommitDevice(v);
 	SaveConfig();
-	return c.modernAudio != audioBefore;
 }
 
 struct Command {
@@ -390,6 +462,7 @@ void Execute(const Command &cmd)
 	case kActSlider:
 		SetSlider(cmd.arg, cmd.value);
 		ApplyPanelFromView();
+		if (IsExtra(cmd.arg)) ApplySoundFromView();
 		break;
 	case kActSegment:
 		OptionsWriteCheck(cmd.arg >> 4, (cmd.arg & 15) != 0);
@@ -427,23 +500,22 @@ void Execute(const Command &cmd)
 		Refresh();
 		PreviewResolutions();
 		ApplyPanelFromView();
+		ApplySoundFromView();
 		break;
 	}
 	case kActApply: {
-		const bool audio = CommitExtras(cmd.values);
+		CommitExtras(cmd.values);
 		OptionsClick(kNativeApply);
 		Refresh(true);
-		if (audio) UiAskRestart(Tr("The game will restart to change the sound system."));
 		break;
 	}
 	case kActOk: {
-		const bool audio = CommitExtras(cmd.values);
+		CommitExtras(cmd.values);
 		{
 			std::lock_guard<std::mutex> lock(g_lock);
 			g_s.closedAt = GetTickCount();
 		}
 		OptionsClick(kNativeOk);
-		if (audio) UiAskRestart(Tr("The game will restart to change the sound system."));
 		break;
 	}
 	case kActCancel: {
@@ -455,6 +527,7 @@ void Execute(const Command &cmd)
 			baseline = g_s.baseline;
 		}
 		ApplyDisplayLive(baseline);
+		ApplySoundLive(baseline);
 		OptionsClick(kNativeCancel);
 		break;
 	}

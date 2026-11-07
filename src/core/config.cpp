@@ -80,6 +80,14 @@ void LoadConfig()
 	g_config.modernAudio = GetPrivateProfileIntA("Sound", "ModernAudio", 1, path) != 0;
 	g_config.fixVoices = GetPrivateProfileIntA("Sound", "FixVoices", 1, path) != 0;
 	g_config.onlineAlerts = GetPrivateProfileIntA("Sound", "OnlineAlerts", 1, path) != 0;
+	g_config.masterVolume = (std::max)(0, (std::min)(100, static_cast<int>(GetPrivateProfileIntA("Sound", "MasterVolume", 100, path))));
+	g_config.natureVolume = static_cast<int>(GetPrivateProfileIntA("Sound", "NatureVolume", -1, path));
+	if (g_config.natureVolume < 1 || g_config.natureVolume > 100) g_config.natureVolume = -1;
+	g_config.conversationVolume = static_cast<int>(GetPrivateProfileIntA("Sound", "ConversationVolume", 100, path));
+	if (g_config.conversationVolume < 1 || g_config.conversationVolume > 100) g_config.conversationVolume = 100;
+	char device[512] = {};
+	GetPrivateProfileStringA("Sound", "OutputDevice", "", device, sizeof(device), path);
+	g_config.outputDevice = device;
 
 	GetPrivateProfileStringA("Game", "ScrollSpeed", "1.0", buf, sizeof(buf), path);
 	g_config.scrollSpeed = static_cast<float>(atof(buf));
@@ -179,4 +187,9 @@ void SaveConfig()
 	WritePrivateProfileStringA("Sound", "MuteInBackground", g_config.muteInBackground ? "1" : "0", path);
 	WritePrivateProfileStringA("Sound", "ModernAudio", g_config.modernAudio ? "1" : "0", path);
 	WritePrivateProfileStringA("Sound", "OnlineAlerts", g_config.onlineAlerts ? "1" : "0", path);
+	WritePrivateProfileStringA("Sound", "MasterVolume", std::to_string(g_config.masterVolume).c_str(), path);
+	// Without the key, nature sounds follow the effects volume.
+	WritePrivateProfileStringA("Sound", "NatureVolume", g_config.natureVolume > 0 ? std::to_string(g_config.natureVolume).c_str() : nullptr, path);
+	WritePrivateProfileStringA("Sound", "ConversationVolume", std::to_string(g_config.conversationVolume).c_str(), path);
+	WritePrivateProfileStringA("Sound", "OutputDevice", g_config.outputDevice.c_str(), path);
 }
