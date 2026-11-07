@@ -409,28 +409,14 @@ void PaintWho(Painter &p, const State &st, int x, int cy, int w, uint64_t who, c
 	}
 }
 
-const DWORD kPopMs = 380, kAppearMs = 360, kHoverMs = 120;
+const DWORD kHoverMs = 120;
 
-// How big a check is while it pops in: it grows past its size and settles back.
-float PopScale(DWORD since)
-{
-	if (since >= kPopMs) return 1.0f;
-	const float u = since / static_cast<float>(kPopMs);
-	return u < 0.55f ? 0.35f + 0.9f * (u / 0.55f) : 1.25f - 0.25f * ((u - 0.55f) / 0.45f);
-}
-
-void PaintReadyCheck(Painter &p, int cx, int cy, bool ready, bool hot, DWORD since)
+void PaintReadyCheck(Painter &p, int cx, int cy, bool ready, bool hot)
 {
 	const float r = 10.5f, fx = static_cast<float>(cx), fy = static_cast<float>(cy);
 	if (ready) {
-		const float k = PopScale(since);
-		if (since < kPopMs) {
-			const float u = since / static_cast<float>(kPopMs);
-			PaintRing(p, fx, fy, r * (1.0f + 0.9f * u), 2.0f, RGB(150, 206, 120), static_cast<int>(200 * (1.0f - u)), 1.0f, false);
-		}
-		const bool still = since >= kPopMs;
-		PaintDisc(p, fx, fy, r * k, hot ? RGB(150, 206, 120) : RGB(124, 184, 96), hot ? RGB(84, 140, 64) : RGB(64, 116, 50), 255, still);
-		PaintCheckMark(p, fx, fy, 12.0f * k, 2.6f * std::min(1.0f, k), RGB(20, 34, 16), still);
+		PaintDisc(p, fx, fy, r, hot ? RGB(150, 206, 120) : RGB(124, 184, 96), hot ? RGB(84, 140, 64) : RGB(64, 116, 50));
+		PaintCheckMark(p, fx, fy, 12.0f, 2.6f, RGB(20, 34, 16));
 	}
 	else {
 		PaintRing(p, fx, fy, r - 0.5f, 1.6f, hot ? pal::focus : pal::edge);
@@ -453,35 +439,12 @@ struct TableCtx {
 	bool moving = false;
 };
 
-// What changed in the table since the last frame, so new rows and new ready checks can be animated.
+// The row under the mouse, so its highlight can fade in.
 struct RoomAnimState {
-	DWORD lastPaint = 0;
-	std::string who[8];
-	DWORD appearAt[8] = {};
-	bool ready[8] = {};
-	DWORD readyAt[8] = {};
 	int hoverRow = -1;
 	DWORD hoverAt = 0;
 };
 RoomAnimState g_anim;
-
-void TrackRows(const GameRoomSnapshot &g, const Arrival arriving[8])
-{
-	const DWORD now = GetTickCount();
-	// After a while away (another tab, or the room just opened) everything is already there: nothing is new.
-	const bool fresh = now - g_anim.lastPaint > 1000;
-	g_anim.lastPaint = now;
-	for (int i = 0; i < 8; i++) {
-		const GameRoomSlot &s = g.slots[i];
-		const std::string who = !arriving[i].Empty() ? arriving[i].name : !s.used ? std::string() : s.type == 1 ? std::string("#ai") : s.name;
-		const bool same = who == g_anim.who[i] || (!who.empty() && !g_anim.who[i].empty() && PlayerNameMatches(who, g_anim.who[i]));
-		if (!same) g_anim.appearAt[i] = fresh || who.empty() ? 0 : now;
-		g_anim.who[i] = who;
-		const bool ready = s.used && s.ready;
-		if (ready && !g_anim.ready[i]) g_anim.readyAt[i] = fresh ? 0 : now;
-		g_anim.ready[i] = ready;
-	}
-}
 
 DWORD Since(DWORD at)
 {
@@ -681,7 +644,7 @@ void PaintSlotRow(Painter &p, const State &st, const TableCtx &t, int i, const A
 		else {
 			const bool toggles = s.local && (t.f.mapReady || s.ready) && !(st.map.needsPack && !g.host);
 			const bool hot = toggles && p.Hover(rx - 13, cy - 13, 26, 26, mx, my);
-			PaintReadyCheck(p, rx, cy, s.ready, hot, Since(g_anim.readyAt[i]));
+			PaintReadyCheck(p, rx, cy, s.ready, hot);
 			if (toggles) p.AddHit(rx - 13, cy - 13, 26, 26, kGReady, 0);
 		}
 	}
@@ -712,7 +675,6 @@ void PaintPlayerTable(Painter &p, const State &st, const RoomFacts &f, int x, in
 
 	Arrival arriving[8];
 	PlaceArrivals(st, f, arriving);
-	TrackRows(g, arriving);
 	const int playerH = g.online ? 36 : 42, compactH = g.online ? 30 : 38;
 	int rowY = y + kTableHeadH + 2, hovered = -1;
 	for (int i = 0; i < 8; i++) {
@@ -722,21 +684,7 @@ void PaintPlayerTable(Painter &p, const State &st, const RoomFacts &f, int x, in
 		if (p.Hover(x + 1, rowY, w - 2, rowH, st.mouseX, st.mouseY)) hovered = i;
 		if (hovered == i && g_anim.hoverRow != i) g_anim.hoverAt = GetTickCount();
 		const int hoverPercent = static_cast<int>(std::min<DWORD>(kHoverMs, Since(g_anim.hoverAt)) * 100 / kHoverMs);
-		const DWORD appear = Since(g_anim.appearAt[i]);
-		if (appear >= kAppearMs) {
-			PaintSlotRow(p, st, t, i, arriving[i], rowY, rowH, hoverPercent);
-		}
-		else {
-			// A new player slides in from the left and fades in over the card.
-			const float u = appear / static_cast<float>(kAppearMs), ease = 1.0f - (1.0f - u) * (1.0f - u) * (1.0f - u);
-			const int dx = static_cast<int>((1.0f - ease) * 28.0f);
-			TableCtx shifted = t;
-			for (int *col : {&shifted.c.player, &shifted.c.team, &shifted.c.civ, &shifted.c.color, &shifted.c.bonus, &shifted.c.ready, &shifted.c.kick}) *col -= dx;
-			p.Clip(x + 1, rowY, w - 2, rowH);
-			PaintSlotRow(p, st, shifted, i, arriving[i], rowY, rowH, hoverPercent);
-			PaintShape(p, x + 1, rowY, w - 2, rowH, RGB(25, 19, 13), RGB(25, 19, 13), static_cast<int>((1.0f - ease) * 255), [](float, float) { return 100.0f; });
-			p.Unclip();
-		}
+		PaintSlotRow(p, st, t, i, arriving[i], rowY, rowH, hoverPercent);
 		rowY += rowH;
 	}
 	g_anim.hoverRow = hovered;
@@ -969,8 +917,7 @@ void PaintReadyBlock(Painter &p, const State &st, const RoomFacts &f, int x, int
 		p.Text(cx - radius, textY - 16, radius * 2, 32, "Start", ink, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		break;
 	case kIsReady: {
-		const DWORD since = Since(g_anim.readyAt[g.localSlot & 7]);
-		PaintCheckMark(p, fx, fy - 9, radius * 0.62f * PopScale(since), 5.0f, RGB(170, 226, 140), since >= kPopMs);
+		PaintCheckMark(p, fx, fy - 9, radius * 0.62f, 5.0f, RGB(170, 226, 140));
 		p.Font(1);
 		p.Text(cx - radius, textY + 12, radius * 2, 22, "Ready", RGB(200, 236, 180), DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		caption = g.host && !f.block.label.empty() ? f.block.label : count;
