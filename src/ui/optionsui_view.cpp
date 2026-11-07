@@ -251,7 +251,7 @@ std::vector<Page> BuildPages(const Values &v)
 		mode.items = {"Full screen", "Window"};
 		mode.selected = Check(v, kWindowed) ? 1 : 0;
 		const bool windowed = Check(v, kWindowed);
-		page.left.push_back({"Size and mode", {Combo(v, "Monitor", kMonitor), mode, Combo(v, "Resolution", kResolution), Combo(v, "Window size", kWindowSize, "", false, windowed),
+		page.left.push_back({"Size and mode", {Combo(v, "Monitor", kMonitor), mode, Combo(v, "Resolution", kResolution, windowed ? "Also the window size" : ""),
 			Toggle(v, "Trap the mouse", kTrapMouse, "The cursor stays inside the game window")}});
 		const bool vsync = Check(v, kVSync);
 		page.right.push_back({"Image", {Slider(v, "Brightness", kBrightness, 80, 130), Toggle(v, "Vertical sync", kVSync, "Avoids tearing in the image"),

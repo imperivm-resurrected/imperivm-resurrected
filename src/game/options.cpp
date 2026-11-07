@@ -196,6 +196,11 @@ void __fastcall HookPopulateControls(void *dlg)
 {
 	g_origPopulate(dlg);
 	g_openDialog = dlg;
+	// The game's size may not be in the list (in a window, one that no longer fits): the largest that does is shown.
+	void *resolution = FindCombo(dlg, kIdResolution);
+	if (resolution && GetComboIndex(dlg, kIdResolution) < 0 && !TweaksResolutionList().empty()) {
+		reinterpret_cast<ComboSetSelected_t>(addr::kComboSetSelected)(resolution, nullptr, 0, 0);
+	}
 	static const Config kFactory;
 	const Config &c = g_useDefaults ? kFactory : GetConfig();
 	if (!g_useDefaults) g_brightOriginal = c.brightness;

@@ -15,8 +15,6 @@ struct Config {
 	bool fakeModeChange = true;
 
 	bool windowed = false;
-	int windowW = 1600;
-	int windowH = 900;
 	bool trapMouse = true;
 	int monitor = 0;
 	int resolutionW = 0;

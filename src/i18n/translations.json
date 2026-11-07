@@ -1496,7 +1496,7 @@
 {"en":"Panel opacity","es":"Opacidad del panel","it":"Opacità del pannello"},
 {"en":"Size and mode","es":"Tamaño y modo","it":"Dimensioni e modalità"},
 {"en":"Alt+Enter switches","es":"Alt+Intro alterna","it":"Alt+Invio alterna"},
-{"en":"Window size","es":"Tamaño de la ventana","it":"Dimensioni della finestra"},
+{"en":"Also the window size","es":"También el tamaño de ventana","it":"Vale anche per la finestra"},
 {"en":"FPS limit","es":"Límite de FPS","it":"Limite di FPS"},
 {"en":"No limit","es":"Sin límite","it":"Nessun limite"},
 {"en":"Off with vertical sync","es":"Inactivo con sincronía vertical","it":"Inattivo con sincronia verticale"},

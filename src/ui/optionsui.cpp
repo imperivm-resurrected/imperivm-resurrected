@@ -4,7 +4,6 @@
 #include "ui/optionsui.h"
 
 #include <algorithm>
-#include <cstdio>
 #include <cstdlib>
 #include <iterator>
 #include <mutex>
@@ -15,8 +14,6 @@
 #include "core/log.h"
 #include "core/uiport.h"
 #include "game/options.h"
-#include "hooks/displaymode.h"
-#include "hooks/respick.h"
 #include "i18n/tr.h"
 #include "ui/modui.h"
 #include "ui/optionsui_view.h"
@@ -66,49 +63,15 @@ int ComboIndex(const Values &v, int id, int count)
 	return it != v.combos.end() && it->second >= 0 && it->second < count ? it->second : -1;
 }
 
-std::string SizeLabel(ResSize s)
-{
-	return std::to_string(s.w) + " x " + std::to_string(s.h);
-}
-
-bool SelectedSize(const Values &v, int id, ResSize &size)
-{
-	const auto items = v.items.find(id);
-	const auto sel = v.combos.find(id);
-	if (items == v.items.end() || sel == v.combos.end() || sel->second < 0 || sel->second >= static_cast<int>(items->second.size())) return false;
-	return sscanf_s(items->second[sel->second].c_str(), "%d x %d", &size.w, &size.h) == 2;
-}
-
-int MonitorShown(const Values &v)
-{
-	const auto it = v.combos.find(kMonitor);
-	return it == v.combos.end() ? GetConfig().monitor : it->second;
-}
-
-// The window sizes are the monitor's own that fit in its work area, plus the size the window has now.
-void SetWindowSizes(Values &v, int monitor, ResSize current)
-{
-	std::vector<ResSize> modes;
-	for (POINT p : DisplayWindowsSizes(monitor)) modes.push_back({p.x, p.y});
-	ResSize area;
-	DisplayWindowArea(monitor, area.w, area.h);
-	std::vector<std::string> &items = v.items[kWindowSize];
-	items.clear();
-	for (ResSize s : BuildWindowSizeList(modes, area, current)) items.push_back(SizeLabel(s));
-	const auto at = std::find(items.begin(), items.end(), SizeLabel(current));
-	v.combos[kWindowSize] = at == items.end() ? -1 : static_cast<int>(at - items.begin());
-}
-
 void SetDisplayExtras(Values &v, const Config &c)
 {
-	SetWindowSizes(v, MonitorShown(v), {c.windowW, c.windowH});
 	v.items[kFpsLimit] = std::vector<std::string>(std::begin(kFpsLabels), std::end(kFpsLabels));
 	v.combos[kFpsLimit] = FpsIndex(c.fpsLimit);
 }
 
 void CopyDisplayExtras(Values &to, const Values &from)
 {
-	for (int id : {kWindowSize, kFpsLimit}) {
+	for (int id : {kFpsLimit}) {
 		const auto sel = from.combos.find(id);
 		if (sel != from.combos.end()) to.combos[id] = sel->second;
 		const auto items = from.items.find(id);
@@ -118,19 +81,12 @@ void CopyDisplayExtras(Values &to, const Values &from)
 
 void ApplyDisplayLive(const Values &v)
 {
-	ResSize window;
-	if (SelectedSize(v, kWindowSize, window)) DisplaySetWindowSize(window.w, window.h);
 	const int fps = ComboIndex(v, kFpsLimit, static_cast<int>(sizeof(kFpsLimits) / sizeof(kFpsLimits[0])));
 	if (fps >= 0) MutableConfig().fpsLimit = kFpsLimits[fps];
 }
 
 void CommitDisplayExtras(Config &c, const Values &v)
 {
-	ResSize window;
-	if (SelectedSize(v, kWindowSize, window)) {
-		c.windowW = window.w;
-		c.windowH = window.h;
-	}
 	const int fps = ComboIndex(v, kFpsLimit, static_cast<int>(sizeof(kFpsLimits) / sizeof(kFpsLimits[0])));
 	if (fps >= 0) c.fpsLimit = kFpsLimits[fps];
 }
@@ -315,13 +271,6 @@ void PreviewResolutions()
 		extended = GetConfig().extendedView;
 	}
 	OptionsPreviewResolutions(monitor, windowed, extended);
-	{
-		std::lock_guard<std::mutex> lock(g_lock);
-		Values &v = g_s.view.values;
-		ResSize window = {GetConfig().windowW, GetConfig().windowH};
-		SelectedSize(v, kWindowSize, window);
-		SetWindowSizes(v, monitor, window);
-	}
 	Refresh();
 }
 

@@ -1503,7 +1503,7 @@ extern const TrRow kTrRows[] = {
 	{"Panel opacity", "Opacidad del panel", "Opacità del pannello"},
 	{"Size and mode", "Tamaño y modo", "Dimensioni e modalità"},
 	{"Alt+Enter switches", "Alt+Intro alterna", "Alt+Invio alterna"},
-	{"Window size", "Tamaño de la ventana", "Dimensioni della finestra"},
+	{"Also the window size", "También el tamaño de ventana", "Vale anche per la finestra"},
 	{"FPS limit", "Límite de FPS", "Limite di FPS"},
 	{"No limit", "Sin límite", "Nessun limite"},
 	{"Off with vertical sync", "Inactivo con sincronía vertical", "Inattivo con sincronia verticale"},

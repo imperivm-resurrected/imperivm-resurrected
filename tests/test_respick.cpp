@@ -119,14 +119,19 @@ static void Monitor4k()
 static void WindowSizes()
 {
 	// A 4K monitor with the taskbar at the bottom: 3840x2160 and 4096x2160 do not fit with the frame.
-	const std::vector<ResSize> sizes = BuildWindowSizeList(k4k, {3824, 2049}, {1600, 900});
-	CHECK_EQ(static_cast<int>(sizes.size()), 24);
+	const std::vector<ResSize> sizes = BuildWindowResolutionList(k4k, {3840, 2160}, {3824, 2049});
+	CHECK_EQ(static_cast<int>(sizes.size()), 18);
 	CHECK(sizes.front().w == 3200 && sizes.front().h == 1800);
-	CHECK(sizes.back().w == 640 && sizes.back().h == 480);
-	CHECK(Same(BuildWindowSizeList({{1920, 1080}, {1600, 900}, {1600, 900}, {1280, 720}}, {1904, 1001}, {1500, 800}), {{1600, 900}, {1500, 800}, {1280, 720}}));
-	CHECK(Same(BuildWindowSizeList({{1920, 1080}, {1280, 720}}, {1904, 1001}, {1280, 720}), {{1280, 720}}));
-	CHECK(Same(BuildWindowSizeList({{1920, 1080}}, {1904, 1001}, {2560, 1440}), {{2560, 1440}}));
-	CHECK(Same(BuildWindowSizeList({}, {1904, 1001}, {}), {}));
+	CHECK(sizes.back().w == 1024 && sizes.back().h == 768);
+	const std::vector<ResSize> fullHd = {{1920, 1080}, {1680, 1050}, {1600, 900}, {1366, 768}, {1280, 1024}, {1280, 720}, {1024, 768}};
+	CHECK(Same(BuildWindowResolutionList(fullHd, {1920, 1080}, {1904, 1001}), {{1600, 900}, {1366, 768}, {1024, 768}}));
+	// Nothing the game takes fits on a 1366x768 laptop: its own size, the window kept in the work area.
+	CHECK(Same(BuildWindowResolutionList(fullHd, {1366, 768}, {1350, 705}), {{1366, 768}}));
+	CHECK(Same(BuildWindowResolutionList({}, {2560, 1440}, {2544, 1329}), {{2560, 1440}}));
+	// Full screen to window: the size kept if it fits, else the largest that does (the first).
+	const std::vector<ResSize> window = BuildWindowResolutionList(fullHd, {1920, 1080}, {1904, 1001});
+	CHECK_EQ(KeepResolution(window, {1366, 768}, {1920, 1080}), 1);
+	CHECK_EQ(KeepResolution(window, {1920, 1080}, {1920, 1080}), -1);
 }
 
 int main()

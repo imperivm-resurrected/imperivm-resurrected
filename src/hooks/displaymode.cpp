@@ -243,7 +243,9 @@ void PlaceWindow()
 	}
 	else if (Windowed()) {
 		g_origSetWindowLong(g_gameWnd, GWL_STYLE, kWindowedStyle);
-		RECT r = {0, 0, GetConfig().windowW, GetConfig().windowH};
+		// In a window the resolution is the window's inner size, so the image is not scaled. The player may
+		// still drag the frame (the image follows); the next mode change puts the window back to the resolution.
+		RECT r = {0, 0, g_logW, g_logH};
 		AdjustWindowRectEx(&r, kWindowedStyle, FALSE, 0);
 		// Centred in the part of the monitor the taskbar leaves, and never larger than it.
 		const RECT wa = MonitorAt(-1).work;
@@ -288,6 +290,8 @@ bool FakeMode(int w, int h, DWORD bpp, bool testOnly)
 		}
 		DisplayRestoreMonitor();
 	}
+	// A new resolution chosen with the window maximized gives the window that size.
+	if (g_gameWnd && Windowed() && IsZoomed(g_gameWnd) && (w != g_logW || h != g_logH)) ShowWindow(g_gameWnd, SW_RESTORE);
 	g_faking = true;
 	g_logW = w;
 	g_logH = h;
@@ -567,18 +571,6 @@ LRESULT CALLBACK GameWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 			HookClipCursor(&r);
 		}
 	}
-	// A window the player resizes by hand keeps that size, also after the game changes its mode.
-	if (msg == WM_EXITSIZEMOVE && Windowed() && !IsZoomed(hwnd) && !IsIconic(hwnd)) {
-		RECT r = {};
-		g_origGetClientRect(hwnd, &r);
-		Config &c = MutableConfig();
-		if (r.right > 0 && r.bottom > 0 && (r.right != c.windowW || r.bottom != c.windowH)) {
-			c.windowW = r.right;
-			c.windowH = r.bottom;
-			SaveConfig();
-			LogI("display", "window resized by hand to %ldx%ld", r.right, r.bottom);
-		}
-	}
 	if (msg == WM_DISPLAYCHANGE) {
 		std::lock_guard<std::mutex> lock(g_modesMx);
 		g_modesReady = false;
@@ -803,18 +795,6 @@ void DisplayWindowArea(int monitor, int &w, int &h)
 	AdjustWindowRectEx(&frame, kWindowedStyle, FALSE, 0);
 	w = (wa.right - wa.left) - (frame.right - frame.left);
 	h = (wa.bottom - wa.top) - (frame.bottom - frame.top);
-}
-
-void DisplaySetWindowSize(int w, int h)
-{
-	if (w <= 0 || h <= 0) return;
-	Config &c = MutableConfig();
-	if (c.windowW == w && c.windowH == h) return;
-	c.windowW = w;
-	c.windowH = h;
-	if (!g_gameWnd || !Windowed()) return;
-	if (IsZoomed(g_gameWnd)) ShowWindow(g_gameWnd, SW_RESTORE);
-	PlaceWindow();
 }
 
 void DisplayMonitorSize(int monitor, int &w, int &h)
