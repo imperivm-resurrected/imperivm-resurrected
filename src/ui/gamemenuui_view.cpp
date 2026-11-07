@@ -48,7 +48,6 @@ const uint32_t kRangeMs[] = {0, 10 * 60000, 5 * 60000};
 const char *const kRangeLabels[] = {"All game", "Last 10 min", "Last 5 min"};
 const char *const kGroupLabels[] = {"All", "Humans", "My team", "Rivals"};
 
-constexpr uint32_t kLateHistoryMs = 60000;
 constexpr int kPad = 24, kRailW = 216, kMainX = kPad + kRailW + 16, kMainW = kStatsW - kMainX - kPad, kFooterY = 622;
 
 COLORREF ColorOf(const StatsPlayerInfo &info) { return RGB(info.rgb >> 16 & 255, info.rgb >> 8 & 255, info.rgb & 255); }
@@ -421,11 +420,6 @@ void PaintStatistics(Painter &p, const View &v)
 	if (v.statsData) {
 		p.Font(0);
 		p.Text(kPad + 4, kFooterY + 10, 240, 40, Tr("Game time: ") + StatsFormatTime(v.statsData->history.LastMs()), kDim);
-		const uint32_t first = FirstSampleMs(v, players);
-		if (first > kLateHistoryMs) {
-			p.Font(3);
-			p.Text(kPad + 250, kFooterY + 10, 520, 40, Tr("This game was saved without history: it starts at ") + StatsFormatTime(first), kDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		}
 	}
 	p.Button(kStatsW - kPad - 160, kFooterY + 10, 160, 40, "Close", kActButton, kStatsClose, v.mouseX, v.mouseY, true, true);
 }
