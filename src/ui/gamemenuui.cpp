@@ -69,7 +69,7 @@ struct State {
 std::mutex g_lock;
 State g_s;
 Canvas g_canvas;
-bool g_swallowUp = false;
+bool g_swallowUp = false, g_escArmed = false, g_enterArmed = false;
 
 // The mod's own screens and the room handle what the game asks behind them.
 bool OtherScreenOwnsInput() { return ModUiIsOpen() || MpUiNeedsDraw(); }
@@ -270,7 +270,14 @@ bool GameMenuUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 	}
 	void *dlg = nullptr;
 	const Screen screen = CurrentScreen(dlg);
-	if (screen == kScreenNone) return false;
+	if (screen == kScreenNone) {
+		// The screen went away with the key still down: its release is not for the game, which opens its menu on it.
+		if (msg == WM_KEYUP && ((wp == VK_ESCAPE && g_escArmed) || (wp == VK_RETURN && g_enterArmed))) {
+			g_escArmed = g_enterArmed = false;
+			return true;
+		}
+		return false;
+	}
 	const POINT at = {static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))};
 	int clickId = 0;
 	bool consumed = true;
@@ -297,11 +304,20 @@ bool GameMenuUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		break;
 	}
 	case WM_KEYDOWN:
-		if (lp & 0x40000000) break;
-		if (wp == VK_ESCAPE) clickId = EscapeButton(screen, dlg);
-		else if (wp == VK_RETURN && screen == kScreenConfirm) clickId = kNativeYes;
+		if (wp == VK_ESCAPE) g_escArmed = true;
+		else if (wp == VK_RETURN) g_enterArmed = true;
 		break;
+	// On the release, as the game does: closing on the press would leave it the release, and it would open its menu again.
 	case WM_KEYUP:
+		if (wp == VK_ESCAPE && g_escArmed) {
+			g_escArmed = false;
+			clickId = EscapeButton(screen, dlg);
+		}
+		else if (wp == VK_RETURN && g_enterArmed) {
+			g_enterArmed = false;
+			if (screen == kScreenConfirm) clickId = kNativeYes;
+		}
+		break;
 	case WM_CHAR:
 		break;
 	default:
