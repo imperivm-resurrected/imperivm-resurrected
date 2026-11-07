@@ -15,8 +15,8 @@
 
 namespace {
 const unsigned kMsgButtonClick = 0x12345604, kFlagVisible = 2, kFlagBusy = 0x100, kFlagDisabled = 0x200;
-const size_t kTextBuffer = 0x98, kStatsCount = 0x60, kStatsPlayers = 0x64, kPlayerSize = 800, kPlayersStart = 0x12cc, kPlayerColor = 0x314;
-const int kMaxText = 512, kMaxPlayers = 16;
+const size_t kTextBuffer = 0x98, kStatsCount = 0x60, kStatsPlayers = 0x64;
+const int kMaxText = 512;
 
 typedef int(__fastcall *IsKindOf_t)(void *obj, void *edx, const char *cls);
 typedef bool(__fastcall *HasFlags_t)(void *window, void *edx, unsigned flags);
@@ -85,20 +85,6 @@ int ReadWide(void *text, wchar_t *out, int size)
 	out[count] = 0;
 	return count;
 }
-
-unsigned ReadPlayerColor(void *dlg, int row)
-{
-	__try {
-		const int player = *reinterpret_cast<int *>(static_cast<char *>(dlg) + kStatsPlayers + row * 4);
-		char *game = *reinterpret_cast<char **>(addr::kGame);
-		if (!game || player < 0 || player >= kMaxPlayers) return 0;
-		const unsigned v = *reinterpret_cast<unsigned *>(game + player * kPlayerSize + kPlayersStart + kPlayerColor);
-		return ((v >> 10 & 0x1f) * 255 / 31) << 16 | ((v >> 5 & 0x1f) * 255 / 31) << 8 | ((v & 0x1f) * 255 / 31);
-	}
-	__except (EXCEPTION_EXECUTE_HANDLER) {
-		return 0;
-	}
-}
 }
 
 void InstallGameMenuHooks(bool knownExe)
@@ -164,7 +150,7 @@ int StatisticsPlayerCount(void *dlg)
 	return *reinterpret_cast<int *>(static_cast<char *>(dlg) + kStatsCount);
 }
 
-unsigned StatisticsPlayerColor(void *dlg, int row)
+int StatisticsPlayerIndex(void *dlg, int row)
 {
-	return ReadPlayerColor(dlg, row);
+	return *reinterpret_cast<int *>(static_cast<char *>(dlg) + kStatsPlayers + row * 4);
 }

@@ -3,13 +3,14 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include "ui/gamemenuui.h"
 
-#include <cstdlib>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
 
 #include "core/log.h"
 #include "game/gamemenu.h"
+#include "game/gamestats.h"
 #include "game/options.h"
 #include "ui/gamemenuui_view.h"
 #include "ui/modui.h"
@@ -24,8 +25,8 @@ namespace {
 
 const int kNativeYes = 0x1002, kNativeNo = 0x1003, kNativeBack = 0x1007, kNativeQuit = 0x1006, kNativeQuitReplay = 0x100b;
 const int kTitleId = 0x1007f, kEndMessageId = 0x1009, kRatingIds[] = {0x100c, 0x100d};
-const int kStatsFirstPage = 4, kStatsLastPage = 7, kStatsTimeId = 9, kStatsHeadIds[kStatsColumns] = {1, 2, 3};
 const DWORD kReadEveryMs = 120;
+const size_t kChartNeedsSamples = 3;
 
 struct RowSpec {
 	int id;
@@ -108,29 +109,46 @@ Screen CurrentScreen(void *&dlg)
 	return kScreenNone;
 }
 
-// The game writes the percent as "(45%)" in the cell three places after the value.
-int ParsePercent(const std::string &text)
-{
-	const size_t open = text.find('(');
-	return open == std::string::npos ? 0 : std::atoi(text.c_str() + open + 1);
-}
-
 void ReadStatistics(void *dlg, View &v)
 {
-	v.statsTime = NativeText(dlg, kStatsTimeId);
-	for (int c = 0; c < kStatsColumns; c++) v.statsColumns[c] = NativeText(dlg, kStatsHeadIds[c]);
 	const int count = std::max(0, std::min(8, StatisticsPlayerCount(dlg)));
-	for (int row = 0; row < count; row++) {
-		const int base = 0x400 + row * 0x10;
-		StatsPlayer player;
-		player.name = NativeText(dlg, base + 1);
-		const unsigned color = StatisticsPlayerColor(dlg, row);
-		player.color = RGB(color >> 16 & 255, color >> 8 & 255, color & 255);
-		for (int c = 0; c < kStatsColumns; c++) {
-			player.value[c] = NativeText(dlg, base + 2 + c);
-			player.percent[c] = ParsePercent(NativeText(dlg, base + 5 + c));
+	for (int row = 0; row < count; row++) v.statsPlayers.push_back(StatisticsPlayerIndex(dlg, row));
+	v.statsData = GameStatsSnapshot();
+}
+
+StatsFilters OpeningFilters()
+{
+	GameStatsSampleNow();
+	StatsFilters filters;
+	const std::shared_ptr<const StatsSnapshot> data = GameStatsSnapshot();
+	bool enough = false;
+	for (const StatsPlayerInfo &info : data->players) enough = enough || data->history.Samples(info.index).size() >= kChartNeedsSamples;
+	filters.chart = enough;
+	return filters;
+}
+
+void ApplyStatsClick(StatsFilters &f, int action, int arg)
+{
+	switch (action) {
+	case kActCategory:
+		f.category = arg;
+		f.metric = 0;
+		f.sortColumn = -1;
+		break;
+	case kActChart: f.chart = arg != 0; break;
+	case kActMetric: f.metric = arg; break;
+	case kActRange: f.range = arg; break;
+	case kActGroup: f.group = arg; break;
+	case kActPlayer: f.hidden ^= 1u << arg; break;
+	case kActSort:
+		if (f.sortColumn != arg) {
+			f.sortColumn = arg;
+			f.sortAscending = false;
 		}
-		v.statsPlayers.push_back(player);
+		else if (!f.sortAscending) f.sortAscending = true;
+		else f.sortColumn = -1;
+		break;
+	default: break;
 	}
 }
 
@@ -172,8 +190,10 @@ int EscapeButton(Screen screen, void *dlg)
 
 void GameMenuUiGameTick()
 {
+	GameStatsTick();
 	void *dlg = nullptr;
 	const Screen screen = CurrentScreen(dlg);
+	bool opened = false;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
 		const bool changed = screen != g_s.screen || dlg != g_s.dlg;
@@ -182,9 +202,10 @@ void GameMenuUiGameTick()
 			LogD("ui", "game menu screen: %d -> %d", static_cast<int>(g_s.screen), static_cast<int>(screen));
 			g_s.hits.clear();
 			g_s.mouseDown = false;
-			g_s.view.statsPage = kStatsFirstPage;
+			opened = screen == kScreenStats;
 		}
 	}
+	const StatsFilters opening = opened ? OpeningFilters() : StatsFilters();
 	View fresh;
 	if (screen == kScreenMenu) fresh.rows = ReadRows(dlg, kMenuRows, false);
 	else if (screen == kScreenEnd) ReadEndMenu(dlg, fresh);
@@ -193,7 +214,7 @@ void GameMenuUiGameTick()
 	std::lock_guard<std::mutex> lock(g_lock);
 	fresh.mouseX = g_s.view.mouseX;
 	fresh.mouseY = g_s.view.mouseY;
-	fresh.statsPage = g_s.view.statsPage;
+	fresh.stats = opened ? opening : g_s.view.stats;
 	g_s.screen = screen;
 	g_s.dlg = dlg;
 	g_s.view = std::move(fresh);
@@ -267,10 +288,7 @@ bool GameMenuUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		if (action == kActButton) clickId = arg;
 		else if (action == kActYes) clickId = kNativeYes;
 		else if (action == kActNo) clickId = kNativeNo;
-		if (screen == kScreenStats && clickId >= kStatsFirstPage && clickId <= kStatsLastPage) {
-			g_s.view.statsPage = clickId;
-			g_s.lastRead = 0;
-		}
+		else if (screen == kScreenStats) ApplyStatsClick(g_s.view.stats, action, arg);
 		break;
 	}
 	case WM_KEYDOWN:

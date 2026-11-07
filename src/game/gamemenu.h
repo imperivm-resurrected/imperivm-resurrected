@@ -22,5 +22,4 @@ void NativeButtonClick(void *dlg, int id);
 std::string NativeText(void *dlg, int id);
 
 int StatisticsPlayerCount(void *dlg);
-// 0xRRGGBB, 0 if it cannot be read.
-unsigned StatisticsPlayerColor(void *dlg, int row);
+int StatisticsPlayerIndex(void *dlg, int row);

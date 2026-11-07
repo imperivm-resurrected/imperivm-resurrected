@@ -54,6 +54,7 @@ inline constexpr uintptr_t kRequestPauseOnline = 0x00550450;
 inline constexpr uintptr_t kRestoreNoteIcons = 0x005586f0;
 inline constexpr uintptr_t kRestoreNoteIconsLoadImage = 0x005587a7;
 constexpr uintptr_t kCrashFixSites[] = {0x0055f500, 0x0057177c, 0x005717f6, 0x005aae23, 0x005aae73};
+inline constexpr uintptr_t kComputePlayerTotals = 0x0056a6e0;
 inline constexpr uintptr_t kGenerateRandomMap = 0x00587e60;
 inline constexpr uintptr_t kRandomMapRacePrefixes = 0x0058988d;
 inline constexpr uintptr_t kFindTemplateByPrefix = 0x0058dfc0;
