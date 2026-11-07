@@ -48,6 +48,7 @@ const uint32_t kRangeMs[] = {0, 10 * 60000, 5 * 60000};
 const char *const kRangeLabels[] = {"All game", "Last 10 min", "Last 5 min"};
 const char *const kGroupLabels[] = {"All", "Humans", "My team", "Rivals"};
 
+constexpr uint32_t kLateHistoryMs = 60000;
 constexpr int kPad = 24, kRailW = 216, kMainX = kPad + kRailW + 16, kMainW = kStatsW - kMainX - kPad, kFooterY = 622;
 
 COLORREF ColorOf(const StatsPlayerInfo &info) { return RGB(info.rgb >> 16 & 255, info.rgb >> 8 & 255, info.rgb & 255); }
@@ -224,6 +225,16 @@ struct Surface {
 	}
 };
 
+uint32_t FirstSampleMs(const View &v, const std::vector<const StatsPlayerInfo *> &players)
+{
+	uint32_t first = v.statsData->history.LastMs();
+	for (const StatsPlayerInfo *info : players) {
+		const std::vector<StatSample> &samples = v.statsData->history.Samples(info->index);
+		if (!samples.empty()) first = std::min(first, samples.front().ms);
+	}
+	return first;
+}
+
 void PaintChart(Painter &p, const View &v, const std::vector<const StatsPlayerInfo *> &players, int top)
 {
 	const Category &category = kCategories[v.stats.category];
@@ -234,24 +245,26 @@ void PaintChart(Painter &p, const View &v, const std::vector<const StatsPlayerIn
 	const int plotX = kMainX + 62, plotW = kMainW - 62 - 18, plotY = top + 16, plotH = bottom - top - 16 - 32;
 	const StatsHistory &history = v.statsData->history;
 	const uint32_t now = history.LastMs(), span = kRangeMs[v.stats.range];
-	const uint32_t from = span && now > span ? now - span : 0;
+	const uint32_t from = std::max(FirstSampleMs(v, players), span && now > span ? now - span : 0);
 	const uint32_t length = std::max<uint32_t>(now - from, 1000);
 
 	std::vector<const StatsPlayerInfo *> shown;
 	int maximum = 0;
-	size_t points = 0;
+	size_t mostPoints = 0;
 	for (const StatsPlayerInfo *info : players) {
 		if (!Shown(v, *info)) continue;
 		shown.push_back(info);
+		size_t points = 0;
 		for (const StatSample &s : history.Samples(info->index)) {
 			if (s.ms < from) continue;
 			maximum = std::max(maximum, s.values[metric]);
 			points++;
 		}
+		mostPoints = std::max(mostPoints, points);
 	}
-	if (shown.empty() || points == 0) {
+	if (shown.empty() || mostPoints < 2) {
 		p.Font(0);
-		p.Text(plotX, plotY, plotW, plotH, shown.empty() ? "No player matches the filters." : "No data for this period yet.", kDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.Text(plotX, plotY, plotW, plotH, shown.empty() ? "No player matches the filters." : "Not enough history to draw yet. The Table view has the totals.", kDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		return;
 	}
 	const StatsAxis axis = StatsNiceAxis(maximum);
@@ -407,7 +420,12 @@ void PaintStatistics(Painter &p, const View &v)
 	p.Fill(18, kFooterY, kStatsW - 36, 1, pal::line);
 	if (v.statsData) {
 		p.Font(0);
-		p.Text(kPad + 4, kFooterY + 10, 500, 40, Tr("Game time: ") + StatsFormatTime(v.statsData->history.LastMs()), kDim);
+		p.Text(kPad + 4, kFooterY + 10, 240, 40, Tr("Game time: ") + StatsFormatTime(v.statsData->history.LastMs()), kDim);
+		const uint32_t first = FirstSampleMs(v, players);
+		if (first > kLateHistoryMs) {
+			p.Font(3);
+			p.Text(kPad + 250, kFooterY + 10, 520, 40, Tr("This game was saved without history: it starts at ") + StatsFormatTime(first), kDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		}
 	}
 	p.Button(kStatsW - kPad - 160, kFooterY + 10, 160, 40, "Close", kActButton, kStatsClose, v.mouseX, v.mouseY, true, true);
 }

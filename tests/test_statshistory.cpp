@@ -104,8 +104,91 @@ static void FormatsTexts()
 	CHECK_EQ(StatsFormatShort(-12500), std::string("-12.5k"));
 }
 
+static StatsHistory SomeHistory(std::vector<StatsPlayerInfo> &players)
+{
+	StatsHistory h;
+	StatsPlayerInfo a, b;
+	a.index = 0;
+	a.name = "THIONG";
+	a.rgb = 0xff0000;
+	a.human = a.local = true;
+	b.index = 5;
+	b.name = "Eóin (IA)";
+	b.rgb = 0x00ff00;
+	b.ally = true;
+	players = {a, b};
+	for (uint32_t ms = 10000; ms <= 50000; ms += 10000) {
+		StatSample s = At(ms, static_cast<int>(ms / 100));
+		s.values[kStatMetricCount - 1] = -7;
+		h.Add(0, s);
+		if (ms <= 30000) h.Add(5, s);
+	}
+	return h;
+}
+
+static void SavedHistoryComesBack()
+{
+	std::vector<StatsPlayerInfo> players, back;
+	const StatsHistory h = SomeHistory(players);
+	StatsHistory read;
+	CHECK(StatsDecode(StatsEncode(h, players), read, back));
+	CHECK_EQ(static_cast<int>(back.size()), 2);
+	CHECK_EQ(back[1].index, 5);
+	CHECK_EQ(back[1].name, std::string("Eóin (IA)"));
+	CHECK_EQ(back[0].rgb, 0xff0000u);
+	CHECK(back[0].human && back[0].local && !back[0].ally);
+	CHECK(!back[1].human && !back[1].local && back[1].ally);
+	CHECK_EQ(static_cast<int>(read.Samples(0).size()), 5);
+	CHECK_EQ(static_cast<int>(read.Samples(5).size()), 3);
+	CHECK_EQ(read.Samples(0)[4].values[kStatScore], 500);
+	CHECK_EQ(read.Samples(0)[4].values[kStatMetricCount - 1], -7);
+	CHECK_EQ(read.LastMs(), 50000u);
+}
+
+static void DamagedHistoryIsRefused()
+{
+	std::vector<StatsPlayerInfo> players, back;
+	const StatsHistory h = SomeHistory(players);
+	const std::string good = StatsEncode(h, players);
+	StatsHistory keep;
+	keep.Add(1, At(5, 9));
+	CHECK(!StatsDecode("", keep, back));
+	CHECK(!StatsDecode("hello there, this is no history", keep, back));
+	for (size_t size = 0; size < good.size(); size += 37) CHECK(!StatsDecode(good.substr(0, size), keep, back));
+	std::string wrongVersion = good;
+	wrongVersion[4] = 99;
+	CHECK(!StatsDecode(wrongVersion, keep, back));
+	CHECK_EQ(keep.Samples(1)[0].values[kStatScore], 9);
+}
+
+static void EmptyHistoryRoundTrips()
+{
+	std::vector<StatsPlayerInfo> players, back;
+	StatsHistory h = SomeHistory(players);
+	std::string data = StatsEncode(h, std::vector<StatsPlayerInfo>{});
+	StatsHistory read;
+	CHECK(StatsDecode(data, read, back));
+	CHECK(read.Empty());
+}
+
+static void TrimsWhatComesAfter()
+{
+	std::vector<StatsPlayerInfo> players;
+	StatsHistory h = SomeHistory(players);
+	h.TrimAfter(25000);
+	CHECK_EQ(static_cast<int>(h.Samples(0).size()), 2);
+	CHECK_EQ(static_cast<int>(h.Samples(5).size()), 2);
+	CHECK_EQ(h.LastMs(), 20000u);
+	h.TrimAfter(5);
+	CHECK(h.Empty());
+}
+
 int main()
 {
+	SavedHistoryComesBack();
+	DamagedHistoryIsRefused();
+	EmptyHistoryRoundTrips();
+	TrimsWhatComesAfter();
 	AddAndClear();
 	IgnoresBadPlayers();
 	SameTimeReplaces();

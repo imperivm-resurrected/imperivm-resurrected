@@ -6,15 +6,20 @@
 #include <windows.h>
 
 #include <cstddef>
+#include <cstdio>
 
 #include "addr/state.h"
 #include "addr/world.h"
+#include "core/log.h"
+#include "hooks/gameload.h"
 
 namespace {
 const size_t kGameClock = 0x1258, kLocalPlayer = 0x12c8, kPlayersStart = 0x12cc, kPlayerSize = 800;
 const size_t kGameStats = 0x258, kStatsRecordSize = 0xd0;
 const size_t kPlayerId = 8, kPlayerDiplomacy = 0x24, kPlayerActive = 0x64, kPlayerAi = 0x88, kPlayerName = 0x94, kPlayerNameCapacity = 0xa8, kPlayerState = 0x290, kPlayerColor = 0x314;
-const int kStatePlaying = 1;
+const size_t kSettingsSlots = 0xac, kSettingsSlotSize = 0xc0;
+const int kStatePlaying = 1, kSlotAi = 1, kSettingsSlotCount = 8;
+const char kFileSuffix[] = ".stats";
 
 // The totals function adds up into this: mask at 0, gold 1, food 2, units on the map 3, units in buildings 4, city points 5, mask again at 6.
 struct Totals {
@@ -33,6 +38,8 @@ uint32_t g_lastClock = 0, g_lastSample = 0;
 bool g_sampled = false;
 std::shared_ptr<const StatsSnapshot> g_snapshot;
 bool g_dirty = true;
+bool g_loadPending = false;
+std::string g_loadData;
 
 template <class T>
 T Field(const char *base, size_t offset)
@@ -78,7 +85,10 @@ bool ReadPlayer(const char *game, int index, RawPlayer &out)
 		out.active = Field<int>(player, kPlayerActive) != 0 || state != 0;
 		if (!out.active) return true;
 		out.playing = state == kStatePlaying;
-		out.human = Field<void *>(player, kPlayerAi) == nullptr;
+		// A player that lost has no AI object any more, so the game's settings say it better.
+		const char *settings = *reinterpret_cast<const char *const *>(addr::kGameSettings);
+		if (settings && index < kSettingsSlotCount) out.human = Field<int>(settings, kSettingsSlots + index * kSettingsSlotSize) != kSlotAi;
+		else out.human = Field<void *>(player, kPlayerAi) == nullptr;
 		const char *local = Field<const char *>(game, kLocalPlayer);
 		out.local = local == player;
 		if (local && !out.local) {
@@ -164,6 +174,36 @@ void Sample(const char *game, uint32_t clock)
 	g_dirty = true;
 }
 
+std::string ReadWholeFile(const std::string &path)
+{
+	std::string data;
+	FILE *f = nullptr;
+	if (fopen_s(&f, path.c_str(), "rb") != 0 || !f) return data;
+	char buffer[16384];
+	for (size_t got = fread(buffer, 1, sizeof(buffer), f); got; got = fread(buffer, 1, sizeof(buffer), f)) data.append(buffer, got);
+	fclose(f);
+	return data;
+}
+
+std::string DiskPath(const std::string &gamePath)
+{
+	char exe[MAX_PATH] = {};
+	GetModuleFileNameA(nullptr, exe, MAX_PATH);
+	std::string file = exe;
+	file = file.substr(0, file.find_last_of('\\') + 1) + gamePath;
+	for (char &c : file) {
+		if (c == '/') c = '\\';
+	}
+	return file;
+}
+
+void AfterGameLoad(const char *path, int result)
+{
+	if (result != 0 || !path) return;
+	g_loadPending = true;
+	g_loadData = ReadWholeFile(DiskPath(path) + kFileSuffix);
+}
+
 void Reset(char *game)
 {
 	g_history.Clear();
@@ -185,6 +225,25 @@ void GameStatsTick()
 	}
 	uint32_t clock = 0;
 	if (!ReadClock(game, clock)) return;
+	if (g_loadPending) {
+		g_loadPending = false;
+		Reset(game);
+		std::vector<StatsPlayerInfo> players;
+		if (!g_loadData.empty() && StatsDecode(g_loadData, g_history, players)) {
+			g_history.TrimAfter(clock);
+			for (const StatsPlayerInfo &info : players) {
+				g_info[info.index] = info;
+				g_seen[info.index] = true;
+			}
+			g_sampled = !g_history.Empty();
+			g_lastSample = g_history.LastMs();
+			LogD("saves", "history restored up to %u ms of the game", g_lastSample);
+		}
+		else if (!g_loadData.empty()) LogW("saves", "the history of the loaded game could not be read");
+		g_loadData.clear();
+		g_lastClock = clock;
+		return;
+	}
 	if (game != g_game || clock < g_lastClock) Reset(game);
 	// Only a game that advances is sure to be fully there: loading one also shows frames.
 	const bool advanced = clock != g_lastClock;
@@ -204,6 +263,31 @@ void GameStatsSampleNow()
 	if (game != g_game || clock < g_lastClock) Reset(game);
 	g_lastClock = clock;
 	Sample(game, clock);
+}
+
+void InstallGameStats(bool knownExe)
+{
+	if (!InstallGameLoadHook(knownExe)) return;
+	OnGameLoadedFrom(&AfterGameLoad);
+}
+
+void GameStatsWriteFile(const std::string &saveFile)
+{
+	const std::string file = saveFile + kFileSuffix;
+	GameStatsSampleNow();
+	if (g_history.Empty()) {
+		DeleteFileA(file.c_str());
+		return;
+	}
+	const std::shared_ptr<const StatsSnapshot> data = GameStatsSnapshot();
+	const std::string bytes = StatsEncode(data->history, data->players);
+	FILE *f = nullptr;
+	if (fopen_s(&f, file.c_str(), "wb") != 0 || !f) {
+		LogW("saves", "could not write the history of the save");
+		return;
+	}
+	fwrite(bytes.data(), 1, bytes.size(), f);
+	fclose(f);
 }
 
 std::shared_ptr<const StatsSnapshot> GameStatsSnapshot()

@@ -10,13 +10,15 @@
 #include "MinHook.h"
 #include "addr/state.h"
 #include "addr/ui.h"
+#include "addr/world.h"
 #include "core/log.h"
+#include "hooks/gamestate.h"
 #include "hooks/hookcount.h"
 
 namespace {
 const unsigned kMsgButtonClick = 0x12345604, kFlagVisible = 2, kFlagBusy = 0x100, kFlagDisabled = 0x200;
 const size_t kTextBuffer = 0x98, kStatsCount = 0x60, kStatsPlayers = 0x64;
-const int kMaxText = 512;
+const int kMaxText = 512, kEndMenuLoad = 0x1001, kLoadKindScenario = 3, kLoadFromEndMenu = 3;
 
 typedef int(__fastcall *IsKindOf_t)(void *obj, void *edx, const char *cls);
 typedef bool(__fastcall *HasFlags_t)(void *window, void *edx, unsigned flags);
@@ -132,6 +134,22 @@ void NativeButtonClick(void *dlg, int id)
 	char *b = static_cast<char *>(button);
 	reinterpret_cast<SendNotify_t>((*reinterpret_cast<void ***>(button))[0x6c / 4])(button, nullptr, *reinterpret_cast<int *>(b + 0x34), kMsgButtonClick,
 		*reinterpret_cast<int *>(b + 0x30), *reinterpret_cast<short *>(b + 0x7e), 0);
+}
+
+bool GameHasSeveralHumans()
+{
+	return reinterpret_cast<bool(__cdecl *)()>(addr::kMultiHumans)();
+}
+
+void EndMenuLoadGame(void *dlg)
+{
+	// The game's own handler only knows adventures and single games, and does nothing in a skirmish, which is a CVXGameMultiplayer.
+	if (!GameIsMultiplayer()) {
+		NativeButtonClick(dlg, kEndMenuLoad);
+		return;
+	}
+	if (*reinterpret_cast<void **>(addr::kSelectionManager)) reinterpret_cast<void(__cdecl *)()>(addr::kPostCloseGameMenu)();
+	reinterpret_cast<const char *(__cdecl *)(int, int)>(addr::kShowLoadDialog)(kLoadKindScenario, kLoadFromEndMenu);
 }
 
 std::string NativeText(void *dlg, int id)

@@ -17,6 +17,8 @@ struct NativeButtonState {
 };
 NativeButtonState NativeButton(void *dlg, int id);
 void NativeButtonClick(void *dlg, int id);
+void EndMenuLoadGame(void *dlg);
+bool GameHasSeveralHumans();
 
 // Empty when the control is missing or hidden.
 std::string NativeText(void *dlg, int id);
