@@ -141,6 +141,12 @@ ResSize ScreenSize()
 	return s;
 }
 
+// While the options are open, the list follows the monitor, mode and extended view shown there, before they
+// are applied; the size the game is at is kept apart, since that list may not have it.
+bool g_previewing = false;
+ResolutionChoice g_preview;
+ResSize g_heldSize;
+
 void SetResolutionIndex(int index)
 {
 	if (index < 0) return;
@@ -185,12 +191,15 @@ void __fastcall HookSaveOptions(unsigned *block)
 // reports, so wide and large screens never found theirs: the list is built from the monitor's own modes.
 void ReplaceResolutionList()
 {
+	const ResolutionChoice choice = g_previewing ? g_preview : ResolutionChoice{-1, DisplayIsWindowed(), GetConfig().extendedView};
 	std::vector<ResSize> windows, extended;
-	for (POINT p : DisplayWindowsSizes()) windows.push_back({p.x, p.y});
-	if (GetConfig().extendedView && DisplayFakesModeChange()) {
-		for (POINT p : DisplayExtendedSizes()) extended.push_back({p.x, p.y});
+	for (POINT p : DisplayWindowsSizes(choice.monitor)) windows.push_back({p.x, p.y});
+	if (choice.extendedView && DisplayFakesModeChange()) {
+		for (POINT p : DisplayExtendedSizes(choice.monitor)) extended.push_back({p.x, p.y});
 	}
-	const std::vector<ResSize> sizes = BuildResolutionList(windows, ScreenSize(), extended, DisplayFakesModeChange() && !DisplayIsWindowed());
+	ResSize screen;
+	DisplayMonitorSize(choice.monitor, screen.w, screen.h);
+	const std::vector<ResSize> sizes = BuildResolutionList(windows, screen, extended, DisplayFakesModeChange() && !choice.windowed);
 	auto &begin = *reinterpret_cast<POINT **>(addr::kResolutionList + 4);
 	auto &end = *reinterpret_cast<POINT **>(addr::kResolutionList + 8);
 	if (begin) end = begin;
@@ -218,6 +227,9 @@ bool __cdecl HookInitResolutionList()
 	if (!started && ResolutionCount() > 0) {
 		started = true;
 		UseSavedResolution();
+	}
+	else if (keep && g_previewing) {
+		*reinterpret_cast<int *>(addr::kCurrentResolutionIndex) = ResolutionIndexOf(keepW, keepH);
 	}
 	else if (keep) {
 		const int at = KeepResolution(ResolutionSizes(), {keepW, keepH}, ScreenSize());
@@ -582,11 +594,33 @@ void InstallTweaks(bool knownExe)
 bool TweaksIntendedResolution(int &w, int &h)
 {
 	const int index = *reinterpret_cast<int *>(addr::kCurrentResolutionIndex);
-	if (index < 0 || index >= ResolutionCount()) return false;
+	if (index < 0 || index >= ResolutionCount()) {
+		if (!g_previewing || g_heldSize.w <= 0) return false;
+		w = g_heldSize.w;
+		h = g_heldSize.h;
+		return true;
+	}
 	const POINT size = (*reinterpret_cast<POINT **>(addr::kResolutionList + 4))[index];
 	w = size.x;
 	h = size.y;
 	return true;
+}
+
+void TweaksPreviewResolutions(const ResolutionChoice *choice)
+{
+	if (!choice && !g_previewing) return;
+	int w = 0, h = 0;
+	if (TweaksIntendedResolution(w, h)) g_heldSize = {w, h};
+	g_previewing = choice != nullptr;
+	if (choice) g_preview = *choice;
+	ReplaceResolutionList();
+	// The game changes its mode when the size chosen is not the one at this position: -1 when the list lacks it.
+	*reinterpret_cast<int *>(addr::kCurrentResolutionIndex) = g_heldSize.w > 0 ? ResolutionIndexOf(g_heldSize.w, g_heldSize.h) : -1;
+}
+
+std::vector<ResSize> TweaksResolutionList()
+{
+	return ResolutionSizes();
 }
 
 void TweaksApplySmoothScroll()

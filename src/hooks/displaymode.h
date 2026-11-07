@@ -36,9 +36,12 @@ void DisplayRestoreMonitor();
 
 bool DisplayMonitorHasMode(int w, int h);
 
-std::vector<POINT> DisplayExtendedSizes();
+// For these, a negative monitor is the one chosen in the settings.
+std::vector<POINT> DisplayExtendedSizes(int monitor = -1);
 
-std::vector<POINT> DisplayWindowsSizes();
+std::vector<POINT> DisplayWindowsSizes(int monitor = -1);
+
+void DisplayMonitorSize(int monitor, int &w, int &h);
 
 bool DisplayModeAllowed(int w, int h);
 

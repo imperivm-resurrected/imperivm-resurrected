@@ -4,6 +4,7 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <map>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -58,6 +59,7 @@ int DesktopH() { return g_origMetrics ? g_origMetrics(SM_CYSCREEN) : GetSystemMe
 
 struct MonitorEntry {
 	RECT rect;
+	RECT work;
 	bool primary;
 	std::wstring device;
 };
@@ -66,7 +68,7 @@ BOOL CALLBACK EnumMonitor(HMONITOR monitor, HDC, LPRECT, LPARAM param)
 {
 	MONITORINFOEXW mi = {};
 	mi.cbSize = sizeof(mi);
-	if (GetMonitorInfoW(monitor, &mi)) reinterpret_cast<std::vector<MonitorEntry> *>(param)->push_back({mi.rcMonitor, (mi.dwFlags & MONITORINFOF_PRIMARY) != 0, mi.szDevice});
+	if (GetMonitorInfoW(monitor, &mi)) reinterpret_cast<std::vector<MonitorEntry> *>(param)->push_back({mi.rcMonitor, mi.rcWork, (mi.dwFlags & MONITORINFOF_PRIMARY) != 0, mi.szDevice});
 	return TRUE;
 }
 
@@ -108,26 +110,47 @@ std::vector<MonitorEntry> Monitors()
 	return list;
 }
 
-RECT TargetMonitor()
+// A negative index is the monitor chosen in the settings; one that is no longer connected is the main one.
+int MonitorIndex(int index, size_t count)
+{
+	if (index < 0) index = GetConfig().monitor;
+	return index >= 0 && index < static_cast<int>(count) ? index : 0;
+}
+
+MonitorEntry MonitorAt(int index)
 {
 	const std::vector<MonitorEntry> list = Monitors();
-	if (list.empty()) return RECT{0, 0, DesktopW(), DesktopH()};
-	const int index = GetConfig().monitor;
-	return list[index >= 0 && index < static_cast<int>(list.size()) ? index : 0].rect;
+	if (list.empty()) {
+		const RECT desktop = {0, 0, DesktopW(), DesktopH()};
+		return MonitorEntry{desktop, desktop, true, std::wstring()};
+	}
+	return list[MonitorIndex(index, list.size())];
+}
+
+bool IsTargetMonitor(int index)
+{
+	const size_t count = Monitors().size();
+	return MonitorIndex(index, count) == MonitorIndex(-1, count);
+}
+
+RECT TargetMonitor()
+{
+	return MonitorAt(-1).rect;
 }
 
 bool Enabled();
 
+std::string DeviceName(const MonitorEntry &monitor)
+{
+	char name[64] = {};
+	WideCharToMultiByte(CP_ACP, 0, monitor.device.c_str(), -1, name, sizeof(name), nullptr, nullptr);
+	return name;
+}
+
 std::string TargetDevice()
 {
 	if (!Enabled()) return std::string();
-	const std::vector<MonitorEntry> list = Monitors();
-	if (list.empty()) return std::string();
-	const int index = GetConfig().monitor;
-	const std::wstring &device = list[index >= 0 && index < static_cast<int>(list.size()) ? index : 0].device;
-	char name[64] = {};
-	WideCharToMultiByte(CP_ACP, 0, device.c_str(), -1, name, sizeof(name), nullptr, nullptr);
-	return name;
+	return DeviceName(MonitorAt(-1));
 }
 
 bool Enabled() { return GetConfig().fakeModeChange && GetConfig().renderEnabled; }
@@ -271,6 +294,7 @@ bool FakeMode(int w, int h, DWORD bpp, bool testOnly)
 std::mutex g_modesMx;
 std::string g_modeDevice;
 std::vector<DEVMODEA> g_modes;
+std::map<std::string, std::vector<POINT>> g_otherSizes;
 bool g_modesReady = false;
 bool g_realHas16 = false;
 
@@ -361,7 +385,9 @@ bool SwitchMonitorTo(int w, int h)
 		std::lock_guard<std::mutex> lock(g_modesMx);
 		for (const DEVMODEA &m : g_modes) {
 			if (static_cast<int>(m.dmPelsWidth) != w || static_cast<int>(m.dmPelsHeight) != h || m.dmBitsPerPel < 24) continue;
-			if (!best.dmPelsWidth || m.dmDisplayFrequency > best.dmDisplayFrequency) best = m;
+			// A television lists 1080i next to 1080p; the interlaced one only if it is all there is.
+			const bool interlaced = (m.dmDisplayFlags & DM_INTERLACED) != 0, bestInterlaced = (best.dmDisplayFlags & DM_INTERLACED) != 0;
+			if (!best.dmPelsWidth || (bestInterlaced && !interlaced) || (interlaced == bestInterlaced && m.dmDisplayFrequency > best.dmDisplayFrequency)) best = m;
 		}
 	}
 	if (!best.dmPelsWidth) return false;
@@ -538,6 +564,7 @@ LRESULT CALLBACK GameWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 	if (msg == WM_DISPLAYCHANGE) {
 		std::lock_guard<std::mutex> lock(g_modesMx);
 		g_modesReady = false;
+		g_otherSizes.clear();
 	}
 	if (Scaling() && msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST && msg != WM_MOUSEWHEEL && msg != WM_MOUSEHWHEEL) {
 		int x = static_cast<short>(LOWORD(lp)), y = static_cast<short>(HIWORD(lp));
@@ -658,7 +685,12 @@ void DisplayApplySettings(bool windowModeChanged)
 		if (!Windowed()) {
 			g_origSetWindowLong(g_gameWnd, GWL_STYLE, g_originalStyle);
 		}
-		PlaceWindow();
+		// The size the game is at is set again for the new mode or monitor: it may need that monitor switched,
+		// or no longer fit and be shrunk.
+		if (!g_faking || !FakeMode(g_logW, g_logH, g_logBpp, false)) {
+			DisplayRestoreMonitor();
+			PlaceWindow();
+		}
 	}
 	if (Windowed() || !GetConfig().trapMouse) {
 		g_origClipCursor(nullptr);
@@ -702,10 +734,10 @@ bool DisplayModeAllowed(int w, int h)
 	return w <= (2 * monitorW < 4096 ? 2 * monitorW : 4096) && h <= (2 * monitorH < 2304 ? 2 * monitorH : 2304);
 }
 
-std::vector<POINT> DisplayExtendedSizes()
+std::vector<POINT> DisplayExtendedSizes(int monitor)
 {
 	int monitorW = 0, monitorH = 0;
-	DisplayTargetSize(monitorW, monitorH);
+	DisplayMonitorSize(monitor, monitorW, monitorH);
 	std::vector<POINT> sizes;
 	for (float factor : {1.25f, 1.5f, 2.0f}) {
 		const int w = static_cast<int>(monitorW * factor) / 8 * 8, h = static_cast<int>(monitorH * factor) / 8 * 8;
@@ -714,16 +746,47 @@ std::vector<POINT> DisplayExtendedSizes()
 	return sizes;
 }
 
-std::vector<POINT> DisplayWindowsSizes()
+std::vector<POINT> DisplayWindowsSizes(int monitor)
 {
-	PrepareModes();
 	std::vector<POINT> sizes;
-	std::lock_guard<std::mutex> lock(g_modesMx);
-	for (const DEVMODEA &m : g_modes) {
-		const POINT p = {static_cast<LONG>(m.dmPelsWidth), static_cast<LONG>(m.dmPelsHeight)};
+	const auto add = [&](DWORD w, DWORD h) {
+		const POINT p = {static_cast<LONG>(w), static_cast<LONG>(h)};
 		if (std::find_if(sizes.begin(), sizes.end(), [&](const POINT &q) { return q.x == p.x && q.y == p.y; }) == sizes.end()) sizes.push_back(p);
+	};
+	if (!Enabled() || IsTargetMonitor(monitor)) {
+		PrepareModes();
+		std::lock_guard<std::mutex> lock(g_modesMx);
+		for (const DEVMODEA &m : g_modes) add(m.dmPelsWidth, m.dmPelsHeight);
+		return sizes;
 	}
+	// Another monitor, while the player looks at it in the options: the game keeps enumerating the chosen one.
+	const std::string device = DeviceName(MonitorAt(monitor));
+	{
+		std::lock_guard<std::mutex> lock(g_modesMx);
+		const auto known = g_otherSizes.find(device);
+		if (known != g_otherSizes.end()) return known->second;
+	}
+	const auto enumerate = g_origEnum ? g_origEnum : &EnumDisplaySettingsA;
+	for (DWORD n = 0;; n++) {
+		DEVMODEA dm = {};
+		dm.dmSize = sizeof(dm);
+		if (!enumerate(device.empty() ? nullptr : device.c_str(), n, &dm)) break;
+		add(dm.dmPelsWidth, dm.dmPelsHeight);
+	}
+	std::lock_guard<std::mutex> lock(g_modesMx);
+	g_otherSizes[device] = sizes;
 	return sizes;
+}
+
+void DisplayMonitorSize(int monitor, int &w, int &h)
+{
+	if (IsTargetMonitor(monitor)) {
+		DisplayTargetSize(w, h);
+		return;
+	}
+	const RECT r = MonitorAt(monitor).rect;
+	w = r.right - r.left;
+	h = r.bottom - r.top;
 }
 
 void DisplayTargetSize(int &w, int &h)

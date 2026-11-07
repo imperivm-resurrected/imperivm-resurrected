@@ -192,6 +192,27 @@ int SliderValue(const State &st, int id, const RECT &hit, int mouseX)
 
 RECT g_dragRect = {};
 
+// The resolution list follows the monitor and mode picked here before they are applied.
+void PreviewResolutions()
+{
+	int monitor = 0;
+	bool windowed = false, extended = false;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		const Values &v = g_s.view.values;
+		const auto combo = v.combos.find(kMonitor);
+		monitor = combo == v.combos.end() ? GetConfig().monitor : combo->second;
+		const auto check = [&](int id, bool fallback) {
+			const auto it = v.checks.find(id);
+			return it == v.checks.end() ? fallback : it->second;
+		};
+		windowed = check(kWindowed, GetConfig().windowed);
+		extended = GetConfig().extendedView;
+	}
+	OptionsPreviewResolutions(monitor, windowed, extended);
+	Refresh();
+}
+
 void SetSlider(int id, int value)
 {
 	if (IsExtra(id)) {
@@ -227,10 +248,12 @@ void Execute(const Command &cmd)
 	case kActSegment:
 		OptionsWriteCheck(cmd.arg >> 4, (cmd.arg & 15) != 0);
 		Refresh();
+		if (cmd.arg >> 4 == kWindowed) PreviewResolutions();
 		break;
 	case kActPick:
 		OptionsWriteCombo(cmd.value, cmd.arg);
 		Refresh();
+		if (cmd.value == kMonitor) PreviewResolutions();
 		break;
 	case kActRow:
 		if (cmd.arg == kOpenLogs) ReportOpenLogsFolder();
@@ -246,6 +269,7 @@ void Execute(const Command &cmd)
 		}
 		OptionsWriteScroll(kBrightness, OptionsReadScroll(kBrightness, 100));
 		Refresh();
+		PreviewResolutions();
 		ApplyPanelFromView();
 		break;
 	}
