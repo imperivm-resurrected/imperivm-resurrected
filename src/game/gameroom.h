@@ -98,6 +98,23 @@ void GameRoomSetTeam(int slot, int team);
 void GameRoomSetBonus(int slot, int index);
 void GameRoomToggleReady();
 void GameRoomStart();
+
+// Start countdown of a network room (Steam or local network). When every human is ready (AIs count as ready), nothing is
+// blocking and the room did not change in the last second, the host counts kRoomCountdownMs down and then starts the game
+// as GameRoomStart does. It stops for everyone when someone is not ready, a player joins or leaves, a slot, team,
+// civilization, colour or option changes, the start gate blocks or the host cancels it. In Steam rooms the guests get it
+// over the mod's channel; in local network rooms only the host counts.
+// Milliseconds left on this PC, 0 while waiting for the start, -1 without a countdown.
+int GameRoomCountdownLeftMs();
+// Off by default: the host only counts down once the interface turns it on.
+void GameRoomSetAutoStart(bool on);
+// Called on the game thread, from GameRoomTick, with no lock of the room held: true while the game must not start (players
+// still joining or downloading, a saved game being placed...). Pass nullptr to remove it.
+void GameRoomSetStartGate(bool (*blocked)());
+// The host stops the countdown; a new one starts only after someone stops being ready. Does nothing for a guest.
+void GameRoomCountdownCancel();
+// From the network: the host's countdown of `ms` (already corrected for the latency), or its cancellation when ms < 0.
+void GameRoomCountdownReceived(unsigned seq, int ms);
 void GameRoomCancel();
 void GameRoomSetOption(int id, int index);
 void GameRoomToggleOption(int id);

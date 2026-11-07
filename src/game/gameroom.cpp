@@ -8,6 +8,7 @@
 #include <functional>
 #include <mutex>
 #include <algorithm>
+#include <atomic>
 
 #include "MinHook.h"
 #include "hooks/hookcount.h"
@@ -20,6 +21,7 @@
 #include "mods/modoptions.h"
 #include "mods/modvars.h"
 #include "game/netlink.h"
+#include "game/roomcountdown.h"
 #include "core/log.h"
 #include "core/names.h"
 #include "addr/engine.h"
@@ -79,6 +81,14 @@ ThisOnly_t g_origPickerDtor = nullptr;
 std::mutex g_lock;
 GameRoomSnapshot g_snap;
 std::deque<std::function<void()>> g_actions;
+
+struct CountdownState {
+	std::mutex mx;
+	RoomCountdown clock;
+	std::atomic<bool> autoStart{false};
+	std::atomic<bool (*)()> startBlocked{nullptr};
+};
+CountdownState g_countdown;
 
 void *Child(void *dlg, int id, uintptr_t className)
 {
@@ -578,10 +588,158 @@ void Queue(std::function<void()> fn)
 	g_actions.push_back(std::move(fn));
 }
 
+uint32_t Mix(uint32_t h, uint32_t v)
+{
+	for (int i = 0; i < 4; i++) h = (h ^ ((v >> (i * 8)) & 0xff)) * 16777619u;
+	return h;
+}
+
+uint32_t MixText(uint32_t h, const std::string &text)
+{
+	for (char c : text) h = (h ^ static_cast<unsigned char>(c)) * 16777619u;
+	return Mix(h, static_cast<uint32_t>(text.size()));
+}
+
+const uint32_t kFnvBasis = 2166136261u;
+const int kOptionsPart = 8;
+
+// What the countdown watches: one part per slot and one for the options, so that the log can say what changed.
+RoomCountdownInput CountdownInput(const GameRoomSnapshot &s)
+{
+	RoomCountdownInput in;
+	in.allReady = true;
+	int humans = 0;
+	for (const GameRoomSlot &slot : s.slots) {
+		uint32_t h = kFnvBasis;
+		h = Mix(h, slot.used);
+		h = Mix(h, static_cast<uint32_t>(slot.type));
+		h = MixText(h, slot.name);
+		h = Mix(h, static_cast<uint32_t>(slot.color));
+		h = Mix(h, static_cast<uint32_t>(slot.team));
+		h = Mix(h, static_cast<uint32_t>(slot.race));
+		h = Mix(h, static_cast<uint32_t>(slot.bonus));
+		h = Mix(h, static_cast<uint32_t>(slot.nameSel));
+		h = Mix(h, slot.exists);
+		in.parts.push_back(h);
+		if (slot.joining) in.blocked = true;
+		if (!slot.used || slot.type != 3) continue;
+		humans++;
+		if (!slot.ready) in.allReady = false;
+		if (!slot.exists) in.blocked = true;
+	}
+	if (!humans) in.allReady = false;
+	uint32_t o = kFnvBasis;
+	for (const GameRoomOption &opt : s.options) {
+		o = Mix(o, static_cast<uint32_t>(opt.id));
+		o = Mix(o, opt.value);
+		o = Mix(o, static_cast<uint32_t>(opt.sel));
+	}
+	o = Mix(o, s.siteFlags);
+	o = Mix(o, s.rules);
+	o = Mix(o, s.randomMap);
+	o = MixText(o, s.scenario);
+	o = MixText(o, s.mode);
+	in.parts.push_back(o);
+	if (s.busy || s.picker) in.blocked = true;
+	return in;
+}
+
+std::string CountdownReasonText(const CountdownStep &step)
+{
+	switch (step.reason) {
+	case CountdownReason::NotReady: return "a player is not ready";
+	case CountdownReason::Blocked: return "the game cannot start yet (a player is joining or the slots are changing)";
+	case CountdownReason::Changed:
+		return step.part >= 0 && step.part < kOptionsPart ? "slot " + std::to_string(step.part + 1) + " changed" : std::string("the game options changed");
+	case CountdownReason::Host: return "the host stopped it";
+	case CountdownReason::Remote: return "the game did not start";
+	default: return "?";
+	}
+}
+
+void CountdownSend(uint32_t seq, int ms)
+{
+	const bool shared = NetSendRoomCountdown(seq, ms);
+	LogD("room", "countdown %u: %s %s", seq, ms >= 0 ? "start" : "cancel",
+		shared ? "sent to the room" : "not sent (no channel of the mod in this room: only the host counts)");
+}
+
+void CountdownRoomClosed(bool host)
+{
+	bool cancel = false;
+	uint32_t seq = 0;
+	{
+		std::lock_guard<std::mutex> lock(g_countdown.mx);
+		cancel = host && g_countdown.clock.Counting();
+		if (cancel) g_countdown.clock.HostCancel();
+		seq = g_countdown.clock.Seq();
+		g_countdown.clock.Reset();
+	}
+	if (cancel) {
+		LogI("room", "countdown cancelled: the room closed");
+		CountdownSend(seq, -1);
+	}
+}
+
+void CountdownTick()
+{
+	GameRoomSnapshot s;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		s = g_snap;
+	}
+	const uint32_t now = GetTickCount();
+	if (!g_dlg || !s.active || !s.online) {
+		std::lock_guard<std::mutex> lock(g_countdown.mx);
+		if (g_countdown.clock.Counting()) LogI("room", "countdown stopped: not in a network room");
+		g_countdown.clock.Reset();
+		return;
+	}
+	if (!s.host) {
+		CountdownStep step;
+		{
+			std::lock_guard<std::mutex> lock(g_countdown.mx);
+			step = g_countdown.clock.GuestStep(s.slots[s.localSlot & 7].ready, now);
+		}
+		if (step.event == CountdownEvent::Cancel) LogI("room", "countdown stopped here: %s", CountdownReasonText(step).c_str());
+		return;
+	}
+	RoomCountdownInput in = CountdownInput(s);
+	if (bool (*blocked)() = g_countdown.startBlocked.load()) {
+		if (blocked()) in.blocked = true;
+	}
+	CountdownStep step;
+	uint32_t seq = 0;
+	{
+		std::lock_guard<std::mutex> lock(g_countdown.mx);
+		step = g_countdown.clock.HostStep(in, now, g_countdown.autoStart.load());
+		seq = g_countdown.clock.Seq();
+	}
+	switch (step.event) {
+	case CountdownEvent::Start:
+		LogI("room", "countdown: everyone is ready; the game starts in %d s", kRoomCountdownMs / 1000);
+		CountdownSend(seq, kRoomCountdownMs);
+		break;
+	case CountdownEvent::Cancel:
+		LogI("room", "countdown cancelled: %s", CountdownReasonText(step).c_str());
+		CountdownSend(seq, -1);
+		break;
+	case CountdownEvent::Fire:
+		LogI("room", "countdown finished: starting the game");
+		Click(Button(g_dlg, 0x9006));
+		break;
+	default: break;
+	}
+}
+
 void __fastcall HookOnShow(void *dlg)
 {
 	g_origOnShow(dlg);
 	CivsOnRoomShown(dlg);
+	{
+		std::lock_guard<std::mutex> lock(g_countdown.mx);
+		g_countdown.clock.Reset();
+	}
 	g_dlg = dlg;
 	g_optionsLogged = false;
 	g_siteFlags = LoadRoomFlags("Sites", 0) & kSiteMask;
@@ -593,6 +751,12 @@ void __fastcall HookDtor(void *dlg)
 {
 	if (dlg == g_dlg) {
 		g_dlg = nullptr;
+		bool host = false;
+		{
+			std::lock_guard<std::mutex> lock(g_lock);
+			host = g_snap.host;
+		}
+		CountdownRoomClosed(host);
 		std::lock_guard<std::mutex> lock(g_lock);
 		g_snap = GameRoomSnapshot();
 		g_actions.clear();
@@ -991,8 +1155,64 @@ void GameRoomTick()
 	TakeSnapshot();
 	bool busy = false;
 	for (int t : g_typeTarget) busy = busy || t >= 0;
-	std::lock_guard<std::mutex> lock(g_lock);
-	g_snap.busy = busy || !g_actions.empty();
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		g_snap.busy = busy || !g_actions.empty();
+	}
+	CountdownTick();
+}
+
+int GameRoomCountdownLeftMs()
+{
+	std::lock_guard<std::mutex> lock(g_countdown.mx);
+	return g_countdown.clock.LeftMs(GetTickCount());
+}
+
+void GameRoomSetAutoStart(bool on)
+{
+	if (g_countdown.autoStart.exchange(on) != on) LogI("room", "start countdown when everyone is ready: %s", on ? "on" : "off");
+}
+
+void GameRoomSetStartGate(bool (*blocked)())
+{
+	g_countdown.startBlocked.store(blocked);
+}
+
+void GameRoomCountdownCancel()
+{
+	Queue([] {
+		if (!reinterpret_cast<IntThis_t>(addr::kIsHostOrOffline)(g_dlg)) {
+			LogD("room", "countdown: only the host can stop it (a guest stops it by not being ready)");
+			return;
+		}
+		CountdownStep step;
+		uint32_t seq = 0;
+		{
+			std::lock_guard<std::mutex> lock(g_countdown.mx);
+			step = g_countdown.clock.HostCancel();
+			seq = g_countdown.clock.Seq();
+		}
+		if (step.event != CountdownEvent::Cancel) return;
+		LogI("room", "countdown cancelled: %s", CountdownReasonText(step).c_str());
+		CountdownSend(seq, -1);
+	});
+}
+
+void GameRoomCountdownReceived(unsigned seq, int ms)
+{
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		if (!g_snap.active || g_snap.host) return;
+	}
+	const uint32_t now = GetTickCount();
+	bool changed = false;
+	{
+		std::lock_guard<std::mutex> lock(g_countdown.mx);
+		changed = ms >= 0 ? g_countdown.clock.RemoteStart(seq, ms, now) : g_countdown.clock.RemoteCancel(seq);
+	}
+	if (!changed) return;
+	if (ms >= 0) LogI("room", "countdown from the host: the game starts in %d ms", ms);
+	else LogI("room", "countdown cancelled by the host");
 }
 
 GameRoomSnapshot GameRoomGet()

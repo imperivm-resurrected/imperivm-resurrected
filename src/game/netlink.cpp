@@ -33,3 +33,8 @@ bool NetIsLockstepHost()
 {
 	return g_link.isLockstepHost && g_link.isLockstepHost();
 }
+
+bool NetSendRoomCountdown(unsigned seq, int ms)
+{
+	return g_link.sendRoomCountdown && g_link.sendRoomCountdown(seq, ms);
+}
