@@ -13,6 +13,7 @@
 #include "core/uiport.h"
 #include "game/options.h"
 #include "i18n/tr.h"
+#include "mods/updater.h"
 #include "ui/modui.h"
 #include "ui/optionsui_view.h"
 #include "ui/report.h"
@@ -70,6 +71,26 @@ Values ReadNative()
 	return v;
 }
 
+// The update panel only draws on the main menu, which is hidden while this screen is open, so the result goes in the row.
+void SetUpdateStatus(Values &v)
+{
+	const UpdaterInfo info = UpdaterGetInfo();
+	std::string text;
+	switch (info.state) {
+	case UpdaterInfo::kAvailable: text = TrFmt("Version %s is out: see the main menu", {info.newVersion}); break;
+	case UpdaterInfo::kDownloading: text = TrFmt("Downloading %s...", {info.newVersion}) + " " + std::to_string(info.percent) + " %"; break;
+	case UpdaterInfo::kReady: text = TrFmt("Version %s installed: restart the game", {info.newVersion}); break;
+	case UpdaterInfo::kFailed: text = Tr("Couldn't update: see the main menu"); break;
+	default:
+		if (info.check == UpdaterInfo::kChecking) text = Tr("Checking...");
+		else if (info.check == UpdaterInfo::kUpToDate) text = Tr("You have the latest version");
+		else if (info.check == UpdaterInfo::kCheckFailed) text = Tr("Couldn't check. Try again later");
+		break;
+	}
+	v.texts[kCheckUpdates] = text;
+	v.disabled[kCheckUpdates] = info.check == UpdaterInfo::kChecking || info.state == UpdaterInfo::kDownloading || info.state == UpdaterInfo::kReady;
+}
+
 void CopyExtras(Values &to, const Values &from)
 {
 	for (int id : {kSmoothCamera, kModernAudio}) {
@@ -110,6 +131,7 @@ void Refresh(bool setBaseline = false)
 	void *dlg = OptionsDialogOpen();
 	if (!dlg) return;
 	Values fresh = ReadNative();
+	SetUpdateStatus(fresh);
 	std::lock_guard<std::mutex> lock(g_lock);
 	if (g_s.dlg != dlg) {
 		g_s = State();
@@ -235,6 +257,10 @@ void Execute(const Command &cmd)
 	case kActRow:
 		if (cmd.arg == kOpenLogs) ReportOpenLogsFolder();
 		else if (cmd.arg == kCreateReport) ReportStart();
+		else if (cmd.arg == kCheckUpdates) {
+			UpdaterCheckNow();
+			Refresh();
+		}
 		break;
 	case kActControls: OptionsClick(kNativeControls); break;
 	case kActReset: {

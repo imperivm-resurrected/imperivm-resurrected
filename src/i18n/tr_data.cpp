@@ -1539,5 +1539,12 @@ extern const TrRow kTrRows[] = {
 	{"Beta", "Beta", "Beta"},
 	{"Game executable", "Ejecutable del juego", "Eseguibile del gioco"},
 	{"Recognised (Steam)", "Reconocido (Steam)", "Riconosciuto (Steam)"},
+	{"New version", "Nueva versión", "Nuova versione"},
+	{"Check now", "Buscar ahora", "Controlla ora"},
+	{"Version %s is out: see the main menu", "Ya salió la %s: mira el menú principal", "È uscita la %s: vedi il menu principale"},
+	{"Version %s installed: restart the game", "Versión %s instalada: reinicia el juego", "Versione %s installata: riavvia il gioco"},
+	{"Couldn't update: see the main menu", "No se pudo actualizar: mira el menú principal", "Aggiornamento non riuscito: vedi il menu principale"},
+	{"You have the latest version", "Tienes la última versión", "Hai l'ultima versione"},
+	{"Couldn't check. Try again later", "No se pudo comprobar. Prueba más tarde", "Controllo non riuscito. Riprova più tardi"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

@@ -319,7 +319,11 @@ std::vector<Page> BuildPages(const Values &v)
 		// The options screen only replaces the game's when the executable is the known Steam one (InstallOptionsHooks).
 		page.left.push_back({"About", {Info("Mod version", kModVersion, ModVersionText(), IsBetaVersion(ModVersionText()) ? "Beta" : ""),
 			Info("Game executable", kGameExe, "Recognised (Steam)")}});
-		page.left.push_back({"Updates", {Combo(v, "Updates", kUpdates)}});
+		Row check = ActionRow("New version", kCheckUpdates, "Check now");
+		const auto status = v.texts.find(kCheckUpdates);
+		if (status != v.texts.end()) check.hint = status->second;
+		check.enabled = !Disabled(v, kCheckUpdates);
+		page.left.push_back({"Updates", {Combo(v, "Updates", kUpdates), check}});
 		page.right.push_back({"If something fails", {ActionRow("Logs folder", kOpenLogs, "Open folder"), ActionRow("Problem report", kCreateReport, "Create", "A zip with your private data hidden")}});
 		pages.push_back(page);
 	}

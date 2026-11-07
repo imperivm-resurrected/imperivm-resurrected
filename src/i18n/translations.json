@@ -1531,5 +1531,12 @@
 {"en":"Mod version","es":"Versión del mod","it":"Versione della mod"},
 {"en":"Beta","es":"Beta","it":"Beta"},
 {"en":"Game executable","es":"Ejecutable del juego","it":"Eseguibile del gioco"},
-{"en":"Recognised (Steam)","es":"Reconocido (Steam)","it":"Riconosciuto (Steam)"}
+{"en":"Recognised (Steam)","es":"Reconocido (Steam)","it":"Riconosciuto (Steam)"},
+{"en":"New version","es":"Nueva versión","it":"Nuova versione"},
+{"en":"Check now","es":"Buscar ahora","it":"Controlla ora"},
+{"en":"Version %s is out: see the main menu","es":"Ya salió la %s: mira el menú principal","it":"È uscita la %s: vedi il menu principale"},
+{"en":"Version %s installed: restart the game","es":"Versión %s instalada: reinicia el juego","it":"Versione %s installata: riavvia il gioco"},
+{"en":"Couldn't update: see the main menu","es":"No se pudo actualizar: mira el menú principal","it":"Aggiornamento non riuscito: vedi il menu principale"},
+{"en":"You have the latest version","es":"Tienes la última versión","it":"Hai l'ultima versione"},
+{"en":"Couldn't check. Try again later","es":"No se pudo comprobar. Prueba más tarde","it":"Controllo non riuscito. Riprova più tardi"}
 ]
