@@ -14,6 +14,7 @@
 #include "hooks/hookcount.h"
 #include "hooks/audio.h"
 #include "core/config.h"
+#include "core/imagefit.h"
 #include "hooks/displaymode.h"
 #include "core/log.h"
 #include "i18n/tr.h"
@@ -174,14 +175,14 @@ bool Scaling()
 	return rc.right - rc.left != g_logW || rc.bottom - rc.top != g_logH;
 }
 
+// The same scale and margins the presenter draws the image with (render.cpp).
 void Mapping(float &s, float &offX, float &offY)
 {
-	RECT rc = PhysClient();
-	float pw = static_cast<float>(rc.right - rc.left), ph = static_cast<float>(rc.bottom - rc.top);
-	float sx = pw / g_logW, sy = ph / g_logH;
-	s = sx < sy ? sx : sy;
-	offX = (pw - g_logW * s) / 2;
-	offY = (ph - g_logH * s) / 2;
+	const RECT rc = PhysClient();
+	const int pw = rc.right - rc.left, ph = rc.bottom - rc.top;
+	s = ImageScale(pw, ph, g_logW, g_logH, GetConfig().imageScaling);
+	offX = static_cast<float>(ImageMargin(pw, g_logW, s));
+	offY = static_cast<float>(ImageMargin(ph, g_logH, s));
 }
 
 void PhysToLog(int &x, int &y)

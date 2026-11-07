@@ -48,6 +48,7 @@ std::mutex g_lock;
 State g_s;
 Canvas g_canvas;
 
+const char *const kScalingLabels[] = {"Sharp", "Smooth", "Pixel-exact"};
 const int kFpsLimits[] = {0, 30, 60, 120, 144, 240};
 const char *const kFpsLabels[] = {"No limit", "30", "60", "120", "144", "240"};
 
@@ -105,11 +106,13 @@ void SetDisplayExtras(Values &v, const Config &c)
 	v.checks[kExtendedView] = c.extendedView;
 	v.items[kFpsLimit] = std::vector<std::string>(std::begin(kFpsLabels), std::end(kFpsLabels));
 	v.combos[kFpsLimit] = FpsIndex(c.fpsLimit);
+	v.items[kImageScaling] = std::vector<std::string>(std::begin(kScalingLabels), std::end(kScalingLabels));
+	v.combos[kImageScaling] = c.imageScaling;
 }
 
 void CopyDisplayExtras(Values &to, const Values &from)
 {
-	for (int id : {kWindowSize, kFpsLimit}) {
+	for (int id : {kWindowSize, kFpsLimit, kImageScaling}) {
 		const auto sel = from.combos.find(id);
 		if (sel != from.combos.end()) to.combos[id] = sel->second;
 		const auto items = from.items.find(id);
@@ -127,6 +130,8 @@ void ApplyDisplayLive(const Values &v)
 	if (SelectedSize(v, kWindowSize, window)) DisplaySetWindowSize(window.w, window.h);
 	const int fps = ComboIndex(v, kFpsLimit, static_cast<int>(sizeof(kFpsLimits) / sizeof(kFpsLimits[0])));
 	if (fps >= 0) MutableConfig().fpsLimit = kFpsLimits[fps];
+	const int scaling = ComboIndex(v, kImageScaling, static_cast<int>(sizeof(kScalingLabels) / sizeof(kScalingLabels[0])));
+	if (scaling >= 0) MutableConfig().imageScaling = scaling;
 }
 
 void CommitDisplayExtras(Config &c, const Values &v)
@@ -140,6 +145,8 @@ void CommitDisplayExtras(Config &c, const Values &v)
 	}
 	const int fps = ComboIndex(v, kFpsLimit, static_cast<int>(sizeof(kFpsLimits) / sizeof(kFpsLimits[0])));
 	if (fps >= 0) c.fpsLimit = kFpsLimits[fps];
+	const int scaling = ComboIndex(v, kImageScaling, static_cast<int>(sizeof(kScalingLabels) / sizeof(kScalingLabels[0])));
+	if (scaling >= 0) c.imageScaling = scaling;
 }
 
 void ApplyDisplayFromView()

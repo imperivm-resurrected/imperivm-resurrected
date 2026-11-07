@@ -67,6 +67,8 @@ void LoadConfig()
 	}
 	g_config.extendedView = GetPrivateProfileIntA("Display", "ExtendedView", 0, path) != 0;
 	g_config.fpsLimit = (std::max)(0, (std::min)(1000, static_cast<int>(GetPrivateProfileIntA("Render", "FpsLimit", 0, path))));
+	GetPrivateProfileStringA("Render", "ImageScaling", "sharp", buf, sizeof(buf), path);
+	g_config.imageScaling = _stricmp(buf, "smooth") == 0 ? 1 : _stricmp(buf, "exact") == 0 ? 2 : 0;
 	g_config.showPerf = GetPrivateProfileIntA("Display", "ShowPerformance", 0, path) != 0;
 	g_config.showNet = GetPrivateProfileIntA("Display", "ShowNetwork", 0, path) != 0;
 	g_config.panelX = (std::max)(0, (std::min)(1000, static_cast<int>(GetPrivateProfileIntA("Display", "PanelX", 1000, path))));
@@ -145,6 +147,8 @@ void SaveConfig()
 	}
 	WritePrivateProfileStringA("Render", "VSync", g_config.vsync ? "1" : "0", path);
 	WritePrivateProfileStringA("Render", "FpsLimit", std::to_string(g_config.fpsLimit).c_str(), path);
+	static const char *const kScalingNames[] = {"sharp", "smooth", "exact"};
+	WritePrivateProfileStringA("Render", "ImageScaling", kScalingNames[g_config.imageScaling >= 0 && g_config.imageScaling < 3 ? g_config.imageScaling : 0], path);
 	WritePrivateProfileStringA("Render", "Scaling", nullptr, path);
 	WritePrivateProfileStringA("Render", "Filter", nullptr, path);
 	WritePrivateProfileStringA("Render", "Brightness", std::to_string(g_config.brightness).c_str(), path);

@@ -15,6 +15,7 @@
 #include "core/config.h"
 #include "core/framefreeze.h"
 #include "core/framepace.h"
+#include "core/imagefit.h"
 #include "game/controls.h"
 #include "ui/controlsui.h"
 #include "core/guard.h"
@@ -479,18 +480,19 @@ DWORD WINAPI RenderThread(LPVOID)
 			ctx->Unmap(tex, 0);
 		}
 
-		float sx = static_cast<float>(bbW) / fw, sy = static_cast<float>(bbH) / fh;
-		float s = sx < sy ? sx : sy;
-		float w = fw * s / bbW * 2.0f, h = fh * s / bbH * 2.0f;
+		// The cursor is mapped with the same scale and margins (displaymode.cpp), so the two must not differ.
+		const int scaling = GetConfig().imageScaling;
+		const float s = ImageScale(bbW, bbH, fw, fh, scaling);
+		const float w = fw * s / bbW * 2.0f, h = fh * s / bbH * 2.0f;
 		if (SUCCEEDED(ctx->Map(cb, 0, D3D11_MAP_WRITE_DISCARD, 0, &map))) {
 			float *r = static_cast<float *>(map.pData);
-			r[0] = -w / 2;
-			r[1] = h / 2;
+			r[0] = ImageMargin(bbW, fw, s) * 2.0f / bbW - 1.0f;
+			r[1] = 1.0f - ImageMargin(bbH, fh, s) * 2.0f / bbH;
 			r[2] = w;
 			r[3] = h;
 			r[4] = static_cast<float>(fw);
 			r[5] = static_cast<float>(fh);
-			r[6] = s > 1.0f ? static_cast<float>(static_cast<int>(s)) : s < 1.0f ? -1.0f / s : 0.0f;
+			r[6] = ImageSharpness(s, scaling);
 			r[7] = GetConfig().brightness / 100.0f;
 			ctx->Unmap(cb, 0);
 		}

@@ -25,6 +25,7 @@ struct Config {
 	int resolutionScreenH = 0;
 	bool extendedView = false;
 	int fpsLimit = 0;
+	int imageScaling = 0;
 	bool showPerf = false;
 	bool showNet = false;
 	int panelX = 1000;
