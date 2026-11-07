@@ -4,3 +4,7 @@
 	// a hero holding position stood still under their blows. Those close enough to hit him are answered too.
 	if(!u.IsValid()) u = .BestTargetInRange(.pos, 100);
 	if(u.IsAlive())
+@replace while(!.Attack(u))
+			// .Attack only strikes what is already within reach: step in first, as hero_attack.vs does.
+			if(!.Attack(u)) .GotoAttack(u, 5000, true, 2500);
+			while(!.Attack(u))

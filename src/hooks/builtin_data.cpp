@@ -32,7 +32,11 @@ const BuiltinText kPatches[] = {
 		"\t// BestTargetForPos only takes targets inside the hero's own reach (17), while melee units hit from up to 40:\n"
 		"\t// a hero holding position stood still under their blows. Those close enough to hit him are answered too.\n"
 		"\tif(!u.IsValid()) u = .BestTargetInRange(.pos, 100);\n"
-		"\tif(u.IsAlive())\n",
+		"\tif(u.IsAlive())\n"
+		"@replace while(!.Attack(u))\n"
+		"\t\t\t// .Attack only strikes what is already within reach: step in first, as hero_attack.vs does.\n"
+		"\t\t\tif(!.Attack(u)) .GotoAttack(u, 5000, true, 2500);\n"
+		"\t\t\twhile(!.Attack(u))\n",
 		"f9e76d98893e61b9a4bdfef000482251182259ca704c594826e7b96915e79a5a"},
 	{"menuini/gameoptions.ini",
 		"[GameOptions Objects]\n"
