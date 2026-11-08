@@ -639,19 +639,23 @@ void DoAction(int action, int arg)
 	case kCivSetToggle: {
 		const std::vector<CivSet> sets = CivsSets();
 		if (arg < 0 || arg >= static_cast<int>(sets.size())) break;
-		// In a skirmish there is no "Create game" screen: the room's own rows edit the sets the game reads.
-		const bool skirmish = g_s.game.active && !g_s.game.online;
-		const std::vector<std::string> now = skirmish ? CivRoomSets() : g_s.createCivSets;
-		std::vector<std::string> chosen;
-		for (const CivSet &s : sets) {
-			if (CivSetsAllow(now, s.id) != (s.id == sets[arg].id)) chosen.push_back(s.id);
+		// In a room (skirmish or online) the host edits the sets the game reads, and the tick publishes them to the guests; the Create
+		// room dialog only keeps them for the room it will create.
+		const bool inRoom = g_s.game.active && g_s.game.host;
+		const std::vector<std::string> now = inRoom ? CivRoomSets() : g_s.createCivSets;
+		std::vector<std::string> known;
+		for (const CivSet &s : sets) known.push_back(s.id);
+		const std::vector<std::string> chosen = CivSetsToggle(known, now, known[arg]);
+		if (!inRoom) {
+			g_s.createCivSets = chosen;
+			break;
 		}
-		if (chosen.empty()) break;
-		if (chosen.size() == sets.size()) chosen.clear();
-		if (skirmish) CivRoomSetsSet(chosen);
-		else g_s.createCivSets = chosen;
+		if (chosen == now) break;
+		CivRoomSetsSet(chosen);
+		LogI("room", "civilization sets: %s", chosen.empty() ? "all" : CivSetsJoin(chosen).c_str());
 		break;
 	}
+	case kCivSetsEdit: g_s.civEdit = !g_s.civEdit; break;
 	case kPlayersPrev: g_s.createPlayers = std::max(2, g_s.createPlayers - 1); break;
 	case kPlayersNext: g_s.createPlayers = std::min(8, g_s.createPlayers + 1); break;
 	case kMapPrev: g_s.createMap = (g_s.createMap + 4) % 5; break;

@@ -1519,5 +1519,9 @@ extern const TrRow kTrRows[] = {
 	{"%s is an alternative to %s (%s)", "%s es una alternativa a %s (%s)", "%s è un'alternativa a %s (%s)"},
 	{"Gameplay files in common: %s", "Archivos de jugabilidad en común: %s", "File di gioco in comune: %s"},
 	{"Values in common: %s", "Valores en común: %s", "Valori in comune: %s"},
+	{"Edit civilizations", "Editar civilizaciones", "Modifica le civiltà"},
+	{"Choose which civilizations can be picked in this room: the game's and each mod's. It applies at once, and a player whose civilization is left out goes back to Random.", "Elige qué civilizaciones se pueden escoger en esta sala: las del juego y las de cada mod. Se aplica al instante, y el jugador cuya civilización queda fuera vuelve a Aleatoria.", "Scegli quali civiltà si possono selezionare in questa stanza: quelle del gioco e quelle di ogni mod. Si applica subito, e il giocatore la cui civiltà viene esclusa torna a Casuale."},
+	{"CIVILIZATIONS", "CIVILIZACIONES", "CIVILTÀ"},
+	{"The host changed the civilizations of the room.", "El anfitrión ha cambiado las civilizaciones de la sala.", "L'host ha cambiato le civiltà della stanza."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

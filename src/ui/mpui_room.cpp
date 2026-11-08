@@ -363,7 +363,7 @@ bool LocalReady(const GameRoomSnapshot &g)
 
 std::string RoomConfigKey(const OnlineLobby &l)
 {
-	std::string key = l.optionsText + "|" + std::to_string(l.rules) + "|" + l.map + "|" + l.mode;
+	std::string key = l.optionsText + "|" + std::to_string(l.rules) + "|" + l.map + "|" + l.mode + "|" + l.civSets;
 	for (const OnlineSlot &s : l.slots) {
 		if (s.type != 3) key += "|" + std::to_string(s.type) + ":" + s.name;
 	}
@@ -383,6 +383,7 @@ bool RoomActionFrozen(const GameRoomSnapshot &g, int action, int arg)
 	case kGTeam:
 	case kGColor: return SlotFrozen(g, g.slots[arg & 7]);
 	case kGRuleToggle:
+	case kCivSetToggle:
 	case kGSiteToggle:
 	case kGOptToggle: return g.host && LocalReady(g);
 	case kGDropOpen: {

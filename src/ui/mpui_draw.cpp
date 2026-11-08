@@ -190,7 +190,13 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 			if (m.me && m.owner) roomOwner = true;
 		}
 		if (g_s.room.id) g_s.skirmishCivs = false;
-		if (g_s.room.id && !roomOwner) CivRoomSetsSet(CivSetsSplit(g_s.room.info.civSets));
+		if (g_s.room.id && !roomOwner) {
+			// The host can change the sets while the room is open: tell the guest, whatever happens to their own civilization.
+			if (g_s.civSetsRoom == g_s.room.id && g_s.civSetsSeen != g_s.room.info.civSets) ModUiToast("The host changed the civilizations of the room.");
+			g_s.civSetsRoom = g_s.room.id;
+			g_s.civSetsSeen = g_s.room.info.civSets;
+			CivRoomSetsSet(CivSetsSplit(g_s.room.info.civSets));
+		}
 		else if (!g_s.skirmishCivs && !g_s.room.id && !g_s.connecting && !g_s.autoHost && !g_flow.hostPending && !g_flow.inJoin && !g_autoJoin.active && !RejoinBusy()) {
 			CivRoomSetsSet({});
 		}
@@ -288,6 +294,7 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 			CivRoomSetsSet({}); // a new skirmish starts with every set allowed
 			g_s.skirmishCivs = true;
 		}
+		if (!snap.active) g_s.civEdit = false;
 		if (!justClosed) g_s.game = std::move(snap);
 		ApplyPredicted(g_s.game, g_s.predicted);
 		ApplySeatDisplay(g_s.game);

@@ -12,6 +12,9 @@ inline constexpr char kCivSetGame[] = "@game";
 bool CivSetsAllow(const std::vector<std::string> &sets, const std::string &set);
 std::string CivSetsJoin(const std::vector<std::string> &sets);
 std::vector<std::string> CivSetsSplit(const std::string &text);
+// The sets after the host flips `set` (one of `known`, the sets the room's content offers) while `now` are allowed. At least one set
+// stays allowed: flipping the last one returns `now`. When every known set ends up allowed the list is empty, which means all.
+std::vector<std::string> CivSetsToggle(const std::vector<std::string> &known, const std::vector<std::string> &now, const std::string &set);
 
 // The sets of the room being played or hosted. Guests take them from the host.
 std::vector<std::string> CivRoomSets();

@@ -37,6 +37,17 @@ std::vector<std::string> CivSetsSplit(const std::string &text)
 	return out;
 }
 
+std::vector<std::string> CivSetsToggle(const std::vector<std::string> &known, const std::vector<std::string> &now, const std::string &set)
+{
+	std::vector<std::string> chosen;
+	for (const std::string &s : known) {
+		if (CivSetsAllow(now, s) != (s == set)) chosen.push_back(s);
+	}
+	if (chosen.empty()) return now;
+	if (chosen.size() == known.size()) chosen.clear();
+	return chosen;
+}
+
 std::vector<std::string> CivRoomSets()
 {
 	std::lock_guard<std::mutex> lock(g_lock);

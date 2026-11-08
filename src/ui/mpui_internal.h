@@ -49,7 +49,7 @@ enum Action {
 	kPickRow, kPickOk, kPickCancel,
 	kRecoverYes, kRecoverNo, kRejoinCancel, kRejoinClose,
 	kGKick, kGKickJoining, kDiscord, kPassOk, kPassCancel, kGSeat, kGMove, kGMoveTo, kGSwapAsk, kSwapAccept, kSwapDecline, kDropYes, kDropNo, kPassShow, kGSiteToggle, kGRuleToggle, kSpectate, kReturnGame,
-	kFieldPickSearch, kPickDelete, kPickDeleteYes, kPickDeleteNo, kGResync, kCivSetToggle, kPatronLink,
+	kFieldPickSearch, kPickDelete, kPickDeleteYes, kPickDeleteNo, kGResync, kCivSetToggle, kPatronLink, kCivSetsEdit,
 };
 
 typedef int(__cdecl *HostGame_t)(int, unsigned, int);
@@ -200,6 +200,9 @@ struct State {
 	ModRuleset createRuleset;
 	std::vector<std::string> createCivSets;
 	bool skirmishCivs = false; // the skirmish room owns CivRoomSets until the multiplayer menu opens
+	bool civEdit = false; // the room's "Edit civilizations" row is on: the host sees the sets as toggles
+	uint64_t civSetsRoom = 0; // the room whose sets civSetsSeen holds, to tell a guest that the host changed them
+	std::string civSetsSeen;
 	int createVisibility = 0;
 	int createSpec = 1;
 	bool syncConfirm = false;
