@@ -11,8 +11,6 @@
 //   and the target searches of Larax, up to 3 other units of his player, up to 3 Gaul allies and one Teuton.
 //   seq18, after the prisoners and guards are spawned into S_Prizon, every second for 30 s (in a sequence of its own):
 //   the prison and its prisoners.
-//   seq5, after the riders are sent at the axemen, every second for 90 s (in a sequence of its own): the health of the
-//   axemen and of each rider, and Larax's distance; first the stats each side fights with (I1_Stats).
 'use strict';
 
 const S = require('./script');
@@ -204,7 +202,6 @@ const PROBES = [
 	['Maps/11937/Sequences/seq15.vs', /^C_Conv\.Run\(\);/m, 'after', ['Mod_LogInt("I1PROBE seq15 opening conversation ended, t", GetTime());']],
 	// Before the wait for the Teutons, which counts only the living (script.livingWaits).
 	['Maps/11937/Sequences/seq15.vs', /^\{ i1w_t = 0; i1w_r = 0; while \(1\) \{ i1w_l = \(M1_Q_Victims1\)/m, 'before', ['EnvWriteInt("/I1Probe/Seq15", 1);']],
-	['Maps/11937/Sequences/seq5.vs', /^M1_Q_Losers3\.SetCommand\("attack", NO_Protector5 \);/m, 'after', ['EnvWriteInt("/I1Probe/Seq5", 1);']],
 ];
 
 // The two 30-s loops run in sequences of their own, started when the campaign's script reaches their place (an
@@ -216,46 +213,6 @@ function probeSequences() {
 	return [
 		{ map: '11937', name: 'I1_Probe_Seq15', script: wrap('Seq15', ['NamedObj NO_Larax;', 'NO_Larax = GetNamedObj("Larax");'], seq15Loop()) },
 		{ map: '11937', name: 'I1_Probe_Prison', script: wrap('Prison', [], prisonLoop()) },
-		{ map: '11937', name: 'I1_Probe_Seq5', script: wrap('Seq5', ['NamedObj NO_Larax;', 'NO_Larax = GetNamedObj("Larax");'], seq5Loop()) },
-	];
-}
-
-// seq5 (the riders of M1_Q_Losers3/12 sent at the axemen NO_Protector5/6): the stats each side fights with, then every
-// second for 90 s one line with everyone's health and Larax's distance to the axemen. Compact: the mod's log folds
-// repeated lines.
-function seq5Loop() {
-	const stat = (tag, o) =>
-		`if (${o}.IsValid()) Mod_Log("I1PROBE seq5 stats ${tag} class=" + ${o}.class() + " damage=" + ${o}.damage + " armor_slash=" + ${o}.armor_slash + " armor_pierce=" + ${o}.armor_pierce + " maxhealth=" + ${o}.maxhealth + " health=" + ${o}.health + " speed=" + ${o}.AsUnit().speed + " speed_factor=" + ${o}.AsUnit().speed_factor);`;
-	const hp = (o) => `if (${o}.IsValid()) i1p_s = i1p_s + ${o}.health; else i1p_s = i1p_s + "x";`;
-	const group = (name, label) => [
-		`i1p_s = i1p_s + " ${label}=";`,
-		`i1p_w = ${name}.GetObjList();`,
-		'for (i1p_j = 0; i1p_j < i1p_w.count; i1p_j += 1) {',
-		`\t${hp('i1p_w[i1p_j]')}`,
-		'\tif (i1p_j + 1 < i1p_w.count) i1p_s = i1p_s + ",";',
-		'}',
-	];
-	return [
-		'// I1PROBE: diagnostics added by convert.js --probe',
-		stat('axeman5', 'NO_Protector5.obj'),
-		stat('axeman6', 'NO_Protector6.obj'),
-		'i1p_w = M1_Q_Losers3.GetObjList();',
-		'if (i1p_w.count > 0) {',
-		'\ti1p_o = i1p_w[0];',
-		`\t${stat('rider', 'i1p_o')}`,
-		'}',
-		'for (i1p_k = 0; i1p_k < 90; i1p_k += 1) {',
-		'\ti1p_s = "I1PROBE seq5 t=" + GetTime() + " ax5=";',
-		`\t${hp('NO_Protector5.obj')}`,
-		'\ti1p_s = i1p_s + " ax6=";',
-		`\t${hp('NO_Protector6.obj')}`,
-		...indent(group('M1_Q_Losers3', 'losers3'), 1),
-		...indent(group('M1_Q_Losers12', 'losers12'), 1),
-		'\tif (NO_Protector5.obj.IsValid()) i1p_s = i1p_s + " larax_to_ax5=" + NO_Larax.obj.DistTo(NO_Protector5.obj);',
-		'\tMod_Log(i1p_s);',
-		'\tSleep(1000);',
-		'}',
-		'Mod_Log("I1PROBE seq5 end");',
 	];
 }
 

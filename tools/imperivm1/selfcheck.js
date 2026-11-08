@@ -274,39 +274,6 @@ function check(cond, what) {
 	check(!bad.length, `sight and wait scripts call only game functions (${bad.map((c) => c.name).join(', ')})`);
 }
 
-// Combat stats: the fit reproduces Imperivm I's hits on a small roster, and the script gives each class its bonus once.
-{
-	const A = require('./lib/adventure');
-	const cls = (id, parent, cpp, stats) => ({ id, parent, cpp, stats });
-	const i1 = {
-		classes: new Map([
-			['Military', cls('Military', null, 'CVXUnit', {})],
-			['Rider', cls('Rider', 'Military', null, { minattack: '10', maxattack: '40', defense_slash: '10', defense_pierce: '10', maxhealth: '400', speed: '160', damage_type: 'slash' })],
-			['Axeman', cls('Axeman', 'Military', null, { minattack: '8', maxattack: '40', defense_slash: '26', defense_pierce: '4', maxhealth: '220', speed: '60', damage_type: 'slash' })],
-			['Peasant', cls('Peasant', null, 'CVXUnit', { maxhealth: '100' })],
-		]),
-	};
-	const gbr = {
-		classes: new Map([
-			['Rider', cls('Rider', null, 'CVXUnit', { damage: '30', armor_slash: '8', armor_pierce: '8', maxhealth: '300', speed: '160' })],
-			['Axeman', cls('Axeman', null, 'CVXUnit', { damage: '40', armor_slash: '8', armor_pierce: '8', maxhealth: '220', speed: '80' })],
-			['Peasant', cls('Peasant', null, 'CVXUnit', { maxhealth: '100' })],
-		]),
-	};
-	const rules = A.statRules(i1, gbr, { resolve: (id) => ({ to: id }) }, ['Rider', 'Axeman', 'Peasant'], new A.Report());
-	const r = (id) => rules.find((x) => x.gbr === id);
-	const hitG = (a, d) => Math.max(r(a).set.damage - r(d).set.armor, Math.floor((r(a).set.damage * 20) / 100), 3);
-	check(rules.length === 2 && !r('Peasant'), 'stats only for soldiers');
-	check(Math.abs(hitG('Rider', 'Axeman') - 10) <= 1 && Math.abs(hitG('Axeman', 'Rider') - 24) <= 2, `fitted hits match Imperivm I's (rider on axeman ${hitG('Rider', 'Axeman')} vs 10, axeman on rider ${hitG('Axeman', 'Rider')} vs 24)`);
-	check(r('Rider').set.health === 400 && r('Axeman').set.speed === 75 && r('Rider').set.speed === 101, 'maxhealth from Imperivm I, speed as a factor, never left at 100');
-	const src = A.statsScript(rules);
-	check(/if \(i1x_o\.IsAlive\(\) && i1x_u\.speed_factor == 100\)/.test(src) && /if \(i1x_c == "Rider"\) \{ i1x_u\.AddBonus\(-?\d+, 100, 0, -?\d+, -?\d+\); i1x_u\.SetSpeedFactor\(101\); \}/.test(src), 'stats script: bonus and speed factor once per unit');
-	const { readFunctions } = require('./lib/catalog');
-	const fns = readFunctions(require('path').join(__dirname, '..', '..', 'sdk', 'game-functions.txt'));
-	const bad = S.listCalls(src).filter((c) => !['if', 'for', 'while'].includes(c.name) && !(c.method ? fns.methods.has(c.name) : fns.functions.has(c.name)));
-	check(!bad.length, `stats script calls only game functions (${bad.map((c) => c.name).join(', ')})`);
-}
-
 // Audit: strings of an executable, calls with their arguments, and the census lines.
 {
 	const AU = require('./lib/audit');

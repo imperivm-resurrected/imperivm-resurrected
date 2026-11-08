@@ -37,13 +37,6 @@ function readClasses(pak, prefix) {
 			displayName: attr(live, 'display_name'),
 			icon: (/<properties\s+icon\s*=\s*"([^"]*)"/.exec(live) || [])[1] || null,
 			sight: (/<properties\b[^>]*\ssight\s*=\s*"(\d+)"/.exec(live) || [])[1] || null,
-			// Combat stats as the class file writes them (strings; null when the class does not set them).
-			stats: Object.fromEntries(
-				['minattack', 'maxattack', 'defense_slash', 'defense_pierce', 'maxhealth', 'damage', 'armor_slash', 'armor_pierce', 'speed', 'damage_type', 'range'].map((k) => [
-					k,
-					(new RegExp(`<properties\\b[^>]*\\s${k}\\s*=\\s*"([^"]*)"`).exec(live) || [])[1] || null,
-				]),
-			),
 			methods: new Set([...live.matchAll(/<method\s+sig\s*=\s*"([^"]*)"/g)].map((m) => m[1].toLowerCase())),
 			// sig (lower case) -> the script that runs the command, as the class file writes it.
 			methodScripts: new Map([...live.matchAll(/<method\s+sig\s*=\s*"([^"]*)"\s+vs\s*=\s*"([^"]*)"/g)].map((m) => [m[1].toLowerCase(), m[2]])),
