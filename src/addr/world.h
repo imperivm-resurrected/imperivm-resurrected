@@ -41,6 +41,7 @@ inline constexpr uintptr_t kRandomDrawSite = 0x005223b5;
 inline constexpr uintptr_t kDeclareDefeated = 0x00522f90;
 inline constexpr uintptr_t kCreateWorldCore = 0x00526200;
 inline constexpr uintptr_t kHeroAvailableSkillPoints = 0x0052da80;
+inline constexpr uintptr_t kHeroSerialize = 0x0052f8b0;
 inline constexpr uintptr_t kRemoveFromMap = 0x0053d6a0;
 inline constexpr uintptr_t kVisionRun = 0x0053e910;
 inline constexpr uintptr_t kGetHeightAt = 0x0053eaa0;
