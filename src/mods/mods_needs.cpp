@@ -60,13 +60,13 @@ ModNeeds ModsNeededFor(const std::string &gamePath, const std::string &profile)
 		n.id = e.GetString("id");
 		n.name = e.GetString("name");
 		n.version = e.GetString("version");
+		n.ruleset = e.GetString("ruleset");
 		out.folders.push_back(n.folder);
 		const Json *tp = e.Get("kind");
 		const bool typed = tp && tp->type == Json::String && ModsKindFromId(tp->str) >= 0;
-		if (typed) {
-			if (ModsKindFromId(tp->str) != kModRules) continue;
-		}
-		else {
+		// A package whose rules were in a ruleset counts as rules content whatever its root is.
+		if (n.ruleset.empty() && typed && ModsKindFromId(tp->str) != kModRules) continue;
+		if (n.ruleset.empty() && !typed) {
 			const Json *gp = e.Get("gameplay");
 			if (gp ? !gp->b : e.GetString("fingerprint").empty()) continue;
 		}
@@ -79,13 +79,18 @@ ModNeeds ModsNeededFor(const std::string &gamePath, const std::string &profile)
 				break;
 			}
 		}
-		if (!typed && notRulesNow) continue;
+		if (!typed && notRulesNow && n.ruleset.empty()) continue;
 		for (const std::string &f : p.mods) {
 			ModInfo m;
 			if (_stricmp(f.c_str(), n.folder.c_str()) == 0 || (ModsFind(f, m) && !n.id.empty() && _stricmp(m.id.c_str(), n.id.c_str()) == 0)) {
-				n.inProfile = true;
+				// Enabled, but with the ruleset the game was saved with (or with none, if it was saved with none).
+				n.inProfile = _stricmp(ModsRulesetOf(p.ruleset, f).c_str(), n.ruleset.c_str()) == 0;
 				break;
 			}
+		}
+		if (!n.ruleset.empty() && n.installed) {
+			out.ruleset.pack = n.installedFolder;
+			out.ruleset.id = n.ruleset;
 		}
 		out.mods.push_back(n);
 	}
@@ -104,7 +109,7 @@ std::string ModsActivateProfileFor(const ModNeeds &needs, const std::string &lab
 			}
 			if (!found) return false;
 		}
-		return true;
+		return ModsSameRuleset(p.ruleset, needs.ruleset);
 	};
 	const std::vector<std::string> names = ModsProfileNames();
 	if (!needs.profile.empty() && std::find(names.begin(), names.end(), needs.profile) != names.end() && covers(needs.profile)) {
@@ -121,7 +126,7 @@ std::string ModsActivateProfileFor(const ModNeeds &needs, const std::string &lab
 	for (const ModNeed &n : needs.mods) {
 		if (std::find(folders.begin(), folders.end(), n.installedFolder) == folders.end()) folders.push_back(n.installedFolder);
 	}
-	const ModProfile p = ModsLooseProfileWith(folders);
+	const ModProfile p = ModsLooseProfileWith(folders, needs.ruleset);
 	if (!ModsSaveProfile(p)) return "";
 	ModsSetActiveProfileName(p.name);
 	LogI("content", "\"%s\" with %u mods to load \"%s\"", p.name.c_str(), static_cast<unsigned>(p.mods.size()), label.c_str());

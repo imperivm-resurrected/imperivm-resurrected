@@ -82,6 +82,7 @@ struct ModCheck {
 	bool differs = false;
 	bool blocked = false;
 	std::vector<std::string> rulesFolders;
+	ModRuleset ruleset;
 	bool needsActivation = false;
 	bool warn = false;
 };
@@ -167,7 +168,7 @@ ModCheck ComputeModCheck(const State &st, const SaveRec &r)
 			for (const ModInfo &i : installed) {
 				if (_stricmp(i.folder.c_str(), f.c_str()) == 0) on = &i;
 			}
-			if (!on || !on->gameplay) continue;
+			if (!on || !(on->gameplay || !ModsRulesetOf(mounted.ruleset, on->folder).empty())) continue;
 			bool inSave = false;
 			for (const SaveMod &m : r.mods) {
 				inSave = inSave || (!m.id.empty() && _stricmp(on->id.c_str(), m.id.c_str()) == 0) ||
@@ -188,20 +189,33 @@ ModCheck ComputeModCheck(const State &st, const SaveRec &r)
 				break;
 			}
 		}
-		const bool rules = m.kind >= 0 ? m.kind == kModRules : m.oldGameplay;
+		const bool rules = !m.ruleset.empty() || (m.kind >= 0 ? m.kind == kModRules : m.oldGameplay);
 		if (!found) {
 			if (rules) c.missing.push_back(ModLabel(m));
 			continue;
 		}
-		if (!found->gameplay) continue;
+		if (!found->gameplay && m.ruleset.empty() && ModsRulesetOf(mounted.ruleset, found->folder).empty()) continue;
 		c.rulesFolders.push_back(found->folder);
+		const ModLayer *savedLayer = ModsFindLayer(*found, m.ruleset);
+		if (savedLayer) {
+			c.ruleset.pack = found->folder;
+			c.ruleset.id = savedLayer->id;
+		}
 		bool active = false;
 		for (const std::string &f : mounted.mods) active = active || _stricmp(f.c_str(), found->folder.c_str()) == 0;
+		// Loaded with the ruleset it was saved with, or with none if it was saved with none.
+		const bool sameRuleset = _stricmp(ModsRulesetOf(mounted.ruleset, found->folder).c_str(), m.ruleset.c_str()) == 0;
 		const bool otherVersion = !m.version.empty() && !found->version.empty() && ModsCompareVersions(m.version, found->version) != 0;
 		const bool otherFiles = sameSchema && !m.hash.empty() && !found->gameplayHash.empty() && m.hash != found->gameplayHash;
+		const bool otherLayerFiles = sameSchema && savedLayer && !m.rulesetHash.empty() && !savedLayer->gameplayHash.empty() && m.rulesetHash != savedLayer->gameplayHash;
 		if (otherVersion) c.other.push_back(ModLabel(m) + Tr(" (you have ") + found->version + ")");
-		else if (otherFiles) c.other.push_back(ModLabel(m) + Tr(" (different files)"));
-		else if (!active) c.inactive.push_back(ModLabel(m));
+		else if (!m.ruleset.empty() && !savedLayer) c.other.push_back(ModLabel(m) + Tr(" (without its ruleset)"));
+		else if (otherFiles || otherLayerFiles) c.other.push_back(ModLabel(m) + Tr(" (different files)"));
+		else if (!active || !sameRuleset) {
+			std::string label = ModLabel(m);
+			if (!sameRuleset) label += " \xC2\xB7 " + (savedLayer ? savedLayer->name : Tr("Original (HD)"));
+			c.inactive.push_back(label);
+		}
 	}
 	c.blocked = !c.missing.empty();
 	c.needsActivation = c.missing.empty() && !c.inactive.empty();
@@ -815,7 +829,7 @@ void DoAction(State &st, int action, int arg)
 				break;
 			}
 			if (mc.needsActivation) {
-				const ModProfile loose = ModsLooseProfileWith(mc.rulesFolders);
+				const ModProfile loose = ModsLooseProfileWith(mc.rulesFolders, mc.ruleset);
 				if (!ModsSaveProfile(loose)) {
 					ModUiToast("The content of the game could not be enabled.", true);
 					break;

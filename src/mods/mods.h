@@ -176,6 +176,12 @@ struct ModProfile {
 	ModRuleset ruleset;
 };
 
+// The id of the ruleset a profile mounts from a package; empty when it mounts none of its rulesets (the package's root alone).
+inline std::string ModsRulesetOf(const ModRuleset &r, const std::string &packFolder)
+{
+	return !r.Empty() && _stricmp(r.pack.c_str(), packFolder.c_str()) == 0 ? r.id : std::string();
+}
+
 // The ruleset of profile p that belongs to package m, if the profile mounts one of it.
 inline const ModLayer *ModsActiveLayer(const ModProfile &p, const ModInfo &m)
 {
@@ -250,6 +256,8 @@ std::string ModsCheckCivIndices(const std::string &gamePath);
 
 struct ModNeed {
 	std::string folder, id, name, version;
+	// The id of the ruleset the game was saved with from this package; empty if it used the package's root alone.
+	std::string ruleset;
 	bool installed = false;
 	std::string installedFolder;
 	bool inProfile = false;
@@ -258,6 +266,7 @@ struct ModNeeds {
 	std::vector<ModNeed> mods;
 	std::string profile;
 	std::vector<std::string> folders;
+	ModRuleset ruleset;
 	bool Satisfied() const;
 	bool AllInstalled() const;
 	std::vector<std::string> Names(bool onlyMissing) const;

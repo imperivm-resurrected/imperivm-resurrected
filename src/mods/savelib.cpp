@@ -183,6 +183,8 @@ void ScanDir(const std::string &profile, bool onlineFolder, std::vector<SaveRec>
 					m.hash = e.GetString("fingerprint");
 					m.kind = ModsKindFromId(e.GetString("kind"));
 					m.oldGameplay = e.GetBool("gameplay", false);
+					m.ruleset = e.GetString("ruleset");
+					m.rulesetHash = e.GetString("rulesetFingerprint");
 					if (!m.folder.empty() || !m.id.empty()) r.mods.push_back(std::move(m));
 				}
 			}

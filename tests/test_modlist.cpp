@@ -210,6 +210,26 @@ static void Rulesets()
 	CHECK_EQ(list[0].layerName, "A B C");
 }
 
+// A game saved with a ruleset is not the same as one saved with none, nor with another ruleset of the same package.
+static void SavedRulesets()
+{
+	ModRuleset mounted;
+	mounted.pack = "Civs";
+	mounted.id = "cm";
+	CHECK_EQ(ModsRulesetOf(mounted, "civs"), "cm");
+	CHECK_EQ(ModsRulesetOf(mounted, "Other"), "");
+	CHECK_EQ(ModsRulesetOf(ModRuleset(), "Civs"), "");
+	CHECK(ModsSameRuleset(mounted, mounted));
+	ModRuleset other = mounted;
+	other.id = "MCI";
+	CHECK(!ModsSameRuleset(mounted, other));
+	other.id = "CM";
+	other.pack = "civs";
+	CHECK(ModsSameRuleset(mounted, other));
+	CHECK(!ModsSameRuleset(mounted, ModRuleset()));
+	CHECK(ModsSameRuleset(ModRuleset(), ModRuleset()));
+}
+
 static void Malformed()
 {
 	CHECK(DecodeModList("only\ttwo\n").empty());
@@ -229,6 +249,7 @@ int main()
 	GbFile();
 	CopyKey();
 	Rulesets();
+	SavedRulesets();
 	Malformed();
 	return test::Summary("modlist");
 }

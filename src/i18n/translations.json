@@ -1505,5 +1505,6 @@
 {"en":"The game will restart with the rules you chose. Afterwards, create the room again.","es":"El juego se reiniciará con las reglas que elegiste. Después, vuelve a crear la sala.","it":"Il gioco si riavvierà con le regole che hai scelto. Poi crea di nuovo la stanza."},
 {"en":"The game will restart with the rules you chose.","es":"El juego se reiniciará con las reglas que elegiste.","it":"Il gioco si riavvierà con le regole che hai scelto."},
 {"en":"Rules that will be loaded:","es":"Reglas que se cargarán:","it":"Regole che verranno caricate:"},
-{"en":"Could not save the rules in the content profile.","es":"No se pudieron guardar las reglas en el perfil de contenido.","it":"Impossibile salvare le regole nel profilo dei contenuti."}
+{"en":"Could not save the rules in the content profile.","es":"No se pudieron guardar las reglas en el perfil de contenido.","it":"Impossibile salvare le regole nel profilo dei contenuti."},
+{"en":" (without its ruleset)","es":" (sin su conjunto de reglas)","it":" (senza il suo set di regole)"}
 ]

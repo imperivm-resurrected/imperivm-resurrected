@@ -1513,5 +1513,6 @@ extern const TrRow kTrRows[] = {
 	{"The game will restart with the rules you chose.", "El juego se reiniciará con las reglas que elegiste.", "Il gioco si riavvierà con le regole che hai scelto."},
 	{"Rules that will be loaded:", "Reglas que se cargarán:", "Regole che verranno caricate:"},
 	{"Could not save the rules in the content profile.", "No se pudieron guardar las reglas en el perfil de contenido.", "Impossibile salvare le regole nel profilo dei contenuti."},
+	{" (without its ruleset)", " (sin su conjunto de reglas)", " (senza il suo set di regole)"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);
