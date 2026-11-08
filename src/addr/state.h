@@ -16,6 +16,7 @@ inline constexpr uintptr_t kMapView = 0x00996ff0;
 inline constexpr uintptr_t kGame = 0x00996ff4;
 inline constexpr uintptr_t kPausedMenu = 0x0099700c;
 inline constexpr uintptr_t kSyncHashes = 0x009a7054;
+inline constexpr uintptr_t kCustomItemDefs = 0x009a7214;
 inline constexpr uintptr_t kMap = 0x009a721c;
 inline constexpr uintptr_t kDecorEntities = 0x009a7a78;
 inline constexpr uintptr_t kNoteManager = 0x009bdaa8;
