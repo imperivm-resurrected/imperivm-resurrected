@@ -5,6 +5,7 @@
 
 #include "MinHook.h"
 #include "hooks/hookcount.h"
+#include "hooks/selectionguard.h"
 #include "game/civs.h"
 #include "core/log.h"
 
@@ -30,6 +31,7 @@ void LogScope(const CivRaceAsBase &scope, const char *what)
 
 void *__fastcall HookInitForPlayer(void *self, void *edx, void *player)
 {
+	DropStaleEffectiveSelection(self);
 	CivRaceAsBase own(player);
 	CivRaceAsBase local(CivsLocalPlayer());
 	LogScope(own, "bars and menus");

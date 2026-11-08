@@ -7,6 +7,7 @@
 namespace addr {
 
 inline constexpr uintptr_t kGameCodeBegin = 0x00400000;
+inline constexpr uintptr_t kGameTextBegin = 0x00401000;
 inline constexpr uintptr_t kStringAssign = 0x00401ec0;
 inline constexpr uintptr_t kStringAssignCstr = 0x00402160;
 inline constexpr uintptr_t kStringAppend = 0x004045c0;
@@ -46,6 +47,9 @@ inline constexpr uintptr_t kMountPakFilesInDir = 0x0074c400;
 inline constexpr uintptr_t kLoadConfigIni = 0x0074cd20;
 inline constexpr uintptr_t kOperatorNew = 0x00762870;
 inline constexpr uintptr_t kGameFree = 0x007629b9;
+inline constexpr uintptr_t kGameTextEnd = 0x007aa98b;
+inline constexpr uintptr_t kGameRdataBegin = 0x007ab000;
+inline constexpr uintptr_t kGameRdataEnd = 0x00819bb0;
 inline constexpr uintptr_t kPersistVersionSrc = 0x008212f4;
 inline constexpr uintptr_t kVfsOpenFilePtr = 0x00829b30;
 inline constexpr uintptr_t kPfnVfsFileExists = 0x00829b50;
