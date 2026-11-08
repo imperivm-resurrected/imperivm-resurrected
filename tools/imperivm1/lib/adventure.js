@@ -7,7 +7,7 @@ const S = require('./script');
 const X = require('./xml');
 const G = require('./grid');
 const M = require('./mapping');
-const { addProbe, censusSequence, sceneSequence, probeSequences } = require('./probe');
+const { addProbe, addActorProbes, censusSequence, sceneSequence, probeSequences } = require('./probe');
 
 const EOL = '\r\n';
 const LANGS = ['English', 'Spanish', 'Italian'];
@@ -495,7 +495,11 @@ function sightScript(rules) {
 		bySight.get(r.base).push(r);
 	}
 	const lines = ['//void', 'ObjList i1v_l;', 'Obj i1v_o;', 'int i1v_p, i1v_i, i1v_s;', 'str i1v_c;', '', 'while (1)', '{', '\tfor (i1v_p = 0; i1v_p <= 16; i1v_p += 1)', '\t{'];
-	lines.push('\t\ti1v_l = ClassPlayerObjs("Unit", i1v_p).GetObjList();', '\t\tfor (i1v_i = 0; i1v_i < i1v_l.count; i1v_i += 1)', '\t\t{', '\t\t\ti1v_o = i1v_l[i1v_i];', '\t\t\ti1v_s = i1v_o.sight;');
+	lines.push('\t\ti1v_l = ClassPlayerObjs("Unit", i1v_p).GetObjList();', '\t\tfor (i1v_i = 0; i1v_i < i1v_l.count; i1v_i += 1)', '\t\t{', '\t\t\ti1v_o = i1v_l[i1v_i];',
+		// Great Battles of Rome's sneak_behavior.vs hides Gaul druids (and huntresses, mountaineers) after 20 s without attacking;
+		// Imperivm I's never hid on their own. The mod's patch of that script skips units marked I1NoSneak.
+		'\t\t\tif (EnvReadInt(i1v_o, "I1NoSneak") != 1) EnvWriteInt(i1v_o, "I1NoSneak", 1);',
+		'\t\t\ti1v_s = i1v_o.sight;');
 	for (const [base, rs] of [...bySight].sort((a, b) => a[0] - b[0])) {
 		lines.push(`\t\t\tif (i1v_s == ${base})`, '\t\t\t{', '\t\t\t\ti1v_c = i1v_o.class();');
 		rs.forEach((r, k) => lines.push(`\t\t\t\t${k ? 'else ' : ''}if (i1v_c == "${r.gbr}") i1v_o.SetSight(${r.i1});`));
@@ -806,6 +810,11 @@ function convertAdventure(input) {
 				s = probed;
 				report.add('Probe', `${p}: I1PROBE diagnostics added (Mod_Log, needs Imperivm Resurrected)`);
 			}
+			const actors = input.probe ? addActorProbes(p, s) : null;
+			if (actors) {
+				s = actors;
+				report.count('Probe', 'scripts whose conversation actors are logged (I1PROBE actor lines)');
+			}
 			// After the probe, whose anchors are the original Run() lines.
 			const q = S.queueConversations(s);
 			s = q.src;
@@ -930,12 +939,10 @@ function convertAdventure(input) {
 	// Sequences every map runs: no sentries, and with --probe the census of what is in the world.
 	const sight = sightRules(i1, gbr, classes, report);
 	for (const r of sight) report.add('Sight', `${r.gbr}: ${r.base} -> ${r.i1} (Imperivm I's ${r.from})`);
-	const sightSrc = sight.length ? sightScript(sight) : null;
+	const sightSrc = sightScript(sight);
 	for (const id of mapNames.keys()) {
-		if (sightSrc) {
-			addMapSequence(out, id, 'I1_Sight', sightSrc);
-			report.count('Sight', 'maps given the I1_Sight sequence (units get Imperivm I\'s sight)');
-		}
+		addMapSequence(out, id, 'I1_Sight', sightSrc);
+		report.count('Sight', 'maps given the I1_Sight sequence (units get Imperivm I\'s sight and never hide on their own)');
 		addMapSequence(out, id, 'I1_NoSentries', NO_SENTRIES_SCRIPT);
 		report.count('Sentries', 'maps given the I1_NoSentries sequence (no sentries, as in Imperivm I)');
 		if (input.probe) {

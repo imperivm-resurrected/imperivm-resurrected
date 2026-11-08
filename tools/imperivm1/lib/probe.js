@@ -301,4 +301,25 @@ function sceneSequence() {
 	return lines.join('\r\n');
 }
 
-module.exports = { addProbe, censusSequence, sceneSequence, probeSequences };
+// After every Conversation.SetActor("name", expr) of a script: one "I1PROBE actor" line with what expr is at that moment.
+// A conversation shows no title and no picture for an actor whose unit is not valid when SetActor runs (gbr.exe 0050BD72).
+// Returns the new source, or null when the script sets no actor.
+function addActorProbes(path, src) {
+	const file = path.replace(/^.*\/Maps\//i, '');
+	let count = 0;
+	const out = src.replace(/\.SetActor\s*\(\s*"([^"]+)"\s*,\s*([^;]+?)\s*\)\s*;/g, (all, name, expr) => {
+		count++;
+		const e = `(${expr})`;
+		const lines = [
+			`i1p_s = "I1PROBE actor file=${file} name=${name} t=" + GetTime();`,
+			`if (${e}.IsValid()) i1p_s = i1p_s + " valid=1 class=" + ${e}.class() + " player=" + ${e}.player + " health=" + ${e}.health + " x=" + ${e}.pos.x + " y=" + ${e}.pos.y; else i1p_s = i1p_s + " valid=0";`,
+		];
+		const base = /^(.*)\.AsUnit\(\)$/.exec(expr.trim());
+		if (base) lines.push(`if ((${base[1]}).IsValid()) i1p_s = i1p_s + " obj_valid=1 obj_class=" + (${base[1]}).class() + " obj_player=" + (${base[1]}).player + " obj_x=" + (${base[1]}).pos.x + " obj_y=" + (${base[1]}).pos.y; else i1p_s = i1p_s + " obj_valid=0";`);
+		lines.push('Mod_Log(i1p_s);');
+		return `${all}\r\n${lines.join('\r\n')}`;
+	});
+	return count ? S.insertDeclarations(out, DECLARATIONS) : null;
+}
+
+module.exports = { addProbe, addActorProbes, censusSequence, sceneSequence, probeSequences };
