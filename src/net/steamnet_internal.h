@@ -121,6 +121,7 @@ std::string Fnv(const std::string &s);
 std::string Data(uint64 lobby, const char *key);
 std::string EncodeMods(const std::string &scenModId, int &optional);
 std::string OwnKey();
+std::string OwnHashKey();
 bool IsBanned(uint64 lobby, uint64 id);
 bool StaleLobby(uint64 id);
 OnlineLobby ReadLobby(uint64 id);

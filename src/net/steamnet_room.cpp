@@ -79,6 +79,8 @@ void RefreshOwnKey()
 	if (!g_lobby || S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) != g_steam.me) return;
 	const std::string own = OwnKey();
 	if (!own.empty() && Data(g_lobby, "key") != own) S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, "key", own.c_str());
+	const std::string plain = OwnHashKey();
+	if (!plain.empty() && Data(g_lobby, "hkey") != plain) S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, "hkey", plain.c_str());
 }
 
 void TakeOverHostData()
@@ -514,7 +516,7 @@ void MirrorSpectators()
 	if (g_spectate.wanted && !g_spectate.lobby && !g_spectate.creating && g_lobby) OpenSpectators(g_spectate.delay, g_spectate.visibility);
 	if (!g_spectate.lobby) return;
 	if (!g_lobby || S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) != g_steam.me) return;
-	static const char *const kCopy[] = {"name", "host", "hostid", "map", "mode", "key", "scen", "pw", "vis", "irver", "mods", "slots", "plist", "pids", "opts", "rules", "civsets", "save", "playing", "modsv", "nopt"};
+	static const char *const kCopy[] = {"name", "host", "hostid", "map", "mode", "key", "hkey", "scen", "pw", "vis", "irver", "mods", "slots", "plist", "pids", "opts", "rules", "civsets", "save", "playing", "modsv", "nopt"};
 	for (const char *k : kCopy) SpecSet(k, Data(g_lobby, k));
 	SpecSet("main", std::to_string(g_lobby));
 	SpecSet("delay", std::to_string(g_spectate.delay));

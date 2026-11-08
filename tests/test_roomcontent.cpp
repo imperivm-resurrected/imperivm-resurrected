@@ -63,6 +63,31 @@ void OnlyTheTwoDifferencesDiffer()
 	CHECK(!RoomContentDiffers(RoomContent::kChecking));
 }
 
+void TheHashKeyIsTheStartOfTheHash()
+{
+	const std::string hash = "685eb718eafca4a3f00dbeef0123456789abcdef0123456789abcdef01234567";
+	CHECK_EQ(RoomHashKey(hash), "685eb718eafca4a3");
+	CHECK_EQ(RoomHashKey(""), "");
+	CHECK_EQ(RoomHashKey("abc"), "abc");
+}
+
+// The room "key" of a host with civilizations is not the start of its hash, so a joiner that checks the content it
+// received before restarting has to compare against the plain hash key.
+void TheSyncCheckIgnoresTheCivilizationTable()
+{
+	const std::string hash = "685eb718eafca4a3f00dbeef0123456789abcdef0123456789abcdef01234567";
+	const std::string hostKeyWithCivs = "1f00aa0000000001";
+	CHECK(RoomHashKey(hash) != hostKeyWithCivs);
+	CHECK(RoomHashMatches(hash, RoomHashKey(hash)));
+	CHECK(!RoomHashMatches(hash, "1f00aa0000000000"));
+	CHECK(!RoomHashMatches("", "685eb718eafca4a3"));
+}
+
+void AnOlderHostPublishesNoHashKey()
+{
+	CHECK(RoomHashMatches("685eb718eafca4a3f00d", ""));
+}
+
 }
 
 int main()
@@ -74,5 +99,8 @@ int main()
 	AMapOnlyPackIsNotNeededToJoin();
 	AMissingMapModIsKnownBeforeTheKeys();
 	OnlyTheTwoDifferencesDiffer();
+	TheHashKeyIsTheStartOfTheHash();
+	TheSyncCheckIgnoresTheCivilizationTable();
+	AnOlderHostPublishesNoHashKey();
 	return test::Summary("roomcontent");
 }

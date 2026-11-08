@@ -58,7 +58,7 @@ void StartSyncCheck(const OnlineLobby lobby, const std::map<std::string, std::st
 			if (hash.empty()) Sleep(200);
 		}
 		if (error.empty() && hash.empty()) error = Tr("the content could not be checked");
-		if (error.empty() && !lobby.gameplayKey.empty() && hash.substr(0, 16) != lobby.gameplayKey) {
+		if (error.empty() && !RoomHashMatches(hash, lobby.contentKey)) {
 			error = Tr("the received content does not match the host's");
 		}
 		if (error.empty()) {

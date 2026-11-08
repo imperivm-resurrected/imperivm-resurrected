@@ -31,6 +31,8 @@ struct OnlineLobby {
 	bool kickedMe = false;
 	std::string name, host, map, mode;
 	std::string gameplayKey;
+	// Start of the gameplay hash alone (the key also covers the civilization table). Empty in rooms of older versions.
+	std::string contentKey;
 	std::string scenModId, scenModVersion, scenModName;
 	bool scenSimple = false;
 	bool scenShareable = false;

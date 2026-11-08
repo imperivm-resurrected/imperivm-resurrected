@@ -11,6 +11,16 @@ RoomContent CompareRoomContent(const RoomContentFacts &facts)
 	return keysKnown ? RoomContent::kSame : RoomContent::kChecking;
 }
 
+std::string RoomHashKey(const std::string &gameplayHash)
+{
+	return gameplayHash.substr(0, 16);
+}
+
+bool RoomHashMatches(const std::string &gameplayHash, const std::string &hostHashKey)
+{
+	return hostHashKey.empty() || RoomHashKey(gameplayHash) == hostHashKey;
+}
+
 bool RoomContentDiffers(RoomContent content)
 {
 	return content == RoomContent::kOtherGameplay || content == RoomContent::kOtherMap;
