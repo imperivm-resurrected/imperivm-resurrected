@@ -954,6 +954,7 @@ function convertAdventure(input) {
 		}
 	}
 
+	alignPhraseActors(out, report);
 	const actorRows = conversationActors({ files, out, gbr, i1, classes, namedObjects, report });
 	// Every adventure of Great Battles of Rome has these two folders, empty. Without "Conversations" the game cannot load
 	// CurrentGame/conversations when a map starts ("Empty or invalid directory specified for CVXConvRegistry::Load" in
@@ -969,6 +970,43 @@ function convertAdventure(input) {
 // so each actor the adventure does not translate gets an entry with its class name in the map's conversation table, and
 // one whose class has no icon in Great Battles of Rome gets an Icon on its object. Returns rows for the audit:
 // [map, conversation file, actor, I1 class, GBR class, Spanish title, picture].
+// The translated phrases of Imperivm I's local.pak name some speakers differently from the map's conversation ("Daranix"
+// for NO_Daranix, "Larax" for NO_Larax). The game reads the translated file with the same parser as the map's
+// (CConversation::OnStartElement, gbr.exe 00507ed0), so its actor= wins; a name that is not one of the conversation's actors
+// leaves the phrase with no actor, and the window then shows no title and no picture (ShowPhrase, 0050baf0). Each translated
+// phrase gets the actor of the map's phrase with the same conversation and number, in actor= and in its id.
+function alignPhraseActors(out, report) {
+	const keys = [...out.keys()];
+	const byLower = new Map(keys.map((k) => [lower(k), k]));
+	for (const k of keys) {
+		const m = /^Local\/[^/]+\/(Maps\/[^/]+\/conversations\/[^/]+\.conv\.xml)$/i.exec(k);
+		if (!m) continue;
+		const mapKey = byLower.get(lower(m[1]));
+		if (!mapKey) continue;
+		const conv = text(out.get(mapKey));
+		const actors = new Map();
+		for (const c of conv.matchAll(/<conversation\b[^>]*?\sname="([^"]*)"[^]*?<\/conversation>/g)) {
+			const phrases = [...c[0].matchAll(/<phrase\b[^>]*?\sactor="([^"]*)"/g)].map((p) => p[1]);
+			actors.set(c[1], phrases);
+		}
+		let fixed = 0;
+		const loc = text(out.get(k)).replace(/<translationtableentry\b[^>]*\/>/g, (e) => {
+			const conv1 = /\sconvname="([^"]*)"/.exec(e);
+			const num = /\snumber="(\d+)"/.exec(e);
+			const actor = /\sactor="([^"]*)"/.exec(e);
+			if (!conv1 || !num || !actor) return e;
+			const want = (actors.get(conv1[1]) || [])[Number(num[1])];
+			if (!want || want === actor[1]) return e;
+			fixed++;
+			return e.replace(/\sactor="[^"]*"/, ` actor="${want}"`).replace(/(\sid="conv-[^"]*-)[^"-]+(-\d+")/, `$1${want}$2`);
+		});
+		if (fixed) {
+			out.set(k, bytes(loc));
+			report.count('Conversation actors', 'translated phrases given the speaker name of the map\'s conversation (title and picture)', fixed);
+		}
+	}
+}
+
 function conversationActors({ files, out, gbr, i1, classes, namedObjects, report }) {
 	const gbrById = new Map();
 	for (const c of gbr.classes.values()) for (const id of [c.id, c.altid].filter(Boolean)) if (!gbrById.has(lower(id))) gbrById.set(lower(id), c);
