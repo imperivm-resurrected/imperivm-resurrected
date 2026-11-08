@@ -300,6 +300,7 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 		ApplySeatDisplay(g_s.game);
 		ApplySaveLook(g_s.game);
 		RedirectReplacedRaces(g_s.game);
+		ResetDisallowedRaces(g_s.game);
 		if (!g_s.game.active && g_s.dropKind <= kDropPreset) g_s.dropOpen = false;
 		if (g_s.dropOpen && g_s.dropKind == kDropSlot && (g_flow.arrivingIds[g_s.dropIndex & 7] || g_s.game.slots[g_s.dropIndex & 7].joining)) {
 			g_s.dropOpen = false;

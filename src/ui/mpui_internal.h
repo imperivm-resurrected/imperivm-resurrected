@@ -426,6 +426,9 @@ std::string RoomConfigKey(const OnlineLobby &l);
 bool SlotFrozen(const GameRoomSnapshot &g, const GameRoomSlot &s);
 bool RoomActionFrozen(const GameRoomSnapshot &g, int action, int arg);
 void RedirectReplacedRaces(GameRoomSnapshot &g);
+// The slots whose civilization the room's sets do not allow (they go back to Random); a guest resets and tells its own.
+std::vector<int> DisallowedRaceSlots(const GameRoomSnapshot &g);
+void ResetDisallowedRaces(GameRoomSnapshot &g);
 void ApplyPredicted(GameRoomSnapshot &g, std::vector<State::Predicted> &list);
 typedef unsigned(__fastcall *GameMenuMsg_t)(void *dlg, void *edx, int *msg);
 

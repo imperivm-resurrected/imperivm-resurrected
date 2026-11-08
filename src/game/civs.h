@@ -65,6 +65,8 @@ const char *CivsRoomSeparator();
 std::vector<int> CivsRoomOrder(int items);
 // Whether the room's sets (CivRoomSets) allow the civilization. "Random" is always allowed.
 bool CivsRoomAllows(int race);
+// Of the civilizations of the slots (-1: nobody), the positions the room's sets do not allow: those go back to Random.
+std::vector<int> CivsSlotsToReset(const std::vector<int> &races);
 struct CivSet {
 	std::string id, name;
 };

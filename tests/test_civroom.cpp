@@ -103,6 +103,38 @@ void RandomGroups()
 	CHECK(CivRandomGroups(civs, true, false).empty());
 }
 
+void RaceAllowed()
+{
+	// The game and a pack that replaces Republican Rome (11) and one that adds a civilization (10); the pack of 12 is off.
+	const std::vector<RandomCiv> civs = {Random(10, kGaul, false), Random(11, kRepublicanRome, true), Random(12, kRepublicanRome, true, false)};
+	CHECK(CivRaceAllowed(civs, true, kRepublicanRome));
+	CHECK(CivRaceAllowed(civs, true, 8));
+	CHECK(CivRaceAllowed(civs, true, 11));
+	CHECK(!CivRaceAllowed(civs, true, 12));
+	// Without the game: a base race stays only if an allowed civilization replaces it; Random is always there.
+	CHECK(CivRaceAllowed(civs, false, kRepublicanRome));
+	CHECK(!CivRaceAllowed(civs, false, kGaul));
+	CHECK(CivRaceAllowed(civs, false, 8));
+	CHECK(CivRaceAllowed(civs, false, 10));
+	// A civilization the room does not know is not held back.
+	CHECK(CivRaceAllowed(civs, false, 40));
+}
+
+void SlotsGoBackToRandom()
+{
+	const std::vector<RandomCiv> civs = {Random(10, kGaul, false), Random(11, kRepublicanRome, true), Random(12, kRepublicanRome, true, false)};
+	// Slots: Gaul, nobody, Random, the pack civilization that is off, the one that is on, Republican Rome (replaced by 11).
+	const std::vector<int> races = {kGaul, -1, 8, 12, 10, kRepublicanRome};
+	CHECK(CivSlotsToReset(races, civs, true) == std::vector<int>({3}));
+	// The game's set goes off: Gaul is no longer offered, Republican Rome still is (11 replaces it), and the empty slot is left alone.
+	CHECK(CivSlotsToReset(races, civs, false) == std::vector<int>({0, 3}));
+	// Every set on: nobody changes. Nobody seated: nothing to do.
+	const std::vector<RandomCiv> all = {Random(10, kGaul, false), Random(12, kRepublicanRome, true)};
+	CHECK(CivSlotsToReset(races, all, true).empty());
+	CHECK(CivSlotsToReset({}, civs, false).empty());
+	CHECK(CivSlotsToReset({-1, -1}, civs, false).empty());
+}
+
 }
 
 int main()
@@ -115,5 +147,7 @@ int main()
 	RoomSetsHideCivs();
 	WithoutTheGame();
 	RandomGroups();
+	RaceAllowed();
+	SlotsGoBackToRandom();
 	return test::Summary("civroom");
 }

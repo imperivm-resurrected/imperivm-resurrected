@@ -1523,5 +1523,8 @@ extern const TrRow kTrRows[] = {
 	{"Choose which civilizations can be picked in this room: the game's and each mod's. It applies at once, and a player whose civilization is left out goes back to Random.", "Elige qué civilizaciones se pueden escoger en esta sala: las del juego y las de cada mod. Se aplica al instante, y el jugador cuya civilización queda fuera vuelve a Aleatoria.", "Scegli quali civiltà si possono selezionare in questa stanza: quelle del gioco e quelle di ogni mod. Si applica subito, e il giocatore la cui civiltà viene esclusa torna a Casuale."},
 	{"CIVILIZATIONS", "CIVILIZACIONES", "CIVILTÀ"},
 	{"The host changed the civilizations of the room.", "El anfitrión ha cambiado las civilizaciones de la sala.", "L'host ha cambiato le civiltà della stanza."},
+	{"Slots set back to Random, their civilization is no longer allowed in the room: %s", "Plazas devueltas a Aleatoria, su civilización ya no está permitida en la sala: %s", "Posti riportati a Casuale, la loro civiltà non è più consentita nella stanza: %s"},
+	{"Your civilization is no longer allowed in this room: you play Random now.", "Tu civilización ya no está permitida en esta sala: ahora juegas con Aleatoria.", "La tua civiltà non è più consentita in questa stanza: ora giochi con Casuale."},
+	{"Some players had a civilization the room does not allow and now play Random. Press Start again.", "Algunos jugadores tenían una civilización que la sala no permite y ahora juegan con Aleatoria. Pulsa Empezar de nuevo.", "Alcuni giocatori avevano una civiltà non consentita dalla stanza e ora giocano con Casuale. Premi di nuovo Inizia."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

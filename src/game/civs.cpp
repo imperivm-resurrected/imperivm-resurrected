@@ -1015,16 +1015,12 @@ std::vector<int> CivsRoomOrder(int items)
 
 bool CivsRoomAllows(int race)
 {
-	if (race == 8) return true;
-	if (race >= 10) {
-		const Civ *c = FindByIndex(race);
-		return !c || CivInRoom(*c);
-	}
-	if (GameInRoom()) return true;
-	for (const Civ *other : SortedCivs()) {
-		if (other->replacesBase && other->base == race && CivInRoom(*other)) return true;
-	}
-	return false;
+	return CivRaceAllowed(RandomCivs(SortedCivs(), true), GameInRoom(), race);
+}
+
+std::vector<int> CivsSlotsToReset(const std::vector<int> &races)
+{
+	return CivSlotsToReset(races, RandomCivs(SortedCivs(), true), GameInRoom());
 }
 
 std::vector<CivSet> CivsSets()

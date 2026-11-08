@@ -398,6 +398,33 @@ bool RoomActionFrozen(const GameRoomSnapshot &g, int action, int arg)
 	}
 }
 
+std::vector<int> DisallowedRaceSlots(const GameRoomSnapshot &g)
+{
+	std::vector<int> races(8, -1);
+	for (int i = 0; i < 8; i++) {
+		const GameRoomSlot &s = g.slots[i];
+		if (!s.used || (s.type != 1 && s.type != 3) || s.fixedRace >= 0 || s.raceNames.empty()) continue;
+		races[i] = CivsRaceOfRoomItem(s.race);
+	}
+	return CivsSlotsToReset(races);
+}
+
+void ResetDisallowedRaces(GameRoomSnapshot &g)
+{
+	// The host resets every slot it owns; a guest only its own, so it can tell the player and does not wait for the host's change.
+	if (!g.active || !g.online || g.host || !g_s.room.info.saveName.empty()) return;
+	for (const int i : DisallowedRaceSlots(g)) {
+		GameRoomSlot &s = g.slots[i];
+		if (!s.local) continue;
+		const int random = CivsRoomItemOfRace(8);
+		LogI("room", "your civilization is no longer allowed in the room; you play Random");
+		s.race = random;
+		Predict(kPredRace, i, random);
+		GameRoomSetRace(i, random);
+		ModUiToast("Your civilization is no longer allowed in this room: you play Random now.");
+	}
+}
+
 void RedirectReplacedRaces(GameRoomSnapshot &g)
 {
 	if (!g.active) return;

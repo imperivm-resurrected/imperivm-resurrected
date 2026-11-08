@@ -79,3 +79,25 @@ std::vector<std::vector<int>> CivRandomGroups(const std::vector<RandomCiv> &civs
 	}
 	return groups;
 }
+
+bool CivRaceAllowed(const std::vector<RandomCiv> &civs, bool gameAllowed, int race)
+{
+	if (race == kRandomRace) return true;
+	if (race >= kFirstModItem) {
+		for (const RandomCiv &c : civs) {
+			if (c.index == race) return c.allowed;
+		}
+		return true;
+	}
+	if (gameAllowed) return true;
+	return std::any_of(civs.begin(), civs.end(), [race](const RandomCiv &c) { return c.replacesBase && c.base == race && c.allowed; });
+}
+
+std::vector<int> CivSlotsToReset(const std::vector<int> &races, const std::vector<RandomCiv> &civs, bool gameAllowed)
+{
+	std::vector<int> out;
+	for (size_t i = 0; i < races.size(); i++) {
+		if (races[i] >= 0 && !CivRaceAllowed(civs, gameAllowed, races[i])) out.push_back(static_cast<int>(i));
+	}
+	return out;
+}

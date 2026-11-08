@@ -374,6 +374,16 @@ void DoAction(int action, int arg)
 				break;
 			}
 		}
+		// The room resets a civilization the sets left out on its own; this is the last look, so that one can never start.
+		if (!g_s.hostSavePublished) {
+			const std::vector<int> disallowed = DisallowedRaceSlots(snap);
+			if (!disallowed.empty()) {
+				for (const int i : disallowed) GameRoomSetRace(i, CivsRoomItemOfRace(8));
+				LogI("room", "not starting: %d slot(s) had a civilization the room does not allow; they are set to Random", static_cast<int>(disallowed.size()));
+				ModUiToast("Some players had a civilization the room does not allow and now play Random. Press Start again.");
+				break;
+			}
+		}
 		if (const StartBlock block = StartBlocker(g_s, snap); !block.toast.empty()) {
 			LogI("room", "not starting yet: %s", block.toast.c_str());
 			ModUiToast(block.toast);
