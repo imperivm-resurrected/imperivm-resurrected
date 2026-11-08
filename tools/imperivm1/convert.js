@@ -13,7 +13,7 @@
 //   --movies      also converts the two movies of Imperivm I (Packs\data*.bfhp, MPEG-1) into <out>\Movies\ and plays them
 //                 from movies\ (they have to be copied to the game's Movies folder); without it, the calls are commented out
 //   --unpacked    also writes the files of the adventure, unpacked, to <out>\unpacked\
-//   --probe       adds diagnostics to the Kormaris opening that write "I1PROBE ..." lines to
+//   --probe       adds diagnostics to the Kormaris opening and the Teuton ambush on its road, that write "I1PROBE ..." lines to
 //                 Logs\imperivm\imperivm-mod.log (they need Imperivm Resurrected's Mod_Log); for testing only. On every
 //                 map it also lists the units and buildings in the world ("I1PROBE census")
 //   --audit       writes <out>\audit.txt: what the conversion keeps of each XML attribute, the diplomacy, the script API

@@ -7,7 +7,7 @@ const S = require('./script');
 const X = require('./xml');
 const G = require('./grid');
 const M = require('./mapping');
-const { addProbe, censusSequence } = require('./probe');
+const { addProbe, censusSequence, sceneSequence } = require('./probe');
 
 const EOL = '\r\n';
 const LANGS = ['English', 'Spanish', 'Italian'];
@@ -860,6 +860,7 @@ function convertAdventure(input) {
 		report.count('Sentries', 'maps given the I1_NoSentries sequence (no sentries, as in Imperivm I)');
 		if (input.probe) {
 			addMapSequence(out, id, 'I1_Census', censusSequence());
+			if (id === '11937') addMapSequence(out, id, 'I1_SceneProbe', sceneSequence());
 			report.count('Probe', 'maps given the I1_Census sequence (I1PROBE census lines)');
 		}
 	}

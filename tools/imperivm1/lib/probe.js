@@ -263,4 +263,27 @@ function censusSequence() {
 	].join('\r\n');
 }
 
-module.exports = { addProbe, censusSequence };
+// Kormaris (11937): the six units of the Teuton ambush the player meets on the road (seq6, M1_Q_Losers11 against three
+// Gaul swordsmen), every 2 s for the first 2 minutes: whether they fight before Larax gets there.
+const SCENE_UNITS = ['NO_Teuton4', 'NO_Teuton5', 'NO_Teuton6', 'NO_Protector2', 'NO_Protector3', 'NO_Protector4', 'NO_Protector5', 'NO_Protector6'];
+function sceneSequence() {
+	const lines = ['//void', 'NamedObj i1q_n;', 'Obj i1q_o;', 'int i1q_t;', 'str i1q_s;', '', 'for (i1q_t = 0; i1q_t < 60; i1q_t += 1)', '{'];
+	for (const n of SCENE_UNITS) {
+		lines.push(
+			`\ti1q_n = GetNamedObj("${n}");`,
+			'\tif (i1q_n.count == 0) Mod_Log("I1PROBE scene t=" + GetTime() + " name=' + n + ' gone");',
+			'\telse',
+			'\t{',
+			'\t\ti1q_o = i1q_n.obj;',
+			`\t\ti1q_s = "I1PROBE scene t=" + GetTime() + " name=${n} class=" + i1q_o.class() + " player=" + i1q_o.player + " health=" + i1q_o.health + " command=" + i1q_o.command + " x=" + i1q_o.pos.x + " y=" + i1q_o.pos.y;`,
+			'\t\tif (i1q_o.IsAlive()) i1q_s = i1q_s + " alive=1"; else i1q_s = i1q_s + " alive=0";',
+			'\t\tif (i1q_o.AsUnit().InHolder()) i1q_s = i1q_s + " inholder=1"; else i1q_s = i1q_s + " inholder=0";',
+			'\t\tMod_Log(i1q_s);',
+			'\t}',
+		);
+	}
+	lines.push('\tSleep(2000);', '}', '');
+	return lines.join('\r\n');
+}
+
+module.exports = { addProbe, censusSequence, sceneSequence };
