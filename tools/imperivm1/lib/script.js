@@ -323,6 +323,90 @@ function ownHolderSpawns(src, group, owner) {
 	return { src: join(tokens), count };
 }
 
+// Types of the variables a script declares ("point p, q;" -> p: point), from declarations at the start of a statement.
+const DECLARED_TYPES = /^(point|Obj|Unit|NamedObj|Query|ObjList|Building|Hero|Settlement|int|str|bool|float|Conversation|rect|Gate|Druid)$/;
+function declaredTypes(src) {
+	const types = new Map();
+	const tokens = tokenize(src).filter((t) => t.type !== 'space' && t.type !== 'comment');
+	for (let i = 0; i < tokens.length; i++) {
+		const t = tokens[i];
+		if (t.type !== 'ident' || !DECLARED_TYPES.test(t.text)) continue;
+		const before = tokens[i - 1];
+		if (before && ![';', '{', '}'].includes(before.text)) continue;
+		for (let j = i + 1; j + 1 < tokens.length && tokens[j].text !== ';'; j++) {
+			if (tokens[j].type === 'ident' && [',', ';', '='].includes(tokens[j + 1].text)) types.set(tokens[j].text, t.text);
+			if (tokens[j].text === '(' || tokens[j].text === '=') break;
+		}
+	}
+	return types;
+}
+
+const OBJECT_TYPES = new Set(['Obj', 'Unit', 'NamedObj', 'Query', 'ObjList', 'Building', 'Hero', 'Settlement', 'Gate', 'Druid']);
+
+// Whether the target of a command (the text of the argument) is a point, an object, or cannot be told:
+// 'point' | 'object' | 'unknown'. `types`: declaredTypes of the script.
+function targetKind(arg, types) {
+	const s = arg.replace(/\s+/g, '');
+	if (/(^|[^\w])(AreaCenter|Point|GetRandomPointInArea)\(/.test(s)) return 'point';
+	if (/\.(pos|posRH)\)*$/.test(s)) return 'point';
+	if (/^GetNamedObj\(/.test(s) || /\.(obj|AsUnit\(\)|AsBuilding\(\)|AsHero\(\))\)*$/.test(s)) return 'object';
+	let m;
+	if ((m = /^\(*([A-Za-z_]\w*)\)*$/.exec(s))) {
+		const type = types.get(m[1]);
+		if (type === 'point') return 'point';
+		if (type && OBJECT_TYPES.has(type)) return 'object';
+		// Not declared: a named object or group of the map.
+		if (!type) return 'object';
+		return 'unknown';
+	}
+	if ((m = /^([A-Za-z_]\w*)\[[^\]]*\]$/.exec(s))) {
+		const type = types.get(m[1]);
+		if (!type || type === 'ObjList' || type === 'Query') return 'object';
+	}
+	// Sums and differences of points (pt + offset) when one side is a point variable.
+	if (/[+-]/.test(s) && s.split(/[+-]/).some((x) => types.get(x.replace(/[()]/g, '')) === 'point')) return 'point';
+	return 'unknown';
+}
+
+// "attack" given a point: Imperivm I's units walk to it and fight what they meet; Great Battles of Rome's attack method
+// takes an object only, so with a point they stand still. Those commands become "advance", which walks to the point
+// fighting on the way. SetCommand/SetCommandOffset("attack", x) and AddCommand/AddCommandOffset(b, "attack", x).
+// Returns {src, advanced, kept, unknown: [call text]}.
+function attackPointsToAdvance(src) {
+	const types = declaredTypes(src);
+	const tokens = tokenize(src);
+	let advanced = 0;
+	let kept = 0;
+	const unknown = [];
+	for (const method of ['SetCommand', 'SetCommandOffset', 'AddCommand', 'AddCommandOffset']) {
+		for (const c of methodCalls(tokens, method)) {
+			let at = nextCode(tokens, c.open + 1);
+			if (/^Add/.test(method)) {
+				// Skip the first argument (the bool).
+				let depth = 0;
+				for (; at < c.close; at++) {
+					const x = tokens[at].text;
+					if (x === '(') depth++;
+					else if (x === ')') depth--;
+					else if (x === ',' && depth === 0) break;
+				}
+				at = nextCode(tokens, at + 1);
+			}
+			if (at >= c.close || tokens[at].type !== 'string' || tokens[at].text.slice(1, -1) !== 'attack') continue;
+			const comma = nextCode(tokens, at + 1);
+			if (tokens[comma].text !== ',') continue;
+			const arg = join(tokens.slice(comma + 1, c.close)).trim();
+			const kind = /Offset$/.test(method) ? 'point' : targetKind(arg, types);
+			if (kind === 'point') {
+				tokens[at] = { type: 'string', text: tokens[at].text[0] + 'advance' + tokens[at].text[0] };
+				advanced++;
+			} else if (kind === 'object') kept++;
+			else unknown.push(join(tokens.slice(c.start, c.close + 1)).trim());
+		}
+	}
+	return { src: join(tokens), advanced, kept, unknown };
+}
+
 // Inserts `line` before or after the first line that matches `anchor`, with that line's indentation.
 function insertAtLine(src, anchor, where, line) {
 	const m = anchor.exec(src);
@@ -383,4 +467,7 @@ module.exports = {
 	insertAtLine,
 	rewriteCall,
 	insertDeclarations,
+	declaredTypes,
+	targetKind,
+	attackPointsToAdvance,
 };

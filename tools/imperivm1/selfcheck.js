@@ -1,4 +1,4 @@
-// Checks the pure parts of the Imperivm I converter with made-up data (no game files needed):
+// Checks the Imperivm I converter: its parts with made-up data, and the whole conversion when both games are installed:
 //   node tools/imperivm1/selfcheck.js
 'use strict';
 const { readHpfs, writeHpfs } = require('./lib/hpfs');
@@ -164,6 +164,117 @@ function check(cond, what) {
 	const small = B.coverResize(img, 2, 2);
 	check(small.width === 2 && small.height === 2 && small.rgb.length === 12, 'cover resize size');
 	check(B.fillKey(img, [1, 1, 1]).rgb.slice(3, 6).equals(Buffer.from([1, 1, 1])), 'green key painted');
+}
+
+// "attack" given a point becomes "advance"; given an object it stays "attack".
+{
+	const src = [
+		'//void',
+		'point p_P1;',
+		'NamedObj NO_Larax;',
+		'ObjList OL_Enemy;',
+		'int n_I;',
+		'A.SetCommand("attack", AreaCenter("A_Gate"));',
+		'B.SetCommand("attack", p_P1);',
+		'C.SetCommand("attack", NO_Larax.obj.posRH);',
+		'D.SetCommand("attack", AreaCenter("A") - Point(100, 400));',
+		'E.SetCommandOffset("attack", AreaCenter("R") + Point(0, 3000));',
+		'F.AddCommand(true, "attack", OL_Enemy[0].pos);',
+		'G.SetCommand("attack", NO_Larax);',
+		'H.SetCommand("attack", OL_Enemy[n_I]);',
+		'I.SetCommand("attack", NO_Protector2);',
+		'J.SetCommand("attack", Larax.obj.AsUnit());',
+		'K.SetCommand("attack", n_I);',
+		'L.SetCommand("move", p_P1);',
+	].join('\n');
+	const r = S.attackPointsToAdvance(src);
+	const lines = r.src.split('\n');
+	check(r.advanced === 6 && r.kept === 4 && r.unknown.length === 1, `attack: 6 points, 4 objects, 1 unknown (got ${r.advanced}/${r.kept}/${r.unknown.length})`);
+	check(['A', 'B', 'C', 'D', 'E', 'F'].every((x) => lines.some((l) => l.startsWith(x + '.') && l.includes('"advance"'))), 'attack with a point written advance');
+	check(['G', 'H', 'I', 'J', 'K'].every((x) => lines.some((l) => l.startsWith(x + '.') && l.includes('"attack"'))), 'attack with an object (or unknown) kept');
+	check(lines.some((l) => l === 'L.SetCommand("move", p_P1);'), 'other commands untouched');
+	check(S.targetKind('Caesar.obj.pos', new Map()) === 'point' && S.targetKind('Q_X.GetObjList()[0]', new Map()) === 'unknown', 'target kinds');
+}
+
+// No sentries: settlements get extrasentries="0", each map gets the I1_NoSentries sequence, and its script calls only
+// functions Great Battles of Rome has.
+{
+	const A = require('./lib/adventure');
+	const report = new A.Report();
+	const classes = {
+		resolve: (id) => ({ to: id, substituted: false }),
+		gbrCpp: (id) => (id === 'RArch' ? 'CVXDecor' : 'CVXUnit'),
+		i1DisplayName: () => null,
+		gbrDisplayName: () => null,
+	};
+	const objects = [
+		'\t<mapobject>',
+		'\t\t<settlement',
+		'\t\t\tid="1"',
+		'\t\t\tplayer="5"',
+		'\t\t\tmaxpopulation="0"',
+		'\t\t\tname="S">',
+		'\t<scriptobj',
+		'\t\tclass="RArch"',
+		'\t\tnum="7"',
+		'\tplayer="5"',
+		'\tflags="0x80800010"/>',
+		'\t\t</settlement>',
+		'\t</mapobject>',
+		'',
+	].join('\r\n');
+	const t = A.convertObjects(objects, classes, { hasGameres: () => false }, report, 'map.obj.xml');
+	const doc = X.parseXml(t).root;
+	const sett = doc.children.find((c) => c.name === 'settlement');
+	const arch = doc.children.find((c) => c.name === 'scriptobj');
+	check(sett && sett.attrs.get('extrasentries') === '0', 'settlement given extrasentries="0"');
+	check(arch && arch.attrs.get('flags') === '0x80000000' && !arch.attrs.has('player') && !sett.children.length, 'decor taken out of its settlement, without player');
+	const out = new Map([['Maps/7/Sequences/sequences.xml', Buffer.from('\t<sequences>\r\n\t\t<sequence\r\n\t\t\tname="A"\r\n\t\t\twizard=""\r\n\t\t\tscript="CurrentMap/sequences/seq4.vs">\r\n\t\t</sequence>\r\n\t</sequences>\r\n')], ['Maps/7/Sequences/seq4.vs', Buffer.from('//void')]]);
+	const p = A.addMapSequence(out, '7', 'I1_NoSentries', A.NO_SENTRIES_SCRIPT);
+	const seqs = X.parseXml(out.get('Maps/7/Sequences/sequences.xml').toString()).root.children;
+	check(p === 'Maps/7/Sequences/seq5.vs' && seqs.length === 2 && seqs[1].attrs.get('script') === 'CurrentMap/sequences/seq5.vs', 'map sequence added as the next seqN.vs');
+	const { readFunctions } = require('./lib/catalog');
+	const fns = readFunctions(require('path').join(__dirname, '..', '..', 'sdk', 'game-functions.txt'));
+	const missing = S.listCalls(A.NO_SENTRIES_SCRIPT).filter((c) => !['if', 'for', 'while'].includes(c.name) && !(c.method ? fns.methods.has(c.name) : fns.functions.has(c.name)));
+	check(!missing.length, `no-sentries script calls only game functions (${missing.map((c) => c.name).join(', ')})`);
+	const table = A.addEntries('<translationtable/>', [{ text: 'NO_Teuton5', result: 'Jinete teutón' }]);
+	check(/<translationtableentry text="NO_Teuton5" id="actor name" result="Jinete teutón"\/>/.test(table), 'actor name entry added to an empty table');
+	const names = A.classNameTable(Buffer.from('<translationtable><translationtableentry text="Teuton Raider" context="TeutonWolf class" result="Jinete teutón"/></translationtable>'), 'class');
+	check(names.get('teutonwolf') === 'Jinete teutón', 'class names read by context');
+}
+
+// Audit: strings of an executable, calls with their arguments, and the census lines.
+{
+	const AU = require('./lib/audit');
+	const s = AU.exeStrings(Buffer.from('\0persist_state\0x\0Icon\0\x01ab\0'));
+	check(s.exact.has('persist_state') && s.exact.has('Icon') && !s.exact.has('x'), 'executable strings');
+	const c = AU.calls('A.SetCommand("attack", AreaCenter("X"));\nDiplCeaseFire(1, 2, true);\nB.AddCommand(false, "move", p);');
+	const set = c.find((x) => x.name === 'SetCommand');
+	const dipl = c.find((x) => x.name === 'DiplCeaseFire');
+	const add = c.find((x) => x.name === 'AddCommand');
+	check(set && set.args === 2 && set.verb === 'attack' && dipl && dipl.args === 3 && !dipl.method && add.verb === 'move', 'calls, arguments and verbs');
+	const objs = '\t<mapobject>\r\n\t<scriptobj\r\n\t\tclass="GAxeman"\r\n\t\tnum="1"\r\n\tplayer="2"\r\n\tflags="0x80400002"/>\r\n\t</mapobject>\r\n';
+	const census = AU.compareCensus('I1PROBE census map=Map1 round=0 player=2 class=GAxeman kind=Unit x=1 y=2 health=5 inholder=0\n', new Map([['Maps/7/map.obj.xml', Buffer.from(objs)]]), new Map([['7', 'Map1']]));
+	check(/GAxeman\s*\|\s*2\s*\|\s*1\s*\|\s*1\s*\|\s*0/.test(census), 'census compared with the map');
+}
+
+// The real conversion, when both games are installed (I1_DIR / GBR_DIR, or their usual folders): it must convert with no
+// check or audit error, so that no class, attribute or call Great Battles of Rome lacks slips in.
+{
+	const fs = require('fs');
+	const path = require('path');
+	const os = require('os');
+	const i1 = process.env.I1_DIR || 'C:/Program Files (x86)/Imperivm. La guerra de las Galias';
+	const gbr = process.env.GBR_DIR || 'C:/Program Files (x86)/Steam/steamapps/common/Imperivm - Great Battles of Rome HD';
+	if (fs.existsSync(path.join(i1, 'data.pak')) && fs.existsSync(path.join(gbr, 'gbr.exe'))) {
+		const out = fs.mkdtempSync(path.join(os.tmpdir(), 'i1audit-'));
+		const r = require('child_process').spawnSync(process.execPath, [path.join(__dirname, 'convert.js'), '--i1', i1, '--gbr', gbr, '--out', out, '--dry-run', '--audit'], { encoding: 'utf8', maxBuffer: 1 << 28 });
+		const audit = fs.existsSync(path.join(out, 'audit.txt')) ? fs.readFileSync(path.join(out, 'audit.txt'), 'utf8') : '';
+		check(r.status === 0 && /\nErrors: 0\n/.test(audit), `the campaign converts with no check or audit error (see ${out})`);
+		if (r.status === 0) fs.rmSync(out, { recursive: true, force: true });
+	} else {
+		console.log('skipped: the real conversion (Imperivm I or Great Battles of Rome not installed; set I1_DIR and GBR_DIR)');
+	}
 }
 
 console.log(`${checks - failures} of ${checks} checks passed`);

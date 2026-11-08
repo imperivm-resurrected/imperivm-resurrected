@@ -13,7 +13,9 @@ const CLASS_SUBSTITUTES = {
 	GVikingLord: 'BVikingLord', // Thoric, the Viking Lord (also known as "Thoric" in both games)
 	// Same unit, the Teuton version of Great Battles of Rome.
 	TeutonArcher: 'TTeutonArcher',
-	TeutonWolf: 'TTeutonWolf',
+	// Imperivm I's TeutonWolf is the same rider as TeutonMetal (entity, stats and name "Teuton Raider", in Spanish
+	// "Jinete teutón"); Great Battles of Rome's TTeutonWolf is another unit ("Teuton Wolf", "Asaltador teutón").
+	TeutonWolf: 'TTeutonRider',
 	TeutonMetal: 'TTeutonRider',
 	GWFighter: 'GWomanWarrior',
 	// Heroes without an equivalent: another hero of the same race; the object keeps the original name.
@@ -109,7 +111,8 @@ const HOLDER_SPAWNS = {
 	'11945/M20_Q_MiddleInnerDefenders': {
 		owner: 4,
 		back: [
-			['seq34.vs', /^\s*M20_Q_MiddleInnerDefenders\.SetCommand\("attack"/m, 'before', 13],
+			// "attack" given a point is written "advance" before this rule runs.
+			['seq34.vs', /^\s*M20_Q_MiddleInnerDefenders\.SetCommand\("advance"/m, 'before', 13],
 			['seq34.vs', /^\s*M20_Q_MiddleInnerDefenders\.SetCommand\("enter"/m, 'before', 4],
 		],
 		why: 'player 13 defenders garrison S_Fortress (player 4, no ceasefire between them): they belong to player 4 while they are inside and to player 13 when seq34 sends them to attack',
@@ -160,4 +163,37 @@ const STAMINA = {
 	CVXTownHall: 20,
 };
 
-module.exports = { ADVENTURE_TEXTS, HOLDER_SPAWNS, HOLDER_SPAWNS_KEPT, STAMINA, PLAYER_CONTROL, CLASS_SUBSTITUTES, RACES, FUNCTION_RENAMES, RESEARCH_RENAMES, TIMED_RITUALS, TERRAIN_FALLBACKS, GAME_PROPERTIES };
+// Behaviour scripts that Great Battles of Rome's classes run and Imperivm I's did not (data/subai/...), read from the
+// game's own scripts: what each one does to a converted map. The audit lists them; one not here is a warning.
+const GBR_BEHAVIORS = {
+	'data/subai/gate_patrol.vs': 'sentries at the gate: the I1_NoSentries sequence keeps every settlement without them',
+	'data/subai/wall_patrol.vs': 'sentries on the walls: the I1_NoSentries sequence keeps every settlement without them',
+	'data/subai/townhall_sentries_control.vs': 'gives the settlement 20 sentries and 4 more every 30 s: undone by the I1_NoSentries sequence',
+	'data/subai/townhall_autotrain.vs': 'trains the units inside only when the player turns "autotrain" on: idle in a scripted map',
+	'data/subai/arena_behavior.vs': 'trains units only when the player orders it from the building: idle in a scripted map',
+	'data/subai/settlement_behavior_horses.vs': 'wild horses (WildHorse) near the settlement go to player 15: the campaign has none',
+	'data/subai/village_behavior_supply.vs': 'a village sends its gold and food to the settlement it supplies, only if the player sets one',
+	'data/subai/outpost_behavior.vs': 'only for independent outposts: spawns their defenders and keeps loyalty at 100; also orders enemy units out (see the holder spawns)',
+	'data/subai/teuton_feeding.vs': 'Teuton units given an order start "feeding" (Great Battles of Rome\'s Teuton upkeep); DIFFERS from Imperivm I',
+	'data/subai/sneak_behavior.vs': 'the Gaul druid hides after 20 s without attacking; DIFFERS from Imperivm I, where druids hide only when told',
+	'data/subai/hero_skill_behaviour.vs': 'computer heroes spend skill points and cast skills; DIFFERS from Imperivm I (no hero skills)',
+	'data/subai/stonehenge_charge.vs': 'Stonehenge refills the stamina of units near it, one per second',
+	'data/subai/summoning_behavior.vs': 'a summoned ghost loses stamina and dies when it runs out (the summon lasts a while)',
+	'data/subai/teleport_force_exit.vs': 'units left inside a teleport\'s settlement are sent through it',
+};
+
+module.exports = {
+	ADVENTURE_TEXTS,
+	HOLDER_SPAWNS,
+	HOLDER_SPAWNS_KEPT,
+	STAMINA,
+	PLAYER_CONTROL,
+	CLASS_SUBSTITUTES,
+	RACES,
+	FUNCTION_RENAMES,
+	RESEARCH_RENAMES,
+	TIMED_RITUALS,
+	TERRAIN_FALLBACKS,
+	GAME_PROPERTIES,
+	GBR_BEHAVIORS,
+};

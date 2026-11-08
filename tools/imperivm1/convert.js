@@ -2,6 +2,7 @@
 //
 //   node tools/imperivm1/convert.js --i1 "<Imperivm I folder>" --gbr "<Great Battles of Rome folder>" --out <folder>
 //        [--name "<adventure name>"] [--dry-run] [--keep-class <I1 class>]... [--movies] [--unpacked] [--probe]
+//        [--audit] [--census <imperivm-mod.log>]
 //
 //   --i1          the Imperivm I install (read only): adventures\Celtic Kings Adventure.bfhp, data.pak, assets.pak, local.pak
 //   --gbr         the Great Battles of Rome install (read only): Packs\data.pak, MapObjects.pak and UI.pak
@@ -13,7 +14,12 @@
 //                 from movies\ (they have to be copied to the game's Movies folder); without it, the calls are commented out
 //   --unpacked    also writes the files of the adventure, unpacked, to <out>\unpacked\
 //   --probe       adds diagnostics to the Kormaris opening that write "I1PROBE ..." lines to
-//                 Logs\imperivm\imperivm-mod.log (they need Imperivm Resurrected's Mod_Log); for testing only
+//                 Logs\imperivm\imperivm-mod.log (they need Imperivm Resurrected's Mod_Log); for testing only. On every
+//                 map it also lists the units and buildings in the world ("I1PROBE census")
+//   --audit       writes <out>\audit.txt: what the conversion keeps of each XML attribute, the diplomacy, the script API
+//                 and the classes, against Great Battles of Rome's own adventures and gbr.exe (lib/audit.js); its errors
+//                 fail the conversion
+//   --census      with --audit, compares the "I1PROBE census" lines of a --probe build's log with the maps
 //
 // The output is a conversion of your own copy of the game, for your own use: do not redistribute it.
 'use strict';
@@ -24,6 +30,7 @@ const { loadGbr, loadI1, findFile } = require('./lib/catalog');
 const { convertAdventure } = require('./lib/adventure');
 const { validateAdventure } = require('./lib/validate');
 const { readBmp, writeBmp24, coverResize, fillKey } = require('./lib/bmp');
+const { auditAdventure, compareCensus } = require('./lib/audit');
 
 const ADVENTURE = 'Celtic Kings Adventure';
 
@@ -44,6 +51,8 @@ function parseArgs(argv) {
 		else if (a === '--movies') opts.movies = true;
 		else if (a === '--unpacked') opts.unpacked = true;
 		else if (a === '--probe') opts.probe = true;
+		else if (a === '--audit') opts.audit = true;
+		else if (a === '--census') opts.census = value();
 		else throw new Error(`unknown option ${a}`);
 	}
 	if (!opts.i1 || !opts.gbr || !opts.out) throw new Error('--i1, --gbr and --out are required');
@@ -66,6 +75,28 @@ function findMovies(i1Dir) {
 		if (head.readUInt32BE(0) === 0x000001ba) movies.set(m[1].toLowerCase(), { file: path.join(packs, f), name: `imperivm1_${m[1].toLowerCase()}.mpg` });
 	}
 	return movies;
+}
+
+// The XML files of Great Battles of Rome's own adventures (read only), for the audit; not the package named `skip`.
+function referenceAdventures(gbrDir, skip) {
+	const files = new Map();
+	const walk = (dir, rel) => {
+		for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+			const full = path.join(dir, e.name);
+			if (e.isDirectory()) walk(full, `${rel}${e.name}/`);
+			else if (/\.bfhp$/i.test(e.name) && e.name.toLowerCase() !== `${skip}.bfhp`.toLowerCase()) {
+				let entries;
+				try {
+					entries = readHpfs(fs.readFileSync(full)).entries;
+				} catch {
+					continue;
+				}
+				for (const x of entries) if (!x.directory && /\.xml$/i.test(x.path)) files.set(`${rel}${e.name}/${x.path}`, x.data);
+			}
+		}
+	};
+	walk(path.join(gbrDir, 'adventures'), '');
+	return files;
 }
 
 function main() {
@@ -109,6 +140,23 @@ function main() {
 	for (const [p, buf] of result.files) if (!backFiles.has(p) || !backFiles.get(p).equals(buf)) roundTrip = false;
 	for (const d of result.dirs) if (!back.entries.some((e) => e.directory && e.path === d)) roundTrip = false;
 	if (!roundTrip) check.errors.push('the written package does not read back to the same files');
+	let audit = null;
+	if (opts.audit) {
+		console.log('auditing...');
+		audit = auditAdventure({
+			i1Files: files,
+			outFiles: result.files,
+			refFiles: referenceAdventures(opts.gbr, opts.name),
+			gbr,
+			i1,
+			gbrExe: fs.readFileSync(findFile(opts.gbr, 'gbr.exe')),
+			i1Exe: fs.readFileSync(findFile(opts.i1, 'Imperivm.exe')),
+			actorRows: result.actorRows,
+			modFunctions: new Set(['Mod_Log', 'Mod_LogInt']),
+		});
+		for (const e of audit.errors) check.errors.push(`audit: ${e}`);
+		report.add('Audit', `${audit.errors.length} errors, ${audit.warnings.length} warnings (audit.txt)`);
+	}
 	const stats = check.stats;
 	report.add(
 		'Checks',
@@ -121,6 +169,11 @@ function main() {
 
 	fs.mkdirSync(opts.out, { recursive: true });
 	const reportText = report.toText();
+	if (audit) {
+		let t = audit.text;
+		if (opts.census) t += `\nCensus: the I1PROBE census lines of ${opts.census} against the maps\n${compareCensus(fs.readFileSync(opts.census, 'latin1'), result.files, result.mapNames)}`;
+		fs.writeFileSync(path.join(opts.out, 'audit.txt'), t);
+	}
 	fs.writeFileSync(path.join(opts.out, 'report.txt'), reportText);
 	if (!opts.dryRun) {
 		if (check.errors.length) {

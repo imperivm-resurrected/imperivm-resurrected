@@ -217,4 +217,41 @@ function addProbe(path, src) {
 	return S.insertDeclarations(out, DECLARATIONS);
 }
 
-module.exports = { addProbe };
+// A sequence of the whole adventure that, on every map, lists what is in the world: one "I1PROBE census" line per unit and
+// building of every player, 3 s, 60 s and 5 min after the map starts. audit.compareCensus reads them back.
+function censusSequence() {
+	return [
+		'//void',
+		'ObjList i1c_l;',
+		'Obj i1c_o;',
+		'int i1c_r, i1c_p, i1c_i, i1c_k;',
+		'str i1c_s, i1c_kind;',
+		'',
+		'for (i1c_r = 0; i1c_r < 3; i1c_r += 1)',
+		'{',
+		'\tif (i1c_r == 0) Sleep(3000);',
+		'\tif (i1c_r == 1) Sleep(57000);',
+		'\tif (i1c_r == 2) Sleep(240000);',
+		'\tMod_Log("I1PROBE census begin map=" + MapName() + " round=" + i1c_r + " t=" + GetTime());',
+		'\tfor (i1c_k = 0; i1c_k < 2; i1c_k += 1)',
+		'\t{',
+		'\t\tif (i1c_k == 0) i1c_kind = "Unit"; else i1c_kind = "Building";',
+		'\t\tfor (i1c_p = 0; i1c_p <= 16; i1c_p += 1)',
+		'\t\t{',
+		'\t\t\ti1c_l = ClassPlayerObjs(i1c_kind, i1c_p).GetObjList();',
+		'\t\t\tfor (i1c_i = 0; i1c_i < i1c_l.count; i1c_i += 1)',
+		'\t\t\t{',
+		'\t\t\t\ti1c_o = i1c_l[i1c_i];',
+		'\t\t\t\ti1c_s = "I1PROBE census map=" + MapName() + " round=" + i1c_r + " player=" + i1c_p + " class=" + i1c_o.class() + " kind=" + i1c_kind + " x=" + i1c_o.pos.x + " y=" + i1c_o.pos.y + " health=" + i1c_o.health;',
+		'\t\t\t\tif (i1c_k == 0) { if (i1c_o.AsUnit().InHolder()) i1c_s = i1c_s + " inholder=1"; else i1c_s = i1c_s + " inholder=0"; }',
+		'\t\t\t\tMod_Log(i1c_s);',
+		'\t\t\t}',
+		'\t\t}',
+		'\t}',
+		'\tMod_Log("I1PROBE census end map=" + MapName() + " round=" + i1c_r);',
+		'}',
+		'',
+	].join('\r\n');
+}
+
+module.exports = { addProbe, censusSequence };
