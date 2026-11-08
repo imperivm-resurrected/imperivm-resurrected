@@ -90,7 +90,7 @@ std::string EncodeMods(const std::string &scenModId, int &optional)
 		m.gbFile = DlInstalledGbFile(m);
 		mounted.push_back(m);
 	}
-	return EncodeModList(mounted, scenModId, optional);
+	return EncodeModList(mounted, scenModId, optional, ModsMountedProfile().ruleset);
 }
 
 std::string OwnKey()

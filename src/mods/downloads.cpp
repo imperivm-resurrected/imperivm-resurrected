@@ -1992,7 +1992,8 @@ bool IsRoomVersion(const ModInfo &m, const RoomModRequest &r)
 bool FindInstalledCopy(const RoomModRequest &r, std::string &folder, const std::set<std::string> &skip = {})
 {
 	for (const ModInfo &m : ModsList()) {
-		if (IsRoomVersion(m, r) && !skip.count(m.folder) && ModsCompareRoomCopy(m, r.copyKey) != RoomCopy::kOther) {
+		if (IsRoomVersion(m, r) && !skip.count(m.folder) && ModsCompareRoomCopy(m, r.copyKey) != RoomCopy::kOther &&
+			ModsCompareRoomLayer(m, r.layer, r.layerKey) != RoomCopy::kOther) {
 			folder = m.folder;
 			return true;
 		}

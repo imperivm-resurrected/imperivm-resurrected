@@ -128,11 +128,12 @@ std::string ModsActivateProfileFor(const ModNeeds &needs, const std::string &lab
 	return p.name;
 }
 
-ModProfile ModsLooseProfileWith(const std::vector<std::string> &folders)
+ModProfile ModsLooseProfileWith(const std::vector<std::string> &folders, const ModRuleset &ruleset)
 {
 	ModProfile p;
 	p.name = kNoProfile;
 	p.mods = folders;
+	p.ruleset = ruleset;
 	const std::vector<ModInfo> installed = ModsList();
 	const ModProfile active = ModsLoadProfile(ModsActiveProfileName());
 	p.choices = active.choices;

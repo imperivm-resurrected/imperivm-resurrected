@@ -19,6 +19,8 @@ struct OnlineMod {
 	uint64_t gbId = 0;
 	uint64_t gbFile = 0;
 	std::string copyKey;
+	// The ruleset of this package the room mounts: its id, its name for the player and the start of its gameplay hash. Empty if none.
+	std::string layer, layerName, layerKey;
 };
 
 struct OnlineSlot {

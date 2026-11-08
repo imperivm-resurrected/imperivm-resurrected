@@ -264,7 +264,8 @@ struct ModNeeds {
 };
 ModNeeds ModsNeededFor(const std::string &gamePath, const std::string &profile = "");
 std::string ModsActivateProfileFor(const ModNeeds &needs, const std::string &label);
-ModProfile ModsLooseProfileWith(const std::vector<std::string> &folders);
+// The profile "My content" with these packages (and the cosmetic ones already active), mounting the ruleset if there is one.
+ModProfile ModsLooseProfileWith(const std::vector<std::string> &folders, const ModRuleset &ruleset = ModRuleset());
 
 std::vector<std::string> ModsMountedLocalDirs();
 std::vector<std::string> ModsMountedDirs();

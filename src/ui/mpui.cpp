@@ -177,7 +177,8 @@ namespace {
 const ModInfo *ExactMod(const State &st, const OnlineMod &m)
 {
 	for (const ModInfo &i : st.mods) {
-		if (_stricmp(i.id.c_str(), m.id.c_str()) == 0 && i.version == m.version && ModsCompareRoomCopy(i, m.copyKey) != RoomCopy::kOther) return &i;
+		if (_stricmp(i.id.c_str(), m.id.c_str()) == 0 && i.version == m.version && ModsCompareRoomCopy(i, m.copyKey) != RoomCopy::kOther &&
+			ModsCompareRoomLayer(i, m.layer, m.layerKey) != RoomCopy::kOther) return &i;
 	}
 	return nullptr;
 }
