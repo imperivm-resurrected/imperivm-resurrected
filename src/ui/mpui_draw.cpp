@@ -378,7 +378,6 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 	g_s.hits = std::move(r.hits);
 	g_s.syncGeom = g_syncGeomOut;
 	g_s.createModsGeom = g_createModsGeomOut;
-	g_s.createCivGeom = g_createCivGeomOut;
 	const bool overlay = OverlayActive(st);
 	g_s.pickGeom = g_pickGeomOut;
 	g_s.optGeom = overlay || !st.game.active ? ListGeom() : g_optGeomOut;

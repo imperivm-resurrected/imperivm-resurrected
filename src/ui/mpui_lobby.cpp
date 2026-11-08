@@ -188,7 +188,6 @@ bool MpUiHostSave(const std::string &path)
 	g_s.passInput.clear();
 	g_s.createProfile = ModsMountedProfile().name;
 	g_s.createRuleset = ModsMountedProfile().ruleset;
-	g_s.createCivSets.clear();
 	LogI("saves", "online game: the room is created to load it");
 	DoAction(kCreateOk, 0);
 	return true;

@@ -105,7 +105,7 @@ struct OnlineRoom {
 };
 
 struct OnlineCreateSettings {
-	std::string name, map, mode, password, civSets;
+	std::string name, map, mode, password;
 	int maxPlayers = 4;
 	int visibility = 0;
 	bool spectators = true;

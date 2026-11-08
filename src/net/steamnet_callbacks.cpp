@@ -121,7 +121,6 @@ void OnCallback(int id, const void *data)
 		set("vis", std::to_string(g_creating.visibility));
 		set("key", OwnKey());
 		set("hkey", OwnHashKey());
-		if (!g_creating.civSets.empty()) set("civsets", g_creating.civSets);
 		PublishMods("");
 		set("irver", ModVersionText());
 		set("irlvl", ModsRulesLevel());

@@ -129,7 +129,6 @@ struct ProfileSummary {
 };
 
 extern ListGeom g_createModsGeomOut;
-extern ListGeom g_createCivGeomOut;
 std::vector<ListLine> BuildModLines(const std::vector<ModRow> &rows, const std::string &emptyText);
 int PaintLinesInline(Painter &p, const std::vector<ListLine> &lines, int x, int y, int w, int rowH);
 struct State {
@@ -198,7 +197,6 @@ struct State {
 	std::vector<std::string> profiles;
 	ProfileSummary createProfileInfo;
 	ModRuleset createRuleset;
-	std::vector<std::string> createCivSets;
 	bool skirmishCivs = false; // the skirmish room owns CivRoomSets until the multiplayer menu opens
 	bool civEdit = false; // the room's "Edit civilizations" row is on: the host sees the sets as toggles
 	uint64_t civSetsRoom = 0; // the room whose sets civSetsSeen holds, to tell a guest that the host changed them
@@ -217,8 +215,6 @@ struct State {
 	ListGeom syncGeom;
 	ListState createModsList;
 	ListGeom createModsGeom;
-	ListState createCivList;
-	ListGeom createCivGeom;
 	int syncPhase = 0;
 	DWORD syncStart = 0;
 	std::string syncError;

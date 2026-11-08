@@ -236,8 +236,6 @@ void DoAction(int action, int arg)
 				g_s.createProfile = g_s.profiles[arg];
 				g_s.createProfileInfo = ProfileSummaryFor(g_s.createProfile), g_s.createModsList = ListState();
 				g_s.createRuleset = ProfileRulesetFor(g_s.createProfile);
-				g_s.createCivSets.clear();
-				g_s.createCivList = ListState();
 				const std::string chosen = g_s.createSave >= 0 && g_s.createSave < static_cast<int>(g_s.saves.size()) ? g_s.saves[g_s.createSave].vfsPath : "";
 				g_s.saves = ListSaves();
 				g_s.createSave = -1;
@@ -521,7 +519,6 @@ void DoAction(int action, int arg)
 			g_s.nameInput = Tr("Game of ") + g_s.player;
 			g_s.createProfile = ModsMountedProfile().name;
 			g_s.createRuleset = ModsMountedProfile().ruleset;
-			g_s.createCivSets.clear();
 			DoAction(kCreateOk, 0);
 		}
 		else if (!r.host) {
@@ -649,17 +646,12 @@ void DoAction(int action, int arg)
 	case kCivSetToggle: {
 		const std::vector<CivSet> sets = CivsSets();
 		if (arg < 0 || arg >= static_cast<int>(sets.size())) break;
-		// In a room (skirmish or online) the host edits the sets the game reads, and the tick publishes them to the guests; the Create
-		// room dialog only keeps them for the room it will create.
-		const bool inRoom = g_s.game.active && g_s.game.host;
-		const std::vector<std::string> now = inRoom ? CivRoomSets() : g_s.createCivSets;
+		// Only the host of a room (skirmish or online) edits the sets the game reads; the tick publishes them to the guests.
+		if (!g_s.game.active || !g_s.game.host) break;
+		const std::vector<std::string> now = CivRoomSets();
 		std::vector<std::string> known;
 		for (const CivSet &s : sets) known.push_back(s.id);
 		const std::vector<std::string> chosen = CivSetsToggle(known, now, known[arg]);
-		if (!inRoom) {
-			g_s.createCivSets = chosen;
-			break;
-		}
 		if (chosen == now) break;
 		CivRoomSetsSet(chosen);
 		LogI("room", "civilization sets: %s", chosen.empty() ? "all" : CivSetsJoin(chosen).c_str());
@@ -731,8 +723,7 @@ void DoAction(int action, int arg)
 		s.name = g_s.nameInput.empty() ? Tr("Game of ") + g_s.player : g_s.nameInput;
 		s.map = "Chosen in the room";
 		s.mode = "Elimination";
-		s.civSets = CivSetsJoin(g_s.createCivSets);
-		CivRoomSetsSet(g_s.createCivSets);
+		CivRoomSetsSet({}); // a new room starts with every set allowed; the host edits them in the room
 		if (g_s.createVisibility == 1 && g_s.passInput.empty()) {
 			ModUiToast("Enter the room password.");
 			FocusField(kPassField);
@@ -884,7 +875,6 @@ void OpenMpMenu(bool checkRecover)
 	g_s.profiles = ModsProfileNames();
 	g_s.createProfile = ModsMountedProfile().name;
 	g_s.createRuleset = ModsMountedProfile().ruleset;
-	g_s.createCivSets.clear();
 	g_s.createProfileInfo = ProfileSummaryFor(g_s.createProfile), g_s.createModsList = ListState();
 	g_s.saves = ListSaves();
 	g_s.createSave = -1;
