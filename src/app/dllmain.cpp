@@ -50,6 +50,7 @@
 #include "net/lobbygates.h"
 #include "hooks/selectionguard.h"
 #include "hooks/curseguard.h"
+#include "hooks/itemdefguard.h"
 #include "hooks/handleguard.h"
 #include "game/packrules.h"
 #include "hooks/builtinfixes.h"
@@ -215,6 +216,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 		InstallLobbyGates(knownExe);
 		InstallSelectionGuard(knownExe);
 		InstallCurseGuard(knownExe);
+		InstallItemDefGuard(knownExe);
 		InstallHandleGuard(knownExe);
 		InstallPackRules(knownExe);
 		InstallRejoin(knownExe);
