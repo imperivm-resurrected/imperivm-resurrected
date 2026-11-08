@@ -510,6 +510,111 @@ function sightScript(rules) {
 	return lines.join(EOL);
 }
 
+// Combat stats. The two games hit differently (same levels, no class-pair bonus):
+//   Imperivm I (Imperivm.exe 004FCD37-004FCE8D): t = clamp(20 + attack bonus - defense, 0, 20), with the defense of the
+//     attacker's damage_type (defense_slash or defense_pierce, unit +0xC8/+0xCC); hit = minattack + (maxattack -
+//     minattack) * t / 20, times the class-pair percent of bonus.xml (100 but Catapult vs Building).
+//   Great Battles of Rome (CalcAttackOutcome 0050FF30, 00510D82-00510E40): hit = max(damage - armor_slash,
+//     damage * MinPercentOfAttackersDamage(20) / 100), times the level-difference table, at least MinDamage (3). Its
+//     combat reads only armor_slash (unit +0xE4), for arrows too; armor_pierce (+0xE8) is not read there.
+// Imperivm I's hit is not of the form damage - armor (a defense of 20 or more always gives minattack, and each point of
+// defense takes (max - min) / 20 off, which differs per attacker), so every converted unit class gets the damage and
+// armor that fit Imperivm I's hits best over the matchups of the campaign's classes: least squares of
+// hit(a, d) ~ damage(a) - armor(d), armor fitted on slash attackers (Great Battles of Rome has one armor), lowest armor 0.
+// Also its maxhealth and its speed (as a factor of Great Battles of Rome's, SetSpeedFactor). Only soldiers (Military):
+// heroes, druids, animals and peasants keep Great Battles of Rome's stats. Pierce attackers (archers) are fitted against
+// that same armor, so they match Imperivm I worst against units with very different slash and pierce defenses.
+// Returns the rules [{gbr, from, i1: {...}, base: {...}, set: {...}}].
+function statRules(i1, gbr, classes, usedClasses, report) {
+	const byId = (all) => {
+		const m = new Map();
+		for (const c of all.values()) for (const id of [c.id, c.altid].filter(Boolean)) if (!m.has(lower(id))) m.set(lower(id), c);
+		return m;
+	};
+	const I = byId(i1.classes);
+	const Gc = byId(gbr.classes);
+	const up = (m, id, key) => {
+		for (let c = m.get(lower(id || '')), n = 0; c && n < 32; c = c.parent && m.get(lower(c.parent)), n++) {
+			const v = key === 'cpp' ? c.cpp : c.stats && c.stats[key];
+			if (v !== null && v !== undefined) return v;
+		}
+		return null;
+	};
+	const num = (m, id, key) => Number(up(m, id, key) || 0);
+	const units = [];
+	for (const id of usedClasses) {
+		const c = I.get(lower(id));
+		if (!c || up(I, c.id, 'cpp') !== 'CVXUnit') continue;
+		// Soldiers only: animals and peasants keep Great Battles of Rome's (deer_idle.vs sets their speed factor itself).
+		let military = false;
+		for (let p = c, n = 0; p && n < 32; p = p.parent && I.get(lower(p.parent)), n++) if (lower(p.id) === 'military') military = true;
+		if (!military) continue;
+		const to = classes.resolve(c.id).to;
+		const g = to && Gc.get(lower(to));
+		if (!g || up(Gc, g.id, 'cpp') !== 'CVXUnit') continue;
+		units.push({
+			from: c.id,
+			gbr: g.id,
+			i1: { min: num(I, c.id, 'minattack'), max: num(I, c.id, 'maxattack'), slash: num(I, c.id, 'defense_slash'), pierce: num(I, c.id, 'defense_pierce'), health: num(I, c.id, 'maxhealth'), speed: num(I, c.id, 'speed'), type: up(I, c.id, 'damage_type') || 'slash' },
+			base: { damage: num(Gc, g.id, 'damage'), slash: num(Gc, g.id, 'armor_slash'), pierce: num(Gc, g.id, 'armor_pierce'), health: num(Gc, g.id, 'maxhealth'), speed: num(Gc, g.id, 'speed') },
+		});
+	}
+	const hit = (a, d) => {
+		const def = a.i1.type === 'pierce' ? d.i1.pierce : d.i1.slash;
+		return a.i1.min + ((a.i1.max - a.i1.min) * Math.max(0, Math.min(20, 20 - def))) / 20;
+	};
+	const fighters = units.filter((u) => u.i1.max > 0);
+	const slashers = fighters.filter((u) => u.i1.type !== 'pierce');
+	const damage = new Map();
+	const armor = new Map(units.map((u) => [u.from, 0]));
+	for (let it = 0; it < 60 && fighters.length && slashers.length; it++) {
+		for (const a of fighters) damage.set(a.from, units.reduce((s, d) => s + hit(a, d) + armor.get(d.from), 0) / units.length);
+		for (const d of units) armor.set(d.from, slashers.reduce((s, a) => s + damage.get(a.from) - hit(a, d), 0) / slashers.length);
+		const low = Math.min(...armor.values());
+		for (const k of armor.keys()) armor.set(k, armor.get(k) - low);
+	}
+	for (const a of fighters) damage.set(a.from, units.reduce((s, d) => s + hit(a, d) + armor.get(d.from), 0) / units.length);
+	const rules = new Map();
+	for (const u of units) {
+		if (rules.has(u.gbr)) continue;
+		const set = {
+			damage: u.i1.max > 0 ? Math.round(damage.get(u.from)) : u.base.damage,
+			armor: Math.round(armor.get(u.from)),
+			health: u.i1.health || u.base.health,
+			speed: u.i1.speed && u.base.speed ? Math.round((100 * u.i1.speed) / u.base.speed) : 100,
+		};
+		const changes = set.damage !== u.base.damage || set.armor !== u.base.slash || set.health !== u.base.health || set.speed !== 100;
+		if (!changes) continue;
+		// The speed factor marks a unit as done (a unit not yet done has 100), so it is never left at 100.
+		if (set.speed === 100) set.speed = 101;
+		rules.set(u.gbr, { ...u, set });
+	}
+	const out = [...rules.values()].sort((x, y) => x.gbr.localeCompare(y.gbr));
+	for (const r of out) {
+		report.add('Combat stats', `${r.gbr} (Imperivm I's ${r.from}): damage ${r.base.damage} -> ${r.set.damage}, armor ${r.base.slash} -> ${r.set.armor}, maxhealth ${r.base.health} -> ${r.set.health}, speed x${r.set.speed}%`);
+	}
+	return out;
+}
+
+// Every 500 ms, each unit of one of those classes whose speed factor is still 100 gets the differences as a bonus
+// (Unit::AddBonus, kept per unit in g_pUnitBonuses, which saves with the game) and its speed factor (saved with the unit
+// as "speedfactor"). A unit carried to another map is a new object (CVXUnit::CopyStateTo 005DD2D0 copies neither), so it
+// gets them again there; a saved game keeps both, so nothing is given twice. A unit at full health stays at full health.
+function statsScript(rules) {
+	const lines = ['//void', 'ObjList i1x_l;', 'Obj i1x_o;', 'Unit i1x_u;', 'int i1x_p, i1x_i, i1x_h, i1x_m;', 'str i1x_c;', '', 'while (1)', '{', '\tfor (i1x_p = 0; i1x_p <= 16; i1x_p += 1)', '\t{'];
+	lines.push('\t\ti1x_l = ClassPlayerObjs("Unit", i1x_p).GetObjList();', '\t\tfor (i1x_i = 0; i1x_i < i1x_l.count; i1x_i += 1)', '\t\t{', '\t\t\ti1x_o = i1x_l[i1x_i];', '\t\t\ti1x_u = i1x_o.AsUnit();');
+	lines.push('\t\t\tif (i1x_o.IsAlive() && i1x_u.speed_factor == 100)', '\t\t\t{', '\t\t\t\ti1x_c = i1x_o.class();', '\t\t\t\ti1x_h = i1x_o.health;', '\t\t\t\ti1x_m = i1x_o.maxhealth;');
+	rules.forEach((r, k) => {
+		const d = r.set.damage - r.base.damage;
+		const h = r.set.health - r.base.health;
+		const s = r.set.armor - r.base.slash;
+		const p = r.set.armor - r.base.pierce;
+		lines.push(`\t\t\t\t${k ? 'else ' : ''}if (i1x_c == "${r.gbr}") { i1x_u.AddBonus(${d}, ${h}, 0, ${s}, ${p}); i1x_u.SetSpeedFactor(${r.set.speed}); }`);
+	});
+	lines.push('\t\t\t\tif (i1x_h >= i1x_m && i1x_o.maxhealth > i1x_m) i1x_o.Heal(i1x_o.maxhealth - i1x_m);', '\t\t\t}', '\t\t}', '\t}', '\tSleep(500);', '}', '');
+	return lines.join(EOL);
+}
+
 // Adds a sequence to a map: a new seqN.vs and its entry in the map's sequences.xml. Returns the script's path.
 function addMapSequence(out, mapId, name, script) {
 	const dir = `Maps/${mapId}/Sequences/`;
@@ -941,7 +1046,16 @@ function convertAdventure(input) {
 	const sight = sightRules(i1, gbr, classes, report);
 	for (const r of sight) report.add('Sight', `${r.gbr}: ${r.base} -> ${r.i1} (Imperivm I's ${r.from})`);
 	const sightSrc = sightScript(sight);
+	// The unit classes the campaign places or spawns, for the stat fit.
+	const usedClasses = new Set();
+	for (const [p, buf] of files) if (/^Maps\/[^/]+\/map\.obj\.xml$/i.test(p)) for (const m of text(buf).matchAll(/<scriptobj\s+class="([^"]*)"/g)) usedClasses.add(m[1]);
+	const stats = statRules(i1, gbr, classes, [...usedClasses].sort(), report);
+	const statsSrc = stats.length ? statsScript(stats) : null;
 	for (const id of mapNames.keys()) {
+		if (statsSrc) {
+			addMapSequence(out, id, 'I1_Stats', statsSrc);
+			report.count('Combat stats', 'maps given the I1_Stats sequence (units fight with stats fitted to Imperivm I\'s)');
+		}
 		addMapSequence(out, id, 'I1_Sight', sightSrc);
 		report.count('Sight', 'maps given the I1_Sight sequence (units get Imperivm I\'s sight and never hide on their own)');
 		addMapSequence(out, id, 'I1_NoSentries', NO_SENTRIES_SCRIPT);
@@ -961,7 +1075,7 @@ function convertAdventure(input) {
 	// vxlog.log), and the code that loads the map's conversations throws when that load fails.
 	const dirs = ['Conversations', 'Resources'];
 	report.add('Adventure', 'empty Conversations and Resources folders, as in Great Battles of Rome\'s adventures');
-	return { files: out, dirs, report, mapNames, customItems, terrain, decors, classes, actorRows, sight };
+	return { files: out, dirs, report, mapNames, customItems, terrain, decors, classes, actorRows, sight, stats };
 }
 
 // The actors of the conversations. A phrase's title is the actor's name looked up in the translation tables, and its
@@ -1188,4 +1302,6 @@ module.exports = {
 	addEntries,
 	NO_SENTRIES_SCRIPT,
 	sightScript,
+	statsScript,
+	statRules,
 };

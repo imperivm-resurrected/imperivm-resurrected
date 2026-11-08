@@ -52,7 +52,9 @@ const KNOWN = {
 	'function|WaitEmptyQuery': 'reviewed: GBR counts a dead unit until its body goes (6-8 s in Kormaris), Imperivm I goes on at its death; written as a loop that counts living units (IsAlive)',
 	'function|WaitQueryCountBetween': 'reviewed: GBR counts a dead unit until its body goes; written as a loop that counts living units (IsAlive)',
 	'method|ClearDead': 'reviewed: in GBR it drops only objects that no longer exist (ObjList::ClearDead 0055F430), not dead units whose bodies remain',
-	'method|SetSight': 'added: units get Imperivm I\'s sight, the radius in which they pick a target on their own',
+	'method|AddBonus': 'added: soldiers get the damage, armor and maxhealth fitted to Imperivm I\'s hits (I1_Stats; the formulas are in adventure.statRules)',
+	'method|SetSpeedFactor': 'added: soldiers move at Imperivm I\'s speed; the factor also marks a unit as done',
+	'method|SetSight':'added: units get Imperivm I\'s sight, the radius in which they pick a target on their own',
 	'verb|hide': 'Gaul druids cannot hide in Great Battles of Rome: the calls are written SetVisible(false) on the target',
 	'verb|mist': 'Gaul druids cannot cast mist in Great Battles of Rome: the calls place the Mist object',
 };
@@ -794,6 +796,15 @@ function auditAdventure(input) {
 	if (input.sight) {
 		out.push('', 'D. Unit sight, also the radius in which a unit picks a target on its own (gbr.exe 005DCA61): Great Battles of Rome -> Imperivm I, set by the I1_Sight sequence');
 		out.push(table(['GBR class', 'GBR sight', 'I1 sight', 'I1 class'], input.sight.map((r) => [r.gbr, String(r.base), String(r.i1), r.from])));
+	}
+	if (input.stats) {
+		out.push('', 'D. Combat stats (I1_Stats): Imperivm I min-max attack, defense slash/pierce, maxhealth, speed; Great Battles of Rome damage, armor slash/pierce, maxhealth, speed; what the unit gets (damage/armor fitted to Imperivm I\'s hits, see adventure.statRules)');
+		out.push(
+			table(
+				['GBR class', 'I1 class', 'I1 attack', 'I1 def s/p', 'I1 hp', 'I1 speed', 'GBR dmg', 'GBR arm s/p', 'GBR hp', 'GBR speed', 'set dmg', 'set armor', 'set hp', 'speed %'],
+				input.stats.map((r) => [r.gbr, r.from, `${r.i1.min}-${r.i1.max} ${r.i1.type}`, `${r.i1.slash}/${r.i1.pierce}`, String(r.i1.health), String(r.i1.speed), String(r.base.damage), `${r.base.slash}/${r.base.pierce}`, String(r.base.health), String(r.base.speed), String(r.set.damage), String(r.set.armor), String(r.set.health), String(r.set.speed)]),
+			),
+		);
 	}
 	out.push('', 'D. Bits of the objects\' flags');
 	out.push(table(['bit', 'meaning', 'I1', 'out', 'GBR adventures'], D.bitsRows));

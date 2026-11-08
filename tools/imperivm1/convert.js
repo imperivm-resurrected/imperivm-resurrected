@@ -154,6 +154,7 @@ function main() {
 			i1Exe: fs.readFileSync(findFile(opts.i1, 'Imperivm.exe')),
 			actorRows: result.actorRows,
 			sight: result.sight,
+			stats: result.stats,
 			modFunctions: new Set(['Mod_Log', 'Mod_LogInt']),
 		});
 		for (const e of audit.errors) check.errors.push(`audit: ${e}`);
