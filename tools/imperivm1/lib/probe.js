@@ -217,8 +217,9 @@ function addProbe(path, src) {
 	return S.insertDeclarations(out, DECLARATIONS);
 }
 
-// A sequence of the whole adventure that, on every map, lists what is in the world: one "I1PROBE census" line per unit and
-// building of every player, 3 s, 60 s and 5 min after the map starts. audit.compareCensus reads them back.
+// A sequence added to every map that lists what is in the world: one "I1PROBE census" line per unit and building of every
+// player (gates say whether they are open), and one per player with its cease-fire towards player 1 and back, 3 s, 60 s
+// and 5 min after the map starts. audit.compareCensus reads them back.
 function censusSequence() {
 	return [
 		'//void',
@@ -244,9 +245,17 @@ function censusSequence() {
 		'\t\t\t\ti1c_o = i1c_l[i1c_i];',
 		'\t\t\t\ti1c_s = "I1PROBE census map=" + MapName() + " round=" + i1c_r + " player=" + i1c_p + " class=" + i1c_o.class() + " kind=" + i1c_kind + " x=" + i1c_o.pos.x + " y=" + i1c_o.pos.y + " health=" + i1c_o.health;',
 		'\t\t\t\tif (i1c_k == 0) { if (i1c_o.AsUnit().InHolder()) i1c_s = i1c_s + " inholder=1"; else i1c_s = i1c_s + " inholder=0"; }',
+		'\t\t\t\tif (i1c_k == 1) { if (i1c_o.AsGate().IsValid()) { if (i1c_o.AsGate().IsOpened()) i1c_s = i1c_s + " gate=open"; else i1c_s = i1c_s + " gate=closed"; } }',
 		'\t\t\t\tMod_Log(i1c_s);',
 		'\t\t\t}',
 		'\t\t}',
+		'\t}',
+		'\tfor (i1c_p = 0; i1c_p <= 16; i1c_p += 1)',
+		'\t{',
+		'\t\ti1c_s = "I1PROBE census dipl map=" + MapName() + " round=" + i1c_r + " player=" + i1c_p;',
+		'\t\tif (DiplGetCeaseFire(i1c_p, 1)) i1c_s = i1c_s + " ceasefire_to_1=1"; else i1c_s = i1c_s + " ceasefire_to_1=0";',
+		'\t\tif (DiplGetCeaseFire(1, i1c_p)) i1c_s = i1c_s + " ceasefire_from_1=1"; else i1c_s = i1c_s + " ceasefire_from_1=0";',
+		'\t\tMod_Log(i1c_s);',
 		'\t}',
 		'\tMod_Log("I1PROBE census end map=" + MapName() + " round=" + i1c_r);',
 		'}',

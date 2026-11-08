@@ -77,7 +77,7 @@ function findMovies(i1Dir) {
 	return movies;
 }
 
-// The XML files of Great Battles of Rome's own adventures (read only), for the audit; not the package named `skip`.
+// The files of Great Battles of Rome's own adventures (read only), for the audit; not the package named `skip`.
 function referenceAdventures(gbrDir, skip) {
 	const files = new Map();
 	const walk = (dir, rel) => {
@@ -91,7 +91,8 @@ function referenceAdventures(gbrDir, skip) {
 				} catch {
 					continue;
 				}
-				for (const x of entries) if (!x.directory && /\.xml$/i.test(x.path)) files.set(`${rel}${e.name}/${x.path}`, x.data);
+				// The XML files with their text; the others by name only (the audit counts them).
+				for (const x of entries) if (!x.directory) files.set(`${rel}${e.name}/${x.path}`, /\.xml$/i.test(x.path) ? x.data : Buffer.alloc(0));
 			}
 		}
 	};
