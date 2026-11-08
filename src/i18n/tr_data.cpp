@@ -1501,5 +1501,10 @@ extern const TrRow kTrRows[] = {
 	{"Next", "Siguiente", "Successivo"},
 	{"%s-%s of %s", "%s-%s de %s", "%s-%s di %s"},
 	{"Page %s of %s", "Página %s de %s", "Pagina %s di %s"},
+	{"Ruleset \"%s\" ignored: its id must be lowercase letters, numbers, - and _ (up to 24)", "Conjunto de reglas \"%s\" ignorado: su id debe ser letras minúsculas, números, - y _ (hasta 24)", "Set di regole \"%s\" ignorato: il suo id deve essere lettere minuscole, numeri, - e _ (fino a 24)"},
+	{"Ruleset \"%s\" ignored: its id is used twice", "Conjunto de reglas \"%s\" ignorado: su id está repetido", "Set di regole \"%s\" ignorato: il suo id è usato due volte"},
+	{"Ruleset \"%s\" ignored: its path must be a folder inside rulesets/", "Conjunto de reglas \"%s\" ignorado: su ruta debe ser una carpeta dentro de rulesets/", "Set di regole \"%s\" ignorato: il suo percorso deve essere una cartella dentro rulesets/"},
+	{"Ruleset \"%s\" ignored: its folder overlaps the one of \"%s\"", "Conjunto de reglas \"%s\" ignorado: su carpeta se solapa con la de \"%s\"", "Set di regole \"%s\" ignorato: la sua cartella si sovrappone a quella di \"%s\""},
+	{"Ruleset \"%s\" ignored: its folder %s does not exist", "Conjunto de reglas \"%s\" ignorado: su carpeta %s no existe", "Set di regole \"%s\" ignorato: la sua cartella %s non esiste"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

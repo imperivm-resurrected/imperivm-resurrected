@@ -1493,5 +1493,10 @@
 {"en":"Previous","es":"Anterior","it":"Precedente"},
 {"en":"Next","es":"Siguiente","it":"Successivo"},
 {"en":"%s-%s of %s","es":"%s-%s de %s","it":"%s-%s di %s"},
-{"en":"Page %s of %s","es":"Página %s de %s","it":"Pagina %s di %s"}
+{"en":"Page %s of %s","es":"Página %s de %s","it":"Pagina %s di %s"},
+{"en":"Ruleset \"%s\" ignored: its id must be lowercase letters, numbers, - and _ (up to 24)","es":"Conjunto de reglas \"%s\" ignorado: su id debe ser letras minúsculas, números, - y _ (hasta 24)","it":"Set di regole \"%s\" ignorato: il suo id deve essere lettere minuscole, numeri, - e _ (fino a 24)"},
+{"en":"Ruleset \"%s\" ignored: its id is used twice","es":"Conjunto de reglas \"%s\" ignorado: su id está repetido","it":"Set di regole \"%s\" ignorato: il suo id è usato due volte"},
+{"en":"Ruleset \"%s\" ignored: its path must be a folder inside rulesets/","es":"Conjunto de reglas \"%s\" ignorado: su ruta debe ser una carpeta dentro de rulesets/","it":"Set di regole \"%s\" ignorato: il suo percorso deve essere una cartella dentro rulesets/"},
+{"en":"Ruleset \"%s\" ignored: its folder overlaps the one of \"%s\"","es":"Conjunto de reglas \"%s\" ignorado: su carpeta se solapa con la de \"%s\"","it":"Set di regole \"%s\" ignorato: la sua cartella si sovrappone a quella di \"%s\""},
+{"en":"Ruleset \"%s\" ignored: its folder %s does not exist","es":"Conjunto de reglas \"%s\" ignorado: su carpeta %s no existe","it":"Set di regole \"%s\" ignorato: la sua cartella %s non esiste"}
 ]

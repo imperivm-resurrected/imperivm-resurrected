@@ -14,6 +14,7 @@
 #include "core/versioncmp.h"
 #include "mods/modclash.h"
 #include "mods/modrules.h"
+#include "mods/rulesets.h"
 #include "mods/mods.h"
 #include "mods/savelib.h"
 #include "addr/state.h"
@@ -68,6 +69,9 @@ struct ScanFile {
 	bool gameplay = false;
 	bool content = false;
 	std::string text;
+	// The ruleset this file belongs to ("" for the package root) and how many characters of rel are the folder of that ruleset.
+	std::string layer;
+	size_t layerStrip = 0;
 };
 
 extern std::map<std::string, std::vector<ScanFile>> g_scanFiles;

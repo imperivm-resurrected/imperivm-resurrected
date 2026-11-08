@@ -9,12 +9,14 @@
 #include "MinHook.h"
 #include "core/legacy.h"
 #include "core/guard.h"
+#include "i18n/tr.h"
 #include "mods/fingerprint.h"
 #include "mods/gbref.h"
 #include "mods/modvars.h"
 #include "mods/pak.h"
 #include "mods/rletail.h"
 #include "mods/hidefiles.h"
+#include "mods/rulesets.h"
 
 #include "mods/mods_internal.h"
 
@@ -168,6 +170,44 @@ void ReadManifest(ModInfo &m)
 			if (!l.names.empty()) m.orderLabels.push_back(l);
 		}
 	}
+	if (const Json *rs = j.Get("rulesets")) {
+		std::vector<RulesetDecl> decls;
+		std::vector<ModLayer> declared;
+		for (const Json &v : rs->arr) {
+			if (v.type != Json::Object) continue;
+			ModLayer l;
+			l.id = v.GetString("id");
+			l.name = LocalizedText(v, "name", l.id);
+			l.description = LocalizedText(v, "description", "");
+			declared.push_back(l);
+			decls.push_back({l.id, v.GetString("path")});
+		}
+		for (const RulesetIssue &issue : RulesetResolve(decls)) {
+			const std::string id = issue.id, other = issue.other;
+			switch (issue.problem) {
+			case RulesetProblem::kBadId:
+				m.rulesetProblems.push_back(TrFmt("Ruleset \"%s\" ignored: its id must be lowercase letters, numbers, - and _ (up to 24)", {id}));
+				break;
+			case RulesetProblem::kDuplicate:
+				m.rulesetProblems.push_back(TrFmt("Ruleset \"%s\" ignored: its id is used twice", {id}));
+				break;
+			case RulesetProblem::kBadPath:
+				m.rulesetProblems.push_back(TrFmt("Ruleset \"%s\" ignored: its path must be a folder inside rulesets/", {id}));
+				break;
+			case RulesetProblem::kOverlap:
+				m.rulesetProblems.push_back(TrFmt("Ruleset \"%s\" ignored: its folder overlaps the one of \"%s\"", {id, other}));
+				break;
+			}
+		}
+		for (const RulesetDecl &d : decls) {
+			for (const ModLayer &l : declared) {
+				if (l.id != d.id) continue;
+				m.layers.push_back(l);
+				m.layers.back().path = d.path;
+				break;
+			}
+		}
+	}
 	if (const Json *s = j.Get("sources")) {
 		m.sourceUrl = s->GetString("url", s->GetString("page"));
 		m.gbId = GbKeyFromJson(*s);
@@ -182,6 +222,33 @@ void ReadManifest(ModInfo &m)
 }
 
 namespace mods_impl {
+namespace {
+// What the files of the package root, or of one ruleset, add up to.
+struct LayerScan {
+	std::set<std::string> paths, loose;
+	std::vector<PatchedValue> patchValues;
+	std::vector<std::string> hidden;
+	bool rleTail = false;
+	uint64_t rleBaseSize = 0;
+	std::string rleBaseSha256, rleTailError;
+	bool hasLoose = false, gameplay = false, content = false;
+	unsigned fileCount = 0;
+	uint64_t totalBytes = 0;
+};
+
+std::string ReadWhole(const std::string &path, uint64_t size)
+{
+	std::string text;
+	HANDLE h = CreateFileA(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
+	if (h == INVALID_HANDLE_VALUE) return text;
+	text.resize(static_cast<size_t>(size));
+	DWORD got = 0;
+	if (!text.empty() && ReadFile(h, &text[0], static_cast<DWORD>(text.size()), &got, nullptr)) text.resize(got);
+	CloseHandle(h);
+	return text;
+}
+}
+
 ModInfo ScanMod(const std::string &folder, std::vector<ScanFile> &files)
 {
 	ModInfo m;
@@ -190,7 +257,9 @@ ModInfo ScanMod(const std::string &folder, std::vector<ScanFile> &files)
 	const std::string base = ModsDir() + "\\" + folder;
 	Walk(base, "", files);
 	const std::string lang = LanguageLower();
-	std::set<std::string> paths, loose;
+	std::vector<RulesetDecl> decls;
+	for (const ModLayer &l : m.layers) decls.push_back({l.id, l.path});
+	std::vector<LayerScan> scans(m.layers.size() + 1);
 	unsigned documents = 0;
 	auto addLanguage = [&](const std::string &code) {
 		for (const ModLanguage &l : m.languages) {
@@ -201,122 +270,156 @@ ModInfo ScanMod(const std::string &folder, std::vector<ScanFile> &files)
 		m.languages.push_back(l);
 	};
 	for (ScanFile &f : files) {
-		if (f.rel == "mod.json" || f.rel == ".fingerprint" || StartsWith(f.rel, ".")) {
+		// A ruleset is read like a package root: from here on rel is the path inside its folder.
+		const int owner = RulesetOwnerOf(decls, f.rel);
+		LayerScan &s = scans[owner + 1];
+		if (owner >= 0) {
+			f.layer = m.layers[owner].id;
+			f.layerStrip = m.layers[owner].path.size() + 1;
+		}
+		const std::string rel = f.rel.substr(f.layerStrip);
+		if (rel == "mod.json" || rel == ".fingerprint" || StartsWith(rel, ".")) {
 			continue;
 		}
 		m.fileCount++;
 		m.totalBytes += f.size;
-		if (f.rel == kHiddenFile) {
-			std::string text;
-			HANDLE h = CreateFileA((base + "\\" + kHiddenFile).c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
-			if (h != INVALID_HANDLE_VALUE) {
-				text.resize(static_cast<size_t>(f.size));
-				DWORD got = 0;
-				if (!text.empty() && ReadFile(h, &text[0], static_cast<DWORD>(text.size()), &got, nullptr)) text.resize(got);
-				CloseHandle(h);
-			}
-			m.hidden = HiddenParse(text, lang);
-			for (const std::string &p : m.hidden) {
+		s.fileCount++;
+		s.totalBytes += f.size;
+		if (rel == kHiddenFile) {
+			s.hidden = HiddenParse(ReadWhole(base + "\\" + f.rel, f.size), lang);
+			for (const std::string &p : s.hidden) {
 				f.gameplay = f.gameplay || IsGameplayPath(p);
 				f.content = f.content || IsContentPath(p);
 			}
-			m.gameplay = m.gameplay || f.gameplay;
-			m.content = m.content || f.content;
+			s.gameplay = s.gameplay || f.gameplay;
+			s.content = s.content || f.content;
 			continue;
 		}
-		if (f.rel == kRleTailFile) {
-			m.rleTail = true;
+		if (rel == kRleTailFile) {
+			s.rleTail = true;
 			unsigned char head[kRleTailHeaderSize] = {};
 			DWORD got = 0;
-			HANDLE h = CreateFileA((base + "\\" + kRleTailFile).c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
+			HANDLE h = CreateFileA((base + "\\" + f.rel).c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
 			if (h != INVALID_HANDLE_VALUE) {
 				ReadFile(h, head, sizeof(head), &got, nullptr);
 				CloseHandle(h);
 			}
 			RleTailHeader th;
 			if (RleTailParse(head, got, th)) {
-				m.rleBaseSize = th.baseSize;
-				m.rleBaseSha256 = th.baseSha256;
+				s.rleBaseSize = th.baseSize;
+				s.rleBaseSha256 = th.baseSha256;
 			}
 			else {
-				m.rleTailError = "rle.mmp.tail is damaged: it was not made by the SDK tool";
+				s.rleTailError = "rle.mmp.tail is damaged: it was not made by the SDK tool";
 			}
 			continue;
 		}
-		if (!AllowedExtension(f.rel)) {
+		if (!AllowedExtension(rel)) {
 			m.forbidden.push_back(f.rel);
 			continue;
 		}
-		const bool inPacks = StartsWith(f.rel, "packs/") && f.rel.find('/', 6) == std::string::npos;
-		const bool inLocal = StartsWith(f.rel, "local/") && f.rel.find('/', 6) == std::string::npos;
-		if (inLocal && EndsWith(f.rel, ".pak")) {
-			std::string code = f.rel.substr(6, f.rel.size() - 10);
+		const bool inPacks = StartsWith(rel, "packs/") && rel.find('/', 6) == std::string::npos;
+		const bool inLocal = StartsWith(rel, "local/") && rel.find('/', 6) == std::string::npos;
+		if (inLocal && EndsWith(rel, ".pak")) {
+			std::string code = rel.substr(6, rel.size() - 10);
 			code = code.substr(0, code.find('_'));
 			if (!code.empty()) addLanguage(code);
 		}
-		if (IsDocumentation(f.rel)) {
+		if (IsDocumentation(rel)) {
 			documents++;
 			continue;
 		}
-		if (StartsWith(f.rel, "loc/")) {
+		if (StartsWith(rel, "loc/")) {
 			continue;
 		}
-		if (StartsWith(f.rel, "patches/")) {
-			const std::string target = f.rel.substr(8);
+		if (StartsWith(rel, "patches/")) {
+			const std::string target = rel.substr(8);
 			f.gameplay = IsGameplayPath(target);
 			f.content = IsContentPath(target);
-			m.content = m.content || f.content;
-			m.gameplay = m.gameplay || f.gameplay;
+			s.content = s.content || f.content;
+			s.gameplay = s.gameplay || f.gameplay;
 			if (EndsWith(target, ".xml") || EndsWith(target, ".ini")) {
 				const std::string text = PatchText(base, f);
-				for (PatchedValue &v : PatchValues(target, text)) m.patchValues.push_back(std::move(v));
+				for (PatchedValue &v : PatchValues(target, text)) s.patchValues.push_back(std::move(v));
 				if (EndsWith(target, ".xml")) f.text = text;
 			}
 			continue;
 		}
-		if (StartsWith(f.rel, "local/") && !inLocal) {
-			const size_t slash = f.rel.find('/', 6);
-			const std::string code = f.rel.substr(6, slash - 6);
+		if (StartsWith(rel, "local/") && !inLocal) {
+			const size_t slash = rel.find('/', 6);
+			const std::string code = rel.substr(6, slash - 6);
 			addLanguage(code);
 			if (code == lang) {
-				paths.insert("currentlang/" + f.rel.substr(slash + 1));
-				loose.insert("currentlang/" + f.rel.substr(slash + 1));
+				s.paths.insert("currentlang/" + rel.substr(slash + 1));
+				s.loose.insert("currentlang/" + rel.substr(slash + 1));
 			}
 			continue;
 		}
-		if ((inPacks || inLocal) && EndsWith(f.rel, ".pak")) {
-			if (inLocal && !StartsWith(f.rel.substr(6), lang.c_str())) {
+		if ((inPacks || inLocal) && EndsWith(rel, ".pak")) {
+			if (inLocal && !StartsWith(rel.substr(6), lang.c_str())) {
 				continue;
 			}
 			std::vector<PakEntry> entries;
 			if (ReadPakIndex(base + "\\" + f.rel, entries)) {
 				for (const PakEntry &e : entries) {
 					std::string p = NormPath(e.name);
-					paths.insert(p);
+					s.paths.insert(p);
 					f.gameplay = f.gameplay || IsGameplayPath(p);
 					f.content = f.content || IsContentPath(p);
 				}
 			}
-			m.gameplay = m.gameplay || f.gameplay;
-			m.content = m.content || f.content;
+			s.gameplay = s.gameplay || f.gameplay;
+			s.content = s.content || f.content;
 			continue;
 		}
-		m.hasLoose = true;
-		paths.insert(f.rel);
-		loose.insert(f.rel);
-		f.gameplay = IsGameplayPath(f.rel);
-		f.content = IsContentPath(f.rel);
-		m.content = m.content || f.content;
-		m.gameplay = m.gameplay || f.gameplay;
+		s.hasLoose = true;
+		s.paths.insert(rel);
+		s.loose.insert(rel);
+		f.gameplay = IsGameplayPath(rel);
+		f.content = IsContentPath(rel);
+		s.content = s.content || f.content;
+		s.gameplay = s.gameplay || f.gameplay;
 	}
 	m.noGameFiles = m.fileCount == documents && m.requires.empty();
-	m.paths.assign(paths.begin(), paths.end());
-	m.loosePaths.assign(loose.begin(), loose.end());
+	{
+		LayerScan &root = scans[0];
+		m.paths.assign(root.paths.begin(), root.paths.end());
+		m.loosePaths.assign(root.loose.begin(), root.loose.end());
+		m.patchValues = std::move(root.patchValues);
+		m.hidden = std::move(root.hidden);
+		m.rleTail = root.rleTail;
+		m.rleBaseSize = root.rleBaseSize;
+		m.rleBaseSha256 = root.rleBaseSha256;
+		m.rleTailError = root.rleTailError;
+		m.hasLoose = root.hasLoose;
+		m.gameplay = root.gameplay;
+		m.content = root.content;
+	}
+	for (size_t i = 0; i < m.layers.size(); i++) {
+		ModLayer &l = m.layers[i];
+		LayerScan &s = scans[i + 1];
+		l.paths.assign(s.paths.begin(), s.paths.end());
+		l.loosePaths.assign(s.loose.begin(), s.loose.end());
+		l.patchValues = std::move(s.patchValues);
+		l.hidden = std::move(s.hidden);
+		l.rleTail = s.rleTail;
+		l.rleBaseSize = s.rleBaseSize;
+		l.rleBaseSha256 = s.rleBaseSha256;
+		l.rleTailError = s.rleTailError;
+		l.hasLoose = s.hasLoose;
+		l.gameplay = s.gameplay;
+		l.content = s.content;
+		l.fileCount = s.fileCount;
+		l.totalBytes = s.totalBytes;
+		l.folderMissing = !IsDir(base + "\\" + l.path);
+		if (l.folderMissing) m.rulesetProblems.push_back(TrFmt("Ruleset \"%s\" ignored: its folder %s does not exist", {l.id, l.path}));
+	}
+	m.layers.erase(std::remove_if(m.layers.begin(), m.layers.end(), [](const ModLayer &l) { return l.folderMissing; }), m.layers.end());
 	m.kind = m.gameplay ? kModRules : m.content ? kModContent : kModCosmetic;
 	if (m.declaredKind > m.kind) {
 		m.kind = m.declaredKind;
 		if (m.kind == kModRules) {
-			for (ScanFile &f : files) f.gameplay = true;
+			for (ScanFile &f : files) f.gameplay = f.gameplay || f.layer.empty();
 			m.gameplay = true;
 		}
 		else {
@@ -422,24 +525,35 @@ void HashMods()
 	for (const ModHashWork &w : mods) {
 		Json newCache = Json::MakeObject();
 		Json &cacheFiles = newCache.Set("files", Json::MakeObject());
+		// The copy's identity covers every file; the gameplay hash of the package only its root, and each ruleset has one of its own
+		// over its files with the folder's prefix cut off.
 		std::vector<FingerprintFile> prints;
+		std::map<std::string, std::vector<FingerprintFile>> layerPrints;
 		for (size_t i = 0; i < w.files.size(); i++) {
 			const ScanFile &f = w.files[i];
 			Json c = Json::MakeObject();
 			c.Set("t", Json::MakeString(FileKey(f)));
 			c.Set("sha256", Json::MakeString(w.shas[i]));
 			cacheFiles.Set(f.rel, c);
-			prints.push_back({f.rel, w.shas[i], f.gameplay});
+			prints.push_back({f.rel, w.shas[i], f.gameplay && f.layer.empty()});
+			if (!f.layer.empty()) layerPrints[f.layer].push_back({f.rel.substr(f.layerStrip), w.shas[i], f.gameplay});
 		}
 		const Fingerprint print = ComputeFingerprint(prints);
 		newCache.Set("fingerprint", Json::MakeString(print.all));
 		newCache.Set("gameplayFingerprint", Json::MakeString(print.gameplay));
+		std::map<std::string, std::string> layerHashes;
+		Json &cacheLayers = newCache.Set("rulesets", Json::MakeObject());
+		for (const auto &lp : layerPrints) {
+			layerHashes[lp.first] = ComputeFingerprint(lp.second).gameplay;
+			cacheLayers.Set(lp.first, Json::MakeString(layerHashes[lp.first]));
+		}
 		WriteJsonFile(ModsDir() + "\\" + w.folder + "\\.fingerprint", newCache);
 		std::lock_guard<std::mutex> lock(g_lock);
 		for (ModInfo &m : g_mods) {
 			if (m.folder == w.folder) {
 				m.hash = print.all;
 				m.gameplayHash = print.gameplay;
+				for (ModLayer &l : m.layers) l.gameplayHash = layerHashes[l.id];
 			}
 		}
 	}
@@ -483,6 +597,12 @@ ModProfile ReadProfileFile(const std::string &path)
 				choice.use = v.GetString("use");
 				choice.over = v.GetString("over");
 				if (!choice.use.empty() && !choice.over.empty()) p.choices.push_back(choice);
+			}
+		}
+		if (const Json *r = j.Get("ruleset")) {
+			if (r->type == Json::Object) {
+				p.ruleset.pack = r->GetString("pack");
+				p.ruleset.id = r->GetString("id");
 			}
 		}
 	}

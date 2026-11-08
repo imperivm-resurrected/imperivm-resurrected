@@ -128,6 +128,7 @@ bool ModsRestartNeeded()
 	}), active.mods.end());
 	const ModProfile &mounted = ModsMountedProfile();
 	if (!ModsSameSet(active.mods, mounted.mods)) return true;
+	if (!ModsSameRuleset(ModsEffectiveRuleset(active), mounted.ruleset)) return true;
 	std::map<std::string, std::string> signatures;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
@@ -142,6 +143,20 @@ bool ModsRestartNeeded()
 	if (!active.choices.empty()) chosen = ChosenFolders(active, ModsList());
 	std::lock_guard<std::mutex> lock(g_lock);
 	return chosen != g_mount.chosen;
+}
+
+ModRuleset ModsEffectiveRuleset(const ModProfile &p)
+{
+	if (p.ruleset.Empty()) return ModRuleset();
+	const bool inProfile = std::find_if(p.mods.begin(), p.mods.end(), [&](const std::string &f) { return _stricmp(f.c_str(), p.ruleset.pack.c_str()) == 0; }) != p.mods.end();
+	ModInfo m;
+	if (!inProfile || !ModsFind(p.ruleset.pack, m) || !m.forbidden.empty()) return ModRuleset();
+	const ModLayer *layer = ModsFindLayer(m, p.ruleset.id);
+	if (!layer) return ModRuleset();
+	ModRuleset out;
+	out.pack = m.folder;
+	out.id = layer->id;
+	return out;
 }
 
 bool ModsSameSet(std::vector<std::string> a, std::vector<std::string> b)
@@ -189,9 +204,11 @@ std::string ModsProfileGameplayHash(const ModProfile &p)
 	std::lock_guard<std::mutex> lock(g_lock);
 	for (const std::string &folder : p.mods) {
 		for (const ModInfo &m : g_mods) {
-			if (m.folder == folder && m.gameplay) {
-				parts.push_back({m.id, m.gameplayHash});
-			}
+			if (m.folder != folder) continue;
+			if (m.gameplay) parts.push_back({m.id, m.gameplayHash, ""});
+			// The ruleset the profile mounts is part of what the players share, hashed apart from the package's root.
+			const ModLayer *layer = _stricmp(m.folder.c_str(), p.ruleset.pack.c_str()) == 0 ? ModsFindLayer(m, p.ruleset.id) : nullptr;
+			if (layer && layer->gameplay) parts.push_back({m.id, layer->gameplayHash, layer->id});
 		}
 	}
 	return RulesFingerprint(parts);

@@ -111,6 +111,10 @@ bool IsGameplayPath(const std::string &p)
 	if (StartsWith(p, "options/") || StartsWith(p, "randommap/")) {
 		return true;
 	}
+	// Whatever is left under rulesets/ after the declared layers have taken their files.
+	if (StartsWith(p, "rulesets/")) {
+		return true;
+	}
 	if (StartsWith(p, "randommapsettlements/")) {
 		return true;
 	}
@@ -138,14 +142,15 @@ std::string RulesFingerprint(std::vector<RulesPart> parts)
 {
 	std::sort(parts.begin(), parts.end(), [](const RulesPart &a, const RulesPart &b) {
 		const std::string ia = Lower(a.id), ib = Lower(b.id);
-		return ia != ib ? ia < ib : a.gameplayHash < b.gameplayHash;
+		if (ia != ib) return ia < ib;
+		return a.layer != b.layer ? a.layer < b.layer : a.gameplayHash < b.gameplayHash;
 	});
 	std::string text = std::string(kGameId) + "|sim:" + std::to_string(kSimLevel) + "|esq:" + std::to_string(kRulesSchema) + "|";
 	for (const RulesPart &p : parts) {
 		if (p.gameplayHash.empty()) {
 			return "";
 		}
-		text += p.id + "@" + p.gameplayHash + "|";
+		text += p.id + (p.layer.empty() ? "" : "#" + p.layer) + "@" + p.gameplayHash + "|";
 	}
 	if (!parts.empty()) text += "api:" + std::to_string(kScriptApiVersion) + "|";
 	return HashString(text);

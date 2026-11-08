@@ -204,6 +204,16 @@ std::vector<std::string> ModsMountedDirs()
 	return g_mount.dirs;
 }
 
+std::string ModsPackFolder(const std::string &mountedDir)
+{
+	return PackFolderOfDir(ModsDir(), mountedDir);
+}
+
+std::string ModsDirVfsName(const std::string &mountedDir)
+{
+	return ModDirVfsName(ModsDir(), mountedDir);
+}
+
 std::string ModsLocalizedText(const Json &j, const char *key, const std::string &def)
 {
 	return LocalizedText(j, key, def);
