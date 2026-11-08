@@ -7,7 +7,7 @@ const S = require('./script');
 const X = require('./xml');
 const G = require('./grid');
 const M = require('./mapping');
-const { addProbe, censusSequence, sceneSequence } = require('./probe');
+const { addProbe, censusSequence, sceneSequence, probeSequences } = require('./probe');
 
 const EOL = '\r\n';
 const LANGS = ['English', 'Spanish', 'Italian'];
@@ -231,6 +231,17 @@ function convertObjects(src, classes, gbr, report, where) {
 		report.count('Decors', `${m[1]} written without player, flags 0x80000000`);
 		return obj.replace(/(\sflags=")0x[0-9a-fA-F]+(")/, '$10x80000000$2').replace(/\r?\n[ \t]*player="[^"]*"/, '');
 	});
+	// UnitFlags: Imperivm I's loader takes only the high 16 bits and keeps the unit's own low 16 bits (Imperivm.exe
+	// 0050E50B-0050E51F: +0x138 = (old & 0xFFFF) | (UnitFlags & 0xFFFF0000)); the low bits the editor saved are run-time
+	// states the game drops. Great Battles of Rome stores all 32 bits (gbr.exe 005DD6A9, unit +0x194), where 0x1 is
+	// "blessed" and 0x2 raises the unit as a target (CUnitTargetQuery::VisitUnit 005DB6D7). So they are cleared, as
+	// Imperivm I reads them.
+	t = X.mapAttribute(t, 'UnitFlags', (v) => {
+		const n = Number(v);
+		if (!Number.isInteger(n) || !(n & 0xffff)) return v;
+		for (let bit = 1; bit <= 0x8000; bit <<= 1) if (n & bit) report.count('UnitFlags low bits cleared (Imperivm I ignores them at load)', `0x${bit.toString(16)}`);
+		return String((n & 0xffff0000) >>> 0);
+	}).text;
 	// Imperivm I has no sentries; every settlement of Great Battles of Rome's maps says how many extra ones it starts with.
 	t = t.replace(/(<settlement\b)([^>]*?)(\/?>)/g, (all, open, attrs, end) => {
 		if (/\sextrasentries="/.test(attrs)) return all;
@@ -284,6 +295,10 @@ function convertScript(src, ctx, where) {
 	if (ra.advanced) ctx.report.count('"attack" given a point, written "advance" (per map)', `map ${mapId}`, ra.advanced);
 	if (ra.kept) ctx.report.count('"attack" given an object, kept (per map)', `map ${mapId}`, ra.kept);
 	for (const u of ra.unknown) ctx.report.add('Check warnings', `${where}: ${u}: could not tell whether "attack" is given a point or an object; left as it is`);
+	const rw = S.livingWaits(s);
+	s = rw.src;
+	if (rw.count) ctx.report.count('WaitEmptyQuery/WaitQueryCountBetween counting only living units (per map)', `map ${mapId}`, rw.count);
+	for (const k of rw.skipped) ctx.report.add('Check warnings', `${where}: ${k} left as it is (counts dead units until their bodies go)`);
 	s = S.rewriteCall(s, 'PlayMovie', (arg) => ctx.movie(arg, where)).src;
 	// The silence Imperivm I plays under its intro movie is a file Great Battles of Rome does not have.
 	s = S.rewriteCall(s, 'PlayMusic', (arg) => {
@@ -431,6 +446,64 @@ const NO_SENTRIES_SCRIPT = [
 	'}',
 	'',
 ].join(EOL);
+
+// Sight. Great Battles of Rome gives units 100 to 150 more sight than Imperivm I (Unit 400 -> 500, Ranged 450 -> 600,
+// ShipL 600 -> 700), and a unit's sight (+0xD0) is also the radius in which it picks a target to fight on its own: the
+// squad-sight search builds its circle from the squad leader's +0xD0 (gbr.exe 005DCA61-005DCA9B). So the ambushes the
+// campaign stages a little further than 400 from their victims started on their own (Kormaris: Teuton riders 475 from
+// the axemen NO_Protector5/6 killed them in the first 13 s). Returns [{gbr, i1, from}] for every unit class of Great
+// Battles of Rome that stands for an Imperivm I class with another sight; conflicts take the first and are reported.
+function sightRules(i1, gbr, classes, report) {
+	const byId = (all) => {
+		const m = new Map();
+		for (const c of all.values()) for (const id of [c.id, c.altid].filter(Boolean)) if (!m.has(lower(id))) m.set(lower(id), c);
+		return m;
+	};
+	const I = byId(i1.classes);
+	const Gc = byId(gbr.classes);
+	const up = (m, id, fn) => {
+		for (let c = m.get(lower(id || '')), n = 0; c && n < 32; c = c.parent && m.get(lower(c.parent)), n++) {
+			const v = fn(c);
+			if (v) return v;
+		}
+		return null;
+	};
+	const rules = new Map();
+	for (const c of i1.classes.values()) {
+		if (!/^CVX(Unit|Hero|Druid|FlyingUnit|Wagon|Ship)$/.test(up(I, c.id, (x) => x.cpp) || '')) continue;
+		const to = classes.resolve(c.id).to;
+		if (!to || !Gc.has(lower(to))) continue;
+		const a = Number(up(I, c.id, (x) => x.sight));
+		const b = Number(up(Gc, to, (x) => x.sight));
+		if (!a || !b || a === b) continue;
+		const id = Gc.get(lower(to)).id;
+		if (rules.has(id)) {
+			if (rules.get(id).i1 !== a) report.add('Sight', `${id}: ${c.id} has sight ${a}, ${rules.get(id).from} ${rules.get(id).i1}; ${rules.get(id).i1} kept`);
+			continue;
+		}
+		rules.set(id, { gbr: id, i1: a, base: b, from: c.id });
+	}
+	return [...rules.values()].sort((x, y) => x.gbr.localeCompare(y.gbr));
+}
+
+// Every 500 ms, a unit of one of those classes that still has Great Battles of Rome's sight gets Imperivm I's (units
+// spawned later get it too). The check goes by sight first, so the class comparisons run only for those not done yet.
+function sightScript(rules) {
+	const bySight = new Map();
+	for (const r of rules) {
+		if (!bySight.has(r.base)) bySight.set(r.base, []);
+		bySight.get(r.base).push(r);
+	}
+	const lines = ['//void', 'ObjList i1v_l;', 'Obj i1v_o;', 'int i1v_p, i1v_i, i1v_s;', 'str i1v_c;', '', 'while (1)', '{', '\tfor (i1v_p = 0; i1v_p <= 16; i1v_p += 1)', '\t{'];
+	lines.push('\t\ti1v_l = ClassPlayerObjs("Unit", i1v_p).GetObjList();', '\t\tfor (i1v_i = 0; i1v_i < i1v_l.count; i1v_i += 1)', '\t\t{', '\t\t\ti1v_o = i1v_l[i1v_i];', '\t\t\ti1v_s = i1v_o.sight;');
+	for (const [base, rs] of [...bySight].sort((a, b) => a[0] - b[0])) {
+		lines.push(`\t\t\tif (i1v_s == ${base})`, '\t\t\t{', '\t\t\t\ti1v_c = i1v_o.class();');
+		rs.forEach((r, k) => lines.push(`\t\t\t\t${k ? 'else ' : ''}if (i1v_c == "${r.gbr}") i1v_o.SetSight(${r.i1});`));
+		lines.push('\t\t\t}');
+	}
+	lines.push('\t\t}', '\t}', '\tSleep(500);', '}', '');
+	return lines.join(EOL);
+}
 
 // Adds a sequence to a map: a new seqN.vs and its entry in the map's sequences.xml. Returns the script's path.
 function addMapSequence(out, mapId, name, script) {
@@ -855,12 +928,20 @@ function convertAdventure(input) {
 	}
 
 	// Sequences every map runs: no sentries, and with --probe the census of what is in the world.
+	const sight = sightRules(i1, gbr, classes, report);
+	for (const r of sight) report.add('Sight', `${r.gbr}: ${r.base} -> ${r.i1} (Imperivm I's ${r.from})`);
+	const sightSrc = sight.length ? sightScript(sight) : null;
 	for (const id of mapNames.keys()) {
+		if (sightSrc) {
+			addMapSequence(out, id, 'I1_Sight', sightSrc);
+			report.count('Sight', 'maps given the I1_Sight sequence (units get Imperivm I\'s sight)');
+		}
 		addMapSequence(out, id, 'I1_NoSentries', NO_SENTRIES_SCRIPT);
 		report.count('Sentries', 'maps given the I1_NoSentries sequence (no sentries, as in Imperivm I)');
 		if (input.probe) {
 			addMapSequence(out, id, 'I1_Census', censusSequence());
 			if (id === '11937') addMapSequence(out, id, 'I1_SceneProbe', sceneSequence());
+			for (const ps of probeSequences()) if (ps.map === id) addMapSequence(out, id, ps.name, ps.script);
 			report.count('Probe', 'maps given the I1_Census sequence (I1PROBE census lines)');
 		}
 	}
@@ -871,7 +952,7 @@ function convertAdventure(input) {
 	// vxlog.log), and the code that loads the map's conversations throws when that load fails.
 	const dirs = ['Conversations', 'Resources'];
 	report.add('Adventure', 'empty Conversations and Resources folders, as in Great Battles of Rome\'s adventures');
-	return { files: out, dirs, report, mapNames, customItems, terrain, decors, classes, actorRows };
+	return { files: out, dirs, report, mapNames, customItems, terrain, decors, classes, actorRows, sight };
 }
 
 // The actors of the conversations. A phrase's title is the actor's name looked up in the translation tables, and its
@@ -1060,4 +1141,5 @@ module.exports = {
 	classNameTable,
 	addEntries,
 	NO_SENTRIES_SCRIPT,
+	sightScript,
 };

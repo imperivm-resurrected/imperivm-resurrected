@@ -407,6 +407,99 @@ function attackPointsToAdvance(src) {
 	return { src: join(tokens), advanced, kept, unknown };
 }
 
+// Top-level arguments of the call whose '(' is at `open` and ')' at `close`: [text].
+function argsOf(tokens, open, close) {
+	const args = [];
+	let depth = 0;
+	let from = open + 1;
+	for (let i = open + 1; i < close; i++) {
+		const x = tokens[i].text;
+		if (x === '(' || x === '[') depth++;
+		else if (x === ')' || x === ']') depth--;
+		else if (x === ',' && depth === 0) {
+			args.push(join(tokens.slice(from, i)).trim());
+			from = i + 1;
+		}
+	}
+	args.push(join(tokens.slice(from, close)).trim());
+	return args;
+}
+
+// WaitEmptyQuery(q, timeout) and WaitQueryCountBetween(q, min, max, timeout) count only the living. In Great Battles of
+// Rome a dead unit stays in a group's query until its body is removed, some 20 s later (Kormaris: the two Victims1
+// riders die at 11.5 s and WaitEmptyQuery(M1_Q_Victims1) returns at 31.5 s, with the player's input blocked); Imperivm I
+// goes on as soon as they die. ObjList::ClearDead does not help: it drops only objects that no longer exist. The call
+// becomes a loop that counts the query's objects with IsAlive() every 250 ms (max < 0: no upper bound; timeout < 0:
+// no limit, 0: one look). A call that is a statement is replaced; one that is the condition of an if is computed just
+// before the if, into i1w_r. Returns {src, count, skipped: [text]} (calls in other places are left as they are).
+const LIVING_VARS = 'ObjList i1w_l;\nint i1w_t, i1w_r, i1w_n, i1w_i;\n';
+function livingWaits(src) {
+	const tokens = tokenize(src);
+	let count = 0;
+	const skipped = [];
+	for (let i = tokens.length - 1; i >= 0; i--) {
+		const t = tokens[i];
+		if (t.type !== 'ident' || (t.text !== 'WaitEmptyQuery' && t.text !== 'WaitQueryCountBetween')) continue;
+		const p = prevCode(tokens, i - 1);
+		if (p >= 0 && tokens[p].text === '.') continue;
+		const open = nextCode(tokens, i + 1);
+		if (open >= tokens.length || tokens[open].text !== '(') continue;
+		const close = closingParen(tokens, open);
+		if (close < 0) continue;
+		const args = argsOf(tokens, open, close);
+		let q;
+		let min;
+		let max;
+		let timeout;
+		if (t.text === 'WaitEmptyQuery' && args.length === 2) [q, min, max, timeout] = [args[0], '0', '0', args[1]];
+		else if (t.text === 'WaitQueryCountBetween' && args.length === 4) [q, min, max, timeout] = args;
+		else {
+			skipped.push(join(tokens.slice(i, close + 1)));
+			continue;
+		}
+		const loop =
+			`{ i1w_t = 0; i1w_r = 0; while (1) { i1w_l = (${q}).GetObjList(); i1w_n = 0; ` +
+			`for (i1w_i = 0; i1w_i < i1w_l.count; i1w_i += 1) { if (i1w_l[i1w_i].IsAlive()) i1w_n += 1; } ` +
+			`if (i1w_n >= (${min}) && ((${max}) < 0 || i1w_n <= (${max}))) { i1w_r = 1; break; } ` +
+			`if ((${timeout}) >= 0 && i1w_t >= (${timeout})) break; Sleep(250); i1w_t += 250; } }`;
+		const semi = nextCode(tokens, close + 1);
+		const statementStart = p < 0 || [';', '{', '}', ')'].includes(tokens[p].text) || tokens[p].text === 'else';
+		if (statementStart && semi < tokens.length && tokens[semi].text === ';') {
+			tokens.splice(i, semi - i + 1, { type: 'other', text: loop });
+			count++;
+			continue;
+		}
+		// The condition of an if: `if (W(...)` or `if (!W(...)`, the if itself not the body of an else.
+		let k = p;
+		if (k >= 0 && tokens[k].text === '!') k = prevCode(tokens, k - 1);
+		const kw = k >= 0 && tokens[k].text === '(' ? prevCode(tokens, k - 1) : -1;
+		const before = kw >= 0 ? prevCode(tokens, kw - 1) : -1;
+		// Only an if that starts a statement of its own: after an else or a for/if/while header the loop would become
+		// the body instead.
+		if (kw >= 0 && tokens[kw].text === 'if' && (before < 0 || [';', '{', '}'].includes(tokens[before].text))) {
+			tokens.splice(i, close - i + 1, { type: 'other', text: '(i1w_r == 1)' });
+			tokens.splice(kw, 0, { type: 'other', text: loop + ' ' });
+			count++;
+			continue;
+		}
+		// The condition of a while with a { } body: while (C) { B }  ->  while (1) { <loop>; if (!(C)) break; B }
+		if (kw >= 0 && tokens[kw].text === 'while') {
+			const condOpen = nextCode(tokens, kw + 1);
+			const condClose = closingParen(tokens, condOpen);
+			const body = nextCode(tokens, condClose + 1);
+			if (condClose > close && body < tokens.length && tokens[body].text === '{') {
+				const cond = join(tokens.slice(condOpen + 1, i)) + '(i1w_r == 1)' + join(tokens.slice(close + 1, condClose));
+				tokens.splice(kw, body - kw + 1, { type: 'other', text: `while (1) { ${loop} if (!(${cond.trim()})) break;` });
+				count++;
+				continue;
+			}
+		}
+		skipped.push(join(tokens.slice(i, close + 1)));
+	}
+	if (!count) return { src, count, skipped };
+	return { src: insertDeclarations(join(tokens), LIVING_VARS), count, skipped };
+}
+
 // Inserts `line` before or after the first line that matches `anchor`, with that line's indentation.
 function insertAtLine(src, anchor, where, line) {
 	const m = anchor.exec(src);
@@ -470,4 +563,5 @@ module.exports = {
 	declaredTypes,
 	targetKind,
 	attackPointsToAdvance,
+	livingWaits,
 };

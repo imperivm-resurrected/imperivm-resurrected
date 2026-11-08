@@ -48,7 +48,12 @@ const KNOWN = {
 	'itemsCustom.xml|item|usescript': 'renamed use_script (the script converted like the maps\' scripts)',
 	'itemsCustom.xml|item|scripttarget': 'dropped: always "None" in the campaign, and Great Battles of Rome\'s items have no such attribute',
 	'map.obj.xml|scriptobj|player': 'dropped from decors only (rocks, the Roman arch), as Great Battles of Rome\'s maps write them',
-	'verb|hide':'Gaul druids cannot hide in Great Battles of Rome: the calls are written SetVisible(false) on the target',
+	'map.obj.xml|scriptobj|UnitFlags': 'low 16 bits cleared: Imperivm I\'s loader ignores them (Imperivm.exe 0050E50B), Great Battles of Rome would read 0x1 as blessed',
+	'function|WaitEmptyQuery': 'reviewed: GBR counts a dead unit until its body goes (6-8 s in Kormaris), Imperivm I goes on at its death; written as a loop that counts living units (IsAlive)',
+	'function|WaitQueryCountBetween': 'reviewed: GBR counts a dead unit until its body goes; written as a loop that counts living units (IsAlive)',
+	'method|ClearDead': 'reviewed: in GBR it drops only objects that no longer exist (ObjList::ClearDead 0055F430), not dead units whose bodies remain',
+	'method|SetSight': 'added: units get Imperivm I\'s sight, the radius in which they pick a target on their own',
+	'verb|hide': 'Gaul druids cannot hide in Great Battles of Rome: the calls are written SetVisible(false) on the target',
 	'verb|mist': 'Gaul druids cannot cast mist in Great Battles of Rome: the calls place the Mist object',
 };
 
@@ -96,6 +101,18 @@ const FLAG_BITS = [
 	[0x20000000, 'set on heroes by the editor'],
 	[0x80000000, 'set on every object by the editor'],
 ];
+
+// Bits of a unit's UnitFlags in Great Battles of Rome (unit +0x194; imperivm-re P23, and the tests found in gbr.exe).
+const UNIT_FLAG_BITS = {
+	0x1: 'blessed (tested at 00423328, 0051B329...); in Imperivm I a run-time state the loader drops',
+	0x2: 'warning effect; as a target, +200 to its score (005DB6D7); Imperivm I uses it in combat (004FCEE3), not from the map',
+	0x4: 'cleared at 0052F7CD; no test found',
+	0x8: 'no code of gbr.exe tests it directly',
+	0x20: 'Imperivm I uses it in combat (004FCEA4), not from the map',
+	0x10000: 'moving along a path',
+	0x20000: 'wounded (repairable); the default of a unit without UnitFlags',
+	0x40000: 'set on every unit of both games\' maps',
+};
 
 function kindOf(p) {
 	if (/^local\//i.test(p)) return null;
@@ -285,6 +302,11 @@ function tableD(i1Files, outFiles, ctx, errors, warnings) {
 	const bitsRows = [];
 	const removed = new Map(Object.entries(ctx.removedClasses || {}));
 	const flagBits = { i1: 0, out: 0 };
+	// UnitFlags bits: how many objects have each one, in the original and in the conversion.
+	const unitBits = { i1: new Map(), out: new Map() };
+	const countBits = (m, v) => {
+		for (let b = 0; b < 32; b++) if ((v >>> b) & 1) m.set(b, (m.get(b) || 0) + 1);
+	};
 	const behaviors = new Map();
 	for (const [p, buf] of i1Files) {
 		const m = /^Maps\/([^/]+)\/map\.obj\.xml$/i.exec(p);
@@ -309,11 +331,13 @@ function tableD(i1Files, outFiles, ctx, errors, warnings) {
 			else g.placed++;
 			g.players.add(o.player);
 			flagBits.i1 |= o.flags;
+			if (o.attrs.has('UnitFlags')) countBits(unitBits.i1, o.unitFlags);
 			if (conv) {
 				g.to.add(conv.cls);
 				if ((conv.flags & 0x08000000) !== 0) g.outTmpl++;
 				else g.outPlaced++;
 				flagBits.out |= conv.flags;
+				if (conv.attrs.has('UnitFlags')) countBits(unitBits.out, conv.unitFlags);
 			}
 		}
 		// Objects the conversion has that the original does not.
@@ -377,7 +401,16 @@ function tableD(i1Files, outFiles, ctx, errors, warnings) {
 		const classes = [...e.classes];
 		behaviorRows.push([x.replace(/^data\/subai\//, ''), classes.slice(0, 8).join(', ') + (classes.length > 8 ? ` (+${classes.length - 8})` : ''), String(e.maps.size), status, note || '']);
 	}
-	return { rows, bitsRows, behaviorRows };
+	const unitFlagRows = [];
+	for (let b = 0; b < 32; b++) {
+		const a = unitBits.i1.get(b) || 0;
+		const o = unitBits.out.get(b) || 0;
+		const r = (ctx.refUnitBits && ctx.refUnitBits.get(b)) || 0;
+		if (!a && !o && !r) continue;
+		if (o && !r && !UNIT_FLAG_BITS[1 << b]) warnings.push(`D: UnitFlags bit 0x${((1 << b) >>> 0).toString(16)} is set on converted objects and on none of Great Battles of Rome's`);
+		unitFlagRows.push([`0x${((1 << b) >>> 0).toString(16)}`, String(a), String(o), String(r), UNIT_FLAG_BITS[(1 << b) >>> 0] || '']);
+	}
+	return { rows, bitsRows, behaviorRows, unitFlagRows };
 }
 
 // Script literals that name a class, per map: [map, literal, class used, exists].
@@ -537,6 +570,7 @@ function tableC(i1Files, outFiles, ctx, errors, warnings) {
 			}
 		}
 		if (ea && !eb && !renamed) notes.push('no longer called (rewritten)');
+		if (KNOWN[key]) notes.push(KNOWN[key]);
 		if (!ea && eb) notes.push('added by the converter');
 		rows.push([kind, name, String(ea ? ea.count : 0), String(eb ? eb.count : 0), ea ? [...ea.args].sort().join('/') : '', exists ? 'yes' : 'NO', arity ? [...arity].sort().join('/') : '?', status, notes.join('; ')]);
 	}
@@ -687,10 +721,14 @@ function auditAdventure(input) {
 	const gbrExe = exeStrings(input.gbrExe);
 	const i1Exe = exeStrings(input.i1Exe);
 	let refFlagBits = 0;
+	const refUnitBits = new Map();
 	for (const [p, buf] of input.refFiles) {
 		if (!/map\.obj\.xml$/i.test(p)) continue;
 		try {
-			for (const o of mapObjects(buf).objects) refFlagBits |= o.flags;
+			for (const o of mapObjects(buf).objects) {
+				refFlagBits |= o.flags;
+				if (o.attrs.has('UnitFlags')) for (let b = 0; b < 32; b++) if ((o.unitFlags >>> b) & 1) refUnitBits.set(b, (refUnitBits.get(b) || 0) + 1);
+			}
 		} catch {
 			/* a reference map that does not parse says nothing */
 		}
@@ -717,6 +755,7 @@ function auditAdventure(input) {
 	const ctx = {
 		...input,
 		refFlagBits,
+		refUnitBits,
 		classPairs,
 		referenced: (p) => seqNames.has(lower(p)),
 		sequenceName: (p) => seqNames.get(lower(p)) || '',
@@ -752,8 +791,14 @@ function auditAdventure(input) {
 		out.push(table(['map', 'conversation', 'actor', 'I1 class', 'GBR class', 'title (es)', 'picture'], input.actorRows));
 		for (const r of input.actorRows) if (/^NONE/.test(r[6])) warnings.push(`D: map ${r[0]} ${r[1]}: actor ${r[2]} has no picture (${r[6]})`);
 	}
+	if (input.sight) {
+		out.push('', 'D. Unit sight, also the radius in which a unit picks a target on its own (gbr.exe 005DCA61): Great Battles of Rome -> Imperivm I, set by the I1_Sight sequence');
+		out.push(table(['GBR class', 'GBR sight', 'I1 sight', 'I1 class'], input.sight.map((r) => [r.gbr, String(r.base), String(r.i1), r.from])));
+	}
 	out.push('', 'D. Bits of the objects\' flags');
 	out.push(table(['bit', 'meaning', 'I1', 'out', 'GBR adventures'], D.bitsRows));
+	out.push('', 'A/D. UnitFlags bits (objects with the bit: original / converted / GBR adventures). Imperivm I reads only the high 16 bits (Imperivm.exe 0050E50B), Great Battles of Rome all 32 (gbr.exe 005DD6A9)');
+	out.push(table(['bit', 'I1', 'out', 'GBR', 'meaning'], D.unitFlagRows));
 	out.push('', `Errors: ${errors.length}`, ...errors.map((e) => '  ' + e), `Warnings: ${warnings.length}`, ...warnings.map((w) => '  ' + w));
 	return { errors, warnings, text: out.join('\n') + '\n', tables: { A, B, C, D, L } };
 }

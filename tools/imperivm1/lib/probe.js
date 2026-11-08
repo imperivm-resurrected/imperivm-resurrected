@@ -6,9 +6,11 @@
 //   seq0, right after Larax is looked up, before any command: Larax's state and one Teuton's ("seq0 start").
 //   seq0, right after his "hold_position": the same ("seq0 after hold_position").
 //   seq0, around the goddess conversation: the time before and after C_Conv.Run(), to see whether it was played.
-//   seq15, after the Teutons are sent at him, every 2 s for 30 s: Larax, his best target, each Teuton and the diplomacy,
+//   seq15, after the Teutons are sent at him, every 2 s for 30 s (in a sequence of its own): Larax, his best target,
+//   each Teuton and the diplomacy,
 //   and the target searches of Larax, up to 3 other units of his player, up to 3 Gaul allies and one Teuton.
-//   seq18, after the prisoners and guards are spawned into S_Prizon, every second for 30 s: the prison and its prisoners.
+//   seq18, after the prisoners and guards are spawned into S_Prizon, every second for 30 s (in a sequence of its own):
+//   the prison and its prisoners.
 'use strict';
 
 const S = require('./script');
@@ -195,11 +197,24 @@ const PROBES = [
 	['Maps/11937/Sequences/seq0.vs', /^NO_Larax\.SetCommand\("hold_position"\);/m, 'after', laraxLine('seq0 after hold_position')],
 	['Maps/11937/Sequences/seq0.vs', /^C_Conv\.Init\("TheGodess"\);/m, 'before', ['Mod_LogInt("I1PROBE seq0 goddess conversation starts, t", GetTime());']],
 	['Maps/11937/Sequences/seq0.vs', /^C_Conv\.Run\(\);/m, 'after', ['Mod_LogInt("I1PROBE seq0 goddess conversation ended, t", GetTime());', ...laraxLine('seq0 after goddess')]],
-	['Maps/11937/Sequences/seq18.vs', /^SpawnGroupInHolder\("M1_Q_PrisonGuards", "S_Prizon"\);/m, 'after', prisonLoop()],
+	['Maps/11937/Sequences/seq18.vs', /^SpawnGroupInHolder\("M1_Q_PrisonGuards", "S_Prizon"\);/m, 'after', ['EnvWriteInt("/I1Probe/Prison", 1);']],
 	['Maps/11937/Sequences/seq15.vs', /^C_Conv\.Init\("OpeningConversation"\);/m, 'before', ['Mod_LogInt("I1PROBE seq15 opening conversation starts, t", GetTime());']],
 	['Maps/11937/Sequences/seq15.vs', /^C_Conv\.Run\(\);/m, 'after', ['Mod_LogInt("I1PROBE seq15 opening conversation ended, t", GetTime());']],
-	['Maps/11937/Sequences/seq15.vs', /^WaitEmptyQuery\s*\(\s*M1_Q_Victims1/m, 'before', seq15Loop()],
+	// Before the wait for the Teutons, which counts only the living (script.livingWaits).
+	['Maps/11937/Sequences/seq15.vs', /^\{ i1w_t = 0; i1w_r = 0; while \(1\) \{ i1w_l = \(M1_Q_Victims1\)/m, 'before', ['EnvWriteInt("/I1Probe/Seq15", 1);']],
 ];
+
+// The two 30-s loops run in sequences of their own, started when the campaign's script reaches their place (an
+// environment flag), so that they do not hold that script up: inline, the seq15 loop kept the player's input blocked
+// for 30 s and the prison loop delayed seq18 by 30 s. [{map, name, script}].
+function probeSequences() {
+	const wrap = (flagName, decl, lines) =>
+		['//void', DECLARATIONS.trimEnd(), ...decl, `while (EnvReadInt("/I1Probe/${flagName}") == 0) Sleep(100);`, ...lines, ''].join('\r\n');
+	return [
+		{ map: '11937', name: 'I1_Probe_Seq15', script: wrap('Seq15', ['NamedObj NO_Larax;', 'NO_Larax = GetNamedObj("Larax");'], seq15Loop()) },
+		{ map: '11937', name: 'I1_Probe_Prison', script: wrap('Prison', [], prisonLoop()) },
+	];
+}
 
 // Adds the probes of `path` to its script. Returns the new source, or null when the probe has nothing for this file.
 function addProbe(path, src) {
@@ -275,7 +290,7 @@ function sceneSequence() {
 			'\telse',
 			'\t{',
 			'\t\ti1q_o = i1q_n.obj;',
-			`\t\ti1q_s = "I1PROBE scene t=" + GetTime() + " name=${n} class=" + i1q_o.class() + " player=" + i1q_o.player + " health=" + i1q_o.health + " command=" + i1q_o.command + " x=" + i1q_o.pos.x + " y=" + i1q_o.pos.y;`,
+			`\t\ti1q_s = "I1PROBE scene t=" + GetTime() + " name=${n} class=" + i1q_o.class() + " player=" + i1q_o.player + " health=" + i1q_o.health + " command=" + i1q_o.command + " sight=" + i1q_o.sight + " x=" + i1q_o.pos.x + " y=" + i1q_o.pos.y;`,
 			'\t\tif (i1q_o.IsAlive()) i1q_s = i1q_s + " alive=1"; else i1q_s = i1q_s + " alive=0";',
 			'\t\tif (i1q_o.AsUnit().InHolder()) i1q_s = i1q_s + " inholder=1"; else i1q_s = i1q_s + " inholder=0";',
 			'\t\tMod_Log(i1q_s);',
@@ -286,4 +301,4 @@ function sceneSequence() {
 	return lines.join('\r\n');
 }
 
-module.exports = { addProbe, censusSequence, sceneSequence };
+module.exports = { addProbe, censusSequence, sceneSequence, probeSequences };

@@ -36,6 +36,7 @@ function readClasses(pak, prefix) {
 			entity: attr(head[0], 'entity'),
 			displayName: attr(live, 'display_name'),
 			icon: (/<properties\s+icon\s*=\s*"([^"]*)"/.exec(live) || [])[1] || null,
+			sight: (/<properties\b[^>]*\ssight\s*=\s*"(\d+)"/.exec(live) || [])[1] || null,
 			methods: new Set([...live.matchAll(/<method\s+sig\s*=\s*"([^"]*)"/g)].map((m) => m[1].toLowerCase())),
 			// sig (lower case) -> the script that runs the command, as the class file writes it.
 			methodScripts: new Map([...live.matchAll(/<method\s+sig\s*=\s*"([^"]*)"\s+vs\s*=\s*"([^"]*)"/g)].map((m) => [m[1].toLowerCase(), m[2]])),

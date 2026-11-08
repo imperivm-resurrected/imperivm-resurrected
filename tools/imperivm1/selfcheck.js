@@ -243,6 +243,37 @@ function check(cond, what) {
 	check(names.get('teutonwolf') === 'Jinete teutón', 'class names read by context');
 }
 
+// Waits count only living units; UnitFlags keep only the bits Imperivm I reads; units get Imperivm I's sight.
+{
+	const A = require('./lib/adventure');
+	const src = [
+		'//void',
+		'WaitEmptyQuery(Group("A"), -1);',
+		'if (x) WaitQueryCountBetween(Q, 1, -1, 0);',
+		'if ( WaitQueryCountBetween(Q, 0, 3, 500) ) n = 1;',
+		'while ( !WaitQueryCountBetween(Group("B"), 0, 0, 1000) && n < 3) {',
+		'\tn += 1;',
+		'}',
+		'else if (WaitEmptyQuery(Q, 0)) n = 2;',
+	].join('\n');
+	const r = S.livingWaits(src);
+	check(r.count === 4 && r.skipped.length === 1 && /else if \(WaitEmptyQuery/.test(r.src), `living waits: 4 rewritten, the one after else left (got ${r.count}/${r.skipped.length})`);
+	check(!/^WaitEmptyQuery\(Group\("A"\)/m.test(r.src) && /i1w_l = \(Group\("A"\)\)\.GetObjList\(\)/.test(r.src) && /IsAlive\(\)/.test(r.src), 'a wait statement becomes a loop over living units');
+	check(/\{ i1w_t = 0;[^\n]*\} if \( \(i1w_r == 1\) \) n = 1;/.test(r.src), 'a wait in an if is computed just before it');
+	check(/while \(1\) \{ \{ i1w_t = 0;[^\n]*if \(!\(!\(i1w_r == 1\) && n < 3\)\) break;/.test(r.src), 'a wait in a while condition runs at each turn');
+	check(/^ObjList i1w_l;$/m.test(r.src), 'living waits declare their variables');
+	const classes = { resolve: (id) => ({ to: id, substituted: false }), gbrCpp: () => 'CVXUnit', i1DisplayName: () => null, gbrDisplayName: () => null };
+	const objs = '\t<mapobject>\r\n\t<scriptobj\r\n\t\tclass="GAxeman"\r\n\t\tnum="1"\r\n\tUnitFlags="262153"\r\n\tplayer="2"\r\n\tflags="0x80400002"/>\r\n\t</mapobject>\r\n';
+	const t = A.convertObjects(objs, classes, { hasGameres: () => false }, new A.Report(), 'map.obj.xml');
+	check(/UnitFlags="262144"/.test(t), 'UnitFlags low 16 bits cleared (262153 -> 262144)');
+	const sight = A.sightScript([{ gbr: 'GAxeman', base: 500, i1: 400, from: 'GAxeman' }, { gbr: 'GArcher', base: 600, i1: 450, from: 'GArcher' }]);
+	check(/if \(i1v_s == 500\)[\s\S]*if \(i1v_c == "GAxeman"\) i1v_o\.SetSight\(400\);/.test(sight) && /if \(i1v_c == "GArcher"\) i1v_o\.SetSight\(450\);/.test(sight), 'sight script sets Imperivm I\'s sight by class');
+	const { readFunctions } = require('./lib/catalog');
+	const fns = readFunctions(require('path').join(__dirname, '..', '..', 'sdk', 'game-functions.txt'));
+	const bad = [...S.listCalls(sight), ...S.listCalls(r.src)].filter((c) => !['if', 'for', 'while'].includes(c.name) && !(c.method ? fns.methods.has(c.name) : fns.functions.has(c.name)));
+	check(!bad.length, `sight and wait scripts call only game functions (${bad.map((c) => c.name).join(', ')})`);
+}
+
 // Audit: strings of an executable, calls with their arguments, and the census lines.
 {
 	const AU = require('./lib/audit');
