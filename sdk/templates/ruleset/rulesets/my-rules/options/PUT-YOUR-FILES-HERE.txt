@@ -1,0 +1,1 @@
+Switches in the lobby rules: <id>.json. See options.md. Delete this note.

@@ -39,6 +39,7 @@ A template is an empty mod with the folders the game reads, a valid `mod.json` a
 | Music, sounds, voices | [`audio`](templates/audio) | [Audio](audio.md) |
 | The game in another language | [`translation`](templates/translation) | [Languages](languages.md) |
 | Textures, sprites, icons, menus | [`graphics`](templates/graphics) | [Custom graphics](graphics.md) |
+| A civilization package with its own global rules, chosen per room | [`ruleset`](templates/ruleset) | [Rulesets](rulesets.md) |
 | Several of the above | [`full`](templates/full) | [Reference](reference.md) |
 
 Don't include executables or system scripts (`.exe .dll .asi .bat .cmd .com .scr .ps1 .vbs .js .msi .sys .cpl .lnk .reg .jar .hta .wsf .pif`). If there's one, the mod won't load. A stray `.js`, like a generator of your own, counts.
@@ -69,6 +70,7 @@ Don't include executables or system scripts (`.exe .dll .asi .bat .cmd .com .scr
 | `sources` | `{"url": "...", "gamebanana": 123456}`. The game writes it when you install from Browse content; it's used to flag new versions. If it comes from the Sounds section, the number is in `gamebananaSound`. |
 | `language` | Declares a new language. See [Languages](languages.md). |
 | `commands` | Name of each command file on the Controls screen. See [Mod keys](keys.md). |
+| `rulesets` | Folders of the mod with its global rules, of which the host of a room chooses one. See [Rulesets](rulesets.md). |
 
 > Up to 0.31.50 the names of these fields were in Spanish (`nombre`, `autores`, `descripcion`, `etiquetas`, `categoria`, `redistribuible`, `licencia`, `requiere`, `incompatibleCon`, `cargarDespuesDe`, `cargarAntesDe`, `fuentes`, `idioma`, `ordenes`…). The old ones are still read, but write the new ones.
 
@@ -89,6 +91,7 @@ Don't include executables or system scripts (`.exe .dll .asi .bat .cmd .com .scr
 - [Outposts and buildings](outposts.md): new neutral outposts on random maps (`create-outpost.js`) and tower, wall and gate classes.
 - [Victory modes](victory-modes.md): a script in `data\GameScripts` adds a mode to the lobby's "Mode" dropdown.
 - [Starting bonuses](bonuses.md): scripts in `data\BonusScripts` add choices to the "Bonus" column of the lobby.
+- [Rulesets](rulesets.md): a package keeps its civilizations in the root and its global rules in a folder the host chooses per room.
 - [Custom game options](options.md): new switches in the lobby rules, which scripts read with `Mod_GetOption`.
 - [Scenarios, adventures and conquests](maps.md): the three kinds of map, the files each needs and cutscenes.
 - [Music, sounds and voices](audio.md): replace or add audio.

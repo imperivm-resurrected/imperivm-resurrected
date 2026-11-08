@@ -1,0 +1,1 @@
+Event scripts: OnGameStart.vs, OnObjectDie.vs... See scripts.md. Delete this note.

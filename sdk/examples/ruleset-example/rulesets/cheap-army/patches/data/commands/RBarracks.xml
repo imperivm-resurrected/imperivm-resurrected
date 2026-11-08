@@ -1,0 +1,4 @@
+<patch>
+  <!-- The Roman hastatus costs 60 gold in this ruleset -->
+  <set select="/commands/cmd[@name='trainRHastatus']" costgold="60"/>
+</patch>
