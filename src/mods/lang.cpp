@@ -469,7 +469,7 @@ std::string LangLooseFile(const std::string &rel)
 		const std::string lang = ModsLanguage();
 		for (const std::string &dir : ModsMountedDirs()) {
 			if (!IsDir(dir + "\\Local\\" + lang)) continue;
-			const std::string folder = dir.substr(dir.find_last_of('\\') + 1);
+			const std::string folder = ModsDirVfsName(dir);
 			g_looseBases.push_back("mods/" + folder + "/Local/" + lang + "/");
 			LogD("language", "%s brings loose files from %s", folder.c_str(), lang.c_str());
 		}

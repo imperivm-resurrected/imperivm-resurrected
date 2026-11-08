@@ -120,9 +120,20 @@ void PublishChosenFiles(const ModProfile &p)
 	if (chosen.empty()) return;
 	auto *open = new std::map<std::string, std::string>();
 	const std::string lang = LanguageLower();
+	std::string layerFolder, layerPath;
+	{
+		ModInfo owner;
+		if (!p.ruleset.Empty() && ModsFind(p.ruleset.pack, owner)) {
+			if (const ModLayer *layer = ModsActiveLayer(p, owner)) {
+				layerFolder = owner.folder;
+				layerPath = layer->path;
+			}
+		}
+	}
 	for (const auto &c : chosen) {
 		std::vector<std::string> tries;
 		if (StartsWith(c.first, "currentlang/")) tries.push_back("mods/" + c.second + "/local/" + lang + "/" + c.first.substr(12));
+		if (!layerPath.empty() && _stricmp(layerFolder.c_str(), c.second.c_str()) == 0) tries.push_back("mods/" + c.second + "/" + layerPath + "/" + c.first);
 		tries.push_back("mods/" + c.second + "/" + c.first);
 		for (const std::string &t : tries) {
 			std::string disk = GameDir() + "\\" + t;
@@ -161,6 +172,14 @@ void MountProfileLayers(void *list)
 	}
 	ModProfile p = ModsLoadProfile(name);
 	p.mods = ModsLoadOrder(p.mods);
+	{
+		const ModRuleset effective = ModsEffectiveRuleset(p);
+		if (!p.ruleset.Empty() && effective.Empty()) {
+			LogW("content", "the profile asks for ruleset \"%s\" of \"%s\" but it cannot be mounted (the pack is not enabled or installed, or it has no such ruleset)",
+				p.ruleset.id.c_str(), p.ruleset.pack.c_str());
+		}
+		p.ruleset = effective;
+	}
 	std::map<std::string, std::string> signatures;
 	for (const std::string &folder : p.mods) {
 		ModInfo m;
@@ -181,21 +200,15 @@ void MountProfileLayers(void *list)
 	}
 	const std::string lang = LanguageLower();
 	std::vector<std::string> looseLayers;
-	for (const std::string &folder : p.mods) {
-		ModInfo m;
-		if (!ModsFind(folder, m)) {
-			LogW("content", "the profile uses \"%s\" but it is not in the mods folder", folder.c_str());
-			continue;
-		}
-		if (!m.forbidden.empty()) {
-			LogW("content", "%s is NOT loaded: it brings disallowed files (%s...)", folder.c_str(), m.forbidden[0].c_str());
-			continue;
-		}
-		const std::string vfsBase = "mods/" + folder + "/";
-		const std::string diskBase = ModsDir() + "\\" + folder + "\\";
+	// sub is "" for a package's root or "rulesets/<id>/" for one of its rulesets: both are mounted the same way.
+	auto mountRoot = [&](const std::string &folder, const std::string &sub, bool hasLoose) {
+		std::string diskSub = sub;
+		std::replace(diskSub.begin(), diskSub.end(), '/', '\\');
+		const std::string vfsBase = "mods/" + folder + "/" + sub;
+		const std::string diskBase = ModsDir() + "\\" + folder + "\\" + diskSub;
 		{
 			std::lock_guard<std::mutex> lock(g_lock);
-			g_mount.dirs.push_back(ModsDir() + "\\" + folder);
+			g_mount.dirs.push_back(diskSub.empty() ? ModsDir() + "\\" + folder : diskBase.substr(0, diskBase.size() - 1));
 		}
 		if (IsDir(diskBase + "Local")) {
 			g_origMountPakFilesInDir((vfsBase + "Local/").c_str(), list, lang.c_str());
@@ -207,9 +220,29 @@ void MountProfileLayers(void *list)
 		if (IsDir(diskBase + "Packs")) {
 			g_origMountPakFilesInDir((vfsBase + "Packs/").c_str(), list, nullptr);
 		}
-		if (m.hasLoose) {
+		if (hasLoose) {
 			looseLayers.push_back(vfsBase);
 		}
+	};
+	for (const std::string &folder : p.mods) {
+		ModInfo m;
+		if (!ModsFind(folder, m)) {
+			LogW("content", "the profile uses \"%s\" but it is not in the mods folder", folder.c_str());
+			continue;
+		}
+		if (!m.forbidden.empty()) {
+			LogW("content", "%s is NOT loaded: it brings disallowed files (%s...)", folder.c_str(), m.forbidden[0].c_str());
+			continue;
+		}
+		// The chosen ruleset goes right above its package: where both carry a file, the ruleset's is the one used.
+		if (!p.ruleset.Empty() && _stricmp(folder.c_str(), p.ruleset.pack.c_str()) == 0) {
+			if (const ModLayer *layer = ModsFindLayer(m, p.ruleset.id)) {
+				mountRoot(folder, layer->path + "/", layer->hasLoose);
+				LogI("content", "ruleset \"%s\" of %s mounted (%u files%s)", layer->id.c_str(), m.name.c_str(), layer->fileCount,
+					layer->gameplay ? ", rules type" : "");
+			}
+		}
+		mountRoot(folder, "", m.hasLoose);
 		LogI("content", "loaded %s %s (%u files%s%s)", m.name.c_str(), m.version.c_str(), m.fileCount,
 			m.hasLoose ? ", with loose files" : "", m.gameplay ? ", rules type" : m.kind == kModContent ? ", content type" : ", cosmetic type");
 	}
@@ -228,6 +261,10 @@ void MountProfileLayers(void *list)
 		for (const std::string &folder : p.mods) {
 			ModInfo m;
 			if (!ModsFind(folder, m) || !m.forbidden.empty()) continue;
+			if (const ModLayer *layer = ModsActiveLayer(p, m)) {
+				if (!layer->hidden.empty()) hides.push_back(layer->hidden);
+				provided.insert(layer->paths.begin(), layer->paths.end());
+			}
 			if (!m.hidden.empty()) hides.push_back(m.hidden);
 			provided.insert(m.paths.begin(), m.paths.end());
 		}
@@ -284,6 +321,7 @@ bool ModsApplyWithoutRestart()
 		if (!ContainsFolder(active.mods, f)) removed.push_back(f);
 	}
 	if (added.empty() && removed.empty()) return false;
+	if (!ModsSameRuleset(ModsEffectiveRuleset(active), mounted.ruleset)) return false;
 	if (!active.choices.empty() && ChosenFolders(active, ModsList()) != chosen) return false;
 	std::vector<ModInfo> addedInfo;
 	for (const std::string &f : added) {
@@ -331,6 +369,7 @@ bool ModsApplyWithoutRestart()
 	for (const std::string &f : failed) active.mods.erase(std::remove(active.mods.begin(), active.mods.end(), f), active.mods.end());
 	active.mods = ModsLoadOrder(active.mods);
 	std::vector<std::string> dirs;
+	active.ruleset = mounted.ruleset;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
 		g_mount.profile = active;

@@ -145,7 +145,7 @@ void SpecialsRebuild()
 {
 	std::vector<const ModSpecial *> found;
 	std::vector<std::pair<std::string, std::string>> roots;
-	for (const std::string &dir : ModsMountedDirs()) roots.push_back({dir.substr(dir.find_last_of('\\') + 1), dir + "\\specials"});
+	for (const std::string &dir : ModsMountedDirs()) roots.push_back({ModsPackFolder(dir), dir + "\\specials"});
 	roots.push_back({"", GameDir() + "\\imperivm-resurrected\\specials"});
 	for (const auto &root : roots) {
 		WIN32_FIND_DATAA fd;

@@ -75,21 +75,34 @@ std::vector<std::string> OrderOf(const std::vector<std::string> &folders, const 
 	return CanonicalOrder(items);
 }
 
-ClashMod ClashModOf(const ModInfo &m)
+// The ruleset a profile mounts counts as part of its package: what it shares with other packs is a clash, what it shares with its own root is not.
+void AddUnique(std::vector<std::string> &into, const std::vector<std::string> &more)
+{
+	into.insert(into.end(), more.begin(), more.end());
+	std::sort(into.begin(), into.end());
+	into.erase(std::unique(into.begin(), into.end()), into.end());
+}
+
+ClashMod ClashModOf(const ModInfo &m, const ModLayer *layer)
 {
 	ClashMod c;
 	c.folder = m.folder;
 	c.id = m.id;
 	c.paths = m.paths;
 	c.loose = m.loosePaths;
+	if (layer) {
+		AddUnique(c.paths, layer->paths);
+		AddUnique(c.loose, layer->loosePaths);
+	}
 	for (const ModDependency &d : m.requires) c.declares.push_back(d.id);
 	c.declares.insert(c.declares.end(), m.loadAfter.begin(), m.loadAfter.end());
 	c.declares.insert(c.declares.end(), m.loadBefore.begin(), m.loadBefore.end());
 	c.values = m.patchValues;
+	if (layer) c.values.insert(c.values.end(), layer->patchValues.begin(), layer->patchValues.end());
 	return c;
 }
 
-void ResolvePatchedValues(std::vector<ClashMod> &mods)
+void ResolvePatchedValues(std::vector<ClashMod> &mods, const ModRuleset &ruleset)
 {
 	std::map<std::string, int> setters;
 	for (const ClashMod &m : mods) {
@@ -105,7 +118,7 @@ void ResolvePatchedValues(std::vector<ClashMod> &mods)
 		std::vector<size_t> owners;
 		for (size_t i = mods.size(); i-- > 0;) {
 			std::string text;
-			if (!PatchTextOf(mods[i].folder, kv.first, text)) continue;
+			if (!PatchTextOf(mods[i].folder, kv.first, text, SameFolder(mods[i].folder, ruleset.pack) ? ruleset.id : std::string())) continue;
 			patches.push_back(text);
 			owners.push_back(i);
 		}
@@ -130,9 +143,9 @@ ClashReport ClashesOf(const ModProfile &p, const std::vector<ModInfo> &all)
 	std::vector<ClashMod> mods;
 	for (const std::string &folder : OrderOf(p.mods, all)) {
 		const ModInfo *m = FindIn(all, folder);
-		if (m && m->forbidden.empty()) mods.push_back(ClashModOf(*m));
+		if (m && m->forbidden.empty()) mods.push_back(ClashModOf(*m, ModsActiveLayer(p, *m)));
 	}
-	ResolvePatchedValues(mods);
+	ResolvePatchedValues(mods, p.ruleset);
 	std::vector<ClashChoice> choices;
 	for (const ModChoice &c : p.choices) choices.push_back({c.use, c.over});
 	return ClashAnalyze(mods, choices);
@@ -181,16 +194,22 @@ ModIssues IssuesOf(const ModProfile &p, const std::vector<ModInfo> &all, const s
 	if (!m->manifestError.empty()) out.problems.push_back(Tr("mod.json has errors: ") + m->manifestError);
 	if (m->noGameFiles) out.problems.push_back(Tr("This content pack is empty: it brings nothing for the game."));
 	if (!m->rleTailError.empty()) out.problems.push_back(Tr(m->rleTailError));
+	for (const std::string &e : m->rulesetProblems) out.problems.push_back(e);
 	for (const std::string &e : PatchErrorsFor(m->folder)) {
 		if (out.problems.size() >= 8) break;
 		out.problems.push_back(Tr("Patch ") + e);
 	}
 	for (const std::string &e : ModsFeatureProblems(m->folder)) out.problems.push_back(e);
 	if (!active) return out;
-	if (m->rleTail && m->rleTailError.empty()) {
+	const ModLayer *layer = ModsActiveLayer(p, *m);
+	if (layer && !layer->rleTailError.empty()) out.problems.push_back(Tr(layer->rleTailError));
+	// The tail of the ruleset in use counts as its package's.
+	const bool rleTail = (m->rleTail && m->rleTailError.empty()) || (layer && layer->rleTail && layer->rleTailError.empty());
+	const uint64_t rleBase = m->rleTail ? m->rleBaseSize : layer ? layer->rleBaseSize : 0;
+	if (rleTail) {
 		const std::string rle = RleProblemOf(m->folder);
 		if (!rle.empty()) out.problems.push_back(Tr(rle));
-		else if (GameRleSize() && GameRleSize() != m->rleBaseSize) {
+		else if (GameRleSize() && GameRleSize() != rleBase) {
 			out.problems.push_back(Tr("Made for another version of the game's graphics (rle.mmp): its new graphics cannot be shown"));
 		}
 	}
@@ -215,7 +234,8 @@ ModIssues IssuesOf(const ModProfile &p, const std::vector<ModInfo> &all, const s
 		if (a == m) continue;
 		const size_t before = out.problems.size();
 		if (ModsSameMod(*a, *m)) out.problems.push_back(Tr("Another version of this content pack is active (") + a->version + Tr("): keep only one"));
-		if (m->rleTail && a->rleTail) out.problems.push_back(TrFmt("Only one content pack can add graphics to rle.mmp, and %s also does", {a->name}));
+		const ModLayer *otherLayer = ModsActiveLayer(p, *a);
+		if ((m->rleTail || (layer && layer->rleTail)) && (a->rleTail || (otherLayer && otherLayer->rleTail))) out.problems.push_back(TrFmt("Only one content pack can add graphics to rle.mmp, and %s also does", {a->name}));
 		for (const std::string &x : m->incompatible) {
 			if (SameId(x, a->id)) out.problems.push_back(Tr("Not compatible with ") + a->name);
 		}

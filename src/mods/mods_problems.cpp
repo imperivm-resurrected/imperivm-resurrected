@@ -207,7 +207,7 @@ std::string ModsProfileGameplayHash(const ModProfile &p)
 			if (m.folder != folder) continue;
 			if (m.gameplay) parts.push_back({m.id, m.gameplayHash, ""});
 			// The ruleset the profile mounts is part of what the players share, hashed apart from the package's root.
-			const ModLayer *layer = _stricmp(m.folder.c_str(), p.ruleset.pack.c_str()) == 0 ? ModsFindLayer(m, p.ruleset.id) : nullptr;
+			const ModLayer *layer = ModsActiveLayer(p, m);
 			if (layer && layer->gameplay) parts.push_back({m.id, layer->gameplayHash, layer->id});
 		}
 	}

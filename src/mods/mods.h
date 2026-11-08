@@ -176,6 +176,12 @@ struct ModProfile {
 	ModRuleset ruleset;
 };
 
+// The ruleset of profile p that belongs to package m, if the profile mounts one of it.
+inline const ModLayer *ModsActiveLayer(const ModProfile &p, const ModInfo &m)
+{
+	return !p.ruleset.Empty() && _stricmp(p.ruleset.pack.c_str(), m.folder.c_str()) == 0 ? ModsFindLayer(m, p.ruleset.id) : nullptr;
+}
+
 enum MapOriginKind { kMapBase, kMapLoose, kMapReceived, kMapMod };
 struct MapOrigin {
 	int kind = kMapBase;

@@ -434,12 +434,17 @@ ModInfo ScanMod(const std::string &folder, std::vector<ScanFile> &files)
 	return m;
 }
 
-bool PatchTextOf(const std::string &folder, const std::string &target, std::string &out)
+bool PatchTextOf(const std::string &folder, const std::string &target, std::string &out, const std::string &layer)
 {
 	std::lock_guard<std::mutex> lock(g_lock);
 	const auto it = g_scanFiles.find(folder);
 	if (it == g_scanFiles.end()) return false;
 	const std::string rel = "patches/" + target;
+	for (const ScanFile &f : it->second) {
+		if (layer.empty() || f.layer != layer || f.rel.compare(f.layerStrip, std::string::npos, rel) != 0) continue;
+		out = f.text;
+		return true;
+	}
 	for (const ScanFile &f : it->second) {
 		if (f.rel != rel) continue;
 		out = f.text;

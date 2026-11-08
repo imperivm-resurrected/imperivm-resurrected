@@ -815,7 +815,7 @@ void CivsRebuild()
 	std::vector<Civ *> found;
 	std::vector<std::string> dirs = ModsMountedDirs();
 	std::vector<std::pair<std::string, std::string>> roots;
-	for (const std::string &dir : dirs) roots.push_back({dir.substr(dir.find_last_of('\\') + 1), dir + "\\civs"});
+	for (const std::string &dir : dirs) roots.push_back({ModsPackFolder(dir), dir + "\\civs"});
 	roots.push_back({"", GameDir() + "\\imperivm-resurrected\\civs"});
 	for (const auto &root : roots) {
 		WIN32_FIND_DATAA fd;

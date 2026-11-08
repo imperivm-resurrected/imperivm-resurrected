@@ -167,7 +167,7 @@ void PackRulesRebuild()
 {
 	Rules merged;
 	std::vector<std::pair<std::string, std::string>> roots;
-	for (const std::string &dir : ModsMountedDirs()) roots.push_back({dir.substr(dir.find_last_of('\\') + 1), dir + "\\rules\\game.json"});
+	for (const std::string &dir : ModsMountedDirs()) roots.push_back({ModsPackFolder(dir), dir + "\\rules\\game.json"});
 	roots.push_back({"", GameDir() + "\\imperivm-resurrected\\rules\\game.json"});
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
