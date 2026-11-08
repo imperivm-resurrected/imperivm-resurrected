@@ -11,12 +11,40 @@
 #include "MinHook.h"
 #include "hooks/hookcount.h"
 #include "core/log.h"
+#include "addr/script.h"
 #include "addr/world.h"
 
 // Diagnostic only (not for main): logs what CVXConversationWnd::ShowPhrase is about to draw for the current phrase.
 namespace {
 typedef void(__fastcall *ShowPhrase_t)(int *wnd);
 ShowPhrase_t g_orig = nullptr;
+typedef void(__fastcall *HeroSerialize_t)(char *hero, void *unused, int *stream);
+HeroSerialize_t g_origHero = nullptr;
+void Text(const char *s, char *out, size_t size);
+
+void DescribeHero(char *hero, int *stream)
+{
+	__try {
+		const unsigned short handle = *reinterpret_cast<unsigned short *>(hero + 8);
+		char *slot = reinterpret_cast<char **>(addr::kHandleTable)[handle];
+		const uint32_t flags = *reinterpret_cast<uint32_t *>(hero + 0x2c);
+		const char *type = *reinterpret_cast<const char **>(hero + 0x3c);
+		char name[48] = "?";
+		if (type) Text(type + 4, name, sizeof(name));
+		LogI("game", "herodiag: %s hero=%08x handle=%u slot=%08x%s class=%s flags=%08x vtable=%08x stream=%08x",
+			stream && stream[4] == 1 ? "load" : "save", reinterpret_cast<uintptr_t>(hero), handle, reinterpret_cast<uintptr_t>(slot),
+			slot == hero ? "" : " (NOT THIS)", name, flags, *reinterpret_cast<uint32_t *>(hero), reinterpret_cast<uintptr_t>(stream));
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		LogW("game", "herodiag: could not read hero %08x", reinterpret_cast<uintptr_t>(hero));
+	}
+}
+
+void __fastcall HookHero(char *hero, void *unused, int *stream)
+{
+	DescribeHero(hero, stream);
+	g_origHero(hero, unused, stream);
+}
 
 void Text(const char *s, char *out, size_t size)
 {
@@ -80,4 +108,7 @@ void InstallConversationDiag(bool knownExe)
 		return;
 	}
 	LogI("game", "convdiag: logging every conversation phrase");
+	void *hero = reinterpret_cast<void *>(addr::kHeroSerialize);
+	if (HookCreate(hero, reinterpret_cast<void *>(&HookHero), reinterpret_cast<void **>(&g_origHero)) != MH_OK || HookEnable(hero) != MH_OK)
+		LogE("game", "herodiag: could not hook CVXHero::Serialize");
 }
