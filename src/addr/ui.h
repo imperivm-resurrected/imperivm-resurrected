@@ -10,6 +10,7 @@ inline constexpr uintptr_t kIsNewUpdateAvailable = 0x00408a30;
 inline constexpr uintptr_t kUpdateXmlExists = 0x00408ab0;
 inline constexpr uintptr_t kChatSend = 0x004e51e0;
 inline constexpr uintptr_t kRegisterCommands = 0x004ee870;
+inline constexpr uintptr_t kSelectionClear = 0x005b8960;
 inline constexpr uintptr_t kSelectionRevalidate = 0x005b9560;
 inline constexpr uintptr_t kRebuildCommandList = 0x005e7710;
 inline constexpr uintptr_t kPlayMovieFile = 0x005f97d0;
