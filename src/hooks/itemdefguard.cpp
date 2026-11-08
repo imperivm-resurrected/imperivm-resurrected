@@ -24,13 +24,15 @@ typedef void *(__fastcall *LoadFile_t)(char *reader, void *unused, const char *p
 LoadFile_t g_origLoadFile = nullptr;
 
 // CItemsReader: std::vector<CItemDef *> at +0x08 (begin, end, capacity).
-const unsigned kBegin = 0x08, kEnd = 0x0c, kCapacity = 0x10;
+const unsigned kBegin = 0x08, kEnd = 0x0c, kCapacity = 0x10, kReaderLocale = 0x24;
 // CItemDef (0x1e0 bytes): id, name, description, image and sound strings, then the values, then 9 script strings.
 const unsigned kStringSize = 0x1c;
 const unsigned kTexts[] = {0x00, 0x1c, 0x38, 0x54, 0x70};
 const unsigned kValuesFirst = 0x90, kValuesEnd = 0xd8;
 const unsigned kSerial = 0xd8;
 const unsigned kScripts = 0xdc, kScriptCount = 9;
+// The translations of itemsCustom.loc.xml the type was read with (CItemDef::GetDescription); the loader frees them on reload.
+const unsigned kLocale = 0x1dc;
 
 // The game's std::string (MSVC 7.1): text inline at +4 while capacity (+0x18) < 16, else a pointer at +4; size at +0x14.
 bool SameString(const char *a, const char *b)
@@ -52,11 +54,14 @@ bool SameType(const char *a, const char *b)
 	return true;
 }
 
-// Puts back in the new list each old type that is the same as a new one. Returns how many, or -1 if reading them failed.
-int SwapBackSameTypes(char **begin, char **end, char **old, size_t count)
+// Points every old type at the new translations, then puts back in the new list each old type that is the same as a new
+// one. Returns how many were put back, or -1 if reading them failed.
+int SwapBackSameTypes(char **begin, char **end, char **old, size_t count, void *locale)
 {
 	int kept = 0;
 	__try {
+		for (size_t i = 0; i < count; i++)
+			if (old[i]) *reinterpret_cast<void **>(old[i] + kLocale) = locale;
 		for (char **slot = begin; slot != end; ++slot) {
 			for (size_t i = 0; i < count; i++) {
 				char *type = old[i];
@@ -86,7 +91,7 @@ void *__fastcall HookLoadFile(char *reader, void *unused, const char *path)
 	// The loader frees what the list holds: with an empty list it frees nothing. The old list's own buffer is left behind.
 	begin = end = *reinterpret_cast<char ***>(reader + kCapacity) = nullptr;
 	void *result = g_origLoadFile(reader, unused, path);
-	const int kept = SwapBackSameTypes(begin, end, old.data(), old.size());
+	const int kept = SwapBackSameTypes(begin, end, old.data(), old.size(), *reinterpret_cast<void **>(reader + kReaderLocale));
 	if (kept < 0) {
 		LogE("game", "items: could not compare the item types of %s; the old ones are kept alive", path ? path : "?");
 		return result;
