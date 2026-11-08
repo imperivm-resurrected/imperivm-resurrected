@@ -408,6 +408,60 @@ function attackPointsToAdvance(src) {
 }
 
 // Top-level arguments of the call whose '(' is at `open` and ')' at `close`: [text].
+// "attach" to a hero: Imperivm I's wagons and caravan mules join the hero's army and follow him. Great Battles of Rome's
+// unit_attach.vs returns at once for a Wagon (`if (.IsHeirOf("Wagon") ...) return;`), so they stand still; its wagons
+// follow a unit with their own "follow" command (wagon_follow.vs). Each R.SetCommand("attach", H) / R.AddCommand(b,
+// "attach", H) statement sends "follow" to the wagons among R and "attach" to the rest. A wagon already following is left
+// alone, since Imperivm I's scripts repeat the attach while the hero's army does not hold the wagon (in Great Battles of
+// Rome it never will) and a new "follow" every time would restart its walk.
+const WAGON_VARS = 'ObjList i1wa_l;\nint i1wa_i;\n';
+function wagonsFollow(src) {
+	const types = declaredTypes(src);
+	const tokens = tokenize(src);
+	let count = 0;
+	const skipped = [];
+	for (const method of ['SetCommand', 'AddCommand']) {
+		for (const c of methodCalls(tokens, method)) {
+			const args = argsOf(tokens, c.open, c.close);
+			const cmdArg = method === 'AddCommand' ? args[1] : args[0];
+			if (!cmdArg || !/^"attach"$/.test(cmdArg.trim())) continue;
+			const semi = nextCode(tokens, c.close + 1);
+			const original = join(tokens.slice(c.start, c.close + 1)).trim();
+			if (semi >= tokens.length || tokens[semi].text !== ';') {
+				skipped.push(original);
+				continue;
+			}
+			const receiver = join(tokens.slice(c.start, c.dot)).trim();
+			const rest = (method === 'AddCommand' ? args.slice(2) : args.slice(1)).map((a) => a.trim()).join(', ');
+			const lead = method === 'AddCommand' ? `${args[0].trim()}, ` : '';
+			const call = (o, cmd) => `${o}.${method}(${lead}"${cmd}", ${rest})`;
+			const one = (o) => `if (${o}.IsHeirOf("Wagon")) { if (${o}.command != "follow") ${call(o, 'follow')}; } else ${call(o, 'attach')};`;
+			const name = /^[A-Za-z_]\w*$/.test(receiver) ? receiver : null;
+			const type = name ? types.get(name) : null;
+			let list = null;
+			if (type === 'ObjList') list = receiver;
+			else if (type === 'Query' || (name && !type)) list = `(${receiver}).GetObjList()`;
+			let text;
+			if (list) {
+				const o = 'i1wa_l[i1wa_i].AsUnit()';
+				text = `{ i1wa_l = ${list}; for (i1wa_i = 0; i1wa_i < i1wa_l.count; i1wa_i += 1) { ${one(o)} } }`;
+			} else if (type === 'NamedObj') text = `{ ${one(`${receiver}.obj.AsUnit()`)} }`;
+			else if (/\.obj$/.test(receiver) || /\.AsUnit\(\)$/.test(receiver) || type === 'Obj' || type === 'Unit') {
+				const o = /\.AsUnit\(\)$/.test(receiver) || type === 'Unit' ? receiver : `${receiver}.AsUnit()`;
+				text = `{ ${one(o)} }`;
+			}
+			if (!text) {
+				skipped.push(original);
+				continue;
+			}
+			tokens.splice(c.start, semi - c.start + 1, { type: 'other', text: `${text} /* was ${original.replace(/\*\//g, '* /')}; */` });
+			count++;
+		}
+	}
+	if (!count) return { src, count, skipped };
+	return { src: insertDeclarations(join(tokens), WAGON_VARS), count, skipped };
+}
+
 function argsOf(tokens, open, close) {
 	const args = [];
 	let depth = 0;
@@ -554,6 +608,7 @@ module.exports = {
 	replaceStringLiterals,
 	expandReduceGroup,
 	rewriteRituals,
+	wagonsFollow,
 	rewriteDruidCommands,
 	queueConversations,
 	ownHolderSpawns,

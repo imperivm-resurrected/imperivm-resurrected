@@ -295,6 +295,10 @@ function convertScript(src, ctx, where) {
 	if (ra.advanced) ctx.report.count('"attack" given a point, written "advance" (per map)', `map ${mapId}`, ra.advanced);
 	if (ra.kept) ctx.report.count('"attack" given an object, kept (per map)', `map ${mapId}`, ra.kept);
 	for (const u of ra.unknown) ctx.report.add('Check warnings', `${where}: ${u}: could not tell whether "attack" is given a point or an object; left as it is`);
+	const wf = S.wagonsFollow(s);
+	s = wf.src;
+	if (wf.count) ctx.report.count('"attach" sending wagons "follow" instead (per map)', `map ${mapId}`, wf.count);
+	for (const k of wf.skipped) ctx.report.add('Check warnings', `${where}: ${k}: "attach" left as it is (a wagon given it stands still)`);
 	const rw = S.livingWaits(s);
 	s = rw.src;
 	if (rw.count) ctx.report.count('WaitEmptyQuery/WaitQueryCountBetween counting only living units (per map)', `map ${mapId}`, rw.count);
