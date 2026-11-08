@@ -319,7 +319,9 @@ function addActorProbes(path, src) {
 		lines.push('Mod_Log(i1p_s);');
 		return `${all}\r\n${lines.join('\r\n')}`;
 	});
-	return count ? S.insertDeclarations(out, DECLARATIONS) : null;
+	if (!count) return null;
+	// addProbe may have declared the i1p_ variables already; a second declaration stops the script from compiling.
+	return /\bstr i1p_s\b/.test(src) ? out : S.insertDeclarations(out, DECLARATIONS);
 }
 
 module.exports = { addProbe, addActorProbes, censusSequence, sceneSequence, probeSequences };

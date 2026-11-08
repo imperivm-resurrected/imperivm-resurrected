@@ -495,10 +495,11 @@ function sightScript(rules) {
 		bySight.get(r.base).push(r);
 	}
 	const lines = ['//void', 'ObjList i1v_l;', 'Obj i1v_o;', 'int i1v_p, i1v_i, i1v_s;', 'str i1v_c;', '', 'while (1)', '{', '\tfor (i1v_p = 0; i1v_p <= 16; i1v_p += 1)', '\t{'];
+	// Great Battles of Rome's sneak_behavior.vs hides Gaul druids (and huntresses, mountaineers) after 20 s without attacking;
+	// Imperivm I's never hid on their own. The mod's patch of that script skips the units of players with I1NoSneak set
+	// (the script language has no env on a unit: only global, per player and per settlement).
+	lines.push('\t\tif (EnvReadInt(i1v_p, "I1NoSneak") != 1) EnvWriteInt(i1v_p, "I1NoSneak", 1);');
 	lines.push('\t\ti1v_l = ClassPlayerObjs("Unit", i1v_p).GetObjList();', '\t\tfor (i1v_i = 0; i1v_i < i1v_l.count; i1v_i += 1)', '\t\t{', '\t\t\ti1v_o = i1v_l[i1v_i];',
-		// Great Battles of Rome's sneak_behavior.vs hides Gaul druids (and huntresses, mountaineers) after 20 s without attacking;
-		// Imperivm I's never hid on their own. The mod's patch of that script skips units marked I1NoSneak.
-		'\t\t\tif (EnvReadInt(i1v_o, "I1NoSneak") != 1) EnvWriteInt(i1v_o, "I1NoSneak", 1);',
 		'\t\t\ti1v_s = i1v_o.sight;');
 	for (const [base, rs] of [...bySight].sort((a, b) => a[0] - b[0])) {
 		lines.push(`\t\t\tif (i1v_s == ${base})`, '\t\t\t{', '\t\t\t\ti1v_c = i1v_o.class();');
