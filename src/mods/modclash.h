@@ -57,4 +57,24 @@ struct ClashReport {
 
 int ClashKindOf(const std::string &path);
 
+// A ruleset of an installed package, to compare with the rulesets of the other packages. A room mounts only one ruleset, so two that
+// change the same gameplay files are alternatives to each other, not a clash. paths and loose have the ruleset's folder cut off.
+struct RulesetClashMod {
+	std::string pack;
+	std::string layer;
+	std::vector<std::string> paths;
+	std::vector<std::string> loose;
+	std::vector<PatchedValue> values;
+};
+
+// What two rulesets of different packages share: gameplay files, and values their patches set in the same file and key to different things.
+struct RulesetShared {
+	std::string packA, layerA, packB, layerB;
+	int files = 0;
+	int values = 0;
+};
+
+// Only pairs that share something. Rulesets of the same package are not compared.
+std::vector<RulesetShared> RulesetCompare(const std::vector<RulesetClashMod> &rulesets);
+
 ClashReport ClashAnalyze(const std::vector<ClashMod> &ordered, const std::vector<ClashChoice> &choices);

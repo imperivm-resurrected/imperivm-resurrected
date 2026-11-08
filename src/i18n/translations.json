@@ -1506,5 +1506,10 @@
 {"en":"The game will restart with the rules you chose.","es":"El juego se reiniciará con las reglas que elegiste.","it":"Il gioco si riavvierà con le regole che hai scelto."},
 {"en":"Rules that will be loaded:","es":"Reglas que se cargarán:","it":"Regole che verranno caricate:"},
 {"en":"Could not save the rules in the content profile.","es":"No se pudieron guardar las reglas en el perfil de contenido.","it":"Impossibile salvare le regole nel profilo dei contenuti."},
-{"en":" (without its ruleset)","es":" (sin su conjunto de reglas)","it":" (senza il suo set di regole)"}
+{"en":" (without its ruleset)","es":" (sin su conjunto de reglas)","it":" (senza il suo set di regole)"},
+{"en":"Rulesets: %s","es":"Conjuntos de reglas: %s","it":"Set di regole: %s"},
+{"en":" (in use)","es":" (en uso)","it":" (in uso)"},
+{"en":"%s is an alternative to %s (%s)","es":"%s es una alternativa a %s (%s)","it":"%s è un'alternativa a %s (%s)"},
+{"en":"Gameplay files in common: %s","es":"Archivos de jugabilidad en común: %s","it":"File di gioco in comune: %s"},
+{"en":"Values in common: %s","es":"Valores en común: %s","it":"Valori in comune: %s"}
 ]

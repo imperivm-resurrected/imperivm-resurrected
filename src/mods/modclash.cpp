@@ -106,6 +106,50 @@ int ClashKindOf(const std::string &path)
 	return kClashCosmetic;
 }
 
+std::vector<RulesetShared> RulesetCompare(const std::vector<RulesetClashMod> &rulesets)
+{
+	std::vector<ClashMod> mods;
+	for (const RulesetClashMod &r : rulesets) {
+		ClashMod m;
+		m.folder = r.pack + "\n" + r.layer;
+		m.paths = r.paths;
+		m.loose = r.loose;
+		m.values = r.values;
+		mods.push_back(std::move(m));
+	}
+	const ClashReport report = ClashAnalyze(mods, {});
+	auto indexOf = [&](const std::string &folder) {
+		for (size_t i = 0; i < mods.size(); i++) {
+			if (mods[i].folder == folder) return i;
+		}
+		return mods.size();
+	};
+	std::map<std::pair<size_t, size_t>, RulesetShared> found;
+	auto entry = [&](const std::string &x, const std::string &y) -> RulesetShared * {
+		const size_t a = indexOf(x), b = indexOf(y);
+		if (a >= mods.size() || b >= mods.size() || rulesets[a].pack == rulesets[b].pack) return nullptr;
+		RulesetShared &s = found[Key(a, b)];
+		const size_t lo = std::min(a, b), hi = std::max(a, b);
+		s.packA = rulesets[lo].pack;
+		s.layerA = rulesets[lo].layer;
+		s.packB = rulesets[hi].pack;
+		s.layerB = rulesets[hi].layer;
+		return &s;
+	};
+	for (const ClashPair &p : report.pairs) {
+		if (p.gameplay == 0) continue;
+		if (RulesetShared *s = entry(p.a, p.b)) s->files = p.gameplay;
+	}
+	for (const ValueClash &v : report.values) {
+		if (RulesetShared *s = entry(v.used, v.lost)) s->values += static_cast<int>(v.values.size());
+	}
+	std::vector<RulesetShared> out;
+	for (auto &kv : found) {
+		if (kv.second.files || kv.second.values) out.push_back(kv.second);
+	}
+	return out;
+}
+
 ClashReport ClashAnalyze(const std::vector<ClashMod> &ordered, const std::vector<ClashChoice> &choices)
 {
 	const size_t n = ordered.size();

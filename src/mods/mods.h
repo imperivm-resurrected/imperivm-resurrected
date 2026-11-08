@@ -324,6 +324,8 @@ struct ModOverlapValue {
 struct ModIssues {
 	std::vector<std::string> problems;
 	std::vector<std::string> notices;
+	// Information, never a problem: the package's rulesets, and which rulesets of other packages are alternatives to them.
+	std::vector<std::string> rulesets;
 	int overwrites = 0;
 	std::vector<ModOverlap> overlaps;
 	std::vector<ModOverlapFile> files;

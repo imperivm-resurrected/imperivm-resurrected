@@ -173,6 +173,31 @@ struct ClashCache {
 	const std::vector<ModInfo> &all;
 	bool done = false;
 	ClashReport report;
+	bool alternativesDone = false;
+	std::vector<RulesetShared> alternatives;
+
+	// The rulesets of every installed package, compared once for all the cards.
+	const std::vector<RulesetShared> &Alternatives()
+	{
+		if (!alternativesDone) {
+			std::vector<RulesetClashMod> layers;
+			for (const ModInfo &m : all) {
+				if (!m.forbidden.empty()) continue;
+				for (const ModLayer &l : m.layers) {
+					RulesetClashMod c;
+					c.pack = m.folder;
+					c.layer = l.id;
+					c.paths = l.paths;
+					c.loose = l.loosePaths;
+					c.values = l.patchValues;
+					layers.push_back(std::move(c));
+				}
+			}
+			alternatives = RulesetCompare(layers);
+			alternativesDone = true;
+		}
+		return alternatives;
+	}
 
 	const ClashReport &Get()
 	{
@@ -183,6 +208,31 @@ struct ClashCache {
 		return report;
 	}
 };
+
+std::string LayerName(const ModInfo *m, const std::string &id)
+{
+	const ModLayer *l = m ? ModsFindLayer(*m, id) : nullptr;
+	return l && !l->name.empty() ? l->name : id;
+}
+
+void AddRulesetLines(const ModInfo &m, const ModProfile &p, const std::vector<ModInfo> &all, ClashCache &cache, ModIssues &out)
+{
+	if (m.layers.empty()) return;
+	const ModLayer *used = ModsActiveLayer(p, m);
+	std::string names;
+	for (const ModLayer &l : m.layers) names += (names.empty() ? "" : ", ") + LayerName(&m, l.id) + (&l == used ? Tr(" (in use)") : "");
+	out.rulesets.push_back(TrFmt("Rulesets: %s", {names}));
+	for (const RulesetShared &s : cache.Alternatives()) {
+		const bool first = SameFolder(s.packA, m.folder);
+		if (!first && !SameFolder(s.packB, m.folder)) continue;
+		const std::string &layer = first ? s.layerA : s.layerB, &otherPack = first ? s.packB : s.packA, &otherLayer = first ? s.layerB : s.layerA;
+		const ModInfo *other = FindIn(all, otherPack);
+		std::string shared;
+		if (s.files) shared = TrFmt("Gameplay files in common: %s", {std::to_string(s.files)});
+		if (s.values) shared += (shared.empty() ? "" : "; ") + TrFmt("Values in common: %s", {std::to_string(s.values)});
+		out.rulesets.push_back(TrFmt("%s is an alternative to %s (%s)", {LayerName(&m, layer), (other ? other->name : otherPack) + " \xC2\xB7 " + LayerName(other, otherLayer), shared}));
+	}
+}
 
 ModIssues IssuesOf(const ModProfile &p, const std::vector<ModInfo> &all, const std::string &folder, ClashCache &cache)
 {
@@ -200,6 +250,7 @@ ModIssues IssuesOf(const ModProfile &p, const std::vector<ModInfo> &all, const s
 		out.problems.push_back(Tr("Patch ") + e);
 	}
 	for (const std::string &e : ModsFeatureProblems(m->folder)) out.problems.push_back(e);
+	AddRulesetLines(*m, p, all, cache, out);
 	if (!active) return out;
 	const ModLayer *layer = ModsActiveLayer(p, *m);
 	if (layer && !layer->rleTailError.empty()) out.problems.push_back(Tr(layer->rleTailError));

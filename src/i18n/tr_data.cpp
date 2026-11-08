@@ -1514,5 +1514,10 @@ extern const TrRow kTrRows[] = {
 	{"Rules that will be loaded:", "Reglas que se cargarán:", "Regole che verranno caricate:"},
 	{"Could not save the rules in the content profile.", "No se pudieron guardar las reglas en el perfil de contenido.", "Impossibile salvare le regole nel profilo dei contenuti."},
 	{" (without its ruleset)", " (sin su conjunto de reglas)", " (senza il suo set di regole)"},
+	{"Rulesets: %s", "Conjuntos de reglas: %s", "Set di regole: %s"},
+	{" (in use)", " (en uso)", " (in uso)"},
+	{"%s is an alternative to %s (%s)", "%s es una alternativa a %s (%s)", "%s è un'alternativa a %s (%s)"},
+	{"Gameplay files in common: %s", "Archivos de jugabilidad en común: %s", "File di gioco in comune: %s"},
+	{"Values in common: %s", "Valores en común: %s", "Valori in comune: %s"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

@@ -893,6 +893,12 @@ void PaintInstalled(Painter &p, const State &st)
 			p.Font(3);
 			y += 2 + p.TextWrapped(dx, y + 2, dw, 36, notice, kGold);
 		}
+		// Information only: rulesets of different packages cannot be mounted together, so sharing files with one is not a problem.
+		for (size_t k = 0; k < is.rulesets.size(); k++) {
+			if (y > textLimit) break;
+			p.Font(3);
+			y += 2 + p.TextWrapped(dx, y + 2, dw, 36, is.rulesets[k], k == 0 ? kText : kDim);
+		}
 		for (size_t k = 0; k < is.overlaps.size(); k++) {
 			const ModOverlap &ov = is.overlaps[k];
 			if (ov.problem) continue;
