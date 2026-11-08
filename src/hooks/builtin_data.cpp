@@ -29,8 +29,8 @@ const BuiltinText kPatches[] = {
 		"b06962a1cb46ea51b78de0b9adabc5a3620ec6a598b1d9671fdc97974ff2ff04"},
 	{"data/subai/sneak_behavior.vs",
 		"@replace if (.TimeWithoutAttack >= 20000)\n"
-		"\t// Units marked I1NoSneak (the converted Imperivm I campaign) never hid on their own in their game.\n"
-		"\tif (.TimeWithoutAttack >= 20000 && EnvReadInt(this, \"I1NoSneak\") != 1)\n",
+		"\t// Units of players with I1NoSneak set (the converted Imperivm I campaign) never hid on their own in their game.\n"
+		"\tif (.TimeWithoutAttack >= 20000 && EnvReadInt(.player, \"I1NoSneak\") != 1)\n",
 		"8fe330c486b6dcc43edfa055563cca78a85dcf107cc2af9ea495e7bd905538c0"},
 	{"menuini/gameoptions.ini",
 		"[GameOptions Objects]\n"
