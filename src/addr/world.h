@@ -31,6 +31,7 @@ inline constexpr uintptr_t kDiplomacyExecute = 0x004e5f80;
 inline constexpr uintptr_t kQueryGetResults = 0x004f9490;
 inline constexpr uintptr_t kConquestTintColor = 0x00500c60;
 inline constexpr uintptr_t kConquestIsAttackable = 0x00501030;
+inline constexpr uintptr_t kConversationShowPhrase = 0x0050baf0;
 inline constexpr uintptr_t kCalcAttackOutcome = 0x0050ff30;
 inline constexpr uintptr_t kProcessDeath = 0x005141b0;
 inline constexpr uintptr_t kIsExplored = 0x00515950;
