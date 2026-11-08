@@ -552,6 +552,13 @@ void PaintGameRoom(Painter &p, const State &st)
 						toggleRow(known[i].name.c_str(), CivSetsAllow(sets, known[i].id), canEdit, kCivSetToggle, static_cast<int>(i), nullptr);
 					}
 				}
+				// Only the rulesets of the packages that are loaded; picking another one restarts the game.
+				const std::vector<RulesetChoice> &rulesets = MountedRulesets();
+				if (!rulesets.empty()) {
+					const ModRuleset &mounted = ModsMountedProfile().ruleset;
+					section("CONTENT");
+					row("Rules", RulesetLabel(rulesets, mounted), !mounted.Empty(), canEdit, true, kDropProfile, 1, nullptr);
+				}
 			}
 
 			if (!host && st.map.state == 1) {

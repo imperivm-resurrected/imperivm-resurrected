@@ -506,12 +506,20 @@ void PaintCreate(Painter &p, const State &st)
 	p.Text(lx, y, 140, 30, "Content", kDim);
 	Combo(p, st, fx, y, fw, 30, ModsProfileLabel(st.createProfile), kDropProfile, 0, st.profiles.size() > 1);
 	y += 38;
+	// The rules of the packages in the content (their rulesets): the game restarts if the ones loaded now are not the chosen ones.
+	const std::vector<RulesetChoice> &rulesets = st.createProfileInfo.rulesets;
+	if (!rulesets.empty()) {
+		p.Font(0);
+		p.Text(lx, y, 140, 30, "Rules", kDim);
+		Combo(p, st, fx, y, fw, 30, RulesetLabel(rulesets, st.createRuleset), kDropProfile, 1, true);
+		y += 38;
+	}
 	// The sets are those of the content that is loaded now; a game that is loaded keeps the ones it was saved with.
 	const std::vector<CivSet> civSets = CivsSets();
 	const bool showCivSets = civSets.size() > 1 && st.createProfile == ModsMountedProfile().name && st.createSave < 0;
 	{
 		const std::vector<ListLine> lines = BuildModLines(st.createProfileInfo.rows, "None: the original game.");
-		const int rows = std::min<int>(showCivSets ? 3 : 6, static_cast<int>(lines.size()));
+		const int rows = std::min<int>(showCivSets ? (rulesets.empty() ? 3 : 1) : 6, static_cast<int>(lines.size()));
 		g_createModsGeomOut = ListGeom();
 		ListState ls = st.createModsList;
 		ListPaint(p, fx, y, fw, rows * 22 + 8, lines, ls, g_createModsGeomOut, 3, 22);
@@ -557,10 +565,11 @@ void PaintCreate(Painter &p, const State &st)
 		}
 	}
 	const bool restart = st.createProfile != ModsMountedProfile().name;
+	const bool restartRules = !restart && !ModsSameRuleset(st.createRuleset, ModsMountedProfile().ruleset);
 	const int by = y0 + h - 60;
 	const int bw = 320;
-	p.Button(x + (w - bw) / 2, by, bw, 42, restart ? "Restart with this content" : "Create room", kCreateOk, 0, mx, my,
-		st.ready || restart, true);
+	p.Button(x + (w - bw) / 2, by, bw, 42, restart ? "Restart with this content" : restartRules ? "Restart with these rules" : "Create room", kCreateOk, 0, mx, my,
+		st.ready || restart || restartRules, true);
 }
 
 void PaintChat(Painter &p, const State &st)
@@ -777,6 +786,16 @@ std::vector<std::string> DropItems(const State &st, int &sel)
 	if (st.dropKind == kDropPlayers) {
 		sel = st.createPlayers - 2;
 		return {"2 players", "3 players", "4 players", "5 players", "6 players", "7 players", "8 players"};
+	}
+	if (st.dropKind == kDropProfile && idx == 1) {
+		const std::vector<RulesetChoice> &choices = RulesetChoicesShown(st);
+		std::vector<std::string> labels = {Tr("Original (HD)")};
+		sel = 0;
+		for (size_t i = 0; i < choices.size(); i++) {
+			if (ModsSameRuleset(choices[i].ruleset, RulesetShown(st))) sel = static_cast<int>(i) + 1;
+			labels.push_back(choices[i].label);
+		}
+		return labels;
 	}
 	if (st.dropKind == kDropProfile) {
 		std::vector<std::string> labels;

@@ -1506,5 +1506,12 @@ extern const TrRow kTrRows[] = {
 	{"Ruleset \"%s\" ignored: its path must be a folder inside rulesets/", "Conjunto de reglas \"%s\" ignorado: su ruta debe ser una carpeta dentro de rulesets/", "Set di regole \"%s\" ignorato: il suo percorso deve essere una cartella dentro rulesets/"},
 	{"Ruleset \"%s\" ignored: its folder overlaps the one of \"%s\"", "Conjunto de reglas \"%s\" ignorado: su carpeta se solapa con la de \"%s\"", "Set di regole \"%s\" ignorato: la sua cartella si sovrappone a quella di \"%s\""},
 	{"Ruleset \"%s\" ignored: its folder %s does not exist", "Conjunto de reglas \"%s\" ignorado: su carpeta %s no existe", "Set di regole \"%s\" ignorato: la sua cartella %s non esiste"},
+	{"Rules", "Reglas", "Regole"},
+	{"Original (HD)", "=", "Originale (HD)"},
+	{"Restart with these rules", "Reiniciar con estas reglas", "Riavvia con queste regole"},
+	{"The game will restart with the rules you chose. Afterwards, create the room again.", "El juego se reiniciará con las reglas que elegiste. Después, vuelve a crear la sala.", "Il gioco si riavvierà con le regole che hai scelto. Poi crea di nuovo la stanza."},
+	{"The game will restart with the rules you chose.", "El juego se reiniciará con las reglas que elegiste.", "Il gioco si riavvierà con le regole che hai scelto."},
+	{"Rules that will be loaded:", "Reglas que se cargarán:", "Regole che verranno caricate:"},
+	{"Could not save the rules in the content profile.", "No se pudieron guardar las reglas en el perfil de contenido.", "Impossibile salvare le regole nel profilo dei contenuti."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

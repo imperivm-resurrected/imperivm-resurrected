@@ -117,8 +117,15 @@ struct ModRow {
 	COLORREF color = kText;
 };
 
+// A ruleset the host can pick: the layer of a package that is in the profile.
+struct RulesetChoice {
+	ModRuleset ruleset;
+	std::string label;
+};
+
 struct ProfileSummary {
 	std::vector<ModRow> rows;
+	std::vector<RulesetChoice> rulesets;
 };
 
 extern ListGeom g_createModsGeomOut;
@@ -190,6 +197,7 @@ struct State {
 	std::string createProfile;
 	std::vector<std::string> profiles;
 	ProfileSummary createProfileInfo;
+	ModRuleset createRuleset;
 	std::vector<std::string> createCivSets;
 	bool skirmishCivs = false; // the skirmish room owns CivRoomSets until the multiplayer menu opens
 	int createVisibility = 0;
@@ -396,6 +404,13 @@ std::vector<SlotChoice> SlotChoices(const GameRoomSnapshot &g, const GameRoomSlo
 std::string SavePlayersText(const std::vector<MpSavePlayer> &players);
 std::vector<SaveEntry> ListSaves();
 ProfileSummary ProfileSummaryFor(const std::string &profile);
+ModRuleset ProfileRulesetFor(const std::string &profile);
+const std::vector<RulesetChoice> &MountedRulesets();
+bool SkirmishRoom(const State &st);
+const std::vector<RulesetChoice> &RulesetChoicesShown(const State &st);
+const ModRuleset &RulesetShown(const State &st);
+std::string RulesetLabel(const std::vector<RulesetChoice> &choices, const ModRuleset &ruleset);
+void ChooseRuleset(int item);
 void Predict(int kind, int index, int value);
 bool SeatTakeable(const GameRoomSlot &s);
 bool BonusesDisabled(const GameRoomSnapshot &g);

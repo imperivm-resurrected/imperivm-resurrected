@@ -213,6 +213,7 @@ std::vector<ModRow> OnlineModRows(const State &st, const std::vector<OnlineMod> 
 	for (const OnlineMod &m : mods) {
 		ModRow r;
 		r.name = m.name + (m.version.empty() || m.name.find(m.version) != std::string::npos ? "" : " " + m.version);
+		if (!m.layer.empty()) r.name += " \xC2\xB7 " + (m.layerName.empty() ? m.layer : m.layerName);
 		r.kind = m.kind;
 		if (withStatus) {
 			const bool have = ExactMod(st, m) != nullptr;

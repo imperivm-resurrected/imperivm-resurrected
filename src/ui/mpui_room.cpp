@@ -200,6 +200,20 @@ std::vector<SaveEntry> ListSaves()
 	return out;
 }
 
+namespace {
+void AddRulesets(const ModInfo &m, std::vector<RulesetChoice> &out)
+{
+	if (!m.forbidden.empty()) return;
+	for (const ModLayer &l : m.layers) {
+		RulesetChoice c;
+		c.ruleset.pack = m.folder;
+		c.ruleset.id = l.id;
+		c.label = l.name + " \xC2\xB7 " + m.name;
+		out.push_back(c);
+	}
+}
+}
+
 ProfileSummary ProfileSummaryFor(const std::string &profile)
 {
 	ProfileSummary out;
@@ -214,10 +228,58 @@ ProfileSummary ProfileSummaryFor(const std::string &profile)
 		else {
 			r.name = m.name + (m.version.empty() || m.name.find(m.version) != std::string::npos ? "" : " " + m.version);
 			r.kind = m.kind;
+			AddRulesets(m, out.rulesets);
 		}
 		out.rows.push_back(r);
 	}
 	return out;
+}
+
+// What a profile mounts: the mounted profile has its ruleset already checked; another one is checked here.
+ModRuleset ProfileRulesetFor(const std::string &profile)
+{
+	const ModProfile &mounted = ModsMountedProfile();
+	return profile == mounted.name ? mounted.ruleset : ModsEffectiveRuleset(ModsLoadProfile(profile));
+}
+
+// The rulesets of the packages the game has loaded; it changes only when the mods are scanned again.
+const std::vector<RulesetChoice> &MountedRulesets()
+{
+	static uint64_t serial = ~0ull;
+	static std::vector<RulesetChoice> choices;
+	if (serial != ModsListSerial()) {
+		serial = ModsListSerial();
+		choices.clear();
+		for (const std::string &folder : ModsMountedProfile().mods) {
+			ModInfo m;
+			if (ModsFind(folder, m)) AddRulesets(m, choices);
+		}
+	}
+	return choices;
+}
+
+// The skirmish room has no Create screen: its own row picks the ruleset of the content that is loaded.
+bool SkirmishRoom(const State &st)
+{
+	return st.game.active && !st.game.online;
+}
+
+const std::vector<RulesetChoice> &RulesetChoicesShown(const State &st)
+{
+	return SkirmishRoom(st) ? MountedRulesets() : st.createProfileInfo.rulesets;
+}
+
+const ModRuleset &RulesetShown(const State &st)
+{
+	return SkirmishRoom(st) ? ModsMountedProfile().ruleset : st.createRuleset;
+}
+
+std::string RulesetLabel(const std::vector<RulesetChoice> &choices, const ModRuleset &ruleset)
+{
+	for (const RulesetChoice &c : choices) {
+		if (ModsSameRuleset(c.ruleset, ruleset)) return c.label;
+	}
+	return Tr("Original (HD)");
 }
 
 void Predict(int kind, int index, int value)

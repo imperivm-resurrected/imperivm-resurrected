@@ -228,10 +228,14 @@ void DoAction(int action, int arg)
 				SteamSetSpectators(g_s.createSpec != 0, kDelays[g_s.createSpec]);
 			}
 		}
+		else if (g_s.dropKind == kDropProfile && idx == 1) {
+			ChooseRuleset(arg);
+		}
 		else if (g_s.dropKind == kDropProfile) {
 			if (arg >= 0 && arg < static_cast<int>(g_s.profiles.size())) {
 				g_s.createProfile = g_s.profiles[arg];
 				g_s.createProfileInfo = ProfileSummaryFor(g_s.createProfile), g_s.createModsList = ListState();
+				g_s.createRuleset = ProfileRulesetFor(g_s.createProfile);
 				g_s.createCivSets.clear();
 				g_s.createCivList = ListState();
 				const std::string chosen = g_s.createSave >= 0 && g_s.createSave < static_cast<int>(g_s.saves.size()) ? g_s.saves[g_s.createSave].vfsPath : "";
@@ -506,6 +510,7 @@ void DoAction(int action, int arg)
 			g_s.passInput.clear();
 			g_s.nameInput = Tr("Game of ") + g_s.player;
 			g_s.createProfile = ModsMountedProfile().name;
+			g_s.createRuleset = ModsMountedProfile().ruleset;
 			g_s.createCivSets.clear();
 			DoAction(kCreateOk, 0);
 		}
@@ -672,11 +677,26 @@ void DoAction(int action, int arg)
 				break;
 			}
 		}
-		if (g_s.createProfile != ModsMountedProfile().name) {
+		const bool otherProfile = g_s.createProfile != ModsMountedProfile().name;
+		if (otherProfile || !ModsSameRuleset(g_s.createRuleset, ModsMountedProfile().ruleset)) {
+			// The ruleset is part of the profile, so the profile that will be loaded keeps it.
+			ModProfile chosen = ModsLoadProfile(g_s.createProfile);
+			if (!ModsSameRuleset(chosen.ruleset, g_s.createRuleset)) {
+				chosen.ruleset = g_s.createRuleset;
+				if (!ModsSaveProfile(chosen) && !chosen.ruleset.Empty()) {
+					ModUiToast(Tr("Could not save the rules in the content profile."));
+					break;
+				}
+			}
 			ModsSetActiveProfileName(g_s.createProfile);
 			g_s.open = false;
 			std::vector<std::string> profileMods;
 			for (const ModRow &row : g_s.createProfileInfo.rows) profileMods.push_back(row.name);
+			if (!otherProfile) {
+				ModUiAskRestart("The game will restart with the rules you chose. Afterwards, create the room again.", -1,
+					{RulesetLabel(g_s.createProfileInfo.rulesets, g_s.createRuleset)}, "Rules that will be loaded:");
+				break;
+			}
 			ModUiAskRestart(profileMods.empty() ? "The game will restart without additional content. Afterwards, create the room again."
 												: "The game will restart to load the room's content. Afterwards, create the room again.",
 				-1, profileMods, "Content that will be loaded:");
@@ -727,6 +747,28 @@ void DoAction(int action, int arg)
 		break;
 	}
 	}
+}
+
+// Item 0 is the game's own rules; item k is the k-th ruleset of the list shown. In a room that is being created it only
+// marks the choice; in the skirmish room the choice is saved in the profile and the game restarts.
+void ChooseRuleset(int item)
+{
+	const std::vector<RulesetChoice> &choices = RulesetChoicesShown(g_s);
+	if (item < 0 || item > static_cast<int>(choices.size())) return;
+	const ModRuleset picked = item == 0 ? ModRuleset() : choices[item - 1].ruleset;
+	if (!SkirmishRoom(g_s)) {
+		g_s.createRuleset = picked;
+		return;
+	}
+	if (ModsSameRuleset(picked, ModsMountedProfile().ruleset)) return;
+	ModProfile profile = ModsLoadProfile(ModsMountedProfile().name);
+	profile.ruleset = picked;
+	if (!ModsSaveProfile(profile)) {
+		ModUiToast(Tr("Could not save the rules in the content profile."));
+		return;
+	}
+	ModsSetActiveProfileName(profile.name);
+	ModUiAskRestart("The game will restart with the rules you chose.", -1, {RulesetLabel(choices, picked)}, "Rules that will be loaded:");
 }
 
 std::string &FocusedText()
@@ -827,6 +869,7 @@ void OpenMpMenu(bool checkRecover)
 	g_s.mods = ModsList();
 	g_s.profiles = ModsProfileNames();
 	g_s.createProfile = ModsMountedProfile().name;
+	g_s.createRuleset = ModsMountedProfile().ruleset;
 	g_s.createCivSets.clear();
 	g_s.createProfileInfo = ProfileSummaryFor(g_s.createProfile), g_s.createModsList = ListState();
 	g_s.saves = ListSaves();

@@ -1498,5 +1498,12 @@
 {"en":"Ruleset \"%s\" ignored: its id is used twice","es":"Conjunto de reglas \"%s\" ignorado: su id está repetido","it":"Set di regole \"%s\" ignorato: il suo id è usato due volte"},
 {"en":"Ruleset \"%s\" ignored: its path must be a folder inside rulesets/","es":"Conjunto de reglas \"%s\" ignorado: su ruta debe ser una carpeta dentro de rulesets/","it":"Set di regole \"%s\" ignorato: il suo percorso deve essere una cartella dentro rulesets/"},
 {"en":"Ruleset \"%s\" ignored: its folder overlaps the one of \"%s\"","es":"Conjunto de reglas \"%s\" ignorado: su carpeta se solapa con la de \"%s\"","it":"Set di regole \"%s\" ignorato: la sua cartella si sovrappone a quella di \"%s\""},
-{"en":"Ruleset \"%s\" ignored: its folder %s does not exist","es":"Conjunto de reglas \"%s\" ignorado: su carpeta %s no existe","it":"Set di regole \"%s\" ignorato: la sua cartella %s non esiste"}
+{"en":"Ruleset \"%s\" ignored: its folder %s does not exist","es":"Conjunto de reglas \"%s\" ignorado: su carpeta %s no existe","it":"Set di regole \"%s\" ignorato: la sua cartella %s non esiste"},
+{"en":"Rules","es":"Reglas","it":"Regole"},
+{"en":"Original (HD)","es":"=","it":"Originale (HD)"},
+{"en":"Restart with these rules","es":"Reiniciar con estas reglas","it":"Riavvia con queste regole"},
+{"en":"The game will restart with the rules you chose. Afterwards, create the room again.","es":"El juego se reiniciará con las reglas que elegiste. Después, vuelve a crear la sala.","it":"Il gioco si riavvierà con le regole che hai scelto. Poi crea di nuovo la stanza."},
+{"en":"The game will restart with the rules you chose.","es":"El juego se reiniciará con las reglas que elegiste.","it":"Il gioco si riavvierà con le regole che hai scelto."},
+{"en":"Rules that will be loaded:","es":"Reglas que se cargarán:","it":"Regole che verranno caricate:"},
+{"en":"Could not save the rules in the content profile.","es":"No se pudieron guardar las reglas en el perfil de contenido.","it":"Impossibile salvare le regole nel profilo dei contenuti."}
 ]
