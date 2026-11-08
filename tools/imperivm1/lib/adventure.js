@@ -665,7 +665,7 @@ const attrText = (s) => s.replace(/&(?![a-z]+;|#\d+;)/gi, '&amp;').replace(/</g,
 // Adds entries to a translation table (the text of the file); `entries`: [{text, result}], values already escaped.
 function addEntries(src, entries) {
 	if (!entries.length) return src;
-	const lines = entries.map((e) => `<translationtableentry text="${e.text}" id="actor name" result="${e.result}"/>`).join('');
+	const lines = entries.map((e) => `<translationtableentry id="actor name" map="" text="${e.text}" result="${e.result}"/>`).join('');
 	if (/<translationtable\s*\/>/.test(src)) return src.replace(/<translationtable\s*\/>/, `<translationtable>${lines}</translationtable>`);
 	return src.replace(/<\/translationtable>/, `${lines}</translationtable>`);
 }
@@ -1165,6 +1165,7 @@ function conversationActors({ files, out, gbr, i1, classes, namedObjects, report
 	const translated = (actor) => advTexts.has(actor) && advTexts.get(actor) !== actor && !/^NO_/i.test(advTexts.get(actor));
 	// actor -> Spanish title -> {English, Italian, maps}: class names for the untranslated entries of the adventure.
 	const advTitles = new Map();
+	const advExtra = Object.fromEntries(LANGS.map((l) => [l, []]));
 
 	const rows = [];
 	const mapIds = [...namedObjects.keys()].sort((a, b) => Number(a) - Number(b));
@@ -1252,15 +1253,11 @@ function conversationActors({ files, out, gbr, i1, classes, namedObjects, report
 				}
 				rows.push([id, file, actor, obj.i1, gbrClass, es, picture]);
 			}
-			for (const lang of LANGS) {
-				if (!entries[lang].length) continue;
-				const key = [...out.keys()].find((k) => lower(k) === lower(`Local/${lang}/Maps/${id}/conversations/${file}`));
-				if (!key) {
-					report.add('Check warnings', `Local/${lang}/Maps/${id}/conversations/${file} missing: actor names of ${file} not translated`);
-					continue;
-				}
-				out.set(key, Buffer.from(addEntries(out.get(key).toString('utf8'), entries[lang]), 'utf8'));
-			}
+			// Into the adventure's table, never the conversation's: an "actor name" entry in a conversation's own table renames
+			// the actors of its <actor> list but not the actor= of its phrases, so those phrases lose their actor and show no
+			// title and no picture (Kormaris: NO_Maios -> "Maios", phrase actor index -1 in ShowPhrase). Great Battles of Rome's
+			// own adventures keep every actor name in adventure.loc.xml.
+			for (const lang of LANGS) for (const e of entries[lang]) if (!advExtra[lang].some((x) => x.text === e.text)) advExtra[lang].push(e);
 		}
 	}
 	// The untranslated entries of the adventure's table get the class name; an actor name that stands for units of
@@ -1283,6 +1280,16 @@ function conversationActors({ files, out, gbr, i1, classes, namedObjects, report
 			out.set(key, Buffer.from(next, 'utf8'));
 		}
 		report.count('Conversation actors', "actor names of the adventure's table titled with their class name, as in Imperivm I");
+	}
+	for (const lang of LANGS) {
+		const key = [...out.keys()].find((k) => lower(k) === lower(`Local/${lang}/adventure.loc.xml`));
+		if (!key) {
+			if (advExtra[lang].length) report.add('Check warnings', `Local/${lang}/adventure.loc.xml missing: ${advExtra[lang].length} actor names not translated`);
+			continue;
+		}
+		const have = out.get(key).toString('utf8');
+		const add = advExtra[lang].filter((e) => !have.includes(` text="${e.text}"`));
+		out.set(key, Buffer.from(addEntries(have, add), 'utf8'));
 	}
 	for (const r of rows) {
 		const t = advTitles.get(r[2]);

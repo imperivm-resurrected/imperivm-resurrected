@@ -238,7 +238,7 @@ function check(cond, what) {
 	const missing = S.listCalls(A.NO_SENTRIES_SCRIPT).filter((c) => !['if', 'for', 'while'].includes(c.name) && !(c.method ? fns.methods.has(c.name) : fns.functions.has(c.name)));
 	check(!missing.length, `no-sentries script calls only game functions (${missing.map((c) => c.name).join(', ')})`);
 	const table = A.addEntries('<translationtable/>', [{ text: 'NO_Teuton5', result: 'Jinete teutón' }]);
-	check(/<translationtableentry text="NO_Teuton5" id="actor name" result="Jinete teutón"\/>/.test(table), 'actor name entry added to an empty table');
+	check(/<translationtableentry id="actor name" map="" text="NO_Teuton5" result="Jinete teutón"\/>/.test(table), "actor name entry added to an empty table, in the format of Great Battles of Rome's adventure tables");
 	const names = A.classNameTable(Buffer.from('<translationtable><translationtableentry text="Teuton Raider" context="TeutonWolf class" result="Jinete teutón"/></translationtable>'), 'class');
 	check(names.get('teutonwolf') === 'Jinete teutón', 'class names read by context');
 }
