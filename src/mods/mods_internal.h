@@ -43,6 +43,7 @@ void ModsBumpSerial();
 extern std::string g_language;
 struct MountedState {
 	ModProfile profile;
+	ModRuleset choice;
 	bool known = false;
 	std::vector<std::string> localDirs;
 	std::vector<std::string> dirs;

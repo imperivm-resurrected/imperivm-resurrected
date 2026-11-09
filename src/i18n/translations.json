@@ -1518,5 +1518,6 @@
 {"en":"The host changed the civilizations of the room.","es":"El anfitrión ha cambiado las civilizaciones de la sala.","it":"L'host ha cambiato le civiltà della stanza."},
 {"en":"Slots set back to Random, their civilization is no longer allowed in the room: %s","es":"Plazas devueltas a Aleatoria, su civilización ya no está permitida en la sala: %s","it":"Posti riportati a Casuale, la loro civiltà non è più consentita nella stanza: %s"},
 {"en":"Your civilization is no longer allowed in this room: you play Random now.","es":"Tu civilización ya no está permitida en esta sala: ahora juegas con Aleatoria.","it":"La tua civiltà non è più consentita in questa stanza: ora giochi con Casuale."},
-{"en":"Some players had a civilization the room does not allow and now play Random. Press Start again.","es":"Algunos jugadores tenían una civilización que la sala no permite y ahora juegan con Aleatoria. Pulsa Empezar de nuevo.","it":"Alcuni giocatori avevano una civiltà non consentita dalla stanza e ora giocano con Casuale. Premi di nuovo Inizia."}
+{"en":"Some players had a civilization the room does not allow and now play Random. Press Start again.","es":"Algunos jugadores tenían una civilización que la sala no permite y ahora juegan con Aleatoria. Pulsa Empezar de nuevo.","it":"Alcuni giocatori avevano una civiltà non consentita dalla stanza e ora giocano con Casuale. Premi di nuovo Inizia."},
+{"en":"%s (original rules)","es":"%s (reglas originales)","it":"%s (regole originali)"}
 ]

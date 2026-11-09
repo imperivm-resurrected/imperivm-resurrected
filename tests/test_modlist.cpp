@@ -228,6 +228,20 @@ static void SavedRulesets()
 	CHECK(ModsSameRuleset(mounted, other));
 	CHECK(!ModsSameRuleset(mounted, ModRuleset()));
 	CHECK(ModsSameRuleset(ModRuleset(), ModRuleset()));
+	// A package without a layer mounts the same files as the game's rules, but it is another entry.
+	ModRuleset bare;
+	bare.pack = "Civs";
+	CHECK(bare.Empty());
+	CHECK(ModsSameRuleset(bare, ModRuleset()));
+	CHECK(!ModsSameChoice(bare, ModRuleset()));
+	CHECK(ModsSameChoice(ModRuleset(), ModRuleset()));
+	CHECK(!ModsSameRuleset(bare, mounted));
+	CHECK(!ModsSameChoice(bare, mounted));
+	ModRuleset bareOther = bare;
+	bareOther.pack = "civs";
+	CHECK(ModsSameChoice(bare, bareOther));
+	CHECK(ModsSameChoice(mounted, other));
+	CHECK_EQ(ModsRulesetOf(bare, "Civs"), "");
 }
 
 static void Malformed()

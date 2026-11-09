@@ -66,6 +66,27 @@ std::vector<RulesetIssue> RulesetResolve(std::vector<RulesetDecl> &decls)
 	return issues;
 }
 
+std::vector<RulesetEntry> RulesetEntries(const std::vector<RulesetPackFacts> &packs)
+{
+	std::vector<RulesetEntry> out;
+	for (size_t i = 0; i < packs.size(); i++) {
+		if (!packs[i].usable) continue;
+		for (size_t l = 0; l < packs[i].layers; l++) out.push_back({i, static_cast<int>(l)});
+		if (packs[i].layers == 0 && packs[i].hasCivs) out.push_back({i, -1});
+	}
+	return out;
+}
+
+bool RulesetPathsHaveCivs(const std::vector<std::string> &paths)
+{
+	static const char kFolder[] = "civs/", kExt[] = ".json";
+	const size_t folder = sizeof(kFolder) - 1, ext = sizeof(kExt) - 1;
+	for (const std::string &p : paths) {
+		if (p.size() > folder + ext && p.compare(0, folder, kFolder) == 0 && p.compare(p.size() - ext, ext, kExt) == 0 && p.find('/', folder) == std::string::npos) return true;
+	}
+	return false;
+}
+
 int RulesetOwnerOf(const std::vector<RulesetDecl> &layers, const std::string &rel)
 {
 	for (size_t i = 0; i < layers.size(); i++) {

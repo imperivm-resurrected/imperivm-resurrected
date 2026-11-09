@@ -201,14 +201,13 @@ std::vector<SaveEntry> ListSaves()
 }
 
 namespace {
-void AddRulesets(const ModInfo &m, std::vector<RulesetChoice> &out)
+// One entry per ruleset of the packages, and one "(original rules)" for each package that has civilizations and no ruleset.
+void AddRulesets(const std::vector<std::string> &folders, std::vector<RulesetChoice> &out)
 {
-	if (!m.forbidden.empty()) return;
-	for (const ModLayer &l : m.layers) {
+	for (const ModRulesetEntry &e : ModsRulesetEntries(folders)) {
 		RulesetChoice c;
-		c.ruleset.pack = m.folder;
-		c.ruleset.id = l.id;
-		c.label = l.name + " \xC2\xB7 " + m.name;
+		c.ruleset = e.ruleset;
+		c.label = e.ruleset.id.empty() ? TrFmt("%s (original rules)", {e.packName}) : e.layerName + " \xC2\xB7 " + e.packName;
 		out.push_back(c);
 	}
 }
@@ -228,10 +227,10 @@ ProfileSummary ProfileSummaryFor(const std::string &profile)
 		else {
 			r.name = m.name + (m.version.empty() || m.name.find(m.version) != std::string::npos ? "" : " " + m.version);
 			r.kind = m.kind;
-			AddRulesets(m, out.rulesets);
 		}
 		out.rows.push_back(r);
 	}
+	AddRulesets(ModsLoadProfile(profile).mods, out.rulesets);
 	return out;
 }
 
@@ -239,7 +238,7 @@ ProfileSummary ProfileSummaryFor(const std::string &profile)
 ModRuleset ProfileRulesetFor(const std::string &profile)
 {
 	const ModProfile &mounted = ModsMountedProfile();
-	return profile == mounted.name ? mounted.ruleset : ModsEffectiveRuleset(ModsLoadProfile(profile));
+	return profile == mounted.name ? ModsMountedChoice() : ModsEffectiveRuleset(ModsLoadProfile(profile));
 }
 
 // The rulesets of the packages the game has loaded; it changes only when the mods are scanned again.
@@ -250,10 +249,7 @@ const std::vector<RulesetChoice> &MountedRulesets()
 	if (serial != ModsListSerial()) {
 		serial = ModsListSerial();
 		choices.clear();
-		for (const std::string &folder : ModsMountedProfile().mods) {
-			ModInfo m;
-			if (ModsFind(folder, m)) AddRulesets(m, choices);
-		}
+		AddRulesets(ModsMountedProfile().mods, choices);
 	}
 	return choices;
 }
@@ -269,15 +265,15 @@ const std::vector<RulesetChoice> &RulesetChoicesShown(const State &st)
 	return SkirmishRoom(st) ? MountedRulesets() : st.createProfileInfo.rulesets;
 }
 
-const ModRuleset &RulesetShown(const State &st)
+ModRuleset RulesetShown(const State &st)
 {
-	return SkirmishRoom(st) ? ModsMountedProfile().ruleset : st.createRuleset;
+	return SkirmishRoom(st) ? ModsMountedChoice() : st.createRuleset;
 }
 
 std::string RulesetLabel(const std::vector<RulesetChoice> &choices, const ModRuleset &ruleset)
 {
 	for (const RulesetChoice &c : choices) {
-		if (ModsSameRuleset(c.ruleset, ruleset)) return c.label;
+		if (ModsSameChoice(c.ruleset, ruleset)) return c.label;
 	}
 	return Tr("Original (HD)");
 }

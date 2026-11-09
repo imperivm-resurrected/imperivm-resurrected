@@ -518,7 +518,7 @@ void DoAction(int action, int arg)
 			g_s.passInput.clear();
 			g_s.nameInput = Tr("Game of ") + g_s.player;
 			g_s.createProfile = ModsMountedProfile().name;
-			g_s.createRuleset = ModsMountedProfile().ruleset;
+			g_s.createRuleset = ModsMountedChoice();
 			DoAction(kCreateOk, 0);
 		}
 		else if (!r.host) {
@@ -687,9 +687,9 @@ void DoAction(int action, int arg)
 		if (otherProfile || !ModsSameRuleset(g_s.createRuleset, ModsMountedProfile().ruleset)) {
 			// The ruleset is part of the profile, so the profile that will be loaded keeps it.
 			ModProfile chosen = ModsLoadProfile(g_s.createProfile);
-			if (!ModsSameRuleset(chosen.ruleset, g_s.createRuleset)) {
+			if (!ModsSameChoice(chosen.ruleset, g_s.createRuleset)) {
 				chosen.ruleset = g_s.createRuleset;
-				if (!ModsSaveProfile(chosen) && !chosen.ruleset.Empty()) {
+				if (!ModsSaveProfile(chosen) && !chosen.ruleset.pack.empty()) {
 					ModUiToast(Tr("Could not save the rules in the content profile."));
 					break;
 				}
@@ -707,6 +707,17 @@ void DoAction(int action, int arg)
 												: "The game will restart to load the room's content. Afterwards, create the room again.",
 				-1, profileMods, "Content that will be loaded:");
 			break;
+		}
+		if (!ModsSameChoice(g_s.createRuleset, ModsMountedChoice())) {
+			// Another Rules entry that mounts the same files (a package without a layer, or the game's rules): nothing to reload, it is
+			// only kept in the profile so it is still the choice after a restart.
+			ModProfile chosen = ModsLoadProfile(g_s.createProfile);
+			chosen.ruleset = g_s.createRuleset;
+			if (!ModsSaveProfile(chosen)) {
+				ModUiToast(Tr("Could not save the rules in the content profile."));
+				break;
+			}
+			ModsMountedChoiceSet(g_s.createRuleset);
 		}
 		if (g_s.createSave >= 0 && g_s.createSave < static_cast<int>(g_s.saves.size())) {
 			const std::string problem = ModsCheckCivIndices(g_s.saves[g_s.createSave].vfsPath);
@@ -765,11 +776,16 @@ void ChooseRuleset(int item)
 		g_s.createRuleset = picked;
 		return;
 	}
-	if (ModsSameRuleset(picked, ModsMountedProfile().ruleset)) return;
+	if (ModsSameChoice(picked, ModsMountedChoice())) return;
 	ModProfile profile = ModsLoadProfile(ModsMountedProfile().name);
 	profile.ruleset = picked;
 	if (!ModsSaveProfile(profile)) {
 		ModUiToast(Tr("Could not save the rules in the content profile."));
+		return;
+	}
+	if (ModsSameRuleset(picked, ModsMountedProfile().ruleset)) {
+		// The same files stay mounted: no restart.
+		ModsMountedChoiceSet(picked);
 		return;
 	}
 	ModsSetActiveProfileName(profile.name);
@@ -874,7 +890,7 @@ void OpenMpMenu(bool checkRecover)
 	g_s.mods = ModsList();
 	g_s.profiles = ModsProfileNames();
 	g_s.createProfile = ModsMountedProfile().name;
-	g_s.createRuleset = ModsMountedProfile().ruleset;
+	g_s.createRuleset = ModsMountedChoice();
 	g_s.createProfileInfo = ProfileSummaryFor(g_s.createProfile), g_s.createModsList = ListState();
 	g_s.saves = ListSaves();
 	g_s.createSave = -1;

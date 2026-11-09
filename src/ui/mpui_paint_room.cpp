@@ -564,9 +564,9 @@ void PaintGameRoom(Painter &p, const State &st)
 				// Only the rulesets of the packages that are loaded; picking another one restarts the game.
 				const std::vector<RulesetChoice> &rulesets = MountedRulesets();
 				if (!rulesets.empty()) {
-					const ModRuleset &mounted = ModsMountedProfile().ruleset;
+					const ModRuleset mounted = ModsMountedChoice();
 					section("CONTENT");
-					row("Rules", RulesetLabel(rulesets, mounted), !mounted.Empty(), canEdit, true, kDropProfile, 1, nullptr);
+					row("Rules", RulesetLabel(rulesets, mounted), !mounted.pack.empty(), canEdit, true, kDropProfile, 1, nullptr);
 				}
 			}
 

@@ -192,9 +192,10 @@ bool ModsSaveProfile(const ModProfile &p)
 		choices.arr.push_back(o);
 	}
 	if (!choices.arr.empty()) j.Set("choices", choices);
-	if (!p.ruleset.Empty()) {
+	if (!p.ruleset.pack.empty()) {
 		Json r = Json::MakeObject();
 		r.Set("pack", Json::MakeString(p.ruleset.pack));
+		// An empty id is the package without a layer.
 		r.Set("id", Json::MakeString(p.ruleset.id));
 		j.Set("ruleset", r);
 	}

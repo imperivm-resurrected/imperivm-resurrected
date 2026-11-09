@@ -407,7 +407,7 @@ ModRuleset ProfileRulesetFor(const std::string &profile);
 const std::vector<RulesetChoice> &MountedRulesets();
 bool SkirmishRoom(const State &st);
 const std::vector<RulesetChoice> &RulesetChoicesShown(const State &st);
-const ModRuleset &RulesetShown(const State &st);
+ModRuleset RulesetShown(const State &st);
 std::string RulesetLabel(const std::vector<RulesetChoice> &choices, const ModRuleset &ruleset);
 void ChooseRuleset(int item);
 void Predict(int kind, int index, int value);

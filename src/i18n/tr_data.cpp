@@ -1526,5 +1526,6 @@ extern const TrRow kTrRows[] = {
 	{"Slots set back to Random, their civilization is no longer allowed in the room: %s", "Plazas devueltas a Aleatoria, su civilización ya no está permitida en la sala: %s", "Posti riportati a Casuale, la loro civiltà non è più consentita nella stanza: %s"},
 	{"Your civilization is no longer allowed in this room: you play Random now.", "Tu civilización ya no está permitida en esta sala: ahora juegas con Aleatoria.", "La tua civiltà non è più consentita in questa stanza: ora giochi con Casuale."},
 	{"Some players had a civilization the room does not allow and now play Random. Press Start again.", "Algunos jugadores tenían una civilización que la sala no permite y ahora juegan con Aleatoria. Pulsa Empezar de nuevo.", "Alcuni giocatori avevano una civiltà non consentita dalla stanza e ora giocano con Casuale. Premi di nuovo Inizia."},
+	{"%s (original rules)", "%s (reglas originales)", "%s (regole originali)"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

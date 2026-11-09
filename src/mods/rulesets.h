@@ -35,6 +35,24 @@ std::vector<RulesetIssue> RulesetResolve(std::vector<RulesetDecl> &decls);
 // The index of the layer that holds rel (a normalized path relative to the package), or -1 when it belongs to the root.
 int RulesetOwnerOf(const std::vector<RulesetDecl> &layers, const std::string &rel);
 
+// What the Rules combo may offer for a package: the facts about it, then one entry per ruleset it declares, or, when it declares
+// none and has civilizations, one entry for the package alone (layer -1). A package that cannot be used (forbidden files) offers nothing.
+struct RulesetPackFacts {
+	bool usable = true;
+	bool hasCivs = false;
+	size_t layers = 0;
+};
+
+struct RulesetEntry {
+	size_t pack = 0;
+	int layer = -1;
+};
+
+std::vector<RulesetEntry> RulesetEntries(const std::vector<RulesetPackFacts> &packs);
+
+// Whether the paths of a package (normalized, relative to its root) hold a civilization: civs/<name>.json.
+bool RulesetPathsHaveCivs(const std::vector<std::string> &paths);
+
 // A mounted folder is mods\<pack> or mods\<pack>\rulesets\<id>. Both give the folder of the pack...
 std::string PackFolderOfDir(const std::string &modsDir, const std::string &dir);
 

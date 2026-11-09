@@ -762,7 +762,7 @@ std::vector<std::string> DropItems(const State &st, int &sel)
 		std::vector<std::string> labels = {Tr("Original (HD)")};
 		sel = 0;
 		for (size_t i = 0; i < choices.size(); i++) {
-			if (ModsSameRuleset(choices[i].ruleset, RulesetShown(st))) sel = static_cast<int>(i) + 1;
+			if (ModsSameChoice(choices[i].ruleset, RulesetShown(st))) sel = static_cast<int>(i) + 1;
 			labels.push_back(choices[i].label);
 		}
 		return labels;

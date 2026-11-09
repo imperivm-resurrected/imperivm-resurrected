@@ -174,9 +174,9 @@ void MountProfileLayers(void *list)
 	p.mods = ModsLoadOrder(p.mods);
 	{
 		const ModRuleset effective = ModsEffectiveRuleset(p);
-		if (!p.ruleset.Empty() && effective.Empty()) {
+		if (!p.ruleset.pack.empty() && effective.pack.empty()) {
 			LogW("content", "the profile asks for ruleset \"%s\" of \"%s\" but it cannot be mounted (the pack is not enabled or installed, or it has no such ruleset)",
-				p.ruleset.id.c_str(), p.ruleset.pack.c_str());
+				p.ruleset.id.empty() ? "(none)" : p.ruleset.id.c_str(), p.ruleset.pack.c_str());
 		}
 		p.ruleset = effective;
 	}
@@ -188,6 +188,7 @@ void MountProfileLayers(void *list)
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
 		g_mount.profile = p;
+		g_mount.choice = p.ruleset;
 		g_mount.known = true;
 		g_mount.signatures = signatures;
 		g_mount.layerList = list;

@@ -156,7 +156,9 @@ struct ModChoice {
 	std::string over;
 };
 
-// The ruleset a profile mounts: layer `id` of the package in folder `pack`. Empty is the game's own rules.
+// The Rules entry a profile keeps: layer `id` of the package in folder `pack`, or, with an empty `id`, that package without a layer
+// (its civilizations are the default ones of a room). Empty() says that no layer is mounted, so {pack, ""} mounts the same files as
+// the game's own rules: use ModsSameRuleset for "same files" and ModsSameChoice for "same entry".
 struct ModRuleset {
 	std::string pack;
 	std::string id;
@@ -167,6 +169,18 @@ inline bool ModsSameRuleset(const ModRuleset &a, const ModRuleset &b)
 {
 	if (a.Empty() || b.Empty()) return a.Empty() && b.Empty();
 	return _stricmp(a.pack.c_str(), b.pack.c_str()) == 0 && _stricmp(a.id.c_str(), b.id.c_str()) == 0;
+}
+
+inline bool ModsSameChoice(const ModRuleset &a, const ModRuleset &b)
+{
+	if (a.pack.empty() || b.pack.empty()) return a.pack.empty() && b.pack.empty();
+	return _stricmp(a.pack.c_str(), b.pack.c_str()) == 0 && _stricmp(a.id.c_str(), b.id.c_str()) == 0;
+}
+
+// The id of the set of civilizations a package makes in a room: its id, or its folder when it has none.
+inline std::string ModsCivSetId(const ModInfo &m)
+{
+	return m.id.empty() ? m.folder : m.id;
 }
 
 struct ModProfile {
@@ -283,6 +297,19 @@ std::string ModsPackFolder(const std::string &mountedDir);
 std::string ModsDirVfsName(const std::string &mountedDir);
 // The ruleset of the profile if it can be mounted (its package is in the profile, installed, and has that layer); empty otherwise.
 ModRuleset ModsEffectiveRuleset(const ModProfile &p);
+// What the Rules combo offers for these packages (in this order): each ruleset of a package, and, for a package that has
+// civilizations but no ruleset, the package alone (layerName empty).
+struct ModRulesetEntry {
+	ModRuleset ruleset;
+	std::string packName, layerName;
+};
+std::vector<ModRulesetEntry> ModsRulesetEntries(const std::vector<std::string> &folders);
+// The civilization set a Rules entry stands for: the one of its package if the package has civilizations, otherwise "" (the game's).
+std::string ModsRulesetCivSet(const ModRuleset &choice);
+// The entry of the mounted profile. It differs from ModsMountedProfile().ruleset only after ModsMountedChoiceSet.
+ModRuleset ModsMountedChoice();
+// Remembers another entry that mounts the same files (see ModsSameRuleset), so nothing is reloaded. Ignored if the files differ.
+void ModsMountedChoiceSet(const ModRuleset &choice);
 const std::string &ModsLanguage();
 struct Json;
 std::string ModsLocalizedText(const Json &j, const char *key, const std::string &def);
