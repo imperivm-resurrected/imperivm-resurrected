@@ -46,6 +46,8 @@ struct Config {
 	bool smoothScroll = true;
 
 	bool modOverrides = true;
+	// [Mods] ConstHotReload: change between rulesets that differ only in data/const.ini without restarting the game.
+	bool constHotReload = false;
 
 	bool logFiles = false;
 	bool rejoinTrace = false;

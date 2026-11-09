@@ -35,6 +35,7 @@ inline constexpr uintptr_t kProcessDeath = 0x005141b0;
 inline constexpr uintptr_t kIsExplored = 0x00515950;
 inline constexpr uintptr_t kSetPaused = 0x0051d2e0;
 inline constexpr uintptr_t kSetCurrentPlayer = 0x0051d5b0;
+inline constexpr uintptr_t kLoadGameData = 0x0051e040;
 inline constexpr uintptr_t kGameUpdate = 0x0051e940;
 inline constexpr uintptr_t kShowPausedMenu = 0x0051ee80;
 inline constexpr uintptr_t kRandomDrawSite = 0x005223b5;

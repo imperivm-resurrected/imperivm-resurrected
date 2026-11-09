@@ -310,6 +310,14 @@ std::string ModsRulesetCivSet(const ModRuleset &choice);
 ModRuleset ModsMountedChoice();
 // Remembers another entry that mounts the same files (see ModsSameRuleset), so nothing is reloaded. Ignored if the files differ.
 void ModsMountedChoiceSet(const ModRuleset &choice);
+// Hot reload of CONST.INI between matches. ModsSwapMountedRuleset mounts another ruleset in place of the mounted one without
+// restarting (its folder in the mount list, the profile's ruleset, the patches; no check, see ModsSwitchRulesetWithoutRestart). The game
+// keeps the table of the ruleset it started with until game/constreload.cpp loads the new one: Pending says they differ, Done that
+// the game now holds the mounted one, Failed that it could not and kept the old one (the mounted ruleset goes back to match it).
+bool ModsSwapMountedRuleset(const ModRuleset &wanted);
+bool ModsConstReloadPending();
+void ModsConstReloadDone();
+void ModsConstReloadFailed();
 const std::string &ModsLanguage();
 struct Json;
 std::string ModsLocalizedText(const Json &j, const char *key, const std::string &def);

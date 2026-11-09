@@ -24,6 +24,7 @@ inline constexpr uintptr_t kLoadStream = 0x009bdaf8;
 inline constexpr uintptr_t kPersistVersion = 0x009bdafc;
 inline constexpr uintptr_t kSelectionManager = 0x009c0938;
 inline constexpr uintptr_t kVisibleMgr = 0x009edd18;
+inline constexpr uintptr_t kPtrPool = 0x00a04a34;
 inline constexpr uintptr_t kLanguageSettings = 0x00a6a618;
 inline constexpr uintptr_t kUiLocalization = 0x00a77e94;
 inline constexpr uintptr_t kSoundManager = 0x00a78420;
@@ -35,6 +36,7 @@ inline constexpr uintptr_t kSaveRequest = 0x00a87350;
 inline constexpr uintptr_t kLoadRequest = 0x00a87354;
 inline constexpr uintptr_t kReplayRequest = 0x00a87358;
 inline constexpr uintptr_t kLoadingSavedGame = 0x00a87390;
+inline constexpr uintptr_t kConstIni = 0x00a877b4;
 inline constexpr uintptr_t kGameSettings = 0x00a87c48;
 
 }

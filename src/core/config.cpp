@@ -93,6 +93,7 @@ void LoadConfig()
 	g_config.smoothScroll = true;
 
 	g_config.modOverrides = GetPrivateProfileIntA("Mods", "Override", 1, path) != 0;
+	g_config.constHotReload = GetPrivateProfileIntA("Mods", "ConstHotReload", 0, path) != 0;
 	g_config.logFiles = GetPrivateProfileIntA("Debug", "LogFiles", 0, path) != 0;
 	g_config.rejoinTrace = GetPrivateProfileIntA("Debug", "RejoinTrace", IsBetaVersion(ModVersionText()) ? 1 : 0, path) != 0;
 	GetPrivateProfileStringA("Online", "RejoinMode", "reload", buf, sizeof(buf), path);

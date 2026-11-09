@@ -17,3 +17,6 @@ bool VfsIsHidden(const std::string &rel);
 void InstallHiddenHooks();
 
 bool VfsReadUnpatched(const std::string &rel, std::string &out);
+
+// Rebuilds the patches and forgets the patched copy of rel (a path like "data/const.ini") so the next open serves the new bytes.
+void VfsResetPatched(const std::string &rel);
