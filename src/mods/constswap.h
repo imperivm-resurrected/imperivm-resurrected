@@ -32,6 +32,12 @@ unsigned FullSwapKindOf(const std::string &file);
 unsigned FullSwapKinds(const std::vector<std::string> &files);
 std::string FullSwapKindsText(unsigned kinds);
 
+// Whether loading a saved game needs no restart although the ruleset it was saved with is not the mounted one: the game is one whose load
+// the full reload covers (a skirmish or an online game, not a campaign, a conquest or a replay), every package it needs is enabled and only
+// the ruleset differs, there is nothing the restart would have switched off, and the switch itself can be made in place. The saves screen
+// (list mark, details, button) and the load action both ask this, so what they say is what happens.
+bool SaveSwitchesInPlace(bool plainGame, bool needsActivation, bool rulesetOnly, bool somethingExtra, bool switchQualifies);
+
 // Whether the text of a const.ini can be loaded: it has a [GamePlay] section (every constant the game reads is in it). A file that
 // cannot be read, or an empty one, would leave the game's table empty.
 bool ConstIniHasGamePlay(const std::string &text);

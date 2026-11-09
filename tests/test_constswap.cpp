@@ -103,6 +103,17 @@ void EachKindOfFileIsAcceptedOnItsOwn()
 	CHECK(SwapDecide(false, true, kNone, {"data/GameScripts/9 Arena.vs", "gameres/x.bmp"}) == ConstSwap::kRestart);
 }
 
+void ASavedGameSwitchesInPlaceOnlyWhenEverythingAgrees()
+{
+	CHECK(SaveSwitchesInPlace(true, true, true, false, true));
+	// Each condition on its own makes it the restart it was before.
+	CHECK(!SaveSwitchesInPlace(false, true, true, false, true)); // a campaign, a conquest or a replay
+	CHECK(!SaveSwitchesInPlace(true, false, true, false, true)); // nothing to activate
+	CHECK(!SaveSwitchesInPlace(true, true, false, false, true)); // a package has to be enabled
+	CHECK(!SaveSwitchesInPlace(true, true, true, true, true));   // the restart would switch other packs off
+	CHECK(!SaveSwitchesInPlace(true, true, true, false, false)); // flag off, or the layer carries paks, art, sounds...
+}
+
 void FullSwapNeedsOnlyPatchesOfData()
 {
 	const Files commands = {"patches/data/commands/rbarracks.xml"};
@@ -143,6 +154,7 @@ int main()
 	OnlyThePatchOfConstIniCounts();
 	TheTextNeedsAGamePlaySection();
 	FullSwapNeedsOnlyPatchesOfData();
+	ASavedGameSwitchesInPlaceOnlyWhenEverythingAgrees();
 	EachKindOfFileIsAcceptedOnItsOwn();
 	return test::Summary("constswap");
 }

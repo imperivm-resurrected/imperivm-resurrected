@@ -1329,6 +1329,8 @@ extern const TrRow kTrRows[] = {
 	{"you", "tú", "tu"},
 	{"You can't load this game: you are missing content (%s). See the list in the game's details.", "No puedes cargar esta partida: te falta contenido (%s). Mira la lista en el detalle de la partida.", "Non puoi caricare questa partita: ti manca del contenuto (%s). Guarda l'elenco nei dettagli della partita."},
 	{"random", "aleatorio", "casuale"},
+	{"Loading it switches the rules without restarting:", "Al cargarla se cambian las reglas sin reiniciar:", "Caricandola si cambiano le regole senza riavviare:"},
+	{"This game uses other rules: ", "Esta partida usa otras reglas: ", "Questa partita usa altre regole: "},
 	{"Another version or different files:", "Otra versión o archivos distintos:", "Un'altra versione o file diversi:"},
 	{"Delete the %s selected items? This will delete %s.", "¿Eliminar los %s elementos elegidos? Se borrarán %s.", "Eliminare i %s elementi selezionati? Verranno eliminati %s."},
 	{"Delete the game \"%s\"? This will delete %s.", "¿Eliminar la partida \"%s\"? Se borrarán %s.", "Eliminare la partita \"%s\"? Verranno eliminati %s."},

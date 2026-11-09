@@ -527,9 +527,12 @@ void PaintCreate(Painter &p, const State &st)
 		const ModNeeds &needs = CreateSaveNeeds(st.saves[st.createSave].vfsPath, st.createProfile);
 		if (!needs.Satisfied()) {
 			y += 4;
-			p.Text(fx + 4, y, fw, 20, Tr("This game needs: ") + ShortList(needs.Names(true), 2), kBad, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			// Only its ruleset differs and the switch is made for you when the room is created: not a problem.
+			const bool inPlace = needs.AllInstalled() && ModsCanSwitchForNeeds(needs);
+			p.Text(fx + 4, y, fw, 20, (inPlace ? Tr("This game uses other rules: ") : Tr("This game needs: ")) + ShortList(needs.Names(true), 2), inPlace ? kDim : kBad,
+				DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 			y += 20;
-			p.Text(fx + 4, y, fw, 20, needs.AllInstalled() ? (ModsCanSwitchForNeeds(needs) ? "They are switched in place when you create it." : "They are activated when you create it (the game must restart).") : "You don't have it installed: Options > Content > Browse content.", kDim,
+			p.Text(fx + 4, y, fw, 20, needs.AllInstalled() ? (inPlace ? "They are switched in place when you create it." : "They are activated when you create it (the game must restart).") : "You don't have it installed: Options > Content > Browse content.", kDim,
 				DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 			y += 20;
 		}

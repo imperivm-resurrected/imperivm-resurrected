@@ -73,6 +73,11 @@ std::string FullSwapKindsText(unsigned kinds)
 	return out.empty() ? "nothing" : out;
 }
 
+bool SaveSwitchesInPlace(bool plainGame, bool needsActivation, bool rulesetOnly, bool somethingExtra, bool switchQualifies)
+{
+	return plainGame && needsActivation && rulesetOnly && !somethingExtra && switchQualifies;
+}
+
 bool ConstIniHasGamePlay(const std::string &text)
 {
 	size_t at = text.compare(0, 3, "\xEF\xBB\xBF") == 0 ? 3 : 0;
