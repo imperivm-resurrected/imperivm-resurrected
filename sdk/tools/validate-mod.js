@@ -341,6 +341,28 @@ else {
 	catch (e) { error('mod.json', 0, 'not valid JSON: ' + e.message); }
 }
 
+// --- where the art, sounds and texts go (warnings only; the classes are in lib/assetclass.js) ----------------------------------------
+{
+	const assets = require('./lib/assetclass');
+	const MAX_LISTED = 10;
+	const listed = (found, msg) => {
+		found.slice(0, MAX_LISTED).forEach(f => warn(f, 0, msg));
+		if (found.length > MAX_LISTED) warn(found[MAX_LISTED], 0, `${found.length - MAX_LISTED} more files like the ones above`);
+	};
+	if (layerOf) {
+		// a ruleset is what a host chooses for a game: the menu is not part of it
+		listed(files.filter(f => assets.isMenuSkin(f)), 'menu skin file in a ruleset layer: it belongs to a skin (not the ruleset)');
+	}
+	else if (gameDir && files.some(f => /^civs\//i.test(f))) {
+		// a civilization pack's root is mounted for everyone who has the pack: a file that replaces the game's changes the game for all of them
+		const game = assets.gameFiles(gameDir);
+		if (game) {
+			listed(files.filter(f => !/^(patches|loc|civs)\//i.test(f) && game.has(assets.gamePath(f)) && !assets.isMenuSkin(f)),
+				'global in-game file in the root of a civilization pack: put it in a ruleset layer (rulesets/<id>/)');
+		}
+	}
+}
+
 // --- rulesets (mod.json "rulesets"): ids, folders and the rle.mmp.tail the package would bring twice -------------------------------
 if (!layerOf) {
 	if (rootJson && rootJson.rulesets !== undefined && !Array.isArray(rootJson.rulesets)) error('mod.json', 0, '"rulesets" has to be a list');
