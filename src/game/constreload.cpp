@@ -177,5 +177,6 @@ void InstallConstReload(bool knownExe)
 		LogE("game", "const reload: could not hook LoadGameData; a ruleset change will still need a restart");
 		return;
 	}
+	ModsConstReloadSetReady(true);
 	LogI("game", "const reload: ready ([Mods] ConstHotReload=1)");
 }

@@ -42,6 +42,8 @@ struct ModLayer {
 	std::string path;
 	std::vector<std::string> paths;
 	std::vector<std::string> loosePaths;
+	// Every file of the folder (patches, hidden.txt, rle.mmp.tail... included, documents not), relative to it.
+	std::vector<std::string> files;
 	std::vector<PatchedValue> patchValues;
 	std::vector<std::string> hidden;
 	bool rleTail = false;
@@ -315,6 +317,13 @@ void ModsMountedChoiceSet(const ModRuleset &choice);
 // keeps the table of the ruleset it started with until game/constreload.cpp loads the new one: Pending says they differ, Done that
 // the game now holds the mounted one, Failed that it could not and kept the old one (the mounted ruleset goes back to match it).
 bool ModsSwapMountedRuleset(const ModRuleset &wanted);
+// game/constreload.cpp says whether it is installed; without it no ruleset change can skip the restart.
+void ModsConstReloadSetReady(bool ready);
+// Whether the mounted ruleset can be replaced by `wanted` without restarting: the two differ only in data/const.ini (see constswap.h).
+bool ModsCanSwitchWithoutRestart(const ModRuleset &wanted);
+// Replaces the mounted ruleset if ModsCanSwitchWithoutRestart. The caller saves the profile and sets the choice, as for any other
+// entry that mounts the same files (ModsMountedChoiceSet).
+bool ModsSwitchRulesetWithoutRestart(const ModRuleset &wanted);
 bool ModsConstReloadPending();
 void ModsConstReloadDone();
 void ModsConstReloadFailed();

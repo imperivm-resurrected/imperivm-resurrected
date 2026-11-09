@@ -6,7 +6,9 @@
 
 #include "MinHook.h"
 #include "core/log.h"
+#include "addr/state.h"
 #include "hooks/media.h"
+#include "mods/constswap.h"
 #include "mods/mods_internal.h"
 #include "mods/vfs.h"
 
@@ -17,6 +19,7 @@ namespace {
 // mounted when it started; it only changes when game/constreload.cpp loads another one. Not known until the first swap.
 ModRuleset g_engineRules;
 bool g_engineKnown = false;
+std::atomic<bool> g_ready{false};
 
 bool SameFolder(const std::string &a, const std::string &b)
 {
@@ -34,6 +37,53 @@ std::string LayerDir(const ModRuleset &r)
 	std::replace(dir.begin(), dir.end(), '/', '\\');
 	return dir;
 }
+
+// The files of the folder a ruleset mounts; false if the ruleset is not there. Nothing for the game's own rules.
+bool LayerFiles(const ModRuleset &r, std::vector<std::string> &out)
+{
+	out.clear();
+	if (r.Empty()) return true;
+	std::lock_guard<std::mutex> lock(g_lock);
+	for (const ModInfo &m : g_mods) {
+		if (!SameFolder(m.folder, r.pack)) continue;
+		const ModLayer *layer = ModsFindLayer(m, r.id);
+		if (!layer) return false;
+		out = layer->files;
+		return true;
+	}
+	return false;
+}
+}
+
+void ModsConstReloadSetReady(bool ready)
+{
+	g_ready = ready;
+}
+
+bool ModsCanSwitchWithoutRestart(const ModRuleset &wanted)
+{
+	if (!g_ready) return false;
+	// A running game has the rules it started with; this is only for the menus and the room before the match.
+	if (*reinterpret_cast<void *const *>(addr::kGame) != nullptr) return false;
+	ModProfile p;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		if (!g_mount.known) return false;
+		p = g_mount.profile;
+	}
+	const ModRuleset from = p.ruleset;
+	p.ruleset = wanted;
+	const ModRuleset to = ModsEffectiveRuleset(p);
+	// The profile may not be able to mount what was asked (its package is not enabled): then it is not this switch.
+	if (!ModsSameChoice(to, wanted)) return false;
+	std::vector<std::string> fromFiles, toFiles;
+	if (!LayerFiles(from, fromFiles) || !LayerFiles(to, toFiles)) return false;
+	return ConstSwapDecide(ModsSameRuleset(from, to), fromFiles, toFiles) == ConstSwap::kReload;
+}
+
+bool ModsSwitchRulesetWithoutRestart(const ModRuleset &wanted)
+{
+	return ModsCanSwitchWithoutRestart(wanted) && ModsSwapMountedRuleset(wanted);
 }
 
 bool ModsSwapMountedRuleset(const ModRuleset &wanted)
