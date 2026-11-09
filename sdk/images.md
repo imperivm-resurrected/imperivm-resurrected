@@ -33,6 +33,8 @@ The game's commands also use the `upgrades`, `skills`, `states` and `specials` f
 
 Case doesn't matter in paths. If the game can't find an image, the button shows as a plain blue square.
 
+To **replace** an image the game already has (the hastatus portrait, say), use the same path: `gameres/icons/RHastatus.bmp`. With the DLL of this version it wins over the game's own. Before that it was silently ignored for files the game has, because the game turns `gameres\` into `ui\` before it looks for the file; the folder name `ui\cmdbar\Actions\...` always worked. The same goes for `gameini\` (`data\interface\`), `menuini\` (`data\interface\menu\`) and the other folders the game mounts under another name. Put the images that replace the game's in a [ruleset](rulesets.md#where-art-sounds-and-texts-go).
+
 ## If it doesn't show
 
 1. Set `LogFiles=1` in `[Debug]` of `imperivm-mod.ini`. The log notes every file the game opens and flags the ones that don't exist (`VFS: opens … -> does not exist`), so you can see the exact name it asks for.

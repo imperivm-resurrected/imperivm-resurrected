@@ -10,11 +10,14 @@
 'use strict';
 const fs = require('fs'), path = require('path');
 
-// Paths in the form the game uses (lowercase, "/"): local/<language>/x is currentlang/x, and the game's UI.pak is gameres/.
+// Paths in their real form (lowercase, "/"): local/<language>/x is currentlang/x, and the folders the game mounts under another name are
+// the real ones (gameres/ is ui/, menuini/ is data/interface/menu/). The table is the one of src/mods/volumes.h.
+const VOLUMES = [['gameres/', 'ui/'], ['gameini/', 'data/interface/'], ['commonres/', 'ui/common/'], ['commonini/', 'data/interface/common/'],
+	['menures/', 'ui/menu/'], ['menuini/', 'data/interface/menu/'], ['cursors/', 'ui/cursors/'], ['editorres/', 'ui/editor/'],
+	['editorini/', 'data/interface/editor/']];
 const MENU_SKIN = [
-	/^menuini\//,                                         // the menu INIs and the pages of the lobby
-	/^data\/interface\/menu\//,                           // the same, in data/
-	/^ui\/menu\//, /^gameres\/menu\//,                    // the buttons and pictures of the menus
+	/^data\/interface\/menu\//,                           // the menu INIs and the pages of the lobby
+	/^ui\/menu\//,                                        // the buttons and pictures of the menus
 	/^currentlang\/(menubackground|menu_16_9|menu_4_3)\.bmp$/,
 	/^currentlang\/logo[^/]*\.bmp$/,
 	/^currentlang\/(tips|help)\.xml$/,                    // the tips of the loading screen and the help (F1)
@@ -23,7 +26,9 @@ const MENU_SKIN = [
 function gamePath(rel) {
 	const p = rel.replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase();
 	const m = p.match(/^local\/[^/]+\/(.+)$/);
-	return m ? 'currentlang/' + m[1] : p;
+	if (m) return 'currentlang/' + m[1];
+	const v = VOLUMES.find(([name]) => p.startsWith(name));
+	return v ? v[1] + p.slice(v[0].length) : p;
 }
 
 function isMenuSkin(rel) {
@@ -58,7 +63,7 @@ function pakNames(file) {
 	finally { fs.closeSync(fd); }
 }
 
-// Every file the game has, as game paths: Packs/*.pak (UI/ is gameres/) and local/*.pak (CURRENTLANG/). null if there is no game folder.
+// Every file the game has, as game paths: Packs/*.pak and local/*.pak (only CURRENTLANG/). null if there is no game folder.
 function gameFiles(gameDir) {
 	if (!gameDir) return null;
 	const out = new Set();
@@ -70,7 +75,7 @@ function gameFiles(gameDir) {
 			for (const name of pakNames(path.join(full, f))) {
 				const p = name.replace(/\\/g, '/').toLowerCase();
 				if (dir === 'local' && !p.startsWith('currentlang/')) continue;
-				out.add(p.startsWith('ui/') ? 'gameres/' + p.slice(3) : p);
+				out.add(p);
 			}
 		}
 	}
