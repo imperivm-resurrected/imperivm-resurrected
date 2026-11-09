@@ -47,6 +47,25 @@ void ToggleKeepsOneSet()
 	CHECK(CivSetsToggle(known, noGreek, "other") == noGreek);
 }
 
+void DefaultFromTheEntry()
+{
+	const std::vector<std::string> known = {kCivSetGame, "community", "greek"};
+	// The game's own rules, or an entry whose package has no civilizations: only the game's set.
+	CHECK(CivSetsDefault(known, "") == std::vector<std::string>({kCivSetGame}));
+	// An entry of a package with civilizations: only that package's set; the other packages are left for "Edit civilizations".
+	CHECK(CivSetsDefault(known, "community") == std::vector<std::string>({"community"}));
+	CHECK(CivSetsDefault(known, "greek") == std::vector<std::string>({"greek"}));
+	// A set that is not loaded falls back to the game's.
+	CHECK(CivSetsDefault(known, "gone") == std::vector<std::string>({kCivSetGame}));
+	// With a single set there is nothing to filter: all.
+	CHECK(CivSetsDefault({kCivSetGame}, "").empty());
+	CHECK(CivSetsDefault({}, "community").empty());
+	// Whatever the default is, "Edit civilizations" can add the others one by one.
+	const std::vector<std::string> start = CivSetsDefault(known, "community");
+	CHECK(CivSetsToggle(known, start, "greek") == std::vector<std::string>({"community", "greek"}));
+	CHECK(CivSetsToggle(known, start, "community") == start);
+}
+
 void RoomState()
 {
 	CHECK(CivRoomSets().empty());
@@ -64,6 +83,7 @@ int main()
 	ListAllowsItsSets();
 	JoinAndSplit();
 	ToggleKeepsOneSet();
+	DefaultFromTheEntry();
 	RoomState();
 	return test::Summary("civsets");
 }

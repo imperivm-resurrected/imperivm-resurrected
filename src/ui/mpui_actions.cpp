@@ -734,7 +734,11 @@ void DoAction(int action, int arg)
 		s.name = g_s.nameInput.empty() ? Tr("Game of ") + g_s.player : g_s.nameInput;
 		s.map = "Chosen in the room";
 		s.mode = "Elimination";
-		CivRoomSetsSet({}); // a new room starts with every set allowed; the host edits them in the room
+		// A new room starts with the civilizations of its Rules entry (the host adds others in the room); a saved game brings its own sets.
+		const bool fromSave = g_s.createSave >= 0 && g_s.createSave < static_cast<int>(g_s.saves.size());
+		const std::vector<std::string> defaultSets = fromSave ? std::vector<std::string>() : DefaultCivSets(g_s.createRuleset);
+		s.civSets = CivSetsJoin(defaultSets);
+		CivRoomSetsSet(defaultSets);
 		if (g_s.createVisibility == 1 && g_s.passInput.empty()) {
 			ModUiToast("Enter the room password.");
 			FocusField(kPassField);
@@ -784,8 +788,10 @@ void ChooseRuleset(int item)
 		return;
 	}
 	if (ModsSameRuleset(picked, ModsMountedProfile().ruleset)) {
-		// The same files stay mounted: no restart.
+		// The same files stay mounted: no restart. The room takes the civilizations of the new entry at once.
 		ModsMountedChoiceSet(picked);
+		CivRoomSetsSet(DefaultCivSets(picked));
+		LogI("room", "rules entry changed without a restart; civilization sets: %s", CivSetsJoin(CivRoomSets()).c_str());
 		return;
 	}
 	ModsSetActiveProfileName(profile.name);

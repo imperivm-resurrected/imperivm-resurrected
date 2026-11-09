@@ -685,7 +685,7 @@ void LoadCivFile(const std::string &folder, const std::string &path, const std::
 	civ->modFolder = folder;
 	if (!folder.empty()) {
 		ModInfo owner;
-		civ->modId = ModsFind(folder, owner) && !owner.id.empty() ? owner.id : folder;
+		civ->modId = ModsFind(folder, owner) ? ModsCivSetId(owner) : folder;
 	}
 	std::string spelled = j.GetString("id");
 	if (spelled.empty()) spelled = fileName.substr(0, fileName.rfind('.'));

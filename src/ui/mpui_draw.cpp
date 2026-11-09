@@ -291,7 +291,7 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 		GameRoomSnapshot snap = GameRoomGet();
 		const bool justClosed = !snap.active && g_s.game.active && (g_s.startingCover || (g_s.gameWasActive && !g_s.leftByUser));
 		if (snap.active && !snap.online && !g_s.game.active && !g_s.room.id) {
-			CivRoomSetsSet({}); // a new skirmish starts with every set allowed
+			CivRoomSetsSet(DefaultCivSets(ModsMountedChoice())); // a new skirmish starts with the civilizations of its Rules entry
 			g_s.skirmishCivs = true;
 		}
 		if (!snap.active) g_s.civEdit = false;

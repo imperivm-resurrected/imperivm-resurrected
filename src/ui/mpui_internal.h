@@ -408,6 +408,8 @@ const std::vector<RulesetChoice> &MountedRulesets();
 bool SkirmishRoom(const State &st);
 const std::vector<RulesetChoice> &RulesetChoicesShown(const State &st);
 ModRuleset RulesetShown(const State &st);
+// The civilization sets a new room starts with for this Rules entry (see CivSetsDefault).
+std::vector<std::string> DefaultCivSets(const ModRuleset &choice);
 std::string RulesetLabel(const std::vector<RulesetChoice> &choices, const ModRuleset &ruleset);
 void ChooseRuleset(int item);
 void Predict(int kind, int index, int value);

@@ -48,6 +48,15 @@ std::vector<std::string> CivSetsToggle(const std::vector<std::string> &known, co
 	return chosen;
 }
 
+std::vector<std::string> CivSetsDefault(const std::vector<std::string> &known, const std::string &packSet)
+{
+	if (known.size() < 2) return {};
+	const auto has = [&](const std::string &s) { return std::find(known.begin(), known.end(), s) != known.end(); };
+	if (!packSet.empty() && has(packSet)) return {packSet};
+	if (has(kCivSetGame)) return {kCivSetGame};
+	return {};
+}
+
 std::vector<std::string> CivRoomSets()
 {
 	std::lock_guard<std::mutex> lock(g_lock);

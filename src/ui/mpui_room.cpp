@@ -9,6 +9,7 @@
 
 #include "ui/mpui_internal.h"
 #include "game/civs.h"
+#include "mods/civsets.h"
 #include "core/log.h"
 
 using namespace mpui_impl;
@@ -268,6 +269,13 @@ const std::vector<RulesetChoice> &RulesetChoicesShown(const State &st)
 ModRuleset RulesetShown(const State &st)
 {
 	return SkirmishRoom(st) ? ModsMountedChoice() : st.createRuleset;
+}
+
+std::vector<std::string> DefaultCivSets(const ModRuleset &choice)
+{
+	std::vector<std::string> known;
+	for (const CivSet &s : CivsSets()) known.push_back(s.id);
+	return CivSetsDefault(known, ModsRulesetCivSet(choice));
 }
 
 std::string RulesetLabel(const std::vector<RulesetChoice> &choices, const ModRuleset &ruleset)
