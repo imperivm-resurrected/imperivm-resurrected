@@ -4,6 +4,7 @@
 #include "mods/constswap.h"
 
 #include <cctype>
+#include <cstring>
 
 namespace {
 std::string Normal(std::string s)
@@ -21,17 +22,55 @@ bool ConstSwapLayerOk(const std::vector<std::string> &files)
 	return true;
 }
 
+namespace {
+bool StartsWith(const std::string &s, const char *prefix)
+{
+	return s.compare(0, strlen(prefix), prefix) == 0;
+}
+
+std::string Extension(const std::string &f)
+{
+	const size_t dot = f.find_last_of('.'), slash = f.find_last_of('/');
+	return dot == std::string::npos || (slash != std::string::npos && dot < slash) ? std::string() : f.substr(dot);
+}
+}
+
+unsigned FullSwapKindOf(const std::string &raw)
+{
+	const std::string f = Normal(raw);
+	const std::string ext = Extension(f);
+	if (f == "hidden.txt") return kFullHidden;
+	// A file in a subfolder or with no name is not one of these.
+	if (StartsWith(f, "patches/data/") && f.size() > 13 && (ext == ".xml" || ext == ".ini" || ext == ".vs")) return kFullPatch;
+	if (StartsWith(f, "data/") && f.size() > 5 && (ext == ".xml" || ext == ".ini" || ext == ".vs")) return kFullLoose;
+	if (StartsWith(f, "modes/") && f.size() > 6 && f.find('/', 6) == std::string::npos && ext == ".json") return kFullModes;
+	return kFullOther;
+}
+
+unsigned FullSwapKinds(const std::vector<std::string> &files)
+{
+	unsigned kinds = kFullNone;
+	for (const std::string &f : files) kinds |= FullSwapKindOf(f);
+	return kinds;
+}
+
 bool FullSwapLayerOk(const std::vector<std::string> &files)
 {
-	static const char kPrefix[] = "patches/data/";
-	for (const std::string &raw : files) {
-		const std::string f = Normal(raw);
-		if (f.compare(0, sizeof(kPrefix) - 1, kPrefix) != 0 || f.size() == sizeof(kPrefix) - 1) return false;
-		const size_t dot = f.find_last_of('.');
-		const std::string ext = dot == std::string::npos ? std::string() : f.substr(dot);
-		if (ext != ".xml" && ext != ".ini" && ext != ".vs") return false;
-	}
-	return true;
+	return (FullSwapKinds(files) & kFullOther) == 0;
+}
+
+std::string FullSwapKindsText(unsigned kinds)
+{
+	std::string out;
+	auto add = [&](unsigned bit, const char *name) {
+		if (kinds & bit) out += (out.empty() ? "" : ", ") + std::string(name);
+	};
+	add(kFullPatch, "patches of data/");
+	add(kFullLoose, "files in data/");
+	add(kFullModes, "modes");
+	add(kFullHidden, "hidden.txt");
+	add(kFullOther, "other files");
+	return out.empty() ? "nothing" : out;
 }
 
 bool ConstIniHasGamePlay(const std::string &text)
