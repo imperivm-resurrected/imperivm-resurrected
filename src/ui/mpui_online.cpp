@@ -3,6 +3,7 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include "ui/textedit.h"
 #include "MinHook.h"
+#include "core/log.h"
 #include "core/names.h"
 #include "ui/modui.h"
 
