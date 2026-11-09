@@ -95,6 +95,11 @@ int RulesetOwnerOf(const std::vector<RulesetDecl> &layers, const std::string &re
 	return -1;
 }
 
+PackKind PackKindOf(bool rootGameplay, bool rootContent, bool rulesetGameplay)
+{
+	return rootGameplay || rulesetGameplay ? PackKind::kRules : rootContent ? PackKind::kContent : PackKind::kCosmetic;
+}
+
 std::string ModDirVfsName(const std::string &modsDir, const std::string &dir)
 {
 	const std::string base = modsDir + "\\";

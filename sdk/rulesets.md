@@ -13,6 +13,8 @@ Example: [`ruleset-example`](examples/ruleset-example). Template: [`ruleset`](te
 | The package root | Civilizations (`civs\`, their classes, `specials\`) and whatever the package needs in every room | Whenever the package is enabled, as always |
 | `rulesets\<id>\` | The global rules, laid out like a mod root: `patches\`, `data\`, `packs\`, `local\`, `modes\`, `options\`, `events\`, `rules\game.json`, `hidden.txt`, `rle.mmp.tail`... | Only when a room chooses that ruleset |
 
+A package counts as a **rules** package (required content in a room, not "optional"; a change to it needs a restart) if its root or any of its rulesets holds gameplay files, `patches\data\const.ini` included. A package with only `mod.json` in its root and all its gameplay in `rulesets\` is a rules package. `"kind"` in `mod.json` can only raise this, never lower it.
+
 The civilizations of every enabled package stay selectable in a room whatever the rules are (the host adds them with **Edit civilizations**, see below), but a room starts with only one pack of them. Nothing forces you to move the files of a mod that already works: the root keeps working as before, and `rulesets` is optional.
 
 ## Declaring them

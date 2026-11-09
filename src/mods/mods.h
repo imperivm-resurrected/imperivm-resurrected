@@ -116,6 +116,12 @@ inline const ModLayer *ModsFindLayer(const ModInfo &m, const std::string &id)
 	return nullptr;
 }
 
+// Whether the package changes the rules: its root has gameplay files, or it is of the rules kind (rules only in its rulesets).
+inline bool ModsIsRulesPack(const ModInfo &m)
+{
+	return m.gameplay || m.kind == kModRules;
+}
+
 inline bool ModsIsMod(const ModInfo &m, const std::string &id, uint64_t gbId)
 {
 	if (m.gbId && gbId) return m.gbId == gbId;

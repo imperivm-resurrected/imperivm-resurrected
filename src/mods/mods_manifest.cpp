@@ -417,7 +417,11 @@ ModInfo ScanMod(const std::string &folder, std::vector<ScanFile> &files)
 		if (l.folderMissing) m.rulesetProblems.push_back(TrFmt("Ruleset \"%s\" ignored: its folder %s does not exist", {l.id, l.path}));
 	}
 	m.layers.erase(std::remove_if(m.layers.begin(), m.layers.end(), [](const ModLayer &l) { return l.folderMissing; }), m.layers.end());
-	m.kind = m.gameplay ? kModRules : m.content ? kModContent : kModCosmetic;
+	// The files of the rulesets count too: a package whose only gameplay is in rulesets/<id>/ is a rules package. m.gameplay stays the
+	// root's: it says that the root has gameplay files to hash, and each ruleset is hashed apart.
+	bool rulesetGameplay = false;
+	for (const ModLayer &l : m.layers) rulesetGameplay = rulesetGameplay || l.gameplay;
+	m.kind = static_cast<int>(PackKindOf(m.gameplay, m.content, rulesetGameplay));
 	if (m.declaredKind > m.kind) {
 		m.kind = m.declaredKind;
 		if (m.kind == kModRules) {
