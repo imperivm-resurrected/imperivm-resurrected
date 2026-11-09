@@ -1,0 +1,2 @@
+; The game hides this mode from the list while the Arena ruleset is mounted
+data/GameScripts/2 SCORE LIMIT.VS
