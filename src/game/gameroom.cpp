@@ -12,6 +12,7 @@
 #include "MinHook.h"
 #include "hooks/hookcount.h"
 #include "game/civs.h"
+#include "game/civroom.h"
 #include "core/crashlog.h"
 #include "game/gameroom.h"
 #include "game/gamemodes.h"
@@ -51,6 +52,7 @@ ThisOnly_t g_origOnShow = nullptr;
 ThisOnly_t g_origDtor = nullptr;
 
 void *g_dlg = nullptr;
+CivResetGate g_civResetGate;
 void *g_picker = nullptr;
 int g_scenarioRace[8] = {-1, -1, -1, -1, -1, -1, -1, -1};
 typedef void(__fastcall *UpdateRow_t)(void *, void *, unsigned);
@@ -576,6 +578,7 @@ void __fastcall HookOnShow(void *dlg)
 	g_origOnShow(dlg);
 	CivsOnRoomShown(dlg);
 	g_dlg = dlg;
+	g_civResetGate = CivResetGate();
 	g_optionsLogged = false;
 	g_siteFlags = LoadRoomFlags("Sites", 0) & kSiteMask;
 	g_ruleFlags = LoadRoomFlags("Rules", ModOptionsDefaults()) & kRuleMask;
@@ -847,6 +850,7 @@ void EnforceModeRaces()
 		const int shownItem = ComboSel(combos[i]);
 		races[i] = CivsRaceOfRoomItem(shownItem >= 0 ? shownItem : static_cast<unsigned char>(choice[i]));
 	}
+	const bool tell = g_civResetGate.Look(static_cast<size_t>(std::count_if(races.begin(), races.end(), [](int r) { return r >= 0; })));
 	// A civilization the sets no longer allow goes back to Random (a player or an AI alike); one the mode does not allow, to the first the mode does.
 	const std::vector<int> leaving = sets ? CivsSlotsToReset(races) : std::vector<int>();
 	std::string told;
@@ -876,8 +880,9 @@ void EnforceModeRaces()
 		SelectCombo(combos[i], item);
 		if (outOfSets) told += (told.empty() ? "" : ", ") + std::to_string(i + 1);
 	}
+	if (!told.empty() && !tell) LogI("room", "new room: slot(s) %s start on a civilization the room's sets do not allow; they are set to Random", told.c_str());
 	static DWORD toldAt = 0;
-	if (!told.empty() && GetTickCount() - toldAt > 2000) {
+	if (!told.empty() && tell && GetTickCount() - toldAt > 2000) {
 		toldAt = GetTickCount();
 		UiToast(TrFmt("Slots set back to Random, their civilization is no longer allowed in the room: %s", {told}));
 	}
@@ -1036,6 +1041,11 @@ bool GameRoomActive()
 {
 	std::lock_guard<std::mutex> lock(g_lock);
 	return g_snap.active;
+}
+
+void GameRoomCivSetsEdited()
+{
+	Queue([] { g_civResetGate.Edited(); });
 }
 
 void GameRoomSetRace(int slot, int index)

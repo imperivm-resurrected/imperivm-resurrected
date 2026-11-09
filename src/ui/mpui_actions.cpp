@@ -654,6 +654,7 @@ void DoAction(int action, int arg)
 		const std::vector<std::string> chosen = CivSetsToggle(known, now, known[arg]);
 		if (chosen == now) break;
 		CivRoomSetsSet(chosen);
+		GameRoomCivSetsEdited();
 		LogI("room", "civilization sets: %s", chosen.empty() ? "all" : CivSetsJoin(chosen).c_str());
 		break;
 	}
@@ -791,6 +792,7 @@ void ChooseRuleset(int item)
 		// The same files stay mounted: no restart. The room takes the civilizations of the new entry at once.
 		ModsMountedChoiceSet(picked);
 		CivRoomSetsSet(DefaultCivSets(picked));
+		GameRoomCivSetsEdited();
 		LogI("room", "rules entry changed without a restart; civilization sets: %s", CivSetsJoin(CivRoomSets()).c_str());
 		return;
 	}

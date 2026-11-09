@@ -2,6 +2,7 @@
 // Copyright (C) 2026 THIONG
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #pragma once
+#include <cstddef>
 #include <vector>
 
 struct RoomCiv {
@@ -37,3 +38,18 @@ bool CivRaceAllowed(const std::vector<RandomCiv> &civs, bool gameAllowed, int ra
 // The slots (their positions in `races`) whose civilization the room does not allow any more, and that go back to Random.
 // races[i] is the civilization of slot i, or -1 when nobody plays there.
 std::vector<int> CivSlotsToReset(const std::vector<int> &races, const std::vector<RandomCiv> &civs, bool gameAllowed);
+
+// Whether sending slots back to Random is told to the player. A new room is normalized once, silently, the first time it has seated
+// nations to look at: its default sets (from the Rules entry) can leave out the nation a slot starts on, and that is not news.
+// After that, and once the host has edited the sets, every reset is told.
+struct CivResetGate {
+	bool configured = false;
+	// One look at the room's slots; seated is how many hold a nation. Returns whether the resets found now are told.
+	bool Look(size_t seated)
+	{
+		if (configured) return true;
+		if (seated > 0) configured = true;
+		return false;
+	}
+	void Edited() { configured = true; }
+};

@@ -120,6 +120,26 @@ void RaceAllowed()
 	CHECK(CivRaceAllowed(civs, false, 40));
 }
 
+void FirstResetOfANewRoomIsSilent()
+{
+	CivResetGate gate;
+	// Nobody seated yet: nothing to look at, the room is still new.
+	CHECK(!gate.Look(0));
+	// The first look with nations (the host's own slot): silent.
+	CHECK(!gate.Look(1));
+	// Every later look is told (an AI added, a guest who joins, Start).
+	CHECK(gate.Look(1));
+	CHECK(gate.Look(3));
+	// A room whose sets the host edits before anything was seated tells the next reset.
+	CivResetGate edited;
+	edited.Edited();
+	CHECK(edited.Look(0));
+	CHECK(edited.Look(2));
+	// A new room starts over.
+	gate = CivResetGate();
+	CHECK(!gate.Look(2));
+}
+
 void SlotsGoBackToRandom()
 {
 	const std::vector<RandomCiv> civs = {Random(10, kGaul, false), Random(11, kRepublicanRome, true), Random(12, kRepublicanRome, true, false)};
@@ -149,5 +169,6 @@ int main()
 	RandomGroups();
 	RaceAllowed();
 	SlotsGoBackToRandom();
+	FirstResetOfANewRoomIsSilent();
 	return test::Summary("civroom");
 }
