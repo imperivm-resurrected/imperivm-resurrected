@@ -67,11 +67,29 @@ A player who joins a room with another ruleset gets the usual *This room uses ot
 - **Saved games.** A save records its ruleset. Loading it under another one (or under none) behaves like a rules pack that is not enabled: the game offers to restart with the saved one. Whether the game survives a save loaded under other rules, for example when a unit class is removed, has not been tested.
 - **Content manager.** The card of a package lists its rulesets. The ones that change the same gameplay files as the ruleset of another package are shown as an alternative to it, not as a problem: they can never be mounted together.
 
+## Switching without a restart
+
+Choosing another ruleset normally restarts the game, because the game reads almost everything a ruleset carries once, when it starts. The one exception is `CONST.INI`: with `[Mods] ConstHotReload=1` in `imperivm-mod.ini` (off by default), the game loads the other ruleset's `CONST.INI` when the next match starts and does not restart.
+
+**It skips the restart only if both rulesets hold nothing but `patches\data\const.ini`** (a ruleset may also hold nothing at all, as the game's own rules and *<package> (original rules)* do). A ruleset with any other file, even one that the other ruleset also has, restarts as before: command costs, unit stats, classes, `hidden.txt`, `rle.mmp.tail`, civilizations, modes, options, events, packs, translations and loose files are read once per process. A loose `data\const.ini` (not a patch) replaces the game's file instead of patching it and restarts too.
+
+What the player sees: with the flag on, the **Rules** row of the skirmish room changes at once, the button of *Create room* keeps reading *Create room* when the choice differs only in `CONST.INI` (the rules are loaded when it is pressed), and the next match plays with the new constants. With it off, or for any other pair of rulesets, nothing changes: the button reads *Restart with these rules* and the game restarts.
+
+Things to know when you use it:
+
+- The game copies some constants into private variables the first time it needs them and never looks at the file again (`DamageAmplify`, the production of settlements, the combat costs of hero skills...). The DLL sets those copies back when it loads the new file, so every constant follows the ruleset. A constant that no ruleset changes is not affected.
+- The new `CONST.INI` is read before the match is created, and its values are used by units and buildings created after that. A saved game keeps what it stored (timers already running when it was saved); load it under the ruleset it was saved with.
+- In a room, the host's key and the `mods` line follow the ruleset that is loaded. A player who has another ruleset still gets the *This room uses other content* dialog and restarts into the room's; switching without a restart on the joining side is not implemented.
+- If the new file cannot be loaded, the match is played with the rules the game started with and a notice says so.
+- `[Resolutions]` and the other sections the game reads only at start-up (see above) keep the values the game started with.
+
+Example: [`ruleset-const-example`](examples/ruleset-const-example).
+
 ## Limits
 
 - A profile can use only one `rle.mmp.tail`. The one in the ruleset that is mounted counts as its package's, so a package cannot have a tail in its root and in a ruleset; two rulesets can each have theirs, because only one is mounted.
 - Do not put `[Resolutions]` in the `const.ini` of a ruleset: the screen resolutions are not part of the rules a room chooses. Keep that section in the package root.
-- The host chooses the ruleset before the room exists. It cannot be changed in an open room, two rulesets cannot be mixed, and the game cannot switch without restarting.
+- The host chooses the ruleset before the room exists. It cannot be changed in an open room and two rulesets cannot be mixed. Switching restarts the game, except between rulesets that differ only in `CONST.INI` (see [Switching without a restart](#switching-without-a-restart)).
 - The **Rules** combo only lists rulesets of packages that are in the profile.
 - Some files, such as `AI.INI` and `SKILLS.INI`, are read by the game in ways this guide cannot describe. Try your ruleset in a room before publishing it.
 
