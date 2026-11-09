@@ -23,7 +23,6 @@ AutoJoinState g_autoJoin;
 std::string SaveLabel(const SaveEntry &e) { return Tr("Load: ") + e.name + (e.online ? Tr(" (online)") : ""); }
 
 ListGeom g_createModsGeomOut;
-ListGeom g_createCivGeomOut;
 }
 
 namespace mpui_impl {
@@ -177,7 +176,8 @@ namespace {
 const ModInfo *ExactMod(const State &st, const OnlineMod &m)
 {
 	for (const ModInfo &i : st.mods) {
-		if (_stricmp(i.id.c_str(), m.id.c_str()) == 0 && i.version == m.version && ModsCompareRoomCopy(i, m.copyKey) != RoomCopy::kOther) return &i;
+		if (_stricmp(i.id.c_str(), m.id.c_str()) == 0 && i.version == m.version && ModsCompareRoomCopy(i, m.copyKey) != RoomCopy::kOther &&
+			ModsCompareRoomLayer(i, m.layer, m.layerKey) != RoomCopy::kOther) return &i;
 	}
 	return nullptr;
 }
@@ -212,6 +212,7 @@ std::vector<ModRow> OnlineModRows(const State &st, const std::vector<OnlineMod> 
 	for (const OnlineMod &m : mods) {
 		ModRow r;
 		r.name = m.name + (m.version.empty() || m.name.find(m.version) != std::string::npos ? "" : " " + m.version);
+		if (!m.layer.empty()) r.name += " \xC2\xB7 " + (m.layerName.empty() ? m.layer : m.layerName);
 		r.kind = m.kind;
 		if (withStatus) {
 			const bool have = ExactMod(st, m) != nullptr;

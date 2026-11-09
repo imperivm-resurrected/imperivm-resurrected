@@ -16,7 +16,8 @@ bool CopiesStillHashing(const std::vector<ModInfo> &mods, const std::vector<Onli
 {
 	for (const OnlineMod &m : room) {
 		for (const ModInfo &i : mods) {
-			if (_stricmp(i.id.c_str(), m.id.c_str()) == 0 && i.version == m.version && ModsCompareRoomCopy(i, m.copyKey) == RoomCopy::kNotHashed) return true;
+			if (_stricmp(i.id.c_str(), m.id.c_str()) != 0 || i.version != m.version) continue;
+			if (ModsCompareRoomCopy(i, m.copyKey) == RoomCopy::kNotHashed || ModsCompareRoomLayer(i, m.layer, m.layerKey) == RoomCopy::kNotHashed) return true;
 		}
 	}
 	return false;
@@ -27,7 +28,7 @@ std::string FolderOfCopy(const std::vector<ModInfo> &mods, const OnlineMod &m)
 	std::string same, any;
 	for (const ModInfo &i : mods) {
 		if (_stricmp(i.id.c_str(), m.id.c_str()) != 0 || i.version != m.version) continue;
-		if (same.empty() && ModsCompareRoomCopy(i, m.copyKey) == RoomCopy::kSame) same = i.folder;
+		if (same.empty() && ModsCompareRoomCopy(i, m.copyKey) == RoomCopy::kSame && ModsCompareRoomLayer(i, m.layer, m.layerKey) != RoomCopy::kOther) same = i.folder;
 		any = i.folder;
 	}
 	return same.empty() ? any : same;
@@ -44,13 +45,20 @@ void StartSyncCheck(const OnlineLobby lobby, const std::map<std::string, std::st
 		std::string error;
 		for (const OnlineMod &m : lobby.mods) {
 			auto it = installed.find(m.id);
+			std::string folder;
 			if (it != installed.end()) {
-				p.mods.push_back(it->second);
-				continue;
+				folder = it->second;
 			}
-			const std::string folder = FolderOfCopy(mods, m);
-			if (folder.empty()) error = Tr("missing ") + m.name + " " + m.version;
+			else {
+				folder = FolderOfCopy(mods, m);
+				if (folder.empty()) error = Tr("missing ") + m.name + " " + m.version;
+			}
 			p.mods.push_back(folder);
+			// The room's ruleset is the layer of one of its packages: the profile built for the room mounts it too.
+			if (!m.layer.empty()) {
+				p.ruleset.pack = folder;
+				p.ruleset.id = m.layer;
+			}
 		}
 		std::string hash;
 		for (int i = 0; error.empty() && i < 600 && hash.empty(); i++) {
@@ -58,11 +66,11 @@ void StartSyncCheck(const OnlineLobby lobby, const std::map<std::string, std::st
 			if (hash.empty()) Sleep(200);
 		}
 		if (error.empty() && hash.empty()) error = Tr("the content could not be checked");
-		if (error.empty() && !lobby.gameplayKey.empty() && hash.substr(0, 16) != lobby.gameplayKey) {
+		if (error.empty() && !RoomHashMatches(hash, lobby.contentKey)) {
 			error = Tr("the received content does not match the host's");
 		}
 		if (error.empty()) {
-			const ModProfile loose = ModsLooseProfileWith(p.mods);
+			const ModProfile loose = ModsLooseProfileWith(p.mods, p.ruleset);
 			p.name = loose.name;
 			if (!ModsSaveProfile(loose)) error = Tr("the profile could not be saved");
 		}
@@ -123,7 +131,7 @@ void StartSyncReceive(const std::vector<OnlineMod> &missing)
 	g_s.syncRetryHost = false;
 	g_s.rate.Reset();
 	for (const OnlineMod &m : missing) {
-		if (m.gbId) io.push_back({m.id, m.gbId, m.version, m.gbFile, m.copyKey});
+		if (m.gbId) io.push_back({m.id, m.gbId, m.version, m.gbFile, m.copyKey, m.layer, m.layerKey});
 		else g_s.syncHostList.push_back(m);
 	}
 	g_s.syncPhase = 2;

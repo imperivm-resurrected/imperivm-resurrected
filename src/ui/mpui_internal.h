@@ -49,7 +49,7 @@ enum Action {
 	kPickRow, kPickOk, kPickCancel,
 	kRecoverYes, kRecoverNo, kRejoinCancel, kRejoinClose,
 	kGKick, kGKickJoining, kDiscord, kPassOk, kPassCancel, kGSeat, kGMove, kGMoveTo, kGSwapAsk, kSwapAccept, kSwapDecline, kDropYes, kDropNo, kPassShow, kGSiteToggle, kGRuleToggle, kSpectate, kReturnGame,
-	kFieldPickSearch, kPickDelete, kPickDeleteYes, kPickDeleteNo, kGResync, kCivSetToggle, kPatronLink,
+	kFieldPickSearch, kPickDelete, kPickDeleteYes, kPickDeleteNo, kGResync, kCivSetToggle, kPatronLink, kCivSetsEdit,
 };
 
 typedef int(__cdecl *HostGame_t)(int, unsigned, int);
@@ -117,12 +117,18 @@ struct ModRow {
 	COLORREF color = kText;
 };
 
+// A ruleset the host can pick: the layer of a package that is in the profile.
+struct RulesetChoice {
+	ModRuleset ruleset;
+	std::string label;
+};
+
 struct ProfileSummary {
 	std::vector<ModRow> rows;
+	std::vector<RulesetChoice> rulesets;
 };
 
 extern ListGeom g_createModsGeomOut;
-extern ListGeom g_createCivGeomOut;
 std::vector<ListLine> BuildModLines(const std::vector<ModRow> &rows, const std::string &emptyText);
 int PaintLinesInline(Painter &p, const std::vector<ListLine> &lines, int x, int y, int w, int rowH);
 struct State {
@@ -190,8 +196,11 @@ struct State {
 	std::string createProfile;
 	std::vector<std::string> profiles;
 	ProfileSummary createProfileInfo;
-	std::vector<std::string> createCivSets;
+	ModRuleset createRuleset;
 	bool skirmishCivs = false; // the skirmish room owns CivRoomSets until the multiplayer menu opens
+	bool civEdit = false; // the room's "Edit civilizations" row is on: the host sees the sets as toggles
+	uint64_t civSetsRoom = 0; // the room whose sets civSetsSeen holds, to tell a guest that the host changed them
+	std::string civSetsSeen;
 	int createVisibility = 0;
 	int createSpec = 1;
 	bool syncConfirm = false;
@@ -206,8 +215,6 @@ struct State {
 	ListGeom syncGeom;
 	ListState createModsList;
 	ListGeom createModsGeom;
-	ListState createCivList;
-	ListGeom createCivGeom;
 	int syncPhase = 0;
 	DWORD syncStart = 0;
 	std::string syncError;
@@ -396,6 +403,15 @@ std::vector<SlotChoice> SlotChoices(const GameRoomSnapshot &g, const GameRoomSlo
 std::string SavePlayersText(const std::vector<MpSavePlayer> &players);
 std::vector<SaveEntry> ListSaves();
 ProfileSummary ProfileSummaryFor(const std::string &profile);
+ModRuleset ProfileRulesetFor(const std::string &profile);
+const std::vector<RulesetChoice> &MountedRulesets();
+bool SkirmishRoom(const State &st);
+const std::vector<RulesetChoice> &RulesetChoicesShown(const State &st);
+ModRuleset RulesetShown(const State &st);
+// The civilization sets a new room starts with for this Rules entry (see CivSetsDefault).
+std::vector<std::string> DefaultCivSets(const ModRuleset &choice);
+std::string RulesetLabel(const std::vector<RulesetChoice> &choices, const ModRuleset &ruleset);
+void ChooseRuleset(int item);
 void Predict(int kind, int index, int value);
 bool SeatTakeable(const GameRoomSlot &s);
 bool BonusesDisabled(const GameRoomSnapshot &g);
@@ -408,6 +424,9 @@ std::string RoomConfigKey(const OnlineLobby &l);
 bool SlotFrozen(const GameRoomSnapshot &g, const GameRoomSlot &s);
 bool RoomActionFrozen(const GameRoomSnapshot &g, int action, int arg);
 void RedirectReplacedRaces(GameRoomSnapshot &g);
+// The slots whose civilization the room's sets do not allow (they go back to Random); a guest resets and tells its own.
+std::vector<int> DisallowedRaceSlots(const GameRoomSnapshot &g);
+void ResetDisallowedRaces(GameRoomSnapshot &g);
 void ApplyPredicted(GameRoomSnapshot &g, std::vector<State::Predicted> &list);
 typedef unsigned(__fastcall *GameMenuMsg_t)(void *dlg, void *edx, int *msg);
 

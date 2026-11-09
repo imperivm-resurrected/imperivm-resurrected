@@ -1,0 +1,10 @@
+{
+  "id": "GaulExample",
+  "base": "Gaul",
+  "name": {
+    "spanish": "Galia (ejemplo)",
+    "english": "Gaul (example)",
+    "italian": "Gallia (esempio)"
+  },
+  "variant": true
+}

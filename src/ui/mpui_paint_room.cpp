@@ -527,30 +527,46 @@ void PaintGameRoom(Painter &p, const State &st)
 						mo.description.c_str());
 				}
 			}
+			// The sets of civilizations the room offers: the content's, or the ones the host left. The host edits them here, in a new
+			// game; a saved game keeps the ones it was saved with. Nothing to say when only the game has civilizations.
+			const std::vector<CivSet> civKnown = CivsSets();
+			const bool civEditable = host && !load && civKnown.size() > 1;
+			if (civEditable) {
+				toggleRow("Edit civilizations", st.civEdit, true, kCivSetsEdit, 0,
+					"Choose which civilizations can be picked in this room: the game's and each mod's. It applies at once, and a player whose civilization is left out goes back to Random.");
+			}
+			auto civSection = [&]() {
+				if (civKnown.size() < 2) return;
+				const std::vector<std::string> sets = CivRoomSets();
+				if (civEditable && st.civEdit) {
+					section("CIVILIZATIONS");
+					for (size_t i = 0; i < civKnown.size(); i++) {
+						toggleRow(civKnown[i].name.c_str(), CivSetsAllow(sets, civKnown[i].id), canEdit, kCivSetToggle, static_cast<int>(i), nullptr);
+					}
+					return;
+				}
+				std::vector<ListLine> lines;
+				for (const CivSet &s : civKnown) {
+					if (CivSetsAllow(sets, s.id)) lines.push_back({"\xE2\x80\xA2  " + s.name, kText, false});
+				}
+				if (lines.empty()) return;
+				section("CIVILIZATIONS");
+				y = PaintLinesInline(p, lines, ix, y, iw, 20) + 4;
+			};
 			if (g.online) {
 				section("CONTENT");
 				y = PaintLinesInline(p, OnlineLobbyLines(st, st.room.info, false), ix, y, iw, 20) + 4;
-				// The sets the room offers: every one the content has, or the ones the host left. Nothing to say when only the game has civilizations.
-				const std::vector<CivSet> known = CivsSets();
-				const std::vector<std::string> sets = CivRoomSets();
-				std::vector<ListLine> lines;
-				for (const CivSet &s : known) {
-					if (CivSetsAllow(sets, s.id)) lines.push_back({"\xE2\x80\xA2  " + s.name, kText, false});
-				}
-				if (known.size() > 1 && !lines.empty()) {
-					section("CIVILIZATIONS");
-					y = PaintLinesInline(p, lines, ix, y, iw, 20) + 4;
-				}
+				civSection();
 			}
 
 			if (!g.online) {
-				const std::vector<CivSet> known = CivsSets();
-				if (known.size() > 1) {
-					const std::vector<std::string> sets = CivRoomSets();
-					section("CIVILIZATIONS");
-					for (size_t i = 0; i < known.size(); i++) {
-						toggleRow(known[i].name.c_str(), CivSetsAllow(sets, known[i].id), canEdit, kCivSetToggle, static_cast<int>(i), nullptr);
-					}
+				civSection();
+				// Only the rulesets of the packages that are loaded; picking another one restarts the game.
+				const std::vector<RulesetChoice> &rulesets = MountedRulesets();
+				if (!rulesets.empty()) {
+					const ModRuleset mounted = ModsMountedChoice();
+					section("CONTENT");
+					row("Rules", RulesetLabel(rulesets, mounted), !mounted.pack.empty(), canEdit, true, kDropProfile, 1, nullptr);
 				}
 			}
 

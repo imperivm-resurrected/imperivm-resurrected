@@ -228,12 +228,14 @@ void DoAction(int action, int arg)
 				SteamSetSpectators(g_s.createSpec != 0, kDelays[g_s.createSpec]);
 			}
 		}
+		else if (g_s.dropKind == kDropProfile && idx == 1) {
+			ChooseRuleset(arg);
+		}
 		else if (g_s.dropKind == kDropProfile) {
 			if (arg >= 0 && arg < static_cast<int>(g_s.profiles.size())) {
 				g_s.createProfile = g_s.profiles[arg];
 				g_s.createProfileInfo = ProfileSummaryFor(g_s.createProfile), g_s.createModsList = ListState();
-				g_s.createCivSets.clear();
-				g_s.createCivList = ListState();
+				g_s.createRuleset = ProfileRulesetFor(g_s.createProfile);
 				const std::string chosen = g_s.createSave >= 0 && g_s.createSave < static_cast<int>(g_s.saves.size()) ? g_s.saves[g_s.createSave].vfsPath : "";
 				g_s.saves = ListSaves();
 				g_s.createSave = -1;
@@ -367,6 +369,16 @@ void DoAction(int action, int arg)
 			}
 			if (!without.empty()) {
 				ModUiToast(Tr("This map is for ") + std::to_string(positions) + Tr(" players: move or kick ") + without + Tr(" before starting."));
+				break;
+			}
+		}
+		// The room resets a civilization the sets left out on its own; this is the last look, so that one can never start.
+		if (!g_s.hostSavePublished) {
+			const std::vector<int> disallowed = DisallowedRaceSlots(snap);
+			if (!disallowed.empty()) {
+				for (const int i : disallowed) GameRoomSetRace(i, CivsRoomItemOfRace(8));
+				LogI("room", "not starting: %d slot(s) had a civilization the room does not allow; they are set to Random", static_cast<int>(disallowed.size()));
+				ModUiToast("Some players had a civilization the room does not allow and now play Random. Press Start again.");
 				break;
 			}
 		}
@@ -506,7 +518,7 @@ void DoAction(int action, int arg)
 			g_s.passInput.clear();
 			g_s.nameInput = Tr("Game of ") + g_s.player;
 			g_s.createProfile = ModsMountedProfile().name;
-			g_s.createCivSets.clear();
+			g_s.createRuleset = ModsMountedChoice();
 			DoAction(kCreateOk, 0);
 		}
 		else if (!r.host) {
@@ -634,19 +646,19 @@ void DoAction(int action, int arg)
 	case kCivSetToggle: {
 		const std::vector<CivSet> sets = CivsSets();
 		if (arg < 0 || arg >= static_cast<int>(sets.size())) break;
-		// In a skirmish there is no "Create game" screen: the room's own rows edit the sets the game reads.
-		const bool skirmish = g_s.game.active && !g_s.game.online;
-		const std::vector<std::string> now = skirmish ? CivRoomSets() : g_s.createCivSets;
-		std::vector<std::string> chosen;
-		for (const CivSet &s : sets) {
-			if (CivSetsAllow(now, s.id) != (s.id == sets[arg].id)) chosen.push_back(s.id);
-		}
-		if (chosen.empty()) break;
-		if (chosen.size() == sets.size()) chosen.clear();
-		if (skirmish) CivRoomSetsSet(chosen);
-		else g_s.createCivSets = chosen;
+		// Only the host of a room (skirmish or online) edits the sets the game reads; the tick publishes them to the guests.
+		if (!g_s.game.active || !g_s.game.host) break;
+		const std::vector<std::string> now = CivRoomSets();
+		std::vector<std::string> known;
+		for (const CivSet &s : sets) known.push_back(s.id);
+		const std::vector<std::string> chosen = CivSetsToggle(known, now, known[arg]);
+		if (chosen == now) break;
+		CivRoomSetsSet(chosen);
+		GameRoomCivSetsEdited();
+		LogI("room", "civilization sets: %s", chosen.empty() ? "all" : CivSetsJoin(chosen).c_str());
 		break;
 	}
+	case kCivSetsEdit: g_s.civEdit = !g_s.civEdit; break;
 	case kPlayersPrev: g_s.createPlayers = std::max(2, g_s.createPlayers - 1); break;
 	case kPlayersNext: g_s.createPlayers = std::min(8, g_s.createPlayers + 1); break;
 	case kMapPrev: g_s.createMap = (g_s.createMap + 4) % 5; break;
@@ -672,15 +684,41 @@ void DoAction(int action, int arg)
 				break;
 			}
 		}
-		if (g_s.createProfile != ModsMountedProfile().name) {
+		const bool otherProfile = g_s.createProfile != ModsMountedProfile().name;
+		if (otherProfile || !ModsSameRuleset(g_s.createRuleset, ModsMountedProfile().ruleset)) {
+			// The ruleset is part of the profile, so the profile that will be loaded keeps it.
+			ModProfile chosen = ModsLoadProfile(g_s.createProfile);
+			if (!ModsSameChoice(chosen.ruleset, g_s.createRuleset)) {
+				chosen.ruleset = g_s.createRuleset;
+				if (!ModsSaveProfile(chosen) && !chosen.ruleset.pack.empty()) {
+					ModUiToast(Tr("Could not save the rules in the content profile."));
+					break;
+				}
+			}
 			ModsSetActiveProfileName(g_s.createProfile);
 			g_s.open = false;
 			std::vector<std::string> profileMods;
 			for (const ModRow &row : g_s.createProfileInfo.rows) profileMods.push_back(row.name);
+			if (!otherProfile) {
+				ModUiAskRestart("The game will restart with the rules you chose. Afterwards, create the room again.", -1,
+					{RulesetLabel(g_s.createProfileInfo.rulesets, g_s.createRuleset)}, "Rules that will be loaded:");
+				break;
+			}
 			ModUiAskRestart(profileMods.empty() ? "The game will restart without additional content. Afterwards, create the room again."
 												: "The game will restart to load the room's content. Afterwards, create the room again.",
 				-1, profileMods, "Content that will be loaded:");
 			break;
+		}
+		if (!ModsSameChoice(g_s.createRuleset, ModsMountedChoice())) {
+			// Another Rules entry that mounts the same files (a package without a layer, or the game's rules): nothing to reload, it is
+			// only kept in the profile so it is still the choice after a restart.
+			ModProfile chosen = ModsLoadProfile(g_s.createProfile);
+			chosen.ruleset = g_s.createRuleset;
+			if (!ModsSaveProfile(chosen)) {
+				ModUiToast(Tr("Could not save the rules in the content profile."));
+				break;
+			}
+			ModsMountedChoiceSet(g_s.createRuleset);
 		}
 		if (g_s.createSave >= 0 && g_s.createSave < static_cast<int>(g_s.saves.size())) {
 			const std::string problem = ModsCheckCivIndices(g_s.saves[g_s.createSave].vfsPath);
@@ -697,8 +735,11 @@ void DoAction(int action, int arg)
 		s.name = g_s.nameInput.empty() ? Tr("Game of ") + g_s.player : g_s.nameInput;
 		s.map = "Chosen in the room";
 		s.mode = "Elimination";
-		s.civSets = CivSetsJoin(g_s.createCivSets);
-		CivRoomSetsSet(g_s.createCivSets);
+		// A new room starts with the civilizations of its Rules entry (the host adds others in the room); a saved game brings its own sets.
+		const bool fromSave = g_s.createSave >= 0 && g_s.createSave < static_cast<int>(g_s.saves.size());
+		const std::vector<std::string> defaultSets = fromSave ? std::vector<std::string>() : DefaultCivSets(g_s.createRuleset);
+		s.civSets = CivSetsJoin(defaultSets);
+		CivRoomSetsSet(defaultSets);
 		if (g_s.createVisibility == 1 && g_s.passInput.empty()) {
 			ModUiToast("Enter the room password.");
 			FocusField(kPassField);
@@ -727,6 +768,36 @@ void DoAction(int action, int arg)
 		break;
 	}
 	}
+}
+
+// Item 0 is the game's own rules; item k is the k-th ruleset of the list shown. In a room that is being created it only
+// marks the choice; in the skirmish room the choice is saved in the profile and the game restarts.
+void ChooseRuleset(int item)
+{
+	const std::vector<RulesetChoice> &choices = RulesetChoicesShown(g_s);
+	if (item < 0 || item > static_cast<int>(choices.size())) return;
+	const ModRuleset picked = item == 0 ? ModRuleset() : choices[item - 1].ruleset;
+	if (!SkirmishRoom(g_s)) {
+		g_s.createRuleset = picked;
+		return;
+	}
+	if (ModsSameChoice(picked, ModsMountedChoice())) return;
+	ModProfile profile = ModsLoadProfile(ModsMountedProfile().name);
+	profile.ruleset = picked;
+	if (!ModsSaveProfile(profile)) {
+		ModUiToast(Tr("Could not save the rules in the content profile."));
+		return;
+	}
+	if (ModsSameRuleset(picked, ModsMountedProfile().ruleset)) {
+		// The same files stay mounted: no restart. The room takes the civilizations of the new entry at once.
+		ModsMountedChoiceSet(picked);
+		CivRoomSetsSet(DefaultCivSets(picked));
+		GameRoomCivSetsEdited();
+		LogI("room", "rules entry changed without a restart; civilization sets: %s", CivSetsJoin(CivRoomSets()).c_str());
+		return;
+	}
+	ModsSetActiveProfileName(profile.name);
+	ModUiAskRestart("The game will restart with the rules you chose.", -1, {RulesetLabel(choices, picked)}, "Rules that will be loaded:");
 }
 
 std::string &FocusedText()
@@ -827,7 +898,7 @@ void OpenMpMenu(bool checkRecover)
 	g_s.mods = ModsList();
 	g_s.profiles = ModsProfileNames();
 	g_s.createProfile = ModsMountedProfile().name;
-	g_s.createCivSets.clear();
+	g_s.createRuleset = ModsMountedChoice();
 	g_s.createProfileInfo = ProfileSummaryFor(g_s.createProfile), g_s.createModsList = ListState();
 	g_s.saves = ListSaves();
 	g_s.createSave = -1;

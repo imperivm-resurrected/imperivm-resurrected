@@ -2,6 +2,7 @@
 // Copyright (C) 2026 THIONG
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include <windows.h>
+#include <algorithm>
 #include <map>
 #include <mutex>
 #include <vector>
@@ -153,15 +154,32 @@ void PrepareRleMmp(const ModProfile &p, const std::vector<ModInfo> &all)
 		g_rlePath.clear();
 		g_rleProblems.clear();
 	}
-	const ModInfo *provider = nullptr;
+	// The first package with a tail provides it; the tail of a ruleset the profile mounts counts as its package's and goes first.
+	struct Provider {
+		std::string folder, tailDir;
+		uint64_t rleBaseSize = 0;
+		std::string rleBaseSha256;
+	} found;
+	bool have = false;
 	for (const std::string &folder : p.mods) {
 		for (const ModInfo &m : all) {
-			if (_stricmp(m.folder.c_str(), folder.c_str()) == 0 && m.rleTail && m.rleTailError.empty() && m.forbidden.empty() && !provider) provider = &m;
+			if (_stricmp(m.folder.c_str(), folder.c_str()) != 0 || !m.forbidden.empty() || have) continue;
+			const ModLayer *layer = ModsActiveLayer(p, m);
+			if (layer && layer->rleTail && layer->rleTailError.empty()) {
+				found = {m.folder, ModsDir() + "\\" + m.folder + "\\" + layer->path, layer->rleBaseSize, layer->rleBaseSha256};
+				std::replace(found.tailDir.begin(), found.tailDir.end(), '/', '\\');
+				have = true;
+			}
+			else if (m.rleTail && m.rleTailError.empty()) {
+				found = {m.folder, ModsDir() + "\\" + m.folder, m.rleBaseSize, m.rleBaseSha256};
+				have = true;
+			}
 		}
 	}
-	if (!provider) return;
+	if (!have) return;
+	const Provider *provider = &found;
 	const std::string base = GameDir() + "\\rle.mmp";
-	const std::string tail = ModsDir() + "\\" + provider->folder + "\\" + kRleTailFile;
+	const std::string tail = provider->tailDir + "\\" + kRleTailFile;
 	RleCacheSource src;
 	src.tailPath = tail;
 	if (!FileInfo(base, src.baseSize, src.baseTime) || !FileInfo(tail, src.tailSize, src.tailTime)) {

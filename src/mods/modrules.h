@@ -11,7 +11,7 @@ const char kGameId[] = "gbr-hd-1.0";
 
 const int kSimLevel = 3;
 
-const int kRulesSchema = 2;
+const int kRulesSchema = 3;
 
 std::string Lower(std::string s);
 
@@ -32,9 +32,11 @@ bool IsGameplayPath(const std::string &p);
 
 bool IsContentPath(const std::string &p);
 
+// One piece of what the players must share: a package's root (layer empty) or the ruleset it mounts (layer = its id).
 struct RulesPart {
 	std::string id;
 	std::string gameplayHash;
+	std::string layer;
 };
 
 std::string RulesFingerprint(std::vector<RulesPart> parts);

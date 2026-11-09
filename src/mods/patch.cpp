@@ -136,8 +136,7 @@ void PatchRebuild()
 	std::map<std::string, std::vector<Source>> found;
 	std::vector<std::string> dirs = ModsMountedDirs();
 	for (auto it = dirs.rbegin(); it != dirs.rend(); ++it) {
-		const std::string folder = it->substr(it->find_last_of('\\') + 1);
-		Walk(*it + "\\patches\\", "", folder, found);
+		Walk(*it + "\\patches\\", "", ModsPackFolder(*it), found);
 	}
 	Walk(GameDirPath() + "\\imperivm-resurrected\\patches\\", "", "", found);
 	for (const BuiltinPatch &b : UsableBuiltinPatches(true)) found[b.path].insert(found[b.path].begin(), {"Imperivm Resurrected", "", b.text, b.gameFileSha256});

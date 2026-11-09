@@ -15,4 +15,9 @@ struct RoomContentFacts {
 };
 
 RoomContent CompareRoomContent(const RoomContentFacts &facts);
+
+// The room "key" also covers the civilization table, which a joiner only knows once it has restarted into the host's profile.
+// Before restarting it can only check the plain gameplay hash, which the host publishes next to it as "hkey".
+std::string RoomHashKey(const std::string &gameplayHash);
+bool RoomHashMatches(const std::string &gameplayHash, const std::string &hostHashKey);
 bool RoomContentDiffers(RoomContent content);

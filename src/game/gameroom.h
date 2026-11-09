@@ -78,6 +78,8 @@ void GameRoomTick();
 GameRoomSnapshot GameRoomGet();
 bool GameRoomActive();
 
+// The host changed the room's civilization sets: from now on, sending a slot back to Random is told.
+void GameRoomCivSetsEdited();
 void GameRoomSetRace(int slot, int index);
 void GameRoomSetSlotItem(int slot, int index);
 void GameRoomSetSlotType(int slot, int type);

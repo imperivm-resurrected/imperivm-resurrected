@@ -14,6 +14,7 @@
 #include "core/versioncmp.h"
 #include "mods/modclash.h"
 #include "mods/modrules.h"
+#include "mods/rulesets.h"
 #include "mods/mods.h"
 #include "mods/savelib.h"
 #include "addr/state.h"
@@ -42,6 +43,7 @@ void ModsBumpSerial();
 extern std::string g_language;
 struct MountedState {
 	ModProfile profile;
+	ModRuleset choice;
 	bool known = false;
 	std::vector<std::string> localDirs;
 	std::vector<std::string> dirs;
@@ -68,6 +70,9 @@ struct ScanFile {
 	bool gameplay = false;
 	bool content = false;
 	std::string text;
+	// The ruleset this file belongs to ("" for the package root) and how many characters of rel are the folder of that ruleset.
+	std::string layer;
+	size_t layerStrip = 0;
 };
 
 extern std::map<std::string, std::vector<ScanFile>> g_scanFiles;
@@ -75,7 +80,7 @@ void Walk(const std::string &base, const std::string &rel, std::vector<ScanFile>
 std::string LanguageLower();
 std::string LocalizedText(const Json &j, const char *key, const std::string &def);
 ModInfo ScanMod(const std::string &folder, std::vector<ScanFile> &files);
-bool PatchTextOf(const std::string &folder, const std::string &target, std::string &out);
+bool PatchTextOf(const std::string &folder, const std::string &target, std::string &out, const std::string &layer = "");
 void StartHashing();
 ModProfile ReadProfileFile(const std::string &path);
 ClashReport ClashesOf(const ModProfile &p, const std::vector<ModInfo> &all);

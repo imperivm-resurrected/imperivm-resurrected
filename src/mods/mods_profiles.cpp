@@ -67,6 +67,9 @@ static void ModsScanUnguarded()
 				if (old.folder == m.folder && old.totalBytes == m.totalBytes && old.fileCount == m.fileCount) {
 					m.hash = old.hash;
 					m.gameplayHash = old.gameplayHash;
+					for (ModLayer &l : m.layers) {
+						if (const ModLayer *was = ModsFindLayer(old, l.id)) l.gameplayHash = was->gameplayHash;
+					}
 				}
 			}
 		}
@@ -98,11 +101,22 @@ std::vector<ModInfo> ModsSummaries()
 	for (ModInfo &m : g_mods) {
 		std::vector<std::string> paths = std::move(m.paths), loose = std::move(m.loosePaths), hidden = std::move(m.hidden);
 		std::vector<PatchedValue> values = std::move(m.patchValues);
+		std::vector<ModLayer> layers = std::move(m.layers);
 		out.push_back(m);
 		m.paths = std::move(paths);
 		m.loosePaths = std::move(loose);
 		m.hidden = std::move(hidden);
 		m.patchValues = std::move(values);
+		for (ModLayer &l : layers) {
+			std::vector<std::string> lp = std::move(l.paths), ll = std::move(l.loosePaths), lh = std::move(l.hidden);
+			std::vector<PatchedValue> lv = std::move(l.patchValues);
+			out.back().layers.push_back(l);
+			l.paths = std::move(lp);
+			l.loosePaths = std::move(ll);
+			l.hidden = std::move(lh);
+			l.patchValues = std::move(lv);
+		}
+		m.layers = std::move(layers);
 	}
 	return out;
 }
@@ -178,6 +192,13 @@ bool ModsSaveProfile(const ModProfile &p)
 		choices.arr.push_back(o);
 	}
 	if (!choices.arr.empty()) j.Set("choices", choices);
+	if (!p.ruleset.pack.empty()) {
+		Json r = Json::MakeObject();
+		r.Set("pack", Json::MakeString(p.ruleset.pack));
+		// An empty id is the package without a layer.
+		r.Set("id", Json::MakeString(p.ruleset.id));
+		j.Set("ruleset", r);
+	}
 	CreateDirectoryA(ProfilesDir().c_str(), nullptr);
 	return WriteJsonFile(ProfilesDir() + "\\" + SafeFileName(p.name) + ".json", j);
 }

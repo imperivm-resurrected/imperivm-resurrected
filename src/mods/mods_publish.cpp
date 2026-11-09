@@ -141,6 +141,10 @@ bool ModsOnSaveWritten(const std::string &gamePath, bool online)
 			if (!m.gameplayHash.empty()) e.Set("fingerprint", Json::MakeString(m.gameplayHash));
 			e.Set("gameplay", Json::MakeBool(m.gameplay));
 			e.Set("kind", Json::MakeString(ModsKindId(m.kind)));
+			if (const ModLayer *layer = ModsActiveLayer(p, m)) {
+				e.Set("ruleset", Json::MakeString(layer->id));
+				if (!layer->gameplayHash.empty()) e.Set("rulesetFingerprint", Json::MakeString(layer->gameplayHash));
+			}
 			GbKeyToJson(e, m.gbId);
 		}
 		mods.arr.push_back(e);

@@ -33,6 +33,30 @@ const char *ModsKindId(int kind);
 int ModsKindFromId(const std::string &id);
 int ModsRulesSchema();
 
+// A ruleset: a folder of the package (rulesets/<id>) shaped like a package root, mounted only when the profile chooses it.
+// It is scanned as a root of its own, so its paths have the folder's prefix cut off.
+struct ModLayer {
+	std::string id;
+	std::string name;
+	std::string description;
+	std::string path;
+	std::vector<std::string> paths;
+	std::vector<std::string> loosePaths;
+	std::vector<PatchedValue> patchValues;
+	std::vector<std::string> hidden;
+	bool rleTail = false;
+	uint64_t rleBaseSize = 0;
+	std::string rleBaseSha256;
+	std::string rleTailError;
+	bool hasLoose = false;
+	bool gameplay = false;
+	bool content = false;
+	bool folderMissing = false;
+	unsigned fileCount = 0;
+	uint64_t totalBytes = 0;
+	std::string gameplayHash;
+};
+
 struct ModInfo {
 	std::string folder;
 	std::string id;
@@ -76,8 +100,19 @@ struct ModInfo {
 	unsigned fileCount = 0;
 	bool noGameFiles = false;
 	std::string hash;
+	// Of the package root only; each ruleset has its own in layers.
 	std::string gameplayHash;
+	std::vector<ModLayer> layers;
+	std::vector<std::string> rulesetProblems;
 };
+
+inline const ModLayer *ModsFindLayer(const ModInfo &m, const std::string &id)
+{
+	for (const ModLayer &l : m.layers) {
+		if (!id.empty() && _stricmp(l.id.c_str(), id.c_str()) == 0) return &l;
+	}
+	return nullptr;
+}
 
 inline bool ModsIsMod(const ModInfo &m, const std::string &id, uint64_t gbId)
 {
@@ -105,16 +140,67 @@ inline RoomCopy ModsCompareRoomCopy(const ModInfo &have, const std::string &room
 	return have.gameplayHash.size() >= roomKey.size() && have.gameplayHash.compare(0, roomKey.size(), roomKey) == 0 ? RoomCopy::kSame : RoomCopy::kOther;
 }
 
+// How a room checks a ruleset: the layer id from the room, and the start of its gameplay hash.
+inline RoomCopy ModsCompareRoomLayer(const ModInfo &have, const std::string &layerId, const std::string &layerKey)
+{
+	if (layerId.empty()) return RoomCopy::kSame;
+	const ModLayer *l = ModsFindLayer(have, layerId);
+	if (!l) return RoomCopy::kOther;
+	if (layerKey.empty()) return RoomCopy::kSame;
+	if (l->gameplay && l->gameplayHash.empty()) return RoomCopy::kNotHashed;
+	return l->gameplayHash.size() >= layerKey.size() && l->gameplayHash.compare(0, layerKey.size(), layerKey) == 0 ? RoomCopy::kSame : RoomCopy::kOther;
+}
+
 struct ModChoice {
 	std::string use;
 	std::string over;
 };
 
+// The Rules entry a profile keeps: layer `id` of the package in folder `pack`, or, with an empty `id`, that package without a layer
+// (its civilizations are the default ones of a room). Empty() says that no layer is mounted, so {pack, ""} mounts the same files as
+// the game's own rules: use ModsSameRuleset for "same files" and ModsSameChoice for "same entry".
+struct ModRuleset {
+	std::string pack;
+	std::string id;
+	bool Empty() const { return pack.empty() || id.empty(); }
+};
+
+inline bool ModsSameRuleset(const ModRuleset &a, const ModRuleset &b)
+{
+	if (a.Empty() || b.Empty()) return a.Empty() && b.Empty();
+	return _stricmp(a.pack.c_str(), b.pack.c_str()) == 0 && _stricmp(a.id.c_str(), b.id.c_str()) == 0;
+}
+
+inline bool ModsSameChoice(const ModRuleset &a, const ModRuleset &b)
+{
+	if (a.pack.empty() || b.pack.empty()) return a.pack.empty() && b.pack.empty();
+	return _stricmp(a.pack.c_str(), b.pack.c_str()) == 0 && _stricmp(a.id.c_str(), b.id.c_str()) == 0;
+}
+
+// The id of the set of civilizations a package makes in a room: its id, or its folder when it has none.
+inline std::string ModsCivSetId(const ModInfo &m)
+{
+	return m.id.empty() ? m.folder : m.id;
+}
+
 struct ModProfile {
 	std::string name;
 	std::vector<std::string> mods;
 	std::vector<ModChoice> choices;
+	ModRuleset ruleset;
 };
+
+// The id of the ruleset a profile mounts from a package; empty when it mounts none of its rulesets (the package's root alone).
+inline std::string ModsRulesetOf(const ModRuleset &r, const std::string &packFolder)
+{
+	return !r.Empty() && _stricmp(r.pack.c_str(), packFolder.c_str()) == 0 ? r.id : std::string();
+}
+
+// The ruleset of profile p that belongs to package m, if the profile mounts one of it.
+inline const ModLayer *ModsActiveLayer(const ModProfile &p, const ModInfo &m)
+{
+	return !p.ruleset.Empty() && _stricmp(p.ruleset.pack.c_str(), m.folder.c_str()) == 0 ? ModsFindLayer(m, p.ruleset.id) : nullptr;
+}
 
 enum MapOriginKind { kMapBase, kMapLoose, kMapReceived, kMapMod };
 struct MapOrigin {
@@ -184,6 +270,8 @@ std::string ModsCheckCivIndices(const std::string &gamePath);
 
 struct ModNeed {
 	std::string folder, id, name, version;
+	// The id of the ruleset the game was saved with from this package; empty if it used the package's root alone.
+	std::string ruleset;
 	bool installed = false;
 	std::string installedFolder;
 	bool inProfile = false;
@@ -192,16 +280,36 @@ struct ModNeeds {
 	std::vector<ModNeed> mods;
 	std::string profile;
 	std::vector<std::string> folders;
+	ModRuleset ruleset;
 	bool Satisfied() const;
 	bool AllInstalled() const;
 	std::vector<std::string> Names(bool onlyMissing) const;
 };
 ModNeeds ModsNeededFor(const std::string &gamePath, const std::string &profile = "");
 std::string ModsActivateProfileFor(const ModNeeds &needs, const std::string &label);
-ModProfile ModsLooseProfileWith(const std::vector<std::string> &folders);
+// The profile "My content" with these packages (and the cosmetic ones already active), mounting the ruleset if there is one.
+ModProfile ModsLooseProfileWith(const std::vector<std::string> &folders, const ModRuleset &ruleset = ModRuleset());
 
 std::vector<std::string> ModsMountedLocalDirs();
 std::vector<std::string> ModsMountedDirs();
+// A mounted folder is a package's or one of its rulesets'. These give the package's folder and the folder's path below mods/.
+std::string ModsPackFolder(const std::string &mountedDir);
+std::string ModsDirVfsName(const std::string &mountedDir);
+// The ruleset of the profile if it can be mounted (its package is in the profile, installed, and has that layer); empty otherwise.
+ModRuleset ModsEffectiveRuleset(const ModProfile &p);
+// What the Rules combo offers for these packages (in this order): each ruleset of a package, and, for a package that has
+// civilizations but no ruleset, the package alone (layerName empty).
+struct ModRulesetEntry {
+	ModRuleset ruleset;
+	std::string packName, layerName;
+};
+std::vector<ModRulesetEntry> ModsRulesetEntries(const std::vector<std::string> &folders);
+// The civilization set a Rules entry stands for: the one of its package if the package has civilizations, otherwise "" (the game's).
+std::string ModsRulesetCivSet(const ModRuleset &choice);
+// The entry of the mounted profile. It differs from ModsMountedProfile().ruleset only after ModsMountedChoiceSet.
+ModRuleset ModsMountedChoice();
+// Remembers another entry that mounts the same files (see ModsSameRuleset), so nothing is reloaded. Ignored if the files differ.
+void ModsMountedChoiceSet(const ModRuleset &choice);
 const std::string &ModsLanguage();
 struct Json;
 std::string ModsLocalizedText(const Json &j, const char *key, const std::string &def);
@@ -243,6 +351,8 @@ struct ModOverlapValue {
 struct ModIssues {
 	std::vector<std::string> problems;
 	std::vector<std::string> notices;
+	// Information, never a problem: the package's rulesets, and which rulesets of other packages are alternatives to them.
+	std::vector<std::string> rulesets;
 	int overwrites = 0;
 	std::vector<ModOverlap> overlaps;
 	std::vector<ModOverlapFile> files;

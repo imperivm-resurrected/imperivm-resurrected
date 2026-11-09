@@ -1,0 +1,47 @@
+{
+  "id": "example-rulesets",
+  "name": {
+    "spanish": "Ejemplo: conjuntos de reglas",
+    "english": "Example: rulesets",
+    "italian": "Esempio: set di regole"
+  },
+  "version": "1.0",
+  "category": "Gameplay & Balance",
+  "authors": ["Imperivm Resurrected"],
+  "description": {
+    "spanish": "Ejemplo del SDK: una civilización en la raíz y dos conjuntos de reglas entre los que elige el anfitrión al crear la sala (hastatus barato o caro). Cambia la jugabilidad: en multijugador todos tienen que llevarlo.",
+    "english": "SDK example: a civilization in the root and two rulesets the host chooses between when creating the room (cheap or costly hastatus). Changes gameplay: everyone must have it in multiplayer.",
+    "italian": "Esempio dell'SDK: una civiltà nella radice e due set di regole tra cui sceglie l'host quando crea la stanza (hastatus economico o costoso). Cambia il gioco: in multigiocatore devono averlo tutti."
+  },
+  "redistributable": true,
+  "rulesets": [
+    {
+      "id": "cheap-army",
+      "name": {
+        "spanish": "Ejército barato",
+        "english": "Cheap army",
+        "italian": "Esercito economico"
+      },
+      "description": {
+        "spanish": "El hastatus cuesta 60 de oro y DamageAmplify sube a 250.",
+        "english": "The hastatus costs 60 gold and DamageAmplify goes up to 250.",
+        "italian": "L'hastatus costa 60 oro e DamageAmplify sale a 250."
+      },
+      "path": "rulesets/cheap-army"
+    },
+    {
+      "id": "costly-army",
+      "name": {
+        "spanish": "Ejército caro",
+        "english": "Costly army",
+        "italian": "Esercito costoso"
+      },
+      "description": {
+        "spanish": "El hastatus cuesta 150 de oro y DamageAmplify baja a 150.",
+        "english": "The hastatus costs 150 gold and DamageAmplify goes down to 150.",
+        "italian": "L'hastatus costa 150 oro e DamageAmplify scende a 150."
+      },
+      "path": "rulesets/costly-army"
+    }
+  ]
+}

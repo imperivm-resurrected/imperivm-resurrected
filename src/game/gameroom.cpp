@@ -12,6 +12,7 @@
 #include "MinHook.h"
 #include "hooks/hookcount.h"
 #include "game/civs.h"
+#include "game/civroom.h"
 #include "core/crashlog.h"
 #include "game/gameroom.h"
 #include "game/gamemodes.h"
@@ -29,6 +30,7 @@
 #include "addr/ui.h"
 #include "addr/world.h"
 #include "core/uiport.h"
+#include "i18n/tr.h"
 
 namespace {
 const unsigned kMsgClick = 0x12345604;
@@ -50,6 +52,7 @@ ThisOnly_t g_origOnShow = nullptr;
 ThisOnly_t g_origDtor = nullptr;
 
 void *g_dlg = nullptr;
+CivResetGate g_civResetGate;
 void *g_picker = nullptr;
 int g_scenarioRace[8] = {-1, -1, -1, -1, -1, -1, -1, -1};
 typedef void(__fastcall *UpdateRow_t)(void *, void *, unsigned);
@@ -575,6 +578,7 @@ void __fastcall HookOnShow(void *dlg)
 	g_origOnShow(dlg);
 	CivsOnRoomShown(dlg);
 	g_dlg = dlg;
+	g_civResetGate = CivResetGate();
 	g_optionsLogged = false;
 	g_siteFlags = LoadRoomFlags("Sites", 0) & kSiteMask;
 	g_ruleFlags = LoadRoomFlags("Rules", ModOptionsDefaults()) & kRuleMask;
@@ -832,6 +836,9 @@ void EnforceModeRaces()
 	const bool sets = !CivRoomSets().empty();
 	if (!mode && !sets) return;
 	char *choice = static_cast<char *>(g_dlg) + 0xa8;
+	const int kRandomRace = 8;
+	std::vector<int> races(8, -1);
+	void *combos[8] = {};
 	for (int i = 0; i < 8; i++) {
 		const char *name = nullptr;
 		int type = 0, color = 0, ready = 0, race = 0, team = 0xff, extra = 0;
@@ -839,25 +846,45 @@ void EnforceModeRaces()
 		// A scenario map fixes the civilization of its slots (EnforceFixedRaces); the others follow the room's sets and mode.
 		if (*reinterpret_cast<int *>(static_cast<char *>(g_dlg) + 0x9c) == 0 && g_scenarioRace[i] >= 0) continue;
 		// The stored choice only follows the game's own civilizations: for a mod's it stays at 0 while the dropdown holds the real item.
-		void *combo = Combo(g_dlg, ((i + 1) << 12) | 0x22);
-		const int shownItem = ComboSel(combo);
-		const int now = CivsRaceOfRoomItem(shownItem >= 0 ? shownItem : static_cast<unsigned char>(choice[i]));
-		if (now < 0 || ((!mode || GameModeAllows(*mode, now)) && (!sets || CivsRoomAllows(now)))) continue;
+		combos[i] = Combo(g_dlg, ((i + 1) << 12) | 0x22);
+		const int shownItem = ComboSel(combos[i]);
+		races[i] = CivsRaceOfRoomItem(shownItem >= 0 ? shownItem : static_cast<unsigned char>(choice[i]));
+	}
+	const bool tell = g_civResetGate.Look(static_cast<size_t>(std::count_if(races.begin(), races.end(), [](int r) { return r >= 0; })));
+	// A civilization the sets no longer allow goes back to Random (a player or an AI alike); one the mode does not allow, to the first the mode does.
+	const std::vector<int> leaving = sets ? CivsSlotsToReset(races) : std::vector<int>();
+	std::string told;
+	for (int i = 0; i < 8; i++) {
+		const int now = races[i];
+		const bool outOfSets = std::find(leaving.begin(), leaving.end(), i) != leaving.end();
+		if (now < 0 || (!outOfSets && (!mode || GameModeAllows(*mode, now)))) continue;
 		int item = -1;
-		for (int shown : CivsRoomOrder(10 + static_cast<int>(CivsList().size()))) {
-			const int race = CivsRaceOfRoomItem(shown);
-			if (race >= 0 && (!mode || GameModeAllows(*mode, race)) && CivsRoomAllows(race)) {
-				item = shown;
-				break;
-			}
+		if (outOfSets) {
+			item = CivsRoomItemOfRace(kRandomRace);
 		}
-		if (item < 0 && mode) item = CivsRoomItemOfRace(GameModeFirstAllowed(*mode, false));
+		else {
+			for (int shown : CivsRoomOrder(10 + static_cast<int>(CivsList().size()))) {
+				const int race = CivsRaceOfRoomItem(shown);
+				if (race >= 0 && (!mode || GameModeAllows(*mode, race)) && CivsRoomAllows(race)) {
+					item = shown;
+					break;
+				}
+			}
+			if (item < 0 && mode) item = CivsRoomItemOfRace(GameModeFirstAllowed(*mode, false));
+		}
 		if (item < 0) continue;
 		LogI("room", "slot %d: the room does not allow civilization %d; it is changed to %d", i + 1, now, CivsRaceOfRoomItem(item));
 		choice[i] = static_cast<char>(item);
 		reinterpret_cast<UpdateRow_t>(addr::kUpdateSlotRow)(g_dlg, nullptr, static_cast<unsigned>(i));
 		// The dropdown is what the room shows and sends; changing the stored choice alone does not move it.
-		SelectCombo(combo, item);
+		SelectCombo(combos[i], item);
+		if (outOfSets) told += (told.empty() ? "" : ", ") + std::to_string(i + 1);
+	}
+	if (!told.empty() && !tell) LogI("room", "new room: slot(s) %s start on a civilization the room's sets do not allow; they are set to Random", told.c_str());
+	static DWORD toldAt = 0;
+	if (!told.empty() && tell && GetTickCount() - toldAt > 2000) {
+		toldAt = GetTickCount();
+		UiToast(TrFmt("Slots set back to Random, their civilization is no longer allowed in the room: %s", {told}));
 	}
 }
 
@@ -1014,6 +1041,11 @@ bool GameRoomActive()
 {
 	std::lock_guard<std::mutex> lock(g_lock);
 	return g_snap.active;
+}
+
+void GameRoomCivSetsEdited()
+{
+	Queue([] { g_civResetGate.Edited(); });
 }
 
 void GameRoomSetRace(int slot, int index)

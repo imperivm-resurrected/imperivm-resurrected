@@ -133,6 +133,7 @@ struct RoomModRequest {
 	std::string version;
 	uint64_t gbFile = 0;
 	std::string copyKey;
+	std::string layer, layerKey;
 };
 struct RoomModStatus {
 	bool active = false, done = false;

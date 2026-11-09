@@ -1,0 +1,1 @@
+Victory modes: one .vs per mode, named like "6 My mode.vs". See victory-modes.md. Delete this note.

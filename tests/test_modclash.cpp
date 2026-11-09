@@ -319,8 +319,60 @@ void ChoiceAmongThree()
 
 }
 
+RulesetClashMod Ruleset(const std::string &pack, const std::string &layer, std::vector<std::string> paths, std::vector<PatchedValue> values = {})
+{
+	RulesetClashMod r;
+	r.pack = pack;
+	r.layer = layer;
+	r.paths = paths;
+	r.loose = paths;
+	r.values = values;
+	return r;
+}
+
+// A room mounts one ruleset, so rulesets that change the same gameplay files are alternatives; the comparison only reports them.
+void RulesetsOfOtherPacksAreAlternatives()
+{
+	const std::vector<RulesetShared> r = RulesetCompare({Ruleset("cm", "rules", {"data/classes/a.sc.xml", "data/classes/b.sc.xml", "gameres/x.tga"}),
+		Ruleset("mci", "rules", {"data/classes/a.sc.xml", "data/classes/c.sc.xml", "gameres/x.tga"}),
+		Ruleset("other", "rules", {"data/classes/z.sc.xml"})});
+	CHECK_EQ(r.size(), static_cast<size_t>(1));
+	if (r.size() != 1) return;
+	CHECK_EQ(r[0].packA, "cm");
+	CHECK_EQ(r[0].packB, "mci");
+	CHECK_EQ(r[0].files, 1);
+	CHECK_EQ(r[0].values, 0);
+}
+
+void RulesetsOfOnePackAreNotCompared()
+{
+	CHECK(RulesetCompare({Ruleset("cm", "cheap", {"data/const.ini"}), Ruleset("cm", "costly", {"data/const.ini"})}).empty());
+}
+
+void RulesetsShareValuesToo()
+{
+	const std::vector<RulesetShared> r = RulesetCompare({Ruleset("cm", "a", {}, {Set("hp", "10", "data/const.ini"), Set("gold", "5", "data/const.ini")}),
+		Ruleset("mci", "b", {}, {Set("hp", "20", "data/const.ini"), Set("gold", "5", "data/const.ini")})});
+	CHECK_EQ(r.size(), static_cast<size_t>(1));
+	if (r.size() != 1) return;
+	CHECK_EQ(r[0].files, 0);
+	CHECK_EQ(r[0].values, 1);
+	CHECK_EQ(r[0].layerA, "a");
+	CHECK_EQ(r[0].layerB, "b");
+}
+
+void CosmeticFilesAreNotAlternatives()
+{
+	CHECK(RulesetCompare({Ruleset("cm", "a", {"gameres/x.tga"}), Ruleset("mci", "b", {"gameres/x.tga"})}).empty());
+	CHECK(RulesetCompare({}).empty());
+}
+
 int main()
 {
+	RulesetsOfOtherPacksAreAlternatives();
+	RulesetsOfOnePackAreNotCompared();
+	RulesetsShareValuesToo();
+	CosmeticFilesAreNotAlternatives();
 	Kinds();
 	NothingShared();
 	FirstInOrderWins();

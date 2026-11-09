@@ -1,0 +1,19 @@
+{
+  "id": "my-ruleset-mod",
+  "name": "My ruleset mod",
+  "version": "1.0",
+  "authors": [
+    "Your name"
+  ],
+  "description": "A package with its civilizations in the root and its global rules in a ruleset the host chooses when creating the room.",
+  "category": "Gameplay & Balance",
+  "redistributable": true,
+  "rulesets": [
+    {
+      "id": "my-rules",
+      "name": "My rules",
+      "description": "What these rules change for the whole game.",
+      "path": "rulesets/my-rules"
+    }
+  ]
+}

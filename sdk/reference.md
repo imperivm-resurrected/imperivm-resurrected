@@ -29,6 +29,7 @@ A mod is a folder in `mods\`. Folders starting with `.` or `_` are ignored. With
 | `local\<language>\<path>` | File the game sees as `currentlang\<path>`, only with that language | No |
 | `local\<language>.pak` | Language pack (also `<language>_something.pak`). Only the one for the game's language is mounted | Depends on its contents |
 | `hidden.txt` | Game files the mod hides, one path per line; the ones after `[language]` are only hidden with that language. For old mods that removed files by replacing the game's packs; `shrink-mod.js` writes it | Yes, if it hides gameplay files |
+| `rulesets\<id>\…` | A ruleset: a folder laid out like a mod root that is only mounted when a room chooses it. Declared in `mod.json` (`rulesets`). See [Rulesets](rulesets.md) | Yes |
 | `rle.mmp.tail` | The mod's graphics: what it changes in or adds to the game's `rle.mmp`, which goes after it, with the fingerprint of the game's `rle.mmp` it was made for. `shrink-mod.js` writes it. Only one active pack can have it | No |
 | `movies\…` | Cutscenes (`PlayMovie`): they are looked up in the active packs first, in load order | No |
 | `gameres\…` | Loose interface images ([Images](images.md)) | No |
@@ -66,6 +67,7 @@ Test folder `<game>\mod\` (no mod needed; it beats all mods):
 | `sources` | object | none | `url` (or `page`), `gamebanana` or `gamebananaSound` (number, from the Mods or Sounds section) and `tags` (list, added to the ones above) |
 | `language` | object, list of objects or text | none | `code`, `name` and `base` (`english` by default). Plain text = just the code. See [Languages](languages.md) |
 | `commands` | object | none | `{"<orders file without extension>": {"name": text or object per language}}`. See [Keys](keys.md) |
+| `rulesets` | list of objects | none | `{"id", "name", "description", "path"}`: `id` lowercase letters, numbers, `-` and `_` (up to 24), `path` inside `rulesets\` (`rulesets/<id>` by default). See [Rulesets](rulesets.md) |
 
 A per-language text picks the game's language; if it's missing, English; if that's missing too, the first one.
 

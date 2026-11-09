@@ -1,0 +1,1 @@
+Game modes (modes\*.json) that only apply when this ruleset is chosen.

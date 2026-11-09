@@ -23,11 +23,18 @@ const LEGACY_DIRECTIVES = { principio: 'top', final: 'bottom', antes: 'before', 
 // Graphics (.ent.xml and .rle): missing images (the game HANGS when loading the class), repeated idx or outside 1..32, layers and
 // animations that point to images that do not exist, variations different from columns, rows/columns that do not match the .rle,
 // engine limits (32 images, 32 layers, 8 states, animations 1..28, 64 frames), corrupt .rle files and malformed .pass files.
+// Rulesets (mod.json "rulesets", see rulesets.md): the folders they name are validated apart, each one as a mod root of its own with the
+// folder's path cut off, and the package is checked for repeated or invalid ids, folders that are missing and layers inside one another.
 // Exits with code 1 if there are errors.
 const fs = require('fs'), path = require('path');
+const { spawnSync } = require('child_process');
 
 const args = process.argv.slice(2);
-const modDir = args.find(a => !a.startsWith('--') && !['--data', '--game', '--mods'].includes(args[args.indexOf(a) - 1]));
+const modDir = args.find(a => !a.startsWith('--') && !['--data', '--game', '--mods', '--layer-of'].includes(args[args.indexOf(a) - 1]));
+// The validator calls itself on each ruleset folder: --layer-of is the package the folder belongs to, --json makes it report in lines of JSON
+const layerOfIdx = args.indexOf('--layer-of');
+const layerOf = layerOfIdx >= 0 ? args[layerOfIdx + 1] : null;
+const asJson = args.includes('--json');
 const modsIdx = args.indexOf('--mods');
 const dataIdx = args.indexOf('--data');
 const dataDir = dataIdx >= 0 ? args[dataIdx + 1] : null;
@@ -67,6 +74,7 @@ const LABEL_ERROR = () => 'ERROR';
 const LABEL_WARN = () => 'WARNING';
 const report = (kind, file, line, msg) => {
 	if (kind === 'ERROR') errors++; else warnings++;
+	if (asJson) { console.log(JSON.stringify({ k: kind, f: file, l: line, m: msg })); return; }
 	console.log(`${kind === 'ERROR' ? LABEL_ERROR() : LABEL_WARN()}  ${file}${line ? ':' + line : ''}  ${msg}`);
 };
 const error = (file, line, msg) => report('ERROR', file, line, msg);
@@ -81,7 +89,34 @@ function walk(dir, rel = '') {
 	}
 	return out;
 }
-const files = walk(modDir).filter(f => !f.startsWith('.'));
+// --- rulesets: which folders of the package are layers (the same rules as the game: see src/mods/rulesets.cpp) ----------------------------
+const RULESET_ID_RE = /^[a-z0-9_-]{1,24}$/;
+function resolveRulesets(entries) {
+	const kept = [], issues = [];
+	entries.forEach((o, i) => {
+		const e = o && typeof o === 'object' && !Array.isArray(o) ? o : {};
+		const id = e.id;
+		if (typeof id !== 'string' || !RULESET_ID_RE.test(id)) { issues.push({ i, msg: `the id "${id}" is not valid (lowercase letters, digits, - and _; up to 24)` }); return; }
+		if (kept.some(k => k.id === id)) { issues.push({ i, msg: `the id "${id}" is used by another ruleset` }); return; }
+		const p = (typeof e.path === 'string' && e.path ? e.path : 'rulesets/' + id).replace(/\\/g, '/').toLowerCase().replace(/^\/+/, '').replace(/\/+$/, '');
+		if (!p.startsWith('rulesets/') || p.split('/').some(c => !c || c === '.' || c === '..' || /[<>:"|?*]/.test(c))) {
+			issues.push({ i, msg: `"${id}": the path "${e.path}" has to be a folder inside rulesets/` });
+			return;
+		}
+		const clash = kept.find(k => k.path === p || k.path.startsWith(p + '/') || p.startsWith(k.path + '/'));
+		if (clash) { issues.push({ i, msg: `"${id}": its folder ${p} overlaps the one of "${clash.id}" (${clash.path}): rulesets cannot be inside one another` }); return; }
+		kept.push({ id, path: p, i, entry: e });
+	});
+	return { kept, issues };
+}
+let rootJson = null;
+if (!layerOf) {
+	try { rootJson = modernKeys(JSON.parse(fs.readFileSync(path.join(modDir, 'mod.json'), 'utf8').replace(/^\uFEFF/, ''))); } catch { /* mod.json is checked below */ }
+}
+const resolvedRulesets = resolveRulesets(rootJson && Array.isArray(rootJson.rulesets) ? rootJson.rulesets : []);
+const layers = resolvedRulesets.kept;
+const inLayer = f => layers.some(l => f.toLowerCase().startsWith(l.path + '/'));
+const files = walk(modDir).filter(f => !f.startsWith('.') && !inLayer(f));
 const read = rel => fs.readFileSync(path.join(modDir, rel), 'utf8').replace(/^﻿/, '');
 const lineOf = (text, index) => text.slice(0, index).split('\n').length;
 const lower = s => s.toLowerCase();
@@ -102,7 +137,8 @@ function gameFile(rel) {
 // What mod.json "requires" is the mod's to use: its classes, entities, sprites, scripts and civilizations are not missing. Each required mod is
 // looked up (by folder name or by the "id" of its mod.json, and what it requires in turn) in --mods <folder>, in <game>\mods with --game, and next
 // to this mod's folder.
-const depRoots = [...(modsIdx >= 0 ? [args[modsIdx + 1]] : []), ...(gameDir ? [path.join(gameDir, 'mods')] : []), path.dirname(path.resolve(modDir))]
+const selfDir = layerOf || modDir;  // (the package, when this is one of its rulesets)
+const depRoots = [...(modsIdx >= 0 ? [args[modsIdx + 1]] : []), ...(gameDir ? [path.join(gameDir, 'mods')] : []), path.dirname(path.resolve(selfDir))]
 	.filter(d => d && fs.existsSync(d) && fs.statSync(d).isDirectory());
 const depFiles = new Set(), depClassIds = new Set(), depCivs = new Set(), depNotFound = [];
 function loadDeps(ids, seen = new Set()) {
@@ -113,7 +149,7 @@ function loadDeps(ids, seen = new Set()) {
 		for (const root of depRoots) {
 			for (const e of fs.readdirSync(root, { withFileTypes: true })) {
 				const p = path.join(root, e.name);
-				if (path.resolve(p) === path.resolve(modDir) || !fs.statSync(p, { throwIfNoEntry: false })?.isDirectory()) continue;  // (a link to a folder counts)
+				if (path.resolve(p) === path.resolve(selfDir) || !fs.statSync(p, { throwIfNoEntry: false })?.isDirectory()) continue;  // (a link to a folder counts)
 				let j = null;
 				try { j = modernKeys(JSON.parse(fs.readFileSync(path.join(p, 'mod.json'), 'utf8').replace(/^\uFEFF/, ''))); } catch { /* no mod.json */ }
 				if (lower(e.name) === lower(id) || (j && typeof j.id === 'string' && lower(j.id) === lower(id))) { dir = p; json = j; break; }
@@ -121,18 +157,31 @@ function loadDeps(ids, seen = new Set()) {
 			if (dir) break;
 		}
 		if (!dir) { depNotFound.push(id); continue; }
-		for (const f of walk(dir)) {
-			depFiles.add(lower(f));
-			if (/^data\/classes\/.+\.sc\.xml$/i.test(f)) {
-				const h = fs.readFileSync(path.join(dir, f), 'latin1').match(/<class\b[^>]*>/);
-				for (const x of (h && h[0].match(/\b(?:id|altid)\s*=\s*"([^"]+)"/g)) || []) depClassIds.add(lower(x.replace(/^[a-z]+\s*=\s*"|"$/gi, '')));
-			}
-			else if (/^civs\/[^/]+\.json$/i.test(f)) {
-				try { const c = modernKeys(JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8').replace(/^\uFEFF/, ''))); if (typeof c.id === 'string') depCivs.add(lower(c.id)); } catch { /* not valid: its own validation says so */ }
-			}
-		}
+		addDepFiles(dir);
 		if (json && Array.isArray(json.requires)) loadDeps(json.requires, seen);
 	}
+}
+// What a folder ships counts as provided. skipRulesets leaves out the rulesets of a package: only the one being checked is mounted with it.
+function addDepFiles(dir, skipRulesets = false) {
+	for (const f of walk(dir)) {
+		if (skipRulesets && /^rulesets\//i.test(f)) continue;
+		depFiles.add(lower(f));
+		if (/^data\/classes\/.+\.sc\.xml$/i.test(f)) {
+			const h = fs.readFileSync(path.join(dir, f), 'latin1').match(/<class\b[^>]*>/);
+			for (const x of (h && h[0].match(/\b(?:id|altid)\s*=\s*"([^"]+)"/g)) || []) depClassIds.add(lower(x.replace(/^[a-z]+\s*=\s*"|"$/gi, '')));
+		}
+		else if (/^civs\/[^/]+\.json$/i.test(f)) {
+			try { const c = modernKeys(JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8').replace(/^\uFEFF/, ''))); if (typeof c.id === 'string') depCivs.add(lower(c.id)); } catch { /* not valid: its own validation says so */ }
+		}
+	}
+}
+if (layerOf) {
+	// A ruleset is mounted with its package, so the package's root, and what the package requires, are there for it
+	addDepFiles(layerOf, true);
+	try {
+		const parent = modernKeys(JSON.parse(fs.readFileSync(path.join(layerOf, 'mod.json'), 'utf8').replace(/^\uFEFF/, '')));
+		if (Array.isArray(parent.requires)) loadDeps(parent.requires);
+	} catch { /* the package's own validation says so */ }
 }
 const hasDep = rel => depFiles.has(lower(rel));
 
@@ -196,7 +245,10 @@ function checkXml(text) {
 }
 
 // --- mod.json ---------------------------------------------------------------------------------------------------------
-if (!has('mod.json')) {
+if (layerOf) {
+	// a ruleset has no mod.json: its package's covers it
+}
+else if (!has('mod.json')) {
 	warn('mod.json', 0, 'there is no mod.json: the game will create one named after the folder');
 }
 else {
@@ -287,6 +339,32 @@ else {
 		if (kWithLanguage.includes(category) && !language) warn('mod.json', 0, `no language tag: add "Language: English" (or the one it is: ${kLanguages.join(', ')}) to "tags" and to the GameBanana tags, or it won't show up when filtering by language`);
 	}
 	catch (e) { error('mod.json', 0, 'not valid JSON: ' + e.message); }
+}
+
+// --- rulesets (mod.json "rulesets"): ids, folders and the rle.mmp.tail the package would bring twice -------------------------------
+if (!layerOf) {
+	if (rootJson && rootJson.rulesets !== undefined && !Array.isArray(rootJson.rulesets)) error('mod.json', 0, '"rulesets" has to be a list');
+	for (const issue of resolvedRulesets.issues) error('mod.json', 0, `rulesets[${issue.i}]: ${issue.msg}`);
+	const rootTail = has('rle.mmp.tail');
+	for (const l of layers) {
+		const where = `rulesets[${l.i}] "${l.id}"`;
+		const dir = path.join(modDir, l.path);
+		if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) { error('mod.json', 0, `${where}: the folder ${l.path} does not exist`); continue; }
+		if (l.entry.name === undefined) warn('mod.json', 0, `${where}: "name" is missing: the room will show the id`);
+		for (const k of ['name', 'description']) {
+			const v = l.entry[k];
+			if (v && typeof v === 'object') {
+				for (const [lang, text] of Object.entries(v)) if (typeof text !== 'string') error('mod.json', 0, `${where}: "${k}": the text for "${lang}" has to be a string`);
+			}
+			else if (v !== undefined && typeof v !== 'string') error('mod.json', 0, `${where}: "${k}" has to be a string or an object with one string per language`);
+		}
+		// the ruleset is mounted with its package: both bringing a tail would be two in one profile
+		if (rootTail && walk(dir).some(f => lower(f) === 'rle.mmp.tail')) {
+			error(l.path + '/rle.mmp.tail', 0, 'the package root already has an rle.mmp.tail and a profile can use only one: keep the graphics in one of them');
+		}
+	}
+	const stray = files.filter(f => /^rulesets\//i.test(f));
+	if (stray.length) warn(stray[0], 0, `${stray.length} file(s) under rulesets/ are not inside any ruleset declared in mod.json ("rulesets"): they count as part of the package root and change gameplay for everyone`);
 }
 
 // --- extensions and paths ---------------------------------------------------------------------------------------------
@@ -628,6 +706,14 @@ for (const f of files.filter(f => /(^|\/)unit_specials\.ini$/i.test(f) && !/^pat
 	}
 }
 
+// A ruleset is chosen per room, the screen resolutions are not: they belong to the package root
+if (layerOf) {
+	for (const f of files.filter(f => /^(patches\/)?data\/const\.ini$/i.test(f))) {
+		const text = read(f), m = /^\s*\[Resolutions\]/im.exec(text);
+		if (m) error(f, lineOf(text, m.index), '[Resolutions] cannot be in a ruleset: the player\'s screen resolutions are not part of the rules a room chooses. Put that section in the package root');
+	}
+}
+
 // --- texts ------------------------------------------------------------------------------------------------------------
 for (const f of files.filter(f => /^loc\/.+\.xml$/i.test(f))) {
 	const text = read(f);
@@ -918,9 +1004,31 @@ for (const [id, c] of classHeaders) {
 	if (gameHas(rel) === false) error(c.file, 0, `the class ${id}: entity="${e}" exists neither in the mod nor in the game`);
 }
 
+// --- the rulesets, each one as a root of its own -------------------------------------------------------------------------
+let layerFiles = 0;
+for (const l of layers) {
+	const dir = path.join(modDir, l.path);
+	if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) continue;
+	const childArgs = [__filename, dir, '--layer-of', modDir, '--json', ...(dataDir ? ['--data', dataDir] : []), ...(gameDir ? ['--game', gameDir] : []), ...(modsIdx >= 0 ? ['--mods', args[modsIdx + 1]] : [])];
+	const r = spawnSync(process.execPath, childArgs, { encoding: 'utf8', maxBuffer: 256 << 20 });
+	if (r.error || r.status === null || r.status > 1) { error(l.path, 0, 'the ruleset could not be validated: ' + ((r.error && r.error.message) || r.stderr || 'the validator stopped').toString().trim().split('\n')[0]); continue; }
+	for (const line of r.stdout.split('\n')) {
+		if (!line.startsWith('{')) continue;
+		let e;
+		try { e = JSON.parse(line); } catch { continue; }
+		if (e.k) report(e.k, l.path + '/' + e.f, e.l, e.m);
+		else if (typeof e.files === 'number') layerFiles += e.files;
+	}
+}
+
 // --- summary ----------------------------------------------------------------------------------------------------------
+if (asJson) {
+	console.log(JSON.stringify({ files: files.length }));
+	process.exit(errors ? 1 : 0);
+}
 console.log('');
-if (!errors && !warnings) console.log(`OK: ${files.length} files checked, no problems.`);
-else console.log(`${files.length} files checked: ${errors} errors, ${warnings} warnings.`);
+const checked = files.length + layerFiles;
+if (!errors && !warnings) console.log(`OK: ${checked} files checked, no problems.`);
+else console.log(`${checked} files checked: ${errors} errors, ${warnings} warnings.`);
 if (!dataDir) console.log('(Without --data, the tool does not check that the files and scripts the mod refers to exist in the game.)');
 process.exit(errors ? 1 : 0);

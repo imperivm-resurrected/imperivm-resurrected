@@ -685,7 +685,7 @@ void LoadCivFile(const std::string &folder, const std::string &path, const std::
 	civ->modFolder = folder;
 	if (!folder.empty()) {
 		ModInfo owner;
-		civ->modId = ModsFind(folder, owner) && !owner.id.empty() ? owner.id : folder;
+		civ->modId = ModsFind(folder, owner) ? ModsCivSetId(owner) : folder;
 	}
 	std::string spelled = j.GetString("id");
 	if (spelled.empty()) spelled = fileName.substr(0, fileName.rfind('.'));
@@ -815,7 +815,7 @@ void CivsRebuild()
 	std::vector<Civ *> found;
 	std::vector<std::string> dirs = ModsMountedDirs();
 	std::vector<std::pair<std::string, std::string>> roots;
-	for (const std::string &dir : dirs) roots.push_back({dir.substr(dir.find_last_of('\\') + 1), dir + "\\civs"});
+	for (const std::string &dir : dirs) roots.push_back({ModsPackFolder(dir), dir + "\\civs"});
 	roots.push_back({"", GameDir() + "\\imperivm-resurrected\\civs"});
 	for (const auto &root : roots) {
 		WIN32_FIND_DATAA fd;
@@ -1015,16 +1015,12 @@ std::vector<int> CivsRoomOrder(int items)
 
 bool CivsRoomAllows(int race)
 {
-	if (race == 8) return true;
-	if (race >= 10) {
-		const Civ *c = FindByIndex(race);
-		return !c || CivInRoom(*c);
-	}
-	if (GameInRoom()) return true;
-	for (const Civ *other : SortedCivs()) {
-		if (other->replacesBase && other->base == race && CivInRoom(*other)) return true;
-	}
-	return false;
+	return CivRaceAllowed(RandomCivs(SortedCivs(), true), GameInRoom(), race);
+}
+
+std::vector<int> CivsSlotsToReset(const std::vector<int> &races)
+{
+	return CivSlotsToReset(races, RandomCivs(SortedCivs(), true), GameInRoom());
 }
 
 std::vector<CivSet> CivsSets()

@@ -150,6 +150,100 @@ static void CopyKey()
 	CHECK(ModsCompareRoomCopy(Mod("cosm", kModCosmetic), list[1].copyKey) == RoomCopy::kSame);
 }
 
+static ModInfo WithLayer(ModInfo m, const std::string &id, const std::string &hash, bool gameplay = true)
+{
+	ModLayer l;
+	l.id = id;
+	l.name = "Layer " + id;
+	l.gameplay = gameplay;
+	l.gameplayHash = hash;
+	m.layers.push_back(l);
+	return m;
+}
+
+static void Rulesets()
+{
+	ModInfo civs = Mod("civs", kModCosmetic);
+	civs.gameplay = false;
+	civs = WithLayer(WithLayer(civs, "cm", "0123456789abcdef0000"), "mci", "fedcba98765432100000");
+	ModRuleset chosen;
+	chosen.pack = civs.folder = "Civs";
+	chosen.id = "cm";
+	int optional = 0;
+	// The package is listed because of its ruleset, though its root is not rules content, and the line names the layer.
+	std::vector<OnlineMod> list = DecodeModList(EncodeModList({civs, Mod("skins", kModCosmetic)}, "", optional, chosen));
+	CHECK_EQ(list.size(), size_t(1));
+	CHECK_EQ(optional, 1);
+	if (list.size() != 1) return;
+	CHECK_EQ(list[0].layer, "cm");
+	CHECK_EQ(list[0].layerKey, "0123456789abcdef");
+	CHECK_EQ(list[0].layerName, "Layer cm");
+	CHECK_EQ(list[0].kind, 2);
+	// Without a ruleset the package stays optional and the line has no layer.
+	list = DecodeModList(EncodeModList({civs}, "", optional));
+	CHECK(list.empty());
+	// Old lines have no layer.
+	CHECK_EQ(DecodeModList("old\tOld\t1.0\t1\t5\t0\t0\t2\t0\tabc\n")[0].layer, "");
+	CHECK_EQ(DecodeModList("old\tOld\t1.0\t1\t5\t0\t0\t2\t0\tabc\n")[0].layerKey, "");
+
+	list = DecodeModList(EncodeModList({civs}, "", optional, chosen));
+	const OnlineMod &room = list[0];
+	CHECK(ModsCompareRoomLayer(civs, room.layer, room.layerKey) == RoomCopy::kSame);
+	CHECK(ModsCompareRoomLayer(civs, "", "") == RoomCopy::kSame);
+	ModInfo other = WithLayer(Mod("civs", kModCosmetic), "cm", "ffffffffffffffff0000");
+	CHECK(ModsCompareRoomLayer(other, room.layer, room.layerKey) == RoomCopy::kOther);
+	CHECK(ModsCompareRoomLayer(Mod("civs", kModCosmetic), room.layer, room.layerKey) == RoomCopy::kOther);
+	other = WithLayer(Mod("civs", kModCosmetic), "cm", "");
+	CHECK(ModsCompareRoomLayer(other, room.layer, room.layerKey) == RoomCopy::kNotHashed);
+	// A layer with nothing that counts as gameplay has no key to compare.
+	ModInfo cosmetic = WithLayer(Mod("civs", kModCosmetic), "cm", "", false);
+	chosen.pack = cosmetic.folder = "Civs";
+	list = DecodeModList(EncodeModList({cosmetic}, "", optional, chosen));
+	CHECK_EQ(list[0].layerKey, "");
+	CHECK(ModsCompareRoomLayer(cosmetic, "cm", "") == RoomCopy::kSame);
+	// A name with tabs or new lines cannot break the line.
+	ModInfo odd = WithLayer(Mod("civs", kModCosmetic), "cm", "0123456789abcdef");
+	odd.layers[0].name = "A\tB\nC";
+	odd.folder = "Civs";
+	list = DecodeModList(EncodeModList({odd}, "", optional, chosen));
+	CHECK_EQ(list.size(), size_t(1));
+	CHECK_EQ(list[0].layerName, "A B C");
+}
+
+// A game saved with a ruleset is not the same as one saved with none, nor with another ruleset of the same package.
+static void SavedRulesets()
+{
+	ModRuleset mounted;
+	mounted.pack = "Civs";
+	mounted.id = "cm";
+	CHECK_EQ(ModsRulesetOf(mounted, "civs"), "cm");
+	CHECK_EQ(ModsRulesetOf(mounted, "Other"), "");
+	CHECK_EQ(ModsRulesetOf(ModRuleset(), "Civs"), "");
+	CHECK(ModsSameRuleset(mounted, mounted));
+	ModRuleset other = mounted;
+	other.id = "MCI";
+	CHECK(!ModsSameRuleset(mounted, other));
+	other.id = "CM";
+	other.pack = "civs";
+	CHECK(ModsSameRuleset(mounted, other));
+	CHECK(!ModsSameRuleset(mounted, ModRuleset()));
+	CHECK(ModsSameRuleset(ModRuleset(), ModRuleset()));
+	// A package without a layer mounts the same files as the game's rules, but it is another entry.
+	ModRuleset bare;
+	bare.pack = "Civs";
+	CHECK(bare.Empty());
+	CHECK(ModsSameRuleset(bare, ModRuleset()));
+	CHECK(!ModsSameChoice(bare, ModRuleset()));
+	CHECK(ModsSameChoice(ModRuleset(), ModRuleset()));
+	CHECK(!ModsSameRuleset(bare, mounted));
+	CHECK(!ModsSameChoice(bare, mounted));
+	ModRuleset bareOther = bare;
+	bareOther.pack = "civs";
+	CHECK(ModsSameChoice(bare, bareOther));
+	CHECK(ModsSameChoice(mounted, other));
+	CHECK_EQ(ModsRulesetOf(bare, "Civs"), "");
+}
+
 static void Malformed()
 {
 	CHECK(DecodeModList("only\ttwo\n").empty());
@@ -168,6 +262,8 @@ int main()
 	Legacy();
 	GbFile();
 	CopyKey();
+	Rulesets();
+	SavedRulesets();
 	Malformed();
 	return test::Summary("modlist");
 }

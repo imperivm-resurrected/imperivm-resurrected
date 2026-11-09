@@ -10,4 +10,5 @@
 
 std::vector<OnlineMod> DecodeModList(const std::string &text);
 
-std::string EncodeModList(const std::vector<ModInfo> &mounted, const std::string &scenModId, int &optional);
+// ruleset is the one the room mounts; the package that holds it is listed with the layer's id, name and key.
+std::string EncodeModList(const std::vector<ModInfo> &mounted, const std::string &scenModId, int &optional, const ModRuleset &ruleset = ModRuleset());

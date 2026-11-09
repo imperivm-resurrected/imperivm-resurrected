@@ -90,14 +90,19 @@ std::string EncodeMods(const std::string &scenModId, int &optional)
 		m.gbFile = DlInstalledGbFile(m);
 		mounted.push_back(m);
 	}
-	return EncodeModList(mounted, scenModId, optional);
+	return EncodeModList(mounted, scenModId, optional, ModsMountedProfile().ruleset);
 }
 
 std::string OwnKey()
 {
 	const std::string h = ModsProfileGameplayHash(ModsMountedProfile());
 	const Json indices = CivIndicesToJson();
-	return indices.obj.empty() ? h.substr(0, 16) : Fnv(h + "\n" + indices.Dump());
+	return indices.obj.empty() ? RoomHashKey(h) : Fnv(h + "\n" + indices.Dump());
+}
+
+std::string OwnHashKey()
+{
+	return RoomHashKey(ModsProfileGameplayHash(ModsMountedProfile()));
 }
 
 bool IsBanned(uint64 lobby, uint64 id)
@@ -125,6 +130,7 @@ OnlineLobby ReadLobby(uint64 id)
 	l.map = Data(id, "map");
 	l.mode = Data(id, "mode");
 	l.gameplayKey = Data(id, "key");
+	l.contentKey = Data(id, "hkey");
 	{
 		ScenValue scen;
 		if (ScenValueParse(Data(id, "scen"), scen) && !scen.modId.empty()) {

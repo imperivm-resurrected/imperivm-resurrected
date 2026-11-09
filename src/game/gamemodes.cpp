@@ -138,7 +138,7 @@ void GameModesRebuild()
 		g_errors.clear();
 	}
 	std::vector<std::pair<std::string, std::string>> roots;
-	for (const std::string &dir : ModsMountedDirs()) roots.push_back({dir.substr(dir.find_last_of('\\') + 1), dir + "\\modes"});
+	for (const std::string &dir : ModsMountedDirs()) roots.push_back({ModsPackFolder(dir), dir + "\\modes"});
 	roots.push_back({"", GameDir() + "\\imperivm-resurrected\\modes"});
 	for (const auto &root : roots) {
 		WIN32_FIND_DATAA fd;

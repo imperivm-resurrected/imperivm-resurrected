@@ -16,6 +16,12 @@ std::string LowerId(std::string id)
 	return id;
 }
 
+std::string OneLine(std::string s)
+{
+	std::replace_if(s.begin(), s.end(), [](char c) { return c == '\t' || c == '\n' || c == '\r'; }, ' ');
+	return s;
+}
+
 }
 
 std::vector<OnlineMod> DecodeModList(const std::string &text)
@@ -47,17 +53,22 @@ std::vector<OnlineMod> DecodeModList(const std::string &text)
 			m.gameplay = m.kind == 2;
 			m.gbFile = f.size() >= 9 ? _strtoui64(f[8].c_str(), nullptr, 10) : 0;
 			if (f.size() >= 10) m.copyKey = f[9];
+			if (f.size() >= 11) m.layer = f[10];
+			if (f.size() >= 12) m.layerKey = f[11];
+			if (f.size() >= 13) m.layerName = f[12];
 			out.push_back(m);
 		}
 	}
 	return out;
 }
 
-std::string EncodeModList(const std::vector<ModInfo> &mounted, const std::string &scenModId, int &optional)
+std::string EncodeModList(const std::vector<ModInfo> &mounted, const std::string &scenModId, int &optional, const ModRuleset &ruleset)
 {
+	ModProfile profile;
+	profile.ruleset = ruleset;
 	std::set<std::string> need;
 	for (const ModInfo &m : mounted) {
-		if (m.kind == kModRules || m.gameplay || (!scenModId.empty() && LowerId(m.id) == LowerId(scenModId))) need.insert(LowerId(m.id));
+		if (m.kind == kModRules || m.gameplay || (!scenModId.empty() && LowerId(m.id) == LowerId(scenModId)) || ModsActiveLayer(profile, m)) need.insert(LowerId(m.id));
 	}
 	for (bool grew = true; grew;) {
 		grew = false;
@@ -73,9 +84,13 @@ std::string EncodeModList(const std::vector<ModInfo> &mounted, const std::string
 			optional++;
 			continue;
 		}
+		// A package whose rules are in the ruleset the room mounts is rules content for the room, even if its root is not.
+		const ModLayer *layer = ModsActiveLayer(profile, m);
+		const int kind = layer && layer->gameplay ? kModRules : m.kind;
 		out += m.id + "\t" + m.name + "\t" + m.version + "\t" + (m.gameplay ? "1" : "0") + "\t" + std::to_string(m.totalBytes) + "\t" +
-			(m.redistributable && m.forbidden.empty() ? "1" : "0") + "\t" + std::to_string(m.gbId) + "\t" + std::to_string(m.kind) + "\t" + std::to_string(m.gbFile) + "\t" +
-			ModsRoomCopyKey(m.gameplayHash) + "\n";
+			(m.redistributable && m.forbidden.empty() ? "1" : "0") + "\t" + std::to_string(m.gbId) + "\t" + std::to_string(kind) + "\t" + std::to_string(m.gbFile) + "\t" +
+			ModsRoomCopyKey(m.gameplayHash) + "\t" + (layer ? layer->id : "") + "\t" + (layer && layer->gameplay ? ModsRoomCopyKey(layer->gameplayHash) : "") + "\t" +
+			(layer ? OneLine(layer->name) : "") + "\n";
 	}
 	return out;
 }

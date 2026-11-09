@@ -9,6 +9,7 @@
 
 #include "ui/mpui_internal.h"
 #include "game/civs.h"
+#include "mods/civsets.h"
 #include "core/log.h"
 
 using namespace mpui_impl;
@@ -200,6 +201,19 @@ std::vector<SaveEntry> ListSaves()
 	return out;
 }
 
+namespace {
+// One entry per ruleset of the packages, and one "(original rules)" for each package that has civilizations and no ruleset.
+void AddRulesets(const std::vector<std::string> &folders, std::vector<RulesetChoice> &out)
+{
+	for (const ModRulesetEntry &e : ModsRulesetEntries(folders)) {
+		RulesetChoice c;
+		c.ruleset = e.ruleset;
+		c.label = e.ruleset.id.empty() ? TrFmt("%s (original rules)", {e.packName}) : e.layerName + " \xC2\xB7 " + e.packName;
+		out.push_back(c);
+	}
+}
+}
+
 ProfileSummary ProfileSummaryFor(const std::string &profile)
 {
 	ProfileSummary out;
@@ -217,7 +231,59 @@ ProfileSummary ProfileSummaryFor(const std::string &profile)
 		}
 		out.rows.push_back(r);
 	}
+	AddRulesets(ModsLoadProfile(profile).mods, out.rulesets);
 	return out;
+}
+
+// What a profile mounts: the mounted profile has its ruleset already checked; another one is checked here.
+ModRuleset ProfileRulesetFor(const std::string &profile)
+{
+	const ModProfile &mounted = ModsMountedProfile();
+	return profile == mounted.name ? ModsMountedChoice() : ModsEffectiveRuleset(ModsLoadProfile(profile));
+}
+
+// The rulesets of the packages the game has loaded; it changes only when the mods are scanned again.
+const std::vector<RulesetChoice> &MountedRulesets()
+{
+	static uint64_t serial = ~0ull;
+	static std::vector<RulesetChoice> choices;
+	if (serial != ModsListSerial()) {
+		serial = ModsListSerial();
+		choices.clear();
+		AddRulesets(ModsMountedProfile().mods, choices);
+	}
+	return choices;
+}
+
+// The skirmish room has no Create screen: its own row picks the ruleset of the content that is loaded.
+bool SkirmishRoom(const State &st)
+{
+	return st.game.active && !st.game.online;
+}
+
+const std::vector<RulesetChoice> &RulesetChoicesShown(const State &st)
+{
+	return SkirmishRoom(st) ? MountedRulesets() : st.createProfileInfo.rulesets;
+}
+
+ModRuleset RulesetShown(const State &st)
+{
+	return SkirmishRoom(st) ? ModsMountedChoice() : st.createRuleset;
+}
+
+std::vector<std::string> DefaultCivSets(const ModRuleset &choice)
+{
+	std::vector<std::string> known;
+	for (const CivSet &s : CivsSets()) known.push_back(s.id);
+	return CivSetsDefault(known, ModsRulesetCivSet(choice));
+}
+
+std::string RulesetLabel(const std::vector<RulesetChoice> &choices, const ModRuleset &ruleset)
+{
+	for (const RulesetChoice &c : choices) {
+		if (ModsSameChoice(c.ruleset, ruleset)) return c.label;
+	}
+	return Tr("Original (HD)");
 }
 
 void Predict(int kind, int index, int value)
@@ -301,7 +367,7 @@ bool LocalReady(const GameRoomSnapshot &g)
 
 std::string RoomConfigKey(const OnlineLobby &l)
 {
-	std::string key = l.optionsText + "|" + std::to_string(l.rules) + "|" + l.map + "|" + l.mode;
+	std::string key = l.optionsText + "|" + std::to_string(l.rules) + "|" + l.map + "|" + l.mode + "|" + l.civSets;
 	for (const OnlineSlot &s : l.slots) {
 		if (s.type != 3) key += "|" + std::to_string(s.type) + ":" + s.name;
 	}
@@ -321,6 +387,7 @@ bool RoomActionFrozen(const GameRoomSnapshot &g, int action, int arg)
 	case kGTeam:
 	case kGColor: return SlotFrozen(g, g.slots[arg & 7]);
 	case kGRuleToggle:
+	case kCivSetToggle:
 	case kGSiteToggle:
 	case kGOptToggle: return g.host && LocalReady(g);
 	case kGDropOpen: {
@@ -332,6 +399,33 @@ bool RoomActionFrozen(const GameRoomSnapshot &g, int action, int arg)
 		return false;
 	}
 	default: return false;
+	}
+}
+
+std::vector<int> DisallowedRaceSlots(const GameRoomSnapshot &g)
+{
+	std::vector<int> races(8, -1);
+	for (int i = 0; i < 8; i++) {
+		const GameRoomSlot &s = g.slots[i];
+		if (!s.used || (s.type != 1 && s.type != 3) || s.fixedRace >= 0 || s.raceNames.empty()) continue;
+		races[i] = CivsRaceOfRoomItem(s.race);
+	}
+	return CivsSlotsToReset(races);
+}
+
+void ResetDisallowedRaces(GameRoomSnapshot &g)
+{
+	// The host resets every slot it owns; a guest only its own, so it can tell the player and does not wait for the host's change.
+	if (!g.active || !g.online || g.host || !g_s.room.info.saveName.empty()) return;
+	for (const int i : DisallowedRaceSlots(g)) {
+		GameRoomSlot &s = g.slots[i];
+		if (!s.local) continue;
+		const int random = CivsRoomItemOfRace(8);
+		LogI("room", "your civilization is no longer allowed in the room; you play Random");
+		s.race = random;
+		Predict(kPredRace, i, random);
+		GameRoomSetRace(i, random);
+		ModUiToast("Your civilization is no longer allowed in this room: you play Random now.");
 	}
 }
 

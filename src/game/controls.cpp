@@ -1115,9 +1115,15 @@ std::vector<ControlInfo> ControlsList()
 		if (std::find(files.begin(), files.end(), o.file) == files.end()) files.push_back(o.file);
 	}
 	std::vector<ModInfo> mods;
+	const ModRuleset mountedRuleset = ModsMountedProfile().ruleset;
 	for (const std::string &dir : ModsMountedDirs()) {
 		ModInfo m;
-		if (ModsFind(dir.substr(dir.find_last_of('\\') + 1), m)) mods.push_back(m);
+		if (!ModsFind(ModsPackFolder(dir), m)) continue;
+		if (std::any_of(mods.begin(), mods.end(), [&](const ModInfo &x) { return x.folder == m.folder; })) continue;
+		ModProfile mounted;
+		mounted.ruleset = mountedRuleset;
+		if (const ModLayer *layer = ModsActiveLayer(mounted, m)) m.paths.insert(m.paths.end(), layer->paths.begin(), layer->paths.end());
+		mods.push_back(m);
 	}
 	const std::string lang = ModsLanguage();
 	for (const std::string &file : files) {

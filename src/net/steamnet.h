@@ -19,6 +19,8 @@ struct OnlineMod {
 	uint64_t gbId = 0;
 	uint64_t gbFile = 0;
 	std::string copyKey;
+	// The ruleset of this package the room mounts: its id, its name for the player and the start of its gameplay hash. Empty if none.
+	std::string layer, layerName, layerKey;
 };
 
 struct OnlineSlot {
@@ -31,6 +33,8 @@ struct OnlineLobby {
 	bool kickedMe = false;
 	std::string name, host, map, mode;
 	std::string gameplayKey;
+	// Start of the gameplay hash alone (the key also covers the civilization table). Empty in rooms of older versions.
+	std::string contentKey;
 	std::string scenModId, scenModVersion, scenModName;
 	bool scenSimple = false;
 	bool scenShareable = false;

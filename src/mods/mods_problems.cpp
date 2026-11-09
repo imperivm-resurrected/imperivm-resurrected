@@ -128,6 +128,7 @@ bool ModsRestartNeeded()
 	}), active.mods.end());
 	const ModProfile &mounted = ModsMountedProfile();
 	if (!ModsSameSet(active.mods, mounted.mods)) return true;
+	if (!ModsSameRuleset(ModsEffectiveRuleset(active), mounted.ruleset)) return true;
 	std::map<std::string, std::string> signatures;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
@@ -142,6 +143,73 @@ bool ModsRestartNeeded()
 	if (!active.choices.empty()) chosen = ChosenFolders(active, ModsList());
 	std::lock_guard<std::mutex> lock(g_lock);
 	return chosen != g_mount.chosen;
+}
+
+ModRuleset ModsEffectiveRuleset(const ModProfile &p)
+{
+	if (p.ruleset.pack.empty()) return ModRuleset();
+	const bool inProfile = std::find_if(p.mods.begin(), p.mods.end(), [&](const std::string &f) { return _stricmp(f.c_str(), p.ruleset.pack.c_str()) == 0; }) != p.mods.end();
+	ModInfo m;
+	if (!inProfile || !ModsFind(p.ruleset.pack, m) || !m.forbidden.empty()) return ModRuleset();
+	ModRuleset out;
+	out.pack = m.folder;
+	if (p.ruleset.id.empty()) {
+		// The package without a layer is an entry only for a package that has civilizations and no ruleset; it mounts nothing.
+		if (!m.layers.empty() || !RulesetPathsHaveCivs(m.paths)) return ModRuleset();
+		return out;
+	}
+	const ModLayer *layer = ModsFindLayer(m, p.ruleset.id);
+	if (!layer) return ModRuleset();
+	out.id = layer->id;
+	return out;
+}
+
+std::vector<ModRulesetEntry> ModsRulesetEntries(const std::vector<std::string> &folders)
+{
+	std::vector<ModInfo> packs;
+	std::vector<RulesetPackFacts> facts;
+	for (const std::string &folder : folders) {
+		ModInfo m;
+		if (!ModsFind(folder, m)) continue;
+		RulesetPackFacts f;
+		f.usable = m.forbidden.empty();
+		f.hasCivs = RulesetPathsHaveCivs(m.paths);
+		f.layers = m.layers.size();
+		facts.push_back(f);
+		packs.push_back(std::move(m));
+	}
+	std::vector<ModRulesetEntry> out;
+	for (const RulesetEntry &e : RulesetEntries(facts)) {
+		const ModInfo &m = packs[e.pack];
+		ModRulesetEntry entry;
+		entry.ruleset.pack = m.folder;
+		if (e.layer >= 0) {
+			entry.ruleset.id = m.layers[e.layer].id;
+			entry.layerName = m.layers[e.layer].name;
+		}
+		entry.packName = m.name;
+		out.push_back(entry);
+	}
+	return out;
+}
+
+std::string ModsRulesetCivSet(const ModRuleset &choice)
+{
+	ModInfo m;
+	if (choice.pack.empty() || !ModsFind(choice.pack, m) || !RulesetPathsHaveCivs(m.paths)) return std::string();
+	return ModsCivSetId(m);
+}
+
+ModRuleset ModsMountedChoice()
+{
+	std::lock_guard<std::mutex> lock(g_lock);
+	return g_mount.known ? g_mount.choice : ModRuleset();
+}
+
+void ModsMountedChoiceSet(const ModRuleset &choice)
+{
+	std::lock_guard<std::mutex> lock(g_lock);
+	if (g_mount.known && ModsSameRuleset(g_mount.profile.ruleset, choice)) g_mount.choice = choice;
 }
 
 bool ModsSameSet(std::vector<std::string> a, std::vector<std::string> b)
@@ -189,9 +257,11 @@ std::string ModsProfileGameplayHash(const ModProfile &p)
 	std::lock_guard<std::mutex> lock(g_lock);
 	for (const std::string &folder : p.mods) {
 		for (const ModInfo &m : g_mods) {
-			if (m.folder == folder && m.gameplay) {
-				parts.push_back({m.id, m.gameplayHash});
-			}
+			if (m.folder != folder) continue;
+			if (m.gameplay) parts.push_back({m.id, m.gameplayHash, ""});
+			// The ruleset the profile mounts is part of what the players share, hashed apart from the package's root.
+			const ModLayer *layer = ModsActiveLayer(p, m);
+			if (layer && layer->gameplay) parts.push_back({m.id, layer->gameplayHash, layer->id});
 		}
 	}
 	return RulesFingerprint(parts);

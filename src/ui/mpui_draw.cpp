@@ -190,7 +190,13 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 			if (m.me && m.owner) roomOwner = true;
 		}
 		if (g_s.room.id) g_s.skirmishCivs = false;
-		if (g_s.room.id && !roomOwner) CivRoomSetsSet(CivSetsSplit(g_s.room.info.civSets));
+		if (g_s.room.id && !roomOwner) {
+			// The host can change the sets while the room is open: tell the guest, whatever happens to their own civilization.
+			if (g_s.civSetsRoom == g_s.room.id && g_s.civSetsSeen != g_s.room.info.civSets) ModUiToast("The host changed the civilizations of the room.");
+			g_s.civSetsRoom = g_s.room.id;
+			g_s.civSetsSeen = g_s.room.info.civSets;
+			CivRoomSetsSet(CivSetsSplit(g_s.room.info.civSets));
+		}
 		else if (!g_s.skirmishCivs && !g_s.room.id && !g_s.connecting && !g_s.autoHost && !g_flow.hostPending && !g_flow.inJoin && !g_autoJoin.active && !RejoinBusy()) {
 			CivRoomSetsSet({});
 		}
@@ -285,14 +291,16 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 		GameRoomSnapshot snap = GameRoomGet();
 		const bool justClosed = !snap.active && g_s.game.active && (g_s.startingCover || (g_s.gameWasActive && !g_s.leftByUser));
 		if (snap.active && !snap.online && !g_s.game.active && !g_s.room.id) {
-			CivRoomSetsSet({}); // a new skirmish starts with every set allowed
+			CivRoomSetsSet(DefaultCivSets(ModsMountedChoice())); // a new skirmish starts with the civilizations of its Rules entry
 			g_s.skirmishCivs = true;
 		}
+		if (!snap.active) g_s.civEdit = false;
 		if (!justClosed) g_s.game = std::move(snap);
 		ApplyPredicted(g_s.game, g_s.predicted);
 		ApplySeatDisplay(g_s.game);
 		ApplySaveLook(g_s.game);
 		RedirectReplacedRaces(g_s.game);
+		ResetDisallowedRaces(g_s.game);
 		if (!g_s.game.active && g_s.dropKind <= kDropPreset) g_s.dropOpen = false;
 		if (g_s.dropOpen && g_s.dropKind == kDropSlot && (g_flow.arrivingIds[g_s.dropIndex & 7] || g_s.game.slots[g_s.dropIndex & 7].joining)) {
 			g_s.dropOpen = false;
@@ -370,7 +378,6 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 	g_s.hits = std::move(r.hits);
 	g_s.syncGeom = g_syncGeomOut;
 	g_s.createModsGeom = g_createModsGeomOut;
-	g_s.createCivGeom = g_createCivGeomOut;
 	const bool overlay = OverlayActive(st);
 	g_s.pickGeom = g_pickGeomOut;
 	g_s.optGeom = overlay || !st.game.active ? ListGeom() : g_optGeomOut;

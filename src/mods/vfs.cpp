@@ -841,8 +841,7 @@ void *__cdecl OpenImpl(const char *path, unsigned mode, void *err)
 			std::string disk = dir + "\\" + rel;
 			std::replace(disk.begin(), disk.end(), '/', '\\');
 			if (!DiskFileExists(disk)) continue;
-			const size_t slash = dir.find_last_of("\\/");
-			const std::string alt = "mods/" + (slash == std::string::npos ? dir : dir.substr(slash + 1)) + "/" + rel;
+			const std::string alt = "mods/" + ModsDirVfsName(dir) + "/" + rel;
 			if ((f = g_origOpen(alt.c_str(), mode, err)) != nullptr) {
 				opened = alt;
 				std::lock_guard<std::mutex> lock(g_lock);

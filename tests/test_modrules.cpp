@@ -78,6 +78,9 @@ static void Classification()
 	CHECK(IsGameplayPath("options/o.json"));
 	CHECK(IsGameplayPath("randommap/a.ini"));
 	CHECK(IsGameplayPath("randommapsettlements/a.ini"));
+	CHECK(IsGameplayPath("rulesets/cm/data/const.ini"));
+	CHECK(IsGameplayPath("rulesets/readme.png"));
+	CHECK(!IsGameplayPath("ruleset/x"));
 	CHECK(IsGameplayPath("packs/x.bfhp"));
 	CHECK(!IsGameplayPath("packs/x.txt"));
 	CHECK(IsGameplayPath("units/rhastatus.xml"));
@@ -115,7 +118,25 @@ static void Fingerprint()
 	CHECK(three != two);
 	CHECK_EQ(RulesFingerprint({{"mod-a", "aaaa"}, {"mod-b", ""}}), "");
 	CHECK_EQ(RulesFingerprint({{"mod-a", ""}}), "");
-	CHECK_EQ(empty, HashString(std::string(kGameId) + "|sim:3|esq:2|"));
+	CHECK_EQ(empty, HashString(std::string(kGameId) + "|sim:3|esq:3|"));
+}
+
+static void RulesetParts()
+{
+	const std::string root = RulesFingerprint({{"mod-a", "aaaa"}});
+	const std::string cm = RulesFingerprint({{"mod-a", "aaaa"}, {"mod-a", "cccc", "cm"}});
+	const std::string mci = RulesFingerprint({{"mod-a", "aaaa"}, {"mod-a", "dddd", "mci"}});
+	CHECK(cm != root);
+	CHECK(cm != mci);
+	CHECK_EQ(cm, RulesFingerprint({{"mod-a", "cccc", "cm"}, {"mod-a", "aaaa"}}));
+	CHECK(cm != RulesFingerprint({{"mod-a", "aaaa"}, {"mod-a", "cccd", "cm"}}));
+	// The same hash under another layer id is another ruleset.
+	CHECK(cm != RulesFingerprint({{"mod-a", "aaaa"}, {"mod-a", "cccc", "mci"}}));
+	// A layer on its own: a package whose root has no gameplay files.
+	CHECK(RulesFingerprint({{"mod-a", "cccc", "cm"}}) != RulesFingerprint({}));
+	CHECK_EQ(RulesFingerprint({{"mod-a", "", "cm"}}), "");
+	// A package that carries rulesets but mounts none hashes like one without them.
+	CHECK_EQ(RulesFingerprint({{"mod-a", "aaaa", ""}}), root);
 }
 
 int main()
@@ -126,5 +147,6 @@ int main()
 	Extensions();
 	Classification();
 	Fingerprint();
+	RulesetParts();
 	return test::Summary("modrules");
 }

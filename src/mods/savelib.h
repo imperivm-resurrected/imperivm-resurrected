@@ -16,6 +16,8 @@ struct SaveMod {
 	std::string hash;
 	int kind = -1;
 	bool oldGameplay = false;
+	// The ruleset of this package the game was saved with and its gameplay hash. Empty if it used the package's root alone.
+	std::string ruleset, rulesetHash;
 };
 
 struct SaveRec {
