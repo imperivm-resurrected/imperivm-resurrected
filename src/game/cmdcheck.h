@@ -13,6 +13,9 @@ std::string GameStringAt(const void *at);
 std::vector<GameCommand> GameCommands();
 
 // The gold and food a command costs in the game's command table (the costgold and costfood of its XML), or false if there is no such command.
+// The checksum of the names of the commands (the game computes it when it reads data/commands/, and meant it to check that players have
+// the same set), or 0 if there is no command table.
+unsigned GameCommandsChecksum();
 // How many commands the game's command table holds.
 int GameCommandCount();
 bool GameCommandCost(const char *name, int *gold, int *food);

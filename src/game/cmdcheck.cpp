@@ -12,6 +12,7 @@
 namespace {
 
 typedef char *(__fastcall *FindDesc_t)(void *registry, void *edx, const char *name);
+typedef unsigned(__fastcall *ChecksumFn_t)(void *registry);
 typedef int(__fastcall *IsCommandEnabled_t)(void *obj, void *edx, int index);
 typedef bool(__fastcall *RunPlayerVerifier_t)(void *desc, void *edx, int player, void *out);
 typedef bool(__fastcall *RunGroupVerifier_t)(void *desc, void *edx, void *list, void *out);
@@ -135,6 +136,14 @@ std::vector<GameCommand> GameCommands()
 		out.push_back({GameStringAt(*it + kDescName), GameStringAt(*it + kDescMethod), GameStringAt(*it + kDescParam)});
 	}
 	return out;
+}
+
+unsigned GameCommandsChecksum()
+{
+	void *registry = Registry();
+	if (!registry) return 0;
+	void **vt = *reinterpret_cast<void ***>(registry);
+	return reinterpret_cast<ChecksumFn_t>(vt[1])(registry);
 }
 
 int GameCommandCount()
