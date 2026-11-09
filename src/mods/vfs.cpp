@@ -18,6 +18,7 @@
 #include "core/uiport.h"
 #include "core/sha256.h"
 #include "mods/lang.h"
+#include "mods/layerdiag.h"
 #include "mods/menuart.h"
 #include "core/log.h"
 #include "mods/mods.h"
@@ -755,6 +756,58 @@ void *OpenPackArchive(const std::string &rel, unsigned mode, void *err)
 	return f;
 }
 
+// --- the files of the mounted ruleset layer that the engine asks for (mods/layerdiag.h) ------------------------------------------------
+LayerDiag g_layerDiag;
+std::string g_layerDiskDir, g_layerLabel;
+std::atomic<bool> g_layerDiagOn{false};
+
+typedef unsigned(__fastcall *CFileSize_t)(void *self, void *edx);
+const unsigned kSizeUnknown = 0xffffffffu;
+
+// The length of an open game file (slot 8 of every CFile: VfsOpenCompressedAware asks it of whatever the VFS returns).
+unsigned OpenFileSize(void *file)
+{
+	__try {
+		void **vtable = *reinterpret_cast<void ***>(file);
+		return reinterpret_cast<CFileSize_t>(vtable[0x20 / 4])(file, nullptr);
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return kSizeUnknown;
+	}
+}
+
+// rel is a name the engine asked for. The first time it is a file of the layer, say whether what the engine got is the layer's file: it
+// has the same length. A different one means the game's own file (or another mod's) was served instead.
+void NoteLayerFile(const std::string &rel, void *file, const std::string &opened)
+{
+	std::string layerPath, diskDir;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		layerPath = g_layerDiag.Opened(rel);
+		diskDir = g_layerDiskDir;
+	}
+	if (layerPath.empty()) return;
+	if (!file) {
+		LogW("content", "layer file NOT served: the engine asked for %s (the layer has %s) and the open failed", rel.c_str(), layerPath.c_str());
+		return;
+	}
+	std::string disk = diskDir + "\\" + layerPath;
+	std::replace(disk.begin(), disk.end(), '/', '\\');
+	WIN32_FILE_ATTRIBUTE_DATA a = {};
+	const bool haveDisk = GetFileAttributesExA(disk.c_str(), GetFileExInfoStandard, &a) && a.nFileSizeHigh == 0;
+	const unsigned got = OpenFileSize(file);
+	if (!haveDisk || got == kSizeUnknown) {
+		LogD("content", "layer file opened: %s (the layer has %s; lengths not compared)", rel.c_str(), layerPath.c_str());
+	}
+	else if (got == a.nFileSizeLow) {
+		LogD("content", "layer file served: %s (%u bytes, opened as %s)", layerPath.c_str(), got, opened.c_str());
+	}
+	else {
+		LogW("content", "layer file NOT served: the engine asked for %s and got %u bytes (opened as %s); the layer's %s has %lu", rel.c_str(), got,
+			opened.c_str(), layerPath.c_str(), static_cast<unsigned long>(a.nFileSizeLow));
+	}
+}
+
 std::atomic<long long> g_openTicks{0}, g_existTicks{0};
 std::atomic<int> g_openCount{0};
 
@@ -830,6 +883,12 @@ void *__cdecl OpenImpl(const char *path, unsigned mode, void *err)
 		const std::string alt = LangLooseFile(rel);
 		if (!alt.empty() && (f = g_origOpen(alt.c_str(), mode, err)) != nullptr) opened = alt;
 	}
+	if (!f && reading) {
+		// gameres/icons/x.bmp of a mod: the game's own file would win, because the loose layers only see the volume's real path (ui/icons/x.bmp)
+		if (const std::string *volume = ModsVolumeFile(rel)) {
+			if ((f = g_origOpen(volume->c_str(), mode, err)) != nullptr) opened = *volume;
+		}
+	}
 	if (!f && PackArchive(rel, mode) && (f = OpenPackArchive(rel, mode, err)) != nullptr) opened = "imperivm-resurrected/_cache/archives/" + rel;
 	if (!f) f = g_origOpen(path, mode, err);
 	if (!f && reading) {
@@ -850,6 +909,7 @@ void *__cdecl OpenImpl(const char *path, unsigned mode, void *err)
 			}
 		}
 	}
+	if (reading && g_layerDiagOn.load()) NoteLayerFile(rel, f, opened);
 	if (f && reading && rel == "currentlang/credits.txt") f = OpenMergedCredits(f, opened.c_str(), mode, err);
 	if (reading && rel == "currentlang/game.loc.xml") f = OpenMergedLoc(f, opened.c_str(), mode, err);
 	if (reading && PatchHas(rel)) f = OpenPatched(f, rel, opened.c_str(), mode, err);
@@ -1009,6 +1069,37 @@ void VfsResetPatched(const std::string &rel)
 	std::lock_guard<std::recursive_mutex> lock(g_patchLock);
 	PatchRebuild();
 	g_patchedPath.erase(rel);
+}
+
+void VfsLayerDiagReset(const std::string &label, const std::string &diskDir, const std::vector<std::string> &files)
+{
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		g_layerDiag.Reset(files);
+		g_layerDiskDir = diskDir;
+		g_layerLabel = label;
+		g_layerDiagOn = !files.empty();
+	}
+	if (!files.empty()) LogI("content", "ruleset %s: %u loose files to watch; the log says which ones the engine opens", label.c_str(), static_cast<unsigned>(files.size()));
+}
+
+void VfsLayerDiagSummary(const char *when)
+{
+	if (!g_layerDiagOn.load()) return;
+	std::vector<std::string> left;
+	std::string label;
+	size_t total, opened;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		left = g_layerDiag.NotOpened();
+		label = g_layerLabel;
+		total = g_layerDiag.Total();
+		opened = g_layerDiag.OpenedCount();
+	}
+	LogI("content", "layer files (%s): %u of %u of ruleset %s opened by the engine so far", when, static_cast<unsigned>(opened), static_cast<unsigned>(total),
+		label.c_str());
+	for (size_t i = 0; i < left.size() && i < 40; i++) LogI("content", "  not opened yet: %s", left[i].c_str());
+	if (left.size() > 40) LogI("content", "  and %u more", static_cast<unsigned>(left.size() - 40));
 }
 
 // The same for every file: after the patches of another ruleset are mounted, any of them may serve other bytes.

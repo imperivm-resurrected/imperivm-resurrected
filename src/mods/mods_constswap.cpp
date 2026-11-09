@@ -170,6 +170,8 @@ bool ModsSwapMountedRuleset(const ModRuleset &wanted)
 			now = g_mount.profile;
 		}
 		ApplyHiddenFiles(now);
+		PublishVolumeFiles(now);
+		PublishLayerDiag(now);
 	}
 	for (void (*hook)() : SwapHooks()) hook();
 	std::vector<std::string> files;

@@ -18,6 +18,12 @@ void InstallHiddenHooks();
 
 bool VfsReadUnpatched(const std::string &rel, std::string &out);
 
+// The loose files of the mounted ruleset layer, to tell which ones the engine really opens (see mods/layerdiag.h). label names the ruleset,
+// diskDir is its folder. An empty list switches the account off.
+void VfsLayerDiagReset(const std::string &label, const std::string &diskDir, const std::vector<std::string> &files);
+// Logs how many of them the engine has opened so far and which it has not (when says where in the game this is).
+void VfsLayerDiagSummary(const char *when);
+
 // Rebuilds the patches and forgets every patched copy.
 void VfsResetPatchedAll();
 

@@ -410,3 +410,6 @@ std::vector<std::string> ModsProblemsFrom(const ModProfile &p, const std::map<st
 void ModsReadPatchedFiles();
 void ModsChooseFiles(ModProfile &p, const std::string &useFolder, const std::string &overFolder);
 const std::string *ModsChosenFile(const std::string &rel);
+// The file of a mounted pack (or of its ruleset) that answers a name with a translated volume in front ("gameres/icons/x.bmp"; see
+// mods/volumes.h), as the VFS name that opens it ("mods/<pack>/.../gameres/icons/x.bmp"), or nullptr. rel is lowercase.
+const std::string *ModsVolumeFile(const std::string &rel);

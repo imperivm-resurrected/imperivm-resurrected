@@ -8,6 +8,7 @@
 #include "game/noteicons.h"
 #include "game/zoomview.h"
 #include "core/crashlog.h"
+#include "mods/vfs.h"
 #include "app/overlay.h"
 #include "i18n/tr.h"
 
@@ -699,7 +700,7 @@ void SaveSnapped(int ox, int oy)
 
 int __fastcall HookGameUpdate(void *game)
 {
-	CrashLogLoadingEnd();
+	if (CrashLogLoadingEnd()) VfsLayerDiagSummary("the game has loaded");
 	g_updateTicks += ZoomFogGameThreadTick();
 	QuickIconsGameThreadTick();
 	NoteIconsGameTick();

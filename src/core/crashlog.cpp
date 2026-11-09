@@ -158,11 +158,12 @@ void CrashLogLoadingBegin()
 	g_loadingSince = GetTickCount() | 1;
 }
 
-void CrashLogLoadingEnd()
+bool CrashLogLoadingEnd()
 {
 	const DWORD since = g_loadingSince.exchange(0);
-	if (!since) return;
+	if (!since) return false;
 	LogI("game", "game load took %.1f s", static_cast<double>(GetTickCount() - since) / 1000.0);
+	return true;
 }
 
 void InstallCrashLog()
