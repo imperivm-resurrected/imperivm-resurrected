@@ -21,6 +21,19 @@ bool ConstSwapLayerOk(const std::vector<std::string> &files)
 	return true;
 }
 
+bool FullSwapLayerOk(const std::vector<std::string> &files)
+{
+	static const char kPrefix[] = "patches/data/";
+	for (const std::string &raw : files) {
+		const std::string f = Normal(raw);
+		if (f.compare(0, sizeof(kPrefix) - 1, kPrefix) != 0 || f.size() == sizeof(kPrefix) - 1) return false;
+		const size_t dot = f.find_last_of('.');
+		const std::string ext = dot == std::string::npos ? std::string() : f.substr(dot);
+		if (ext != ".xml" && ext != ".ini" && ext != ".vs") return false;
+	}
+	return true;
+}
+
 bool ConstIniHasGamePlay(const std::string &text)
 {
 	size_t at = text.compare(0, 3, "\xEF\xBB\xBF") == 0 ? 3 : 0;
@@ -40,4 +53,11 @@ ConstSwap ConstSwapDecide(bool sameRuleset, const std::vector<std::string> &from
 {
 	if (sameRuleset) return ConstSwap::kNothing;
 	return ConstSwapLayerOk(from) && ConstSwapLayerOk(to) ? ConstSwap::kReload : ConstSwap::kRestart;
+}
+
+ConstSwap SwapDecide(bool sameRuleset, bool full, const std::vector<std::string> &from, const std::vector<std::string> &to)
+{
+	const ConstSwap simple = ConstSwapDecide(sameRuleset, from, to);
+	if (simple != ConstSwap::kRestart) return simple;
+	return full && FullSwapLayerOk(from) && FullSwapLayerOk(to) ? ConstSwap::kFull : ConstSwap::kRestart;
 }

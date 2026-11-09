@@ -78,6 +78,35 @@ void TheTextNeedsAGamePlaySection()
 	CHECK(!ConstIniHasGamePlay("<html>not found</html>"));
 }
 
+void FullSwapNeedsOnlyPatchesOfData()
+{
+	const Files commands = {"patches/data/commands/rbarracks.xml"};
+	const Files both = {"patches/data/const.ini", "patches/data/commands/RBarracks.xml"};
+	// The example pack of the SDK: two rulesets that differ in a command and in CONST.INI.
+	CHECK(SwapDecide(false, true, both, both) == ConstSwap::kFull);
+	CHECK(SwapDecide(false, true, kConst, both) == ConstSwap::kFull);
+	CHECK(SwapDecide(false, true, kNone, commands) == ConstSwap::kFull);
+	CHECK(SwapDecide(false, true, {"patches/data/classes/rhastatus.sc.xml", "patches/data/ai/main.vs"}, commands) == ConstSwap::kFull);
+	// Without the flag it is the restart, as before.
+	CHECK(SwapDecide(false, false, both, both) == ConstSwap::kRestart);
+	CHECK(SwapDecide(false, false, kConst, both) == ConstSwap::kRestart);
+	// The const-only path is kept when it applies, with the flag or not.
+	CHECK(SwapDecide(false, true, kConst, kConst) == ConstSwap::kReload);
+	CHECK(SwapDecide(false, false, kConst, kNone) == ConstSwap::kReload);
+	CHECK(SwapDecide(true, true, both, commands) == ConstSwap::kNothing);
+	// Anything that is not a patch of data/ restarts, whichever side has it.
+	const Files bad[] = {{"patches/data/const.ini", "hidden.txt"}, {"rle.mmp.tail"}, {"civs/gaul.json"}, {"specials/x.json"}, {"modes/fast.json"},
+		{"options/speed.json"}, {"events/ongamestart.vs"}, {"packs/units.pak"}, {"data/commands/rbarracks.xml"}, {"patches/units/rhastatus.ent.xml"},
+		{"patches/currentlang/game.loc.xml"}, {"patches/data/readme.txt"}, {"patches/data/"}, {"local/spanish/game.pak"}, {"rules/game.json"}};
+	for (const Files &b : bad) {
+		CHECK(SwapDecide(false, true, both, b) == ConstSwap::kRestart);
+		CHECK(SwapDecide(false, true, b, both) == ConstSwap::kRestart);
+		CHECK(!FullSwapLayerOk(b));
+	}
+	CHECK(FullSwapLayerOk({}));
+	CHECK(FullSwapLayerOk({"Patches\\Data\\Commands\\RBarracks.XML"}));
+}
+
 }
 
 int main()
@@ -87,5 +116,6 @@ int main()
 	AnythingElseRestarts();
 	OnlyThePatchOfConstIniCounts();
 	TheTextNeedsAGamePlaySection();
+	FullSwapNeedsOnlyPatchesOfData();
 	return test::Summary("constswap");
 }
