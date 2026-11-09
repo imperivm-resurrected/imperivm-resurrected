@@ -87,6 +87,14 @@ Things to know when you use it:
 
 Example: [`ruleset-const-example`](examples/ruleset-const-example).
 
+### Experimental: switching rulesets made of patches (`FullHotReload`)
+
+**Experimental, off by default, and it can still make the game restart by itself.** With `[Mods] FullHotReload=1` in `imperivm-mod.ini`, the skirmish room also switches without a restart between two rulesets whose files are **all patches to `data\`** (`patches\data\...` of `.xml`, `.ini` and `.vs` files: class and command XML, `items.xml`, `bonus.xml`, `AI.INI`, `CONST.INI`...). The game reads the classes, commands, skills and specials once, when it starts; the DLL makes it free those tables and read them again when the next match starts (about the time the first match of a session takes to load, 2 to 4 seconds), and sets back the values the game had looked up once.
+
+What still restarts, as without the flag: a ruleset with anything that is not a patch of `data\` (`.pak` files, loose files, `hidden.txt`, `rle.mmp.tail`, civilizations, specials, modes, options, events, `rules\`, translations, patches to `units\`, `buildings\` or `currentlang\`); *Create room* (a multiplayer match does not run the reload: it restarts the game when it starts if the rules had been changed in place); and loading a saved game. If the reload fails at any step the game restarts by itself with the rules you chose; the log (`game: full reload`) says which step. The line `full reload (after LoadGameData): ... trainRHastatus costgold = N` shows the cost the game holds for the Roman hastatus, which tells whether the new rules are live.
+
+What it does not redo: the content manager, civilizations, specials, modes, options and the other things the DLL builds from the mounted folders (they cannot differ between two rulesets that pass the test above).
+
 ## Limits
 
 - A profile can use only one `rle.mmp.tail`. The one in the ruleset that is mounted counts as its package's, so a package cannot have a tail in its root and in a ruleset; two rulesets can each have theirs, because only one is mounted.
