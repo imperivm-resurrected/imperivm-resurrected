@@ -63,6 +63,21 @@ void OnlyThePatchOfConstIniCounts()
 	CHECK(ConstSwapLayerOk(kConst));
 }
 
+void TheTextNeedsAGamePlaySection()
+{
+	CHECK(ConstIniHasGamePlay("[GamePlay]\r\nDamageAmplify = 200\r\n"));
+	CHECK(ConstIniHasGamePlay("; comment\r\n[Other]\r\nA=1\r\n\r\n  [gameplay]  \r\nB=2"));
+	CHECK(ConstIniHasGamePlay("\xEF\xBB\xBF[GAMEPLAY]\nA=1\n"));
+	CHECK(ConstIniHasGamePlay("[GamePlay]"));
+	CHECK(!ConstIniHasGamePlay(""));
+	CHECK(!ConstIniHasGamePlay("\r\n\r\n"));
+	CHECK(!ConstIniHasGamePlay("; [GamePlay]\r\nA=1"));
+	CHECK(!ConstIniHasGamePlay("[GamePlayX]\nA=1"));
+	CHECK(!ConstIniHasGamePlay("GamePlay\nA=1"));
+	CHECK(!ConstIniHasGamePlay("A=1 [GamePlay]"));
+	CHECK(!ConstIniHasGamePlay("<html>not found</html>"));
+}
+
 }
 
 int main()
@@ -71,5 +86,6 @@ int main()
 	RulesetsThatDifferOnlyInConstIniReload();
 	AnythingElseRestarts();
 	OnlyThePatchOfConstIniCounts();
+	TheTextNeedsAGamePlaySection();
 	return test::Summary("constswap");
 }

@@ -52,6 +52,7 @@ inline constexpr uintptr_t kGetScriptData = 0x0069f950;
 inline constexpr uintptr_t kRunScriptByName = 0x006a0360;
 inline constexpr uintptr_t kStartScriptByName = 0x006a07e0;
 inline constexpr uintptr_t kLoadScriptFile = 0x006a2110;
+inline constexpr uintptr_t kReloadConstIni = 0x006a4120;
 inline constexpr uintptr_t kScriptEngine = 0x0082a500;
 inline constexpr uintptr_t kCurScriptId = 0x0082e5d8;
 inline constexpr uintptr_t kRegistry = 0x009bdb00;

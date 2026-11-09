@@ -4,39 +4,48 @@
 #include <windows.h>
 
 #include <cstdint>
+#include <string>
 
 #include "MinHook.h"
 #include "hooks/hookcount.h"
 #include "addr/constcache.h"
 #include "addr/engine.h"
+#include "addr/script.h"
 #include "addr/state.h"
 #include "addr/world.h"
 #include "core/config.h"
+#include "core/crashlog.h"
 #include "core/log.h"
 #include "core/uiport.h"
 #include "game/constreload.h"
 #include "i18n/tr.h"
+#include "mods/constswap.h"
 #include "mods/mods.h"
 #include "mods/vfs.h"
 
 // The game reads data/const.ini into a table once per process (DAT_00a877b4) and, besides, copies some of its values into globals
 // the first time each is needed, guarded by a flag or a -1 that nothing sets back. A new table alone leaves those copies stale
-// ("half applied" constants), so loading another ruleset's const.ini takes three steps, before the match is created:
-//   1. serve the new bytes (the DLL's patched copy of the file is made again),
-//   2. build a complete new table and put it in place of the old one,
+// ("half applied" constants), so loading another ruleset's const.ini takes these steps, before the match is created:
+//   1. serve the new bytes (the DLL's patched copy of the file is made again) and check they are a usable const.ini,
+//   2. call the game's own ReloadConstIni (Clear + Load on the table it already has) and check the table is not empty,
 //   3. set every "already copied" guard back, so each copy is made again the next time it is needed.
 // It runs at the start of LoadGameData: skirmish, multiplayer, loaded games and restarts all pass there, and nothing of the match
-// exists yet.
+// exists yet. Every call into the game is inside a __try: a fault there leaves the old rules and never ends the game.
 namespace {
-typedef void *(__cdecl *OperatorNew_t)(size_t size);
-typedef void *(__fastcall *HashIniCtor_t)(void *self, void *edx, unsigned sectionSlots, unsigned keySlots, void *pool, unsigned ownsPool);
-typedef const char *(__fastcall *HashIniLoad_t)(void *self, void *edx, const char *path);
-typedef const char *(__fastcall *HashIniFindValue_t)(void *self, void *edx, const char *section);
+typedef int(__cdecl *ReloadConstIni_t)();
 typedef const char *(__fastcall *HashIniGetInt_t)(void *self, void *edx, const char *section, const char *key, int *out);
 typedef void *(__fastcall *LoadGameData_t)(void *self, void *edx);
 
 LoadGameData_t g_origLoadGameData = nullptr;
 
+enum class Reload {
+	kDone,    // the table holds the new file and the guards are set back
+	kRefused, // nothing of the game was changed
+	kBroken   // the game's table may be empty or half made: it has to be loaded again from the previous file
+};
+
+// The guards are 32-bit words: the game's own code reads and writes them as 32-bit words (the exception-unwinding thunks of the
+// flags do "mov eax,[flag] ... mov [flag],eax"), and nothing refers to the three bytes after the flags that Ghidra types as one byte.
 volatile unsigned *Word(uintptr_t address)
 {
 	return reinterpret_cast<volatile unsigned *>(address);
@@ -47,61 +56,77 @@ void *&Table()
 	return *reinterpret_cast<void **>(addr::kConstIni);
 }
 
-int GamePlayInt(void *table, const char *key)
+// CHashINI::GetInt(section, key, &value) is a thiscall with three stack arguments; it returns 0 when it found the key.
+bool GamePlayInt(void *table, const char *key, int *value)
 {
-	int value = 0;
-	if (table) reinterpret_cast<HashIniGetInt_t>(addr::kHashIniGetInt)(table, nullptr, "GamePlay", key, &value);
-	return value;
+	*value = 0;
+	return table && reinterpret_cast<HashIniGetInt_t>(addr::kHashIniGetInt)(table, nullptr, "GamePlay", key, value) == nullptr;
 }
 
-// The flags use a few low bits. A word that holds anything else is not the guard this code expects (another build of the game):
-// nothing is written.
+// Every const.ini of the game has these; a table that has none of them is empty or did not load.
+bool TableHasConstants(void *table)
+{
+	static const char *const kKeys[] = {"DamageAmplify", "MinPopulation", "ProductionInterval"};
+	for (const char *key : kKeys) {
+		int value = 0;
+		if (GamePlayInt(table, key, &value)) return true;
+	}
+	return false;
+}
+
+// The flags use a few low bits. A word that holds anything else is not the guard this code expects (another build of the game).
 bool GuardsLookRight()
 {
-	if (!Table() || !*reinterpret_cast<void **>(addr::kPtrPool)) {
-		LogW("game", "const reload: the game's table or its allocator are not there");
+	if (!Table()) {
+		LogW("game", "const reload: the game has no table of constants yet");
 		return false;
 	}
 	for (uintptr_t flag : addr::kConstFlagGuards) {
 		if (*Word(flag) > 0xff) {
-			LogW("game", "const reload: the word at %08x holds %08x, not a flag; the guards are not set back", static_cast<unsigned>(flag), *Word(flag));
+			LogW("game", "const reload: the word at %08x holds %08x, not a flag; nothing is changed", static_cast<unsigned>(flag), *Word(flag));
 			return false;
 		}
 	}
 	if (*Word(addr::kLoyaltyRadiusFlags) > 0xff) {
-		LogW("game", "const reload: the word at %08x holds %08x, not a flag; the guards are not set back", static_cast<unsigned>(addr::kLoyaltyRadiusFlags),
+		LogW("game", "const reload: the word at %08x holds %08x, not a flag; nothing is changed", static_cast<unsigned>(addr::kLoyaltyRadiusFlags),
 			*Word(addr::kLoyaltyRadiusFlags));
 		return false;
 	}
 	return true;
 }
 
-// A complete table of data/const.ini as the files serve it now, or nullptr. A failed attempt leaves the game's table as it was
-// (the half-built one is left behind: a few kilobytes, and only on a failure).
-void *BuildTable()
+// The update check (UpdateCheckThreadProc) reads the table once, early, from a thread of its own, and then ends. If it is somehow still
+// running, the table is not touched.
+bool UpdateCheckRunning()
 {
-	void *pool = *reinterpret_cast<void **>(addr::kPtrPool);
-	void *memory = reinterpret_cast<OperatorNew_t>(addr::kOperatorNew)(0x28);
-	if (!memory) {
-		LogE("game", "const reload: no memory for the new table");
-		return nullptr;
+	bool running = false;
+	g_crashLogQuiet++;
+	__try {
+		const HANDLE *info = *reinterpret_cast<HANDLE *const *>(addr::kUpdateCheckInfo);
+		running = info && *info && WaitForSingleObject(*info, 0) == WAIT_TIMEOUT;
 	}
-	// The same arguments the game gives it when it creates its table (LoadGameConfigFile).
-	void *table = reinterpret_cast<HashIniCtor_t>(addr::kHashIniCtor)(memory, nullptr, 0x20, 0x80, pool, 0);
-	if (!table) {
-		LogE("game", "const reload: the new table could not be created");
-		return nullptr;
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		running = false;
 	}
-	const char *error = reinterpret_cast<HashIniLoad_t>(addr::kHashIniLoad)(table, nullptr, "data/Const.ini");
-	if (error) {
-		LogE("game", "const reload: data/Const.ini could not be loaded");
-		return nullptr;
+	g_crashLogQuiet--;
+	return running;
+}
+
+// The file as the game will read it now has to be there and be a const.ini, before the game's table is cleared.
+bool FileIsUsable()
+{
+	VfsResetPatched("data/const.ini");
+	std::string text;
+	if (!VfsReadPatched("data/const.ini", text)) {
+		LogE("game", "const reload: data/const.ini cannot be read");
+		return false;
 	}
-	if (!reinterpret_cast<HashIniFindValue_t>(addr::kHashIniFindValue)(table, nullptr, "GamePlay")) {
-		LogE("game", "const reload: the new data/Const.ini has no [GamePlay] section");
-		return nullptr;
+	if (!ConstIniHasGamePlay(text)) {
+		LogE("game", "const reload: data/const.ini (%u bytes) has no [GamePlay] section", static_cast<unsigned>(text.size()));
+		return false;
 	}
-	return table;
+	LogI("game", "const reload: data/const.ini as served now: %u bytes", static_cast<unsigned>(text.size()));
+	return true;
 }
 
 // Sets the words to value and returns how many held something else (loaders that had already run).
@@ -119,49 +144,88 @@ unsigned SetWords(const uintptr_t *list, size_t count, unsigned value)
 
 void ResetGuards()
 {
+	const unsigned flagCount = sizeof(addr::kConstFlagGuards) / sizeof(addr::kConstFlagGuards[0]);
+	const unsigned sentinelCount = sizeof(addr::kConstSentinelGuards) / sizeof(addr::kConstSentinelGuards[0]);
+	const unsigned zeroCount = sizeof(addr::kConstZeroGuards) / sizeof(addr::kConstZeroGuards[0]);
 	const unsigned loaded = *Word(addr::kGameplayConstantsLoaded), amplify = *Word(addr::kDamageAmplify);
-	const unsigned flags = SetWords(addr::kConstFlagGuards, sizeof(addr::kConstFlagGuards) / sizeof(addr::kConstFlagGuards[0]), 0);
+	const unsigned flags = SetWords(addr::kConstFlagGuards, flagCount, 0);
 	const unsigned loyalty = *Word(addr::kLoyaltyRadiusFlags);
 	*Word(addr::kLoyaltyRadiusFlags) = loyalty & ~3u;
 	LogD("game", "const reload: %08x was %08x, now %08x", static_cast<unsigned>(addr::kLoyaltyRadiusFlags), loyalty, *Word(addr::kLoyaltyRadiusFlags));
 	LogI("game", "const reload: flags set back to 0: %u of %u had been set (g_bGameplayConstantsLoaded %u -> %u)", flags + ((loyalty & 3u) ? 1u : 0u),
-		static_cast<unsigned>(sizeof(addr::kConstFlagGuards) / sizeof(addr::kConstFlagGuards[0])) + 1u, loaded, *Word(addr::kGameplayConstantsLoaded));
-	const unsigned sentinels = SetWords(addr::kConstSentinelGuards, sizeof(addr::kConstSentinelGuards) / sizeof(addr::kConstSentinelGuards[0]), 0xffffffffu);
-	LogI("game", "const reload: sentinels set back to -1: %u of %u had been filled", sentinels,
-		static_cast<unsigned>(sizeof(addr::kConstSentinelGuards) / sizeof(addr::kConstSentinelGuards[0])));
-	const unsigned zeros = SetWords(addr::kConstZeroGuards, sizeof(addr::kConstZeroGuards) / sizeof(addr::kConstZeroGuards[0]), 0);
-	LogI("game", "const reload: ghost values set back to 0: %u of %u had been filled", zeros,
-		static_cast<unsigned>(sizeof(addr::kConstZeroGuards) / sizeof(addr::kConstZeroGuards[0])));
+		flagCount + 1u, loaded, *Word(addr::kGameplayConstantsLoaded));
+	LogI("game", "const reload: sentinels set back to -1: %u of %u had been filled", SetWords(addr::kConstSentinelGuards, sentinelCount, 0xffffffffu), sentinelCount);
+	LogI("game", "const reload: ghost values set back to 0: %u of %u had been filled", SetWords(addr::kConstZeroGuards, zeroCount, 0), zeroCount);
 	LogI("game", "const reload: the copy of DamageAmplify (%08x) still reads %d until the next settlement is created", static_cast<unsigned>(addr::kDamageAmplify),
 		static_cast<int>(amplify));
 }
 
-bool ReloadConst()
+// Steps 2 and 3. Only plain data in here, so the __try can protect it.
+Reload ReloadTable()
 {
-	if (!GuardsLookRight()) return false;
-	// Step 1: the next open of the file applies the patches of the ruleset mounted now.
-	VfsResetPatched("data/const.ini");
-	// Step 2: the old table is not freed. Another thread may still be reading it, and a failed load must never leave the game without one.
-	void *fresh = BuildTable();
-	if (!fresh) return false;
-	void *old = Table();
-	const int amplifyOld = GamePlayInt(old, "DamageAmplify"), amplifyNew = GamePlayInt(fresh, "DamageAmplify");
-	Table() = fresh;
-	LogI("game", "const reload: new table in place (DamageAmplify in the table %d -> %d)", amplifyOld, amplifyNew);
-	// Step 3.
-	ResetGuards();
-	return true;
+	Reload result = Reload::kBroken;
+	g_crashLogQuiet++;
+	__try {
+		int before = 0, after = 0;
+		GamePlayInt(Table(), "DamageAmplify", &before);
+		reinterpret_cast<ReloadConstIni_t>(addr::kReloadConstIni)();
+		if (TableHasConstants(Table())) {
+			GamePlayInt(Table(), "DamageAmplify", &after);
+			LogI("game", "const reload: table loaded again (DamageAmplify in the table %d -> %d)", before, after);
+			ResetGuards();
+			result = Reload::kDone;
+		}
+		else {
+			LogE("game", "const reload: the table has no constants after loading data/const.ini");
+		}
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		LogE("game", "const reload: the game faulted while loading data/const.ini");
+		result = Reload::kBroken;
+	}
+	g_crashLogQuiet--;
+	return result;
+}
+
+Reload ReloadConst()
+{
+	if (!GuardsLookRight()) return Reload::kRefused;
+	if (UpdateCheckRunning()) {
+		LogW("game", "const reload: the update check is still reading the table; nothing is changed");
+		return Reload::kRefused;
+	}
+	if (!FileIsUsable()) return Reload::kRefused;
+	return ReloadTable();
+}
+
+// After a failure the previous ruleset is mounted again (ModsConstReloadFailed); load its file into the table.
+void RestoreTable()
+{
+	bool restored = false;
+	g_crashLogQuiet++;
+	__try {
+		reinterpret_cast<ReloadConstIni_t>(addr::kReloadConstIni)();
+		restored = TableHasConstants(Table());
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		restored = false;
+	}
+	g_crashLogQuiet--;
+	if (restored) LogW("game", "const reload: the table was loaded again from the previous rules");
+	else LogE("game", "const reload: the table could not be restored; restart the game");
 }
 
 void *__fastcall HookLoadGameData(void *self, void *edx)
 {
 	if (ModsConstReloadPending()) {
-		if (ReloadConst()) {
+		const Reload result = ReloadConst();
+		if (result == Reload::kDone) {
 			ModsConstReloadDone();
 		}
 		else {
 			LogE("game", "const reload: failed; the match uses the rules the game started with");
 			ModsConstReloadFailed();
+			if (result == Reload::kBroken) RestoreTable();
 			UiToast(Tr("The new rules could not be loaded without restarting. This game uses the previous ones."), true);
 		}
 	}

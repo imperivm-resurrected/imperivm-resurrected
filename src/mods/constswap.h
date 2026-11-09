@@ -18,4 +18,8 @@ enum class ConstSwap {
 // layer). Any other file, even one the two rulesets share, could differ or need the game to read it again, so it keeps the restart.
 bool ConstSwapLayerOk(const std::vector<std::string> &files);
 
+// Whether the text of a const.ini can be loaded: it has a [GamePlay] section (every constant the game reads is in it). A file that
+// cannot be read, or an empty one, would leave the game's table empty.
+bool ConstIniHasGamePlay(const std::string &text);
+
 ConstSwap ConstSwapDecide(bool sameRuleset, const std::vector<std::string> &from, const std::vector<std::string> &to);

@@ -1011,6 +1011,14 @@ void VfsResetPatched(const std::string &rel)
 	g_patchedPath.erase(rel);
 }
 
+bool VfsReadPatched(const std::string &rel, std::string &out)
+{
+	std::vector<char> data;
+	if (!ReadGameFile(rel.c_str(), 1, data)) return false;
+	out.assign(data.begin(), data.end());
+	return true;
+}
+
 bool VfsReadUnpatched(const std::string &rel, std::string &out)
 {
 	std::vector<char> data;
