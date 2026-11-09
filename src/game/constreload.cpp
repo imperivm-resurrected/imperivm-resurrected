@@ -49,6 +49,8 @@ typedef void *(__fastcall *FindClass_t)(void *registry, void *edx, const char *n
 
 LoadGameData_t g_origLoadGameData = nullptr;
 
+const unsigned kDecorTypes = 256;
+
 enum class Reload {
 	kDone,    // the table holds the new file and the guards are set back
 	kRefused, // nothing of the game was changed
@@ -255,6 +257,26 @@ void ResetClassCaches()
 		flags, flagCount);
 }
 
+// Shutdown freed the entities (ClearEntityCache) but the game keeps pointers to some of them: the array of decor entities that the passability
+// grid and the map view read (g_decorEntities, filled by LoadDecorsIni), and the marks that say "the decorations were read for this season".
+// The first match of a process reads decors.ini in CreateWorldCore only when the season is not the one in DAT_00996ffc; the values of a
+// new process are 0 everywhere, so that is what they are set to.
+void ResetEntityCaches()
+{
+	void **decors = reinterpret_cast<void **>(addr::kDecorEntities);
+	unsigned decorCount = 0;
+	for (unsigned i = 0; i < kDecorTypes; i++) {
+		if (decors[i]) decorCount++;
+		decors[i] = nullptr;
+	}
+	const unsigned loaded = *Word(addr::kDecorsLoaded), loadedSeason = *Word(addr::kDecorsLoadedSeason), season = *Word(addr::kEntityCacheSeason);
+	*Word(addr::kDecorsLoaded) = 0;
+	*Word(addr::kDecorsLoadedSeason) = 0;
+	*Word(addr::kEntityCacheSeason) = 0;
+	LogI("game", "full reload: decor entities set back: %u of %u were set; decors.ini marks (loaded %u, season %u) and the entity cache season (%u) set to 0",
+		decorCount, kDecorTypes, loaded, loadedSeason, season);
+}
+
 // Makes the game free its data tables and make them again. Only plain data in here, so the __try can protect it.
 bool RebuildGameData(DWORD *shutdownMs, DWORD *initMs)
 {
@@ -265,6 +287,7 @@ bool RebuildGameData(DWORD *shutdownMs, DWORD *initMs)
 		reinterpret_cast<GameDataSystems_t>(addr::kShutdownGameDataSystems)();
 		const DWORD freed = GetTickCount();
 		ResetClassCaches();
+		ResetEntityCaches();
 		reinterpret_cast<GameDataSystems_t>(addr::kInitGameDataSystems)();
 		*shutdownMs = freed - start;
 		*initMs = GetTickCount() - freed;
@@ -332,6 +355,23 @@ bool SafeHasClass(const char *name)
 	return found;
 }
 
+// The classes the game looks up by name and keeps (the pointers set back in ResetClassCaches). A missing one is only logged: a ruleset may
+// remove a class, and the game copes with a null pointer there.
+void CheckCachedClassNames()
+{
+	static const char *const kNames[] = {"Tower", "BaseTownhall", "BaseVillage", "Outpost", "BaseShipyard", "TTent", "Barrack", "RBarracks", "MBarracks",
+		"CBarracks", "IBarracks", "BBarracks", "EBarracks", "TBarracks", "Sentry", "Military", "BaseMage", "ShipBattle", "Animal", "Peaceful", "Peasant",
+		"PeasantAmbient", "RamUnit", "Gate", "LionF", "LionM", "Boar", "Bear", "Wolf", "HeroGrave", "DefItemHolder", "FormDir", "Trader", "CartTrader",
+		"Tradecar_Donkey", "Camel", "ShipS"};
+	unsigned found = 0, total = 0;
+	for (const char *name : kNames) {
+		total++;
+		if (SafeHasClass(name)) found++;
+		else LogW("game", "full reload: the class %s that the game looks up by name is not in the new registry", name);
+	}
+	LogI("game", "full reload (after LoadGameData): %u of %u classes the game looks up by name are in the new registry", found, total);
+}
+
 // The log itself says which rules are live: the cost the game's command table holds for the Roman hastatus.
 bool CommandSanity(const char *when)
 {
@@ -393,6 +433,7 @@ void CheckFullReload(const void *loadResult)
 	}
 	const bool hastatus = SafeHasClass("RHastatus"), barracks = SafeHasClass("RBarracks");
 	LogI("game", "full reload (after LoadGameData): class RHastatus %s, class RBarracks %s", hastatus ? "found" : "NOT FOUND", barracks ? "found" : "NOT FOUND");
+	CheckCachedClassNames();
 	if (!hastatus || !barracks) RestartNow("the class registry lacks the Roman classes");
 	else if (!CommandSanity("after LoadGameData")) RestartNow("the command table lacks the Roman commands");
 }
