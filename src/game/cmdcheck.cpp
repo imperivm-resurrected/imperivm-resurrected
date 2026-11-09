@@ -137,6 +137,24 @@ std::vector<GameCommand> GameCommands()
 	return out;
 }
 
+int GameCommandCount()
+{
+	char *registry = static_cast<char *>(Registry());
+	if (!registry) return 0;
+	char **begin = *reinterpret_cast<char ***>(registry - 0x10);
+	char **end = *reinterpret_cast<char ***>(registry - 0xc);
+	return begin && end >= begin && end - begin <= 20000 ? static_cast<int>(end - begin) : 0;
+}
+
+bool GameCommandCost(const char *name, int *gold, int *food)
+{
+	const char *desc = FindDesc(name);
+	if (!desc) return false;
+	*gold = *reinterpret_cast<const int *>(desc + 0x1e8);
+	*food = *reinterpret_cast<const int *>(desc + 0x1ec);
+	return true;
+}
+
 bool OffersCommand(unsigned handle, const char *command)
 {
 	const uint16_t index = static_cast<uint16_t>(handle & 0xffff);

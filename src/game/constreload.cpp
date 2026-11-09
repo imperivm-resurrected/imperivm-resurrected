@@ -8,6 +8,7 @@
 
 #include "MinHook.h"
 #include "hooks/hookcount.h"
+#include "addr/classcache.h"
 #include "addr/constcache.h"
 #include "addr/engine.h"
 #include "addr/script.h"
@@ -17,7 +18,10 @@
 #include "core/crashlog.h"
 #include "core/log.h"
 #include "core/uiport.h"
+#include "game/cmdcheck.h"
 #include "game/constreload.h"
+#include "game/scriptevents.h"
+#include "hooks/gamestate.h"
 #include "i18n/tr.h"
 #include "mods/constswap.h"
 #include "mods/mods.h"
@@ -31,10 +35,17 @@
 //   3. set every "already copied" guard back, so each copy is made again the next time it is needed.
 // It runs at the start of LoadGameData: skirmish, multiplayer, loaded games and restarts all pass there, and nothing of the match
 // exists yet. Every call into the game is inside a __try: a fault there leaves the old rules and never ends the game.
+//
+// FullHotReload (experimental) goes further, for rulesets made only of patches to data/ (classes, commands, items, AI...): the game
+// reads those once per process, in InitGameDataSystems, and frees them in ShutdownGameDataSystems, which it only runs at exit. Here both
+// run between two matches, at the same point, with the const.ini reload before them and the "already looked up" class pointers set back
+// after Shutdown. If anything fails after the game's data has been freed the game cannot go on: it restarts with the chosen rules.
 namespace {
 typedef int(__cdecl *ReloadConstIni_t)();
 typedef const char *(__fastcall *HashIniGetInt_t)(void *self, void *edx, const char *section, const char *key, int *out);
 typedef void *(__fastcall *LoadGameData_t)(void *self, void *edx);
+typedef void(__cdecl *GameDataSystems_t)();
+typedef void *(__fastcall *FindClass_t)(void *registry, void *edx, const char *name);
 
 LoadGameData_t g_origLoadGameData = nullptr;
 
@@ -215,9 +226,182 @@ void RestoreTable()
 	else LogE("game", "const reload: the table could not be restored; restart the game");
 }
 
+// ---- FullHotReload ----
+
+void *Pointer(uintptr_t address)
+{
+	return *reinterpret_cast<void *const *>(address);
+}
+
+// The class pointers that were looked up once and kept, and what says they were looked up (see addr/classcache.h).
+void ResetClassCaches()
+{
+	const unsigned pointerCount = sizeof(addr::kClassPointerCaches) / sizeof(addr::kClassPointerCaches[0]);
+	const unsigned flagCount = sizeof(addr::kClassFlagGuards) / sizeof(addr::kClassFlagGuards[0]);
+	unsigned pointers = 0, flags = 0;
+	for (uintptr_t p : addr::kClassPointerCaches) {
+		if (*Word(p)) pointers++;
+		*Word(p) = 0;
+	}
+	for (uintptr_t f : addr::kClassFlagGuards) {
+		if (*Word(f)) flags++;
+		*Word(f) = 0;
+	}
+	// BaseTownhall is kept by bit 2 of the word whose bits 0 and 1 guard the loyalty radii.
+	*Word(addr::kLoyaltyRadiusFlags) &= ~7u;
+	// CounterUnits.xml is read again by the next AI that starts.
+	*Word(addr::kCounterUnits + 4) = 0;
+	LogI("game", "full reload: class pointers set back: %u of %u were set, %u of %u lookup flags; CounterUnits will be read again", pointers, pointerCount,
+		flags, flagCount);
+}
+
+// Makes the game free its data tables and make them again. Only plain data in here, so the __try can protect it.
+bool RebuildGameData(DWORD *shutdownMs, DWORD *initMs)
+{
+	bool ok = false;
+	g_crashLogQuiet++;
+	__try {
+		const DWORD start = GetTickCount();
+		reinterpret_cast<GameDataSystems_t>(addr::kShutdownGameDataSystems)();
+		const DWORD freed = GetTickCount();
+		ResetClassCaches();
+		reinterpret_cast<GameDataSystems_t>(addr::kInitGameDataSystems)();
+		*shutdownMs = freed - start;
+		*initMs = GetTickCount() - freed;
+		ok = true;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		LogE("game", "full reload: the game faulted while freeing or making its data tables");
+		ok = false;
+	}
+	g_crashLogQuiet--;
+	return ok;
+}
+
+// What Init makes has to be there. The class registry is still empty: LoadGameData fills it, after this.
+bool TablesExist()
+{
+	const struct {
+		const char *name;
+		uintptr_t address;
+	} tables[] = {{"script class registry", addr::kRegistry}, {"script library", addr::kScriptLibrary}, {"command registry", addr::kCmdRegistry},
+		{"persistent class registry", addr::kPersistClassRegistry}, {"item definitions", addr::kBaseItemDefs}, {"custom item definitions", addr::kCustomItemDefs},
+		{"hero skills", addr::kHeroSkillTable}, {"unit specials", addr::kUnitSpecialTable}};
+	bool ok = true;
+	g_crashLogQuiet++;
+	__try {
+		for (const auto &t : tables) {
+			if (Pointer(t.address)) continue;
+			LogE("game", "full reload: the %s was not made", t.name);
+			ok = false;
+		}
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		ok = false;
+	}
+	g_crashLogQuiet--;
+	return ok;
+}
+
+bool SafeCommandCost(const char *name, int *gold, int *food)
+{
+	bool found = false;
+	g_crashLogQuiet++;
+	__try {
+		found = GameCommandCost(name, gold, food);
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		found = false;
+	}
+	g_crashLogQuiet--;
+	return found;
+}
+
+bool SafeHasClass(const char *name)
+{
+	bool found = false;
+	g_crashLogQuiet++;
+	__try {
+		void *registry = Pointer(addr::kRegistry);
+		found = registry && reinterpret_cast<FindClass_t>(addr::kFindClassByName)(registry, nullptr, name) != nullptr;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		found = false;
+	}
+	g_crashLogQuiet--;
+	return found;
+}
+
+// The log itself says which rules are live: the cost the game's command table holds for the Roman hastatus.
+bool CommandSanity(const char *when)
+{
+	int gold = 0, food = 0;
+	if (!SafeCommandCost("trainRHastatus", &gold, &food)) {
+		LogE("game", "full reload (%s): the command table has no trainRHastatus", when);
+		return false;
+	}
+	LogI("game", "full reload (%s): trainRHastatus costgold = %d, costfood = %d; %d commands in the table", when, gold, food, GameCommandCount());
+	return true;
+}
+
+void RestartNow(const char *why)
+{
+	LogE("game", "full reload: %s; the game restarts with the chosen rules", why);
+	ModsRestartGame();
+}
+
+// Before the match is created. Returns false if the game could not be made to use the mounted rules (the caller restarts).
+bool ReloadFull()
+{
+	const DWORD start = GetTickCount();
+	if (GameIsMultiplayer()) {
+		LogW("game", "full reload: not for a multiplayer game");
+		return false;
+	}
+	if (*reinterpret_cast<const int *>(addr::kLoadingSavedGame)) {
+		LogW("game", "full reload: not for a saved game (its scripts are already compiled in the library that would be freed)");
+		return false;
+	}
+	if (!GuardsLookRight()) return false;
+	if (UpdateCheckRunning()) {
+		LogW("game", "full reload: the update check is still reading the table");
+		return false;
+	}
+	LogI("game", "full reload: starting");
+	// The patched copies of every file are made again from the patches mounted now.
+	VfsResetPatchedAll();
+	if (!FileIsUsable()) return false;
+	const DWORD patched = GetTickCount();
+	if (ReloadTable() != Reload::kDone) return false;
+	const DWORD constDone = GetTickCount();
+	DWORD shutdownMs = 0, initMs = 0;
+	if (!RebuildGameData(&shutdownMs, &initMs)) return false;
+	if (!TablesExist()) return false;
+	// The event scripts were compiled in the library that is gone.
+	ScriptEventsReset();
+	LogI("game", "full reload: patches %lu ms, const.ini %lu ms, shutdown %lu ms, init %lu ms", static_cast<unsigned long>(patched - start),
+		static_cast<unsigned long>(constDone - patched), static_cast<unsigned long>(shutdownMs), static_cast<unsigned long>(initMs));
+	return CommandSanity("after Init");
+}
+
+// After LoadGameData has read the classes with the new tables.
+void CheckFullReload(const void *loadResult)
+{
+	if (loadResult) {
+		LogE("game", "full reload: LoadGameData reported an error after the data tables were made again");
+		return;
+	}
+	const bool hastatus = SafeHasClass("RHastatus"), barracks = SafeHasClass("RBarracks");
+	LogI("game", "full reload (after LoadGameData): class RHastatus %s, class RBarracks %s", hastatus ? "found" : "NOT FOUND", barracks ? "found" : "NOT FOUND");
+	if (!hastatus || !barracks) RestartNow("the class registry lacks the Roman classes");
+	else if (!CommandSanity("after LoadGameData")) RestartNow("the command table lacks the Roman commands");
+}
+
 void *__fastcall HookLoadGameData(void *self, void *edx)
 {
-	if (ModsConstReloadPending()) {
+	bool full = false;
+	switch (ModsReloadPlan()) {
+	case ModsReload::kConst: {
 		const Reload result = ReloadConst();
 		if (result == Reload::kDone) {
 			ModsConstReloadDone();
@@ -228,19 +412,38 @@ void *__fastcall HookLoadGameData(void *self, void *edx)
 			if (result == Reload::kBroken) RestoreTable();
 			UiToast(Tr("The new rules could not be loaded without restarting. This game uses the previous ones."), true);
 		}
+		break;
 	}
-	return g_origLoadGameData(self, edx);
+	case ModsReload::kFull:
+		if (ReloadFull()) {
+			ModsConstReloadDone();
+			full = true;
+		}
+		else {
+			RestartNow("it could not be done");
+		}
+		break;
+	case ModsReload::kRestart:
+		RestartNow("the mounted rules differ from the loaded ones in more than a hot reload can change");
+		break;
+	default:
+		break;
+	}
+	void *result = g_origLoadGameData(self, edx);
+	if (full) CheckFullReload(result);
+	return result;
 }
 }
 
 void InstallConstReload(bool knownExe)
 {
-	if (!knownExe || !GetConfig().constHotReload) return;
+	if (!knownExe || !(GetConfig().constHotReload || GetConfig().fullHotReload)) return;
 	if (HookCreate(reinterpret_cast<void *>(addr::kLoadGameData), reinterpret_cast<void *>(&HookLoadGameData), reinterpret_cast<void **>(&g_origLoadGameData)) != MH_OK ||
 		HookEnable(reinterpret_cast<void *>(addr::kLoadGameData)) != MH_OK) {
 		LogE("game", "const reload: could not hook LoadGameData; a ruleset change will still need a restart");
 		return;
 	}
-	ModsConstReloadSetReady(true);
-	LogI("game", "const reload: ready ([Mods] ConstHotReload=1)");
+	ModsConstReloadSetReady(GetConfig().constHotReload);
+	ModsFullReloadSetReady(GetConfig().fullHotReload);
+	LogI("game", "const reload: ready (ConstHotReload=%d, FullHotReload=%d)", GetConfig().constHotReload ? 1 : 0, GetConfig().fullHotReload ? 1 : 0);
 }

@@ -11,5 +11,10 @@ struct GameCommand {
 
 std::string GameStringAt(const void *at);
 std::vector<GameCommand> GameCommands();
+
+// The gold and food a command costs in the game's command table (the costgold and costfood of its XML), or false if there is no such command.
+// How many commands the game's command table holds.
+int GameCommandCount();
+bool GameCommandCost(const char *name, int *gold, int *food);
 bool CanExecCommand(unsigned handle, const char *command);
 bool OffersCommand(unsigned handle, const char *command);
