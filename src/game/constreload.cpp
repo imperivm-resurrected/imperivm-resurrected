@@ -50,6 +50,7 @@ typedef void *(__fastcall *FindClass_t)(void *registry, void *edx, const char *n
 LoadGameData_t g_origLoadGameData = nullptr;
 
 const unsigned kDecorTypes = 256;
+const unsigned kFeedbackTypes = 56; // 28 ids with two variants, ending where the guard word starts
 
 enum class Reload {
 	kDone,    // the table holds the new file and the guards are set back
@@ -230,6 +231,49 @@ void RestoreTable()
 
 // ---- FullHotReload ----
 
+struct MemoryCounters {
+	DWORD cb, pageFaults;
+	SIZE_T peakWorkingSet, workingSet, quotaPeakPaged, quotaPaged, quotaPeakNonPaged, quotaNonPaged, pagefile, peakPagefile;
+};
+typedef BOOL(WINAPI *GetProcessMemoryInfo_t)(HANDLE process, MemoryCounters *counters, DWORD size);
+
+SIZE_T g_lastCommit = 0;
+
+// How much memory the process holds and whether its heaps are consistent, to see what a reload leaks and whether something wrote into freed
+// memory (HeapValidate walks every block of every heap of the process: it takes a moment and says nothing about the game's own small-block heap).
+void LogProcessState(const char *when)
+{
+	g_crashLogQuiet++;
+	__try {
+		MemoryCounters counters = {};
+		counters.cb = sizeof(counters);
+		HMODULE kernel = GetModuleHandleA("kernel32.dll");
+		const GetProcessMemoryInfo_t info = kernel ? reinterpret_cast<GetProcessMemoryInfo_t>(GetProcAddress(kernel, "K32GetProcessMemoryInfo")) : nullptr;
+		const bool haveInfo = info && info(GetCurrentProcess(), &counters, sizeof(counters));
+		MEMORYSTATUSEX status = {};
+		status.dwLength = sizeof(status);
+		const bool haveStatus = GlobalMemoryStatusEx(&status) != 0;
+		HANDLE heaps[64];
+		const DWORD heapCount = GetProcessHeaps(64, heaps);
+		const DWORD start = GetTickCount();
+		unsigned corrupt = 0;
+		for (DWORD i = 0; i < heapCount && i < 64; i++) {
+			if (!HeapValidate(heaps[i], 0, nullptr)) corrupt++;
+		}
+		const SIZE_T commit = haveInfo ? counters.pagefile : 0;
+		LogI("game", "full reload (%s): process commit %u MB (%+d MB since the last line), working set %u MB, address space in use %u MB, %lu heaps, %u failed HeapValidate (%lu ms)",
+			when, static_cast<unsigned>(commit >> 20), static_cast<int>((static_cast<long long>(commit) - static_cast<long long>(g_lastCommit)) >> 20),
+			haveInfo ? static_cast<unsigned>(counters.workingSet >> 20) : 0u,
+			haveStatus ? static_cast<unsigned>((status.ullTotalVirtual - status.ullAvailVirtual) >> 20) : 0u, static_cast<unsigned long>(heapCount), corrupt,
+			static_cast<unsigned long>(GetTickCount() - start));
+		g_lastCommit = commit;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		LogE("game", "full reload (%s): the process state could not be read (the heap may be damaged)", when);
+	}
+	g_crashLogQuiet--;
+}
+
 void *Pointer(uintptr_t address)
 {
 	return *reinterpret_cast<void *const *>(address);
@@ -249,6 +293,15 @@ void ResetClassCaches()
 		if (*Word(f)) flags++;
 		*Word(f) = 0;
 	}
+	// The feedback classes are looked up once, for all ids, when the guard word is 0.
+	unsigned feedback = 0;
+	for (unsigned i = 0; i < kFeedbackTypes; i++) {
+		if (Word(addr::kFeedbackTypeCache)[i]) feedback++;
+		Word(addr::kFeedbackTypeCache)[i] = 0;
+	}
+	const unsigned feedbackInit = *Word(addr::kFeedbackTypeCacheInit);
+	*Word(addr::kFeedbackTypeCacheInit) = 0;
+	LogI("game", "full reload: feedback classes set back: %u of %u were set (looked up: %u)", feedback, kFeedbackTypes, feedbackInit);
 	// BaseTownhall is kept by bit 2 of the word whose bits 0 and 1 guard the loyalty radii.
 	*Word(addr::kLoyaltyRadiusFlags) &= ~7u;
 	// CounterUnits.xml is read again by the next AI that starts.
@@ -408,6 +461,7 @@ bool ReloadFull()
 		return false;
 	}
 	LogI("game", "full reload: starting");
+	LogProcessState("before");
 	// The patched copies of every file are made again from the patches mounted now.
 	VfsResetPatchedAll();
 	if (!FileIsUsable()) return false;
@@ -417,6 +471,7 @@ bool ReloadFull()
 	DWORD shutdownMs = 0, initMs = 0;
 	if (!RebuildGameData(&shutdownMs, &initMs)) return false;
 	if (!TablesExist()) return false;
+	LogProcessState("after Init");
 	// The event scripts were compiled in the library that is gone.
 	ScriptEventsReset();
 	LogI("game", "full reload: patches %lu ms, const.ini %lu ms, shutdown %lu ms, init %lu ms", static_cast<unsigned long>(patched - start),
@@ -434,6 +489,7 @@ void CheckFullReload(const void *loadResult)
 	const bool hastatus = SafeHasClass("RHastatus"), barracks = SafeHasClass("RBarracks");
 	LogI("game", "full reload (after LoadGameData): class RHastatus %s, class RBarracks %s", hastatus ? "found" : "NOT FOUND", barracks ? "found" : "NOT FOUND");
 	CheckCachedClassNames();
+	LogProcessState("after LoadGameData");
 	if (!hastatus || !barracks) RestartNow("the class registry lacks the Roman classes");
 	else if (!CommandSanity("after LoadGameData")) RestartNow("the command table lacks the Roman commands");
 }
