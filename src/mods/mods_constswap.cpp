@@ -19,7 +19,7 @@ namespace {
 // mounted when it started; it only changes when game/constreload.cpp loads another one. Not known until the first swap.
 ModRuleset g_engineRules;
 bool g_engineKnown = false;
-std::atomic<bool> g_ready{false};
+std::atomic<bool> g_ready{false}, g_fullReady{false};
 
 bool SameFolder(const std::string &a, const std::string &b)
 {
@@ -60,30 +60,44 @@ void ModsConstReloadSetReady(bool ready)
 	g_ready = ready;
 }
 
-bool ModsCanSwitchWithoutRestart(const ModRuleset &wanted)
+void ModsFullReloadSetReady(bool ready)
 {
-	if (!g_ready) return false;
+	g_fullReady = ready;
+}
+
+bool ModsCanSwitchWithoutRestart(const ModRuleset &wanted, bool allowFull)
+{
+	const bool full = g_fullReady && allowFull;
+	if (!g_ready && !full) return false;
 	// A running game has the rules it started with; this is only for the menus and the room before the match.
 	if (*reinterpret_cast<void *const *>(addr::kGame) != nullptr) return false;
 	ModProfile p;
+	ModRuleset engine;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
 		if (!g_mount.known) return false;
 		p = g_mount.profile;
+		engine = g_engineKnown ? g_engineRules : p.ruleset;
 	}
 	const ModRuleset from = p.ruleset;
 	p.ruleset = wanted;
 	const ModRuleset to = ModsEffectiveRuleset(p);
 	// The profile may not be able to mount what was asked (its package is not enabled): then it is not this switch.
-	if (!ModsSameChoice(to, wanted)) return false;
+	if (!ModsSameChoice(to, wanted) || ModsSameRuleset(from, to)) return false;
+	// What the game has to be made to read is the difference between the rules it holds and the ones asked for.
 	std::vector<std::string> fromFiles, toFiles;
-	if (!LayerFiles(from, fromFiles) || !LayerFiles(to, toFiles)) return false;
-	return ConstSwapDecide(ModsSameRuleset(from, to), fromFiles, toFiles) == ConstSwap::kReload;
+	if (!LayerFiles(engine, fromFiles) || !LayerFiles(to, toFiles)) return false;
+	switch (SwapDecide(ModsSameRuleset(engine, to), full, fromFiles, toFiles)) {
+	case ConstSwap::kNothing: return true;
+	case ConstSwap::kReload: return g_ready || full;
+	case ConstSwap::kFull: return full;
+	default: return false;
+	}
 }
 
-bool ModsSwitchRulesetWithoutRestart(const ModRuleset &wanted)
+bool ModsSwitchRulesetWithoutRestart(const ModRuleset &wanted, bool allowFull)
 {
-	return ModsCanSwitchWithoutRestart(wanted) && ModsSwapMountedRuleset(wanted);
+	return ModsCanSwitchWithoutRestart(wanted, allowFull) && ModsSwapMountedRuleset(wanted);
 }
 
 bool ModsSwapMountedRuleset(const ModRuleset &wanted)
@@ -118,17 +132,35 @@ bool ModsSwapMountedRuleset(const ModRuleset &wanted)
 		g_mount.profile.ruleset = next;
 		dirs = mounted;
 	}
-	VfsResetPatched("data/const.ini");
+	VfsResetPatchedAll();
 	MediaSetModDirs(dirs);
 	LogI("content", "ruleset changed without a restart: %s%s%s -> %s%s%s", before.pack.c_str(), before.id.empty() ? "" : ":", before.id.c_str(),
 		next.pack.c_str(), next.id.empty() ? "" : ":", next.id.c_str());
 	return true;
 }
 
+ModsReload ModsReloadPlan()
+{
+	ModRuleset engine, mounted;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		if (!g_engineKnown || !g_mount.known) return ModsReload::kNone;
+		engine = g_engineRules;
+		mounted = g_mount.profile.ruleset;
+	}
+	if (ModsSameRuleset(engine, mounted)) return ModsReload::kNone;
+	std::vector<std::string> fromFiles, toFiles;
+	if (!LayerFiles(engine, fromFiles) || !LayerFiles(mounted, toFiles)) return ModsReload::kRestart;
+	switch (SwapDecide(false, g_fullReady, fromFiles, toFiles)) {
+	case ConstSwap::kReload: return g_ready ? ModsReload::kConst : g_fullReady ? ModsReload::kFull : ModsReload::kRestart;
+	case ConstSwap::kFull: return ModsReload::kFull;
+	default: return ModsReload::kRestart;
+	}
+}
+
 bool ModsConstReloadPending()
 {
-	std::lock_guard<std::mutex> lock(g_lock);
-	return g_engineKnown && g_mount.known && !ModsSameRuleset(g_engineRules, g_mount.profile.ruleset);
+	return ModsReloadPlan() != ModsReload::kNone;
 }
 
 void ModsConstReloadDone()

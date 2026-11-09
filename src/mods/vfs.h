@@ -18,6 +18,9 @@ void InstallHiddenHooks();
 
 bool VfsReadUnpatched(const std::string &rel, std::string &out);
 
+// Rebuilds the patches and forgets every patched copy.
+void VfsResetPatchedAll();
+
 // The file as the game reads it now, with the mounted patches applied.
 bool VfsReadPatched(const std::string &rel, std::string &out);
 

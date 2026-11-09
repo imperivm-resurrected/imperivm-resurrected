@@ -686,7 +686,7 @@ void DoAction(int action, int arg)
 		}
 		const bool otherProfile = g_s.createProfile != ModsMountedProfile().name;
 		// Rules that differ from the mounted ones only in CONST.INI are loaded now and the match reads them (ConstHotReload): no restart.
-		const bool rulesInPlace = !otherProfile && !ModsSameRuleset(g_s.createRuleset, ModsMountedProfile().ruleset) && ModsSwitchRulesetWithoutRestart(g_s.createRuleset);
+		const bool rulesInPlace = !otherProfile && !ModsSameRuleset(g_s.createRuleset, ModsMountedProfile().ruleset) && ModsSwitchRulesetWithoutRestart(g_s.createRuleset, false);
 		if (!rulesInPlace && (otherProfile || !ModsSameRuleset(g_s.createRuleset, ModsMountedProfile().ruleset))) {
 			// The ruleset is part of the profile, so the profile that will be loaded keeps it.
 			ModProfile chosen = ModsLoadProfile(g_s.createProfile);

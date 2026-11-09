@@ -326,11 +326,17 @@ bool ModsSwapMountedRuleset(const ModRuleset &wanted);
 // game/constreload.cpp says whether it is installed; without it no ruleset change can skip the restart.
 void ModsConstReloadSetReady(bool ready);
 // Whether the mounted ruleset can be replaced by `wanted` without restarting: the two differ only in data/const.ini (see constswap.h).
-bool ModsCanSwitchWithoutRestart(const ModRuleset &wanted);
+bool ModsCanSwitchWithoutRestart(const ModRuleset &wanted, bool allowFull = true);
 // Replaces the mounted ruleset if ModsCanSwitchWithoutRestart. The caller saves the profile and sets the choice, as for any other
 // entry that mounts the same files (ModsMountedChoiceSet).
-bool ModsSwitchRulesetWithoutRestart(const ModRuleset &wanted);
+bool ModsSwitchRulesetWithoutRestart(const ModRuleset &wanted, bool allowFull = true);
+// What the game has to do before the next match so that it plays with the mounted ruleset: nothing, load data/const.ini again, read all its
+// data again (FullHotReload), or nothing it can do (kRestart: the pair is not one that can be switched in place).
+enum class ModsReload { kNone, kConst, kFull, kRestart };
+ModsReload ModsReloadPlan();
 bool ModsConstReloadPending();
+// game/constreload.cpp says whether the full reload is installed.
+void ModsFullReloadSetReady(bool ready);
 void ModsConstReloadDone();
 void ModsConstReloadFailed();
 const std::string &ModsLanguage();

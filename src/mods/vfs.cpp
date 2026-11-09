@@ -1011,6 +1011,14 @@ void VfsResetPatched(const std::string &rel)
 	g_patchedPath.erase(rel);
 }
 
+// The same for every file: after the patches of another ruleset are mounted, any of them may serve other bytes.
+void VfsResetPatchedAll()
+{
+	std::lock_guard<std::recursive_mutex> lock(g_patchLock);
+	PatchRebuild();
+	g_patchedPath.clear();
+}
+
 bool VfsReadPatched(const std::string &rel, std::string &out)
 {
 	std::vector<char> data;
