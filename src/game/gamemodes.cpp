@@ -180,6 +180,9 @@ std::vector<std::string> GameModeProblemsFor(const std::string &folder)
 
 const bool g_featureRegistered = (ModsRegisterFeature({45, &GameModesRebuild, &GameModeProblemsFor}), true);
 
+// A ruleset switched in place can bring its own modes\*.json.
+const bool g_swapRegistered = (ModsOnRulesetSwapped(&GameModesRebuild), true);
+
 std::string GameStringText(const char *s)
 {
 	const unsigned size = *reinterpret_cast<const unsigned *>(s + 0x14);

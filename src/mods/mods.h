@@ -327,6 +327,8 @@ void ModsMountedChoiceSet(const ModRuleset &choice);
 // keeps the table of the ruleset it started with until game/constreload.cpp loads the new one: Pending says they differ, Done that
 // the game now holds the mounted one, Failed that it could not and kept the old one (the mounted ruleset goes back to match it).
 bool ModsSwapMountedRuleset(const ModRuleset &wanted);
+// Something that depends on the mounted folders and is safe to build again (the lobby's list of modes) asks to run after every switch.
+void ModsOnRulesetSwapped(void (*hook)());
 // game/constreload.cpp says whether it is installed; without it no ruleset change can skip the restart.
 void ModsConstReloadSetReady(bool ready);
 // Whether the mounted ruleset can be replaced by `wanted` without restarting: the two differ only in data/const.ini (see constswap.h).

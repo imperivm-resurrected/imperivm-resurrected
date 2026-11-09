@@ -256,23 +256,7 @@ void MountProfileLayers(void *list)
 	}
 	LogI("content", "profile \"%s\" mounted (%u mods)", p.name.c_str(), static_cast<unsigned>(p.mods.size()));
 	PrepareRleMmp(p, ModsList());
-	{
-		std::vector<std::vector<std::string>> hides;
-		std::set<std::string> provided;
-		for (const std::string &folder : p.mods) {
-			ModInfo m;
-			if (!ModsFind(folder, m) || !m.forbidden.empty()) continue;
-			if (const ModLayer *layer = ModsActiveLayer(p, m)) {
-				if (!layer->hidden.empty()) hides.push_back(layer->hidden);
-				provided.insert(layer->paths.begin(), layer->paths.end());
-			}
-			if (!m.hidden.empty()) hides.push_back(m.hidden);
-			provided.insert(m.paths.begin(), m.paths.end());
-		}
-		const std::set<std::string> hidden = HiddenEffective(hides, provided);
-		VfsSetHidden(hidden);
-		if (!hidden.empty()) LogI("content", "%u game files hidden by the active content packs", static_cast<unsigned>(hidden.size()));
-	}
+	ApplyHiddenFiles(p);
 	{
 		std::vector<std::string> dirs;
 		{
@@ -488,5 +472,60 @@ std::string ShowStartupPicker(const std::string &current)
 	}
 	return current;
 }
+}
+}
+
+namespace mods_impl {
+bool MountLooseFolder(const std::string &vfsPrefix)
+{
+	void *list = nullptr;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		if (!g_mount.known || !g_mount.layerList || g_mount.looseLayers.count(Lower(vfsPrefix))) return false;
+		list = g_mount.layerList;
+	}
+	void *layer = CreateLooseLayer(vfsPrefix);
+	if (!layer) return false;
+	ListPushFront(list, layer);
+	std::lock_guard<std::mutex> lock(g_lock);
+	g_mount.looseLayers[Lower(vfsPrefix)] = layer;
+	return true;
+}
+
+// The layer object is left allocated (the game has no call to free it, and the engine may still hold a name it resolved with it).
+bool UnmountLooseFolder(const std::string &vfsPrefix)
+{
+	void *list = nullptr, *layer = nullptr;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		const auto it = g_mount.looseLayers.find(Lower(vfsPrefix));
+		if (it == g_mount.looseLayers.end() || !g_mount.layerList) return false;
+		list = g_mount.layerList;
+		layer = it->second;
+		g_mount.looseLayers.erase(it);
+	}
+	return ListUnlink(list, layer);
+}
+}
+
+namespace mods_impl {
+// The game files the packs of the profile hide (their hidden.txt, the ruleset's too), except the ones a pack provides itself.
+void ApplyHiddenFiles(const ModProfile &p)
+{
+	std::vector<std::vector<std::string>> hides;
+	std::set<std::string> provided;
+	for (const std::string &folder : p.mods) {
+		ModInfo m;
+		if (!ModsFind(folder, m) || !m.forbidden.empty()) continue;
+		if (const ModLayer *layer = ModsActiveLayer(p, m)) {
+			if (!layer->hidden.empty()) hides.push_back(layer->hidden);
+			provided.insert(layer->paths.begin(), layer->paths.end());
+		}
+		if (!m.hidden.empty()) hides.push_back(m.hidden);
+		provided.insert(m.paths.begin(), m.paths.end());
+	}
+	const std::set<std::string> hidden = HiddenEffective(hides, provided);
+	VfsSetHidden(hidden);
+	if (!hidden.empty()) LogI("content", "%u game files hidden by the active content packs", static_cast<unsigned>(hidden.size()));
 }
 }
