@@ -529,7 +529,7 @@ void PaintCreate(Painter &p, const State &st)
 			y += 4;
 			// Only its ruleset differs and the switch is made for you when the room is created: not a problem.
 			const bool inPlace = needs.AllInstalled() && ModsCanSwitchForNeeds(needs);
-			p.Text(fx + 4, y, fw, 20, (inPlace ? Tr("This game uses another ruleset: ") : Tr("This game needs: ")) + ShortList(needs.Names(true), 2), inPlace ? kDim : kBad,
+			p.Text(fx + 4, y, fw, 20, (inPlace ? Tr("Other ruleset: ") : Tr("This game needs: ")) + ShortList(needs.Names(true), 2), inPlace ? kDim : kBad,
 				DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 			y += 20;
 			p.Text(fx + 4, y, fw, 20, needs.AllInstalled() ? (inPlace ? "They are switched in place when you create it." : "They are activated when you create it (the game must restart).") : "You don't have it installed: Options > Content > Browse content.", kDim,
@@ -906,7 +906,7 @@ void PaintDropList(Painter &p, const State &st)
 	if (st.dropKind == kDropBonus) {
 		for (size_t i = 0; i < shown.size() && i < st.game.bonuses.size(); i++) shown[i].tip = st.game.bonuses[i].description;
 	}
-	PaintDropMenu(p, g_dropAnchor, shown, sel, st.dropScroll, kW, kH, kGDropPick, kGDropClose, st.mouseX, st.mouseY, st.dropKind == kDropBonus ? 150 : 200);
+	PaintDropMenu(p, g_dropAnchor, shown, sel, st.dropScroll, kW, kH, kGDropPick, kGDropClose, st.mouseX, st.mouseY, st.dropKind == kDropBonus ? 150 : st.dropKind == kDropProfile && st.dropIndex == 1 ? 480 : 200);
 }
 }
 

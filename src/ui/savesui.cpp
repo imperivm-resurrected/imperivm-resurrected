@@ -1299,7 +1299,7 @@ void PaintDetailBody(Painter &p, State &st)
 		};
 		const std::string many = std::to_string(mc.missing.size());
 		group(mc.missing.size() == 1 ? "You are missing 1 content pack (it cannot be loaded):" : Tr("You are missing ") + many + Tr(" content packs (they cannot be loaded):"), mc.missing, kBad);
-		if (mc.inPlace) group("Loading it switches the ruleset without restarting:", mc.inactive, kOk);
+		if (mc.inPlace) group("Switches the ruleset, no restart:", mc.inactive, kOk);
 		else group(mc.inactive.size() == 1 ? "You need to enable 1 content pack:" : Tr("You need to enable ") + std::to_string(mc.inactive.size()) + Tr(" content packs:"), mc.inactive, kGold);
 		group("Another version or different files:", mc.other, kGold);
 		group(rec->mods.empty() ? "It was saved without additional content. You have enabled:" : "It was saved without this content you have enabled:", mc.extra, kGold);
