@@ -525,7 +525,7 @@ void *__fastcall HookLoadGameData(void *self, void *edx)
 			LogE("game", "const reload: failed; the match uses the rules the game started with");
 			ModsConstReloadFailed();
 			if (result == Reload::kBroken) RestoreTable();
-			UiToast(Tr("The new rules could not be loaded without restarting. This game uses the previous ones."), true);
+			UiToast(Tr("The new ruleset could not be loaded without restarting. This game uses the previous one."), true);
 		}
 		break;
 	}

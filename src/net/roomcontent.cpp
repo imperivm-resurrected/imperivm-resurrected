@@ -32,3 +32,13 @@ bool RoomContentDiffers(RoomContent content)
 {
 	return content == RoomContent::kOtherGameplay || content == RoomContent::kOtherMap;
 }
+
+std::string RoomRulesetText(const std::vector<std::pair<std::string, std::string>> &packRulesets)
+{
+	std::string out;
+	for (const auto &pr : packRulesets) {
+		if (pr.second.empty()) continue;
+		out += (out.empty() ? "" : ", ") + pr.first + " \xC2\xB7 " + pr.second;
+	}
+	return out;
+}

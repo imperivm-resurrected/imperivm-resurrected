@@ -8,6 +8,7 @@
 #include "mods/civsets.h"
 #include "mods/modoptions.h"
 #include "net/rejoin.h"
+#include "net/roomcontent.h"
 #include "net/spectator.h"
 
 #include "ui/mpui_internal.h"
@@ -453,6 +454,23 @@ void PaintGameRoom(Painter &p, const State &st)
 				const bool set = (g.rules & bit) != 0;
 				toggleRow(label, set, canEdit && (!load || inLoad), kGRuleToggle, static_cast<int>(bit), help);
 			};
+			// The first row: the ruleset decides which civilizations and modes the rest of the panel offers. The host picks it (in the skirmish
+			// room, the one of the loaded content; in an open room only when it can be switched in place); a guest sees the room's, read-only.
+			{
+				const std::vector<RulesetChoice> &rulesets = MountedRulesets();
+				if (host) {
+					if (!rulesets.empty() && (!g.online || ModsHotSwitchEnabled())) {
+						const ModRuleset mounted = ModsMountedChoice();
+						row("Ruleset", RulesetLabel(rulesets, mounted), !mounted.pack.empty(), canEdit, true, kDropProfile, 1, nullptr);
+					}
+				}
+				else {
+					std::vector<std::pair<std::string, std::string>> packRulesets;
+					for (const OnlineMod &m : st.room.info.mods) packRulesets.push_back({m.name, m.layerName.empty() ? m.layer : m.layerName});
+					const std::string text = RoomRulesetText(packRulesets);
+					if (!text.empty() || !rulesets.empty()) row("Ruleset", text.empty() ? Tr("Original (HD)") : text, !text.empty(), false, false, 0, 0, nullptr);
+				}
+			}
 			if (saveName.empty() || !g.online) {
 				const int preset = MatchPreset(g.siteFlags, g.rules, [&](int id, const char *key) {
 					int index;
@@ -557,25 +575,9 @@ void PaintGameRoom(Painter &p, const State &st)
 				section("CONTENT");
 				y = PaintLinesInline(p, OnlineLobbyLines(st, st.room.info, false), ix, y, iw, 20) + 4;
 				civSection();
-				if (host && ModsHotSwitchEnabled()) {
-					const std::vector<RulesetChoice> &rulesets = MountedRulesets();
-					if (!rulesets.empty()) {
-						const ModRuleset mounted = ModsMountedChoice();
-						row("Rules", RulesetLabel(rulesets, mounted), !mounted.pack.empty(), canEdit, true, kDropProfile, 1, nullptr);
-					}
-				}
 			}
 
-			if (!g.online) {
-				civSection();
-				// Only the rulesets of the packages that are loaded; picking another one restarts the game.
-				const std::vector<RulesetChoice> &rulesets = MountedRulesets();
-				if (!rulesets.empty()) {
-					const ModRuleset mounted = ModsMountedChoice();
-					section("CONTENT");
-					row("Rules", RulesetLabel(rulesets, mounted), !mounted.pack.empty(), canEdit, true, kDropProfile, 1, nullptr);
-				}
-			}
+			if (!g.online) civSection();
 
 			if (!host && st.map.state == 1) {
 				const uint64_t total = std::max<uint64_t>(1, st.map.total);

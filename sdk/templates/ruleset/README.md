@@ -7,7 +7,7 @@ One package for a mod that has civilizations **and** global rules (the `CONST.IN
 1. Copy this folder into `<game folder>\mods\` and rename it.
 2. In `mod.json` change `id` (lowercase letters, numbers and hyphens), `name`, `authors` and `description`. Under `rulesets`, give each ruleset an `id` (lowercase letters, numbers, `-` and `_`, up to 24), a `name` and a `description` for the room, and its `path` (`rulesets/<id>`). For several rulesets, repeat the entry and the folder.
 3. Put your civilizations in `civs\` (and their classes in `data\`, as in the [civilization template](../civilization)). Put the global rules in `rulesets\<id>\`, which has the shape of a mod root: `patches\`, `data\`, `modes\`, `options\`, `events\`, `packs\`, `local\`, `hidden.txt`... Delete the note files and the folders you do not use.
-4. Enable the mod in your profile. The host chooses the ruleset in **Create room** (**Rules**) or in the skirmish room; the game restarts when it is not the one that is loaded.
+4. Enable the mod in your profile. The host chooses the ruleset in **Create room** (**Ruleset**) or in the skirmish room; the game restarts when it is not the one that is loaded.
 5. Read `Logs\imperivm\imperivm-mod.log`, in the game folder: the lines tagged `content` say which ruleset was mounted.
 
 ## Folder layout

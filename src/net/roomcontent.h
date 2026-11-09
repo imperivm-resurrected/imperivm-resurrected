@@ -3,6 +3,8 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #pragma once
 #include <string>
+#include <utility>
+#include <vector>
 
 enum class RoomContent { kSame, kChecking, kOtherGameplay, kOtherMap };
 
@@ -28,3 +30,7 @@ bool RoomContentDiffers(RoomContent content);
 enum class RoomRulesStep { kInSync, kTryAdopt, kWait, kLeave };
 const unsigned kRoomRulesGraceMs = 4000;
 RoomRulesStep RoomRulesDecide(const std::string &roomKey, const std::string &ownKey, bool adoptFailed, unsigned differentForMs);
+
+// What the Ruleset row shows a guest: "pack \xC2\xB7 ruleset" for each package of the room that has a ruleset (the pairs are the pack name and
+// the ruleset name), joined with commas. Empty when the room has none, which the row shows as the game's own rules.
+std::string RoomRulesetText(const std::vector<std::pair<std::string, std::string>> &packRulesets);

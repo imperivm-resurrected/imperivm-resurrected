@@ -509,12 +509,12 @@ void PaintCreate(Painter &p, const State &st)
 	const std::vector<RulesetChoice> &rulesets = st.createProfileInfo.rulesets;
 	if (!rulesets.empty()) {
 		p.Font(0);
-		p.Text(lx, y, 140, 30, "Rules", kDim);
+		p.Text(lx, y, 140, 30, "Ruleset", kDim);
 		Combo(p, st, fx, y, fw, 30, RulesetLabel(rulesets, st.createRuleset), kDropProfile, 1, true);
 		y += 38;
 	}
 	{
-		// As many rows as fit above the button (the password and the Rules combo take room).
+		// As many rows as fit above the button (the password and the Ruleset combo take room).
 		const std::vector<ListLine> lines = BuildModLines(st.createProfileInfo.rows, "None: the original game.");
 		const int fit = std::max(1, (y0 + h - 80 - y) / 22);
 		const int rows = std::min<int>(std::min(6, fit), static_cast<int>(lines.size()));
@@ -529,7 +529,7 @@ void PaintCreate(Painter &p, const State &st)
 			y += 4;
 			// Only its ruleset differs and the switch is made for you when the room is created: not a problem.
 			const bool inPlace = needs.AllInstalled() && ModsCanSwitchForNeeds(needs);
-			p.Text(fx + 4, y, fw, 20, (inPlace ? Tr("This game uses other rules: ") : Tr("This game needs: ")) + ShortList(needs.Names(true), 2), inPlace ? kDim : kBad,
+			p.Text(fx + 4, y, fw, 20, (inPlace ? Tr("This game uses another ruleset: ") : Tr("This game needs: ")) + ShortList(needs.Names(true), 2), inPlace ? kDim : kBad,
 				DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 			y += 20;
 			p.Text(fx + 4, y, fw, 20, needs.AllInstalled() ? (inPlace ? "They are switched in place when you create it." : "They are activated when you create it (the game must restart).") : "You don't have it installed: Options > Content > Browse content.", kDim,
@@ -541,7 +541,7 @@ void PaintCreate(Painter &p, const State &st)
 	const bool restartRules = !restart && !ModsSameRuleset(st.createRuleset, ModsMountedProfile().ruleset) && !ModsCanSwitchWithoutRestart(st.createRuleset);
 	const int by = y0 + h - 60;
 	const int bw = 320;
-	p.Button(x + (w - bw) / 2, by, bw, 42, restart ? "Restart with this content" : restartRules ? "Restart with these rules" : "Create room", kCreateOk, 0, mx, my,
+	p.Button(x + (w - bw) / 2, by, bw, 42, restart ? "Restart with this content" : restartRules ? "Restart with this ruleset" : "Create room", kCreateOk, 0, mx, my,
 		st.ready || restart || restartRules, true);
 }
 

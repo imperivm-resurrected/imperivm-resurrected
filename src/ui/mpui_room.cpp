@@ -208,7 +208,7 @@ void AddRulesets(const std::vector<std::string> &folders, std::vector<RulesetCho
 	for (const ModRulesetEntry &e : ModsRulesetEntries(folders)) {
 		RulesetChoice c;
 		c.ruleset = e.ruleset;
-		c.label = e.ruleset.id.empty() ? TrFmt("%s (original rules)", {e.packName}) : e.layerName + " \xC2\xB7 " + e.packName;
+		c.label = e.ruleset.id.empty() ? TrFmt("%s (original ruleset)", {e.packName}) : e.layerName + " \xC2\xB7 " + e.packName;
 		out.push_back(c);
 	}
 }
@@ -616,7 +616,7 @@ void RoomFollowRules(const GameRoomSnapshot &snap)
 	if (!since) since = now;
 	if (AdoptRoomRules(room)) {
 		since = 0;
-		ModUiToast("The host changed the rules: yours were switched to match without restarting.");
+		ModUiToast("The host changed the ruleset: yours was switched to match without restarting.");
 		return;
 	}
 	const RoomRulesStep step = RoomRulesDecide(room.gameplayKey, own, true, now - since);
@@ -630,7 +630,7 @@ void ChooseRulesetInRoom(const ModRuleset &picked)
 {
 	if (ModsSameChoice(picked, ModsMountedChoice())) return;
 	if (!g_s.hostSave.name.empty()) {
-		ModUiToast("The room is for a saved game: its rules are the ones it was saved with.");
+		ModUiToast("The room is for a saved game: its ruleset is the one it was saved with.");
 		return;
 	}
 	if (ModsSameRuleset(picked, ModsMountedProfile().ruleset)) {
@@ -638,13 +638,13 @@ void ChooseRulesetInRoom(const ModRuleset &picked)
 		ModProfile profile = ModsLoadProfile(ModsMountedProfile().name);
 		profile.ruleset = picked;
 		if (!ModsSaveProfile(profile)) {
-			ModUiToast(Tr("Could not save the rules in the content profile."));
+			ModUiToast(Tr("Could not save the ruleset in the content profile."));
 			return;
 		}
 		ModsMountedChoiceSet(picked);
 	}
 	else if (!ModsSwitchRulesetAndRemember(picked)) {
-		ModUiToast("That change needs a restart: close the room and create it again with those rules.");
+		ModUiToast("That change needs a restart: close the room and create it again with that ruleset.");
 		return;
 	}
 	CivRoomSetsSet(DefaultCivSets(picked));

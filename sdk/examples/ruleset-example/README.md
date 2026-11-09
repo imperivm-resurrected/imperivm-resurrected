@@ -1,6 +1,6 @@
 # Example: rulesets
 
-One package with a civilization in its root and two rulesets in `rulesets\`. The host chooses one in the **Create room** dialog (**Rules**, next to **Content**) or in the skirmish room; only that one is mounted. Guide: [Rulesets](../../rulesets.md).
+One package with a civilization in its root and two rulesets in `rulesets\`. The host chooses one in the **Create room** dialog (**Ruleset**, next to **Content**) or in the skirmish room; only that one is mounted. Guide: [Rulesets](../../rulesets.md).
 
 What is in it:
 

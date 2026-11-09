@@ -699,7 +699,7 @@ void DoAction(int action, int arg)
 			if (!ModsSameChoice(chosen.ruleset, g_s.createRuleset)) {
 				chosen.ruleset = g_s.createRuleset;
 				if (!ModsSaveProfile(chosen) && !chosen.ruleset.pack.empty()) {
-					ModUiToast(Tr("Could not save the rules in the content profile."));
+					ModUiToast(Tr("Could not save the ruleset in the content profile."));
 					break;
 				}
 			}
@@ -708,8 +708,8 @@ void DoAction(int action, int arg)
 			std::vector<std::string> profileMods;
 			for (const ModRow &row : g_s.createProfileInfo.rows) profileMods.push_back(row.name);
 			if (!otherProfile) {
-				ModUiAskRestart("The game will restart with the rules you chose. Afterwards, create the room again.", -1,
-					{RulesetLabel(g_s.createProfileInfo.rulesets, g_s.createRuleset)}, "Rules that will be loaded:");
+				ModUiAskRestart("The game will restart with the ruleset you chose. Afterwards, create the room again.", -1,
+					{RulesetLabel(g_s.createProfileInfo.rulesets, g_s.createRuleset)}, "Ruleset that will be loaded:");
 				break;
 			}
 			ModUiAskRestart(profileMods.empty() ? "The game will restart without additional content. Afterwards, create the room again."
@@ -723,7 +723,7 @@ void DoAction(int action, int arg)
 			ModProfile chosen = ModsLoadProfile(g_s.createProfile);
 			chosen.ruleset = g_s.createRuleset;
 			if (!ModsSaveProfile(chosen)) {
-				ModUiToast(Tr("Could not save the rules in the content profile."));
+				ModUiToast(Tr("Could not save the ruleset in the content profile."));
 				break;
 			}
 			ModsMountedChoiceSet(g_s.createRuleset);
@@ -797,7 +797,7 @@ void ChooseRuleset(int item)
 	ModProfile profile = ModsLoadProfile(ModsMountedProfile().name);
 	profile.ruleset = picked;
 	if (!ModsSaveProfile(profile)) {
-		ModUiToast(Tr("Could not save the rules in the content profile."));
+		ModUiToast(Tr("Could not save the ruleset in the content profile."));
 		return;
 	}
 	if (ModsSameRuleset(picked, ModsMountedProfile().ruleset) || ModsSwitchRulesetWithoutRestart(picked)) {
@@ -810,7 +810,7 @@ void ChooseRuleset(int item)
 		return;
 	}
 	ModsSetActiveProfileName(profile.name);
-	ModUiAskRestart("The game will restart with the rules you chose.", -1, {RulesetLabel(choices, picked)}, "Rules that will be loaded:");
+	ModUiAskRestart("The game will restart with the ruleset you chose.", -1, {RulesetLabel(choices, picked)}, "Ruleset that will be loaded:");
 }
 
 std::string &FocusedText()

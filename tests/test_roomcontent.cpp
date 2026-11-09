@@ -103,6 +103,14 @@ void AGuestFollowsTheRoomsRules()
 	CHECK(RoomRulesDecide("aa", "bb", true, kRoomRulesGraceMs) == RoomRulesStep::kLeave);
 }
 
+void TheRulesetRowTextNamesThePackAndTheRuleset()
+{
+	CHECK(RoomRulesetText({}).empty());
+	CHECK(RoomRulesetText({{"Base pack", ""}}).empty());
+	CHECK(RoomRulesetText({{"Example", "Arena"}}) == "Example \xC2\xB7 Arena");
+	CHECK(RoomRulesetText({{"A", "x"}, {"B", ""}, {"C", "z"}}) == "A \xC2\xB7 x, C \xC2\xB7 z");
+}
+
 }
 
 int main()
@@ -118,5 +126,6 @@ int main()
 	TheSyncCheckIgnoresTheCivilizationTable();
 	AnOlderHostPublishesNoHashKey();
 	AGuestFollowsTheRoomsRules();
+	TheRulesetRowTextNamesThePackAndTheRuleset();
 	return test::Summary("roomcontent");
 }
