@@ -13,7 +13,7 @@ Example: [`ruleset-example`](examples/ruleset-example). Template: [`ruleset`](te
 | The package root | Civilizations (`civs\`, their classes, `specials\`) and whatever the package needs in every room | Whenever the package is enabled, as always |
 | `rulesets\<id>\` | The global rules, laid out like a mod root: `patches\`, `data\`, `packs\`, `local\`, `modes\`, `options\`, `events\`, `rules\game.json`, `hidden.txt`, `rle.mmp.tail`... | Only when a room chooses that ruleset |
 
-The civilizations of every enabled package stay selectable whatever the rules are. Nothing forces you to move the files of a mod that already works: the root keeps working as before, and `rulesets` is optional.
+The civilizations of every enabled package stay selectable in a room whatever the rules are (the host adds them with **Edit civilizations**, see below), but a room starts with only one pack of them. Nothing forces you to move the files of a mod that already works: the root keeps working as before, and `rulesets` is optional.
 
 ## Declaring them
 
@@ -41,9 +41,21 @@ A ruleset that breaks one of these rules is ignored, and its package's card in t
 
 ## How the host chooses it
 
-- In **Create room**, the **Rules** combo, next to **Content**, lists the game's own rules (*Original (HD)*) and the rulesets of the packages that are in the chosen content profile. If the choice is not the one that is loaded, the button reads *Restart with these rules*: the game restarts with it and the host creates the room again, as when changing the content.
+- In **Create room**, the **Rules** combo, next to **Content**, lists the game's own rules (*Original (HD)*), the rulesets of the packages that are in the chosen content profile, and one entry *<package> (original rules)* for each package of the profile that has civilizations (`civs\*.json`) and **no** ruleset. If the choice is not the one that is loaded, the button reads *Restart with these rules*: the game restarts with it and the host creates the room again, as when changing the content.
 - In the skirmish room, the **Rules** row under **Content** does the same: picking another ruleset restarts the game, and nothing is lost because the match has not started.
-- The ruleset is saved in the profile (`"ruleset": {"pack": "<folder>", "id": "<id>"}`). A profile mounts at most one.
+- The ruleset is saved in the profile (`"ruleset": {"pack": "<folder>", "id": "<id>"}`). A profile mounts at most one. `"id": ""` (or no `id`) is the entry *<package> (original rules)*: that package without a layer. It mounts no extra files, so choosing it never needs a restart as long as no ruleset is mounted (going from a ruleset to it, or the other way, does restart).
+
+### Which civilizations a room starts with
+
+One Rules entry is one pack of civilizations, strictly, not a mix:
+
+| Entry | Civilizations a new room allows |
+|---|---|
+| *Original (HD)* | only the game's |
+| A ruleset of package P, or *P (original rules)*, where P has civilizations | only P's |
+| A ruleset of package P, where P has no civilizations (rules only) | only the game's |
+
+The civilizations of the other enabled packages are not in that default. The host adds them, or takes the default away, in the room lobby: **Game options > RULES > Edit civilizations** lists every set of the content profile as a toggle (at least one stays on), applies at once and sends a player whose civilization is left out back to *Random*. A package with civilizations **and** rulesets keeps one entry per ruleset and has no *(original rules)* entry. If you want players to be able to pick your civilizations in the base game's rules, a package without `rulesets` already does that: it appears as *(original rules)*.
 
 A player who joins a room with another ruleset gets the usual *This room uses other content* dialog: the game downloads what is missing, restarts with the room's ruleset and returns to the room.
 
