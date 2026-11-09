@@ -65,6 +65,11 @@ void ModsFullReloadSetReady(bool ready)
 	g_fullReady = ready;
 }
 
+bool ModsHotSwitchEnabled()
+{
+	return g_ready || g_fullReady;
+}
+
 bool ModsCanSwitchWithoutRestart(const ModRuleset &wanted, bool allowFull)
 {
 	const bool full = g_fullReady && allowFull;

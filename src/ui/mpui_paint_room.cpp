@@ -557,6 +557,13 @@ void PaintGameRoom(Painter &p, const State &st)
 				section("CONTENT");
 				y = PaintLinesInline(p, OnlineLobbyLines(st, st.room.info, false), ix, y, iw, 20) + 4;
 				civSection();
+				if (host && ModsHotSwitchEnabled()) {
+					const std::vector<RulesetChoice> &rulesets = MountedRulesets();
+					if (!rulesets.empty()) {
+						const ModRuleset mounted = ModsMountedChoice();
+						row("Rules", RulesetLabel(rulesets, mounted), !mounted.pack.empty(), canEdit, true, kDropProfile, 1, nullptr);
+					}
+				}
 			}
 
 			if (!g.online) {

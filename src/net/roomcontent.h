@@ -21,3 +21,10 @@ RoomContent CompareRoomContent(const RoomContentFacts &facts);
 std::string RoomHashKey(const std::string &gameplayHash);
 bool RoomHashMatches(const std::string &gameplayHash, const std::string &hostHashKey);
 bool RoomContentDiffers(RoomContent content);
+
+// What a guest in an open room does about the room's key (see mpui_room.cpp RoomFollowRules): nothing while the keys are equal or one is not
+// known yet; try to switch its own rules to the room's when they differ; if that was not possible, wait (the host's mods line and key reach
+// it as two updates) and leave the room if the difference lasts.
+enum class RoomRulesStep { kInSync, kTryAdopt, kWait, kLeave };
+const unsigned kRoomRulesGraceMs = 4000;
+RoomRulesStep RoomRulesDecide(const std::string &roomKey, const std::string &ownKey, bool adoptFailed, unsigned differentForMs);

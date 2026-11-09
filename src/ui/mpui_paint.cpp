@@ -529,13 +529,13 @@ void PaintCreate(Painter &p, const State &st)
 			y += 4;
 			p.Text(fx + 4, y, fw, 20, Tr("This game needs: ") + ShortList(needs.Names(true), 2), kBad, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 			y += 20;
-			p.Text(fx + 4, y, fw, 20, needs.AllInstalled() ? "They are activated when you create it (the game must restart)." : "You don't have it installed: Options > Content > Browse content.", kDim,
+			p.Text(fx + 4, y, fw, 20, needs.AllInstalled() ? (ModsCanSwitchForNeeds(needs) ? "They are switched in place when you create it." : "They are activated when you create it (the game must restart).") : "You don't have it installed: Options > Content > Browse content.", kDim,
 				DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 			y += 20;
 		}
 	}
 	const bool restart = st.createProfile != ModsMountedProfile().name;
-	const bool restartRules = !restart && !ModsSameRuleset(st.createRuleset, ModsMountedProfile().ruleset) && !ModsCanSwitchWithoutRestart(st.createRuleset, false);
+	const bool restartRules = !restart && !ModsSameRuleset(st.createRuleset, ModsMountedProfile().ruleset) && !ModsCanSwitchWithoutRestart(st.createRuleset);
 	const int by = y0 + h - 60;
 	const int bw = 320;
 	p.Button(x + (w - bw) / 2, by, bw, 42, restart ? "Restart with this content" : restartRules ? "Restart with these rules" : "Create room", kCreateOk, 0, mx, my,
@@ -763,7 +763,7 @@ std::vector<std::string> DropItems(const State &st, int &sel)
 		sel = 0;
 		for (size_t i = 0; i < choices.size(); i++) {
 			if (ModsSameChoice(choices[i].ruleset, RulesetShown(st))) sel = static_cast<int>(i) + 1;
-			labels.push_back(choices[i].label);
+			labels.push_back(choices[i].label + (RulesetNeedsRestart(st, choices[i].ruleset) ? Tr(" (needs a restart)") : ""));
 		}
 		return labels;
 	}

@@ -88,6 +88,21 @@ void AnOlderHostPublishesNoHashKey()
 	CHECK(RoomHashMatches("685eb718eafca4a3f00d", ""));
 }
 
+void AGuestFollowsTheRoomsRules()
+{
+	// Equal keys, or a key not known yet, change nothing.
+	CHECK(RoomRulesDecide("aa", "aa", false, 0) == RoomRulesStep::kInSync);
+	CHECK(RoomRulesDecide("", "bb", false, 0) == RoomRulesStep::kInSync);
+	CHECK(RoomRulesDecide("aa", "", true, 99999) == RoomRulesStep::kInSync);
+	// Different keys: try to switch first, whatever the time.
+	CHECK(RoomRulesDecide("aa", "bb", false, 0) == RoomRulesStep::kTryAdopt);
+	CHECK(RoomRulesDecide("aa", "bb", false, 99999) == RoomRulesStep::kTryAdopt);
+	// It was not possible: wait for the host's second update, then leave.
+	CHECK(RoomRulesDecide("aa", "bb", true, 0) == RoomRulesStep::kWait);
+	CHECK(RoomRulesDecide("aa", "bb", true, kRoomRulesGraceMs - 1) == RoomRulesStep::kWait);
+	CHECK(RoomRulesDecide("aa", "bb", true, kRoomRulesGraceMs) == RoomRulesStep::kLeave);
+}
+
 }
 
 int main()
@@ -102,5 +117,6 @@ int main()
 	TheHashKeyIsTheStartOfTheHash();
 	TheSyncCheckIgnoresTheCivilizationTable();
 	AnOlderHostPublishesNoHashKey();
+	AGuestFollowsTheRoomsRules();
 	return test::Summary("roomcontent");
 }

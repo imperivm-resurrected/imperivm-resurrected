@@ -21,6 +21,13 @@ bool RoomHashMatches(const std::string &gameplayHash, const std::string &hostHas
 	return hostHashKey.empty() || RoomHashKey(gameplayHash) == hostHashKey;
 }
 
+RoomRulesStep RoomRulesDecide(const std::string &roomKey, const std::string &ownKey, bool adoptFailed, unsigned differentForMs)
+{
+	if (roomKey.empty() || ownKey.empty() || roomKey == ownKey) return RoomRulesStep::kInSync;
+	if (!adoptFailed) return RoomRulesStep::kTryAdopt;
+	return differentForMs < kRoomRulesGraceMs ? RoomRulesStep::kWait : RoomRulesStep::kLeave;
+}
+
 bool RoomContentDiffers(RoomContent content)
 {
 	return content == RoomContent::kOtherGameplay || content == RoomContent::kOtherMap;

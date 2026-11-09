@@ -350,6 +350,8 @@ ModsReload ModsReloadPlan();
 bool ModsConstReloadPending();
 // game/constreload.cpp says whether the full reload is installed.
 void ModsFullReloadSetReady(bool ready);
+// Whether any of the in-place reloads is installed (ConstHotReload or FullHotReload on, and the hook in place). Without it nothing here acts.
+bool ModsHotSwitchEnabled();
 void ModsConstReloadDone();
 void ModsConstReloadFailed();
 const std::string &ModsLanguage();

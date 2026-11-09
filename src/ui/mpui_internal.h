@@ -406,12 +406,20 @@ ProfileSummary ProfileSummaryFor(const std::string &profile);
 ModRuleset ProfileRulesetFor(const std::string &profile);
 const std::vector<RulesetChoice> &MountedRulesets();
 bool SkirmishRoom(const State &st);
+// The host of an online room that is open: the Rules row is there too, for the changes that need no restart.
+bool OpenRoomHost(const State &st);
+// A Rules entry that cannot be mounted in place from the rules the game holds (shown with its reason in the open room).
+bool RulesetNeedsRestart(const State &st, const ModRuleset &ruleset);
+// A guest whose key differs from the room's switches to the room's rules if that needs no restart; false if it cannot.
+bool AdoptRoomRules(const OnlineLobby &room);
+void RoomFollowRules(const GameRoomSnapshot &snap);
 const std::vector<RulesetChoice> &RulesetChoicesShown(const State &st);
 ModRuleset RulesetShown(const State &st);
 // The civilization sets a new room starts with for this Rules entry (see CivSetsDefault).
 std::vector<std::string> DefaultCivSets(const ModRuleset &choice);
 std::string RulesetLabel(const std::vector<RulesetChoice> &choices, const ModRuleset &ruleset);
 void ChooseRuleset(int item);
+void ChooseRulesetInRoom(const ModRuleset &picked);
 void Predict(int kind, int index, int value);
 bool SeatTakeable(const GameRoomSlot &s);
 bool BonusesDisabled(const GameRoomSnapshot &g);

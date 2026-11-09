@@ -261,14 +261,25 @@ bool SkirmishRoom(const State &st)
 	return st.game.active && !st.game.online;
 }
 
+bool OpenRoomHost(const State &st)
+{
+	return st.game.active && st.game.online && st.game.host;
+}
+
+bool RulesetNeedsRestart(const State &st, const ModRuleset &ruleset)
+{
+	if (!OpenRoomHost(st) || ModsSameChoice(ruleset, ModsMountedChoice()) || ModsSameRuleset(ruleset, ModsMountedProfile().ruleset)) return false;
+	return !ModsCanSwitchWithoutRestart(ruleset);
+}
+
 const std::vector<RulesetChoice> &RulesetChoicesShown(const State &st)
 {
-	return SkirmishRoom(st) ? MountedRulesets() : st.createProfileInfo.rulesets;
+	return SkirmishRoom(st) || OpenRoomHost(st) ? MountedRulesets() : st.createProfileInfo.rulesets;
 }
 
 ModRuleset RulesetShown(const State &st)
 {
-	return SkirmishRoom(st) ? ModsMountedChoice() : st.createRuleset;
+	return SkirmishRoom(st) || OpenRoomHost(st) ? ModsMountedChoice() : st.createRuleset;
 }
 
 std::vector<std::string> DefaultCivSets(const ModRuleset &choice)
@@ -368,6 +379,8 @@ bool LocalReady(const GameRoomSnapshot &g)
 std::string RoomConfigKey(const OnlineLobby &l)
 {
 	std::string key = l.optionsText + "|" + std::to_string(l.rules) + "|" + l.map + "|" + l.mode + "|" + l.civSets;
+	// The rules of the room count too: a guest who agreed to the game with other rules has to agree again.
+	for (const OnlineMod &m : l.mods) key += "|" + m.id + "#" + m.layer + ":" + m.layerKey;
 	for (const OnlineSlot &s : l.slots) {
 		if (s.type != 3) key += "|" + std::to_string(s.type) + ":" + s.name;
 	}
@@ -563,5 +576,80 @@ void AbortJoin()
 	g_flow.hostPending = false;
 	if (g_flow.inJoin) g_flow.joinAbort = true;
 	if (g_flow.inJoin || GetTickCount() - g_flow.lastLobbyUpdate < 1000) g_flow.backToMain = true;
+}
+}
+
+namespace mpui_impl {
+bool AdoptRoomRules(const OnlineLobby &room)
+{
+	std::vector<RoomPackFact> facts;
+	for (const OnlineMod &m : room.mods) facts.push_back({m.id, m.version, m.copyKey, m.layer, m.layerKey});
+	ModRuleset want;
+	if (!ModsFindRoomRuleset(facts, want)) return false;
+	const ModRuleset before = ModsMountedProfile().ruleset;
+	if (ModsSameRuleset(before, want) || !ModsSwitchRulesetAndRemember(want)) return false;
+	if (SteamOwnGameplayKey() != room.gameplayKey) {
+		// Not what the host has (something else differs): put the rules back and let the usual check decide.
+		ModsSwitchRulesetAndRemember(before);
+		LogW("room", "the room's rules (%s %s) do not give the host's key; they were put back", want.pack.c_str(), want.id.c_str());
+		return false;
+	}
+	LogI("room", "the room's rules (%s %s) are now mine, without a restart; the game loads them when it starts", want.pack.c_str(), want.id.c_str());
+	return true;
+}
+
+// A guest checks, about twice a second, that its key is the room's. The host's mods line and key reach it as two updates, so a difference
+// is judged only after a few seconds. If the room's rules can be mounted in place they are; otherwise it leaves the room the way a
+// guest with other content does when joining (the dialog that downloads what is missing and restarts).
+void RoomFollowRules(const GameRoomSnapshot &snap)
+{
+	static DWORD last = 0, since = 0;
+	const DWORD now = GetTickCount();
+	if (!ModsHotSwitchEnabled() || !snap.online || snap.host || now - last < 500) return;
+	last = now;
+	const OnlineLobby &room = g_s.room.info;
+	const std::string own = g_s.room.id ? SteamOwnGameplayKey() : std::string();
+	if (RoomRulesDecide(room.gameplayKey, own, false, 0) == RoomRulesStep::kInSync) {
+		since = 0;
+		return;
+	}
+	if (!since) since = now;
+	if (AdoptRoomRules(room)) {
+		since = 0;
+		ModUiToast("The host changed the rules: yours were switched to match without restarting.");
+		return;
+	}
+	const RoomRulesStep step = RoomRulesDecide(room.gameplayKey, own, true, now - since);
+	if (step != RoomRulesStep::kLeave) return;
+	since = 0;
+	LogW("room", "my content differs from the room's and cannot be switched in place; leaving the room");
+	SteamLeaveForContent();
+}
+
+void ChooseRulesetInRoom(const ModRuleset &picked)
+{
+	if (ModsSameChoice(picked, ModsMountedChoice())) return;
+	if (!g_s.hostSave.name.empty()) {
+		ModUiToast("The room is for a saved game: its rules are the ones it was saved with.");
+		return;
+	}
+	if (ModsSameRuleset(picked, ModsMountedProfile().ruleset)) {
+		// Another entry that mounts the same files: only the civilizations of the room change.
+		ModProfile profile = ModsLoadProfile(ModsMountedProfile().name);
+		profile.ruleset = picked;
+		if (!ModsSaveProfile(profile)) {
+			ModUiToast(Tr("Could not save the rules in the content profile."));
+			return;
+		}
+		ModsMountedChoiceSet(picked);
+	}
+	else if (!ModsSwitchRulesetAndRemember(picked)) {
+		ModUiToast("That change needs a restart: close the room and create it again with those rules.");
+		return;
+	}
+	CivRoomSetsSet(DefaultCivSets(picked));
+	GameRoomCivSetsEdited();
+	SteamRepublishContent();
+	LogI("room", "the host changed the rules of the open room without a restart; civilization sets: %s", CivSetsJoin(CivRoomSets()).c_str());
 }
 }

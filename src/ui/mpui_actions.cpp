@@ -666,7 +666,13 @@ void DoAction(int action, int arg)
 	case kCreateOk: {
 		if (g_s.createSave >= 0 && g_s.createSave < static_cast<int>(g_s.saves.size())) {
 			const SaveEntry &save = g_s.saves[g_s.createSave];
-			const ModNeeds needs = ModsNeededFor(save.vfsPath, g_s.createProfile);
+			ModNeeds needs = ModsNeededFor(save.vfsPath, g_s.createProfile);
+			// Only the ruleset differs and it can be mounted in place: the room is for the saved game's rules, with no restart.
+			if (!needs.Satisfied() && g_s.createProfile == ModsMountedProfile().name && ModsSwitchForNeeds(needs)) {
+				g_s.createRuleset = ModsMountedChoice();
+				needs = ModsNeededFor(save.vfsPath, g_s.createProfile);
+				LogI("lobby", "the saved game \"%s\" needs other rules; switched in place without a restart", save.name.c_str());
+			}
 			if (!needs.Satisfied()) {
 				if (!needs.AllInstalled()) {
 					ModUiToast(Tr("The game \"") + save.name + Tr("\" needs content you don't have: ") + ShortList(needs.Names(true)) +
@@ -686,7 +692,7 @@ void DoAction(int action, int arg)
 		}
 		const bool otherProfile = g_s.createProfile != ModsMountedProfile().name;
 		// Rules that differ from the mounted ones only in CONST.INI are loaded now and the match reads them (ConstHotReload): no restart.
-		const bool rulesInPlace = !otherProfile && !ModsSameRuleset(g_s.createRuleset, ModsMountedProfile().ruleset) && ModsSwitchRulesetWithoutRestart(g_s.createRuleset, false);
+		const bool rulesInPlace = !otherProfile && !ModsSameRuleset(g_s.createRuleset, ModsMountedProfile().ruleset) && ModsSwitchRulesetWithoutRestart(g_s.createRuleset);
 		if (!rulesInPlace && (otherProfile || !ModsSameRuleset(g_s.createRuleset, ModsMountedProfile().ruleset))) {
 			// The ruleset is part of the profile, so the profile that will be loaded keeps it.
 			ModProfile chosen = ModsLoadProfile(g_s.createProfile);
@@ -779,6 +785,10 @@ void ChooseRuleset(int item)
 	const std::vector<RulesetChoice> &choices = RulesetChoicesShown(g_s);
 	if (item < 0 || item > static_cast<int>(choices.size())) return;
 	const ModRuleset picked = item == 0 ? ModRuleset() : choices[item - 1].ruleset;
+	if (OpenRoomHost(g_s)) {
+		ChooseRulesetInRoom(picked);
+		return;
+	}
 	if (!SkirmishRoom(g_s)) {
 		g_s.createRuleset = picked;
 		return;

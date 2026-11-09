@@ -84,6 +84,8 @@ struct ModCheck {
 	std::vector<std::string> rulesFolders;
 	ModRuleset ruleset;
 	bool needsActivation = false;
+	// Every package the game needs is enabled and only the ruleset is not the one it was saved with.
+	bool rulesetOnly = true;
 	bool warn = false;
 };
 
@@ -214,6 +216,7 @@ ModCheck ComputeModCheck(const State &st, const SaveRec &r)
 		else if (!active || !sameRuleset) {
 			std::string label = ModLabel(m);
 			if (!sameRuleset) label += " \xC2\xB7 " + (savedLayer ? savedLayer->name : Tr("Original (HD)"));
+			if (!active) c.rulesetOnly = false;
 			c.inactive.push_back(label);
 		}
 	}
@@ -822,11 +825,17 @@ void DoAction(State &st, int action, int arg)
 	case kLoad:
 		if (st.mode == 1) break;
 		if (sel && st.sel.size() == 1) {
-			const ModCheck mc = CheckFor(st, *sel);
+			ModCheck mc = CheckFor(st, *sel);
 			if (mc.blocked) {
 				LogW("saves", "\"%s\" not loaded: missing mods (%s)", sel->vfsPath.c_str(), Join(mc.missing).c_str());
 				ModUiToast(TrFmt("You can't load this game: you are missing content (%s). See the list in the game's details.", {ShortList(mc.missing)}), true);
 				break;
+			}
+			// Only the ruleset differs and it can be mounted in place: no restart (the game reads its data again when the game loads).
+			if (mc.needsActivation && mc.rulesetOnly && mc.extra.empty() && ModsCanSwitchWithoutRestart(mc.ruleset) && ModsSwitchRulesetAndRemember(mc.ruleset)) {
+				LogI("saves", "\"%s\" needs other rules; switched in place without a restart", sel->vfsPath.c_str());
+				st.modChecks.clear();
+				mc.needsActivation = false;
 			}
 			if (mc.needsActivation) {
 				const ModProfile loose = ModsLooseProfileWith(mc.rulesFolders, mc.ruleset);
