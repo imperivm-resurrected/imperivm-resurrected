@@ -97,6 +97,25 @@ ModNeeds ModsNeededFor(const std::string &gamePath, const std::string &profile)
 	return out;
 }
 
+bool ModsCanSwitchForNeeds(const ModNeeds &needs)
+{
+	if (needs.Satisfied() || needs.mods.empty()) return false;
+	const ModProfile mounted = ModsMountedProfile();
+	for (const ModNeed &n : needs.mods) {
+		if (n.inProfile) continue;
+		// Only the ruleset may differ: the package is installed and enabled.
+		if (!n.installed || std::none_of(mounted.mods.begin(), mounted.mods.end(), [&](const std::string &f) { return _stricmp(f.c_str(), n.installedFolder.c_str()) == 0; })) {
+			return false;
+		}
+	}
+	return !ModsSameRuleset(needs.ruleset, mounted.ruleset) && ModsCanSwitchWithoutRestart(needs.ruleset);
+}
+
+bool ModsSwitchForNeeds(const ModNeeds &needs)
+{
+	return ModsCanSwitchForNeeds(needs) && ModsSwitchRulesetAndRemember(needs.ruleset);
+}
+
 std::string ModsActivateProfileFor(const ModNeeds &needs, const std::string &label)
 {
 	if (!needs.AllInstalled()) return "";

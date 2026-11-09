@@ -200,6 +200,8 @@ void SteamPublishSlots(const std::string &text);
 void SteamPublishSaveColors(const std::string &text);
 std::string SteamTakeNotice();
 std::string SteamOwnGameplayKey();
+// The host's room says again what content it needs (the "mods" line, the key and the hash key), after its rules were switched in place.
+void SteamRepublishContent();
 RoomContent SteamRoomContent(const OnlineLobby &lobby, const std::string &ownKey, bool strictMap = false, bool watching = false);
 void SteamLeaveForContent(bool strictMap = false);
 

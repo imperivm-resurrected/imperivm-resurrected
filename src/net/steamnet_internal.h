@@ -177,6 +177,7 @@ void FoldSpectator(OnlineLobby &row, const OnlineLobby &s);
 void MergeSpectateLobbies(std::vector<OnlineLobby> &list);
 extern OnlineCreateSettings g_creating;
 void PublishMods(const std::string &scenModId);
+void RepublishContent();
 void DispatchCallbacks();
 const int kShareChannel = 2;
 

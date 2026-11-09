@@ -293,6 +293,10 @@ struct ModNeeds {
 	bool AllInstalled() const;
 	std::vector<std::string> Names(bool onlyMissing) const;
 };
+// The packages a saved game needs are all installed and enabled and only the ruleset differs from the mounted one, and that switch can be
+// made without a restart: nothing is changed. ModsSwitchForNeeds makes it (and remembers it in the profile).
+bool ModsCanSwitchForNeeds(const ModNeeds &needs);
+bool ModsSwitchForNeeds(const ModNeeds &needs);
 ModNeeds ModsNeededFor(const std::string &gamePath, const std::string &profile = "");
 std::string ModsActivateProfileFor(const ModNeeds &needs, const std::string &label);
 // The profile "My content" with these packages (and the cosmetic ones already active), mounting the ruleset if there is one.
@@ -330,6 +334,15 @@ bool ModsCanSwitchWithoutRestart(const ModRuleset &wanted, bool allowFull = true
 // Replaces the mounted ruleset if ModsCanSwitchWithoutRestart. The caller saves the profile and sets the choice, as for any other
 // entry that mounts the same files (ModsMountedChoiceSet).
 bool ModsSwitchRulesetWithoutRestart(const ModRuleset &wanted, bool allowFull = true);
+// The same, and the mounted profile keeps the ruleset (as the Rules row of the skirmish room does), so a restart or the next session has it too.
+bool ModsSwitchRulesetAndRemember(const ModRuleset &wanted, bool allowFull = true);
+// What a room says about one of its packages (the "mods" line of the lobby).
+struct RoomPackFact {
+	std::string id, version, copyKey, layer, layerKey;
+};
+// The ruleset a room mounts, when this computer has that exact copy of the package of its ruleset, enabled in the mounted profile (empty
+// ruleset if the room has none). False if it does not, or if the room names more than one ruleset.
+bool ModsFindRoomRuleset(const std::vector<RoomPackFact> &packs, ModRuleset &out);
 // What the game has to do before the next match so that it plays with the mounted ruleset: nothing, load data/const.ini again, read all its
 // data again (FullHotReload), or nothing it can do (kRestart: the pair is not one that can be switched in place).
 enum class ModsReload { kNone, kConst, kFull, kRestart };

@@ -180,3 +180,43 @@ void ModsConstReloadFailed()
 	std::lock_guard<std::mutex> lock(g_lock);
 	g_mount.choice = back;
 }
+
+bool ModsSwitchRulesetAndRemember(const ModRuleset &wanted, bool allowFull)
+{
+	if (!ModsSwitchRulesetWithoutRestart(wanted, allowFull)) return false;
+	const std::string name = ModsMountedProfile().name;
+	ModProfile p = ModsLoadProfile(name);
+	p.ruleset = wanted;
+	if (!ModsSaveProfile(p)) LogW("content", "the rules could not be saved in the profile \"%s\"; they stay for this session", name.c_str());
+	ModsMountedChoiceSet(wanted);
+	return true;
+}
+
+bool ModsFindRoomRuleset(const std::vector<RoomPackFact> &packs, ModRuleset &out)
+{
+	out = ModRuleset();
+	const RoomPackFact *with = nullptr;
+	for (const RoomPackFact &f : packs) {
+		if (f.layer.empty()) continue;
+		if (with) return false;
+		with = &f;
+	}
+	if (!with) return true;
+	std::vector<std::string> mounted;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		mounted = g_mount.profile.mods;
+	}
+	std::lock_guard<std::mutex> lock(g_lock);
+	for (const ModInfo &m : g_mods) {
+		if (_stricmp(m.id.c_str(), with->id.c_str()) != 0 || m.version != with->version) continue;
+		if (ModsCompareRoomCopy(m, with->copyKey) != RoomCopy::kSame || ModsCompareRoomLayer(m, with->layer, with->layerKey) != RoomCopy::kSame) continue;
+		if (std::none_of(mounted.begin(), mounted.end(), [&](const std::string &f) { return SameFolder(f, m.folder); })) continue;
+		const ModLayer *layer = ModsFindLayer(m, with->layer);
+		if (!layer) continue;
+		out.pack = m.folder;
+		out.id = layer->id;
+		return true;
+	}
+	return false;
+}
