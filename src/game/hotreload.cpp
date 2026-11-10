@@ -21,6 +21,7 @@
 #include "core/log.h"
 #include "game/cmdcheck.h"
 #include "game/hotreload.h"
+#include "game/memcensus.h"
 #include "game/scriptevents.h"
 #include "mods/hotswap.h"
 #include "mods/mods.h"
@@ -234,6 +235,13 @@ void LogProcessState(const char *when)
 			haveStatus ? static_cast<unsigned>((status.ullTotalVirtual - status.ullAvailVirtual) >> 20) : 0u, static_cast<unsigned long>(heapCount), corrupt,
 			static_cast<unsigned long>(GetTickCount() - start));
 		g_lastCommit = commit;
+		// What the engine keeps loaded between matches and refills when a match needs it: a match after a reload starts with these at 0.
+		unsigned decors = 0;
+		for (unsigned i = 0; i < kDecorTypes; i++) {
+			if (reinterpret_cast<void *const *>(addr::kDecorEntities)[i]) decors++;
+		}
+		LogI("game", "memory (%s): entity cache holds %u entities by name and %u by pointer, %u decor types set", when, *Word(addr::kEntityNameCount),
+			*Word(addr::kEntityPointerCount), decors);
 	}
 	__except (EXCEPTION_EXECUTE_HANDLER) {
 		LogE("game", "memory (%s): the process state could not be read (the heap may be damaged)", when);
@@ -306,6 +314,7 @@ bool RebuildGameData(DWORD *shutdownMs, DWORD *initMs)
 		const DWORD start = GetTickCount();
 		reinterpret_cast<GameDataSystems_t>(addr::kShutdownGameDataSystems)();
 		const DWORD freed = GetTickCount();
+		MemoryCensus(CensusPoint::kAfterShutdown, "after Shutdown", CensusPoint::kBeforeReload);
 		ResetClassCaches();
 		ResetEntityCaches();
 		reinterpret_cast<GameDataSystems_t>(addr::kInitGameDataSystems)();
@@ -448,6 +457,7 @@ bool HotReload(const void *game)
 	}
 	LogI("game", "hot reload: starting");
 	LogProcessState("before");
+	MemoryCensus(CensusPoint::kBeforeReload, "before the reload", CensusPoint::kAfterUnload);
 	// The patched copies of every file are made again from the patches mounted now.
 	VfsResetPatchedAll();
 	if (!FileIsUsable()) return false;
@@ -458,6 +468,7 @@ bool HotReload(const void *game)
 	if (!RebuildGameData(&shutdownMs, &initMs)) return false;
 	if (!TablesExist()) return false;
 	LogProcessState("after Init");
+	MemoryCensus(CensusPoint::kAfterInit, "after Init", CensusPoint::kAfterShutdown);
 	// The event scripts were compiled in the library that is gone.
 	ScriptEventsReset();
 	LogI("game", "hot reload: patches %lu ms, const.ini %lu ms, shutdown %lu ms, init %lu ms", static_cast<unsigned long>(patched - start),
@@ -475,6 +486,7 @@ void CheckAfterLoad(const void *loadResult)
 	LogI("game", "hot reload (after LoadGameData): class RHastatus %s, class RBarracks %s", hastatus ? "found" : "NOT FOUND", barracks ? "found" : "NOT FOUND");
 	CheckCachedClassNames();
 	LogProcessState("after LoadGameData");
+	MemoryCensus(CensusPoint::kAfterLoad, "after LoadGameData", CensusPoint::kAfterInit, CensusPoint::kAfterUnload);
 	if (!hastatus || !barracks) RestartNow("the class registry lacks the Roman classes");
 	else if (!CommandSanity("after LoadGameData")) RestartNow("the command table lacks the Roman commands");
 }
@@ -509,7 +521,10 @@ void *__fastcall HookLoadGameData(void *self, void *edx)
 	}
 	void *result = g_origLoadGameData(self, edx);
 	if (reloaded) CheckAfterLoad(result);
-	else LogProcessState("after LoadGameData, nothing reloaded");
+	else {
+		LogProcessState("after LoadGameData, nothing reloaded");
+		MemoryCensus(CensusPoint::kAfterLoad, "after LoadGameData, nothing reloaded", CensusPoint::kAfterUnload);
+	}
 	return result;
 }
 
@@ -518,8 +533,11 @@ void *__fastcall HookLoadGameData(void *self, void *edx)
 void *__fastcall HookUnloadGameData(void *self, void *edx)
 {
 	LogProcessState("before UnloadGameData");
+	MemoryCensus(CensusPoint::kBeforeUnload, "before UnloadGameData", CensusPoint::kAfterLoad);
 	void *result = g_origUnloadGameData(self, edx);
 	LogProcessState("after UnloadGameData");
+	// Against the end of the previous game too: that is the number the test of the switches reads.
+	MemoryCensus(CensusPoint::kAfterUnload, "after UnloadGameData", CensusPoint::kBeforeUnload, CensusPoint::kAfterUnload);
 	return result;
 }
 }

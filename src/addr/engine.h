@@ -57,5 +57,9 @@ inline constexpr uintptr_t kPersistVersionSrc = 0x008212f4;
 inline constexpr uintptr_t kVfsOpenFilePtr = 0x00829b30;
 inline constexpr uintptr_t kPfnVfsFileExists = 0x00829b50;
 inline constexpr uintptr_t kGameCodeEnd = 0x00900000;
+// The game's C runtime (Visual Studio 2003) keeps blocks of up to 1016 bytes in its own small-block heap, outside the Windows heaps: an array of
+// regions of 20 bytes each (the base of its 1 MB of address space is the word at +12) and how many there are (___sbh_alloc_new_region).
+inline constexpr uintptr_t kSbhRegionCount = 0x00a89648;
+inline constexpr uintptr_t kSbhRegionList = 0x00a8964c;
 
 }
