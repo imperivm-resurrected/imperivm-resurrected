@@ -12,6 +12,7 @@
 #include "core/crashlog.h"
 #include "core/log.h"
 #include "game/memcensus.h"
+#include "game/memtrace.h"
 
 namespace {
 
@@ -77,6 +78,7 @@ bool WalkHeap(HANDLE heap, HeapCensus &out)
 				const unsigned bin = BinOf(entry.cbData);
 				out.count[bin]++;
 				out.bytes[bin] += entry.cbData;
+				if (entry.cbData >= kMemTraceLarge) MemTraceNote(entry.lpData, entry.cbData);
 			}
 			else {
 				out.freeBlocks++;
@@ -149,6 +151,7 @@ void ReadAddressSpace(Census &c)
 void Take(Census &c)
 {
 	memset(&c, 0, sizeof(c));
+	MemTraceBegin();
 	const DWORD start = GetTickCount();
 	HANDLE handles[64];
 	const DWORD total = GetProcessHeaps(64, handles);
@@ -284,6 +287,8 @@ void MemoryCensus(CensusPoint at, const char *when, CensusPoint compare, CensusP
 		g_off = true;
 	}
 	LogSummary(when, g_now);
+	// The large blocks that are alive, by game and by the code that made them: what the engine keeps for ever shows up as old games.
+	if (at == CensusPoint::kBeforeReload || at == CensusPoint::kAfterShutdown || at == CensusPoint::kAfterUnload) MemTraceReport(when);
 	for (const CensusPoint other : {compare, also}) {
 		if (other == CensusPoint::kNone) continue;
 		const Census &before = g_slot[static_cast<unsigned>(other)];
