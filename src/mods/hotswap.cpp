@@ -121,3 +121,13 @@ bool SaveKindSwitchesInPlace(int saveKind)
 {
 	return saveKind == kSaveStrategy || saveKind == kSaveAdventure || saveKind == kSaveConquest;
 }
+
+bool GameKindCanSwitchWhileRunning(GameKind kind)
+{
+	return kind == GameKind::kSkirmish || kind == GameKind::kAdventure || kind == GameKind::kConquest;
+}
+
+bool PendingSwitchStillValid(unsigned chosenTick, unsigned nowTick)
+{
+	return nowTick - chosenTick <= kPendingSwitchMs;
+}

@@ -7,6 +7,7 @@
 #include <string>
 
 #include "MinHook.h"
+#include "hooks/gameload.h"
 #include "hooks/hookcount.h"
 #include "addr/classcache.h"
 #include "addr/constcache.h"
@@ -480,6 +481,8 @@ void CheckAfterLoad(const void *loadResult)
 void *__fastcall HookLoadGameData(void *self, void *edx)
 {
 	bool reloaded = false;
+	// A switch chosen from inside a game that was running is mounted now: the old game is gone and the new one is still empty.
+	if (ModsApplyPendingSwitch() == ModsPending::kFailed) RestartNow("the ruleset chosen could not be mounted");
 	const ModsReload plan = ModsReloadPlan();
 	// One line per game that starts, for every kind: what it is and what is done about the rules.
 	{
@@ -519,5 +522,7 @@ void InstallHotReload(bool knownExe)
 		return;
 	}
 	ModsHotReloadSetReady(true);
+	// A load that ends (done or not) has used or lost the switch that was waiting for it.
+	OnGameLoaded([](int) { ModsDropPendingSwitch("the load ended"); });
 	LogI("game", "hot reload: ready");
 }

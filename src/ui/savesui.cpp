@@ -837,8 +837,9 @@ void DoAction(State &st, int action, int arg)
 				ModUiToast(TrFmt("You can't load this game: you are missing content (%s). See the list in the game's details.", {ShortList(mc.missing)}), true);
 				break;
 			}
-			// Only the ruleset differs and it can be mounted in place: no restart (the game reads its data again when the game loads).
-			if (mc.inPlace) {
+			// Only the ruleset differs and it can be mounted in place: no restart (the game reads its data again when the game loads). An online
+			// save opened from a running game is hosted in a room after the game is left: the room does its own switch, in the menu.
+			if (mc.inPlace && !(sel->online && sel->kind == kSaveStrategy && InGame())) {
 				if (ModsSwitchRulesetAndRemember(mc.ruleset)) {
 					LogI("saves", "\"%s\" needs other rules; switched in place without a restart", sel->vfsPath.c_str());
 					st.modChecks.clear();

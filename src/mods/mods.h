@@ -333,13 +333,19 @@ void ModsHotReloadSetReady(bool ready);
 // Whether the hook is in place: the rooms and the saves screen only offer an in-place switch then.
 bool ModsHotSwitchAvailable();
 // Whether the mounted ruleset can be replaced by `wanted` without restarting: the game holds the rules of its start and both rulesets hold only
-// the kinds of file the game can read again (see hotswap.h).
+// the kinds of file the game can read again (see hotswap.h). While a game is running it is only true for the kinds that can wait for the next one.
 bool ModsCanSwitchWithoutRestart(const ModRuleset &wanted);
 // Replaces the mounted ruleset if ModsCanSwitchWithoutRestart. The caller saves the profile and sets the choice, as for any other
 // entry that mounts the same files (ModsMountedChoiceSet).
 bool ModsSwitchRulesetWithoutRestart(const ModRuleset &wanted);
 // The same, and the mounted profile keeps the ruleset (as the Ruleset row of the skirmish room does), so a restart or the next session has it too.
 bool ModsSwitchRulesetAndRemember(const ModRuleset &wanted);
+// A switch chosen while a game is running waits for the next game: the start of its LoadGameData mounts it (game/hotreload.cpp), when the old
+// game has been torn down. kFailed means it could not be mounted: the profile keeps it and the game restarts.
+enum class ModsPending { kNone, kApplied, kFailed };
+ModsPending ModsApplyPendingSwitch();
+// The load that was going to start that game ended without starting it.
+void ModsDropPendingSwitch(const char *why);
 // What a room says about one of its packages (the "mods" line of the lobby).
 struct RoomPackFact {
 	std::string id, version, copyKey, layer, layerKey;

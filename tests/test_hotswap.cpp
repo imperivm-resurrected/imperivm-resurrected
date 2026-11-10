@@ -142,6 +142,27 @@ void SavesOfEveryKindOfGameButReplaysSwitchInPlace()
 	CHECK(!SaveSwitchesInPlace(SaveKindSwitchesInPlace(kSaveReplay), true, true, false, true));
 }
 
+void ASwitchChosenInAGameWaitsOnlyWhereTheNextGameIsLoadedThroughLoadGameData()
+{
+	CHECK(GameKindCanSwitchWhileRunning(GameKind::kSkirmish));
+	CHECK(GameKindCanSwitchWhileRunning(GameKind::kAdventure));
+	CHECK(GameKindCanSwitchWhileRunning(GameKind::kConquest));
+	// The editor loads its files inside the same game object, a multiplayer game does not load saves, and an unknown game is not known.
+	CHECK(!GameKindCanSwitchWhileRunning(GameKind::kEditor));
+	CHECK(!GameKindCanSwitchWhileRunning(GameKind::kMultiplayer));
+	CHECK(!GameKindCanSwitchWhileRunning(GameKind::kUnknown));
+}
+
+void AWaitingSwitchExpires()
+{
+	CHECK(PendingSwitchStillValid(1000, 1000));
+	CHECK(PendingSwitchStillValid(1000, 1000 + kPendingSwitchMs));
+	CHECK(!PendingSwitchStillValid(1000, 1000 + kPendingSwitchMs + 1));
+	// The tick counter wraps around after 49 days.
+	CHECK(PendingSwitchStillValid(0xfffffff0u, 20));
+	CHECK(!PendingSwitchStillValid(0xfffffff0u, kPendingSwitchMs + 100));
+}
+
 }
 
 int main()
@@ -154,5 +175,7 @@ int main()
 	EachKindOfFileIsAcceptedOnItsOwn();
 	EveryKindOfGameThatTheEngineMakesIsKnown();
 	SavesOfEveryKindOfGameButReplaysSwitchInPlace();
+	ASwitchChosenInAGameWaitsOnlyWhereTheNextGameIsLoadedThroughLoadGameData();
+	AWaitingSwitchExpires();
 	return test::Summary("hotswap");
 }
