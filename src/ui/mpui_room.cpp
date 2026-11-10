@@ -404,8 +404,8 @@ bool RoomActionFrozen(const GameRoomSnapshot &g, int action, int arg)
 	case kGSiteToggle:
 	case kGOptToggle: return g.host && LocalReady(g);
 	case kGDropOpen: {
-		const int kind = arg & 15, slot = (arg >> 4) & 7;
-		if (kind == kDropRace || kind == kDropBonus || kind == kDropColor) return SlotFrozen(g, g.slots[slot]);
+		const int kind = arg & kDropKindMask, slot = (arg >> kDropKindBits) & 7;
+		if (kind == kDropRace || kind == kDropBonus || kind == kDropColor || kind == kDropTeam) return SlotFrozen(g, g.slots[slot]);
 		if (kind == kDropOption || kind == kDropPreset || kind == kDropSites || kind == kDropModOption || kind == kDropSpectators || kind == kDropSlot) {
 			return g.host && LocalReady(g);
 		}

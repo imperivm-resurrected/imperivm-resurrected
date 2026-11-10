@@ -5,6 +5,8 @@
 
 #include <string>
 
+#include "core/log.h"
+
 struct Config {
 	bool renderEnabled = true;
 	bool vsync = true;
@@ -15,8 +17,6 @@ struct Config {
 	bool fakeModeChange = true;
 
 	bool windowed = false;
-	int windowW = 1600;
-	int windowH = 900;
 	bool trapMouse = true;
 	int monitor = 0;
 	int resolutionW = 0;
@@ -24,6 +24,8 @@ struct Config {
 	int resolutionScreenW = 0;
 	int resolutionScreenH = 0;
 	bool extendedView = false;
+	int fpsLimit = 0;
+	int imageScaling = 0;
 	bool showPerf = false;
 	bool showNet = false;
 	int panelX = 1000;
@@ -44,6 +46,12 @@ struct Config {
 	int autosaveSlots = 3;
 	bool crashFix = true;
 	bool smoothScroll = true;
+	int healthBarOwners = 0;
+	bool healthBarHeroesOnly = false;
+	bool pauseInBackground = false;
+	bool zoomExtras = true;
+	bool zoomFog = true;
+	int zoomRefreshMs = 16;
 
 	bool modOverrides = true;
 	// [Mods] ConstHotReload: change between rulesets that differ only in data/const.ini without restarting the game.
@@ -51,11 +59,17 @@ struct Config {
 	// [Mods] FullHotReload (experimental): any ruleset made only of patches switches without restarting, by making the game read its data again.
 	bool fullHotReload = false;
 
+	LogLevel logLevel = kLogInfo;
 	bool logFiles = false;
 	bool rejoinTrace = false;
 	bool rejoinReload = true;
 	std::string dumpFiles;
 	std::string dumpAtStartup;
+
+	int masterVolume = 100;
+	int natureVolume = -1;
+	int conversationVolume = 100;
+	std::string outputDevice;
 };
 
 const Config &GetConfig();

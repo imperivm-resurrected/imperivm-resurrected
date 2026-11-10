@@ -22,6 +22,7 @@
 #include "hooks/displaymode.h"
 #include "core/log.h"
 #include "hooks/media.h"
+#include "hooks/soundlevels.h"
 #include "addr/state.h"
 #include "addr/media.h"
 
@@ -43,9 +44,8 @@ std::atomic<DWORD> g_movieSince{0};
 
 long MovieVolume()
 {
-	const int pct = GetConfig().movieMute ? 0 : GetConfig().movieVolume;
-	if (pct <= 0) return -10000;
-	return std::max(-10000L, static_cast<long>(2000.0 * std::log10(pct / 100.0)));
+	const Config &c = GetConfig();
+	return SoundMovieVolume(c.movieVolume, c.movieMute, c.masterVolume);
 }
 
 RECT GameScreenRect(HWND game)
@@ -358,7 +358,8 @@ HRESULT WINAPI HookCoCreateInstance(REFCLSID clsid, LPUNKNOWN outer, DWORD ctx, 
 }
 
 const unsigned kIsPausedSlot = 22;
-const unsigned short kTypeMusic = 1, kTypeUI = 6;
+// A conversation pauses the match while it is on screen and moves on when its voice (type 9) stops playing.
+const unsigned short kTypeMusic = 1, kTypeUI = 6, kTypeConversation = 9;
 
 typedef void(__fastcall *SetVolume_t)(void *channel, void *edx, long volume);
 typedef void(__fastcall *ThisOnly_t)(void *self);
@@ -366,6 +367,8 @@ typedef int(__fastcall *IsPaused_t)(void *game);
 
 bool g_muted = false;
 std::vector<void *> g_pausedPaths;
+bool g_musicMuted = false;
+std::vector<void *> g_pausedMusic;
 
 }
 
@@ -412,7 +415,7 @@ void MediaFrameTick()
 			char *ch = *reinterpret_cast<char **>(mgr + 0x18 + i * 4);
 			if (!ch || !*reinterpret_cast<void **>(ch + 8)) continue;
 			const unsigned short type = *reinterpret_cast<unsigned short *>(ch + 0xc);
-			if (type == kTypeMusic || type == kTypeUI) continue;
+			if (type == kTypeMusic || type == kTypeUI || type == kTypeConversation) continue;
 			void *path = *reinterpret_cast<void **>(ch + 4);
 			if (DmShimPausePath(path, true)) {
 				g_pausedPaths.push_back(path);
@@ -432,6 +435,27 @@ void MediaFrameTick()
 		reinterpret_cast<ThisOnly_t>(addr::kUpdateChannelVolumes)(mgr);
 		g_muted = false;
 	}
+}
+
+void MediaPauseMusic(bool pause)
+{
+	char *mgr = *reinterpret_cast<char **>(addr::kSoundManager);
+	if (!mgr || pause == g_musicMuted) return;
+	if (pause) {
+		for (int i = 0; i < 0x40; i++) {
+			char *ch = *reinterpret_cast<char **>(mgr + 0x18 + i * 4);
+			if (!ch || !*reinterpret_cast<void **>(ch + 8) || *reinterpret_cast<unsigned short *>(ch + 0xc) != kTypeMusic) continue;
+			void *path = *reinterpret_cast<void **>(ch + 4);
+			if (DmShimPausePath(path, true)) g_pausedMusic.push_back(path);
+			else reinterpret_cast<SetVolume_t>(addr::kChannelSetVolume)(ch, nullptr, -9600);
+		}
+	}
+	else {
+		for (void *path : g_pausedMusic) DmShimPausePath(path, false);
+		g_pausedMusic.clear();
+		reinterpret_cast<ThisOnly_t>(addr::kUpdateChannelVolumes)(mgr);
+	}
+	g_musicMuted = pause;
 }
 
 bool MediaMovieShowing()

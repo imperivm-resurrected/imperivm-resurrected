@@ -11,9 +11,11 @@ void UpdaterMenuReached();
 
 struct UpdaterInfo {
 	enum State { kNone, kAvailable, kDownloading, kReady, kFailed } state = kNone;
+	enum Check { kNotChecked, kChecking, kUpToDate, kNewer, kCheckFailed } check = kNotChecked;
 	std::string current, newVersion, notes, error;
 	int percent = 0;
 };
 UpdaterInfo UpdaterGetInfo();
 void UpdaterStartInstall();
+bool UpdaterCheckNow();
 void UpdaterRestartNow();

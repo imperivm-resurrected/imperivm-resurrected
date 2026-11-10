@@ -139,7 +139,7 @@ void MpUiWakeGameThread()
 
 void MpUiObserveFrame(const uint32_t *buf, int w, int h)
 {
-	if (*reinterpret_cast<void **>(addr::kGame) == nullptr && !GameRoomActive() && !MostlyBlack(buf, static_cast<size_t>(w) * h)) {
+	if (MpUiMainMenuVisible() && !GameRoomActive() && !MostlyBlack(buf, static_cast<size_t>(w) * h)) {
 		SaveBackground(buf, w, h, false);
 		PersistBackground(buf, w, h);
 	}
@@ -301,7 +301,7 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 		ApplySaveLook(g_s.game);
 		RedirectReplacedRaces(g_s.game);
 		ResetDisallowedRaces(g_s.game);
-		if (!g_s.game.active && g_s.dropKind <= kDropPreset) g_s.dropOpen = false;
+		if (!g_s.game.active && (g_s.dropKind <= kDropPreset || g_s.dropKind == kDropBonus || g_s.dropKind == kDropTeam)) g_s.dropOpen = false;
 		if (g_s.dropOpen && g_s.dropKind == kDropSlot && (g_flow.arrivingIds[g_s.dropIndex & 7] || g_s.game.slots[g_s.dropIndex & 7].joining)) {
 			g_s.dropOpen = false;
 		}
@@ -339,11 +339,16 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 		st = g_s;
 	}
 	const float s = std::max(0.6f, std::min(1.6f, std::min((w - 16) / static_cast<float>(kW), (h - 16) / static_cast<float>(kH))));
+	bool menuOnTop = false;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
 		g_s.uiScale = s;
+		menuOnTop = MainMenuOnTop();
 	}
-	const bool cover = st.game.active || st.connecting || SpectatorCovering() || GetTickCount() - g_flow.lastLobbyUpdate < 1000;
+	// The closed room stays in the frame until the game paints again, and the lobby under this list keeps the cover on from then on:
+	// a frame saved in between would be the backdrop of every room that follows.
+	const bool roomInFrame = st.gameWasActive || st.gameClosedAt;
+	const bool cover = st.game.active || st.connecting || roomInFrame || SpectatorCovering() || GetTickCount() - g_flow.lastLobbyUpdate < 1000;
 	const size_t n = static_cast<size_t>(w) * h;
 	static bool triedCache = false;
 	if (cover && g_bg.size() != n && !triedCache) {
@@ -357,7 +362,7 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 		for (size_t i = 0; i < n; i++) {
 			buf[i] = cover ? 0xff100c08u : 0xff000000u | ((buf[i] >> 1) & 0x7f7f7f);
 		}
-		if (!cover) SaveBackground(buf, w, h, true);
+		if (!cover && menuOnTop) SaveBackground(buf, w, h, true);
 	}
 	PanelRender r(g_canvas, buf, w, h);
 	if (!r.Begin(kW, kH, 16, false, s)) return;

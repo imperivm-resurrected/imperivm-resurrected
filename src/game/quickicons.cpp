@@ -16,6 +16,7 @@
 #include "addr/script.h"
 #include "addr/state.h"
 #include "addr/world.h"
+#include "core/config.h"
 #include "core/log.h"
 #include "game/quickicons.h"
 
@@ -67,6 +68,8 @@ template <typename T>
 T &At(void *p, unsigned off) { return *reinterpret_cast<T *>(static_cast<char *>(p) + off); }
 
 void *Bar() { return *reinterpret_cast<void **>(addr::kQuickIconBarGlobal); }
+
+bool ExtrasEnabled() { return GetConfig().zoomExtras; }
 
 const unsigned kHeroFlag = 0x1000000, kOffFlags = 0x2c, kOffExperience = 0x180, kOffLevel = 0x184;
 const DWORD kBlinkMs = 450;
@@ -200,6 +203,10 @@ void DecorateIcon(void *icon, void *surface)
 
 void __fastcall HookRenderIcon(void *self)
 {
+	if (!ExtrasEnabled()) {
+		g_origRenderIcon(self);
+		return;
+	}
 	const int saved = At<int>(self, kOffCount);
 	At<int>(self, kOffCount) = -1;
 	g_origRenderIcon(self);
@@ -209,7 +216,7 @@ void __fastcall HookRenderIcon(void *self)
 void __fastcall HookIconDraw(void *self, void *edx, void *surface, int unused)
 {
 	g_origIconDraw(self, edx, surface, unused);
-	if (g_failed || !At<void *>(self, kOffBitmap) || At<int>(self, kOffShown) == 0) return;
+	if (g_failed || !ExtrasEnabled() || !At<void *>(self, kOffBitmap) || At<int>(self, kOffShown) == 0) return;
 	__try {
 		DecorateIcon(self, surface);
 	}
@@ -217,14 +224,6 @@ void __fastcall HookIconDraw(void *self, void *edx, void *surface, int unused)
 		g_failed = true;
 		LogE("game", "group icons: ERROR decorating the hero icon, disabled");
 	}
-}
-
-bool ExtrasEnabled()
-{
-	char path[MAX_PATH] = {};
-	GetModuleFileNameA(nullptr, path, MAX_PATH);
-	if (char *slash = strrchr(path, 0x5c)) strcpy_s(slash + 1, MAX_PATH - (slash + 1 - path), "imperivm-mod.ini");
-	return GetPrivateProfileIntA("Map", "ZoomExtras", 1, path) != 0;
 }
 
 bool IsExtraIndex(int index) { return index >= kRealCount || index == -1; }
@@ -321,6 +320,9 @@ void DestroyExtras()
 {
 	for (void *&icon : g_extra) {
 		if (!icon) continue;
+		if (At<int>(icon, kOffShown) != 0) {
+			reinterpret_cast<Invalidate_t>(addr::kVisibleMgrInvalidateRect)(*reinterpret_cast<void **>(addr::kVisibleMgr), nullptr, reinterpret_cast<int *>(static_cast<char *>(icon) + kOffInvalid));
+		}
 		At<int>(icon, kOffIndex) = kBarCursorSlot;
 		void **vtable = *reinterpret_cast<void ***>(icon);
 		reinterpret_cast<void(__fastcall *)(void *, void *, int)>(vtable[0])(icon, nullptr, 1);
@@ -358,7 +360,7 @@ bool SafeDestroyExtras()
 void __cdecl HookCreateBar(int param)
 {
 	g_origCreateBar(param);
-	if (!SafeCreateExtras()) LogE("game", "group icons: ERROR creating the extra icons, disabled");
+	if (ExtrasEnabled() && !SafeCreateExtras()) LogE("game", "group icons: ERROR creating the extra icons, disabled");
 }
 
 void __cdecl HookDestroyBar()
@@ -402,14 +404,28 @@ bool Inside(void *icon, int x, int y)
 {
 	return At<int>(icon, kOffShown) != 0 && x >= At<int>(icon, kOffLeft) && x <= At<int>(icon, kOffRight) && y >= At<int>(icon, kOffTop) && y <= At<int>(icon, kOffBottom);
 }
+
+// The setting changes while playing: the extra icons come and go with it, as when the bar is made or removed.
+void SyncExtras()
+{
+	if (ExtrasEnabled() && !g_barFor && Bar()) {
+		if (!SafeCreateExtras()) LogE("game", "group icons: ERROR creating the extra icons, disabled");
+	}
+	else if (!ExtrasEnabled() && g_barFor) {
+		if (SafeDestroyExtras()) LogI("game", "group icons: turned off in the options");
+		else LogE("game", "group icons: ERROR removing the extra icons");
+	}
+}
 }
 
 void QuickIconsGameThreadTick()
 {
-	if (g_failed || !g_barFor) return;
+	if (g_failed) return;
 	const DWORD now = GetTickCount();
 	if (now - g_lastTick < 400) return;
 	g_lastTick = now;
+	SyncExtras();
+	if (g_failed || !g_barFor) return;
 	__try {
 		RefreshExtras(0);
 		for (int slot = 0; slot < kRealCount + kExtraCount; slot++) {
@@ -471,11 +487,6 @@ bool QuickIconsMouse(int gameMessage, int viewX, int viewY)
 void InstallQuickIcons(bool knownExe)
 {
 	if (!knownExe) return;
-	if (!ExtrasEnabled()) {
-		g_failed = true;
-		LogI("game", "group icons: disabled in the .ini");
-		return;
-	}
 	struct Item {
 		uintptr_t address;
 		void *detour;
@@ -499,5 +510,5 @@ void InstallQuickIcons(bool knownExe)
 		ok = ok && enabled;
 	}
 	if (!ok) g_failed = true;
-	LogAt(ok ? kLogInfo : kLogError, "game", "group icons: %s", ok ? "ready" : "NOT available");
+	LogAt(ok ? kLogInfo : kLogError, "game", "group icons: %s", ok ? (ExtrasEnabled() ? "ready" : "ready, turned off in the options") : "NOT available");
 }

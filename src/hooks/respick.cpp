@@ -15,6 +15,11 @@ int IndexOf(const std::vector<ResSize> &list, ResSize size)
 	return -1;
 }
 
+bool LargerFirst(ResSize a, ResSize b)
+{
+	return a.w != b.w ? a.w > b.w : a.h > b.h;
+}
+
 }
 
 ResPick PickStartResolution(const std::vector<ResSize> &list, ResSize saved, ResSize savedOn, ResSize screen, bool savedIsMonitorMode)
@@ -39,9 +44,16 @@ ResPick PickStartResolution(const std::vector<ResSize> &list, ResSize saved, Res
 	return pick;
 }
 
-// The game's menus are a 1366x768 frame: its own list never went below 1280 wide or 768 high. The
-// screen's own size is offered anyway, so a smaller screen still has one.
-const int kMinW = 1280, kMinH = 768, kMaxW = 4096, kMaxH = 2304;
+// Every size Windows reports for the monitor is offered, at any colour depth or refresh rate, except:
+// - below 1024 wide or 768 high: the game lays its menus out on a frame of that size centred on the
+//   screen (the conquest map is 1024x768, the other menus are 768 high), so a smaller image cuts them;
+//   1024x768 is also the size the game itself falls back to. The screen's own size is offered anyway, so
+//   a smaller screen still has one.
+// - above 4096x2304: the largest image the mod has ever let the game draw, in every version; the game
+//   paints each frame in software and a larger one was never tried.
+// - above the size Windows uses for the monitor, unless allowed: in full screen the mod switches the
+//   monitor to that mode; a window cannot, and in a window the list is the one of BuildWindowResolutionList.
+const int kMinW = 1024, kMinH = 768, kMaxW = 4096, kMaxH = 2304;
 
 std::vector<ResSize> BuildResolutionList(const std::vector<ResSize> &windows, ResSize screen, const std::vector<ResSize> &extended, bool monitorModesBeyondScreen)
 {
@@ -56,7 +68,20 @@ std::vector<ResSize> BuildResolutionList(const std::vector<ResSize> &windows, Re
 	add(screen, false);
 	for (ResSize s : windows) add(s, monitorModesBeyondScreen);
 	for (ResSize s : extended) add(s, true);
-	std::sort(out.begin(), out.end(), [](ResSize a, ResSize b) { return a.w != b.w ? a.w > b.w : a.h > b.h; });
+	std::sort(out.begin(), out.end(), LargerFirst);
+	return out;
+}
+
+std::vector<ResSize> BuildWindowResolutionList(const std::vector<ResSize> &windows, ResSize screen, ResSize area)
+{
+	const std::vector<ResSize> all = BuildResolutionList(windows, screen, {});
+	std::vector<ResSize> out;
+	for (ResSize s : all) {
+		if (s.w <= area.w && s.h <= area.h) out.push_back(s);
+	}
+	// A screen too small for any size the game takes, with the frame and the taskbar, still gets its own:
+	// the window is then kept inside the work area and the image shrunk a little.
+	if (out.empty() && !all.empty()) out.push_back(all.front());
 	return out;
 }
 

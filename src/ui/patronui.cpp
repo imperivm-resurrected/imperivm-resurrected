@@ -151,7 +151,8 @@ void DrawPatron(ui::Painter &p, int x, int y, int size, int nameX, int nameY, in
 	if (!PatronShines(tier)) return;
 
 	const int textW = std::min(nameW, p.TextWidth(name));
-	const int left = x, right = nameX + textW;
+	const int textX = nameX + ((fmt & DT_CENTER) ? (nameW - textW) / 2 : (fmt & DT_RIGHT) ? nameW - textW : 0);
+	const int left = size > 0 ? std::min(x, textX) : textX, right = std::max(size > 0 ? x + size : textX, textX + textW);
 	const int top = std::min(y, nameY), bottom = std::max(y + size, nameY + nameH);
 	const int slant = (bottom - top) / 2, soft = 30;
 	const int travel = right - left + soft * 2 + slant;

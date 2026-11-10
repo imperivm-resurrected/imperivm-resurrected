@@ -46,8 +46,6 @@ void LoadConfig()
 
 	GetPrivateProfileStringA("Display", "Mode", "fullscreen", buf, sizeof(buf), path);
 	g_config.windowed = _stricmp(buf, "windowed") == 0;
-	g_config.windowW = GetPrivateProfileIntA("Display", "WindowWidth", 1600, path);
-	g_config.windowH = GetPrivateProfileIntA("Display", "WindowHeight", 900, path);
 	g_config.trapMouse = GetPrivateProfileIntA("Display", "TrapMouse", 1, path) != 0;
 	g_config.monitor = (std::max)(0, (std::min)(15, static_cast<int>(GetPrivateProfileIntA("Display", "Monitor", 0, path))));
 	GetPrivateProfileStringA("Display", "Resolution", "", buf, sizeof(buf), path);
@@ -62,6 +60,9 @@ void LoadConfig()
 		g_config.resolutionScreenH = resH;
 	}
 	g_config.extendedView = GetPrivateProfileIntA("Display", "ExtendedView", 0, path) != 0;
+	g_config.fpsLimit = (std::max)(0, (std::min)(1000, static_cast<int>(GetPrivateProfileIntA("Render", "FpsLimit", 0, path))));
+	GetPrivateProfileStringA("Render", "ImageScaling", "sharp", buf, sizeof(buf), path);
+	g_config.imageScaling = _stricmp(buf, "smooth") == 0 ? 1 : _stricmp(buf, "exact") == 0 ? 2 : 0;
 	g_config.showPerf = GetPrivateProfileIntA("Display", "ShowPerformance", 0, path) != 0;
 	g_config.showNet = GetPrivateProfileIntA("Display", "ShowNetwork", 0, path) != 0;
 	g_config.panelX = (std::max)(0, (std::min)(1000, static_cast<int>(GetPrivateProfileIntA("Display", "PanelX", 1000, path))));
@@ -73,6 +74,14 @@ void LoadConfig()
 	g_config.modernAudio = GetPrivateProfileIntA("Sound", "ModernAudio", 1, path) != 0;
 	g_config.fixVoices = GetPrivateProfileIntA("Sound", "FixVoices", 1, path) != 0;
 	g_config.onlineAlerts = GetPrivateProfileIntA("Sound", "OnlineAlerts", 1, path) != 0;
+	g_config.masterVolume = (std::max)(0, (std::min)(100, static_cast<int>(GetPrivateProfileIntA("Sound", "MasterVolume", 100, path))));
+	g_config.natureVolume = static_cast<int>(GetPrivateProfileIntA("Sound", "NatureVolume", -1, path));
+	if (g_config.natureVolume < 1 || g_config.natureVolume > 100) g_config.natureVolume = -1;
+	g_config.conversationVolume = static_cast<int>(GetPrivateProfileIntA("Sound", "ConversationVolume", 100, path));
+	if (g_config.conversationVolume < 1 || g_config.conversationVolume > 100) g_config.conversationVolume = 100;
+	char device[512] = {};
+	GetPrivateProfileStringA("Sound", "OutputDevice", "", device, sizeof(device), path);
+	g_config.outputDevice = device;
 
 	GetPrivateProfileStringA("Game", "ScrollSpeed", "1.0", buf, sizeof(buf), path);
 	g_config.scrollSpeed = static_cast<float>(atof(buf));
@@ -90,11 +99,19 @@ void LoadConfig()
 		g_config.autosaveSlots = 3;
 	}
 	g_config.crashFix = GetPrivateProfileIntA("Game", "CrashFix", 1, path) != 0;
-	g_config.smoothScroll = true;
+	g_config.smoothScroll = GetPrivateProfileIntA("Game", "SmoothScroll", 1, path) != 0;
+	g_config.healthBarOwners = (std::max)(0, (std::min)(3, static_cast<int>(GetPrivateProfileIntA("Game", "HealthBarOwners", 0, path))));
+	g_config.healthBarHeroesOnly = GetPrivateProfileIntA("Game", "HealthBarHeroesOnly", 0, path) != 0;
+	g_config.pauseInBackground = GetPrivateProfileIntA("Game", "PauseInBackground", 0, path) != 0;
+	g_config.zoomExtras = GetPrivateProfileIntA("Map", "ZoomExtras", 1, path) != 0;
+	g_config.zoomFog = GetPrivateProfileIntA("Map", "FogVisible", 1, path) != 0;
+	g_config.zoomRefreshMs = (std::max)(0, (std::min)(1000, static_cast<int>(GetPrivateProfileIntA("Map", "RefreshMs", 16, path))));
 
 	g_config.modOverrides = GetPrivateProfileIntA("Mods", "Override", 1, path) != 0;
 	g_config.constHotReload = GetPrivateProfileIntA("Mods", "ConstHotReload", 0, path) != 0;
 	g_config.fullHotReload = GetPrivateProfileIntA("Mods", "FullHotReload", 0, path) != 0;
+	GetPrivateProfileStringA("Debug", "LogLevel", "info", buf, sizeof(buf), path);
+	if (!ParseLogLevel(buf, g_config.logLevel)) g_config.logLevel = kLogInfo;
 	g_config.logFiles = GetPrivateProfileIntA("Debug", "LogFiles", 0, path) != 0;
 	g_config.rejoinTrace = GetPrivateProfileIntA("Debug", "RejoinTrace", IsBetaVersion(ModVersionText()) ? 1 : 0, path) != 0;
 	GetPrivateProfileStringA("Online", "RejoinMode", "reload", buf, sizeof(buf), path);
@@ -107,9 +124,9 @@ void LoadConfig()
 	g_config.dumpAtStartup = dumpStart;
 
 	LogI("boot", "config: Render(Enabled=%d VSync=%d Brightness=%d FakeModeChange=%d) Display(Mode=%s "
-		"%dx%d TrapMouse=%d ExtendedView=%d) Game(ScrollSpeed=%.2f Autosave=%d every %d min, %d slots) Online(RejoinMode=%s)",
+		"Resolution=%dx%d TrapMouse=%d ExtendedView=%d) Game(ScrollSpeed=%.2f Autosave=%d every %d min, %d slots) Online(RejoinMode=%s)",
 		g_config.renderEnabled, g_config.vsync, g_config.brightness, g_config.fakeModeChange,
-		g_config.windowed ? "windowed" : "fullscreen", g_config.windowW, g_config.windowH, g_config.trapMouse,
+		g_config.windowed ? "windowed" : "fullscreen", g_config.resolutionW, g_config.resolutionH, g_config.trapMouse,
 		g_config.extendedView, g_config.scrollSpeed, g_config.autosave, g_config.autosaveMinutes,
 		g_config.autosaveSlots, g_config.rejoinReload ? "reload" : "hot");
 }
@@ -128,7 +145,11 @@ void SaveConfig()
 		strcpy_s(slash + 1, MAX_PATH - (slash + 1 - path), "imperivm-mod.ini");
 	}
 	WritePrivateProfileStringA("Display", "Mode", g_config.windowed ? "windowed" : "fullscreen", path);
+	// In a window the resolution is the window's size; the old keys are left out.
+	WritePrivateProfileStringA("Display", "WindowWidth", nullptr, path);
+	WritePrivateProfileStringA("Display", "WindowHeight", nullptr, path);
 	WritePrivateProfileStringA("Display", "TrapMouse", g_config.trapMouse ? "1" : "0", path);
+	WritePrivateProfileStringA("Display", "ExtendedView", g_config.extendedView ? "1" : "0", path);
 	WritePrivateProfileStringA("Display", "Monitor", std::to_string(g_config.monitor).c_str(), path);
 	if (g_config.resolutionW > 0) {
 		WritePrivateProfileStringA("Display", "Resolution", (std::to_string(g_config.resolutionW) + "x" + std::to_string(g_config.resolutionH)).c_str(), path);
@@ -138,6 +159,9 @@ void SaveConfig()
 			(std::to_string(g_config.resolutionScreenW) + "x" + std::to_string(g_config.resolutionScreenH)).c_str(), path);
 	}
 	WritePrivateProfileStringA("Render", "VSync", g_config.vsync ? "1" : "0", path);
+	WritePrivateProfileStringA("Render", "FpsLimit", std::to_string(g_config.fpsLimit).c_str(), path);
+	static const char *const kScalingNames[] = {"sharp", "smooth", "exact"};
+	WritePrivateProfileStringA("Render", "ImageScaling", kScalingNames[g_config.imageScaling >= 0 && g_config.imageScaling < 3 ? g_config.imageScaling : 0], path);
 	WritePrivateProfileStringA("Render", "Scaling", nullptr, path);
 	WritePrivateProfileStringA("Render", "Filter", nullptr, path);
 	WritePrivateProfileStringA("Render", "Brightness", std::to_string(g_config.brightness).c_str(), path);
@@ -149,6 +173,11 @@ void SaveConfig()
 	WritePrivateProfileStringA("Game", "AutosaveSlots", std::to_string(g_config.autosaveSlots).c_str(), path);
 	WritePrivateProfileStringA("Game", "AutosaveOnExit", g_config.autosaveOnExit ? "1" : "0", path);
 	WritePrivateProfileStringA("Game", "SmoothScroll", g_config.smoothScroll ? "1" : "0", path);
+	WritePrivateProfileStringA("Game", "HealthBarOwners", std::to_string(g_config.healthBarOwners).c_str(), path);
+	WritePrivateProfileStringA("Game", "HealthBarHeroesOnly", g_config.healthBarHeroesOnly ? "1" : "0", path);
+	WritePrivateProfileStringA("Game", "PauseInBackground", g_config.pauseInBackground ? "1" : "0", path);
+	WritePrivateProfileStringA("Game", "CrashFix", g_config.crashFix ? "1" : "0", path);
+	WritePrivateProfileStringA("Mods", "Override", g_config.modOverrides ? "1" : "0", path);
 	WritePrivateProfileStringA("Display", "ShowPerformance", g_config.showPerf ? "1" : "0", path);
 	WritePrivateProfileStringA("Display", "ShowNetwork", g_config.showNet ? "1" : "0", path);
 	WritePrivateProfileStringA("Display", "PanelX", std::to_string(g_config.panelX).c_str(), path);
@@ -158,4 +187,10 @@ void SaveConfig()
 	WritePrivateProfileStringA("Sound", "MuteInBackground", g_config.muteInBackground ? "1" : "0", path);
 	WritePrivateProfileStringA("Sound", "ModernAudio", g_config.modernAudio ? "1" : "0", path);
 	WritePrivateProfileStringA("Sound", "OnlineAlerts", g_config.onlineAlerts ? "1" : "0", path);
+	WritePrivateProfileStringA("Sound", "MasterVolume", std::to_string(g_config.masterVolume).c_str(), path);
+	// Without the key, nature sounds follow the effects volume.
+	WritePrivateProfileStringA("Sound", "NatureVolume", g_config.natureVolume > 0 ? std::to_string(g_config.natureVolume).c_str() : nullptr, path);
+	WritePrivateProfileStringA("Sound", "ConversationVolume", std::to_string(g_config.conversationVolume).c_str(), path);
+	WritePrivateProfileStringA("Sound", "OutputDevice", g_config.outputDevice.c_str(), path);
+	WritePrivateProfileStringA("Debug", "LogLevel", LogLevelName(g_config.logLevel), path);
 }

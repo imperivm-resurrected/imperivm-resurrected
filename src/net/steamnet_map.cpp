@@ -587,6 +587,11 @@ void ReceiveShare()
 		else if (len && (kRejoinMessages.Has(data[0]) || kReloadMessages.Has(data[0]))) {
 			RejoinOnSteamMessage(peer, data[0], std::string(reinterpret_cast<const char *>(data + 1), len - 1));
 		}
+		else if (len && kRoomMessages.Has(data[0])) {
+			if (g_lobby && peer != g_steam.me && S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) == peer && len < 64) {
+				RoomOnMessage(peer, data[0], std::string(reinterpret_cast<const char *>(data + 1), len - 1));
+			}
+		}
 		else if (len && data[0] == kShMapReq) {
 			if (g_lobby && S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) == g_steam.me) {
 				HostOnMapRequest(peer, std::string(reinterpret_cast<const char *>(data + 1), len - 1));

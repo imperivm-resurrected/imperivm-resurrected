@@ -7,6 +7,7 @@
 namespace addr {
 
 inline constexpr uintptr_t kGameCodeBegin = 0x00400000;
+inline constexpr uintptr_t kGameTextBegin = 0x00401000;
 inline constexpr uintptr_t kStringAssign = 0x00401ec0;
 inline constexpr uintptr_t kStringAssignCstr = 0x00402160;
 inline constexpr uintptr_t kStringAppend = 0x004045c0;
@@ -18,6 +19,8 @@ inline constexpr uintptr_t kVfsFindFirst = 0x0063a4a0;
 inline constexpr uintptr_t kVfsFindNext = 0x0063a550;
 inline constexpr uintptr_t kVfsFindClose = 0x0063a5c0;
 inline constexpr uintptr_t kVfsFileExists = 0x0063a790;
+inline constexpr uintptr_t kBitmapGetPixelPtr = 0x0063d5e0;
+inline constexpr uintptr_t kHashIniGetString = 0x0063f190;
 inline constexpr uintptr_t kHashIniGetInt = 0x0063f200;
 inline constexpr uintptr_t kRandomRange = 0x0063ff00;
 inline constexpr uintptr_t kVfsOpenCompressedAware = 0x00644560;
@@ -47,6 +50,9 @@ inline constexpr uintptr_t kMountPakFilesInDir = 0x0074c400;
 inline constexpr uintptr_t kLoadConfigIni = 0x0074cd20;
 inline constexpr uintptr_t kOperatorNew = 0x00762870;
 inline constexpr uintptr_t kGameFree = 0x007629b9;
+inline constexpr uintptr_t kGameTextEnd = 0x007aa98b;
+inline constexpr uintptr_t kGameRdataBegin = 0x007ab000;
+inline constexpr uintptr_t kGameRdataEnd = 0x00819bb0;
 inline constexpr uintptr_t kPersistVersionSrc = 0x008212f4;
 inline constexpr uintptr_t kVfsOpenFilePtr = 0x00829b30;
 inline constexpr uintptr_t kPfnVfsFileExists = 0x00829b50;

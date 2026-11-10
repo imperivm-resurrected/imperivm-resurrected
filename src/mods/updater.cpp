@@ -40,6 +40,7 @@ unsigned long long g_zipBytes = 0;
 std::string g_zipPath;
 bool g_menuSeen = false;
 std::string g_rolledBack;
+UpdaterInfo::Check g_check = UpdaterInfo::kNotChecked;
 
 std::string GameDir()
 {
@@ -286,14 +287,30 @@ void DownloadAndInstall()
 	SetState(kReady);
 }
 
-void CheckNow()
+bool BeginCheck(State &before)
 {
-	SetState(kChecking);
+	std::lock_guard<std::mutex> lock(g_mx);
+	if (g_state == kChecking || g_state == kDownloading || g_state == kReady) return false;
+	before = g_state;
+	g_state = kChecking;
+	g_check = UpdaterInfo::kChecking;
+	return true;
+}
+
+void EndCheck(State state, UpdaterInfo::Check result)
+{
+	std::lock_guard<std::mutex> lock(g_mx);
+	g_state = state;
+	g_check = result;
+}
+
+void CheckNow(State before)
+{
 	Json j;
 	const std::string err = DlHttpGetJson(kVersionUrl, j);
 	if (!err.empty()) {
 		LogW("update", "could not check (%s)", err.c_str());
-		SetState(kNone);
+		EndCheck(before, UpdaterInfo::kCheckFailed);
 		return;
 	}
 	const std::string version = j.GetString("version");
@@ -302,17 +319,17 @@ void CheckNow()
 	const unsigned long long bytes = zip ? static_cast<unsigned long long>(zip->GetNumber("bytes")) : 0;
 	if (version.empty() || url.compare(0, 8, "https://") != 0 || sha.size() != 64 || !bytes) {
 		LogW("update", "incomplete version.json");
-		SetState(kNone);
+		EndCheck(before, UpdaterInfo::kCheckFailed);
 		return;
 	}
 	if (!VerifySignature("imperivm-resurrected\n" + version + "\n" + sha + "\n" + std::to_string(bytes), j.GetString("signature"))) {
 		LogE("update", "the published version %s does NOT carry a valid signature: not offered", version.c_str());
-		SetState(kNone);
+		EndCheck(before, UpdaterInfo::kCheckFailed);
 		return;
 	}
 	if (CompareReleaseVersions(version, ModVersionText()) <= 0) {
 		LogI("update", "up to date (%s)", ModVersionText());
-		SetState(kNone);
+		EndCheck(kNone, UpdaterInfo::kUpToDate);
 		return;
 	}
 	{
@@ -323,6 +340,7 @@ void CheckNow()
 		g_zipSha = sha;
 		g_zipBytes = bytes;
 		g_state = kAvailable;
+		g_check = UpdaterInfo::kNewer;
 	}
 	LogI("update", "there is a new version, %s (you have %s)", version.c_str(), ModVersionText());
 	if (_stricmp(IniGet("Mode", "notify").c_str(), "auto") == 0) DownloadAndInstall();
@@ -367,7 +385,8 @@ void InstallUpdater()
 	}
 	SafeThread([] {
 		Sleep(8000);
-		CheckNow();
+		State before = kNone;
+		if (BeginCheck(before)) CheckNow(before);
 	}).detach();
 }
 
@@ -400,6 +419,7 @@ UpdaterInfo UpdaterGetInfo()
 		i.newVersion = g_newVersion;
 		i.notes = g_notes;
 		i.error = g_error;
+		i.check = g_check;
 		zip = g_zipPath;
 		bytes = g_zipBytes;
 	}
@@ -421,6 +441,15 @@ void UpdaterStartInstall()
 		g_state = kDownloading;
 	}
 	SafeThread(DownloadAndInstall).detach();
+}
+
+bool UpdaterCheckNow()
+{
+	State before = kNone;
+	if (!BeginCheck(before)) return false;
+	LogI("update", "checking for a new version (asked from the options)");
+	SafeThread(CheckNow, before).detach();
+	return true;
 }
 
 void UpdaterRestartNow()

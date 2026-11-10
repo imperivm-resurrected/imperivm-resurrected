@@ -143,7 +143,8 @@ OnlineLobby ReadLobby(uint64 id)
 			l.scenMapSize = scen.mapSize;
 		}
 	}
-	l.password = !Data(id, "pw").empty();
+	l.passwordHash = Data(id, "pw");
+	l.password = !l.passwordHash.empty();
 	l.visibility = atoi(Data(id, "vis").c_str());
 	l.hosting = Data(id, "hosting") == "1";
 	l.playing = Data(id, "playing") == "1";

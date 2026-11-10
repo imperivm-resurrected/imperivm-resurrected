@@ -219,8 +219,7 @@ void PaintScenarioPicker(Painter &p, const State &st)
 	}
 
 	const int dx = lx + kListW + 20, dw = x + kDlgW - 20 - dx;
-	p.Fill(dx, ly, dw, kRows * kRowH + 4, pal::wellRaised);
-	p.Frame(dx, ly, dw, kRows * kRowH + 4, pal::line);
+	PaintCard(p, dx, ly, dw, kRows * kRowH + 4);
 	const bool has = st.pickSel >= 0 && st.pickSel < static_cast<int>(g.pickerPaths.size());
 	const std::shared_ptr<const MapPreviewData> d = has ? MapPreviewGet(g.pickerPaths[st.pickSel]) : nullptr;
 	if (!has) {

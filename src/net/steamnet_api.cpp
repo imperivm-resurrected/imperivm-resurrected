@@ -3,6 +3,7 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #define NOMINMAX
 #include <windows.h>
+#include <shellapi.h>
 #pragma warning(push)
 #pragma warning(disable : 4996 4828)
 #pragma warning(pop)
@@ -163,9 +164,19 @@ void SteamJoinLobby(uint64_t id, const std::string &password, bool forContentSyn
 	});
 }
 
+bool SteamPasswordMatches(const OnlineLobby &lobby, const std::string &password)
+{
+	return lobby.passwordHash.empty() || Fnv(password) == lobby.passwordHash;
+}
+
 bool SteamTakeJoinRefused()
 {
 	return g_signal.joinRefused.exchange(false);
+}
+
+bool SteamTakeWrongPassword()
+{
+	return g_signal.wrongPassword.exchange(false);
 }
 
 bool SteamTakeCreateFailed()
@@ -247,6 +258,28 @@ void SteamSendChat(const std::string &text)
 	if (!SteamOnlineReady() || text.empty()) return;
 	Post([text] {
 		if (g_lobby) S.SteamAPI_ISteamMatchmaking_SendLobbyChatMsg(g_steam.mm, g_lobby, text.c_str(), static_cast<int>(text.size()) + 1);
+	});
+}
+
+namespace {
+void OpenProfileInClient(uint64_t id)
+{
+	const std::string url = "steam://url/SteamIDPage/" + std::to_string(id);
+	ShellExecuteA(nullptr, "open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+}
+}
+
+void SteamOpenProfile(uint64_t id)
+{
+	if (!id) return;
+	if (!SteamOnlineReady()) {
+		OpenProfileInClient(id);
+		return;
+	}
+	Post([id] {
+		ISteamUtils *utils = S.SteamAPI_SteamUtils_v011();
+		if (g_steam.friends && utils && S.SteamAPI_ISteamUtils_IsOverlayEnabled(utils)) S.SteamAPI_ISteamFriends_ActivateGameOverlayToUser(g_steam.friends, "steamid", id);
+		else OpenProfileInClient(id);
 	});
 }
 

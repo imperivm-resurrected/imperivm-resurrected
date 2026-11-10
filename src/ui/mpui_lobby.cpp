@@ -13,10 +13,9 @@
 
 using namespace mpui_impl;
 
-bool MpUiMainMenuVisible()
+bool MainMenuOnTop()
 {
-	std::lock_guard<std::mutex> lock(g_lock);
-	if (!g_mainMenu || g_s.open || *reinterpret_cast<void **>(addr::kGame) != nullptr) return false;
+	if (!g_mainMenu || *reinterpret_cast<void **>(addr::kGame) != nullptr) return false;
 	char *menu = static_cast<char *>(g_mainMenu);
 	char *desktop = *reinterpret_cast<char **>(menu + 0x08);
 	if (desktop) {
@@ -24,6 +23,12 @@ bool MpUiMainMenuVisible()
 		if (modal && modal != g_mainMenu) return false;
 	}
 	return true;
+}
+
+bool MpUiMainMenuVisible()
+{
+	std::lock_guard<std::mutex> lock(g_lock);
+	return !g_s.open && MainMenuOnTop();
 }
 
 bool MpUiIsOpen()

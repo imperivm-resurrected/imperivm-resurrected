@@ -48,7 +48,7 @@ bool FileExists(const std::string &path)
 std::string ProfileDir(const std::string &profile) { return GameDir() + "\\Profiles\\" + profile + "\\"; }
 std::string OnlineDir(const std::string &profile) { return ProfileDir(profile) + kSaveOnlineFolder + "\\"; }
 
-const char *const kAuxSuffixes[] = {".bmp", ".cameras", ".mods.json"};
+const char *const kAuxSuffixes[] = {".bmp", ".cameras", ".mods.json", ".stats"};
 
 }
 
@@ -364,7 +364,7 @@ void CleanOrphansIn(const std::string &dirA)
 	std::vector<std::wstring> orphans;
 	do {
 		const std::wstring name = fd.cFileName;
-		const wchar_t *suffix = endsWith(name, L".mods.json") ? L".mods.json" : endsWith(name, L".cameras") ? L".cameras" : endsWith(name, L".bmp") ? L".bmp" : nullptr;
+		const wchar_t *suffix = endsWith(name, L".mods.json") ? L".mods.json" : endsWith(name, L".cameras") ? L".cameras" : endsWith(name, L".bmp") ? L".bmp" : endsWith(name, L".stats") ? L".stats" : nullptr;
 		if (!suffix) continue;
 		const std::wstring main = name.substr(0, name.size() - wcslen(suffix));
 		if (!(endsWith(main, L".snr") || endsWith(main, L".adv") || endsWith(main, L".con") || endsWith(main, L".dmo"))) continue;

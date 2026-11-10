@@ -14,11 +14,17 @@
 #include "game/zoomview.h"
 #include "hooks/audio.h"
 #include "hooks/displaymode.h"
+#include "hooks/tweaks.h"
 #include "net/rejoin.h"
 #include "net/spectator.h"
+#include "ui/battlesui.h"
 #include "ui/controlsui.h"
 #include "ui/modui.h"
+#include "ui/conquestui.h"
 #include "ui/mpui.h"
+#include "ui/gamemenuui.h"
+#include "ui/optionsui.h"
+#include "ui/profileui.h"
 #include "ui/savesui.h"
 #include "ui/support.h"
 #include "ui/updateui.h"
@@ -46,7 +52,7 @@ LRESULT GameWindowHandler(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 	bool uiHandled = false;
 	Guard("interface message", [&] {
 		uiHandled = UpdateUiHandleMessage(msg, wp, lp) || ControlsUiHandleMessage(msg, wp, lp) || SupportHandleMessage(msg, wp, lp) ||
-			ModUiHandleCornerMessage(msg, wp, lp) || SavesUiHandleMessage(msg, wp, lp) || ModUiHandleMessage(msg, wp, lp) || MpUiHandleMessage(msg, wp, lp);
+			GameMenuUiHandleMessage(msg, wp, lp) || OptionsUiHandleMessage(msg, wp, lp) || ConquestUiHandleMessage(msg, wp, lp) || ProfileUiHandleMessage(msg, wp, lp) || BattlesUiHandleMessage(msg, wp, lp) || ModUiHandleCornerMessage(msg, wp, lp) || SavesUiHandleMessage(msg, wp, lp) || ModUiHandleMessage(msg, wp, lp) || MpUiHandleMessage(msg, wp, lp);
 	});
 	if (uiHandled) return 0;
 	if (msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST) {
@@ -84,6 +90,7 @@ LRESULT GameWindowHandler(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 	if (msg == WM_ACTIVATEAPP && GetConfig().muteInBackground && !g_closing) {
 		AudioSetBackgroundMute(wp == FALSE);
 	}
+	if (msg == WM_ACTIVATEAPP && !g_closing) Guard("background pause", [&] { TweaksWindowActive(wp != FALSE); });
 	if (msg == WM_CLOSE || msg == WM_DESTROY || (msg == WM_SYSCOMMAND && (wp & 0xfff0) == SC_CLOSE)) {
 		if (!g_closing) LogI("display", "window: closing (message 0x%x)", msg);
 		g_closing = true;

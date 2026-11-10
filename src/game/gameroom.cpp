@@ -6,8 +6,10 @@
 
 #include <deque>
 #include <functional>
+#include <map>
 #include <mutex>
 #include <algorithm>
+#include <atomic>
 
 #include "MinHook.h"
 #include "hooks/hookcount.h"
@@ -23,6 +25,9 @@
 #include "mods/modvars.h"
 #include "mods/vfs.h"
 #include "game/netlink.h"
+#include "game/roomprefs.h"
+#include "game/roomcountdown.h"
+#include "game/roomname.h"
 #include "core/log.h"
 #include "core/names.h"
 #include "addr/engine.h"
@@ -78,12 +83,44 @@ void SaveRoomFlags(const char *key, unsigned value)
 {
 	WritePrivateProfileStringA("Room", key, std::to_string(value).c_str(), RoomIniPath().c_str());
 }
+
+const char kModOptionsSection[] = "RoomModOptions";
+const char kOptionsSection[] = "RoomOptions";
+
+unsigned LoadRoomRules()
+{
+	const std::string ini = RoomIniPath();
+	std::map<std::string, int> values;
+	for (const ModOption &o : ModOptions()) {
+		const int value = static_cast<int>(GetPrivateProfileIntA(kModOptionsSection, o.id.c_str(), -1, ini.c_str()));
+		if (value >= 0) values[o.id] = value;
+	}
+	const UINT saved = GetPrivateProfileIntA("Room", "Rules", -1, ini.c_str());
+	return RoomRulesFromSaved(ModOptions(), saved != 0xFFFFFFFFu, saved, kRuleBaseMask, values);
+}
+
+void SaveRoomRules(unsigned rules)
+{
+	SaveRoomFlags("Rules", rules);
+	const std::string ini = RoomIniPath();
+	for (const ModOption &o : ModOptions()) {
+		WritePrivateProfileStringA(kModOptionsSection, o.id.c_str(), std::to_string(ModOptionGet(o, rules)).c_str(), ini.c_str());
+	}
+}
 typedef int(__fastcall *GetGameOptions_t)(void *dlg);
 PickerOnShow_t g_origPickerOnShow = nullptr;
 ThisOnly_t g_origPickerDtor = nullptr;
 std::mutex g_lock;
 GameRoomSnapshot g_snap;
 std::deque<std::function<void()>> g_actions;
+
+struct CountdownState {
+	std::mutex mx;
+	RoomCountdown clock;
+	std::atomic<bool> autoStart{false};
+	std::atomic<bool (*)()> startBlocked{nullptr};
+};
+CountdownState g_countdown;
 
 void *Child(void *dlg, int id, uintptr_t className)
 {
@@ -147,6 +184,14 @@ int ComboSel(void *combo)
 bool Checked(void *button)
 {
 	return button && *reinterpret_cast<short *>(static_cast<char *>(button) + 0x7e) == 1;
+}
+
+const int kDefaultTeamChoices = 5;
+
+int TeamChoices(void *teamButton)
+{
+	const short rows = teamButton ? *reinterpret_cast<short *>(static_cast<char *>(teamButton) + 0x7c) : 0;
+	return rows > 1 && rows <= 16 ? rows : kDefaultTeamChoices;
 }
 
 void Click(void *button)
@@ -257,6 +302,28 @@ std::vector<int> DisplayOrder(int id, const std::vector<std::string> &items)
 }
 
 bool g_optionsLogged = false;
+void *g_optionsSeenFor = nullptr;
+void *g_optionsRestoredFor = nullptr;
+std::map<int, std::string> g_savedOptions;
+void *g_scenarioSeenFor = nullptr;
+void *g_scenarioCheckedFor = nullptr;
+std::string g_replacedScenario;
+
+// The same check as the game's when it starts a match: CVXUIMultiplayerGame::StartGame gives up if the file is not there.
+bool ScenarioFileMissing(const std::string &scenario)
+{
+	typedef int(__cdecl *VfsFileExists_t)(const char *path);
+	static std::string lastScenario;
+	static DWORD lastCheck = 0;
+	static bool lastMissing = false;
+	const DWORD now = GetTickCount();
+	if (scenario != lastScenario || now - lastCheck > 500) {
+		lastScenario = scenario;
+		lastCheck = now;
+		lastMissing = reinterpret_cast<VfsFileExists_t>(addr::kVfsFileExists)((scenario + ".bfhp").c_str()) == 0;
+	}
+	return lastMissing;
+}
 
 int PickerCount(void *picker)
 {
@@ -375,6 +442,45 @@ const std::vector<BonusDef> &RoomBonuses(void *dlg)
 	return g_bonusDefs;
 }
 
+// CNGameShell+0x10 points to the description a host sends to the LAN browsers; it starts with the game name, char[0x40]
+// copied with Utf8CopyTruncated in CNGameShell::CNGameShell_Host (0064d1a0). Only read on the host, whose shell built it.
+const size_t kLanDescName = 0x40;
+
+bool LanNameRead(void *shell, char *buf)
+{
+	buf[0] = 0;
+	__try {
+		const char *desc = *reinterpret_cast<const char *const *>(static_cast<char *>(shell) + 0x10);
+		if (!desc) return false;
+		size_t n = 0;
+		while (n + 1 < kLanDescName && desc[n]) {
+			buf[n] = desc[n];
+			n++;
+		}
+		buf[n] = 0;
+		return true;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		buf[0] = 0;
+		return false;
+	}
+}
+
+bool LanNameWrite(void *shell, const char *name)
+{
+	__try {
+		char *desc = *reinterpret_cast<char **>(static_cast<char *>(shell) + 0x10);
+		if (!desc) return false;
+		size_t n = strnlen(name, kLanDescName - 1);
+		memset(desc, 0, kLanDescName);
+		memcpy(desc, name, n);
+		return true;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return false;
+	}
+}
+
 bool SlotHandshaking(int row)
 {
 	if (!g_dlg || row < 0 || row > 7) return false;
@@ -400,8 +506,14 @@ void TakeSnapshot()
 			}
 		}
 		s.online = *reinterpret_cast<void **>(static_cast<char *>(g_dlg) + 0x8228) != nullptr;
+		s.roomName = s.online ? NetRoomName() : std::string();
+		if (s.online && s.host && s.roomName.empty()) {
+			char lan[kLanDescName];
+			if (LanNameRead(*reinterpret_cast<void **>(static_cast<char *>(g_dlg) + 0x8228), lan)) s.roomName = lan;
+		}
 		s.bonuses = RoomBonuses(g_dlg);
 		s.localSlot = reinterpret_cast<IntThis_t>(addr::kGetLocalSlot)(g_dlg);
+		s.teamChoices = TeamChoices(Button(g_dlg, (((s.localSlot & 7) + 1) << 12) | 0x32));
 		memcpy(s.colors, reinterpret_cast<const void *>(addr::kPlayerColorTable), sizeof(s.colors));
 		for (int i = 0; i < 8; i++) {
 			GameRoomSlot &slot = s.slots[i];
@@ -487,19 +599,6 @@ void TakeSnapshot()
 			}
 			if (!g_optionsLogged && !s.options.empty()) {
 				g_optionsLogged = true;
-				if (!NetMultiplayerSaveLoading()) {
-					void *gold = Combo(opts, 0x1005);
-					const std::vector<std::string> real = ComboItems(gold);
-					int def = -1;
-					for (size_t i = 0; i < real.size(); i++) {
-						if (_stricmp(real[i].c_str(), "Por defecto") == 0 || _stricmp(real[i].c_str(), "Default") == 0) def = static_cast<int>(i);
-					}
-					const int now = ComboSel(gold);
-					if (def >= 0 && def != now) {
-						LogD("room", "starting gold set to \"%s\" (was \"%s\")", real[def].c_str(), now >= 0 && now < static_cast<int>(real.size()) ? real[now].c_str() : "?");
-						SelectCombo(gold, def);
-					}
-				}
 				for (const GameRoomOption &o : s.options) {
 					if (o.checkbox) {
 						LogI("room", "options: 0x%x %s = %s", o.id, o.label.c_str(), o.value ? "yes" : "no");
@@ -550,6 +649,7 @@ void TakeSnapshot()
 			const char *path = static_cast<const char *>(g_dlg) + 0x114;
 			s.scenario.assign(path, strnlen(path, 260));
 			if (!s.scenario.empty()) s.optionsText += "Scenario: " + ScenarioName(s.scenario) + "\n";
+			s.scenarioMissing = s.host && ScenarioFileMissing(s.scenario);
 		}
 		if (g_picker) {
 			s.picker = true;
@@ -574,15 +674,167 @@ void Queue(std::function<void()> fn)
 	g_actions.push_back(std::move(fn));
 }
 
+uint32_t Mix(uint32_t h, uint32_t v)
+{
+	for (int i = 0; i < 4; i++) h = (h ^ ((v >> (i * 8)) & 0xff)) * 16777619u;
+	return h;
+}
+
+uint32_t MixText(uint32_t h, const std::string &text)
+{
+	for (char c : text) h = (h ^ static_cast<unsigned char>(c)) * 16777619u;
+	return Mix(h, static_cast<uint32_t>(text.size()));
+}
+
+const uint32_t kFnvBasis = 2166136261u;
+const int kOptionsPart = 8;
+
+// What the countdown watches: one part per slot and one for the options, so that the log can say what changed.
+RoomCountdownInput CountdownInput(const GameRoomSnapshot &s)
+{
+	RoomCountdownInput in;
+	in.allReady = true;
+	int humans = 0;
+	for (const GameRoomSlot &slot : s.slots) {
+		uint32_t h = kFnvBasis;
+		h = Mix(h, slot.used);
+		h = Mix(h, static_cast<uint32_t>(slot.type));
+		h = MixText(h, slot.name);
+		h = Mix(h, static_cast<uint32_t>(slot.color));
+		h = Mix(h, static_cast<uint32_t>(slot.team));
+		h = Mix(h, static_cast<uint32_t>(slot.race));
+		h = Mix(h, static_cast<uint32_t>(slot.bonus));
+		h = Mix(h, static_cast<uint32_t>(slot.nameSel));
+		h = Mix(h, slot.exists);
+		in.parts.push_back(h);
+		if (slot.joining) in.blocked = true;
+		if (!slot.used || slot.type != 3) continue;
+		humans++;
+		if (!slot.ready) in.allReady = false;
+		if (!slot.exists) in.blocked = true;
+	}
+	if (!humans) in.allReady = false;
+	uint32_t o = kFnvBasis;
+	for (const GameRoomOption &opt : s.options) {
+		o = Mix(o, static_cast<uint32_t>(opt.id));
+		o = Mix(o, opt.value);
+		o = Mix(o, static_cast<uint32_t>(opt.sel));
+	}
+	o = Mix(o, s.siteFlags);
+	o = Mix(o, s.rules);
+	o = Mix(o, s.randomMap);
+	o = MixText(o, s.scenario);
+	o = MixText(o, s.mode);
+	in.parts.push_back(o);
+	if (s.busy || s.picker) in.blocked = true;
+	return in;
+}
+
+std::string CountdownReasonText(const CountdownStep &step)
+{
+	switch (step.reason) {
+	case CountdownReason::NotReady: return "a player is not ready";
+	case CountdownReason::Blocked: return "the game cannot start yet (a player is joining or the slots are changing)";
+	case CountdownReason::Changed:
+		return step.part >= 0 && step.part < kOptionsPart ? "slot " + std::to_string(step.part + 1) + " changed" : std::string("the game options changed");
+	case CountdownReason::Host: return "the host stopped it";
+	case CountdownReason::Remote: return "the game did not start";
+	default: return "?";
+	}
+}
+
+void CountdownSend(uint32_t seq, int ms)
+{
+	const bool shared = NetSendRoomCountdown(seq, ms);
+	LogD("room", "countdown %u: %s %s", seq, ms >= 0 ? "start" : "cancel",
+		shared ? "sent to the room" : "not sent (no channel of the mod in this room: only the host counts)");
+}
+
+void CountdownRoomClosed(bool host)
+{
+	bool cancel = false;
+	uint32_t seq = 0;
+	{
+		std::lock_guard<std::mutex> lock(g_countdown.mx);
+		cancel = host && g_countdown.clock.Counting();
+		if (cancel) g_countdown.clock.HostCancel();
+		seq = g_countdown.clock.Seq();
+		g_countdown.clock.Reset();
+	}
+	if (cancel) {
+		LogI("room", "countdown cancelled: the room closed");
+		CountdownSend(seq, -1);
+	}
+}
+
+void CountdownTick()
+{
+	GameRoomSnapshot s;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		s = g_snap;
+	}
+	const uint32_t now = GetTickCount();
+	if (!g_dlg || !s.active || !s.online) {
+		std::lock_guard<std::mutex> lock(g_countdown.mx);
+		if (g_countdown.clock.Counting()) LogI("room", "countdown stopped: not in a network room");
+		g_countdown.clock.Reset();
+		return;
+	}
+	if (!s.host) {
+		CountdownStep step;
+		{
+			std::lock_guard<std::mutex> lock(g_countdown.mx);
+			step = g_countdown.clock.GuestStep(s.slots[s.localSlot & 7].ready, now);
+		}
+		if (step.event == CountdownEvent::Cancel) LogI("room", "countdown stopped here: %s", CountdownReasonText(step).c_str());
+		return;
+	}
+	RoomCountdownInput in = CountdownInput(s);
+	if (bool (*blocked)() = g_countdown.startBlocked.load()) {
+		if (blocked()) in.blocked = true;
+	}
+	CountdownStep step;
+	uint32_t seq = 0;
+	{
+		std::lock_guard<std::mutex> lock(g_countdown.mx);
+		step = g_countdown.clock.HostStep(in, now, g_countdown.autoStart.load());
+		seq = g_countdown.clock.Seq();
+	}
+	switch (step.event) {
+	case CountdownEvent::Start:
+		LogI("room", "countdown: everyone is ready; the game starts in %d s", kRoomCountdownMs / 1000);
+		CountdownSend(seq, kRoomCountdownMs);
+		break;
+	case CountdownEvent::Cancel:
+		LogI("room", "countdown cancelled: %s", CountdownReasonText(step).c_str());
+		CountdownSend(seq, -1);
+		break;
+	case CountdownEvent::Fire:
+		LogI("room", "countdown finished: starting the game");
+		Click(Button(g_dlg, 0x9006));
+		break;
+	default: break;
+	}
+}
+
 void __fastcall HookOnShow(void *dlg)
 {
 	g_origOnShow(dlg);
 	CivsOnRoomShown(dlg);
+	{
+		std::lock_guard<std::mutex> lock(g_countdown.mx);
+		g_countdown.clock.Reset();
+	}
 	g_dlg = dlg;
 	g_civResetGate = CivResetGate();
 	g_optionsLogged = false;
+	g_optionsSeenFor = nullptr;
+	g_optionsRestoredFor = nullptr;
+	g_scenarioSeenFor = nullptr;
+	g_scenarioCheckedFor = nullptr;
 	g_siteFlags = LoadRoomFlags("Sites", 0) & kSiteMask;
-	g_ruleFlags = LoadRoomFlags("Rules", ModOptionsDefaults()) & kRuleMask;
+	g_ruleFlags = LoadRoomRules();
 	LogI("room", "open (managed by the mod's interface)");
 }
 
@@ -590,6 +842,12 @@ void __fastcall HookDtor(void *dlg)
 {
 	if (dlg == g_dlg) {
 		g_dlg = nullptr;
+		bool host = false;
+		{
+			std::lock_guard<std::mutex> lock(g_lock);
+			host = g_snap.host;
+		}
+		CountdownRoomClosed(host);
 		std::lock_guard<std::mutex> lock(g_lock);
 		g_snap = GameRoomSnapshot();
 		g_actions.clear();
@@ -828,6 +1086,128 @@ bool LockedByMode(int id)
 	return true;
 }
 
+const int kSharedSupportOption = 0x1009;
+const int kMapTypeOption = 0x1000;
+const int kStartingGoldOption = 0x1005;
+
+std::string OptionKey(int id)
+{
+	char key[16];
+	sprintf_s(key, "%x", id);
+	return key;
+}
+
+std::string LoadRoomOption(int id)
+{
+	char value[1024] = {};
+	GetPrivateProfileStringA(kOptionsSection, OptionKey(id).c_str(), "", value, sizeof(value), RoomIniPath().c_str());
+	return RoomPrefDecode(value);
+}
+
+void SelectDefaultGold(void *gold)
+{
+	const std::vector<std::string> items = ComboItems(gold);
+	for (size_t i = 0; i < items.size(); i++) {
+		if (_stricmp(items[i].c_str(), "Por defecto") != 0 && _stricmp(items[i].c_str(), "Default") != 0) continue;
+		if (ComboSel(gold) != static_cast<int>(i)) SelectCombo(gold, static_cast<int>(i));
+		return;
+	}
+}
+
+void RestoreRoomOption(void *opts, const OptionDef &d)
+{
+	const std::string saved = LoadRoomOption(d.id);
+	if (d.checkbox) {
+		void *button = Button(opts, d.id);
+		if (button && !saved.empty() && Checked(button) != (saved == "1")) ToggleCheck(button);
+		return;
+	}
+	void *combo = Combo(opts, d.id);
+	if (!combo) return;
+	if (saved.empty()) {
+		if (d.id == kStartingGoldOption) SelectDefaultGold(combo);
+		return;
+	}
+	// Item 0 of the map type is the predefined map, which depends on the scenario the game is still holding from this session.
+	if (d.id == kMapTypeOption && ComboSel(combo) == 0) return;
+	const int index = RoomPrefItemIndex(ComboItems(combo), saved);
+	if (index < 0 || index == ComboSel(combo)) return;
+	if (d.id == kMapSizeCombo) {
+		void *typeCombo = Combo(opts, kMapTypeOption);
+		bool fits[kMapSizes];
+		if (!typeCombo || !SizesOfMapType(opts, typeCombo, ComboSel(typeCombo), fits) || index >= kMapSizes || !fits[index]) return;
+	}
+	SelectCombo(combo, index);
+}
+
+void SaveRoomOption(void *opts, const OptionDef &d)
+{
+	std::string value;
+	if (d.checkbox) {
+		void *button = Button(opts, d.id);
+		if (!button) return;
+		value = Checked(button) ? "1" : "0";
+	}
+	else {
+		void *combo = Combo(opts, d.id);
+		const std::vector<std::string> items = ComboItems(combo);
+		const int selected = ComboSel(combo);
+		if (selected < 0 || selected >= static_cast<int>(items.size())) return;
+		if (d.id == kMapTypeOption && selected == 0) return;
+		value = items[selected];
+	}
+	std::string &last = g_savedOptions[d.id];
+	if (last == value) return;
+	last = value;
+	WritePrivateProfileStringA(kOptionsSection, OptionKey(d.id).c_str(), RoomPrefEncode(value).c_str(), RoomIniPath().c_str());
+}
+
+// Waits one tick after the room opens: a room for a saved game only says so after the first one, and its options are not the player's.
+void RoomOptionsTick()
+{
+	void *opts = *reinterpret_cast<void **>(addr::kGameOptionsDialog);
+	if (!g_dlg || !opts || !reinterpret_cast<IntThis_t>(addr::kIsHostOrOffline)(g_dlg) || NetMultiplayerSaveLoading() || NetRejoinLoading()) return;
+	if (g_optionsSeenFor != g_dlg) {
+		g_optionsSeenFor = g_dlg;
+		return;
+	}
+	const bool restore = g_optionsRestoredFor != g_dlg;
+	g_optionsRestoredFor = g_dlg;
+	for (const OptionDef &d : kOptions) {
+		if (d.id == kSharedSupportOption || GameModeLocksOption(CurrentMode(), d.id)) continue;
+		if (restore) RestoreRoomOption(opts, d);
+		else SaveRoomOption(opts, d);
+	}
+}
+
+// The game keeps the scenario chosen in an earlier room of this session, even if a content pack that brought it is gone by now.
+// Waits one tick after the room opens: a room for a saved game only says so after the first one, and it chooses its own map.
+void ReplaceMissingScenario()
+{
+	if (!g_dlg || g_scenarioCheckedFor == g_dlg || NetMultiplayerSaveLoading() || NetRejoinLoading()) return;
+	if (g_scenarioSeenFor != g_dlg) {
+		g_scenarioSeenFor = g_dlg;
+		return;
+	}
+	g_scenarioCheckedFor = g_dlg;
+	std::string scenario;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		if (!g_snap.scenarioMissing || g_snap.scenario.empty()) return;
+		scenario = g_snap.scenario;
+	}
+	void *opts = *reinterpret_cast<void **>(addr::kGameOptionsDialog);
+	void *mapType = Combo(opts, 0x1000);
+	if (!opts || !mapType || ComboItems(mapType).size() < 2) {
+		LogW("room", "the chosen scenario \"%s\" no longer exists and there is no random map to use instead", scenario.c_str());
+		return;
+	}
+	SelectCombo(mapType, 1);
+	LogI("room", "the chosen scenario \"%s\" no longer exists; a random map is chosen instead", scenario.c_str());
+	std::lock_guard<std::mutex> lock(g_lock);
+	g_replacedScenario = ScenarioName(scenario);
+}
+
 void EnforceModeRaces()
 {
 	if (!g_dlg || NetMultiplayerSaveLoading()) return;
@@ -1026,10 +1406,95 @@ void GameRoomTick()
 		for (int &t : g_typeTarget) t = -1;
 	}
 	TakeSnapshot();
+	ReplaceMissingScenario();
+	RoomOptionsTick();
 	bool busy = false;
 	for (int t : g_typeTarget) busy = busy || t >= 0;
-	std::lock_guard<std::mutex> lock(g_lock);
-	g_snap.busy = busy || !g_actions.empty();
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		g_snap.busy = busy || !g_actions.empty();
+	}
+	CountdownTick();
+}
+
+void GameRoomRename(const std::string &name)
+{
+	Queue([name] {
+		if (!reinterpret_cast<IntThis_t>(addr::kIsHostOrOffline)(g_dlg)) {
+			LogW("room", "not renamed: only the host can rename the room");
+			return;
+		}
+		void *shell = *reinterpret_cast<void **>(static_cast<char *>(g_dlg) + 0x8228);
+		if (!shell) {
+			LogD("room", "not renamed: a game without network has no room name");
+			return;
+		}
+		const std::string online = RoomNameClean(name, kRoomNameMaxBytes);
+		if (online.empty()) {
+			LogW("room", "not renamed: the name is empty");
+			return;
+		}
+		if (NetRenameRoom(online)) {
+			LogI("room", "renaming the Steam room to \"%s\"", online.c_str());
+			return;
+		}
+		const std::string lan = RoomNameClean(name, kLanRoomNameMaxBytes);
+		if (LanNameWrite(shell, lan.c_str())) LogI("room", "local network game renamed to \"%s\"", lan.c_str());
+		else LogW("room", "the local network game could not be renamed");
+	});
+}
+
+int GameRoomCountdownLeftMs()
+{
+	std::lock_guard<std::mutex> lock(g_countdown.mx);
+	return g_countdown.clock.LeftMs(GetTickCount());
+}
+
+void GameRoomSetAutoStart(bool on)
+{
+	if (g_countdown.autoStart.exchange(on) != on) LogI("room", "start countdown when everyone is ready: %s", on ? "on" : "off");
+}
+
+void GameRoomSetStartGate(bool (*blocked)())
+{
+	g_countdown.startBlocked.store(blocked);
+}
+
+void GameRoomCountdownCancel()
+{
+	Queue([] {
+		if (!reinterpret_cast<IntThis_t>(addr::kIsHostOrOffline)(g_dlg)) {
+			LogD("room", "countdown: only the host can stop it (a guest stops it by not being ready)");
+			return;
+		}
+		CountdownStep step;
+		uint32_t seq = 0;
+		{
+			std::lock_guard<std::mutex> lock(g_countdown.mx);
+			step = g_countdown.clock.HostCancel();
+			seq = g_countdown.clock.Seq();
+		}
+		if (step.event != CountdownEvent::Cancel) return;
+		LogI("room", "countdown cancelled: %s", CountdownReasonText(step).c_str());
+		CountdownSend(seq, -1);
+	});
+}
+
+void GameRoomCountdownReceived(unsigned seq, int ms)
+{
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		if (!g_snap.active || g_snap.host) return;
+	}
+	const uint32_t now = GetTickCount();
+	bool changed = false;
+	{
+		std::lock_guard<std::mutex> lock(g_countdown.mx);
+		changed = ms >= 0 ? g_countdown.clock.RemoteStart(seq, ms, now) : g_countdown.clock.RemoteCancel(seq);
+	}
+	if (!changed) return;
+	if (ms >= 0) LogI("room", "countdown from the host: the game starts in %d ms", ms);
+	else LogI("room", "countdown cancelled by the host");
 }
 
 GameRoomSnapshot GameRoomGet()
@@ -1047,6 +1512,14 @@ bool GameRoomActive()
 void GameRoomCivSetsEdited()
 {
 	Queue([] { g_civResetGate.Edited(); });
+}
+
+std::string GameRoomTakeReplacedScenario()
+{
+	std::lock_guard<std::mutex> lock(g_lock);
+	std::string name;
+	name.swap(g_replacedScenario);
+	return name;
 }
 
 void GameRoomSetRace(int slot, int index)
@@ -1078,6 +1551,70 @@ void GameRoomSetSlotType(int slot, int type)
 void GameRoomCycleTeam(int slot)
 {
 	Queue([slot] { Click(Button(g_dlg, ((slot + 1) << 12) | 0x32)); });
+}
+
+// The native team button of a row (id row<<12 | 0x32) is a CUIButton whose frame is the team: CUIButton::SetFrame
+// (vtable +0x70, 00661020, ret 8) keeps frame % rows (+0x7c) in +0x7e. Its click handler in
+// CVXUIMultiplayerGame::OnMessage (006dd6f0) stores that frame in the row (+0x2c of the local array, or +0x68 of the
+// CNGameShell player with +8 set), sends SendPlayerInfo and redraws; GameRoomSetTeam does the same with the chosen frame.
+void GameRoomSetTeam(int slot, int team)
+{
+	Queue([slot, team] {
+		typedef void(__fastcall * SendPlayerInfo_t)(void *, void *, int, unsigned, int);
+		typedef void(__fastcall * UpdateSlotRow_t)(void *, void *, unsigned);
+		if (!g_dlg || slot < 0 || slot > 7) return;
+		const char *name = nullptr;
+		int type = 0, color = 0, ready = 0, race = 0, current = 0, extra = 0;
+		if (!reinterpret_cast<GetSlotInfo_t>(addr::kGetSlotInfo)(g_dlg, nullptr, slot, &name, &type, &color, &ready, &race, &current, &extra) ||
+			(type != 1 && type != 3)) {
+			LogD("room", "team of slot %d not changed: the slot is empty", slot + 1);
+			return;
+		}
+		char *d = static_cast<char *>(g_dlg);
+		char *shell = *reinterpret_cast<char **>(d + 0x8228);
+		const bool host = reinterpret_cast<IntThis_t>(addr::kIsHostOrOffline)(g_dlg) != 0;
+		const bool local = slot == reinterpret_cast<IntThis_t>(addr::kGetLocalSlot)(g_dlg);
+		if (!local && !(host && type == 1)) {
+			LogW("room", "team of slot %d not changed: only its player, or the host for an AI, can change it", slot + 1);
+			return;
+		}
+		if (shell && *reinterpret_cast<int *>(d + 0x78)) {
+			LogD("room", "team of slot %d not changed: the rows are locked while you are ready", slot + 1);
+			return;
+		}
+		if (SlotHandshaking(slot)) {
+			LogW("room", "team of slot %d not changed: a player is joining it", slot + 1);
+			return;
+		}
+		void *button = Button(g_dlg, ((slot + 1) << 12) | 0x32);
+		const int choices = TeamChoices(button);
+		if (team < 0 || team >= choices) {
+			LogW("room", "team %d for slot %d is out of range (0 = none, 1..%d)", team, slot + 1, choices - 1);
+			return;
+		}
+		if (team == current) return;
+		const int player = static_cast<int>(*reinterpret_cast<signed char *>(d + 0xa0 + slot));
+		if (shell) {
+			char *rec = *reinterpret_cast<char **>(shell + 8) + player * 0x21;
+			if (!*reinterpret_cast<int *>(rec + 4)) return;
+		}
+		if (button) {
+			void **vt = *reinterpret_cast<void ***>(button);
+			reinterpret_cast<SetValue_t>(vt[0x70 / 4])(button, nullptr, team, 1);
+		}
+		if (!shell) {
+			*reinterpret_cast<int *>(player * 0x34 + *reinterpret_cast<char **>(d + 0x174) + 0x2c) = team;
+		}
+		else {
+			char *rec = *reinterpret_cast<char **>(shell + 8) + player * 0x21;
+			*reinterpret_cast<int *>(rec + 8) = 1;
+			*reinterpret_cast<int *>(*reinterpret_cast<char **>(rec) + 0x68) = team;
+			reinterpret_cast<SendPlayerInfo_t>(addr::kSendPlayerInfo)(shell, nullptr, player, 0xffff, 0);
+		}
+		reinterpret_cast<ThisOnly_t>(addr::kUpdatePlayerCounts)(g_dlg);
+		reinterpret_cast<UpdateSlotRow_t>(addr::kUpdateSlotRow)(g_dlg, nullptr, static_cast<unsigned>(slot));
+		LogI("room", "slot %d: team %d -> %d", slot + 1, current, team);
+	});
 }
 
 void GameRoomSetBonus(int slot, int index)
@@ -1155,6 +1692,16 @@ void GameRoomSetOption(int id, int index)
 	});
 }
 
+int GameRoomLoadSetting(const char *key, int def)
+{
+	return static_cast<int>(LoadRoomFlags(key, static_cast<unsigned>(def)));
+}
+
+void GameRoomSaveSetting(const char *key, int value)
+{
+	SaveRoomFlags(key, static_cast<unsigned>(value));
+}
+
 void GameRoomSetSiteFlags(unsigned bits)
 {
 	Queue([bits] {
@@ -1171,7 +1718,7 @@ void GameRoomSetRules(unsigned bits)
 {
 	Queue([bits] {
 		g_ruleFlags = bits & kRuleMask;
-		SaveRoomFlags("Rules", g_ruleFlags);
+		if (!NetMultiplayerSaveLoading()) SaveRoomRules(g_ruleFlags);
 		void *opts = *reinterpret_cast<void **>(addr::kGameOptionsDialog);
 		typedef void(__fastcall *OnApply_t)(void *opts);
 		if (opts) reinterpret_cast<OnApply_t>(addr::kOnApplyOptions)(opts);

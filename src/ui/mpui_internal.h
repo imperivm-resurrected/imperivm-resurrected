@@ -49,7 +49,7 @@ enum Action {
 	kPickRow, kPickOk, kPickCancel,
 	kRecoverYes, kRecoverNo, kRejoinCancel, kRejoinClose,
 	kGKick, kGKickJoining, kDiscord, kPassOk, kPassCancel, kGSeat, kGMove, kGMoveTo, kGSwapAsk, kSwapAccept, kSwapDecline, kDropYes, kDropNo, kPassShow, kGSiteToggle, kGRuleToggle, kSpectate, kReturnGame,
-	kFieldPickSearch, kPickDelete, kPickDeleteYes, kPickDeleteNo, kGResync, kCivSetToggle, kPatronLink, kCivSetsEdit,
+	kFieldPickSearch, kPickDelete, kPickDeleteYes, kPickDeleteNo, kGResync, kCivSetToggle, kPatronLink, kCivSetsEdit, kProfile, kGTab, kFieldRoomName,
 };
 
 typedef int(__cdecl *HostGame_t)(int, unsigned, int);
@@ -87,11 +87,19 @@ struct JoinFlowState {
 extern JoinFlowState g_flow;
 enum View { kViewList, kViewRanked, kViewCreate };
 
-enum Field { kNoField, kChatField, kNameField, kPassField, kJoinPassField, kSearchField, kPickSearchField };
+enum Field { kNoField, kChatField, kNameField, kPassField, kJoinPassField, kSearchField, kPickSearchField, kRoomNameField };
 
 enum { kPredTeam, kPredRace, kPredAi, kPredReady, kPredOptSel, kPredOptVal, kPredColor };
 
-enum { kDropRace, kDropAi, kDropOption, kDropColor, kDropSlot, kDropSites, kDropModOption, kDropPreset, kDropFilter, kDropPlayers, kDropProfile, kDropVisibility, kDropSaveGame, kDropSpectators, kDropPickSort, kDropBonus };
+enum { kDropRace, kDropAi, kDropOption, kDropColor, kDropSlot, kDropSites, kDropModOption, kDropPreset, kDropFilter, kDropPlayers, kDropProfile, kDropVisibility, kDropSaveGame, kDropSpectators, kDropPickSort, kDropBonus, kDropTeam };
+
+// The argument of kGDropOpen: the kind in the low bits and the slot or option index above them.
+const int kDropKindBits = 5, kDropKindMask = (1 << kDropKindBits) - 1;
+
+inline int DropArg(int kind, int index)
+{
+	return kind | (index << kDropKindBits);
+}
 
 struct SaveEntry {
 	std::string name, vfsPath, file;
@@ -302,6 +310,8 @@ struct State {
 	int resizeCol = -1, resizeStartX = 0, resizeStartW = 0;
 	float uiScale = 1.0f;
 	int dropKind = 0, dropIndex = 0, dropScroll = 0;
+	int roomTab = 0;
+	std::string roomNameInput;
 };
 
 extern std::mutex g_lock;
@@ -454,12 +464,29 @@ void PaintField(Painter &p, const State &st, int x, int y, int w, int h, const s
 bool PaintAvatar(Painter &p, int x, int y, int size, uint64_t id);
 std::string SaveSlotNameFromOptions(const std::string &opts, int i);
 uint64_t MemberIdByName(const State &st, const std::string &name, bool skipMe = false);
+// The argument of kProfile says where the player was clicked.
+const int kProfileLobbySlot = 0, kProfileLobbyName = 0x1000, kProfileRoomSlot = 0x2000;
+void ProfileHotspot(ui::Painter &p, const State &st, int x, int y, int w, int h, const std::string &name, int arg);
 void PaintHeader(Painter &p, const State &st);
 void PaintPassPrompt(Painter &p, const State &st);
 void PaintList(Painter &p, const State &st);
 void PaintRanked(Painter &p, const State &st);
 void PaintCreate(Painter &p, const State &st);
 void PaintChat(Painter &p, const State &st);
+std::map<std::string, std::string> PublishedOptions(const State &st);
+std::string RoomOptionText(const State &st, int id, const char *published);
+std::string RoomMapLabel(const State &st);
+void PaintGameTab(Painter &p, const State &st, int top);
+void PaintMapThumb(Painter &p, const State &st, int x, int y, int size, bool markers);
+std::string RoomNotice(const State &st, COLORREF &color);
+
+const int kRoomTeams = 4;
+
+// What the room screen asks of the room that the game does not do yet; mpui_room_link.cpp keeps them together.
+void SetTeamTo(int slot, int team);
+int CountdownLeftMs();
+void RenameRoom(const std::string &name);
+void StartRoomCountdown();
 extern ListGeom g_syncGeomOut;
 void PaintSyncConfirm(Painter &p, const State &st);
 void PaintSyncProgress(Painter &p, const State &st);
@@ -505,4 +532,5 @@ struct HostAfterGameState {
 extern HostAfterGameState g_hostAfter;
 void StepSaveMap(const GameRoomSnapshot &snap);
 extern std::vector<uint32_t> g_bg;
+bool MainMenuOnTop();
 void WakeGameThread();
