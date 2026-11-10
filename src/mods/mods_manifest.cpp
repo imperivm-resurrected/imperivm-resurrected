@@ -396,8 +396,6 @@ ModInfo ScanMod(const std::string &folder, std::vector<ScanFile> &files)
 		m.hasLoose = root.hasLoose;
 		m.gameplay = root.gameplay;
 		m.content = root.content;
-		// What the root replaces of the game: only a package with civilizations, and the game's files are read only if there is something to compare.
-		if (!m.loosePaths.empty() && RulesetPathsHaveCivs(m.paths)) m.globalLoose = RootGlobalFiles(m.loosePaths, GameFiles());
 	}
 	for (size_t i = 0; i < m.layers.size(); i++) {
 		ModLayer &l = m.layers[i];
@@ -440,6 +438,9 @@ ModInfo ScanMod(const std::string &folder, std::vector<ScanFile> &files)
 			ModsKindId(m.kind), ModsKindId(m.kind));
 	}
 	m.content = m.content || m.kind == kModContent;
+	// What the root replaces of the game: in a rules package (one with civilizations is always one), whose root is its ruleset. The game's files are
+	// read only if there is something to compare.
+	if (m.kind == kModRules && !m.loosePaths.empty()) m.globalLoose = RootGlobalFiles(m.loosePaths, GameFiles());
 	return m;
 }
 

@@ -21,7 +21,7 @@ What happens when two packages put a file at the **same game path**? This exampl
 
 ## What the code says should happen
 
-A civilization package's root may **add** files but may not **replace** the game's. `clash-a` has `civs\`, and `gameres\icons\RHastatus.bmp` is a file the game already has (`ui\icons\RHastatus.bmp` in its packs), so that file in `clash-a`'s root is **global**: it is mounted only when the ruleset in use is one of `clash-a`'s own (here, the package itself: it declares none), and ignored under any other, the game's own included. The game's file is the one used then. A file with a name the game does not have is always mounted.
+A rules package's root (a civilization package is one) may **add** files but may not **replace** the game's. `clash-a` has `civs\`, and `gameres\icons\RHastatus.bmp` is a file the game already has (`ui\icons\RHastatus.bmp` in its packs), so that file in `clash-a`'s root is **global**: it is mounted only when the ruleset in use is one of `clash-a`'s own (here, the package itself: it declares none), and ignored under any other, the game's own included. The game's file is the one used then. A file with a name the game does not have is always mounted.
 
 | Ruleset in the room | The portrait is | Why |
 |---|---|---|
@@ -49,7 +49,7 @@ The validator sees the mistake too, and says what happens to it:
 
 ```text
 node tools\validate-mod.js sdk\examples\ruleset-clash-example\clash-a --game "<game folder>"
-WARNING  gameres/icons/RHastatus.bmp  global in-game file in the root of a civilization pack: it is ignored unless a ruleset of this package is chosen; put it in a ruleset layer (rulesets/<id>/)
+WARNING  gameres/icons/RHastatus.bmp  global in-game file in the root of a rules package (a civilization pack is one): it is ignored unless a ruleset of this package is chosen; put it in a ruleset layer (rulesets/<id>/)
 ```
 
 ## What is not here

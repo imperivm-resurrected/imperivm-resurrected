@@ -154,8 +154,9 @@ ModRuleset ModsEffectiveRuleset(const ModProfile &p)
 	ModRuleset out;
 	out.pack = m.folder;
 	if (p.ruleset.id.empty()) {
-		// The package without a layer is an entry only for a package that has civilizations and no ruleset; it mounts nothing.
-		if (!m.layers.empty() || !RulesetPathsHaveCivs(m.paths)) return ModRuleset();
+		// The package without a layer is an entry only for a package that has civilizations (or root files that replace the game's) and no ruleset.
+		// It mounts no folder; the root files that replace the game's are mounted with it.
+		if (!m.layers.empty() || !(RulesetPathsHaveCivs(m.paths) || !m.globalLoose.empty())) return ModRuleset();
 		return out;
 	}
 	const ModLayer *layer = ModsFindLayer(m, p.ruleset.id);
@@ -174,6 +175,7 @@ std::vector<ModRulesetEntry> ModsRulesetEntries(const std::vector<std::string> &
 		RulesetPackFacts f;
 		f.usable = m.forbidden.empty();
 		f.hasCivs = RulesetPathsHaveCivs(m.paths);
+		f.hasGlobal = !m.globalLoose.empty();
 		f.layers = m.layers.size();
 		facts.push_back(f);
 		packs.push_back(std::move(m));

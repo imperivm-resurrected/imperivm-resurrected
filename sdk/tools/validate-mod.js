@@ -353,13 +353,18 @@ else {
 		// a ruleset is what a host chooses for a game: the menu is not part of it
 		listed(files.filter(f => assets.isMenuSkin(f)), 'menu skin file in a ruleset layer: it belongs to a skin (not the ruleset)');
 	}
-	else if (gameDir && files.some(f => /^civs\//i.test(f))) {
-		// a civilization pack's root may add files, not replace the game's: such a file is mounted only when a ruleset of the package is chosen
-		const game = assets.gameFiles(gameDir);
-		if (game) {
-			listed(files.filter(f => !/^(patches|loc|civs)\//i.test(f) && game.has(assets.gamePath(f)) && !assets.isMenuSkin(f)),
-				'global in-game file in the root of a civilization pack: it is ignored unless a ruleset of this package is chosen; put it in a ruleset layer (rulesets/<id>/)');
+	else if (files.some(f => /^civs\//i.test(f) || assets.isGameplayPath(f))) {
+		// the root of a rules package (a civilization pack is one) may add files, not replace the game's: such a file is mounted only when a ruleset of the package is chosen
+		if (gameDir) {
+			const game = assets.gameFiles(gameDir);
+			if (game) {
+				listed(files.filter(f => !/^(patches|loc|civs)\//i.test(f) && game.has(assets.gamePath(f)) && !assets.isMenuSkin(f)),
+					'global in-game file in the root of a rules package (a civilization pack is one): it is ignored unless a ruleset of this package is chosen; put it in a ruleset layer (rulesets/<id>/)');
+			}
 		}
+		// a .pak is mounted whole: the rule cannot leave out the files of it that replace the game's
+		listed(files.filter(f => /^(packs|local)\/[^/]+\.pak$/i.test(f)),
+			'.pak in the root of a rules package: it is mounted whole, so the files in it that replace the game\'s are not ignored under other rulesets; put them in a ruleset layer');
 	}
 }
 

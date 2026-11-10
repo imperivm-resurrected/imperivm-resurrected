@@ -31,6 +31,15 @@ function gamePath(rel) {
 	return v ? v[1] + p.slice(v[0].length) : p;
 }
 
+// A path that changes gameplay, as the DLL counts it (src/mods/modrules.cpp, IsGameplayPath): a package whose root has one is a rules package.
+function isGameplayPath(rel) {
+	const p = rel.replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase();
+	if (/^(data|civs|specials|events|rules|modes|options|randommap|rulesets|randommapsettlements)\//.test(p)) return true;
+	if (/^packs\/.*\.bfhp$/.test(p)) return true;
+	if (/^units\/.*\.xml$/.test(p) || /^(buildings|mapobjects|visuals)\/.*\.xml$/.test(p)) return true;
+	return /^(units|buildings|mapobjects)\/.*\.pass$/.test(p);
+}
+
 function isMenuSkin(rel) {
 	const p = gamePath(rel);
 	return MENU_SKIN.some(re => re.test(p));
@@ -95,4 +104,4 @@ function gameFiles(gameDir) {
 	return out.size ? out : null;
 }
 
-module.exports = { MENU_SKIN, gamePath, isMenuSkin, pakNames, gameFiles };
+module.exports = { MENU_SKIN, gamePath, isMenuSkin, isGameplayPath, pakNames, gameFiles };
