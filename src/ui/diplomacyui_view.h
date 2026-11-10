@@ -10,7 +10,9 @@
 
 namespace diplomacyui {
 
-enum Action { kActNone, kActPreset, kActToggle, kActAccept, kActAllied, kActApply, kActCancel, kActScrollUp, kActScrollDown };
+enum Action { kActNone, kActPreset, kActToggle, kActAccept, kActAllied, kActApply, kActCancel };
+
+constexpr int kBarCards = 0;
 
 struct Card {
 	std::string name;
@@ -26,6 +28,7 @@ struct View {
 	bool alliedVictory = false;
 	bool locked = false;
 	int scroll = 0;  // in rows of cards
+	ui::ScrollDrag bar;
 };
 
 constexpr int kPanelW = 1000;
