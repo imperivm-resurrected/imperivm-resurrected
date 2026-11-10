@@ -36,6 +36,7 @@ inline constexpr uintptr_t kOnHotkeyChar = 0x006b3620;
 inline constexpr uintptr_t kCmdBarRebuild = 0x006b3d60;
 inline constexpr uintptr_t kShowEndMultiplayerDlg = 0x006b46d0;
 inline constexpr uintptr_t kNotificationOnKey = 0x006b6f10;
+inline constexpr uintptr_t kHelpDlgOnKey = 0x006b90a0;
 inline constexpr uintptr_t kConfirmSetup = 0x006c8ba0;
 inline constexpr uintptr_t kShowConquestGameDialog = 0x006c9080;
 inline constexpr uintptr_t kEndMenuOnShow = 0x006cd7f0;
