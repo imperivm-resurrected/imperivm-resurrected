@@ -41,18 +41,14 @@ inline void ScrollbarPaint(Painter &p, int tx, int ty, int th, int total, int vi
 	geom.maxScroll = ListMaxScroll(total, visible);
 	geom.track = geom.thumb = RECT();
 	if (geom.maxScroll <= 0 || th <= 0) return;
-	const int thumbH = std::max(20, th * visible / total);
-	const int scroll = std::max(0, std::min(st.scroll, geom.maxScroll));
-	const int thumbY = ty + (th - thumbH) * scroll / geom.maxScroll;
-	const bool hot = st.drag || p.Hover(tx - 4, ty, 14, th, mx, my);
-	p.Fill(tx, ty, 6, th, pal::track);
-	p.Fill(tx, thumbY, 6, thumbH, hot ? pal::thumbHot : pal::thumb);
-	RECT t = p.R(tx - 4, ty, 14, th);
-	OffsetRect(&t, p.ox, p.oy);
-	geom.track = t;
-	RECT c = p.R(tx - 4, thumbY, 14, thumbH);
-	OffsetRect(&c, p.ox, p.oy);
-	geom.thumb = c;
+	const ScrollbarLook look;
+	const ThumbSpan t = DrawScrollbar(p, tx, ty, th, {st.scroll, geom.maxScroll, visible}, st.drag, mx, my, look);
+	RECT r = p.R(tx - look.grip, ty, look.width + 2 * look.grip, th);
+	OffsetRect(&r, p.ox, p.oy);
+	geom.track = r;
+	r = p.R(tx - look.grip, ty + t.top, look.width + 2 * look.grip, t.len);
+	OffsetRect(&r, p.ox, p.oy);
+	geom.thumb = r;
 }
 
 inline void ListPaint(Painter &p, int x, int y, int w, int h, const std::vector<ListLine> &lines, ListState &st, ListGeom &geom, int font = 0,
@@ -88,24 +84,20 @@ inline bool ListWheel(ListState &st, const ListGeom &g, POINT pt, int wheelDelta
 
 inline int ListScrollFor(const ListGeom &g, int thumbTop)
 {
-	const int range = static_cast<int>((g.track.bottom - g.track.top) - (g.thumb.bottom - g.thumb.top));
-	if (range <= 0) return 0;
-	const int rel = std::max(0, std::min(range, thumbTop - static_cast<int>(g.track.top)));
-	return (rel * g.maxScroll + range / 2) / range;
+	return ScrollAtThumb(g.maxScroll, g.track.bottom - g.track.top, g.thumb.bottom - g.thumb.top, thumbTop - g.track.top);
 }
 
+// PaintScrollbar's bar for the lists that keep their own geometry: the thumb drags and the track pages.
 inline bool ListDown(ListState &st, const ListGeom &g, POINT pt)
 {
 	if (g.maxScroll <= 0 || !PtInRect(&g.track, pt)) return false;
-	const int thumbH = static_cast<int>(g.thumb.bottom - g.thumb.top);
-	if (PtInRect(&g.thumb, pt)) {
+	if (pt.y >= g.thumb.top && pt.y < g.thumb.bottom) {
 		st.grab = static_cast<int>(pt.y - g.thumb.top);
+		st.drag = true;
 	}
 	else {
-		st.grab = thumbH / 2;
-		st.scroll = ListScrollFor(g, pt.y - st.grab);
+		st.scroll = ScrollPaged({st.scroll, g.maxScroll, g.visible}, pt.y < g.thumb.top ? -1 : 1);
 	}
-	st.drag = true;
 	return true;
 }
 
