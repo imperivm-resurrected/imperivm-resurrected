@@ -7,6 +7,7 @@
 #include <string>
 
 #include "MinHook.h"
+#include "hooks/gameload.h"
 #include "hooks/hookcount.h"
 #include "addr/classcache.h"
 #include "addr/constcache.h"
@@ -44,6 +45,7 @@ typedef void(__cdecl *GameDataSystems_t)();
 typedef void *(__fastcall *FindClass_t)(void *registry, void *edx, const char *name);
 
 LoadGameData_t g_origLoadGameData = nullptr;
+LoadGameData_t g_origUnloadGameData = nullptr;
 
 const unsigned kDecorTypes = 256;
 const unsigned kFeedbackTypes = 56; // 28 ids with two variants, ending where the guard word starts
@@ -226,7 +228,7 @@ void LogProcessState(const char *when)
 			if (!HeapValidate(heaps[i], 0, nullptr)) corrupt++;
 		}
 		const SIZE_T commit = haveInfo ? counters.pagefile : 0;
-		LogI("game", "hot reload (%s): process commit %u MB (%+d MB since the last line), working set %u MB, address space in use %u MB, %lu heaps, %u failed HeapValidate (%lu ms)",
+		LogI("game", "memory (%s): process commit %u MB (%+d MB since the last line), working set %u MB, address space in use %u MB, %lu heaps, %u failed HeapValidate (%lu ms)",
 			when, static_cast<unsigned>(commit >> 20), static_cast<int>((static_cast<long long>(commit) - static_cast<long long>(g_lastCommit)) >> 20),
 			haveInfo ? static_cast<unsigned>(counters.workingSet >> 20) : 0u,
 			haveStatus ? static_cast<unsigned>((status.ullTotalVirtual - status.ullAvailVirtual) >> 20) : 0u, static_cast<unsigned long>(heapCount), corrupt,
@@ -234,7 +236,7 @@ void LogProcessState(const char *when)
 		g_lastCommit = commit;
 	}
 	__except (EXCEPTION_EXECUTE_HANDLER) {
-		LogE("game", "hot reload (%s): the process state could not be read (the heap may be damaged)", when);
+		LogE("game", "memory (%s): the process state could not be read (the heap may be damaged)", when);
 	}
 	g_crashLogQuiet--;
 }
@@ -480,6 +482,8 @@ void CheckAfterLoad(const void *loadResult)
 void *__fastcall HookLoadGameData(void *self, void *edx)
 {
 	bool reloaded = false;
+	// A switch chosen from inside a game that was running is mounted now: the old game is gone and the new one is still empty.
+	if (ModsApplyPendingSwitch() == ModsPending::kFailed) RestartNow("the ruleset chosen could not be mounted");
 	const ModsReload plan = ModsReloadPlan();
 	// One line per game that starts, for every kind: what it is and what is done about the rules.
 	{
@@ -488,6 +492,8 @@ void *__fastcall HookLoadGameData(void *self, void *edx)
 			plan == ModsReload::kReload ? "the rules mounted are not the ones the game holds, they are loaded now"
 				: plan == ModsReload::kRestart ? "the rules mounted cannot be loaded in place, the game restarts" : "the rules the game holds are the mounted ones");
 	}
+	// A game that does not reload says its memory too, so that a match after a reload can be compared with one without it.
+	if (plan != ModsReload::kReload) LogProcessState("start of a game, nothing reloaded");
 	switch (plan) {
 	case ModsReload::kReload:
 		// RestartNow does not return: whatever fails before the match is created ends in the restart.
@@ -503,6 +509,17 @@ void *__fastcall HookLoadGameData(void *self, void *edx)
 	}
 	void *result = g_origLoadGameData(self, edx);
 	if (reloaded) CheckAfterLoad(result);
+	else LogProcessState("after LoadGameData, nothing reloaded");
+	return result;
+}
+
+// The end of a game: what it holds before the engine frees its per-game data and what stays after. Together with the lines of the start of
+// the next game this tells what a match keeps (the same without a reload) from what a reload leaves behind (the lines around Shutdown/Init).
+void *__fastcall HookUnloadGameData(void *self, void *edx)
+{
+	LogProcessState("before UnloadGameData");
+	void *result = g_origUnloadGameData(self, edx);
+	LogProcessState("after UnloadGameData");
 	return result;
 }
 }
@@ -518,6 +535,13 @@ void InstallHotReload(bool knownExe)
 		LogE("game", "hot reload: could not hook LoadGameData; every ruleset change will need a restart");
 		return;
 	}
+	// Only to measure memory: if it cannot be hooked nothing else changes.
+	if (HookCreate(reinterpret_cast<void *>(addr::kUnloadGameData), reinterpret_cast<void *>(&HookUnloadGameData), reinterpret_cast<void **>(&g_origUnloadGameData)) != MH_OK ||
+		HookEnable(reinterpret_cast<void *>(addr::kUnloadGameData)) != MH_OK) {
+		LogW("game", "hot reload: could not hook UnloadGameData; the memory at the end of a game is not logged");
+	}
 	ModsHotReloadSetReady(true);
+	// A load that ends (done or not) has used or lost the switch that was waiting for it.
+	OnGameLoaded([](int) { ModsDropPendingSwitch("the load ended"); });
 	LogI("game", "hot reload: ready");
 }

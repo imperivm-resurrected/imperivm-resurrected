@@ -21,6 +21,25 @@ ModRuleset g_engineRules;
 bool g_engineKnown = false;
 // game/hotreload.cpp has hooked the start of a match. Without that hook no ruleset change can skip the restart.
 std::atomic<bool> g_ready{false};
+// A switch chosen while a game was running, to be mounted at the start of the next game (see GameKindCanSwitchWhileRunning).
+ModRuleset g_pending;
+bool g_hasPending = false;
+unsigned g_pendingTick = 0;
+
+// The game object that exists, or null in the menus and the rooms.
+void *RunningGame()
+{
+	return *reinterpret_cast<void *const *>(addr::kGame);
+}
+
+void RememberRuleset(const ModRuleset &wanted)
+{
+	const std::string name = ModsMountedProfile().name;
+	ModProfile p = ModsLoadProfile(name);
+	p.ruleset = wanted;
+	if (!ModsSaveProfile(p)) LogW("content", "the rules could not be saved in the profile \"%s\"; they stay for this session", name.c_str());
+	ModsMountedChoiceSet(wanted);
+}
 
 bool SameFolder(const std::string &a, const std::string &b)
 {
@@ -84,8 +103,11 @@ bool ModsHotSwitchAvailable()
 bool ModsCanSwitchWithoutRestart(const ModRuleset &wanted)
 {
 	if (!g_ready) return false;
-	// A running game has the rules it started with; this is only for the menus and the room before the match.
-	if (*reinterpret_cast<void *const *>(addr::kGame) != nullptr) return false;
+	// A game that is running has the rules it started with and keeps them until it is gone. A switch chosen then waits for the next game (see
+	// ModsSwitchRulesetWithoutRestart); it is only possible for the kinds of game whose load ends in LoadGameData on a new game object.
+	if (void *game = RunningGame()) {
+		if (!GameKindCanSwitchWhileRunning(GameKindOfVtable(*static_cast<const uintptr_t *>(game)))) return false;
+	}
 	ModProfile p;
 	ModRuleset engine;
 	{
@@ -105,9 +127,61 @@ bool ModsCanSwitchWithoutRestart(const ModRuleset &wanted)
 	return SwapDecide(ModsSameRuleset(engine, to), fromFiles, toFiles) != HotSwap::kRestart;
 }
 
+namespace {
+// Mounts wanted now, or, if a game is running, keeps it for the start of the next one. deferred says which.
+bool SwitchOrWait(const ModRuleset &wanted, bool &deferred)
+{
+	deferred = false;
+	if (!ModsCanSwitchWithoutRestart(wanted)) return false;
+	if (!RunningGame()) return ModsSwapMountedRuleset(wanted);
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		g_pending = wanted;
+		g_hasPending = true;
+		g_pendingTick = GetTickCount();
+	}
+	deferred = true;
+	LogI("content", "ruleset %s%s%s chosen while a game is running: it is mounted when the next game starts, after this one is gone", wanted.pack.c_str(),
+		wanted.id.empty() ? "" : ":", wanted.id.c_str());
+	return true;
+}
+}
+
 bool ModsSwitchRulesetWithoutRestart(const ModRuleset &wanted)
 {
-	return ModsCanSwitchWithoutRestart(wanted) && ModsSwapMountedRuleset(wanted);
+	bool deferred;
+	return SwitchOrWait(wanted, deferred);
+}
+
+ModsPending ModsApplyPendingSwitch()
+{
+	ModRuleset wanted;
+	unsigned tick;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		if (!g_hasPending) return ModsPending::kNone;
+		g_hasPending = false;
+		wanted = g_pending;
+		tick = g_pendingTick;
+	}
+	if (!PendingSwitchStillValid(tick, GetTickCount())) {
+		LogW("content", "the ruleset %s:%s that was chosen %u ms ago for the next game is dropped (too old: the load did not start a game)", wanted.pack.c_str(),
+			wanted.id.c_str(), GetTickCount() - tick);
+		return ModsPending::kNone;
+	}
+	// The profile keeps it first: if mounting fails the game restarts, and the new process has to mount this one.
+	RememberRuleset(wanted);
+	if (!ModsSwapMountedRuleset(wanted)) return ModsPending::kFailed;
+	LogI("content", "ruleset %s%s%s mounted at the start of the game, after the running one was gone", wanted.pack.c_str(), wanted.id.empty() ? "" : ":", wanted.id.c_str());
+	return ModsPending::kApplied;
+}
+
+void ModsDropPendingSwitch(const char *why)
+{
+	std::lock_guard<std::mutex> lock(g_lock);
+	if (!g_hasPending) return;
+	g_hasPending = false;
+	LogW("content", "the ruleset %s:%s chosen for the next game is dropped (%s)", g_pending.pack.c_str(), g_pending.id.c_str(), why);
 }
 
 bool ModsSwapMountedRuleset(const ModRuleset &wanted)
@@ -201,12 +275,10 @@ void ModsHotReloadDone()
 
 bool ModsSwitchRulesetAndRemember(const ModRuleset &wanted)
 {
-	if (!ModsSwitchRulesetWithoutRestart(wanted)) return false;
-	const std::string name = ModsMountedProfile().name;
-	ModProfile p = ModsLoadProfile(name);
-	p.ruleset = wanted;
-	if (!ModsSaveProfile(p)) LogW("content", "the rules could not be saved in the profile \"%s\"; they stay for this session", name.c_str());
-	ModsMountedChoiceSet(wanted);
+	bool deferred;
+	if (!SwitchOrWait(wanted, deferred)) return false;
+	// A switch that waits for the next game is remembered when it is mounted (ModsApplyPendingSwitch).
+	if (!deferred) RememberRuleset(wanted);
 	return true;
 }
 

@@ -52,3 +52,13 @@ const char *GameKindName(GameKind kind);
 // Whether a saved game of this kind (SaveKind in savelib.h) is loaded through one of those games, so the saves screen can say the ruleset
 // it was saved with is switched in place: strategy, adventure and conquest saves. A replay has no ruleset to switch to.
 bool SaveKindSwitchesInPlace(int saveKind);
+
+// A switch chosen while a game is running (the Load screen of the in-game menu) is not mounted at once: the running game is still alive until
+// the engine tears it down to load the other one. It waits, and is mounted at the start of the next game's LoadGameData, when no part of the old
+// one exists. Only the games whose load goes through that point can wait for it: a skirmish, a campaign or a conquest (also a replay in progress).
+// The editor loads its files in the same game object and multiplayer games do not load saves: for those the restart is asked before.
+bool GameKindCanSwitchWhileRunning(GameKind kind);
+// How long a waiting switch is good for. A load that never reaches LoadGameData (it was cancelled, the file is bad) must not change the rules of
+// a game that starts much later. Ticks are milliseconds of one clock, compared with wrap-around.
+const unsigned kPendingSwitchMs = 15000;
+bool PendingSwitchStillValid(unsigned chosenTick, unsigned nowTick);

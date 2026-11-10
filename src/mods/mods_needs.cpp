@@ -210,6 +210,23 @@ std::string ModsCheckSaveOnLoad(const std::string &gamePath)
 	if (savedHash.empty() || now.empty() || savedHash == now) {
 		return "";
 	}
+	// The save was made under another ruleset of the packages that are enabled, and that alone is what differs: loading it switches the
+	// ruleset in place (the Saves screen and the rooms do it before the game starts), so there is nothing to warn about. A real mismatch,
+	// or a ruleset that would need the restart, keeps the warning. (The engine also opens saves to read their headers, so this runs for
+	// every save of the list, not only for the one that is loaded.)
+	if (const Json *mods = j.Get("mods"); mods && mods->type == Json::Array) {
+		ModRuleset saved;
+		for (const Json &e : mods->arr) {
+			const std::string id = e.GetString("ruleset");
+			if (id.empty()) continue;
+			saved.pack = e.GetString("folder");
+			saved.id = id;
+			break;
+		}
+		ModProfile asSaved = p;
+		asSaved.ruleset = saved;
+		if (ModsProfileGameplayHash(asSaved) == savedHash && ModsCanSwitchWithoutRestart(saved)) return "";
+	}
 	if (savedName == p.name) {
 		return Tr("This game was saved with different content than the one you have enabled. It may not load properly.");
 	}
