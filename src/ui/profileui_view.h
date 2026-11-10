@@ -66,7 +66,7 @@ enum Action {
 constexpr int kScreenW = 1100, kScreenH = 740;
 // How many rows of the list fit; the controller scrolls by rows.
 constexpr int kListRows = 8;
-constexpr int kBarList = 0;
+constexpr int kBarList = 0, kBarHistory = 1;
 
 // The player goes with the Steam account, so the list is left only for installs that still keep several from before.
 inline bool ShowsList(const View &v) { return v.cards.size() > 1; }

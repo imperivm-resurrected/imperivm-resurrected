@@ -306,6 +306,7 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, Command &cmd)
 	ScrollTo to;
 	const bool onBar = ScrollbarMouse(v.bar, g_s.hits, msg, wp, at, to);
 	if (to.id == kBarList) v.scroll = to.pos;
+	else if (to.id == kBarHistory) v.historyScroll = to.pos;
 	switch (msg) {
 	case WM_MOUSEMOVE:
 		v.mouseX = at.x;
