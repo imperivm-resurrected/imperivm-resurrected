@@ -225,7 +225,7 @@ ModCheck ComputeModCheck(const State &st, const SaveRec &r)
 	}
 	c.blocked = !c.missing.empty();
 	c.needsActivation = c.missing.empty() && !c.inactive.empty();
-	c.inPlace = SaveSwitchesInPlace(r.kind == kSaveStrategy, c.needsActivation, c.rulesetOnly, !c.extra.empty(), c.needsActivation && ModsCanSwitchWithoutRestart(c.ruleset));
+	c.inPlace = SaveSwitchesInPlace(SaveKindSwitchesInPlace(r.kind), c.needsActivation, c.rulesetOnly, !c.extra.empty(), c.needsActivation && ModsCanSwitchWithoutRestart(c.ruleset));
 	if (c.inPlace) c.needsActivation = false;
 	// The saved hash differs from the active one because of the ruleset alone: that is not a warning when the switch is made for you.
 	c.warn = (c.differs && !c.inPlace) || c.needsActivation || !c.other.empty() || !c.extra.empty();

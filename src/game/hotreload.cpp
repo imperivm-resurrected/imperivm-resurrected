@@ -428,16 +428,17 @@ void RestartNow(const char *why)
 bool HotReload(const void *game)
 {
 	const DWORD start = GetTickCount();
-	// Only the games whose LoadGameData is known to run before anything of the match reads the tables: a skirmish (also a saved one:
-	// PersistSavedGame creates the game, runs LoadGameData and only then reads the world) and a multiplayer game. Campaigns, conquests,
-	// the editor and replays are not looked at.
-	const uintptr_t kind = *reinterpret_cast<const uintptr_t *>(game);
-	if (kind != addr::kGameSingleVtable && kind != addr::kMultiplayerVtable) {
-		LogW("game", "hot reload: not for this kind of game (vtable %08x)", static_cast<unsigned>(kind));
+	// Every kind of game the engine makes runs LoadGameData on its empty game object before anything of it reads the tables (the vtable
+	// of each one is in addr/world.h and net.h; a saved game and a replay go through the same slot): see GameKind in mods/hotswap.h.
+	// Any other vtable is not known to do that, and the data is not read again for it.
+	const uintptr_t vtable = *reinterpret_cast<const uintptr_t *>(game);
+	const GameKind kind = GameKindOfVtable(vtable);
+	if (kind == GameKind::kUnknown) {
+		LogW("game", "hot reload: not for this kind of game (vtable %08x)", static_cast<unsigned>(vtable));
 		return false;
 	}
-	LogI("game", "hot reload: %s%s game", kind == addr::kMultiplayerVtable ? "multiplayer" : "single-player",
-		*reinterpret_cast<const int *>(addr::kLoadingSavedGame) ? " saved" : "");
+	LogI("game", "hot reload: %s%s game (vtable %08x)", GameKindName(kind), *reinterpret_cast<const int *>(addr::kLoadingSavedGame) ? ", saved" : "",
+		static_cast<unsigned>(vtable));
 	if (!GuardsLookRight()) return false;
 	if (UpdateCheckRunning()) {
 		LogW("game", "hot reload: the update check is still reading the table");
@@ -479,7 +480,15 @@ void CheckAfterLoad(const void *loadResult)
 void *__fastcall HookLoadGameData(void *self, void *edx)
 {
 	bool reloaded = false;
-	switch (ModsReloadPlan()) {
+	const ModsReload plan = ModsReloadPlan();
+	// One line per game that starts, for every kind: what it is and what is done about the rules.
+	{
+		const uintptr_t vtable = self ? *reinterpret_cast<const uintptr_t *>(self) : 0;
+		LogI("game", "hot reload: LoadGameData of a %s game (vtable %08x): %s", GameKindName(GameKindOfVtable(vtable)), static_cast<unsigned>(vtable),
+			plan == ModsReload::kReload ? "the rules mounted are not the ones the game holds, they are loaded now"
+				: plan == ModsReload::kRestart ? "the rules mounted cannot be loaded in place, the game restarts" : "the rules the game holds are the mounted ones");
+	}
+	switch (plan) {
 	case ModsReload::kReload:
 		// RestartNow does not return: whatever fails before the match is created ends in the restart.
 		if (!HotReload(self)) RestartNow("it could not be done");

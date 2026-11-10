@@ -6,7 +6,10 @@
 #include <string>
 #include <vector>
 
+#include "addr/net.h"
+#include "addr/world.h"
 #include "mods/hotswap.h"
+#include "mods/savelib.h"
 
 namespace {
 
@@ -107,6 +110,38 @@ void OnlyTheKindsOfFileTheGameCanReadAgainAreSwitched()
 	CHECK(HotSwapLayerOk({"Patches\\Data\\Commands\\RBarracks.XML"}));
 }
 
+void EveryKindOfGameThatTheEngineMakesIsKnown()
+{
+	CHECK(GameKindOfVtable(addr::kGameSingleVtable) == GameKind::kSkirmish);
+	CHECK(GameKindOfVtable(addr::kMultiplayerVtable) == GameKind::kMultiplayer);
+	CHECK(GameKindOfVtable(addr::kGameAdvVtable) == GameKind::kAdventure);
+	CHECK(GameKindOfVtable(addr::kGameConqVtable) == GameKind::kConquest);
+	CHECK(GameKindOfVtable(addr::kGameEditVtable) == GameKind::kEditor);
+	CHECK(GameKindOfVtable(0) == GameKind::kUnknown);
+	CHECK(GameKindOfVtable(addr::kGameSingleVtable + 4) == GameKind::kUnknown);
+	CHECK(GameKindOfVtable(addr::kShipVtable) == GameKind::kUnknown);
+	// The five vtables are five different addresses, and each has its own name for the log.
+	const uintptr_t all[] = {addr::kGameSingleVtable, addr::kMultiplayerVtable, addr::kGameAdvVtable, addr::kGameConqVtable, addr::kGameEditVtable};
+	for (size_t i = 0; i < 5; i++) {
+		for (size_t j = i + 1; j < 5; j++) CHECK(all[i] != all[j]);
+		CHECK(std::string(GameKindName(GameKindOfVtable(all[i]))) != "unknown");
+	}
+	CHECK_EQ(std::string(GameKindName(GameKind::kAdventure)), "adventure");
+	CHECK_EQ(std::string(GameKindName(GameKind::kUnknown)), "unknown");
+}
+
+void SavesOfEveryKindOfGameButReplaysSwitchInPlace()
+{
+	CHECK(SaveKindSwitchesInPlace(kSaveStrategy));
+	CHECK(SaveKindSwitchesInPlace(kSaveAdventure));
+	CHECK(SaveKindSwitchesInPlace(kSaveConquest));
+	CHECK(!SaveKindSwitchesInPlace(kSaveReplay));
+	CHECK(!SaveKindSwitchesInPlace(-1));
+	// An adventure save under another ruleset of an enabled package is the same case as a skirmish save.
+	CHECK(SaveSwitchesInPlace(SaveKindSwitchesInPlace(kSaveAdventure), true, true, false, true));
+	CHECK(!SaveSwitchesInPlace(SaveKindSwitchesInPlace(kSaveReplay), true, true, false, true));
+}
+
 }
 
 int main()
@@ -117,5 +152,7 @@ int main()
 	OnlyTheKindsOfFileTheGameCanReadAgainAreSwitched();
 	ASavedGameSwitchesInPlaceOnlyWhenEverythingAgrees();
 	EachKindOfFileIsAcceptedOnItsOwn();
+	EveryKindOfGameThatTheEngineMakesIsKnown();
+	SavesOfEveryKindOfGameButReplaysSwitchInPlace();
 	return test::Summary("hotswap");
 }

@@ -3,6 +3,10 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include "mods/hotswap.h"
 
+#include "addr/net.h"
+#include "addr/world.h"
+#include "mods/savelib.h"
+
 #include <cctype>
 #include <cstring>
 
@@ -89,4 +93,31 @@ HotSwap SwapDecide(bool sameRuleset, const std::vector<std::string> &from, const
 {
 	if (sameRuleset) return HotSwap::kNothing;
 	return HotSwapLayerOk(from) && HotSwapLayerOk(to) ? HotSwap::kReload : HotSwap::kRestart;
+}
+
+GameKind GameKindOfVtable(uintptr_t vtable)
+{
+	if (vtable == addr::kGameSingleVtable) return GameKind::kSkirmish;
+	if (vtable == addr::kMultiplayerVtable) return GameKind::kMultiplayer;
+	if (vtable == addr::kGameAdvVtable) return GameKind::kAdventure;
+	if (vtable == addr::kGameConqVtable) return GameKind::kConquest;
+	if (vtable == addr::kGameEditVtable) return GameKind::kEditor;
+	return GameKind::kUnknown;
+}
+
+const char *GameKindName(GameKind kind)
+{
+	switch (kind) {
+	case GameKind::kSkirmish: return "single-player";
+	case GameKind::kMultiplayer: return "multiplayer";
+	case GameKind::kAdventure: return "adventure";
+	case GameKind::kConquest: return "conquest";
+	case GameKind::kEditor: return "editor";
+	default: return "unknown";
+	}
+}
+
+bool SaveKindSwitchesInPlace(int saveKind)
+{
+	return saveKind == kSaveStrategy || saveKind == kSaveAdventure || saveKind == kSaveConquest;
 }
