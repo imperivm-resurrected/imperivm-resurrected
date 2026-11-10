@@ -51,6 +51,15 @@ try {
 	const files = assets.gameFiles(game);
 	assert.deepEqual([...files].sort(), ['currentlang/tips.xml', 'currentlang/voices/rhastatus/1.wav', 'data/classes/rhastatus.sc.xml', 'ui/icons/rhastatus.bmp',
 		'ui/menu/button.bmp']);
+	// the loose files of Units/ and Currentlang/ of the game folder count too (the DLL reads the same ones); other folders do not
+	write(path.join(game, 'Units', 'Ghero1', 'LARAX_WALK.RLE.MMP'));
+	write(path.join(game, 'Currentlang', 'MENUBACKGROUND.bmp'));
+	write(path.join(game, 'Music', 'GBR_TRACK_1.ogg'));
+	const withLoose = assets.gameFiles(game);
+	assert.ok(withLoose.has('units/ghero1/larax_walk.rle.mmp') && withLoose.has('currentlang/menubackground.bmp'));
+	assert.ok(!withLoose.has('music/gbr_track_1.ogg'));
+	fs.rmSync(path.join(game, 'Units'), { recursive: true });
+	fs.rmSync(path.join(game, 'Currentlang'), { recursive: true });
 	assert.equal(assets.gameFiles(path.join(temp, 'nowhere')), null);
 	assert.equal(assets.gameFiles(null), null);
 
@@ -84,14 +93,24 @@ try {
 		globals.some(l => l.includes('local/english/voices/RHastatus/1.wav')));
 	assert.doesNotMatch(withGame.text, /MyUnit|gameres\/menu\/button/);
 	assert.doesNotMatch(withGame.text, /ERROR/);
-	// a package without civilizations is not a civilization pack
+	// a package without civilizations and without gameplay files is not a rules package: its root is not what the rule is about
 	fs.rmSync(path.join(mod, 'civs'), { recursive: true });
 	assert.doesNotMatch(run([mod, '--game', game]).text, /global in-game file/);
+	// a rules package without civilizations is: its root is its ruleset, and a game file in it applies only when that ruleset is chosen
+	write(path.join(mod, 'data', 'classes', 'NewClass.sc.xml'));
+	assert.equal(run([mod, '--game', game]).text.split('\n').filter(l => /global in-game file/.test(l)).length, 3);
+	assert.ok(assets.isGameplayPath('Data\\Classes\\X.xml') && assets.isGameplayPath('units/A/a.ent.xml') && assets.isGameplayPath('packs/x.bfhp'));
+	assert.ok(!assets.isGameplayPath('gameres/icons/a.bmp') && !assets.isGameplayPath('patches/data/const.ini') && !assets.isGameplayPath('units/A/a.rle'));
+	// a .pak in the root of a rules package is mounted whole: the rule cannot leave out its files that replace the game's
+	write(path.join(mod, 'Packs', 'extra.pak'));
+	assert.match(run([mod]).text, /WARNING  Packs\/extra\.pak  \.pak in the root of a rules package/);
+	fs.rmSync(path.join(mod, 'Packs'), { recursive: true });
+	fs.rmSync(path.join(mod, 'data'), { recursive: true });
 	// the clash example: the root file of clash-a is the mistake the warning is for, and clash-b does it right
 	const clash = path.join(root, 'sdk/examples/ruleset-clash-example');
 	const wrong = run([path.join(clash, 'clash-a'), '--game', game]);
 	assert.equal(wrong.status, 0, wrong.text);
-	assert.match(wrong.text, /WARNING  gameres\/icons\/RHastatus\.bmp  global in-game file in the root of a civilization pack/);
+	assert.match(wrong.text, /WARNING  gameres\/icons\/RHastatus\.bmp  global in-game file in the root of a rules package \(a civilization pack is one\): it is ignored unless a ruleset of this package is chosen/);
 	assert.equal(wrong.text.split('\n').filter(l => /global in-game file/.test(l)).length, 1, wrong.text);
 	assert.doesNotMatch(run([path.join(clash, 'clash-a')]).text, /global in-game file/, 'without --game nothing can be compared');
 	const right = run([path.join(clash, 'clash-b'), '--game', game]);

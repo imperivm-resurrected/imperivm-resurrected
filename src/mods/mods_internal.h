@@ -15,6 +15,7 @@
 #include "mods/modclash.h"
 #include "mods/modrules.h"
 #include "mods/rulesets.h"
+#include "mods/rootrules.h"
 #include "mods/mods.h"
 #include "mods/savelib.h"
 #include "addr/state.h"
@@ -59,10 +60,19 @@ void ApplyHiddenFiles(const ModProfile &p);
 // What the mounted profile gives to the lookups by volume name (ModsVolumeFile) and to the account of which layer files the engine opens
 // (VfsLayerDiagReset): both follow the profile and its ruleset, so they are made again when either changes.
 void PublishVolumeFiles(const ModProfile &p);
+// The root files of the packs that replace the game's and are ignored under the profile's ruleset (mods/rootrules.h): the loose layers of those
+// packs answer "not here" to them, and every other way the DLL serves a mod's file skips them.
+void PublishRootRefusals(const ModProfile &p);
 void PublishLayerDiag(const ModProfile &p);
 void PublishFileSources(const ModProfile &p);
 bool MountLooseFolder(const std::string &vfsPrefix);
 bool UnmountLooseFolder(const std::string &vfsPrefix);
+// The root files of a package that are global (they replace the game's) and are not mounted under this profile's ruleset: all of them unless the
+// ruleset is one of the package's own.
+inline std::vector<std::string> RootIgnoredOf(const ModProfile &p, const ModInfo &m)
+{
+	return RootGlobalApplies(m.folder, p.ruleset.pack) ? std::vector<std::string>() : m.globalLoose;
+}
 inline std::string ModSignature(const ModInfo &m)
 {
 	return m.version + "|" + std::to_string(m.fileCount) + "|" + std::to_string(m.totalBytes);

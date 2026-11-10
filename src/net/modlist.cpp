@@ -24,9 +24,10 @@ std::string OneLine(std::string s)
 
 }
 
-std::vector<OnlineMod> DecodeModList(const std::string &text)
+std::vector<OnlineMod> DecodeModList(const std::string &text, std::string *rulesetPackage)
 {
 	std::vector<OnlineMod> out;
+	if (rulesetPackage) rulesetPackage->clear();
 	size_t start = 0;
 	while (start < text.size()) {
 		size_t end = text.find('\n', start);
@@ -39,6 +40,10 @@ std::vector<OnlineMod> DecodeModList(const std::string &text)
 			f.push_back(line.substr(p, t == std::string::npos ? std::string::npos : t - p));
 			if (t == std::string::npos) break;
 			p = t + 1;
+		}
+		if (f.size() == 2 && f[0] == "@package") {
+			if (rulesetPackage) *rulesetPackage = f[1];
+			continue;
 		}
 		if (f.size() >= 5) {
 			OnlineMod m;
@@ -91,6 +96,12 @@ std::string EncodeModList(const std::vector<ModInfo> &mounted, const std::string
 			(m.redistributable && m.forbidden.empty() ? "1" : "0") + "\t" + std::to_string(m.gbId) + "\t" + std::to_string(kind) + "\t" + std::to_string(m.gbFile) + "\t" +
 			ModsRoomCopyKey(m.gameplayHash) + "\t" + (layer ? layer->id : "") + "\t" + (layer && layer->gameplay ? ModsRoomCopyKey(layer->gameplayHash) : "") + "\t" +
 			(layer ? OneLine(layer->name) : "") + "\n";
+	}
+	// The room's ruleset is a package that has no ruleset of its own: say which, so the guests mount its root files that replace the game's too.
+	if (!ruleset.pack.empty() && ruleset.id.empty()) {
+		for (const ModInfo &m : mounted) {
+			if (_stricmp(m.folder.c_str(), ruleset.pack.c_str()) == 0 && !m.globalLoose.empty() && need.count(LowerId(m.id))) out += "@package\t" + m.id + "\n";
+		}
 	}
 	return out;
 }

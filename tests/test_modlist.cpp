@@ -38,6 +38,28 @@ static void RoundTrip()
 	CHECK_EQ(list[0].gbId, 42ull);
 }
 
+static void ThePackageThatIsTheRulesetTravelsInItsOwnLine()
+{
+	ModInfo civ = Mod("civ-pack", kModRules);
+	civ.folder = "Civ-Pack";
+	civ.globalLoose = {"ui/icons/rhastatus.bmp"};
+	ModInfo plain = Mod("plain-civ", kModRules);
+	plain.folder = "plain-civ";
+	int optional = 0;
+	ModRuleset entry;
+	entry.pack = "civ-pack";
+	std::string chosen;
+	std::vector<OnlineMod> list = DecodeModList(EncodeModList({civ, plain}, "", optional, entry), &chosen);
+	CHECK_EQ(list.size(), size_t(2));
+	CHECK_EQ(chosen, "civ-pack");
+	// a package without such files, or no entry: no line; and an old reader skips the line (it has two fields)
+	list = DecodeModList(EncodeModList({plain}, "", optional, ModRuleset{"plain-civ", ""}), &chosen);
+	CHECK_EQ(list.size(), size_t(1));
+	CHECK(chosen.empty());
+	CHECK(EncodeModList({civ}, "", optional).find("@package") == std::string::npos);
+	CHECK_EQ(DecodeModList("@package\tx\n").size(), size_t(0));
+}
+
 static void Closure()
 {
 	int optional = 0;
@@ -256,6 +278,7 @@ static void Malformed()
 int main()
 {
 	RoundTrip();
+	ThePackageThatIsTheRulesetTravelsInItsOwnLine();
 	Closure();
 	Nothing();
 	Forbidden();

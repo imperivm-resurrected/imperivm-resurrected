@@ -99,13 +99,14 @@ std::vector<ModInfo> ModsSummaries()
 	std::vector<ModInfo> out;
 	out.reserve(g_mods.size());
 	for (ModInfo &m : g_mods) {
-		std::vector<std::string> paths = std::move(m.paths), loose = std::move(m.loosePaths), hidden = std::move(m.hidden);
+		std::vector<std::string> paths = std::move(m.paths), loose = std::move(m.loosePaths), hidden = std::move(m.hidden), global = std::move(m.globalLoose);
 		std::vector<PatchedValue> values = std::move(m.patchValues);
 		std::vector<ModLayer> layers = std::move(m.layers);
 		out.push_back(m);
 		m.paths = std::move(paths);
 		m.loosePaths = std::move(loose);
 		m.hidden = std::move(hidden);
+		m.globalLoose = std::move(global);
 		m.patchValues = std::move(values);
 		for (ModLayer &l : layers) {
 			std::vector<std::string> lp = std::move(l.paths), ll = std::move(l.loosePaths), lh = std::move(l.hidden), lf = std::move(l.files);

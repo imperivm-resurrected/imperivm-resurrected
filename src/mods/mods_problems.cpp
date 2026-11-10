@@ -128,7 +128,7 @@ bool ModsRestartNeeded()
 	}), active.mods.end());
 	const ModProfile &mounted = ModsMountedProfile();
 	if (!ModsSameSet(active.mods, mounted.mods)) return true;
-	if (!ModsSameRuleset(ModsEffectiveRuleset(active), mounted.ruleset)) return true;
+	if (!ModsSameMount(ModsEffectiveRuleset(active), mounted.ruleset)) return true;
 	std::map<std::string, std::string> signatures;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
@@ -154,8 +154,9 @@ ModRuleset ModsEffectiveRuleset(const ModProfile &p)
 	ModRuleset out;
 	out.pack = m.folder;
 	if (p.ruleset.id.empty()) {
-		// The package without a layer is an entry only for a package that has civilizations and no ruleset; it mounts nothing.
-		if (!m.layers.empty() || !RulesetPathsHaveCivs(m.paths)) return ModRuleset();
+		// The package without a layer is an entry only for a package that has civilizations (or root files that replace the game's) and no ruleset.
+		// It mounts no folder; the root files that replace the game's are mounted with it.
+		if (!m.layers.empty() || !(RulesetPathsHaveCivs(m.paths) || !m.globalLoose.empty())) return ModRuleset();
 		return out;
 	}
 	const ModLayer *layer = ModsFindLayer(m, p.ruleset.id);
@@ -174,6 +175,7 @@ std::vector<ModRulesetEntry> ModsRulesetEntries(const std::vector<std::string> &
 		RulesetPackFacts f;
 		f.usable = m.forbidden.empty();
 		f.hasCivs = RulesetPathsHaveCivs(m.paths);
+		f.hasGlobal = !m.globalLoose.empty();
 		f.layers = m.layers.size();
 		facts.push_back(f);
 		packs.push_back(std::move(m));
@@ -208,8 +210,16 @@ ModRuleset ModsMountedChoice()
 
 void ModsMountedChoiceSet(const ModRuleset &choice)
 {
+	ModRuleset mounted;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		if (!g_mount.known) return;
+		mounted = g_mount.profile.ruleset;
+	}
+	// ModsSameMount reads the list of packs under the same lock.
+	if (!ModsSameMount(mounted, choice)) return;
 	std::lock_guard<std::mutex> lock(g_lock);
-	if (g_mount.known && ModsSameRuleset(g_mount.profile.ruleset, choice)) g_mount.choice = choice;
+	g_mount.choice = choice;
 }
 
 bool ModsSameSet(std::vector<std::string> a, std::vector<std::string> b)
@@ -258,7 +268,9 @@ std::string ModsProfileGameplayHash(const ModProfile &p)
 	for (const std::string &folder : p.mods) {
 		for (const ModInfo &m : g_mods) {
 			if (m.folder != folder) continue;
-			if (m.gameplay) parts.push_back({m.id, m.gameplayHash, ""});
+			// "." marks a package whose root files that replace the game's are mounted (its own ruleset is in use): the key of a room has to say so,
+			// or two computers with the same files would play with different ones (mods/rootrules.h). Packages that have no such files are unchanged.
+			if (m.gameplay) parts.push_back({m.id, m.gameplayHash, !m.globalLoose.empty() && RootGlobalApplies(m.folder, p.ruleset.pack) ? "." : ""});
 			// The ruleset the profile mounts is part of what the players share, hashed apart from the package's root.
 			const ModLayer *layer = ModsActiveLayer(p, m);
 			if (layer && layer->gameplay) parts.push_back({m.id, layer->gameplayHash, layer->id});

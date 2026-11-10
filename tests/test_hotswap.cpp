@@ -165,6 +165,23 @@ void AWaitingSwitchExpires()
 
 }
 
+void GlobalRootFilesCountAsFilesThatComeWithARuleset()
+{
+	const std::vector<std::string> layer = {"patches/data/const.ini"};
+	const std::vector<std::string> art = {"ui/icons/rhastatus.bmp"}, data = {"data/classes/rhastatus.sc.xml"};
+	// Another package's ruleset: the global root files of this one come or go with it.
+	CHECK(!HotSwapLayerOk(SwapFilesOf(layer, art, false)));
+	CHECK(HotSwapLayerOk(SwapFilesOf(layer, data, false)));
+	CHECK(HotSwapLayerOk(SwapFilesOf(layer, {}, false)));
+	// The same package: they are mounted before and after, nothing changes with them.
+	CHECK(HotSwapLayerOk(SwapFilesOf(layer, art, true)));
+	CHECK_EQ(SwapFilesOf(layer, art, true).size(), size_t(1));
+	CHECK_EQ(SwapFilesOf(layer, art, false).size(), size_t(2));
+	// A package entry mounts no folder: only its global files change.
+	CHECK(SwapDecide(false, SwapFilesOf({}, {}, false), SwapFilesOf({}, data, false)) == HotSwap::kReload);
+	CHECK(SwapDecide(false, SwapFilesOf({}, {}, false), SwapFilesOf({}, art, false)) == HotSwap::kRestart);
+}
+
 int main()
 {
 	TheSameRulesetNeedsNothing();
@@ -177,5 +194,6 @@ int main()
 	SavesOfEveryKindOfGameButReplaysSwitchInPlace();
 	ASwitchChosenInAGameWaitsOnlyWhereTheNextGameIsLoadedThroughLoadGameData();
 	AWaitingSwitchExpires();
+	GlobalRootFilesCountAsFilesThatComeWithARuleset();
 	return test::Summary("hotswap");
 }

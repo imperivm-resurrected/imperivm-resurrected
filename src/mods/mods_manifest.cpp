@@ -11,6 +11,7 @@
 #include "core/guard.h"
 #include "i18n/tr.h"
 #include "mods/fingerprint.h"
+#include "mods/gamefiles.h"
 #include "mods/gbref.h"
 #include "mods/modvars.h"
 #include "mods/pak.h"
@@ -437,6 +438,9 @@ ModInfo ScanMod(const std::string &folder, std::vector<ScanFile> &files)
 			ModsKindId(m.kind), ModsKindId(m.kind));
 	}
 	m.content = m.content || m.kind == kModContent;
+	// What the root replaces of the game: in a rules package (one with civilizations is always one), whose root is its ruleset. The game's files are
+	// read only if there is something to compare.
+	if (m.kind == kModRules && !m.loosePaths.empty()) m.globalLoose = RootGlobalFiles(m.loosePaths, GameFiles());
 	return m;
 }
 

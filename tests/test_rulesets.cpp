@@ -76,8 +76,10 @@ static void Owner()
 
 static void Entries()
 {
-	// 0: rules only (layers, no civs); 1: civs and layers; 2: civs only; 3: civs only but forbidden; 4: nothing to offer.
-	std::vector<RulesetPackFacts> packs(5);
+	// 0: rules only (layers, no civs); 1: civs and layers; 2: civs only; 3: civs only but forbidden; 4: nothing to offer; 5: no civs, no layers, but a
+	// root that replaces game files (its root is its ruleset); 6: no civs and no layers, root patches only.
+	std::vector<RulesetPackFacts> packs(7);
+	packs[5].hasGlobal = true;
 	packs[0].layers = 2;
 	packs[1].layers = 1;
 	packs[1].hasCivs = true;
@@ -85,12 +87,14 @@ static void Entries()
 	packs[3].hasCivs = true;
 	packs[3].usable = false;
 	const std::vector<RulesetEntry> e = RulesetEntries(packs);
-	CHECK_EQ(e.size(), size_t(4));
+	CHECK_EQ(e.size(), size_t(5));
 	CHECK(e[0].pack == 0 && e[0].layer == 0);
 	CHECK(e[1].pack == 0 && e[1].layer == 1);
 	// A package with civs and a layer keeps its layer entry only; the civs-only package is offered alone.
 	CHECK(e[2].pack == 1 && e[2].layer == 0);
 	CHECK(e[3].pack == 2 && e[3].layer == -1);
+	// A rules package without civs is offered alone too when its root has files that replace the game's; one without any is not.
+	CHECK(e[4].pack == 5 && e[4].layer == -1);
 	CHECK(RulesetEntries({}).empty());
 }
 

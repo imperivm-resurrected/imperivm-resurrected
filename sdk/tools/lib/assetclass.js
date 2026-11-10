@@ -31,6 +31,15 @@ function gamePath(rel) {
 	return v ? v[1] + p.slice(v[0].length) : p;
 }
 
+// A path that changes gameplay, as the DLL counts it (src/mods/modrules.cpp, IsGameplayPath): a package whose root has one is a rules package.
+function isGameplayPath(rel) {
+	const p = rel.replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase();
+	if (/^(data|civs|specials|events|rules|modes|options|randommap|rulesets|randommapsettlements)\//.test(p)) return true;
+	if (/^packs\/.*\.bfhp$/.test(p)) return true;
+	if (/^units\/.*\.xml$/.test(p) || /^(buildings|mapobjects|visuals)\/.*\.xml$/.test(p)) return true;
+	return /^(units|buildings|mapobjects)\/.*\.pass$/.test(p);
+}
+
 function isMenuSkin(rel) {
 	const p = gamePath(rel);
 	return MENU_SKIN.some(re => re.test(p));
@@ -63,7 +72,16 @@ function pakNames(file) {
 	finally { fs.closeSync(fd); }
 }
 
-// Every file the game has, as game paths: Packs/*.pak and local/*.pak (only CURRENTLANG/). null if there is no game folder.
+// The loose files below a folder of the game, as game paths ("units/Ghero1/x.rle.mmp" is "units/ghero1/x.rle.mmp").
+function looseFiles(dir, rel, out) {
+	for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+		if (e.isDirectory()) looseFiles(path.join(dir, e.name), rel + e.name + '/', out);
+		else out.add((rel + e.name).toLowerCase());
+	}
+}
+
+// Every file the game has, as game paths: Packs/*.pak, local/*.pak (only CURRENTLANG/) and the loose files of Units/ and Currentlang/ of the game folder.
+// It is the list the DLL reads (src/mods/gamefiles.cpp): a root file of a civilization pack at one of these paths is global. null if there is no game folder.
 function gameFiles(gameDir) {
 	if (!gameDir) return null;
 	const out = new Set();
@@ -79,7 +97,11 @@ function gameFiles(gameDir) {
 			}
 		}
 	}
+	for (const dir of ['Units', 'Currentlang']) {
+		const full = path.join(gameDir, dir);
+		if (fs.existsSync(full) && fs.statSync(full).isDirectory()) looseFiles(full, dir.toLowerCase() + '/', out);
+	}
 	return out.size ? out : null;
 }
 
-module.exports = { MENU_SKIN, gamePath, isMenuSkin, pakNames, gameFiles };
+module.exports = { MENU_SKIN, gamePath, isMenuSkin, isGameplayPath, pakNames, gameFiles };

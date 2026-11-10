@@ -72,7 +72,7 @@ std::vector<RulesetEntry> RulesetEntries(const std::vector<RulesetPackFacts> &pa
 	for (size_t i = 0; i < packs.size(); i++) {
 		if (!packs[i].usable) continue;
 		for (size_t l = 0; l < packs[i].layers; l++) out.push_back({i, static_cast<int>(l)});
-		if (packs[i].layers == 0 && packs[i].hasCivs) out.push_back({i, -1});
+		if (packs[i].layers == 0 && (packs[i].hasCivs || packs[i].hasGlobal)) out.push_back({i, -1});
 	}
 	return out;
 }
