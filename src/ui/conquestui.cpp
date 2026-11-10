@@ -46,9 +46,17 @@ int HitAt(const std::vector<ui::Hit> &hits, POINT at, int &arg)
 	return kActNone;
 }
 
-void ScrollBy(int lines)
+void SetScroll(int line) { g_s.view.scroll = std::max(0, std::min(g_s.painted.maxScroll, line)); }
+
+void ScrollBy(int lines) { SetScroll(g_s.view.scroll + lines); }
+
+// A drag of the description's bar, or a click on its track.
+bool BarMouse(UINT msg, WPARAM wp, POINT at)
 {
-	g_s.view.scroll = std::max(0, std::min(g_s.painted.maxScroll, g_s.view.scroll + lines));
+	ui::ScrollTo to;
+	const bool took = ui::ScrollbarMouse(g_s.view.bar, g_s.painted.hits, msg, wp, at, to);
+	if (to.id == kBarDescription) SetScroll(to.pos);
+	return took;
 }
 
 // While the "you have won" box is up, only its OK reaches the game, which has its own button in the same place.
@@ -110,11 +118,11 @@ void ConquestUiDraw(uint32_t *buf, int w, int h)
 
 bool ConquestUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 {
-	(void)wp;
 	if (msg == WM_LBUTTONUP && g_swallowUp) {
 		g_swallowUp = false;
 		std::lock_guard<std::mutex> lock(g_lock);
 		g_s.mouseDown = false;
+		g_s.view.bar = ui::ScrollDrag();
 		return true;
 	}
 	const POINT at = {static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))};
@@ -127,6 +135,7 @@ bool ConquestUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		if (msg == WM_MOUSEMOVE) {
 			g_s.view.mouseX = at.x;
 			g_s.view.mouseY = at.y;
+			BarMouse(msg, wp, at);
 			return false;
 		}
 		if (other) return false;
@@ -140,17 +149,16 @@ bool ConquestUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 			if (!Inside(pt.panel, at) && !Inside(pt.path, at) && !Inside(pt.legend, at)) return false;
 			g_s.mouseDown = true;
 			g_swallowUp = true;
+			if (BarMouse(msg, wp, at)) break;
 			action = HitAt(pt.hits, at, arg);
-			if (action == kActScroll) {
-				ScrollBy(arg);
-				action = kActNone;
-			}
 			break;
 		case WM_MOUSEWHEEL:
 			// The wheel carries screen coordinates: the last position of the mouse is the one inside the game.
 			if (Inside(pt.panel, mouse)) ScrollBy(-GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA * kWheelLines);
 			return Inside(pt.panel, mouse) || Inside(pt.path, mouse) || Inside(pt.legend, mouse);
-		case WM_LBUTTONUP: return false;
+		case WM_LBUTTONUP:
+			g_s.view.bar = ui::ScrollDrag();
+			return false;
 		default:
 			if (msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST) return Inside(pt.panel, at) || Inside(pt.path, at) || Inside(pt.legend, at);
 			return false;

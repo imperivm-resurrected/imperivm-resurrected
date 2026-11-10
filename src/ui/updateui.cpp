@@ -43,20 +43,13 @@ const int kNotesWheelStep = 48;
 struct NotesScroll {
 	std::string version;
 	float scroll = 0, maxScroll = 0, scale = 1;
-	RECT view = {}, track = {};
-	int thumbTop = 0, thumbH = 0;
-	bool dragging = false;
-	int grab = 0;
+	RECT view = {};
+	ScrollDrag bar;
 } g_notes;
 
-void ScrollNotesTo(float value) { g_notes.scroll = std::max(0.0f, std::min(g_notes.maxScroll, value)); }
+const int kNotesBar = 0;
 
-void DragNotesTo(int mouseY)
-{
-	const int span = (g_notes.track.bottom - g_notes.track.top) - g_notes.thumbH;
-	if (span <= 0) return;
-	ScrollNotesTo(static_cast<float>(mouseY - g_notes.grab - g_notes.track.top) / span * g_notes.maxScroll);
-}
+void ScrollNotesTo(float value) { g_notes.scroll = std::max(0.0f, std::min(g_notes.maxScroll, value)); }
 
 void ReplaceAll(std::string &text, const std::string &from, const std::string &to)
 {
@@ -442,32 +435,24 @@ void UpdateUiDrawPanel(uint32_t *buf, int w, int h)
 			p.LineW(x + word.x, top - offset + word.y, w2, layout.lineH, word.text, NoteColor(word.style));
 		}
 		p.Unclip();
-		RECT view = {}, track = {};
-		int thumbTop = 0, thumbH = 0;
 		if (contentH > viewH) {
-			const int bx = x + w2 - kNotesBarW, th = std::max(28, viewH * viewH / contentH);
-			const int ty = top + static_cast<int>((viewH - th) * (scroll / (contentH - viewH)));
-			bool grabbing;
+			ScrollDrag bar;
 			{
 				std::lock_guard<std::mutex> lock(g_lock);
-				grabbing = g_notes.dragging;
+				bar = g_notes.bar;
 			}
-			const bool hot = grabbing || p.Hover(bx - 4, top, kNotesBarW + 8, viewH, mx, my);
-			p.Fill(bx, top, kNotesBarW, viewH, RGB(30, 24, 16));
-			p.Fill(bx, ty, kNotesBarW, th, hot ? RGB(232, 192, 104) : RGB(150, 118, 58));
-			track = p.R(bx - 4, top, kNotesBarW + 8, viewH);
-			OffsetRect(&track, ox, oy);
-			thumbTop = oy + p.S(ty);
-			thumbH = p.S(ty + th) - p.S(ty);
+			ScrollbarLook look;
+			look.width = kNotesBarW;
+			look.minThumb = 28;
+			look.track = RGB(30, 24, 16);
+			look.thumb = RGB(150, 118, 58);
+			PaintScrollbar(p, kNotesBar, x + w2 - kNotesBarW, top, viewH, {offset, contentH - viewH, viewH}, bar, mx, my, look);
 		}
-		view = p.R(x, top, w2, viewH);
+		RECT view = p.R(x, top, w2, viewH);
 		OffsetRect(&view, ox, oy);
 		{
 			std::lock_guard<std::mutex> lock(g_lock);
 			g_notes.view = view;
-			g_notes.track = track;
-			g_notes.thumbTop = thumbTop;
-			g_notes.thumbH = thumbH;
 			g_notes.scale = p.s;
 		}
 		y += notesH;
@@ -497,8 +482,9 @@ bool UpdateUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 	if (msg == WM_MOUSEMOVE) {
 		g_mx = static_cast<short>(LOWORD(lp));
 		g_my = static_cast<short>(HIWORD(lp));
-		if (g_open && g_notes.dragging) {
-			DragNotesTo(g_my);
+		ScrollTo to;
+		if (g_open && ScrollbarMouse(g_notes.bar, g_hits, msg, wp, {g_mx, g_my}, to)) {
+			ScrollNotesTo(static_cast<float>(to.pos));
 			return true;
 		}
 	}
@@ -540,11 +526,9 @@ bool UpdateUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 	case WM_LBUTTONDBLCLK: {
 		const POINT pt = {static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))};
 		g_tabAction = -1;
-		if (g_notes.maxScroll > 0 && PtInRect(&g_notes.track, pt)) {
-			const bool onThumb = pt.y >= g_notes.thumbTop && pt.y < g_notes.thumbTop + g_notes.thumbH;
-			g_notes.grab = onThumb ? pt.y - g_notes.thumbTop : g_notes.thumbH / 2;
-			g_notes.dragging = true;
-			DragNotesTo(pt.y);
+		ScrollTo to;
+		if (ScrollbarMouse(g_notes.bar, g_hits, msg, wp, pt, to)) {
+			if (to.id == kNotesBar) ScrollNotesTo(static_cast<float>(to.pos));
 			g_swallowUp = true;
 			return true;
 		}
@@ -582,7 +566,7 @@ bool UpdateUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		return true;
 	case WM_LBUTTONUP:
 		g_swallowUp = false;
-		g_notes.dragging = false;
+		g_notes.bar = ScrollDrag();
 		return true;
 	case WM_MOUSEWHEEL:
 		if (g_notes.maxScroll > 0) {

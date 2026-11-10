@@ -73,6 +73,8 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 			ListMove(g_s.opt, g_s.optGeom, at);
 			ListMove(g_s.detail, g_s.detailGeom, at);
 			ChatBarMove(at);
+			ScrollTo to;
+			if (ScrollbarMouse(g_s.dropBar, g_s.hits, msg, wp, at, to) && to.id == kDropMenuBar) g_s.dropScroll = to.pos;
 		}
 		if (g_s.syncConfirm || g_s.view == kViewCreate) {
 			const POINT at = {g_s.mouseX, g_s.mouseY};
@@ -97,6 +99,13 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		g_s.mouseY = static_cast<short>(HIWORD(lp));
 		POINT pt = {g_s.mouseX, g_s.mouseY};
 		g_s.tabAction = -1;
+		{
+			ScrollTo to;
+			if (ScrollbarMouse(g_s.dropBar, g_s.hits, msg, wp, pt, to)) {
+				if (to.id == kDropMenuBar) g_s.dropScroll = to.pos;
+				return true;
+			}
+		}
 		if (g_s.syncConfirm && ListDown(g_s.syncList, g_s.syncGeom, pt)) return true;
 		if (!g_s.syncConfirm && g_s.view == kViewCreate && ListDown(g_s.createModsList, g_s.createModsGeom, pt)) return true;
 		if (g_s.game.picker && !SaveMapPicking(g_s)) {
@@ -176,6 +185,7 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		g_s.edit.dragging = false;
 		g_s.mouseDown = false;
 		g_s.resizeCol = -1;
+		g_s.dropBar = ScrollDrag();
 		ListUp(g_s.pick);
 		ListUp(g_s.opt);
 		ListUp(g_s.detail);

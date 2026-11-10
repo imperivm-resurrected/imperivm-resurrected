@@ -74,6 +74,7 @@ struct View {
 	int page = 0;
 	int mouseX = -10000, mouseY = -10000;
 	int dropId = 0, dropScroll = 0;
+	ui::ScrollDrag dropBar;
 	int dragId = 0;
 	bool dirty = false;
 	Values values;
