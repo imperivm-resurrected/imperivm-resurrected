@@ -24,7 +24,8 @@ using namespace ui;
 namespace helpui {
 namespace {
 
-constexpr int kMargin = 24, kTop = 92, kBottom = 656, kFooterTop = 664, kFooterY = 674, kFooterH = 36, kCloseW = 140;
+// No footer: the page runs to the bottom of the frame, and Close sits under the side bar.
+constexpr int kMargin = 24, kTop = 92, kPaneBottom = kScreenH - 28, kCloseH = 38, kCloseY = kPaneBottom - kCloseH, kNavBottom = kCloseY - 14;
 constexpr int kNavX = 24, kNavW = 268, kSearchY = 96, kSearchH = 32, kNavTop = 140, kDividerX = 306;
 constexpr int kPaneX = 322, kPaneW = kScreenW - kMargin - kPaneX;
 constexpr int kBarY = 94, kBarH = 28, kTitleY = 128, kTitleH = 46, kRuleY = 176, kViewTop = 192;
@@ -35,7 +36,7 @@ constexpr int kLinkRowH = 28, kResultIconW = 40, kResultIconH = 46;
 constexpr int kChipH = 50, kChipGap = 10, kChips = 4, kCellH = 46, kKeyW = 220;
 constexpr int kGroupH = 32, kItemH = 26, kSectionH = 24, kToggleW = 26;
 const COLORREF kPlain = RGB(208, 194, 158), kLink = RGB(226, 186, 104), kLinkHot = RGB(250, 226, 160), kCurrentBg = RGB(60, 43, 22),
-			   kHotBg = RGB(38, 30, 20), kCardBg = RGB(25, 19, 13), kCardHot = RGB(46, 35, 22), kHint = RGB(186, 170, 134);
+			   kHotBg = RGB(38, 30, 20), kCardBg = RGB(25, 19, 13), kCardHot = RGB(46, 35, 22);
 
 const char *const kIconHealth = "UI/help/health ico.bmp", *const kIconSlash = "UI/help/sattack ico.bmp", *const kIconPierce = "UI/help/pattack ico.bmp",
 				  *const kIconDefense = "UI/help/defense ico.bmp", *const kIconSpeed = "UI/help/speed ico.bmp", *const kIconSight = "UI/help/sight ico.bmp",
@@ -705,7 +706,7 @@ struct Pane {
 	int scroll = 0;
 
 	int Top(const Block &b) const { return kViewTop + b.y - scroll; }
-	bool Visible(int y, int h) const { return y + h > kViewTop && y < kBottom; }
+	bool Visible(int y, int h) const { return y + h > kViewTop && y < kPaneBottom; }
 	bool Inside() const
 	{
 		RECT r = out.content;
@@ -715,7 +716,7 @@ struct Pane {
 	bool Hot(int x, int y, int w, int h) const { return Inside() && p.Hover(x, y, w, h, v.mouseX, v.mouseY); }
 	void Hit(int x, int y, int w, int h, int action, int arg)
 	{
-		const int top = std::max(y, kViewTop), bottom = std::min(y + h, kBottom);
+		const int top = std::max(y, kViewTop), bottom = std::min(y + h, kPaneBottom);
 		if (bottom > top) p.AddHit(x, top, w, bottom - top, action, arg);
 	}
 
@@ -939,7 +940,7 @@ struct Pane {
 	void Paint(const Page &page)
 	{
 		const int x = kPaneX;
-		p.Clip(kPaneX - 4, kViewTop, kPaneW + 4, kBottom - kViewTop);
+		p.Clip(kPaneX - 4, kViewTop, kPaneW + 4, kPaneBottom - kViewTop);
 		for (const Block &b : page.blocks) {
 			const int y = Top(b);
 			if (!Visible(y, b.h)) continue;
@@ -967,7 +968,7 @@ struct Pane {
 		}
 		p.Unclip();
 		if (page.height > out.viewH) {
-			const int trackX = kPaneX + kPaneW - kScrollW, trackH = kBottom - kViewTop;
+			const int trackX = kPaneX + kPaneW - kScrollW, trackH = kPaneBottom - kViewTop;
 			const int thumbH = std::max(30, trackH * out.viewH / page.height);
 			const int maxScroll = std::max(1, page.height - out.viewH);
 			const int thumbY = kViewTop + (trackH - thumbH) * scroll / maxScroll;
@@ -1032,7 +1033,7 @@ void PaintNav(Painter &p, const Content &c, const View &v, PaintOut &out)
 			}
 		}
 	}
-	const int viewH = kBottom - kNavTop;
+	const int viewH = kNavBottom - kNavTop;
 	out.navH = y;
 	out.navViewH = viewH;
 	int scroll = std::max(0, std::min(v.navScroll, std::max(0, y - viewH)));
@@ -1052,8 +1053,8 @@ void PaintNav(Painter &p, const Content &c, const View &v, PaintOut &out)
 	p.Clip(kNavX - 2, kNavTop, kNavW + 4, viewH);
 	for (const NavRow &r : rows) {
 		const int ry = kNavTop + r.y - scroll;
-		if (ry + r.h <= kNavTop || ry >= kBottom) continue;
-		const int hitTop = std::max(ry, kNavTop), hitH = std::min(ry + r.h, kBottom) - hitTop;
+		if (ry + r.h <= kNavTop || ry >= kNavBottom) continue;
+		const int hitTop = std::max(ry, kNavTop), hitH = std::min(ry + r.h, kNavBottom) - hitTop;
 		if (r.kind == 0) {
 			p.Font(4);
 			const std::wstring up = Upper(W(r.label));
@@ -1197,14 +1198,10 @@ void PaintSearch(Painter &p, const View &v)
 	p.AddHit(bx, kSearchY + 4, 24, kSearchH - 8, kActClearSearch, 0);
 }
 
-void PaintFooter(Painter &p, const View &v)
+void PaintClose(Painter &p, const View &v)
 {
-	p.Fill(18, kFooterTop, kScreenW - 36, 1, pal::line);
-	const int bx = kScreenW - kMargin - kCloseW;
-	p.Button(bx, kFooterY, kCloseW, kFooterH, Tr("Close"), kActClose, 0, v.mouseX, v.mouseY);
-	p.Diamond(kMargin + 4, kFooterY + kFooterH / 2, 4, kGold);
-	p.Font(3);
-	p.Text(kMargin + 16, kFooterY, bx - kMargin - 32, kFooterH, Tr("Type to search \xC2\xB7 Wheel scrolls \xC2\xB7 Backspace goes back \xC2\xB7 Esc closes"), kHint);
+	p.FillH(kNavX, kNavBottom + 6, kNavW, 1, pal::line, pal::panel);
+	p.Button(kNavX, kCloseY, kNavW, kCloseH, Tr("Close"), kActClose, 0, v.mouseX, v.mouseY);
 }
 
 }
@@ -1257,13 +1254,13 @@ void PaintHelpScreen(Painter &p, const View &v, PaintOut &out)
 	p.raw = true;
 	PaintWindowFrame(p, kScreenW, kScreenH);
 	PaintWindowHeader(p, kScreenW, Utf8(Upper(W(Tr("Help")))));
-	p.Fill(kDividerX, kTop + 4, 1, kBottom - kTop - 4, pal::lineDim);
+	p.Fill(kDividerX, kTop + 4, 1, kPaneBottom - kTop - 4, pal::lineDim);
 	PaintSearch(p, v);
 	const Content *c = v.content.get();
-	RECT content = p.R(kPaneX, kViewTop, kPaneW, kBottom - kViewTop);
+	RECT content = p.R(kPaneX, kViewTop, kPaneW, kPaneBottom - kViewTop);
 	OffsetRect(&content, p.ox, p.oy);
 	out.content = content;
-	out.viewH = kBottom - kViewTop;
+	out.viewH = kPaneBottom - kViewTop;
 	if (c) PaintNav(p, *c, v, out);
 	PaintBar(p, c, v, out);
 	if (c) {
@@ -1280,7 +1277,7 @@ void PaintHelpScreen(Painter &p, const View &v, PaintOut &out)
 	else {
 		PaintTitle(p, W(Tr("Help")));
 	}
-	PaintFooter(p, v);
+	PaintClose(p, v);
 	p.raw = false;
 }
 
