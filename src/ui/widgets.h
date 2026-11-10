@@ -290,8 +290,11 @@ inline DropLayout DropMenuLayout(const RECT &anchor, int count, int scroll, int 
 	return d;
 }
 
+// The bar of a long menu goes into the hits with this id.
+constexpr int kDropMenuBar = 900;
+
 inline DropLayout PaintDropMenu(Painter &p, const RECT &anchor, const std::vector<DropItem> &items, int selected, int scroll, int canvasW,
-	int canvasH, int pickAction, int closeAction, int mx, int my, int minW = 200)
+	int canvasH, int pickAction, int closeAction, int mx, int my, int minW = 200, const ScrollDrag &drag = ScrollDrag())
 {
 	const int count = static_cast<int>(items.size());
 	const DropLayout d = DropMenuLayout(anchor, count, scroll, canvasW, canvasH, minW);
@@ -330,9 +333,12 @@ inline DropLayout PaintDropMenu(Painter &p, const RECT &anchor, const std::vecto
 		p.Font(0);
 	}
 	if (count > d.rows) {
-		const int bh = d.h - 4, th = std::max(16, bh * d.rows / count), ty = d.y + 2 + (bh - th) * d.scroll / (count - d.rows);
-		p.Fill(d.x + d.w - 8, d.y + 2, 5, bh, pal::well);
-		p.Fill(d.x + d.w - 8, ty, 5, th, pal::thumb);
+		ScrollbarLook look;
+		look.width = 5;
+		look.minThumb = 16;
+		look.grip = 3;
+		look.track = pal::well;
+		PaintScrollbar(p, kDropMenuBar, d.x + d.w - 8, d.y + 2, d.h - 4, {d.scroll, DropMaxScroll(count, d.rows), d.rows}, drag, mx, my, look);
 	}
 	return d;
 }
