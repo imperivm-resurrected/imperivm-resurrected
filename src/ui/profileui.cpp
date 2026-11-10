@@ -20,7 +20,6 @@
 #include "ui/modui.h"
 #include "ui/patronui.h"
 #include "ui/profileui_view.h"
-#include "ui/textedit.h"
 #include "ui/widgets.h"
 
 using namespace ui;
@@ -102,7 +101,6 @@ Card BuildCard(const ProfileSlot &slot, const std::vector<RankStep> &ranks)
 		r.kills = g.unitsKilled;
 		c.recent.push_back(r);
 	}
-	c.saves = ProfileSaveCount(slot.dir);
 	return c;
 }
 
@@ -188,8 +186,6 @@ void Refresh()
 struct Command {
 	int action = kActNone;
 	int arg = 0;
-	int modal = kModalNone;
-	std::string text;
 };
 
 int HitAt(const State &st, POINT at, int &arg)
@@ -202,56 +198,21 @@ int HitAt(const State &st, POINT at, int &arg)
 	return kActNone;
 }
 
-void OpenModal(View &v, int modal)
-{
-	v.modal = modal;
-	v.text = modal == kModalRename && v.selected >= 0 && v.selected < static_cast<int>(v.cards.size()) ? v.cards[v.selected].name : std::string();
-	EditSelectAll(v.text, v.edit);
-}
-
-bool CanAct(const View &v, int action)
-{
-	const int count = static_cast<int>(v.cards.size());
-	const bool one = v.selected >= 0 && v.selected < count;
-	switch (action) {
-	case kActRename:
-	case kActPlay: return one;
-	case kActDelete: return one && count > 1;
-	default: return true;
-	}
-}
-
 // Changes of the screen alone happen here, under the lock; whatever touches the game is left in `cmd` for Execute.
 void Act(View &v, int action, int arg, Command &cmd)
 {
 	switch (action) {
-	case kActNew: OpenModal(v, kModalNew); break;
-	case kActRename:
-		if (CanAct(v, action)) OpenModal(v, kModalRename);
-		break;
-	case kActDelete:
-		if (CanAct(v, action)) OpenModal(v, kModalDelete);
-		break;
-	case kActModalCancel:
-		v.modal = kModalNone;
-		break;
-	case kActModalOk:
-		if (v.modal != kModalDelete && NameDraft(v.text).empty()) break;
-		cmd.action = kActModalOk;
-		cmd.modal = v.modal;
-		cmd.arg = v.selected;
-		cmd.text = NameDraft(v.text);
-		v.modal = kModalNone;
-		break;
 	case kActPick:
 		if (arg != v.selected) {
 			cmd.action = kActPick;
 			cmd.arg = arg;
 		}
 		break;
-	case kActPlay:
-		if (CanAct(v, action)) {
-			cmd.action = kActPlay;
+	case kActUse:
+		// The player in use has nothing to change to: the screen just closes.
+		if (SelectedIsActive(v)) cmd.action = kActBack;
+		else if (v.selected >= 0 && v.selected < static_cast<int>(v.cards.size())) {
+			cmd.action = kActUse;
 			cmd.arg = v.selected;
 		}
 		break;
@@ -270,13 +231,7 @@ void Execute(const Command &cmd)
 		ProfileDialogSelect(cmd.arg);
 		Refresh();
 		break;
-	case kActModalOk:
-		if (cmd.modal == kModalNew) ProfileDialogCreate(cmd.text);
-		else if (cmd.modal == kModalRename) ProfileDialogRename(cmd.arg, cmd.text);
-		else if (cmd.modal == kModalDelete) ProfileDialogDelete(cmd.arg);
-		Refresh();
-		break;
-	case kActPlay:
+	case kActUse:
 	case kActBack: {
 		int index = cmd.arg;
 		if (cmd.action == kActBack) {
@@ -301,20 +256,6 @@ void Execute(const Command &cmd)
 	}
 }
 
-bool HandleModalKey(View &v, UINT msg, WPARAM wp, Command &cmd)
-{
-	if (v.modal == kModalNone) return false;
-	if (msg == WM_CHAR) {
-		if (v.modal != kModalDelete) EditChar(v.text, v.edit, wp, kProfileNameMax);
-		return true;
-	}
-	if (msg != WM_KEYDOWN) return true;
-	if (wp == VK_ESCAPE) Act(v, kActModalCancel, 0, cmd);
-	else if (wp == VK_RETURN) Act(v, kActModalOk, 0, cmd);
-	else if (v.modal != kModalDelete) EditKey(v.text, v.edit, wp, kProfileNameMax);
-	return true;
-}
-
 bool Handle(UINT msg, WPARAM wp, LPARAM lp, Command &cmd)
 {
 	std::lock_guard<std::mutex> lock(g_lock);
@@ -325,27 +266,17 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, Command &cmd)
 	case WM_MOUSEMOVE:
 		v.mouseX = at.x;
 		v.mouseY = at.y;
-		if (g_s.mouseDown && v.modal != kModalNone) {
-			FieldGeom geom;
-			if (FieldGet(kActField, geom)) v.edit.caret = EditIndexAt(geom, v.text, at.x);
-		}
 		return false;
 	case WM_LBUTTONDOWN:
 	case WM_LBUTTONDBLCLK: {
 		g_s.mouseDown = true;
 		int arg = 0;
 		const int action = HitAt(g_s, at, arg);
-		if (action == kActField) {
-			FieldGeom geom;
-			if (FieldGet(kActField, geom)) v.edit.caret = v.edit.anchor = EditIndexAt(geom, v.text, at.x);
-			if (msg == WM_LBUTTONDBLCLK) EditSelectWord(v.text, v.edit);
-			return true;
-		}
 		const DWORD now = GetTickCount();
 		const bool twice = action == kActPick && arg == g_s.lastClickRow && now - g_s.lastClick <= GetDoubleClickTime();
 		g_s.lastClickRow = action == kActPick && !twice ? arg : -1;
 		g_s.lastClick = now;
-		if (twice && arg == v.selected) Act(v, kActPlay, 0, cmd);
+		if (twice && arg == v.selected) Act(v, kActUse, 0, cmd);
 		else Act(v, action, arg, cmd);
 		return true;
 	}
@@ -353,21 +284,15 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, Command &cmd)
 		g_s.mouseDown = false;
 		return true;
 	case WM_MOUSEWHEEL:
-		if (v.modal == kModalNone) {
-			v.scroll -= GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA;
-			v.scroll = std::max(0, std::min(v.scroll, std::max(0, static_cast<int>(v.cards.size()) - kListRows)));
-		}
+		v.scroll -= GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA;
+		v.scroll = std::max(0, std::min(v.scroll, std::max(0, static_cast<int>(v.cards.size()) - kListRows)));
 		return true;
 	case WM_KEYDOWN:
 	case WM_CHAR:
-		if (HandleModalKey(v, msg, wp, cmd)) return true;
 		if (msg == WM_CHAR) return true;
 		switch (wp) {
 		case VK_ESCAPE: Act(v, kActBack, 0, cmd); break;
-		case VK_RETURN: Act(v, kActPlay, 0, cmd); break;
-		case VK_F2: Act(v, kActRename, 0, cmd); break;
-		case VK_DELETE: Act(v, kActDelete, 0, cmd); break;
-		case VK_INSERT: Act(v, kActNew, 0, cmd); break;
+		case VK_RETURN: Act(v, kActUse, 0, cmd); break;
 		case VK_UP:
 		case VK_DOWN: {
 			const int count = static_cast<int>(v.cards.size());

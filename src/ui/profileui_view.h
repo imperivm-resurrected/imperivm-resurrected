@@ -10,7 +10,6 @@
 #include "game/playerini.h"
 #include "net/patrons.h"
 #include "net/steamnet.h"
-#include "ui/textedit.h"
 #include "ui/uikit.h"
 
 namespace profileui {
@@ -29,37 +28,32 @@ struct Card {
 	bool readable = true;
 	ProfileSummary summary;
 	std::string rankName, nextRankName, favoriteCiv, favoriteUnit, bestUnit;
-	int saves = 0;
 	// Newest first.
 	std::vector<RecentRow> recent;
 };
-
-enum Modal { kModalNone, kModalNew, kModalRename, kModalDelete };
 
 struct View {
 	std::vector<Card> cards;
 	int selected = -1;
 	int scroll = 0;
 	int mouseX = -10000, mouseY = -10000;
-	int modal = kModalNone;
-	std::string text;
-	ui::EditState edit;
 	// Steam is the identity of the computer, so its avatar and laurel go only on the profile in use.
 	std::shared_ptr<const OnlineAvatar> avatar;
 	std::string steamName;
 	PatronInfo patron;
 };
 
-enum Action {
-	kActNone = 0, kActPick, kActNew, kActRename, kActDelete, kActPlay, kActBack, kActModalOk, kActModalCancel, kActField, kActPatron,
-};
+enum Action { kActNone = 0, kActPick, kActUse, kActBack, kActPatron };
 
 constexpr int kScreenW = 1100, kScreenH = 680;
 // How many rows of the list fit; the controller scrolls by rows.
 constexpr int kListRows = 7;
-constexpr int kRecentRows = 5, kChartGames = 16;
+constexpr int kChartGames = 16;
 
-std::string NameDraft(const std::string &text);
+// The player goes with the Steam account, so the list is left only for installs that still keep several from before.
+inline bool ShowsList(const View &v) { return v.cards.size() > 1; }
+inline bool SelectedIsActive(const View &v) { return v.selected >= 0 && v.selected < static_cast<int>(v.cards.size()) && v.cards[v.selected].active; }
+
 void PaintProfileScreen(ui::Painter &p, const View &v);
 
 }
