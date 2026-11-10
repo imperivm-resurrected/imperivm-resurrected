@@ -195,14 +195,6 @@ void PublishRootRefusals(const ModProfile &p)
 	g_refusals.store(map);
 }
 
-bool ModsRootFileIgnored(const std::string &folder, const std::string &rel)
-{
-	const RootRefusalMap *refusals = g_refusals.load();
-	if (!refusals) return false;
-	const auto it = refusals->byFolder.find(Lower(folder));
-	return it != refusals->byFolder.end() && RootRefuses(it->second, rel);
-}
-
 void PublishVolumeFiles(const ModProfile &p)
 {
 	auto *files = new std::map<std::string, std::string>();
@@ -389,6 +381,14 @@ void MountProfileLayers(void *list)
 	ModsRebuildFeatures();
 }
 }
+}
+
+bool ModsRootFileIgnored(const std::string &folder, const std::string &rel)
+{
+	const RootRefusalMap *refusals = g_refusals.load();
+	if (!refusals) return false;
+	const auto it = refusals->byFolder.find(Lower(folder));
+	return it != refusals->byFolder.end() && RootRefuses(it->second, rel);
 }
 
 const std::string *ModsVolumeFile(const std::string &rel)
