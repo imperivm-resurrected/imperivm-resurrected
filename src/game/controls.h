@@ -22,10 +22,13 @@ enum ModKey {
 	kModKeySpecUi,
 	kModKeySpecBar,
 	kModKeyCheats,
+	kModKeyPing,
 };
 bool ControlsModKeyPressed(int id, unsigned vk);
 bool ControlsMouseButton(unsigned msg, unsigned wp, unsigned &vk, bool &down);
 bool ControlsEatChar(unsigned msg, unsigned wp);
+// The command bar of the match on screen, in game pixels; false when it is not shown.
+bool ControlsCmdBarRect(int &left, int &top, int &right, int &bottom);
 
 enum : unsigned char { kKeyCtrl = 1, kKeyShift = 2, kKeyAlt = 4 };
 

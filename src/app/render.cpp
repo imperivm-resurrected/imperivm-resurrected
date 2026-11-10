@@ -30,6 +30,7 @@
 #include "ui/profileui.h"
 #include "ui/battlesui.h"
 #include "ui/creditsui.h"
+#include "ui/chatui.h"
 #include "net/netdrop.h"
 #include "net/rejoin.h"
 #include "net/spectator.h"
@@ -397,8 +398,8 @@ DWORD WINAPI RenderThread(LPVOID)
 		}
 		const bool overlay = GetConfig().showPerf || GetConfig().showNet;
 		if (newFrame && !MpUiNeedsDraw()) MpUiObserveFrame(local.data(), fw, fh);
-		const bool needSaves = SavesUiNeedsDraw(), needMods = ModUiNeedsDraw(), needMp = MpUiNeedsDraw(), needControls = ControlsUiNeedsDraw(), needOptions = OptionsUiNeedsDraw(), needGameMenu = GameMenuUiNeedsDraw(), needConquest = ConquestUiNeedsDraw(), needProfile = ProfileUiNeedsDraw(), needBattles = BattlesUiNeedsDraw(), needCredits = CreditsUiNeedsDraw();
-		const bool ui = !video && (needSaves || needMods || needMp || needControls || needOptions || needGameMenu || needConquest || needProfile || needBattles || needCredits);
+		const bool needSaves = SavesUiNeedsDraw(), needMods = ModUiNeedsDraw(), needMp = MpUiNeedsDraw(), needControls = ControlsUiNeedsDraw(), needOptions = OptionsUiNeedsDraw(), needGameMenu = GameMenuUiNeedsDraw(), needConquest = ConquestUiNeedsDraw(), needProfile = ProfileUiNeedsDraw(), needBattles = BattlesUiNeedsDraw(), needCredits = CreditsUiNeedsDraw(), needChat = ChatUiNeedsDraw();
+		const bool ui = !video && (needSaves || needMods || needMp || needControls || needOptions || needGameMenu || needConquest || needProfile || needBattles || needCredits || needChat);
 		// The credits scroll on their own: they are drawn on every pass, at the pace of the screen.
 		if (ui && (newFrame || needCredits || now - lastUiDraw >= 33)) {
 			if (!newFrame) {
@@ -411,6 +412,7 @@ DWORD WINAPI RenderThread(LPVOID)
 				ControlsDrawBarKeys(local.data(), fw, fh);
 			}
 			Guard("interface drawing", [&] {
+				if (needChat) ChatUiDraw(local.data(), fw, fh);
 				if (needConquest) ConquestUiDraw(local.data(), fw, fh);
 				if (needBattles) BattlesUiDraw(local.data(), fw, fh);
 				MpUiDraw(local.data(), fw, fh);
@@ -567,6 +569,7 @@ int WINAPI HookSetDIBitsToDevice(HDC hdc, int xDest, int yDest, DWORD w, DWORD h
 	ProfileUiGameTick();
 	BattlesUiGameTick();
 	CreditsUiGameTick();
+	ChatUiGameTick();
 	RejoinGameThreadTick();
 	SpectatorGameThreadTick();
 	ZoomFogNoteImage();

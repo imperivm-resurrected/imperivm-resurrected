@@ -1,0 +1,443 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 THIONG
+// Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
+#define NOMINMAX
+#include <windows.h>
+
+#include <algorithm>
+#include <cstdint>
+#include <cstring>
+#include <mutex>
+#include <string>
+#include <vector>
+
+#include "MinHook.h"
+#include "addr/engine.h"
+#include "addr/net.h"
+#include "addr/state.h"
+#include "addr/ui.h"
+#include "addr/world.h"
+#include "core/log.h"
+#include "game/chat.h"
+#include "game/cheats.h"
+#include "game/controls.h"
+#include "game/zoomview.h"
+#include "hooks/hookcount.h"
+
+namespace {
+
+typedef void *(__fastcall *DialogCtor_t)(void *self, void *edx, int sendLocation, int mostDerived);
+typedef void(__fastcall *Execute_t)(void *cmd);
+typedef void *(__cdecl *Create_t)();
+typedef void(__fastcall *Assign_t)(void *str, void *edx, const char *text, unsigned len);
+typedef void(__fastcall *SetPlayer_t)(void *cmd, void *edx, void *player);
+typedef void(__fastcall *Queue_t)(void *game, void *edx, void *cmd);
+typedef void(__fastcall *RunScript_t)(void *game, void *edx, const char *text);
+typedef int(__cdecl *IsDemo_t)();
+typedef bool(__cdecl *Bool_t)();
+typedef void(__cdecl *Free_t)(void *p);
+
+// CVXGame and CVXPlayer fields, as the chat dialog (004e4f00, 004e51e0) and CVXChatMessage::Execute (004e7370) read them.
+const unsigned kGameClock = 0x1258, kLocalPlayer = 0x12c8, kPlayers = 0x12cc, kPlayerSize = 800;
+const unsigned kPlayerIndex = 8, kPlayerEnemies = 0x10, kPlayerActive = 0x64, kPlayerControl = 0x80, kPlayerName = 0x94, kPlayerNameSize = 0xa4,
+			   kPlayerNameCapacity = 0xa8, kPlayerState = 0x290, kPlayerColor = 0x314;
+const int kSlots = 8;
+// CVXChatMessage: +4 sender, +0xc std::string message (buffer +0x10, size +0x20, capacity +0x24), +0x28 location, +0x30 players mask.
+const unsigned kCmdPlayer = 4, kCmdText = 0xc, kCmdTextBuf = 0x10, kCmdTextSize = 0x20, kCmdTextCapacity = 0x24, kCmdLocation = 0x28, kCmdMask = 0x30;
+const unsigned kSlotSetPlayer = 3, kSlotRunScript = 0xa8 / 4;
+// CVXVisibleMgr: the part of the map in view, in the coordinates of the location messages.
+const unsigned kViewRect = 0x618;
+const unsigned kWindowRect = 0x10, kWindowFlags = 0x28, kWindowVisible = 2;
+
+DialogCtor_t g_origCtor = nullptr;
+Execute_t g_origExecute = nullptr;
+void *g_origConsolePrintf = nullptr;
+// Read by the naked hook: while set, ConsolePrintf prints nothing.
+int g_suppressConsole = 0;
+bool g_ready = false;
+ChatOpenFn g_openHandler = nullptr;
+
+std::mutex g_logLock;
+ChatLog g_log;
+
+struct RawPlayer {
+	bool exists = false, human = false;
+	char name[64] = {};
+	uint32_t rgb = 0;
+};
+
+struct RawMatch {
+	bool game = false, editor = false, demo = false, shown = false, severalHumans = false;
+	uint32_t clock = 0;
+	int local = -1;
+	unsigned enemies = 0;
+	RawPlayer players[kSlots];
+	bool haveView = false, haveVisible = false;
+	int view[4] = {}, visible[4] = {};
+};
+
+char *Game() { return *reinterpret_cast<char **>(addr::kGame); }
+
+template <class T>
+T Field(const char *base, unsigned offset)
+{
+	return *reinterpret_cast<const T *>(base + offset);
+}
+
+void CopyGameString(char *out, size_t size, const char *base, unsigned buf, unsigned length, unsigned capacity)
+{
+	const char *text = Field<unsigned>(base, capacity) < 0x10 ? base + buf : Field<const char *>(base, buf);
+	const size_t n = std::min<size_t>(Field<unsigned>(base, length), size - 1);
+	if (text && n) memcpy(out, text, n);
+	out[text ? n : 0] = 0;
+}
+
+bool ReadClock(const char *game, uint32_t &clock)
+{
+	__try {
+		clock = Field<uint32_t>(game, kGameClock);
+		return true;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return false;
+	}
+}
+
+uint32_t Rgb555(unsigned c) { return ((c >> 10 & 0x1f) * 255 / 31) << 16 | ((c >> 5 & 0x1f) * 255 / 31) << 8 | ((c & 0x1f) * 255 / 31); }
+
+bool ReadRaw(RawMatch &m)
+{
+	__try {
+		char *game = Game();
+		m.game = game != nullptr;
+		if (!game) return true;
+		m.editor = *reinterpret_cast<int *>(addr::kEditorMode) != 0;
+		m.demo = reinterpret_cast<IsDemo_t>(addr::kIsDemoPlayback)() != 0;
+		m.severalHumans = reinterpret_cast<Bool_t>(addr::kMultiHumans)();
+		const char *mapView = *reinterpret_cast<const char **>(addr::kMapView);
+		m.shown = mapView && (Field<unsigned>(mapView, kWindowFlags) & kWindowVisible);
+		if (m.shown) {
+			const short *r = reinterpret_cast<const short *>(mapView + kWindowRect);
+			m.view[0] = r[0];
+			m.view[1] = r[1];
+			m.view[2] = r[2] + 1;
+			m.view[3] = r[3] + 1;
+			m.haveView = m.view[2] > m.view[0] && m.view[3] > m.view[1];
+		}
+		const char *visible = *reinterpret_cast<const char **>(addr::kVisibleMgr);
+		if (visible) {
+			for (int i = 0; i < 4; i++) m.visible[i] = Field<int>(visible, kViewRect + i * 4);
+			m.haveVisible = m.visible[2] > m.visible[0] && m.visible[3] > m.visible[1];
+		}
+		m.clock = Field<uint32_t>(game, kGameClock);
+		const char *local = Field<const char *>(game, kLocalPlayer);
+		if (local) {
+			m.local = Field<int>(local, kPlayerIndex);
+			m.enemies = Field<unsigned>(local, kPlayerEnemies) & kChatEveryone;
+		}
+		for (int i = 0; i < kSlots; i++) {
+			const char *p = game + kPlayers + i * kPlayerSize;
+			RawPlayer &out = m.players[i];
+			CopyGameString(out.name, sizeof(out.name), p, kPlayerName, kPlayerNameSize, kPlayerNameCapacity);
+			out.exists = out.name[0] && (Field<int>(p, kPlayerActive) != 0 || Field<int>(p, kPlayerState) != 0);
+			out.human = Field<int>(p, kPlayerControl) == 0;
+			out.rgb = Rgb555(Field<unsigned>(p, kPlayerColor));
+		}
+		return true;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return false;
+	}
+}
+
+ChatMatch Build(const RawMatch &raw)
+{
+	ChatMatch m;
+	if (!raw.game || raw.editor) return m;
+	m.onScreen = raw.shown;
+	m.playing = raw.shown && !raw.demo && raw.local >= 0 && raw.local < 16;
+	m.severalHumans = raw.severalHumans;
+	m.local = raw.local;
+	m.enemies = raw.enemies;
+	m.clockMs = raw.clock;
+	for (int i = 0; i < kSlots; i++) {
+		const RawPlayer &p = raw.players[i];
+		if (!p.exists || !p.human || i == raw.local) continue;
+		ChatPlayer cp;
+		cp.index = i;
+		cp.name = p.name;
+		cp.rgb = p.rgb;
+		cp.enemy = (raw.enemies & (1u << i)) != 0;
+		if (!cp.enemy) m.hasAllies = true;
+		m.humans.push_back(cp);
+	}
+	m.haveView = raw.haveView;
+	m.viewLeft = raw.view[0];
+	m.viewTop = raw.view[1];
+	m.viewRight = raw.view[2];
+	m.viewBottom = raw.view[3];
+	m.haveBar = ControlsCmdBarRect(m.barLeft, m.barTop, m.barRight, m.barBottom);
+	return m;
+}
+
+bool CameraCentre(const RawMatch &raw, int &x, int &y)
+{
+	if (!raw.haveVisible) return false;
+	x = (raw.visible[0] + raw.visible[2]) / 2;
+	y = (raw.visible[1] + raw.visible[3]) / 2;
+	return true;
+}
+
+// As CIngameChatDialog::SendMessage (004e51e0): the factory's object, the text, the sender, the point or -1, the mask, and the
+// command queue, which runs it on every computer in the same tick.
+bool QueueChat(const std::string &text, unsigned mask, bool withPoint, int x, int y)
+{
+	__try {
+		char *game = Game();
+		void *player = game ? Field<void *>(game, kLocalPlayer) : nullptr;
+		if (!player) return false;
+		char *cmd = static_cast<char *>(reinterpret_cast<Create_t>(addr::kChatMessageCreate)());
+		if (!cmd) return false;
+		*reinterpret_cast<unsigned short *>(cmd + kCmdMask) = 0;
+		reinterpret_cast<SetPlayer_t>((*reinterpret_cast<void ***>(cmd))[kSlotSetPlayer])(cmd, nullptr, player);
+		*reinterpret_cast<int *>(cmd + kCmdLocation) = withPoint ? x : -1;
+		*reinterpret_cast<int *>(cmd + kCmdLocation + 4) = withPoint ? y : -1;
+		reinterpret_cast<Assign_t>(addr::kStringAssign)(cmd + kCmdText, nullptr, text.c_str(), static_cast<unsigned>(text.size()));
+		*reinterpret_cast<unsigned short *>(cmd + kCmdMask) = static_cast<unsigned short>(mask);
+		reinterpret_cast<Queue_t>(addr::kQueueCommand)(game, nullptr, cmd);
+		return true;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return false;
+	}
+}
+
+// Alone in a match, the dialog also hands the line to the script engine (004e51e0): kept, so the game behaves the same.
+void RunAsScript(const std::string &text)
+{
+	__try {
+		char *game = Game();
+		if (game) reinterpret_cast<RunScript_t>((*reinterpret_cast<void ***>(game))[kSlotRunScript])(game, nullptr, text.c_str());
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+	}
+}
+
+struct RawChat {
+	bool show = false, own = false, location = false;
+	int sender = -1, local = -1;
+	unsigned mask = 0;
+	uint32_t rgb = 0, clock = 0;
+	char name[64] = {};
+	char text[1024] = {};
+	char names[kSlots][64] = {};
+};
+
+// What CVXChatMessage::Execute shows: nothing in the editor; in a replay every line; in a match the lines whose mask has the local
+// player. A line without text shows only its location.
+bool ReadChat(const char *cmd, RawChat &c)
+{
+	__try {
+		const char *game = Game();
+		if (!game || *reinterpret_cast<int *>(addr::kEditorMode) != 0) return false;
+		const char *sender = Field<const char *>(cmd, kCmdPlayer);
+		const char *local = Field<const char *>(game, kLocalPlayer);
+		if (!sender || !local) return false;
+		c.mask = Field<unsigned short>(cmd, kCmdMask);
+		c.local = Field<int>(local, kPlayerIndex);
+		c.sender = Field<int>(sender, kPlayerIndex);
+		const bool demo = reinterpret_cast<IsDemo_t>(addr::kIsDemoPlayback)() != 0;
+		c.own = !demo && sender == local;
+		if (!demo && (c.local < 0 || c.local > 15 || !(c.mask & (1u << c.local)))) return false;
+		c.location = Field<int>(cmd, kCmdLocation) != -1 && Field<int>(cmd, kCmdLocation + 4) != -1;
+		CopyGameString(c.text, sizeof(c.text), cmd, kCmdTextBuf, kCmdTextSize, kCmdTextCapacity);
+		if (!c.text[0] && !c.location) return false;
+		CopyGameString(c.name, sizeof(c.name), sender, kPlayerName, kPlayerNameSize, kPlayerNameCapacity);
+		c.rgb = Rgb555(Field<unsigned>(sender, kPlayerColor));
+		c.clock = Field<uint32_t>(game, kGameClock);
+		for (int i = 0; i < kSlots; i++) {
+			const char *p = game + kPlayers + i * kPlayerSize;
+			CopyGameString(c.names[i], sizeof(c.names[i]), p, kPlayerName, kPlayerNameSize, kPlayerNameCapacity);
+		}
+		c.show = true;
+		return true;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return false;
+	}
+}
+
+ChatEntry EntryOf(const RawChat &c)
+{
+	ChatEntry e;
+	e.arrivedMs = GetTickCount();
+	e.clockMs = c.clock;
+	int to = -1;
+	e.scope = ChatScopeOfMask(c.mask, c.sender, to);
+	e.sender = c.sender;
+	e.name = c.name;
+	e.rgb = c.rgb;
+	if (e.scope == kChatPrivate && c.own && to >= 0 && to < kSlots) e.toName = c.names[to];
+	e.text = c.text;
+	e.location = c.location;
+	e.own = c.own;
+	return e;
+}
+
+void CallExecute(void *cmd)
+{
+	g_suppressConsole = 1;
+	g_origExecute(cmd);
+	g_suppressConsole = 0;
+}
+
+void __fastcall HookExecute(void *cmd)
+{
+	RawChat raw;
+	if (!g_ready || !g_openHandler || !ReadChat(static_cast<const char *>(cmd), raw) || !raw.show) {
+		g_origExecute(cmd);
+		return;
+	}
+	CallExecute(cmd);
+	ChatEntry e = EntryOf(raw);
+	LogD("game", "chat: line from player %d (%s%s, %u bytes)", raw.sender + 1, e.scope == kChatAll ? "everyone" : e.scope == kChatPrivate ? "private" : "allies",
+		e.location ? ", with a location" : "", static_cast<unsigned>(e.text.size()));
+	std::lock_guard<std::mutex> lock(g_logLock);
+	g_log.Add(std::move(e));
+}
+
+__declspec(naked) void HookConsolePrintf()
+{
+	__asm {
+		cmp g_suppressConsole, 0
+		jne skip
+		jmp dword ptr [g_origConsolePrintf]
+	skip:
+		ret
+	}
+}
+
+void *__fastcall HookCtor(void *self, void *edx, int sendLocation, int mostDerived)
+{
+	if (g_ready && g_openHandler && self && mostDerived && g_openHandler(sendLocation != 0)) {
+		// Both callers only allocate the dialog and forget it: the singleton keeps it. No dialog, so the memory goes back.
+		reinterpret_cast<Free_t>(addr::kGameFree)(self);
+		return self;
+	}
+	return g_origCtor(self, edx, sendLocation, mostDerived);
+}
+
+bool Create(uintptr_t target, void *detour, void **orig, const char *what)
+{
+	if (HookCreate(reinterpret_cast<void *>(target), detour, orig) == MH_OK) return true;
+	LogE("game", "chat: could not hook %s (%08x)", what, static_cast<unsigned>(target));
+	return false;
+}
+
+}
+
+void InstallChat(bool knownExe)
+{
+	if (!knownExe) return;
+	const uintptr_t targets[] = {addr::kConsolePrintf, addr::kChatMessageExecute, addr::kChatDialogCtor};
+	bool created[3] = {};
+	created[0] = Create(addr::kConsolePrintf, reinterpret_cast<void *>(&HookConsolePrintf), &g_origConsolePrintf, "ConsolePrintf");
+	created[1] = created[0] && Create(addr::kChatMessageExecute, reinterpret_cast<void *>(&HookExecute), reinterpret_cast<void **>(&g_origExecute), "CVXChatMessage::Execute");
+	created[2] = created[1] && Create(addr::kChatDialogCtor, reinterpret_cast<void *>(&HookCtor), reinterpret_cast<void **>(&g_origCtor), "CIngameChatDialog::CIngameChatDialog");
+	if (!created[2]) {
+		for (int i = 0; i < 3; i++) {
+			if (created[i]) MH_RemoveHook(reinterpret_cast<void *>(targets[i]));
+		}
+		LogE("game", "chat: the floating chat is off; the game's chat window works as always");
+		return;
+	}
+	bool ok = true;
+	for (uintptr_t t : targets) ok = HookEnable(reinterpret_cast<void *>(t)) == MH_OK && ok;
+	g_ready = ok;
+	LogAt(ok ? kLogInfo : kLogError, "game", "chat: floating chat %s", ok ? "ready" : "NOT available (a hook could not be enabled)");
+}
+
+bool ChatFloating() { return g_ready && g_openHandler; }
+
+ChatMatch ChatReadMatch()
+{
+	RawMatch raw;
+	if (!ReadRaw(raw)) return ChatMatch();
+	return Build(raw);
+}
+
+void ChatSetOpenHandler(ChatOpenFn fn) { g_openHandler = fn; }
+
+bool ChatSend(const std::string &text, ChatTarget target, bool withLocation)
+{
+	const std::string clean = ChatCleanText(text);
+	if (clean.empty() && !withLocation) return false;
+	if (!ChatCommandOf(clean).empty() && CheatsChatLine(clean)) return true;
+	RawMatch raw;
+	if (!ReadRaw(raw) || !raw.game || raw.local < 0) return false;
+	if (!raw.severalHumans && !clean.empty()) RunAsScript(clean);
+	int x = -1, y = -1;
+	const bool point = withLocation && CameraCentre(raw, x, y);
+	const unsigned mask = ChatMask(target, raw.local, raw.enemies);
+	const bool ok = QueueChat(clean, mask, point, x, y);
+	LogAt(ok ? kLogDebug : kLogError, "game", "chat: %s %u bytes to mask %04x%s", ok ? "sent" : "could NOT send", static_cast<unsigned>(clean.size()), mask,
+		point ? " with the camera's location" : "");
+	return ok;
+}
+
+bool ChatPing(int mouseX, int mouseY, bool haveMouse)
+{
+	RawMatch raw;
+	if (!ReadRaw(raw) || !raw.game || raw.local < 0) return false;
+	const ChatMatch m = Build(raw);
+	int point[2] = {-1, -1};
+	const char *from = "the camera";
+	if (haveMouse && ZoomViewScreenPoint(mouseX, mouseY, point)) {
+		from = "the zoom map";
+	}
+	else if (haveMouse && m.haveView && raw.haveVisible && mouseX >= m.viewLeft && mouseX < m.viewRight && mouseY >= m.viewTop && mouseY < m.viewBottom &&
+		(!m.haveBar || mouseY < m.barTop)) {
+		const int spanX = std::max(1, m.viewRight - m.viewLeft), spanY = std::max(1, m.viewBottom - m.viewTop);
+		point[0] = raw.visible[0] + (mouseX - m.viewLeft) * (raw.visible[2] - raw.visible[0]) / spanX;
+		point[1] = raw.visible[1] + (mouseY - m.viewTop) * (raw.visible[3] - raw.visible[1]) / spanY;
+		from = "the mouse";
+	}
+	else if (!CameraCentre(raw, point[0], point[1])) {
+		return false;
+	}
+	const ChatTarget target = {m.hasAllies ? kTargetAllies : kTargetAll, -1};
+	const bool ok = QueueChat(std::string(), ChatMask(target, raw.local, raw.enemies), true, point[0], point[1]);
+	LogAt(ok ? kLogDebug : kLogError, "game", "chat: %s a ping at %d,%d from %s to %s", ok ? "sent" : "could NOT send", point[0], point[1], from,
+		m.hasAllies ? "the allies" : "everyone");
+	return ok;
+}
+
+uint32_t ChatLogSerial()
+{
+	std::lock_guard<std::mutex> lock(g_logLock);
+	return g_log.Serial();
+}
+
+std::vector<ChatEntry> ChatLogLines()
+{
+	std::lock_guard<std::mutex> lock(g_logLock);
+	return std::vector<ChatEntry>(g_log.Lines().begin(), g_log.Lines().end());
+}
+
+void ChatGameTick()
+{
+	// A C++ exception thrown through Execute would leave the console silenced.
+	g_suppressConsole = 0;
+	static char *lastGame = nullptr;
+	static uint32_t lastClock = 0;
+	char *game = Game();
+	uint32_t clock = 0;
+	if (game && !ReadClock(game, clock)) return;
+	// Another match, or a saved game loaded into this one: the lines of before do not belong to it.
+	const bool other = game != lastGame || clock + 5000 < lastClock;
+	lastGame = game;
+	lastClock = clock;
+	if (!other) return;
+	std::lock_guard<std::mutex> lock(g_logLock);
+	g_log.Clear();
+}

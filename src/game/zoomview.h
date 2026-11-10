@@ -10,3 +10,5 @@
 void InstallZoomView(bool knownExe);
 bool ZoomViewHandleMouse(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 void ZoomViewGameTick();
+// The point of the open zoom map under (x, y), in the view coordinates the game's location messages carry.
+bool ZoomViewScreenPoint(int x, int y, int *point);

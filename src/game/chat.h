@@ -1,0 +1,53 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 THIONG
+// Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
+#pragma once
+#include <cstdint>
+#include <string>
+#include <vector>
+
+#include "game/chatlog.h"
+
+// The game's in-match chat, without its dialog: the mod opens its own bar on the same key, sends the game's own chat command
+// (so players without the mod read it as always) and keeps the chat lines out of the game's message feed.
+void InstallChat(bool knownExe);
+// The hooks are in place: when false, the game's own dialog and feed work as always.
+bool ChatFloating();
+
+struct ChatPlayer {
+	int index = -1;
+	std::string name;
+	uint32_t rgb = 0;
+	bool enemy = false;
+};
+
+struct ChatMatch {
+	// A match on screen that the player can write in: not a replay and not the editor.
+	bool playing = false;
+	// A match or a replay on screen, where received lines are shown.
+	bool onScreen = false;
+	bool severalHumans = false;
+	int local = -1;
+	unsigned enemies = 0;
+	std::vector<ChatPlayer> humans;
+	bool hasAllies = false;
+	uint32_t clockMs = 0;
+	bool haveView = false;
+	int viewLeft = 0, viewTop = 0, viewRight = 0, viewBottom = 0;
+	bool haveBar = false;
+	int barLeft = 0, barTop = 0, barRight = 0, barBottom = 0;
+};
+ChatMatch ChatReadMatch();
+
+// Called by the game when it would open its chat dialog; true when the mod opened its bar instead.
+typedef bool (*ChatOpenFn)(bool withLocation);
+void ChatSetOpenHandler(ChatOpenFn fn);
+
+// Text and target as typed; withLocation adds the centre of the camera, as the dialog's "Send location". False if nothing was sent.
+bool ChatSend(const std::string &text, ChatTarget target, bool withLocation);
+// An empty chat line with a location: the point under the mouse (map or open zoom map), else the centre of the camera.
+bool ChatPing(int mouseX, int mouseY, bool haveMouse);
+
+uint32_t ChatLogSerial();
+std::vector<ChatEntry> ChatLogLines();
+void ChatGameTick();

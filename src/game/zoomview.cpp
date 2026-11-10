@@ -180,9 +180,11 @@ void PreviewBox(int x0, int y0, int x1, int y1, bool force);
 void __fastcall HookZoomDraw(void *self, void *edx, void *surface, int unused)
 {
 	g_origDraw(self, edx, surface, unused);
-	if (g_failed || !ExtrasEnabled()) return;
+	if (g_failed) return;
 	__try {
+		// The chat's map ping reads the geometry too, so it is kept with the extras turned off.
 		CaptureGeometry(self, surface);
+		if (!ExtrasEnabled()) return;
 		QuickIconsDraw(surface, g_geo.winX, g_geo.winY);
 		if (g_drag.dragging) PreviewBox(g_drag.startX, g_drag.startY, g_drag.curX, g_drag.curY, false);
 		DrawDragRectangle(surface);
@@ -358,6 +360,21 @@ bool ZoomViewHandleMouse(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 	default:
 		return false;
 	}
+}
+
+bool ZoomViewScreenPoint(int x, int y, int *point)
+{
+	if (g_failed || !ZoomOpen() || !InsideBitmap(x, y)) return false;
+	int rect[4];
+	__try {
+		if (!ProjectedRect(x, y, x, y, rect)) return false;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return false;
+	}
+	point[0] = rect[0];
+	point[1] = rect[1];
+	return true;
 }
 
 void ZoomViewGameTick()
