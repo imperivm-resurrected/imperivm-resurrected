@@ -74,6 +74,7 @@ struct State {
 	POINT menuCenter = {};
 	// The help just shown starts at the top of the panel until the player scrolls.
 	uint32_t helpSerial = 0;
+	ScrollDrag bar;
 };
 
 std::mutex g_lock;
@@ -123,6 +124,7 @@ void CloseLocked(State &s)
 	s.recall.Reset();
 	s.painted = Painted();
 	s.helpSerial = 0;
+	s.bar = ScrollDrag();
 }
 
 void Choose(State &s)
@@ -795,6 +797,7 @@ void ChatUiDraw(uint32_t *buf, int w, int h)
 		v.left = at.left;
 		v.bottom = at.bottom;
 		v.dragging = s.dragging;
+		v.bar = s.bar;
 		g_s.drawn = at;
 	}
 	v.mouseX = g_mouseX;
@@ -822,10 +825,29 @@ void ChatUiResetPosition()
 
 bool ChatUiPositionMoved() { return GetConfig().chatX >= 0; }
 
+// The history's scroll bar: a press on it, and the drag that follows until the button comes up.
+bool HandleHistoryBar(UINT msg, WPARAM wp, LPARAM lp)
+{
+	if (msg != WM_LBUTTONDOWN && msg != WM_LBUTTONDBLCLK && msg != WM_MOUSEMOVE && msg != WM_LBUTTONUP) return false;
+	const POINT at = {static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))};
+	std::lock_guard<std::mutex> lock(g_lock);
+	if (!g_s.open && g_s.bar.id < 0) return false;
+	ScrollTo to;
+	const bool took = ScrollbarMouse(g_s.bar, g_s.painted.hits, msg, wp, at, to);
+	if (to.id == kBarHistory) {
+		g_s.helpSerial = 0;
+		g_s.scroll = std::max(0, std::min(g_s.painted.maxScroll, g_s.painted.maxScroll - to.pos));
+	}
+	if (!took || msg == WM_MOUSEMOVE) return false;
+	g_swallowLeftUp = msg != WM_LBUTTONUP;
+	return true;
+}
+
 bool ChatUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 {
 	if (HandleMenu(msg, wp, lp)) return true;
 	if (HandleDrag(msg, wp, lp)) return true;
+	if (HandleHistoryBar(msg, wp, lp)) return true;
 	if (msg == WM_MOUSEMOVE) {
 		g_mouseX = static_cast<short>(LOWORD(lp));
 		g_mouseY = static_cast<short>(HIWORD(lp));
