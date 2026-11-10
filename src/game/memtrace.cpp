@@ -68,7 +68,7 @@ const unsigned kUnknownKept = 2048;
 // The blocks the heap functions of Windows are followed for: those of the size the leak has, and larger.
 const size_t kHeapLarge = 0x20000;
 
-struct Unknown {
+struct UnseenBlock {
 	uintptr_t block;
 	size_t size;
 	unsigned heap;
@@ -85,7 +85,7 @@ unsigned g_groups = 0;
 unsigned g_groupsLost = 0;
 unsigned g_noRecord[kHeaps] = {};
 unsigned long long g_noRecordBytes[kHeaps] = {};
-Unknown g_unknown[kUnknownKept], g_unknownBefore[kUnknownKept];
+UnseenBlock g_unknown[kUnknownKept], g_unknownBefore[kUnknownKept];
 unsigned g_unknownCount = 0, g_unknownBeforeCount = 0;
 
 typedef void *(__cdecl *Malloc_t)(size_t size);
@@ -311,7 +311,7 @@ void Describe(uintptr_t address, char *out, size_t cap)
 }
 
 // What the first bytes of a block that nobody was seen to ask for look like, to tell a bitmap from a table of zeros from a sound.
-void LogUnknownContent(const char *when, const Unknown &u)
+void LogUnknownContent(const char *when, const UnseenBlock &u)
 {
 	unsigned char head[16] = {};
 	unsigned zeros = 0, sample = 0;
