@@ -58,7 +58,7 @@ unsigned BinOf(SIZE_T size)
 }
 
 // Walks one heap with it locked. Only plain data in here: nothing may allocate while the lock is held.
-bool WalkHeap(HANDLE heap, HeapCensus &out)
+bool WalkHeap(HANDLE heap, HeapCensus &out, unsigned heapIndex)
 {
 	bool ok = true;
 	const bool locked = HeapLock(heap) != FALSE;
@@ -78,7 +78,7 @@ bool WalkHeap(HANDLE heap, HeapCensus &out)
 				const unsigned bin = BinOf(entry.cbData);
 				out.count[bin]++;
 				out.bytes[bin] += entry.cbData;
-				if (entry.cbData >= kMemTraceLarge) MemTraceNote(entry.lpData, entry.cbData);
+				if (entry.cbData >= kMemTraceLarge) MemTraceNote(entry.lpData, entry.cbData, heapIndex);
 			}
 			else {
 				out.freeBlocks++;
@@ -164,7 +164,7 @@ void Take(Census &c)
 		HeapCensus &h = c.heap[c.heaps];
 		h.handle = handles[i];
 		h.isDefault = handles[i] == process;
-		WalkHeap(handles[i], h);
+		WalkHeap(handles[i], h, c.heaps);
 		c.heapsCommitted += h.committed;
 		c.heaps++;
 	}
