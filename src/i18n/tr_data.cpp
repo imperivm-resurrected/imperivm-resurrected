@@ -1655,7 +1655,6 @@ extern const TrRow kTrRows[] = {
 	{"Conquer a neighbouring territory first.", "Antes conquista un territorio vecino.", "Prima conquista un territorio vicino."},
 	{"Victory", "Victoria", "Vittoria"},
 	{"Congratulations! You have been victorious.", "¡Enhorabuena! Has salido victorioso.", "Congratulazioni! Hai vinto."},
-	{"PLAYER", "JUGADOR", "GIOCATORE"},
 	{"New", "Nuevo", "Nuovo"},
 	{"Wins", "Victorias", "Vittorie"},
 	{"Hours played", "Horas jugadas", "Ore di gioco"},

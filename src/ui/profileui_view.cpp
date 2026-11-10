@@ -523,7 +523,7 @@ void PaintFooter(Painter &p, const View &v)
 void PaintProfileScreen(Painter &p, const View &v)
 {
 	PaintWindowFrame(p, kScreenW, kScreenH);
-	PaintWindowHeader(p, kScreenW, "PLAYER");
+	PaintWindowHeader(p, kScreenW, "STATISTICS");
 	const bool list = ShowsList(v);
 	if (list) {
 		PaintList(p, v);
