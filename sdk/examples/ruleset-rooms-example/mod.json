@@ -1,0 +1,47 @@
+{
+  "id": "example-rooms-rulesets",
+  "name": {
+    "spanish": "Ejemplo: reglas que se cambian en la sala",
+    "english": "Example: rulesets that switch in a room",
+    "italian": "Esempio: regole che cambiano nella stanza"
+  },
+  "version": "1.0",
+  "category": "Gameplay & Balance",
+  "authors": ["Imperivm Resurrected"],
+  "description": {
+    "spanish": "Ejemplo del SDK: dos conjuntos de reglas que difieren en un parche de una orden, en un modo de victoria nuevo (Arena), en un modes\\*.json y en un hidden.txt. Con FullHotReload=1 el anfitrión cambia entre ellos sin reiniciar, también con la sala abierta. Cambia la jugabilidad: en multijugador todos tienen que llevarlo.",
+    "english": "SDK example: two rulesets that differ in the patch of a command, a new victory mode (Arena), a modes\\*.json and a hidden.txt. With FullHotReload=1 the host switches between them without restarting, also with the room open. Changes gameplay: everyone must have it in multiplayer.",
+    "italian": "Esempio dell'SDK: due set di regole che differiscono per la patch di un ordine, una nuova modalità di vittoria (Arena), un modes\\*.json e un hidden.txt. Con FullHotReload=1 l'host passa dall'uno all'altro senza riavviare, anche con la stanza aperta. Cambia il gioco: in multigiocatore devono averlo tutti."
+  },
+  "redistributable": true,
+  "rulesets": [
+    {
+      "id": "classic",
+      "name": {
+        "spanish": "Clásico",
+        "english": "Classic",
+        "italian": "Classico"
+      },
+      "description": {
+        "spanish": "El hastato cuesta 60 de oro, los cinco modos del juego están en la lista y no hay modo Arena.",
+        "english": "The hastatus costs 60 gold, the game's five modes are in the list and there is no Arena mode.",
+        "italian": "L'hastatus costa 60 oro, le cinque modalità del gioco sono nella lista e non c'è la modalità Arena."
+      },
+      "path": "rulesets/classic"
+    },
+    {
+      "id": "arena",
+      "name": {
+        "spanish": "Arena",
+        "english": "Arena",
+        "italian": "Arena"
+      },
+      "description": {
+        "spanish": "El hastato cuesta 150 de oro, aparece el modo 7 Arena (con 5000 de oro) y el modo 2 SCORE LIMIT desaparece de la lista.",
+        "english": "The hastatus costs 150 gold, the mode 7 Arena appears (with 5000 starting gold) and the mode 2 SCORE LIMIT disappears from the list.",
+        "italian": "L'hastatus costa 150 oro, compare la modalità 7 Arena (con 5000 oro) e la modalità 2 SCORE LIMIT scompare dalla lista."
+      },
+      "path": "rulesets/arena"
+    }
+  ]
+}

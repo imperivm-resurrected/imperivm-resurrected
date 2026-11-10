@@ -120,6 +120,7 @@ void MpUiGameThreadTick()
 				g_s.roomLimit = 0;
 			}
 			if (snap.online && !snap.host) {
+				RoomFollowRules(snap);
 				if (!LocalReady(snap)) {
 					g_s.readySeen = false;
 				}

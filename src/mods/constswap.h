@@ -19,10 +19,24 @@ enum class ConstSwap {
 // layer). Any other file, even one the two rulesets share, could differ or need the game to read it again, so it keeps the restart.
 bool ConstSwapLayerOk(const std::vector<std::string> &files);
 
-// FullHotReload (experimental): a ruleset made only of patches to files under data/ (xml, ini, vs). Those are read by the game when it
-// starts, so the DLL makes the game read them again (game/constreload.cpp). Anything that is not a patch of data/ (paks, loose files,
-// hidden.txt, rle.mmp.tail, civs, specials, modes, options, events, rules, translations, patches to units/ or buildings/...) keeps the restart.
+// FullHotReload (experimental): a ruleset made only of the kinds below. The game reads them when it starts, so the DLL makes the game read
+// them again (game/constreload.cpp). Anything else (paks, art, sounds, texts, rle.mmp.tail, civs, specials, options, events, rules,
+// patches to units/ or buildings/...) keeps the restart.
 bool FullSwapLayerOk(const std::vector<std::string> &files);
+
+// What kinds of files a ruleset has for FullHotReload, to say it in the log and to test each one: patches to data/ (kFullPatch), new or
+// replacing files under data/ (kFullLoose: .xml, .ini, .vs; the game reads them when it starts or when the match does, from the loose
+// layer that is mounted in place), the lobby's mode files modes/*.json (kFullModes) and hidden.txt (kFullHidden). kFullOther is anything else.
+enum FullSwapKind : unsigned { kFullNone = 0, kFullPatch = 1, kFullLoose = 2, kFullModes = 4, kFullHidden = 8, kFullOther = 16 };
+unsigned FullSwapKindOf(const std::string &file);
+unsigned FullSwapKinds(const std::vector<std::string> &files);
+std::string FullSwapKindsText(unsigned kinds);
+
+// Whether loading a saved game needs no restart although the ruleset it was saved with is not the mounted one: the game is one whose load
+// the full reload covers (a skirmish or an online game, not a campaign, a conquest or a replay), every package it needs is enabled and only
+// the ruleset differs, there is nothing the restart would have switched off, and the switch itself can be made in place. The saves screen
+// (list mark, details, button) and the load action both ask this, so what they say is what happens.
+bool SaveSwitchesInPlace(bool plainGame, bool needsActivation, bool rulesetOnly, bool somethingExtra, bool switchQualifies);
 
 // Whether the text of a const.ini can be loaded: it has a [GamePlay] section (every constant the game reads is in it). A file that
 // cannot be read, or an empty one, would leave the game's table empty.

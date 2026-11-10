@@ -15,6 +15,7 @@
 #include "hooks/hookcount.h"
 #include "core/log.h"
 #include "ui/modui.h"
+#include "mods/constswap.h"
 #include "game/autosave.h"
 #include "mods/mods.h"
 #include "net/mpsave.h"
@@ -84,6 +85,10 @@ struct ModCheck {
 	std::vector<std::string> rulesFolders;
 	ModRuleset ruleset;
 	bool needsActivation = false;
+	// Every package the game needs is enabled and only the ruleset is not the one it was saved with.
+	bool rulesetOnly = true;
+	// The ruleset is another one but the game switches it in place when loading (no restart): `inactive` then only names it.
+	bool inPlace = false;
 	bool warn = false;
 };
 
@@ -214,12 +219,16 @@ ModCheck ComputeModCheck(const State &st, const SaveRec &r)
 		else if (!active || !sameRuleset) {
 			std::string label = ModLabel(m);
 			if (!sameRuleset) label += " \xC2\xB7 " + (savedLayer ? savedLayer->name : Tr("Original (HD)"));
+			if (!active) c.rulesetOnly = false;
 			c.inactive.push_back(label);
 		}
 	}
 	c.blocked = !c.missing.empty();
 	c.needsActivation = c.missing.empty() && !c.inactive.empty();
-	c.warn = c.differs || c.needsActivation || !c.other.empty() || !c.extra.empty();
+	c.inPlace = SaveSwitchesInPlace(r.kind == kSaveStrategy, c.needsActivation, c.rulesetOnly, !c.extra.empty(), c.needsActivation && ModsCanSwitchWithoutRestart(c.ruleset));
+	if (c.inPlace) c.needsActivation = false;
+	// The saved hash differs from the active one because of the ruleset alone: that is not a warning when the switch is made for you.
+	c.warn = (c.differs && !c.inPlace) || c.needsActivation || !c.other.empty() || !c.extra.empty();
 	return c;
 }
 
@@ -822,11 +831,23 @@ void DoAction(State &st, int action, int arg)
 	case kLoad:
 		if (st.mode == 1) break;
 		if (sel && st.sel.size() == 1) {
-			const ModCheck mc = CheckFor(st, *sel);
+			ModCheck mc = CheckFor(st, *sel);
 			if (mc.blocked) {
 				LogW("saves", "\"%s\" not loaded: missing mods (%s)", sel->vfsPath.c_str(), Join(mc.missing).c_str());
 				ModUiToast(TrFmt("You can't load this game: you are missing content (%s). See the list in the game's details.", {ShortList(mc.missing)}), true);
 				break;
+			}
+			// Only the ruleset differs and it can be mounted in place: no restart (the game reads its data again when the game loads).
+			if (mc.inPlace) {
+				if (ModsSwitchRulesetAndRemember(mc.ruleset)) {
+					LogI("saves", "\"%s\" needs other rules; switched in place without a restart", sel->vfsPath.c_str());
+					st.modChecks.clear();
+				}
+				else {
+					// The screen said it would switch and it could not: the way it was before.
+					LogW("saves", "\"%s\": the rules could not be switched in place; asking to restart", sel->vfsPath.c_str());
+					mc.needsActivation = true;
+				}
 			}
 			if (mc.needsActivation) {
 				const ModProfile loose = ModsLooseProfileWith(mc.rulesFolders, mc.ruleset);
@@ -1278,7 +1299,8 @@ void PaintDetailBody(Painter &p, State &st)
 		};
 		const std::string many = std::to_string(mc.missing.size());
 		group(mc.missing.size() == 1 ? "You are missing 1 content pack (it cannot be loaded):" : Tr("You are missing ") + many + Tr(" content packs (they cannot be loaded):"), mc.missing, kBad);
-		group(mc.inactive.size() == 1 ? "You need to enable 1 content pack:" : Tr("You need to enable ") + std::to_string(mc.inactive.size()) + Tr(" content packs:"), mc.inactive, kGold);
+		if (mc.inPlace) group("Switches the ruleset, no restart:", mc.inactive, kOk);
+		else group(mc.inactive.size() == 1 ? "You need to enable 1 content pack:" : Tr("You need to enable ") + std::to_string(mc.inactive.size()) + Tr(" content packs:"), mc.inactive, kGold);
 		group("Another version or different files:", mc.other, kGold);
 		group(rec->mods.empty() ? "It was saved without additional content. You have enabled:" : "It was saved without this content you have enabled:", mc.extra, kGold);
 		if (lines.empty() && mc.warn) lines.push_back({"The content of this game does not match the one you have enabled.", kGold, false});

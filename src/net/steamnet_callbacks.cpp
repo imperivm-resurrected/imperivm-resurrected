@@ -21,9 +21,22 @@
 using namespace steamnet_impl;
 
 namespace steamnet_impl {
+namespace {
+std::string g_publishedScenMod;
+}
+
+void RepublishContent()
+{
+	if (!g_lobby || S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) != g_steam.me) return;
+	PublishMods(g_publishedScenMod);
+	RefreshOwnKey();
+	LogI("steam", "the room's required content was published again (the host switched its rules)");
+}
+
 void PublishMods(const std::string &scenModId)
 {
 	if (!g_lobby) return;
+	g_publishedScenMod = scenModId;
 	int optional = 0;
 	const std::string list = EncodeMods(scenModId, optional);
 	S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, "mods", list.c_str());

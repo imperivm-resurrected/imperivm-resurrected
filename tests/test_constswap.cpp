@@ -78,6 +78,42 @@ void TheTextNeedsAGamePlaySection()
 	CHECK(!ConstIniHasGamePlay("<html>not found</html>"));
 }
 
+void EachKindOfFileIsAcceptedOnItsOwn()
+{
+	// Phase B: one kind at a time, each with the number the log prints.
+	CHECK_EQ(FullSwapKindOf("patches/data/commands/RBarracks.xml"), static_cast<unsigned>(kFullPatch));
+	CHECK_EQ(FullSwapKindOf("patches\\data\\const.ini"), static_cast<unsigned>(kFullPatch));
+	CHECK_EQ(FullSwapKindOf("data/GameScripts/6 Dominio.vs"), static_cast<unsigned>(kFullLoose));
+	CHECK_EQ(FullSwapKindOf("data/itemscripts/Sword.vs"), static_cast<unsigned>(kFullLoose));
+	CHECK_EQ(FullSwapKindOf("data/classes/RHastatus.sc.xml"), static_cast<unsigned>(kFullLoose));
+	CHECK_EQ(FullSwapKindOf("modes/arena.json"), static_cast<unsigned>(kFullModes));
+	CHECK_EQ(FullSwapKindOf("hidden.txt"), static_cast<unsigned>(kFullHidden));
+	CHECK_EQ(FullSwapKindOf("Hidden.TXT"), static_cast<unsigned>(kFullHidden));
+	CHECK_EQ(FullSwapKindOf("gameres/x.bmp"), static_cast<unsigned>(kFullOther));
+	CHECK_EQ(FullSwapKinds({"patches/data/const.ini", "data/GameScripts/a.vs", "hidden.txt"}), static_cast<unsigned>(kFullPatch | kFullLoose | kFullHidden));
+	CHECK_EQ(FullSwapKinds({}), static_cast<unsigned>(kFullNone));
+	CHECK(FullSwapKinds({"modes/a.json", "gameres/x.bmp"}) & kFullOther);
+	CHECK_EQ(FullSwapKindsText(kFullPatch | kFullHidden), "patches of data/, hidden.txt");
+	CHECK_EQ(FullSwapKindsText(kFullNone), "nothing");
+	// A layer with all the accepted kinds is switched in place; with one more kind it is not.
+	const Files all = {"patches/data/const.ini", "data/GameScripts/9 Arena.vs", "modes/arena.json", "hidden.txt"};
+	CHECK(SwapDecide(false, true, kNone, all) == ConstSwap::kFull);
+	CHECK(SwapDecide(false, true, all, kConst) == ConstSwap::kFull);
+	CHECK(SwapDecide(false, false, kNone, all) == ConstSwap::kRestart);
+	CHECK(SwapDecide(false, true, kNone, {"data/GameScripts/9 Arena.vs", "gameres/x.bmp"}) == ConstSwap::kRestart);
+}
+
+void ASavedGameSwitchesInPlaceOnlyWhenEverythingAgrees()
+{
+	CHECK(SaveSwitchesInPlace(true, true, true, false, true));
+	// Each condition on its own makes it the restart it was before.
+	CHECK(!SaveSwitchesInPlace(false, true, true, false, true)); // a campaign, a conquest or a replay
+	CHECK(!SaveSwitchesInPlace(true, false, true, false, true)); // nothing to activate
+	CHECK(!SaveSwitchesInPlace(true, true, false, false, true)); // a package has to be enabled
+	CHECK(!SaveSwitchesInPlace(true, true, true, true, true));   // the restart would switch other packs off
+	CHECK(!SaveSwitchesInPlace(true, true, true, false, false)); // flag off, or the layer carries paks, art, sounds...
+}
+
 void FullSwapNeedsOnlyPatchesOfData()
 {
 	const Files commands = {"patches/data/commands/rbarracks.xml"};
@@ -94,10 +130,11 @@ void FullSwapNeedsOnlyPatchesOfData()
 	CHECK(SwapDecide(false, true, kConst, kConst) == ConstSwap::kReload);
 	CHECK(SwapDecide(false, false, kConst, kNone) == ConstSwap::kReload);
 	CHECK(SwapDecide(true, true, both, commands) == ConstSwap::kNothing);
-	// Anything that is not a patch of data/ restarts, whichever side has it.
-	const Files bad[] = {{"patches/data/const.ini", "hidden.txt"}, {"rle.mmp.tail"}, {"civs/gaul.json"}, {"specials/x.json"}, {"modes/fast.json"},
-		{"options/speed.json"}, {"events/ongamestart.vs"}, {"packs/units.pak"}, {"data/commands/rbarracks.xml"}, {"patches/units/rhastatus.ent.xml"},
-		{"patches/currentlang/game.loc.xml"}, {"patches/data/readme.txt"}, {"patches/data/"}, {"local/spanish/game.pak"}, {"rules/game.json"}};
+	// Anything else restarts, whichever side has it.
+	const Files bad[] = {{"patches/data/const.ini", "rle.mmp.tail"}, {"civs/gaul.json"}, {"specials/x.json"}, {"options/speed.json"},
+		{"events/ongamestart.vs"}, {"packs/units.pak"}, {"patches/units/rhastatus.ent.xml"}, {"patches/currentlang/game.loc.xml"},
+		{"patches/data/readme.txt"}, {"patches/data/"}, {"data/"}, {"data/sounds/x.wav"}, {"data/readme.txt"}, {"local/spanish/game.pak"},
+		{"rules/game.json"}, {"modes/sub/x.json"}, {"modes/x.xml"}, {"gameres/icons/x.bmp"}, {"hidden.txt.bak"}};
 	for (const Files &b : bad) {
 		CHECK(SwapDecide(false, true, both, b) == ConstSwap::kRestart);
 		CHECK(SwapDecide(false, true, b, both) == ConstSwap::kRestart);
@@ -117,5 +154,7 @@ int main()
 	OnlyThePatchOfConstIniCounts();
 	TheTextNeedsAGamePlaySection();
 	FullSwapNeedsOnlyPatchesOfData();
+	ASavedGameSwitchesInPlaceOnlyWhenEverythingAgrees();
+	EachKindOfFileIsAcceptedOnItsOwn();
 	return test::Summary("constswap");
 }

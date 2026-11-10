@@ -11,6 +11,7 @@
 #include "addr/classcache.h"
 #include "addr/constcache.h"
 #include "addr/engine.h"
+#include "addr/net.h"
 #include "addr/script.h"
 #include "addr/state.h"
 #include "addr/world.h"
@@ -21,7 +22,6 @@
 #include "game/cmdcheck.h"
 #include "game/constreload.h"
 #include "game/scriptevents.h"
-#include "hooks/gamestate.h"
 #include "i18n/tr.h"
 #include "mods/constswap.h"
 #include "mods/mods.h"
@@ -393,6 +393,20 @@ bool SafeCommandCost(const char *name, int *gold, int *food)
 	return found;
 }
 
+unsigned SafeChecksum()
+{
+	unsigned sum = 0;
+	g_crashLogQuiet++;
+	__try {
+		sum = GameCommandsChecksum();
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		sum = 0;
+	}
+	g_crashLogQuiet--;
+	return sum;
+}
+
 bool SafeHasClass(const char *name)
 {
 	bool found = false;
@@ -433,7 +447,9 @@ bool CommandSanity(const char *when)
 		LogE("game", "full reload (%s): the command table has no trainRHastatus", when);
 		return false;
 	}
-	LogI("game", "full reload (%s): trainRHastatus costgold = %d, costfood = %d; %d commands in the table", when, gold, food, GameCommandCount());
+	// Every peer logs the same line: if two computers play with different tables, this is where to look first.
+	LogI("game", "full reload (%s): trainRHastatus costgold = %d, costfood = %d; %d commands in the table, checksum of their names %08x", when, gold, food,
+		GameCommandCount(), SafeChecksum());
 	return true;
 }
 
@@ -444,17 +460,19 @@ void RestartNow(const char *why)
 }
 
 // Before the match is created. Returns false if the game could not be made to use the mounted rules (the caller restarts).
-bool ReloadFull()
+bool ReloadFull(const void *game)
 {
 	const DWORD start = GetTickCount();
-	if (GameIsMultiplayer()) {
-		LogW("game", "full reload: not for a multiplayer game");
+	// Only the games whose LoadGameData is known to run before anything of the match reads the tables: a skirmish (also a saved one:
+	// PersistSavedGame creates the game, runs LoadGameData and only then reads the world) and a multiplayer game. Campaigns, conquests,
+	// the editor and replays are not looked at.
+	const uintptr_t kind = *reinterpret_cast<const uintptr_t *>(game);
+	if (kind != addr::kGameSingleVtable && kind != addr::kMultiplayerVtable) {
+		LogW("game", "full reload: not for this kind of game (vtable %08x)", static_cast<unsigned>(kind));
 		return false;
 	}
-	if (*reinterpret_cast<const int *>(addr::kLoadingSavedGame)) {
-		LogW("game", "full reload: not for a saved game (its scripts are already compiled in the library that would be freed)");
-		return false;
-	}
+	LogI("game", "full reload: %s%s game", kind == addr::kMultiplayerVtable ? "multiplayer" : "single-player",
+		*reinterpret_cast<const int *>(addr::kLoadingSavedGame) ? " saved" : "");
 	if (!GuardsLookRight()) return false;
 	if (UpdateCheckRunning()) {
 		LogW("game", "full reload: the update check is still reading the table");
@@ -507,12 +525,12 @@ void *__fastcall HookLoadGameData(void *self, void *edx)
 			LogE("game", "const reload: failed; the match uses the rules the game started with");
 			ModsConstReloadFailed();
 			if (result == Reload::kBroken) RestoreTable();
-			UiToast(Tr("The new rules could not be loaded without restarting. This game uses the previous ones."), true);
+			UiToast(Tr("The new ruleset could not be loaded without restarting. This game uses the previous one."), true);
 		}
 		break;
 	}
 	case ModsReload::kFull:
-		if (ReloadFull()) {
+		if (ReloadFull(self)) {
 			ModsConstReloadDone();
 			full = true;
 		}

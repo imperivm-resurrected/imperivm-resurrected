@@ -147,6 +147,7 @@ inline constexpr uintptr_t kRequestLoadGame = 0x00749990;
 inline constexpr uintptr_t kProcessPendingGameRequests = 0x00749fd0;
 inline constexpr uintptr_t kAiVtable = 0x007ac76c;
 inline constexpr uintptr_t kSquadVtable = 0x007b13c8;
+inline constexpr uintptr_t kGameSingleVtable = 0x007bf2c8;
 inline constexpr uintptr_t kSettlementVtable = 0x007cea80;
 inline constexpr uintptr_t kShipVtable = 0x007cf598;
 inline constexpr uintptr_t kFeedbackClassName = 0x00821178;

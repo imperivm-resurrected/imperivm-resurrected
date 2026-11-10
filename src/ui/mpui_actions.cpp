@@ -666,7 +666,13 @@ void DoAction(int action, int arg)
 	case kCreateOk: {
 		if (g_s.createSave >= 0 && g_s.createSave < static_cast<int>(g_s.saves.size())) {
 			const SaveEntry &save = g_s.saves[g_s.createSave];
-			const ModNeeds needs = ModsNeededFor(save.vfsPath, g_s.createProfile);
+			ModNeeds needs = ModsNeededFor(save.vfsPath, g_s.createProfile);
+			// Only the ruleset differs and it can be mounted in place: the room is for the saved game's rules, with no restart.
+			if (!needs.Satisfied() && g_s.createProfile == ModsMountedProfile().name && ModsSwitchForNeeds(needs)) {
+				g_s.createRuleset = ModsMountedChoice();
+				needs = ModsNeededFor(save.vfsPath, g_s.createProfile);
+				LogI("lobby", "the saved game \"%s\" needs other rules; switched in place without a restart", save.name.c_str());
+			}
 			if (!needs.Satisfied()) {
 				if (!needs.AllInstalled()) {
 					ModUiToast(Tr("The game \"") + save.name + Tr("\" needs content you don't have: ") + ShortList(needs.Names(true)) +
@@ -686,14 +692,14 @@ void DoAction(int action, int arg)
 		}
 		const bool otherProfile = g_s.createProfile != ModsMountedProfile().name;
 		// Rules that differ from the mounted ones only in CONST.INI are loaded now and the match reads them (ConstHotReload): no restart.
-		const bool rulesInPlace = !otherProfile && !ModsSameRuleset(g_s.createRuleset, ModsMountedProfile().ruleset) && ModsSwitchRulesetWithoutRestart(g_s.createRuleset, false);
+		const bool rulesInPlace = !otherProfile && !ModsSameRuleset(g_s.createRuleset, ModsMountedProfile().ruleset) && ModsSwitchRulesetWithoutRestart(g_s.createRuleset);
 		if (!rulesInPlace && (otherProfile || !ModsSameRuleset(g_s.createRuleset, ModsMountedProfile().ruleset))) {
 			// The ruleset is part of the profile, so the profile that will be loaded keeps it.
 			ModProfile chosen = ModsLoadProfile(g_s.createProfile);
 			if (!ModsSameChoice(chosen.ruleset, g_s.createRuleset)) {
 				chosen.ruleset = g_s.createRuleset;
 				if (!ModsSaveProfile(chosen) && !chosen.ruleset.pack.empty()) {
-					ModUiToast(Tr("Could not save the rules in the content profile."));
+					ModUiToast(Tr("Could not save the ruleset in the content profile."));
 					break;
 				}
 			}
@@ -702,8 +708,8 @@ void DoAction(int action, int arg)
 			std::vector<std::string> profileMods;
 			for (const ModRow &row : g_s.createProfileInfo.rows) profileMods.push_back(row.name);
 			if (!otherProfile) {
-				ModUiAskRestart("The game will restart with the rules you chose. Afterwards, create the room again.", -1,
-					{RulesetLabel(g_s.createProfileInfo.rulesets, g_s.createRuleset)}, "Rules that will be loaded:");
+				ModUiAskRestart("The game will restart with the ruleset you chose. Afterwards, create the room again.", -1,
+					{RulesetLabel(g_s.createProfileInfo.rulesets, g_s.createRuleset)}, "Ruleset that will be loaded:");
 				break;
 			}
 			ModUiAskRestart(profileMods.empty() ? "The game will restart without additional content. Afterwards, create the room again."
@@ -717,7 +723,7 @@ void DoAction(int action, int arg)
 			ModProfile chosen = ModsLoadProfile(g_s.createProfile);
 			chosen.ruleset = g_s.createRuleset;
 			if (!ModsSaveProfile(chosen)) {
-				ModUiToast(Tr("Could not save the rules in the content profile."));
+				ModUiToast(Tr("Could not save the ruleset in the content profile."));
 				break;
 			}
 			ModsMountedChoiceSet(g_s.createRuleset);
@@ -779,6 +785,10 @@ void ChooseRuleset(int item)
 	const std::vector<RulesetChoice> &choices = RulesetChoicesShown(g_s);
 	if (item < 0 || item > static_cast<int>(choices.size())) return;
 	const ModRuleset picked = item == 0 ? ModRuleset() : choices[item - 1].ruleset;
+	if (OpenRoomHost(g_s)) {
+		ChooseRulesetInRoom(picked);
+		return;
+	}
 	if (!SkirmishRoom(g_s)) {
 		g_s.createRuleset = picked;
 		return;
@@ -787,7 +797,7 @@ void ChooseRuleset(int item)
 	ModProfile profile = ModsLoadProfile(ModsMountedProfile().name);
 	profile.ruleset = picked;
 	if (!ModsSaveProfile(profile)) {
-		ModUiToast(Tr("Could not save the rules in the content profile."));
+		ModUiToast(Tr("Could not save the ruleset in the content profile."));
 		return;
 	}
 	if (ModsSameRuleset(picked, ModsMountedProfile().ruleset) || ModsSwitchRulesetWithoutRestart(picked)) {
@@ -800,7 +810,7 @@ void ChooseRuleset(int item)
 		return;
 	}
 	ModsSetActiveProfileName(profile.name);
-	ModUiAskRestart("The game will restart with the rules you chose.", -1, {RulesetLabel(choices, picked)}, "Rules that will be loaded:");
+	ModUiAskRestart("The game will restart with the ruleset you chose.", -1, {RulesetLabel(choices, picked)}, "Ruleset that will be loaded:");
 }
 
 std::string &FocusedText()

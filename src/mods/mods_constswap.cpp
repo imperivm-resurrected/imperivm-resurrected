@@ -38,6 +38,21 @@ std::string LayerDir(const ModRuleset &r)
 	return dir;
 }
 
+// The VFS name of the folder of a ruleset that has loose files ("mods/<pack>/rulesets/<id>/", as MountProfileLayers names it); empty if none.
+std::string LooseLayerPrefix(const ModRuleset &r)
+{
+	ModInfo m;
+	if (r.Empty() || !ModsFind(r.pack, m)) return std::string();
+	const ModLayer *layer = ModsFindLayer(m, r.id);
+	return layer && layer->hasLoose ? "mods/" + m.folder + "/" + layer->path + "/" : std::string();
+}
+
+std::vector<void (*)()> &SwapHooks()
+{
+	static std::vector<void (*)()> hooks;
+	return hooks;
+}
+
 // The files of the folder a ruleset mounts; false if the ruleset is not there. Nothing for the game's own rules.
 bool LayerFiles(const ModRuleset &r, std::vector<std::string> &out)
 {
@@ -63,6 +78,11 @@ void ModsConstReloadSetReady(bool ready)
 void ModsFullReloadSetReady(bool ready)
 {
 	g_fullReady = ready;
+}
+
+bool ModsHotSwitchEnabled()
+{
+	return g_ready || g_fullReady;
 }
 
 bool ModsCanSwitchWithoutRestart(const ModRuleset &wanted, bool allowFull)
@@ -112,6 +132,13 @@ bool ModsSwapMountedRuleset(const ModRuleset &wanted)
 	p.ruleset = wanted;
 	const ModRuleset next = ModsEffectiveRuleset(p);
 	const std::string oldDir = LayerDir(before), newDir = LayerDir(next);
+	const bool sameFiles = ModsSameRuleset(before, next);
+	const std::string oldLoose = sameFiles ? std::string() : LooseLayerPrefix(before), newLoose = sameFiles ? std::string() : LooseLayerPrefix(next);
+	// The loose files of the new ruleset are mounted before anything else changes, so a failure leaves everything as it was.
+	if (!newLoose.empty() && !MountLooseFolder(newLoose)) {
+		LogE("content", "the loose files of the ruleset %s could not be mounted; nothing was changed", newLoose.c_str());
+		return false;
+	}
 	std::vector<std::string> dirs;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
@@ -132,10 +159,24 @@ bool ModsSwapMountedRuleset(const ModRuleset &wanted)
 		g_mount.profile.ruleset = next;
 		dirs = mounted;
 	}
+	if (!oldLoose.empty()) UnmountLooseFolder(oldLoose);
 	VfsResetPatchedAll();
 	MediaSetModDirs(dirs);
-	LogI("content", "ruleset changed without a restart: %s%s%s -> %s%s%s", before.pack.c_str(), before.id.empty() ? "" : ":", before.id.c_str(),
-		next.pack.c_str(), next.id.empty() ? "" : ":", next.id.c_str());
+	{
+		// The files the packs hide are the ones of the new ruleset's hidden.txt; the game asks the hidden set on every open and search.
+		ModProfile now;
+		{
+			std::lock_guard<std::mutex> lock(g_lock);
+			now = g_mount.profile;
+		}
+		ApplyHiddenFiles(now);
+	}
+	for (void (*hook)() : SwapHooks()) hook();
+	std::vector<std::string> files;
+	LayerFiles(next, files);
+	LogI("content", "ruleset changed without a restart: %s%s%s -> %s%s%s (files of the new one: %s; loose layer: %s%s)", before.pack.c_str(),
+		before.id.empty() ? "" : ":", before.id.c_str(), next.pack.c_str(), next.id.empty() ? "" : ":", next.id.c_str(),
+		FullSwapKindsText(FullSwapKinds(files)).c_str(), newLoose.empty() ? "none" : "mounted", oldLoose.empty() ? "" : ", the old one taken out");
 	return true;
 }
 
@@ -156,6 +197,11 @@ ModsReload ModsReloadPlan()
 	case ConstSwap::kFull: return ModsReload::kFull;
 	default: return ModsReload::kRestart;
 	}
+}
+
+void ModsOnRulesetSwapped(void (*hook)())
+{
+	SwapHooks().push_back(hook);
 }
 
 bool ModsConstReloadPending()
@@ -179,4 +225,44 @@ void ModsConstReloadFailed()
 	ModsSwapMountedRuleset(back);
 	std::lock_guard<std::mutex> lock(g_lock);
 	g_mount.choice = back;
+}
+
+bool ModsSwitchRulesetAndRemember(const ModRuleset &wanted, bool allowFull)
+{
+	if (!ModsSwitchRulesetWithoutRestart(wanted, allowFull)) return false;
+	const std::string name = ModsMountedProfile().name;
+	ModProfile p = ModsLoadProfile(name);
+	p.ruleset = wanted;
+	if (!ModsSaveProfile(p)) LogW("content", "the rules could not be saved in the profile \"%s\"; they stay for this session", name.c_str());
+	ModsMountedChoiceSet(wanted);
+	return true;
+}
+
+bool ModsFindRoomRuleset(const std::vector<RoomPackFact> &packs, ModRuleset &out)
+{
+	out = ModRuleset();
+	const RoomPackFact *with = nullptr;
+	for (const RoomPackFact &f : packs) {
+		if (f.layer.empty()) continue;
+		if (with) return false;
+		with = &f;
+	}
+	if (!with) return true;
+	std::vector<std::string> mounted;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		mounted = g_mount.profile.mods;
+	}
+	std::lock_guard<std::mutex> lock(g_lock);
+	for (const ModInfo &m : g_mods) {
+		if (_stricmp(m.id.c_str(), with->id.c_str()) != 0 || m.version != with->version) continue;
+		if (ModsCompareRoomCopy(m, with->copyKey) != RoomCopy::kSame || ModsCompareRoomLayer(m, with->layer, with->layerKey) != RoomCopy::kSame) continue;
+		if (std::none_of(mounted.begin(), mounted.end(), [&](const std::string &f) { return SameFolder(f, m.folder); })) continue;
+		const ModLayer *layer = ModsFindLayer(m, with->layer);
+		if (!layer) continue;
+		out.pack = m.folder;
+		out.id = layer->id;
+		return true;
+	}
+	return false;
 }

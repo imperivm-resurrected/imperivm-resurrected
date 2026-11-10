@@ -3,6 +3,8 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #pragma once
 #include <string>
+#include <utility>
+#include <vector>
 
 enum class RoomContent { kSame, kChecking, kOtherGameplay, kOtherMap };
 
@@ -21,3 +23,14 @@ RoomContent CompareRoomContent(const RoomContentFacts &facts);
 std::string RoomHashKey(const std::string &gameplayHash);
 bool RoomHashMatches(const std::string &gameplayHash, const std::string &hostHashKey);
 bool RoomContentDiffers(RoomContent content);
+
+// What a guest in an open room does about the room's key (see mpui_room.cpp RoomFollowRules): nothing while the keys are equal or one is not
+// known yet; try to switch its own rules to the room's when they differ; if that was not possible, wait (the host's mods line and key reach
+// it as two updates) and leave the room if the difference lasts.
+enum class RoomRulesStep { kInSync, kTryAdopt, kWait, kLeave };
+const unsigned kRoomRulesGraceMs = 4000;
+RoomRulesStep RoomRulesDecide(const std::string &roomKey, const std::string &ownKey, bool adoptFailed, unsigned differentForMs);
+
+// What the Ruleset row shows a guest: "pack \xC2\xB7 ruleset" for each package of the room that has a ruleset (the pairs are the pack name and
+// the ruleset name), joined with commas. Empty when the room has none, which the row shows as the game's own rules.
+std::string RoomRulesetText(const std::vector<std::pair<std::string, std::string>> &packRulesets);

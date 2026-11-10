@@ -19,6 +19,6 @@ To try it, copy this folder to `<game>\mods\`, enable it in the content manager 
 ConstHotReload=1
 ```
 
-Restart the game, pick **Slow economy** in the **Rules** row of the skirmish room (if the package was only just enabled, the game restarts once for that), play, go back to the menu and pick **Fast economy** in the same row: the game does not restart. `Logs\imperivm\imperivm-mod.log` says `ruleset changed without a restart` when you pick it and `const reload` lines when the next match starts (with the old and new `DamageAmplify` and how many copies were set back).
+Restart the game, pick **Slow economy** in the **Ruleset** row of the skirmish room (if the package was only just enabled, the game restarts once for that), play, go back to the menu and pick **Fast economy** in the same row: the game does not restart. `Logs\imperivm\imperivm-mod.log` says `ruleset changed without a restart` when you pick it and `const reload` lines when the next match starts (with the old and new `DamageAmplify` and how many copies were set back).
 
 It changes gameplay: in multiplayer everyone must have the package. A player whose ruleset is not the room's still restarts into it.

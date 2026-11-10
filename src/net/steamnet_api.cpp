@@ -271,6 +271,12 @@ std::string SteamOwnGameplayKey()
 	return OwnKey();
 }
 
+void SteamRepublishContent()
+{
+	if (!SteamOnlineReady()) return;
+	Post([] { RepublishContent(); });
+}
+
 RoomContent SteamRoomContent(const OnlineLobby &lobby, const std::string &ownKey, bool strictMap, bool watching)
 {
 	RoomContentFacts facts;

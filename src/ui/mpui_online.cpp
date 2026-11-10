@@ -3,6 +3,7 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include "ui/textedit.h"
 #include "MinHook.h"
+#include "core/log.h"
 #include "core/names.h"
 #include "ui/modui.h"
 
@@ -206,7 +207,13 @@ void TryJoinNow(const OnlineLobby &lobby, const std::string &password, bool watc
 	OnlineLobby target = g;
 	if (watch) target.id = g.specLobby;
 	if (g_s.ownKey.empty()) g_s.ownKey = SteamOwnGameplayKey();
-	const RoomContent content = SteamRoomContent(g, g_s.ownKey, strictMap, watch);
+	RoomContent content = SteamRoomContent(g, g_s.ownKey, strictMap, watch);
+	// A room with other rules that can be mounted in place (and whose files this computer has): switch and go in, without the restart.
+	if (content == RoomContent::kOtherGameplay && !watch && AdoptRoomRules(g)) {
+		g_s.ownKey = SteamOwnGameplayKey();
+		content = SteamRoomContent(g, g_s.ownKey, strictMap, watch);
+		LogI("lobby", "joining a room with other rules after switching mine in place");
+	}
 	if (content == RoomContent::kChecking) {
 		ModUiToast("Your content is still being checked: try again in a few seconds.");
 		return;
