@@ -2,6 +2,7 @@
 // Copyright (C) 2026 THIONG
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include "ui/optionsui.h"
+#include "ui/chatui.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -197,6 +198,7 @@ void SetUpdateStatus(Values &v)
 		break;
 	}
 	v.texts[kCheckUpdates] = text;
+	v.disabled[kResetChatPlace] = !ChatUiPositionMoved();
 	v.disabled[kCheckUpdates] = info.check == UpdaterInfo::kChecking || info.state == UpdaterInfo::kDownloading || info.state == UpdaterInfo::kReady;
 }
 
@@ -465,6 +467,10 @@ void Execute(const Command &cmd)
 	case kActRow:
 		if (cmd.arg == kOpenLogs) ReportOpenLogsFolder();
 		else if (cmd.arg == kCreateReport) ReportStart();
+		else if (cmd.arg == kResetChatPlace) {
+			ChatUiResetPosition();
+			Refresh();
+		}
 		else if (cmd.arg == kCheckUpdates) {
 			UpdaterCheckNow();
 			Refresh();

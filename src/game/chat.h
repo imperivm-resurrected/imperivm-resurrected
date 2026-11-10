@@ -27,6 +27,8 @@ struct ChatMatch {
 	bool playing = false;
 	// A match or a replay on screen, where received lines are shown.
 	bool onScreen = false;
+	// The local player is still in the match: not defeated and has not surrendered.
+	bool alive = false;
 	bool severalHumans = false;
 	int local = -1;
 	unsigned enemies = 0;

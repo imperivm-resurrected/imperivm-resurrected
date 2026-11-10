@@ -32,6 +32,9 @@ struct Config {
 	int panelY = 0;
 	bool panelCompact = false;
 	int panelOpacity = 90;
+	// Where the chat sits, in thousandths of the screen: its left edge and its bottom edge. -1 is the default place.
+	int chatX = -1;
+	int chatY = -1;
 	bool dpiAware = true;
 
 	bool muteInBackground = true;

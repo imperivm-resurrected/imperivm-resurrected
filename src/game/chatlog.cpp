@@ -3,6 +3,7 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include "game/chatlog.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <utility>
@@ -213,4 +214,40 @@ void ChatPingMenuOffset(int type, int radius, int &dx, int &dy)
 	const double a = kMenuAngles[type >= 0 && type < kPingTypes ? type : 0] * 3.14159265358979 / 180.0;
 	dx = static_cast<int>(std::lround(std::cos(a) * radius));
 	dy = static_cast<int>(std::lround(std::sin(a) * radius));
+}
+
+ChatAnchor ChatClampAnchor(ChatAnchor a, int screenW, int width, int minBottom, int maxBottom)
+{
+	a.left = std::max(0, std::min(a.left, screenW - width));
+	if (maxBottom < minBottom) maxBottom = minBottom;
+	a.bottom = std::max(minBottom, std::min(a.bottom, maxBottom));
+	return a;
+}
+
+int ChatToPermille(int value, int size)
+{
+	if (size <= 0) return 0;
+	return std::max(0, std::min(1000, static_cast<int>((static_cast<long long>(value) * 1000 + size / 2) / size)));
+}
+
+int ChatFromPermille(int permille, int size) { return static_cast<int>((static_cast<long long>(permille) * size + 500) / 1000); }
+
+void ChatRateLimit::Forget(uint32_t now)
+{
+	while (!times_.empty() && now - times_.front() >= window_) times_.pop_front();
+}
+
+bool ChatRateLimit::Allow(uint32_t now)
+{
+	Forget(now);
+	if (static_cast<int>(times_.size()) >= max_) return false;
+	times_.push_back(now);
+	return true;
+}
+
+uint32_t ChatRateLimit::WaitMs(uint32_t now)
+{
+	Forget(now);
+	if (static_cast<int>(times_.size()) < max_ || times_.empty()) return 0;
+	return times_.front() + window_ - now;
 }

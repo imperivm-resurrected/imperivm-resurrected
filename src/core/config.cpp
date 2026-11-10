@@ -68,6 +68,9 @@ void LoadConfig()
 	g_config.panelX = (std::max)(0, (std::min)(1000, static_cast<int>(GetPrivateProfileIntA("Display", "PanelX", 1000, path))));
 	g_config.panelY = (std::max)(0, (std::min)(1000, static_cast<int>(GetPrivateProfileIntA("Display", "PanelY", 0, path))));
 	g_config.panelCompact = GetPrivateProfileIntA("Display", "PanelCompact", 0, path) != 0;
+	g_config.chatX = (std::max)(-1, (std::min)(1000, static_cast<int>(GetPrivateProfileIntA("Display", "ChatX", -1, path))));
+	g_config.chatY = (std::max)(-1, (std::min)(1000, static_cast<int>(GetPrivateProfileIntA("Display", "ChatY", -1, path))));
+	if (g_config.chatX < 0 || g_config.chatY < 0) g_config.chatX = g_config.chatY = -1;
 	g_config.panelOpacity = (std::max)(30, (std::min)(100, static_cast<int>(GetPrivateProfileIntA("Display", "PanelOpacity", 90, path))));
 	g_config.dpiAware = GetPrivateProfileIntA("Display", "DpiAware", 1, path) != 0;
 	g_config.muteInBackground = GetPrivateProfileIntA("Sound", "MuteInBackground", 1, path) != 0;
@@ -181,6 +184,8 @@ void SaveConfig()
 	WritePrivateProfileStringA("Display", "PanelX", std::to_string(g_config.panelX).c_str(), path);
 	WritePrivateProfileStringA("Display", "PanelY", std::to_string(g_config.panelY).c_str(), path);
 	WritePrivateProfileStringA("Display", "PanelCompact", g_config.panelCompact ? "1" : "0", path);
+	WritePrivateProfileStringA("Display", "ChatX", g_config.chatX >= 0 ? std::to_string(g_config.chatX).c_str() : nullptr, path);
+	WritePrivateProfileStringA("Display", "ChatY", g_config.chatY >= 0 ? std::to_string(g_config.chatY).c_str() : nullptr, path);
 	WritePrivateProfileStringA("Display", "PanelOpacity", std::to_string(g_config.panelOpacity).c_str(), path);
 	WritePrivateProfileStringA("Sound", "MuteInBackground", g_config.muteInBackground ? "1" : "0", path);
 	WritePrivateProfileStringA("Sound", "ModernAudio", g_config.modernAudio ? "1" : "0", path);

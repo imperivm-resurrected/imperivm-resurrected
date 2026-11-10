@@ -1714,5 +1714,9 @@
 {"en":"Ping: attack here","es":"Marcar: atacad aquí","it":"Segnala: attaccate qui"},
 {"en":"Ping: danger","es":"Marcar: peligro","it":"Segnala: pericolo"},
 {"en":"the point under the cursor, with the swords","es":"el punto bajo el cursor, con las espadas","it":"il punto sotto il cursore, con le spade"},
-{"en":"the point under the cursor, with the red flag","es":"el punto bajo el cursor, con la bandera roja","it":"il punto sotto il cursore, con la bandiera rossa"}
+{"en":"the point under the cursor, with the red flag","es":"el punto bajo el cursor, con la bandera roja","it":"il punto sotto il cursore, con la bandiera rossa"},
+{"en":"Chat position","es":"Posición del chat","it":"Posizione della chat"},
+{"en":"Back above the command bar","es":"Vuelve encima de la barra de órdenes","it":"Torna sopra la barra dei comandi"},
+{"en":"Marks are only for players still in the match.","es":"Las marcas son solo para quien sigue en la partida.","it":"I segnali sono solo per chi è ancora in partita."},
+{"en":"Too many marks: wait a moment.","es":"Demasiadas marcas: espera un momento.","it":"Troppi segnali: aspetta un momento."}
 ]
