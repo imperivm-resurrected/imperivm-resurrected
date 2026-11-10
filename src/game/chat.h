@@ -52,7 +52,12 @@ bool ChatSend(const std::string &text, ChatTarget target, bool withLocation);
 // An empty chat line with a location: the point under the mouse (map or open zoom map), else the centre of the camera. The
 // sender also gets the type's notification, which the game itself only gives to the others. how says what asked for it, for
 // the log; type is a ChatPingType.
-bool ChatPing(int mouseX, int mouseY, bool haveMouse, const char *how, int type);
+bool ChatPing(int mouseX, int mouseY, bool haveMouse, const char *how, int type, ChatTarget target);
+// Whether (x, y) is on the map itself: inside the big map's picture when it is open, else on the map view and not on a bar or
+// window of the game. area is the part of the screen around it that is map, to keep a menu inside; why says what is there.
+bool ChatPointOnMap(int x, int y, int *area, const char *&why);
+// A line in the chat for the local player only.
+void ChatAddLocal(const std::string &text);
 
 uint32_t ChatLogSerial();
 std::vector<ChatEntry> ChatLogLines();

@@ -735,3 +735,11 @@ void DrawCheatsPanel(uint32_t *frame, int frameW, int H, float s)
 	g_ch.shown = true;
 }
 }
+
+bool ModUiCoversPoint(int x, int y)
+{
+	if (!CheatsPanelAvailable()) return false;
+	const POINT at = {x, y};
+	std::lock_guard<std::mutex> lock(g_lock);
+	return PtInRect(&g_ch.tab, at) || PtInRect(&g_ch.panel, at);
+}

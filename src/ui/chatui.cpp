@@ -67,6 +67,10 @@ struct State {
 	POINT lastGripAt = {};
 	// The place last drawn, to save where the drag ended.
 	ChatAnchor drawn;
+	// The recipients last chosen on the chip, for the rest of the match: the bar opens with them and pings go to them.
+	ChatTarget chosen;
+	bool chosenSet = false;
+	POINT menuCenter = {};
 };
 
 std::mutex g_lock;
@@ -117,6 +121,76 @@ void CloseLocked(State &s)
 	s.painted = Painted();
 }
 
+void Choose(State &s)
+{
+	if (s.target < 0 || s.target >= static_cast<int>(s.targets.size())) return;
+	s.chosen = s.targets[s.target];
+	s.chosenSet = true;
+}
+
+// Where pings go: the chip's last choice while it still exists, else the allies if there are any, else everyone.
+ChatTarget PingTarget()
+{
+	std::lock_guard<std::mutex> lock(g_lock);
+	const std::vector<ChatTarget> targets = TargetsOf(g_s.match);
+	if (g_s.chosenSet && ChatFindTarget(targets, g_s.chosen) >= 0) return g_s.chosen;
+	return {g_s.match.hasAllies ? kTargetAllies : kTargetAll, -1};
+}
+
+std::string KeyText(int id)
+{
+	const ControlKey k = ControlsModKey(id);
+	return k.vk ? ControlsKeyLabel(k) : std::string();
+}
+
+void ShowHelp()
+{
+	ChatAddLocal(Tr("Chat commands (only you see this):"));
+	ChatAddLocal(Tr("/all, /al, /todos or /tutti and the message: to everyone"));
+	ChatAddLocal(Tr("/allies, /a, /aliados or /alleati and the message: to your allies"));
+	ChatAddLocal(Tr("/w or /p, a name and the message: only to that player"));
+	ChatAddLocal(Tr("Tab changes who reads it; Up and Down bring back what you sent; Esc closes."));
+	static const char *const kClicks[kPingClickModes] = {"Alt + click", "Ctrl + click", "Shift + click", "Off"};
+	const int click = ControlsPingClickMode();
+	const std::string ping = KeyText(kModKeyPing);
+	if (click != kPingClickOff) {
+		ChatAddLocal(TrFmt("Marks: %s on the map and point to choose on my way, attack or danger; %s marks on my way.",
+			{Tr(kClicks[click]), ping.empty() ? Tr("its key") : ping}));
+	}
+	else if (!ping.empty()) {
+		ChatAddLocal(TrFmt("Marks: %s marks on my way under the cursor.", {ping}));
+	}
+	const std::string attack = KeyText(kModKeyPingAttack), danger = KeyText(kModKeyPingDanger);
+	if (!attack.empty() || !danger.empty()) {
+		ChatAddLocal(TrFmt("Attack here: %s. Danger: %s.", {attack.empty() ? "-" : attack, danger.empty() ? "-" : danger}));
+	}
+	ChatAddLocal(Tr("Marks go to whoever the chip shows."));
+	if (CheatsPanelAvailable()) ChatAddLocal(Tr("Cheats: /gold, /food, /map and the others of the cheats panel."));
+	ChatAddLocal(Tr("Start with // to send a line that begins with /."));
+}
+
+// What a /w names, among the other players. Writes the local error and returns false when it does not settle on one.
+bool Whisper(const ChatSlash &sl, const ChatMatch &m, ChatTarget &target)
+{
+	if (sl.name.empty()) {
+		ChatAddLocal(Tr("Write a name after /w."));
+		return false;
+	}
+	std::vector<std::string> names;
+	for (const ChatPlayer &p : m.others) names.push_back(p.name);
+	const int found = ChatMatchName(sl.name, names);
+	if (found == -1) {
+		ChatAddLocal(TrFmt("No player is called %s.", {sl.name}));
+		return false;
+	}
+	if (found == -2) {
+		ChatAddLocal(TrFmt("Several players start with %s: write more of the name.", {sl.name}));
+		return false;
+	}
+	target = {kTargetPlayer, m.others[found].index};
+	return true;
+}
+
 bool OnOpen(bool withLocation)
 {
 	if (!ChatFloating() || OtherScreenOpen()) return false;
@@ -132,6 +206,9 @@ bool OnOpen(bool withLocation)
 		g_s.matchRead = GetTickCount();
 		g_s.targets = TargetsOf(m);
 		g_s.target = ChatDefaultTarget(g_s.targets, everyone);
+		const int remembered = g_s.chosenSet ? ChatFindTarget(g_s.targets, g_s.chosen) : -1;
+		if (!everyone && remembered >= 0) g_s.target = remembered;
+		Choose(g_s);
 		g_s.withLocation = withLocation;
 		count = static_cast<int>(g_s.targets.size());
 	}
@@ -146,12 +223,60 @@ void Send(bool withLocation)
 	std::string text;
 	ChatTarget target;
 	bool location = false;
+	ChatMatch m;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
-		text = g_s.text;
+		text = ChatCleanText(g_s.text);
 		target = g_s.target >= 0 && g_s.target < static_cast<int>(g_s.targets.size()) ? g_s.targets[g_s.target] : ChatTarget();
 		location = withLocation || g_s.withLocation;
-		g_s.recall.Push(ChatCleanText(text));
+		m = g_s.match;
+	}
+	// The bar's own commands: never sent, and the bar stays open for the answer.
+	const ChatSlash sl = ChatParseSlash(text);
+	bool keep = false, clear = false;
+	switch (sl.kind) {
+	case kSlashHelp:
+		ShowHelp();
+		keep = clear = true;
+		break;
+	case kSlashTarget:
+		if (sl.rest.empty()) {
+			ChatAddLocal(Tr("Write the message after the command."));
+			keep = true;
+		}
+		target = {sl.target, -1};
+		text = sl.rest;
+		break;
+	case kSlashWhisper:
+		if (!Whisper(sl, m, target)) {
+			keep = true;
+		}
+		else if (sl.rest.empty()) {
+			ChatAddLocal(Tr("Write the message after the name."));
+			keep = true;
+		}
+		text = sl.rest;
+		break;
+	case kSlashOther:
+		if (!CheatsCommandKnown(sl.verb)) {
+			ChatAddLocal(TrFmt("Unknown command /%s. Type /help.", {sl.verb}));
+			keep = true;
+		}
+		break;
+	default:
+		break;
+	}
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		g_s.recall.Push(ChatCleanText(g_s.text));
+		if (keep) {
+			if (clear) {
+				g_s.text.clear();
+				g_s.edit = EditState();
+			}
+			LogD("ui", "chat: command handled here (%s)", sl.kind == kSlashHelp ? "help" : sl.kind == kSlashOther ? "unknown" : "incomplete");
+			return;
+		}
 		CloseLocked(g_s);
 	}
 	// The game's dialog can call back into the mod: no lock while sending.
@@ -194,6 +319,7 @@ bool HandleKeyDown(WPARAM wp)
 	switch (wp) {
 	case VK_TAB:
 		s.target = ChatCycle(s.target, static_cast<int>(s.targets.size()), shift);
+		Choose(s);
 		return true;
 	case VK_UP:
 		if (s.recall.Older(s.text)) EditToEnd(s.text, s.edit);
@@ -252,7 +378,10 @@ bool HandleMouse(UINT msg, WPARAM wp, POINT at)
 			return true;
 		}
 		std::lock_guard<std::mutex> lock(g_lock);
-		if (action == kActChip) g_s.target = ChatCycle(g_s.target, static_cast<int>(g_s.targets.size()), false);
+		if (action == kActChip) {
+			g_s.target = ChatCycle(g_s.target, static_cast<int>(g_s.targets.size()), false);
+			Choose(g_s);
+		}
 		int field = 0;
 		FieldGeom geo;
 		if (action == kActField && FieldAt(at, field, geo)) {
@@ -268,7 +397,10 @@ bool HandleMouse(UINT msg, WPARAM wp, POINT at)
 		if (!inside) return false;
 		g_swallowRightUp = true;
 		std::lock_guard<std::mutex> lock(g_lock);
-		if (HitAt(hits, at) == kActChip) g_s.target = ChatCycle(g_s.target, static_cast<int>(g_s.targets.size()), true);
+		if (HitAt(hits, at) == kActChip) {
+			g_s.target = ChatCycle(g_s.target, static_cast<int>(g_s.targets.size()), true);
+			Choose(g_s);
+		}
 		return true;
 	}
 	case WM_MBUTTONDOWN:
@@ -336,7 +468,7 @@ void Ping(int x, int y, bool haveMouse, const char *how, int type)
 		Hint("Too many marks: wait a moment.");
 		return;
 	}
-	ChatPing(x, y, haveMouse, how, type);
+	ChatPing(x, y, haveMouse, how, type, PingTarget());
 }
 
 bool TryPingKey(WPARAM wp, LPARAM lp)
@@ -369,14 +501,25 @@ bool TryPingClick(POINT at)
 	// The same key as the box selection: the zoom map tells a click from a drag and calls back for the click.
 	if (zoomMap && ZoomViewBoxUses(vk)) return false;
 	LogD("ui", "chat: %s at %d,%d (%s): ping menu", ClickName(vk), static_cast<int>(at.x), static_cast<int>(at.y), zoomMap ? "zoom map" : "map view");
+	// Only the map itself takes marks: not the bars, the game's windows or the mod's panels over it.
+	int area[4] = {};
+	const char *why = nullptr, *where = "not on the map";
+	if (ModUiCoversPoint(at.x, at.y)) why = "over the cheats panel";
+	else if (!ChatPointOnMap(at.x, at.y, area, where)) why = where;
+	if (why) {
+		LogD("ui", "chat: %s at %d,%d is not a mark: %s", ClickName(vk), static_cast<int>(at.x), static_cast<int>(at.y), why);
+		return false;
+	}
 	if (!CanPing(ClickName(vk))) return false;
 	if (!MayPing()) {
 		g_swallowLeftUp = true;
 		return true;
 	}
+	const POINT center = PingMenuPlace(at, area, g_frameW, g_frameH);
 	std::lock_guard<std::mutex> lock(g_lock);
 	g_s.menu = true;
 	g_s.menuAt = at;
+	g_s.menuCenter = center;
 	g_s.menuHover = -1;
 	g_s.menuSince = GetTickCount();
 	g_s.menuHow = ClickName(vk);
@@ -395,7 +538,8 @@ bool HandleMenu(UINT msg, WPARAM wp, LPARAM lp)
 		at = g_s.menuAt;
 		how = g_s.menuHow;
 		if (msg == WM_MOUSEMOVE) {
-			g_s.menuHover = ChatPingMenuPick(static_cast<short>(LOWORD(lp)) - at.x, static_cast<short>(HIWORD(lp)) - at.y, PingMenuDeadZone(g_frameW, g_frameH));
+			const POINT c = g_s.menuCenter;
+			g_s.menuHover = ChatPingMenuPick(static_cast<short>(LOWORD(lp)) - c.x, static_cast<short>(HIWORD(lp)) - c.y, PingMenuDeadZone(g_frameW, g_frameH));
 			return false;
 		}
 		hover = g_s.menuHover;
@@ -486,6 +630,7 @@ Line LineOf(const ChatEntry &e, int alpha)
 	l.color = ColorOf(e.rgb);
 	l.location = e.location;
 	l.ping = e.ping;
+	l.local = e.local;
 	l.alpha = alpha;
 	return l;
 }
@@ -527,6 +672,7 @@ void ChatUiGameTick()
 	const ChatTarget current = g_s.target >= 0 && g_s.target < static_cast<int>(g_s.targets.size()) ? g_s.targets[g_s.target] : ChatTarget();
 	g_s.match = m;
 	g_s.matchRead = now;
+	if (!m.onScreen) g_s.chosenSet = false;
 	if (g_s.open && (!m.playing || other)) {
 		LogD("ui", "chat: bar closed (%s)", other ? "another screen opened" : "the match is no longer on screen");
 		CloseLocked(g_s);
@@ -564,8 +710,10 @@ void ChatUiDraw(uint32_t *buf, int w, int h)
 		g_frameH = h;
 		const DWORD now = GetTickCount();
 		menu = s.menu && (s.menuHover >= 0 || now - s.menuSince >= kMenuDelayMs);
-		menuView.x = s.menuAt.x;
-		menuView.y = s.menuAt.y;
+		menuView.x = s.menuCenter.x;
+		menuView.y = s.menuCenter.y;
+		menuView.pressX = s.menuAt.x;
+		menuView.pressY = s.menuAt.y;
 		menuView.hover = s.menuHover;
 		v.typing = s.open;
 		if (s.open) {
@@ -579,8 +727,25 @@ void ChatUiDraw(uint32_t *buf, int w, int h)
 			}
 		}
 		v.scroll = s.scroll;
-		if (s.target >= 0 && s.target < static_cast<int>(s.targets.size())) {
-			const ChatTarget &t = s.targets[s.target];
+		ChatTarget shownTarget = s.target >= 0 && s.target < static_cast<int>(s.targets.size()) ? s.targets[s.target] : ChatTarget();
+		bool haveTarget = s.target >= 0 && s.target < static_cast<int>(s.targets.size());
+		// A target command being typed shows its recipients on the chip at once.
+		const ChatSlash sl = s.open ? ChatParseSlash(s.text) : ChatSlash();
+		if (sl.kind == kSlashTarget && sl.complete) {
+			shownTarget = {sl.target, -1};
+			haveTarget = true;
+		}
+		else if (sl.kind == kSlashWhisper && !sl.name.empty()) {
+			std::vector<std::string> names;
+			for (const ChatPlayer &p : s.match.others) names.push_back(p.name);
+			const int found = ChatMatchName(sl.name, names);
+			if (found >= 0) {
+				shownTarget = {kTargetPlayer, s.match.others[found].index};
+				haveTarget = true;
+			}
+		}
+		if (haveTarget) {
+			const ChatTarget &t = shownTarget;
 			v.targetScope = t.kind == kTargetAllies ? kChatAllies : t.kind == kTargetAll ? kChatAll : kChatPrivate;
 			if (const ChatPlayer *p = t.kind == kTargetPlayer ? PlayerOf(s.match, t.player) : nullptr) {
 				v.targetName = p->name;

@@ -14,6 +14,8 @@ void ZoomViewGameTick();
 bool ZoomViewScreenPoint(int x, int y, int *point);
 bool ZoomViewOpen();
 bool ZoomViewContains(int x, int y);
+// The big map's picture on screen: left, top, right, bottom (exclusive).
+bool ZoomViewBitmap(int *rect);
 // The box selection is on and held with this key.
 bool ZoomViewBoxUses(unsigned vk);
 // Called for a click on the big map made with the box key but without a drag; true when it was used.

@@ -24,7 +24,7 @@ using namespace ui;
 constexpr int kWidth = 500, kBarH = 28, kRowH = 19, kGap = 6, kPad = 8, kIdleRows = 8, kTypingRows = 12, kIcon = 15, kIconGap = 4, kGripH = 12;
 constexpr COLORREF kCream = RGB(242, 232, 206), kClock = RGB(178, 166, 140), kAllies = RGB(146, 214, 122), kAll = RGB(228, 188, 98),
 				   kPrivate = RGB(224, 156, 234), kNote = RGB(214, 202, 172), kPanel = RGB(14, 10, 6), kAttack = RGB(240, 98, 66),
-				   kDanger = RGB(246, 166, 52);
+				   kDanger = RGB(246, 166, 52), kLocal = RGB(196, 214, 236);
 
 struct Fonts {
 	HFONT text = nullptr, name = nullptr, meta = nullptr, chip = nullptr;
@@ -108,6 +108,7 @@ struct Measured {
 	int clockX = 0, tagX = 0, nameX = 0, toX = 0, pinX = 0, textX = 0, indent = 0;
 	std::wstring clock, tag, name, to;
 	bool note = false;
+	bool local = false;
 };
 
 struct Row {
@@ -132,6 +133,12 @@ Measured Measure(Painter &p, const Line &l)
 	m.name = W(l.name);
 	if (!l.toName.empty()) m.to = W(" \xe2\x86\x92 " + l.toName);
 	m.note = PingOf(l) >= 0;
+	if (l.local) {
+		m.local = true;
+		m.note = false;
+		m.indent = m.textX = kPad;
+		return m;
+	}
 	int x = kPad;
 	m.clockX = x;
 	if (!m.clock.empty()) x += WidthOf(p.dc, g_f.meta, m.clock, p.s) + 6;
@@ -236,6 +243,11 @@ void PaintRow(Painter &p, const View &v, const Layout &L, int r, int y)
 	const Row &row = L.rows[r];
 	const Line &l = v.lines[row.line];
 	const Measured &m = L.measured[row.line];
+	if (m.local) {
+		SelectObject(p.dc, g_f.text);
+		ShadowLine(p, row.first ? m.textX : m.indent, y, row.text, kLocal);
+		return;
+	}
 	if (!row.first) {
 		SelectObject(p.dc, g_f.text);
 		ShadowLine(p, m.indent, y, row.text, m.note ? (PingOf(l) == kPingHere ? kNote : PingColor(PingOf(l))) : kCream);
@@ -391,8 +403,8 @@ void PaintMenuPass(Painter &p, const PingMenuView &v, int size, bool white)
 	DeleteObject(bg);
 	g_outline = true;
 	const int c = size / 2;
-	p.Diamond(c, c, 5, RGB(0, 0, 0));
-	p.Diamond(c, c, 4, pal::goldLight);
+	// The mark goes where the button went down, which the menu may have moved away from.
+	const int px = c + static_cast<int>((v.pressX - v.x) / p.s), py = c + static_cast<int>((v.pressY - v.y) / p.s);
 	for (int t = 0; t < kPingTypes; t++) {
 		int dx = 0, dy = 0;
 		ChatPingMenuOffset(t, kMenuRadius, dx, dy);
@@ -409,6 +421,8 @@ void PaintMenuPass(Painter &p, const PingMenuView &v, int size, bool white)
 		const int ly = t == kPingHere ? y - r - 20 : y + r + 3;
 		ShadowLine(p, x - lw / 2, ly, label, hot ? pal::focus : kText);
 	}
+	p.Diamond(px, py, 6, RGB(0, 0, 0));
+	p.Diamond(px, py, 5, pal::goldLight);
 }
 
 }
@@ -466,6 +480,18 @@ void PaintChat(uint32_t *buf, int w, int h, const View &v, Painted &out)
 
 
 int PingMenuDeadZone(int w, int h) { return static_cast<int>(16 * Scale(w, h) + 0.5f); }
+
+POINT PingMenuPlace(POINT at, const int *area, int w, int h)
+{
+	const float s = Scale(w, h);
+	// The buttons with their labels: "here" above with its label over it, the other two below at 30 degrees with labels under them.
+	const int side = static_cast<int>((kMenuRadius * 0.87f + kMenuButton + 3 + 46) * s), up = static_cast<int>((kMenuRadius + kMenuButton + 3 + 22) * s),
+			  down = static_cast<int>((kMenuRadius * 0.5f + kMenuButton + 3 + 22) * s);
+	POINT c = at;
+	if (area[2] - area[0] > 2 * side) c.x = std::max<LONG>(area[0] + side, std::min<LONG>(c.x, area[2] - side));
+	if (area[3] - area[1] > up + down) c.y = std::max<LONG>(area[1] + up, std::min<LONG>(c.y, area[3] - down));
+	return c;
+}
 
 void PaintPingMenu(uint32_t *buf, int w, int h, const PingMenuView &v)
 {

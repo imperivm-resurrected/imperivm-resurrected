@@ -7,6 +7,7 @@
 void InstallCheats(bool knownExe);
 // The mod's "/" commands typed in the chat; true when the line was one and must not be sent.
 bool CheatsChatLine(const std::string &text);
+bool CheatsCommandKnown(const std::string &verb);
 bool CheatsPanelAvailable();
 bool CheatsPanelOpen();
 void CheatsPanelToggle();
