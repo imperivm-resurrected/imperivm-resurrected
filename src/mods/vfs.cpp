@@ -1000,6 +1000,33 @@ const bool g_dumpRegistered = (TweaksOnConfigLoaded(&VfsDumpAtStartup), true);
 
 }
 
+// OpenPatched keeps the path of the patched copy it made for each file and serves that from then on. After the mounted patches change,
+// forget the copy of rel: the next open applies the new patches and writes _cache/patched/<rel> again over the old one (a file that
+// the new patches no longer touch is served from the game's own copy, and the old copy on disk is not used). The patches are rebuilt
+// inside the same lock, so no open can store a copy made from the old ones after the entry is gone.
+void VfsResetPatched(const std::string &rel)
+{
+	std::lock_guard<std::recursive_mutex> lock(g_patchLock);
+	PatchRebuild();
+	g_patchedPath.erase(rel);
+}
+
+// The same for every file: after the patches of another ruleset are mounted, any of them may serve other bytes.
+void VfsResetPatchedAll()
+{
+	std::lock_guard<std::recursive_mutex> lock(g_patchLock);
+	PatchRebuild();
+	g_patchedPath.clear();
+}
+
+bool VfsReadPatched(const std::string &rel, std::string &out)
+{
+	std::vector<char> data;
+	if (!ReadGameFile(rel.c_str(), 1, data)) return false;
+	out.assign(data.begin(), data.end());
+	return true;
+}
+
 bool VfsReadUnpatched(const std::string &rel, std::string &out)
 {
 	std::vector<char> data;

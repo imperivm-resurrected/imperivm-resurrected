@@ -13,6 +13,8 @@ Example: [`ruleset-example`](examples/ruleset-example). Template: [`ruleset`](te
 | The package root | Civilizations (`civs\`, their classes, `specials\`) and whatever the package needs in every room | Whenever the package is enabled, as always |
 | `rulesets\<id>\` | The global rules, laid out like a mod root: `patches\`, `data\`, `packs\`, `local\`, `modes\`, `options\`, `events\`, `rules\game.json`, `hidden.txt`, `rle.mmp.tail`... | Only when a room chooses that ruleset |
 
+A package counts as a **rules** package (required content in a room, not "optional"; a change to it needs a restart) if its root or any of its rulesets holds gameplay files, `patches\data\const.ini` included. A package with only `mod.json` in its root and all its gameplay in `rulesets\` is a rules package. `"kind"` in `mod.json` can only raise this, never lower it.
+
 The civilizations of every enabled package stay selectable in a room whatever the rules are (the host adds them with **Edit civilizations**, see below), but a room starts with only one pack of them. Nothing forces you to move the files of a mod that already works: the root keeps working as before, and `rulesets` is optional.
 
 ## Declaring them
@@ -67,11 +69,37 @@ A player who joins a room with another ruleset gets the usual *This room uses ot
 - **Saved games.** A save records its ruleset. Loading it under another one (or under none) behaves like a rules pack that is not enabled: the game offers to restart with the saved one. Whether the game survives a save loaded under other rules, for example when a unit class is removed, has not been tested.
 - **Content manager.** The card of a package lists its rulesets. The ones that change the same gameplay files as the ruleset of another package are shown as an alternative to it, not as a problem: they can never be mounted together.
 
+## Switching without a restart
+
+Choosing another ruleset normally restarts the game, because the game reads almost everything a ruleset carries once, when it starts. The one exception is `CONST.INI`: with `[Mods] ConstHotReload=1` in `imperivm-mod.ini` (off by default), the game loads the other ruleset's `CONST.INI` when the next match starts and does not restart.
+
+**It skips the restart only if both rulesets hold nothing but `patches\data\const.ini`** (a ruleset may also hold nothing at all, as the game's own rules and *<package> (original rules)* do). A ruleset with any other file, even one that the other ruleset also has, restarts as before: command costs, unit stats, classes, `hidden.txt`, `rle.mmp.tail`, civilizations, modes, options, events, packs, translations and loose files are read once per process. A loose `data\const.ini` (not a patch) replaces the game's file instead of patching it and restarts too.
+
+What the player sees: with the flag on, the **Rules** row of the skirmish room changes at once, the button of *Create room* keeps reading *Create room* when the choice differs only in `CONST.INI` (the rules are loaded when it is pressed), and the next match plays with the new constants. With it off, or for any other pair of rulesets, nothing changes: the button reads *Restart with these rules* and the game restarts.
+
+Things to know when you use it:
+
+- The game copies some constants into private variables the first time it needs them and never looks at the file again (`DamageAmplify`, the production of settlements, the combat costs of hero skills...). The DLL sets those copies back when it loads the new file, so every constant follows the ruleset. A constant that no ruleset changes is not affected.
+- The new `CONST.INI` is read before the match is created, and its values are used by units and buildings created after that. A saved game keeps what it stored (timers already running when it was saved); load it under the ruleset it was saved with.
+- In a room, the host's key and the `mods` line follow the ruleset that is loaded. A player who has another ruleset still gets the *This room uses other content* dialog and restarts into the room's; switching without a restart on the joining side is not implemented.
+- If the new file cannot be loaded, the match is played with the rules the game started with and a notice says so.
+- `[Resolutions]` and the other sections the game reads only at start-up (see above) keep the values the game started with.
+
+Example: [`ruleset-const-example`](examples/ruleset-const-example).
+
+### Experimental: switching rulesets made of patches (`FullHotReload`)
+
+**Experimental, off by default, and it can still make the game restart by itself.** With `[Mods] FullHotReload=1` in `imperivm-mod.ini`, the skirmish room also switches without a restart between two rulesets whose files are **all patches to `data\`** (`patches\data\...` of `.xml`, `.ini` and `.vs` files: class and command XML, `items.xml`, `bonus.xml`, `AI.INI`, `CONST.INI`...). The game reads the classes, commands, skills and specials once, when it starts; the DLL makes it free those tables and read them again when the next match starts (about the time the first match of a session takes to load, 2 to 4 seconds), and sets back the values the game had looked up once.
+
+What still restarts, as without the flag: a ruleset with anything that is not a patch of `data\` (`.pak` files, loose files, `hidden.txt`, `rle.mmp.tail`, civilizations, specials, modes, options, events, `rules\`, translations, patches to `units\`, `buildings\` or `currentlang\`); *Create room* (a multiplayer match does not run the reload: it restarts the game when it starts if the rules had been changed in place); and loading a saved game. If the reload fails at any step the game restarts by itself with the rules you chose; the log (`game: full reload`) says which step. The line `full reload (after LoadGameData): ... trainRHastatus costgold = N` shows the cost the game holds for the Roman hastatus, which tells whether the new rules are live.
+
+What it does not redo: the content manager, civilizations, specials, modes, options and the other things the DLL builds from the mounted folders (they cannot differ between two rulesets that pass the test above).
+
 ## Limits
 
 - A profile can use only one `rle.mmp.tail`. The one in the ruleset that is mounted counts as its package's, so a package cannot have a tail in its root and in a ruleset; two rulesets can each have theirs, because only one is mounted.
 - Do not put `[Resolutions]` in the `const.ini` of a ruleset: the screen resolutions are not part of the rules a room chooses. Keep that section in the package root.
-- The host chooses the ruleset before the room exists. It cannot be changed in an open room, two rulesets cannot be mixed, and the game cannot switch without restarting.
+- The host chooses the ruleset before the room exists. It cannot be changed in an open room and two rulesets cannot be mixed. Switching restarts the game, except between rulesets that differ only in `CONST.INI` (see [Switching without a restart](#switching-without-a-restart)).
 - The **Rules** combo only lists rulesets of packages that are in the profile.
 - Some files, such as `AI.INI` and `SKILLS.INI`, are read by the game in ways this guide cannot describe. Try your ruleset in a room before publishing it.
 

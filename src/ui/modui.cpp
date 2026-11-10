@@ -98,7 +98,7 @@ bool Pending(const State &st, const std::string &folder)
 CatalogFacts ModFactsOf(const ModInfo &m)
 {
 	CatalogFacts facts = CatalogFactsOf(m.category, m.tags);
-	if (!CatalogCategoriesOf(facts)) facts.category = m.gameplay ? kCatGameplay : m.kind == kModContent ? kCatScenarios : kCatGraphics;
+	if (!CatalogCategoriesOf(facts)) facts.category = ModsIsRulesPack(m) ? kCatGameplay : m.kind == kModContent ? kCatScenarios : kCatGraphics;
 	return facts;
 }
 

@@ -840,7 +840,7 @@ void DoAction(State &st, int action, int arg)
 				std::vector<std::string> off;
 				for (const std::string &f : ModsMountedProfile().mods) {
 					ModInfo m;
-					if (!ModsFind(f, m) || !m.gameplay) continue;
+					if (!ModsFind(f, m) || !ModsIsRulesPack(m)) continue;
 					if (std::find_if(mc.rulesFolders.begin(), mc.rulesFolders.end(), [&](const std::string &r) { return _stricmp(r.c_str(), f.c_str()) == 0; }) != mc.rulesFolders.end()) continue;
 					off.push_back(m.name + (m.version.empty() || m.name.find(m.version) != std::string::npos ? "" : " " + m.version));
 				}

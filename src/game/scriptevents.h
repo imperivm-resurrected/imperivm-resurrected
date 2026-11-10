@@ -5,5 +5,8 @@
 
 void InstallScriptEvents(bool knownExe);
 
+// The game made its script library again: the event scripts have to be compiled again the next time they fire.
+void ScriptEventsReset();
+
 int ModAttackDamage();
 void ModSetAttackDamage(int damage);

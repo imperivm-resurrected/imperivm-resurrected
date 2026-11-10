@@ -75,7 +75,7 @@ ModNeeds ModsNeededFor(const std::string &gamePath, const std::string &profile)
 			if ((!n.id.empty() && _stricmp(m.id.c_str(), n.id.c_str()) == 0) || _stricmp(m.folder.c_str(), n.folder.c_str()) == 0) {
 				n.installed = true;
 				n.installedFolder = m.folder;
-				notRulesNow = !m.gameplay;
+				notRulesNow = !ModsIsRulesPack(m);
 				break;
 			}
 		}
@@ -145,7 +145,7 @@ ModProfile ModsLooseProfileWith(const std::vector<std::string> &folders, const M
 	for (const std::string &f : active.mods) {
 		bool cosmetic = false;
 		for (const ModInfo &m : installed) {
-			if (_stricmp(m.folder.c_str(), f.c_str()) == 0) cosmetic = !m.gameplay && m.forbidden.empty();
+			if (_stricmp(m.folder.c_str(), f.c_str()) == 0) cosmetic = !ModsIsRulesPack(m) && m.forbidden.empty();
 		}
 		if (cosmetic && std::find(p.mods.begin(), p.mods.end(), f) == p.mods.end()) p.mods.push_back(f);
 	}

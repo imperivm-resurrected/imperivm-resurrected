@@ -53,6 +53,12 @@ std::vector<RulesetEntry> RulesetEntries(const std::vector<RulesetPackFacts> &pa
 // Whether the paths of a package (normalized, relative to its root) hold a civilization: civs/<name>.json.
 bool RulesetPathsHaveCivs(const std::vector<std::string> &paths);
 
+// What a package is, from what its root and its rulesets hold: rules if its root or any of its rulesets holds gameplay files, else
+// content if the root holds maps or battles, else cosmetic. The files of a ruleset count: a package whose only gameplay is in
+// rulesets/<id>/patches/data/const.ini is a rules package (the numbers are those of ModKind in mods.h).
+enum class PackKind { kCosmetic = 0, kContent = 1, kRules = 2 };
+PackKind PackKindOf(bool rootGameplay, bool rootContent, bool rulesetGameplay);
+
 // A mounted folder is mods\<pack> or mods\<pack>\rulesets\<id>. Both give the folder of the pack...
 std::string PackFolderOfDir(const std::string &modsDir, const std::string &dir);
 

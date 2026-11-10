@@ -685,7 +685,9 @@ void DoAction(int action, int arg)
 			}
 		}
 		const bool otherProfile = g_s.createProfile != ModsMountedProfile().name;
-		if (otherProfile || !ModsSameRuleset(g_s.createRuleset, ModsMountedProfile().ruleset)) {
+		// Rules that differ from the mounted ones only in CONST.INI are loaded now and the match reads them (ConstHotReload): no restart.
+		const bool rulesInPlace = !otherProfile && !ModsSameRuleset(g_s.createRuleset, ModsMountedProfile().ruleset) && ModsSwitchRulesetWithoutRestart(g_s.createRuleset, false);
+		if (!rulesInPlace && (otherProfile || !ModsSameRuleset(g_s.createRuleset, ModsMountedProfile().ruleset))) {
 			// The ruleset is part of the profile, so the profile that will be loaded keeps it.
 			ModProfile chosen = ModsLoadProfile(g_s.createProfile);
 			if (!ModsSameChoice(chosen.ruleset, g_s.createRuleset)) {
@@ -788,8 +790,9 @@ void ChooseRuleset(int item)
 		ModUiToast(Tr("Could not save the rules in the content profile."));
 		return;
 	}
-	if (ModsSameRuleset(picked, ModsMountedProfile().ruleset)) {
-		// The same files stay mounted: no restart. The room takes the civilizations of the new entry at once.
+	if (ModsSameRuleset(picked, ModsMountedProfile().ruleset) || ModsSwitchRulesetWithoutRestart(picked)) {
+		// The same files stay mounted, or the rules differ only in CONST.INI and the game reads the new one when the match starts
+		// (ConstHotReload): no restart. The room takes the civilizations of the new entry at once.
 		ModsMountedChoiceSet(picked);
 		CivRoomSetsSet(DefaultCivSets(picked));
 		GameRoomCivSetsEdited();

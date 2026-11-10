@@ -245,7 +245,7 @@ void MountProfileLayers(void *list)
 		}
 		mountRoot(folder, "", m.hasLoose);
 		LogI("content", "loaded %s %s (%u files%s%s)", m.name.c_str(), m.version.c_str(), m.fileCount,
-			m.hasLoose ? ", with loose files" : "", m.gameplay ? ", rules type" : m.kind == kModContent ? ", content type" : ", cosmetic type");
+			m.hasLoose ? ", with loose files" : "", ModsIsRulesPack(m) ? ", rules type" : m.kind == kModContent ? ", content type" : ", cosmetic type");
 	}
 	for (auto it = looseLayers.rbegin(); it != looseLayers.rend(); ++it) {
 		if (void *layer = CreateLooseLayer(*it)) {

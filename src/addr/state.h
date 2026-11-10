@@ -11,6 +11,7 @@ inline constexpr uintptr_t kCmdContextParam = 0x008210c8;
 inline constexpr uintptr_t kCmdContextText2 = 0x008210e4;
 inline constexpr uintptr_t kCmdContextText3 = 0x00821100;
 inline constexpr uintptr_t kSaveName = 0x00830254;
+inline constexpr uintptr_t kUpdateCheckInfo = 0x008379e4;
 inline constexpr uintptr_t kCmdRegistry = 0x009969dc;
 inline constexpr uintptr_t kMapView = 0x00996ff0;
 inline constexpr uintptr_t kGame = 0x00996ff4;
@@ -35,6 +36,7 @@ inline constexpr uintptr_t kSaveRequest = 0x00a87350;
 inline constexpr uintptr_t kLoadRequest = 0x00a87354;
 inline constexpr uintptr_t kReplayRequest = 0x00a87358;
 inline constexpr uintptr_t kLoadingSavedGame = 0x00a87390;
+inline constexpr uintptr_t kConstIni = 0x00a877b4;
 inline constexpr uintptr_t kGameSettings = 0x00a87c48;
 
 }

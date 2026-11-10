@@ -225,7 +225,7 @@ namespace mods_impl {
 namespace {
 // What the files of the package root, or of one ruleset, add up to.
 struct LayerScan {
-	std::set<std::string> paths, loose;
+	std::set<std::string> paths, loose, files;
 	std::vector<PatchedValue> patchValues;
 	std::vector<std::string> hidden;
 	bool rleTail = false;
@@ -285,6 +285,7 @@ ModInfo ScanMod(const std::string &folder, std::vector<ScanFile> &files)
 		m.totalBytes += f.size;
 		s.fileCount++;
 		s.totalBytes += f.size;
+		if (!IsDocumentation(rel)) s.files.insert(rel);
 		if (rel == kHiddenFile) {
 			s.hidden = HiddenParse(ReadWhole(base + "\\" + f.rel, f.size), lang);
 			for (const std::string &p : s.hidden) {
@@ -400,6 +401,7 @@ ModInfo ScanMod(const std::string &folder, std::vector<ScanFile> &files)
 		LayerScan &s = scans[i + 1];
 		l.paths.assign(s.paths.begin(), s.paths.end());
 		l.loosePaths.assign(s.loose.begin(), s.loose.end());
+		l.files.assign(s.files.begin(), s.files.end());
 		l.patchValues = std::move(s.patchValues);
 		l.hidden = std::move(s.hidden);
 		l.rleTail = s.rleTail;
@@ -415,7 +417,11 @@ ModInfo ScanMod(const std::string &folder, std::vector<ScanFile> &files)
 		if (l.folderMissing) m.rulesetProblems.push_back(TrFmt("Ruleset \"%s\" ignored: its folder %s does not exist", {l.id, l.path}));
 	}
 	m.layers.erase(std::remove_if(m.layers.begin(), m.layers.end(), [](const ModLayer &l) { return l.folderMissing; }), m.layers.end());
-	m.kind = m.gameplay ? kModRules : m.content ? kModContent : kModCosmetic;
+	// The files of the rulesets count too: a package whose only gameplay is in rulesets/<id>/ is a rules package. m.gameplay stays the
+	// root's: it says that the root has gameplay files to hash, and each ruleset is hashed apart.
+	bool rulesetGameplay = false;
+	for (const ModLayer &l : m.layers) rulesetGameplay = rulesetGameplay || l.gameplay;
+	m.kind = static_cast<int>(PackKindOf(m.gameplay, m.content, rulesetGameplay));
 	if (m.declaredKind > m.kind) {
 		m.kind = m.declaredKind;
 		if (m.kind == kModRules) {

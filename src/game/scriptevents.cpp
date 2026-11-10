@@ -266,6 +266,14 @@ void InstallScriptEvents(bool knownExe)
 	LogI("script", "events: hooked");
 }
 
+void ScriptEventsReset()
+{
+	for (ObjEvent *e : {&g_onDie, &g_onKill, &g_onCapture, &g_onDefeat, &g_onAttack}) {
+		e->ready = false;
+		e->scripts.clear();
+	}
+}
+
 int ModAttackDamage()
 {
 	return g_attack.active ? g_attack.damage : 0;

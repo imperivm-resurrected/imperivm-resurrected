@@ -1,0 +1,47 @@
+{
+  "id": "example-const-rulesets",
+  "name": {
+    "spanish": "Ejemplo: reglas que solo cambian CONST.INI",
+    "english": "Example: rulesets that only change CONST.INI",
+    "italian": "Esempio: regole che cambiano solo CONST.INI"
+  },
+  "version": "1.0",
+  "category": "Gameplay & Balance",
+  "authors": ["Imperivm Resurrected"],
+  "description": {
+    "spanish": "Ejemplo del SDK: dos conjuntos de reglas que solo se diferencian en data\\const.ini (producción de oro y comida de los asentamientos, y DamageAmplify). Con ConstHotReload=1 el anfitrión cambia entre ellos sin reiniciar el juego. Cambia la jugabilidad: en multijugador todos tienen que llevarlo.",
+    "english": "SDK example: two rulesets that differ only in data\\const.ini (the gold and food production of settlements, and DamageAmplify). With ConstHotReload=1 the host switches between them without restarting the game. Changes gameplay: everyone must have it in multiplayer.",
+    "italian": "Esempio dell'SDK: due set di regole che differiscono solo in data\\const.ini (produzione di oro e cibo degli insediamenti, e DamageAmplify). Con ConstHotReload=1 l'host passa dall'uno all'altro senza riavviare il gioco. Cambia il gioco: in multigiocatore devono averlo tutti."
+  },
+  "redistributable": true,
+  "rulesets": [
+    {
+      "id": "slow-economy",
+      "name": {
+        "spanish": "Economía lenta",
+        "english": "Slow economy",
+        "italian": "Economia lenta"
+      },
+      "description": {
+        "spanish": "Las ciudades producen un 6 % de su población en oro cada 2 s, los pueblos un 6 % en comida, y DamageAmplify baja a 100.",
+        "english": "Towns produce 6 % of their population in gold every 2 s, villages 6 % in food, and DamageAmplify goes down to 100.",
+        "italian": "Le città producono il 6 % della popolazione in oro ogni 2 s, i villaggi il 6 % in cibo, e DamageAmplify scende a 100."
+      },
+      "path": "rulesets/slow-economy"
+    },
+    {
+      "id": "fast-economy",
+      "name": {
+        "spanish": "Economía rápida",
+        "english": "Fast economy",
+        "italian": "Economia veloce"
+      },
+      "description": {
+        "spanish": "Las ciudades producen un 96 % de su población en oro cada 2 s, los pueblos un 96 % en comida, y DamageAmplify sube a 300.",
+        "english": "Towns produce 96 % of their population in gold every 2 s, villages 96 % in food, and DamageAmplify goes up to 300.",
+        "italian": "Le città producono il 96 % della popolazione in oro ogni 2 s, i villaggi il 96 % in cibo, e DamageAmplify sale a 300."
+      },
+      "path": "rulesets/fast-economy"
+    }
+  ]
+}

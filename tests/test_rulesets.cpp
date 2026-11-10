@@ -3,6 +3,7 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include "check.h"
 
+#include "mods/modrules.h"
 #include "mods/rulesets.h"
 
 using namespace mods_impl;
@@ -113,8 +114,33 @@ static void MountedDirs()
 	CHECK_EQ(ModDirVfsName(mods, "Pack"), "Pack");
 }
 
+// The flags a package's files give it, as ScanMod works them out: a file under patches/ counts by the game file it patches.
+static bool Gameplay(const std::string &rel)
+{
+	return IsGameplayPath(rel.compare(0, 8, "patches/") == 0 ? rel.substr(8) : rel);
+}
+
+static void KindOfAPackage()
+{
+	// Root with only mod.json and a README, everything in a ruleset: the example-const-rulesets package.
+	CHECK(Gameplay("patches/data/const.ini"));
+	CHECK(PackKindOf(false, false, Gameplay("patches/data/const.ini")) == PackKind::kRules);
+	// Civilizations in the root, as before.
+	CHECK(PackKindOf(Gameplay("civs/gaul.json"), false, false) == PackKind::kRules);
+	CHECK(PackKindOf(Gameplay("civs/gaul.json"), false, Gameplay("patches/data/const.ini")) == PackKind::kRules);
+	// A cosmetic root with a ruleset that has gameplay.
+	CHECK(!Gameplay("gameres/icons/x.bmp"));
+	CHECK(PackKindOf(Gameplay("gameres/icons/x.bmp"), false, Gameplay("patches/data/commands/rbarracks.xml")) == PackKind::kRules);
+	// Without gameplay anywhere it stays what the root is.
+	CHECK(PackKindOf(false, false, false) == PackKind::kCosmetic);
+	CHECK(PackKindOf(false, false, Gameplay("gameres/icons/x.bmp")) == PackKind::kCosmetic);
+	CHECK(PackKindOf(false, true, false) == PackKind::kContent);
+	CHECK(PackKindOf(false, true, true) == PackKind::kRules);
+}
+
 int main()
 {
+	KindOfAPackage();
 	Ids();
 	Resolve();
 	ResolveDropsWhatCannotBeUsed();

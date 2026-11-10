@@ -42,6 +42,8 @@ struct ModLayer {
 	std::string path;
 	std::vector<std::string> paths;
 	std::vector<std::string> loosePaths;
+	// Every file of the folder (patches, hidden.txt, rle.mmp.tail... included, documents not), relative to it.
+	std::vector<std::string> files;
 	std::vector<PatchedValue> patchValues;
 	std::vector<std::string> hidden;
 	bool rleTail = false;
@@ -112,6 +114,12 @@ inline const ModLayer *ModsFindLayer(const ModInfo &m, const std::string &id)
 		if (!id.empty() && _stricmp(l.id.c_str(), id.c_str()) == 0) return &l;
 	}
 	return nullptr;
+}
+
+// Whether the package changes the rules: its root has gameplay files, or it is of the rules kind (rules only in its rulesets).
+inline bool ModsIsRulesPack(const ModInfo &m)
+{
+	return m.gameplay || m.kind == kModRules;
 }
 
 inline bool ModsIsMod(const ModInfo &m, const std::string &id, uint64_t gbId)
@@ -310,6 +318,27 @@ std::string ModsRulesetCivSet(const ModRuleset &choice);
 ModRuleset ModsMountedChoice();
 // Remembers another entry that mounts the same files (see ModsSameRuleset), so nothing is reloaded. Ignored if the files differ.
 void ModsMountedChoiceSet(const ModRuleset &choice);
+// Hot reload of CONST.INI between matches. ModsSwapMountedRuleset mounts another ruleset in place of the mounted one without
+// restarting (its folder in the mount list, the profile's ruleset, the patches; no check, see ModsSwitchRulesetWithoutRestart). The game
+// keeps the table of the ruleset it started with until game/constreload.cpp loads the new one: Pending says they differ, Done that
+// the game now holds the mounted one, Failed that it could not and kept the old one (the mounted ruleset goes back to match it).
+bool ModsSwapMountedRuleset(const ModRuleset &wanted);
+// game/constreload.cpp says whether it is installed; without it no ruleset change can skip the restart.
+void ModsConstReloadSetReady(bool ready);
+// Whether the mounted ruleset can be replaced by `wanted` without restarting: the two differ only in data/const.ini (see constswap.h).
+bool ModsCanSwitchWithoutRestart(const ModRuleset &wanted, bool allowFull = true);
+// Replaces the mounted ruleset if ModsCanSwitchWithoutRestart. The caller saves the profile and sets the choice, as for any other
+// entry that mounts the same files (ModsMountedChoiceSet).
+bool ModsSwitchRulesetWithoutRestart(const ModRuleset &wanted, bool allowFull = true);
+// What the game has to do before the next match so that it plays with the mounted ruleset: nothing, load data/const.ini again, read all its
+// data again (FullHotReload), or nothing it can do (kRestart: the pair is not one that can be switched in place).
+enum class ModsReload { kNone, kConst, kFull, kRestart };
+ModsReload ModsReloadPlan();
+bool ModsConstReloadPending();
+// game/constreload.cpp says whether the full reload is installed.
+void ModsFullReloadSetReady(bool ready);
+void ModsConstReloadDone();
+void ModsConstReloadFailed();
 const std::string &ModsLanguage();
 struct Json;
 std::string ModsLocalizedText(const Json &j, const char *key, const std::string &def);
