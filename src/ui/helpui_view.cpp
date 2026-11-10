@@ -968,12 +968,12 @@ struct Pane {
 		}
 		p.Unclip();
 		if (page.height > out.viewH) {
-			const int trackX = kPaneX + kPaneW - kScrollW, trackH = kPaneBottom - kViewTop;
-			const int thumbH = std::max(30, trackH * out.viewH / page.height);
-			const int maxScroll = std::max(1, page.height - out.viewH);
-			const int thumbY = kViewTop + (trackH - thumbH) * scroll / maxScroll;
-			p.Fill(trackX, kViewTop, kScrollW, trackH, pal::well);
-			p.Fill(trackX, thumbY, kScrollW, thumbH, pal::thumb);
+			ScrollbarLook look;
+			look.width = kScrollW;
+			look.minThumb = 30;
+			look.track = pal::well;
+			PaintScrollbar(p, kBarPage, kPaneX + kPaneW - kScrollW, kViewTop, kPaneBottom - kViewTop, {scroll, page.height - out.viewH, out.viewH}, v.bar,
+				v.mouseX, v.mouseY, look);
 		}
 	}
 };
@@ -1089,10 +1089,11 @@ void PaintNav(Painter &p, const Content &c, const View &v, PaintOut &out)
 	}
 	p.Unclip();
 	if (y > viewH) {
-		const int trackX = kNavX + kNavW + 5, thumbH = std::max(30, viewH * viewH / y);
-		const int thumbY = kNavTop + (viewH - thumbH) * scroll / std::max(1, y - viewH);
-		p.Fill(trackX, kNavTop, 4, viewH, pal::well);
-		p.Fill(trackX, thumbY, 4, thumbH, pal::thumb);
+		ScrollbarLook look;
+		look.width = 4;
+		look.minThumb = 30;
+		look.track = pal::well;
+		PaintScrollbar(p, kBarNav, kNavX + kNavW + 5, kNavTop, viewH, {scroll, y - viewH, viewH}, v.bar, v.mouseX, v.mouseY, look);
 	}
 }
 

@@ -43,12 +43,15 @@ struct View {
 	// The player's keys from the Controls screen, which the page of keys shows instead of the file's; null when they could not be read.
 	std::shared_ptr<const std::vector<ControlInfo>> controls;
 	int scroll = 0, navScroll = 0;
+	ui::ScrollDrag bar;
 	// Bring the row of the place into the side bar once.
 	bool revealNav = false;
 	// Rows of the side bar opened or closed by hand, as group * 1000 + item.
 	std::set<int> toggled;
 	int mouseX = -10000, mouseY = -10000;
 };
+
+enum Bar { kBarPage, kBarNav };
 
 struct PaintOut {
 	// In the units of the design, and the scrolls the painting kept to.
