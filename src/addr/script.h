@@ -26,6 +26,7 @@ inline constexpr uintptr_t kScriptFnSettlementCanResearch = 0x00434870;
 inline constexpr uintptr_t kScriptFnBuildingResearch = 0x004dfcd0;
 inline constexpr uintptr_t kRunPlayerVerifier = 0x004eaa40;
 inline constexpr uintptr_t kRunGroupVerifier = 0x004eac10;
+inline constexpr uintptr_t kScriptFnClearNotes = 0x00557fc0;
 inline constexpr uintptr_t kIsDerivedFrom = 0x0059a220;
 inline constexpr uintptr_t kIsKindOfName = 0x0059c020;
 inline constexpr uintptr_t kClassStartElement = 0x0059f540;

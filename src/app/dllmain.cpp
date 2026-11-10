@@ -63,6 +63,7 @@
 #include "game/mapfog.h"
 #include "game/quickicons.h"
 #include "game/noteicons.h"
+#include "game/objectives.h"
 #include "game/zoomview.h"
 #include "game/viewgrid.h"
 #include "game/healthbars.h"
@@ -231,6 +232,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 		InstallZoomFog(knownExe);
 		InstallQuickIcons(knownExe);
 		InstallNoteIcons(knownExe);
+		InstallObjectives(knownExe);
 		InstallZoomView(knownExe);
 		InstallViewGrid(knownExe);
 		InstallHealthBars(knownExe);

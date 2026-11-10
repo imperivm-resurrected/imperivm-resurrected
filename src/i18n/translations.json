@@ -1803,5 +1803,13 @@
 {"en":"Search the help","es":"Buscar en la ayuda","it":"Cerca nella guida"},
 {"en":"Damage","es":"Ataque","it":"Attacco"},
 {"en":"Change in Controls","es":"Cambiar en Controles","it":"Cambia in Controlli"},
-{"en":"Your keys as they are set in Controls, where the orders of units and buildings are too.","es":"Tus teclas tal como están en Controles, donde también están las órdenes de unidades y edificios.","it":"I tuoi tasti come sono impostati in Controlli, dove ci sono anche gli ordini di unità ed edifici."}
+{"en":"Your keys as they are set in Controls, where the orders of units and buildings are too.","es":"Tus teclas tal como están en Controles, donde también están las órdenes de unidades y edificios.","it":"I tuoi tasti come sono impostati in Controlli, dove ci sono anche gli ordini di unità ed edifici."},
+{"en":"Objectives","es":"Objetivos","it":"Obiettivi"},
+{"en":"Completed","es":"Completados","it":"Completati"},
+{"en":"Objective completed","es":"Objetivo cumplido","it":"Obiettivo completato"},
+{"en":"Nothing in progress right now","es":"Ahora no hay nada en curso","it":"Al momento non c'è niente in corso"},
+{"en":"Marked on the map","es":"Señalado en el mapa","it":"Segnato sulla mappa"},
+{"en":"Show on map","es":"Ver en el mapa","it":"Mostra sulla mappa"},
+{"en":"No objectives yet","es":"Todavía no hay objetivos","it":"Ancora nessun obiettivo"},
+{"en":"When the mission gives you an objective, it shows here.","es":"Cuando la misión te dé un objetivo, aparecerá aquí.","it":"Quando la missione ti darà un obiettivo, apparirà qui."}
 ]
