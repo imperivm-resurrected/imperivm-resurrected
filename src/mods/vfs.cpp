@@ -761,6 +761,9 @@ LayerDiag g_layerDiag;
 std::string g_layerDiskDir, g_layerLabel;
 std::atomic<bool> g_layerDiagOn{false};
 
+SharedFiles g_shared;
+std::atomic<bool> g_sharedOn{false};
+
 typedef unsigned(__fastcall *CFileSize_t)(void *self, void *edx);
 const unsigned kSizeUnknown = 0xffffffffu;
 
@@ -806,6 +809,62 @@ void NoteLayerFile(const std::string &rel, void *file, const std::string &opened
 		LogW("content", "layer file NOT served: the engine asked for %s and got %u bytes (opened as %s); the layer's %s has %lu", rel.c_str(), got,
 			opened.c_str(), layerPath.c_str(), static_cast<unsigned long>(a.nFileSizeLow));
 	}
+}
+
+unsigned DiskSize(const std::string &path)
+{
+	WIN32_FILE_ATTRIBUTE_DATA a = {};
+	return GetFileAttributesExA(path.c_str(), GetFileExInfoStandard, &a) && a.nFileSizeHigh == 0 ? a.nFileSizeLow : kSizeUnknown;
+}
+
+// rel is a name that more than one active source has a file for (a pack root and the ruleset of another pack, or two roots). The first time the
+// engine opens it, say which one it came from: by the VFS name when the DLL chose the file, otherwise by the length of what the engine got.
+void NoteSharedFile(const std::string &rel, void *file, const std::string &opened)
+{
+	std::vector<FileSource> among;
+	std::vector<std::string> paths;
+	int owner = -1;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		const std::vector<size_t> indexes = g_shared.Asked(rel);
+		if (indexes.empty()) return;
+		for (size_t i : indexes) {
+			among.push_back(g_shared.Source(i));
+			paths.push_back(g_shared.PathIn(i, rel));
+		}
+		owner = g_shared.OwnerOf(opened, indexes);
+		if (owner >= 0) {
+			for (size_t k = 0; k < indexes.size(); k++) {
+				if (static_cast<int>(indexes[k]) == owner) owner = static_cast<int>(k);
+			}
+		}
+	}
+	if (owner < 0 && file) {
+		const unsigned got = OpenFileSize(file);
+		int match = -1, matches = 0;
+		for (size_t k = 0; k < among.size(); k++) {
+			std::string disk = among[k].diskDir + "\\" + paths[k];
+			std::replace(disk.begin(), disk.end(), '/', '\\');
+			if (got != kSizeUnknown && DiskSize(disk) == got) {
+				match = static_cast<int>(k);
+				matches++;
+			}
+		}
+		if (matches == 1) owner = match;
+	}
+	std::string all;
+	for (const FileSource &s : among) all += (all.empty() ? "" : ", ") + s.label;
+	if (owner < 0) {
+		LogW("content", "file %s: the engine opened it as %s and it is not clear which of these served it (or the game's own did): %s", rel.c_str(), opened.c_str(),
+			all.c_str());
+		return;
+	}
+	std::string others;
+	for (size_t k = 0; k < among.size(); k++) {
+		if (static_cast<int>(k) != owner) others += (others.empty() ? "" : ", ") + among[k].label;
+	}
+	LogI("content", "file %s served from %s (also in: %s)", rel.c_str(), among[owner].label.c_str(), others.c_str());
+	if (owner != 0) LogW("content", "file %s: %s comes first in the load order, but %s served it", rel.c_str(), among[0].label.c_str(), among[owner].label.c_str());
 }
 
 std::atomic<long long> g_openTicks{0}, g_existTicks{0};
@@ -910,6 +969,7 @@ void *__cdecl OpenImpl(const char *path, unsigned mode, void *err)
 		}
 	}
 	if (reading && g_layerDiagOn.load()) NoteLayerFile(rel, f, opened);
+	if (reading && g_sharedOn.load()) NoteSharedFile(rel, f, opened);
 	if (f && reading && rel == "currentlang/credits.txt") f = OpenMergedCredits(f, opened.c_str(), mode, err);
 	if (reading && rel == "currentlang/game.loc.xml") f = OpenMergedLoc(f, opened.c_str(), mode, err);
 	if (reading && PatchHas(rel)) f = OpenPatched(f, rel, opened.c_str(), mode, err);
@@ -1081,6 +1141,18 @@ void VfsLayerDiagReset(const std::string &label, const std::string &diskDir, con
 		g_layerDiagOn = !files.empty();
 	}
 	if (!files.empty()) LogI("content", "ruleset %s: %u loose files to watch; the log says which ones the engine opens", label.c_str(), static_cast<unsigned>(files.size()));
+}
+
+void VfsSharedFilesReset(const std::vector<FileSource> &sources, const std::vector<std::vector<std::string>> &files)
+{
+	size_t shared;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		g_shared.Reset(sources, files);
+		shared = g_shared.Count();
+		g_sharedOn = shared != 0;
+	}
+	if (shared) LogI("content", "%u files are in more than one active pack or ruleset: the log says which one serves each", static_cast<unsigned>(shared));
 }
 
 void VfsLayerDiagSummary(const char *when)

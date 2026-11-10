@@ -1,0 +1,47 @@
+{
+  "id": "clash-b",
+  "name": {
+    "spanish": "Ejemplo choque B: imágenes globales en un conjunto de reglas",
+    "english": "Clash example B: global images in a ruleset",
+    "italian": "Esempio scontro B: immagini globali in un set di regole"
+  },
+  "version": "1.0",
+  "category": "Graphics",
+  "authors": ["Imperivm Resurrected"],
+  "description": {
+    "spanish": "Ejemplo del SDK, la mitad que lo hace bien: sin archivos en la raíz y dos conjuntos de reglas. «blue» trae el mismo retrato del hastato que clash-a pero con un dibujo AZUL, y los iconos del mapa estratégico de unas ruinas y de un árbol en azul y cian. «plain» no cambia nada. Es cosmético: los demás jugadores no necesitan tenerlo.",
+    "english": "SDK example, the half that does it right: no files in the root and two rulesets. \"blue\" brings the same hastatus portrait as clash-a but with a BLUE pattern, and the strategic-map icons of a ruin and a tree in blue and cyan. \"plain\" changes nothing. It is cosmetic: other players don't need it.",
+    "italian": "Esempio dell'SDK, la metà che lo fa bene: nessun file nella radice e due set di regole. «blue» porta lo stesso ritratto dell'astato di clash-a ma con un disegno BLU, e le icone della mappa strategica di una rovina e di un albero in blu e ciano. «plain» non cambia nulla. È cosmetico: gli altri giocatori non ne hanno bisogno."
+  },
+  "redistributable": true,
+  "rulesets": [
+    {
+      "id": "blue",
+      "name": {
+        "spanish": "Azul",
+        "english": "Blue",
+        "italian": "Blu"
+      },
+      "description": {
+        "spanish": "El retrato del hastato con un dibujo azul y los iconos del mapa estratégico de unas ruinas (DRUINS1) y de un árbol (TR1) de colores vivos.",
+        "english": "The hastatus portrait with a blue pattern and bright strategic-map icons for a ruin (DRUINS1) and a tree (TR1).",
+        "italian": "Il ritratto dell'astato con un disegno blu e icone vivaci della mappa strategica per una rovina (DRUINS1) e un albero (TR1)."
+      },
+      "path": "rulesets/blue"
+    },
+    {
+      "id": "plain",
+      "name": {
+        "spanish": "Sin cambios",
+        "english": "Plain",
+        "italian": "Senza modifiche"
+      },
+      "description": {
+        "spanish": "El juego tal como es.",
+        "english": "The game as it is.",
+        "italian": "Il gioco così com'è."
+      },
+      "path": "rulesets/plain"
+    }
+  ]
+}

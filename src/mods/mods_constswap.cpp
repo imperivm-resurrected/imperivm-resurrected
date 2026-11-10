@@ -172,6 +172,7 @@ bool ModsSwapMountedRuleset(const ModRuleset &wanted)
 		ApplyHiddenFiles(now);
 		PublishVolumeFiles(now);
 		PublishLayerDiag(now);
+		PublishFileSources(now);
 	}
 	for (void (*hook)() : SwapHooks()) hook();
 	std::vector<std::string> files;

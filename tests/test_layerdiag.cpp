@@ -61,6 +61,47 @@ void AResetForgetsTheAccount()
 	CHECK(d.Total() == 0 && d.NotOpened().empty() && d.Opened("a/b.bmp").empty());
 }
 
+void ASharedFileIsReportedOnceWithItsSources()
+{
+	// clash-b/blue is mounted before clash-a, as the load order puts a cosmetic pack above a rules pack.
+	SharedFiles s;
+	s.Reset({{"clash-b/blue", "mods/clash-b/rulesets/blue/", "C:\\g\\mods\\clash-b\\rulesets\\blue"}, {"clash-b", "mods/clash-b/", "C:\\g\\mods\\clash-b"},
+				{"clash-a", "mods/clash-a/", "C:\\g\\mods\\clash-a"}},
+		{{"gameres/icons/RHastatus.bmp", "minimap/zoom16/entities/a.bmp"}, {"ui/other.bmp"}, {"gameres/icons/RHastatus.bmp", "civs/rome.json"}});
+	CHECK(s.Count() == 1);
+	// The engine's name has the volume and lowercase; the sources spell it as they like.
+	const std::vector<size_t> among = s.Asked("gameres/icons/rhastatus.bmp");
+	CHECK(among.size() == 2 && among[0] == 0 && among[1] == 2);
+	CHECK(s.Asked("gameres/icons/rhastatus.bmp").empty());
+	CHECK(s.Asked("minimap/zoom16/entities/a.bmp").empty());
+	CHECK(s.Asked("ui/other.bmp").empty());
+	CHECK(s.PathIn(2, "gameres/icons/rhastatus.bmp") == "gameres/icons/RHastatus.bmp");
+	CHECK(s.PathIn(1, "gameres/icons/rhastatus.bmp").empty());
+	// Who a VFS name belongs to: the longest start wins, and only among the sources that have the file.
+	CHECK(s.OwnerOf("mods/clash-b/rulesets/blue/gameres/icons/rhastatus.bmp", among) == 0);
+	CHECK(s.OwnerOf("mods/Clash-A/gameres/icons/rhastatus.bmp", among) == 2);
+	CHECK(s.OwnerOf("mods/clash-b/gameres/icons/rhastatus.bmp", among) == -1);
+	CHECK(s.OwnerOf("gameres/icons/rhastatus.bmp", among) == -1);
+	CHECK(s.OwnerOf("mods/clash-b/x.bmp", {1}) == 1);
+}
+
+void TwoSpellingsOfOneFileAreOneSharedFile()
+{
+	SharedFiles s;
+	s.Reset({{"a", "mods/a/", "d\\a"}, {"b", "mods/b/", "d\\b"}}, {{"ui/icons/x.bmp"}, {"gameres/icons/x.bmp"}});
+	CHECK(s.Count() == 1);
+	CHECK(s.Asked("gameres/icons/x.bmp").size() == 2);
+	// A file one source has twice, or alone, is not shared.
+	s.Reset({{"a", "mods/a/", "d\\a"}}, {{"ui/icons/x.bmp", "gameres/icons/x.bmp"}});
+	CHECK(s.Count() == 0 && s.Asked("gameres/icons/x.bmp").empty());
+}
+
+void AVolumeCoversItsRealFolderToo()
+{
+	CHECK(VolumeCovers("gameres/icons/a.bmp") && VolumeCovers("ui/icons/a.bmp") && VolumeCovers("data/interface/menu/a.ini"));
+	CHECK(!VolumeCovers("sounds/a.wav") && !VolumeCovers("minimap/zoom16/a.bmp") && !VolumeCovers("data/classes/a.xml"));
+}
+
 }
 
 int main()
@@ -69,5 +110,8 @@ int main()
 	TheKeyIgnoresCaseSlashesAndTheVolume();
 	TheEngineAsksForTheLayersFiles();
 	AResetForgetsTheAccount();
+	ASharedFileIsReportedOnceWithItsSources();
+	TwoSpellingsOfOneFileAreOneSharedFile();
+	AVolumeCoversItsRealFolderToo();
 	return test::Summary("layerdiag");
 }

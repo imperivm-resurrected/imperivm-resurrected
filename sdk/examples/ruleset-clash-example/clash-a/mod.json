@@ -1,0 +1,17 @@
+{
+  "id": "clash-a",
+  "name": {
+    "spanish": "Ejemplo choque A: civilización con una imagen global en la raíz",
+    "english": "Clash example A: a civilization with a global image in its root",
+    "italian": "Esempio scontro A: una civiltà con un'immagine globale nella radice"
+  },
+  "version": "1.0",
+  "category": "Civilizations",
+  "authors": ["Imperivm Resurrected"],
+  "description": {
+    "spanish": "Ejemplo del SDK, la mitad que hace mal: una variante de Roma Republicana y, en la raíz, el retrato del hastato del juego (gameres\\icons\\RHastatus.bmp) con un dibujo ROJO. Una imagen que sustituye a la del juego no debe ir en la raíz de una civilización: tiene que ir en un conjunto de reglas. Sirve para ver qué pasa cuando dos paquetes ponen un archivo en la misma ruta. Cambia la jugabilidad: en multijugador todos tienen que llevarlo.",
+    "english": "SDK example, the half that does it wrong: a variant of Republican Rome and, in the root, the game's hastatus portrait (gameres\\icons\\RHastatus.bmp) with a RED pattern. An image that replaces the game's must not be in the root of a civilization: it belongs in a ruleset. It is here to see what happens when two packages put a file at the same path. Changes gameplay: everyone must have it in multiplayer.",
+    "italian": "Esempio dell'SDK, la metà che sbaglia: una variante di Roma Repubblicana e, nella radice, il ritratto dell'astato del gioco (gameres\\icons\\RHastatus.bmp) con un disegno ROSSO. Un'immagine che sostituisce quella del gioco non deve stare nella radice di una civiltà: va in un set di regole. Serve a vedere cosa succede quando due pacchetti mettono un file nello stesso percorso. Cambia il gioco: in multigiocatore devono averlo tutti."
+  },
+  "redistributable": true
+}

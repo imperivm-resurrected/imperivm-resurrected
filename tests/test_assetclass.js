@@ -87,6 +87,16 @@ try {
 	// a package without civilizations is not a civilization pack
 	fs.rmSync(path.join(mod, 'civs'), { recursive: true });
 	assert.doesNotMatch(run([mod, '--game', game]).text, /global in-game file/);
+	// the clash example: the root file of clash-a is the mistake the warning is for, and clash-b does it right
+	const clash = path.join(root, 'sdk/examples/ruleset-clash-example');
+	const wrong = run([path.join(clash, 'clash-a'), '--game', game]);
+	assert.equal(wrong.status, 0, wrong.text);
+	assert.match(wrong.text, /WARNING  gameres\/icons\/RHastatus\.bmp  global in-game file in the root of a civilization pack/);
+	assert.equal(wrong.text.split('\n').filter(l => /global in-game file/.test(l)).length, 1, wrong.text);
+	assert.doesNotMatch(run([path.join(clash, 'clash-a')]).text, /global in-game file/, 'without --game nothing can be compared');
+	const right = run([path.join(clash, 'clash-b'), '--game', game]);
+	assert.equal(right.status, 0, right.text);
+	assert.doesNotMatch(right.text, /WARNING/);
 	console.log('assetclass: ok');
 }
 finally {

@@ -60,6 +60,7 @@ void ApplyHiddenFiles(const ModProfile &p);
 // (VfsLayerDiagReset): both follow the profile and its ruleset, so they are made again when either changes.
 void PublishVolumeFiles(const ModProfile &p);
 void PublishLayerDiag(const ModProfile &p);
+void PublishFileSources(const ModProfile &p);
 bool MountLooseFolder(const std::string &vfsPrefix);
 bool UnmountLooseFolder(const std::string &vfsPrefix);
 inline std::string ModSignature(const ModInfo &m)

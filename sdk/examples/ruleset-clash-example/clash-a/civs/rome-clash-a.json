@@ -1,0 +1,10 @@
+{
+  "id": "RomeClashA",
+  "base": "RepublicanRome",
+  "name": {
+    "spanish": "Roma (choque A)",
+    "english": "Rome (clash A)",
+    "italian": "Roma (scontro A)"
+  },
+  "variant": true
+}

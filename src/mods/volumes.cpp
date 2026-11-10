@@ -14,6 +14,15 @@ const VolumeName *VolumeOf(const std::string &rel)
 	return nullptr;
 }
 
+bool VolumeCovers(const std::string &rel)
+{
+	if (VolumeOf(rel)) return true;
+	for (unsigned i = 0; i < kVolumeCount; i++) {
+		if (rel.compare(0, strlen(kVolumeNames[i].real), kVolumeNames[i].real) == 0) return true;
+	}
+	return false;
+}
+
 std::string VolumeRealPath(const std::string &rel)
 {
 	const VolumeName *v = VolumeOf(rel);

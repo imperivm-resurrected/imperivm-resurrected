@@ -30,5 +30,8 @@ inline constexpr unsigned kVolumeCount = sizeof(kVolumeNames) / sizeof(kVolumeNa
 // The volume that rel (lowercase, "/") starts with, or nullptr.
 const VolumeName *VolumeOf(const std::string &rel);
 
+// Whether rel is in a volume, or in the real folder of one (ui/, data/interface/...): the files a mod can give under that name.
+bool VolumeCovers(const std::string &rel);
+
 // rel with the volume replaced by its real folder: "gameres/icons/x.bmp" is "ui/icons/x.bmp". Anything else is returned as it came.
 std::string VolumeRealPath(const std::string &rel);
