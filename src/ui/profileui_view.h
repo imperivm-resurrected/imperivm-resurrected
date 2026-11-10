@@ -2,11 +2,13 @@
 // Copyright (C) 2026 THIONG
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #pragma once
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
 
+#include "core/matchhistory.h"
 #include "game/playerini.h"
 #include "net/patrons.h"
 #include "net/steamnet.h"
@@ -14,12 +16,16 @@
 
 namespace profileui {
 
-struct RecentRow {
-	int day = 0, month = 0, year = 0;
+// A recorded game, with its texts already in the player's language.
+struct GameRow {
+	int day = 0, month = 0, year = 0, hour = 0, minute = 0;
 	bool won = false, multi = false;
-	std::string civ;
-	uint32_t durationMs = 0, kills = 0;
+	std::string civ, bestUnit;
+	uint32_t durationMs = 0, kills = 0, losses = 0, produced = 0, armyMax = 0, gold = 0, food = 0, bestLevel = 0;
+	uint32_t damageDealt = 0, damageTaken = 0;
 };
+
+MatchFacts FactsOf(const GameRow &g);
 
 // One profile, with every text already in the player's language.
 struct Card {
@@ -28,9 +34,11 @@ struct Card {
 	bool readable = true;
 	ProfileSummary summary;
 	std::string rankName, nextRankName, favoriteCiv, favoriteUnit, bestUnit;
-	// Newest first.
-	std::vector<RecentRow> recent;
+	// Every recorded game, newest first.
+	std::vector<GameRow> games;
 };
+
+enum ChartRange { kRange20, kRange50, kRangeAll };
 
 struct View {
 	std::vector<Card> cards;
@@ -42,18 +50,33 @@ struct View {
 	PatronInfo patron;
 	// The ranks of the game's constants, which spread the colours of the ranks.
 	int rankCount = 0;
+	int metric = kMetricKills, chartMode = kModeAll, chartRange = kRange20;
+	int outcome = kOutcomeAll, historyScroll = 0;
+	// The position in the selected card's games of the one opened in the history, or -1.
+	int expanded = -1;
+	int todayYear = 0, todayMonth = 0, todayDay = 0;
 };
 
-enum Action { kActNone = 0, kActPick, kActUse, kActBack, kActPatron };
+enum Action {
+	kActNone = 0, kActPick, kActUse, kActBack, kActPatron, kActMetric, kActChartMode, kActChartRange, kActOutcome, kActBar, kActGame,
+	kActHistory,
+};
 
-constexpr int kScreenW = 1100, kScreenH = 680;
+constexpr int kScreenW = 1100, kScreenH = 740;
 // How many rows of the list fit; the controller scrolls by rows.
-constexpr int kListRows = 7;
-constexpr int kChartGames = 16;
+constexpr int kListRows = 8;
 
 // The player goes with the Steam account, so the list is left only for installs that still keep several from before.
 inline bool ShowsList(const View &v) { return v.cards.size() > 1; }
 inline bool SelectedIsActive(const View &v) { return v.selected >= 0 && v.selected < static_cast<int>(v.cards.size()) && v.cards[v.selected].active; }
+const Card *SelectedCard(const View &v);
+
+// The games of the history, as positions in the selected card's games, newest first.
+std::vector<size_t> HistoryGames(const View &v);
+// How far the history scrolls, in rows, with the open game's detail counted in.
+int HistoryMaxScroll(const View &v);
+// Opens a game in the history and scrolls to it, showing every game if the filter hid it.
+void HistoryReveal(View &v, int game);
 
 void PaintProfileScreen(ui::Painter &p, const View &v);
 
