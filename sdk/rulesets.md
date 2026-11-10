@@ -43,9 +43,9 @@ A ruleset that breaks one of these rules is ignored, and its package's card in t
 
 ## How the host chooses it
 
-- In **Create room**, the **Ruleset** combo, next to **Content**, lists the game's own rules (*Original (HD)*), the rulesets of the packages that are in the chosen content profile, and one entry *<package> (original ruleset)* for each package of the profile that has civilizations (`civs\*.json`) and **no** ruleset. If the choice is not the one that is loaded, the button reads *Restart with this ruleset*: the game restarts with it and the host creates the room again, as when changing the content.
-- In the skirmish room, the **Ruleset** row, the first of **Game options**, does the same: picking another ruleset restarts the game, and nothing is lost because the match has not started.
-- The ruleset is saved in the profile (`"ruleset": {"pack": "<folder>", "id": "<id>"}`). A profile mounts at most one. `"id": ""` (or no `id`) is the entry *<package> (original ruleset)*: that package without a layer. It mounts no extra files, so choosing it never needs a restart as long as no ruleset is mounted (going from a ruleset to it, or the other way, does restart).
+- In **Create room**, the **Ruleset** combo, next to **Content**, lists the game's own rules (*Original (HD)*), the rulesets of the packages that are in the chosen content profile, and one entry *<package> (original ruleset)* for each package of the profile that has civilizations (`civs\*.json`) and **no** ruleset. If the choice is not the one that is loaded and cannot be [switched without a restart](#switching-without-a-restart), the button reads *Restart with this ruleset*: the game restarts with it and the host creates the room again, as when changing the content.
+- In the skirmish room, the **Ruleset** row, the first of **Game options**, does the same: picking another ruleset switches it at once when it can be [switched without a restart](#switching-without-a-restart), and otherwise restarts the game (nothing is lost, because the match has not started).
+- The ruleset is saved in the profile (`"ruleset": {"pack": "<folder>", "id": "<id>"}`). A profile mounts at most one. `"id": ""` (or no `id`) is the entry *<package> (original ruleset)*: that package without a layer. It mounts no extra files, so choosing it never needs a restart as long as no ruleset is mounted (going from a ruleset to it, or the other way, restarts unless both rulesets qualify for the [switch without a restart](#switching-without-a-restart)).
 
 ### Which civilizations a room starts with
 
@@ -59,37 +59,21 @@ One Ruleset entry is one pack of civilizations, strictly, not a mix:
 
 The civilizations of the other enabled packages are not in that default. The host adds them, or takes the default away, in the room lobby: **Game options > RULES > Edit civilizations** lists every set of the content profile as a toggle (at least one stays on), applies at once and sends a player whose civilization is left out back to *Random*. A package with civilizations **and** rulesets keeps one entry per ruleset and has no *(original ruleset)* entry. If you want players to be able to pick your civilizations in the base game's rules, a package without `rulesets` already does that: it appears as *(original ruleset)*.
 
-A player who joins a room with another ruleset gets the usual *This room uses other content* dialog: the game downloads what is missing, restarts with the room's ruleset and returns to the room.
+A player who joins a room with another ruleset switches to it by itself when the pair can be [switched without a restart](#switching-without-a-restart) and the player has the exact package; otherwise gets the usual *This room uses other content* dialog: the game downloads what is missing, restarts with the room's ruleset and returns to the room.
 
 ## What it does to the rest
 
 - **Order.** The mounted ruleset goes right above its package: where both have the same file, the ruleset's is used. Against other packages it follows the package's place in the [load order](reference.md#1-mod-structure).
 - **Patches, civilizations, modes, events, options, `rules\game.json`, `hidden.txt`, `local\` and `packs\`** inside a ruleset are read exactly as in a root.
 - **Multiplayer.** The gameplay hash of the package covers its root only; each ruleset has its own, and the room checks the root of every package plus the ruleset it mounts. Two players can have another copy of a ruleset the room does not use.
-- **Saved games.** A save records its ruleset. Loading it under another one (or under none) behaves like a rules pack that is not enabled: the game offers to restart with the saved one. Whether the game survives a save loaded under other rules, for example when a unit class is removed, has not been tested.
+- **Saved games.** A save records its ruleset. Loading it under another one (or under none) switches to the saved one without a restart when the pair qualifies for the [switch without a restart](#switching-without-a-restart); otherwise it behaves like a rules pack that is not enabled: the game offers to restart with the saved one. Whether the game survives a save loaded under other rules, for example when a unit class is removed, has not been tested.
 - **Content manager.** The card of a package lists its rulesets. The ones that change the same gameplay files as the ruleset of another package are shown as an alternative to it, not as a problem: they can never be mounted together.
 
 ## Switching without a restart
 
-Choosing another ruleset normally restarts the game, because the game reads almost everything a ruleset carries once, when it starts. The one exception is `CONST.INI`: with `[Mods] ConstHotReload=1` in `imperivm-mod.ini` (off by default), the game loads the other ruleset's `CONST.INI` when the next match starts and does not restart.
+Choosing another ruleset normally restarts the game, because the game reads almost everything a ruleset carries once, when it starts. When the ruleset only holds the kinds of files below, the DLL makes the game read its data again between two matches and **no restart is needed**. There is nothing to turn on.
 
-**It skips the restart only if both rulesets hold nothing but `patches\data\const.ini`** (a ruleset may also hold nothing at all, as the game's own rules and *<package> (original ruleset)* do). A ruleset with any other file, even one that the other ruleset also has, restarts as before: command costs, unit stats, classes, `hidden.txt`, `rle.mmp.tail`, civilizations, modes, options, events, packs, translations and loose files are read once per process. A loose `data\const.ini` (not a patch) replaces the game's file instead of patching it and restarts too.
-
-What the player sees: with the flag on, the **Ruleset** row of the skirmish room changes at once, the button of *Create room* keeps reading *Create room* when the choice differs only in `CONST.INI` (the rules are loaded when it is pressed), and the next match plays with the new constants. With it off, or for any other pair of rulesets, nothing changes: the button reads *Restart with this ruleset* and the game restarts.
-
-Things to know when you use it:
-
-- The game copies some constants into private variables the first time it needs them and never looks at the file again (`DamageAmplify`, the production of settlements, the combat costs of hero skills...). The DLL sets those copies back when it loads the new file, so every constant follows the ruleset. A constant that no ruleset changes is not affected.
-- The new `CONST.INI` is read before the match is created, and its values are used by units and buildings created after that. A saved game keeps what it stored (timers already running when it was saved); load it under the ruleset it was saved with.
-- In a room, the host's key and the `mods` line follow the ruleset that is loaded. A player who has another ruleset still gets the *This room uses other content* dialog and restarts into the room's; switching without a restart on the joining side is not implemented.
-- If the new file cannot be loaded, the match is played with the rules the game started with and a notice says so.
-- `[Resolutions]` and the other sections the game reads only at start-up (see above) keep the values the game started with.
-
-Example: [`ruleset-const-example`](examples/ruleset-const-example).
-
-### Experimental: switching rulesets without restarting (`FullHotReload`)
-
-**Experimental, off by default, and it can still make the game restart by itself.** With `[Mods] FullHotReload=1` in `imperivm-mod.ini`, a ruleset switch that only involves the kinds of files below needs no restart. The game reads classes, commands, items, skills, specials and scripts once, when it starts; the DLL makes it free those tables and read them again when the next match (or the loaded game) starts, and sets back the values the game had looked up once.
+The game reads classes, commands, items, skills, specials, scripts and `CONST.INI` once, when it starts. When the next match (or the loaded game) starts, the DLL frees those tables, reads them again with the rules that are mounted now, and sets back the values the game had looked up once. This is done at the start of the match, before anything of it exists.
 
 | Kind of file in the ruleset folder | What the DLL does when the ruleset is switched |
 |---|---|
@@ -98,17 +82,27 @@ Example: [`ruleset-const-example`](examples/ruleset-const-example).
 | `modes\*.json` | builds the lobby's list of modes again |
 | `hidden.txt` | sets the hidden files from the new ruleset |
 
-**Where it works.** The skirmish room and *Create room*; the host can also change the **Ruleset** row of an **open online room**: the entries that cannot be switched in place say *(needs a restart)*. A guest whose room changes its rules, or who joins a room with other rules, switches its own by itself if it has the exact package and the pair qualifies; otherwise it does what it did before (download what is missing and restart). A saved game made with other rules loads without the restart too. Every computer reloads at its own `LoadGameData`, from the ruleset it has mounted, so all of them build the match with the same tables; the log prints the checksum of the command names, which is the same line on every computer.
+A ruleset may also hold nothing at all (the game's own rules and *<package> (original ruleset)* do).
 
-**What still restarts**, as without the flag: a ruleset with anything else (`.pak` files, art, sounds, voices, translations, `Packs\*.bfhp`, `rle.mmp.tail`, civilizations, specials, options, events, `rules\`, patches to `units\`, `buildings\` or `currentlang\`); campaigns, conquests and the editor; spectators and rejoining. If the reload fails at any step the game restarts by itself with the rules you chose; the log (`game: full reload`) says which step. The line `full reload (after LoadGameData): ... trainRHastatus costgold = N` shows the cost the game holds for the Roman hastatus, which tells whether the new rules are live.
+**Where it works.** In every kind of game: a skirmish (also a replay), a campaign (adventure), a conquest, the editor and a multiplayer room. The ruleset is chosen in the skirmish room or in *Create room* (the host can also change the **Ruleset** row of an **open online room**: the entries that cannot be switched in place say *(needs a restart)*), and the next game of any kind, started from the menu or loaded from a save, plays with it: the DLL reads the game's data again at the start of that game, on the empty game object, the same way for all of them. In the middle of a game nothing is switched: the Load screen of a running game asks for a restart as before. A guest whose room changes its ruleset, or who joins a room with another one, switches its own by itself if it has the exact package and the pair qualifies; otherwise it does what it did before (download what is missing and restart). A saved game of any kind (skirmish, campaign, conquest) made with another ruleset loads without the restart too. Every computer reloads at its own `LoadGameData`, from the ruleset it has mounted, so all of them build the match with the same tables; the log prints the checksum of the command names, which is the same line on every computer.
 
-Things to know:
+**What still restarts**: a ruleset with anything else (`.pak` files, art, sounds, voices, translations, `Packs\*.bfhp`, `rle.mmp.tail`, civilizations, specials, options, events, `rules\`, patches to `units\`, `buildings\` or `currentlang\`, a file that is not `.xml`, `.ini` or `.vs` under `data\`); spectators and rejoining. **If the reload fails or finds something it cannot set back, the game restarts by itself with the ruleset you chose**: it never goes on half switched. The log (`game: hot reload`) says which step. The line `hot reload (after Init): ... trainRHastatus costgold = N` shows the cost the game holds for the Roman hastatus, which tells whether the new rules are live.
 
+What the player sees: the **Ruleset** row of the skirmish room changes at once, the button of *Create room* keeps reading *Create room* when the pair qualifies, and the next match plays with the new rules. For any other pair the button reads *Restart with this ruleset* and the game restarts.
+
+Things to know when you use it:
+
+- The game copies some constants into private variables the first time it needs them and never looks at the file again (`DamageAmplify`, the production of settlements, the combat costs of hero skills...). The DLL sets those copies back when it loads the new file, so every constant follows the ruleset. A constant that no ruleset changes is not affected.
+- A saved game keeps what it stored (timers already running when it was saved); load it under the ruleset it was saved with, or let the game switch to it.
+- In a room, the host's key and the `mods` line follow the ruleset that is loaded.
+- A loose `data\const.ini` (not a patch) replaces the game's file instead of patching it; it is a file in `data\` like the others.
+- `[Resolutions]` and the other sections the game reads only at start-up keep the values the game started with.
 - Loose files of the ruleset that another package also ships take priority over the other package's, while the ruleset was switched in place (it is mounted in front of the list).
 - The list of modes of a dialog that is already open is not refreshed until the dialog is shown again.
 - The game keeps one list of random-map templates for the whole session; a switch does not change it.
+- An old `imperivm-mod.ini` that still has `ConstHotReload` or `FullHotReload` under `[Mods]` is fine: both keys are ignored.
 
-Example: [`ruleset-rooms-example`](examples/ruleset-rooms-example).
+Examples: [`ruleset-const-example`](examples/ruleset-const-example) (only `CONST.INI`), [`ruleset-rooms-example`](examples/ruleset-rooms-example) (a command, a mode, `hidden.txt`).
 
 ## Where art, sounds and texts go
 
@@ -124,7 +118,7 @@ A ruleset is mounted like a package root, so everything the root can hold works 
 
 If two packages put a file at the **same path**, the one that is first in the load order is used: packages are sorted by kind (cosmetic above content above rules), then by `id`, with `requires`, `loadAfter` and `loadBefore` first. A ruleset sits right above its own package, so it wins over the root of that package, but **not** over the root of another package that comes before it: a civilization pack that ships a game file in its root can beat the ruleset the host chose. That is one more reason to keep such files out of a civilization's root (the validator warns). In **Options > Content** both packages say they share the file, and the player can pick which one to use when it is only an image or a sound. [`ruleset-clash-example`](examples/ruleset-clash-example) shows it; the game's log says which package served each shared file.
 
-None of these files can be switched in place: a ruleset that has any of them is not one of the cases of [Switching without a restart](#switching-without-a-restart), so changing to it restarts the game, as without `FullHotReload`.
+None of these files can be switched in place: a ruleset that has any of them is not one of the cases of [Switching without a restart](#switching-without-a-restart), so changing to it restarts the game.
 
 The validator helps (warnings, never errors): in a package with `civs\`, a file of the root that the game already has (`--game <game folder>` is needed to compare) is reported as *global in-game file in the root of a civilization pack*; a menu skin file inside a ruleset is reported as *menu skin file in a ruleset layer*.
 
@@ -132,7 +126,7 @@ The validator helps (warnings, never errors): in a package with `civs\`, a file 
 
 - A profile can use only one `rle.mmp.tail`. The one in the ruleset that is mounted counts as its package's, so a package cannot have a tail in its root and in a ruleset; two rulesets can each have theirs, because only one is mounted.
 - Do not put `[Resolutions]` in the `const.ini` of a ruleset: the screen resolutions are not part of the rules a room chooses. Keep that section in the package root.
-- The host chooses the ruleset before the room exists. With `FullHotReload` the host can change it in an open room when the switch needs no restart; two rulesets cannot be mixed. Switching restarts the game, except in the cases of [Switching without a restart](#switching-without-a-restart).
+- The host chooses the ruleset before the room exists. The host can change it in an open room when the switch needs no restart; two rulesets cannot be mixed. Switching restarts the game, except in the cases of [Switching without a restart](#switching-without-a-restart).
 - The **Ruleset** combo only lists rulesets of packages that are in the profile.
 - Some files, such as `AI.INI` and `SKILLS.INI`, are read by the game in ways this guide cannot describe. Try your ruleset in a room before publishing it.
 

@@ -1510,7 +1510,6 @@ extern const TrRow kTrRows[] = {
 	{"The game will restart with the ruleset you chose. Afterwards, create the room again.", "El juego se reiniciará con el conjunto de reglas que elegiste. Después, vuelve a crear la sala.", "Il gioco si riavvierà con il set di regole che hai scelto. Poi crea di nuovo la stanza."},
 	{"The game will restart with the ruleset you chose.", "El juego se reiniciará con el conjunto de reglas que elegiste.", "Il gioco si riavvierà con il set di regole che hai scelto."},
 	{"Ruleset that will be loaded:", "Conjunto de reglas que se cargará:", "Set di regole che verrà caricato:"},
-	{"The new ruleset could not be loaded without restarting. This game uses the previous one.", "No se pudo cargar el conjunto de reglas nuevo sin reiniciar. Esta partida usa el anterior.", "Impossibile caricare il nuovo set di regole senza riavviare. Questa partita usa il precedente."},
 	{"Could not save the ruleset in the content profile.", "No se pudo guardar el conjunto de reglas en el perfil de contenido.", "Impossibile salvare il set di regole nel profilo dei contenuti."},
 	{" (without its ruleset)", " (sin su conjunto de reglas)", " (senza il suo set di regole)"},
 	{"Rulesets: %s", "Conjuntos de reglas: %s", "Set di regole: %s"},

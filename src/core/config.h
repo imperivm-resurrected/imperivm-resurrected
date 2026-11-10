@@ -54,10 +54,8 @@ struct Config {
 	int zoomRefreshMs = 16;
 
 	bool modOverrides = true;
-	// [Mods] ConstHotReload: change between rulesets that differ only in data/const.ini without restarting the game.
-	bool constHotReload = false;
-	// [Mods] FullHotReload (experimental): any ruleset made only of patches switches without restarting, by making the game read its data again.
-	bool fullHotReload = false;
+	// imperivm-mod.ini still has [Mods] ConstHotReload or FullHotReload: they are ignored (the switch without restart has no flag), and logged once.
+	bool hotReloadKeysFound = false;
 
 	LogLevel logLevel = kLogInfo;
 	bool logFiles = false;

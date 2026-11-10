@@ -155,6 +155,11 @@ inline constexpr uintptr_t kRequestLoadGame = 0x00749990;
 inline constexpr uintptr_t kProcessPendingGameRequests = 0x00749fd0;
 inline constexpr uintptr_t kAiVtable = 0x007ac76c;
 inline constexpr uintptr_t kSquadVtable = 0x007b13c8;
+// The vtables of the kinds of game CreateGameFromSettings makes (the multiplayer one is in net.h). The LoadGameData slot of every one of them
+// ends in CVXBasicGame::LoadGameData (the editor's calls it, then registers its key handler); the replays are CVXGameSingle.
+inline constexpr uintptr_t kGameEditVtable = 0x007b4ec0;
+inline constexpr uintptr_t kGameAdvVtable = 0x007b8d28;
+inline constexpr uintptr_t kGameConqVtable = 0x007b8dd8;
 inline constexpr uintptr_t kGameSingleVtable = 0x007bf2c8;
 inline constexpr uintptr_t kSettlementVtable = 0x007cea80;
 inline constexpr uintptr_t kShipVtable = 0x007cf598;

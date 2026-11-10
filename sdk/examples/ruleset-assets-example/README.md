@@ -14,7 +14,7 @@ The sounds are sine tones made for this example and the images flat colours: not
 
 ## What to look at and listen to
 
-Put only this package in a profile and start the game. In the skirmish room, the **Ruleset** row (the first of *Game options*) offers *Plain* and *Assets*. Changing it **restarts the game**: these are loose files that are not data, so they are not switched in place even with `FullHotReload=1`. After the restart, with **Assets**, all five should work:
+Put only this package in a profile and start the game. In the skirmish room, the **Ruleset** row (the first of *Game options*) offers *Plain* and *Assets*. Changing it **restarts the game**: these are loose files that are not data, so they are not switched in place. After the restart, with **Assets**, all five should work:
 
 1. **Text.** Start a game as the **Romans** (Republican Rome) and select the **barracks**; hover the hastatus button: *Equip Hastatus (assets layer)*.
 2. **Voice.** Select the hastatus and give orders: the chord. The language of the game decides which one (English, Spanish or Italian); any other language plays the game's own voice, because the example has no folder for it.

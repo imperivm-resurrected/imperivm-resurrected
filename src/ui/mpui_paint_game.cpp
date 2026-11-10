@@ -302,7 +302,7 @@ void PaintOptionsCard(Painter &p, const State &st, int x, int y, int w, int h)
 		{
 			const std::vector<RulesetChoice> &rulesets = MountedRulesets();
 			if (host) {
-				if (!rulesets.empty() && (!g.online || ModsHotSwitchEnabled())) {
+				if (!rulesets.empty() && (!g.online || ModsHotSwitchAvailable())) {
 					const ModRuleset mounted = ModsMountedChoice();
 					grid.WideCombo("Ruleset", RulesetLabel(rulesets, mounted), !mounted.pack.empty(), canEdit, kDropProfile, 1, nullptr);
 				}

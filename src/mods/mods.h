@@ -322,22 +322,24 @@ std::string ModsRulesetCivSet(const ModRuleset &choice);
 ModRuleset ModsMountedChoice();
 // Remembers another entry that mounts the same files (see ModsSameRuleset), so nothing is reloaded. Ignored if the files differ.
 void ModsMountedChoiceSet(const ModRuleset &choice);
-// Hot reload of CONST.INI between matches. ModsSwapMountedRuleset mounts another ruleset in place of the mounted one without
-// restarting (its folder in the mount list, the profile's ruleset, the patches; no check, see ModsSwitchRulesetWithoutRestart). The game
-// keeps the table of the ruleset it started with until game/constreload.cpp loads the new one: Pending says they differ, Done that
-// the game now holds the mounted one, Failed that it could not and kept the old one (the mounted ruleset goes back to match it).
+// Switching rulesets without restarting the game. ModsSwapMountedRuleset mounts another ruleset in place of the mounted one (its folder in
+// the mount list, the profile's ruleset, the patches, its loose files and hidden.txt; no check, see ModsSwitchRulesetWithoutRestart). The game
+// keeps the data of the ruleset it started with until game/hotreload.cpp reads the mounted one, when the next match starts.
 bool ModsSwapMountedRuleset(const ModRuleset &wanted);
 // Something that depends on the mounted folders and is safe to build again (the lobby's list of modes) asks to run after every switch.
 void ModsOnRulesetSwapped(void (*hook)());
-// game/constreload.cpp says whether it is installed; without it no ruleset change can skip the restart.
-void ModsConstReloadSetReady(bool ready);
-// Whether the mounted ruleset can be replaced by `wanted` without restarting: the two differ only in data/const.ini (see constswap.h).
-bool ModsCanSwitchWithoutRestart(const ModRuleset &wanted, bool allowFull = true);
+// game/hotreload.cpp says whether it is installed; without it no ruleset change can skip the restart.
+void ModsHotReloadSetReady(bool ready);
+// Whether the hook is in place: the rooms and the saves screen only offer an in-place switch then.
+bool ModsHotSwitchAvailable();
+// Whether the mounted ruleset can be replaced by `wanted` without restarting: the game holds the rules of its start and both rulesets hold only
+// the kinds of file the game can read again (see hotswap.h).
+bool ModsCanSwitchWithoutRestart(const ModRuleset &wanted);
 // Replaces the mounted ruleset if ModsCanSwitchWithoutRestart. The caller saves the profile and sets the choice, as for any other
 // entry that mounts the same files (ModsMountedChoiceSet).
-bool ModsSwitchRulesetWithoutRestart(const ModRuleset &wanted, bool allowFull = true);
-// The same, and the mounted profile keeps the ruleset (as the Rules row of the skirmish room does), so a restart or the next session has it too.
-bool ModsSwitchRulesetAndRemember(const ModRuleset &wanted, bool allowFull = true);
+bool ModsSwitchRulesetWithoutRestart(const ModRuleset &wanted);
+// The same, and the mounted profile keeps the ruleset (as the Ruleset row of the skirmish room does), so a restart or the next session has it too.
+bool ModsSwitchRulesetAndRemember(const ModRuleset &wanted);
 // What a room says about one of its packages (the "mods" line of the lobby).
 struct RoomPackFact {
 	std::string id, version, copyKey, layer, layerKey;
@@ -345,17 +347,12 @@ struct RoomPackFact {
 // The ruleset a room mounts, when this computer has that exact copy of the package of its ruleset, enabled in the mounted profile (empty
 // ruleset if the room has none). False if it does not, or if the room names more than one ruleset.
 bool ModsFindRoomRuleset(const std::vector<RoomPackFact> &packs, ModRuleset &out);
-// What the game has to do before the next match so that it plays with the mounted ruleset: nothing, load data/const.ini again, read all its
-// data again (FullHotReload), or nothing it can do (kRestart: the pair is not one that can be switched in place).
-enum class ModsReload { kNone, kConst, kFull, kRestart };
+// What the game has to do before the next match so that it plays with the mounted ruleset: nothing, read all its data again, or nothing
+// it can do (kRestart: the pair is not one that can be switched in place).
+enum class ModsReload { kNone, kReload, kRestart };
 ModsReload ModsReloadPlan();
-bool ModsConstReloadPending();
-// game/constreload.cpp says whether the full reload is installed.
-void ModsFullReloadSetReady(bool ready);
-// Whether any of the in-place reloads is installed (ConstHotReload or FullHotReload on, and the hook in place). Without it nothing here acts.
-bool ModsHotSwitchEnabled();
-void ModsConstReloadDone();
-void ModsConstReloadFailed();
+// The game now holds the mounted ruleset.
+void ModsHotReloadDone();
 const std::string &ModsLanguage();
 struct Json;
 std::string ModsLocalizedText(const Json &j, const char *key, const std::string &def);

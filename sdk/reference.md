@@ -249,8 +249,6 @@ It's in the game folder. It's read at startup.
 | `[Debug]` | `Dump` | comma-separated paths, or `*` | empty | Copies each file to `mod-dump\<path>` exactly as the game reads it (patches and mod texts already applied), the first time it opens it. Exact name, no wildcards except `*` (all) |
 | `[Debug]` | `DumpAtStartup` | comma-separated paths | empty | Copies those files to `mod-dump\` at startup, without waiting for the game to open them |
 | `[Mods]` | `Override` | `0` or `1` | `1` | Enables `<game>\mod\<path>` as a file replacement |
-| `[Mods]` | `ConstHotReload` | `0` or `1` | `0` | Rulesets that differ only in `patches\data\const.ini` switch without restarting the game (see [Rulesets](rulesets.md#switching-without-a-restart)) |
-| `[Mods]` | `FullHotReload` | `0` or `1` | `0` | Experimental. Rulesets whose files are patches to `data\`, files in `data\`, `modes\*.json` and `hidden.txt` switch in place (skirmish room, Create room, open room, joining, saved games) without restarting the game (see [Rulesets](rulesets.md#experimental-switching-rulesets-without-restarting-fullhotreload)) |
 | `[Mods]` | `Profile` | profile name, `Original` or `No profile` | `Original` | Profile the game starts with (`No profile` is "My content" in the manager). The content manager changes it; a change applies on restart |
 
 ## 10. Limits

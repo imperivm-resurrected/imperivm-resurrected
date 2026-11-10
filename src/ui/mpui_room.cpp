@@ -605,7 +605,7 @@ void RoomFollowRules(const GameRoomSnapshot &snap)
 {
 	static DWORD last = 0, since = 0;
 	const DWORD now = GetTickCount();
-	if (!ModsHotSwitchEnabled() || !snap.online || snap.host || now - last < 500) return;
+	if (!ModsHotSwitchAvailable() || !snap.online || snap.host || now - last < 500) return;
 	last = now;
 	const OnlineLobby &room = g_s.room.info;
 	const std::string own = g_s.room.id ? SteamOwnGameplayKey() : std::string();
