@@ -31,6 +31,7 @@
 #include "mods/vfs.h"
 #include "game/gamemenu.h"
 #include "game/gamestats.h"
+#include "game/credits.h"
 #include "game/greatbattles.h"
 #include "game/options.h"
 #include "game/profiles.h"
@@ -243,6 +244,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 		InstallGameStats(knownExe);
 		InstallProfileHooks(knownExe);
 		InstallGreatBattlesHooks(knownExe);
+		InstallCreditsHooks(knownExe);
 		InstallControls(knownExe);
 		InstallModernAudio(knownExe);
 		InstallSoundLevels(knownExe);

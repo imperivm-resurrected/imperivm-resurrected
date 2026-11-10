@@ -802,7 +802,7 @@ void *__cdecl OpenImpl(const char *path, unsigned mode, void *err)
 			}
 		}
 	}
-	if (f && reading && rel == "currentlang/credits.txt") f = OpenMergedCredits(f, opened.c_str(), mode, err);
+	if (f && reading && !t_unpatched && rel == "currentlang/credits.txt") f = OpenMergedCredits(f, opened.c_str(), mode, err);
 	if (reading && rel == "currentlang/game.loc.xml") f = OpenMergedLoc(f, opened.c_str(), mode, err);
 	if (reading && PatchHas(rel)) f = OpenPatched(f, rel, opened.c_str(), mode, err);
 	if (reading && (rel == "menuini/template.ini" || rel == "data/interface/menu/template.ini")) f = OpenMenuTemplate(f, opened.c_str(), mode, err);
@@ -873,7 +873,7 @@ void *__cdecl OpenImpl(const char *path, unsigned mode, void *err)
 		if (first) {
 			DumpAndClose(f, rel);
 			f = g_origOpen(opened.c_str(), mode, err);
-			if (f && rel == "currentlang/credits.txt") f = OpenMergedCredits(f, opened.c_str(), mode, err);
+			if (f && !t_unpatched && rel == "currentlang/credits.txt") f = OpenMergedCredits(f, opened.c_str(), mode, err);
 			if (rel == "currentlang/game.loc.xml") f = OpenMergedLoc(f, opened.c_str(), mode, err);
 			if (PatchHas(rel)) f = OpenPatched(f, rel, opened.c_str(), mode, err);
 		}
