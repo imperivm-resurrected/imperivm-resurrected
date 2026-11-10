@@ -265,10 +265,12 @@ struct Arrival {
 
 struct RoomFacts {
 	bool load = false;
-	int humans = 0, readyCount = 0, positions = 0, withoutSlot = 0;
+	int humans = 0, readyCount = 0, ai = 0, positions = 0, withoutSlot = 0;
 	bool saveReady = true, mapReady = true, allReady = false, canStart = false;
 	StartBlock block;
 	int hostSlot = -1;
+	// The AI shows the ready check too, so the count the player reads takes it in; starting waits for the humans alone.
+	std::string ReadyText() const { return TrFmt("%d of %d ready", {std::to_string(readyCount + ai), std::to_string(humans + ai)}); }
 };
 
 RoomFacts Facts(const State &st)
@@ -279,6 +281,7 @@ RoomFacts Facts(const State &st)
 	for (int i = 0; i < 8; i++) {
 		const GameRoomSlot &s = g.slots[i];
 		if (s.exists) f.positions++;
+		if (s.used && s.type == 1) f.ai++;
 		if (!s.used || s.type != 3) continue;
 		f.humans++;
 		if (s.ready) f.readyCount++;
@@ -642,8 +645,7 @@ void PaintSlotRow(Painter &p, const State &st, const TableCtx &t, int i, const A
 			PaintBadge(p, c.ready - 6, cy - 10, c.readyW + 12, 20, "No slot", RGB(90, 36, 30), RGB(255, 200, 190));
 		}
 		else if (s.type == 1) {
-			p.Font(3);
-			p.Text(c.ready, cy - 10, c.readyW, 20, "AI", kDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			PaintReadyCheck(p, rx, cy, true, false);
 		}
 		else {
 			const bool toggles = s.local && (t.f.mapReady || s.ready) && !(st.map.needsPack && !g.host);
@@ -718,7 +720,7 @@ void PaintRoomHeader(Painter &p, const State &st, const RoomFacts &f)
 	add(RoomOptionText(st, 0x1002, "Game type"));
 	if (g.online) add(Tr(st.room.id ? "Online" : "Local network"));
 	if (f.positions < 8) add(Tr("Map for ") + std::to_string(f.positions));
-	if (g.online) add(TrFmt("%d of %d ready", {std::to_string(f.readyCount), std::to_string(f.humans)}));
+	if (g.online) add(f.ReadyText());
 	p.Font(3);
 	if (f.withoutSlot) {
 		p.Text(sideW, 46, areaW, 18, Tr("The map is for ") + std::to_string(f.positions) + Tr(" players"), kBad, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
@@ -909,7 +911,7 @@ void PaintReadyBlock(Painter &p, const State &st, const RoomFacts &f, int x, int
 	const int textY = cy + (down ? 1 : 0);
 	std::string caption;
 	COLORREF captionColor = kDim;
-	const std::string count = TrFmt("%d of %d ready", {std::to_string(f.readyCount), std::to_string(f.humans)});
+	const std::string count = f.ReadyText();
 	switch (look) {
 	case kAsk:
 		FitFont(p, "Ready?", radius * 2 - 16);
