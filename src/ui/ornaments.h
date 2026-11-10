@@ -18,3 +18,5 @@ enum Ornament {
 
 // How much of each pixel the ornament covers, 0 to 255, row by row.
 std::vector<uint8_t> OrnamentMask(Ornament ornament, int width, int height);
+// The same for any shape, which says whether a point of its box, from 0 to 1 on each side, is inside it.
+std::vector<uint8_t> ShapeMask(int width, int height, bool (*inside)(double x, double y));
