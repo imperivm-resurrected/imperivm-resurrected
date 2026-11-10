@@ -18,6 +18,8 @@
 #include "core/log.h"
 #include "game/helpdialog.h"
 #include "ui/helpui_view.h"
+#include "game/controls.h"
+#include "ui/controlsui.h"
 #include "ui/modui.h"
 #include "ui/widgets.h"
 
@@ -40,7 +42,7 @@ struct State {
 	std::vector<Hit> hits;
 	PaintOut out;
 	std::vector<std::string> wanted;
-	bool mouseDown = false, escArmed = false;
+	bool mouseDown = false, escArmed = false, controlsOpen = false;
 	DWORD closedAt = 0;
 };
 
@@ -60,6 +62,33 @@ Kept g_kept;
 Canvas g_canvas;
 // The click that closes the screen must not reach the map when the button comes up.
 bool g_swallowUp = false;
+
+// The pages and, on the page of keys, the player's keys.
+std::shared_ptr<const std::vector<HelpHit>> Search(const View &v, const std::string &query)
+{
+	std::vector<HelpHit> pages = HelpSearch(v.content->doc, v.content->index, query), rows;
+	const int keys = v.content->index.keys;
+	if (v.controls && keys >= 0) {
+		rows = HelpSearchRows(ControlRows(*v.controls), keys, query);
+		// The file's own text of that page is not shown any more.
+		pages.erase(std::remove_if(pages.begin(), pages.end(), [&](const HelpHit &h) { return h.topic == keys; }), pages.end());
+	}
+	return std::make_shared<const std::vector<HelpHit>>(HelpMergeHits(pages, rows));
+}
+
+// On the game thread, as the Controls screen reads them.
+std::shared_ptr<const std::vector<ControlInfo>> ReadControls()
+{
+	auto list = std::make_shared<std::vector<ControlInfo>>();
+	for (ControlInfo &c : ControlsList()) {
+		if (!c.order && !ControlsPageIsOrders(c.page)) list->push_back(std::move(c));
+	}
+	if (list->empty()) {
+		LogW("ui", "help: no controls to show; the page of keys keeps the help's text");
+		return nullptr;
+	}
+	return list;
+}
 
 std::shared_ptr<const Content> Build(const std::string &text)
 {
@@ -99,7 +128,7 @@ void Apply(State &st)
 		if (v.query != v.place.query || !v.hits) {
 			v.query = v.place.query;
 			EditToEnd(v.query, v.edit);
-			v.hits = std::make_shared<const std::vector<HelpHit>>(HelpSearch(v.content->doc, v.content->index, v.query));
+			v.hits = Search(v, v.query);
 		}
 	}
 }
@@ -156,7 +185,7 @@ void QueryChanged(State &st)
 		}
 		return;
 	}
-	v.hits = std::make_shared<const std::vector<HelpHit>>(HelpSearch(v.content->doc, v.content->index, q));
+	v.hits = Search(v, q);
 	const HelpPlace place = {-1, -1, q};
 	if (onSearch) {
 		st.history.Replace(place);
@@ -198,7 +227,7 @@ void NavScrollBy(State &st, int delta)
 }
 
 struct After {
-	bool close = false;
+	bool close = false, controls = false;
 	std::string web;
 };
 
@@ -216,6 +245,7 @@ void Click(State &st, int action, int arg, After &after)
 	case kActToggle:
 		if (!v.toggled.erase(arg)) v.toggled.insert(arg);
 		break;
+	case kActControls: after.controls = true; break;
 	case kActWeb:
 		if (arg >= 0 && arg < static_cast<int>(st.out.web.size())) after.web = st.out.web[arg];
 		break;
@@ -440,12 +470,14 @@ void HelpUiGameTick()
 		}
 		const std::shared_ptr<const Content> content = g_kept.content;
 		const std::string path = HelpDialogTopicPath(dlg);
+		const std::shared_ptr<const std::vector<ControlInfo>> controls = ReadControls();
 		std::lock_guard<std::mutex> lock(g_lock);
 		g_s = State();
 		g_s.dlg = dlg;
 		g_s.nativeTopic = topic;
 		g_s.view.content = content;
 		g_s.view.images = g_kept.images;
+		g_s.view.controls = controls;
 		g_s.history = g_kept.history;
 		// The same topic as when it closed: the player pressed F1 again and comes back to the page they were reading.
 		if (!g_s.history.Current() || topic != g_kept.nativeTopic) g_s.history.Go(PlaceOfPath(*content, path));
@@ -460,6 +492,22 @@ void HelpUiGameTick()
 		if (g_s.dlg == dlg && g_s.view.content) {
 			g_s.nativeTopic = topic;
 			Go(g_s, PlaceOfPath(*g_s.view.content, path));
+		}
+	}
+	// Back from the Controls screen: the page of keys shows the keys just changed.
+	const bool controlsOpen = ControlsUiNeedsDraw();
+	bool reread = false;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		reread = g_s.controlsOpen && !controlsOpen;
+		g_s.controlsOpen = controlsOpen;
+	}
+	if (reread) {
+		const std::shared_ptr<const std::vector<ControlInfo>> controls = ReadControls();
+		std::lock_guard<std::mutex> lock(g_lock);
+		if (g_s.dlg == dlg) {
+			g_s.view.controls = controls;
+			if (g_s.view.hits && !g_s.view.place.query.empty()) g_s.view.hits = Search(g_s.view, g_s.view.place.query);
 		}
 	}
 	LoadImages(dlg);
@@ -512,7 +560,8 @@ bool HelpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		return true;
 	}
 	void *dlg = HelpDialogOpen();
-	if (!dlg || ModUiIsOpen()) return false;
+	// The Controls screen opened from the page of keys lies over this one and takes the input until it closes.
+	if (!dlg || ModUiIsOpen() || ControlsUiNeedsDraw()) return false;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
 		if (g_s.dlg != dlg) return false;
@@ -521,6 +570,10 @@ bool HelpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 	After after;
 	const bool consumed = Handle(msg, wp, lp, after);
 	if (!after.web.empty()) OpenWeb(after.web);
+	if (after.controls) {
+		LogI("ui", "help: opening the Controls screen from the page of keys");
+		ControlsUiOpen();
+	}
 	if (after.close) Close(dlg);
 	return consumed;
 }
