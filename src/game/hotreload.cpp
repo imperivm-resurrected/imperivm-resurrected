@@ -546,10 +546,11 @@ void *__fastcall HookLoadGameData(void *self, void *edx)
 				: plan == ModsReload::kRestart ? "the rules mounted cannot be loaded in place, the game restarts" : "the rules the game holds are the mounted ones");
 	}
 	// A game that does not reload says its memory too, so that a match after a reload can be compared with one without it.
-	if (plan != ModsReload::kReload) LogProcessState("start of a game, nothing reloaded");
+	if (plan != ModsReload::kReload && GetConfig().memoryTrace) LogProcessState("start of a game, nothing reloaded");
 	switch (plan) {
 	case ModsReload::kReload:
 		// RestartNow does not return: whatever fails before the match is created ends in the restart.
+		MemTraceGameReloaded();
 		if (!HotReload(self)) RestartNow("it could not be done");
 		ModsHotReloadDone();
 		reloaded = true;
@@ -562,7 +563,7 @@ void *__fastcall HookLoadGameData(void *self, void *edx)
 	}
 	void *result = g_origLoadGameData(self, edx);
 	if (reloaded) CheckAfterLoad(result);
-	else {
+	else if (GetConfig().memoryTrace) {
 		LogProcessState("after LoadGameData, nothing reloaded");
 		MemoryCensus(CensusPoint::kAfterLoad, "after LoadGameData, nothing reloaded", CensusPoint::kAfterUnload);
 	}
@@ -573,7 +574,7 @@ void *__fastcall HookLoadGameData(void *self, void *edx)
 // the next game this tells what a match keeps (the same without a reload) from what a reload leaves behind (the lines around Shutdown/Init).
 void *__fastcall HookUnloadGameData(void *self, void *edx)
 {
-	LogProcessState("before UnloadGameData");
+	if (GetConfig().memoryTrace) LogProcessState("before UnloadGameData");
 	MemoryCensus(CensusPoint::kBeforeUnload, "before UnloadGameData", CensusPoint::kAfterLoad);
 	void *result = g_origUnloadGameData(self, edx);
 	LogProcessState("after UnloadGameData");
@@ -594,7 +595,10 @@ void InstallHotReload(bool knownExe)
 		LogE("game", "hot reload: could not hook LoadGameData; every ruleset change will need a restart");
 		return;
 	}
-	InstallMemTrace(knownExe);
+	if (GetConfig().memoryTrace) {
+		LogI("game", "memory trace: on ([Debug] MemoryTrace=1): every step of a game walks the heaps, and the large blocks are followed");
+		InstallMemTrace(knownExe);
+	}
 	// Only to measure memory: if it cannot be hooked nothing else changes.
 	if (HookCreate(reinterpret_cast<void *>(addr::kUnloadGameData), reinterpret_cast<void *>(&HookUnloadGameData), reinterpret_cast<void **>(&g_origUnloadGameData)) != MH_OK ||
 		HookEnable(reinterpret_cast<void *>(addr::kUnloadGameData)) != MH_OK) {

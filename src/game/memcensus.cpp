@@ -9,6 +9,7 @@
 #include <initializer_list>
 
 #include "addr/engine.h"
+#include "core/config.h"
 #include "core/crashlog.h"
 #include "core/log.h"
 #include "game/memcensus.h"
@@ -278,6 +279,8 @@ const char *NameOf(CensusPoint p)
 
 void MemoryCensus(CensusPoint at, const char *when, CensusPoint compare, CensusPoint also)
 {
+	// A diagnostic: it walks every heap at each step of every game, so it is off unless [Debug] MemoryTrace=1 is in imperivm-mod.ini.
+	if (!GetConfig().memoryTrace) return;
 	static volatile LONG running = 0;
 	if (g_off || InterlockedExchange(&running, 1)) return;
 	g_crashLogQuiet++;
@@ -288,7 +291,10 @@ void MemoryCensus(CensusPoint at, const char *when, CensusPoint compare, CensusP
 	}
 	LogSummary(when, g_now);
 	// The large blocks that are alive, by game and by the code that made them: what the engine keeps for ever shows up as old games.
-	if (at == CensusPoint::kBeforeReload || at == CensusPoint::kAfterShutdown || at == CensusPoint::kAfterUnload) MemTraceReport(when);
+	if (at == CensusPoint::kBeforeReload) MemTraceReport(when, TraceAt::kSummary);
+	else if (at == CensusPoint::kAfterShutdown) MemTraceReport(when, TraceAt::kShutdown);
+	else if (at == CensusPoint::kAfterLoad) MemTraceReport(when, TraceAt::kLoad);
+	else if (at == CensusPoint::kAfterUnload) MemTraceReport(when, TraceAt::kUnload);
 	for (const CensusPoint other : {compare, also}) {
 		if (other == CensusPoint::kNone) continue;
 		const Census &before = g_slot[static_cast<unsigned>(other)];

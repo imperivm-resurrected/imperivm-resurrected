@@ -64,5 +64,7 @@ inline constexpr uintptr_t kGameCodeEnd = 0x00900000;
 // regions of 20 bytes each (the base of its 1 MB of address space is the word at +12) and how many there are (___sbh_alloc_new_region).
 inline constexpr uintptr_t kSbhRegionCount = 0x00a89648;
 inline constexpr uintptr_t kSbhRegionList = 0x00a8964c;
+// Past the last global of the executable (its image ends a little before).
+inline constexpr uintptr_t kGameImageEnd = 0x00ab0000;
 
 }

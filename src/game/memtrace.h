@@ -12,12 +12,17 @@
 // for the rest. Reads and notes only; nothing of the game changes.
 const size_t kMemTraceLarge = 0x10000;
 
+// Where in a game the report is written: the unseen blocks are compared with the ones the reload started from, and with the end of the last game.
+enum class TraceAt { kSummary, kShutdown, kLoad, kUnload };
+
 void InstallMemTrace(bool knownExe);
 // A game's data is being loaded: the blocks made from here on belong to the next game number.
 void MemTraceNewGame();
+// The game that is starting reads its data again (a hot switch).
+void MemTraceGameReloaded();
 // The census starts a walk of the heaps: forget the groups of the last one.
 void MemTraceBegin();
 // The census found a block of kMemTraceLarge or more in use, in the heap with that number (called with a heap locked: it does not allocate).
 void MemTraceNote(const void *block, size_t size, unsigned heap);
 // Writes what the walk found: how many large blocks are alive from each game, and the code that made the biggest groups.
-void MemTraceReport(const char *when);
+void MemTraceReport(const char *when, TraceAt at);
