@@ -225,7 +225,6 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 		InstallRejoin(knownExe);
 		InstallNetTune(knownExe);
 		InstallSpectator(knownExe);
-		InstallCheats(knownExe);
 		InstallChat(knownExe);
 		ChatUiInstall();
 		InstallZoomFog(knownExe);

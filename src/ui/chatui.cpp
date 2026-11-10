@@ -20,6 +20,7 @@
 #include "game/zoomview.h"
 #include "ui/battlesui.h"
 #include "ui/chatui_view.h"
+#include "ui/keycaps.h"
 #include "ui/conquestui.h"
 #include "ui/controlsui.h"
 #include "ui/gamemenuui.h"
@@ -71,6 +72,8 @@ struct State {
 	ChatTarget chosen;
 	bool chosenSet = false;
 	POINT menuCenter = {};
+	// The help just shown starts at the top of the panel until the player scrolls.
+	uint32_t helpSerial = 0;
 };
 
 std::mutex g_lock;
@@ -119,6 +122,7 @@ void CloseLocked(State &s)
 	s.scroll = 0;
 	s.recall.Reset();
 	s.painted = Painted();
+	s.helpSerial = 0;
 }
 
 void Choose(State &s)
@@ -143,30 +147,48 @@ std::string KeyText(int id)
 	return k.vk ? ControlsKeyLabel(k) : std::string();
 }
 
+void HelpEntry(int kind, const std::string &text, const std::string &key = "", std::vector<ControlKey> keys = {})
+{
+	ChatEntry e;
+	e.localKind = kind;
+	e.text = text;
+	e.key = key;
+	for (const ControlKey &k : keys) {
+		if (k.vk) e.keys.push_back(k.vk | static_cast<uint32_t>(k.mods) << 16);
+	}
+	ChatAddLocalEntry(std::move(e));
+}
+
 void ShowHelp()
 {
-	ChatAddLocal(Tr("Chat commands (only you see this):"));
-	ChatAddLocal(Tr("/all, /al, /todos or /tutti and the message: to everyone"));
-	ChatAddLocal(Tr("/allies, /a, /aliados or /alleati and the message: to your allies"));
-	ChatAddLocal(Tr("/w or /p, a name and the message: only to that player"));
-	ChatAddLocal(Tr("Tab changes who reads it; Up and Down bring back what you sent; Esc closes."));
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		g_s.helpSerial = ChatLogSerial() + 1;
+	}
+	HelpEntry(kLocalHeading, Tr("Chat commands"));
+	HelpEntry(kLocalSection, Tr("Recipients"));
+	HelpEntry(kLocalRow, Tr("everyone"), Tr("/all \xc2\xb7 /al"));
+	HelpEntry(kLocalRow, Tr("your allies"), Tr("/allies \xc2\xb7 /a"));
+	HelpEntry(kLocalRow, Tr("one player"), Tr("/w \xc2\xb7 /p name"));
+	HelpEntry(kLocalRow, Tr("a line that starts with /"), "//");
+	HelpEntry(kLocalSection, Tr("Keys"));
+	HelpEntry(kLocalRow, Tr("who reads it"), "", {{VK_TAB, 0}});
+	HelpEntry(kLocalRow, Tr("what you sent"), "", {{VK_UP, 0}, {VK_DOWN, 0}});
+	HelpEntry(kLocalRow, Tr("send with your camera's place"), "", {{VK_RETURN, kKeyCtrl}});
+	HelpEntry(kLocalRow, Tr("close"), "", {{VK_ESCAPE, 0}});
+	HelpEntry(kLocalSection, Tr("Marks"));
 	static const char *const kClicks[kPingClickModes] = {"Alt + click", "Ctrl + click", "Shift + click", "Off"};
 	const int click = ControlsPingClickMode();
-	const std::string ping = KeyText(kModKeyPing);
-	if (click != kPingClickOff) {
-		ChatAddLocal(TrFmt("Marks: %s on the map and point to choose on my way, attack or danger; %s marks on my way.",
-			{Tr(kClicks[click]), ping.empty() ? Tr("its key") : ping}));
+	if (click != kPingClickOff) HelpEntry(kLocalRow, Tr("hold and point: on my way, attack, danger"), Tr(kClicks[click]));
+	const struct {
+		int id;
+		const char *what;
+	} keys[] = {{kModKeyPing, "on my way"}, {kModKeyPingAttack, "attack here"}, {kModKeyPingDanger, "danger"}};
+	for (const auto &k : keys) {
+		const ControlKey key = ControlsModKey(k.id);
+		if (key.vk) HelpEntry(kLocalRow, Tr(k.what), "", {key});
 	}
-	else if (!ping.empty()) {
-		ChatAddLocal(TrFmt("Marks: %s marks on my way under the cursor.", {ping}));
-	}
-	const std::string attack = KeyText(kModKeyPingAttack), danger = KeyText(kModKeyPingDanger);
-	if (!attack.empty() || !danger.empty()) {
-		ChatAddLocal(TrFmt("Attack here: %s. Danger: %s.", {attack.empty() ? "-" : attack, danger.empty() ? "-" : danger}));
-	}
-	ChatAddLocal(Tr("Marks go to whoever the chip shows."));
-	if (CheatsPanelAvailable()) ChatAddLocal(Tr("Cheats: /gold, /food, /map and the others of the cheats panel."));
-	ChatAddLocal(Tr("Start with // to send a line that begins with /."));
+	HelpEntry(kLocalRow, Tr("they go to whoever the chip shows"));
 }
 
 // What a /w names, among the other players. Writes the local error and returns false when it does not settle on one.
@@ -258,10 +280,8 @@ void Send(bool withLocation)
 		text = sl.rest;
 		break;
 	case kSlashOther:
-		if (!CheatsCommandKnown(sl.verb)) {
-			ChatAddLocal(TrFmt("Unknown command /%s. Type /help.", {sl.verb}));
-			keep = true;
-		}
+		ChatAddLocal(TrFmt("Unknown command: /%s \xc2\xb7 %s", {sl.verb, Tr("/help")}));
+		keep = true;
 		break;
 	default:
 		break;
@@ -328,9 +348,13 @@ bool HandleKeyDown(WPARAM wp)
 		if (s.recall.Newer(s.text)) EditToEnd(s.text, s.edit);
 		return true;
 	case VK_PRIOR:
+		if (s.helpSerial) s.scroll = s.painted.scroll;
+		s.helpSerial = 0;
 		s.scroll = std::min(s.painted.maxScroll, s.scroll + s.painted.pageRows);
 		return true;
 	case VK_NEXT:
+		if (s.helpSerial) s.scroll = s.painted.scroll;
+		s.helpSerial = 0;
 		s.scroll = std::max(0, s.scroll - s.painted.pageRows);
 		return true;
 	default:
@@ -411,6 +435,8 @@ bool HandleMouse(UINT msg, WPARAM wp, POINT at)
 		if (!inside) return false;
 		const int steps = GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA;
 		std::lock_guard<std::mutex> lock(g_lock);
+		if (g_s.helpSerial) g_s.scroll = g_s.painted.scroll;
+		g_s.helpSerial = 0;
 		g_s.scroll = std::max(0, std::min(g_s.painted.maxScroll, g_s.scroll + steps * 3));
 		return true;
 	}
@@ -631,6 +657,9 @@ Line LineOf(const ChatEntry &e, int alpha)
 	l.location = e.location;
 	l.ping = e.ping;
 	l.local = e.local;
+	l.localKind = e.localKind;
+	l.key = e.key;
+	for (const uint32_t k : e.keys) l.keys.push_back({static_cast<unsigned short>(k & 0xffff), static_cast<unsigned char>(k >> 16)});
 	l.alpha = alpha;
 	return l;
 }
@@ -718,7 +747,10 @@ void ChatUiDraw(uint32_t *buf, int w, int h)
 		v.typing = s.open;
 		if (s.open) {
 			const size_t from = s.lines.size() > kChatHistoryLines ? s.lines.size() - kChatHistoryLines : 0;
-			for (size_t i = from; i < s.lines.size(); i++) v.lines.push_back(LineOf(s.lines[i], 255));
+			for (size_t i = from; i < s.lines.size(); i++) {
+				if (s.helpSerial && s.lines[i].serial == s.helpSerial) v.topLine = static_cast<int>(v.lines.size());
+				v.lines.push_back(LineOf(s.lines[i], 255));
+			}
 		}
 		else {
 			for (const ChatEntry &e : s.lines) {

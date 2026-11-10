@@ -34,7 +34,14 @@ struct ChatEntry {
 	int ping = -1;
 	// A line the mod writes for the local player only (help, errors): no name, nothing sent.
 	bool local = false;
+	// How a local line is laid out: plain text, the help's heading, a section title, or a row of the help with its command or
+	// keys on the left (key, or keys as vk | mods << 16) and the text on the right.
+	int localKind = 0;
+	std::string key;
+	std::vector<uint32_t> keys;
 };
+
+enum ChatLocalKind { kLocalText, kLocalHeading, kLocalSection, kLocalRow };
 
 
 // The chat's place: the bottom-left corner of the panel, kept inside the screen and above the command bar. Saved in thousandths
@@ -111,7 +118,7 @@ int ChatMatchName(const std::string &typed, const std::vector<std::string> &name
 
 // Spaces at both ends go; the text is cut at kChatMaxText bytes without splitting a UTF-8 character.
 std::string ChatCleanText(const std::string &text);
-// "/gold 500" -> "gold 500"; empty when the line is not a command.
+// "/w Marcus hi" -> "w Marcus hi"; empty when the line is not a command.
 std::string ChatCommandOf(const std::string &text);
 std::string ChatClock(uint32_t ms);
 int ChatLineAlpha(uint32_t ageMs);

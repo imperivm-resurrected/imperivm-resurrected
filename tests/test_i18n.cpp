@@ -88,7 +88,6 @@ int main(int argc, char **argv)
 	const std::vector<std::string> all = TrAllLanguages("Autosave %02dh%02d");
 	Check(all.size() == 3 && all[1] == "Autoguardado %02dh%02d", "TrAllLanguages");
 	Check(std::string(LegacyJsonKey("name")) == "nombre" && LegacyJsonKey("zzz") == nullptr, "LegacyJsonKey");
-	Check(LegacyCheatVerb("oro") == "gold" && LegacyCheatVerb("gold") == "gold", "LegacyCheatVerb");
 	Check(LegacyDirective("antes") == "before" && LegacyDirective("top") == "top", "LegacyDirective");
 	Check(LegacyKeyVk("Izquierda") == VK_LEFT && LegacyKeyVk("Left") == 0, "LegacyKeyVk");
 	printf("%d translation rows\n", rows);

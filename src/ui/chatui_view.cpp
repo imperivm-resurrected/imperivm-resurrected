@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "i18n/tr.h"
+#include "ui/keycaps.h"
 #include "ui/ornaments.h"
 #include "ui/textedit.h"
 #include "ui/uikit.h"
@@ -21,10 +22,11 @@ namespace {
 
 using namespace ui;
 
-constexpr int kWidth = 500, kBarH = 28, kRowH = 19, kGap = 6, kPad = 8, kIdleRows = 8, kTypingRows = 12, kIcon = 15, kIconGap = 4, kGripH = 12;
+constexpr int kWidth = 500, kBarH = 28, kRowH = 19, kGap = 6, kPad = 8, kIdleRows = 8, kTypingRows = 16, kIcon = 15, kIconGap = 4, kGripH = 12;
 constexpr COLORREF kCream = RGB(242, 232, 206), kClock = RGB(178, 166, 140), kAllies = RGB(146, 214, 122), kAll = RGB(228, 188, 98),
 				   kPrivate = RGB(224, 156, 234), kNote = RGB(214, 202, 172), kPanel = RGB(14, 10, 6), kAttack = RGB(240, 98, 66),
-				   kDanger = RGB(246, 166, 52), kLocal = RGB(196, 214, 236);
+				   kDanger = RGB(246, 166, 52), kMuted = RGB(184, 172, 146), kHelpKey = RGB(236, 200, 112);
+constexpr int kHelpKeyColumn = 150;
 
 struct Fonts {
 	HFONT text = nullptr, name = nullptr, meta = nullptr, chip = nullptr;
@@ -213,6 +215,10 @@ Layout Plan(Painter &p, const View &v, int widthDesign, int heightDesign)
 		L.measured.push_back(Measure(p, l));
 		const Measured &m = L.measured.back();
 		SelectObject(p.dc, g_f.text);
+		if (l.local && l.localKind != kLocalText) {
+			L.rows.push_back({static_cast<int>(i), true, W(l.text)});
+			continue;
+		}
 		const std::string body = m.note ? PingText(l) : l.text;
 		const std::vector<std::wstring> wrapped = p.WrapLines(body, m.textX - m.indent, std::max(40, textRight - m.indent));
 		for (size_t k = 0; k < wrapped.size(); k++) L.rows.push_back({static_cast<int>(i), k == 0, wrapped[k]});
@@ -223,6 +229,13 @@ Layout Plan(Painter &p, const View &v, int widthDesign, int heightDesign)
 	L.shown = std::min(total, limit);
 	L.maxScroll = v.typing ? std::max(0, total - L.shown) : 0;
 	L.scroll = std::max(0, std::min(v.scroll, L.maxScroll));
+	if (v.typing && v.topLine >= 0) {
+		for (int r = 0; r < total; r++) {
+			if (L.rows[r].line != v.topLine) continue;
+			L.scroll = std::max(0, std::min(L.maxScroll, total - L.shown - r));
+			break;
+		}
+	}
 	L.first = total - L.shown - L.scroll;
 	const int rowsH = L.shown * kRowH;
 	if (v.typing) {
@@ -238,14 +251,54 @@ Layout Plan(Painter &p, const View &v, int widthDesign, int heightDesign)
 	return L;
 }
 
+// The help as a small table: a heading over a rule, section titles, and rows with the command (gold) or its keys (caps) on the
+// left and a short description in a second column.
+void PaintLocalRow(Painter &p, const Line &l, const Row &row, const Measured &m, int w, int y)
+{
+	switch (l.localKind) {
+	case kLocalHeading: {
+		SelectObject(p.dc, g_f.name);
+		ShadowLine(p, kPad, y, W(l.text), pal::goldLight);
+		const int tw = WidthOf(p.dc, g_f.name, W(l.text), p.s);
+		p.Fill(kPad + tw + 10, y + kRowH / 2, std::max(0, w - 2 * kPad - tw - 10), 1, kGold);
+		p.Diamond(w - kPad, y + kRowH / 2, 2, pal::goldLight);
+		return;
+	}
+	case kLocalSection:
+		SelectObject(p.dc, g_f.meta);
+		ShadowLine(p, kPad, y + 4, W(l.text), pal::section);
+		return;
+	case kLocalRow: {
+		int right = kPad + 8;
+		if (!l.keys.empty()) {
+			p.fonts[4] = g_f.meta;
+			DrawKeys(p, kPad + 8, y + 2, kRowH - 3, l.keys);
+			right += KeysWidth(p, l.keys);
+		}
+		else if (!l.key.empty()) {
+			SelectObject(p.dc, g_f.chip);
+			ShadowLine(p, kPad + 8, y + 1, W(l.key), kHelpKey);
+			right += WidthOf(p.dc, g_f.chip, W(l.key), p.s);
+		}
+		const int col = l.keys.empty() && l.key.empty() ? kPad + 8 : std::max(kPad + kHelpKeyColumn, right + 10);
+		SelectObject(p.dc, g_f.text);
+		ShadowLine(p, col, y, W(l.text), kMuted);
+		return;
+	}
+	default:
+		SelectObject(p.dc, g_f.text);
+		ShadowLine(p, row.first ? m.textX : m.indent, y, row.text, kMuted);
+		return;
+	}
+}
+
 void PaintRow(Painter &p, const View &v, const Layout &L, int r, int y)
 {
 	const Row &row = L.rows[r];
 	const Line &l = v.lines[row.line];
 	const Measured &m = L.measured[row.line];
 	if (m.local) {
-		SelectObject(p.dc, g_f.text);
-		ShadowLine(p, row.first ? m.textX : m.indent, y, row.text, kLocal);
+		PaintLocalRow(p, l, row, m, L.w, y);
 		return;
 	}
 	if (!row.first) {
@@ -313,7 +366,7 @@ void PaintBar(Painter &p, const View &v, const Layout &L)
 	PaintEditField(p, fieldX, y, fieldW, kBarH, v.text, "", true, false, v.edit, kActField);
 	if (v.text.empty()) {
 		p.Font(0);
-		p.Text(fieldX + 12, y, fieldW - 16, kBarH, Tr("Tab changes who reads it"), RGB(120, 108, 86), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(fieldX + 12, y, fieldW - 16, kBarH, Tr("Type a message\xe2\x80\xa6"), RGB(120, 108, 86), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
 	PaintPinButton(p, v, pinX, y, kBarH);
 }
@@ -451,6 +504,7 @@ void PaintChat(uint32_t *buf, int w, int h, const View &v, Painted &out)
 	p.fonts[0] = g_f.text;
 	Layout L = Plan(p, v, widthDesign, static_cast<int>(v.bottom / s));
 	out.maxScroll = L.maxScroll;
+	out.scroll = L.scroll;
 	out.pageRows = std::max(1, L.shown - 1);
 	const int ph = std::min(maxPh, static_cast<int>(L.height * s + 0.5f));
 	const int oy = v.bottom - ph, ox = v.left;

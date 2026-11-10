@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "game/chatlog.h"
+#include "game/controls.h"
 #include "ui/textedit.h"
 #include "ui/uikit.h"
 
@@ -23,8 +24,11 @@ struct Line {
 	bool location = false;
 	// The type of a ping (ChatPingType), or -1.
 	int ping = -1;
-	// Written by the mod for the reader only: just the text.
+	// Written by the mod for the reader only, laid out as ChatLocalKind says.
 	bool local = false;
+	int localKind = kLocalText;
+	std::string key;
+	std::vector<ControlKey> keys;
 	int alpha = 255;
 };
 
@@ -42,6 +46,8 @@ struct View {
 	std::vector<Line> lines;
 	// Rows scrolled up from the newest one, while typing.
 	int scroll = 0;
+	// A line to show at the top instead (the start of the help), or -1.
+	int topLine = -1;
 	int targetScope = kChatAll;
 	std::string targetName;
 	COLORREF targetColor = RGB(232, 216, 160);
@@ -61,6 +67,8 @@ struct Painted {
 	RECT panel = {};
 	int maxScroll = 0;
 	int pageRows = 1;
+	// The scroll the panel was drawn with.
+	int scroll = 0;
 };
 
 float Scale(int w, int h);

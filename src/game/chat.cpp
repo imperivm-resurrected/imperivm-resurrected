@@ -20,7 +20,6 @@
 #include "core/log.h"
 #include "i18n/tr.h"
 #include "game/chat.h"
-#include "game/cheats.h"
 #include "game/controls.h"
 #include "game/zoomview.h"
 #include "hooks/hookcount.h"
@@ -569,7 +568,6 @@ bool ChatSend(const std::string &text, ChatTarget target, bool withLocation)
 {
 	const std::string clean = ChatCleanText(text);
 	if (clean.empty() && !withLocation) return false;
-	if (!ChatCommandOf(clean).empty() && CheatsChatLine(clean)) return true;
 	RawMatch raw;
 	if (!ReadRaw(raw) || !raw.game || raw.local < 0) return false;
 	if (!raw.severalHumans && !clean.empty()) RunAsScript(clean);
@@ -691,17 +689,22 @@ bool ChatPointOnMap(int x, int y, int *area, const char *&why)
 	return true;
 }
 
-void ChatAddLocal(const std::string &text)
+void ChatAddLocalEntry(ChatEntry e)
 {
-	ChatEntry e;
 	e.arrivedMs = GetTickCount();
 	uint32_t clock = 0;
 	if (Game()) ReadClock(Game(), clock);
 	e.clockMs = clock;
-	e.text = text;
 	e.local = true;
 	std::lock_guard<std::mutex> lock(g_logLock);
 	g_log.Add(std::move(e));
+}
+
+void ChatAddLocal(const std::string &text)
+{
+	ChatEntry e;
+	e.text = text;
+	ChatAddLocalEntry(std::move(e));
 }
 
 uint32_t ChatLogSerial()
