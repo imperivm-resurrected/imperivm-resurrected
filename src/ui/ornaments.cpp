@@ -10,7 +10,11 @@
 namespace {
 const double kPi = 3.14159265358979;
 const int kLeafPairs = 7;
-const int kSamples = 4;
+// A first pass of kSamples x kSamples per pixel finds the edges: the pixels it covers in part, and the ones next to a pixel it saw
+// otherwise. Those are sampled again at kEdgeSamples points, each in its own column and two to a row, mirrored left to right so that
+// symmetric shapes stay so: an edge close to level (the top of the flag) or to upright gets a hundred shades or more, rather than the
+// few steps of a square grid.
+const int kSamples = 4, kEdgeSamples = 256, kEdgeStride = 37;
 
 struct Point {
 	double x, y;
@@ -70,15 +74,38 @@ template <class Inside>
 std::vector<uint8_t> Coverage(int width, int height, Inside inside)
 {
 	std::vector<uint8_t> mask(static_cast<size_t>(width) * height);
+	std::vector<uint8_t> coarse(mask.size());
+	const int full = kSamples * kSamples;
 	for (int y = 0; y < height; y++) {
 		for (int x = 0; x < width; x++) {
 			int hits = 0;
 			for (int j = 0; j < kSamples; j++) {
-				for (int k = 0; k < kSamples; k++) {
-					hits += inside((x + (k + 0.5) / kSamples) / width, (y + (j + 0.5) / kSamples) / height) ? 1 : 0;
-				}
+				for (int k = 0; k < kSamples; k++) hits += inside((x + (k + 0.5) / kSamples) / width, (y + (j + 0.5) / kSamples) / height) ? 1 : 0;
 			}
-			mask[static_cast<size_t>(y) * width + x] = static_cast<uint8_t>(hits * 255 / (kSamples * kSamples));
+			coarse[static_cast<size_t>(y) * width + x] = static_cast<uint8_t>(hits);
+		}
+	}
+	const auto at = [&](int x, int y) { return coarse[static_cast<size_t>(y) * width + x]; };
+	for (int y = 0; y < height; y++) {
+		for (int x = 0; x < width; x++) {
+			const int c = at(x, y);
+			bool edge = c > 0 && c < full;
+			if (!edge && x > 0) edge = at(x - 1, y) != c;
+			if (!edge && x + 1 < width) edge = at(x + 1, y) != c;
+			if (!edge && y > 0) edge = at(x, y - 1) != c;
+			if (!edge && y + 1 < height) edge = at(x, y + 1) != c;
+			if (!edge) {
+				mask[static_cast<size_t>(y) * width + x] = c ? 255 : 0;
+				continue;
+			}
+			int hits = 0;
+			const int half = kEdgeSamples / 2;
+			for (int i = 0; i < half; i++) {
+				const double sx = ((i * kEdgeStride) % half + 0.5) / kEdgeSamples, sy = (i + 0.5) / half;
+				hits += inside((x + sx) / width, (y + sy) / height) ? 1 : 0;
+				hits += inside((x + 1 - sx) / width, (y + sy) / height) ? 1 : 0;
+			}
+			mask[static_cast<size_t>(y) * width + x] = static_cast<uint8_t>((hits * 255 + kEdgeSamples / 2) / kEdgeSamples);
 		}
 	}
 	return mask;
@@ -234,6 +261,12 @@ std::vector<uint8_t> RuleMask(int width, int height)
 	}
 	return mask;
 }
+}
+
+std::vector<uint8_t> ShapeMask(int width, int height, bool (*inside)(double x, double y))
+{
+	if (width <= 0 || height <= 0 || !inside) return {};
+	return Coverage(width, height, inside);
 }
 
 std::vector<uint8_t> OrnamentMask(Ornament ornament, int width, int height)

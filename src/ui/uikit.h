@@ -9,10 +9,14 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include <map>
+#include <mutex>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include "i18n/tr.h"
+#include "ui/ornaments.h"
 
 namespace ui {
 
@@ -35,6 +39,57 @@ inline std::wstring W(const std::string &s)
 }
 
 constexpr int kFontCount = 6;
+
+inline bool InUnitEllipse(double x, double y) { return (x - 0.5) * (x - 0.5) + (y - 0.5) * (y - 0.5) <= 0.25; }
+inline bool InUnitDiamond(double x, double y) { return std::fabs(x - 0.5) + std::fabs(y - 0.5) <= 0.5; }
+
+// The coverage of a shape at a size in pixels, kept: the same few circles and lozenges are drawn on every frame.
+inline std::vector<uint8_t> CachedShapeMask(bool (*inside)(double, double), int w, int h)
+{
+	static std::mutex lock;
+	static std::map<std::tuple<bool (*)(double, double), int, int>, std::vector<uint8_t>> cache;
+	std::lock_guard<std::mutex> guard(lock);
+	const auto key = std::make_tuple(inside, w, h);
+	const auto it = cache.find(key);
+	if (it != cache.end()) return it->second;
+	if (cache.size() > 512) cache.clear();
+	return cache[key] = ShapeMask(w, h, inside);
+}
+
+// Lays a colour over what the DC holds, in the share of each pixel the mask gives, as GDI's own shapes have no smooth edges. It goes
+// through GdiAlphaBlend, which keeps to the DC's clip and to however its bitmap is laid out.
+inline bool BlendCoverage(HDC dc, const RECT &r, const std::vector<uint8_t> &mask, COLORREF c)
+{
+	const int w = r.right - r.left, h = r.bottom - r.top;
+	if (w <= 0 || h <= 0 || mask.size() != static_cast<size_t>(w) * h) return true;
+	BITMAPINFO bi = {};
+	bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
+	bi.bmiHeader.biWidth = w;
+	bi.bmiHeader.biHeight = -h;
+	bi.bmiHeader.biPlanes = 1;
+	bi.bmiHeader.biBitCount = 32;
+	bi.bmiHeader.biCompression = BI_RGB;
+	void *bits = nullptr;
+	HBITMAP bmp = CreateDIBSection(dc, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+	if (!bmp || !bits) {
+		if (bmp) DeleteObject(bmp);
+		return false;
+	}
+	uint32_t *px = static_cast<uint32_t *>(bits);
+	const uint32_t cr = GetRValue(c), cg = GetGValue(c), cb = GetBValue(c);
+	for (size_t i = 0; i < mask.size(); i++) {
+		const uint32_t a = mask[i];
+		px[i] = (a << 24) | (((cr * a + 127) / 255) << 16) | (((cg * a + 127) / 255) << 8) | ((cb * a + 127) / 255);
+	}
+	HDC mem = CreateCompatibleDC(dc);
+	HGDIOBJ old = SelectObject(mem, bmp);
+	BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+	const bool ok = GdiAlphaBlend(dc, r.left, r.top, w, h, mem, 0, 0, w, h, blend) != FALSE;
+	SelectObject(mem, old);
+	DeleteDC(mem);
+	DeleteObject(bmp);
+	return ok;
+}
 
 struct Painter {
 	HDC dc;
@@ -81,9 +136,16 @@ struct Painter {
 	}
 	void FillV(int x, int y, int w, int h, COLORREF top, COLORREF bottom) { FillGradient(x, y, w, h, top, bottom, GRADIENT_FILL_RECT_V); }
 	void FillH(int x, int y, int w, int h, COLORREF left, COLORREF right) { FillGradient(x, y, w, h, left, right, GRADIENT_FILL_RECT_H); }
+	// A shape over a box in pixels, with smooth edges.
+	bool ShapeAt(const RECT &r, bool (*inside)(double, double), COLORREF c)
+	{
+		return BlendCoverage(dc, r, CachedShapeMask(inside, r.right - r.left, r.bottom - r.top), c);
+	}
+	void Shape(int x, int y, int w, int h, bool (*inside)(double, double), COLORREF c) { ShapeAt(R(x, y, w, h), inside, c); }
 	void Diamond(int cx, int cy, int radius, COLORREF c)
 	{
 		const int x = S(cx), y = S(cy), r = S(radius);
+		if (ShapeAt({x - r, y - r, x + r + 1, y + r + 1}, InUnitDiamond, c)) return;
 		POINT pts[4] = {{x, y - r}, {x + r, y}, {x, y + r}, {x - r, y}};
 		HBRUSH b = CreateSolidBrush(c);
 		HPEN pen = CreatePen(PS_SOLID, 1, c);
@@ -169,6 +231,7 @@ struct Painter {
 	}
 	void Ellipse(int x, int y, int w, int h, COLORREF c)
 	{
+		if (ShapeAt(R(x, y, w, h), InUnitEllipse, c)) return;
 		HBRUSH b = CreateSolidBrush(c);
 		HPEN pen = CreatePen(PS_SOLID, 1, c);
 		HGDIOBJ ob = SelectObject(dc, b), op = SelectObject(dc, pen);

@@ -4,6 +4,7 @@
 #include "ui/objectivesui_view.h"
 
 #include <algorithm>
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -70,49 +71,53 @@ std::string Excerpt(const std::string &text)
 	return out;
 }
 
-void Polygon(Painter &p, const std::vector<POINT> &design, COLORREF c)
+// The icons are shapes over a box from 0 to 1, drawn with smooth edges; the pin and the flag are the chat's.
+bool InCircle(double x, double y, double cx, double cy, double r) { return (x - cx) * (x - cx) + (y - cy) * (y - cy) <= r * r; }
+
+bool InPolygon(double x, double y, const double (*pts)[2], int n)
 {
-	std::vector<POINT> pts;
-	for (const POINT &d : design) pts.push_back({p.S(d.x), p.S(d.y)});
-	HBRUSH b = CreateSolidBrush(c);
-	HPEN pen = CreatePen(PS_SOLID, 1, c);
-	HGDIOBJ ob = SelectObject(p.dc, b), op = SelectObject(p.dc, pen);
-	::Polygon(p.dc, pts.data(), static_cast<int>(pts.size()));
-	SelectObject(p.dc, ob);
-	SelectObject(p.dc, op);
-	DeleteObject(b);
-	DeleteObject(pen);
+	bool in = false;
+	for (int i = 0, j = n - 1; i < n; j = i++) {
+		if ((pts[i][1] > y) != (pts[j][1] > y) && x < (pts[j][0] - pts[i][0]) * (y - pts[i][1]) / (pts[j][1] - pts[i][1]) + pts[i][0]) in = !in;
+	}
+	return in;
 }
 
-// A map pin in a box of kIconBox: a round head with a hole, tapering to its point.
-void PinIcon(Painter &p, int x, int y, COLORREF c, COLORREF hole)
+double SegmentDistance(double x, double y, double ax, double ay, double bx, double by)
 {
-	const int cx = x + kIconBox / 2;
-	p.Ellipse(cx - 7, y + 1, 14, 14, c);
-	Polygon(p, {{cx - 6, y + 11}, {cx + 6, y + 11}, {cx, y + kIconBox}}, c);
-	p.Ellipse(cx - 3, y + 5, 6, 6, hole);
+	const double dx = bx - ax, dy = by - ay, t = std::max(0.0, std::min(1.0, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy)));
+	const double px = ax + t * dx - x, py = ay + t * dy - y;
+	return std::sqrt(px * px + py * py);
 }
 
-// A banner on its pole, with a swallowtail.
-void FlagIcon(Painter &p, int x, int y, COLORREF c)
+// A map pin: a round head with a hole, its sides running from the tip along the tangents of the head.
+bool InPin(double x, double y)
 {
-	p.Fill(x + 3, y + 1, 2, kIconBox - 1, c);
-	Polygon(p, {{x + 5, y + 2}, {x + 18, y + 2}, {x + 13, y + 7}, {x + 18, y + 12}, {x + 5, y + 12}}, c);
+	static const double taper[][2] = {{0.239, 0.507}, {0.761, 0.507}, {0.5, 0.97}};
+	if (InCircle(x, y, 0.5, 0.36, 0.115)) return false;
+	return InCircle(x, y, 0.5, 0.36, 0.3) || InPolygon(x, y, taper, 3);
 }
 
-// A round seal with a check cut into it.
-void CheckIcon(Painter &p, int x, int y, COLORREF c, COLORREF mark)
+// A banner flying from its pole.
+bool InFlag(double x, double y)
 {
-	p.Ellipse(x + 1, y + 1, kIconBox - 2, kIconBox - 2, c);
-	p.Line(x + 5, y + 10, x + 9, y + 14, mark, 2);
-	p.Line(x + 9, y + 14, x + 15, y + 6, mark, 2);
+	static const double cloth[][2] = {{0.3, 0.08}, {0.6, 0.15}, {0.9, 0.09}, {0.9, 0.5}, {0.6, 0.57}, {0.3, 0.5}};
+	const bool pole = x >= 0.16 && x <= 0.27 && y >= 0.04 && y <= 0.96;
+	return pole || InCircle(x, y, 0.215, 0.05, 0.07) || InPolygon(x, y, cloth, 6);
 }
 
-void NoteIcon(Painter &p, const ObjectiveEntry &e, int x, int y, bool selected, COLORREF bg)
+// A round seal with a check cut through it.
+bool InCheck(double x, double y)
 {
-	if (e.done) CheckIcon(p, x, y, kDoneMark, bg);
-	else if (e.note.onMap) PinIcon(p, x, y, selected ? pal::goldLight : kGold, bg);
-	else FlagIcon(p, x, y, selected ? pal::goldLight : kGold);
+	if (!InCircle(x, y, 0.5, 0.5, 0.47)) return false;
+	const double stroke = 0.075;
+	return SegmentDistance(x, y, 0.27, 0.5, 0.43, 0.66) > stroke && SegmentDistance(x, y, 0.43, 0.66, 0.74, 0.34) > stroke;
+}
+
+void NoteIcon(Painter &p, const ObjectiveEntry &e, int x, int y, bool selected)
+{
+	if (e.done) p.Shape(x, y, kIconBox, kIconBox, InCheck, kDoneMark);
+	else p.Shape(x, y, kIconBox, kIconBox, e.note.onMap ? InPin : InFlag, selected ? pal::goldLight : kGold);
 }
 
 int TagWidth(Painter &p, const std::string &label)
@@ -216,17 +221,14 @@ void PaintNoteRow(Painter &p, const View &v, int y, const Row &r, bool inside, i
 	const ObjectiveEntry &e = v.entries[r.index];
 	const bool selected = r.index == v.selected;
 	const bool hot = inside && !selected && p.Hover(kListX, y, kListW, r.h, v.mouseX, v.mouseY);
-	COLORREF bg = pal::panel;
 	if (selected) {
 		p.FillH(kListX, y, kListW, r.h, kCurrentBg, pal::panel);
 		p.Fill(kListX, y + 4, 3, r.h - 8, kGold);
-		bg = kCurrentBg;
 	}
 	else if (hot) {
 		p.FillH(kListX, y, kListW, r.h, kHotBg, pal::panel);
-		bg = kHotBg;
 	}
-	NoteIcon(p, e, kListX + 12, y + 9, selected, bg);
+	NoteIcon(p, e, kListX + 12, y + 9, selected);
 	const int textX = kListX + 42;
 	int textW = kListX + kListW - 10 - textX;
 	if (e.fresh && !e.done) {
@@ -321,7 +323,7 @@ void PaintStatus(Painter &p, const View &v, const ObjectiveEntry &e, int dy)
 	const int top = kStatusY + dy, y = top + (kStatusH - kIconBox) / 2;
 	p.Font(3);
 	if (e.done) {
-		CheckIcon(p, x, y, kDoneMark, pal::panel);
+		p.Shape(x, y, kIconBox, kIconBox, InCheck, kDoneMark);
 		p.Text(x + kIconBox + 8, top, kPaneW - kIconBox - 8, kStatusH, Tr("Objective completed"), kDoneText);
 		return;
 	}
@@ -333,7 +335,7 @@ void PaintStatus(Painter &p, const View &v, const ObjectiveEntry &e, int dy)
 	if (e.note.onMap) {
 		p.Text(x, top, 12, kStatusH, "\xC2\xB7", kDim);
 		x += 14;
-		PinIcon(p, x, y, kGold, pal::panel);
+		p.Shape(x, y, kIconBox, kIconBox, InPin, kGold);
 		x += kIconBox + 6;
 		const std::string marked = Tr("Marked on the map");
 		p.Text(x, top, kPaneX + kPaneW - kMapButtonW - 12 - x, kStatusH, marked, kDim);
@@ -371,11 +373,9 @@ void PaintText(Painter &p, const View &v, const ObjectiveEntry &e, PaintOut &out
 void PaintEmpty(Painter &p)
 {
 	const int cx = kPaneX + kPaneW / 2, top = 236;
-	const int big = 3;
+	const int big = 3 * kIconBox;
 	// The flag of the list, three times larger.
-	p.Fill(cx - 24 + 3 * big, top, 2 * big, kIconBox * big, pal::bronze);
-	Polygon(p, {{cx - 24 + 5 * big, top + 2 * big}, {cx - 24 + 18 * big, top + 2 * big}, {cx - 24 + 13 * big, top + 7 * big}, {cx - 24 + 18 * big, top + 12 * big},
-		{cx - 24 + 5 * big, top + 12 * big}}, pal::bronze);
+	p.Shape(cx - big / 2, top, big, big, InFlag, pal::bronze);
 	p.Font(2);
 	p.Text(kPaneX, top + 80, kPaneW, 32, Tr("No objectives yet"), pal::goldLight, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 	p.Font(0);
