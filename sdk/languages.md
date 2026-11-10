@@ -113,6 +113,20 @@ In multiplayer the language doesn't matter: players with different languages can
 
 Any file in `currentlang\` can be changed for one language only with your mod's `Local\<language>\` folder. `Local\spanish\help.xml` changes the help in Spanish only. If you put the file in `currentlang\help.xml` (outside `Local\`), it applies to all languages.
 
+## Help
+
+The help screen (F1) reads `currentlang\help.xml` in the player's language, with your mod's `Local\<language>\help.xml` or patches applied, and lays it out from its structure. The format is the game's: nested `<topic id>` elements, each with its `<entry>` elements (`font="large"`, `hcenter`, `vcenter`, `image`, `link`, `vspacing`). What the screen does with it:
+
+- **Side bar.** The first topic is the contents. Each `font="large"` entry in it starts a group, and the links under it are the group's rows.
+- **Listings.** A topic with two or more `font="large"` headings, each followed by links that have an `image` and a one-line text, is a listing (the units and the structures, one heading per civilization). Its row in the side bar opens into one row per heading, and each heading is a page that shows its links as a grid of cards.
+- **Links.** A `link` is resolved as the game does: an id among the children of the topic, or a path from the top with a leading `/` (`/contents/units/RHastatus`). A link the game wouldn't find still leads to the topic with that id, if there is one. Links that lead nowhere are shown as plain text, and `http://` links open in the browser.
+- **Titles.** A topic's title is its first entry when that one is `font="large"`. A listing takes the text of the link to it.
+- **Unit pages.** When a topic is the page of a class (the class has `help="contents/units/<topic>"` of its own, or the topic's id is the class id), the page starts with a card of that class's numbers as the game loaded them: health, attack and its type, armour, speed, sight, range for missile units, and the cost, time and building of its train command. A page shared by several classes (the heroes of each level, the peasants) gets no card. The units it is strong and weak against come from `data\CounterUnits.xml`, the table the computer players recruit from.
+- **Keys.** In a topic whose plain one-line entries are mostly `Key - what it does`, they are shown as keys.
+- **Search** looks in the titles and in every entry that isn't a link.
+
+Anything else is shown in the order of the file: headings, paragraphs (an empty line between them), pictures with their text, and empty entries as space.
+
 ## If something goes wrong
 
 Look in `Logs\imperivm\imperivm-mod.log` for the lines tagged `language`. The warnings (`W`) point at the lines with errors. To also see which text files were read and which `Local\<language>\` files are in use, put `LogChannels=language:debug` under `[Debug]` in `imperivm-mod.ini`.

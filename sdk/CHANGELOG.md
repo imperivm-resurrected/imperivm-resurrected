@@ -2,6 +2,10 @@
 
 The SDK version and which mods you can make with each one. The script API version (`Mod_ApiVersion()`) is separate: it's currently 7.
 
+## Next
+
+- **Help:** the help screen (F1) builds its side bar, its grids of units and its unit cards from `currentlang\help.xml` and the classes the game loaded. See [Help](languages.md#help) for what a mod's own file should follow.
+
 ## 1.0
 
 Needs Imperivm Resurrected 1.0 or later.
