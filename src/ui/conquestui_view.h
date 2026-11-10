@@ -14,12 +14,15 @@
 
 namespace conquestui {
 
-enum Action { kActNone = -1, kActNative = 1, kActDifficulty, kActScroll, kActOk };
+enum Action { kActNone = -1, kActNative = 1, kActDifficulty, kActOk };
+
+constexpr int kBarDescription = 0;
 
 struct View {
 	ConquestSnapshot game;
 	int mouseX = -1000, mouseY = -1000;
 	int scroll = 0;
+	ui::ScrollDrag bar;
 	bool victory = false;
 	std::string victoryText;
 };

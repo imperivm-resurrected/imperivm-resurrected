@@ -56,6 +56,8 @@ int g_tabAction = -1;
 // 0 the ways to support, 1 the honour roll.
 int g_tab = 0;
 int g_rollScroll = 0, g_rollScrollMax = 0;
+ScrollDrag g_rollBar;
+const int kRollBar = 0;
 
 void TabStep(bool back)
 {
@@ -279,10 +281,12 @@ void SupportDrawPanel(uint32_t *buf, int w, int h)
 	const int ox = r.ox, oy = r.oy, pw = r.pw, ph = r.ph;
 	int mx, my, copied;
 	DWORD copiedAt;
+	ScrollDrag bar;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
 		mx = g_mx;
 		my = g_my;
+		bar = g_rollBar;
 		copied = g_copied;
 		copiedAt = g_copiedAt;
 	}
@@ -416,10 +420,12 @@ void SupportDrawPanel(uint32_t *buf, int w, int h)
 			}
 			p.Unclip();
 			if (maxScroll > 0) {
-				const int trackH = listH, thumbH = std::max(30, trackH * listH / (listH + maxScroll));
-				const int thumbY = y + (trackH - thumbH) * scroll / maxScroll;
-				p.Fill(x + w2 - 5, y, 4, trackH, pal::lineDim);
-				p.Fill(x + w2 - 5, thumbY, 4, thumbH, kGold);
+				ScrollbarLook look;
+				look.width = 4;
+				look.minThumb = 30;
+				look.track = pal::lineDim;
+				look.thumb = kGold;
+				PaintScrollbar(p, kRollBar, x + w2 - 5, y, listH, {scroll, maxScroll, listH}, bar, mx, my, look);
 			}
 			else if (rows <= 0) {
 				p.Font(3);
@@ -459,6 +465,7 @@ bool SupportHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 				g_open = true;
 				g_tab = 0;
 				g_rollScroll = 0;
+				g_rollBar = ScrollDrag();
 				g_tabAction = -1;
 				g_swallowUp = true;
 				g_copied = -1;
@@ -488,6 +495,7 @@ bool SupportHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		if (action == kTabSupport || action == kTabRoll) {
 			g_tab = action == kTabRoll ? 1 : 0;
 			g_rollScroll = 0;
+			g_rollBar = ScrollDrag();
 			return;
 		}
 		if (action == kWholeRoll) {
@@ -514,6 +522,9 @@ bool SupportHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 			}
 		}
 	};
+	ScrollTo to;
+	const bool onBar = ScrollbarMouse(g_rollBar, g_hits, msg, wp, {static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))}, to);
+	if (to.id == kRollBar) g_rollScroll = to.pos;
 	switch (msg) {
 	case WM_MOUSEMOVE:
 		return false;
@@ -521,6 +532,10 @@ bool SupportHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 	case WM_LBUTTONDBLCLK: {
 		const POINT pt = {static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))};
 		g_tabAction = -1;
+		if (onBar) {
+			g_swallowUp = true;
+			return true;
+		}
 		int action = kNone;
 		for (auto it = g_hits.rbegin(); it != g_hits.rend(); ++it) {
 			if (PtInRect(&it->r, pt)) {
