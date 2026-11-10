@@ -307,6 +307,10 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, After &after)
 	State &st = g_s;
 	View &v = st.view;
 	const POINT at = {static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))};
+	ScrollTo to;
+	const bool onBar = ScrollbarMouse(v.bar, st.hits, msg, wp, at, to);
+	if (to.id == kBarPage) v.scroll = to.pos;
+	else if (to.id == kBarNav) v.navScroll = to.pos;
 	switch (msg) {
 	case WM_MOUSEMOVE:
 		v.mouseX = at.x;
@@ -319,6 +323,7 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, After &after)
 		g_swallowUp = true;
 		v.mouseX = at.x;
 		v.mouseY = at.y;
+		if (onBar) return true;
 		int fieldAction = 0;
 		FieldGeom geom;
 		if (FieldAt(at, fieldAction, geom) && fieldAction == kActSearch) {
@@ -557,6 +562,7 @@ bool HelpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		g_swallowUp = false;
 		std::lock_guard<std::mutex> lock(g_lock);
 		g_s.mouseDown = false;
+		g_s.view.bar = ScrollDrag();
 		return true;
 	}
 	void *dlg = HelpDialogOpen();
