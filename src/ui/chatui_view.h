@@ -27,8 +27,9 @@ struct Line {
 	// Written by the mod for the reader only, laid out as ChatLocalKind says.
 	bool local = false;
 	int localKind = kLocalText;
-	std::string key;
+	std::string key, keyHint;
 	std::vector<ControlKey> keys;
+	bool click = false;
 	int alpha = 255;
 };
 

@@ -39,6 +39,10 @@ struct ChatEntry {
 	int localKind = 0;
 	std::string key;
 	std::vector<uint32_t> keys;
+	// Drawn muted after the key: what the player fills in ("‹name›").
+	std::string keyHint;
+	// The keys are a modifier held with a left click.
+	bool click = false;
 };
 
 enum ChatLocalKind { kLocalText, kLocalHeading, kLocalSection, kLocalRow };
