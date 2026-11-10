@@ -5,6 +5,7 @@
 #include <intrin.h>
 
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 
 #include "MinHook.h"
