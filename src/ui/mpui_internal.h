@@ -298,6 +298,7 @@ struct State {
 	int resizeCol = -1, resizeStartX = 0, resizeStartW = 0;
 	float uiScale = 1.0f;
 	int dropKind = 0, dropIndex = 0, dropScroll = 0;
+	ScrollDrag dropBar;
 	int roomTab = 0;
 	std::string roomNameInput;
 };

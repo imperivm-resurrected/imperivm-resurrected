@@ -261,13 +261,12 @@ void PaintDescription(Layer &l, const View &v, int top, int bottom, int &maxScro
 	for (int i = 0; i < visible && first + i < static_cast<int>(lines.size()); i++) p.LineW(x, top + i * kLineH, w, kLineH, lines[first + i], kText);
 	p.Unclip();
 	if (maxScroll > 0) {
-		const int trackX = x + kCardW - 5, trackH = bottom - top;
-		const int thumbH = std::max(18, trackH * visible / static_cast<int>(lines.size()));
-		const int thumbY = top + (trackH - thumbH) * first / maxScroll;
-		p.Fill(trackX, top, 4, trackH, pal::well);
-		p.Fill(trackX, thumbY, 4, thumbH, p.Hover(trackX - 6, top, 16, trackH, v.mouseX, v.mouseY) ? pal::thumbHot : pal::thumb);
-		p.AddHit(trackX - 6, top, 16, (thumbY - top) + thumbH / 2, kActScroll, -visible);
-		p.AddHit(trackX - 6, thumbY + thumbH / 2, 16, bottom - thumbY - thumbH / 2, kActScroll, visible);
+		ScrollbarLook look;
+		look.width = 4;
+		look.minThumb = 18;
+		look.grip = 6;
+		look.track = pal::well;
+		PaintScrollbar(p, kBarDescription, x + kCardW - 5, top, bottom - top, {first, maxScroll, visible}, v.bar, v.mouseX, v.mouseY, look);
 	}
 }
 

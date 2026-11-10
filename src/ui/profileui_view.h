@@ -40,6 +40,7 @@ struct View {
 	std::vector<Card> cards;
 	int selected = -1;
 	int scroll = 0;
+	ui::ScrollDrag bar;
 	int mouseX = -10000, mouseY = -10000;
 	int modal = kModalNone;
 	std::string text;
@@ -57,6 +58,7 @@ enum Action {
 constexpr int kScreenW = 1100, kScreenH = 680;
 // How many rows of the list fit; the controller scrolls by rows.
 constexpr int kListRows = 7;
+constexpr int kBarList = 0;
 constexpr int kRecentRows = 5, kChartGames = 16;
 
 std::string NameDraft(const std::string &text);
