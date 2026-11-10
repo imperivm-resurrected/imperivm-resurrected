@@ -110,6 +110,24 @@ Things to know:
 
 Example: [`ruleset-rooms-example`](examples/ruleset-rooms-example).
 
+## Where art, sounds and texts go
+
+The files of a big mod that you can see and hear fall in three classes. Put each one where the host's choice of ruleset can pick it:
+
+| Class | Examples | Where |
+|---|---|---|
+| **1. The art of a civilization**, under names of its own | `units\MyUnit\...`, `buildings\...`, `gameres\icons\MyUnit.bmp`, `gameres\cmdbar\Actions\train MyUnit.bmp`, its sounds and voices | the **package root**, as always |
+| **2. Global in-game files that replace the game's** | a new `gameres\icons\RHastatus.bmp`, `sounds\Notifications\barrack idle.wav`, `local\<language>\voices\RHastatus\1.wav`, `loc\<language>.loc.xml` that rewrites the game's texts, a replaced `.ent.xml`, `.rle` or `.pass` of a game unit | a **ruleset** (`rulesets\<id>\`), because it is the host who chooses it and only one is mounted. The room's key does not cover images, sounds and texts, so players may have different ones |
+| **3. The menu skin**: menu INIs, backgrounds, buttons, lobby pages, tips and help (`menuini\`, `data\interface\menu\`, `gameres\menu\`, `menubackground.bmp`, `logo*.bmp`, `tips.xml`, `help.xml`) | the look of the menus | **not a ruleset**: it is a skin, a feature of its own that is not there yet. Leave it in the package root until then |
+
+A ruleset is mounted like a package root, so everything the root can hold works in it with the same paths: loose files at the game's paths, `loc\<language>.loc.xml`, `local\<language>\` (loose or `local\<language>.pak`, only for players of that language) and `rle.mmp.tail`. If two rulesets of a package replace the same file, only the one the host chose is used. Example: [`ruleset-assets-example`](examples/ruleset-assets-example) (a text, a voice, a sound, a button and a portrait). The log (`layer file served: ...`) says which files of the ruleset the game opened.
+
+If two packages put a file at the **same path**, the one that is first in the load order is used: packages are sorted by kind (cosmetic above content above rules), then by `id`, with `requires`, `loadAfter` and `loadBefore` first. A ruleset sits right above its own package, so it wins over the root of that package, but **not** over the root of another package that comes before it: a civilization pack that ships a game file in its root can beat the ruleset the host chose. That is one more reason to keep such files out of a civilization's root (the validator warns). In **Options > Content** both packages say they share the file, and the player can pick which one to use when it is only an image or a sound. [`ruleset-clash-example`](examples/ruleset-clash-example) shows it; the game's log says which package served each shared file.
+
+None of these files can be switched in place: a ruleset that has any of them is not one of the cases of [Switching without a restart](#switching-without-a-restart), so changing to it restarts the game, as without `FullHotReload`.
+
+The validator helps (warnings, never errors): in a package with `civs\`, a file of the root that the game already has (`--game <game folder>` is needed to compare) is reported as *global in-game file in the root of a civilization pack*; a menu skin file inside a ruleset is reported as *menu skin file in a ruleset layer*.
+
 ## Limits
 
 - A profile can use only one `rle.mmp.tail`. The one in the ruleset that is mounted counts as its package's, so a package cannot have a tail in its root and in a ruleset; two rulesets can each have theirs, because only one is mounted.

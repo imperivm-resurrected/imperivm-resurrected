@@ -15,9 +15,14 @@ for (const group of ['examples', 'templates']) {
   if (!fs.existsSync(root)) continue;
   for (const name of fs.readdirSync(root)) {
     if (!fs.statSync(path.join(root, name)).isDirectory()) continue;
-    const r = spawnSync(process.execPath, [validator, path.join(root, name)], { encoding: 'utf8' });
-    checked++;
-    if (r.status !== 0) problems.push(`${group}/${name}: ${(r.stdout + r.stderr).trim().split('\n').slice(0, 4).join(' | ')}`);
+    // An example of several packages has no mod.json of its own: each folder with one is a package.
+    const dir = path.join(root, name);
+    const packs = fs.existsSync(path.join(dir, 'mod.json')) ? [''] : fs.readdirSync(dir).filter(d => fs.existsSync(path.join(dir, d, 'mod.json')));
+    for (const pack of packs.length ? packs : ['']) {
+      const r = spawnSync(process.execPath, [validator, path.join(dir, pack)], { encoding: 'utf8' });
+      checked++;
+      if (r.status !== 0) problems.push(`${group}/${name}${pack ? '/' + pack : ''}: ${(r.stdout + r.stderr).trim().split('\n').slice(0, 4).join(' | ')}`);
+    }
   }
 }
 console.log(`${checked} examples and templates validated, ${problems.length} with problems`);

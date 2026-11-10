@@ -15,6 +15,7 @@
 #include "hooks/media.h"
 #include "mods/hidefiles.h"
 #include "mods/vfs.h"
+#include "mods/volumes.h"
 
 #include "mods/mods_internal.h"
 
@@ -149,6 +150,64 @@ void PublishChosenFiles(const ModProfile &p)
 	g_chosenFiles.store(open);
 }
 
+std::atomic<const std::map<std::string, std::string> *> g_volumeFiles{nullptr};
+}
+
+void PublishVolumeFiles(const ModProfile &p)
+{
+	auto *files = new std::map<std::string, std::string>();
+	for (const std::string &folder : p.mods) {
+		ModInfo m;
+		if (!ModsFind(folder, m) || !m.forbidden.empty()) continue;
+		// The first pack of the profile wins, and a ruleset before its package, as the loose layers are put in front of the engine's list.
+		auto add = [&](const std::vector<std::string> &loose, const std::string &sub) {
+			for (const std::string &path : loose) {
+				// Keyed by the real path, so gameres/icons/x.bmp and ui/icons/x.bmp of two packs compete in the packs' order.
+				if (VolumeCovers(path)) files->emplace(VolumeRealPath(path), "mods/" + m.folder + "/" + sub + path);
+			}
+		};
+		if (const ModLayer *layer = ModsActiveLayer(p, m)) add(layer->loosePaths, layer->path + "/");
+		add(m.loosePaths, "");
+	}
+	LogI("content", "%u files of the packs answer to a name with a volume (gameres/, gameini/...)", static_cast<unsigned>(files->size()));
+	g_volumeFiles.store(files);
+}
+
+void PublishFileSources(const ModProfile &p)
+{
+	std::vector<FileSource> sources;
+	std::vector<std::vector<std::string>> files;
+	for (const std::string &folder : p.mods) {
+		ModInfo m;
+		if (!ModsFind(folder, m) || !m.forbidden.empty()) continue;
+		auto add = [&](const std::string &label, const std::string &sub, const std::vector<std::string> &loose) {
+			if (loose.empty()) return;
+			std::string dir = ModsDir() + "\\" + m.folder + (sub.empty() ? "" : "\\" + sub.substr(0, sub.size() - 1));
+			std::replace(dir.begin(), dir.end(), '/', '\\');
+			sources.push_back({label, "mods/" + m.folder + "/" + sub, dir});
+			files.push_back(loose);
+		};
+		// Mounted in this order: a ruleset right above its package.
+		if (const ModLayer *layer = ModsActiveLayer(p, m)) add(m.folder + "/" + layer->id, layer->path + "/", layer->loosePaths);
+		add(m.folder, "", m.loosePaths);
+	}
+	VfsSharedFilesReset(sources, files);
+}
+
+void PublishLayerDiag(const ModProfile &p)
+{
+	ModInfo owner;
+	const ModLayer *layer = !p.ruleset.Empty() && ModsFind(p.ruleset.pack, owner) ? ModsActiveLayer(p, owner) : nullptr;
+	if (!layer) {
+		VfsLayerDiagReset("", "", {});
+		return;
+	}
+	std::string dir = ModsDir() + "\\" + owner.folder + "\\" + layer->path;
+	std::replace(dir.begin(), dir.end(), '/', '\\');
+	VfsLayerDiagReset(owner.folder + "/" + layer->id, dir, layer->loosePaths);
+}
+
+namespace {
 void LogValueClashes(const ModProfile &p)
 {
 	for (const ValueClash &c : ClashesOf(p, ModsList()).values) {
@@ -266,11 +325,22 @@ void MountProfileLayers(void *list)
 		MediaSetModDirs(dirs);
 	}
 	PublishChosenFiles(p);
+	PublishVolumeFiles(p);
+	PublishLayerDiag(p);
+	PublishFileSources(p);
 	PatchRebuild();
 	LogValueClashes(p);
 	ModsRebuildFeatures();
 }
 }
+}
+
+const std::string *ModsVolumeFile(const std::string &rel)
+{
+	const std::map<std::string, std::string> *files = g_volumeFiles.load();
+	if (!files || files->empty() || !VolumeOf(rel)) return nullptr;
+	const auto it = files->find(VolumeRealPath(rel));
+	return it == files->end() ? nullptr : &it->second;
 }
 
 const std::string *ModsChosenFile(const std::string &rel)
@@ -361,6 +431,8 @@ bool ModsApplyWithoutRestart()
 		dirs = g_mount.dirs;
 	}
 	MediaSetModDirs(dirs);
+	PublishVolumeFiles(active);
+	PublishFileSources(active);
 	return failed.empty();
 }
 

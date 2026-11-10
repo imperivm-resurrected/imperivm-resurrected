@@ -21,6 +21,7 @@
 #include "mods/mods.h"
 #include "mods/modoptions.h"
 #include "mods/modvars.h"
+#include "mods/vfs.h"
 #include "game/netlink.h"
 #include "core/log.h"
 #include "core/names.h"
@@ -1210,6 +1211,7 @@ void GameRulesOnGameStart()
 void GameRulesOnGameEnd()
 {
 	CrashLogLoadingEnd();
+	VfsLayerDiagSummary("the game has ended");
 	g_gameRunning = false;
 	ModRulesSetActive(0);
 	if (!g_pendingRulesTick || static_cast<int>(GetTickCount() - g_pendingRulesTick) > 5000) g_pendingRulesTick = 0;

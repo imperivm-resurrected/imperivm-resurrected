@@ -56,6 +56,11 @@ extern MountedState g_mount;
 // The game files the packs of the profile hide, set in the VFS (the same as MountProfileLayers does at start-up).
 void ApplyHiddenFiles(const ModProfile &p);
 // Mount (or take out) the loose files of a folder of mods\, as the VFS name "mods/<pack>/rulesets/<id>/", in place. For an in-place switch.
+// What the mounted profile gives to the lookups by volume name (ModsVolumeFile) and to the account of which layer files the engine opens
+// (VfsLayerDiagReset): both follow the profile and its ruleset, so they are made again when either changes.
+void PublishVolumeFiles(const ModProfile &p);
+void PublishLayerDiag(const ModProfile &p);
+void PublishFileSources(const ModProfile &p);
 bool MountLooseFolder(const std::string &vfsPrefix);
 bool UnmountLooseFolder(const std::string &vfsPrefix);
 inline std::string ModSignature(const ModInfo &m)
