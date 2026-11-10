@@ -1808,7 +1808,6 @@ extern const TrRow kTrRows[] = {
 	{"Weak against", "Débil contra", "Debole contro"},
 	{"From the counters the computer players recruit", "Según las unidades que recluta la IA para contrarrestar a cada una", "Secondo le unità che l'IA addestra per contrastare ciascuna"},
 	{"Search the help", "Buscar en la ayuda", "Cerca nella guida"},
-	{"Type to search · Wheel scrolls · Backspace goes back · Esc closes", "Escribe para buscar · Rueda para desplazar · Retroceso vuelve atrás · Esc cierra", "Scrivi per cercare · Rotella per scorrere · Backspace torna indietro · Esc chiude"},
 	{"Damage", "Ataque", "Attacco"},
 	{"Change in Controls", "Cambiar en Controles", "Cambia in Controlli"},
 	{"Your keys as they are set in Controls, where the orders of units and buildings are too.", "Tus teclas tal como están en Controles, donde también están las órdenes de unidades y edificios.", "I tuoi tasti come sono impostati in Controlli, dove ci sono anche gli ordini di unità ed edifici."},
