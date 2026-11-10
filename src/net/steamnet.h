@@ -52,6 +52,8 @@ struct OnlineLobby {
 	std::string optionsText;
 	unsigned rules = 0;
 	std::string civSets;
+	// The id of the package that is the room's ruleset when it has no ruleset of its own (see DecodeModList); empty otherwise.
+	std::string rulesetPackage;
 	std::string saveName;
 	std::vector<std::string> playerNames;
 	// SteamIDs in the order of playerNames; empty in rooms made with versions before 1.0.3.

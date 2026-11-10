@@ -309,7 +309,7 @@ bool ModsSwitchRulesetAndRemember(const ModRuleset &wanted)
 	return true;
 }
 
-bool ModsFindRoomRuleset(const std::vector<RoomPackFact> &packs, ModRuleset &out)
+bool ModsFindRoomRuleset(const std::vector<RoomPackFact> &packs, const std::string &rulesetPackage, ModRuleset &out)
 {
 	out = ModRuleset();
 	const RoomPackFact *with = nullptr;
@@ -317,6 +317,28 @@ bool ModsFindRoomRuleset(const std::vector<RoomPackFact> &packs, ModRuleset &out
 		if (f.layer.empty()) continue;
 		if (with) return false;
 		with = &f;
+	}
+	if (with && !rulesetPackage.empty()) return false;
+	if (!with && !rulesetPackage.empty()) {
+		// The room's ruleset is a package with no ruleset of its own: this computer needs that exact copy, mounted.
+		const RoomPackFact *fact = nullptr;
+		for (const RoomPackFact &f : packs) {
+			if (_stricmp(f.id.c_str(), rulesetPackage.c_str()) == 0) fact = &f;
+		}
+		if (!fact) return false;
+		std::vector<std::string> mounted;
+		{
+			std::lock_guard<std::mutex> lock(g_lock);
+			mounted = g_mount.profile.mods;
+		}
+		std::lock_guard<std::mutex> lock(g_lock);
+		for (const ModInfo &m : g_mods) {
+			if (_stricmp(m.id.c_str(), fact->id.c_str()) != 0 || m.version != fact->version || ModsCompareRoomCopy(m, fact->copyKey) != RoomCopy::kSame) continue;
+			if (!m.layers.empty() || std::none_of(mounted.begin(), mounted.end(), [&](const std::string &f) { return SameFolder(f, m.folder); })) continue;
+			out.pack = m.folder;
+			return true;
+		}
+		return false;
 	}
 	if (!with) return true;
 	std::vector<std::string> mounted;

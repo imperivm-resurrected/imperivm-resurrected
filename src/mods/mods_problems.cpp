@@ -266,7 +266,9 @@ std::string ModsProfileGameplayHash(const ModProfile &p)
 	for (const std::string &folder : p.mods) {
 		for (const ModInfo &m : g_mods) {
 			if (m.folder != folder) continue;
-			if (m.gameplay) parts.push_back({m.id, m.gameplayHash, ""});
+			// "." marks a package whose root files that replace the game's are mounted (its own ruleset is in use): the key of a room has to say so,
+			// or two computers with the same files would play with different ones (mods/rootrules.h). Packages that have no such files are unchanged.
+			if (m.gameplay) parts.push_back({m.id, m.gameplayHash, !m.globalLoose.empty() && RootGlobalApplies(m.folder, p.ruleset.pack) ? "." : ""});
 			// The ruleset the profile mounts is part of what the players share, hashed apart from the package's root.
 			const ModLayer *layer = ModsActiveLayer(p, m);
 			if (layer && layer->gameplay) parts.push_back({m.id, layer->gameplayHash, layer->id});

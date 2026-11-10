@@ -186,7 +186,7 @@ OnlineLobby ReadLobby(uint64 id)
 		const std::string save = Data(id, "save");
 		l.saveName = save.substr(0, save.find(9));
 	}
-	l.mods = DecodeModList(Data(id, "mods"));
+	l.mods = DecodeModList(Data(id, "mods"), &l.rulesetPackage);
 	l.optionalMods = atoi(Data(id, "nopt").c_str());
 	l.myNumber = atoi(Data(id, ("k:" + std::to_string(g_steam.me)).c_str()).c_str());
 	l.modsRequiredOnly = Data(id, "modsv") == "2";

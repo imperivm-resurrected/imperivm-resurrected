@@ -381,6 +381,7 @@ std::string RoomConfigKey(const OnlineLobby &l)
 	std::string key = l.optionsText + "|" + std::to_string(l.rules) + "|" + l.map + "|" + l.mode + "|" + l.civSets;
 	// The rules of the room count too: a guest who agreed to the game with other rules has to agree again.
 	for (const OnlineMod &m : l.mods) key += "|" + m.id + "#" + m.layer + ":" + m.layerKey;
+	key += "|@" + l.rulesetPackage;
 	for (const OnlineSlot &s : l.slots) {
 		if (s.type != 3) key += "|" + std::to_string(s.type) + ":" + s.name;
 	}
@@ -585,7 +586,7 @@ bool AdoptRoomRules(const OnlineLobby &room)
 	std::vector<RoomPackFact> facts;
 	for (const OnlineMod &m : room.mods) facts.push_back({m.id, m.version, m.copyKey, m.layer, m.layerKey});
 	ModRuleset want;
-	if (!ModsFindRoomRuleset(facts, want)) return false;
+	if (!ModsFindRoomRuleset(facts, room.rulesetPackage, want)) return false;
 	const ModRuleset before = ModsMountedProfile().ruleset;
 	if (ModsSameMount(before, want) || !ModsSwitchRulesetAndRemember(want)) return false;
 	if (SteamOwnGameplayKey() != room.gameplayKey) {

@@ -358,8 +358,9 @@ struct RoomPackFact {
 	std::string id, version, copyKey, layer, layerKey;
 };
 // The ruleset a room mounts, when this computer has that exact copy of the package of its ruleset, enabled in the mounted profile (empty
-// ruleset if the room has none). False if it does not, or if the room names more than one ruleset.
-bool ModsFindRoomRuleset(const std::vector<RoomPackFact> &packs, ModRuleset &out);
+// ruleset if the room has none). False if it does not, or if the room names more than one ruleset. rulesetPackage is the id of the package that
+// is the room's ruleset when it has none of its own (the entry that is called by the package's name), or empty.
+bool ModsFindRoomRuleset(const std::vector<RoomPackFact> &packs, const std::string &rulesetPackage, ModRuleset &out);
 // What the game has to do before the next match so that it plays with the mounted ruleset: nothing, read all its data again, or nothing
 // it can do (kRestart: the pair is not one that can be switched in place).
 enum class ModsReload { kNone, kReload, kRestart };
