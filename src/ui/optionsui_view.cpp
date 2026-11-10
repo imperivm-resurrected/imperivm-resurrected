@@ -388,7 +388,8 @@ void PaintOptionsScreen(Painter &p, const View &v)
 	}
 
 	if (v.dropId && !dropItems.empty()) {
-		PaintDropMenu(p, dropAnchor, ToDropItems(dropItems), dropSel, v.dropScroll, kScreenW, kScreenH, kActPick, kActDropClose, v.mouseX, v.mouseY, kComboW);
+		PaintDropMenu(p, dropAnchor, ToDropItems(dropItems), dropSel, v.dropScroll, kScreenW, kScreenH, kActPick, kActDropClose, v.mouseX, v.mouseY, kComboW,
+			v.dropBar);
 	}
 }
 

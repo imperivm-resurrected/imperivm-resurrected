@@ -97,7 +97,7 @@ void PaintDropList(Painter &p, const State &st)
 		}
 	}
 	const ui::DropLayout d = PaintDropMenu(p, anchor, items, DropCurrent(st), st.dropScroll, kDesignW, kDesignH, kDropPick, kDropClose,
-		st.mouseX, st.mouseY, st.drop == kDropClashFiles ? kDesignW - kDetailX - 16 : st.drop == kDropVersions ? 360 : 180);
+		st.mouseX, st.mouseY, st.drop == kDropClashFiles ? kDesignW - kDetailX - 16 : st.drop == kDropVersions ? 360 : 180, st.dropBar);
 	g_drop.rows = d.rows;
 	g_drop.count = d.count;
 }
