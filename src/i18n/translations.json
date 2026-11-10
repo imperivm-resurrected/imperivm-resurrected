@@ -1733,7 +1733,6 @@
 {"en":"your allies","es":"tus aliados","it":"i tuoi alleati"},
 {"en":"/allies · /a","es":"/aliados · /a","it":"/alleati · /a"},
 {"en":"one player","es":"un jugador","it":"un giocatore"},
-{"en":"/w · /p name","es":"/w · /p nombre","it":"/w · /p nome"},
 {"en":"a line that starts with /","es":"una línea que empieza por /","it":"una riga che inizia con /"},
 {"en":"Keys","es":"Teclas","it":"Tasti"},
 {"en":"who reads it","es":"quién lo lee","it":"chi lo legge"},
@@ -1748,5 +1747,6 @@
 {"en":"they go to whoever the chip shows","es":"van a quien muestra la etiqueta","it":"vanno a chi mostra l'etichetta"},
 {"en":"Unknown command: /%s · %s","es":"Orden desconocida: /%s · %s","it":"Comando sconosciuto: /%s · %s"},
 {"en":"/help","es":"/ayuda","it":"/aiuto"},
-{"en":"Type a message…","es":"Escribe un mensaje…","it":"Scrivi un messaggio…"}
+{"en":"Type a message…","es":"Escribe un mensaje…","it":"Scrivi un messaggio…"},
+{"en":"‹name›","es":"‹nombre›","it":"‹nome›"}
 ]

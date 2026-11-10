@@ -147,12 +147,15 @@ std::string KeyText(int id)
 	return k.vk ? ControlsKeyLabel(k) : std::string();
 }
 
-void HelpEntry(int kind, const std::string &text, const std::string &key = "", std::vector<ControlKey> keys = {})
+void HelpEntry(int kind, const std::string &text, const std::string &key = "", std::vector<ControlKey> keys = {}, const std::string &hint = "",
+	bool click = false)
 {
 	ChatEntry e;
 	e.localKind = kind;
 	e.text = text;
 	e.key = key;
+	e.keyHint = hint;
+	e.click = click;
 	for (const ControlKey &k : keys) {
 		if (k.vk) e.keys.push_back(k.vk | static_cast<uint32_t>(k.mods) << 16);
 	}
@@ -169,7 +172,7 @@ void ShowHelp()
 	HelpEntry(kLocalSection, Tr("Recipients"));
 	HelpEntry(kLocalRow, Tr("everyone"), Tr("/all \xc2\xb7 /al"));
 	HelpEntry(kLocalRow, Tr("your allies"), Tr("/allies \xc2\xb7 /a"));
-	HelpEntry(kLocalRow, Tr("one player"), Tr("/w \xc2\xb7 /p name"));
+	HelpEntry(kLocalRow, Tr("one player"), "/w \xc2\xb7 /p", {}, Tr("\xe2\x80\xb9name\xe2\x80\xba"));
 	HelpEntry(kLocalRow, Tr("a line that starts with /"), "//");
 	HelpEntry(kLocalSection, Tr("Keys"));
 	HelpEntry(kLocalRow, Tr("who reads it"), "", {{VK_TAB, 0}});
@@ -177,9 +180,8 @@ void ShowHelp()
 	HelpEntry(kLocalRow, Tr("send with your camera's place"), "", {{VK_RETURN, kKeyCtrl}});
 	HelpEntry(kLocalRow, Tr("close"), "", {{VK_ESCAPE, 0}});
 	HelpEntry(kLocalSection, Tr("Marks"));
-	static const char *const kClicks[kPingClickModes] = {"Alt + click", "Ctrl + click", "Shift + click", "Off"};
-	const int click = ControlsPingClickMode();
-	if (click != kPingClickOff) HelpEntry(kLocalRow, Tr("hold and point: on my way, attack, danger"), Tr(kClicks[click]));
+	const unsigned clickVk = ControlsPingClickVk();
+	if (clickVk) HelpEntry(kLocalRow, Tr("hold and point: on my way, attack, danger"), "", {{static_cast<unsigned short>(clickVk), 0}}, "", true);
 	const struct {
 		int id;
 		const char *what;
@@ -659,6 +661,8 @@ Line LineOf(const ChatEntry &e, int alpha)
 	l.local = e.local;
 	l.localKind = e.localKind;
 	l.key = e.key;
+	l.keyHint = e.keyHint;
+	l.click = e.click;
 	for (const uint32_t k : e.keys) l.keys.push_back({static_cast<unsigned short>(k & 0xffff), static_cast<unsigned char>(k >> 16)});
 	l.alpha = alpha;
 	return l;

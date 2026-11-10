@@ -190,6 +190,18 @@ bool InFlag(double x, double y)
 	return InRoundRect(x, y, 0.16, 0.04, 0.27, 0.96, 0.03) || InCircle(x, y, 0.215, 0.05, 0.07) || InPolygon(x, y, cloth);
 }
 
+bool InMouse(double x, double y)
+{
+	const double x0 = 0.2, x1 = 0.8, y0 = 0.04, y1 = 0.96, mid = 0.5, split = 0.42, wall = 0.075;
+	if (!InRoundRect(x, y, x0, y0, x1, y1, 0.28)) return false;
+	// A gap between the buttons and under them.
+	if (y < split && std::fabs(x - mid) < 0.03) return false;
+	if (y >= split && y < split + 0.05) return x < x0 + wall || x > x1 - wall;
+	// The right button is only its rim: the left one is the one pressed.
+	if (y < split && x > mid) return !InRoundRect(x, y, mid + 0.03 + wall * 0.6, y0 + wall, x1 - wall, split - 0.01, 0.2);
+	return true;
+}
+
 std::vector<uint8_t> LaurelMask(int width, int height)
 {
 	const double aspect = static_cast<double>(width) / height;
@@ -238,6 +250,7 @@ std::vector<uint8_t> OrnamentMask(Ornament ornament, int width, int height)
 	case kOrnamentPin: return Coverage(width, height, InPin);
 	case kOrnamentChevron: return Coverage(width, height, InChevron);
 	case kOrnamentFlag: return Coverage(width, height, InFlag);
+	case kOrnamentMouse: return Coverage(width, height, InMouse);
 	default: return {};
 	}
 }

@@ -1740,7 +1740,6 @@ extern const TrRow kTrRows[] = {
 	{"your allies", "tus aliados", "i tuoi alleati"},
 	{"/allies · /a", "/aliados · /a", "/alleati · /a"},
 	{"one player", "un jugador", "un giocatore"},
-	{"/w · /p name", "/w · /p nombre", "/w · /p nome"},
 	{"a line that starts with /", "una línea que empieza por /", "una riga che inizia con /"},
 	{"Keys", "Teclas", "Tasti"},
 	{"who reads it", "quién lo lee", "chi lo legge"},
@@ -1756,5 +1755,6 @@ extern const TrRow kTrRows[] = {
 	{"Unknown command: /%s · %s", "Orden desconocida: /%s · %s", "Comando sconosciuto: /%s · %s"},
 	{"/help", "/ayuda", "/aiuto"},
 	{"Type a message…", "Escribe un mensaje…", "Scrivi un messaggio…"},
+	{"‹name›", "‹nombre›", "‹nome›"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

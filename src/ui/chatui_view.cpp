@@ -270,17 +270,38 @@ void PaintLocalRow(Painter &p, const Line &l, const Row &row, const Measured &m,
 		return;
 	case kLocalRow: {
 		int right = kPad + 8;
-		if (!l.keys.empty()) {
-			p.fonts[4] = g_f.meta;
-			DrawKeys(p, kPad + 8, y + 2, kRowH - 3, l.keys);
+		p.fonts[4] = g_f.meta;
+		if (l.click && !l.keys.empty()) {
+			// The modifier's cap, "+" and a mouse with its left button pressed.
+			const unsigned short vk = l.keys[0].vk;
+			const std::string cap = Tr(vk == VK_CONTROL ? "Ctrl" : vk == VK_SHIFT ? "Shift" : "Alt");
+			p.Font(4);
+			const int cw = CapWidth(p, cap), capH = kRowH - 3;
+			DrawCap(p, right, y + 2, cw, capH, cap, vk, RGB(122, 98, 64), RGB(240, 222, 170));
+			right += cw;
+			p.Text(right, y + 2, 12, capH - 2, "+", kDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			right += 12;
+			const int icon = capH;
+			PaintOrnament(p, kOrnamentMouse, right - 1, y + 1, icon + 2, icon + 2, RGB(0, 0, 0));
+			PaintOrnament(p, kOrnamentMouse, right, y + 2, icon, icon, RGB(240, 222, 170));
+			right += icon;
+		}
+		else if (!l.keys.empty()) {
+			DrawKeys(p, right, y + 2, kRowH - 3, l.keys);
 			right += KeysWidth(p, l.keys);
 		}
 		else if (!l.key.empty()) {
 			SelectObject(p.dc, g_f.chip);
-			ShadowLine(p, kPad + 8, y + 1, W(l.key), kHelpKey);
+			ShadowLine(p, right, y + 1, W(l.key), kHelpKey);
 			right += WidthOf(p.dc, g_f.chip, W(l.key), p.s);
+			if (!l.keyHint.empty()) {
+				SelectObject(p.dc, g_f.text);
+				ShadowLine(p, right + 4, y, W(l.keyHint), kMuted);
+				right += 4 + WidthOf(p.dc, g_f.text, W(l.keyHint), p.s);
+			}
 		}
-		const int col = l.keys.empty() && l.key.empty() ? kPad + 8 : std::max(kPad + kHelpKeyColumn, right + 10);
+		// Every row's text in the second column, also the ones with nothing on the left.
+		const int col = std::max(kPad + kHelpKeyColumn, right + 10);
 		SelectObject(p.dc, g_f.text);
 		ShadowLine(p, col, y, W(l.text), kMuted);
 		return;
