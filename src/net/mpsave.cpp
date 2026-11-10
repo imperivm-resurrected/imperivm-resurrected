@@ -13,6 +13,7 @@
 #include "MinHook.h"
 #include "hooks/hookcount.h"
 #include "core/log.h"
+#include "game/gamestats.h"
 #include "hooks/gamestate.h"
 #include "net/mpsave.h"
 #include "net/rejoin.h"
@@ -248,6 +249,13 @@ int __cdecl HookSaveGameToFile(const char *path)
 		static const std::string error = Tr("Could not write the save metadata. Automatic civilizations require it: fix the file permissions or free disk space, then save again.");
 		UiToast(error, true);
 		return static_cast<int>(reinterpret_cast<uintptr_t>(error.c_str()));
+	}
+	if (r == 0 && path) {
+		std::string saved = GameFolder() + "\\" + path;
+		for (char &c : saved) {
+			if (c == '/') c = '\\';
+		}
+		GameStatsWriteFile(saved);
 	}
 	if (InMultiplayer() && path) {
 		int me = 0, x = 0, y = 0;

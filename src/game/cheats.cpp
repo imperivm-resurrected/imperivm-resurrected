@@ -25,6 +25,7 @@
 #include "game/cheats.h"
 #include "game/civs.h"
 #include "game/cmdcheck.h"
+#include "game/gametext.h"
 #include "game/techplan.h"
 #include "game/unitcatalog.h"
 #include "addr/engine.h"
@@ -492,40 +493,12 @@ bool CheatsPanelConsumeKeyOpen() { return g_panelKeyOpened.exchange(false); }
 
 namespace {
 
-typedef char *(__cdecl *LocFormat_t)(void *db, char *out, const char *key, ...);
 typedef int(__fastcall *IsKindOfName_t)(void *self, void *edx, const char *name);
 
-const char *const kRaceEnglish[8] = {"Gaul", "Republican Rome", "Carthage", "Iberia", "Imperial Rome", "Britain", "Egypt", "Germany"};
 const int kClassId = 4, kClassEntity = 0x74, kClassDisplayName = 0x8d4, kClassEditTree = 0x928, kClassRace = 0xb48;
 
 UnitCatalog g_catalog;
 bool g_catalogReady = false;
-
-bool LocalizeKey(void *db, const char *key, char *out, size_t size)
-{
-	out[0] = 0;
-	__try {
-		char buf[512] = {};
-		reinterpret_cast<LocFormat_t>(addr::kLocFormat)(db, buf, key);
-		strncpy_s(out, size, buf, _TRUNCATE);
-		return true;
-	}
-	__except (EXCEPTION_EXECUTE_HANDLER) {
-		return false;
-	}
-}
-
-std::string Localized(void *db, const std::string &text, const std::string &context)
-{
-	if (!db || text.empty() || text.find('%') != std::string::npos) return text;
-	char out[512];
-	if (!context.empty()) {
-		const std::string key = text + "@" + context;
-		if (LocalizeKey(db, key.c_str(), out, sizeof(out)) && out[0] && key != out) return out;
-	}
-	if (LocalizeKey(db, text.c_str(), out, sizeof(out)) && out[0]) return out;
-	return text;
-}
 
 void CollectClasses(char *node, char *head, std::vector<char *> &out, int depth)
 {
@@ -544,7 +517,6 @@ bool BuildCatalog()
 	if (!head) return false;
 	std::vector<char *> classes;
 	CollectClasses(*reinterpret_cast<char **>(head + 4), head, classes, 0);
-	void *db = *reinterpret_cast<void **>(addr::kUiLocalization);
 	std::vector<CatalogClass> input;
 	for (char *cls : classes) {
 		const std::string id = GameStringAt(cls + kClassId);
@@ -553,10 +525,10 @@ bool BuildCatalog()
 		CatalogClass c;
 		c.id = id;
 		c.name = GameStringAt(cls + kClassDisplayName);
-		c.leafName = Localized(db, spot.leaf, spot.leafContext);
+		c.leafName = GameText(spot.leaf, spot.leafContext);
 		const int race = *reinterpret_cast<int *>(cls + kClassRace);
 		if (race >= 0 && race < 8) {
-			c.groupName = Localized(db, kRaceEnglish[race], "race");
+			c.groupName = GameRaceText(race);
 			c.groupOrder = race;
 		}
 		else if (const Civ *civ = race >= 10 ? CivByIndex(race) : nullptr) {
@@ -564,7 +536,7 @@ bool BuildCatalog()
 			c.groupOrder = 100 + race;
 		}
 		if (c.groupName.empty()) {
-			c.groupName = Localized(db, spot.folder, "editortree/Units");
+			c.groupName = GameText(spot.folder, "editortree/Units");
 			c.groupOrder = 1000;
 		}
 		c.hero = reinterpret_cast<IsKindOfName_t>(addr::kIsKindOfName)(cls, nullptr, "Hero") != 0;

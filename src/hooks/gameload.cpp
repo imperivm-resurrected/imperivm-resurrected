@@ -17,20 +17,24 @@ LoadGameFromFile_t g_origLoadGameFromFile = nullptr;
 std::mutex g_lock;
 std::vector<GameLoadingFn> g_before;
 std::vector<GameLoadedFn> g_listeners;
+std::vector<GameLoadedFromFn> g_pathListeners;
 bool g_installed = false, g_ok = false;
 
 int __cdecl HookLoadGameFromFile(const char *path)
 {
 	std::vector<GameLoadingFn> before;
 	std::vector<GameLoadedFn> listeners;
+	std::vector<GameLoadedFromFn> pathListeners;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
 		before = g_before;
 		listeners = g_listeners;
+		pathListeners = g_pathListeners;
 	}
 	for (GameLoadingFn fn : before) fn();
 	const int result = g_origLoadGameFromFile(path);
 	for (GameLoadedFn fn : listeners) fn(result);
+	for (GameLoadedFromFn fn : pathListeners) fn(path, result);
 	return result;
 }
 }
@@ -50,6 +54,12 @@ void OnGameLoading(GameLoadingFn fn)
 {
 	std::lock_guard<std::mutex> lock(g_lock);
 	g_before.push_back(fn);
+}
+
+void OnGameLoadedFrom(GameLoadedFromFn fn)
+{
+	std::lock_guard<std::mutex> lock(g_lock);
+	g_pathListeners.push_back(fn);
 }
 
 void OnGameLoaded(GameLoadedFn fn)

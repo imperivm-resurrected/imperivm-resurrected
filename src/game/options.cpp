@@ -2,6 +2,7 @@
 // Copyright (C) 2026 THIONG
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include <windows.h>
+#include <atomic>
 #include <string>
 #include <vector>
 #include <cstdint>
@@ -42,6 +43,7 @@ const int kIdReset = 0x1115;
 const int kIdControls = 0x111B;
 const int kIdLanguage = 0x111C;
 const int kIdMonitor = 0x111D;
+const int kIdResolution = 0x1004;
 const int kIdUpdate = 0x111E;
 std::vector<std::string> g_langCodes;
 const int kGameDefaults[13] = {0, 0, 0, 1, 1, 1, 1, 1, 14, 50, 50, 50, 50};
@@ -180,9 +182,25 @@ template <size_t N> std::vector<std::string> Items(const char *(&labels)[N])
 	return items;
 }
 
+std::atomic<void *> g_openDialog{nullptr};
+PopulateControls_t g_origDtor = nullptr;
+
+void __fastcall HookDtor(void *dlg)
+{
+	void *expected = dlg;
+	if (g_openDialog.compare_exchange_strong(expected, nullptr)) TweaksPreviewResolutions(nullptr);
+	g_origDtor(dlg);
+}
+
 void __fastcall HookPopulateControls(void *dlg)
 {
 	g_origPopulate(dlg);
+	g_openDialog = dlg;
+	// The game's size may not be in the list (in a window, one that no longer fits): the largest that does is shown.
+	void *resolution = FindCombo(dlg, kIdResolution);
+	if (resolution && GetComboIndex(dlg, kIdResolution) < 0 && !TweaksResolutionList().empty()) {
+		reinterpret_cast<ComboSetSelected_t>(addr::kComboSetSelected)(resolution, nullptr, 0, 0);
+	}
 	static const Config kFactory;
 	const Config &c = g_useDefaults ? kFactory : GetConfig();
 	if (!g_useDefaults) g_brightOriginal = c.brightness;
@@ -256,8 +274,12 @@ void ApplyModOptions(void *dlg)
 	sel = GetComboIndex(dlg, kIdUpdate);
 	if (sel >= 0 && sel < 3) UpdaterModeSet(sel);
 	sel = GetComboIndex(dlg, kIdMonitor);
-	if (sel >= 0 && sel < static_cast<int>(DisplayMonitorLabels().size())) c.monitor = sel;
-	c.brightness = (std::max)(kBrightMin, (std::min)(kBrightMax, (GetScroll(dlg, kIdBrightCombo, c.brightness) + 2) / 5 * 5));
+	if (sel >= 0 && sel < static_cast<int>(DisplayMonitorLabels().size()) && sel != c.monitor) {
+		// A monitor switched to a larger mode goes back while it is still the chosen one.
+		DisplayRestoreMonitor();
+		c.monitor = sel;
+	}
+	c.brightness = (std::max)(kBrightMin, (std::min)(kBrightMax, GetScroll(dlg, kIdBrightCombo, c.brightness)));
 	c.movieVolume = GetScroll(dlg, kIdMovieScroll, c.movieVolume);
 	c.movieMute = !GetCheck(dlg, kIdMovieMute, !c.movieMute);
 	SaveConfig();
@@ -279,7 +301,7 @@ unsigned __fastcall HookOnMessage(void *dlg, void *edx, int *msg)
 {
 	const unsigned kind = static_cast<unsigned>(msg[0x10 / 4]);
 	if (kind >= 0x23432301 && kind <= 0x23432304) {
-		const int v = (std::max)(kBrightMin, (std::min)(kBrightMax, (GetScroll(dlg, kIdBrightCombo, GetConfig().brightness) + 2) / 5 * 5));
+		const int v = (std::max)(kBrightMin, (std::min)(kBrightMax, GetScroll(dlg, kIdBrightCombo, GetConfig().brightness)));
 		if (v != GetConfig().brightness) MutableConfig().brightness = v;
 	}
 	if (static_cast<unsigned>(msg[0x10 / 4]) == kMsgButtonClick) {
@@ -345,6 +367,114 @@ bool HookAt(uintptr_t addr, void *detour, void **orig, const char *what)
 
 }
 
+void *OptionsDialogOpen()
+{
+	return g_openDialog;
+}
+
+bool OptionsReadCheck(int id, bool fallback)
+{
+	void *dlg = g_openDialog;
+	return dlg ? GetCheck(dlg, id, fallback) : fallback;
+}
+
+void OptionsClick(int id)
+{
+	void *dlg = g_openDialog;
+	void *button = dlg ? FindCheck(dlg, id) : nullptr;
+	if (!button) return;
+	typedef void(__fastcall * SendNotify_t)(void *ctrl, void *edx, int target, unsigned msg, int id, int value, int extra);
+	char *b = static_cast<char *>(button);
+	reinterpret_cast<SendNotify_t>((*reinterpret_cast<void ***>(button))[0x6c / 4])(button, nullptr, *reinterpret_cast<int *>(b + 0x34), kMsgButtonClick,
+		*reinterpret_cast<int *>(b + 0x30), *reinterpret_cast<short *>(b + 0x7e), 0);
+}
+
+void OptionsWriteCheck(int id, bool value)
+{
+	void *dlg = g_openDialog;
+	if (!dlg) return;
+	SetCheck(dlg, id, value);
+	OptionsClick(id);
+}
+
+int OptionsReadScroll(int id, int fallback)
+{
+	void *dlg = g_openDialog;
+	return dlg ? GetScroll(dlg, id, fallback) : fallback;
+}
+
+void OptionsWriteScroll(int id, int value)
+{
+	void *dlg = g_openDialog;
+	void *scroll = dlg ? FindScroll(dlg, id) : nullptr;
+	if (!scroll) return;
+	if (id == kIdBrightCombo) {
+		value = (std::max)(kBrightMin, (std::min)(kBrightMax, value));
+		MutableConfig().brightness = value;
+	}
+	reinterpret_cast<SetValue_t>((*reinterpret_cast<void ***>(scroll))[0x70 / 4])(scroll, nullptr, value, 1);
+	// Setting the value sends no message to the dialog, and reading the controls is what applies the sound at once.
+	reinterpret_cast<void(__fastcall *)(void *)>(addr::kReadControls)(dlg);
+}
+
+bool OptionsControlEnabled(int id)
+{
+	void *dlg = g_openDialog;
+	if (!dlg) return false;
+	void *control = reinterpret_cast<GetChild_t>((*reinterpret_cast<void ***>(dlg))[0x7c / 4])(dlg, nullptr, id, *reinterpret_cast<const char **>(addr::kClassNameCWindow));
+	if (!control) return true;
+	return !reinterpret_cast<bool(__fastcall *)(void *, void *, unsigned)>(addr::kWindowHasFlags)(control, nullptr, 0x200);
+}
+
+int OptionsReadCombo(int id)
+{
+	void *dlg = g_openDialog;
+	return dlg ? GetComboIndex(dlg, id) : -1;
+}
+
+std::vector<std::string> OptionsComboItems(int id)
+{
+	std::vector<std::string> out;
+	void *dlg = g_openDialog;
+	void *combo = dlg ? FindCombo(dlg, id) : nullptr;
+	char *list = combo ? *reinterpret_cast<char **>(static_cast<char *>(combo) + 0x64) : nullptr;
+	if (!list) return out;
+	const unsigned count = *reinterpret_cast<unsigned *>(list + 0x58);
+	const char *items = *reinterpret_cast<const char **>(list + 0x94);
+	for (unsigned i = 0; items && i < count && i < 128; i++) {
+		const char *text = *reinterpret_cast<const char *const *>(items + i * 0x14);
+		out.push_back(text ? text : "");
+	}
+	return out;
+}
+
+void OptionsPreviewResolutions(int monitor, bool windowed, bool extendedView)
+{
+	void *dlg = g_openDialog;
+	if (!dlg) return;
+	std::vector<ResSize> list = TweaksResolutionList();
+	const int before = GetComboIndex(dlg, kIdResolution);
+	const ResSize shown = before >= 0 && before < static_cast<int>(list.size()) ? list[before] : ResSize{};
+	const ResolutionChoice choice = {monitor, windowed, extendedView};
+	TweaksPreviewResolutions(&choice);
+	list = TweaksResolutionList();
+	ResSize screen;
+	DisplayMonitorSize(monitor, screen.w, screen.h);
+	const int kept = KeepResolution(list, shown, screen);
+	std::vector<std::string> labels;
+	for (const ResSize &size : list) labels.push_back(std::to_string(size.w) + " x " + std::to_string(size.h));
+	FillCombo(dlg, kIdResolution, labels, kept >= 0 ? kept : 0);
+	LogD("options", "resolutions for monitor %d (%s%s): %u sizes", monitor + 1, windowed ? "window" : "full screen", extendedView ? ", extended view" : "",
+		static_cast<unsigned>(list.size()));
+}
+
+void OptionsWriteCombo(int id, int index)
+{
+	void *dlg = g_openDialog;
+	void *combo = dlg ? FindCombo(dlg, id) : nullptr;
+	if (combo) reinterpret_cast<ComboSetSelected_t>(addr::kComboSetSelected)(combo, nullptr, index, 1);
+}
+
 void InstallOptionsHooks(bool knownExe)
 {
 	if (!knownExe) {
@@ -353,6 +483,7 @@ void InstallOptionsHooks(bool knownExe)
 	bool ok = HookAt(addr::kPopulateControls, reinterpret_cast<void *>(&HookPopulateControls),
 				  reinterpret_cast<void **>(&g_origPopulate), "CVXUIOptions::PopulateControls") &&
 		HookAt(addr::kOptionsOnMessage, reinterpret_cast<void *>(&HookOnMessage), reinterpret_cast<void **>(&g_origOnMessage),
-			"CVXUIOptions::OnMessage");
+			"CVXUIOptions::OnMessage") &&
+		HookAt(addr::kOptionsDtor, reinterpret_cast<void *>(&HookDtor), reinterpret_cast<void **>(&g_origDtor), "CVXUIOptions destructor");
 	LogAt(ok ? kLogInfo : kLogError, "options", "game menu %s", ok ? "connected to the mod's options" : "not connected");
 }

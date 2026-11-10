@@ -196,10 +196,13 @@ void TryJoinNow(const OnlineLobby &lobby, const std::string &password, bool watc
 		ModUiToast(mismatch, true);
 		return;
 	}
-	if (g.password && password.empty()) {
+	const bool wrongPassword = !password.empty() && !SteamPasswordMatches(g, password);
+	if (wrongPassword) ModUiToast("Wrong password");
+	if ((g.password && password.empty()) || wrongPassword) {
 		g_s.passLobby = g;
 		g_s.passWatch = watch;
 		g_s.passPrompt = true;
+		g_s.passShow = false;
 		g_s.joinPassInput.clear();
 		FocusField(kJoinPassField);
 		return;

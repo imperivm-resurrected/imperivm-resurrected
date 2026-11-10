@@ -5,7 +5,9 @@
 
 typedef void (*GameLoadingFn)();
 typedef void (*GameLoadedFn)(int result);
+typedef void (*GameLoadedFromFn)(const char *path, int result);
 
 bool InstallGameLoadHook(bool knownExe);
 void OnGameLoading(GameLoadingFn fn);
 void OnGameLoaded(GameLoadedFn fn);
+void OnGameLoadedFrom(GameLoadedFromFn fn);

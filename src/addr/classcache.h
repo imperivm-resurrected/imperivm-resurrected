@@ -25,8 +25,7 @@ inline constexpr uintptr_t kFeedbackTypeCacheInit = 0x00996f20;
 // A match flushes both caches and reads decors.ini again only when the season is not the one they were made for, so after Shutdown
 // freed the entities these have to go back to what they are in a new process (0): the array of decor entities is in state.h.
 inline constexpr uintptr_t kEntityCacheSeason = 0x00996ffc;
-// The tables Init makes again; a null after Init means it failed.
-inline constexpr uintptr_t kCustomItemDefs = 0x009a7214;
+// The tables Init makes again; a null after Init means it failed. (kCustomItemDefs, 009a7214, is in state.h.)
 inline constexpr uintptr_t kBaseItemDefs = 0x009a7218;
 inline constexpr uintptr_t kDecorsLoadedSeason = 0x009b7e78;
 inline constexpr uintptr_t kDecorsLoaded = 0x009b7e7c;

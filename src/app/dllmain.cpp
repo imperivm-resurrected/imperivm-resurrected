@@ -29,8 +29,13 @@
 #include "hooks/tweaks.h"
 #include "mods/updater.h"
 #include "mods/vfs.h"
+#include "game/gamemenu.h"
+#include "game/gamestats.h"
+#include "game/greatbattles.h"
 #include "game/options.h"
+#include "game/profiles.h"
 #include "hooks/dmshim.h"
+#include "hooks/audio.h"
 #include "mods/mods.h"
 #include "mods/netmods.h"
 #include "mods/downloads.h"
@@ -45,6 +50,7 @@
 #include "net/lobbygates.h"
 #include "hooks/selectionguard.h"
 #include "hooks/curseguard.h"
+#include "hooks/itemdefguard.h"
 #include "hooks/handleguard.h"
 #include "game/packrules.h"
 #include "hooks/builtinfixes.h"
@@ -56,6 +62,7 @@
 #include "game/noteicons.h"
 #include "game/zoomview.h"
 #include "game/viewgrid.h"
+#include "game/healthbars.h"
 #include "game/loadcurtain.h"
 #include "game/constreload.h"
 #include "game/cheats.h"
@@ -211,6 +218,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 		InstallLobbyGates(knownExe);
 		InstallSelectionGuard(knownExe);
 		InstallCurseGuard(knownExe);
+		InstallItemDefGuard(knownExe);
 		InstallHandleGuard(knownExe);
 		InstallPackRules(knownExe);
 		InstallRejoin(knownExe);
@@ -222,6 +230,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 		InstallNoteIcons(knownExe);
 		InstallZoomView(knownExe);
 		InstallViewGrid(knownExe);
+		InstallHealthBars(knownExe);
 		InstallLoadCurtain(knownExe);
 		InstallSavesUi(knownExe);
 		CheckCompatibilityLayers();
@@ -232,8 +241,13 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 		StartSteamOnline();
 		StartDiscordPresence();
 		InstallOptionsHooks(knownExe);
+		InstallGameMenuHooks(knownExe);
+		InstallGameStats(knownExe);
+		InstallProfileHooks(knownExe);
+		InstallGreatBattlesHooks(knownExe);
 		InstallControls(knownExe);
 		InstallModernAudio(knownExe);
+		InstallSoundLevels(knownExe);
 		HookBatchEnd();
 		LogHookSummary();
 		LogI("boot", "mod ready in %lu ms", static_cast<unsigned long>(GetTickCount() - bootStart));

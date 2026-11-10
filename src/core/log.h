@@ -22,6 +22,8 @@ void LogEvery(LogLevel level, const char *channel, unsigned intervalMs, const ch
 void LogOnce(LogLevel level, const char *channel, const char *fmt, ...);
 
 bool LogEnabled(LogLevel level, const char *channel);
+void LogSetLevel(LogLevel level);
+const char *LogLevelName(LogLevel level);
 void LogDumpContext(const char *reason);
 
 const char *LogGameDir();

@@ -79,6 +79,7 @@ It generates `options\<id>.json` and, with `--script`, `data\mod\<id>.vs`. It te
 - **There are 8 bits for all the options of all active mods.** A toggle uses 1; a list uses 1 for 2 values, 2 for 3 or 4, 3 for 5 to 8, and 4 for 9 to 16. They're taken in alphabetical order of `id`; whatever doesn't fit is ignored and the log says so. If two options share an `id`, the game uses the first one it finds when it assembles the mods.
 - **They only work with a lobby.** Options are fixed when a game starts from the lobby (or when you rejoin an online one). Adventures, campaigns and tutorials have no lobby: `Mod_GetOption` always returns 0 and a list is 0, even with `"default": true`.
 - The lobby presets (Classic, Competitive) don't touch mod options.
+- The game remembers what the host chose for each option by its `id`, for the next room. Changing an `id` loses that choice, and a new option starts at its `default`.
 
 ## Fixed rules of a mod
 

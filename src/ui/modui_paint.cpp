@@ -276,8 +276,7 @@ void PaintIoDetail(Painter &p, const State &st, const GbMod &m, int index)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const int x = 16, y = kContentY, w = kDesignW - 32, h = kFootY - 8 - kContentY;
-	p.Fill(x, y, w, h, pal::wellRaised);
-	p.Frame(x, y, w, h, pal::edge);
+	PaintCard(p, x, y, w, h);
 	const int iw = 176, ih = 99;
 	PaintIoImage(p, x + 10, y + 10, iw, ih, m.logoUrl);
 	p.Frame(x + 10, y + 10, iw, ih, pal::line);
@@ -606,7 +605,7 @@ void PaintPanel(Painter &p, const State &st)
 	}
 	const bool overlay = st.drop != kDropNone || st.confirm || (st.tab == 2 && (st.ioFilterOpen || st.ioShot >= 0)) || (st.tab == 0 && st.catOpen);
 	p.noHover = overlay;
-	PaintRule(p, 54, kDesignW);
+	PaintOrnateRule(p, 52, kDesignW);
 	PaintTabBar(p, kDesignW,
 		{{Tr("Installed") + " (" + std::to_string(st.mods.size()) + ")", kTabInstalled, 0, st.tab == 0, true},
 			{"Browse content", kTabExplore, 0, st.tab == 2, true}},

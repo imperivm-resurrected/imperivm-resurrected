@@ -27,6 +27,7 @@
 	X(SteamAPI_ISteamUser_GetSteamID) X(SteamAPI_SteamFriends_v018) X(SteamAPI_ISteamFriends_GetPersonaName) \
 	X(SteamAPI_ISteamFriends_GetFriendPersonaName) X(SteamAPI_ISteamFriends_SetRichPresence)               \
 	X(SteamAPI_ISteamFriends_ClearRichPresence) X(SteamAPI_ISteamFriends_ActivateGameOverlayInviteDialog)  \
+	X(SteamAPI_ISteamFriends_ActivateGameOverlayToUser) X(SteamAPI_ISteamUtils_IsOverlayEnabled)           \
 	X(SteamAPI_SteamUtils_v011) X(SteamAPI_ISteamUtils_GetAppID) X(SteamAPI_SteamApps_v009)                \
 	X(SteamAPI_ISteamApps_GetLaunchCommandLine) X(SteamAPI_SteamMatchmaking_v009)                          \
 	X(SteamAPI_ISteamMatchmaking_CreateLobby) X(SteamAPI_ISteamMatchmaking_SetLobbyData)                   \
@@ -81,6 +82,7 @@ struct SteamSignals {
 	bool kickedHandled = false;
 	std::atomic<bool> kicked{false};
 	std::atomic<bool> joinRefused{false};
+	std::atomic<bool> wrongPassword{false};
 	std::atomic<bool> createFailed{false};
 };
 extern SteamSignals g_signal;
@@ -185,6 +187,11 @@ const int kShareChunk = 64 * 1024;
 
 enum : uint8_t { kShReq = 1, kShFile = 2, kShData = 3, kShModEnd = 4, kShDeny = 5, kShDone = 6, kShMapReq = 7, kShMapFile = 8, kShMapEnd = 9, kShCam = 10, kShSeat = 11, kShSwap = 12, kShProgress = 13, kShMapHave = 14 };
 static_assert(kContentMessages.Has(kShReq) && kContentMessages.Has(kShMapHave), "content messages out of their range");
+
+// The start countdown of the game room, from the host to the other players: "<seq> <ms>" and "<seq>".
+enum : uint8_t { kRmCountdown = kRoomMessages.first, kRmCountdownCancel };
+static_assert(kRoomMessages.Has(kRmCountdownCancel), "room messages out of their range");
+void RoomOnMessage(uint64 peer, uint8_t type, const std::string &text);
 
 struct RejoinOut {
 	uint64 peer;

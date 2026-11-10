@@ -27,7 +27,7 @@ void DoAction(int action, int arg)
 		return;
 	}
 	if (action != kChatFocus && action != kFieldName && action != kFieldPass && action != kChatSend &&
-		action != kFieldJoinPass && action != kJoin && action != kFieldSearch && action != kPassShow) {
+		action != kFieldJoinPass && action != kJoin && action != kFieldSearch && action != kPassShow && action != kFieldRoomName) {
 		g_s.focus = kNoField;
 	}
 	switch (action) {
@@ -112,11 +112,13 @@ void DoAction(int action, int arg)
 			break;
 		}
 		g_s.passPrompt = false;
+		g_s.passShow = false;
 		TryJoin(g_s.passLobby, g_s.joinPassInput, g_s.passWatch);
 		g_s.joinPassInput.clear();
 		break;
 	case kPassCancel:
 		g_s.passPrompt = false;
+		g_s.passShow = false;
 		g_s.joinPassInput.clear();
 		g_s.focus = kNoField;
 		break;
@@ -192,8 +194,8 @@ void DoAction(int action, int arg)
 		break;
 	case kGDropOpen:
 		g_s.dropOpen = true;
-		g_s.dropKind = arg & 0xf;
-		g_s.dropIndex = arg >> 4;
+		g_s.dropKind = arg & kDropKindMask;
+		g_s.dropIndex = arg >> kDropKindBits;
 		{
 			int sel = -1;
 			const int count = static_cast<int>(DropItems(g_s, sel).size());
@@ -223,6 +225,7 @@ void DoAction(int action, int arg)
 		}
 		else if (g_s.dropKind == kDropSpectators) {
 			g_s.createSpec = std::max(0, std::min(4, arg));
+			GameRoomSaveSetting("Spectators", g_s.createSpec);
 			if (g_s.room.id && g_s.room.owner) {
 				static const int kDelays[] = {0, 30, 60, 120, 0};
 				SteamSetSpectators(g_s.createSpec != 0, kDelays[g_s.createSpec]);
@@ -248,6 +251,13 @@ void DoAction(int action, int arg)
 			g_s.game.slots[idx & 7].color = arg;
 			Predict(kPredColor, idx & 7, arg);
 			GameRoomSetColor(idx & 7, arg);
+		}
+		else if (g_s.dropKind == kDropTeam) {
+			if (arg >= 0 && arg <= kRoomTeams) {
+				SetTeamTo(idx & 7, arg);
+				g_s.game.slots[idx & 7].team = arg;
+				Predict(kPredTeam, idx & 7, arg);
+			}
 		}
 		else if (g_s.dropKind == kDropBonus) {
 			g_s.game.slots[idx & 7].bonus = arg;
@@ -360,6 +370,11 @@ void DoAction(int action, int arg)
 	}
 	case kGStart: {
 		const GameRoomSnapshot snap = GameRoomGet();
+		if (snap.scenarioMissing) {
+			LogW("room", "not starting: the chosen scenario \"%s\" no longer exists", snap.scenario.c_str());
+			ModUiToast("That map is no longer installed: choose another one.");
+			break;
+		}
 		{
 			std::string without;
 			int positions = 0;
@@ -391,6 +406,15 @@ void DoAction(int action, int arg)
 		break;
 	}
 	case kGCancel: LeaveGameRoom(); break;
+	case kFieldRoomName:
+		if (!g_s.game.host || !g_s.room.id) break;
+		if (g_s.focus != kRoomNameField) g_s.roomNameInput = g_s.room.info.name;
+		FocusField(kRoomNameField);
+		break;
+	case kGTab:
+		g_s.roomTab = arg == 1 ? 1 : 0;
+		g_s.dropOpen = false;
+		break;
 	case kGResync:
 		LogI("lobby", "leaving the room to download the content of its map and come back");
 		g_s.forcePackLobby = g_s.room.id;
@@ -414,7 +438,7 @@ void DoAction(int action, int arg)
 		}
 		GameRoomToggleOption(arg);
 		break;
-	case kGColor: DoAction(kGDropOpen, kDropColor | ((arg & 7) << 4)); break;
+	case kGColor: DoAction(kGDropOpen, DropArg(kDropColor, arg & 7)); break;
 	case kGKickJoining:
 		if (arg >= 0 && arg < 8 && g_flow.arrivingIds[arg]) SteamKick(g_flow.arrivingIds[arg]);
 		break;
@@ -495,6 +519,24 @@ void DoAction(int action, int arg)
 	case kPatronLink:
 		OpenPatronPage();
 		break;
+	case kProfile: {
+		uint64_t who = 0;
+		if (arg >= kProfileRoomSlot) {
+			const GameRoomSlot &s = g_s.game.slots[(arg - kProfileRoomSlot) & 7];
+			who = s.local ? SteamOwnId() : MemberIdByName(g_s, s.name);
+		}
+		else {
+			const std::vector<int> vis = Visible(g_s);
+			if (g_s.selected >= 0 && g_s.selected < static_cast<int>(vis.size())) {
+				const OnlineLobby &g = g_s.lobbies[vis[g_s.selected]];
+				const int i = arg >= kProfileLobbyName ? arg - kProfileLobbyName : arg - kProfileLobbySlot;
+				if (arg >= kProfileLobbyName && i < static_cast<int>(g.playerNames.size())) who = LobbyPlayerId(g, g.playerNames[i]);
+				else if (arg < kProfileLobbyName && i < static_cast<int>(g.slots.size())) who = LobbyPlayerId(g, g.slots[i].name);
+			}
+		}
+		SteamOpenProfile(who);
+		break;
+	}
 	case kGKick: {
 		const std::string name = g_s.game.slots[arg & 7].name;
 		const uint64_t victim = MemberIdByName(g_s, name, true);
@@ -821,6 +863,7 @@ std::string &FocusedText()
 	case kJoinPassField: return g_s.joinPassInput;
 	case kSearchField: return g_s.searchInput;
 	case kPickSearchField: return g_s.pickSearch;
+	case kRoomNameField: return g_s.roomNameInput;
 	default: return g_s.passInput;
 	}
 }
@@ -829,14 +872,14 @@ int FieldOfAction(int action)
 {
 	return action == kChatFocus ? kChatField : action == kFieldName ? kNameField : action == kFieldPass ? kPassField
 		: action == kFieldJoinPass ? kJoinPassField : action == kFieldSearch ? kSearchField
-		: action == kFieldPickSearch ? kPickSearchField : kNoField;
+		: action == kFieldPickSearch ? kPickSearchField : action == kFieldRoomName ? kRoomNameField : kNoField;
 }
 
 int ActionOfField(int field)
 {
 	return field == kChatField ? kChatFocus : field == kNameField ? kFieldName : field == kPassField ? kFieldPass
 		: field == kJoinPassField ? kFieldJoinPass : field == kSearchField ? kFieldSearch
-		: field == kPickSearchField ? kFieldPickSearch : -1;
+		: field == kPickSearchField ? kFieldPickSearch : field == kRoomNameField ? kFieldRoomName : -1;
 }
 
 void FocusField(int field)
@@ -887,6 +930,10 @@ void FieldKey(UINT msg, WPARAM wp)
 		if (g_s.focus == kPickSearchField) DoAction(kPickOk, 0);
 		else if (g_s.focus == kChatField) DoAction(kChatSend, 0);
 		else if (g_s.focus == kJoinPassField) DoAction(kPassOk, 0);
+		else if (g_s.focus == kRoomNameField) {
+			if (!g_s.roomNameInput.empty() && g_s.roomNameInput != g_s.room.info.name) RenameRoom(g_s.roomNameInput);
+			g_s.focus = kNoField;
+		}
 		else g_s.focus = kNoField;
 	}
 	else if (wp == VK_ESCAPE) {
@@ -915,6 +962,7 @@ void OpenMpMenu(bool checkRecover)
 	g_s.createProfileInfo = ProfileSummaryFor(g_s.createProfile), g_s.createModsList = ListState();
 	g_s.saves = ListSaves();
 	g_s.createSave = -1;
+	g_s.createSpec = std::max(0, std::min(4, GameRoomLoadSetting("Spectators", g_s.createSpec)));
 	if (checkRecover) CheckRecover();
 	g_s.ownKey = SteamOwnGameplayKey();
 	g_s.lastRefresh = 0;

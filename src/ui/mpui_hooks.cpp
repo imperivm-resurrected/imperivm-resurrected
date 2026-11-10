@@ -8,6 +8,7 @@
 #include "MinHook.h"
 #include "hooks/hookcount.h"
 #include "core/log.h"
+#include "ui/conquestui.h"
 #include "ui/modui.h"
 #include "mods/vfs.h"
 #include "ui/savesui.h"
@@ -97,6 +98,7 @@ typedef int(__cdecl *ShowModalMenu_t)(void *, const char *, const char *, int, i
 ShowModalMenu_t g_origShowModal = nullptr;
 
 std::string g_joinModalText;
+const char *const kConquestVictoryIni = "conquestvictory.ini";
 
 int __cdecl HookShowModalMenu(void *winos, const char *ini, const char *text, int a, int b, void *c, int d)
 {
@@ -119,9 +121,13 @@ int __cdecl HookShowModalMenu(void *winos, const char *ini, const char *text, in
 			if (joining) ModUiToast(std::string("The game says: ") + (text ? text : ""));
 		}
 	}
+	const size_t iniLen = ini ? strlen(ini) : 0, victoryLen = strlen(kConquestVictoryIni);
+	const bool victory = iniLen >= victoryLen && _stricmp(ini + iniLen - victoryLen, kConquestVictoryIni) == 0;
+	if (victory) ConquestUiVictoryShown(text);
 	g_gameModal++;
 	const int r = g_origShowModal(winos, ini, text, a, b, c, d);
 	g_gameModal--;
+	if (victory) ConquestUiVictoryClosed();
 	if (wasOpen && *reinterpret_cast<void **>(addr::kGame) == nullptr) {
 		std::lock_guard<std::mutex> lock(g_lock);
 		g_s.open = true;
@@ -210,6 +216,7 @@ void __fastcall HookMainMenuDtor(void *dlg)
 void InstallMpUi(bool knownExe)
 {
 	if (!knownExe) return;
+	StartRoomCountdown();
 	void *target = reinterpret_cast<void *>(addr::kMainMenuOnMessage);
 	if (HookCreate(target, reinterpret_cast<void *>(&HookMainMenuOnMessage), reinterpret_cast<void **>(&g_origMainMenu)) ==
 			MH_OK &&

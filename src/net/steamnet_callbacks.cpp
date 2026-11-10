@@ -236,6 +236,7 @@ void OnCallback(int id, const void *data)
 		if (!pw.empty() && !g_pendingJoin.invite && Fnv(password) != pw) {
 			S.SteamAPI_ISteamMatchmaking_LeaveLobby(g_steam.mm, lobby);
 			Notice("Wrong password");
+			g_signal.wrongPassword = true;
 			return;
 		}
 		const std::string mismatch = SteamVersionMismatch(Data(lobby, "irver"), Data(lobby, "irlvl"));

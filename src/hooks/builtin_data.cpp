@@ -27,6 +27,22 @@ const BuiltinText kPatches[] = {
 		"\t<set select=\"/class\" entity_winter=\"Buildings/RTownhall/RTownhall_w.ent.xml\"/>\n"
 		"</patch>\n",
 		"b06962a1cb46ea51b78de0b9adabc5a3620ec6a598b1d9671fdc97974ff2ff04"},
+	{"data/subai/hero_hold_position.vs",
+		"@replace if(u.IsAlive())\n"
+		"\t// BestTargetForPos only takes targets inside the hero's own reach (17), while melee units hit from up to 40:\n"
+		"\t// a hero holding position stood still under their blows. Those close enough to hit him are answered too.\n"
+		"\tif(!u.IsValid()) u = .BestTargetInRange(.pos, 100);\n"
+		"\tif(u.IsAlive())\n"
+		"@replace while(!.Attack(u))\n"
+		"\t\t\t// .Attack only strikes what is already within reach: step in first, as hero_attack.vs does.\n"
+		"\t\t\tif(!.Attack(u)) .GotoAttack(u, 5000, true, 2500);\n"
+		"\t\t\twhile(!.Attack(u))\n",
+		"f9e76d98893e61b9a4bdfef000482251182259ca704c594826e7b96915e79a5a"},
+	{"data/subai/sneak_behavior.vs",
+		"@replace if (.TimeWithoutAttack >= 20000)\n"
+		"\t// Units of players with I1NoSneak set (the converted Imperivm I campaign) never hid on their own in their game.\n"
+		"\tif (.TimeWithoutAttack >= 20000 && EnvReadInt(.player, \"I1NoSneak\") != 1)\n",
+		"8fe330c486b6dcc43edfa055563cca78a85dcf107cc2af9ea495e7bd905538c0"},
 	{"menuini/gameoptions.ini",
 		"[GameOptions Objects]\n"
 		"+ModMovieMuteCheck\n"

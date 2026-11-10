@@ -36,6 +36,9 @@ const bool g_registered = [] {
 	link.rejoinLoading = &RejoinLoading;
 	link.roomRules = &RoomRules;
 	link.isLockstepHost = &IsLockstepHost;
+	link.sendRoomCountdown = &SteamSendRoomCountdown;
+	link.roomName = &SteamCurrentRoomName;
+	link.renameRoom = &SteamRenameRoom;
 	NetLinkSet(link);
 	return true;
 }();

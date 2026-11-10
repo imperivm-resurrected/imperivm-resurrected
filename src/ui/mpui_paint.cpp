@@ -99,15 +99,6 @@ uint64_t MemberIdByName(const State &st, const std::string &name, bool skipMe)
 void PaintHeader(Painter &p, const State &st)
 {
 	const int mx = st.mouseX, my = st.mouseY;
-	if (st.game.active) {
-		p.Font(2);
-		const std::string title = !st.game.online ? "Skirmish"
-								: st.room.id      ? st.room.info.name
-												  : "Local network game";
-		p.Text(16, 14, kW - 32, 44, title, kGold, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-		p.Fill(16, 66, kW - 32, 1, pal::line);
-		return;
-	}
 	// Lined up with the rule under the header, which it ends on.
 	DrawPatronRowGlow(p, 16, 12, 760, 54, PatronOf(SteamOwnId()).tier);
 	if (!PaintAvatar(p, 20, 16, 44, SteamOwnId())) {
@@ -133,7 +124,7 @@ void PaintHeader(Painter &p, const State &st)
 		p.Text(500, 14, 480, 22, n == 1 ? "1 open room" : std::to_string(n) + Tr(" open rooms"), kDim,
 			DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 	}
-	p.Fill(16, 66, kW - 32, 1, pal::line);
+	PaintOrnateRule(p, 66, kW);
 	PaintTabs(p, 20, 72,
 		{{"Games", kListView, 0, st.view == kViewList, true},
 			{"Create game", kCreate, 0, st.view == kViewCreate, true},
@@ -156,8 +147,7 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const int dx = 632, dw = kW - dx - 16, dy = 172, dh = 396;
-	p.Fill(dx, dy, dw, dh, pal::wellRaised);
-	p.Frame(dx, dy, dw, dh, pal::line);
+	PaintCard(p, dx, dy, dw, dh);
 	{
 		std::lock_guard<std::mutex> lock(g_chat.mx);
 		g_detail.rect = p.R(dx, dy, dw, dh);
@@ -242,6 +232,10 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis)
 				PatronHotspot(p, x + 26, y + 2, 16, patron, st.mouseX, st.mouseY, kPatronLink);
 			}
 			else p.Text(x + 26, y, w - 26 - 80, 20, human ? s.name : ai ? (s.name.empty() ? "AI" : s.name) : "Free", human ? kText : kDim);
+			if (human && LobbyPlayerId(g, s.name)) {
+				const int nameX = patron.tier != PatronTier::None ? x + 46 : x + 26;
+				ProfileHotspot(p, st, nameX, y, w - (nameX - x) - 80, 20, s.name, kProfileLobbySlot + static_cast<int>(&s - g.slots.data()));
+			}
 			if (human && !hostShown && PlayerNameMatches(s.name, g.host)) {
 				hostShown = true;
 				p.Text(x + w - 90, y, 90, 20, "host", kDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
@@ -263,6 +257,10 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis)
 				PatronHotspot(p, x + 26, y + 2, 16, patron, st.mouseX, st.mouseY, kPatronLink);
 			}
 			else p.Text(x + 26, y, w - 26, 20, taken ? g.playerNames[i] : "Free", taken ? kText : kDim);
+			if (taken && LobbyPlayerId(g, g.playerNames[i])) {
+				const int nameX = patron.tier != PatronTier::None ? x + 46 : x + 26;
+				ProfileHotspot(p, st, nameX, y, w - (nameX - x) - 80, 20, g.playerNames[i], kProfileLobbyName + i);
+			}
 			if (taken && i == 0) p.Text(x + w - 90, y, 90, 20, "host", kDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 			y += 22;
 		}
@@ -270,29 +268,141 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis)
 
 	section("Options");
 	{
-		size_t from = 0;
-		while (from < g.optionsText.size()) {
+		// Same rows, labels and order as the room's "Game options" panel (mpui_paint_room.cpp), read from the text the host publishes.
+		std::map<std::string, std::string> pub;
+		std::vector<std::string> published;
+		for (size_t from = 0; from < g.optionsText.size();) {
 			size_t to = g.optionsText.find('\n', from);
 			if (to == std::string::npos) to = g.optionsText.size();
 			const std::string line = g.optionsText.substr(from, to - from);
 			from = to + 1;
-			if (line.empty()) continue;
 			const size_t colon = line.find(": ");
-			const std::string key = colon == std::string::npos ? line : line.substr(0, colon);
-			const std::string value = colon == std::string::npos ? std::string() : key == "Map type" ? MapTypeLabel(line.substr(colon + 2)) : line.substr(colon + 2);
-			const bool yes = value == "yes", no = value == "no";
-			p.Text(x, y, (yes || no) ? w - Painter::kToggleW - 10 : w / 2, 20, colon == std::string::npos ? line : line.substr(0, colon), kDim,
-				DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-			if (yes || no) p.Toggle(x + w - Painter::kToggleW, y + (20 - Painter::kToggleH) / 2, yes, true, false);
-			else if (colon != std::string::npos) p.Text(x + w / 2, y, w - w / 2, 20, value, kText, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
-			y += 22;
+			if (colon == std::string::npos) continue;
+			const std::string key = line.substr(0, colon);
+			if (!pub.count(key)) published.push_back(key);
+			pub[key] = line.substr(colon + 2);
 		}
-		const bool watchable = g.specLobby != 0;
-		std::string spec = SpectatorText(watchable, g.specDelay);
-		if (watchable && g.playing && g.spectators > 0) spec += "  ·  " + std::to_string(g.spectators) + Tr(" watching");
-		p.Text(x, y, w / 2, 20, "Spectators", kDim);
-		p.Text(x + w / 2, y, w - w / 2, 20, spec, watchable ? kText : kDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		y += 22;
+		const bool load = !g.saveName.empty();
+		std::set<std::string> used = {"Shared support", "Scenario"};
+		auto take = [&](const std::string &key, std::string &out) {
+			used.insert(key);
+			const auto it = pub.find(key);
+			if (it == pub.end()) return false;
+			out = it->second;
+			return true;
+		};
+		auto heading = [&](const char *title) {
+			y += 4;
+			p.Font(3);
+			p.Text(x, y, w, 15, title, pal::section, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+			y += 18;
+		};
+		auto valueRow = [&](const std::string &label, const std::string &value, COLORREF color) {
+			p.Text(x, y, w / 2, 20, label, kDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			p.Text(x + w / 2, y, w - w / 2, 20, value, color, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			y += 22;
+		};
+		auto toggleRow = [&](const std::string &label, bool on) {
+			p.Text(x, y, w - Painter::kToggleW - 10, 20, label, on ? kText : kDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			p.Toggle(x + w - Painter::kToggleW, y + (20 - Painter::kToggleH) / 2, on, true, false);
+			y += 22;
+		};
+		auto comboRow = [&](const char *label, const char *key) {
+			std::string v;
+			if (take(key, v)) valueRow(label, v.empty() ? "—" : v, kText);
+		};
+		auto checkRow = [&](const char *label, const char *key, bool inverted) {
+			std::string v;
+			if (take(key, v)) toggleRow(label, (v == "yes") != inverted);
+		};
+		auto yes = [&](const char *key) {
+			const auto it = pub.find(key);
+			return it != pub.end() && it->second == "yes";
+		};
+		static const struct {
+			unsigned bit;
+			const char *key, *name;
+		} kSites[] = {{kSiteRuins, "No ruins", "Ruins"}, {kSiteCaves, "No caves", "Caves"}, {kSiteItems, "No item sites", "Items"},
+			{kSiteStrongholds, "No neutral strongholds", "Strongholds"}};
+		bool randomMap = false;
+		unsigned sites = 0;
+		for (const auto &site : kSites) {
+			randomMap = randomMap || pub.count(site.key) != 0;
+			if (yes(site.key)) sites |= site.bit;
+		}
+		const unsigned rules = (yes("Hidden civilizations") ? kRuleBlindPick : 0) | (yes("Free unit attachment") ? kRuleFreeAttach : 0) |
+			(yes("Diplomacy locked") ? kRuleLockDiplomacy : 0) | (yes("Cheats") ? kRuleCheats : 0);
+		const std::vector<ModOption> &mods = ModOptions();
+
+		if (!load && pub.count("Starting gold")) {
+			const int preset = MatchPreset(sites, rules, [&](int, const char *key) {
+				const auto it = pub.find(key);
+				return it == pub.end() ? std::string("—") : it->second;
+			});
+			valueRow("Preset", preset >= 0 ? kPresets[preset].name : "Custom setup", preset != 0 ? kSpecial : kText);
+		}
+		if (!pub.empty()) {
+			heading("MAP");
+			{
+				std::string v, scenario;
+				if (take("Map type", v)) valueRow("Map type", take("Scenario", scenario) && !scenario.empty() ? Tr("Scenario: ") + scenario : MapTypeLabel(v), kText);
+			}
+			comboRow("Size", "Map size");
+			for (const auto &site : kSites) used.insert(site.key);
+			if (!load) {
+				std::string removed;
+				for (const auto &site : kSites) {
+					if (sites & site.bit) removed += (removed.empty() ? "" : ", ") + Tr(site.name);
+				}
+				valueRow("Remove from map", !randomMap ? Tr("Only on random maps") : removed.empty() ? Tr("None") : removed,
+					!randomMap ? kDim : removed.empty() ? kText : kSpecial);
+			}
+			for (const ModOption &mo : mods) {
+				if (mo.id != kSeasonOptionId) continue;
+				std::string v;
+				const bool has = take(mo.name, v);
+				if (load) continue;
+				if (!randomMap) valueRow(mo.name, Tr("Only on random maps"), kDim);
+				else if (has) valueRow(mo.name, v, !mo.values.empty() && v != mo.values[0] ? kSpecial : kText);
+			}
+		}
+		heading("GAME");
+		comboRow("Mode", "Game type");
+		comboRow("Limit", "Limit");
+		comboRow("Population", "Population");
+		comboRow("Starting gold", "Starting gold");
+		{
+			const bool watchable = g.specLobby != 0;
+			std::string spec = SpectatorText(watchable, g.specDelay);
+			if (watchable && g.playing && g.spectators > 0) spec += "  ·  " + std::to_string(g.spectators) + Tr(" watching");
+			valueRow("Spectators", spec, watchable ? kText : kDim);
+		}
+		if (!pub.empty()) {
+			heading("RULES");
+			checkRow("Fog of war", "No fog", true);
+			checkRow("Explored map", "Map pre-explored", false);
+			checkRow("Shared control", "Shared control", false);
+			checkRow("Bonuses", "Disable bonuses", true);
+			if (!load) checkRow("Hide civilizations", "Hidden civilizations", false);
+			else used.insert("Hidden civilizations");
+			checkRow("Free unit attachment", "Free unit attachment", false);
+			checkRow("Lock diplomacy", "Diplomacy locked", false);
+			checkRow("Allow cheats", "Cheats", false);
+			for (const ModOption &mo : mods) {
+				if (mo.id == kSeasonOptionId) continue;
+				std::string v;
+				if (!take(mo.name, v)) continue;
+				if (mo.values.empty()) toggleRow(mo.name, v == "yes");
+				else valueRow(mo.name, v, v != mo.values[0] ? kSpecial : kText);
+			}
+			// Options of mods this PC doesn't have, as the host wrote them.
+			for (const std::string &key : published) {
+				if (used.count(key)) continue;
+				const std::string &v = pub[key];
+				if (v == "yes" || v == "no") toggleRow(key, v == "yes");
+				else valueRow(key, v, kText);
+			}
+		}
 	}
 	p.Unclip();
 
@@ -323,13 +433,23 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis)
 }
 
 namespace mpui_impl {
+// The name underlines under the mouse, as a link does, and a click opens the player's Steam profile.
+void ProfileHotspot(Painter &p, const State &st, int x, int y, int w, int h, const std::string &name, int arg)
+{
+	const int textW = std::min(w, p.TextWidth(name));
+	if (textW <= 0) return;
+	p.AddHit(x, y, textW, h, kProfile, arg);
+	if (p.Hover(x, y, textW, h, st.mouseX, st.mouseY)) p.Fill(x, y + h / 2 + 9, textW, 1, kGold);
+}
+
 void PaintPassPrompt(Painter &p, const State &st)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const Dialog d = DialogBegin(p, kW, kH, 480, 214, "Password-protected room", kGold, 26);
 	DrawLock(p, d.x + 24, d.y + 22, kGold);
 	DialogText(p, d, 58, "\"" + st.passLobby.name + Tr("\", hosted by ") + st.passLobby.host + Tr(". Enter the password to join."), kDim, 3);
-	PaintField(p, st, d.x + 24, d.y + 104, d.w - 48, 34, st.joinPassInput, "Password", st.focus == kJoinPassField, kFieldJoinPass, true);
+	PaintField(p, st, d.x + 24, d.y + 104, d.w - 48 - 98, 34, st.joinPassInput, "Password", st.focus == kJoinPassField, kFieldJoinPass, !st.passShow);
+	p.Button(d.x + d.w - 24 - 90, d.y + 104, 90, 34, st.passShow ? "Hide" : "Show", kPassShow, 0, mx, my);
 	DialogButtons(p, d, {{"OK", kPassOk, 0, true}, {"Cancel", kPassCancel}}, mx, my);
 }
 
@@ -420,8 +540,7 @@ void PaintList(Painter &p, const State &st)
 void PaintRanked(Painter &p, const State &st)
 {
 	const int mx = st.mouseX, my = st.mouseY;
-	p.Fill(16, 132, 380, 430, pal::wellRaised);
-	p.Frame(16, 132, 380, 430, pal::line);
+	PaintCard(p, 16, 132, 380, 430);
 	p.Fill(150, 184, 112, 112, RGB(70, 54, 24));
 	p.Frame(150, 184, 112, 112, kGold);
 	p.Frame(156, 190, 100, 100, pal::line);
@@ -472,8 +591,7 @@ void PaintCreate(Painter &p, const State &st)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const int x = 190, w = 620, y0 = 134, h = 478;
-	p.Fill(x, y0, w, h, pal::wellRaised);
-	p.Frame(x, y0, w, h, pal::line);
+	PaintCard(p, x, y0, w, h);
 	const int lx = x + 24, fx = x + 170, fw = w - 194;
 	int y = y0 + 22;
 	p.Font(0);
@@ -728,6 +846,13 @@ std::vector<std::string> DropItems(const State &st, int &sel)
 {
 	sel = -1;
 	const int idx = st.dropIndex;
+	if (st.dropKind == kDropTeam) {
+		const int team = st.game.slots[idx & 7].team;
+		sel = team > 0 && team <= kRoomTeams ? team : 0;
+		std::vector<std::string> items = {Tr("No team")};
+		for (int t = 1; t <= kRoomTeams; t++) items.push_back(TrFmt("Team %d", {std::to_string(t)}));
+		return items;
+	}
 	if (st.dropKind == kDropBonus) {
 		sel = st.game.slots[idx & 7].bonus;
 		std::vector<std::string> names;
@@ -841,7 +966,7 @@ RECT g_dropAnchor = {};
 void Combo(Painter &p, const State &st, int x, int y, int w, int h, const std::string &text, int kind, int index, bool enabled)
 {
 	PaintCombo(p, x, y, w, h, text, st.dropOpen && st.dropKind == kind && st.dropIndex == index, enabled, st.mouseX, st.mouseY, kGDropOpen,
-		kind | (index << 4), &g_dropAnchor);
+		DropArg(kind, index), &g_dropAnchor);
 }
 
 void PaintPickCombo(Painter &p, const State &st, int x, int y, int w, int h, const std::string &text)
