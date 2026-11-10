@@ -31,6 +31,7 @@
 #include "mods/vfs.h"
 #include "game/gamemenu.h"
 #include "game/gamestats.h"
+#include "game/credits.h"
 #include "game/greatbattles.h"
 #include "game/options.h"
 #include "game/profiles.h"
@@ -51,7 +52,6 @@
 #include "hooks/selectionguard.h"
 #include "hooks/curseguard.h"
 #include "hooks/itemdefguard.h"
-#include "hooks/convdiag.h"
 #include "hooks/handleguard.h"
 #include "game/packrules.h"
 #include "hooks/builtinfixes.h"
@@ -218,7 +218,6 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 		InstallSelectionGuard(knownExe);
 		InstallCurseGuard(knownExe);
 		InstallItemDefGuard(knownExe);
-		InstallConversationDiag(knownExe);
 		InstallHandleGuard(knownExe);
 		InstallPackRules(knownExe);
 		InstallRejoin(knownExe);
@@ -245,6 +244,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 		InstallGameStats(knownExe);
 		InstallProfileHooks(knownExe);
 		InstallGreatBattlesHooks(knownExe);
+		InstallCreditsHooks(knownExe);
 		InstallControls(knownExe);
 		InstallModernAudio(knownExe);
 		InstallSoundLevels(knownExe);

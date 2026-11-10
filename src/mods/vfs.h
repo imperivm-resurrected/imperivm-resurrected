@@ -16,4 +16,5 @@ void VfsSetHidden(const std::set<std::string> &paths);
 bool VfsIsHidden(const std::string &rel);
 void InstallHiddenHooks();
 
+// The file as the game has it: without the mod's patches nor the block it puts before the game's credits.
 bool VfsReadUnpatched(const std::string &rel, std::string &out);
