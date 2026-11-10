@@ -517,6 +517,9 @@ HelpIndex BuildHelpIndex(const HelpDoc &doc)
 			}
 		}
 	}
+	for (int t = 0; t < n && x.keys < 0; t++) {
+		if (HelpIsKeyTopic(doc, t)) x.keys = t;
+	}
 	if (x.home >= 0) {
 		for (const HelpEntry &e : doc.topics[x.home].entries) {
 			if (e.large && !e.text.empty()) {
@@ -535,6 +538,34 @@ HelpIndex BuildHelpIndex(const HelpDoc &doc)
 		x.groups.erase(std::remove_if(x.groups.begin(), x.groups.end(), [](const HelpNavGroup &g) { return g.items.empty(); }), x.groups.end());
 	}
 	return x;
+}
+
+bool HelpSplitKey(const std::string &text, std::string &key, std::string &what)
+{
+	if (text.find('\n') != std::string::npos) return false;
+	size_t at = text.find(" - "), len = 3;
+	// "- (menos)- Disminuye la velocidad": the dash of the key itself is not the separator.
+	if (at == std::string::npos) {
+		at = text.find("- ", 1);
+		len = 2;
+	}
+	if (at == std::string::npos || at == 0 || at > 44) return false;
+	key = Trim(text.substr(0, at));
+	what = Trim(text.substr(at + len));
+	return !key.empty() && !what.empty();
+}
+
+bool HelpIsKeyTopic(const HelpDoc &doc, int topic)
+{
+	if (topic < 0 || topic >= static_cast<int>(doc.topics.size())) return false;
+	int candidates = 0, keys = 0;
+	for (const HelpEntry &e : doc.topics[topic].entries) {
+		if (e.large || !e.link.empty() || !e.image.empty() || e.text.empty() || e.text.find('\n') != std::string::npos) continue;
+		candidates++;
+		std::string k, w;
+		if (HelpSplitKey(e.text, k, w)) keys++;
+	}
+	return keys >= 4 && keys * 10 >= candidates * 6;
 }
 
 void HelpHistory::Go(const HelpPlace &place)
@@ -697,6 +728,44 @@ std::vector<HelpHit> HelpSearch(const HelpDoc &doc, const HelpIndex &index, cons
 	std::stable_sort(hits.begin(), hits.end(), [](const HelpHit &a, const HelpHit &b) { return a.score > b.score; });
 	if (hits.size() > limit) hits.resize(limit);
 	return hits;
+}
+
+std::vector<HelpHit> HelpSearchRows(const std::vector<HelpRow> &rows, int topic, const std::string &query)
+{
+	std::vector<HelpHit> hits;
+	const std::vector<std::string> tokens = Words(HelpFold(query));
+	if (tokens.empty() || topic < 0) return hits;
+	for (const HelpRow &r : rows) {
+		const std::string title = HelpFold(r.title), text = HelpFold(r.title + " " + r.context + " " + r.text);
+		int score = 0;
+		bool all = true;
+		for (const std::string &tok : tokens) {
+			const size_t at = title.find(tok);
+			if (at != std::string::npos) score += StartsWord(title, at) ? 15 : 10;
+			else if (text.find(tok) != std::string::npos) score += 1;
+			else {
+				all = false;
+				break;
+			}
+		}
+		if (!all) continue;
+		HelpHit h;
+		h.topic = topic;
+		h.score = score;
+		h.title = r.title;
+		h.context = r.context;
+		h.snippet = r.text;
+		hits.push_back(h);
+	}
+	return hits;
+}
+
+std::vector<HelpHit> HelpMergeHits(std::vector<HelpHit> pages, const std::vector<HelpHit> &rows, size_t limit)
+{
+	pages.insert(pages.end(), rows.begin(), rows.end());
+	std::stable_sort(pages.begin(), pages.end(), [](const HelpHit &a, const HelpHit &b) { return a.score > b.score; });
+	if (pages.size() > limit) pages.resize(limit);
+	return pages;
 }
 
 HelpCounters ParseCounterUnits(const std::string &xml)

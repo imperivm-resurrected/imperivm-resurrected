@@ -69,9 +69,15 @@ struct HelpIndex {
 	// Per topic, its paragraphs (not its links) and their folded copies, for the search.
 	std::vector<std::vector<std::string>> paragraphs, folded;
 	std::vector<std::string> foldedTitles;
+	// The page of keys and controls ("Espacio - Muestra el mapa" lines), or -1.
+	int keys = -1;
 };
 
 HelpIndex BuildHelpIndex(const HelpDoc &doc);
+// "Espacio - Muestra el mapa": the key and what it does.
+bool HelpSplitKey(const std::string &text, std::string &key, std::string &what);
+// Most of the plain one-line entries of the topic are keys.
+bool HelpIsKeyTopic(const HelpDoc &doc, int topic);
 
 // A page of the screen: a topic, a section of a listing, or the results of a search when query is not empty.
 struct HelpPlace {
@@ -114,9 +120,19 @@ struct HelpHit {
 	int topic = -1, section = -1;
 	int score = 0;
 	std::string snippet;
+	// For a hit that is not a whole page (a row of the keys): what to show instead of the page's title and path.
+	std::string title, context;
 };
 // Every word must appear in the title or the text of the topic; titles weigh more. Ordered by score, then as in the file.
 std::vector<HelpHit> HelpSearch(const HelpDoc &doc, const HelpIndex &index, const std::string &query, size_t limit = 60);
+
+// Lines a page shows that are not in the file (the player's keys): every word of the query must be in its text.
+struct HelpRow {
+	std::string title, context, text;
+};
+std::vector<HelpHit> HelpSearchRows(const std::vector<HelpRow> &rows, int topic, const std::string &query);
+// The hits of both, by score, then pages before rows.
+std::vector<HelpHit> HelpMergeHits(std::vector<HelpHit> pages, const std::vector<HelpHit> &rows, size_t limit = 60);
 
 // data/CounterUnits.xml, the table the computer players recruit from: for each enemy class, the classes that answer it and how much.
 struct HelpCounter {

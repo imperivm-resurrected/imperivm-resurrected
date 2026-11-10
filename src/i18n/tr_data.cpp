@@ -1786,8 +1786,8 @@ extern const TrRow kTrRows[] = {
 	{"Search results", "Resultados de la búsqueda", "Risultati della ricerca"},
 	{"The game's help could not be read.", "No se ha podido leer la ayuda del juego.", "Non è stato possibile leggere la guida del gioco."},
 	{"Nothing in the help matches “%s”.", "No hay nada en la ayuda que coincida con «%s».", "Nella guida non c'è niente che corrisponda a «%s»."},
-	{"1 page found", "1 página encontrada", "1 pagina trovata"},
-	{"%s pages found", "%s páginas encontradas", "%s pagine trovate"},
+	{"1 result", "1 resultado", "1 risultato"},
+	{"%s results", "%s resultados", "%s risultati"},
 	{"Health", "Salud", "Salute"},
 	{"slash", "corte", "taglio"},
 	{"pierce", "perforación", "perforazione"},
@@ -1810,5 +1810,7 @@ extern const TrRow kTrRows[] = {
 	{"Search the help", "Buscar en la ayuda", "Cerca nella guida"},
 	{"Type to search · Wheel scrolls · Backspace goes back · Esc closes", "Escribe para buscar · Rueda para desplazar · Retroceso vuelve atrás · Esc cierra", "Scrivi per cercare · Rotella per scorrere · Backspace torna indietro · Esc chiude"},
 	{"Damage", "Ataque", "Attacco"},
+	{"Change in Controls", "Cambiar en Controles", "Cambia in Controlli"},
+	{"Your keys as they are set in Controls, where the orders of units and buildings are too.", "Tus teclas tal como están en Controles, donde también están las órdenes de unidades y edificios.", "I tuoi tasti come sono impostati in Controlli, dove ci sono anche gli ordini di unità ed edifici."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

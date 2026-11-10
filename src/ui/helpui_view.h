@@ -13,6 +13,7 @@
 
 #include "core/helpdoc.h"
 #include "game/battlelist.h"
+#include "game/controls.h"
 #include "ui/textedit.h"
 #include "ui/uikit.h"
 
@@ -39,6 +40,8 @@ struct View {
 	ui::EditState edit;
 	bool searchFocused = false;
 	std::shared_ptr<const std::vector<HelpHit>> hits;
+	// The player's keys from the Controls screen, which the page of keys shows instead of the file's; null when they could not be read.
+	std::shared_ptr<const std::vector<ControlInfo>> controls;
 	int scroll = 0, navScroll = 0;
 	// Bring the row of the place into the side bar once.
 	bool revealNav = false;
@@ -59,13 +62,15 @@ struct PaintOut {
 	std::vector<std::string> wanted;
 };
 
-enum Action { kActNone = 0, kActGo, kActBack, kActForward, kActClose, kActSearch, kActClearSearch, kActToggle, kActWeb };
+enum Action { kActNone = 0, kActGo, kActBack, kActForward, kActClose, kActSearch, kActClearSearch, kActToggle, kActWeb, kActControls };
 
 constexpr int kScreenW = 1060, kScreenH = 720;
 
 std::string ImageKey(const std::string &path);
 // Turns the transparent colour of a bitmap of the game into transparent pixels.
 void KeyOut(BattleImage &img);
+// The rows the page of keys shows, for the search: their names, keys and what they do, translated.
+std::vector<HelpRow> ControlRows(const std::vector<ControlInfo> &controls);
 void PaintHelpScreen(ui::Painter &p, const View &v, PaintOut &out);
 
 }

@@ -170,7 +170,7 @@ The help screen (F1) reads `currentlang\help.xml` in the player's language, with
 - **Links.** A `link` is resolved as the game does: an id among the children of the topic, or a path from the top with a leading `/` (`/contents/units/RHastatus`). A link the game wouldn't find still leads to the topic with that id, if there is one. Links that lead nowhere are shown as plain text, and `http://` links open in the browser.
 - **Titles.** A topic's title is its first entry when that one is `font="large"`. A listing takes the text of the link to it.
 - **Unit pages.** When a topic is the page of a class (the class has `help="contents/units/<topic>"` of its own, or the topic's id is the class id), the page starts with a card of that class's numbers as the game loaded them: health, attack and its type, armour, speed, sight, range for missile units, and the cost, time and building of its train command. A page shared by several classes (the heroes of each level, the peasants) gets no card. The units it is strong and weak against come from `data\CounterUnits.xml`, the table the computer players recruit from.
-- **Keys.** In a topic whose plain one-line entries are mostly `Key - what it does`, they are shown as keys.
+- **Keys.** The topic whose plain one-line entries are mostly `Key - what it does` is the page of keys. It shows the player's own keys from the Controls screen instead of its entries, which are only used if those can't be read (then each key is drawn as a key cap).
 - **Search** looks in the titles and in every entry that isn't a link.
 
 Anything else is shown in the order of the file: headings, paragraphs (an empty line between them), pictures with their text, and empty entries as space.

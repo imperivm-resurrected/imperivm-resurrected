@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "i18n/tr.h"
+#include "ui/keycaps.h"
 #include "ui/ornaments.h"
 #include "ui/widgets.h"
 
@@ -141,6 +142,57 @@ void DrawLines(Painter &p, int x, int y, int w, const std::vector<std::wstring> 
 	}
 }
 
+constexpr int kCapH = 26, kPlusW = 12;
+
+// The parts of a key written in the help ("Ctrl + Ñ"), each on its cap as the Controls screen draws them.
+std::vector<std::string> TextCaps(const std::string &key)
+{
+	std::vector<std::string> parts;
+	std::string cur;
+	for (size_t i = 0; i <= key.size(); i++) {
+		const bool end = i == key.size();
+		const bool plus = !end && key[i] == '+' && i > 0 && i + 1 < key.size() && (key[i - 1] == ' ' || key[i + 1] == ' ');
+		if (!end && !plus) {
+			cur += key[i];
+			continue;
+		}
+		while (!cur.empty() && cur.back() == ' ') cur.pop_back();
+		size_t a = 0;
+		while (a < cur.size() && cur[a] == ' ') a++;
+		if (a < cur.size()) parts.push_back(cur.substr(a));
+		cur.clear();
+	}
+	return parts;
+}
+
+int TextCapsWidth(Painter &p, const std::string &key)
+{
+	p.Font(4);
+	int w = 0;
+	const std::vector<std::string> parts = TextCaps(key);
+	for (size_t i = 0; i < parts.size(); i++) w += CapWidth(p, parts[i]) + (i ? kPlusW : 0);
+	return w;
+}
+
+void DrawTextCaps(Painter &p, int x, int y, int h, const std::string &key, int maxW)
+{
+	const COLORREF edge = RGB(122, 98, 64), fg = RGB(240, 222, 170);
+	if (TextCapsWidth(p, key) > maxW) {
+		DrawCap(p, x, y, std::min(maxW, CapWidth(p, key)), h, key, 0, edge, fg);
+		return;
+	}
+	const std::vector<std::string> parts = TextCaps(key);
+	for (size_t i = 0; i < parts.size(); i++) {
+		if (i) {
+			p.Text(x, y, kPlusW, h - 2, "+", kDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			x += kPlusW;
+		}
+		const int w = CapWidth(p, parts[i]);
+		DrawCap(p, x, y, w, h, parts[i], 0, edge, fg);
+		x += w;
+	}
+}
+
 void CenterWrapped(Painter &p, int x, int y, int w, int h, const std::string &text, COLORREF c)
 {
 	RECT r = p.R(x, y, w, h);
@@ -156,25 +208,6 @@ bool SmallImage(const std::string &path)
 	return l.size() >= 7 && l.compare(l.size() - 7, 7, "ico.bmp") == 0;
 }
 
-// "Espacio - Muestra el mapa": the key and what it does.
-bool SplitKey(const std::string &text, std::string &key, std::string &what)
-{
-	if (text.find('\n') != std::string::npos) return false;
-	const size_t dash = text.find(" - ");
-	const size_t tight = text.find("- ", 1);
-	size_t at = dash != std::string::npos ? dash : std::string::npos;
-	size_t len = 3;
-	if (at == std::string::npos && tight != std::string::npos && tight > 0) {
-		at = tight;
-		len = 2;
-	}
-	if (at == std::string::npos || at == 0 || at > 44) return false;
-	key = text.substr(0, at);
-	what = text.substr(at + len);
-	while (!key.empty() && key.back() == ' ') key.pop_back();
-	return !key.empty() && !what.empty();
-}
-
 struct Cell {
 	std::string label, value, icon;
 };
@@ -184,7 +217,7 @@ struct Card {
 	std::string label, sub, image;
 };
 
-enum Kind { kKindHeading, kKindText, kKindIconText, kKindLink, kKindGrid, kKindImage, kKindKey, kKindStats, kKindMatchups, kKindResult, kKindNote, kKindLinks };
+enum Kind { kKindHeading, kKindText, kKindIconText, kKindLink, kKindGrid, kKindImage, kKindKey, kKindStats, kKindMatchups, kKindResult, kKindNote, kKindLinks, kKindControl };
 
 struct Block {
 	Kind kind = kKindText;
@@ -197,6 +230,7 @@ struct Block {
 	std::vector<Cell> cells;
 	std::wstring key;
 	std::string title, context;
+	std::vector<ControlKey> keys;
 };
 
 struct Page {
@@ -327,31 +361,19 @@ struct Builder {
 		Add(b, kBlockGap + 2);
 	}
 
-	bool KeyTopic(int topic) const
-	{
-		int candidates = 0, keys = 0;
-		for (const HelpEntry &e : c.doc.topics[topic].entries) {
-			if (e.large || !e.link.empty() || !e.image.empty() || e.text.empty() || e.text.find('\n') != std::string::npos) continue;
-			candidates++;
-			std::string k, w;
-			if (SplitKey(e.text, k, w)) keys++;
-		}
-		return keys >= 4 && keys * 10 >= candidates * 6;
-	}
-
 	void Entries(int topic, int from, int to, const std::string &skipImage)
 	{
 		const std::vector<HelpEntry> &es = c.doc.topics[topic].entries;
-		const bool keys = KeyTopic(topic);
+		const bool keys = HelpIsKeyTopic(c.doc, topic);
 		int keyW = 0;
 		if (keys) {
 			p.Font(4);
 			for (const HelpEntry &e : es) {
 				std::string k, w;
 				// A long key goes over its text instead of widening the column for all.
-				if (!e.large && e.link.empty() && e.image.empty() && SplitKey(e.text, k, w) && p.TextWidth(k) + 24 <= kKeyW) keyW = std::max(keyW, p.TextWidth(k));
+				if (!e.large && e.link.empty() && e.image.empty() && HelpSplitKey(e.text, k, w) && TextCapsWidth(p, k) + 16 <= kKeyW) keyW = std::max(keyW, TextCapsWidth(p, k));
 			}
-			keyW = std::max(70, keyW + 24);
+			keyW = std::max(70, keyW + 16);
 		}
 		const auto simpleLink = [&](const HelpEntry &e) { return e.target >= 0 && e.image.empty() && !e.text.empty() && e.text.find('\n') == std::string::npos; };
 		const auto cardable = [&](const HelpEntry &e) { return e.target >= 0 && !e.image.empty() && e.text.find('\n') == std::string::npos && !e.text.empty(); };
@@ -411,16 +433,15 @@ struct Builder {
 				continue;
 			}
 			std::string key, what;
-			if (keys && !image && SplitKey(e.text, key, what)) {
+			if (keys && !image && HelpSplitKey(e.text, key, what)) {
 				Block b;
 				b.kind = kKindKey;
 				b.key = W(key);
-				p.Font(4);
-				const bool stacked = p.TextWidth(key) + 24 > keyW;
+				const bool stacked = TextCapsWidth(p, key) + 16 > keyW;
 				b.keyW = stacked ? 0 : keyW;
 				p.Font(0);
 				b.lines = p.WrapLines(what, 0, kContentW - b.keyW - 12);
-				b.h = std::max(28, LinesHeight(b.lines) + 6) + (stacked ? 28 : 0);
+				b.h = std::max(30, LinesHeight(b.lines) + 8) + (stacked ? 30 : 0);
 				Add(b, 4);
 				continue;
 			}
@@ -486,6 +507,28 @@ struct Builder {
 		Add(mb, 16);
 	}
 
+	// The player's own keys, page by page as the Controls screen has them; the orders of units and buildings stay there.
+	void Controls(const std::vector<ControlInfo> &controls)
+	{
+		Note(Tr("Your keys as they are set in Controls, where the orders of units and buildings are too."));
+		for (int page = 0; page < kPageCount; page++) {
+			if (ControlsPageIsOrders(page)) continue;
+			bool first = true;
+			for (const ControlInfo &r : controls) {
+				if (r.order || r.page != page) continue;
+				if (first) Heading(Tr(ControlsPageName(page)));
+				Block b;
+				b.kind = kKindControl;
+				b.title = Tr(r.name);
+				b.context = r.hint.empty() ? std::string() : Tr(r.hint);
+				b.keys = KnownKeys({r.key, r.key2});
+				b.h = b.context.empty() ? 32 : 46;
+				Add(b, first ? kBlockGap : 0);
+				first = false;
+			}
+		}
+	}
+
 	void Results()
 	{
 		const std::vector<HelpHit> none;
@@ -494,17 +537,22 @@ struct Builder {
 			Text(TrFmt("Nothing in the help matches \xE2\x80\x9C%s\xE2\x80\x9D.", {v.query}), false);
 			return;
 		}
-		Note(hits.size() == 1 ? Tr("1 page found") : TrFmt("%s pages found", {std::to_string(hits.size())}));
+		Note(hits.size() == 1 ? Tr("1 result") : TrFmt("%s results", {std::to_string(hits.size())}));
 		for (const HelpHit &h : hits) {
 			Block b;
 			b.kind = kKindResult;
 			const HelpPlace place = {h.topic, h.section, std::string()};
 			b.target = Target(place);
-			b.title = h.section >= 0 ? c.index.sections[h.topic][h.section].heading : c.index.titles[h.topic];
-			if (h.section < 0) b.image = TopicIcon(h.topic);
+			b.title = !h.title.empty() ? h.title : h.section >= 0 ? c.index.sections[h.topic][h.section].heading : c.index.titles[h.topic];
+			if (h.section < 0 && h.title.empty()) b.image = TopicIcon(h.topic);
 			const int textW = kContentW - 24 - (b.image.empty() ? 0 : kResultIconW + 14);
 			const std::vector<HelpCrumb> crumbs = HelpCrumbs(c.doc, c.index, place);
-			for (size_t i = 1; i + 1 < crumbs.size(); i++) b.context += (b.context.empty() ? "" : "  \xE2\x80\xBA  ") + crumbs[i].label;
+			if (!h.title.empty()) {
+				b.context = c.index.titles[h.topic] + (h.context.empty() ? "" : "  \xE2\x80\xBA  " + h.context);
+			}
+			else {
+				for (size_t i = 1; i + 1 < crumbs.size(); i++) b.context += (b.context.empty() ? "" : "  \xE2\x80\xBA  ") + crumbs[i].label;
+			}
 			p.Font(0);
 			if (!h.snippet.empty()) {
 				b.lines = p.WrapLines(h.snippet, 0, textW);
@@ -546,7 +594,8 @@ struct Builder {
 				Stats(pl.topic, stats->second);
 				skip = TopicIcon(pl.topic);
 			}
-			Entries(pl.topic, from, static_cast<int>(es.size()), skip);
+			if (pl.topic == c.index.keys && v.controls && !v.controls->empty()) Controls(*v.controls);
+			else Entries(pl.topic, from, static_cast<int>(es.size()), skip);
 		}
 		page.height = y + 8;
 	}
@@ -851,18 +900,38 @@ struct Pane {
 
 	void Key(const Block &b, int x, int y)
 	{
-		p.Font(4);
 		const bool stacked = b.keyW == 0;
-		const int kw = stacked ? std::min(kContentW, PixelWidthDesign(b.key) + 18) : std::min(b.keyW - 8, PixelWidthDesign(b.key) + 18);
-		p.Fill(x, y + 2, kw, 22, RGB(44, 34, 21));
-		p.Frame(x, y + 2, kw, 22, pal::edge);
-		p.Fill(x + 1, y + 23, kw - 2, 1, RGB(20, 14, 8));
-		RECT r = p.R(x + 4, y + 2, kw - 8, 22);
-		SetTextColor(p.dc, pal::goldLight);
-		DrawTextW(p.dc, b.key.c_str(), static_cast<int>(b.key.size()), &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
+		DrawTextCaps(p, x, y + 1, kCapH, Utf8(b.key), stacked ? kContentW : b.keyW - 8);
 		p.Font(0);
-		if (stacked) DrawLines(p, x + 12, y + 29, kContentW - 12, b.lines, kPlain, false);
-		else DrawLines(p, x + b.keyW + 12, y + 1, kContentW - b.keyW - 12, b.lines, kPlain, false);
+		if (stacked) DrawLines(p, x + 12, y + 31, kContentW - 12, b.lines, kPlain, false);
+		else DrawLines(p, x + b.keyW + 12, y + 2, kContentW - b.keyW - 12, b.lines, kPlain, false);
+	}
+
+	void Control(const Block &b, int x, int y)
+	{
+		p.Fill(x, y + b.h - 1, kContentW, 1, RGB(44, 34, 23));
+		// The caps say Shift or Mayús in the player's language, as on the Controls screen.
+		p.raw = false;
+		const int keysW = b.keys.empty() ? 0 : KeysWidth(p, b.keys);
+		p.raw = true;
+		const int nameW = kContentW - std::max(keysW, 90) - 24;
+		p.Font(0);
+		if (b.context.empty()) {
+			p.Text(x + 6, y, nameW, b.h, b.title, kText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		}
+		else {
+			p.Text(x + 6, y + 4, nameW, 20, b.title, kText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			p.Font(3);
+			p.Text(x + 6, y + 24, nameW, 16, b.context, kDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		}
+		if (b.keys.empty()) {
+			p.Font(3);
+			p.Text(x + kContentW - 96, y, 90, b.h, Tr("No key"), RGB(140, 124, 96), DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+			return;
+		}
+		p.raw = false;
+		DrawKeys(p, x + kContentW - 6 - keysW, y + (b.h - kCapH) / 2, kCapH, b.keys);
+		p.raw = true;
 	}
 
 	int PixelWidthDesign(const std::wstring &w) { return static_cast<int>(PixelWidth(p, w, 0) / p.s + 1); }
@@ -893,6 +962,7 @@ struct Pane {
 			case kKindMatchups: Matchups(b, x, y); break;
 			case kKindResult: Result(b, x, y); break;
 			case kKindLinks: Links(b, x, y); break;
+			case kKindControl: Control(b, x, y); break;
 			}
 		}
 		p.Unclip();
@@ -1047,9 +1117,18 @@ void PaintBar(Painter &p, const Content *c, const View &v, PaintOut &out)
 	std::vector<HelpCrumb> crumbs = HelpCrumbs(c->doc, c->index, v.place);
 	if (!crumbs.empty()) crumbs[0].label = Tr("Help");
 	if (!v.place.query.empty() && crumbs.size() > 1) crumbs.back().label = "\xE2\x80\x9C" + v.place.query + "\xE2\x80\x9D";
+	int right = kPaneX + kPaneW;
+	if (v.place.query.empty() && v.place.topic >= 0 && v.place.topic == c->index.keys && v.controls && !v.controls->empty()) {
+		p.Font(3);
+		const std::string label = Tr("Change in Controls");
+		const int bw = p.TextWidth(label) + 32;
+		right -= bw;
+		p.Button(right, kBarY, bw, kBarH, label, kActControls, 0, v.mouseX, v.mouseY, true, false, 3);
+		right -= 16;
+	}
 	p.Font(3);
 	const std::string sep = "  \xE2\x80\xBA  ";
-	const int x0 = kPaneX + 88, avail = kPaneX + kPaneW - x0;
+	const int x0 = kPaneX + 88, avail = right - x0;
 	const int sepW = p.TextWidth(sep);
 	auto total = [&]() {
 		int t = 0;
@@ -1069,7 +1148,7 @@ void PaintBar(Painter &p, const Content *c, const View &v, PaintOut &out)
 			x += sepW;
 		}
 		const bool last = i + 1 == crumbs.size(), dead = crumbs[i].place.topic == -2;
-		const int w = std::min(p.TextWidth(crumbs[i].label), kPaneX + kPaneW - x);
+		const int w = std::min(p.TextWidth(crumbs[i].label), right - x);
 		if (w <= 0) break;
 		const bool hot = !last && !dead && p.Hover(x, kBarY, w, kBarH, v.mouseX, v.mouseY);
 		p.Text(x, kBarY, w + 2, kBarH, crumbs[i].label, last ? kText : hot ? kLinkHot : kDim);
@@ -1139,6 +1218,27 @@ void KeyOut(BattleImage &img)
 	for (uint32_t &c : img.bgra) {
 		if ((c & 0xffffff) == key) c = 0;
 	}
+}
+
+std::vector<HelpRow> ControlRows(const std::vector<ControlInfo> &controls)
+{
+	std::vector<HelpRow> rows;
+	for (const ControlInfo &r : controls) {
+		if (r.order || ControlsPageIsOrders(r.page)) continue;
+		std::string keys;
+		for (const ControlKey &k : KnownKeys({r.key, r.key2})) {
+			std::string label;
+			for (const std::string &cap : CapTexts(k)) label += (label.empty() ? "" : " + ") + (cap.empty() ? ControlsKeyLabel({k.vk, 0}) : Tr(cap));
+			keys += (keys.empty() ? "" : " / ") + label;
+		}
+		HelpRow row;
+		row.title = Tr(r.name);
+		row.context = Tr(ControlsPageName(r.page));
+		row.text = keys.empty() ? Tr("No key") : keys;
+		if (!r.hint.empty()) row.text += "  \xC2\xB7  " + Tr(r.hint);
+		rows.push_back(row);
+	}
+	return rows;
 }
 
 std::string ImageKey(const std::string &path)

@@ -1779,8 +1779,8 @@
 {"en":"Search results","es":"Resultados de la búsqueda","it":"Risultati della ricerca"},
 {"en":"The game's help could not be read.","es":"No se ha podido leer la ayuda del juego.","it":"Non è stato possibile leggere la guida del gioco."},
 {"en":"Nothing in the help matches “%s”.","es":"No hay nada en la ayuda que coincida con «%s».","it":"Nella guida non c'è niente che corrisponda a «%s»."},
-{"en":"1 page found","es":"1 página encontrada","it":"1 pagina trovata"},
-{"en":"%s pages found","es":"%s páginas encontradas","it":"%s pagine trovate"},
+{"en":"1 result","es":"1 resultado","it":"1 risultato"},
+{"en":"%s results","es":"%s resultados","it":"%s risultati"},
 {"en":"Health","es":"Salud","it":"Salute"},
 {"en":"slash","es":"corte","it":"taglio"},
 {"en":"pierce","es":"perforación","it":"perforazione"},
@@ -1802,5 +1802,7 @@
 {"en":"From the counters the computer players recruit","es":"Según las unidades que recluta la IA para contrarrestar a cada una","it":"Secondo le unità che l'IA addestra per contrastare ciascuna"},
 {"en":"Search the help","es":"Buscar en la ayuda","it":"Cerca nella guida"},
 {"en":"Type to search · Wheel scrolls · Backspace goes back · Esc closes","es":"Escribe para buscar · Rueda para desplazar · Retroceso vuelve atrás · Esc cierra","it":"Scrivi per cercare · Rotella per scorrere · Backspace torna indietro · Esc chiude"},
-{"en":"Damage","es":"Ataque","it":"Attacco"}
+{"en":"Damage","es":"Ataque","it":"Attacco"},
+{"en":"Change in Controls","es":"Cambiar en Controles","it":"Cambia in Controlli"},
+{"en":"Your keys as they are set in Controls, where the orders of units and buildings are too.","es":"Tus teclas tal como están en Controles, donde también están las órdenes de unidades y edificios.","it":"I tuoi tasti come sono impostati in Controlli, dove ci sono anche gli ordini di unità ed edifici."}
 ]

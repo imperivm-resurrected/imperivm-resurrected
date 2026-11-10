@@ -261,6 +261,42 @@ void Counters()
 
 }
 
+void Keys()
+{
+	std::string key, what;
+	CHECK(HelpSplitKey("Ctrl + \xC3\x91 - Cambia la barra de salud", key, what));
+	CHECK_EQ(key, std::string("Ctrl + \xC3\x91"));
+	CHECK_EQ(what, std::string("Cambia la barra de salud"));
+	// The key itself is a dash.
+	CHECK(HelpSplitKey("- (menos)- Disminuye la velocidad", key, what));
+	CHECK_EQ(key, std::string("- (menos)"));
+	CHECK(!HelpSplitKey("A sentence that goes on for longer than any key would - then a dash", key, what));
+	CHECK(!HelpSplitKey("Two\nlines - no", key, what));
+	const HelpDoc doc = ParseHelpXml(
+		"<help><topic id=\"contents\"><entry link=\"keys\">Keys</entry>"
+		"<topic id=\"keys\"><entry font=\"large\">Keys</entry><entry>Space - Map</entry><entry>Tab - Last message</entry>"
+		"<entry>F1 - Help</entry><entry>F2 - Save</entry><entry>Some words without a key</entry></topic></topic></help>");
+	const HelpIndex x = BuildHelpIndex(doc);
+	CHECK_EQ(x.keys, Find(doc, "keys"));
+	CHECK(!HelpIsKeyTopic(doc, Find(doc, "contents")));
+	CHECK_EQ(BuildHelpIndex(ParseHelpXml(kSample)).keys, -1);
+	const std::vector<HelpRow> rows = {{"Center on selection", "Camera", "Home"}, {"Pause", "Game", "Pause \xC2\xB7 stops the game"}};
+	std::vector<HelpHit> hits = HelpSearchRows(rows, x.keys, "center");
+	CHECK_EQ(static_cast<int>(hits.size()), 1);
+	CHECK_EQ(hits[0].title, std::string("Center on selection"));
+	CHECK_EQ(hits[0].context, std::string("Camera"));
+	CHECK_EQ(hits[0].snippet, std::string("Home"));
+	CHECK_EQ(hits[0].topic, x.keys);
+	CHECK_EQ(static_cast<int>(HelpSearchRows(rows, x.keys, "stops game").size()), 1);
+	CHECK(HelpSearchRows(rows, -1, "pause").empty());
+	// A row named after the words weighs more than a page that only mentions them.
+	const std::vector<HelpHit> pages = HelpSearch(doc, x, "pause");
+	hits = HelpMergeHits({{Find(doc, "keys"), -1, 1, "", "", ""}}, HelpSearchRows(rows, x.keys, "pause"));
+	CHECK_EQ(static_cast<int>(hits.size()), 2);
+	CHECK_EQ(hits[0].title, std::string("Pause"));
+	CHECK(pages.empty());
+}
+
 int main()
 {
 	Parsing();
@@ -270,5 +306,6 @@ int main()
 	Search();
 	History();
 	Counters();
+	Keys();
 	return test::Summary("helpdoc");
 }
