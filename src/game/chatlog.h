@@ -32,7 +32,10 @@ struct ChatEntry {
 	bool own = false;
 	// A ping's type (ChatPingType), or -1 for a line that is not one.
 	int ping = -1;
+	// A line the mod writes for the local player only (help, errors): no name, nothing sent.
+	bool local = false;
 };
+
 
 // The chat's place: the bottom-left corner of the panel, kept inside the screen and above the command bar. Saved in thousandths
 // of the screen so it survives a change of resolution.
@@ -87,6 +90,24 @@ std::vector<ChatTarget> ChatTargets(bool hasAllies, const std::vector<int> &othe
 int ChatDefaultTarget(const std::vector<ChatTarget> &targets, bool everyone);
 int ChatCycle(int current, int count, bool back);
 int ChatFindTarget(const std::vector<ChatTarget> &targets, ChatTarget wanted);
+
+// The chat bar's own commands, in the three languages: /help, /all, /allies and /w or /p with a name. They are never sent.
+enum ChatSlashKind { kSlashNone, kSlashHelp, kSlashTarget, kSlashWhisper, kSlashOther };
+struct ChatSlash {
+	int kind = kSlashNone;
+	// For kSlashTarget: kTargetAll or kTargetAllies.
+	int target = kTargetAll;
+	// The command word, lower case, for kSlashOther; the name typed after /w for kSlashWhisper.
+	std::string verb, name;
+	// The message after the command.
+	std::string rest;
+	// The command word (and the name of /w) is finished: a space follows it.
+	bool complete = false;
+};
+ChatSlash ChatParseSlash(const std::string &text);
+// The player whose name starts with what was typed, without regard to case; an exact name wins over longer ones. -1 if none,
+// -2 if several fit.
+int ChatMatchName(const std::string &typed, const std::vector<std::string> &names);
 
 // Spaces at both ends go; the text is cut at kChatMaxText bytes without splitting a UTF-8 character.
 std::string ChatCleanText(const std::string &text);

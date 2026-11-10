@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <initializer_list>
 #include <utility>
 
 ChatScope ChatScopeOfMask(unsigned mask, int sender, int &privateTo)
@@ -250,4 +251,87 @@ uint32_t ChatRateLimit::WaitMs(uint32_t now)
 	Forget(now);
 	if (static_cast<int>(times_.size()) < max_ || times_.empty()) return 0;
 	return times_.front() + window_ - now;
+}
+
+namespace {
+std::string Lower(std::string s)
+{
+	for (char &c : s) {
+		if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+	}
+	return s;
+}
+
+bool OneOf(const std::string &word, std::initializer_list<const char *> list)
+{
+	for (const char *w : list) {
+		if (word == w) return true;
+	}
+	return false;
+}
+
+// The next word of text from pos; pos ends after the spaces that follow it, and spaced tells whether there were any.
+std::string NextWord(const std::string &text, size_t &pos, bool &spaced)
+{
+	const size_t end = text.find(' ', pos);
+	const std::string word = text.substr(pos, end == std::string::npos ? std::string::npos : end - pos);
+	spaced = end != std::string::npos;
+	pos = end == std::string::npos ? text.size() : end;
+	while (pos < text.size() && text[pos] == ' ') pos++;
+	return word;
+}
+}
+
+ChatSlash ChatParseSlash(const std::string &text)
+{
+	ChatSlash out;
+	if (ChatCommandOf(text).empty()) return out;
+	size_t pos = 1;
+	bool spaced = false;
+	const std::string verb = Lower(NextWord(text, pos, spaced));
+	out.complete = spaced;
+	if (OneOf(verb, {"help", "ayuda", "aiuto", "?"})) {
+		out.kind = kSlashHelp;
+	}
+	else if (OneOf(verb, {"all", "al", "todos", "tutti"})) {
+		out.kind = kSlashTarget;
+		out.target = kTargetAll;
+	}
+	else if (OneOf(verb, {"allies", "a", "aliados", "alleati"})) {
+		out.kind = kSlashTarget;
+		out.target = kTargetAllies;
+	}
+	else if (OneOf(verb, {"w", "p"})) {
+		out.kind = kSlashWhisper;
+		if (spaced) {
+			bool nameSpaced = false;
+			out.name = NextWord(text, pos, nameSpaced);
+			out.complete = nameSpaced;
+		}
+		else {
+			out.complete = false;
+		}
+	}
+	else {
+		out.kind = kSlashOther;
+		out.verb = verb;
+	}
+	out.rest = text.substr(pos);
+	return out;
+}
+
+int ChatMatchName(const std::string &typed, const std::vector<std::string> &names)
+{
+	if (typed.empty()) return -1;
+	const std::string want = Lower(typed);
+	int found = -1, count = 0;
+	for (size_t i = 0; i < names.size(); i++) {
+		const std::string name = Lower(names[i]);
+		if (name == want) return static_cast<int>(i);
+		if (name.compare(0, want.size(), want) == 0) {
+			found = static_cast<int>(i);
+			count++;
+		}
+	}
+	return count > 1 ? -2 : found;
 }

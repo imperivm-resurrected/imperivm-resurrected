@@ -707,6 +707,13 @@ bool CheatsHandleCommand(void *cmd, const char *text, unsigned size)
 	return true;
 }
 
+bool CheatsCommandKnown(const std::string &verb)
+{
+	std::string v = verb;
+	std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) { return static_cast<char>(tolower(c)); });
+	return KnownVerb(LegacyCheatVerb(v));
+}
+
 bool CheatsChatLine(const std::string &text)
 {
 	return text.size() > 1 && text[0] == '/' && HandleChat(text.c_str() + 1);

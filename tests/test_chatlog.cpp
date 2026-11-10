@@ -235,6 +235,54 @@ static void TestRateLimit()
 	CHECK(wrap.Allow(0x00000400u));
 }
 
+static void TestSlash()
+{
+	CHECK_EQ(ChatParseSlash("hello").kind, static_cast<int>(kSlashNone));
+	CHECK_EQ(ChatParseSlash("//not a command").kind, static_cast<int>(kSlashNone));
+	for (const char *h : {"/help", "/AYUDA", "/aiuto", "/?"}) CHECK_EQ(ChatParseSlash(h).kind, static_cast<int>(kSlashHelp));
+
+	ChatSlash s = ChatParseSlash("/all go go");
+	CHECK_EQ(s.kind, static_cast<int>(kSlashTarget));
+	CHECK_EQ(s.target, static_cast<int>(kTargetAll));
+	CHECK_EQ(s.rest, std::string("go go"));
+	CHECK(s.complete);
+	for (const char *a : {"/al hola", "/todos hola", "/Tutti ciao"}) CHECK_EQ(ChatParseSlash(a).target, static_cast<int>(kTargetAll));
+	for (const char *a : {"/a hola", "/allies hi", "/aliados hola", "/alleati ciao"}) {
+		CHECK_EQ(ChatParseSlash(a).kind, static_cast<int>(kSlashTarget));
+		CHECK_EQ(ChatParseSlash(a).target, static_cast<int>(kTargetAllies));
+	}
+	// Still typing the word: not complete, so the chip does not change yet.
+	s = ChatParseSlash("/all");
+	CHECK_EQ(s.kind, static_cast<int>(kSlashTarget));
+	CHECK(!s.complete);
+	CHECK_EQ(ChatParseSlash("/alli").kind, static_cast<int>(kSlashOther));
+
+	s = ChatParseSlash("/w Marc  see you");
+	CHECK_EQ(s.kind, static_cast<int>(kSlashWhisper));
+	CHECK_EQ(s.name, std::string("Marc"));
+	CHECK_EQ(s.rest, std::string("see you"));
+	CHECK(s.complete);
+	s = ChatParseSlash("/p Marc");
+	CHECK_EQ(s.name, std::string("Marc"));
+	CHECK(!s.complete);
+	CHECK_EQ(s.rest, std::string(""));
+	s = ChatParseSlash("/w ");
+	CHECK_EQ(s.name, std::string(""));
+
+	// The cheat commands stay theirs.
+	for (const char *c : {"/gold 500", "/food", "/map", "/oro 100"}) CHECK_EQ(ChatParseSlash(c).kind, static_cast<int>(kSlashOther));
+	CHECK_EQ(ChatParseSlash("/Gold 500").verb, std::string("gold"));
+	CHECK_EQ(ChatParseSlash("/gold 500").rest, std::string("500"));
+
+	const std::vector<std::string> names = {"Marcus", "Marcellus", "Lucius Cornelius", "lucius"};
+	CHECK_EQ(ChatMatchName("marcu", names), 0);
+	CHECK_EQ(ChatMatchName("MARC", names), -2);
+	CHECK_EQ(ChatMatchName("lucius", names), 3);
+	CHECK_EQ(ChatMatchName("Luc", names), -2);
+	CHECK_EQ(ChatMatchName("x", names), -1);
+	CHECK_EQ(ChatMatchName("", names), -1);
+}
+
 int main()
 {
 	TestMasks();
@@ -245,5 +293,6 @@ int main()
 	TestPings();
 	TestAnchor();
 	TestRateLimit();
+	TestSlash();
 	return test::Summary("chatlog");
 }

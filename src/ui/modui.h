@@ -15,6 +15,8 @@ void ModUiOpen();
 void ModUiAskRestart(const std::string &reason = "", int largeAddress = -1, const std::vector<std::string> &items = {},
 	const std::string &itemsTitle = "");
 bool ModUiIsOpen();
+// The cheats tab or panel drawn over a match covers this point.
+bool ModUiCoversPoint(int x, int y);
 int ModUiUpdatesAvailable();
 void ModUiResetUpdates();
 void ModUiToast(const std::string &text, bool error = false);

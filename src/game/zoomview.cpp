@@ -369,6 +369,16 @@ bool ZoomViewOpen() { return !g_failed && ZoomOpen(); }
 
 bool ZoomViewContains(int x, int y) { return ZoomViewOpen() && InsideBitmap(x, y); }
 
+bool ZoomViewBitmap(int *rect)
+{
+	if (!ZoomViewOpen()) return false;
+	rect[0] = g_geo.left;
+	rect[1] = g_geo.top;
+	rect[2] = g_geo.right + 1;
+	rect[3] = g_geo.bottom + 1;
+	return true;
+}
+
 bool ZoomViewBoxUses(unsigned vk) { return !g_failed && vk && ExtrasEnabled() && ControlsZoomBoxVk() == vk; }
 
 void ZoomViewSetClickHook(ZoomClickFn fn) { g_clickHook = fn; }

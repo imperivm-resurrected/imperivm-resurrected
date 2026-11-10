@@ -585,7 +585,7 @@ bool ChatSend(const std::string &text, ChatTarget target, bool withLocation)
 	return ok;
 }
 
-bool ChatPing(int mouseX, int mouseY, bool haveMouse, const char *how, int type)
+bool ChatPing(int mouseX, int mouseY, bool haveMouse, const char *how, int type, ChatTarget target)
 {
 	if (type < 0 || type >= kPingTypes) type = kPingHere;
 	RawMatch raw;
@@ -611,7 +611,6 @@ bool ChatPing(int mouseX, int mouseY, bool haveMouse, const char *how, int type)
 		return false;
 	}
 	// The line goes through the command queue even with nobody else to read it: it is the sender's own line in the chat.
-	const ChatTarget target = {m.hasAllies ? kTargetAllies : kTargetAll, -1};
 	// The phrase goes in the sender's language: players without the mod read it next to the game's location message.
 	const std::string phrase = ChatCleanText(Tr(ChatPingPhrase(type)));
 	const bool ok = QueueChat(phrase, ChatMask(target, raw.local, raw.enemies), true, point[0], point[1]);
@@ -620,8 +619,89 @@ bool ChatPing(int mouseX, int mouseY, bool haveMouse, const char *how, int type)
 	const int humans = OtherHumans(m);
 	static const char *const kTypeNames[kPingTypes] = {"here", "attack", "danger"};
 	LogAt(ok && shown ? kLogInfo : kLogError, "game", "chat: %s ping (%s) at %d,%d from %s: %s to %s (%d other humans), %s here", kTypeNames[type], how, point[0], point[1], from,
-		ok ? "sent" : "NOT sent", m.hasAllies ? "the allies" : "everyone", humans, shown ? "notified" : "NOT notified");
+		ok ? "sent" : "NOT sent", target.kind == kTargetAllies ? "the allies" : target.kind == kTargetPlayer ? "one player" : "everyone", humans,
+		shown ? "notified" : "NOT notified");
 	return ok;
+}
+
+namespace {
+typedef void *(__fastcall *WindowAt_t)(void *window, void *edx, const short *point);
+const unsigned kSlotDeepestAt = 0x3c / 4;
+
+bool SameWindow(const char *a, const char *b)
+{
+	if (a == b) return true;
+	__try {
+		return a == b + 4 + *reinterpret_cast<const int *>(*reinterpret_cast<const char *const *>(b + 4) + 4) ||
+			b == a + 4 + *reinterpret_cast<const int *>(*reinterpret_cast<const char *const *>(a + 4) + 4);
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return false;
+	}
+}
+
+// The game's own answer to "which window is here" (CWindow::FindDeepestWindowAt 00632130, slot 15, from the root): the top bar,
+// the command bar and every dialog sit over the map view, so a point on them does not reach it.
+bool MapViewAt(int x, int y)
+{
+	__try {
+		char *root = *reinterpret_cast<char **>(addr::kUIRoot);
+		const char *map = *reinterpret_cast<const char **>(addr::kMapView);
+		if (!root || !map) return false;
+		const short point[2] = {static_cast<short>(x), static_cast<short>(y)};
+		const char *hit = static_cast<const char *>(reinterpret_cast<WindowAt_t>((*reinterpret_cast<void ***>(root))[kSlotDeepestAt])(root, nullptr, point));
+		return hit && SameWindow(hit, map);
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return false;
+	}
+}
+}
+
+bool ChatPointOnMap(int x, int y, int *area, const char *&why)
+{
+	if (ZoomViewOpen()) {
+		if (!ZoomViewBitmap(area)) {
+			why = "the big map could not be read";
+			return false;
+		}
+		why = "outside the big map's picture";
+		return x >= area[0] && x < area[2] && y >= area[1] && y < area[3];
+	}
+	const ChatMatch m = ChatReadMatch();
+	if (!m.haveView) {
+		why = "no map view";
+		return false;
+	}
+	area[0] = m.viewLeft;
+	area[1] = m.viewTop;
+	area[2] = m.viewRight;
+	area[3] = m.haveBar ? std::min(m.viewBottom, m.barTop) : m.viewBottom;
+	if (x < area[0] || x >= area[2] || y < area[1] || y >= area[3] || !MapViewAt(x, y)) {
+		why = "over the game's interface";
+		return false;
+	}
+	// The top bar covers the top of the map view: the map starts where the game finds the view again.
+	for (int top = area[1]; top < y; top += 4) {
+		if (MapViewAt(x, top)) {
+			area[1] = top;
+			break;
+		}
+	}
+	return true;
+}
+
+void ChatAddLocal(const std::string &text)
+{
+	ChatEntry e;
+	e.arrivedMs = GetTickCount();
+	uint32_t clock = 0;
+	if (Game()) ReadClock(Game(), clock);
+	e.clockMs = clock;
+	e.text = text;
+	e.local = true;
+	std::lock_guard<std::mutex> lock(g_logLock);
+	g_log.Add(std::move(e));
 }
 
 uint32_t ChatLogSerial()
