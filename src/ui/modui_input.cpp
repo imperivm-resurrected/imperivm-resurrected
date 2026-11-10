@@ -98,6 +98,7 @@ bool ModUiHandleCornerMessage(UINT msg, WPARAM wp, LPARAM lp)
 			const RECT &t = g_spec.btn[5];
 			g_spec.dragFrac = std::max(0.0, std::min(1.0, (g_hover.x - t.left) / static_cast<double>(std::max<LONG>(1, t.right - t.left))));
 		}
+		if (g_ch.drag && !(wp & MK_LBUTTON)) g_ch.drag = false;
 		if (g_ch.drag && g_ch.shown) CheatsScrollToMouse(g_hover.y);
 		if (g_ch.es.dragging && ChEditing() && g_ch.geomOk[ChSlot()]) g_ch.es.caret = EditIndexAt(g_ch.geom[ChSlot()], ChText(), g_hover.x);
 		if (g_ch.move && g_ch.shown) {
@@ -192,9 +193,7 @@ bool ModUiHandleCornerMessage(UINT msg, WPARAM wp, LPARAM lp)
 				return true;
 			}
 			ChClearFocus();
-			if (g_ch.track.right > g_ch.track.left && PtInRect(&g_ch.track, pt)) {
-				g_ch.drag = true;
-				CheatsScrollToMouse(pt.y);
+			if (CheatsBarPress(pt)) {
 				g_ch.swallowUp = true;
 				return true;
 			}
@@ -267,6 +266,10 @@ bool ModUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 			const POINT pt = {g_s.mouseX, g_s.mouseY};
 			ListMove(g_s.confirmList, g_s.confirmGeom, pt);
 		}
+		{
+			ScrollTo to;
+			if (ScrollbarMouse(g_s.dropBar, g_s.hits, msg, wp, {g_s.mouseX, g_s.mouseY}, to) && to.id == kDropMenuBar) g_s.dropScroll = to.pos;
+		}
 		return false;
 	case WM_LBUTTONDOWN:
 	case WM_LBUTTONDBLCLK: {
@@ -275,6 +278,13 @@ bool ModUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		POINT pt = {g_s.mouseX, g_s.mouseY};
 		g_s.tabAction = -1;
 		g_s.mouseDown = true;
+		{
+			ScrollTo to;
+			if (ScrollbarMouse(g_s.dropBar, g_s.hits, msg, wp, pt, to)) {
+				if (to.id == kDropMenuBar) g_s.dropScroll = to.pos;
+				return true;
+			}
+		}
 		if (g_s.confirm && ListDown(g_s.confirmList, g_s.confirmGeom, pt)) return true;
 		if (!g_s.confirm && g_s.drop == kDropNone && !g_s.ioFilterOpen && !g_s.catOpen && g_s.ioShot < 0) {
 			if (ListDown(g_s.list, g_s.listGeom, pt)) return true;
@@ -317,6 +327,7 @@ bool ModUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 	case WM_LBUTTONUP:
 		g_s.edit.dragging = false;
 		g_s.mouseDown = false;
+		g_s.dropBar = ScrollDrag();
 		ListUp(g_s.confirmList);
 		ListUp(g_s.list);
 		{

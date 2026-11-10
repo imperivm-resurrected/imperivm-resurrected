@@ -111,6 +111,7 @@ struct State {
 	ListState list;
 	ListGeom listGeom;
 	int dropScroll = 0;
+	ScrollDrag dropBar;
 	bool mouseDown = false;
 	bool busy = false;
 	int mouseX = -1, mouseY = -1;
@@ -368,6 +369,7 @@ bool ChIsValue(int verb);
 bool ChEditing();
 std::string &ChText();
 int ChSlot();
+bool CheatsBarPress(POINT pt);
 void CheatsScrollToMouse(int mouseY);
 void ChSetFocus(int verb);
 void ChClearFocus();

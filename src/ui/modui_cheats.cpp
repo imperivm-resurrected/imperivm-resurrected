@@ -18,6 +18,7 @@ CheatsPanelState g_ch;
 namespace modui_impl {
 namespace {
 float g_chThumbH = 0;
+int g_chBarGrab = 0;
 const int kChSteps[7][8] = {{100, 250, 500, 1000, 2500, 5000, 10000, 25000}, {100, 250, 500, 1000, 2500, 5000, 10000, 25000},
 	{10, 25, 50, 100, 250, 500, 1000, 0}, {10, 25, 50, 100, 250, 500, 1000, 5000}, {100, 250, 500, 1000, 2500, 5000, 10000, 25000},
 	{5, 10, 12, 20, 30, 50, 100, 200}, {1, 5, 10, 20, 30, 50, 75, 100}};
@@ -165,12 +166,27 @@ void ChStopEdit(bool keep)
 }
 
 namespace modui_impl {
+// The panel is drawn straight on the frame, without a Painter, but its bar drags and pages as PaintScrollbar's.
+bool CheatsBarPress(POINT pt)
+{
+	if (g_ch.track.right <= g_ch.track.left || g_ch.maxScroll <= 0 || !PtInRect(&g_ch.track, pt)) return false;
+	const int trackLen = g_ch.track.bottom - g_ch.track.top, thumbLen = static_cast<int>(g_chThumbH);
+	const int thumbTop = g_ch.track.top + static_cast<int>((trackLen - thumbLen) * (g_ch.scroll / g_ch.maxScroll));
+	if (pt.y >= thumbTop && pt.y < thumbTop + thumbLen) {
+		g_ch.drag = true;
+		g_chBarGrab = pt.y - thumbTop;
+	}
+	else {
+		const ScrollSpan span = {static_cast<int>(g_ch.scroll + 0.5f), static_cast<int>(g_ch.maxScroll + 0.5f), static_cast<int>(g_chViewH)};
+		g_ch.scroll = static_cast<float>(ScrollPaged(span, pt.y < thumbTop ? -1 : 1));
+	}
+	return true;
+}
+
 void CheatsScrollToMouse(int mouseY)
 {
-	const float span = static_cast<float>(g_ch.track.bottom - g_ch.track.top) - g_chThumbH;
-	if (span <= 1 || g_ch.maxScroll <= 0) return;
-	const float rel = std::max(0.0f, std::min(span, static_cast<float>(mouseY - g_ch.track.top) - g_chThumbH / 2));
-	g_ch.scroll = rel / span * g_ch.maxScroll;
+	const int trackLen = g_ch.track.bottom - g_ch.track.top;
+	g_ch.scroll = static_cast<float>(ScrollAtThumb(static_cast<int>(g_ch.maxScroll + 0.5f), trackLen, static_cast<int>(g_chThumbH), mouseY - g_chBarGrab - g_ch.track.top));
 }
 }
 
@@ -698,7 +714,7 @@ void DrawCheatsPanel(uint32_t *frame, int frameW, int H, float s)
 			const float thumbY = viewTop + (viewH - thumbH) * (scroll / maxScroll);
 			const bool grab = g_ch.drag || (mx >= bx - 6 * s && mx < bx + bw + 6 * s && my >= viewTop && my < viewTop + viewH);
 			FillRound(buf, W, H, bx, viewTop, bw, viewH, 0, pal::well, 1.0f);
-			FillRound(buf, W, H, bx, thumbY, bw, thumbH, 0, grab ? pal::edgeHot : RGB(150, 118, 58), 1.0f);
+			FillRound(buf, W, H, bx, thumbY, bw, thumbH, 0, grab ? pal::thumbHot : RGB(150, 118, 58), 1.0f);
 			track = {static_cast<LONG>(bx - 6 * s), static_cast<LONG>(viewTop), static_cast<LONG>(bx + bw + 6 * s), static_cast<LONG>(viewTop + viewH)};
 		}
 		cCount = count;

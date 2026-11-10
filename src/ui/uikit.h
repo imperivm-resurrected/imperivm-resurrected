@@ -20,10 +20,50 @@
 
 namespace ui {
 
+// A scroll in the caller's own units, rows or pixels: `pos` is the first one shown, `max` the furthest `pos` goes and `page` how many fit
+// at once.
+struct ScrollSpan {
+	int pos = 0, max = 0, page = 1;
+};
+
+// A thumb inside its track: its top below the track's top and its length, in pixels.
+struct ThumbSpan {
+	int top = 0, len = 0;
+};
+
+inline int ScrollClamp(int pos, int max) { return std::max(0, std::min(pos, max)); }
+
+// The thumb is as long as the share of the content in view, and never shorter than `minLen`.
+inline ThumbSpan ScrollThumb(const ScrollSpan &s, int trackLen, int minLen)
+{
+	if (trackLen <= 0) return {};
+	if (s.max <= 0) return {0, trackLen};
+	const long long page = std::max(1, s.page);
+	const int len = std::min(trackLen, std::max(std::min(minLen, trackLen), static_cast<int>(trackLen * page / (s.max + page))));
+	return {static_cast<int>(static_cast<long long>(trackLen - len) * ScrollClamp(s.pos, s.max) / s.max), len};
+}
+
+// The scroll that puts the thumb's top `thumbTop` pixels below the track's top: where a drag takes the content.
+inline int ScrollAtThumb(int max, int trackLen, int thumbLen, int thumbTop)
+{
+	const int travel = trackLen - thumbLen;
+	if (max <= 0 || travel <= 0) return 0;
+	const long long top = std::max(0, std::min(thumbTop, travel));
+	return static_cast<int>((top * max + travel / 2) / travel);
+}
+
+// One page up (dir < 0) or down from where the scroll is.
+inline int ScrollPaged(const ScrollSpan &s, int dir) { return ScrollClamp(s.pos + (dir < 0 ? -1 : 1) * std::max(1, s.page), s.max); }
+
+// A hit with this action is a scroll bar: `arg` is the id its screen gave it, `r` its track and the rest where its thumb was painted.
+constexpr int kHitScrollbar = -0x5c0;
+
 struct Hit {
 	RECT r;
 	int action;
 	int arg;
+	ScrollSpan span = {};
+	int thumbTop = 0, thumbLen = 0;
 };
 
 inline std::wstring W(const std::string &s)
@@ -466,6 +506,110 @@ constexpr COLORREF panel = RGB(24, 18, 12), dialog = RGB(27, 21, 14), well = RGB
 				   field = RGB(34, 27, 19), fieldHover = RGB(58, 46, 32), fieldOpen = RGB(46, 36, 24), rowHover = RGB(66, 52, 36),
 				   rowSelected = RGB(96, 70, 30), track = RGB(36, 28, 18), thumb = RGB(150, 116, 60), thumbHot = RGB(230, 196, 120),
 				   disabledEdge = RGB(90, 76, 56), disabledText = RGB(130, 118, 96), section = RGB(176, 140, 76);
+}
+
+// The bar a screen is dragging, kept between messages: the id it painted it with and how far below the thumb's top it was taken.
+struct ScrollDrag {
+	int id = -1;
+	int grab = 0;
+};
+
+// Where a bar asks its screen to scroll: none when `id` is below 0.
+struct ScrollTo {
+	int id = -1;
+	int pos = 0;
+};
+
+struct ScrollbarLook {
+	int width = 6;
+	// The track is centred under the thumb: -1 makes it as wide as the thumb, 0 leaves it out.
+	int trackWidth = -1;
+	int minThumb = 20;
+	// How far to each side of the thumb the mouse still takes the bar.
+	int grip = 4;
+	COLORREF track = pal::track, thumb = pal::thumb;
+};
+
+// Draws the track and the thumb, lit while the mouse is over the bar or drags it, and returns where the thumb went.
+inline ThumbSpan DrawScrollbar(Painter &p, int x, int y, int h, const ScrollSpan &span, bool dragged, int mx, int my, const ScrollbarLook &look = {})
+{
+	if (span.max <= 0 || h <= 0) return {};
+	const ThumbSpan t = ScrollThumb(span, h, look.minThumb);
+	const int trackW = look.trackWidth < 0 ? look.width : look.trackWidth;
+	if (trackW > 0) p.Fill(x + (look.width - trackW) / 2, y, trackW, h, look.track);
+	const bool hot = dragged || p.Hover(x - look.grip, y, look.width + 2 * look.grip, h, mx, my);
+	p.Fill(x, y + t.top, look.width, t.len, hot ? pal::thumbHot : look.thumb);
+	return t;
+}
+
+// A vertical bar whose thumb's left edge is at x. It goes into the hits with the screen's `id`, so ScrollbarMouse can drag and page it.
+inline ThumbSpan PaintScrollbar(Painter &p, int id, int x, int y, int h, const ScrollSpan &span, const ScrollDrag &drag, int mx, int my,
+	const ScrollbarLook &look = {})
+{
+	const ThumbSpan t = DrawScrollbar(p, x, y, h, span, id >= 0 && drag.id == id, mx, my, look);
+	if (span.max <= 0 || h <= 0 || !p.hits) return t;
+	p.AddHit(x - look.grip, y, look.width + 2 * look.grip, h, kHitScrollbar, id);
+	Hit &hit = p.hits->back();
+	hit.span = {ScrollClamp(span.pos, span.max), span.max, std::max(1, span.page)};
+	hit.thumbTop = p.oy + p.S(y + t.top);
+	hit.thumbLen = p.S(y + t.top + t.len) - p.S(y + t.top);
+	return t;
+}
+
+inline const Hit *TopHitAt(const std::vector<Hit> &hits, POINT at)
+{
+	for (auto it = hits.rbegin(); it != hits.rend(); ++it) {
+		if (PtInRect(&it->r, at)) return &*it;
+	}
+	return nullptr;
+}
+
+// Gives a mouse message to the bars of the last frame's hits. A press on a thumb drags it until the button is let go, even outside the bar,
+// and keeps the point where it was taken under the mouse; a press on the track pages towards the click. True when a bar took the message,
+// and then `to` says which bar scrolls and to where.
+inline bool ScrollbarMouse(ScrollDrag &drag, const std::vector<Hit> &hits, UINT msg, WPARAM wp, POINT at, ScrollTo &to)
+{
+	to = ScrollTo();
+	switch (msg) {
+	case WM_LBUTTONDOWN:
+	case WM_LBUTTONDBLCLK: {
+		const Hit *bar = TopHitAt(hits, at);
+		if (!bar || bar->action != kHitScrollbar) return false;
+		if (at.y >= bar->thumbTop && at.y < bar->thumbTop + bar->thumbLen) {
+			drag.id = bar->arg;
+			drag.grab = at.y - bar->thumbTop;
+		}
+		else {
+			to.id = bar->arg;
+			to.pos = ScrollPaged(bar->span, at.y < bar->thumbTop ? -1 : 1);
+		}
+		return true;
+	}
+	case WM_MOUSEMOVE: {
+		if (drag.id < 0) return false;
+		// The release can happen where the window doesn't hear it.
+		if (!(wp & MK_LBUTTON)) {
+			drag = ScrollDrag();
+			return false;
+		}
+		const Hit *bar = nullptr;
+		for (auto it = hits.rbegin(); it != hits.rend() && !bar; ++it) {
+			if (it->action == kHitScrollbar && it->arg == drag.id) bar = &*it;
+		}
+		if (!bar) {
+			drag = ScrollDrag();
+			return false;
+		}
+		to.id = drag.id;
+		to.pos = ScrollAtThumb(bar->span.max, bar->r.bottom - bar->r.top, bar->thumbLen, at.y - drag.grab - bar->r.top);
+		return true;
+	}
+	case WM_LBUTTONUP:
+		if (drag.id < 0) return false;
+		drag = ScrollDrag();
+		return true;
+	default: return false;
+	}
 }
 
 struct Canvas {
