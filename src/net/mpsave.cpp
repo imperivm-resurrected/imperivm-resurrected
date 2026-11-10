@@ -14,6 +14,7 @@
 #include "hooks/hookcount.h"
 #include "core/log.h"
 #include "game/gamestats.h"
+#include "game/objectives.h"
 #include "hooks/gamestate.h"
 #include "net/mpsave.h"
 #include "net/rejoin.h"
@@ -246,6 +247,7 @@ int __cdecl HookSaveGameToFile(const char *path)
 			if (c == '/') c = '\\';
 		}
 		GameStatsWriteFile(saved);
+		ObjectivesWriteFile(saved);
 	}
 	if (InMultiplayer() && path) {
 		int me = 0, x = 0, y = 0;
