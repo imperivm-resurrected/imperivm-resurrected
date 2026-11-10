@@ -13,3 +13,9 @@ void ZoomViewGameTick();
 // The point of the open zoom map under (x, y), in the view coordinates the game's location messages carry.
 bool ZoomViewScreenPoint(int x, int y, int *point);
 bool ZoomViewOpen();
+bool ZoomViewContains(int x, int y);
+// The box selection is on and held with this key.
+bool ZoomViewBoxUses(unsigned vk);
+// Called for a click on the big map made with the box key but without a drag; true when it was used.
+typedef bool (*ZoomClickFn)(int x, int y);
+void ZoomViewSetClickHook(ZoomClickFn fn);

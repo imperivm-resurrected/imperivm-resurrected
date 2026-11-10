@@ -114,7 +114,7 @@ const Action kActions[] = {
 	{"replay_hide_ui", kPageMod, "Replay: hide the game interface", "to watch the game without bars", 'H', kCtrl, kMod, kRuleShortcut},
 	{"replay_collapse_bar", kPageMod, "Replay: collapse the control bar", "", 'B', kCtrl, kMod, kRuleShortcut},
 	{"cheats_panel", kPageMod, "Cheats: open or close the panel", "only if the game allows cheats", 'T', kCtrl, kMod, kRuleShortcut},
-	{"ping_location", kPageMod, "Ping location", "marks the point under the cursor for your allies, or for everyone if you have none", 'G', kCtrl, kMod, kRuleShortcut},
+	{"ping_location", kPageMod, "Ping location", "marks the point under the cursor for your allies", 'G', kCtrl, kMod, kRuleShortcut},
 };
 const int kActionCount = static_cast<int>(sizeof(kActions) / sizeof(kActions[0]));
 const int kFirstModAction = kActionCount - 11;
@@ -183,6 +183,8 @@ std::vector<Order> g_orders;
 bool g_gridMode = false;
 bool g_barLetters = true;
 int g_zoomBoxMode = kZoomBoxCtrl;
+int g_pingClickMode = kPingClickAlt;
+const char *const kPingClickNames[kPingClickModes] = {"alt", "ctrl", "shift", "off"};
 const char kGridKeys[] = "QWERTYUIOPASDFGHJKLZXCVBNM";
 
 FILETIME g_fileTime = {};
@@ -521,6 +523,11 @@ void LoadControls()
 		char box[16];
 		GetPrivateProfileStringA("General", "ZoomBox", "ctrl", box, sizeof(box), path.c_str());
 		g_zoomBoxMode = _stricmp(box, "alt") == 0 ? kZoomBoxAlt : _stricmp(box, "shift") == 0 ? kZoomBoxShift : _stricmp(box, "off") == 0 ? kZoomBoxOff : kZoomBoxCtrl;
+		GetPrivateProfileStringA("General", "PingClick", "alt", box, sizeof(box), path.c_str());
+		g_pingClickMode = kPingClickAlt;
+		for (int i = 0; i < kPingClickModes; i++) {
+			if (_stricmp(box, kPingClickNames[i]) == 0) g_pingClickMode = i;
+		}
 	}
 	g_orderOverrides.clear();
 	std::vector<char> section(32768);
@@ -1024,6 +1031,10 @@ void SaveControls()
 		WritePrivateProfileStringA("General", "ZoomBox", kNames[g_zoomBoxMode], path.c_str());
 		count++;
 	}
+	if (g_pingClickMode != kPingClickAlt) {
+		WritePrivateProfileStringA("General", "PingClick", kPingClickNames[g_pingClickMode], path.c_str());
+		count++;
+	}
 	for (int i = 0; i < kActionCount; i++) {
 		if (g_bind[i].vk == kActions[i].defVk && g_bind[i].mods == kActions[i].defMods && !g_bind2[i].vk) continue;
 		WritePrivateProfileStringA("Keys", kActions[i].id, SpecPair(g_bind[i], g_bind2[i]).c_str(), path.c_str());
@@ -1223,6 +1234,7 @@ void ControlsResetAll()
 	g_gridMode = false;
 	g_barLetters = true;
 	g_zoomBoxMode = kZoomBoxCtrl;
+	g_pingClickMode = kPingClickAlt;
 	ApplyOrders();
 	SaveControls();
 	LogI("controls", "everything as in the original game");
@@ -1778,6 +1790,27 @@ unsigned ControlsZoomBoxVk()
 	case kZoomBoxShift: return VK_SHIFT;
 	case kZoomBoxOff: return 0;
 	default: return VK_CONTROL;
+	}
+}
+
+int ControlsPingClickMode()
+{
+	return g_pingClickMode;
+}
+
+void ControlsSetPingClickMode(int mode)
+{
+	g_pingClickMode = mode >= 0 && mode < kPingClickModes ? mode : kPingClickAlt;
+	SaveControls();
+}
+
+unsigned ControlsPingClickVk()
+{
+	switch (g_pingClickMode) {
+	case kPingClickCtrl: return VK_CONTROL;
+	case kPingClickShift: return VK_SHIFT;
+	case kPingClickOff: return 0;
+	default: return VK_MENU;
 	}
 }
 

@@ -13,6 +13,7 @@
 #include "game/chatlog.h"
 #include "game/cheats.h"
 #include "game/controls.h"
+#include "game/zoomview.h"
 #include "ui/battlesui.h"
 #include "ui/chatui_view.h"
 #include "ui/conquestui.h"
@@ -283,14 +284,32 @@ bool TryPingKey(WPARAM wp, LPARAM lp)
 	return true;
 }
 
-// Alt + left click, as in other strategy games: the click marks the point and does not reach the game, so nothing is selected.
+const char *ClickName(unsigned vk) { return vk == VK_CONTROL ? "Ctrl + click" : vk == VK_SHIFT ? "Shift + click" : "Alt + click"; }
+
+// The modifier chosen in Controls + left click, as in other strategy games: the click marks the point and does not reach the
+// game, so nothing is selected. On the battlefield the game selects with Ctrl and Shift, so there only Alt marks.
 bool TryPingClick(POINT at)
 {
-	if (!(GetKeyState(VK_MENU) & 0x8000)) return false;
-	LogD("ui", "chat: Alt + click at %d,%d", static_cast<int>(at.x), static_cast<int>(at.y));
-	if (!CanPing("Alt + click")) return false;
+	const unsigned vk = ControlsPingClickVk();
+	if (!vk || !(GetKeyState(static_cast<int>(vk)) & 0x8000)) return false;
+	const bool zoomMap = ZoomViewContains(at.x, at.y);
+	if (!zoomMap && vk != VK_MENU) return false;
+	// The same key as the box selection: the zoom map tells a click from a drag and calls back for the click.
+	if (zoomMap && ZoomViewBoxUses(vk)) return false;
+	LogD("ui", "chat: %s at %d,%d (%s)", ClickName(vk), static_cast<int>(at.x), static_cast<int>(at.y), zoomMap ? "zoom map" : "map view");
+	if (!CanPing(ClickName(vk))) return false;
 	g_swallowLeftUp = true;
-	Ping(at.x, at.y, true, "Alt + click");
+	Ping(at.x, at.y, true, ClickName(vk));
+	return true;
+}
+
+bool OnZoomClick(int x, int y)
+{
+	const unsigned vk = ControlsPingClickVk();
+	if (!vk || !ZoomViewBoxUses(vk)) return false;
+	LogD("ui", "chat: %s at %d,%d (zoom map, no drag)", ClickName(vk), x, y);
+	if (!CanPing(ClickName(vk))) return false;
+	Ping(x, y, true, ClickName(vk));
 	return true;
 }
 
@@ -310,7 +329,11 @@ Line LineOf(const ChatEntry &e, int alpha)
 
 }
 
-void ChatUiInstall() { ChatSetOpenHandler(&OnOpen); }
+void ChatUiInstall()
+{
+	ChatSetOpenHandler(&OnOpen);
+	ZoomViewSetClickHook(&OnZoomClick);
+}
 
 void ChatUiGameTick()
 {
