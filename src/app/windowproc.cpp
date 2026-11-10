@@ -21,6 +21,7 @@
 #include "ui/chatui.h"
 #include "ui/controlsui.h"
 #include "ui/creditsui.h"
+#include "ui/helpui.h"
 #include "ui/modui.h"
 #include "ui/conquestui.h"
 #include "ui/diplomacyui.h"
@@ -54,7 +55,7 @@ LRESULT GameWindowHandler(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 	if (OverlayHandleMouse(hwnd, msg, wp, lp)) return 0;
 	bool uiHandled = false;
 	Guard("interface message", [&] {
-		uiHandled = ChatUiHandleMessage(msg, wp, lp) || UpdateUiHandleMessage(msg, wp, lp) || ControlsUiHandleMessage(msg, wp, lp) || SupportHandleMessage(msg, wp, lp) ||
+		uiHandled = ChatUiHandleMessage(msg, wp, lp) || UpdateUiHandleMessage(msg, wp, lp) || ControlsUiHandleMessage(msg, wp, lp) || SupportHandleMessage(msg, wp, lp) || HelpUiHandleMessage(msg, wp, lp) ||
 			GameMenuUiHandleMessage(msg, wp, lp) || DiplomacyUiHandleMessage(msg, wp, lp) || OptionsUiHandleMessage(msg, wp, lp) || ConquestUiHandleMessage(msg, wp, lp) || ProfileUiHandleMessage(msg, wp, lp) || BattlesUiHandleMessage(msg, wp, lp) || CreditsUiHandleMessage(msg, wp, lp) || ModUiHandleCornerMessage(msg, wp, lp) || SavesUiHandleMessage(msg, wp, lp) || ModUiHandleMessage(msg, wp, lp) || MpUiHandleMessage(msg, wp, lp);
 	});
 	if (uiHandled) return 0;
