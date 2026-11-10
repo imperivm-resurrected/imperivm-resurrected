@@ -8,8 +8,14 @@
 #include "hooks/gamestate.h"
 #include "hooks/hookcount.h"
 #include "game/diplomacy.h"
+#include "game/diplomacyrules.h"
+#include "game/gamemenu.h"
+#include "game/gameroom.h"
+#include "mods/modoptions.h"
 
 #include <cstdint>
+#include <string>
+#include <vector>
 
 #include "addr/state.h"
 #include "addr/ui.h"
@@ -83,4 +89,143 @@ void InstallDiplomacy(bool knownExe)
 		HookEnable(target) == MH_OK;
 	if (ok) LogI("game", "diplomacy against the AI: hooked");
 	else LogE("game", "diplomacy against the AI: could not hook CVXUIEmptySelectionMenu::OnShow");
+}
+
+namespace {
+
+// CVXUIDiplomacyMenu: +0x60 the listed players, +0x7c how many. Row r (1 to 7) has its controls at r * 0x10 + 2..5:
+// ceasefire, vision, support and control, in that order; the toggle's state (+0x7e) is 0 when the permission is given.
+const size_t kDlgPlayers = 0x60, kDlgCount = 0x7c, kToggleState = 0x7e;
+const int kMaxRows = 7, kAlliedVictoryId = 0x100a, kOkId = 0x1000, kCancelId = 0x1001;
+const unsigned kRowBits[4] = {diplomacy::kCeasefire, diplomacy::kVision, diplomacy::kSupport, diplomacy::kControl};
+const size_t kLocalPlayer = 0x12c8, kPlayersStart = 0x12cc, kPlayerSize = 800;
+const size_t kPlayerId = 8, kPlayerFlags = 0x24, kPlayerName = 0x94, kPlayerNameCapacity = 0xa8, kPlayerColor = 0x314;
+const size_t kSettingsTeams = 0x54, kSettingsSlots = 0xac, kSettingsSlotSize = 0xc0;
+const int kSlotAi = 1, kSettingsSlotCount = 8;
+
+typedef void *(__fastcall *GetChild_t)(void *dlg, void *edx, int id, const char *cls);
+typedef void(__fastcall *SetState_t)(void *button, void *edx, int state, int redraw);
+
+void *Toggle(void *dlg, int id)
+{
+	return reinterpret_cast<GetChild_t>((*reinterpret_cast<void ***>(dlg))[0x7c / 4])(dlg, nullptr, id,
+		*reinterpret_cast<const char **>(addr::kClassNameCUIButton));
+}
+
+int ToggleState(void *button)
+{
+	return *reinterpret_cast<short *>(static_cast<char *>(button) + kToggleState);
+}
+
+void SetToggleState(void *button, int state)
+{
+	if (ToggleState(button) == state) return;
+	reinterpret_cast<SetState_t>((*reinterpret_cast<void ***>(button))[0x70 / 4])(button, nullptr, state, 1);
+}
+
+struct RawRow {
+	int player;
+	char name[65];
+	unsigned color, theirs, mine;
+	bool ai;
+	int team;
+};
+
+struct RawDialog {
+	RawRow rows[kMaxRows];
+	int count;
+	bool alliedVictory;
+};
+
+bool ReadRaw(void *dlg, RawDialog &out)
+{
+	__try {
+		const char *game = *reinterpret_cast<const char *const *>(addr::kGame);
+		if (!game) return false;
+		const char *local = *reinterpret_cast<const char *const *>(game + kLocalPlayer);
+		if (!local) return false;
+		const int ours = *reinterpret_cast<const int *>(local + kPlayerId);
+		const char *settings = *reinterpret_cast<const char *const *>(addr::kGameSettings);
+		const int count = *reinterpret_cast<const int *>(static_cast<char *>(dlg) + kDlgCount);
+		for (int i = 0; i < count && i < kMaxRows; i++) {
+			const int index = *reinterpret_cast<const int *>(static_cast<char *>(dlg) + kDlgPlayers + i * 4);
+			if (index < 0 || index >= 16 || ours < 0 || ours >= 16) continue;
+			RawRow &row = out.rows[out.count++];
+			row.player = index;
+			const char *player = game + kPlayersStart + index * kPlayerSize;
+			row.theirs = *reinterpret_cast<const unsigned *>(player + kPlayerFlags + ours * 4) & diplomacy::kAllFlags;
+			for (int b = 0; b < 4; b++) {
+				void *button = Toggle(dlg, (i + 1) * 0x10 + 2 + b);
+				if (button && ToggleState(button) == 0) row.mine |= kRowBits[b];
+			}
+			const char *name = *reinterpret_cast<const unsigned *>(player + kPlayerNameCapacity) < 0x10 ? player + kPlayerName
+																										  : *reinterpret_cast<const char *const *>(player + kPlayerName);
+			for (int c = 0; name && c < 64 && name[c]; c++) row.name[c] = name[c];
+			row.color = *reinterpret_cast<const unsigned *>(player + kPlayerColor);
+			if (settings && index < kSettingsSlotCount) {
+				row.ai = *reinterpret_cast<const int *>(settings + kSettingsSlots + index * kSettingsSlotSize) == kSlotAi;
+				const unsigned char team = *reinterpret_cast<const unsigned char *>(settings + kSettingsTeams + index);
+				row.team = team >= 1 && team <= 8 ? team : 0;
+			}
+		}
+		void *allied = Toggle(dlg, kAlliedVictoryId);
+		out.alliedVictory = allied && ToggleState(allied) == 1;
+		return true;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return false;
+	}
+}
+
+}
+
+bool DiplomacyDialogRead(DiplomacyDialogState &out)
+{
+	out = DiplomacyDialogState();
+	void *dlg = *reinterpret_cast<void **>(addr::kDiplomacyDlg);
+	if (!dlg) return false;
+	out.dlg = dlg;
+	out.locked = (ModRulesActive() & kRuleLockDiplomacy) != 0;
+	RawDialog raw = {};
+	if (!ReadRaw(dlg, raw)) return false;
+	out.alliedVictory = raw.alliedVictory;
+	for (int i = 0; i < raw.count; i++) {
+		const RawRow &r = raw.rows[i];
+		DiplomacyRow row;
+		row.player = r.player;
+		row.name = r.name;
+		row.rgb = ((r.color >> 10 & 0x1f) * 255 / 31) << 16 | ((r.color >> 5 & 0x1f) * 255 / 31) << 8 | ((r.color & 0x1f) * 255 / 31);
+		row.ai = r.ai;
+		row.team = r.team;
+		row.mine = r.mine;
+		row.theirs = r.theirs;
+		out.rows.push_back(row);
+	}
+	return !out.rows.empty();
+}
+
+void DiplomacyDialogSetMine(void *dlg, int row, unsigned flags)
+{
+	if (dlg != *reinterpret_cast<void **>(addr::kDiplomacyDlg) || row < 0 || row >= kMaxRows) return;
+	for (int b = 0; b < 4; b++) {
+		void *button = Toggle(dlg, (row + 1) * 0x10 + 2 + b);
+		if (button) SetToggleState(button, (flags & kRowBits[b]) ? 0 : 1);
+	}
+}
+
+void DiplomacyDialogSetAlliedVictory(void *dlg, bool on)
+{
+	if (dlg != *reinterpret_cast<void **>(addr::kDiplomacyDlg)) return;
+	void *button = Toggle(dlg, kAlliedVictoryId);
+	if (button) SetToggleState(button, on ? 1 : 0);
+}
+
+void DiplomacyDialogApply(void *dlg)
+{
+	if (dlg == *reinterpret_cast<void **>(addr::kDiplomacyDlg)) NativeButtonClick(dlg, kOkId);
+}
+
+void DiplomacyDialogCancel(void *dlg)
+{
+	if (dlg == *reinterpret_cast<void **>(addr::kDiplomacyDlg)) NativeButtonClick(dlg, kCancelId);
 }
