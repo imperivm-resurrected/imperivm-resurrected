@@ -28,6 +28,7 @@ std::mutex g_lock;
 std::string g_fallback;
 bool g_looseReady = false;
 std::vector<std::string> g_looseBases;
+std::vector<std::string> g_looseFolders;
 std::map<std::string, std::string> g_looseCache;
 
 const struct {
@@ -471,6 +472,7 @@ std::string LangLooseFile(const std::string &rel)
 			if (!IsDir(dir + "\\Local\\" + lang)) continue;
 			const std::string folder = ModsDirVfsName(dir);
 			g_looseBases.push_back("mods/" + folder + "/Local/" + lang + "/");
+			g_looseFolders.push_back(ModsPackFolder(dir));
 			LogD("language", "%s brings loose files from %s", folder.c_str(), lang.c_str());
 		}
 	}
@@ -479,7 +481,10 @@ std::string LangLooseFile(const std::string &rel)
 	if (cached != g_looseCache.end()) return cached->second;
 	std::string found;
 	const std::string game = GameDirPath() + "\\";
-	for (const std::string &base : g_looseBases) {
+	for (size_t i = 0; i < g_looseBases.size(); i++) {
+		const std::string &base = g_looseBases[i];
+		// A language file of a root that replaces the game's is ignored unless its own ruleset is in use (mods/rootrules.h).
+		if (ModsRootFileIgnored(g_looseFolders[i], rel)) continue;
 		std::string disk = game + base + rel.substr(prefix.size());
 		std::replace(disk.begin(), disk.end(), '/', '\\');
 		if (IsFile(disk)) {

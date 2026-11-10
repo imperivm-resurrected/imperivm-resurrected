@@ -354,11 +354,11 @@ else {
 		listed(files.filter(f => assets.isMenuSkin(f)), 'menu skin file in a ruleset layer: it belongs to a skin (not the ruleset)');
 	}
 	else if (gameDir && files.some(f => /^civs\//i.test(f))) {
-		// a civilization pack's root is mounted for everyone who has the pack: a file that replaces the game's changes the game for all of them
+		// a civilization pack's root may add files, not replace the game's: such a file is mounted only when a ruleset of the package is chosen
 		const game = assets.gameFiles(gameDir);
 		if (game) {
 			listed(files.filter(f => !/^(patches|loc|civs)\//i.test(f) && game.has(assets.gamePath(f)) && !assets.isMenuSkin(f)),
-				'global in-game file in the root of a civilization pack: put it in a ruleset layer (rulesets/<id>/)');
+				'global in-game file in the root of a civilization pack: it is ignored unless a ruleset of this package is chosen; put it in a ruleset layer (rulesets/<id>/)');
 		}
 	}
 }

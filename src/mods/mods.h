@@ -84,6 +84,9 @@ struct ModInfo {
 
 	std::vector<std::string> paths;
 	std::vector<std::string> loosePaths;
+	// The loose files of the root that replace a file of the game, in a package with civilizations (see mods/rootrules.h). They apply only
+	// under a ruleset of this package; anywhere else they are ignored. Lowercase, "/", sorted.
+	std::vector<std::string> globalLoose;
 	std::vector<PatchedValue> patchValues;
 	std::vector<std::string> forbidden;
 	bool rleTail = false;
@@ -186,6 +189,10 @@ inline bool ModsSameChoice(const ModRuleset &a, const ModRuleset &b)
 }
 
 // The id of the set of civilizations a package makes in a room: its id, or its folder when it has none.
+// Whether two entries mount the same files: no ruleset folder differs (ModsSameRuleset) and neither pack has root files that replace the game's
+// and that the other entry would leave out (those are mounted only under a ruleset of their own package, see mods/rootrules.h).
+bool ModsSameMount(const ModRuleset &a, const ModRuleset &b);
+
 inline std::string ModsCivSetId(const ModInfo &m)
 {
 	return m.id.empty() ? m.folder : m.id;
@@ -416,3 +423,6 @@ const std::string *ModsChosenFile(const std::string &rel);
 // The file of a mounted pack (or of its ruleset) that answers a name with a translated volume in front ("gameres/icons/x.bmp"; see
 // mods/volumes.h), as the VFS name that opens it ("mods/<pack>/.../gameres/icons/x.bmp"), or nullptr. rel is lowercase.
 const std::string *ModsVolumeFile(const std::string &rel);
+// Whether a file of the root of the pack in this folder replaces a file of the game and is ignored under the ruleset that is mounted (see
+// mods/rootrules.h): then whoever serves mod files by name has to leave it and let the game's own be opened. rel is a game path.
+bool ModsRootFileIgnored(const std::string &folder, const std::string &rel);

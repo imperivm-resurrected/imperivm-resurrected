@@ -11,6 +11,7 @@
 #include "core/guard.h"
 #include "i18n/tr.h"
 #include "mods/fingerprint.h"
+#include "mods/gamefiles.h"
 #include "mods/gbref.h"
 #include "mods/modvars.h"
 #include "mods/pak.h"
@@ -395,6 +396,8 @@ ModInfo ScanMod(const std::string &folder, std::vector<ScanFile> &files)
 		m.hasLoose = root.hasLoose;
 		m.gameplay = root.gameplay;
 		m.content = root.content;
+		// What the root replaces of the game: only a package with civilizations, and the game's files are read only if there is something to compare.
+		if (!m.loosePaths.empty() && RulesetPathsHaveCivs(m.paths)) m.globalLoose = RootGlobalFiles(m.loosePaths, GameFiles());
 	}
 	for (size_t i = 0; i < m.layers.size(); i++) {
 		ModLayer &l = m.layers[i];

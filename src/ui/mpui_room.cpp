@@ -268,7 +268,7 @@ bool OpenRoomHost(const State &st)
 
 bool RulesetNeedsRestart(const State &st, const ModRuleset &ruleset)
 {
-	if (!OpenRoomHost(st) || ModsSameChoice(ruleset, ModsMountedChoice()) || ModsSameRuleset(ruleset, ModsMountedProfile().ruleset)) return false;
+	if (!OpenRoomHost(st) || ModsSameChoice(ruleset, ModsMountedChoice()) || ModsSameMount(ruleset, ModsMountedProfile().ruleset)) return false;
 	return !ModsCanSwitchWithoutRestart(ruleset);
 }
 
@@ -587,7 +587,7 @@ bool AdoptRoomRules(const OnlineLobby &room)
 	ModRuleset want;
 	if (!ModsFindRoomRuleset(facts, want)) return false;
 	const ModRuleset before = ModsMountedProfile().ruleset;
-	if (ModsSameRuleset(before, want) || !ModsSwitchRulesetAndRemember(want)) return false;
+	if (ModsSameMount(before, want) || !ModsSwitchRulesetAndRemember(want)) return false;
 	if (SteamOwnGameplayKey() != room.gameplayKey) {
 		// Not what the host has (something else differs): put the rules back and let the usual check decide.
 		ModsSwitchRulesetAndRemember(before);
@@ -633,7 +633,7 @@ void ChooseRulesetInRoom(const ModRuleset &picked)
 		ModUiToast("The room is for a saved game: its ruleset is the one it was saved with.");
 		return;
 	}
-	if (ModsSameRuleset(picked, ModsMountedProfile().ruleset)) {
+	if (ModsSameMount(picked, ModsMountedProfile().ruleset)) {
 		// Another entry that mounts the same files: only the civilizations of the room change.
 		ModProfile profile = ModsLoadProfile(ModsMountedProfile().name);
 		profile.ruleset = picked;

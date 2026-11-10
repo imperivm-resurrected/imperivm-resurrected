@@ -1352,6 +1352,8 @@
 {"en":"Shared values (%s)","es":"Valores compartidos (%s)","it":"Valori condivisi (%s)"},
 {"en":"Shared files (%s) and values (%s)","es":"Archivos (%s) y valores (%s) compartidos","it":"File (%s) e valori (%s) condivisi"},
 {"en":"Changes the same values as %s in %s: the ones from this pack are used","es":"Cambia los mismos valores que %s en %s: se usan los de este paquete","it":"Cambia gli stessi valori di %s in %s: vengono usati quelli di questo pacchetto"},
+{"en":"%s files of its root replace the game's: they apply because a ruleset of this pack is in use (%s)","es":"%s archivos de su raíz sustituyen a los del juego: se aplican porque se usa un conjunto de reglas de este paquete (%s)","it":"%s file della sua radice sostituiscono quelli del gioco: si applicano perché è in uso un set di regole di questo pacchetto (%s)"},
+{"en":"%s files of its root replace the game's and are ignored: they apply only when a ruleset of this pack is chosen (%s)","es":"%s archivos de su raíz sustituyen a los del juego y se ignoran: solo se aplican cuando se elige un conjunto de reglas de este paquete (%s)","it":"%s file della sua radice sostituiscono quelli del gioco e vengono ignorati: si applicano solo quando si sceglie un set di regole di questo pacchetto (%s)"},
 {"en":"Changes the same values as %s in %s: the ones from %s are used","es":"Cambia los mismos valores que %s en %s: se usan los de %s","it":"Cambia gli stessi valori di %s in %s: vengono usati quelli di %s"},
 {"en":" (your choice)","es":" (tu elección)","it":" (tua scelta)"},
 {"en":"Use this pack's files","es":"Usar los de este paquete","it":"Usa quelli di questo pacchetto"},

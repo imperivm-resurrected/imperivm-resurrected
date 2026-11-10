@@ -83,13 +83,19 @@ void AddUnique(std::vector<std::string> &into, const std::vector<std::string> &m
 	into.erase(std::unique(into.begin(), into.end()), into.end());
 }
 
-ClashMod ClashModOf(const ModInfo &m, const ModLayer *layer)
+ClashMod ClashModOf(const ModInfo &m, const ModLayer *layer, const std::vector<std::string> &ignored)
 {
 	ClashMod c;
 	c.folder = m.folder;
 	c.id = m.id;
 	c.paths = m.paths;
 	c.loose = m.loosePaths;
+	// The root files that replace the game's and are not mounted under the ruleset in use are nobody's to share (mods/rootrules.h).
+	if (!ignored.empty()) {
+		const auto gone = [&](const std::string &f) { return std::binary_search(ignored.begin(), ignored.end(), f); };
+		c.paths.erase(std::remove_if(c.paths.begin(), c.paths.end(), gone), c.paths.end());
+		c.loose.erase(std::remove_if(c.loose.begin(), c.loose.end(), gone), c.loose.end());
+	}
 	if (layer) {
 		AddUnique(c.paths, layer->paths);
 		AddUnique(c.loose, layer->loosePaths);
@@ -143,7 +149,7 @@ ClashReport ClashesOf(const ModProfile &p, const std::vector<ModInfo> &all)
 	std::vector<ClashMod> mods;
 	for (const std::string &folder : OrderOf(p.mods, all)) {
 		const ModInfo *m = FindIn(all, folder);
-		if (m && m->forbidden.empty()) mods.push_back(ClashModOf(*m, ModsActiveLayer(p, *m)));
+		if (m && m->forbidden.empty()) mods.push_back(ClashModOf(*m, ModsActiveLayer(p, *m), RootIgnoredOf(p, *m)));
 	}
 	ResolvePatchedValues(mods, p.ruleset);
 	std::vector<ClashChoice> choices;
@@ -296,6 +302,13 @@ ModIssues IssuesOf(const ModProfile &p, const std::vector<ModInfo> &all, const s
 		if (out.problems.size() > before) reported.push_back(a->folder);
 	}
 	if (!m->forbidden.empty()) return out;
+	if (!m->globalLoose.empty()) {
+		std::string names;
+		for (size_t i = 0; i < m->globalLoose.size() && i < 3; i++) names += (names.empty() ? "" : ", ") + m->globalLoose[i];
+		const std::string count = std::to_string(m->globalLoose.size());
+		if (RootIgnoredOf(p, *m).empty()) out.notices.push_back(TrFmt("%s files of its root replace the game's: they apply because a ruleset of this pack is in use (%s)", {count, names}));
+		else out.notices.push_back(TrFmt("%s files of its root replace the game's and are ignored: they apply only when a ruleset of this pack is chosen (%s)", {count, names}));
+	}
 	const ClashReport &clashes = cache.Get();
 	for (const ClashPair &c : clashes.pairs) {
 		const bool first = SameFolder(c.a, folder);

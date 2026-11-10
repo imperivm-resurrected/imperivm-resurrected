@@ -108,7 +108,7 @@ bool ModsCanSwitchForNeeds(const ModNeeds &needs)
 			return false;
 		}
 	}
-	return !ModsSameRuleset(needs.ruleset, mounted.ruleset) && ModsCanSwitchWithoutRestart(needs.ruleset);
+	return !ModsSameMount(needs.ruleset, mounted.ruleset) && ModsCanSwitchWithoutRestart(needs.ruleset);
 }
 
 bool ModsSwitchForNeeds(const ModNeeds &needs)
@@ -128,7 +128,7 @@ std::string ModsActivateProfileFor(const ModNeeds &needs, const std::string &lab
 			}
 			if (!found) return false;
 		}
-		return ModsSameRuleset(p.ruleset, needs.ruleset);
+		return ModsSameMount(p.ruleset, needs.ruleset);
 	};
 	const std::vector<std::string> names = ModsProfileNames();
 	if (!needs.profile.empty() && std::find(names.begin(), names.end(), needs.profile) != names.end() && covers(needs.profile)) {

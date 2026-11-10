@@ -128,7 +128,7 @@ bool ModsRestartNeeded()
 	}), active.mods.end());
 	const ModProfile &mounted = ModsMountedProfile();
 	if (!ModsSameSet(active.mods, mounted.mods)) return true;
-	if (!ModsSameRuleset(ModsEffectiveRuleset(active), mounted.ruleset)) return true;
+	if (!ModsSameMount(ModsEffectiveRuleset(active), mounted.ruleset)) return true;
 	std::map<std::string, std::string> signatures;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
@@ -208,8 +208,16 @@ ModRuleset ModsMountedChoice()
 
 void ModsMountedChoiceSet(const ModRuleset &choice)
 {
+	ModRuleset mounted;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		if (!g_mount.known) return;
+		mounted = g_mount.profile.ruleset;
+	}
+	// ModsSameMount reads the list of packs under the same lock.
+	if (!ModsSameMount(mounted, choice)) return;
 	std::lock_guard<std::mutex> lock(g_lock);
-	if (g_mount.known && ModsSameRuleset(g_mount.profile.ruleset, choice)) g_mount.choice = choice;
+	g_mount.choice = choice;
 }
 
 bool ModsSameSet(std::vector<std::string> a, std::vector<std::string> b)

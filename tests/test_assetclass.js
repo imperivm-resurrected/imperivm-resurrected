@@ -51,6 +51,15 @@ try {
 	const files = assets.gameFiles(game);
 	assert.deepEqual([...files].sort(), ['currentlang/tips.xml', 'currentlang/voices/rhastatus/1.wav', 'data/classes/rhastatus.sc.xml', 'ui/icons/rhastatus.bmp',
 		'ui/menu/button.bmp']);
+	// the loose files of Units/ and Currentlang/ of the game folder count too (the DLL reads the same ones); other folders do not
+	write(path.join(game, 'Units', 'Ghero1', 'LARAX_WALK.RLE.MMP'));
+	write(path.join(game, 'Currentlang', 'MENUBACKGROUND.bmp'));
+	write(path.join(game, 'Music', 'GBR_TRACK_1.ogg'));
+	const withLoose = assets.gameFiles(game);
+	assert.ok(withLoose.has('units/ghero1/larax_walk.rle.mmp') && withLoose.has('currentlang/menubackground.bmp'));
+	assert.ok(!withLoose.has('music/gbr_track_1.ogg'));
+	fs.rmSync(path.join(game, 'Units'), { recursive: true });
+	fs.rmSync(path.join(game, 'Currentlang'), { recursive: true });
 	assert.equal(assets.gameFiles(path.join(temp, 'nowhere')), null);
 	assert.equal(assets.gameFiles(null), null);
 
@@ -91,7 +100,7 @@ try {
 	const clash = path.join(root, 'sdk/examples/ruleset-clash-example');
 	const wrong = run([path.join(clash, 'clash-a'), '--game', game]);
 	assert.equal(wrong.status, 0, wrong.text);
-	assert.match(wrong.text, /WARNING  gameres\/icons\/RHastatus\.bmp  global in-game file in the root of a civilization pack/);
+	assert.match(wrong.text, /WARNING  gameres\/icons\/RHastatus\.bmp  global in-game file in the root of a civilization pack: it is ignored unless a ruleset of this package is chosen/);
 	assert.equal(wrong.text.split('\n').filter(l => /global in-game file/.test(l)).length, 1, wrong.text);
 	assert.doesNotMatch(run([path.join(clash, 'clash-a')]).text, /global in-game file/, 'without --game nothing can be compared');
 	const right = run([path.join(clash, 'clash-b'), '--game', game]);

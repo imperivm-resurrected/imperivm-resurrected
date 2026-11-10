@@ -63,7 +63,16 @@ function pakNames(file) {
 	finally { fs.closeSync(fd); }
 }
 
-// Every file the game has, as game paths: Packs/*.pak and local/*.pak (only CURRENTLANG/). null if there is no game folder.
+// The loose files below a folder of the game, as game paths ("units/Ghero1/x.rle.mmp" is "units/ghero1/x.rle.mmp").
+function looseFiles(dir, rel, out) {
+	for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+		if (e.isDirectory()) looseFiles(path.join(dir, e.name), rel + e.name + '/', out);
+		else out.add((rel + e.name).toLowerCase());
+	}
+}
+
+// Every file the game has, as game paths: Packs/*.pak, local/*.pak (only CURRENTLANG/) and the loose files of Units/ and Currentlang/ of the game folder.
+// It is the list the DLL reads (src/mods/gamefiles.cpp): a root file of a civilization pack at one of these paths is global. null if there is no game folder.
 function gameFiles(gameDir) {
 	if (!gameDir) return null;
 	const out = new Set();
@@ -78,6 +87,10 @@ function gameFiles(gameDir) {
 				out.add(p);
 			}
 		}
+	}
+	for (const dir of ['Units', 'Currentlang']) {
+		const full = path.join(gameDir, dir);
+		if (fs.existsSync(full) && fs.statSync(full).isDirectory()) looseFiles(full, dir.toLowerCase() + '/', out);
 	}
 	return out.size ? out : null;
 }
