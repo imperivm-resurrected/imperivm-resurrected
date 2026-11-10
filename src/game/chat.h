@@ -58,6 +58,7 @@ bool ChatPing(int mouseX, int mouseY, bool haveMouse, const char *how, int type,
 bool ChatPointOnMap(int x, int y, int *area, const char *&why);
 // A line in the chat for the local player only.
 void ChatAddLocal(const std::string &text);
+void ChatAddLocalEntry(ChatEntry e);
 
 uint32_t ChatLogSerial();
 std::vector<ChatEntry> ChatLogLines();

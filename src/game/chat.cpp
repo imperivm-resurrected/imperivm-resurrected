@@ -689,17 +689,22 @@ bool ChatPointOnMap(int x, int y, int *area, const char *&why)
 	return true;
 }
 
-void ChatAddLocal(const std::string &text)
+void ChatAddLocalEntry(ChatEntry e)
 {
-	ChatEntry e;
 	e.arrivedMs = GetTickCount();
 	uint32_t clock = 0;
 	if (Game()) ReadClock(Game(), clock);
 	e.clockMs = clock;
-	e.text = text;
 	e.local = true;
 	std::lock_guard<std::mutex> lock(g_logLock);
 	g_log.Add(std::move(e));
+}
+
+void ChatAddLocal(const std::string &text)
+{
+	ChatEntry e;
+	e.text = text;
+	ChatAddLocalEntry(std::move(e));
 }
 
 uint32_t ChatLogSerial()
