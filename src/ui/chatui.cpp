@@ -68,13 +68,13 @@ bool OtherScreenOpen()
 std::vector<ChatTarget> TargetsOf(const ChatMatch &m)
 {
 	std::vector<int> others;
-	for (const ChatPlayer &p : m.humans) others.push_back(p.index);
+	for (const ChatPlayer &p : m.others) others.push_back(p.index);
 	return ChatTargets(m.hasAllies, others);
 }
 
 const ChatPlayer *PlayerOf(const ChatMatch &m, int index)
 {
-	for (const ChatPlayer &p : m.humans) {
+	for (const ChatPlayer &p : m.others) {
 		if (p.index == index) return &p;
 	}
 	return nullptr;
@@ -245,17 +245,52 @@ bool HandleMouse(UINT msg, WPARAM wp, POINT at)
 	}
 }
 
-bool TryPing(WPARAM wp, LPARAM lp)
+// False when there is no match to ping in, so the key or the click goes on to the game.
+bool CanPing(const char *how)
+{
+	if (!ChatFloating()) return false;
+	if (OtherScreenOpen()) {
+		LogD("ui", "chat: ping (%s) ignored: another screen is open", how);
+		return false;
+	}
+	if (!ChatReadMatch().playing) {
+		LogD("ui", "chat: ping (%s) ignored: no match on screen", how);
+		return false;
+	}
+	return true;
+}
+
+void Ping(int x, int y, bool haveMouse, const char *how)
+{
+	const DWORD now = GetTickCount();
+	if (now - g_lastPing < kPingCooldownMs) {
+		LogD("ui", "chat: ping (%s) ignored: the last one was %lu ms ago", how, static_cast<unsigned long>(now - g_lastPing));
+		return;
+	}
+	g_lastPing = now;
+	ChatPing(x, y, haveMouse, how);
+}
+
+bool TryPingKey(WPARAM wp, LPARAM lp)
 {
 	if (!ControlsModKeyPressed(kModKeyPing, static_cast<unsigned>(wp))) return false;
-	if (!ChatFloating() || OtherScreenOpen()) return false;
-	const ChatMatch m = ChatReadMatch();
-	if (!m.playing || !m.severalHumans) return false;
+	if (lp & (1 << 30)) return g_swallowVk == wp;
+	LogD("ui", "chat: ping key %s received (mouse %s at %d,%d)", ControlsKeyLabel(ControlsModKey(kModKeyPing)).c_str(), g_haveMouse ? "seen" : "not seen yet",
+		g_mouseX, g_mouseY);
+	if (!CanPing("key")) return false;
 	g_swallowVk = wp;
-	const DWORD now = GetTickCount();
-	if ((lp & (1 << 30)) || now - g_lastPing < kPingCooldownMs) return true;
-	g_lastPing = now;
-	ChatPing(g_mouseX, g_mouseY, g_haveMouse);
+	Ping(g_mouseX, g_mouseY, g_haveMouse, "key");
+	return true;
+}
+
+// Alt + left click, as in other strategy games: the click marks the point and does not reach the game, so nothing is selected.
+bool TryPingClick(POINT at)
+{
+	if (!(GetKeyState(VK_MENU) & 0x8000)) return false;
+	LogD("ui", "chat: Alt + click at %d,%d", static_cast<int>(at.x), static_cast<int>(at.y));
+	if (!CanPing("Alt + click")) return false;
+	g_swallowLeftUp = true;
+	Ping(at.x, at.y, true, "Alt + click");
 	return true;
 }
 
@@ -410,7 +445,16 @@ bool ChatUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		std::lock_guard<std::mutex> lock(g_lock);
 		open = g_s.open;
 	}
-	if (!open) return (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) && TryPing(wp, lp);
+	if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK) {
+		const POINT at = {static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))};
+		RECT panel = {};
+		if (open) {
+			std::lock_guard<std::mutex> lock(g_lock);
+			panel = g_s.painted.panel;
+		}
+		if (!PtInRect(&panel, at) && TryPingClick(at)) return true;
+	}
+	if (!open) return (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) && TryPingKey(wp, lp);
 	// Held down, the key that opened the bar repeats: Enter would send the empty bar at once.
 	if (msg == WM_KEYDOWN && wp == g_openVk && (lp & (1 << 30))) return true;
 	switch (msg) {

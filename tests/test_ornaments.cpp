@@ -4,6 +4,7 @@
 #include "check.h"
 
 #include <algorithm>
+#include <cstdlib>
 
 #include "ui/ornaments.h"
 
@@ -68,6 +69,25 @@ static void RuleFadesOutAtBothEnds()
 	for (int x = 0; x < w; x++) CHECK_EQ(static_cast<int>(strongest(x)), static_cast<int>(strongest(w - 1 - x)));
 }
 
+static void PinAndChevronShapes()
+{
+	const int w = 40, h = 40;
+	const std::vector<uint8_t> pin = OrnamentMask(kOrnamentPin, w, h);
+	const auto at = [&](const std::vector<uint8_t> &m, double x, double y) { return static_cast<int>(m[static_cast<size_t>(y * h) * w + static_cast<size_t>(x * w)]); };
+	CHECK_EQ(at(pin, 0.5, 0.36), 0);
+	CHECK_EQ(at(pin, 0.5, 0.15), 255);
+	CHECK_EQ(at(pin, 0.5, 0.85), 255);
+	CHECK_EQ(at(pin, 0.1, 0.85), 0);
+	CHECK_EQ(at(pin, 0.9, 0.1), 0);
+	for (int y = 0; y < h; y++) {
+		for (int x = 0; x < w / 2; x++) CHECK(std::abs(pin[static_cast<size_t>(y) * w + x] - pin[static_cast<size_t>(y) * w + w - 1 - x]) <= 1);
+	}
+	const std::vector<uint8_t> chevron = OrnamentMask(kOrnamentChevron, w, h);
+	CHECK_EQ(at(chevron, 0.7, 0.5), 255);
+	CHECK_EQ(at(chevron, 0.25, 0.5), 0);
+	CHECK_EQ(at(chevron, 0.9, 0.1), 0);
+}
+
 int main()
 {
 	EmptySizes();
@@ -75,5 +95,6 @@ int main()
 	StaysLegibleWhenSmall();
 	IconsAreLegibleWhenSmall();
 	RuleFadesOutAtBothEnds();
+	PinAndChevronShapes();
 	return test::Summary("ornaments");
 }
