@@ -30,6 +30,11 @@ inline constexpr uintptr_t kCTransFSCtor = 0x00660ab0;
 inline constexpr uintptr_t kStrDupPool = 0x00665030;
 inline constexpr uintptr_t kFreePoolString = 0x00665070;
 inline constexpr uintptr_t kCWinFileServiceCtor = 0x00674ea0;
+// CXmlParser::ParseStream reads the file in blocks into a buffer it allocates (4 bytes per block count) and frees it only when the last block comes
+// with its data; when the file ends with a read of 0 bytes (the usual case) the "no more bytes" jump skips the free and leaks the buffer: 8 KB for each
+// class file, 64 KB for each entity. The jump is a "je" and the code that frees the buffer and returns 0 is right before the exit it goes to.
+inline constexpr uintptr_t kXmlParseNoBytesJump = 0x0067a228;
+inline constexpr uintptr_t kXmlParseFreeBuffer = 0x0067a269;
 inline constexpr uintptr_t kParseFile = 0x0067a880;
 inline constexpr uintptr_t kOpenMappedFileSource = 0x0067b390;
 inline constexpr uintptr_t kLanguagePersist = 0x0067b920;
