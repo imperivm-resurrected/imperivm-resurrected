@@ -1695,5 +1695,11 @@
 {"en":"There are no adventures here.","es":"Aquí no hay aventuras.","it":"Qui non ci sono avventure."},
 {"en":"There are no conquests here.","es":"Aquí no hay conquistas.","it":"Qui non ci sono conquiste."},
 {"en":"No Imperivm I campaign is installed yet.","es":"Todavía no hay ninguna campaña de Imperivm I instalada.","it":"Non è ancora installata nessuna campagna di Imperivm I."},
-{"en":"No Imperivm II campaign is installed yet.","es":"Todavía no hay ninguna campaña de Imperivm II instalada.","it":"Non è ancora installata nessuna campagna di Imperivm II."}
+{"en":"No Imperivm II campaign is installed yet.","es":"Todavía no hay ninguna campaña de Imperivm II instalada.","it":"Non è ancora installata nessuna campagna di Imperivm II."},
+{"en":"Allies","es":"Aliados","it":"Alleati"},
+{"en":"Private","es":"Privado","it":"Privato"},
+{"en":"Tab changes who reads it","es":"Tab cambia quién lo lee","it":"Tab cambia chi lo legge"},
+{"en":"marked a point on the map","es":"marcó un punto en el mapa","it":"ha segnato un punto sulla mappa"},
+{"en":"Ping location","es":"Marcar posición","it":"Segnala posizione"},
+{"en":"marks the point under the cursor for your allies, or for everyone if you have none","es":"marca el punto bajo el cursor para tus aliados, o para todos si no tienes","it":"segna il punto sotto il cursore per i tuoi alleati, o per tutti se non ne hai"}
 ]

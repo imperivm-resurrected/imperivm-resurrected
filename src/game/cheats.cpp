@@ -707,6 +707,11 @@ bool CheatsHandleCommand(void *cmd, const char *text, unsigned size)
 	return true;
 }
 
+bool CheatsChatLine(const std::string &text)
+{
+	return text.size() > 1 && text[0] == '/' && HandleChat(text.c_str() + 1);
+}
+
 void InstallCheats(bool knownExe)
 {
 	if (!knownExe) return;

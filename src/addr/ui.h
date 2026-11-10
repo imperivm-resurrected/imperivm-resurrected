@@ -8,6 +8,7 @@ namespace addr {
 
 inline constexpr uintptr_t kIsNewUpdateAvailable = 0x00408a30;
 inline constexpr uintptr_t kUpdateXmlExists = 0x00408ab0;
+inline constexpr uintptr_t kChatDialogCtor = 0x004e4f00;
 inline constexpr uintptr_t kChatSend = 0x004e51e0;
 inline constexpr uintptr_t kRegisterCommands = 0x004ee870;
 inline constexpr uintptr_t kSelectionClear = 0x005b8960;

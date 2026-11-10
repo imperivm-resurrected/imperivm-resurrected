@@ -114,9 +114,10 @@ const Action kActions[] = {
 	{"replay_hide_ui", kPageMod, "Replay: hide the game interface", "to watch the game without bars", 'H', kCtrl, kMod, kRuleShortcut},
 	{"replay_collapse_bar", kPageMod, "Replay: collapse the control bar", "", 'B', kCtrl, kMod, kRuleShortcut},
 	{"cheats_panel", kPageMod, "Cheats: open or close the panel", "only if the game allows cheats", 'T', kCtrl, kMod, kRuleShortcut},
+	{"ping_location", kPageMod, "Ping location", "marks the point under the cursor for your allies, or for everyone if you have none", 'G', kCtrl, kMod, kRuleShortcut},
 };
 const int kActionCount = static_cast<int>(sizeof(kActions) / sizeof(kActions[0]));
-const int kFirstModAction = kActionCount - 10;
+const int kFirstModAction = kActionCount - 11;
 
 const char *kPageNames[kPageCount] = {"Camera", "Selection", "Groups", "Game", "Interface", "Resurrected", "Units", "Hero", "Druid",
 	"Buildings", "Content"};
@@ -908,7 +909,7 @@ bool Hook(uintptr_t addr, void *detour, void **orig, const char *what)
 
 bool ControlsModKeyPressed(int id, unsigned vk)
 {
-	if (id < kModKeyPanel || id > kModKeyCheats) return false;
+	if (id < kModKeyPanel || id > kModKeyPing) return false;
 	const int index = kFirstModAction + id;
 	const unsigned char mods = CurrentMods();
 	for (const KeySpec *k : {&g_bind[index], &g_bind2[index]}) {
@@ -919,7 +920,7 @@ bool ControlsModKeyPressed(int id, unsigned vk)
 
 ControlKey ControlsModKey(int id)
 {
-	if (id < kModKeyPanel || id > kModKeyCheats) return {};
+	if (id < kModKeyPanel || id > kModKeyPing) return {};
 	const int index = kFirstModAction + id;
 	return g_bind[index].vk ? g_bind[index] : g_bind2[index];
 }
@@ -1816,4 +1817,22 @@ bool ControlsEatChar(unsigned msg, unsigned wp)
 		return true;
 	}
 	return false;
+}
+
+bool ControlsCmdBarRect(int &left, int &top, int &right, int &bottom)
+{
+	const uintptr_t game = *reinterpret_cast<uintptr_t *>(addr::kGame);
+	if (!g_cmdBar || !game || g_cmdBarGame != game) return false;
+	__try {
+		if (!(*reinterpret_cast<unsigned *>(g_cmdBar + 0x28) & 2)) return false;
+		const short *r = reinterpret_cast<const short *>(g_cmdBar + 0x10);
+		left = r[0];
+		top = r[1];
+		right = r[2] + 1;
+		bottom = r[3] + 1;
+		return right > left && bottom > top;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return false;
+	}
 }

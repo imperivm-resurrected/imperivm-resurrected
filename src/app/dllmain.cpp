@@ -8,6 +8,7 @@
 #include "MinHook.h"
 #include "hooks/hookcount.h"
 #include "core/config.h"
+#include "game/chat.h"
 #include "game/controls.h"
 #include "core/crashlog.h"
 #include "hooks/displaymode.h"
@@ -66,6 +67,7 @@
 #include "game/loadcurtain.h"
 #include "game/cheats.h"
 #include "net/onlinesaves.h"
+#include "ui/chatui.h"
 #include "ui/savesui.h"
 
 bool LoadRealWinmm();
@@ -223,6 +225,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 		InstallNetTune(knownExe);
 		InstallSpectator(knownExe);
 		InstallCheats(knownExe);
+		InstallChat(knownExe);
+		ChatUiInstall();
 		InstallZoomFog(knownExe);
 		InstallQuickIcons(knownExe);
 		InstallNoteIcons(knownExe);

@@ -1703,5 +1703,11 @@ extern const TrRow kTrRows[] = {
 	{"There are no conquests here.", "Aquí no hay conquistas.", "Qui non ci sono conquiste."},
 	{"No Imperivm I campaign is installed yet.", "Todavía no hay ninguna campaña de Imperivm I instalada.", "Non è ancora installata nessuna campagna di Imperivm I."},
 	{"No Imperivm II campaign is installed yet.", "Todavía no hay ninguna campaña de Imperivm II instalada.", "Non è ancora installata nessuna campagna di Imperivm II."},
+	{"Allies", "Aliados", "Alleati"},
+	{"Private", "Privado", "Privato"},
+	{"Tab changes who reads it", "Tab cambia quién lo lee", "Tab cambia chi lo legge"},
+	{"marked a point on the map", "marcó un punto en el mapa", "ha segnato un punto sulla mappa"},
+	{"Ping location", "Marcar posición", "Segnala posizione"},
+	{"marks the point under the cursor for your allies, or for everyone if you have none", "marca el punto bajo el cursor para tus aliados, o para todos si no tienes", "segna il punto sotto il cursore per i tuoi alleati, o per tutti se non ne hai"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);
