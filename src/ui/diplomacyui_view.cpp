@@ -199,14 +199,13 @@ void PaintTip(Painter &p, const Tip &tip, int panelH)
 	p.TextWrapped(x + 10, y + 7, w - 20, h - 10, tip.text, kText);
 }
 
-void PaintScrollbar(Painter &p, const View &v, int x, int top, int h)
+void PaintCardsBar(Painter &p, const View &v, int x, int top, int h)
 {
-	const int rows = Rows(v), maxScroll = MaxScroll(v);
-	p.Fill(x, top, 6, h, pal::well);
-	const int thumbH = std::max(30, h * kVisibleRows / rows), thumbY = top + (h - thumbH) * v.scroll / std::max(1, maxScroll);
-	p.Fill(x, thumbY, 6, thumbH, pal::thumb);
-	if (v.scroll > 0) p.AddHit(x - 6, top, 18, thumbY - top, kActScrollUp);
-	if (v.scroll < maxScroll) p.AddHit(x - 6, thumbY + thumbH, 18, top + h - thumbY - thumbH, kActScrollDown);
+	ScrollbarLook look;
+	look.minThumb = 30;
+	look.grip = 6;
+	look.track = pal::well;
+	PaintScrollbar(p, kBarCards, x, top, h, {v.scroll, MaxScroll(v), kVisibleRows}, v.bar, v.mouseX, v.mouseY, look);
 }
 
 }
@@ -239,7 +238,7 @@ void PaintDiplomacy(Painter &p, const View &v)
 		PaintPlayerCard(p, v, i, x, top + row * (kCardH + kRowGap), cardW, tip);
 	}
 	p.Unclip();
-	if (scrolling) PaintScrollbar(p, v, kPanelW - kPad - 6, top, bottom - top);
+	if (scrolling) PaintCardsBar(p, v, kPanelW - kPad - 6, top, bottom - top);
 
 	const int ruleY = bottom + kFooterGap;
 	PaintOrnateRule(p, ruleY, kPanelW);

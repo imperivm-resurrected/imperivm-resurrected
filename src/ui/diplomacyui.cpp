@@ -63,6 +63,15 @@ struct Command {
 	bool on = false;
 };
 
+// The cards' scroll bar, under the lock: a press on it, the drag that follows and its end.
+bool BarMouse(UINT msg, WPARAM wp, POINT at)
+{
+	ScrollTo to;
+	const bool took = ScrollbarMouse(g_s.view.bar, g_s.hits, msg, wp, at, to);
+	if (to.id == kBarCards) g_s.view.scroll = std::max(0, std::min(MaxScroll(g_s.view), to.pos));
+	return took;
+}
+
 Command CommandFor(const View &v, int action, int arg)
 {
 	Command cmd;
@@ -134,6 +143,7 @@ void DiplomacyUiGameTick()
 	fresh.mouseX = g_s.view.mouseX;
 	fresh.mouseY = g_s.view.mouseY;
 	fresh.scroll = g_s.view.scroll;
+	fresh.bar = g_s.view.bar;
 	fresh.alliedVictory = state.alliedVictory;
 	fresh.locked = state.locked;
 	for (const DiplomacyRow &row : state.rows) {
@@ -187,6 +197,7 @@ bool DiplomacyUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		g_swallowUp = false;
 		std::lock_guard<std::mutex> lock(g_lock);
 		g_s.mouseDown = false;
+		g_s.view.bar = ScrollDrag();
 		return true;
 	}
 	void *dlg = OpenDialog();
@@ -206,6 +217,7 @@ bool DiplomacyUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		std::lock_guard<std::mutex> lock(g_lock);
 		g_s.view.mouseX = at.x;
 		g_s.view.mouseY = at.y;
+		BarMouse(msg, wp, at);
 		consumed = false;
 		break;
 	}
@@ -215,12 +227,10 @@ bool DiplomacyUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		if (g_s.dlg != dlg) break;
 		g_s.mouseDown = true;
 		g_swallowUp = true;
+		if (BarMouse(msg, wp, at)) break;
 		int arg = 0;
 		const int action = HitAt(g_s, at, arg);
-		if (action == kActScrollUp || action == kActScrollDown) {
-			g_s.view.scroll = std::max(0, std::min(MaxScroll(g_s.view), g_s.view.scroll + (action == kActScrollUp ? -1 : 1)));
-		}
-		else cmd = CommandFor(g_s.view, action, arg);
+		cmd = CommandFor(g_s.view, action, arg);
 		break;
 	}
 	case WM_MOUSEWHEEL: {
