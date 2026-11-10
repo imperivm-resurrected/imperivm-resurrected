@@ -342,7 +342,6 @@ void *OpenMergedCredits(void *original, const char *path, unsigned mode, void *e
 void *OpenMergedLoc(void *original, const char *path, unsigned mode, void *err)
 {
 	const std::vector<std::string> patches = LangPatchFiles();
-	if (patches.empty() && ModsLanguage() == "english") return original;
 	std::string base;
 	if (original) {
 		const std::vector<char> data = ReadAllAndClose(original);

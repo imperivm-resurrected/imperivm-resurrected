@@ -534,6 +534,15 @@ const char *const kMenuKeys[] = {"Apply", "Reset", "Controls", "Play in window",
 	"Chat and invitation alerts", "Cutscenes", "Use up to 4 GB of memory", "Brightness", "Autosave",
 	"Save when leaving the game", "Language", "Updates", "Monitor", "Multiplayer", "Imperivm League", "Additional content"};
 
+// The game's own texts the mod renames, by their full key so that only these buttons change: the player screen is the
+// player's statistics now, and the game wrote "MultiJugador" in Spanish.
+const char *const kGameTextRenames[][2] = {
+	{"Change player@/Menu/mainmenu.ini:ChangePlayer:Text", "Statistics"},
+	{"Change player@/Menu/mainmenuOpenBeta.ini:ChangePlayer:Text", "Statistics"},
+	{"Multiplayer@/Menu/mainmenu.ini:MultiPlayer:Text", "Multiplayer"},
+	{"Multiplayer@/Menu/mainmenuOpenBeta.ini:MultiPlayer:Text", "Multiplayer"},
+};
+
 bool LangMergeLoc(const std::string &base, const std::vector<std::string> &patches, std::string &out)
 {
 	std::multimap<std::string, std::string> fullKeys;
@@ -564,6 +573,11 @@ bool LangMergeLoc(const std::string &base, const std::vector<std::string> &patch
 			added += "<translationtableentry text=\"" + XmlEscape(key) + "\" result=\"" + XmlEscape(translated) + "\"/>\r\n";
 			total++;
 		}
+	}
+	// Before the content packs, which may still rename them.
+	for (const auto &rename : kGameTextRenames) {
+		added += "<translationtableentry text=\"" + XmlEscape(rename[0]) + "\" result=\"" + XmlEscape(Tr(rename[1])) + "\"/>\r\n";
+		total++;
 	}
 	for (const std::string &path : patches) {
 		const std::string shortName = path.compare(0, game.size(), game) == 0 ? path.substr(game.size()) : path;
