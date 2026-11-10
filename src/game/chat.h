@@ -48,9 +48,9 @@ void ChatSetOpenHandler(ChatOpenFn fn);
 // Text and target as typed; withLocation adds the centre of the camera, as the dialog's "Send location". False if nothing was sent.
 bool ChatSend(const std::string &text, ChatTarget target, bool withLocation);
 // An empty chat line with a location: the point under the mouse (map or open zoom map), else the centre of the camera. The
-// sender also gets the game's "location message" notification, which the game itself only gives to the others. how says
-// what asked for it, for the log.
-bool ChatPing(int mouseX, int mouseY, bool haveMouse, const char *how);
+// sender also gets the type's notification, which the game itself only gives to the others. how says what asked for it, for
+// the log; type is a ChatPingType.
+bool ChatPing(int mouseX, int mouseY, bool haveMouse, const char *how, int type);
 
 uint32_t ChatLogSerial();
 std::vector<ChatEntry> ChatLogLines();

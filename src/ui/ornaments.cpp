@@ -184,6 +184,12 @@ bool InChevron(double x, double y)
 	return InPolygon(x, y, head);
 }
 
+bool InFlag(double x, double y)
+{
+	static const Point cloth[] = {{0.3, 0.08}, {0.6, 0.15}, {0.9, 0.09}, {0.9, 0.5}, {0.6, 0.57}, {0.3, 0.5}};
+	return InRoundRect(x, y, 0.16, 0.04, 0.27, 0.96, 0.03) || InCircle(x, y, 0.215, 0.05, 0.07) || InPolygon(x, y, cloth);
+}
+
 std::vector<uint8_t> LaurelMask(int width, int height)
 {
 	const double aspect = static_cast<double>(width) / height;
@@ -231,6 +237,7 @@ std::vector<uint8_t> OrnamentMask(Ornament ornament, int width, int height)
 	case kOrnamentKeys: return Coverage(width, height, InKeys);
 	case kOrnamentPin: return Coverage(width, height, InPin);
 	case kOrnamentChevron: return Coverage(width, height, InChevron);
+	case kOrnamentFlag: return Coverage(width, height, InFlag);
 	default: return {};
 	}
 }

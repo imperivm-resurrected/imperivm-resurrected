@@ -1,0 +1,6 @@
+<patch>
+	<add select="/notifications">
+		<notification id="mod ping attack" category="none" anim="UI/Icons/Notifications/battle.rle" text="Attack here" title="Attack here" sound="Sounds/Notifications/unit attacked.wav" activetime="8000" duration="8000" suspendradius="1000" framechangetime="100" icon="gameres/infobar/common/military.bmp"/>
+		<notification id="mod ping danger" category="none" anim="UI/Icons/Notifications/flag_red.rle" text="Danger" title="Danger" sound="Sounds/Notifications/building attacked.wav" activetime="8000" duration="8000" suspendradius="1000" icon="gameres/infobar/common/military.bmp"/>
+	</add>
+</patch>

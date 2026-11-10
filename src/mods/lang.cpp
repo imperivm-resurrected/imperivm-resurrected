@@ -532,7 +532,9 @@ std::multimap<std::string, std::string> FullKeysByText(const std::string &base)
 const char *const kMenuKeys[] = {"Apply", "Reset", "Controls", "Play in window", "Vertical sync",
 	"Trap the mouse in the game", "Show FPS and memory", "Network statistics", "Mute in the background",
 	"Chat and invitation alerts", "Cutscenes", "Use up to 4 GB of memory", "Brightness", "Autosave",
-	"Save when leaving the game", "Language", "Updates", "Monitor", "Multiplayer", "Imperivm League", "Additional content"};
+	"Save when leaving the game", "Language", "Updates", "Monitor", "Multiplayer", "Imperivm League", "Additional content",
+	// The titles of the chat's ping notifications (built-in patch of data/vxnotifications.xml).
+	"Attack here", "Danger"};
 
 bool LangMergeLoc(const std::string &base, const std::vector<std::string> &patches, std::string &out)
 {

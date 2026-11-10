@@ -18,6 +18,7 @@
 #include "addr/ui.h"
 #include "addr/world.h"
 #include "core/log.h"
+#include "i18n/tr.h"
 #include "game/chat.h"
 #include "game/cheats.h"
 #include "game/controls.h"
@@ -240,11 +241,31 @@ struct GameString {
 static_assert(sizeof(GameString) == 0x1c, "the game's std::string is 28 bytes");
 typedef void(__cdecl *PostNotification_t)(const GameString *type, GameString text, int mapX, int mapY);
 typedef void(__stdcall *ScreenToMap_t)(unsigned *out, const unsigned *in);
-const char kLocationNotice[] = "location message";
+// "location message" is the game's (VXNOTIFICATIONS.XML); the other two are added to that file by the built-in patch
+// data/vxnotifications.xml, with the sprite and sound of "unit attacked" and "building attacked".
+const char *const kPingNotices[kPingTypes] = {"location message", "mod ping attack", "mod ping danger"};
 
-// CVXChatMessage::Execute (004e7370) raises "location message" (VXNOTIFICATIONS.XML: message icon on the map, its sound, the
-// notification and the point that Q goes back to) for everyone but the sender. The sender gets the same here.
-bool NotifyLocation(int x, int y)
+// Read only by the game, so a text past the 15 characters of the buffer can stay where it is.
+GameString GameText(const char *text)
+{
+	GameString g = {};
+	const size_t n = strlen(text);
+	if (n < sizeof(g.buf)) {
+		memcpy(g.buf, text, n + 1);
+		g.capacity = 15;
+	}
+	else {
+		g.ptr = text;
+		g.capacity = static_cast<uint32_t>(n);
+	}
+	g.size = static_cast<uint32_t>(n);
+	return g;
+}
+
+// CVXChatMessage::Execute (004e7370) raises "location message" (message icon on the map, its sound, the notification and the
+// point that Q goes back to) for everyone but the sender. The sender gets it here, and a typed ping gets its own.
+// NotifGroup::Notify (0055cad0) puts the type's sprite at the point given, with no unit or building needed.
+bool NotifyPing(int type, int x, int y)
 {
 	__try {
 		if (!Game()) return false;
@@ -252,13 +273,10 @@ bool NotifyLocation(int x, int y)
 		unsigned at[2] = {};
 		reinterpret_cast<ScreenToMap_t>(addr::kScreenToMap)(at, in);
 		if (static_cast<int>(at[0]) < 0 || static_cast<int>(at[1]) < 0 || at[0] >= 4000000 || at[1] >= 4000000) return false;
-		// Read only by the game: its text lives here, past the 15 characters the buffer holds.
-		GameString type = {};
-		type.ptr = kLocationNotice;
-		type.size = type.capacity = static_cast<uint32_t>(sizeof(kLocationNotice) - 1);
+		const GameString notice = GameText(kPingNotices[type >= 0 && type < kPingTypes ? type : kPingHere]);
 		GameString text = {};
 		text.capacity = 15;
-		reinterpret_cast<PostNotification_t>(addr::kPostNotificationAtPos)(&type, text, static_cast<int>(at[0]), static_cast<int>(at[1]));
+		reinterpret_cast<PostNotification_t>(addr::kPostNotificationAtPos)(&notice, text, static_cast<int>(at[0]), static_cast<int>(at[1]));
 		return true;
 	}
 	__except (EXCEPTION_EXECUTE_HANDLER) {
@@ -276,6 +294,7 @@ int OtherHumans(const ChatMatch &m)
 struct RawChat {
 	bool show = false, own = false, location = false;
 	int sender = -1, local = -1;
+	int at[2] = {-1, -1};
 	unsigned mask = 0;
 	uint32_t rgb = 0, clock = 0;
 	char name[64] = {};
@@ -299,7 +318,9 @@ bool ReadChat(const char *cmd, RawChat &c)
 		const bool demo = reinterpret_cast<IsDemo_t>(addr::kIsDemoPlayback)() != 0;
 		c.own = !demo && sender == local;
 		if (!demo && (c.local < 0 || c.local > 15 || !(c.mask & (1u << c.local)))) return false;
-		c.location = Field<int>(cmd, kCmdLocation) != -1 && Field<int>(cmd, kCmdLocation + 4) != -1;
+		c.at[0] = Field<int>(cmd, kCmdLocation);
+		c.at[1] = Field<int>(cmd, kCmdLocation + 4);
+		c.location = c.at[0] != -1 && c.at[1] != -1;
 		CopyGameString(c.text, sizeof(c.text), cmd, kCmdTextBuf, kCmdTextSize, kCmdTextCapacity);
 		if (!c.text[0] && !c.location) return false;
 		CopyGameString(c.name, sizeof(c.name), sender, kPlayerName, kPlayerNameSize, kPlayerNameCapacity);
@@ -317,6 +338,13 @@ bool ReadChat(const char *cmd, RawChat &c)
 	}
 }
 
+void CallExecute(void *cmd)
+{
+	g_suppressConsole = 1;
+	g_origExecute(cmd);
+	g_suppressConsole = 0;
+}
+
 ChatEntry EntryOf(const RawChat &c)
 {
 	ChatEntry e;
@@ -331,14 +359,21 @@ ChatEntry EntryOf(const RawChat &c)
 	e.text = c.text;
 	e.location = c.location;
 	e.own = c.own;
+	std::vector<std::string> phrases[kPingTypes];
+	for (int t = 0; t < kPingTypes; t++) phrases[t] = TrAllLanguages(ChatPingPhrase(t));
+	e.ping = ChatPingTypeOf(e.text, e.location, phrases);
 	return e;
 }
 
-void CallExecute(void *cmd)
+// The location goes away for the length of Execute, so the game does not raise its generic notification over the typed one.
+void CallExecuteWithoutLocation(void *cmd)
 {
-	g_suppressConsole = 1;
-	g_origExecute(cmd);
-	g_suppressConsole = 0;
+	int *at = reinterpret_cast<int *>(static_cast<char *>(cmd) + kCmdLocation);
+	const int x = at[0], y = at[1];
+	at[0] = at[1] = -1;
+	CallExecute(cmd);
+	at[0] = x;
+	at[1] = y;
 }
 
 void __fastcall HookExecute(void *cmd)
@@ -348,8 +383,18 @@ void __fastcall HookExecute(void *cmd)
 		g_origExecute(cmd);
 		return;
 	}
-	CallExecute(cmd);
 	ChatEntry e = EntryOf(raw);
+	// The sender raised its own when sending; the game gives the sender none.
+	const bool typed = e.ping == kPingAttack || e.ping == kPingDanger;
+	if (typed && !raw.own) {
+		CallExecuteWithoutLocation(cmd);
+		const bool shown = NotifyPing(e.ping, raw.at[0], raw.at[1]);
+		LogI("game", "chat: %s ping from player %d at %d,%d, %s", e.ping == kPingAttack ? "attack" : "danger", raw.sender + 1, raw.at[0], raw.at[1],
+			shown ? "notified here" : "NOT notified here");
+	}
+	else {
+		CallExecute(cmd);
+	}
 	LogD("game", "chat: line from player %d (%s%s, %u bytes)", raw.sender + 1, e.scope == kChatAll ? "everyone" : e.scope == kChatPrivate ? "private" : "allies",
 		e.location ? ", with a location" : "", static_cast<unsigned>(e.text.size()));
 	std::lock_guard<std::mutex> lock(g_logLock);
@@ -430,14 +475,15 @@ bool ChatSend(const std::string &text, ChatTarget target, bool withLocation)
 	const bool point = withLocation && CameraCentre(raw, x, y);
 	const unsigned mask = ChatMask(target, raw.local, raw.enemies);
 	const bool ok = QueueChat(clean, mask, point, x, y);
-	const bool shown = ok && point && NotifyLocation(x, y);
+	const bool shown = ok && point && NotifyPing(kPingHere, x, y);
 	LogAt(ok ? kLogDebug : kLogError, "game", "chat: %s %u bytes to mask %04x%s", ok ? "sent" : "could NOT send", static_cast<unsigned>(clean.size()), mask,
 		point ? (shown ? " with the camera's location (shown here too)" : " with the camera's location (NOT shown here)") : "");
 	return ok;
 }
 
-bool ChatPing(int mouseX, int mouseY, bool haveMouse, const char *how)
+bool ChatPing(int mouseX, int mouseY, bool haveMouse, const char *how, int type)
 {
+	if (type < 0 || type >= kPingTypes) type = kPingHere;
 	RawMatch raw;
 	if (!ReadRaw(raw) || !raw.game || raw.local < 0) {
 		LogW("game", "chat: ping (%s) ignored: no match to read", how);
@@ -462,10 +508,13 @@ bool ChatPing(int mouseX, int mouseY, bool haveMouse, const char *how)
 	}
 	// The line goes through the command queue even with nobody else to read it: it is the sender's own line in the chat.
 	const ChatTarget target = {m.hasAllies ? kTargetAllies : kTargetAll, -1};
-	const bool ok = QueueChat(std::string(), ChatMask(target, raw.local, raw.enemies), true, point[0], point[1]);
-	const bool shown = NotifyLocation(point[0], point[1]);
+	// The phrase goes in the sender's language: players without the mod read it next to the game's location message.
+	const std::string phrase = ChatCleanText(Tr(ChatPingPhrase(type)));
+	const bool ok = QueueChat(phrase, ChatMask(target, raw.local, raw.enemies), true, point[0], point[1]);
+	const bool shown = NotifyPing(type, point[0], point[1]);
 	const int humans = OtherHumans(m);
-	LogAt(ok && shown ? kLogInfo : kLogError, "game", "chat: ping (%s) at %d,%d from %s: %s to %s (%d other humans), %s here", how, point[0], point[1], from,
+	static const char *const kTypeNames[kPingTypes] = {"here", "attack", "danger"};
+	LogAt(ok && shown ? kLogInfo : kLogError, "game", "chat: %s ping (%s) at %d,%d from %s: %s to %s (%d other humans), %s here", kTypeNames[type], how, point[0], point[1], from,
 		ok ? "sent" : "NOT sent", m.hasAllies ? "the allies" : "everyone", humans, shown ? "notified" : "NOT notified");
 	return ok;
 }

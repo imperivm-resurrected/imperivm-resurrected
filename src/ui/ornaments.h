@@ -15,6 +15,7 @@ enum Ornament {
 	kOrnamentKeys,
 	kOrnamentPin,  // a map pin: a round head with a hole, tapering to its point at the bottom
 	kOrnamentChevron,  // a solid arrowhead pointing right
+	kOrnamentFlag,  // a banner flying from a pole, to the right
 	kOrnamentCount
 };
 

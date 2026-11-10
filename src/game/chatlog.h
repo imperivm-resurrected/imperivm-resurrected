@@ -30,7 +30,19 @@ struct ChatEntry {
 	std::string text;
 	bool location = false;
 	bool own = false;
+	// A ping's type (ChatPingType), or -1 for a line that is not one.
+	int ping = -1;
 };
+
+enum ChatPingType { kPingHere, kPingAttack, kPingDanger, kPingTypes };
+// The English phrase a ping of that type carries as its text, translated to the sender's language.
+const char *ChatPingPhrase(int type);
+// A ping is a chat line with a location whose text is empty (the plain "here") or one of its type's phrases, in any of the
+// languages the mod speaks: phrases[type] lists them. -1 for a line that is not a ping.
+int ChatPingTypeOf(const std::string &text, bool location, const std::vector<std::string> (&phrases)[kPingTypes]);
+// The ping menu: "here" above the press, "attack" down right, "danger" down left. -1 within the dead zone (the default).
+int ChatPingMenuPick(int dx, int dy, int deadZone);
+void ChatPingMenuOffset(int type, int radius, int &dx, int &dy);
 
 // What a received mask means: everyone, one other player, or the sender's side.
 ChatScope ChatScopeOfMask(unsigned mask, int sender, int &privateTo);

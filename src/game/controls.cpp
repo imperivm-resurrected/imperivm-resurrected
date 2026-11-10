@@ -115,9 +115,11 @@ const Action kActions[] = {
 	{"replay_collapse_bar", kPageMod, "Replay: collapse the control bar", "", 'B', kCtrl, kMod, kRuleShortcut},
 	{"cheats_panel", kPageMod, "Cheats: open or close the panel", "only if the game allows cheats", 'T', kCtrl, kMod, kRuleShortcut},
 	{"ping_location", kPageMod, "Ping location", "marks the point under the cursor for your allies", 'G', kCtrl, kMod, kRuleShortcut},
+	{"ping_attack", kPageMod, "Ping: attack here", "the point under the cursor, with the swords", 0, 0, kMod, kRuleShortcut},
+	{"ping_danger", kPageMod, "Ping: danger", "the point under the cursor, with the red flag", 0, 0, kMod, kRuleShortcut},
 };
 const int kActionCount = static_cast<int>(sizeof(kActions) / sizeof(kActions[0]));
-const int kFirstModAction = kActionCount - 11;
+const int kFirstModAction = kActionCount - 13;
 
 const char *kPageNames[kPageCount] = {"Camera", "Selection", "Groups", "Game", "Interface", "Resurrected", "Units", "Hero", "Druid",
 	"Buildings", "Content"};
@@ -916,7 +918,7 @@ bool Hook(uintptr_t addr, void *detour, void **orig, const char *what)
 
 bool ControlsModKeyPressed(int id, unsigned vk)
 {
-	if (id < kModKeyPanel || id > kModKeyPing) return false;
+	if (id < kModKeyPanel || id > kModKeyPingDanger) return false;
 	const int index = kFirstModAction + id;
 	const unsigned char mods = CurrentMods();
 	for (const KeySpec *k : {&g_bind[index], &g_bind2[index]}) {
@@ -927,7 +929,7 @@ bool ControlsModKeyPressed(int id, unsigned vk)
 
 ControlKey ControlsModKey(int id)
 {
-	if (id < kModKeyPanel || id > kModKeyPing) return {};
+	if (id < kModKeyPanel || id > kModKeyPingDanger) return {};
 	const int index = kFirstModAction + id;
 	return g_bind[index].vk ? g_bind[index] : g_bind2[index];
 }

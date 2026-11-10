@@ -1716,5 +1716,14 @@ extern const TrRow kTrRows[] = {
 	{"Hold the key and click the map to mark that point for your allies. Ctrl and Shift only mark on the big map; with the box key, a click marks and a drag selects.", "Mantén la tecla y haz clic en el mapa para marcar ese punto a tus aliados. Ctrl y Mayús solo marcan en el mapa grande; con la tecla de la caja, un clic marca y arrastrar selecciona.", "Tieni il tasto e fai clic sulla mappa per segnalare il punto agli alleati. Ctrl e Maiusc solo sulla mappa grande; con il tasto del riquadro, clic segnala e trascinare seleziona."},
 	{"Marking with the mouse is off.", "Marcar con el ratón está desactivado.", "La segnalazione con il mouse è disattivata."},
 	{"Marking with the mouse changed.", "Se cambió cómo marcar con el ratón.", "Segnalazione con il mouse cambiata."},
+	{"On my way", "Voy para allá", "Sto arrivando"},
+	{"Attack here!", "¡Atacad aquí!", "Attaccate qui!"},
+	{"Danger!", "¡Peligro!", "Pericolo!"},
+	{"Attack here", "Atacad aquí", "Attaccate qui"},
+	{"Danger", "Peligro", "Pericolo"},
+	{"Ping: attack here", "Marcar: atacad aquí", "Segnala: attaccate qui"},
+	{"Ping: danger", "Marcar: peligro", "Segnala: pericolo"},
+	{"the point under the cursor, with the swords", "el punto bajo el cursor, con las espadas", "il punto sotto il cursore, con le spade"},
+	{"the point under the cursor, with the red flag", "el punto bajo el cursor, con la bandera roja", "il punto sotto il cursore, con la bandiera rossa"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);
