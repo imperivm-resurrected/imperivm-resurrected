@@ -27,9 +27,8 @@
 #include "mods/pak.h"
 #include "mods/patch.h"
 #include "mods/savelib.h"
-#include "i18n/tr.h"
 #include "addr/engine.h"
-#include "core/version.h"
+#include "core/modcredits.h"
 
 namespace {
 typedef void *(__cdecl *VfsOpen_t)(const char *path, unsigned mode, void *err);
@@ -291,31 +290,6 @@ std::vector<std::string> ResolveMissingVoice(const std::string &rel, unsigned mo
 	return first;
 }
 
-std::string ResurrectedCredits()
-{
-	const std::string bar = "==================================================";
-	const std::string nl = "\r\n";
-	std::string t;
-	t += std::string("Imperivm Resurrected ") + ModVersionText() + nl;
-	t += Tr("Mod for Imperivm HD / Great Battles of Rome") + nl + nl + nl;
-	t += bar + nl + nl + nl;
-	t += "Imperivm Resurrected" + nl;
-	t += "THIONG" + nl + nl;
-	t += Tr("Modern rendering and audio, Steam multiplayer, content manager with GameBanana,") + nl;
-	t += Tr("saved-games screens and much more") + nl + nl + nl;
-	t += Tr("Thanks to") + nl + nl;
-	t += "Syncrash - AlvaroPeyleth" + nl;
-	t += "ImperivmVoicesPatch - Upercat" + nl + nl + nl;
-	t += Tr("Libraries") + nl + nl;
-	t += "MinHook - Tsuda Kageyu" + nl;
-	t += "miniaudio - David Reid" + nl;
-	t += "miniz - Rich Geldreich" + nl;
-	t += "Steamworks SDK - Valve" + nl;
-	t += nl + nl;
-	t += bar + nl + nl + nl;
-	return t;
-}
-
 std::vector<char> ReadAllAndClose(void *file)
 {
 	void **vtable = *reinterpret_cast<void ***>(file);
@@ -347,7 +321,7 @@ void *OpenMergedCredits(void *original, const char *path, unsigned mode, void *e
 		MakeDirsFor(out);
 		FILE *f = nullptr;
 		if (fopen_s(&f, out.c_str(), "wb") == 0 && f) {
-			const std::string head = "\xEF\xBB\xBF" + ResurrectedCredits();
+			const std::string head = "\xEF\xBB\xBF" + ResurrectedCreditsText(ResurrectedCredits());
 			const size_t skip = data.size() >= 3 && static_cast<unsigned char>(data[0]) == 0xEF && static_cast<unsigned char>(data[1]) == 0xBB &&
 				static_cast<unsigned char>(data[2]) == 0xBF ? 3 : 0;
 			written = fwrite(head.data(), 1, head.size(), f) == head.size() &&
