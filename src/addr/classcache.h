@@ -4,7 +4,7 @@
 #pragma once
 #include <cstdint>
 
-// What the game keeps about its classes and data tables between matches, for game/constreload.cpp (FullHotReload). The tables
+// What the game keeps about its classes and data tables between matches, for game/hotreload.cpp. The tables
 // below are freed by ShutdownGameDataSystems and made again by InitGameDataSystems.
 namespace addr {
 

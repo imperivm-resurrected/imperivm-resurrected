@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 THIONG
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
-#include "mods/constswap.h"
+#include "mods/hotswap.h"
 
 #include <cctype>
 #include <cstring>
@@ -12,14 +12,6 @@ std::string Normal(std::string s)
 	for (char &c : s) c = c == '\\' ? '/' : static_cast<char>(tolower(static_cast<unsigned char>(c)));
 	return s;
 }
-}
-
-bool ConstSwapLayerOk(const std::vector<std::string> &files)
-{
-	for (const std::string &f : files) {
-		if (Normal(f) != "patches/data/const.ini") return false;
-	}
-	return true;
 }
 
 namespace {
@@ -35,41 +27,41 @@ std::string Extension(const std::string &f)
 }
 }
 
-unsigned FullSwapKindOf(const std::string &raw)
+unsigned HotSwapKindOf(const std::string &raw)
 {
 	const std::string f = Normal(raw);
 	const std::string ext = Extension(f);
-	if (f == "hidden.txt") return kFullHidden;
+	if (f == "hidden.txt") return kHotHidden;
 	// A file in a subfolder or with no name is not one of these.
-	if (StartsWith(f, "patches/data/") && f.size() > 13 && (ext == ".xml" || ext == ".ini" || ext == ".vs")) return kFullPatch;
-	if (StartsWith(f, "data/") && f.size() > 5 && (ext == ".xml" || ext == ".ini" || ext == ".vs")) return kFullLoose;
-	if (StartsWith(f, "modes/") && f.size() > 6 && f.find('/', 6) == std::string::npos && ext == ".json") return kFullModes;
-	return kFullOther;
+	if (StartsWith(f, "patches/data/") && f.size() > 13 && (ext == ".xml" || ext == ".ini" || ext == ".vs")) return kHotPatch;
+	if (StartsWith(f, "data/") && f.size() > 5 && (ext == ".xml" || ext == ".ini" || ext == ".vs")) return kHotLoose;
+	if (StartsWith(f, "modes/") && f.size() > 6 && f.find('/', 6) == std::string::npos && ext == ".json") return kHotModes;
+	return kHotOther;
 }
 
-unsigned FullSwapKinds(const std::vector<std::string> &files)
+unsigned HotSwapKinds(const std::vector<std::string> &files)
 {
-	unsigned kinds = kFullNone;
-	for (const std::string &f : files) kinds |= FullSwapKindOf(f);
+	unsigned kinds = kHotNone;
+	for (const std::string &f : files) kinds |= HotSwapKindOf(f);
 	return kinds;
 }
 
-bool FullSwapLayerOk(const std::vector<std::string> &files)
+bool HotSwapLayerOk(const std::vector<std::string> &files)
 {
-	return (FullSwapKinds(files) & kFullOther) == 0;
+	return (HotSwapKinds(files) & kHotOther) == 0;
 }
 
-std::string FullSwapKindsText(unsigned kinds)
+std::string HotSwapKindsText(unsigned kinds)
 {
 	std::string out;
 	auto add = [&](unsigned bit, const char *name) {
 		if (kinds & bit) out += (out.empty() ? "" : ", ") + std::string(name);
 	};
-	add(kFullPatch, "patches of data/");
-	add(kFullLoose, "files in data/");
-	add(kFullModes, "modes");
-	add(kFullHidden, "hidden.txt");
-	add(kFullOther, "other files");
+	add(kHotPatch, "patches of data/");
+	add(kHotLoose, "files in data/");
+	add(kHotModes, "modes");
+	add(kHotHidden, "hidden.txt");
+	add(kHotOther, "other files");
 	return out.empty() ? "nothing" : out;
 }
 
@@ -93,15 +85,8 @@ bool ConstIniHasGamePlay(const std::string &text)
 	return false;
 }
 
-ConstSwap ConstSwapDecide(bool sameRuleset, const std::vector<std::string> &from, const std::vector<std::string> &to)
+HotSwap SwapDecide(bool sameRuleset, const std::vector<std::string> &from, const std::vector<std::string> &to)
 {
-	if (sameRuleset) return ConstSwap::kNothing;
-	return ConstSwapLayerOk(from) && ConstSwapLayerOk(to) ? ConstSwap::kReload : ConstSwap::kRestart;
-}
-
-ConstSwap SwapDecide(bool sameRuleset, bool full, const std::vector<std::string> &from, const std::vector<std::string> &to)
-{
-	const ConstSwap simple = ConstSwapDecide(sameRuleset, from, to);
-	if (simple != ConstSwap::kRestart) return simple;
-	return full && FullSwapLayerOk(from) && FullSwapLayerOk(to) ? ConstSwap::kFull : ConstSwap::kRestart;
+	if (sameRuleset) return HotSwap::kNothing;
+	return HotSwapLayerOk(from) && HotSwapLayerOk(to) ? HotSwap::kReload : HotSwap::kRestart;
 }

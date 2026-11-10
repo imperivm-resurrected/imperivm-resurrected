@@ -64,7 +64,7 @@
 #include "game/viewgrid.h"
 #include "game/healthbars.h"
 #include "game/loadcurtain.h"
-#include "game/constreload.h"
+#include "game/hotreload.h"
 #include "game/cheats.h"
 #include "net/onlinesaves.h"
 #include "ui/savesui.h"
@@ -206,7 +206,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 		BuiltinFixesInstall(knownExe);
 		InstallVfsHooks(knownExe);
 		InstallModsHooks(knownExe);
-		InstallConstReload(knownExe);
+		InstallHotReload(knownExe);
 		InstallNetModsHooks(knownExe);
 		DlStartUpdateCheck();
 		InstallAutosave(knownExe);

@@ -15,7 +15,7 @@
 #include "hooks/hookcount.h"
 #include "core/log.h"
 #include "ui/modui.h"
-#include "mods/constswap.h"
+#include "mods/hotswap.h"
 #include "game/autosave.h"
 #include "mods/mods.h"
 #include "net/mpsave.h"

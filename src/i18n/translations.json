@@ -1503,7 +1503,6 @@
 {"en":"The game will restart with the ruleset you chose. Afterwards, create the room again.","es":"El juego se reiniciará con el conjunto de reglas que elegiste. Después, vuelve a crear la sala.","it":"Il gioco si riavvierà con il set di regole che hai scelto. Poi crea di nuovo la stanza."},
 {"en":"The game will restart with the ruleset you chose.","es":"El juego se reiniciará con el conjunto de reglas que elegiste.","it":"Il gioco si riavvierà con il set di regole che hai scelto."},
 {"en":"Ruleset that will be loaded:","es":"Conjunto de reglas que se cargará:","it":"Set di regole che verrà caricato:"},
-{"en":"The new ruleset could not be loaded without restarting. This game uses the previous one.","es":"No se pudo cargar el conjunto de reglas nuevo sin reiniciar. Esta partida usa el anterior.","it":"Impossibile caricare il nuovo set di regole senza riavviare. Questa partita usa il precedente."},
 {"en":"Could not save the ruleset in the content profile.","es":"No se pudo guardar el conjunto de reglas en el perfil de contenido.","it":"Impossibile salvare il set di regole nel profilo dei contenuti."},
 {"en":" (without its ruleset)","es":" (sin su conjunto de reglas)","it":" (senza il suo set di regole)"},
 {"en":"Rulesets: %s","es":"Conjuntos de reglas: %s","it":"Set di regole: %s"},

@@ -9,9 +9,9 @@
   "category": "Gameplay & Balance",
   "authors": ["Imperivm Resurrected"],
   "description": {
-    "spanish": "Ejemplo del SDK: dos conjuntos de reglas que solo se diferencian en data\\const.ini (producción de oro y comida de los asentamientos, y DamageAmplify). Con ConstHotReload=1 el anfitrión cambia entre ellos sin reiniciar el juego. Cambia la jugabilidad: en multijugador todos tienen que llevarlo.",
-    "english": "SDK example: two rulesets that differ only in data\\const.ini (the gold and food production of settlements, and DamageAmplify). With ConstHotReload=1 the host switches between them without restarting the game. Changes gameplay: everyone must have it in multiplayer.",
-    "italian": "Esempio dell'SDK: due set di regole che differiscono solo in data\\const.ini (produzione di oro e cibo degli insediamenti, e DamageAmplify). Con ConstHotReload=1 l'host passa dall'uno all'altro senza riavviare il gioco. Cambia il gioco: in multigiocatore devono averlo tutti."
+    "spanish": "Ejemplo del SDK: dos conjuntos de reglas que solo se diferencian en data\\const.ini (producción de oro y comida de los asentamientos, y DamageAmplify). El anfitrión cambia entre ellos sin reiniciar el juego. Cambia la jugabilidad: en multijugador todos tienen que llevarlo.",
+    "english": "SDK example: two rulesets that differ only in data\\const.ini (the gold and food production of settlements, and DamageAmplify). The host switches between them without restarting the game. Changes gameplay: everyone must have it in multiplayer.",
+    "italian": "Esempio dell'SDK: due set di regole che differiscono solo in data\\const.ini (produzione di oro e cibo degli insediamenti, e DamageAmplify). L'host passa dall'uno all'altro senza riavviare il gioco. Cambia il gioco: in multigiocatore devono averlo tutti."
   },
   "redistributable": true,
   "rulesets": [
