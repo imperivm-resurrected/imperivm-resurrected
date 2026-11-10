@@ -189,7 +189,7 @@ void PublishRootRefusals(const ModProfile &p)
 			if (layer != g_mount.looseLayers.end()) map->byLayer[layer->second] = refusals;
 		}
 		LogI("content", "%s: %u files of its root replace the game's and are ignored (the ruleset in use is %s): the game's own are used; they apply only under a ruleset of this package",
-			m.folder.c_str(), static_cast<unsigned>(ignored.size()), p.ruleset.Empty() ? "the game's own" : (p.ruleset.pack + (p.ruleset.id.empty() ? "" : ":" + p.ruleset.id)).c_str());
+			m.folder.c_str(), static_cast<unsigned>(ignored.size()), p.ruleset.pack.empty() ? "the game's own" : (p.ruleset.pack + (p.ruleset.id.empty() ? "" : ":" + p.ruleset.id)).c_str());
 		for (size_t i = 0; i < ignored.size() && i < 5; i++) LogD("content", "  ignored: %s", ignored[i].c_str());
 	}
 	g_refusals.store(map);

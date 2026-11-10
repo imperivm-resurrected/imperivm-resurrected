@@ -1,0 +1,18 @@
+{
+  "id": "clash-d",
+  "name": {
+    "spanish": "Ejemplo choque D: un paquete de reglas sin civilizaciones",
+    "english": "Clash example D: a rules package without civilizations",
+    "italian": "Esempio scontro D: un pacchetto di regole senza civiltà"
+  },
+  "version": "1.0",
+  "category": "Gameplay & Balance",
+  "kind": "rules",
+  "authors": ["Imperivm Resurrected"],
+  "description": {
+    "spanish": "Ejemplo del SDK. Un paquete de reglas SIN civilizaciones: su raíz es su conjunto de reglas. En la raíz, una copia del archivo de órdenes del cuartel romano del juego (data\\commands\\RBarracks.xml) con el hastato a 88 de oro, que SUSTITUYE al del juego: solo se usa cuando se elige la entrada de este paquete en la fila Reglas; con cualquier otra, o con las del juego, vale lo del juego. El archivo no está en el repositorio: se hace con make-clash-files.js a partir de TU juego. Cambia la jugabilidad: en multijugador todos tienen que llevarlo.",
+    "english": "SDK example. A rules package WITHOUT civilizations: its root is its ruleset. In the root, a copy of the game's command file for the Roman barracks (data\\commands\\RBarracks.xml) with the hastatus at 88 gold, which REPLACES the game's: it is used only when this package's entry of the Ruleset row is chosen; with any other, or the game's own, the game's value applies. The file is not in the repository: make-clash-files.js makes it from YOUR game. Changes gameplay: everyone must have it in multiplayer.",
+    "italian": "Esempio dell'SDK. Un pacchetto di regole SENZA civiltà: la sua radice è il suo set di regole. Nella radice, una copia del file dei comandi della caserma romana del gioco (data\\commands\\RBarracks.xml) con l'astato a 88 d'oro, che SOSTITUISCE quella del gioco: si usa solo quando si sceglie la voce di questo pacchetto nella riga Regole; con qualunque altra, o con quelle del gioco, vale il valore del gioco. Il file non è nel repository: lo crea make-clash-files.js dal TUO gioco. Cambia il gioco: in multigiocatore devono averlo tutti."
+  },
+  "redistributable": true
+}

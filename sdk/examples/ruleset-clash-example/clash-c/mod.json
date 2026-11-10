@@ -1,0 +1,17 @@
+{
+  "id": "clash-c",
+  "name": {
+    "spanish": "Ejemplo choque C: una civilización cuya raíz sustituye un archivo de datos del juego",
+    "english": "Clash example C: a civilization whose root replaces a game data file",
+    "italian": "Esempio scontro C: una civiltà la cui radice sostituisce un file di dati del gioco"
+  },
+  "version": "1.0",
+  "category": "Civilizations",
+  "authors": ["Imperivm Resurrected"],
+  "description": {
+    "spanish": "Ejemplo del SDK. Una variante de Roma Republicana y, en la raíz: (a) una copia del archivo de órdenes del cuartel romano del juego (data\\commands\\RBarracks.xml) con el hastato a 77 de oro, que SUSTITUYE al del juego: solo se usa cuando se elige el conjunto de reglas de este paquete (el paquete mismo); (b) un botón nuevo en el cuartel (patches\\data\\commands\\RBarracks.xml) con imágenes de nombre nuevo, que se montan siempre; (c) botones de menú verdes (gameres\\menu\\button.bmp), que son de la apariencia de los menús y se aplican siempre. El archivo (a) no está en el repositorio: se hace con make-clash-files.js a partir de TU juego. Cambia la jugabilidad: en multijugador todos tienen que llevarlo.",
+    "english": "SDK example. A variant of Republican Rome and, in its root: (a) a copy of the game's command file for the Roman barracks (data\\commands\\RBarracks.xml) with the hastatus at 77 gold, which REPLACES the game's: it is used only when the ruleset of this package (the package itself) is chosen; (b) a new button in the barracks (patches\\data\\commands\\RBarracks.xml) with images of new names, which are always mounted; (c) green menu buttons (gameres\\menu\\button.bmp), which are the look of the menus and apply always. File (a) is not in the repository: make-clash-files.js makes it from YOUR game. Changes gameplay: everyone must have it in multiplayer.",
+    "italian": "Esempio dell'SDK. Una variante di Roma Repubblicana e, nella radice: (a) una copia del file dei comandi della caserma romana del gioco (data\\commands\\RBarracks.xml) con l'astato a 77 d'oro, che SOSTITUISCE quella del gioco: si usa solo quando si sceglie il set di regole di questo pacchetto (il pacchetto stesso); (b) un nuovo pulsante nella caserma (patches\\data\\commands\\RBarracks.xml) con immagini di nome nuovo, che si montano sempre; (c) pulsanti di menu verdi (gameres\\menu\\button.bmp), che sono l'aspetto dei menu e si applicano sempre. Il file (a) non è nel repository: lo crea make-clash-files.js dal TUO gioco. Cambia il gioco: in multigiocatore devono averlo tutti."
+  },
+  "redistributable": true
+}

@@ -200,6 +200,7 @@ if(IMPERIVM_BUILD_TESTS)
 	if(NODE_EXE)
 		add_test(NAME sdk_civprefix COMMAND "${NODE_EXE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_civprefix.js")
 		add_test(NAME sdk_assetclass COMMAND "${NODE_EXE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_assetclass.js")
+		add_test(NAME sdk_clashexample COMMAND "${NODE_EXE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_clashexample.js")
 		set(TSV "${CMAKE_CURRENT_BINARY_DIR}/translations.tsv")
 		add_custom_command(OUTPUT "${TSV}"
 			COMMAND "${NODE_EXE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/export-translations-tsv.js" "${TSV}"
