@@ -412,12 +412,13 @@ void PaintPass(Painter &p, const View &v, const Layout &L, int pw, int ph, bool 
 	}
 	for (int i = 0; i < L.shown; i++) PaintRow(p, v, L, L.first + i, L.rowsTop + i * kRowH);
 	if (L.typing && L.maxScroll > 0) {
-		const int trackY = L.rowsTop, trackH = L.shown * kRowH, x = L.w - 6;
-		const int total = static_cast<int>(L.rows.size());
-		const int thumbH = std::max(10, trackH * L.shown / total);
-		const int thumbY = trackY + (trackH - thumbH) * (L.maxScroll - L.scroll) / L.maxScroll;
-		p.Fill(x, trackY, 2, trackH, pal::track);
-		p.Fill(x - 1, thumbY, 4, thumbH, pal::thumb);
+		// The newest row is at the bottom, so the scroll counts up from the end of the track.
+		ScrollbarLook look;
+		look.width = 4;
+		look.trackWidth = 2;
+		look.minThumb = 10;
+		look.grip = 3;
+		PaintScrollbar(p, kBarHistory, L.w - 7, L.rowsTop, L.shown * kRowH, {L.maxScroll - L.scroll, L.maxScroll, L.shown}, v.bar, v.mouseX, v.mouseY, look);
 	}
 	if (L.typing) PaintBar(p, v, L);
 }
@@ -537,13 +538,14 @@ void PaintChat(uint32_t *buf, int w, int h, const View &v, Painted &out)
 	Painter second{g_white.dc, s, ox, oy, &ignored};
 	second.raw = true;
 	second.fonts[0] = g_f.text;
+	// Under the history's scroll bar, which PaintPass puts in the hits after it.
+	if (L.typing && L.shown) first.AddHit(0, L.rowsTop, L.w, L.shown * kRowH, kActHistory);
 	PaintPass(first, v, L, pw, ph, false);
 	PaintPass(second, v, L, pw, ph, true);
 	GdiFlush();
 	if (L.typing) {
 		out.panel = {ox, oy, ox + pw, oy + ph};
 		Darken(buf, w, h, ox, oy, ox + pw, oy + ph, 196);
-		if (L.shown) first.AddHit(0, L.rowsTop, L.w, L.shown * kRowH, kActHistory);
 		Composite(buf, w, h, ox, oy, {0, 0, pw, ph}, 255);
 		return;
 	}

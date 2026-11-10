@@ -59,9 +59,12 @@ struct View {
 	int left = 0, bottom = 0, maxWidth = 0;
 	int mouseX = -10000, mouseY = -10000;
 	bool dragging = false;
+	ui::ScrollDrag bar;
 };
 
 enum Action { kActNone = 0, kActChip, kActPin, kActField, kActHistory, kActGrip };
+
+constexpr int kBarHistory = 0;
 
 struct Painted {
 	std::vector<ui::Hit> hits;
