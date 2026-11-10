@@ -165,7 +165,6 @@ void ShowHelp()
 		ChatAddLocal(TrFmt("Attack here: %s. Danger: %s.", {attack.empty() ? "-" : attack, danger.empty() ? "-" : danger}));
 	}
 	ChatAddLocal(Tr("Marks go to whoever the chip shows."));
-	if (CheatsPanelAvailable()) ChatAddLocal(Tr("Cheats: /gold, /food, /map and the others of the cheats panel."));
 	ChatAddLocal(Tr("Start with // to send a line that begins with /."));
 }
 
@@ -258,10 +257,8 @@ void Send(bool withLocation)
 		text = sl.rest;
 		break;
 	case kSlashOther:
-		if (!CheatsCommandKnown(sl.verb)) {
-			ChatAddLocal(TrFmt("Unknown command /%s. Type /help.", {sl.verb}));
-			keep = true;
-		}
+		ChatAddLocal(TrFmt("Unknown command /%s. Type /help.", {sl.verb}));
+		keep = true;
 		break;
 	default:
 		break;

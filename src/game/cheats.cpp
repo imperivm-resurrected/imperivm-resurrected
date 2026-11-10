@@ -10,8 +10,6 @@
 #include <deque>
 #include <set>
 
-#include "MinHook.h"
-#include "hooks/hookcount.h"
 #include <atomic>
 #include <string>
 #include <vector>
@@ -20,7 +18,6 @@
 #include "game/controls.h"
 #include "game/gameroom.h"
 #include "mods/modoptions.h"
-#include "core/legacy.h"
 #include "core/log.h"
 #include "game/cheats.h"
 #include "game/civs.h"
@@ -40,9 +37,6 @@ namespace {
 const char kPrefix[] = "#CHEAT:";
 const size_t kPrefixLen = sizeof(kPrefix) - 1;
 
-typedef void(__fastcall *ChatSend_t)(void *dlg);
-typedef void *(__fastcall *GetChild_t)(void *dlg, void *edx, int id, const char *cls);
-typedef int(__fastcall *GetText_t)(void *ctrl, void *edx, char *buf, int size);
 typedef bool(__cdecl *Bool_t)();
 typedef int(__cdecl *IsDemo_t)();
 typedef void *(__cdecl *Create_t)();
@@ -51,7 +45,6 @@ typedef void(__fastcall *ThisPtr_t)(void *self, void *edx, void *arg);
 typedef void(__fastcall *RunScript_t)(void *game, void *edx, const char *text);
 typedef void *(__fastcall *FindClass_t)(void *registry, void *edx, const char *name);
 
-ChatSend_t g_origChatSend = nullptr;
 
 void **Vt(void *obj) { return *reinterpret_cast<void ***>(obj); }
 void *Game() { return *reinterpret_cast<void **>(addr::kGame); }
@@ -445,31 +438,6 @@ bool QueueCheat(const std::string &text)
 	return true;
 }
 
-bool HandleChat(const char *line)
-{
-	std::string text = line;
-	while (!text.empty() && text.back() == ' ') text.pop_back();
-	const size_t sp = text.find(' ');
-	std::string verb = text.substr(0, sp), arg = sp == std::string::npos ? std::string() : text.substr(sp + 1);
-	std::transform(verb.begin(), verb.end(), verb.begin(), [](unsigned char c) { return static_cast<char>(tolower(c)); });
-	verb = LegacyCheatVerb(verb);
-	if (!KnownVerb(verb)) return false;
-	if (!Allowed()) {
-		UiToast("Cheats are not allowed in this game. The host can enable them in the room options.");
-		return true;
-	}
-	const std::string wire = verb == "map" ? std::string() : std::to_string(Amount(arg, 1000));
-	if (!QueueCheat(WithReference(std::string(kPrefix) + verb + ":" + wire))) UiToast("The cheat could not be sent.", true);
-	return true;
-}
-
-void __fastcall HookChatSend(void *dlg)
-{
-	char buf[512] = {};
-	void *ctrl = reinterpret_cast<GetChild_t>(Vt(dlg)[0x7c / 4])(dlg, nullptr, 0x1004, *reinterpret_cast<const char **>(addr::kClassNameCUITextW));
-	if (ctrl && reinterpret_cast<GetText_t>(addr::kGetTextUtf8)(ctrl, nullptr, buf, sizeof(buf)) == 0 && buf[0] == '/' && HandleChat(buf + 1)) return;
-	g_origChatSend(dlg);
-}
 
 std::atomic<bool> g_panelOpen{false};
 std::atomic<bool> g_panelKeyOpened{false};
@@ -705,24 +673,4 @@ bool CheatsHandleCommand(void *cmd, const char *text, unsigned size)
 	LogI("cheats", "player %d uses \"%s\": %s", slot + 1, label.c_str(), code.c_str());
 	reinterpret_cast<RunScript_t>(Vt(game)[0xa8 / 4])(game, nullptr, code.c_str());
 	return true;
-}
-
-bool CheatsCommandKnown(const std::string &verb)
-{
-	std::string v = verb;
-	std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) { return static_cast<char>(tolower(c)); });
-	return KnownVerb(LegacyCheatVerb(v));
-}
-
-bool CheatsChatLine(const std::string &text)
-{
-	return text.size() > 1 && text[0] == '/' && HandleChat(text.c_str() + 1);
-}
-
-void InstallCheats(bool knownExe)
-{
-	if (!knownExe) return;
-	const bool ok = HookCreate(reinterpret_cast<void *>(addr::kChatSend), reinterpret_cast<void *>(&HookChatSend), reinterpret_cast<void **>(&g_origChatSend)) == MH_OK &&
-		HookEnable(reinterpret_cast<void *>(addr::kChatSend)) == MH_OK;
-	LogAt(ok ? kLogInfo : kLogError, "cheats", "chat commands: %s", ok ? "ready (/gold, /food and /map in the chat)" : "NOT available");
 }

@@ -335,7 +335,7 @@ void PaintOptionsCard(Painter &p, const State &st, int x, int y, int w, int h)
 		if (!load) ruleRow(kRuleBlindPick, "Hide civilizations", false, "In the room nobody sees the others' civilization, only their own.");
 		ruleRow(kRuleFreeAttach, "Free unit attachment", true, "Troops of another civilization can be placed under a hero's command (as in Alternative mode).");
 		ruleRow(kRuleLockDiplomacy, "Lock diplomacy", true, "Alliances can't be changed during the game.");
-		ruleRow(kRuleCheats, "Allow cheats", true, "Players can type /gold, /food or /map in the game chat.");
+		ruleRow(kRuleCheats, "Allow cheats", true, "Players can open the cheats panel during the game.");
 		{
 			const std::vector<ModOption> &mods = ModOptions();
 			for (size_t oi = 0; oi < mods.size(); oi++) {

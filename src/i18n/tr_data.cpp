@@ -1296,7 +1296,6 @@ extern const TrRow kTrRows[] = {
 	{"Checking...", "Comprobando...", "Verifica..."},
 	{"Items", "Objetos", "Oggetti"},
 	{"Strongholds", "Fortalezas", "Fortezze"},
-	{"Players can type /gold, /food or /map in the game chat.", "Los jugadores pueden escribir /gold, /food o /map en el chat de la partida.", "I giocatori possono scrivere /gold, /food o /map nella chat della partita."},
 	{"%s wants to swap slots with you (you would move to slot %d).", "%s quiere cambiarse de hueco contigo (tú pasarías al hueco %d).", "%s vuole scambiare posto con te (tu passeresti al posto %d)."},
 	{"%s wants to swap slots with you.", "%s quiere cambiarse de hueco contigo.", "%s vuole scambiare posto con te."},
 	{"Waiting for %s (scenario %d %%)...", "Esperando a %s (escenario %d %%)...", "In attesa di %s (scenario %d %%)..."},
@@ -1739,7 +1738,6 @@ extern const TrRow kTrRows[] = {
 	{"Marks: %s marks on my way under the cursor.", "Marcas: %s marca voy para allá bajo el cursor.", "Segnali: %s segnala sto arrivando sotto il cursore."},
 	{"Attack here: %s. Danger: %s.", "Atacad aquí: %s. Peligro: %s.", "Attaccate qui: %s. Pericolo: %s."},
 	{"Marks go to whoever the chip shows.", "Las marcas van a quien muestre la etiqueta.", "I segnali vanno a chi mostra l'etichetta."},
-	{"Cheats: /gold, /food, /map and the others of the cheats panel.", "Trucos: /gold, /food, /map y los demás del panel de trucos.", "Trucchi: /gold, /food, /map e gli altri del pannello dei trucchi."},
 	{"Start with // to send a line that begins with /.", "Empieza con // para enviar una línea que empiece por /.", "Inizia con // per inviare una riga che comincia con /."},
 	{"Write a name after /w.", "Escribe un nombre después de /w.", "Scrivi un nome dopo /w."},
 	{"No player is called %s.", "Ningún jugador se llama %s.", "Nessun giocatore si chiama %s."},
@@ -1747,5 +1745,6 @@ extern const TrRow kTrRows[] = {
 	{"Write the message after the command.", "Escribe el mensaje después de la orden.", "Scrivi il messaggio dopo il comando."},
 	{"Write the message after the name.", "Escribe el mensaje después del nombre.", "Scrivi il messaggio dopo il nome."},
 	{"Unknown command /%s. Type /help.", "Orden desconocida /%s. Escribe /ayuda.", "Comando sconosciuto /%s. Scrivi /aiuto."},
+	{"Players can open the cheats panel during the game.", "Los jugadores pueden abrir el panel de trucos durante la partida.", "I giocatori possono aprire il pannello dei trucchi durante la partita."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

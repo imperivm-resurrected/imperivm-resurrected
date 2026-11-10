@@ -380,17 +380,6 @@ std::string LegacyDirective(const std::string &word)
 	return word;
 }
 
-std::string LegacyCheatVerb(const std::string &verb)
-{
-	static const std::unordered_map<std::string, const char *> kVerbs = {
-		{"oro", "gold"}, {"comida", "food"}, {"mapa", "map"}, {"poblacion", "maxpop"}, {"habitantes", "population"}, {"curar", "heal"},
-		{"paz", "peace"}, {"nivel", "level"}, {"reparar", "repair"}, {"racion", "ration"}, {"enemigos", "kill"}, {"capturar", "capture"},
-		{"crear", "spawn"},
-	};
-	const auto it = kVerbs.find(verb);
-	return it == kVerbs.end() ? verb : it->second;
-}
-
 unsigned short LegacyKeyVk(const std::string &name)
 {
 	struct Entry {

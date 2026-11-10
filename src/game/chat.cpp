@@ -20,7 +20,6 @@
 #include "core/log.h"
 #include "i18n/tr.h"
 #include "game/chat.h"
-#include "game/cheats.h"
 #include "game/controls.h"
 #include "game/zoomview.h"
 #include "hooks/hookcount.h"
@@ -569,7 +568,6 @@ bool ChatSend(const std::string &text, ChatTarget target, bool withLocation)
 {
 	const std::string clean = ChatCleanText(text);
 	if (clean.empty() && !withLocation) return false;
-	if (!ChatCommandOf(clean).empty() && CheatsChatLine(clean)) return true;
 	RawMatch raw;
 	if (!ReadRaw(raw) || !raw.game || raw.local < 0) return false;
 	if (!raw.severalHumans && !clean.empty()) RunAsScript(clean);

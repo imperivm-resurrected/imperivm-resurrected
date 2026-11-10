@@ -141,7 +141,7 @@ static void TestText()
 	CHECK_EQ(cut, std::string(kChatMaxText - 1, 'x'));
 	CHECK_EQ(ChatCleanText(std::string(400, 'y')).size(), kChatMaxText);
 
-	CHECK_EQ(ChatCommandOf("/gold 500"), std::string("gold 500"));
+	CHECK_EQ(ChatCommandOf("/w Marcus hi"), std::string("w Marcus hi"));
 	CHECK_EQ(ChatCommandOf("/map"), std::string("map"));
 	CHECK_EQ(ChatCommandOf("gold"), std::string(""));
 	CHECK_EQ(ChatCommandOf("/"), std::string(""));
@@ -269,10 +269,10 @@ static void TestSlash()
 	s = ChatParseSlash("/w ");
 	CHECK_EQ(s.name, std::string(""));
 
-	// The cheat commands stay theirs.
-	for (const char *c : {"/gold 500", "/food", "/map", "/oro 100"}) CHECK_EQ(ChatParseSlash(c).kind, static_cast<int>(kSlashOther));
-	CHECK_EQ(ChatParseSlash("/Gold 500").verb, std::string("gold"));
-	CHECK_EQ(ChatParseSlash("/gold 500").rest, std::string("500"));
+	// Any other word is not a chat command: the bar answers that it is unknown.
+	for (const char *c : {"/xyz 500", "/gold", "/alli"}) CHECK_EQ(ChatParseSlash(c).kind, static_cast<int>(kSlashOther));
+	CHECK_EQ(ChatParseSlash("/XYZ 500").verb, std::string("xyz"));
+	CHECK_EQ(ChatParseSlash("/xyz 500").rest, std::string("500"));
 
 	const std::vector<std::string> names = {"Marcus", "Marcellus", "Lucius Cornelius", "lucius"};
 	CHECK_EQ(ChatMatchName("marcu", names), 0);

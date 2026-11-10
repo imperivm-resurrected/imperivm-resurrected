@@ -11,7 +11,6 @@ bool LegacyLooksLikeControls(const std::string &text);
 
 const char *LegacyJsonKey(const std::string &key);
 std::string LegacyDirective(const std::string &word);
-std::string LegacyCheatVerb(const std::string &verb);
 unsigned short LegacyKeyVk(const std::string &name);
 bool LegacyIsShiftName(const char *name);
 int LegacyModKind(const std::string &lowerId);
