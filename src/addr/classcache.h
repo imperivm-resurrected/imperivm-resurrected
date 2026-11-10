@@ -32,6 +32,9 @@ inline constexpr uintptr_t kDecorsLoadedSeason = 0x009b7e78;
 inline constexpr uintptr_t kDecorsLoaded = 0x009b7e7c;
 inline constexpr uintptr_t kHeroSkillTable = 0x009bf7d8;
 inline constexpr uintptr_t kUnitSpecialTable = 0x009bf7dc;
+// How many entities ClearEntityCache's two maps hold (std::map sizes: by file name, by pointer), for the memory lines of the log.
+inline constexpr uintptr_t kEntityPointerCount = 0x009c0d00;
+inline constexpr uintptr_t kEntityNameCount = 0x009c0d0c;
 inline constexpr uintptr_t kPersistClassRegistry = 0x00a76e84;
 
 }

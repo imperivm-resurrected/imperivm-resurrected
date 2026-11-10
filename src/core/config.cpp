@@ -112,6 +112,7 @@ void LoadConfig()
 	GetPrivateProfileStringA("Debug", "LogLevel", "info", buf, sizeof(buf), path);
 	if (!ParseLogLevel(buf, g_config.logLevel)) g_config.logLevel = kLogInfo;
 	g_config.logFiles = GetPrivateProfileIntA("Debug", "LogFiles", 0, path) != 0;
+	g_config.memoryTrace = GetPrivateProfileIntA("Debug", "MemoryTrace", 0, path) != 0;
 	g_config.rejoinTrace = GetPrivateProfileIntA("Debug", "RejoinTrace", IsBetaVersion(ModVersionText()) ? 1 : 0, path) != 0;
 	GetPrivateProfileStringA("Online", "RejoinMode", "reload", buf, sizeof(buf), path);
 	g_config.rejoinReload = _stricmp(buf, "hot") != 0;

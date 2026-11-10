@@ -30,6 +30,11 @@ inline constexpr uintptr_t kCTransFSCtor = 0x00660ab0;
 inline constexpr uintptr_t kStrDupPool = 0x00665030;
 inline constexpr uintptr_t kFreePoolString = 0x00665070;
 inline constexpr uintptr_t kCWinFileServiceCtor = 0x00674ea0;
+// CXmlParser::ParseStream reads the file in blocks into a buffer it allocates (4 bytes per block count) and frees it only when the last block comes
+// with its data; when the file ends with a read of 0 bytes (the usual case) the "no more bytes" jump skips the free and leaks the buffer: 8 KB for each
+// class file, 64 KB for each entity. The jump is a "je" and the code that frees the buffer and returns 0 is right before the exit it goes to.
+inline constexpr uintptr_t kXmlParseNoBytesJump = 0x0067a228;
+inline constexpr uintptr_t kXmlParseFreeBuffer = 0x0067a269;
 inline constexpr uintptr_t kParseFile = 0x0067a880;
 inline constexpr uintptr_t kOpenMappedFileSource = 0x0067b390;
 inline constexpr uintptr_t kLanguagePersist = 0x0067b920;
@@ -50,6 +55,9 @@ inline constexpr uintptr_t kMountPakFilesInDir = 0x0074c400;
 inline constexpr uintptr_t kLoadConfigIni = 0x0074cd20;
 inline constexpr uintptr_t kOperatorNew = 0x00762870;
 inline constexpr uintptr_t kGameFree = 0x007629b9;
+inline constexpr uintptr_t kMalloc = 0x00764a17;
+inline constexpr uintptr_t kRealloc = 0x00764e85;
+inline constexpr uintptr_t kCalloc = 0x00766cf8;
 inline constexpr uintptr_t kGameTextEnd = 0x007aa98b;
 inline constexpr uintptr_t kGameRdataBegin = 0x007ab000;
 inline constexpr uintptr_t kGameRdataEnd = 0x00819bb0;
@@ -57,5 +65,11 @@ inline constexpr uintptr_t kPersistVersionSrc = 0x008212f4;
 inline constexpr uintptr_t kVfsOpenFilePtr = 0x00829b30;
 inline constexpr uintptr_t kPfnVfsFileExists = 0x00829b50;
 inline constexpr uintptr_t kGameCodeEnd = 0x00900000;
+// The game's C runtime (Visual Studio 2003) keeps blocks of up to 1016 bytes in its own small-block heap, outside the Windows heaps: an array of
+// regions of 20 bytes each (the base of its 1 MB of address space is the word at +12) and how many there are (___sbh_alloc_new_region).
+inline constexpr uintptr_t kSbhRegionCount = 0x00a89648;
+inline constexpr uintptr_t kSbhRegionList = 0x00a8964c;
+// Past the last global of the executable (its image ends a little before).
+inline constexpr uintptr_t kGameImageEnd = 0x00ab0000;
 
 }

@@ -21,6 +21,8 @@
 #include "core/log.h"
 #include "game/cmdcheck.h"
 #include "game/hotreload.h"
+#include "game/memcensus.h"
+#include "game/memtrace.h"
 #include "game/scriptevents.h"
 #include "mods/hotswap.h"
 #include "mods/mods.h"
@@ -46,6 +48,11 @@ typedef void *(__fastcall *FindClass_t)(void *registry, void *edx, const char *n
 
 LoadGameData_t g_origLoadGameData = nullptr;
 LoadGameData_t g_origUnloadGameData = nullptr;
+typedef int(__cdecl *ClearEntityCache_t)();
+ClearEntityCache_t g_origClearEntityCache = nullptr;
+// While ShutdownGameDataSystems runs, ClearEntityCache does nothing (see KeepEntityCache).
+volatile bool g_keepEntityCache = false;
+bool g_entityHookOk = false;
 
 const unsigned kDecorTypes = 256;
 const unsigned kFeedbackTypes = 56; // 28 ids with two variants, ending where the guard word starts
@@ -234,6 +241,13 @@ void LogProcessState(const char *when)
 			haveStatus ? static_cast<unsigned>((status.ullTotalVirtual - status.ullAvailVirtual) >> 20) : 0u, static_cast<unsigned long>(heapCount), corrupt,
 			static_cast<unsigned long>(GetTickCount() - start));
 		g_lastCommit = commit;
+		// What the engine keeps loaded between matches and refills when a match needs it: a match after a reload starts with these at 0.
+		unsigned decors = 0;
+		for (unsigned i = 0; i < kDecorTypes; i++) {
+			if (reinterpret_cast<void *const *>(addr::kDecorEntities)[i]) decors++;
+		}
+		LogI("game", "memory (%s): entity cache holds %u entities by name and %u by pointer, %u decor types set", when, *Word(addr::kEntityNameCount),
+			*Word(addr::kEntityPointerCount), decors);
 	}
 	__except (EXCEPTION_EXECUTE_HANDLER) {
 		LogE("game", "memory (%s): the process state could not be read (the heap may be damaged)", when);
@@ -277,7 +291,7 @@ void ResetClassCaches()
 		flags, flagCount);
 }
 
-// Shutdown freed the entities (ClearEntityCache) but the game keeps pointers to some of them: the array of decor entities that the passability
+// Only when the entity cache could not be kept (see KeepEntityCache): Shutdown freed the entities (ClearEntityCache) but the game keeps pointers to some of them: the array of decor entities that the passability
 // grid and the map view read (g_decorEntities, filled by LoadDecorsIni), and the marks that say "the decorations were read for this season".
 // The first match of a process reads decors.ini in CreateWorldCore only when the season is not the one in DAT_00996ffc; the values of a
 // new process are 0 everywhere, so that is what they are set to.
@@ -297,6 +311,36 @@ void ResetEntityCaches()
 		decorCount, kDecorTypes, loaded, loadedSeason, season);
 }
 
+// The entity cache (LoadEntity: one CVXEntity per .ent.xml, with its images and animations) holds art, not rules: no file a ruleset can switch
+// in place (patches and loose files of data/, modes, hidden.txt) is one of its files, and nothing in it points into the classes. It is the one
+// part of the game's data that a match after a reload used to load again from nothing: ShutdownGameDataSystems empties it through
+// ClearEntityCache, and a measured game loses about 25 MB for every time it is emptied (a block of 64 KB or more for each of the ~330
+// entities stays in the heap after ClearEntityCache has freed the entity: 12 switches took the process from 357 to 723 MB). So it is kept:
+// ClearEntityCache does nothing while Shutdown runs, and what its match-to-match users read (the decor entities, the "decors.ini was read"
+// marks, the season of the cache) stays as it is, exactly as in a match without a switch.
+// The one thing a match writes next to the cache is the season stored in the class registry (+0x14, set by CreateWorldCore in the same branch
+// that flushes the cache for a new season, so it always equals DAT_00996ffc): the registry is new and has 0 there, and the cache is no
+// longer flushed, so the branch that would set it does not run. A match for another season still takes that branch and flushes the cache.
+const unsigned kRegistrySeasonOffset = 0x14;
+
+int __cdecl HookClearEntityCache()
+{
+	if (g_keepEntityCache) return 0;
+	return g_origClearEntityCache();
+}
+
+void KeepEntityCache()
+{
+	unsigned decorCount = 0;
+	for (unsigned i = 0; i < kDecorTypes; i++) {
+		if (reinterpret_cast<void *const *>(addr::kDecorEntities)[i]) decorCount++;
+	}
+	const unsigned season = *Word(addr::kEntityCacheSeason);
+	if (void *registry = Pointer(addr::kRegistry)) *reinterpret_cast<unsigned *>(static_cast<char *>(registry) + kRegistrySeasonOffset) = season;
+	LogI("game", "hot reload: entity cache kept: %u entities by name, %u decor types set, season %u (written to the new class registry)", *Word(addr::kEntityNameCount),
+		decorCount, season);
+}
+
 // Makes the game free its data tables and make them again. Only plain data in here, so the __try can protect it.
 bool RebuildGameData(DWORD *shutdownMs, DWORD *initMs)
 {
@@ -304,16 +348,21 @@ bool RebuildGameData(DWORD *shutdownMs, DWORD *initMs)
 	g_crashLogQuiet++;
 	__try {
 		const DWORD start = GetTickCount();
+		g_keepEntityCache = g_entityHookOk;
 		reinterpret_cast<GameDataSystems_t>(addr::kShutdownGameDataSystems)();
+		g_keepEntityCache = false;
 		const DWORD freed = GetTickCount();
+		MemoryCensus(CensusPoint::kAfterShutdown, "after Shutdown", CensusPoint::kBeforeReload);
 		ResetClassCaches();
-		ResetEntityCaches();
+		if (!g_entityHookOk) ResetEntityCaches();
 		reinterpret_cast<GameDataSystems_t>(addr::kInitGameDataSystems)();
+		if (g_entityHookOk) KeepEntityCache();
 		*shutdownMs = freed - start;
 		*initMs = GetTickCount() - freed;
 		ok = true;
 	}
 	__except (EXCEPTION_EXECUTE_HANDLER) {
+		g_keepEntityCache = false;
 		LogE("game", "hot reload: the game faulted while freeing or making its data tables");
 		ok = false;
 	}
@@ -448,6 +497,7 @@ bool HotReload(const void *game)
 	}
 	LogI("game", "hot reload: starting");
 	LogProcessState("before");
+	MemoryCensus(CensusPoint::kBeforeReload, "before the reload", CensusPoint::kAfterUnload);
 	// The patched copies of every file are made again from the patches mounted now.
 	VfsResetPatchedAll();
 	if (!FileIsUsable()) return false;
@@ -458,6 +508,7 @@ bool HotReload(const void *game)
 	if (!RebuildGameData(&shutdownMs, &initMs)) return false;
 	if (!TablesExist()) return false;
 	LogProcessState("after Init");
+	MemoryCensus(CensusPoint::kAfterInit, "after Init", CensusPoint::kAfterShutdown);
 	// The event scripts were compiled in the library that is gone.
 	ScriptEventsReset();
 	LogI("game", "hot reload: patches %lu ms, const.ini %lu ms, shutdown %lu ms, init %lu ms", static_cast<unsigned long>(patched - start),
@@ -475,6 +526,7 @@ void CheckAfterLoad(const void *loadResult)
 	LogI("game", "hot reload (after LoadGameData): class RHastatus %s, class RBarracks %s", hastatus ? "found" : "NOT FOUND", barracks ? "found" : "NOT FOUND");
 	CheckCachedClassNames();
 	LogProcessState("after LoadGameData");
+	MemoryCensus(CensusPoint::kAfterLoad, "after LoadGameData", CensusPoint::kAfterInit, CensusPoint::kAfterUnload);
 	if (!hastatus || !barracks) RestartNow("the class registry lacks the Roman classes");
 	else if (!CommandSanity("after LoadGameData")) RestartNow("the command table lacks the Roman commands");
 }
@@ -482,6 +534,7 @@ void CheckAfterLoad(const void *loadResult)
 void *__fastcall HookLoadGameData(void *self, void *edx)
 {
 	bool reloaded = false;
+	MemTraceNewGame();
 	// A switch chosen from inside a game that was running is mounted now: the old game is gone and the new one is still empty.
 	if (ModsApplyPendingSwitch() == ModsPending::kFailed) RestartNow("the ruleset chosen could not be mounted");
 	const ModsReload plan = ModsReloadPlan();
@@ -493,10 +546,11 @@ void *__fastcall HookLoadGameData(void *self, void *edx)
 				: plan == ModsReload::kRestart ? "the rules mounted cannot be loaded in place, the game restarts" : "the rules the game holds are the mounted ones");
 	}
 	// A game that does not reload says its memory too, so that a match after a reload can be compared with one without it.
-	if (plan != ModsReload::kReload) LogProcessState("start of a game, nothing reloaded");
+	if (plan != ModsReload::kReload && GetConfig().memoryTrace) LogProcessState("start of a game, nothing reloaded");
 	switch (plan) {
 	case ModsReload::kReload:
 		// RestartNow does not return: whatever fails before the match is created ends in the restart.
+		MemTraceGameReloaded();
 		if (!HotReload(self)) RestartNow("it could not be done");
 		ModsHotReloadDone();
 		reloaded = true;
@@ -509,7 +563,10 @@ void *__fastcall HookLoadGameData(void *self, void *edx)
 	}
 	void *result = g_origLoadGameData(self, edx);
 	if (reloaded) CheckAfterLoad(result);
-	else LogProcessState("after LoadGameData, nothing reloaded");
+	else if (GetConfig().memoryTrace) {
+		LogProcessState("after LoadGameData, nothing reloaded");
+		MemoryCensus(CensusPoint::kAfterLoad, "after LoadGameData, nothing reloaded", CensusPoint::kAfterUnload);
+	}
 	return result;
 }
 
@@ -517,9 +574,12 @@ void *__fastcall HookLoadGameData(void *self, void *edx)
 // the next game this tells what a match keeps (the same without a reload) from what a reload leaves behind (the lines around Shutdown/Init).
 void *__fastcall HookUnloadGameData(void *self, void *edx)
 {
-	LogProcessState("before UnloadGameData");
+	if (GetConfig().memoryTrace) LogProcessState("before UnloadGameData");
+	MemoryCensus(CensusPoint::kBeforeUnload, "before UnloadGameData", CensusPoint::kAfterLoad);
 	void *result = g_origUnloadGameData(self, edx);
 	LogProcessState("after UnloadGameData");
+	// Against the end of the previous game too: that is the number the test of the switches reads.
+	MemoryCensus(CensusPoint::kAfterUnload, "after UnloadGameData", CensusPoint::kBeforeUnload, CensusPoint::kAfterUnload);
 	return result;
 }
 }
@@ -535,11 +595,19 @@ void InstallHotReload(bool knownExe)
 		LogE("game", "hot reload: could not hook LoadGameData; every ruleset change will need a restart");
 		return;
 	}
+	if (GetConfig().memoryTrace) {
+		LogI("game", "memory trace: on ([Debug] MemoryTrace=1): every step of a game walks the heaps, and the large blocks are followed");
+		InstallMemTrace(knownExe);
+	}
 	// Only to measure memory: if it cannot be hooked nothing else changes.
 	if (HookCreate(reinterpret_cast<void *>(addr::kUnloadGameData), reinterpret_cast<void *>(&HookUnloadGameData), reinterpret_cast<void **>(&g_origUnloadGameData)) != MH_OK ||
 		HookEnable(reinterpret_cast<void *>(addr::kUnloadGameData)) != MH_OK) {
 		LogW("game", "hot reload: could not hook UnloadGameData; the memory at the end of a game is not logged");
 	}
+	// Without this hook the entity cache is emptied by Shutdown as before (and leaks what it leaks): the reload still works.
+	g_entityHookOk = HookCreate(reinterpret_cast<void *>(addr::kClearEntityCache), reinterpret_cast<void *>(&HookClearEntityCache),
+		reinterpret_cast<void **>(&g_origClearEntityCache)) == MH_OK && HookEnable(reinterpret_cast<void *>(addr::kClearEntityCache)) == MH_OK;
+	if (!g_entityHookOk) LogW("game", "hot reload: could not hook ClearEntityCache; the entity cache is emptied on every switch and part of it is not given back");
 	ModsHotReloadSetReady(true);
 	// A load that ends (done or not) has used or lost the switch that was waiting for it.
 	OnGameLoaded([](int) { ModsDropPendingSwitch("the load ended"); });

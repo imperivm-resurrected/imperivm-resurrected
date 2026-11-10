@@ -112,6 +112,8 @@ inline constexpr uintptr_t kSetPlacementFlag = 0x005e7070;
 inline constexpr uintptr_t kApplySelection = 0x005e7910;
 inline constexpr uintptr_t kClearSelection = 0x005e7e50;
 inline constexpr uintptr_t kInitForPlayer = 0x005e80c0;
+// ClearEntityCache: deletes every entity (and what it holds) of the cache that LoadEntity fills, and empties its two maps.
+inline constexpr uintptr_t kClearEntityCache = 0x00602250;
 inline constexpr uintptr_t kScrollRowsCountJump = 0x00607e71;
 inline constexpr uintptr_t kLoadRleFile = 0x0060ca20;
 inline constexpr uintptr_t kCreateEntityImage = 0x0060cb20;

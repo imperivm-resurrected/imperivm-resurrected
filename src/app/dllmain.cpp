@@ -54,6 +54,7 @@
 #include "hooks/handleguard.h"
 #include "game/packrules.h"
 #include "hooks/builtinfixes.h"
+#include "hooks/xmlbuffer.h"
 #include "net/nettune.h"
 #include "net/rejoin.h"
 #include "net/spectator.h"
@@ -206,6 +207,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 		BuiltinFixesInstall(knownExe);
 		InstallVfsHooks(knownExe);
 		InstallModsHooks(knownExe);
+		InstallXmlBufferFix(knownExe);
 		InstallHotReload(knownExe);
 		InstallNetModsHooks(knownExe);
 		DlStartUpdateCheck();

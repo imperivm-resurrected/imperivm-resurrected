@@ -60,6 +60,8 @@ struct Config {
 	LogLevel logLevel = kLogInfo;
 	bool logFiles = false;
 	bool rejoinTrace = false;
+	// [Debug] MemoryTrace=1: walk the heaps at every step of a game and follow the large blocks (see game/memcensus.h). Slows the loads; for finding leaks.
+	bool memoryTrace = false;
 	bool rejoinReload = true;
 	std::string dumpFiles;
 	std::string dumpAtStartup;

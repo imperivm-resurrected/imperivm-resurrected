@@ -246,6 +246,7 @@ It's in the game folder. It's read at startup.
 | Section | Key | Value | Default | What it does |
 |---|---|---|---|---|
 | `[Debug]` | `LogFiles` | `0` or `1` | `0` | The log records every file the game opens and marks the ones that don't exist (`VFS: opens … -> does not exist`) |
+| `[Debug]` | `MemoryTrace` | `0` or `1` | `0` | For finding memory leaks, not for playing: at every step of every game the log gets how much each heap holds, which sizes of block grew, which game and which code made the large blocks (64 KB and more) that are still alive, and, for a game that switched ruleset, which large blocks appeared that nothing in the game's allocator made, who points to them and what they start with. It hooks the allocation functions of the process and makes every load slower (a second or two per game). Off, the log has only one memory line per game |
 | `[Debug]` | `Dump` | comma-separated paths, or `*` | empty | Copies each file to `mod-dump\<path>` exactly as the game reads it (patches and mod texts already applied), the first time it opens it. Exact name, no wildcards except `*` (all) |
 | `[Debug]` | `DumpAtStartup` | comma-separated paths | empty | Copies those files to `mod-dump\` at startup, without waiting for the game to open them |
 | `[Mods]` | `Override` | `0` or `1` | `1` | Enables `<game>\mod\<path>` as a file replacement |
