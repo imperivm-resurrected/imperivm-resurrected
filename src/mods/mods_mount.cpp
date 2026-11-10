@@ -38,11 +38,12 @@ void *__fastcall RoOpen(void *self, void *edx, const char *path, unsigned mode, 
 		return nullptr;
 	}
 	typedef void *(__fastcall * Open_t)(void *, void *, const char *, unsigned, void *);
-	// A global file of this layer's pack is not mounted under the ruleset in use: the layer does not have it, and the engine asks the next one.
+	// A global file of this layer's pack is not mounted under the ruleset in use: the layer does not have it, and the engine asks the next one. The
+	// layer is asked for a name it never has, in its own folder, so it fails the way it does for any file it lacks.
 	if (const RootRefusalMap *refusals = g_refusals.load(); refusals && path && !refusals->byLayer.empty()) {
 		const auto layer = refusals->byLayer.find(self);
 		if (layer != refusals->byLayer.end() && RootRefuses(layer->second, path)) {
-			return reinterpret_cast<Open_t>(g_readOnly.origTransOpen)(self, edx, "?refused", mode, err);
+			return reinterpret_cast<Open_t>(g_readOnly.origTransOpen)(self, edx, "refused.by.rootrules", mode, err);
 		}
 	}
 	return reinterpret_cast<Open_t>(g_readOnly.origTransOpen)(self, edx, path, mode, err);
