@@ -7,6 +7,7 @@
 #include "MinHook.h"
 #include "hooks/hookcount.h"
 #include "game/controls.h"
+#include "game/diplomacy.h"
 #include "core/legacy.h"
 #include "i18n/tr.h"
 #include "core/log.h"
@@ -687,6 +688,7 @@ void __fastcall HookMapViewOnKey(void *self, void *edx, int msg, unsigned key, u
 		g_blockNotif = false;
 		break;
 	}
+	if (msg == 0x201 && ((d.act == kPass && vk == VK_F5) || (d.act == kTranslate && d.target == VK_F5))) DiplomacyKeyDown();
 }
 
 typedef int(__cdecl *ScrollHook_t)(char *msg, void *out);
