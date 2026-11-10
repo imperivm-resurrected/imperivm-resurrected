@@ -32,6 +32,7 @@
 namespace {
 
 bool g_closing = false;
+bool g_uiCapture = false;
 
 LRESULT GameWindowHandler(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
@@ -54,6 +55,15 @@ LRESULT GameWindowHandler(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 		uiHandled = UpdateUiHandleMessage(msg, wp, lp) || ControlsUiHandleMessage(msg, wp, lp) || SupportHandleMessage(msg, wp, lp) ||
 			GameMenuUiHandleMessage(msg, wp, lp) || OptionsUiHandleMessage(msg, wp, lp) || ConquestUiHandleMessage(msg, wp, lp) || ProfileUiHandleMessage(msg, wp, lp) || BattlesUiHandleMessage(msg, wp, lp) || ModUiHandleCornerMessage(msg, wp, lp) || SavesUiHandleMessage(msg, wp, lp) || ModUiHandleMessage(msg, wp, lp) || MpUiHandleMessage(msg, wp, lp);
 	});
+	// A press taken by a screen keeps the mouse until it is let go, so a scroll bar's thumb follows it out of the window too.
+	if (msg == WM_LBUTTONUP && g_uiCapture) {
+		g_uiCapture = false;
+		if (GetCapture() == hwnd) ReleaseCapture();
+	}
+	else if (uiHandled && (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK) && !GetCapture()) {
+		SetCapture(hwnd);
+		g_uiCapture = true;
+	}
 	if (uiHandled) return 0;
 	if (msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST) {
 		bool zoomHandled = false;

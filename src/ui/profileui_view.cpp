@@ -219,10 +219,10 @@ void PaintList(Painter &p, const View &v)
 		PaintListRow(p, v.cards[i], v.rankCount, i, i == v.selected, kListX, kListTop + r * (kRowH + kRowGap), rowW, v.mouseX, v.mouseY);
 	}
 	if (maxScroll > 0) {
-		const int trackY = kListTop, trackH = kListRows * (kRowH + kRowGap) - kRowGap;
-		const int thumbH = std::max(24, trackH * kListRows / count);
-		p.Fill(kListX + kListW - 6, trackY, 6, trackH, pal::track);
-		p.Fill(kListX + kListW - 6, trackY + (trackH - thumbH) * scroll / maxScroll, 6, thumbH, pal::thumb);
+		ScrollbarLook look;
+		look.minThumb = 24;
+		PaintScrollbar(p, kBarList, kListX + kListW - 6, kListTop, kListRows * (kRowH + kRowGap) - kRowGap, {scroll, maxScroll, kListRows}, v.bar,
+			v.mouseX, v.mouseY, look);
 	}
 	p.Font(3);
 	p.TextWrapped(kListX + 2, kLowerBottom - 34, kListW - 4, 34, "Double-click a player to use it.", kMuted);

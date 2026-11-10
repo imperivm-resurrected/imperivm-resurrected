@@ -44,6 +44,7 @@ struct View {
 	std::vector<Card> cards;
 	int selected = -1;
 	int scroll = 0;
+	ui::ScrollDrag bar;
 	int mouseX = -10000, mouseY = -10000;
 	// Steam is the identity of the computer, so its avatar and laurel go only on the profile in use.
 	std::shared_ptr<const OnlineAvatar> avatar;
@@ -65,6 +66,7 @@ enum Action {
 constexpr int kScreenW = 1100, kScreenH = 740;
 // How many rows of the list fit; the controller scrolls by rows.
 constexpr int kListRows = 8;
+constexpr int kBarList = 0;
 
 // The player goes with the Steam account, so the list is left only for installs that still keep several from before.
 inline bool ShowsList(const View &v) { return v.cards.size() > 1; }

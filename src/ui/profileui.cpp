@@ -303,6 +303,9 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, Command &cmd)
 	if (!g_s.dlg) return false;
 	View &v = g_s.view;
 	const POINT at = {static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))};
+	ScrollTo to;
+	const bool onBar = ScrollbarMouse(v.bar, g_s.hits, msg, wp, at, to);
+	if (to.id == kBarList) v.scroll = to.pos;
 	switch (msg) {
 	case WM_MOUSEMOVE:
 		v.mouseX = at.x;
@@ -310,6 +313,7 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, Command &cmd)
 		return false;
 	case WM_LBUTTONDOWN:
 	case WM_LBUTTONDBLCLK: {
+		if (onBar) return true;
 		g_s.mouseDown = true;
 		int arg = 0;
 		const int action = HitAt(g_s, at, arg);

@@ -1007,7 +1007,8 @@ void PaintDropList(Painter &p, const State &st)
 	if (st.dropKind == kDropBonus) {
 		for (size_t i = 0; i < shown.size() && i < st.game.bonuses.size(); i++) shown[i].tip = st.game.bonuses[i].description;
 	}
-	PaintDropMenu(p, g_dropAnchor, shown, sel, st.dropScroll, kW, kH, kGDropPick, kGDropClose, st.mouseX, st.mouseY, st.dropKind == kDropBonus ? 150 : 200);
+	PaintDropMenu(p, g_dropAnchor, shown, sel, st.dropScroll, kW, kH, kGDropPick, kGDropClose, st.mouseX, st.mouseY, st.dropKind == kDropBonus ? 150 : 200,
+		st.dropBar);
 }
 }
 
