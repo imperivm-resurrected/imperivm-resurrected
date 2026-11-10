@@ -9,6 +9,7 @@
 #include "hooks/hookcount.h"
 #include "core/config.h"
 #include "game/controls.h"
+#include "game/diplomacy.h"
 #include "core/crashlog.h"
 #include "hooks/displaymode.h"
 #include "mods/lang.h"
@@ -244,6 +245,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 		InstallProfileHooks(knownExe);
 		InstallGreatBattlesHooks(knownExe);
 		InstallControls(knownExe);
+		InstallDiplomacy(knownExe);
 		InstallModernAudio(knownExe);
 		InstallSoundLevels(knownExe);
 		HookBatchEnd();
