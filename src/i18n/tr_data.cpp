@@ -1703,5 +1703,13 @@ extern const TrRow kTrRows[] = {
 	{"There are no conquests here.", "Aquí no hay conquistas.", "Qui non ci sono conquiste."},
 	{"No Imperivm I campaign is installed yet.", "Todavía no hay ninguna campaña de Imperivm I instalada.", "Non è ancora installata nessuna campagna di Imperivm I."},
 	{"No Imperivm II campaign is installed yet.", "Todavía no hay ninguna campaña de Imperivm II instalada.", "Non è ancora installata nessuna campagna di Imperivm II."},
+	{"Objectives", "Objetivos", "Obiettivi"},
+	{"Completed", "Completados", "Completati"},
+	{"Objective completed", "Objetivo cumplido", "Obiettivo completato"},
+	{"Nothing in progress right now", "Ahora no hay nada en curso", "Al momento non c'è niente in corso"},
+	{"Marked on the map", "Señalado en el mapa", "Segnato sulla mappa"},
+	{"Show on map", "Ver en el mapa", "Mostra sulla mappa"},
+	{"No objectives yet", "Todavía no hay objetivos", "Ancora nessun obiettivo"},
+	{"When the mission gives you an objective, it shows here.", "Cuando la misión te dé un objetivo, aparecerá aquí.", "Quando la missione ti darà un obiettivo, apparirà qui."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

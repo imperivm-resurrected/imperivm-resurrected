@@ -29,6 +29,7 @@
 #include "ui/optionsui.h"
 #include "ui/profileui.h"
 #include "ui/battlesui.h"
+#include "ui/objectivesui.h"
 #include "net/netdrop.h"
 #include "net/rejoin.h"
 #include "net/spectator.h"
@@ -396,8 +397,8 @@ DWORD WINAPI RenderThread(LPVOID)
 		}
 		const bool overlay = GetConfig().showPerf || GetConfig().showNet;
 		if (newFrame && !MpUiNeedsDraw()) MpUiObserveFrame(local.data(), fw, fh);
-		const bool needSaves = SavesUiNeedsDraw(), needMods = ModUiNeedsDraw(), needMp = MpUiNeedsDraw(), needControls = ControlsUiNeedsDraw(), needOptions = OptionsUiNeedsDraw(), needGameMenu = GameMenuUiNeedsDraw(), needConquest = ConquestUiNeedsDraw(), needProfile = ProfileUiNeedsDraw(), needBattles = BattlesUiNeedsDraw();
-		const bool ui = !video && (needSaves || needMods || needMp || needControls || needOptions || needGameMenu || needConquest || needProfile || needBattles);
+		const bool needSaves = SavesUiNeedsDraw(), needMods = ModUiNeedsDraw(), needMp = MpUiNeedsDraw(), needControls = ControlsUiNeedsDraw(), needOptions = OptionsUiNeedsDraw(), needGameMenu = GameMenuUiNeedsDraw(), needConquest = ConquestUiNeedsDraw(), needProfile = ProfileUiNeedsDraw(), needBattles = BattlesUiNeedsDraw(), needObjectives = ObjectivesUiNeedsDraw();
+		const bool ui = !video && (needSaves || needMods || needMp || needControls || needOptions || needGameMenu || needConquest || needProfile || needBattles || needObjectives);
 		if (ui && (newFrame || now - lastUiDraw >= 33)) {
 			if (!newFrame) {
 				{
@@ -416,6 +417,7 @@ DWORD WINAPI RenderThread(LPVOID)
 				if (needOptions) OptionsUiDraw(local.data(), fw, fh);
 				if (needGameMenu) GameMenuUiDraw(local.data(), fw, fh);
 				if (needProfile) ProfileUiDraw(local.data(), fw, fh);
+				if (needObjectives) ObjectivesUiDraw(local.data(), fw, fh);
 				ModUiDraw(local.data(), fw, fh);
 				ControlsUiDraw(local.data(), fw, fh);
 			});
@@ -563,6 +565,7 @@ int WINAPI HookSetDIBitsToDevice(HDC hdc, int xDest, int yDest, DWORD w, DWORD h
 	ConquestUiGameTick();
 	ProfileUiGameTick();
 	BattlesUiGameTick();
+	ObjectivesUiGameTick();
 	RejoinGameThreadTick();
 	SpectatorGameThreadTick();
 	ZoomFogNoteImage();

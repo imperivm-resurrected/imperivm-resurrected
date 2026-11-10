@@ -1,0 +1,411 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 THIONG
+// Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
+#include "ui/objectivesui_view.h"
+
+#include <algorithm>
+#include <string>
+#include <vector>
+
+#include "i18n/tr.h"
+#include "ui/ornaments.h"
+#include "ui/widgets.h"
+
+using namespace ui;
+
+namespace objectivesui {
+namespace {
+
+// The list on the left with Close under it, as the help has; the note on the right.
+constexpr int kMargin = 24, kTop = 96, kBottom = kScreenH - 28, kCloseH = 38, kCloseY = kBottom - kCloseH, kListBottom = kCloseY - 14;
+constexpr int kListX = kMargin, kListW = 296, kDividerX = 338, kPaneX = 356, kPaneW = kScreenW - kMargin - kPaneX;
+constexpr int kGroupH = 30, kGroupGap = 12, kRowH = 54, kEmptyRowH = 40, kIconBox = 20;
+// A title too long for one line takes a second one, and what is under it moves down by kTitleLineH.
+constexpr int kTitleY = 98, kTitleH = 48, kTitleLineH = 28, kStatusY = 152, kStatusH = 30, kRuleY = 196, kTextTop = 212;
+constexpr int kLineH = 23, kGapLine = 10, kScrollW = 4, kMapButtonW = 176;
+const COLORREF kPlain = RGB(208, 194, 158), kCurrentBg = RGB(60, 43, 22), kHotBg = RGB(38, 30, 20);
+const COLORREF kDoneText = RGB(122, 150, 100), kDoneDim = RGB(92, 112, 78), kDoneMark = RGB(108, 138, 88), kTagText = RGB(34, 24, 12);
+
+std::wstring Upper(std::wstring w)
+{
+	if (!w.empty()) CharUpperBuffW(&w[0], static_cast<DWORD>(w.size()));
+	return w;
+}
+
+std::string Utf8(const std::wstring &w)
+{
+	const int n = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), static_cast<int>(w.size()), nullptr, 0, nullptr, nullptr);
+	std::string out(n > 0 ? n : 0, '\0');
+	if (n > 0) WideCharToMultiByte(CP_UTF8, 0, w.c_str(), static_cast<int>(w.size()), &out[0], n, nullptr, nullptr);
+	return out;
+}
+
+int PixelWidth(Painter &p, const std::wstring &w, int spacing)
+{
+	SetTextCharacterExtra(p.dc, p.S(spacing));
+	SIZE sz = {};
+	GetTextExtentPoint32W(p.dc, w.c_str(), static_cast<int>(w.size()), &sz);
+	SetTextCharacterExtra(p.dc, 0);
+	return static_cast<int>(sz.cx) - (w.empty() ? 0 : p.S(spacing));
+}
+
+void SpacedLine(Painter &p, int x, int y, int h, const std::wstring &w, int spacing, COLORREF c)
+{
+	SetTextColor(p.dc, c);
+	RECT r = {p.S(x), p.S(y), p.S(x) + PixelWidth(p, w, spacing) + p.S(spacing) + 4, p.S(y + h)};
+	SetTextCharacterExtra(p.dc, p.S(spacing));
+	DrawTextW(p.dc, w.c_str(), static_cast<int>(w.size()), &r, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_NOCLIP);
+	SetTextCharacterExtra(p.dc, 0);
+}
+
+// The first line of a text, in one line: for the row under a title.
+std::string Excerpt(const std::string &text)
+{
+	std::string out;
+	for (const char c : text) {
+		if (c == '\r') continue;
+		out += c == '\n' || c == '\t' ? ' ' : c;
+		if (out.size() > 240) break;
+	}
+	return out;
+}
+
+void Polygon(Painter &p, const std::vector<POINT> &design, COLORREF c)
+{
+	std::vector<POINT> pts;
+	for (const POINT &d : design) pts.push_back({p.S(d.x), p.S(d.y)});
+	HBRUSH b = CreateSolidBrush(c);
+	HPEN pen = CreatePen(PS_SOLID, 1, c);
+	HGDIOBJ ob = SelectObject(p.dc, b), op = SelectObject(p.dc, pen);
+	::Polygon(p.dc, pts.data(), static_cast<int>(pts.size()));
+	SelectObject(p.dc, ob);
+	SelectObject(p.dc, op);
+	DeleteObject(b);
+	DeleteObject(pen);
+}
+
+// A map pin in a box of kIconBox: a round head with a hole, tapering to its point.
+void PinIcon(Painter &p, int x, int y, COLORREF c, COLORREF hole)
+{
+	const int cx = x + kIconBox / 2;
+	p.Ellipse(cx - 7, y + 1, 14, 14, c);
+	Polygon(p, {{cx - 6, y + 11}, {cx + 6, y + 11}, {cx, y + kIconBox}}, c);
+	p.Ellipse(cx - 3, y + 5, 6, 6, hole);
+}
+
+// A banner on its pole, with a swallowtail.
+void FlagIcon(Painter &p, int x, int y, COLORREF c)
+{
+	p.Fill(x + 3, y + 1, 2, kIconBox - 1, c);
+	Polygon(p, {{x + 5, y + 2}, {x + 18, y + 2}, {x + 13, y + 7}, {x + 18, y + 12}, {x + 5, y + 12}}, c);
+}
+
+// A round seal with a check cut into it.
+void CheckIcon(Painter &p, int x, int y, COLORREF c, COLORREF mark)
+{
+	p.Ellipse(x + 1, y + 1, kIconBox - 2, kIconBox - 2, c);
+	p.Line(x + 5, y + 10, x + 9, y + 14, mark, 2);
+	p.Line(x + 9, y + 14, x + 15, y + 6, mark, 2);
+}
+
+void NoteIcon(Painter &p, const ObjectiveEntry &e, int x, int y, bool selected, COLORREF bg)
+{
+	if (e.done) CheckIcon(p, x, y, kDoneMark, bg);
+	else if (e.note.onMap) PinIcon(p, x, y, selected ? pal::goldLight : kGold, bg);
+	else FlagIcon(p, x, y, selected ? pal::goldLight : kGold);
+}
+
+int TagWidth(Painter &p, const std::string &label)
+{
+	p.Font(4);
+	return static_cast<int>(PixelWidth(p, Upper(W(label)), 1) / p.s) + 12;
+}
+
+int Tag(Painter &p, int x, int y, const std::string &label)
+{
+	const int w = TagWidth(p, label), h = 17;
+	p.Fill(x, y, w, h, kGold);
+	SpacedLine(p, x + 6, y, h, Upper(W(label)), 1, kTagText);
+	return w;
+}
+
+std::vector<std::wstring> Wrap(Painter &p, const std::string &text, int width)
+{
+	std::vector<std::wstring> out;
+	for (size_t from = 0;;) {
+		const size_t nl = text.find('\n', from);
+		std::string line = text.substr(from, nl == std::string::npos ? std::string::npos : nl - from);
+		if (!line.empty() && line.back() == '\r') line.pop_back();
+		if (line.empty()) out.push_back(std::wstring());
+		else {
+			for (const std::wstring &l : p.WrapLines(line, 0, width)) out.push_back(l);
+		}
+		if (nl == std::string::npos) break;
+		from = nl + 1;
+	}
+	while (!out.empty() && out.back().empty()) out.pop_back();
+	return out;
+}
+
+int LinesHeight(const std::vector<std::wstring> &lines)
+{
+	int h = 0;
+	for (const std::wstring &l : lines) h += l.empty() ? kGapLine : kLineH;
+	return h;
+}
+
+void ScrollBar(Painter &p, int x, int top, int viewH, int total, int scroll)
+{
+	if (total <= viewH) return;
+	const int thumbH = std::max(30, viewH * viewH / total), thumbY = top + (viewH - thumbH) * scroll / std::max(1, total - viewH);
+	p.Fill(x, top, kScrollW, viewH, pal::well);
+	p.Fill(x, thumbY, kScrollW, thumbH, pal::thumb);
+}
+
+struct Row {
+	int kind = 0;  // 0 group, 1 note, 2 nothing in progress
+	int index = -1, y = 0, h = 0, count = 0;
+	bool done = false;
+};
+
+std::vector<Row> Layout(const View &v, int &height)
+{
+	std::vector<Row> rows;
+	const int progress = ObjectiveCountInProgress(v.entries), done = static_cast<int>(v.entries.size()) - progress;
+	int y = 0;
+	rows.push_back({0, -1, y, kGroupH, progress, false});
+	y += kGroupH;
+	if (!progress) {
+		rows.push_back({2, -1, y, kEmptyRowH, 0, false});
+		y += kEmptyRowH;
+	}
+	for (size_t i = 0; i < v.entries.size(); i++) {
+		if (v.entries[i].done) continue;
+		rows.push_back({1, static_cast<int>(i), y, kRowH, 0, false});
+		y += kRowH;
+	}
+	if (done) {
+		y += kGroupGap;
+		rows.push_back({0, -1, y, kGroupH, done, true});
+		y += kGroupH;
+		for (size_t i = 0; i < v.entries.size(); i++) {
+			if (!v.entries[i].done) continue;
+			rows.push_back({1, static_cast<int>(i), y, kRowH, 0, true});
+			y += kRowH;
+		}
+	}
+	height = y;
+	return rows;
+}
+
+void PaintGroup(Painter &p, int y, const Row &r)
+{
+	p.Font(4);
+	const std::wstring up = Upper(W(Tr(r.done ? "Completed" : "In progress")));
+	SpacedLine(p, kListX + 4, y + 8, 18, up, 2, pal::section);
+	const int tw = static_cast<int>(PixelWidth(p, up, 2) / p.s) + 12;
+	const std::string count = std::to_string(r.count);
+	const int cw = p.TextWidth(count);
+	p.Text(kListX + kListW - cw - 4, y + 8, cw + 2, 18, count, kDim);
+	const int lineW = kListW - tw - cw - 22;
+	if (lineW > 0) p.FillH(kListX + 4 + tw, y + 17, lineW, 1, pal::line, pal::panel);
+}
+
+void PaintNoteRow(Painter &p, const View &v, int y, const Row &r, bool inside, int hitTop, int hitH)
+{
+	const ObjectiveEntry &e = v.entries[r.index];
+	const bool selected = r.index == v.selected;
+	const bool hot = inside && !selected && p.Hover(kListX, y, kListW, r.h, v.mouseX, v.mouseY);
+	COLORREF bg = pal::panel;
+	if (selected) {
+		p.FillH(kListX, y, kListW, r.h, kCurrentBg, pal::panel);
+		p.Fill(kListX, y + 4, 3, r.h - 8, kGold);
+		bg = kCurrentBg;
+	}
+	else if (hot) {
+		p.FillH(kListX, y, kListW, r.h, kHotBg, pal::panel);
+		bg = kHotBg;
+	}
+	NoteIcon(p, e, kListX + 12, y + 9, selected, bg);
+	const int textX = kListX + 42;
+	int textW = kListX + kListW - 10 - textX;
+	if (e.fresh && !e.done) {
+		const int tagW = TagWidth(p, Tr("New"));
+		Tag(p, kListX + kListW - 8 - tagW, y + 10, Tr("New"));
+		textW -= tagW + 8;
+	}
+	p.Font(selected ? 1 : 0);
+	const std::string title = e.note.title.empty() ? e.note.id : e.note.title;
+	const COLORREF titleColor = e.done ? kDoneText : selected ? pal::goldLight : hot ? kText : kPlain;
+	p.Text(textX, y + 7, textW, 22, title, titleColor);
+	if (e.done) {
+		const int struck = std::min(textW, p.TextWidth(title));
+		p.Fill(textX, y + 18, struck, 1, kDoneText);
+	}
+	p.Font(3);
+	const std::string excerpt = Excerpt(e.note.text);
+	if (!excerpt.empty()) p.Text(textX, y + 29, kListX + kListW - 10 - textX, 18, excerpt, e.done ? kDoneDim : selected ? kText : kDim);
+	if (hitH > 0) p.AddHit(kListX, hitTop, kListW, hitH, kActSelect, r.index);
+}
+
+void PaintList(Painter &p, const View &v, PaintOut &out)
+{
+	int height = 0;
+	const std::vector<Row> rows = Layout(v, height);
+	const int viewH = kListBottom - kTop;
+	out.listH = height;
+	out.listViewH = viewH;
+	int scroll = std::max(0, std::min(v.listScroll, std::max(0, height - viewH)));
+	if (v.revealSelected) {
+		for (size_t i = 0; i < rows.size(); i++) {
+			const Row &r = rows[i];
+			if (r.kind != 1 || r.index != v.selected) continue;
+			// The first row of a group brings its heading with it.
+			const int top = i > 0 && rows[i - 1].kind == 0 ? rows[i - 1].y : r.y;
+			if (top < scroll) scroll = std::max(0, top);
+			else if (r.y + r.h > scroll + viewH) scroll = std::min(std::max(0, height - viewH), r.y + r.h - viewH);
+		}
+	}
+	out.listScroll = scroll;
+	RECT list = p.R(kListX, kTop, kListW, viewH);
+	OffsetRect(&list, p.ox, p.oy);
+	out.list = list;
+	const POINT mouse = {v.mouseX, v.mouseY};
+	const bool inside = PtInRect(&list, mouse) != 0;
+	p.Clip(kListX - 2, kTop, kListW + 4, viewH);
+	for (const Row &r : rows) {
+		const int y = kTop + r.y - scroll;
+		if (y + r.h <= kTop || y >= kListBottom) continue;
+		const int hitTop = std::max(y, kTop), hitH = std::min(y + r.h, kListBottom) - hitTop;
+		if (r.kind == 0) PaintGroup(p, y, r);
+		else if (r.kind == 2) {
+			p.Font(3);
+			p.Text(kListX + 14, y, kListW - 20, r.h, Tr("Nothing in progress right now"), kDim);
+		}
+		else PaintNoteRow(p, v, y, r, inside, hitTop, hitH);
+	}
+	p.Unclip();
+	ScrollBar(p, kListX + kListW + 5, kTop, viewH, height, scroll);
+}
+
+// Returns how much lower than usual the rest of the note starts.
+int PaintTitle(Painter &p, const std::string &title, COLORREF c)
+{
+	const std::wstring w = W(title);
+	p.Font(5);
+	SetTextColor(p.dc, c);
+	if (PixelWidth(p, w, 0) <= p.S(kPaneW)) {
+		RECT r = p.R(kPaneX, kTitleY, kPaneW, kTitleH);
+		DrawTextW(p.dc, w.c_str(), static_cast<int>(w.size()), &r, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+		return 0;
+	}
+	p.Font(2);
+	const std::vector<std::wstring> lines = p.WrapLines(title, 0, kPaneW);
+	if (lines.size() == 1) {
+		RECT r = p.R(kPaneX, kTitleY, kPaneW, kTitleH);
+		DrawTextW(p.dc, w.c_str(), static_cast<int>(w.size()), &r, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
+		return 0;
+	}
+	std::wstring rest;
+	for (size_t i = 1; i < lines.size(); i++) rest += (i > 1 ? L" " : L"") + lines[i];
+	RECT first = p.R(kPaneX, kTitleY + 8, kPaneW, kTitleLineH), second = p.R(kPaneX, kTitleY + 8 + kTitleLineH, kPaneW, kTitleLineH);
+	DrawTextW(p.dc, lines[0].c_str(), static_cast<int>(lines[0].size()), &first, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+	DrawTextW(p.dc, rest.c_str(), static_cast<int>(rest.size()), &second, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
+	return kTitleLineH;
+}
+
+// The state of the note in a line: new, in progress or completed, and whether it has a place on this map.
+void PaintStatus(Painter &p, const View &v, const ObjectiveEntry &e, int dy)
+{
+	int x = kPaneX;
+	const int top = kStatusY + dy, y = top + (kStatusH - kIconBox) / 2;
+	p.Font(3);
+	if (e.done) {
+		CheckIcon(p, x, y, kDoneMark, pal::panel);
+		p.Text(x + kIconBox + 8, top, kPaneW - kIconBox - 8, kStatusH, Tr("Objective completed"), kDoneText);
+		return;
+	}
+	if (e.fresh) x += Tag(p, x, top + 7, Tr("New")) + 10;
+	p.Font(3);
+	const std::string state = Tr("In progress");
+	p.Text(x, top, p.TextWidth(state) + 4, kStatusH, state, kText);
+	x += p.TextWidth(state) + 10;
+	if (e.note.onMap) {
+		p.Text(x, top, 12, kStatusH, "\xC2\xB7", kDim);
+		x += 14;
+		PinIcon(p, x, y, kGold, pal::panel);
+		x += kIconBox + 6;
+		const std::string marked = Tr("Marked on the map");
+		p.Text(x, top, kPaneX + kPaneW - kMapButtonW - 12 - x, kStatusH, marked, kDim);
+		p.Button(kPaneX + kPaneW - kMapButtonW, top, kMapButtonW, kStatusH, Tr("Show on map"), kActShowOnMap, 0, v.mouseX, v.mouseY, true, true, 4);
+	}
+}
+
+void PaintText(Painter &p, const View &v, const ObjectiveEntry &e, PaintOut &out, int dy)
+{
+	const int textTop = kTextTop + dy, viewH = kBottom - textTop, width = kPaneW - 18;
+	p.Font(0);
+	const std::vector<std::wstring> lines = Wrap(p, e.note.text, width);
+	const int height = LinesHeight(lines);
+	out.textH = height;
+	out.textViewH = viewH;
+	const int scroll = std::max(0, std::min(v.textScroll, std::max(0, height - viewH)));
+	out.textScroll = scroll;
+	RECT text = p.R(kPaneX, textTop, kPaneW, viewH);
+	OffsetRect(&text, p.ox, p.oy);
+	out.text = text;
+	p.Clip(kPaneX, textTop, kPaneW, viewH);
+	int y = textTop - scroll;
+	for (const std::wstring &l : lines) {
+		if (l.empty()) {
+			y += kGapLine;
+			continue;
+		}
+		if (y + kLineH > textTop && y < kBottom) p.LineW(kPaneX, y + 2, width, kLineH, l, e.done ? RGB(168, 160, 136) : kPlain);
+		y += kLineH;
+	}
+	p.Unclip();
+	ScrollBar(p, kPaneX + kPaneW - kScrollW, textTop, viewH, height, scroll);
+}
+
+void PaintEmpty(Painter &p)
+{
+	const int cx = kPaneX + kPaneW / 2, top = 236;
+	const int big = 3;
+	// The flag of the list, three times larger.
+	p.Fill(cx - 24 + 3 * big, top, 2 * big, kIconBox * big, pal::bronze);
+	Polygon(p, {{cx - 24 + 5 * big, top + 2 * big}, {cx - 24 + 18 * big, top + 2 * big}, {cx - 24 + 13 * big, top + 7 * big}, {cx - 24 + 18 * big, top + 12 * big},
+		{cx - 24 + 5 * big, top + 12 * big}}, pal::bronze);
+	p.Font(2);
+	p.Text(kPaneX, top + 80, kPaneW, 32, Tr("No objectives yet"), pal::goldLight, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	p.Font(0);
+	p.Text(kPaneX + 40, top + 116, kPaneW - 80, 48, Tr("When the mission gives you an objective, it shows here."), kDim, DT_CENTER | DT_TOP | DT_WORDBREAK);
+}
+
+}
+
+void PaintObjectivesScreen(Painter &p, const View &v, PaintOut &out)
+{
+	out = PaintOut();
+	// The notes are the game's words, already translated; the screen's own words go through Tr here.
+	p.raw = true;
+	PaintWindowFrame(p, kScreenW, kScreenH);
+	PaintWindowHeader(p, kScreenW, Utf8(Upper(W(Tr("Objectives")))));
+	p.Fill(kDividerX, kTop + 4, 1, kBottom - kTop - 4, pal::lineDim);
+	PaintList(p, v, out);
+	p.FillH(kListX, kListBottom + 6, kListW, 1, pal::line, pal::panel);
+	p.Button(kListX, kCloseY, kListW, kCloseH, Tr("Close"), kActClose, 0, v.mouseX, v.mouseY);
+	if (v.selected < 0 || v.selected >= static_cast<int>(v.entries.size())) {
+		PaintEmpty(p);
+		p.raw = false;
+		return;
+	}
+	const ObjectiveEntry &e = v.entries[v.selected];
+	const int dy = PaintTitle(p, e.note.title.empty() ? e.note.id : e.note.title, e.done ? kDoneText : pal::goldLight);
+	PaintStatus(p, v, e, dy);
+	PaintOrnament(p, kOrnamentRule, kPaneX - 6, kRuleY + dy - 5, kPaneW + 12, 10, kGold);
+	PaintText(p, v, e, out, dy);
+	p.raw = false;
+}
+
+}

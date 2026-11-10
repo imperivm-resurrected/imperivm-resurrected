@@ -1695,5 +1695,13 @@
 {"en":"There are no adventures here.","es":"Aquí no hay aventuras.","it":"Qui non ci sono avventure."},
 {"en":"There are no conquests here.","es":"Aquí no hay conquistas.","it":"Qui non ci sono conquiste."},
 {"en":"No Imperivm I campaign is installed yet.","es":"Todavía no hay ninguna campaña de Imperivm I instalada.","it":"Non è ancora installata nessuna campagna di Imperivm I."},
-{"en":"No Imperivm II campaign is installed yet.","es":"Todavía no hay ninguna campaña de Imperivm II instalada.","it":"Non è ancora installata nessuna campagna di Imperivm II."}
+{"en":"No Imperivm II campaign is installed yet.","es":"Todavía no hay ninguna campaña de Imperivm II instalada.","it":"Non è ancora installata nessuna campagna di Imperivm II."},
+{"en":"Objectives","es":"Objetivos","it":"Obiettivi"},
+{"en":"Completed","es":"Completados","it":"Completati"},
+{"en":"Objective completed","es":"Objetivo cumplido","it":"Obiettivo completato"},
+{"en":"Nothing in progress right now","es":"Ahora no hay nada en curso","it":"Al momento non c'è niente in corso"},
+{"en":"Marked on the map","es":"Señalado en el mapa","it":"Segnato sulla mappa"},
+{"en":"Show on map","es":"Ver en el mapa","it":"Mostra sulla mappa"},
+{"en":"No objectives yet","es":"Todavía no hay objetivos","it":"Ancora nessun obiettivo"},
+{"en":"When the mission gives you an objective, it shows here.","es":"Cuando la misión te dé un objetivo, aparecerá aquí.","it":"Quando la missione ti darà un obiettivo, apparirà qui."}
 ]
