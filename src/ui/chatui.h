@@ -13,3 +13,6 @@ void ChatUiGameTick();
 bool ChatUiNeedsDraw();
 void ChatUiDraw(uint32_t *buf, int w, int h);
 bool ChatUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp);
+// The chat goes back to its place above the command bar.
+void ChatUiResetPosition();
+bool ChatUiPositionMoved();

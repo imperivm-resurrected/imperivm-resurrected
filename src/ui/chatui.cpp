@@ -4,11 +4,15 @@
 #include "ui/chatui.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <mutex>
 #include <string>
 #include <vector>
 
+#include "core/config.h"
 #include "core/log.h"
+#include "core/uiport.h"
+#include "i18n/tr.h"
 #include "game/chat.h"
 #include "game/chatlog.h"
 #include "game/cheats.h"
@@ -33,7 +37,7 @@ namespace {
 
 // Right of the game's own columns at the left of the map: the notifications (from x 40) and the quick icons.
 const int kLeftInset = 264, kBottomMargin = 10;
-const DWORD kReadEveryMs = 200, kPingCooldownMs = 700;
+const DWORD kReadEveryMs = 200;
 
 struct State {
 	bool open = false;
@@ -55,6 +59,14 @@ struct State {
 	int menuHover = -1;
 	DWORD menuSince = 0;
 	const char *menuHow = "";
+	// Dragging the panel by its strip: where the mouse holds it, from the bottom-left corner.
+	bool dragging = false;
+	POINT grab = {};
+	ChatAnchor live;
+	DWORD lastGripDown = 0;
+	POINT lastGripAt = {};
+	// The place last drawn, to save where the drag ended.
+	ChatAnchor drawn;
 };
 
 std::mutex g_lock;
@@ -63,7 +75,7 @@ int g_mouseX = -10000, g_mouseY = -10000;
 bool g_haveMouse = false;
 // Window thread only.
 WPARAM g_swallowVk = 0, g_openVk = 0, g_lastDownVk = 0;
-DWORD g_lastDownAt = 0, g_lastPing = 0;
+DWORD g_lastDownAt = 0;
 bool g_swallowLeftUp = false, g_swallowRightUp = false;
 int g_frameW = 1280, g_frameH = 768;
 // The menu shows once the button has been held this long, or as soon as the mouse leaves the dead zone; a quick click sends the
@@ -221,6 +233,24 @@ bool HandleMouse(UINT msg, WPARAM wp, POINT at)
 			Send(true);
 			return true;
 		}
+		if (action == kActGrip) {
+			const DWORD now = GetTickCount();
+			bool reset = false;
+			{
+				std::lock_guard<std::mutex> lock(g_lock);
+				reset = now - g_s.lastGripDown <= GetDoubleClickTime() && std::abs(at.x - g_s.lastGripAt.x) <= 4 && std::abs(at.y - g_s.lastGripAt.y) <= 4;
+				g_s.lastGripDown = reset ? 0 : now;
+				g_s.lastGripAt = at;
+				if (!reset) {
+					g_s.dragging = true;
+					g_s.grab = {at.x - g_s.drawn.left, at.y - g_s.drawn.bottom};
+					g_s.live = g_s.drawn;
+				}
+			}
+			// The game's window class may not send double clicks, so the strip counts them itself.
+			if (reset) ChatUiResetPosition();
+			return true;
+		}
 		std::lock_guard<std::mutex> lock(g_lock);
 		if (action == kActChip) g_s.target = ChatCycle(g_s.target, static_cast<int>(g_s.targets.size()), false);
 		int field = 0;
@@ -257,6 +287,23 @@ bool HandleMouse(UINT msg, WPARAM wp, POINT at)
 	}
 }
 
+ChatRateLimit g_pingLimit(kPingBurst, kPingWindowMs);
+DWORD g_lastHint = 0;
+
+void Hint(const char *text)
+{
+	const DWORD now = GetTickCount();
+	if (now - g_lastHint < 3000) return;
+	g_lastHint = now;
+	UiToast(Tr(text));
+}
+
+bool MayPing()
+{
+	const ChatMatch m = ChatReadMatch();
+	return m.playing && m.alive;
+}
+
 // False when there is no match to ping in, so the key or the click goes on to the game.
 bool CanPing(const char *how)
 {
@@ -265,21 +312,30 @@ bool CanPing(const char *how)
 		LogD("ui", "chat: ping (%s) ignored: another screen is open", how);
 		return false;
 	}
-	if (!ChatReadMatch().playing) {
+	const ChatMatch m = ChatReadMatch();
+	if (!m.playing) {
 		LogD("ui", "chat: ping (%s) ignored: no match on screen", how);
 		return false;
+	}
+	// Out of the match there is nobody to coordinate with, and the stopped game clock would keep the marks for good.
+	if (!m.alive) {
+		LogI("ui", "chat: ping (%s) ignored: you are out of the match", how);
+		Hint("Marks are only for players still in the match.");
+		return true;
 	}
 	return true;
 }
 
 void Ping(int x, int y, bool haveMouse, const char *how, int type)
 {
+	if (!MayPing()) return;
 	const DWORD now = GetTickCount();
-	if (now - g_lastPing < kPingCooldownMs) {
-		LogD("ui", "chat: ping (%s) ignored: the last one was %lu ms ago", how, static_cast<unsigned long>(now - g_lastPing));
+	if (!g_pingLimit.Allow(now)) {
+		LogI("ui", "chat: ping (%s) refused: %d in %u s already, %lu ms to wait", how, kPingBurst, static_cast<unsigned>(kPingWindowMs / 1000),
+			static_cast<unsigned long>(g_pingLimit.WaitMs(now)));
+		Hint("Too many marks: wait a moment.");
 		return;
 	}
-	g_lastPing = now;
 	ChatPing(x, y, haveMouse, how, type);
 }
 
@@ -314,6 +370,10 @@ bool TryPingClick(POINT at)
 	if (zoomMap && ZoomViewBoxUses(vk)) return false;
 	LogD("ui", "chat: %s at %d,%d (%s): ping menu", ClickName(vk), static_cast<int>(at.x), static_cast<int>(at.y), zoomMap ? "zoom map" : "map view");
 	if (!CanPing(ClickName(vk))) return false;
+	if (!MayPing()) {
+		g_swallowLeftUp = true;
+		return true;
+	}
 	std::lock_guard<std::mutex> lock(g_lock);
 	g_s.menu = true;
 	g_s.menuAt = at;
@@ -370,6 +430,49 @@ bool OnZoomClick(int x, int y)
 	if (!CanPing(ClickName(vk))) return false;
 	Ping(x, y, true, ClickName(vk), kPingHere);
 	return true;
+}
+
+// The default place is above the command bar, right of the game's notification column; a saved place is a share of the screen.
+ChatAnchor PlaceOf(const State &s, int w, int h, int &maxWidth)
+{
+	const ChatMatch &m = s.match;
+	const int viewLeft = m.haveView ? std::max(0, m.viewLeft) : 0;
+	const int barTop = m.haveBar ? m.barTop : m.haveView ? std::min(h, m.viewBottom) : h - 54;
+	ChatAnchor a;
+	a.left = viewLeft + kLeftInset;
+	a.bottom = barTop - kBottomMargin;
+	maxWidth = (m.haveView ? std::min(w, m.viewRight) : w) - a.left - 16;
+	const int width = ChatWidth(w, h, maxWidth);
+	const Config &c = GetConfig();
+	if (s.dragging) a = s.live;
+	else if (c.chatX >= 0 && c.chatY >= 0) a = {ChatFromPermille(c.chatX, w), ChatFromPermille(c.chatY, h)};
+	else return a;
+	maxWidth = width;
+	return ChatClampAnchor(a, w, width, std::min(h, static_cast<int>(160 * Scale(w, h))), barTop - kBottomMargin);
+}
+
+bool HandleDrag(UINT msg, WPARAM wp, LPARAM lp)
+{
+	ChatAnchor end;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		if (!g_s.dragging) return false;
+		const POINT at = {static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))};
+		// A move with the button already up means the release happened outside the window.
+		const bool released = msg == WM_LBUTTONUP || (msg == WM_MOUSEMOVE && !(wp & MK_LBUTTON));
+		if (msg == WM_MOUSEMOVE || msg == WM_LBUTTONUP) g_s.live = {at.x - g_s.grab.x, at.y - g_s.grab.y};
+		if (!released) return msg == WM_MOUSEMOVE ? false : msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST;
+		int maxWidth = 0;
+		end = PlaceOf(g_s, g_frameW, g_frameH, maxWidth);
+		g_s.dragging = false;
+	}
+	Config &c = MutableConfig();
+	c.chatX = ChatToPermille(end.left, g_frameW);
+	c.chatY = ChatToPermille(end.bottom, g_frameH);
+	SaveConfig();
+	LogI("ui", "chat: position saved at %d,%d of %dx%d (%d,%d thousandths)", end.left, end.bottom, g_frameW, g_frameH, c.chatX, c.chatY);
+	if (msg == WM_LBUTTONUP) g_swallowLeftUp = false;
+	return msg == WM_LBUTTONUP;
 }
 
 Line LineOf(const ChatEntry &e, int alpha)
@@ -487,11 +590,11 @@ void ChatUiDraw(uint32_t *buf, int w, int h)
 		v.text = s.text;
 		v.edit = s.edit;
 		v.withLocation = s.withLocation;
-		const ChatMatch &m = s.match;
-		const int viewLeft = m.haveView ? std::max(0, m.viewLeft) : 0;
-		v.left = viewLeft + kLeftInset;
-		v.bottom = (m.haveBar ? m.barTop : m.haveView ? std::min(h, m.viewBottom) : h - 54) - kBottomMargin;
-		v.maxWidth = (m.haveView ? std::min(w, m.viewRight) : w) - v.left - 16;
+		const ChatAnchor at = PlaceOf(s, w, h, v.maxWidth);
+		v.left = at.left;
+		v.bottom = at.bottom;
+		v.dragging = s.dragging;
+		g_s.drawn = at;
 	}
 	v.mouseX = g_mouseX;
 	v.mouseY = g_mouseY;
@@ -507,9 +610,21 @@ void ChatUiDraw(uint32_t *buf, int w, int h)
 	if (menu) PaintPingMenu(buf, w, h, menuView);
 }
 
+void ChatUiResetPosition()
+{
+	Config &c = MutableConfig();
+	if (c.chatX < 0) return;
+	c.chatX = c.chatY = -1;
+	SaveConfig();
+	LogI("ui", "chat: position reset to the default place");
+}
+
+bool ChatUiPositionMoved() { return GetConfig().chatX >= 0; }
+
 bool ChatUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 {
 	if (HandleMenu(msg, wp, lp)) return true;
+	if (HandleDrag(msg, wp, lp)) return true;
 	if (msg == WM_MOUSEMOVE) {
 		g_mouseX = static_cast<short>(LOWORD(lp));
 		g_mouseY = static_cast<short>(HIWORD(lp));

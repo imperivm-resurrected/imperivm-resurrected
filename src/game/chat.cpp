@@ -43,6 +43,8 @@ const unsigned kGameClock = 0x1258, kLocalPlayer = 0x12c8, kPlayers = 0x12cc, kP
 const unsigned kPlayerIndex = 8, kPlayerEnemies = 0x10, kPlayerActive = 0x64, kPlayerControl = 0x80, kPlayerName = 0x94, kPlayerNameSize = 0xa4,
 			   kPlayerNameCapacity = 0xa8, kPlayerState = 0x290, kPlayerColor = 0x314;
 const int kSlots = 8;
+// player+0x290: 1 while the player is in the match; a defeat or a surrender changes it (read the same way by gamestats).
+const int kStatePlaying = 1;
 // CVXChatMessage: +4 sender, +0xc std::string message (buffer +0x10, size +0x20, capacity +0x24), +0x28 location, +0x30 players mask.
 const unsigned kCmdPlayer = 4, kCmdText = 0xc, kCmdTextBuf = 0x10, kCmdTextSize = 0x20, kCmdTextCapacity = 0x24, kCmdLocation = 0x28, kCmdMask = 0x30;
 const unsigned kSlotSetPlayer = 3, kSlotRunScript = 0xa8 / 4;
@@ -70,7 +72,7 @@ struct RawPlayer {
 struct RawMatch {
 	bool game = false, editor = false, demo = false, shown = false, severalHumans = false;
 	uint32_t clock = 0;
-	int local = -1;
+	int local = -1, localState = 0;
 	unsigned enemies = 0;
 	RawPlayer players[kSlots];
 	bool haveView = false, haveVisible = false;
@@ -135,6 +137,7 @@ bool ReadRaw(RawMatch &m)
 		if (local) {
 			m.local = Field<int>(local, kPlayerIndex);
 			m.enemies = Field<unsigned>(local, kPlayerEnemies) & kChatEveryone;
+			m.localState = Field<int>(local, kPlayerState);
 		}
 		for (int i = 0; i < kSlots; i++) {
 			const char *p = game + kPlayers + i * kPlayerSize;
@@ -163,6 +166,7 @@ ChatMatch Build(const RawMatch &raw)
 	m.playing = m.onScreen && !raw.demo && raw.local >= 0 && raw.local < 16;
 	m.severalHumans = raw.severalHumans;
 	m.local = raw.local;
+	m.alive = raw.localState == kStatePlaying;
 	m.enemies = raw.enemies;
 	m.clockMs = raw.clock;
 	for (int i = 0; i < kSlots; i++) {
@@ -284,6 +288,101 @@ bool NotifyPing(int type, int x, int y)
 	}
 }
 
+// A notification's map sprite goes when the game clock passes its end (CUINotificationIcon::OnMessage 00559860 compares
+// state+0x28, the list node's +0x30, with game+0x1258), and the group drops old states only when another notification of
+// its type comes (NotifGroup::Notify 0055cad0). After a defeat or a surrender the clock stops, and so does a pause: the marks
+// would stay for good. The mod ends its marks itself: setting the end to 0 lets the game's own animation tick (a window
+// message timed by the system clock, CWindow::PostMessage 006321e0) remove the sprite and its notification as usual.
+typedef void *(__cdecl *GetGroup_t)(const GameString *type);
+const unsigned kGroupList = 4, kNodeEnd = 0x30;
+
+struct Mark {
+	char *group = nullptr;
+	char *node = nullptr;
+	DWORD at = 0;
+	int sender = -1;
+};
+std::vector<Mark> g_marks;
+
+bool NodeAlive(const Mark &m)
+{
+	__try {
+		const char *head = *reinterpret_cast<char **>(m.group + kGroupList);
+		int guard = 0;
+		for (const char *n = *reinterpret_cast<char **>(const_cast<char *>(head)); n && n != head && guard < 512; n = *reinterpret_cast<char *const *>(n), guard++) {
+			if (n == m.node) return true;
+		}
+		return false;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return false;
+	}
+}
+
+bool EndNode(const Mark &m)
+{
+	if (!NodeAlive(m)) return false;
+	__try {
+		*reinterpret_cast<uint32_t *>(m.node + kNodeEnd) = 0;
+		return true;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return false;
+	}
+}
+
+bool NewestNode(int type, Mark &m)
+{
+	__try {
+		const GameString notice = GameText(kPingNotices[type >= 0 && type < kPingTypes ? type : kPingHere]);
+		m.group = static_cast<char *>(reinterpret_cast<GetGroup_t>(addr::kNotifGetGroup)(&notice));
+		if (!m.group) return false;
+		char *head = *reinterpret_cast<char **>(m.group + kGroupList);
+		m.node = head ? *reinterpret_cast<char **>(head + 4) : nullptr;
+		return m.node && m.node != head;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return false;
+	}
+}
+
+// After a notification of a ping: the newest state of its type is the mark (a nearby one may have been refreshed instead, which
+// renews it). A sender keeps at most kPingMarksPerSender marks; the oldest gives way.
+void TrackMark(int type, int sender)
+{
+	Mark m;
+	if (!NewestNode(type, m)) return;
+	m.at = GetTickCount();
+	m.sender = sender;
+	g_marks.erase(std::remove_if(g_marks.begin(), g_marks.end(), [&](const Mark &o) { return o.node == m.node || !NodeAlive(o); }), g_marks.end());
+	g_marks.push_back(m);
+	int count = 0;
+	for (const Mark &o : g_marks) count += o.sender == sender ? 1 : 0;
+	for (auto it = g_marks.begin(); count > kPingMarksPerSender && it != g_marks.end();) {
+		if (it->sender != sender) {
+			++it;
+			continue;
+		}
+		EndNode(*it);
+		LogD("game", "chat: player %d has more than %d marks on the map: the oldest goes", sender + 1, kPingMarksPerSender);
+		it = g_marks.erase(it);
+		count--;
+	}
+}
+
+void ExpireMarks()
+{
+	const DWORD now = GetTickCount();
+	for (auto it = g_marks.begin(); it != g_marks.end();) {
+		if (now - it->at < kPingLifeMs) {
+			++it;
+			continue;
+		}
+		if (EndNode(*it)) LogD("game", "chat: a mark of player %d ended after %u ms", it->sender + 1, static_cast<unsigned>(now - it->at));
+		it = g_marks.erase(it);
+	}
+}
+
 int OtherHumans(const ChatMatch &m)
 {
 	int n = 0;
@@ -389,11 +488,14 @@ void __fastcall HookExecute(void *cmd)
 	if (typed && !raw.own) {
 		CallExecuteWithoutLocation(cmd);
 		const bool shown = NotifyPing(e.ping, raw.at[0], raw.at[1]);
+		if (shown) TrackMark(e.ping, raw.sender);
 		LogI("game", "chat: %s ping from player %d at %d,%d, %s", e.ping == kPingAttack ? "attack" : "danger", raw.sender + 1, raw.at[0], raw.at[1],
 			shown ? "notified here" : "NOT notified here");
 	}
 	else {
 		CallExecute(cmd);
+		// The game raised its own location message for this line: it is a mark too.
+		if (e.location && !raw.own) TrackMark(kPingHere, raw.sender);
 	}
 	LogD("game", "chat: line from player %d (%s%s, %u bytes)", raw.sender + 1, e.scope == kChatAll ? "everyone" : e.scope == kChatPrivate ? "private" : "allies",
 		e.location ? ", with a location" : "", static_cast<unsigned>(e.text.size()));
@@ -472,10 +574,12 @@ bool ChatSend(const std::string &text, ChatTarget target, bool withLocation)
 	if (!ReadRaw(raw) || !raw.game || raw.local < 0) return false;
 	if (!raw.severalHumans && !clean.empty()) RunAsScript(clean);
 	int x = -1, y = -1;
-	const bool point = withLocation && CameraCentre(raw, x, y);
+	const bool point = withLocation && raw.localState == kStatePlaying && CameraCentre(raw, x, y);
+	if (withLocation && !point) LogI("game", "chat: the location is left out (%s)", raw.localState == kStatePlaying ? "the view could not be read" : "you are out of the match");
 	const unsigned mask = ChatMask(target, raw.local, raw.enemies);
 	const bool ok = QueueChat(clean, mask, point, x, y);
 	const bool shown = ok && point && NotifyPing(kPingHere, x, y);
+	if (shown) TrackMark(kPingHere, raw.local);
 	LogAt(ok ? kLogDebug : kLogError, "game", "chat: %s %u bytes to mask %04x%s", ok ? "sent" : "could NOT send", static_cast<unsigned>(clean.size()), mask,
 		point ? (shown ? " with the camera's location (shown here too)" : " with the camera's location (NOT shown here)") : "");
 	return ok;
@@ -512,6 +616,7 @@ bool ChatPing(int mouseX, int mouseY, bool haveMouse, const char *how, int type)
 	const std::string phrase = ChatCleanText(Tr(ChatPingPhrase(type)));
 	const bool ok = QueueChat(phrase, ChatMask(target, raw.local, raw.enemies), true, point[0], point[1]);
 	const bool shown = NotifyPing(type, point[0], point[1]);
+	if (shown) TrackMark(type, raw.local);
 	const int humans = OtherHumans(m);
 	static const char *const kTypeNames[kPingTypes] = {"here", "attack", "danger"};
 	LogAt(ok && shown ? kLogInfo : kLogError, "game", "chat: %s ping (%s) at %d,%d from %s: %s to %s (%d other humans), %s here", kTypeNames[type], how, point[0], point[1], from,
@@ -535,6 +640,7 @@ void ChatGameTick()
 {
 	// A C++ exception thrown through Execute would leave the console silenced.
 	g_suppressConsole = 0;
+	ExpireMarks();
 	static char *lastGame = nullptr;
 	static uint32_t lastClock = 0;
 	char *game = Game();
@@ -545,6 +651,7 @@ void ChatGameTick()
 	lastGame = game;
 	lastClock = clock;
 	if (!other) return;
+	g_marks.clear();
 	std::lock_guard<std::mutex> lock(g_logLock);
 	g_log.Clear();
 }

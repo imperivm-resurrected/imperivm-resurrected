@@ -34,6 +34,33 @@ struct ChatEntry {
 	int ping = -1;
 };
 
+// The chat's place: the bottom-left corner of the panel, kept inside the screen and above the command bar. Saved in thousandths
+// of the screen so it survives a change of resolution.
+struct ChatAnchor {
+	int left = 0, bottom = 0;
+};
+ChatAnchor ChatClampAnchor(ChatAnchor a, int screenW, int width, int minBottom, int maxBottom);
+int ChatToPermille(int value, int size);
+int ChatFromPermille(int permille, int size);
+
+// Pings: at most this many in a window, as in other strategy games; each sender keeps at most this many marks on the map, and a
+// mark lasts this long even when the game clock stops (paused, or the match over).
+constexpr int kPingBurst = 3, kPingMarksPerSender = 3;
+constexpr uint32_t kPingWindowMs = 5000, kPingLifeMs = 8000;
+
+class ChatRateLimit {
+public:
+	ChatRateLimit(int max, uint32_t windowMs) : max_(max), window_(windowMs) {}
+	bool Allow(uint32_t now);
+	uint32_t WaitMs(uint32_t now);
+
+private:
+	void Forget(uint32_t now);
+	int max_;
+	uint32_t window_;
+	std::deque<uint32_t> times_;
+};
+
 enum ChatPingType { kPingHere, kPingAttack, kPingDanger, kPingTypes };
 // The English phrase a ping of that type carries as its text, translated to the sender's language.
 const char *ChatPingPhrase(int type);

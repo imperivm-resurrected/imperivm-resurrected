@@ -4,6 +4,7 @@
 #include "check.h"
 #include "game/chatlog.h"
 
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -187,6 +188,53 @@ static void TestPings()
 	}
 }
 
+static void TestAnchor()
+{
+	// Inside: unchanged.
+	ChatAnchor a = ChatClampAnchor({300, 600}, 1280, 440, 120, 700);
+	CHECK_EQ(a.left, 300);
+	CHECK_EQ(a.bottom, 600);
+	// Never past the right edge, the top, or down over the command bar.
+	a = ChatClampAnchor({1200, 760}, 1280, 440, 120, 700);
+	CHECK_EQ(a.left, 840);
+	CHECK_EQ(a.bottom, 700);
+	a = ChatClampAnchor({-50, 20}, 1280, 440, 120, 700);
+	CHECK_EQ(a.left, 0);
+	CHECK_EQ(a.bottom, 120);
+	a = ChatClampAnchor({100, 400}, 1280, 440, 300, 200);
+	CHECK_EQ(a.bottom, 300);
+
+	CHECK_EQ(ChatToPermille(640, 1280), 500);
+	CHECK_EQ(ChatToPermille(1280, 1280), 1000);
+	CHECK_EQ(ChatToPermille(-5, 1280), 0);
+	CHECK_EQ(ChatToPermille(5, 0), 0);
+	CHECK_EQ(ChatFromPermille(500, 1920), 960);
+	// A place saved at one resolution lands at the same share of the screen at another.
+	CHECK_EQ(ChatFromPermille(ChatToPermille(264, 1280), 1920), 396);
+	CHECK(std::abs(ChatFromPermille(ChatToPermille(704, 768), 768) - 704) <= 1);
+}
+
+static void TestRateLimit()
+{
+	ChatRateLimit r(kPingBurst, kPingWindowMs);
+	CHECK(r.Allow(1000));
+	CHECK(r.Allow(1200));
+	CHECK(r.Allow(1400));
+	CHECK(!r.Allow(1600));
+	CHECK_EQ(static_cast<int>(r.WaitMs(1600)), 4400);
+	// A refused ping does not lengthen the wait.
+	CHECK(!r.Allow(5999));
+	CHECK(r.Allow(6000));
+	CHECK(!r.Allow(6100));
+	CHECK(r.Allow(6200));
+	CHECK_EQ(static_cast<int>(r.WaitMs(20000)), 0);
+	// GetTickCount wraps after 49 days.
+	ChatRateLimit wrap(1, 1000);
+	CHECK(wrap.Allow(0xffffff00u));
+	CHECK(!wrap.Allow(0x00000010u));
+	CHECK(wrap.Allow(0x00000400u));
+}
+
 int main()
 {
 	TestMasks();
@@ -195,5 +243,7 @@ int main()
 	TestFade();
 	TestText();
 	TestPings();
+	TestAnchor();
+	TestRateLimit();
 	return test::Summary("chatlog");
 }

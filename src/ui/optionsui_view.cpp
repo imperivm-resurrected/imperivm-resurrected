@@ -317,7 +317,9 @@ std::vector<Page> BuildPages(const Values &v)
 		bars.items = {"No bars", "All units", "My units", "Enemy units"};
 		Row heroes = Toggle(v, "Heroes only", kHealthBarHeroes);
 		heroes.enabled = bars.selected > 0;
-		page.left.push_back({"Interface", {Combo(v, "Language", kLanguage, "", true), bars, heroes}});
+		Row chat = ActionRow("Chat position", kResetChatPlace, "Reset", "Back above the command bar");
+		chat.enabled = !(v.disabled.count(kResetChatPlace) && v.disabled.at(kResetChatPlace));
+		page.left.push_back({"Interface", {Combo(v, "Language", kLanguage, "", true), bars, heroes, chat}});
 		const bool autosave = Check(v, kAutosave);
 		page.right.push_back({"Autosave", {Toggle(v, "Autosave", kAutosave), Combo(v, "Every", kAutosaveEvery, "", false, autosave), Combo(v, "Copies", kAutosaveCopies, "", false, autosave),
 			Toggle(v, "Save when leaving the game", kSaveOnExit)}});

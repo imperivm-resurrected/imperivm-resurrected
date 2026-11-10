@@ -1725,5 +1725,9 @@ extern const TrRow kTrRows[] = {
 	{"Ping: danger", "Marcar: peligro", "Segnala: pericolo"},
 	{"the point under the cursor, with the swords", "el punto bajo el cursor, con las espadas", "il punto sotto il cursore, con le spade"},
 	{"the point under the cursor, with the red flag", "el punto bajo el cursor, con la bandera roja", "il punto sotto il cursore, con la bandiera rossa"},
+	{"Chat position", "Posición del chat", "Posizione della chat"},
+	{"Back above the command bar", "Vuelve encima de la barra de órdenes", "Torna sopra la barra dei comandi"},
+	{"Marks are only for players still in the match.", "Las marcas son solo para quien sigue en la partida.", "I segnali sono solo per chi è ancora in partita."},
+	{"Too many marks: wait a moment.", "Demasiadas marcas: espera un momento.", "Troppi segnali: aspetta un momento."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

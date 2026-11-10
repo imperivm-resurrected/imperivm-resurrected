@@ -5,11 +5,13 @@
 
 #include <algorithm>
 #include <cmath>
+#include <map>
 #include <cstdint>
 #include <string>
 #include <vector>
 
 #include "i18n/tr.h"
+#include "ui/ornaments.h"
 #include "ui/textedit.h"
 #include "ui/uikit.h"
 #include "ui/widgets.h"
@@ -19,7 +21,7 @@ namespace {
 
 using namespace ui;
 
-constexpr int kWidth = 500, kBarH = 28, kRowH = 19, kGap = 6, kPad = 8, kIdleRows = 8, kTypingRows = 12, kPinW = 12;
+constexpr int kWidth = 500, kBarH = 28, kRowH = 19, kGap = 6, kPad = 8, kIdleRows = 8, kTypingRows = 12, kIcon = 15, kIconGap = 4, kGripH = 12;
 constexpr COLORREF kCream = RGB(242, 232, 206), kClock = RGB(178, 166, 140), kAllies = RGB(146, 214, 122), kAll = RGB(228, 188, 98),
 				   kPrivate = RGB(224, 156, 234), kNote = RGB(214, 202, 172), kPanel = RGB(14, 10, 6), kAttack = RGB(240, 98, 66),
 				   kDanger = RGB(246, 166, 52);
@@ -30,6 +32,34 @@ struct Fonts {
 };
 Fonts g_f;
 Canvas g_black, g_white, g_menuBlack, g_menuWhite;
+
+// The share of its square each icon really covers, so the gaps on both sides of it look the same whatever its shape.
+struct Extent {
+	double left = 0, right = 1;
+};
+Extent ExtentOf(Ornament ornament)
+{
+	static std::map<int, Extent> cache;
+	const auto it = cache.find(ornament);
+	if (it != cache.end()) return it->second;
+	const int n = 64;
+	const std::vector<uint8_t> mask = OrnamentMask(ornament, n, n);
+	int lo = n, hi = -1;
+	for (int y = 0; y < n; y++) {
+		for (int x = 0; x < n; x++) {
+			if (mask[static_cast<size_t>(y) * n + x] < 48) continue;
+			lo = std::min(lo, x);
+			hi = std::max(hi, x);
+		}
+	}
+	Extent e;
+	if (hi >= lo) {
+		e.left = static_cast<double>(lo) / n;
+		e.right = static_cast<double>(hi + 1) / n;
+	}
+	cache[ornament] = e;
+	return e;
+}
 
 int PingOf(const Line &l) { return l.ping >= 0 ? l.ping : l.location && l.text.empty() ? kPingHere : -1; }
 COLORREF PingColor(int type) { return type == kPingAttack ? kAttack : type == kPingDanger ? kDanger : kAll; }
@@ -112,9 +142,16 @@ Measured Measure(Painter &p, const Line &l)
 	x += WidthOf(p.dc, g_f.name, m.name, p.s);
 	m.toX = x;
 	if (!m.to.empty()) x += WidthOf(p.dc, g_f.name, m.to, p.s);
-	m.pinX = x + 6;
-	if (l.location) x += kPinW + 9;
-	x += m.note ? 6 : WidthOf(p.dc, g_f.text, L": ", p.s);
+	if (l.location) {
+		const Extent e = ExtentOf(PingOrnament(std::max(0, PingOf(l))));
+		m.pinX = x + kIconGap - static_cast<int>(e.left * kIcon + 0.5);
+		// Before a phrase the same gap as before the icon; before ": " a hair, so the colon stays with what it follows.
+		x += kIconGap + (m.note ? kIconGap : 1) + static_cast<int>((e.right - e.left) * kIcon + 0.5);
+	}
+	else {
+		x += m.note ? 4 : 0;
+	}
+	if (!m.note) x += WidthOf(p.dc, g_f.text, L": ", p.s);
 	m.textX = x;
 	return m;
 }
@@ -182,8 +219,8 @@ Layout Plan(Painter &p, const View &v, int widthDesign, int heightDesign)
 	L.first = total - L.shown - L.scroll;
 	const int rowsH = L.shown * kRowH;
 	if (v.typing) {
-		L.rowsTop = kPad;
-		L.barY = kPad + rowsH + (L.shown ? kGap : 0);
+		L.rowsTop = kGripH + 2;
+		L.barY = L.rowsTop + rowsH + (L.shown ? kGap : 0);
 		L.height = L.barY + kBarH + kPad;
 	}
 	else {
@@ -213,8 +250,8 @@ void PaintRow(Painter &p, const View &v, const Layout &L, int r, int y)
 	if (!m.to.empty()) ShadowLine(p, m.toX, y, m.to, kPrivate);
 	if (l.location) {
 		const int type = std::max(0, PingOf(l));
-		PaintOrnament(p, PingOrnament(type), m.pinX - 3, y, kPinW + 4, kPinW + 4, RGB(0, 0, 0));
-		PaintOrnament(p, PingOrnament(type), m.pinX - 2, y + 1, kPinW + 2, kPinW + 2, PingColor(type));
+		PaintOrnament(p, PingOrnament(type), m.pinX - 1, y + 1, kIcon + 2, kIcon + 2, RGB(0, 0, 0));
+		PaintOrnament(p, PingOrnament(type), m.pinX, y + 2, kIcon, kIcon, PingColor(type));
 	}
 	SelectObject(p.dc, g_f.text);
 	if (!m.note) ShadowLine(p, m.textX - WidthOf(p.dc, g_f.text, L": ", p.s), y, L": ", kCream);
@@ -281,6 +318,11 @@ void PaintPass(Painter &p, const View &v, const Layout &L, int pw, int ph, bool 
 		p.Fill(0, L.height - 1, L.w, 1, pal::lineDim);
 		p.Diamond(0, 0, 3, pal::goldLight);
 		p.Diamond(L.w - 1, 0, 3, pal::goldLight);
+		// The strip the panel is dragged by.
+		const bool hot = v.dragging || p.Hover(0, 0, L.w, kGripH, v.mouseX, v.mouseY);
+		if (hot) p.Fill(1, 1, L.w - 2, kGripH - 1, RGB(48, 36, 20));
+		PaintOrnament(p, kOrnamentRule, L.w / 2 - 50, 3, 100, 7, hot ? pal::focus : kGold);
+		p.AddHit(0, 0, L.w, kGripH, kActGrip);
 	}
 	for (int i = 0; i < L.shown; i++) PaintRow(p, v, L, L.first + i, L.rowsTop + i * kRowH);
 	if (L.typing && L.maxScroll > 0) {
@@ -372,6 +414,13 @@ void PaintMenuPass(Painter &p, const PingMenuView &v, int size, bool white)
 }
 
 float Scale(int, int h) { return std::max(0.85f, std::min(1.3f, h / 880.0f)); }
+
+int ChatWidth(int w, int h, int maxWidth)
+{
+	const float s = Scale(w, h);
+	const int widthDesign = std::max(220, std::min(kWidth, static_cast<int>((maxWidth > 0 ? maxWidth : w) / s)));
+	return static_cast<int>(widthDesign * s + 0.5f);
+}
 
 void PaintChat(uint32_t *buf, int w, int h, const View &v, Painted &out)
 {
