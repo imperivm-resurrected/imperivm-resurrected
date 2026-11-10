@@ -19,17 +19,19 @@ struct ChatPlayer {
 	std::string name;
 	uint32_t rgb = 0;
 	bool enemy = false;
+	bool human = false;
 };
 
 struct ChatMatch {
-	// A match on screen that the player can write in: not a replay and not the editor.
+	// A match on screen that the player can write in: not a replay and not the editor. The open zoom map counts.
 	bool playing = false;
 	// A match or a replay on screen, where received lines are shown.
 	bool onScreen = false;
 	bool severalHumans = false;
 	int local = -1;
 	unsigned enemies = 0;
-	std::vector<ChatPlayer> humans;
+	// Every other player, human or computer: a line to a computer player is harmless and Tab always has somewhere to go.
+	std::vector<ChatPlayer> others;
 	bool hasAllies = false;
 	uint32_t clockMs = 0;
 	bool haveView = false;
@@ -45,8 +47,10 @@ void ChatSetOpenHandler(ChatOpenFn fn);
 
 // Text and target as typed; withLocation adds the centre of the camera, as the dialog's "Send location". False if nothing was sent.
 bool ChatSend(const std::string &text, ChatTarget target, bool withLocation);
-// An empty chat line with a location: the point under the mouse (map or open zoom map), else the centre of the camera.
-bool ChatPing(int mouseX, int mouseY, bool haveMouse);
+// An empty chat line with a location: the point under the mouse (map or open zoom map), else the centre of the camera. The
+// sender also gets the game's "location message" notification, which the game itself only gives to the others. how says
+// what asked for it, for the log.
+bool ChatPing(int mouseX, int mouseY, bool haveMouse, const char *how);
 
 uint32_t ChatLogSerial();
 std::vector<ChatEntry> ChatLogLines();

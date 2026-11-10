@@ -12,6 +12,7 @@
 #include "i18n/tr.h"
 #include "ui/textedit.h"
 #include "ui/uikit.h"
+#include "ui/widgets.h"
 
 namespace chatui {
 namespace {
@@ -129,21 +130,11 @@ void ShadowLine(Painter &p, int x, int y, const std::wstring &t, COLORREF c)
 	draw(0, 0, c);
 }
 
-void PaintPin(Painter &p, int x, int y, int size, COLORREF c)
+// A dark rim one pixel wider all round keeps the pin readable on any ground.
+void PaintPin(Painter &p, int x, int y, int size, COLORREF c, COLORREF rim = RGB(0, 0, 0))
 {
-	const int r = std::max(3, size * 3 / 10);
-	const int cx = x + size / 2, cy = y + r + 1;
-	POINT pts[3] = {{p.S(cx - r + 1), p.S(cy + 1)}, {p.S(cx + r - 1) + 1, p.S(cy + 1)}, {p.S(cx), p.S(y + size)}};
-	HBRUSH b = CreateSolidBrush(c);
-	HPEN pen = CreatePen(PS_SOLID, 1, c);
-	HGDIOBJ ob = SelectObject(p.dc, b), op = SelectObject(p.dc, pen);
-	Polygon(p.dc, pts, 3);
-	SelectObject(p.dc, ob);
-	SelectObject(p.dc, op);
-	DeleteObject(b);
-	DeleteObject(pen);
-	p.Ellipse(cx - r, cy - r, r * 2, r * 2, c);
-	p.Ellipse(cx - r / 2, cy - r / 2, std::max(2, r), std::max(2, r), RGB(36, 24, 12));
+	PaintOrnament(p, kOrnamentPin, x - 1, y - 1, size + 2, size + 2, rim);
+	PaintOrnament(p, kOrnamentPin, x, y, size, size, c);
 }
 
 struct Layout {
@@ -210,8 +201,7 @@ void PaintRow(Painter &p, const View &v, const Layout &L, int r, int y)
 	ShadowLine(p, m.nameX, y, m.name, nameColor);
 	if (!m.to.empty()) ShadowLine(p, m.toX, y, m.to, kPrivate);
 	if (l.location) {
-		PaintPin(p, m.pinX + 1, y + 3, kPinW, RGB(0, 0, 0));
-		PaintPin(p, m.pinX, y + 2, kPinW, kAll);
+		PaintPin(p, m.pinX - 2, y + 1, kPinW + 2, kAll);
 	}
 	SelectObject(p.dc, g_f.text);
 	if (!m.note) ShadowLine(p, m.textX - WidthOf(p.dc, g_f.text, L": ", p.s), y, L": ", kCream);
@@ -232,7 +222,7 @@ void PaintChip(Painter &p, const View &v, int x, int y, int w, int h)
 	const std::string label = v.targetScope == kChatPrivate ? v.targetName : Tr(TagOf(v.targetScope));
 	const COLORREF text = v.targetScope == kChatPrivate ? Readable(v.targetColor) : v.targetScope == kChatAll ? RGB(40, 24, 8) : RGB(236, 248, 226);
 	p.Text(x + 8, y, w - 22, h, label, text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-	p.ArrowRight(x + w - 11, y + h / 2 - 4, 5, 8, v.targetScope == kChatAll ? RGB(70, 44, 14) : edge);
+	PaintOrnament(p, kOrnamentChevron, x + w - 15, y + h / 2 - 5, 10, 10, v.targetScope == kChatAll ? RGB(70, 44, 14) : edge);
 	p.AddHit(x, y, w, h, kActChip);
 }
 
@@ -242,7 +232,9 @@ void PaintPinButton(Painter &p, const View &v, int x, int y, int size)
 	if (v.withLocation) p.FillV(x, y, size, size, hot ? RGB(190, 138, 56) : RGB(168, 119, 44), RGB(104, 70, 24));
 	else p.FillV(x, y, size, size, hot ? RGB(82, 63, 38) : RGB(62, 47, 28), hot ? RGB(54, 41, 24) : RGB(36, 27, 16));
 	p.Frame(x, y, size, size, hot ? pal::focus : v.withLocation ? pal::goldLight : pal::edge);
-	PaintPin(p, x + (size - 14) / 2, y + (size - 18) / 2, 14, v.withLocation ? RGB(52, 30, 8) : pal::goldLight);
+	const int icon = size - 8;
+	if (v.withLocation) PaintPin(p, x + (size - icon) / 2, y + 4, icon, RGB(52, 30, 8), RGB(226, 186, 104));
+	else PaintPin(p, x + (size - icon) / 2, y + 4, icon, hot ? pal::focus : pal::goldLight);
 	p.AddHit(x, y, size, size, kActPin);
 }
 

@@ -362,6 +362,8 @@ bool ZoomViewHandleMouse(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 	}
 }
 
+bool ZoomViewOpen() { return !g_failed && ZoomOpen(); }
+
 bool ZoomViewScreenPoint(int x, int y, int *point)
 {
 	if (g_failed || !ZoomOpen() || !InsideBitmap(x, y)) return false;

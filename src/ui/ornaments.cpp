@@ -169,6 +169,21 @@ bool InKeys(double x, double y)
 	return true;
 }
 
+bool InPin(double x, double y)
+{
+	// The sides run from the tip at the bottom along the tangents of the head, so the outline has no corner where they meet.
+	static const Point taper[] = {{0.239, 0.507}, {0.761, 0.507}, {0.5, 0.97}};
+	const double cx = 0.5, cy = 0.36;
+	if (InCircle(x, y, cx, cy, 0.115)) return false;
+	return InCircle(x, y, cx, cy, 0.3) || InPolygon(x, y, taper);
+}
+
+bool InChevron(double x, double y)
+{
+	static const Point head[] = {{0.18, 0.08}, {0.88, 0.5}, {0.18, 0.92}, {0.36, 0.5}};
+	return InPolygon(x, y, head);
+}
+
 std::vector<uint8_t> LaurelMask(int width, int height)
 {
 	const double aspect = static_cast<double>(width) / height;
@@ -214,6 +229,8 @@ std::vector<uint8_t> OrnamentMask(Ornament ornament, int width, int height)
 	case kOrnamentSwords: return Coverage(width, height, InSwords);
 	case kOrnamentGear: return Coverage(width, height, InGear);
 	case kOrnamentKeys: return Coverage(width, height, InKeys);
+	case kOrnamentPin: return Coverage(width, height, InPin);
+	case kOrnamentChevron: return Coverage(width, height, InChevron);
 	default: return {};
 	}
 }

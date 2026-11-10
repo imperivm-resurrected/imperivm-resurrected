@@ -61,7 +61,7 @@ std::mutex g_logLock;
 ChatLog g_log;
 
 struct RawPlayer {
-	bool exists = false, human = false;
+	bool exists = false, human = false, playable = false;
 	char name[64] = {};
 	uint32_t rgb = 0;
 };
@@ -140,7 +140,10 @@ bool ReadRaw(RawMatch &m)
 			RawPlayer &out = m.players[i];
 			CopyGameString(out.name, sizeof(out.name), p, kPlayerName, kPlayerNameSize, kPlayerNameCapacity);
 			out.exists = out.name[0] && (Field<int>(p, kPlayerActive) != 0 || Field<int>(p, kPlayerState) != 0);
-			out.human = Field<int>(p, kPlayerControl) == 0;
+			const int control = Field<int>(p, kPlayerControl);
+			out.human = control == 0;
+			// 3 is the neutral player of the map and 4 an unused slot: nobody writes to them.
+			out.playable = control != 3 && control != 4;
 			out.rgb = Rgb555(Field<unsigned>(p, kPlayerColor));
 		}
 		return true;
@@ -154,22 +157,24 @@ ChatMatch Build(const RawMatch &raw)
 {
 	ChatMatch m;
 	if (!raw.game || raw.editor) return m;
-	m.onScreen = raw.shown;
-	m.playing = raw.shown && !raw.demo && raw.local >= 0 && raw.local < 16;
+	const bool zoomMap = ZoomViewOpen();
+	m.onScreen = raw.shown || zoomMap;
+	m.playing = m.onScreen && !raw.demo && raw.local >= 0 && raw.local < 16;
 	m.severalHumans = raw.severalHumans;
 	m.local = raw.local;
 	m.enemies = raw.enemies;
 	m.clockMs = raw.clock;
 	for (int i = 0; i < kSlots; i++) {
 		const RawPlayer &p = raw.players[i];
-		if (!p.exists || !p.human || i == raw.local) continue;
+		if (!p.exists || !p.playable || i == raw.local) continue;
 		ChatPlayer cp;
 		cp.index = i;
 		cp.name = p.name;
 		cp.rgb = p.rgb;
 		cp.enemy = (raw.enemies & (1u << i)) != 0;
+		cp.human = p.human;
 		if (!cp.enemy) m.hasAllies = true;
-		m.humans.push_back(cp);
+		m.others.push_back(cp);
 	}
 	m.haveView = raw.haveView;
 	m.viewLeft = raw.view[0];
@@ -221,6 +226,51 @@ void RunAsScript(const std::string &text)
 	}
 	__except (EXCEPTION_EXECUTE_HANDLER) {
 	}
+}
+
+// The game's std::string (MSVC 2008): allocator, 16-byte buffer or pointer, size, capacity.
+struct GameString {
+	uint32_t allocator;
+	union {
+		char buf[16];
+		const char *ptr;
+	};
+	uint32_t size, capacity;
+};
+static_assert(sizeof(GameString) == 0x1c, "the game's std::string is 28 bytes");
+typedef void(__cdecl *PostNotification_t)(const GameString *type, GameString text, int mapX, int mapY);
+typedef void(__stdcall *ScreenToMap_t)(unsigned *out, const unsigned *in);
+const char kLocationNotice[] = "location message";
+
+// CVXChatMessage::Execute (004e7370) raises "location message" (VXNOTIFICATIONS.XML: message icon on the map, its sound, the
+// notification and the point that Q goes back to) for everyone but the sender. The sender gets the same here.
+bool NotifyLocation(int x, int y)
+{
+	__try {
+		if (!Game()) return false;
+		const unsigned in[2] = {static_cast<unsigned>(x), static_cast<unsigned>(y)};
+		unsigned at[2] = {};
+		reinterpret_cast<ScreenToMap_t>(addr::kScreenToMap)(at, in);
+		if (static_cast<int>(at[0]) < 0 || static_cast<int>(at[1]) < 0 || at[0] >= 4000000 || at[1] >= 4000000) return false;
+		// Read only by the game: its text lives here, past the 15 characters the buffer holds.
+		GameString type = {};
+		type.ptr = kLocationNotice;
+		type.size = type.capacity = static_cast<uint32_t>(sizeof(kLocationNotice) - 1);
+		GameString text = {};
+		text.capacity = 15;
+		reinterpret_cast<PostNotification_t>(addr::kPostNotificationAtPos)(&type, text, static_cast<int>(at[0]), static_cast<int>(at[1]));
+		return true;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return false;
+	}
+}
+
+int OtherHumans(const ChatMatch &m)
+{
+	int n = 0;
+	for (const ChatPlayer &p : m.others) n += p.human ? 1 : 0;
+	return n;
 }
 
 struct RawChat {
@@ -380,18 +430,22 @@ bool ChatSend(const std::string &text, ChatTarget target, bool withLocation)
 	const bool point = withLocation && CameraCentre(raw, x, y);
 	const unsigned mask = ChatMask(target, raw.local, raw.enemies);
 	const bool ok = QueueChat(clean, mask, point, x, y);
+	const bool shown = ok && point && NotifyLocation(x, y);
 	LogAt(ok ? kLogDebug : kLogError, "game", "chat: %s %u bytes to mask %04x%s", ok ? "sent" : "could NOT send", static_cast<unsigned>(clean.size()), mask,
-		point ? " with the camera's location" : "");
+		point ? (shown ? " with the camera's location (shown here too)" : " with the camera's location (NOT shown here)") : "");
 	return ok;
 }
 
-bool ChatPing(int mouseX, int mouseY, bool haveMouse)
+bool ChatPing(int mouseX, int mouseY, bool haveMouse, const char *how)
 {
 	RawMatch raw;
-	if (!ReadRaw(raw) || !raw.game || raw.local < 0) return false;
+	if (!ReadRaw(raw) || !raw.game || raw.local < 0) {
+		LogW("game", "chat: ping (%s) ignored: no match to read", how);
+		return false;
+	}
 	const ChatMatch m = Build(raw);
 	int point[2] = {-1, -1};
-	const char *from = "the camera";
+	const char *from = "the camera (the mouse is not over the map)";
 	if (haveMouse && ZoomViewScreenPoint(mouseX, mouseY, point)) {
 		from = "the zoom map";
 	}
@@ -400,15 +454,19 @@ bool ChatPing(int mouseX, int mouseY, bool haveMouse)
 		const int spanX = std::max(1, m.viewRight - m.viewLeft), spanY = std::max(1, m.viewBottom - m.viewTop);
 		point[0] = raw.visible[0] + (mouseX - m.viewLeft) * (raw.visible[2] - raw.visible[0]) / spanX;
 		point[1] = raw.visible[1] + (mouseY - m.viewTop) * (raw.visible[3] - raw.visible[1]) / spanY;
-		from = "the mouse";
+		from = "the map view";
 	}
 	else if (!CameraCentre(raw, point[0], point[1])) {
+		LogW("game", "chat: ping (%s) ignored: the view of the map could not be read", how);
 		return false;
 	}
+	// The line goes through the command queue even with nobody else to read it: it is the sender's own line in the chat.
 	const ChatTarget target = {m.hasAllies ? kTargetAllies : kTargetAll, -1};
 	const bool ok = QueueChat(std::string(), ChatMask(target, raw.local, raw.enemies), true, point[0], point[1]);
-	LogAt(ok ? kLogDebug : kLogError, "game", "chat: %s a ping at %d,%d from %s to %s", ok ? "sent" : "could NOT send", point[0], point[1], from,
-		m.hasAllies ? "the allies" : "everyone");
+	const bool shown = NotifyLocation(point[0], point[1]);
+	const int humans = OtherHumans(m);
+	LogAt(ok && shown ? kLogInfo : kLogError, "game", "chat: ping (%s) at %d,%d from %s: %s to %s (%d other humans), %s here", how, point[0], point[1], from,
+		ok ? "sent" : "NOT sent", m.hasAllies ? "the allies" : "everyone", humans, shown ? "notified" : "NOT notified");
 	return ok;
 }
 
