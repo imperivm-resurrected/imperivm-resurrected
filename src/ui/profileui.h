@@ -7,7 +7,7 @@
 
 #include <cstdint>
 
-// The "Change player" screen, drawn over the game's own dialog, which stays open under it and does the work.
+// The player's statistics (the game's "Change player" screen), drawn over the game's own dialog, which stays open under it and does the work.
 void ProfileUiGameTick();
 bool ProfileUiNeedsDraw();
 void ProfileUiDraw(uint32_t *buf, int w, int h);

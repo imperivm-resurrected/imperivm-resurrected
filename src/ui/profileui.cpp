@@ -160,7 +160,6 @@ void Refresh()
 	const uint64_t me = SteamOwnId();
 	std::shared_ptr<const OnlineAvatar> avatar = me ? SteamAvatar(me) : nullptr;
 	const PatronInfo patron = me ? PatronOf(me) : PatronInfo();
-	const std::string steamName = me ? SteamOnlinePlayerName() : std::string();
 
 	std::lock_guard<std::mutex> lock(g_lock);
 	if (fresh) {
@@ -176,7 +175,7 @@ void Refresh()
 	v.selected = native.selected;
 	v.avatar = avatar;
 	v.patron = patron;
-	v.steamName = steamName;
+	v.rankCount = static_cast<int>(g_s.ranks.size());
 	if (moved) KeepVisible(v);
 	g_s.dirs = std::move(dirs);
 	g_s.cache = std::move(kept);

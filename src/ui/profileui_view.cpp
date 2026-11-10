@@ -27,7 +27,7 @@ constexpr int kCardPad = 14, kCardHead = 30;
 // Beside the list: the summary in one column and five games over the chart.
 constexpr int kSummaryW = 262, kNarrowRecentRows = 5;
 // At full width: the summary in two columns over the chart, and more games beside them.
-constexpr int kWideLeftW = 430, kWideSummaryH = 152, kWideRecentRows = 8;
+constexpr int kWideLeftW = 430, kWideSummaryH = 152, kWideRecentRows = 9;
 constexpr int kFooterTop = 622, kFooterButtonsY = 632, kFooterButtonH = 36;
 
 const COLORREF kWonColor = RGB(126, 170, 92), kLostColor = RGB(184, 86, 66), kMuted = RGB(140, 126, 98);
@@ -38,6 +38,31 @@ struct Area {
 	int x = 0, w = 0;
 	bool wide = false;
 };
+
+COLORREF Mix(COLORREF a, COLORREF b, float t)
+{
+	auto ch = [t](int x, int y) { return static_cast<BYTE>(x + (y - x) * t + 0.5f); };
+	return RGB(ch(GetRValue(a), GetRValue(b)), ch(GetGValue(a), GetGValue(b)), ch(GetBValue(a), GetBValue(b)));
+}
+
+// From dull bronze for the lowest rank through silver and gold to crimson and a regal purple for the highest, spread over
+// however many ranks the game's constants define.
+COLORREF RankColor(int rank, int count)
+{
+	static const COLORREF stops[] = {RGB(164, 108, 64), RGB(206, 140, 70), RGB(184, 198, 222), RGB(244, 196, 80), RGB(230, 90, 80), RGB(196, 128, 244)};
+	constexpr int last = sizeof(stops) / sizeof(stops[0]) - 1;
+	if (rank < 0 || count <= 0) return kGold;
+	const float t = count > 1 ? std::min(1.0f, static_cast<float>(rank) / (count - 1)) * last : 0.0f;
+	const int i = std::min(last - 1, static_cast<int>(t));
+	return Mix(stops[i], stops[i + 1], t - i);
+}
+
+void PaintRankBar(Painter &p, int x, int y, int w, int h, float fraction, COLORREF c)
+{
+	p.Fill(x, y, w, h, pal::well);
+	const int filled = static_cast<int>(w * std::max(0.0f, std::min(1.0f, fraction)));
+	if (filled > 0) p.FillV(x, y, filled, h, Mix(c, RGB(255, 255, 255), 0.2f), Mix(c, RGB(0, 0, 0), 0.4f));
+}
 
 Area DetailArea(const View &v)
 {
@@ -129,7 +154,7 @@ void PaintMonogram(Painter &p, int x, int y, int size, const std::string &name, 
 	Raw(p, x, y, size, size, Initials(name), strong ? pal::goldLight : kGold, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 }
 
-void PaintListRow(Painter &p, const Card &c, int index, bool selected, int x, int y, int w, int mx, int my)
+void PaintListRow(Painter &p, const Card &c, int rankCount, int index, bool selected, int x, int y, int w, int mx, int my)
 {
 	const bool hot = !selected && p.Hover(x, y, w, kRowH, mx, my);
 	if (selected) {
@@ -153,8 +178,15 @@ void PaintListRow(Painter &p, const Card &c, int index, bool selected, int x, in
 	Raw(p, x + 62, y + 9, nameW, 22, c.name, selected ? pal::goldLight : kText);
 	p.Font(3);
 	const std::string games = GamesText(c.summary.games);
-	const std::string line = c.rankName.empty() || !c.readable ? games : c.rankName + "  \xC2\xB7  " + games;
-	Raw(p, x + 62, y + 31, w - 74, 18, line, selected ? RGB(200, 180, 136) : kDim);
+	const COLORREF dim = selected ? RGB(200, 180, 136) : kDim;
+	if (c.rankName.empty() || !c.readable) {
+		Raw(p, x + 62, y + 31, w - 74, 18, games, dim);
+	}
+	else {
+		const int rankW = std::min(w - 74, RawWidth(p, c.rankName));
+		Raw(p, x + 62, y + 31, rankW, 18, c.rankName, RankColor(c.summary.rank, rankCount));
+		Raw(p, x + 62 + rankW, y + 31, w - 74 - rankW, 18, "  \xC2\xB7  " + games, dim);
+	}
 	p.AddHit(x, y, w, kRowH, kActPick, index);
 }
 
@@ -170,7 +202,7 @@ void PaintList(Painter &p, const View &v)
 	const int rowW = maxScroll > 0 ? kListW - 12 : kListW;
 	for (int r = 0; r < kListRows && scroll + r < count; r++) {
 		const int i = scroll + r;
-		PaintListRow(p, v.cards[i], i, i == v.selected, kListX, kListTop + r * (kRowH + kRowGap), rowW, v.mouseX, v.mouseY);
+		PaintListRow(p, v.cards[i], v.rankCount, i, i == v.selected, kListX, kListTop + r * (kRowH + kRowGap), rowW, v.mouseX, v.mouseY);
 	}
 	if (maxScroll > 0) {
 		const int trackY = kListTop, trackH = kListRows * (kRowH + kRowGap) - kRowGap;
@@ -201,22 +233,7 @@ void PaintIdentity(Painter &p, const View &v, const Card &c, const Area &a)
 		p.Font(3);
 		const int bw = p.TextWidth("In use") + 16;
 		PaintBadge(p, right - bw, y + 14, bw, 18, "In use", RGB(70, 46, 18), RGB(236, 186, 110));
-		if (!v.steamName.empty()) {
-			const std::string steamLine = "Steam \xC2\xB7 " + v.steamName;
-			Raw(p, right - 220, y + 36, 220, 18, steamLine, kDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		}
 		right -= bw + 12;
-	}
-	else if (c.active && !v.steamName.empty()) {
-		// With one player there is nothing to tell "In use" apart from: the corner names the account it goes with.
-		constexpr int blockW = 260;
-		p.Font(3);
-		const int labelW = p.TextWidth("Steam account");
-		p.Text(right - blockW, y + 16, blockW, 18, "Steam account", kDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
-		p.Font(1);
-		const int nameW = std::min(blockW, std::max(labelW, RawWidth(p, v.steamName)));
-		Raw(p, right - blockW, y + 34, blockW, 24, v.steamName, kText, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		right -= nameW + 16;
 	}
 	p.Font(2);
 	const PatronTier tier = c.active ? v.patron.tier : PatronTier::None;
@@ -237,22 +254,38 @@ void PaintIdentity(Painter &p, const View &v, const Card &c, const Area &a)
 		return;
 	}
 	const ProfileSummary &s = c.summary;
-	p.Font(1);
-	Raw(p, tx, y + 48, x + w - 14 - tx, 22, c.rankName.empty() ? std::string(kDash) : c.rankName, kGold);
-	if (c.rankName.empty()) return;
+	if (c.rankName.empty()) {
+		p.Font(1);
+		Raw(p, tx, y + 48, x + w - 14 - tx, 22, kDash, kGold);
+		return;
+	}
 	const int barW = a.wide ? x + w - 14 - tx : std::min(380, x + w - 14 - tx);
+	const std::string rating = Grouped(static_cast<uint64_t>(std::max<int64_t>(0, s.rating)));
 	float fraction = 1.0f;
 	std::string label;
+	const std::string ahead = Tr(s.nextRank >= 0 ? "Next:" : "Highest rank");
 	if (s.nextRank >= 0) {
 		const int span = std::max(1, s.nextPoints - s.rankPoints);
 		fraction = static_cast<float>(s.rating - s.rankPoints) / span;
-		label = TrFmt("Military rating %s / %s \xC2\xB7 next: %s", {Grouped(static_cast<uint64_t>(std::max<int64_t>(0, s.rating))),
-			Grouped(static_cast<uint64_t>(std::max(0, s.nextPoints))), c.nextRankName});
+		label = TrFmt("Military rating %s / %s", {rating, Grouped(static_cast<uint64_t>(std::max(0, s.nextPoints)))});
 	}
 	else {
-		label = TrFmt("Military rating %s \xC2\xB7 highest rank", {Grouped(static_cast<uint64_t>(std::max<int64_t>(0, s.rating)))});
+		label = TrFmt("Military rating %s", {rating});
 	}
-	PaintProgress(p, tx, y + 74, barW, 7, fraction);
+	// The rank reached goes over the start of the bar and the one ahead over its end.
+	const int barRight = tx + barW;
+	p.Font(4);
+	const int nextW = s.nextRank >= 0 ? std::min(barW / 2, RawWidth(p, c.nextRankName)) : 0;
+	if (nextW) {
+		Raw(p, barRight - nextW, y + 48, nextW, 22, c.nextRankName, RankColor(s.nextRank, v.rankCount), DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	}
+	p.Font(3);
+	const int aheadW = RawWidth(p, ahead);
+	const int aheadX = barRight - nextW - (nextW ? 6 : 0) - aheadW;
+	Raw(p, aheadX, y + 48, aheadW + 2, 22, ahead, kDim);
+	p.Font(1);
+	Raw(p, tx, y + 48, std::max(0, aheadX - 16 - tx), 22, c.rankName, RankColor(s.rank, v.rankCount));
+	PaintRankBar(p, tx, y + 74, barW, 7, fraction, RankColor(s.rank, v.rankCount));
 	p.Frame(tx - 1, y + 73, barW + 2, 9, pal::lineDim);
 	p.Font(3);
 	Raw(p, tx, y + 84, x + w - 14 - tx, 18, label, RGB(196, 178, 136));
@@ -287,8 +320,6 @@ void PaintCardTitle(Painter &p, int x, int y, int w, const std::string &title)
 	p.Text(x + kCardPad, y + 7, w - kCardPad * 2, 18, title, kGold);
 }
 
-const char kNotCounted[] = "Adventures, Great Battles and Conquest are not counted by the game.";
-
 // One column fills the height beside the list; two columns leave room under them for the chart.
 void PaintSummary(Painter &p, const Card &c, int x, int y, int w, int h, int columns)
 {
@@ -309,7 +340,7 @@ void PaintSummary(Painter &p, const Card &c, int x, int y, int w, int h, int col
 		{"Largest army", army},
 	};
 	constexpr int count = sizeof(rows) / sizeof(rows[0]), colGap = 20;
-	const int rowH = columns > 1 ? 38 : 36, inner = w - kCardPad * 2, colW = (inner - (columns - 1) * colGap) / columns;
+	const int rowH = columns > 1 ? 38 : std::min(46, (h - kCardHead - 10) / count), inner = w - kCardPad * 2, colW = (inner - (columns - 1) * colGap) / columns;
 	for (int i = 0; i < count; i++) {
 		const int cx = x + kCardPad + (i % columns) * (colW + colGap), ry = y + kCardHead + (i / columns) * rowH;
 		if (i >= columns) p.Fill(cx, ry, colW, 1, RGB(48, 37, 23));
@@ -318,11 +349,6 @@ void PaintSummary(Painter &p, const Card &c, int x, int y, int w, int h, int col
 		p.Font(4);
 		Raw(p, cx, ry + 19, colW, 18, rows[i].second, kText);
 	}
-	if (columns > 1) return;
-	const int ry = y + kCardHead + count * rowH;
-	p.Fill(x + kCardPad, ry + 4, inner, 1, pal::lineDim);
-	p.Font(3);
-	p.TextWrapped(x + kCardPad, ry + 12, inner, y + h - ry - 16, kNotCounted, kMuted);
 }
 
 void PaintLegend(Painter &p, int right, int y)
@@ -380,19 +406,14 @@ void PaintChartCard(Painter &p, const Card &c, int x, int y, int w, int h)
 	PaintBars(p, c, x + kCardPad, y + kCardHead + 12, w - kCardPad * 2, y + h - 14);
 }
 
-// With the chart under it beside the list; with the note of what the game does not count under it at full width.
+// With the chart under it beside the list; alone, with more games, at full width.
 void PaintRecent(Painter &p, const Card &c, int x, int y, int w, int h, int rows, bool chart)
 {
 	PaintCard(p, x, y, w, h);
 	PaintCardTitle(p, x, y, w, "Recent games");
 	const int x0 = x + kCardPad, inner = w - kCardPad * 2;
-	if (!chart) {
-		p.Fill(x0, y + h - 36, inner, 1, pal::lineDim);
-		p.Font(3);
-		p.Text(x0, y + h - 32, inner, 22, kNotCounted, kMuted, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-	}
 	if (c.recent.empty()) {
-		const int ty = chart ? y + 70 : y + (h - 36) / 2 - 30;
+		const int ty = chart ? y + 70 : y + h / 2 - 30;
 		p.Font(0);
 		p.Text(x0, ty, inner, 22, c.readable ? "No games recorded yet." : kDash, kText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		p.Font(3);
@@ -491,9 +512,6 @@ void PaintFooter(Painter &p, const View &v)
 			if (c.active) hint = TrFmt("You are playing as %s.", {c.name});
 		}
 	}
-	else if (SelectedIsActive(v)) {
-		hint = Tr(!ShowsList(v) && !v.steamName.empty() ? "This player goes with your Steam account." : "You are playing as this player.");
-	}
 	if (hint.empty()) return;
 	p.Font(3);
 	p.Diamond(kMargin + 4, kFooterButtonsY + kFooterButtonH / 2, 4, kGold);
@@ -505,7 +523,7 @@ void PaintFooter(Painter &p, const View &v)
 void PaintProfileScreen(Painter &p, const View &v)
 {
 	PaintWindowFrame(p, kScreenW, kScreenH);
-	PaintWindowHeader(p, kScreenW, "PLAYER");
+	PaintWindowHeader(p, kScreenW, "STATISTICS");
 	const bool list = ShowsList(v);
 	if (list) {
 		PaintList(p, v);
