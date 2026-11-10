@@ -39,8 +39,9 @@ struct View {
 	int mouseX = -10000, mouseY = -10000;
 	// Steam is the identity of the computer, so its avatar and laurel go only on the profile in use.
 	std::shared_ptr<const OnlineAvatar> avatar;
-	std::string steamName;
 	PatronInfo patron;
+	// The ranks of the game's constants, which spread the colours of the ranks.
+	int rankCount = 0;
 };
 
 enum Action { kActNone = 0, kActPick, kActUse, kActBack, kActPatron };
