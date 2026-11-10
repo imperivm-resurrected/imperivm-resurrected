@@ -35,7 +35,7 @@ const DWORD kUndoMs = 15000;
 enum Action {
 	kNone = 0, kClose, kNav, kCell, kRowReset, kSearchField, kClearSearch, kSwap, kAssignAnyway,
 	kCancelPending, kModeLetter, kModePosition, kUndo, kViewList, kViewKeys, kKbKey, kKbLayer, kKbGo,
-	kBarLetters, kCopyConfig, kPasteConfig, kBoxMode, kResetAll, kResetAllYes,
+	kBarLetters, kCopyConfig, kPasteConfig, kBoxMode, kPingMode, kResetAll, kResetAllYes,
 };
 const int kSearchAction = 7301;
 
@@ -50,6 +50,7 @@ struct State {
 	bool grid = false;
 	bool barLetters = true;
 	int boxMode = 0;
+	int pingMode = 0;
 	int page = kPageCamera;
 	ListState list;
 	ListGeom listGeom;
@@ -137,6 +138,7 @@ void Refresh(State &st)
 	st.grid = ControlsGridMode();
 	st.barLetters = ControlsBarLetters();
 	st.boxMode = ControlsZoomBoxMode();
+	st.pingMode = ControlsPingClickMode();
 	st.clash.assign(st.rows.size() * 2, Ref());
 	for (size_t i = 0; i < st.rows.size(); i++) {
 		for (int s = 0; s < 2; s++) {
@@ -1011,6 +1013,20 @@ void ControlsUiDraw(uint32_t *buf, int w, int h)
 			"Hold the key and drag over the big map to select the troops and heroes inside the box; hold the other one of Shift and Ctrl to add to your "
 			"selection. Without the key, a click takes you to that place, as in the original game.",
 			kDim);
+		const int py = by + bh + 8;
+		p.Fill(bx, py, bw, bh, RGB(36, 28, 19));
+		p.Frame(bx, py, bw, bh, pal::divider);
+		p.Font(1);
+		p.Text(bx + 14, py + 8, bw - 28, 28, "Mark position with the mouse", kText);
+		static const char *const kPingLabels[kPingClickModes] = {"Alt + click", "Ctrl + click", "Shift + click", "Off"};
+		for (int i = 0; i < kPingClickModes; i++) {
+			p.Button(segX + i * segW, py + 46, segW, 28, kPingLabels[i], kPingMode, i, mx, my, true, st.pingMode == i, 4);
+		}
+		p.Font(3);
+		p.TextWrapped(bx + 14, py + 82, bw - 28, 34,
+			"Hold the key and click the map to mark that point for your allies. Ctrl and Shift only mark on the big map; with the box key, a "
+			"click marks and a drag selects.",
+			kDim);
 	}
 	if (ordersBanner) {
 		const int bx = kListX + 8, bw = kListW - 16, by = kTop, bh = kBannerH - 10;
@@ -1054,7 +1070,7 @@ void ControlsUiDraw(uint32_t *buf, int w, int h)
 	}
 
 	const Columns cols = Cols();
-	const int colsY = kTop + (banner ? kBannerH : 0);
+	const int colsY = kTop + (boxBanner ? 2 * kBannerH - 2 : banner ? kBannerH : 0);
 	p.Font(4);
 	p.Text(cols.name, colsY, 200, kColsH, "Action", RGB(150, 126, 84));
 	p.Text(cols.cell0, colsY, kCellW, kColsH, "Key", RGB(150, 126, 84), DT_CENTER | DT_VCENTER | DT_SINGLELINE);
@@ -1464,6 +1480,11 @@ void Activate(State &st, int action, int arg, POINT pt)
 		ControlsSetZoomBoxMode(arg);
 		Refresh(st);
 		SetStatus(st, st.boxMode == kZoomBoxOff ? "Box selection on the big map is off." : "Box selection on the big map changed.", false);
+		break;
+	case kPingMode:
+		ControlsSetPingClickMode(arg);
+		Refresh(st);
+		SetStatus(st, st.pingMode == kPingClickOff ? "Marking with the mouse is off." : "Marking with the mouse changed.", false);
 		break;
 	case kBarLetters:
 		ControlsSetBarLetters(!st.barLetters);

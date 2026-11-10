@@ -88,6 +88,11 @@ int ControlsZoomBoxMode();
 void ControlsSetZoomBoxMode(int mode);
 unsigned ControlsZoomBoxVk();
 unsigned ControlsZoomBoxAddVk();
+// The click that marks a position for the allies. Ctrl and Shift mark only on the big map: on the battlefield they select.
+enum PingClickMode { kPingClickAlt, kPingClickCtrl, kPingClickShift, kPingClickOff, kPingClickModes };
+int ControlsPingClickMode();
+void ControlsSetPingClickMode(int mode);
+unsigned ControlsPingClickVk();
 std::string ControlsExport();
 bool ControlsImport(const std::string &text);
 void ControlsNoteLayout();

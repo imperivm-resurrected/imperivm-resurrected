@@ -43,6 +43,7 @@ struct Geometry {
 	int winX = 0, winY = 0;
 };
 Geometry g_geo;
+ZoomClickFn g_clickHook = nullptr;
 
 struct Drag {
 	bool pending = false, dragging = false;
@@ -348,6 +349,8 @@ bool ZoomViewHandleMouse(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 				EndBox();
 				return true;
 			}
+			// The box key held for a click without a drag: if marking positions uses the same key, the click marks.
+			if (g_clickHook && g_clickHook(drag.startX, drag.startY)) return true;
 			DisplayForwardMessage(hwnd, WM_LBUTTONDOWN, drag.downWp, drag.downLp);
 		}
 		return false;
@@ -363,6 +366,12 @@ bool ZoomViewHandleMouse(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 }
 
 bool ZoomViewOpen() { return !g_failed && ZoomOpen(); }
+
+bool ZoomViewContains(int x, int y) { return ZoomViewOpen() && InsideBitmap(x, y); }
+
+bool ZoomViewBoxUses(unsigned vk) { return !g_failed && vk && ExtrasEnabled() && ControlsZoomBoxVk() == vk; }
+
+void ZoomViewSetClickHook(ZoomClickFn fn) { g_clickHook = fn; }
 
 bool ZoomViewScreenPoint(int x, int y, int *point)
 {

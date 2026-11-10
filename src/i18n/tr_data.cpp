@@ -1708,6 +1708,13 @@ extern const TrRow kTrRows[] = {
 	{"Tab changes who reads it", "Tab cambia quién lo lee", "Tab cambia chi lo legge"},
 	{"marked a point on the map", "marcó un punto en el mapa", "ha segnato un punto sulla mappa"},
 	{"Ping location", "Marcar posición", "Segnala posizione"},
-	{"marks the point under the cursor for your allies, or for everyone if you have none", "marca el punto bajo el cursor para tus aliados, o para todos si no tienes", "segna il punto sotto il cursore per i tuoi alleati, o per tutti se non ne hai"},
+	{"marks the point under the cursor for your allies", "marca el punto bajo el cursor para tus aliados", "segna il punto sotto il cursore per i tuoi alleati"},
+	{"Mark position with the mouse", "Marcar posición con el ratón", "Segnala posizione con il mouse"},
+	{"Alt + click", "Alt + clic", "Alt + clic"},
+	{"Ctrl + click", "Ctrl + clic", "Ctrl + clic"},
+	{"Shift + click", "Mayús + clic", "Maiusc + clic"},
+	{"Hold the key and click the map to mark that point for your allies. Ctrl and Shift only mark on the big map; with the box key, a click marks and a drag selects.", "Mantén la tecla y haz clic en el mapa para marcar ese punto a tus aliados. Ctrl y Mayús solo marcan en el mapa grande; con la tecla de la caja, un clic marca y arrastrar selecciona.", "Tieni il tasto e fai clic sulla mappa per segnalare il punto agli alleati. Ctrl e Maiusc solo sulla mappa grande; con il tasto del riquadro, clic segnala e trascinare seleziona."},
+	{"Marking with the mouse is off.", "Marcar con el ratón está desactivado.", "La segnalazione con il mouse è disattivata."},
+	{"Marking with the mouse changed.", "Se cambió cómo marcar con el ratón.", "Segnalazione con il mouse cambiata."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);
