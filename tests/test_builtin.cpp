@@ -20,6 +20,9 @@ void AppliesAnywhere()
 	for (int i = 0; i < count; i++) {
 		if (texts[i].gameFileSha256) continue;
 		anywhere++;
+		// The XML patches are tried on the files they change, below.
+		const std::string path = texts[i].path;
+		if (path.size() > 4 && path.compare(path.size() - 4, 4, ".xml") == 0) continue;
 		std::string data;
 		std::vector<std::string> errors;
 		CHECK(PatchIniText(data, texts[i].text, errors));
@@ -41,6 +44,22 @@ const BuiltinText *Find(const char *path)
 		if (std::string(texts[i].path) == path) return &texts[i];
 	}
 	return nullptr;
+}
+
+void AddsThePingNotifications()
+{
+	const BuiltinText *fix = Find("data/vxnotifications.xml");
+	CHECK(fix != nullptr);
+	if (!fix) return;
+	CHECK(fix->gameFileSha256 == nullptr);
+	std::string data = "<notifications>\r\n<notification\r\n\t\t\tid=\"location message\"\r\n\t\t\tcategory  = \"none\"\r\n\t\t\t/>\r\n</notifications>\r\n";
+	std::vector<std::string> errors;
+	CHECK(PatchXmlText(data, fix->text, errors));
+	CHECK(errors.empty());
+	CHECK(data.find("id=\"location message\"") != std::string::npos);
+	for (const char *id : {"mod ping attack", "mod ping danger"}) CHECK(data.find(std::string("id=\"") + id + "\"") != std::string::npos);
+	CHECK(data.find("UI/Icons/Notifications/battle.rle") != std::string::npos);
+	CHECK(data.find("UI/Icons/Notifications/flag_red.rle") != std::string::npos);
 }
 
 void FixesOnlyTheGameGaulTactic()
@@ -82,6 +101,7 @@ int main()
 {
 	AppliesAnywhere();
 	FixesOnlyTheGameGaulTactic();
+	AddsThePingNotifications();
 	KeepsTheMenuOfAPack();
 	return test::Summary("builtin");
 }

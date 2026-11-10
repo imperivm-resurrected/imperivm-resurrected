@@ -532,7 +532,9 @@ std::multimap<std::string, std::string> FullKeysByText(const std::string &base)
 const char *const kMenuKeys[] = {"Apply", "Reset", "Controls", "Play in window", "Vertical sync",
 	"Trap the mouse in the game", "Show FPS and memory", "Network statistics", "Mute in the background",
 	"Chat and invitation alerts", "Cutscenes", "Use up to 4 GB of memory", "Brightness", "Autosave",
-	"Save when leaving the game", "Language", "Updates", "Monitor", "Multiplayer", "Imperivm League", "Additional content"};
+	"Save when leaving the game", "Language", "Updates", "Monitor", "Multiplayer", "Imperivm League", "Additional content",
+	// The titles of the chat's ping notifications (built-in patch of data/vxnotifications.xml).
+	"Attack here", "Danger"};
 
 // The game's own texts the mod renames, by their full key so that only these buttons change: the player screen is the
 // player's statistics now, and the game wrote "MultiJugador" in Spanish.

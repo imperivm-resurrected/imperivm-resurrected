@@ -3,6 +3,7 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include "game/chatlog.h"
 
+#include <cmath>
 #include <cstdio>
 #include <utility>
 
@@ -163,4 +164,53 @@ void ChatLog::Clear()
 bool ChatLog::AnyFresh(uint32_t now) const
 {
 	return !lines_.empty() && now - lines_.back().arrivedMs < kChatShowMs;
+}
+
+const char *ChatPingPhrase(int type)
+{
+	switch (type) {
+	case kPingAttack: return "Attack here!";
+	case kPingDanger: return "Danger!";
+	default: return "On my way";
+	}
+}
+
+int ChatPingTypeOf(const std::string &text, bool location, const std::vector<std::string> (&phrases)[kPingTypes])
+{
+	if (!location) return -1;
+	if (text.empty()) return kPingHere;
+	for (int t = 0; t < kPingTypes; t++) {
+		for (const std::string &p : phrases[t]) {
+			if (!p.empty() && p == text) return t;
+		}
+	}
+	return -1;
+}
+
+namespace {
+const double kMenuAngles[kPingTypes] = {-90.0, 30.0, 150.0};
+}
+
+int ChatPingMenuPick(int dx, int dy, int deadZone)
+{
+	if (dx * dx + dy * dy <= deadZone * deadZone) return -1;
+	const double angle = std::atan2(static_cast<double>(dy), static_cast<double>(dx)) * 180.0 / 3.14159265358979;
+	int best = 0;
+	double bestGap = 1e9;
+	for (int t = 0; t < kPingTypes; t++) {
+		double gap = std::fabs(angle - kMenuAngles[t]);
+		if (gap > 180) gap = 360 - gap;
+		if (gap < bestGap) {
+			bestGap = gap;
+			best = t;
+		}
+	}
+	return best;
+}
+
+void ChatPingMenuOffset(int type, int radius, int &dx, int &dy)
+{
+	const double a = kMenuAngles[type >= 0 && type < kPingTypes ? type : 0] * 3.14159265358979 / 180.0;
+	dx = static_cast<int>(std::lround(std::cos(a) * radius));
+	dy = static_cast<int>(std::lround(std::sin(a) * radius));
 }

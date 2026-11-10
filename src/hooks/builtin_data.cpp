@@ -43,6 +43,14 @@ const BuiltinText kPatches[] = {
 		"\t// Units of players with I1NoSneak set (the converted Imperivm I campaign) never hid on their own in their game.\n"
 		"\tif (.TimeWithoutAttack >= 20000 && EnvReadInt(.player, \"I1NoSneak\") != 1)\n",
 		"8fe330c486b6dcc43edfa055563cca78a85dcf107cc2af9ea495e7bd905538c0"},
+	{"data/vxnotifications.xml",
+		"<patch>\n"
+		"\t<add select=\"/notifications\">\n"
+		"\t\t<notification id=\"mod ping attack\" category=\"none\" anim=\"UI/Icons/Notifications/battle.rle\" text=\"Attack here\" title=\"Attack here\" sound=\"Sounds/Notifications/unit attacked.wav\" activetime=\"8000\" duration=\"8000\" suspendradius=\"1000\" framechangetime=\"100\" icon=\"gameres/infobar/common/military.bmp\"/>\n"
+		"\t\t<notification id=\"mod ping danger\" category=\"none\" anim=\"UI/Icons/Notifications/flag_red.rle\" text=\"Danger\" title=\"Danger\" sound=\"Sounds/Notifications/building attacked.wav\" activetime=\"8000\" duration=\"8000\" suspendradius=\"1000\" icon=\"gameres/infobar/common/military.bmp\"/>\n"
+		"\t</add>\n"
+		"</patch>\n",
+		nullptr},
 	{"menuini/gameoptions.ini",
 		"[GameOptions Objects]\n"
 		"+ModMovieMuteCheck\n"

@@ -153,6 +153,40 @@ static void TestText()
 	CHECK_EQ(ChatClock(3600000 + 2 * 60000 + 3000), std::string("1:02:03"));
 }
 
+static void TestPings()
+{
+	const std::vector<std::string> phrases[kPingTypes] = {
+		{"On my way", "Voy para allá", "Sto arrivando"},
+		{"Attack here!", "¡Atacad aquí!", "Attaccate qui!"},
+		{"Danger!", "¡Peligro!", "Pericolo!"},
+	};
+	CHECK_EQ(ChatPingTypeOf("", true, phrases), static_cast<int>(kPingHere));
+	CHECK_EQ(ChatPingTypeOf("", false, phrases), -1);
+	CHECK_EQ(ChatPingTypeOf("Attack here!", true, phrases), static_cast<int>(kPingAttack));
+	// Whatever the sender's language, the type reads back.
+	CHECK_EQ(ChatPingTypeOf("¡Peligro!", true, phrases), static_cast<int>(kPingDanger));
+	CHECK_EQ(ChatPingTypeOf("Sto arrivando", true, phrases), static_cast<int>(kPingHere));
+	// The same words without a location are an ordinary line, and other text with a location is a located message.
+	CHECK_EQ(ChatPingTypeOf("Danger!", false, phrases), -1);
+	CHECK_EQ(ChatPingTypeOf("danger!", true, phrases), -1);
+	CHECK_EQ(ChatPingTypeOf("here, catapults", true, phrases), -1);
+	CHECK_EQ(std::string(ChatPingPhrase(kPingAttack)), std::string("Attack here!"));
+	CHECK_EQ(std::string(ChatPingPhrase(99)), std::string("On my way"));
+
+	CHECK_EQ(ChatPingMenuPick(0, 0, 12), -1);
+	CHECK_EQ(ChatPingMenuPick(5, -8, 12), -1);
+	CHECK_EQ(ChatPingMenuPick(0, -40, 12), static_cast<int>(kPingHere));
+	CHECK_EQ(ChatPingMenuPick(40, 20, 12), static_cast<int>(kPingAttack));
+	CHECK_EQ(ChatPingMenuPick(-40, 20, 12), static_cast<int>(kPingDanger));
+	CHECK_EQ(ChatPingMenuPick(40, -10, 12), static_cast<int>(kPingAttack));
+	CHECK_EQ(ChatPingMenuPick(-30, -30, 12), static_cast<int>(kPingHere));
+	for (int t = 0; t < kPingTypes; t++) {
+		int dx = 0, dy = 0;
+		ChatPingMenuOffset(t, 50, dx, dy);
+		CHECK_EQ(ChatPingMenuPick(dx, dy, 12), t);
+	}
+}
+
 int main()
 {
 	TestMasks();
@@ -160,5 +194,6 @@ int main()
 	TestRecall();
 	TestFade();
 	TestText();
+	TestPings();
 	return test::Summary("chatlog");
 }

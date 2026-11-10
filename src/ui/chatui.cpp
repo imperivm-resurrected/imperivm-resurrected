@@ -49,6 +49,12 @@ struct State {
 	std::vector<ChatEntry> lines;
 	uint32_t serial = 0;
 	Painted painted;
+	// The ping menu, open while the button that started it is down.
+	bool menu = false;
+	POINT menuAt = {};
+	int menuHover = -1;
+	DWORD menuSince = 0;
+	const char *menuHow = "";
 };
 
 std::mutex g_lock;
@@ -59,6 +65,11 @@ bool g_haveMouse = false;
 WPARAM g_swallowVk = 0, g_openVk = 0, g_lastDownVk = 0;
 DWORD g_lastDownAt = 0, g_lastPing = 0;
 bool g_swallowLeftUp = false, g_swallowRightUp = false;
+int g_frameW = 1280, g_frameH = 768;
+// The menu shows once the button has been held this long, or as soon as the mouse leaves the dead zone; a quick click sends the
+// default type without it ever appearing.
+const DWORD kMenuDelayMs = 180;
+const char *const kTypeNames[kPingTypes] = {"here", "attack", "danger"};
 
 bool OtherScreenOpen()
 {
@@ -261,7 +272,7 @@ bool CanPing(const char *how)
 	return true;
 }
 
-void Ping(int x, int y, bool haveMouse, const char *how)
+void Ping(int x, int y, bool haveMouse, const char *how, int type)
 {
 	const DWORD now = GetTickCount();
 	if (now - g_lastPing < kPingCooldownMs) {
@@ -269,18 +280,23 @@ void Ping(int x, int y, bool haveMouse, const char *how)
 		return;
 	}
 	g_lastPing = now;
-	ChatPing(x, y, haveMouse, how);
+	ChatPing(x, y, haveMouse, how, type);
 }
 
 bool TryPingKey(WPARAM wp, LPARAM lp)
 {
-	if (!ControlsModKeyPressed(kModKeyPing, static_cast<unsigned>(wp))) return false;
+	const int keys[kPingTypes] = {kModKeyPing, kModKeyPingAttack, kModKeyPingDanger};
+	int type = -1;
+	for (int t = 0; t < kPingTypes && type < 0; t++) {
+		if (ControlsModKeyPressed(keys[t], static_cast<unsigned>(wp))) type = t;
+	}
+	if (type < 0) return false;
 	if (lp & (1 << 30)) return g_swallowVk == wp;
-	LogD("ui", "chat: ping key %s received (mouse %s at %d,%d)", ControlsKeyLabel(ControlsModKey(kModKeyPing)).c_str(), g_haveMouse ? "seen" : "not seen yet",
-		g_mouseX, g_mouseY);
+	LogD("ui", "chat: %s ping key %s received (mouse %s at %d,%d)", kTypeNames[type], ControlsKeyLabel(ControlsModKey(keys[type])).c_str(),
+		g_haveMouse ? "seen" : "not seen yet", g_mouseX, g_mouseY);
 	if (!CanPing("key")) return false;
 	g_swallowVk = wp;
-	Ping(g_mouseX, g_mouseY, g_haveMouse, "key");
+	Ping(g_mouseX, g_mouseY, g_haveMouse, "key", type);
 	return true;
 }
 
@@ -296,10 +312,53 @@ bool TryPingClick(POINT at)
 	if (!zoomMap && vk != VK_MENU) return false;
 	// The same key as the box selection: the zoom map tells a click from a drag and calls back for the click.
 	if (zoomMap && ZoomViewBoxUses(vk)) return false;
-	LogD("ui", "chat: %s at %d,%d (%s)", ClickName(vk), static_cast<int>(at.x), static_cast<int>(at.y), zoomMap ? "zoom map" : "map view");
+	LogD("ui", "chat: %s at %d,%d (%s): ping menu", ClickName(vk), static_cast<int>(at.x), static_cast<int>(at.y), zoomMap ? "zoom map" : "map view");
 	if (!CanPing(ClickName(vk))) return false;
-	g_swallowLeftUp = true;
-	Ping(at.x, at.y, true, ClickName(vk));
+	std::lock_guard<std::mutex> lock(g_lock);
+	g_s.menu = true;
+	g_s.menuAt = at;
+	g_s.menuHover = -1;
+	g_s.menuSince = GetTickCount();
+	g_s.menuHow = ClickName(vk);
+	return true;
+}
+
+// While the menu is open the mouse belongs to it: the button coming up sends the type pointed at, Esc or the right button cancel.
+bool HandleMenu(UINT msg, WPARAM wp, LPARAM lp)
+{
+	POINT at = {};
+	const char *how = "";
+	int hover = -1;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		if (!g_s.menu) return false;
+		at = g_s.menuAt;
+		how = g_s.menuHow;
+		if (msg == WM_MOUSEMOVE) {
+			g_s.menuHover = ChatPingMenuPick(static_cast<short>(LOWORD(lp)) - at.x, static_cast<short>(HIWORD(lp)) - at.y, PingMenuDeadZone(g_frameW, g_frameH));
+			return false;
+		}
+		hover = g_s.menuHover;
+		const bool cancel = (msg == WM_KEYDOWN && wp == VK_ESCAPE) || msg == WM_RBUTTONDOWN || msg == WM_RBUTTONDBLCLK;
+		if (cancel) {
+			g_s.menu = false;
+			if (msg == WM_KEYDOWN) g_swallowVk = VK_ESCAPE;
+			else g_swallowRightUp = true;
+			LogD("ui", "chat: ping menu cancelled");
+			return true;
+		}
+		// A press with the menu open means its release was lost outside the window: the menu goes, the click is a normal one.
+		if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK) {
+			g_s.menu = false;
+			LogD("ui", "chat: ping menu dropped (its release was not seen)");
+			return false;
+		}
+		if (msg != WM_LBUTTONUP) return false;
+		g_s.menu = false;
+	}
+	const int type = hover >= 0 ? hover : kPingHere;
+	LogD("ui", "chat: ping menu released on %s%s", kTypeNames[type], hover < 0 ? " (no type pointed at: the default)" : "");
+	Ping(at.x, at.y, true, how, type);
 	return true;
 }
 
@@ -309,7 +368,7 @@ bool OnZoomClick(int x, int y)
 	if (!vk || !ZoomViewBoxUses(vk)) return false;
 	LogD("ui", "chat: %s at %d,%d (zoom map, no drag)", ClickName(vk), x, y);
 	if (!CanPing(ClickName(vk))) return false;
-	Ping(x, y, true, ClickName(vk));
+	Ping(x, y, true, ClickName(vk), kPingHere);
 	return true;
 }
 
@@ -323,6 +382,7 @@ Line LineOf(const ChatEntry &e, int alpha)
 	l.text = e.text;
 	l.color = ColorOf(e.rgb);
 	l.location = e.location;
+	l.ping = e.ping;
 	l.alpha = alpha;
 	return l;
 }
@@ -383,7 +443,7 @@ bool ChatUiNeedsDraw()
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
 		if (!g_s.match.onScreen) return false;
-		if (!g_s.open && (g_s.lines.empty() || GetTickCount() - g_s.lines.back().arrivedMs >= kChatShowMs)) return false;
+		if (!g_s.open && !g_s.menu && (g_s.lines.empty() || GetTickCount() - g_s.lines.back().arrivedMs >= kChatShowMs)) return false;
 	}
 	return !OtherScreenOpen();
 }
@@ -391,11 +451,19 @@ bool ChatUiNeedsDraw()
 void ChatUiDraw(uint32_t *buf, int w, int h)
 {
 	View v;
+	bool menu = false;
+	PingMenuView menuView;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
 		const State &s = g_s;
 		if (!s.match.onScreen) return;
+		g_frameW = w;
+		g_frameH = h;
 		const DWORD now = GetTickCount();
+		menu = s.menu && (s.menuHover >= 0 || now - s.menuSince >= kMenuDelayMs);
+		menuView.x = s.menuAt.x;
+		menuView.y = s.menuAt.y;
+		menuView.hover = s.menuHover;
 		v.typing = s.open;
 		if (s.open) {
 			const size_t from = s.lines.size() > kChatHistoryLines ? s.lines.size() - kChatHistoryLines : 0;
@@ -427,18 +495,21 @@ void ChatUiDraw(uint32_t *buf, int w, int h)
 	}
 	v.mouseX = g_mouseX;
 	v.mouseY = g_mouseY;
-	if (!v.typing && v.lines.empty()) return;
-	Painted painted;
-	PaintChat(buf, w, h, v, painted);
-	std::lock_guard<std::mutex> lock(g_lock);
-	if (g_s.open == v.typing) {
-		g_s.painted = std::move(painted);
-		g_s.scroll = std::min(g_s.scroll, g_s.painted.maxScroll);
+	if (v.typing || !v.lines.empty()) {
+		Painted painted;
+		PaintChat(buf, w, h, v, painted);
+		std::lock_guard<std::mutex> lock(g_lock);
+		if (g_s.open == v.typing) {
+			g_s.painted = std::move(painted);
+			g_s.scroll = std::min(g_s.scroll, g_s.painted.maxScroll);
+		}
 	}
+	if (menu) PaintPingMenu(buf, w, h, menuView);
 }
 
 bool ChatUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 {
+	if (HandleMenu(msg, wp, lp)) return true;
 	if (msg == WM_MOUSEMOVE) {
 		g_mouseX = static_cast<short>(LOWORD(lp));
 		g_mouseY = static_cast<short>(HIWORD(lp));

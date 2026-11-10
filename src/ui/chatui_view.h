@@ -21,7 +21,15 @@ struct Line {
 	std::string name, toName, text;
 	COLORREF color = RGB(232, 216, 160);
 	bool location = false;
+	// The type of a ping (ChatPingType), or -1.
+	int ping = -1;
 	int alpha = 255;
+};
+
+// The menu of ping types, centred on the point where the button went down; hover is the type under the mouse or -1.
+struct PingMenuView {
+	int x = 0, y = 0;
+	int hover = -1;
 };
 
 struct View {
@@ -52,5 +60,8 @@ struct Painted {
 
 float Scale(int w, int h);
 void PaintChat(uint32_t *buf, int w, int h, const View &v, Painted &out);
+void PaintPingMenu(uint32_t *buf, int w, int h, const PingMenuView &v);
+// How far the mouse has to move from the press before it points at a type, in game pixels.
+int PingMenuDeadZone(int w, int h);
 
 }
