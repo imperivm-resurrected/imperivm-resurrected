@@ -2,6 +2,10 @@
 
 The SDK version and which mods you can make with each one. The script API version (`Mod_ApiVersion()`) is separate: it's currently 7.
 
+## Next
+
+- **Credits:** the credits screen lays out `currentlang\credits.txt` in sections, roles and columns. See [Credits](languages.md#credits) for the format a mod's own file should follow.
+
 ## 1.0
 
 Needs Imperivm Resurrected 1.0 or later.

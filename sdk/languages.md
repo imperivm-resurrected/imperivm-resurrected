@@ -113,6 +113,53 @@ In multiplayer the language doesn't matter: players with different languages can
 
 Any file in `currentlang\` can be changed for one language only with your mod's `Local\<language>\` folder. `Local\spanish\help.xml` changes the help in Spanish only. If you put the file in `currentlang\help.xml` (outside `Local\`), it applies to all languages.
 
+## Credits
+
+The credits screen shows `currentlang\credits.txt`. A mod can replace it for every language (`currentlang\credits.txt`) or for one (`Local\<language>\credits.txt`), and `<game>\imperivm-resurrected\currentlang\credits.txt` works for testing without a mod. The screen reads the file each time it opens, so there's no need to restart.
+
+Imperivm Resurrected draws its own credits and its patrons first. Your file comes after them.
+
+The file is plain text, saved as UTF-8. The screen lays it out from a few rules:
+
+```
+Imperivm HD / Release 0.1
+2 July 2021
+
+==================================================
+
+Haemimont Games
+Gabriel Dobrev, Bisser Dyankov & Assen Ivanov
+
+==================================================
+
+Music
+Tsvetomir Hristov
+
+
+Voice actors
+Antonio Galvez
+Carlos Ysbert
+Conchi Lopez
+
+==================================================
+
+Thanks to everyone who backed the game
+(in alphabetical order)
+
+Aarompi
+Aaron Bernabeu
+…
+```
+
+- **Sections.** A line of five or more `=` (or `-`, `_`, `*`, `~`) starts a new section, drawn with a gold rule. Each section gets a line in the index on the left, which jumps to it.
+- **Title.** The first line of a section is its title. A short line right below it with a number in it, such as a date, is drawn as a subtitle.
+- **Roles.** Blank lines split a section into groups. A group's first line is a role (Music, Voice actors) and the lines under it are names. A group with only a title takes the next group as its names.
+- **Notes.** A line in brackets, `(like this)`, is drawn smaller as a note.
+- **Long lists.** More than 12 names are drawn in three columns. A role with more than 12 names, or with a note, also gets its own line in the index.
+- **Plain text.** A line longer than 90 characters, such as a copyright notice, is drawn as normal centred text.
+
+A file that doesn't follow these rules still shows: its lines are drawn centred, one after another. The scrolling speed is `PixPerSec` in the `[CreditsDescription]` section of `menuini\CreditsMenu.ini`. The images the original screen could show when a word was typed in it aren't drawn.
+
 ## If something goes wrong
 
 Look in `Logs\imperivm\imperivm-mod.log` for the lines tagged `language`. The warnings (`W`) point at the lines with errors. To also see which text files were read and which `Local\<language>\` files are in use, put `LogChannels=language:debug` under `[Debug]` in `imperivm-mod.ini`.
