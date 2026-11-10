@@ -89,17 +89,28 @@ Card BuildCard(const ProfileSlot &slot, const std::vector<RankStep> &ranks)
 	c.favoriteCiv = ProfileCivName(c.summary.favoriteRace);
 	if (!ini.favoriteUnit.empty()) c.favoriteUnit = ProfileUnitName(ini.favoriteUnit);
 	if (!c.summary.bestUnit.empty()) c.bestUnit = ProfileUnitName(c.summary.bestUnit);
-	for (const PlayedGame &g : RecentGames(ini, kChartGames)) {
-		RecentRow r;
+	for (const PlayedGame &g : RecentGames(ini, ini.played.size())) {
+		GameRow r;
 		r.day = g.day;
 		r.month = g.month;
 		r.year = g.year;
+		r.hour = g.hour;
+		r.minute = g.minute;
 		r.won = !g.lost;
 		r.multi = g.multi;
 		r.civ = ProfileCivName(g.race);
+		if (!g.levelMaxUnit.empty()) r.bestUnit = ProfileUnitName(g.levelMaxUnit);
+		r.bestLevel = g.levelMax;
 		r.durationMs = g.durationMs;
 		r.kills = g.unitsKilled;
-		c.recent.push_back(r);
+		r.losses = g.unitsLost;
+		r.produced = g.unitsProduced;
+		r.armyMax = g.unitsMax;
+		r.gold = g.gold;
+		r.food = g.food;
+		r.damageDealt = g.damageInflicted;
+		r.damageTaken = g.damageTaken;
+		c.games.push_back(r);
 	}
 	return c;
 }
@@ -171,11 +182,22 @@ void Refresh()
 	}
 	View &v = g_s.view;
 	const bool moved = v.selected != native.selected || v.cards.size() != cards.size();
+	if (v.selected != native.selected) {
+		v.expanded = -1;
+		v.historyScroll = 0;
+	}
 	v.cards = std::move(cards);
 	v.selected = native.selected;
 	v.avatar = avatar;
 	v.patron = patron;
 	v.rankCount = static_cast<int>(g_s.ranks.size());
+	SYSTEMTIME now;
+	GetLocalTime(&now);
+	v.todayYear = now.wYear;
+	v.todayMonth = now.wMonth;
+	v.todayDay = now.wDay;
+	if (v.expanded >= 0 && (!SelectedCard(v) || v.expanded >= static_cast<int>(SelectedCard(v)->games.size()))) v.expanded = -1;
+	v.historyScroll = std::max(0, std::min(v.historyScroll, HistoryMaxScroll(v)));
 	if (moved) KeepVisible(v);
 	g_s.dirs = std::move(dirs);
 	g_s.cache = std::move(kept);
@@ -195,6 +217,14 @@ int HitAt(const State &st, POINT at, int &arg)
 		return it->action;
 	}
 	return kActNone;
+}
+
+bool OverHistory(const State &st, POINT at)
+{
+	for (const Hit &h : st.hits) {
+		if (h.action == kActHistory && PtInRect(&h.r, at)) return true;
+	}
+	return false;
 }
 
 // Changes of the screen alone happen here, under the lock; whatever touches the game is left in `cmd` for Execute.
@@ -218,6 +248,18 @@ void Act(View &v, int action, int arg, Command &cmd)
 	case kActBack:
 	case kActPatron:
 		cmd.action = action;
+		break;
+	case kActMetric: v.metric = std::max(0, std::min(arg, kMetricCount - 1)); break;
+	case kActChartMode: v.chartMode = arg; break;
+	case kActChartRange: v.chartRange = arg; break;
+	case kActOutcome:
+		v.outcome = arg;
+		v.historyScroll = 0;
+		break;
+	case kActBar: HistoryReveal(v, arg); break;
+	case kActGame:
+		v.expanded = v.expanded == arg ? -1 : arg;
+		v.historyScroll = std::max(0, std::min(v.historyScroll, HistoryMaxScroll(v)));
 		break;
 	default: break;
 	}
@@ -282,10 +324,18 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, Command &cmd)
 	case WM_LBUTTONUP:
 		g_s.mouseDown = false;
 		return true;
-	case WM_MOUSEWHEEL:
-		v.scroll -= GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA;
-		v.scroll = std::max(0, std::min(v.scroll, std::max(0, static_cast<int>(v.cards.size()) - kListRows)));
+	case WM_MOUSEWHEEL: {
+		// The wheel's position comes in screen coordinates; the last move tells where the mouse is over the screen.
+		const int steps = GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA;
+		if (OverHistory(g_s, {v.mouseX, v.mouseY})) {
+			v.historyScroll = std::max(0, std::min(v.historyScroll - steps * 3, HistoryMaxScroll(v)));
+		}
+		else {
+			v.scroll -= steps;
+			v.scroll = std::max(0, std::min(v.scroll, std::max(0, static_cast<int>(v.cards.size()) - kListRows)));
+		}
 		return true;
+	}
 	case WM_KEYDOWN:
 	case WM_CHAR:
 		if (msg == WM_CHAR) return true;
