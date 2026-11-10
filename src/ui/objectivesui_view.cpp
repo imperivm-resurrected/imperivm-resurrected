@@ -159,12 +159,14 @@ int LinesHeight(const std::vector<std::wstring> &lines)
 	return h;
 }
 
-void ScrollBar(Painter &p, int x, int top, int viewH, int total, int scroll)
+void ScrollBar(Painter &p, const View &v, int id, int x, int top, int viewH, int total, int scroll)
 {
 	if (total <= viewH) return;
-	const int thumbH = std::max(30, viewH * viewH / total), thumbY = top + (viewH - thumbH) * scroll / std::max(1, total - viewH);
-	p.Fill(x, top, kScrollW, viewH, pal::well);
-	p.Fill(x, thumbY, kScrollW, thumbH, pal::thumb);
+	ScrollbarLook look;
+	look.width = kScrollW;
+	look.minThumb = 30;
+	look.track = pal::well;
+	PaintScrollbar(p, id, x, top, viewH, {scroll, total - viewH, viewH}, v.bar, v.mouseX, v.mouseY, look);
 }
 
 struct Row {
@@ -287,7 +289,7 @@ void PaintList(Painter &p, const View &v, PaintOut &out)
 		else PaintNoteRow(p, v, y, r, inside, hitTop, hitH);
 	}
 	p.Unclip();
-	ScrollBar(p, kListX + kListW + 5, kTop, viewH, height, scroll);
+	ScrollBar(p, v, kBarList, kListX + kListW + 5, kTop, viewH, height, scroll);
 }
 
 // Returns how much lower than usual the rest of the note starts.
@@ -367,7 +369,7 @@ void PaintText(Painter &p, const View &v, const ObjectiveEntry &e, PaintOut &out
 		y += kLineH;
 	}
 	p.Unclip();
-	ScrollBar(p, kPaneX + kPaneW - kScrollW, textTop, viewH, height, scroll);
+	ScrollBar(p, v, kBarText, kPaneX + kPaneW - kScrollW, textTop, viewH, height, scroll);
 }
 
 void PaintEmpty(Painter &p)

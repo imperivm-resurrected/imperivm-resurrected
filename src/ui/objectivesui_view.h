@@ -16,6 +16,7 @@ struct View {
 	std::vector<ObjectiveEntry> entries;
 	int selected = -1;
 	int listScroll = 0, textScroll = 0;
+	ui::ScrollDrag bar;
 	// Bring the selected row into the list once.
 	bool revealSelected = false;
 	int mouseX = -10000, mouseY = -10000;
@@ -30,6 +31,7 @@ struct PaintOut {
 };
 
 enum Action { kActNone = 0, kActSelect, kActShowOnMap, kActClose };
+enum Bar { kBarList, kBarText };
 
 constexpr int kScreenW = 960, kScreenH = 620;
 
