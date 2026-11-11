@@ -89,6 +89,8 @@ void Scale()
 	// Most games at zero (short or abandoned) and a few big ones: nothing is cut.
 	CHECK(Near(MatchChartTop({0, 0, 0, 0, 0, 0, 0, 0, 250, 300}, 1), 300));
 	CHECK(Near(MatchChartTop({2, 0, 5, 0, 0, 180, 3, 0, 220, 0}, 1), 220));
+	// Two real games among zeros, one more than twice the other: still not cut.
+	CHECK(Near(MatchChartTop({0, 0, 0, 0, 0, 0, 350, 0, 0, 900}, 1), 900));
 	// Two big games of about the same size are not outliers of each other.
 	CHECK(Near(MatchChartTop({40, 55, 60, 900, 38, 70, 52, 1000}, 1), 1000));
 	// Even values keep their maximum.
