@@ -86,6 +86,11 @@ void Scale()
 	const double top = MatchChartTop(outlier, 1);
 	CHECK(top < 100);
 	CHECK(top >= 61);
+	// Most games at zero (short or abandoned) and a few big ones: nothing is cut.
+	CHECK(Near(MatchChartTop({0, 0, 0, 0, 0, 0, 0, 0, 250, 300}, 1), 300));
+	CHECK(Near(MatchChartTop({2, 0, 5, 0, 0, 180, 3, 0, 220, 0}, 1), 220));
+	// Two big games of about the same size are not outliers of each other.
+	CHECK(Near(MatchChartTop({40, 55, 60, 900, 38, 70, 52, 1000}, 1), 1000));
 	// Even values keep their maximum.
 	CHECK(Near(MatchChartTop({40, 55, 60, 38, 70, 52}, 1), 70));
 	// Too few values to call one an outlier.

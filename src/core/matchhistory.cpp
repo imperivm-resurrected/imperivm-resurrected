@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <vector>
 
 MatchResult MatchResultOf(const MatchFacts &m)
@@ -61,13 +62,12 @@ double MatchAverage(const std::vector<double> &values)
 double MatchChartTop(const std::vector<double> &values, double floor)
 {
 	if (values.empty()) return floor;
-	const double most = *std::max_element(values.begin(), values.end());
-	double top = most;
-	// With few values there is nothing to compare an outlier with.
-	if (values.size() >= 5) {
-		const double p90 = MatchPercentile(values, 0.9);
-		if (p90 > 0 && most > p90 * 1.5) top = p90;
-	}
+	std::vector<double> sorted = values;
+	std::sort(sorted.begin(), sorted.end(), std::greater<double>());
+	double top = sorted[0];
+	// Only one game that dwarfs all the others is cut, so the rest stay readable. A percentile cut several big games when most
+	// were short or abandoned (zeros), and the chart showed only cut bars. With few values there is nothing to compare with.
+	if (sorted.size() >= 5 && sorted[1] > 0 && sorted[0] > sorted[1] * 2) top = sorted[1] * 1.15;
 	return std::max(top, floor);
 }
 
