@@ -9,6 +9,7 @@
 
 #include "MinHook.h"
 #include "addr/net.h"
+#include "addr/script.h"
 #include "addr/world.h"
 #include "core/log.h"
 #include "hooks/hookcount.h"
@@ -80,12 +81,111 @@ bool Held(const char *game)
 
 unsigned g_rightAway = 0;
 
+// DIAGNOSTIC (diag/order-latency, never for main): times an order of the local player from the click to the first move of the
+// first selected unit, in real ms and in game clock.
+typedef void(__fastcall *Queue_t)(void *game, void *edx, void *cmd);
+Queue_t g_origQueue = nullptr;
+const unsigned kGameClock = 0x1258, kLocalPlayer = 0x12c8, kCmdPlayer = 4, kPlayerSelection = 0x27c, kObjX = 0x24, kObjY = 0x28;
+
+struct Probe {
+	bool active = false, executed = false;
+	unsigned handle = 0;
+	int x = 0, y = 0;
+	LARGE_INTEGER click = {}, run = {};
+	unsigned clockClick = 0, clockRun = 0;
+	uintptr_t vtable = 0;
+	unsigned frames = 0;
+} g_probe;
+LARGE_INTEGER g_freq = {};
+
+double Ms(const LARGE_INTEGER &a, const LARGE_INTEGER &b) { return static_cast<double>(b.QuadPart - a.QuadPart) * 1000.0 / static_cast<double>(g_freq.QuadPart); }
+
+bool UnitAt(unsigned handle, int &x, int &y)
+{
+	__try {
+		const char *obj = reinterpret_cast<char **>(addr::kHandleTable)[handle & 0xffff];
+		if (!obj) return false;
+		x = *reinterpret_cast<const int *>(obj + kObjX);
+		y = *reinterpret_cast<const int *>(obj + kObjY);
+		return true;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return false;
+	}
+}
+
+bool FirstSelected(const char *game, unsigned &handle, unsigned &clock, uintptr_t &vtable, const void *cmd)
+{
+	__try {
+		const char *local = *reinterpret_cast<char *const *>(game + kLocalPlayer);
+		if (!local || *reinterpret_cast<char *const *>(static_cast<const char *>(cmd) + kCmdPlayer) != local) return false;
+		vtable = *reinterpret_cast<const uintptr_t *>(cmd);
+		const char *head = *reinterpret_cast<char *const *>(local + kPlayerSelection);
+		const char *node = head ? *reinterpret_cast<char *const *>(head) : nullptr;
+		if (!node || node == head) return false;
+		handle = *reinterpret_cast<const unsigned short *>(node + 8);
+		clock = *reinterpret_cast<const unsigned *>(game + kGameClock);
+		return true;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return false;
+	}
+}
+
+unsigned ClockOf(const void *game)
+{
+	__try {
+		return *reinterpret_cast<const unsigned *>(static_cast<const char *>(game) + kGameClock);
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return 0;
+	}
+}
+
+void __fastcall HookQueue(void *game, void *edx, void *cmd)
+{
+	Probe p;
+	if (game && cmd && FirstSelected(static_cast<const char *>(game), p.handle, p.clockClick, p.vtable, cmd) && UnitAt(p.handle, p.x, p.y)) {
+		p.active = true;
+		QueryPerformanceCounter(&p.click);
+		g_probe = p;
+	}
+	g_origQueue(game, edx, cmd);
+}
+
+void ProbeRan(void *game)
+{
+	if (!g_probe.active || g_probe.executed) return;
+	g_probe.executed = true;
+	QueryPerformanceCounter(&g_probe.run);
+	g_probe.clockRun = ClockOf(game);
+}
+
+void ProbeFrame(void *game)
+{
+	if (!g_probe.active || !g_probe.executed) return;
+	g_probe.frames++;
+	int x = 0, y = 0;
+	LARGE_INTEGER now;
+	QueryPerformanceCounter(&now);
+	const bool moved = UnitAt(g_probe.handle, x, y) && (x != g_probe.x || y != g_probe.y);
+	if (!moved && Ms(g_probe.click, now) < 5000) return;
+	LogI("game", "orderprobe: command vtable %08x, unit %u: click->run %.1f ms (clock +%u), run->%s %.1f ms (clock +%u, %u frames)",
+		static_cast<unsigned>(g_probe.vtable), g_probe.handle, Ms(g_probe.click, g_probe.run), g_probe.clockRun - g_probe.clockClick,
+		moved ? "first move" : "NO MOVE within 5 s", Ms(g_probe.run, now), ClockOf(game) - g_probe.clockRun, g_probe.frames);
+	g_probe.active = false;
+}
+
 void RunWaitingOrders(void *game)
 {
 	char *pump = static_cast<char *>(game) + kGamePump;
-	if (!OrderWaiting(pump) || Replaying()) return;
+	if (!OrderWaiting(pump) || Replaying()) {
+		ProbeFrame(game);
+		return;
+	}
 	reinterpret_cast<Pump_t>(addr::kCmdPumpExecuteQueued)(pump);
 	g_origTick(pump);
+	ProbeRan(game);
 	if (g_rightAway++ == 0) LogI("game", "orders: out of multiplayer, orders run in the frame they are given");
 }
 
@@ -116,6 +216,7 @@ void __fastcall HookTick(void *pump)
 	// An order given between this frame's update and the turn (by a script, say) still runs on this turn.
 	if (g_solo > 0 && pump && !Replaying()) reinterpret_cast<Pump_t>(addr::kCmdPumpExecuteQueued)(pump);
 	g_origTick(pump);
+	if (g_solo > 0 && pump) ProbeRan(static_cast<char *>(pump) - kGamePump);
 }
 
 bool Hook(uintptr_t target, void *detour, void **orig, const char *what)
@@ -144,5 +245,9 @@ void InstallOrderDelay(bool knownExe)
 	}
 	bool ok = true;
 	for (uintptr_t t : targets) ok = HookEnable(reinterpret_cast<void *>(t)) == MH_OK && ok;
+	QueryPerformanceFrequency(&g_freq);
+	if (Hook(addr::kQueueCommand, reinterpret_cast<void *>(&HookQueue), reinterpret_cast<void **>(&g_origQueue), "CVXGame::QueueCommand") &&
+		HookEnable(reinterpret_cast<void *>(addr::kQueueCommand)) == MH_OK)
+		LogI("game", "orderprobe: timing the local player's orders (diagnostic build)");
 	LogAt(ok ? kLogInfo : kLogError, "game", "orders: faster orders out of multiplayer %s", ok ? "ready" : "NOT available (a hook could not be enabled)");
 }
