@@ -43,6 +43,8 @@ struct ChatEntry {
 	std::string keyHint;
 	// The keys are a modifier held with a left click.
 	bool click = false;
+	// A game line that reports a failure, drawn in red.
+	bool error = false;
 };
 
 // kLocalGame: a message of the game itself (game saved, a player surrendered…), with its time, as the game's old feed showed it.

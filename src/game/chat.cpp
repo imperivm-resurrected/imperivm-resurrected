@@ -516,11 +516,13 @@ bool InEditor()
 	}
 }
 
+bool InMatch() { return g_ready && g_openHandler && Game() && !InEditor(); }
+
 // Everything else the game writes to its feed in a match (game saved, a player surrendered, the mod's own notices) goes to the
 // chat, so the feed in the top-left corner stays empty and the player reads one place.
-bool AddGameLine(const char *formatted)
+bool AddGameLine(const char *formatted, bool error = false)
 {
-	if (!g_ready || !g_openHandler || !Game() || InEditor()) return false;
+	if (!InMatch()) return false;
 	std::string text = formatted;
 	if (!ChatIsUtf8(text)) text = winpath::Utf8(winpath::Widen(text, CP_ACP));
 	text = ChatCleanText(text);
@@ -529,6 +531,7 @@ bool AddGameLine(const char *formatted)
 	ChatEntry e;
 	e.text = text;
 	e.localKind = kLocalGame;
+	e.error = error;
 	ChatAddLocalEntry(std::move(e));
 	return true;
 }
@@ -741,6 +744,8 @@ void ChatAddLocalEntry(ChatEntry e)
 	g_log.Add(std::move(e));
 }
 
+bool ChatAddGameNotice(const std::string &text, bool error) { return AddGameLine(text.c_str(), error); }
+
 void ChatAddLocal(const std::string &text)
 {
 	ChatEntry e;
@@ -777,5 +782,12 @@ void ChatGameTick()
 	if (!other) return;
 	g_marks.clear();
 	std::lock_guard<std::mutex> lock(g_logLock);
+	// A rejoin reloads the game: its notices ("X is rejoining", "you have rejoined") come right around the reload and must stay.
+	std::vector<ChatEntry> recent;
+	const uint32_t now = GetTickCount();
+	for (const ChatEntry &e : g_log.Lines()) {
+		if (e.local && e.localKind == kLocalGame && now - e.arrivedMs < kChatShowMs) recent.push_back(e);
+	}
 	g_log.Clear();
+	for (ChatEntry &e : recent) g_log.Add(std::move(e));
 }

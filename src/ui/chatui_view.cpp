@@ -317,7 +317,7 @@ void PaintLocalRow(Painter &p, const Line &l, const Row &row, const Measured &m,
 			ShadowLine(p, m.clockX, y + 3, m.clock, kClock);
 		}
 		SelectObject(p.dc, g_f.text);
-		ShadowLine(p, row.first ? m.textX : m.indent, y, row.text, kGameLine);
+		ShadowLine(p, row.first ? m.textX : m.indent, y, row.text, l.error ? kAttack : kGameLine);
 		return;
 	default:
 		SelectObject(p.dc, g_f.text);
