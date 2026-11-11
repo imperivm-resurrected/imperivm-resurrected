@@ -17,9 +17,10 @@
 // first runs the turn's lists and only then moves the local list into them (ExecuteQueued 004f6e80): the order waits for the
 // next turn and runs on the one after. In multiplayer that turn is the time the order needs to reach the others, but out of it
 // the game keeps the same wait: the turn is 150 ms (CVXGameSingle::Update 0051ea30 and CVXGameAdv::Update 004ccc80 schedule
-// it with 0x96), so a click took 150 to 300 ms to start. Out of multiplayer the local list now goes into the turn before it
-// runs: 0 to 150 ms. The replay records the turn's lists after this (Tick copies them before running them), so a replay still
-// plays every order on the turn it ran.
+// it with 0x96), so a click took 150 to 300 ms to start.
+// Out of multiplayer an order now runs in the same frame: after the game's update, a pending order goes into the turn's lists
+// and the pump runs them at once. The replay is safe: Tick records each run with the game clock (game+0x1258, the bucket's
+// +0xf0) and playback runs a bucket when the simulation reaches that very clock (RunTicksUpTo 00528b40), not on a turn.
 
 namespace {
 
@@ -33,24 +34,11 @@ Pump_t g_origTick = nullptr;
 // Set while the game of a single player (skirmish, scenario, adventure) runs its update: CVXGameMultiplayer::Update (00550890)
 // drives the pump through the network transport and never passes here.
 int g_solo = 0;
-bool g_logged = false;
 
 struct SoloScope {
 	SoloScope() { g_solo++; }
 	~SoloScope() { g_solo--; }
 };
-
-int __fastcall HookSingle(void *game)
-{
-	SoloScope scope;
-	return g_origSingle(game);
-}
-
-int __fastcall HookAdventure(void *game)
-{
-	SoloScope scope;
-	return g_origAdventure(game);
-}
 
 bool Replaying()
 {
@@ -62,15 +50,71 @@ bool Replaying()
 	}
 }
 
+// CVXGame+0x1054 is the pump; its local lists, one per player (16), are std::lists of 0xc bytes from +0xf4, size at +8.
+const unsigned kGamePump = 0x1054, kPumpLocal = 0xf4, kListSize = 0xc, kListCount = 8;
+// CVXGameSingle::Update only runs the pump while game+0x22c is 0.
+const unsigned kGameSingleHold = 0x22c;
+
+bool OrderWaiting(const char *pump)
+{
+	__try {
+		for (int i = 0; i < 16; i++) {
+			if (*reinterpret_cast<const unsigned *>(pump + kPumpLocal + i * kListSize + kListCount) != 0) return true;
+		}
+		return false;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return false;
+	}
+}
+
+bool Held(const char *game)
+{
+	__try {
+		return *reinterpret_cast<const int *>(game + kGameSingleHold) != 0;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return true;
+	}
+}
+
+unsigned g_rightAway = 0;
+
+void RunWaitingOrders(void *game)
+{
+	char *pump = static_cast<char *>(game) + kGamePump;
+	if (!OrderWaiting(pump) || Replaying()) return;
+	reinterpret_cast<Pump_t>(addr::kCmdPumpExecuteQueued)(pump);
+	g_origTick(pump);
+	if (g_rightAway++ == 0) LogI("game", "orders: out of multiplayer, orders run in the frame they are given");
+}
+
+int __fastcall HookSingle(void *game)
+{
+	int result;
+	{
+		SoloScope scope;
+		result = g_origSingle(game);
+	}
+	if (result == 0 && game && !Held(static_cast<const char *>(game))) RunWaitingOrders(game);
+	return result;
+}
+
+int __fastcall HookAdventure(void *game)
+{
+	int result;
+	{
+		SoloScope scope;
+		result = g_origAdventure(game);
+	}
+	if (result == 0 && game) RunWaitingOrders(game);
+	return result;
+}
+
 void __fastcall HookTick(void *pump)
 {
-	if (g_solo > 0 && pump && !Replaying()) {
-		reinterpret_cast<Pump_t>(addr::kCmdPumpExecuteQueued)(pump);
-		if (!g_logged) {
-			g_logged = true;
-			LogI("game", "orders: out of multiplayer, orders run on the next command turn (150 ms at most, was up to 300)");
-		}
-	}
+	// An order given between this frame's update and the turn (by a script, say) still runs on this turn.
+	if (g_solo > 0 && pump && !Replaying()) reinterpret_cast<Pump_t>(addr::kCmdPumpExecuteQueued)(pump);
 	g_origTick(pump);
 }
 
