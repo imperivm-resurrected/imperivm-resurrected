@@ -26,6 +26,7 @@ inline constexpr uintptr_t kPlaybackRecordedTick = 0x004f64a0;
 inline constexpr uintptr_t kCmdQueueSetDtor = 0x004f6770;
 inline constexpr uintptr_t kCmdQueueSetCtor = 0x004f6960;
 inline constexpr uintptr_t kAddCommand = 0x004f6dc0;
+inline constexpr uintptr_t kCmdPumpAddLocal = 0x004f6e30;
 inline constexpr uintptr_t kCmdPumpExecuteQueued = 0x004f6e80;
 inline constexpr uintptr_t kBucketPush = 0x004f7940;
 inline constexpr uintptr_t kCmdPumpTick = 0x004f79d0;
