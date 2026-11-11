@@ -665,6 +665,7 @@ Line LineOf(const ChatEntry &e, int alpha)
 	l.key = e.key;
 	l.keyHint = e.keyHint;
 	l.click = e.click;
+	l.error = e.error;
 	for (const uint32_t k : e.keys) l.keys.push_back({static_cast<unsigned short>(k & 0xffff), static_cast<unsigned char>(k >> 16)});
 	l.alpha = alpha;
 	return l;

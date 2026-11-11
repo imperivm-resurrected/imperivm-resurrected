@@ -30,6 +30,7 @@ struct Line {
 	std::string key, keyHint;
 	std::vector<ControlKey> keys;
 	bool click = false;
+	bool error = false;
 	int alpha = 255;
 };
 

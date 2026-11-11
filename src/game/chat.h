@@ -60,6 +60,9 @@ bool ChatPointOnMap(int x, int y, int *area, const char *&why);
 // A line in the chat for the local player only.
 void ChatAddLocal(const std::string &text);
 void ChatAddLocalEntry(ChatEntry e);
+// In a match with the floating chat, a notice of the mod (a player dropped, rejoined…) goes to the chat as one of the game's
+// messages, translated already. False out of a match: the caller shows it as before.
+bool ChatAddGameNotice(const std::string &text, bool error);
 
 uint32_t ChatLogSerial();
 std::vector<ChatEntry> ChatLogLines();
