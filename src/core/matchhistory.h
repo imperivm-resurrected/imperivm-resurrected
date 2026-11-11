@@ -35,8 +35,7 @@ std::vector<size_t> MatchSelect(const std::vector<MatchFacts> &games, MatchMode 
 // Zero without values.
 double MatchPercentile(std::vector<double> values, double fraction);
 double MatchAverage(const std::vector<double> &values);
-// The top of a chart of the values: the 90th percentile when one or more values are far above it, so that a single huge game
-// does not flatten the others, and the highest value otherwise. Never below `floor`.
+// The top of a chart of the values: the highest value, so every bar fits whole. Never below `floor`.
 double MatchChartTop(const std::vector<double> &values, double floor);
 // The average of a metric over the games that really ran.
 double MatchMetricAverage(const std::vector<MatchFacts> &games, MatchMetric metric);
