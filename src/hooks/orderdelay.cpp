@@ -142,15 +142,17 @@ unsigned ClockOf(const void *game)
 	}
 }
 
-void __fastcall HookQueue(void *game, void *edx, void *cmd)
+// CVXCmdPump::AddLocalCommand (004f6e30, thiscall, ret 4): QueueCommand itself is netdrop's.
+void __fastcall HookQueue(void *pump, void *edx, void *cmd)
 {
+	void *game = pump ? static_cast<char *>(pump) - kGamePump : nullptr;
 	Probe p;
 	if (game && cmd && FirstSelected(static_cast<const char *>(game), p.handle, p.clockClick, p.vtable, cmd) && UnitAt(p.handle, p.x, p.y)) {
 		p.active = true;
 		QueryPerformanceCounter(&p.click);
 		g_probe = p;
 	}
-	g_origQueue(game, edx, cmd);
+	g_origQueue(pump, edx, cmd);
 }
 
 void ProbeRan(void *game)
@@ -246,8 +248,8 @@ void InstallOrderDelay(bool knownExe)
 	bool ok = true;
 	for (uintptr_t t : targets) ok = HookEnable(reinterpret_cast<void *>(t)) == MH_OK && ok;
 	QueryPerformanceFrequency(&g_freq);
-	if (Hook(addr::kQueueCommand, reinterpret_cast<void *>(&HookQueue), reinterpret_cast<void **>(&g_origQueue), "CVXGame::QueueCommand") &&
-		HookEnable(reinterpret_cast<void *>(addr::kQueueCommand)) == MH_OK)
+	if (Hook(addr::kCmdPumpAddLocal, reinterpret_cast<void *>(&HookQueue), reinterpret_cast<void **>(&g_origQueue), "CVXCmdPump::AddLocalCommand") &&
+		HookEnable(reinterpret_cast<void *>(addr::kCmdPumpAddLocal)) == MH_OK)
 		LogI("game", "orderprobe: timing the local player's orders (diagnostic build)");
 	LogAt(ok ? kLogInfo : kLogError, "game", "orders: faster orders out of multiplayer %s", ok ? "ready" : "NOT available (a hook could not be enabled)");
 }
