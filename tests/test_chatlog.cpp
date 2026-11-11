@@ -141,6 +141,14 @@ static void TestText()
 	CHECK_EQ(cut, std::string(kChatMaxText - 1, 'x'));
 	CHECK_EQ(ChatCleanText(std::string(400, 'y')).size(), kChatMaxText);
 
+	// The game's own texts come in the Windows code page; the mod's in UTF-8.
+	CHECK(ChatIsUtf8("Partida grabada"));
+	CHECK(ChatIsUtf8("Has sido derrotado \xc2\xb7 \xe2\x86\x92 \xf0\x9f\x8f\x9b"));
+	CHECK(!ChatIsUtf8("Cami\xf3n"));
+	CHECK(!ChatIsUtf8("cut \xe2\x86"));
+	CHECK(!ChatIsUtf8("\xc0\xaf"));
+	CHECK(ChatIsUtf8(""));
+
 	CHECK_EQ(ChatCommandOf("/w Marcus hi"), std::string("w Marcus hi"));
 	CHECK_EQ(ChatCommandOf("/map"), std::string("map"));
 	CHECK_EQ(ChatCommandOf("gold"), std::string(""));

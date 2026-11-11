@@ -25,7 +25,8 @@ using namespace ui;
 constexpr int kWidth = 500, kBarH = 28, kRowH = 19, kGap = 6, kPad = 8, kIdleRows = 8, kTypingRows = 16, kIcon = 15, kIconGap = 4, kGripH = 12;
 constexpr COLORREF kCream = RGB(242, 232, 206), kClock = RGB(178, 166, 140), kAllies = RGB(146, 214, 122), kAll = RGB(228, 188, 98),
 				   kPrivate = RGB(224, 156, 234), kNote = RGB(214, 202, 172), kPanel = RGB(14, 10, 6), kAttack = RGB(240, 98, 66),
-				   kDanger = RGB(246, 166, 52), kMuted = RGB(184, 172, 146), kHelpKey = RGB(236, 200, 112);
+				   kDanger = RGB(246, 166, 52), kMuted = RGB(184, 172, 146), kHelpKey = RGB(236, 200, 112),
+				   kGameLine = RGB(230, 206, 140);
 constexpr int kHelpKeyColumn = 150;
 
 struct Fonts {
@@ -139,6 +140,10 @@ Measured Measure(Painter &p, const Line &l)
 		m.local = true;
 		m.note = false;
 		m.indent = m.textX = kPad;
+		if (l.localKind == kLocalGame && !m.clock.empty()) {
+			m.clockX = kPad;
+			m.indent = m.textX = kPad + WidthOf(p.dc, g_f.meta, m.clock, p.s) + 6;
+		}
 		return m;
 	}
 	int x = kPad;
@@ -215,7 +220,7 @@ Layout Plan(Painter &p, const View &v, int widthDesign, int heightDesign)
 		L.measured.push_back(Measure(p, l));
 		const Measured &m = L.measured.back();
 		SelectObject(p.dc, g_f.text);
-		if (l.local && l.localKind != kLocalText) {
+		if (l.local && l.localKind != kLocalText && l.localKind != kLocalGame) {
 			L.rows.push_back({static_cast<int>(i), true, W(l.text)});
 			continue;
 		}
@@ -306,6 +311,14 @@ void PaintLocalRow(Painter &p, const Line &l, const Row &row, const Measured &m,
 		ShadowLine(p, col, y, W(l.text), kMuted);
 		return;
 	}
+	case kLocalGame:
+		if (row.first && !m.clock.empty()) {
+			SelectObject(p.dc, g_f.meta);
+			ShadowLine(p, m.clockX, y + 3, m.clock, kClock);
+		}
+		SelectObject(p.dc, g_f.text);
+		ShadowLine(p, row.first ? m.textX : m.indent, y, row.text, kGameLine);
+		return;
 	default:
 		SelectObject(p.dc, g_f.text);
 		ShadowLine(p, row.first ? m.textX : m.indent, y, row.text, kMuted);

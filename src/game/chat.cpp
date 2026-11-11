@@ -5,7 +5,10 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <cstdarg>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <mutex>
 #include <string>
@@ -18,6 +21,7 @@
 #include "addr/ui.h"
 #include "addr/world.h"
 #include "core/log.h"
+#include "core/winpath.h"
 #include "i18n/tr.h"
 #include "game/chat.h"
 #include "game/controls.h"
@@ -502,15 +506,52 @@ void __fastcall HookExecute(void *cmd)
 	g_log.Add(std::move(e));
 }
 
-__declspec(naked) void HookConsolePrintf()
+bool InEditor()
 {
-	__asm {
-		cmp g_suppressConsole, 0
-		jne skip
-		jmp dword ptr [g_origConsolePrintf]
-	skip:
-		ret
+	__try {
+		return *reinterpret_cast<int *>(addr::kEditorMode) != 0;
 	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return true;
+	}
+}
+
+// Everything else the game writes to its feed in a match (game saved, a player surrendered, the mod's own notices) goes to the
+// chat, so the feed in the top-left corner stays empty and the player reads one place.
+bool AddGameLine(const char *formatted)
+{
+	if (!g_ready || !g_openHandler || !Game() || InEditor()) return false;
+	std::string text = formatted;
+	if (!ChatIsUtf8(text)) text = winpath::Utf8(winpath::Widen(text, CP_ACP));
+	text = ChatCleanText(text);
+	if (text.empty()) return true;
+	LogD("game", "chat: game message (%u bytes) shown in the chat", static_cast<unsigned>(text.size()));
+	ChatEntry e;
+	e.text = text;
+	e.localKind = kLocalGame;
+	ChatAddLocalEntry(std::move(e));
+	return true;
+}
+
+void __cdecl IgnoreBadFormat(const wchar_t *, const wchar_t *, const wchar_t *, unsigned, uintptr_t) {}
+
+// ConsolePrintf (00619060) formats into the console's own 1024-byte buffer and adds the line to the feed. The texts it gets are
+// already translated, and a translation could carry a stray %: the game's CRT prints it as it can, so a bad format here must not
+// end the program either.
+void __cdecl HookConsolePrintf(void *console, const char *fmt, ...)
+{
+	if (g_suppressConsole) return;
+	char buf[1024] = {};
+	if (fmt) {
+		const _invalid_parameter_handler before = _set_thread_local_invalid_parameter_handler(&IgnoreBadFormat);
+		va_list args;
+		va_start(args, fmt);
+		_vsnprintf_s(buf, sizeof(buf), _TRUNCATE, fmt, args);
+		va_end(args);
+		_set_thread_local_invalid_parameter_handler(before);
+	}
+	if (AddGameLine(buf)) return;
+	reinterpret_cast<void(__cdecl *)(void *, const char *, ...)>(g_origConsolePrintf)(console, "%s", buf);
 }
 
 void *__fastcall HookCtor(void *self, void *edx, int sendLocation, int mostDerived)
