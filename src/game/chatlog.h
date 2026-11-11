@@ -45,7 +45,11 @@ struct ChatEntry {
 	bool click = false;
 };
 
-enum ChatLocalKind { kLocalText, kLocalHeading, kLocalSection, kLocalRow };
+// kLocalGame: a message of the game itself (game saved, a player surrendered…), with its time, as the game's old feed showed it.
+enum ChatLocalKind { kLocalText, kLocalHeading, kLocalSection, kLocalRow, kLocalGame };
+
+// The game's messages come in UTF-8 (the mod's) or in the Windows code page (the game's own texts).
+bool ChatIsUtf8(const std::string &text);
 
 
 // The chat's place: the bottom-left corner of the panel, kept inside the screen and above the command bar. Saved in thousandths

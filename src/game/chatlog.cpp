@@ -88,6 +88,25 @@ std::string ChatCleanText(const std::string &text)
 	return out;
 }
 
+bool ChatIsUtf8(const std::string &text)
+{
+	for (size_t i = 0; i < text.size();) {
+		const unsigned char c = static_cast<unsigned char>(text[i]);
+		size_t n = 0;
+		if (c < 0x80) n = 0;
+		else if (c >= 0xc2 && c <= 0xdf) n = 1;
+		else if (c >= 0xe0 && c <= 0xef) n = 2;
+		else if (c >= 0xf0 && c <= 0xf4) n = 3;
+		else return false;
+		if (i + n >= text.size() && n) return false;
+		for (size_t k = 1; k <= n; k++) {
+			if ((static_cast<unsigned char>(text[i + k]) & 0xc0) != 0x80) return false;
+		}
+		i += n + 1;
+	}
+	return true;
+}
+
 std::string ChatCommandOf(const std::string &text)
 {
 	if (text.size() < 2 || text[0] != '/' || text[1] == '/' || text[1] == ' ') return std::string();

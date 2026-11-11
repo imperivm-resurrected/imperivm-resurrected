@@ -9,7 +9,8 @@
 #include "game/chatlog.h"
 
 // The game's in-match chat, without its dialog: the mod opens its own bar on the same key, sends the game's own chat command
-// (so players without the mod read it as always) and keeps the chat lines out of the game's message feed.
+// (so players without the mod read it as always) and shows the chat lines and the game's own messages (game saved…) in its
+// chat instead of the game's message feed.
 void InstallChat(bool knownExe);
 // The hooks are in place: when false, the game's own dialog and feed work as always.
 bool ChatFloating();
