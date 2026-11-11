@@ -560,19 +560,13 @@ void PaintEvolution(Painter &p, const View &v, const Card &c, const Box &b, Tip 
 		const double value = values[n - 1 - k];
 		const int sx = x0 + static_cast<int>(k * slot), sw = std::max(1, static_cast<int>((k + 1) * slot) - static_cast<int>(k * slot));
 		const bool hot = mx >= sx && mx < sx + sw && my >= plotTop - 4 && my <= bottom;
-		const bool clipped = value > top;
-		const int bh = clipped ? plotH : std::max(value > 0 ? 2 : 1, static_cast<int>(plotH * value / top + 0.5));
+		const int bh = std::min(plotH, std::max(value > 0 ? 2 : 1, static_cast<int>(plotH * value / top + 0.5)));
 		const int bx = x0 + static_cast<int>(k * slot + (slot - barW) / 2);
 		const MatchResult r = MatchResultOf(facts[game]);
 		const COLORREF color = ResultColor(r);
 		const COLORREF lit = hot ? Mix(color, RGB(255, 255, 255), 0.3f) : color;
 		p.FillV(bx, bottom - bh, barW, bh, lit, Mix(lit, RGB(0, 0, 0), 0.4f));
 		if (static_cast<int>(game) == v.expanded) p.Frame(bx - 1, bottom - bh - 1, barW + 2, bh + 2, pal::goldLight);
-		if (clipped) {
-			// Cut through near the top: the bar goes on beyond the scale.
-			p.Fill(bx, plotTop + 5, barW, 2, kCardBody);
-			p.Fill(bx, plotTop + 10, barW, 2, kCardBody);
-		}
 		p.AddHit(sx, plotTop - 4, sw, bottom - plotTop + 4, kActBar, static_cast<int>(game));
 		if (hot) hovered = k;
 	}

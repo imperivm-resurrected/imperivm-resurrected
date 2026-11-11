@@ -6,7 +6,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <vector>
 
 MatchResult MatchResultOf(const MatchFacts &m)
@@ -62,17 +61,9 @@ double MatchAverage(const std::vector<double> &values)
 double MatchChartTop(const std::vector<double> &values, double floor)
 {
 	if (values.empty()) return floor;
-	std::vector<double> sorted;
-	for (double v : values) {
-		if (v > 0) sorted.push_back(v);
-	}
-	if (sorted.empty()) return floor;
-	std::sort(sorted.begin(), sorted.end(), std::greater<double>());
-	double top = sorted[0];
-	// Only one game that dwarfs the others is cut, so the rest stay readable. Short or abandoned games (zeros) have no bar to
-	// make room for, so they don't count: with fewer than five real bars there is nothing to compare with and nothing is cut.
-	if (sorted.size() >= 5 && sorted[0] > sorted[1] * 2) top = sorted[1] * 1.15;
-	return std::max(top, floor);
+	// The scale is the biggest game, so no bar is ever cut: a cut bar read as a drawing fault, and the exact value of a small
+	// game is in its tooltip anyway.
+	return std::max(*std::max_element(values.begin(), values.end()), floor);
 }
 
 double MatchMetricAverage(const std::vector<MatchFacts> &games, MatchMetric metric)

@@ -81,22 +81,14 @@ void Scale()
 	CHECK(Near(MatchPercentile({1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, 0.9), 10));
 	CHECK(Near(MatchAverage({}), 0));
 	CHECK(Near(MatchAverage({2, 4, 9}), 5));
-	// One huge game: the scale follows the others.
-	const std::vector<double> outlier = {40, 55, 60, 38, 70, 52, 1630, 45, 61, 49};
-	const double top = MatchChartTop(outlier, 1);
-	CHECK(top < 100);
-	CHECK(top >= 61);
-	// Most games at zero (short or abandoned) and a few big ones: nothing is cut.
+	// The scale is always the biggest game: no bar is cut, whatever the others are.
+	CHECK(Near(MatchChartTop({40, 55, 60, 38, 70, 52, 1630, 45, 61, 49}, 1), 1630));
 	CHECK(Near(MatchChartTop({0, 0, 0, 0, 0, 0, 0, 0, 250, 300}, 1), 300));
-	CHECK(Near(MatchChartTop({2, 0, 5, 0, 0, 180, 3, 0, 220, 0}, 1), 220));
-	// Two real games among zeros, one more than twice the other: still not cut.
-	CHECK(Near(MatchChartTop({0, 0, 0, 0, 0, 0, 350, 0, 0, 900}, 1), 900));
-	// Two big games of about the same size are not outliers of each other.
-	CHECK(Near(MatchChartTop({40, 55, 60, 900, 38, 70, 52, 1000}, 1), 1000));
-	// Even values keep their maximum.
+	// The case seen in the game: small games, one of about 435 kills and one of about 900.
+	CHECK(Near(MatchChartTop({3, 0, 2, 435, 0, 1, 5, 900, 0, 4}, 1), 900));
 	CHECK(Near(MatchChartTop({40, 55, 60, 38, 70, 52}, 1), 70));
-	// Too few values to call one an outlier.
 	CHECK(Near(MatchChartTop({3, 400}, 1), 400));
+	CHECK(Near(MatchChartTop({0.2, 0.1}, 0.5), 0.5));
 	CHECK(Near(MatchChartTop({}, 1), 1));
 	CHECK(Near(MatchChartTop({0, 0, 0}, 1), 1));
 	const std::vector<MatchFacts> games = {Game(20, false, false, 10, 2), Game(1, false, true, 0, 0), Game(30, false, true, 20, 8)};
