@@ -13,6 +13,7 @@
 #include "core/log.h"
 #include "mods/mods.h"
 #include "mods/savelib.h"
+#include "mods/savename.h"
 #include "i18n/tr.h"
 #include "addr/state.h"
 
@@ -150,11 +151,9 @@ void ScanDir(const std::string &profile, bool onlineFolder, std::vector<SaveRec>
 		r.baseName = file.substr(0, file.size() - 4);
 		r.name = r.baseName;
 		if (kind == kSaveAdventure || kind == kSaveConquest) {
-			const size_t dash = r.baseName.find_last_of('-');
-			if (dash != std::string::npos && dash > 0) {
-				r.name = r.baseName.substr(0, dash);
-				r.campaign = r.baseName.substr(dash + 1);
-			}
+			SaveNameParts parts = SaveNameSplit(r.baseName);
+			r.name = std::move(parts.name);
+			r.campaign = std::move(parts.campaign);
 		}
 		r.vfsPath = vfsDir + file;
 		r.diskPath = dir + file;
