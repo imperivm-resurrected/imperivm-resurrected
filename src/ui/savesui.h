@@ -5,8 +5,11 @@
 #include <windows.h>
 
 #include <cstdint>
+#include <string>
 
 void SavesUiOpen();
+// Loads one game as the load screen's Load button does, with the same checks; the screen stays open on it when they stop the load.
+void SavesUiLoadSave(const std::string &vfsPath);
 void SavesUiOpenSave(void *dlg);
 void SavesUiOpenLoad(void *dlg);
 void InstallSavesUi(bool knownExe);

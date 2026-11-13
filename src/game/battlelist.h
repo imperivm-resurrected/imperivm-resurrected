@@ -37,3 +37,9 @@ std::string BattleTitleWithoutGame(const std::string &title);
 
 // The adventure's text keeps the "\n" of its file as two characters.
 std::string BattleDescriptionText(const std::string &raw);
+
+// Which adventure a saved game belongs to. The game names it "<name>-<the adventure's title, translated>" (BuildQuickSavePath), and
+// both the name and the title may have dashes of their own: the save is the title, among `titles`, that ends its name after a dash
+// and leaves a name before it; the longest one when several do ("…-La guerra de las Galias" and "…-Galias"). -1 when none does,
+// as for a save made in another language. `name` gets the part before the dash.
+int BattleSaveAdventure(const std::string &saveBaseName, const std::vector<std::string> &titles, std::string *name = nullptr);
