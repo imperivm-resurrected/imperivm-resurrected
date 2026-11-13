@@ -9,6 +9,7 @@
 #include "mods/mods.h"
 #include "mods/modvars.h"
 #include "game/scriptevents.h"
+#include "game/i1engine.h"
 
 #include <atomic>
 #include <string>
@@ -164,7 +165,9 @@ CalcAttackOutcome_t g_origCalcAttack = nullptr;
 void __cdecl HookCalcAttackOutcome(void *attacker, void *defender, int *dLifeAtt, int *dLifeDef, int *dEnergyAtt, int *dEnergyDef, int *learn,
 	void *xp, int *feedbackAtt, int *feedbackDef)
 {
+	const I1AttackState before = I1BeforeAttack(attacker);
 	g_origCalcAttack(attacker, defender, dLifeAtt, dLifeDef, dEnergyAtt, dEnergyDef, learn, xp, feedbackAtt, feedbackDef);
+	I1AfterAttack(before, attacker, defender, dLifeAtt, dLifeDef);
 	if ((g_onAttack.ready && g_onAttack.scripts.empty()) || !attacker || !defender || !dLifeDef || g_attack.active) return;
 	const int original = *dLifeDef;
 	if (original >= 0) return;
