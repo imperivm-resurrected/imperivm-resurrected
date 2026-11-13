@@ -517,12 +517,14 @@ void PaintList(Painter &p, const State &st)
 	cx[0] = tx + 20;
 	for (int c = 0; c < 4; c++) cx[c + 1] = cx[c] + static_cast<int>(st.colW[c] * unit + 0.5f);
 	cx[5] = tx + tw - 20;
+	// Where a column's text starts: clear of the separator drawn at its left edge.
+	auto textX = [&](int c) { return cx[c] + (c > 0 ? 14 : 2); };
 	p.Fill(tx + 1, ty + headH - 1, tw - 2, 1, pal::lineStrong);
 	p.Font(4);
 	for (int c = 0; c < 5; c++) {
 		const int w = cx[c + 1] - cx[c];
 		const bool sorted = st.sortCol == c, hov = p.Hover(cx[c], ty + 1, w - 4, headH - 2, mx, my);
-		p.TextCaps(cx[c], ty + 1, w - 28, headH - 2, kCols[c], sorted ? pal::redText : hov ? pal::text : pal::caption,
+		p.TextCaps(textX(c), ty + 1, cx[c + 1] - textX(c) - 28, headH - 2, kCols[c], sorted ? pal::redText : hov ? pal::text : pal::caption,
 			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 2);
 		if (sorted) {
 			if (st.sortDesc) p.ArrowDown(cx[c + 1] - 22, ty + headH / 2 - 2, 10, 5, pal::redText);
@@ -567,7 +569,7 @@ void PaintList(Painter &p, const State &st)
 		p.Fill(tx + 1, y + rowH - 1, tw - 2, 1, pal::hairline);
 		p.AddHit(tx, y, tw, rowH, kSelect, r);
 		auto cell = [&](int c, const std::string &text, COLORREF color) {
-			p.Text(cx[c] + 2, y, cx[c + 1] - cx[c] - 12, rowH, text, color, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			p.Text(textX(c), y, cx[c + 1] - textX(c) - 12, rowH, text, color, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		};
 		p.Font(1);
 		if (g.password) DrawLock(p, cx[0] + 4, y + (rowH - 16) / 2, pal::redText);
@@ -576,7 +578,7 @@ void PaintList(Painter &p, const State &st)
 		p.Font(0);
 		const PatronInfo hostPatron = PatronOf(g.owner);
 		if (hostPatron.tier != PatronTier::None) {
-			const int hx = cx[1] + 2, hw = cx[2] - cx[1] - 12, ly = y + (rowH - 20) / 2;
+			const int hx = textX(1), hw = cx[2] - textX(1) - 12, ly = y + (rowH - 20) / 2;
 			DrawPatron(p, hx, ly, 20, hx + 24, y, hw - 24, rowH, g.friendHost ? g.host + Tr("  (friend)") : g.host, hostPatron.tier,
 				DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 			PatronHotspot(p, hx, ly, 20, hostPatron, mx, my, kPatronLink);
