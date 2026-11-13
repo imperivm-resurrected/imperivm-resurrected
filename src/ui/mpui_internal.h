@@ -122,7 +122,7 @@ struct ModRow {
 	std::string name;
 	int kind = 2;
 	std::string status;
-	COLORREF color = kText;
+	COLORREF color = pal::text;
 };
 
 struct ProfileSummary {
@@ -354,7 +354,7 @@ extern RECT g_optRect;
 extern ListGeom g_optGeomOut;
 const int kDropRows = 12;
 
-const COLORREF kSpecial = RGB(255, 196, 84);
+const COLORREF kSpecial = pal::text;
 
 struct SiteChoice {
 	unsigned bit;

@@ -29,7 +29,7 @@ const int kFooterH = 60;
 const int kRowH = 34, kHintRowH = 46, kHeaderH = 30, kNavItemH = 30, kNavLabelH = 22, kColsH = 24;
 const int kCellW = 132, kCellGap = 8, kResetW = 26;
 const int kBannerH = 132;
-const COLORREF kSpecial = RGB(255, 196, 84);
+const COLORREF kSpecial = pal::text;
 const DWORD kUndoMs = 15000;
 
 enum Action {
@@ -416,20 +416,20 @@ void DrawNav(Painter &p, const State &st, int mx, int my)
 		if (page == kPageCamera || page == kPageUnits) {
 			if (page == kPageUnits) y += 10;
 			p.Font(4);
-			p.Text(kNavX + 10, y, kNavW - 20, kNavLabelH, page == kPageCamera ? "GENERAL" : "COMMANDS", RGB(150, 126, 84));
+			p.Text(kNavX + 10, y, kNavW - 20, kNavLabelH, page == kPageCamera ? "GENERAL" : "COMMANDS", pal::caption);
 			y += kNavLabelH;
 		}
 		const bool sel = st.search.empty() && st.page == page;
 		const bool hov = p.Hover(kNavX, y, kNavW, kNavItemH, mx, my);
 		if (sel) {
-			p.Fill(kNavX, y, kNavW, kNavItemH, pal::rowHover);
-			p.Fill(kNavX, y, 3, kNavItemH, kGold);
+			p.Fill(kNavX, y, kNavW, kNavItemH, pal::raised);
+			p.Fill(kNavX, y, 3, kNavItemH, pal::redText);
 		}
 		else if (hov) {
-			p.Fill(kNavX, y, kNavW, kNavItemH, pal::fieldOpen);
+			p.Fill(kNavX, y, kNavW, kNavItemH, pal::field);
 		}
 		p.Font(sel ? 1 : 0);
-		p.Text(kNavX + 14, y, kNavW - 50, kNavItemH, ControlsPageName(page), sel ? pal::focus : kText);
+		p.Text(kNavX + 14, y, kNavW - 50, kNavItemH, ControlsPageName(page), sel ? pal::text : pal::text);
 		const int changed = ChangedOnPage(st, page);
 		if (changed) {
 			p.Font(4);
@@ -476,28 +476,28 @@ void DrawRow(Painter &p, const State &st, int row, int y, int listTop, int listB
 	const bool active = !Asking(st);
 	const bool inList = active && my >= p.oy + p.S(listTop) && my < p.oy + p.S(listBottom);
 	const bool hov = inList && p.Hover(kListX, y, kListW - 12, rowH, mx, my);
-	if (hov) p.Fill(kListX + 2, y, kListW - 16, rowH, RGB(40, 32, 22));
+	if (hov) p.Fill(kListX + 2, y, kListW - 16, rowH, pal::selected);
 	if (st.capture.row == row) {
-		p.Fill(kListX + 2, y, kListW - 16, rowH, RGB(48, 37, 22));
-		p.Fill(kListX + 2, y, 3, rowH, kGold);
+		p.Fill(kListX + 2, y, kListW - 16, rowH, pal::selected);
+		p.Fill(kListX + 2, y, 3, rowH, pal::redText);
 	}
 	if (st.flashRow == row && GetTickCount() - st.flashAt < 1600) {
-		p.Fill(kListX + 2, y, kListW - 16, rowH, RGB(84, 64, 30));
-		p.Fill(kListX + 2, y, 3, rowH, kGold);
+		p.Fill(kListX + 2, y, kListW - 16, rowH, pal::edge);
+		p.Fill(kListX + 2, y, 3, rowH, pal::redText);
 	}
-	p.Fill(c.name, y + rowH - 1, c.right - c.name, 1, RGB(44, 34, 23));
+	p.Fill(c.name, y + rowH - 1, c.right - c.name, 1, pal::selected);
 	p.Font(0);
 	const int nameMax = c.cell0 - c.name - 10;
 	if (r.hint.empty() && LongName(r)) {
-		p.TextWrapped(c.name, y + 3, nameMax, rowH - 4, r.name, off ? kDim : kText);
+		p.TextWrapped(c.name, y + 3, nameMax, rowH - 4, r.name, off ? pal::textDim : pal::text);
 	}
 	else if (r.hint.empty()) {
-		p.Text(c.name, y, nameMax, rowH, r.name, off ? kDim : kText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(c.name, y, nameMax, rowH, r.name, off ? pal::textDim : pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
 	else {
-		p.Text(c.name, y + 5, nameMax, 20, r.name, off ? kDim : kText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(c.name, y + 5, nameMax, 20, r.name, off ? pal::textDim : pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.Font(3);
-		p.Text(c.name, y + 25, nameMax, 16, r.hint, kDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(c.name, y + 25, nameMax, 16, r.hint, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
 	auto hit = [&](int hx, int hy, int hw, int hh, int action, int arg) {
 		const int top = std::max(hy, listTop), bottom = std::min(hy + hh, listBottom);
@@ -505,7 +505,7 @@ void DrawRow(Painter &p, const State &st, int row, int y, int listTop, int listB
 	};
 	if (off) {
 		p.Font(3);
-		p.Text(c.cell0, y, kCellW, rowH, "By position", RGB(130, 116, 92), DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.Text(c.cell0, y, kCellW, rowH, "By position", pal::edgeHot, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		return;
 	}
 	const float beat = 0.5f + 0.5f * static_cast<float>(sin((GetTickCount() % 1400) / 1400.0 * 6.2831853));
@@ -520,9 +520,9 @@ void DrawRow(Painter &p, const State &st, int row, int y, int listTop, int listB
 		const bool chov = inList && p.Hover(cx, cy, kCellW, ch, mx, my);
 		const bool clash = st.clash[row * 2 + slot].row >= 0;
 		if (capturing) {
-			const COLORREF edge = mix(RGB(150, 112, 50), RGB(255, 228, 150), beat);
+			const COLORREF edge = mix(pal::red, pal::body, beat);
 			p.RoundRect(cx, cy, kCellW, ch, 8, edge);
-			p.RoundRect(cx + 2, cy + 2, kCellW - 4, ch - 4, 6, RGB(56, 42, 22));
+			p.RoundRect(cx + 2, cy + 2, kCellW - 4, ch - 4, 6, pal::hairline);
 			const unsigned char held = HeldMods();
 			if (held) {
 				std::vector<std::string> caps;
@@ -536,44 +536,44 @@ void DrawRow(Painter &p, const State &st, int row, int y, int listTop, int listB
 				int kx = cx + (kCellW - total) / 2;
 				for (const std::string &t : caps) {
 					const int cw = CapWidth(p, t);
-					DrawCap(p, kx, cy + 3, cw, ch - 6, t, 0, pal::edgeStrong, kSpecial);
+					DrawCap(p, kx, cy + 3, cw, ch - 6, t, 0, pal::edgeHot, kSpecial);
 					kx += cw;
-					p.Text(kx, cy, 12, ch, "+", kDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+					p.Text(kx, cy, 12, ch, "+", pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 					kx += 12;
 				}
-				p.Text(kx, cy, 20, ch, "…", pal::focus, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+				p.Text(kx, cy, 20, ch, "…", pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 			}
 			else {
 				p.Font(4);
-				p.Text(cx, cy, kCellW, ch, "Press a key", mix(RGB(220, 196, 140), RGB(255, 240, 190), beat), DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+				p.Text(cx, cy, kCellW, ch, "Press a key", mix(pal::textDim, pal::text, beat), DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 			}
 			if (cy + ch > listTop && cy < listBottom) g_captureCell = {cx, cy, cx + kCellW, cy + ch};
 		}
 		else if (chov) {
 			if (k.vk) {
-				DrawKey(p, cx, cy - 1, kCellW, ch, k, clash ? kBad : RGB(255, 222, 140), clash ? kBad : RGB(255, 240, 196), RGB(84, 66, 40));
+				DrawKey(p, cx, cy - 1, kCellW, ch, k, clash ? pal::bad : pal::text, clash ? pal::bad : pal::text, pal::lineStrong);
 			}
 			else {
 				p.Font(4);
-				p.Text(cx, cy, kCellW, ch, slot ? "+ Add" : "+ Set key", RGB(255, 226, 150), DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+				p.Text(cx, cy, kCellW, ch, slot ? "+ Add" : "+ Set key", pal::body, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 			}
 		}
 		else if (!k.vk) {
 			p.Font(3);
-			p.Text(cx, cy, kCellW, ch, slot ? "—" : "No key", slot ? RGB(96, 84, 64) : RGB(140, 124, 96), DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			p.Text(cx, cy, kCellW, ch, slot ? "—" : "No key", slot ? pal::edgeHot : pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		}
 		else {
 			const bool custom = slot == 1 || k != r.def;
-			DrawKey(p, cx, cy, kCellW, ch, k, clash ? kBad : custom ? pal::edgeStrong : RGB(122, 98, 64),
-				clash ? kBad : custom ? kSpecial : kText);
+			DrawKey(p, cx, cy, kCellW, ch, k, clash ? pal::bad : custom ? pal::edgeHot : pal::edgeHot,
+				clash ? pal::bad : custom ? kSpecial : pal::text);
 		}
 		hit(cx, cy, kCellW, ch, kCell, row * 2 + slot);
 	}
 	if (!IsDefault(r)) {
 		const int ry = y + (rowH - 26) / 2;
 		const bool rh = inList && p.Hover(c.reset, ry, kResetW, 26, mx, my);
-		if (rh) p.RoundRect(c.reset, ry, kResetW, 26, 6, RGB(60, 47, 32));
-		ResetGlyph(p, c.reset + kResetW / 2, ry + 13, rh ? pal::focus : RGB(176, 140, 80));
+		if (rh) p.RoundRect(c.reset, ry, kResetW, 26, 6, pal::edge);
+		ResetGlyph(p, c.reset + kResetW / 2, ry + 13, rh ? pal::text : pal::redText);
 		hit(c.reset, ry, kResetW, 26, kRowReset, row);
 	}
 }
@@ -748,14 +748,14 @@ void DrawKeyboardView(Painter &p, const State &st, int mx, int my, int areaBotto
 		COLORREF face, edge;
 		const char *text;
 	};
-	const Swatch kLegend[] = {{RGB(118, 86, 36), pal::edgeStrong, "Action"}, {RGB(62, 70, 44), RGB(120, 136, 84), "Commands"},
-		{RGB(44, 35, 24), RGB(90, 72, 50), "Free"}, {RGB(44, 35, 24), kBad, "Clash"}};
+	const Swatch kLegend[] = {{pal::red, pal::edgeHot, "Action"}, {RGB(62, 70, 44), RGB(120, 136, 84), "Commands"},
+		{pal::selected, pal::lineStrong, "Free"}, {pal::selected, pal::bad, "Clash"}};
 	int gx = x0 + 10;
 	p.Font(3);
 	for (const Swatch &sw : kLegend) {
 		p.RoundRect(gx, y0 + 7, 16, 14, 4, sw.edge);
 		p.RoundRect(gx + 1, y0 + 8, 14, 12, 3, sw.face);
-		p.Text(gx + 22, y0, 80, 28, sw.text, kDim);
+		p.Text(gx + 22, y0, 80, 28, sw.text, pal::textDim);
 		gx += 22 + p.TextWidth(sw.text) + 18;
 	}
 
@@ -776,35 +776,35 @@ void DrawKeyboardView(Painter &p, const State &st, int mx, int my, int areaBotto
 		for (int m : layerMods) {
 			if (st.layer == 0 && m != 0 && !k.modifier && UseOf(st, vk, static_cast<unsigned char>(m)).Used()) other = true;
 		}
-		COLORREF face = RGB(44, 35, 24), edge = RGB(90, 72, 50), fg = RGB(150, 136, 110);
+		COLORREF face = pal::selected, edge = pal::lineStrong, fg = pal::caption;
 		if (k.modifier) {
-			face = pal::dialog;
-			edge = RGB(60, 48, 34);
-			fg = RGB(104, 92, 72);
+			face = pal::panel;
+			edge = pal::edge;
+			fg = pal::edgeHot;
 		}
 		else if (!use.general.empty()) {
-			face = RGB(118, 86, 36);
-			edge = pal::edgeStrong;
-			fg = pal::focus;
+			face = pal::red;
+			edge = pal::edgeHot;
+			fg = pal::text;
 		}
 		else if (!use.orders.empty() || use.gridPos >= 0) {
 			face = RGB(62, 70, 44);
 			edge = RGB(120, 136, 84);
 			fg = RGB(226, 232, 190);
 		}
-		if (use.clash) edge = kBad;
+		if (use.clash) edge = pal::bad;
 		const bool sel = st.kbSel == i;
-		if (sel) edge = pal::focus;
+		if (sel) edge = pal::text;
 		if (hov && !sel) face = RGB(GetRValue(face) + 22, GetGValue(face) + 18, GetBValue(face) + 12);
 		if (sel) {
-			p.RoundRect(x - 3, y - 3, w + 6, h + 6, 9, kGold);
+			p.RoundRect(x - 3, y - 3, w + 6, h + 6, 9, pal::redText);
 			p.RoundRect(x - 1, y - 1, w + 2, h + 2, 7, pal::panel);
 		}
 		if (k.w2 > 0) {
 			const int x2 = kx + static_cast<int>(k.x2 * u), y2 = ky + static_cast<int>(k.y2 * u);
 			const int w2 = static_cast<int>(k.w2 * u) - 4, h2 = static_cast<int>(k.h2 * u) - 4;
-			p.RoundRect(x, y + 2, w, h, 6, RGB(12, 9, 6));
-			p.RoundRect(x2, y2 + 2, w2, h2, 6, RGB(12, 9, 6));
+			p.RoundRect(x, y + 2, w, h, 6, pal::bg);
+			p.RoundRect(x2, y2 + 2, w2, h2, 6, pal::bg);
 			p.RoundRect(x, y, w, h, 6, edge);
 			p.RoundRect(x2, y2 - 8, w2, h2 + 8, 6, edge);
 			p.RoundRect(x + 1, y + 1, w - 2, h - 2, 5, face);
@@ -812,7 +812,7 @@ void DrawKeyboardView(Painter &p, const State &st, int mx, int my, int areaBotto
 			p.Fill(x2 + 1, y + h - 8, w2 - 2, 10, face);
 		}
 		else {
-			p.RoundRect(x, y + 2, w, h, 6, RGB(12, 9, 6));
+			p.RoundRect(x, y + 2, w, h, 6, pal::bg);
 			p.RoundRect(x, y, w, h, 6, edge);
 			p.RoundRect(x + 1, y + 1, w - 2, h - 2, 5, face);
 		}
@@ -839,8 +839,8 @@ void DrawKeyboardView(Painter &p, const State &st, int mx, int my, int areaBotto
 	}
 
 	const int bx = x0 + 10, bw = w0 - 20, dy = ky + static_cast<int>(6.5f * u) + 8, dh = areaBottom - dy;
-	p.Fill(bx, dy, bw, dh, RGB(34, 27, 18));
-	p.Frame(bx, dy, bw, dh, RGB(80, 62, 38));
+	p.Fill(bx, dy, bw, dh, pal::raised);
+	p.Frame(bx, dy, bw, dh, pal::lineStrong);
 	static int lastHover = -1;
 	const bool inBox = p.Hover(bx, dy, bw, dh, mx, my);
 	if (hover >= 0) lastHover = hover;
@@ -853,7 +853,7 @@ void DrawKeyboardView(Painter &p, const State &st, int mx, int my, int areaBotto
 		p.Font(3);
 		p.TextWrapped(tx, dy + 14, tw, dh - 20,
 			"Hover over a key to see what it does, or click it to pin it. The dot in the corner means it also "
-			"does something with Ctrl, Shift or Alt. Click any of its uses to jump to it in the list.", kDim);
+			"does something with Ctrl, Shift or Alt. Click any of its uses to jump to it in the list.", pal::textDim);
 		return;
 	}
 	const KbKey &k = keys[shown];
@@ -861,16 +861,16 @@ void DrawKeyboardView(Painter &p, const State &st, int mx, int my, int areaBotto
 	const KeyUse use = UseOf(st, vk, static_cast<unsigned char>(st.layer));
 	p.Font(1);
 	const std::string title = ControlsKeyLabel({vk, static_cast<unsigned char>(st.layer)});
-	p.Text(tx, dy + 8, tw, 26, title, kGold);
+	p.Text(tx, dy + 8, tw, 26, title, pal::redText);
 	const int titleW = p.TextWidth(title);
 	std::string summary;
 	if (!use.general.empty()) summary += std::to_string(use.general.size()) + (use.general.size() == 1 ? Tr(" action") : Tr(" actions"));
 	if (!use.orders.empty()) summary += std::string(summary.empty() ? "" : "  ·  ") + std::to_string(use.orders.size()) + (use.orders.size() == 1 ? Tr(" command") : Tr(" commands"));
 	if (use.gridPos >= 0) summary += std::string(summary.empty() ? "" : "  ·  ") + Tr("button ") + std::to_string(use.gridPos + 1) + Tr(" on the bar");
 	p.Font(3);
-	p.Text(tx + titleW + 14, dy + 8, tw - titleW - 14, 26, summary, kDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	p.Text(tx + titleW + 14, dy + 8, tw - titleW - 14, 26, summary, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	if (!use.Used()) {
-		p.Text(tx, dy + 40, tw, 20, "Free", kDim);
+		p.Text(tx, dy + 40, tw, 20, "Free", pal::textDim);
 		return;
 	}
 	struct Item {
@@ -882,7 +882,7 @@ void DrawKeyboardView(Painter &p, const State &st, int mx, int my, int areaBotto
 	for (int row : use.general) {
 		const ControlInfo &r = st.rows[row];
 		const bool clash = st.clash[row * 2].row >= 0 || st.clash[row * 2 + 1].row >= 0;
-		items.push_back({r.name, ControlsPageName(r.page), row, clash ? kBad : kText});
+		items.push_back({r.name, ControlsPageName(r.page), row, clash ? pal::bad : pal::text});
 	}
 	for (int row : use.orders) {
 		const ControlInfo &r = st.rows[row];
@@ -899,12 +899,12 @@ void DrawKeyboardView(Painter &p, const State &st, int mx, int my, int areaBotto
 		const int ix = tx + static_cast<int>(i % 2) * (colW + colGap), iy = top + static_cast<int>(i / 2) * itemH - scroll;
 		if (iy + itemH <= top || iy >= top + viewH) continue;
 		const bool hov = p.Hover(ix - 6, std::max(iy, top), colW + 12, std::min(iy + itemH, top + viewH) - std::max(iy, top), mx, my);
-		if (hov) p.Fill(ix - 6, iy, colW + 12, itemH, pal::rowHover);
+		if (hov) p.Fill(ix - 6, iy, colW + 12, itemH, pal::raised);
 		p.Font(0);
 		const int nameW = std::min(colW - 40, p.TextWidth(it.name));
-		p.Text(ix, iy, colW - 40 > 0 ? nameW : colW, itemH, it.name, hov ? pal::focus : it.color, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(ix, iy, colW - 40 > 0 ? nameW : colW, itemH, it.name, hov ? pal::text : it.color, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.Font(3);
-		p.Text(ix + nameW + 10, iy + 1, colW - nameW - 10, itemH, it.where, kDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(ix + nameW + 10, iy + 1, colW - nameW - 10, itemH, it.where, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		const int ht = std::max(iy, top), hb = std::min(iy + itemH, top + viewH);
 		if (hb > ht) p.AddHit(ix - 6, ht, colW + 12, hb - ht, kKbGo, it.row);
 	}
@@ -975,10 +975,10 @@ void ControlsUiDraw(uint32_t *buf, int w, int h)
 	if (!st.search.empty()) {
 		const bool hov = p.Hover(sx + 280 - 28, 22, 28, 30, mx, my);
 		p.Font(1);
-		p.Text(sx + 280 - 28, 22, 28, 30, "×", hov ? pal::focus : kDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.Text(sx + 280 - 28, 22, 28, 30, "×", hov ? pal::text : pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		p.AddHit(sx + 280 - 28, 22, 28, 30, kClearSearch);
 	}
-	PaintOrnateRule(p, kTop - 10, kW);
+	PaintRule(p, kTop - 10, kW);
 
 	g_captureCell = {};
 	const bool keyboard = st.view == 1;
@@ -990,17 +990,17 @@ void ControlsUiDraw(uint32_t *buf, int w, int h)
 	if (keyboard) DrawKeyboardView(p, st, mx, my, listBottom, kb);
 	if (!keyboard) {
 	DrawNav(p, st, mx, my);
-	p.Fill(kListX - 8, kTop, 1, listBottom - kTop, RGB(56, 43, 28));
+	p.Fill(kListX - 8, kTop, 1, listBottom - kTop, pal::hairline);
 
 	const bool ordersBanner = st.search.empty() && ControlsPageIsOrders(st.page);
 	const bool boxBanner = st.search.empty() && st.page == kPageMod;
 	const bool banner = ordersBanner || boxBanner;
 	if (boxBanner) {
 		const int bx = kListX + 8, bw = kListW - 16, by = kTop, bh = kBannerH - 10;
-		p.Fill(bx, by, bw, bh, RGB(36, 28, 19));
-		p.Frame(bx, by, bw, bh, pal::divider);
+		p.Fill(bx, by, bw, bh, pal::raised);
+		p.Frame(bx, by, bw, bh, pal::lineStrong);
 		p.Font(1);
-		p.Text(bx + 14, by + 8, bw - 28, 28, "Box selection on the big map (M)", kText);
+		p.Text(bx + 14, by + 8, bw - 28, 28, "Box selection on the big map (M)", pal::text);
 		static const char *const kBoxLabels[kZoomBoxModes] = {"Ctrl + drag", "Alt + drag", "Shift + drag", "Off"};
 		const int segW = 120, segX = bx + 14;
 		for (int i = 0; i < kZoomBoxModes; i++) {
@@ -1010,14 +1010,14 @@ void ControlsUiDraw(uint32_t *buf, int w, int h)
 		p.TextWrapped(bx + 14, by + 82, bw - 28, 34,
 			"Hold the key and drag over the big map to select the troops and heroes inside the box; hold the other one of Shift and Ctrl to add to your "
 			"selection. Without the key, a click takes you to that place, as in the original game.",
-			kDim);
+			pal::textDim);
 	}
 	if (ordersBanner) {
 		const int bx = kListX + 8, bw = kListW - 16, by = kTop, bh = kBannerH - 10;
-		p.Fill(bx, by, bw, bh, RGB(36, 28, 19));
-		p.Frame(bx, by, bw, bh, pal::divider);
+		p.Fill(bx, by, bw, bh, pal::raised);
+		p.Frame(bx, by, bw, bh, pal::lineStrong);
 		p.Font(1);
-		p.Text(bx + 14, by + 8, 220, 28, "Command keys", kText);
+		p.Text(bx + 14, by + 8, 220, 28, "Command keys", pal::text);
 		const int seg1 = 110, seg2 = 190, segX = bx + bw - 14 - seg1 - seg2;
 		p.Button(segX, by + 8, seg1, 28, "By letter", kModeLetter, 0, mx, my, true, !st.grid, 4);
 		p.Button(segX + seg1, by + 8, seg2, 28, "By position on the bar", kModePosition, 0, mx, my, true, st.grid, 4);
@@ -1025,30 +1025,30 @@ void ControlsUiDraw(uint32_t *buf, int w, int h)
 		const char *letters = st.grid ? "QWERT" : "SMAPD";
 		for (int i = 0; i < 5; i++) {
 			const int x = exX + i * (bs + gap);
-			p.RoundRect(x, exY, bs, bs, 6, RGB(96, 76, 46));
-			p.RoundRect(x + 1, exY + 1, bs - 2, bs - 2, 5, RGB(58, 46, 30));
-			p.Fill(x + 10, exY + 14, bs - 18, bs - 20, RGB(84, 68, 44));
-			p.Fill(x + 2, exY + 2, 15, 15, pal::edgeStrong);
-			p.Fill(x + 3, exY + 3, 13, 13, RGB(24, 18, 12));
+			p.RoundRect(x, exY, bs, bs, 6, pal::lineStrong);
+			p.RoundRect(x + 1, exY + 1, bs - 2, bs - 2, 5, pal::hairline);
+			p.Fill(x + 10, exY + 14, bs - 18, bs - 20, pal::lineStrong);
+			p.Fill(x + 2, exY + 2, 15, 15, pal::edgeHot);
+			p.Fill(x + 3, exY + 3, 13, 13, pal::panel);
 			SelectObject(p.dc, KeyFont(p.s));
-			p.Text(x + 3, exY + 3, 13, 13, std::string(1, letters[i]), RGB(255, 232, 160), DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			p.Text(x + 3, exY + 3, 13, 13, std::string(1, letters[i]), pal::body, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		}
 		p.Font(3);
 		if (st.grid) {
 			for (int i = 0; i < 5; i++) {
-				p.Text(exX + i * (bs + gap), exY + bs + 4, bs, 18, std::to_string(i + 1) + ".º", RGB(140, 124, 96), DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+				p.Text(exX + i * (bs + gap), exY + bs + 4, bs, 18, std::to_string(i + 1) + ".º", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 			}
 		}
 		const int tx = bx + 14, tw = exX - 20 - tx;
 		p.TextWrapped(tx, by + 46, tw, 42,
 			st.grid ? "The key follows the button's position: Q for the first, W for the second… The same for any unit or building."
 					: "Each command has its own letter (M move, A attack…): the game's or the one you set here. They change depending on the unit or building.",
-			kDim);
+			pal::textDim);
 		const int tgY = by + bh - 32, tgW = 240;
 		const bool tgHov = p.Hover(tx, tgY, tgW, 22, mx, my);
 		const int sw = Painter::kToggleW, swY = tgY + (22 - Painter::kToggleH) / 2;
 		p.Toggle(tx, swY, st.barLetters, true, tgHov);
-		p.Text(tx + sw + 8, tgY, tgW - sw - 8, 22, "Show the letter on each button", tgHov ? pal::focus : st.barLetters ? kText : kDim,
+		p.Text(tx + sw + 8, tgY, tgW - sw - 8, 22, "Show the letter on each button", tgHov ? pal::text : st.barLetters ? pal::text : pal::textDim,
 			DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 		p.AddHit(tx, tgY, tgW, 22, kBarLetters);
 	}
@@ -1056,9 +1056,9 @@ void ControlsUiDraw(uint32_t *buf, int w, int h)
 	const Columns cols = Cols();
 	const int colsY = kTop + (banner ? kBannerH : 0);
 	p.Font(4);
-	p.Text(cols.name, colsY, 200, kColsH, "Action", RGB(150, 126, 84));
-	p.Text(cols.cell0, colsY, kCellW, kColsH, "Key", RGB(150, 126, 84), DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-	p.Text(cols.cell1, colsY, kCellW, kColsH, "Alternative", RGB(150, 126, 84), DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	p.Text(cols.name, colsY, 200, kColsH, "Action", pal::caption);
+	p.Text(cols.cell0, colsY, kCellW, kColsH, "Key", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	p.Text(cols.cell1, colsY, kCellW, kColsH, "Alternative", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
 	const std::vector<Item> view = BuildView(st);
 	listTop = colsY + kColsH;
@@ -1072,8 +1072,8 @@ void ControlsUiDraw(uint32_t *buf, int w, int h)
 		if (it.header) {
 			if (y + kHeaderH > listTop && y < listBottom) {
 				p.Font(4);
-				p.Text(kListX + 10, y + 6, kListW - 40, kHeaderH - 6, it.label, kGold);
-				p.Fill(kListX + 10, y + kHeaderH - 2, kListW - 28, 1, pal::divider);
+				p.Text(kListX + 10, y + 6, kListW - 40, kHeaderH - 6, it.label, pal::redText);
+				p.Fill(kListX + 10, y + kHeaderH - 2, kListW - 28, 1, pal::lineStrong);
 			}
 			y += kHeaderH;
 		}
@@ -1085,7 +1085,7 @@ void ControlsUiDraw(uint32_t *buf, int w, int h)
 	if (view.empty()) {
 		p.Font(0);
 		p.Text(kListX + 10, listTop + 20, kListW - 20, 30,
-			st.search.empty() ? std::string("The game's commands could not be read (see the log in Logs\\imperivm).") : Tr("Nothing matches «") + st.search + "».", kDim);
+			st.search.empty() ? std::string("The game's commands could not be read (see the log in Logs\\imperivm).") : Tr("Nothing matches «") + st.search + "».", pal::textDim);
 	}
 	p.Unclip();
 	{
@@ -1098,16 +1098,16 @@ void ControlsUiDraw(uint32_t *buf, int w, int h)
 		const ControlInfo &r = st.rows[st.pend.row];
 		const ControlInfo &o = st.rows[st.pendWith[0].row];
 		const int cx = kListX + 8, cw = kListW - 24, chh = 78, cyy = listBottom - chh - 8;
-		p.Fill(cx + 4, cyy + 4, cw, chh, RGB(10, 8, 5));
-		p.Fill(cx, cyy, cw, chh, RGB(40, 31, 20));
-		p.Frame(cx, cyy, cw, chh, kGold);
+		p.Fill(cx + 4, cyy + 4, cw, chh, pal::bg);
+		p.Fill(cx, cyy, cw, chh, pal::selected);
+		p.Frame(cx, cyy, cw, chh, pal::lineStrong);
 		std::string text = ControlsKeyLabel(st.pendKey) + Tr(" already belongs to «") + o.name + "» (" + Where(o) + ")";
 		if (st.pendWith.size() > 1) text += Tr(" and ") + std::to_string(st.pendWith.size() - 1) + Tr(" more");
 		text += ".";
 		p.Font(0);
-		p.Text(cx + 14, cyy + 8, cw - 28, 24, text, kText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(cx + 14, cyy + 8, cw - 28, 24, text, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.Font(3);
-		p.Text(cx + 14, cyy + 30, cw - 28, 18, std::string("For «") + r.name + "»" + (st.pend.slot ? Tr(" as an alternative.") : "."), kDim,
+		p.Text(cx + 14, cyy + 30, cw - 28, 18, std::string("For «") + r.name + "»" + (st.pend.slot ? Tr(" as an alternative.") : "."), pal::textDim,
 			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		int bx = cx + cw - 14;
 		const int by = cyy + chh - 36, bh = 28;
@@ -1124,7 +1124,7 @@ void ControlsUiDraw(uint32_t *buf, int w, int h)
 	}
 
 	const int fy = kH - kFooterH;
-	p.Fill(16, fy + 2, kW - 32, 1, pal::lineDim);
+	p.Fill(16, fy + 2, kW - 32, 1, pal::hairline);
 	p.Button(24, fy + 12, 96, 34, "Export", kCopyConfig, 0, mx, my, true, false, 4);
 	p.Button(24 + 96 + 8, fy + 12, 96, 34, "Import", kPasteConfig, 0, mx, my, true, false, 4);
 	p.Button(24 + (96 + 8) * 2, fy + 12, 110, 34, "Reset all", kResetAll, 0, mx, my, true, false, 4);
@@ -1133,7 +1133,7 @@ void ControlsUiDraw(uint32_t *buf, int w, int h)
 	const int undoX = kW - 24 - 130 - 12 - 110;
 	if (canUndo) p.Button(undoX, fy + 12, 110, 34, "Undo", kUndo, 0, mx, my, true, false, 4);
 	std::string status;
-	COLORREF statusColor = kText;
+	COLORREF statusColor = pal::text;
 	if (st.capture.row < 0 && !Asking(st)) {
 		const POINT pt = {mx, my};
 		for (const Hit &hh : hits) {
@@ -1141,7 +1141,7 @@ void ControlsUiDraw(uint32_t *buf, int w, int h)
 			if (hh.action == kCell && hh.arg >= 0 && hh.arg < static_cast<int>(st.clash.size()) && st.clash[hh.arg].row >= 0) {
 				const ControlInfo &o = st.rows[st.clash[hh.arg].row];
 				status = Tr("Clashes with «") + o.name + "» (" + Where(o) + Tr("): only one of the two will work.");
-				statusColor = kBad;
+				statusColor = pal::bad;
 			}
 			else if (hh.action == kCell && hh.arg >= 0 && hh.arg / 2 < static_cast<int>(st.rows.size()) && KeyOf(st.rows[hh.arg / 2], hh.arg % 2).vk) {
 				status = "Click: change  ·  Right-click: remove";
@@ -1162,13 +1162,13 @@ void ControlsUiDraw(uint32_t *buf, int w, int h)
 	}
 	if (st.confirmResetAll) {
 		const int cw = 560, chh = 78, cx = (kW - cw) / 2, cyy = fy - chh - 8;
-		p.Fill(cx + 4, cyy + 4, cw, chh, RGB(10, 8, 5));
-		p.Fill(cx, cyy, cw, chh, RGB(40, 31, 20));
-		p.Frame(cx, cyy, cw, chh, kGold);
+		p.Fill(cx + 4, cyy + 4, cw, chh, pal::bg);
+		p.Fill(cx, cyy, cw, chh, pal::selected);
+		p.Frame(cx, cyy, cw, chh, pal::lineStrong);
 		p.Font(0);
-		p.Text(cx + 14, cyy + 8, cw - 28, 24, "Put every key back as in the original game?", kText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(cx + 14, cyy + 8, cw - 28, 24, "Put every key back as in the original game?", pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.Font(3);
-		p.Text(cx + 14, cyy + 30, cw - 28, 18, "Your keys and command modes go back to the game's. You can undo it for a few seconds.", kDim,
+		p.Text(cx + 14, cyy + 30, cw - 28, 18, "Your keys and command modes go back to the game's. You can undo it for a few seconds.", pal::textDim,
 			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		int bx = cx + cw - 14;
 		const int by = cyy + chh - 36, bh = 28;
@@ -1184,9 +1184,9 @@ void ControlsUiDraw(uint32_t *buf, int w, int h)
 		const int tw = std::min(maxW - 40, p.TextWidth(st.status));
 		const int th = p.Measure(tw, st.status);
 		const int bw = tw + 40, bh = th + 20, bx = (kW - bw) / 2, by = fy - 8 - 12 - bh;
-		p.Fill(bx, by, bw, bh, RGB(26, 21, 15));
-		p.Frame(bx, by, bw, bh, st.statusBad ? kBad : pal::edge);
-		p.TextWrapped(bx + 20, by + 10, tw + 4, th + 2, st.status, st.statusBad ? RGB(255, 190, 170) : kText);
+		p.Fill(bx, by, bw, bh, pal::panel);
+		p.Frame(bx, by, bw, bh, st.statusBad ? pal::bad : pal::edge);
+		p.TextWrapped(bx + 20, by + 10, tw + 4, th + 2, st.status, st.statusBad ? pal::body : pal::text);
 	}
 	{
 		static int lastAction = -1, lastArg = 0;
@@ -1215,9 +1215,9 @@ void ControlsUiDraw(uint32_t *buf, int w, int h)
 		int bx = static_cast<int>((mx - ox) / s) + 14, by = static_cast<int>((my - oy) / s) + 20;
 		bx = std::min(bx, kW - bw - 8);
 		if (by + bh > kH - 8) by = static_cast<int>((my - oy) / s) - bh - 8;
-		p.Fill(bx, by, bw, bh, RGB(26, 21, 15));
-		p.Frame(bx, by, bw, bh, statusColor == kBad ? kBad : pal::edge);
-		p.TextWrapped(bx + 10, by + 6, tw + 4, th + 2, status, statusColor == kBad ? RGB(255, 190, 170) : kText);
+		p.Fill(bx, by, bw, bh, pal::panel);
+		p.Frame(bx, by, bw, bh, statusColor == pal::bad ? pal::bad : pal::edge);
+		p.TextWrapped(bx + 10, by + 6, tw + 4, th + 2, status, statusColor == pal::bad ? pal::body : pal::text);
 	}
 	if (st.capture.row >= 0 && g_captureCell.right > g_captureCell.left) {
 		const std::string tip = "Key or mouse button  ·  Esc cancels";
@@ -1227,9 +1227,9 @@ void ControlsUiDraw(uint32_t *buf, int w, int h)
 		const int bx = std::min(right, kW - 12) - bw;
 		const bool below = g_captureCell.bottom + 8 + bh < kH - kFooterH - 8;
 		const int by = below ? g_captureCell.bottom + 8 : g_captureCell.top - 8 - bh;
-		p.Fill(bx, by, bw, bh, RGB(26, 21, 15));
+		p.Fill(bx, by, bw, bh, pal::panel);
 		p.Frame(bx, by, bw, bh, pal::edge);
-		p.Text(bx, by, bw, bh, tip, pal::focus, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.Text(bx, by, bw, bh, tip, pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 	}
 
 	r.End();

@@ -56,10 +56,10 @@ int CapWidth(Painter &p, const std::string &text)
 void DrawCap(Painter &p, int x, int y, int w, int h, const std::string &text, unsigned short vk, COLORREF edge, COLORREF fg,
 	COLORREF face)
 {
-	p.RoundRect(x, y + 2, w, h - 2, 7, RGB(12, 9, 6));
+	p.RoundRect(x, y + 2, w, h - 2, 7, pal::bg);
 	p.RoundRect(x, y, w, h - 2, 7, edge);
 	p.RoundRect(x + 1, y + 1, w - 2, h - 4, 6, face);
-	p.Fill(x + 5, y + 2, w - 10, 1, RGB(86, 69, 48));
+	p.Fill(x + 5, y + 2, w - 10, 1, pal::lineStrong);
 	if (text.empty() && IsArrow(vk)) ArrowGlyph(p, x + w / 2, y + (h - 2) / 2, vk, fg);
 	else p.Text(x, y, w, h - 2, text, fg, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 }
@@ -79,7 +79,7 @@ void DrawKey(Painter &p, int x, int y, int w, int h, ControlKey k, COLORREF edge
 	int cx = x + (w - total) / 2;
 	for (size_t i = 0; i < caps.size(); i++) {
 		if (i) {
-			p.Text(cx, cy, plusW, capH, "+", kDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			p.Text(cx, cy, plusW, capH, "+", pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 			cx += plusW;
 		}
 		const int cw = CapWidth(p, caps[i]);
@@ -114,17 +114,17 @@ void DrawKeys(Painter &p, int x, int y, int h, const std::vector<ControlKey> &ke
 {
 	p.Font(4);
 	const int plusW = 12, orW = 16;
-	const COLORREF edge = RGB(122, 98, 64), fg = RGB(240, 222, 170);
+	const COLORREF edge = pal::edgeHot, fg = pal::body;
 	int cx = x;
 	for (size_t i = 0; i < keys.size(); i++) {
 		if (i) {
-			p.Text(cx, y, orW, h - 2, "/", kDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			p.Text(cx, y, orW, h - 2, "/", pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 			cx += orW;
 		}
 		const std::vector<std::string> caps = CapTexts(keys[i]);
 		for (size_t c = 0; c < caps.size(); c++) {
 			if (c) {
-				p.Text(cx, y, plusW, h - 2, "+", kDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+				p.Text(cx, y, plusW, h - 2, "+", pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 				cx += plusW;
 			}
 			const int cw = CapWidth(p, caps[c]);

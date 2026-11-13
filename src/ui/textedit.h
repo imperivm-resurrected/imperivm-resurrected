@@ -275,8 +275,8 @@ inline int EditIndexAt(const FieldGeom &g, const std::string &t, int mouseX)
 inline void PaintEditField(Painter &p, int x, int y, int w, int h, const std::string &text, const std::string &placeholder,
 	bool focused, bool secret, const EditState &es, int action)
 {
-	p.Fill(x, y, w, h, focused ? RGB(30, 24, 16) : pal::well);
-	p.Frame(x, y, w, h, focused ? kGold : pal::line);
+	p.Fill(x, y, w, h, focused ? pal::raised : pal::bg);
+	p.Frame(x, y, w, h, focused ? pal::redText : pal::lineStrong);
 	p.Font(0);
 	std::vector<int> bytes;
 	for (int i = 0;; i = NextCp(text, i)) {
@@ -320,21 +320,21 @@ inline void PaintEditField(Painter &p, int x, int y, int w, int h, const std::st
 	if (focused && es.caret != es.anchor) {
 		const size_t a = indexOf(SelLo(es)), b = indexOf(SelHi(es));
 		RECT sr = {origin + edges[a], p.S(y + 4), origin + edges[b], p.S(y + h - 4)};
-		HBRUSH br = CreateSolidBrush(RGB(120, 92, 36));
+		HBRUSH br = CreateSolidBrush(pal::red);
 		FillRect(p.dc, &sr, br);
 		DeleteObject(br);
 	}
 	if (text.empty() && !focused) {
-		p.Text(x + 8, y, w - 16, h, placeholder, kDim);
+		p.Text(x + 8, y, w - 16, h, placeholder, pal::textDim);
 	}
 	else if (!ws.empty()) {
-		SetTextColor(p.dc, kText);
+		SetTextColor(p.dc, pal::text);
 		RECT tr = {origin, p.S(y), origin + totalW + p.S(40), p.S(y + h)};
 		DrawTextW(p.dc, ws.c_str(), static_cast<int>(ws.size()), &tr, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 	}
 	if (focused && (GetTickCount() / 530) % 2 == 0 && es.caret == es.anchor) {
 		RECT cr = {origin + edges[indexOf(es.caret)], p.S(y + 5), origin + edges[indexOf(es.caret)] + std::max(1, p.S(1)), p.S(y + h - 5)};
-		HBRUSH br = CreateSolidBrush(RGB(240, 226, 180));
+		HBRUSH br = CreateSolidBrush(pal::body);
 		FillRect(p.dc, &cr, br);
 		DeleteObject(br);
 	}

@@ -1024,31 +1024,31 @@ void PaintRowText(Painter &p, const State &st, const SaveRec &r, int x, int y, i
 	const std::string &nm = !title.empty() ? title : r.name;
 	if (child) {
 		p.Font(0);
-		if (!editing) p.Text(x + 30, y, w - 190 - (warn ? 26 : 0), h, nm, r.autosave ? kDim : kText);
+		if (!editing) p.Text(x + 30, y, w - 190 - (warn ? 26 : 0), h, nm, r.autosave ? pal::textDim : pal::text);
 		p.Font(3);
 		const std::string when = TimeText(r.time);
-		p.Text(x + w - 160, y, 150, h, when, kDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+		p.Text(x + w - 160, y, 150, h, when, pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 		if (warn) PaintAlertIcon(p, x + w - 10 - p.TextWidth(when) - 24, y + (h - 16) / 2, mc.blocked);
 		return;
 	}
 	p.Font(1);
-	if (!editing) p.Text(x + 12, y + 4, w - 130, 22, nm, r.autosave ? kDim : kText);
+	if (!editing) p.Text(x + 12, y + 4, w - 130, 22, nm, r.autosave ? pal::textDim : pal::text);
 	p.Font(3);
 	std::string sub = TimeText(r.time);
 	if (r.autosave) sub += "  ·  Autosave";
 	if (const std::string camp = CampaignOf(st, r); !camp.empty()) sub += "  ·  " + camp;
 	if (mc.blocked) sub += "  ·  missing content";
 	else if (warn) sub += "  ·  different content";
-	p.Text(x + 12, y + 25, w - 24, 18, sub, warn ? kBad : kDim);
-	p.Text(x + w - 116, y + 4, 104, 22, HumanBytes(r.size), kDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+	p.Text(x + 12, y + 25, w - 24, 18, sub, warn ? pal::bad : pal::textDim);
+	p.Text(x + w - 116, y + 4, 104, 22, HumanBytes(r.size), pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 	if (warn) PaintAlertIcon(p, x + w - 12 - p.TextWidth(HumanBytes(r.size)) - 24, y + 7, mc.blocked);
 }
 
 void PaintList(Painter &p, State &st, const View &v)
 {
 	const int mx = st.mouseX, my = st.mouseY;
-	p.Fill(kLX, kLY, kLW, kLH, RGB(20, 15, 10));
-	p.Frame(kLX, kLY, kLW, kLH, pal::line);
+	p.Fill(kLX, kLY, kLW, kLH, pal::panel);
+	p.Frame(kLX, kLY, kLW, kLH, pal::lineStrong);
 	p.AddHit(kLX, kLY, kLW, kLH, kBlank, 0);
 	st.rowPaths.clear();
 	st.hdrKeys.clear();
@@ -1057,12 +1057,12 @@ void PaintList(Painter &p, State &st, const View &v)
 		p.Font(0);
 		const bool filtered = !st.search.empty();
 		const std::string text = filtered ? "No games match the search." : "There are no saved games.";
-		p.Text(kLX + 10, kLY + 14, kLW - 20, 24, text, kDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.Text(kLX + 10, kLY + 14, kLW - 20, 24, text, pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		bool hiddenAutos = false;
 		for (const SaveRec &r : st.recs) hiddenAutos = hiddenAutos || (r.autosave && ListMatches(st, r, st.tab));
 		if (!st.showAuto && !filtered && hiddenAutos) {
 			p.Font(3);
-			p.Text(kLX + 10, kLY + 40, kLW - 20, 20, "Check \"Show autosaves\" to see the automatic ones too.", kDim,
+			p.Text(kLX + 10, kLY + 40, kLW - 20, 20, "Check \"Show autosaves\" to see the automatic ones too.", pal::textDim,
 				DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		}
 		st.listGeom = ListGeom();
@@ -1083,16 +1083,16 @@ void PaintList(Painter &p, State &st, const View &v)
 		const int top = std::max(ry, kLY + 1), bottom = std::min(ry + r.h, kLY + kLH - 1);
 		if (r.kind == 1) {
 			const bool hovH = p.Hover(rx, top, rw, std::max(0, bottom - top), mx, my);
-			p.Fill(rx, ry, rw, r.h, selected ? RGB(86, 64, 32) : hovH ? RGB(48, 38, 26) : pal::field);
-			if (selected) p.Frame(rx, ry, rw, r.h, kGold);
-			else p.Fill(rx, ry + r.h - 1, rw, 1, pal::lineDim);
+			p.Fill(rx, ry, rw, r.h, selected ? pal::lineStrong : hovH ? pal::hairline : pal::field);
+			if (selected) p.Frame(rx, ry, rw, r.h, pal::redText);
+			else p.Fill(rx, ry + r.h - 1, rw, 1, pal::hairline);
 			p.Font(1);
-			const COLORREF arrow = p.Hover(rx, top, 30, std::max(0, bottom - top), mx, my) ? pal::focus : kGold;
+			const COLORREF arrow = p.Hover(rx, top, 30, std::max(0, bottom - top), mx, my) ? pal::text : pal::redText;
 			if (r.collapsed) p.ArrowRight(rx + 12, ry + r.h / 2 - 5, 7, 10, arrow);
 			else p.ArrowDown(rx + 10, ry + r.h / 2 - 3, 10, 6, arrow);
-			if (!editing) p.Text(rx + 28, ry, rw - 300, r.h, r.title, kGold);
+			if (!editing) p.Text(rx + 28, ry, rw - 300, r.h, r.title, pal::redText);
 			p.Font(3);
-			if (!editing) p.Text(rx + rw - 260, ry, 250, r.h, std::to_string(r.count) + (r.count == 1 ? Tr(" save  ·  ") : Tr(" saves  ·  ")) + TimeText(rec.time), kDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+			if (!editing) p.Text(rx + rw - 260, ry, 250, r.h, std::to_string(r.count) + (r.count == 1 ? Tr(" save  ·  ") : Tr(" saves  ·  ")) + TimeText(rec.time), pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 			if (bottom > top) {
 				st.hdrKeys.push_back(r.key);
 				st.hdrPaths.push_back(rec.vfsPath);
@@ -1107,9 +1107,9 @@ void PaintList(Painter &p, State &st, const View &v)
 			continue;
 		}
 		const bool hov = p.Hover(rx, top, rw, std::max(0, bottom - top), mx, my);
-		p.Fill(rx, ry, rw, r.h, selected ? RGB(86, 64, 32) : hov ? RGB(48, 38, 26) : (r.kind == 2 ? RGB(26, 20, 14) : RGB(22, 17, 12)));
-		if (selected) p.Frame(rx, ry, rw, r.h, kGold);
-		else p.Fill(rx, ry + r.h - 1, rw, 1, RGB(44, 34, 22));
+		p.Fill(rx, ry, rw, r.h, selected ? pal::lineStrong : hov ? pal::hairline : (r.kind == 2 ? pal::panel : pal::panel));
+		if (selected) p.Frame(rx, ry, rw, r.h, pal::redText);
+		else p.Fill(rx, ry + r.h - 1, rw, 1, pal::selected);
 		PaintRowText(p, st, rec, rx, ry, rw, r.h, r.kind == 2, r.title, editing);
 		if (bottom > top) {
 			st.rowPaths.push_back(rec.vfsPath);
@@ -1176,9 +1176,9 @@ int PaintPlayers(Painter &p, const MpSaveInfo &info, const std::vector<int> &sta
 		const bool defeated = i < states.size() && states[i] == 2;
 		const int r = ((c >> 10) & 31) * 255 / 31, g = ((c >> 5) & 31) * 255 / 31, b = (c & 31) * 255 / 31;
 		p.Fill(cx, cy + 5, 10, 10, defeated ? RGB(r / 3 + 30, g / 3 + 30, b / 3 + 30) : RGB(r, g, b));
-		p.Frame(cx, cy + 5, 10, 10, RGB(20, 15, 10));
-		p.Text(cx + 15, cy, tw + 4, rowH, pl.name, defeated ? kDim : kText);
-		if (defeated) p.Fill(cx + 13, cy + rowH / 2, tw + 4, 1, kDim);
+		p.Frame(cx, cy + 5, 10, 10, pal::panel);
+		p.Text(cx + 15, cy, tw + 4, rowH, pl.name, defeated ? pal::textDim : pal::text);
+		if (defeated) p.Fill(cx + 13, cy + rowH / 2, tw + 4, 1, pal::textDim);
 		cx += 15 + tw + 16;
 		any = true;
 	}
@@ -1194,19 +1194,19 @@ void PaintDetailBody(Painter &p, State &st)
 		for (const SaveRec &r : plan.list) bytes += r.size;
 		const int x = kDX + 12, w = kDW - 24;
 		p.Font(1);
-		p.Text(x, kDY + 16, w, 24, std::to_string(plan.rows) + Tr(" items selected"), kGold);
+		p.Text(x, kDY + 16, w, 24, std::to_string(plan.rows) + Tr(" items selected"), pal::redText);
 		p.Font(3);
-		p.Text(x, kDY + 48, w, 18, CountsText(plan.list) + "  ·  " + HumanBytes(bytes), kDim);
+		p.Text(x, kDY + 48, w, 18, CountsText(plan.list) + "  ·  " + HumanBytes(bytes), pal::textDim);
 		return;
 	}
 	const SaveRec *rec = FindRec(st, st.selPath);
 	if (!rec) {
 		p.Font(0);
-		p.Text(kDX + 10, kDY + 10, kDW - 20, 24, "Select a game", kDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.Text(kDX + 10, kDY + 10, kDW - 20, 24, "Select a game", pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		return;
 	}
 	const int tw = 256, th = tw * 3 / 4, tx = kDX + (kDW - tw) / 2, ty = kDY + 12;
-	p.Fill(tx, ty, tw, th, RGB(10, 8, 6));
+	p.Fill(tx, ty, tw, th, pal::bg);
 	if (g_thumb.path != st.selPath || g_thumb.time != rec->time) {
 		g_thumb.path = st.selPath;
 		g_thumb.time = rec->time;
@@ -1219,36 +1219,36 @@ void PaintDetailBody(Painter &p, State &st)
 	}
 	else {
 		p.Font(3);
-		p.Text(tx, ty, tw, th, rec->kind == kSaveReplay ? "Replay" : "No thumbnail", kDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.Text(tx, ty, tw, th, rec->kind == kSaveReplay ? "Replay" : "No thumbnail", pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 	}
-	p.Frame(tx, ty, tw, th, pal::line);
+	p.Frame(tx, ty, tw, th, pal::lineStrong);
 	int y = ty + th + 10;
 	const int x = kDX + 12, w = kDW - 24;
 	const bool group = !st.selGroup.empty();
 	const std::string key = SaveLibGroupKey(*rec);
 	const std::string title = PartidaTitle(st, key, rec->kind);
 	p.Font(1);
-	p.Text(x, y, w, 24, group ? title : rec->name, kGold);
+	p.Text(x, y, w, 24, group ? title : rec->name, pal::redText);
 	y += 26;
 	p.Font(3);
 	std::string line = (group ? Tr("Last saved: ") : "") + TimeText(rec->time) + "  ·  " + HumanBytes(rec->size);
-	p.Text(x, y, w, 18, line, kDim);
+	p.Text(x, y, w, 18, line, pal::textDim);
 	y += 19;
 	if (const std::string camp = CampaignOf(st, *rec); !camp.empty()) {
-		p.Text(x, y, w, 18, (rec->kind == kSaveAdventure ? Tr("Adventure: ") : Tr("Conquest: ")) + camp, kText);
+		p.Text(x, y, w, 18, (rec->kind == kSaveAdventure ? Tr("Adventure: ") : Tr("Conquest: ")) + camp, pal::text);
 		y += 19;
 	}
 	const std::string map = MapLabel(st.info, *rec);
 	if (!map.empty()) {
-		p.Text(x, y, w, 18, Tr("Map: ") + map, kText);
+		p.Text(x, y, w, 18, Tr("Map: ") + map, pal::text);
 		y += 19;
 	}
 	if (rec->playSeconds >= 0) {
-		p.Text(x, y, w, 18, Tr("Play time: ") + PlayTimeText(rec->playSeconds), kText);
+		p.Text(x, y, w, 18, Tr("Play time: ") + PlayTimeText(rec->playSeconds), pal::text);
 		y += 19;
 	}
 	if (rec->online) {
-		p.Text(x, y, w, 18, "Online game", kOk);
+		p.Text(x, y, w, 18, "Online game", pal::ok);
 		y += 19;
 	}
 	if (st.info.valid) y += PaintPlayers(p, st.info, rec->playerStates, x, y + 2, w, kDY + kDH - 70 - y) + 2;
@@ -1262,18 +1262,18 @@ void PaintDetailBody(Painter &p, State &st)
 			for (const std::string &n : names) lines.push_back({"\xE2\x80\xA2  " + n, col, false});
 		};
 		const std::string many = std::to_string(mc.missing.size());
-		group(mc.missing.size() == 1 ? "You are missing 1 content pack (it cannot be loaded):" : Tr("You are missing ") + many + Tr(" content packs (they cannot be loaded):"), mc.missing, kBad);
-		group(mc.inactive.size() == 1 ? "You need to enable 1 content pack:" : Tr("You need to enable ") + std::to_string(mc.inactive.size()) + Tr(" content packs:"), mc.inactive, kGold);
-		group("Another version or different files:", mc.other, kGold);
-		group(rec->mods.empty() ? "It was saved without additional content. You have enabled:" : "It was saved without this content you have enabled:", mc.extra, kGold);
-		if (lines.empty() && mc.warn) lines.push_back({"The content of this game does not match the one you have enabled.", kGold, false});
+		group(mc.missing.size() == 1 ? "You are missing 1 content pack (it cannot be loaded):" : Tr("You are missing ") + many + Tr(" content packs (they cannot be loaded):"), mc.missing, pal::bad);
+		group(mc.inactive.size() == 1 ? "You need to enable 1 content pack:" : Tr("You need to enable ") + std::to_string(mc.inactive.size()) + Tr(" content packs:"), mc.inactive, pal::redText);
+		group("Another version or different files:", mc.other, pal::redText);
+		group(rec->mods.empty() ? "It was saved without additional content. You have enabled:" : "It was saved without this content you have enabled:", mc.extra, pal::redText);
+		if (lines.empty() && mc.warn) lines.push_back({"The content of this game does not match the one you have enabled.", pal::redText, false});
 		if (st.modListKey != rec->vfsPath) {
 			st.modListKey = rec->vfsPath;
 			st.modList = ListState();
 		}
 		st.modGeom = ListGeom();
 		if (!lines.empty()) {
-			p.Fill(x, y + 2, w, 1, pal::lineDim);
+			p.Fill(x, y + 2, w, 1, pal::hairline);
 			y += 8;
 			const int rowH = 19;
 			const int h = std::min(bottom - y, static_cast<int>(lines.size()) * rowH + 8);
@@ -1330,14 +1330,14 @@ void PaintPanel(Painter &p, State &st)
 	const bool save = st.mode == 1;
 	PaintTitle(p, 20, 12, 300, save ? "Save game" : "Load game");
 	p.Font(3);
-	PaintOrnateRule(p, 52, kDesignW);
+	PaintRule(p, 52, kDesignW);
 
 	if (save) {
 		std::string kind = kTabNames[st.tab];
 		for (char &c : kind) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
 		p.Font(0);
-		p.Text(18, 66, 300, 26, "Save name", kDim);
-		p.Text(330, 66, 600, 26, Tr("Saved ") + kind + Tr(" games") + (v.counts[st.tab] ? " (" + std::to_string(v.counts[st.tab]) + ")" : ""), kDim);
+		p.Text(18, 66, 300, 26, "Save name", pal::textDim);
+		p.Text(330, 66, 600, 26, Tr("Saved ") + kind + Tr(" games") + (v.counts[st.tab] ? " (" + std::to_string(v.counts[st.tab]) + ")" : ""), pal::textDim);
 		p.Font(3);
 	}
 	else {
@@ -1407,6 +1407,47 @@ void OpenImpl(void *dlg);
 bool HandleImpl(UINT msg, WPARAM wp, LPARAM lp);
 void DrawImpl(uint32_t *buf, int w, int h);
 
+// Opens the load screen on one game and presses its Load button, so that the game loads with every check of that button (missing or
+// disabled content, the restart to enable it). The game is shown first: an autosave would be hidden, and a load must never fall on
+// another row. If it cannot be selected, or the checks stop the load, the screen stays open on it; otherwise it closes and the game
+// loads, as when the button is pressed on the screen opened from the main menu (no game dialog behind it).
+void LoadSaveImpl(const std::string &vfsPath)
+{
+	OpenImpl(nullptr);
+	SaveRec load;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		State &st = g_s;
+		const SaveRec *rec = FindRec(st, vfsPath);
+		if (!rec) {
+			LogW("saves", "\"%s\" to continue is no longer there", vfsPath.c_str());
+			return;
+		}
+		if (rec->autosave) st.showAuto = true;
+		for (int t = 0; t < kTabCount; t++) {
+			if (TabMatches(*rec, t)) {
+				st.tab = t;
+				break;
+			}
+		}
+		const std::string want = Lower(rec->vfsPath);
+		Select(st, rec->vfsPath);
+		FixSelection(st);
+		ScrollToSelection(st);
+		if (st.selPath != want || st.sel.size() != 1 || !st.selGroup.empty()) {
+			LogW("saves", "\"%s\" to continue could not be selected", vfsPath.c_str());
+			return;
+		}
+		DoAction(st, kLoad, 0);
+		// As after a press of the button: a load the checks let through is left pending, and the screen closed.
+		if (!st.pendingLoad.empty()) {
+			if (const SaveRec *r = FindRec(st, st.pendingLoad)) load = *r;
+			st.pendingLoad.clear();
+		}
+	}
+	if (!load.vfsPath.empty()) ExecuteLoad(load);
+}
+
 int ExcFilter(EXCEPTION_POINTERS *e, const char *where)
 {
 	HMODULE m = nullptr;
@@ -1426,6 +1467,15 @@ void SavesUiOpen()
 		OpenImpl(nullptr);
 	}
 	__except (ExcFilter(GetExceptionInformation(), "open")) {
+	}
+}
+
+void SavesUiLoadSave(const std::string &vfsPath)
+{
+	__try {
+		LoadSaveImpl(vfsPath);
+	}
+	__except (ExcFilter(GetExceptionInformation(), "load save")) {
 	}
 }
 

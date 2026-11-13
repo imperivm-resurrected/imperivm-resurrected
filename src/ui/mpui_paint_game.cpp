@@ -98,8 +98,8 @@ struct OptionGrid {
 		y += 6;
 		if (Shown(kSectionH - 6)) {
 			p.Font(4);
-			p.Text(x, y, w, kSectionH - 8, title, pal::section, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-			p.Fill(x, y + kSectionH - 9, w, 1, pal::lineDim);
+			p.Text(x, y, w, kSectionH - 8, title, pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+			p.Fill(x, y + kSectionH - 9, w, 1, pal::hairline);
 		}
 		y += kSectionH - 6;
 	}
@@ -109,7 +109,7 @@ struct OptionGrid {
 		const int cx = CellX();
 		const bool hov = Shown(kCellH) && p.Hover(cx - 4, y, colW + 8, kCellH, st.mouseX, st.mouseY) && p.Hover(x - 8, top, w + 16, bottom - top, st.mouseX, st.mouseY);
 		if (hov) {
-			p.Fill(cx - 4, y + 1, colW + 8, kCellH - 2, RGB(38, 30, 20));
+			p.Fill(cx - 4, y + 1, colW + 8, kCellH - 2, pal::selected);
 			if (cellHelp && *cellHelp) help = cellHelp;
 		}
 		return hov;
@@ -119,16 +119,16 @@ struct OptionGrid {
 		Hover(cellHelp);
 		const int cx = CellX(), boxW = std::min(178, colW / 2 + 24), boxX = cx + colW - boxW, cy = y + (kCellH - 24) / 2;
 		p.Font(3);
-		p.Text(cx, y, boxX - cx - 8, kCellH, label, kDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(cx, y, boxX - cx - 8, kCellH, label, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		if (Shown(kCellH)) {
 			if (enabled) {
 				mpui_impl::Combo(p, st, boxX, cy, boxW, 24, value, kind, index, true);
 				if (special) p.Fill(boxX + 1, cy + 22, boxW - 26, 1, kSpecial);
 			}
 			else {
-				p.Frame(boxX, cy, boxW, 24, pal::lineDim);
+				p.Frame(boxX, cy, boxW, 24, pal::hairline);
 				p.Font(special ? 4 : 0);
-				p.Text(boxX + 8, cy, boxW - 14, 24, value, special ? kSpecial : kText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+				p.Text(boxX + 8, cy, boxW - 14, 24, value, special ? kSpecial : pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 			}
 		}
 		Next();
@@ -138,7 +138,7 @@ struct OptionGrid {
 		const bool hov = Hover(cellHelp) && enabled;
 		const int cx = CellX(), tx = cx + colW - kBigToggleW, ty = y + (kCellH - kBigToggleH) / 2;
 		p.Font(3);
-		p.Text(cx, y, tx - cx - 8, kCellH, label, on ? kText : kDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(cx, y, tx - cx - 8, kCellH, label, on ? pal::text : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		if (Shown(kCellH)) {
 			PaintBigToggle(p, tx, ty, on, enabled, hov);
 			if (enabled) p.AddHit(cx - 4, y, colW + 8, kCellH, action, arg);
@@ -158,19 +158,19 @@ void PaintRoomName(Painter &p, const State &st, int x, int y, int w)
 {
 	const GameRoomSnapshot &g = st.game;
 	p.Font(4);
-	p.Text(x, y, 130, 28, "Room name", pal::section, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+	p.Text(x, y, 130, 28, "Room name", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 	const int fx = x + 136, fw = std::min(460, w - 136);
 	if (g.host) {
 		const bool focused = st.focus == kRoomNameField;
 		PaintField(p, st, fx, y, fw, 28, focused ? st.roomNameInput : st.room.info.name, "", focused, kFieldRoomName);
 		if (focused) {
 			p.Font(3);
-			p.Text(fx + fw + 12, y, x + w - fx - fw - 12, 28, "Press Enter to rename the room", kDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			p.Text(fx + fw + 12, y, x + w - fx - fw - 12, 28, "Press Enter to rename the room", pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		}
 	}
 	else {
 		p.Font(0);
-		p.Text(fx, y, fw, 28, st.room.info.name, kText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(fx, y, fw, 28, st.room.info.name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
 }
 
@@ -184,29 +184,29 @@ void PaintMapCard(Painter &p, const State &st, int x, int y, int w, int h)
 	const int tx = x + pad, tw = size;
 	p.Font(1);
 	const std::string map = RoomMapLabel(st);
-	p.Text(tx, ty, tw, 22, map.empty() ? std::string("—") : map, kGold, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	p.Text(tx, ty, tw, 22, map.empty() ? std::string("—") : map, pal::redText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	ty += 26;
 	p.Font(3);
 	auto line = [&](const std::string &label, const std::string &value, COLORREF color) {
 		if (ty + 18 > y + h - 8) return;
-		p.Text(tx, ty, tw, 18, label, kDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+		p.Text(tx, ty, tw, 18, label, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 		p.Text(tx, ty, tw, 18, value.empty() ? std::string("—") : value, color, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		p.Fill(tx, ty + 18, tw, 1, RGB(42, 33, 22));
+		p.Fill(tx, ty + 18, tw, 1, pal::selected);
 		ty += 20;
 	};
 	const std::shared_ptr<const MapPreviewData> d = g.scenario.empty() ? nullptr : MapPreviewGet(g.scenario);
 	if (d && !d->failed) {
-		if (d->humans > 0) line(Tr("Players"), std::to_string(d->humans), kText);
-		if (d->info.units > 0) line(Tr("Size"), Tr(MapSizeName(d->info.units)), kText);
-		if (d->origin.kind == kMapMod) line(Tr("From: "), d->origin.modName, kGold);
+		if (d->humans > 0) line(Tr("Players"), std::to_string(d->humans), pal::text);
+		if (d->info.units > 0) line(Tr("Size"), Tr(MapSizeName(d->info.units)), pal::text);
+		if (d->origin.kind == kMapMod) line(Tr("From: "), d->origin.modName, pal::redText);
 	}
 	else {
-		line(Tr("Size"), RoomOptionText(st, 0x01000008, "Map size"), kText);
+		line(Tr("Size"), RoomOptionText(st, 0x01000008, "Map size"), pal::text);
 	}
 	int positions = 0;
 	for (const GameRoomSlot &s : g.slots) positions += s.exists ? 1 : 0;
-	if (positions < 8) line(Tr("Positions"), std::to_string(positions), kText);
-	COLORREF color = kDim;
+	if (positions < 8) line(Tr("Positions"), std::to_string(positions), pal::text);
+	COLORREF color = pal::textDim;
 	const std::string notice = RoomNotice(st, color);
 	if (!notice.empty() && ty + 20 < y + h - 8) {
 		ty += 6;
@@ -237,7 +237,7 @@ void PaintOptionsCard(Painter &p, const State &st, int x, int y, int w, int h)
 	p.Clip(x + 1, listTop, w - 2, listH);
 	if (!host && g.online && st.room.info.optionsText.empty()) {
 		p.Font(3);
-		p.TextWrapped(gx, grid.y + 12, gw, 60, "The host is choosing the map and options.", kDim);
+		p.TextWrapped(gx, grid.y + 12, gw, 60, "The host is choosing the map and options.", pal::textDim);
 		grid.y += 72;
 	}
 	else {
@@ -371,11 +371,11 @@ void PaintOptionsCard(Painter &p, const State &st, int x, int y, int w, int h)
 		ScrollbarPaint(p, x + w - 11, listTop, listH, contentH, listH, view, geom, mx, my);
 		g_optGeomOut = geom;
 	}
-	p.Fill(x + 12, listBottom, w - 24, 1, pal::lineDim);
+	p.Fill(x + 12, listBottom, w - 24, 1, pal::hairline);
 	p.Font(3);
 	const std::string help = grid.help ? std::string(grid.help) : !host && g.online ? std::string("Only the host can change the options.") : std::string();
 	p.Clip(x + 12, listBottom + 2, w - 24, kHelpH - 4);
-	p.TextWrapped(x + 16, listBottom + 4, w - 32, kHelpH - 6, help, kDim);
+	p.TextWrapped(x + 16, listBottom + 4, w - 32, kHelpH - 6, help, pal::textDim);
 	p.Unclip();
 }
 }

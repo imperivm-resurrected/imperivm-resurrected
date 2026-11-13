@@ -41,18 +41,18 @@ std::vector<ListLine> BuildModLines(const std::vector<ModRow> &rows, const std::
 	std::vector<const ModRow *> rules, optional;
 	for (const ModRow &r : rows) (r.kind == 2 ? rules : optional).push_back(&r);
 	if (rows.empty()) {
-		lines.push_back({Tr(emptyText), kDim, false});
+		lines.push_back({Tr(emptyText), pal::textDim, false});
 		return lines;
 	}
 	if (!rules.empty()) {
-		lines.push_back({Tr("Required content") + " (" + std::to_string(rules.size()) + ")", kGold, true});
+		lines.push_back({Tr("Required content") + " (" + std::to_string(rules.size()) + ")", pal::redText, true});
 		for (const ModRow *r : rules) lines.push_back({"\xE2\x80\xA2  " + ModRowText(*r), r->color, false});
 	}
 	if (!optional.empty()) {
-		lines.push_back({Tr("Optional content") + " (" + std::to_string(optional.size()) + ")", kDim, true});
+		lines.push_back({Tr("Optional content") + " (" + std::to_string(optional.size()) + ")", pal::textDim, true});
 		for (const ModRow *r : optional) {
 			const std::string tag = r->kind == 1 ? Tr("maps and campaigns") : Tr("cosmetic");
-			lines.push_back({"\xE2\x80\xA2  " + r->name + "  \xC2\xB7  " + tag + (r->status.empty() ? "" : "  \xC2\xB7  " + r->status), r->color == kText ? kDim : r->color, false});
+			lines.push_back({"\xE2\x80\xA2  " + r->name + "  \xC2\xB7  " + tag + (r->status.empty() ? "" : "  \xC2\xB7  " + r->status), r->color == pal::text ? pal::textDim : r->color, false});
 		}
 	}
 	return lines;
@@ -220,7 +220,7 @@ std::vector<ModRow> OnlineModRows(const State &st, const std::vector<OnlineMod> 
 				: other ? Tr("you have another copy") + " \xC2\xB7 " + HumanBytes(m.bytes)
 				: old ? Tr("you have ") + old->version + " \xC2\xB7 " + HumanBytes(m.bytes)
 				: HumanBytes(m.bytes);
-			r.color = have ? kOk : kGold;
+			r.color = have ? pal::ok : pal::redText;
 		}
 		rows.push_back(r);
 	}

@@ -14,7 +14,7 @@ namespace ui {
 
 struct ListLine {
 	std::string text;
-	COLORREF color = RGB(232, 216, 160);
+	COLORREF color = pal::textDim;
 	bool heading = false;
 };
 
@@ -45,8 +45,8 @@ inline void ScrollbarPaint(Painter &p, int tx, int ty, int th, int total, int vi
 	const int scroll = std::max(0, std::min(st.scroll, geom.maxScroll));
 	const int thumbY = ty + (th - thumbH) * scroll / geom.maxScroll;
 	const bool hot = st.drag || p.Hover(tx - 4, ty, 14, th, mx, my);
-	p.Fill(tx, ty, 6, th, pal::track);
-	p.Fill(tx, thumbY, 6, thumbH, hot ? pal::thumbHot : pal::thumb);
+	p.Fill(tx, ty, 6, th, pal::field);
+	p.Fill(tx, thumbY, 6, thumbH, hot ? pal::edgeHot : pal::lineStrong);
 	RECT t = p.R(tx - 4, ty, 14, th);
 	OffsetRect(&t, p.ox, p.oy);
 	geom.track = t;
@@ -63,8 +63,8 @@ inline void ListPaint(Painter &p, int x, int y, int w, int h, const std::vector<
 	const int maxScroll = ListMaxScroll(total, visible);
 	st.scroll = std::max(0, std::min(st.scroll, maxScroll));
 	const bool bar = maxScroll > 0;
-	p.Fill(x, y, w, h, pal::well);
-	p.Frame(x, y, w, h, pal::line);
+	p.Fill(x, y, w, h, pal::bg);
+	p.Frame(x, y, w, h, pal::lineStrong);
 	const int textW = w - 12 - (bar ? 12 : 0);
 	for (int i = 0; i < visible && st.scroll + i < total; i++) {
 		const ListLine &l = lines[st.scroll + i];

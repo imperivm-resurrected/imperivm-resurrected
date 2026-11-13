@@ -15,10 +15,10 @@ std::vector<ListLine> ConfirmLines(const State &st)
 {
 	std::vector<ListLine> lines;
 	if (st.confirmItems.empty()) return lines;
-	if (!st.confirmItemsTitle.empty()) lines.push_back({Tr(st.confirmItemsTitle), kGold, true});
+	if (!st.confirmItemsTitle.empty()) lines.push_back({Tr(st.confirmItemsTitle), pal::redText, true});
 	for (const std::string &item : st.confirmItems) {
-		if (item.compare(0, 2, "##") == 0) lines.push_back({Tr(item.substr(2)), kGold, true});
-		else lines.push_back({"•  " + item, kText, false});
+		if (item.compare(0, 2, "##") == 0) lines.push_back({Tr(item.substr(2)), pal::redText, true});
+		else lines.push_back({"•  " + item, pal::text, false});
 	}
 	return lines;
 }
@@ -85,7 +85,7 @@ void PaintConfirm(Painter &p, const State &st)
 	const Dialog d = DialogBegin(p, st.confirmOnly ? cw : kDesignW, st.confirmOnly ? ch : kDesignH, cw, ch, title);
 	p.Font(0);
 	const int textH = st.confirmItems.empty() ? 70 : 62;
-	p.TextWrapped(d.BodyX(), d.BodyTop(), d.BodyW(), textH, text, kText);
+	p.TextWrapped(d.BodyX(), d.BodyTop(), d.BodyW(), textH, text, pal::text);
 	if (!st.confirmItems.empty()) {
 		const std::vector<ListLine> lines = ConfirmLines(st);
 		const int rows = std::min<int>(kConfirmListRows, static_cast<int>(lines.size()));

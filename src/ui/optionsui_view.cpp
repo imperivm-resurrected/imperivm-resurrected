@@ -114,7 +114,7 @@ Row Info(const char *label, int id, const std::string &text, const std::string &
 	return r;
 }
 
-COLORREF RowText(const Row &r) { return r.enabled || r.kind == kRowToggleSlider ? kText : kDim; }
+COLORREF RowText(const Row &r) { return r.enabled || r.kind == kRowToggleSlider ? pal::text : pal::textDim; }
 
 constexpr int kNavX = 12, kNavW = 208, kNavH = 56, kNavTop = 92, kNavRight = kNavX + kNavW, kNavIcon = 30;
 constexpr int kContentX = 240, kContentRight = kScreenW - 18, kContentTop = 132;
@@ -125,18 +125,18 @@ void PaintNavItem(Painter &p, int y, const std::string &title, const std::string
 {
 	const bool hot = !active && p.Hover(kNavX, y, kNavW, kNavH, mx, my);
 	if (active) {
-		p.FillH(kNavX, y, kNavW, kNavH, RGB(96, 34, 24), pal::panel);
-		p.FillV(kNavX, y, 4, kNavH, pal::goldLight, pal::bronze);
+		p.Fill(kNavX, y, kNavW, kNavH, pal::selected);
+		p.Fill(kNavX, y, 3, kNavH, pal::red);
 	}
 	else if (hot) {
-		p.FillH(kNavX, y, kNavW, kNavH, RGB(50, 38, 22), pal::panel);
+		p.Fill(kNavX, y, kNavW, kNavH, pal::raised);
 	}
-	const COLORREF iconColor = active ? pal::goldLight : hot ? kGold : pal::bronze;
+	const COLORREF iconColor = active ? pal::text : hot ? pal::redText : pal::caption;
 	PaintOrnament(p, icon, kNavX + 15, y + (kNavH - kNavIcon) / 2, kNavIcon, kNavIcon, iconColor);
 	p.Font(1);
-	p.Text(kNavX + 56, y + 9, kNavW - 62, 20, title, active ? pal::goldLight : hot ? kText : RGB(214, 200, 164));
+	p.Text(kNavX + 56, y + 9, kNavW - 62, 20, title, active ? pal::text : hot ? pal::text : pal::textDim);
 	p.Font(3);
-	p.Text(kNavX + 56, y + 29, kNavW - 62, 16, subtitle, active ? RGB(190, 172, 132) : kDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	p.Text(kNavX + 56, y + 29, kNavW - 62, 16, subtitle, active ? pal::caption : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	p.AddHit(kNavX, y, kNavW, kNavH, action, arg);
 }
 
@@ -148,11 +148,11 @@ void PaintRowLabel(Painter &p, const Row &r, int x, int y, int w)
 	p.Text(x, labelY, w, 22, r.label, RowText(r), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	if (r.restart) {
 		const int used = std::min(w - 62, p.TextWidth(r.label));
-		PaintBadge(p, x + used + 8, labelY + 3, 54, 16, "Restarts", RGB(70, 46, 18), RGB(236, 186, 110));
+		PaintBadge(p, x + used + 8, labelY + 3, 54, 16, "Restarts", pal::hairline, pal::redText);
 	}
 	if (hint) {
 		p.Font(3);
-		p.Text(x, y + 22, w, 16, r.hint, kDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(x, y + 22, w, 16, r.hint, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
 }
 
@@ -162,7 +162,7 @@ void PaintSliderControl(Painter &p, const Row &r, const View &v, int x, int y, i
 	const bool hot = r.enabled && (v.dragId == r.id || p.Hover(x - kSliderMargin, y + 4, w + kSliderMargin * 2, kRowH - 8, v.mouseX, v.mouseY));
 	PaintSlider(p, x, y + 10, w, 20, f, r.enabled, hot);
 	p.Font(3);
-	p.Text(x + w + 8, y + 10, kValueW - 8, 20, std::to_string(r.shown >= 0 ? r.shown : r.value) + " %", r.enabled ? pal::goldLight : kDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+	p.Text(x + w + 8, y + 10, kValueW - 8, 20, std::to_string(r.shown >= 0 ? r.shown : r.value) + " %", r.enabled ? pal::text : pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 	if (r.enabled) p.AddHit(x - kSliderMargin, y + 4, w + kSliderMargin * 2, kRowH - 8, kActSlider, r.id);
 }
 
@@ -212,11 +212,11 @@ void PaintRow(Painter &p, const Row &r, const View &v, int x, int y, int w, RECT
 			const int bx = sx + static_cast<int>(i) * segW;
 			const bool on = static_cast<int>(i) == r.selected;
 			const bool hot = !on && p.Hover(bx, y + 6, segW, 28, v.mouseX, v.mouseY);
-			if (on) p.FillV(bx, y + 6, segW, 28, pal::goldLight, kGold);
-			else p.Fill(bx, y + 6, segW, 28, hot ? pal::fieldHover : pal::well);
-			p.Frame(bx, y + 6, segW, 28, on ? pal::goldLight : pal::edge);
+			if (on) p.Fill(bx, y + 6, segW, 28, pal::text);
+			else p.Fill(bx, y + 6, segW, 28, hot ? pal::button : pal::bg);
+			p.Frame(bx, y + 6, segW, 28, on ? pal::text : pal::edge);
 			p.Font(0);
-			p.Text(bx, y + 6, segW, 28, r.items[i], on ? RGB(34, 22, 8) : kText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			p.Text(bx, y + 6, segW, 28, r.items[i], on ? pal::onLight : pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 			if (!on) p.AddHit(bx, y + 6, segW, 28, kActSegment, r.id << 4 | static_cast<int>(i));
 		}
 		break;
@@ -231,10 +231,10 @@ void PaintRow(Painter &p, const Row &r, const View &v, int x, int y, int w, RECT
 		p.Font(0);
 		const int textW = std::min(w / 2, p.TextWidth(r.text) + 4);
 		int tx = right - textW;
-		p.Text(tx, y + 8, textW, 22, r.text, pal::goldLight, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+		p.Text(tx, y + 8, textW, 22, r.text, pal::text, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 		if (!r.badge.empty()) {
 			tx -= 8 + 54;
-			PaintBadge(p, tx, y + 11, 54, 16, r.badge, RGB(70, 46, 18), RGB(236, 186, 110));
+			PaintBadge(p, tx, y + 11, 54, 16, r.badge, pal::hairline, pal::redText);
 		}
 		PaintRowLabel(p, r, x, y, tx - x - 8);
 		break;
@@ -247,10 +247,10 @@ int PaintCard(Painter &p, const Card &c, const View &v, int x, int y, int w, REC
 	const int h = kCardHead + static_cast<int>(c.rows.size()) * kRowH + 4;
 	PaintCard(p, x, y, w, h);
 	p.Font(4);
-	p.Text(x + kCardPad, y + 7, w - kCardPad * 2, 18, c.title, kGold);
+	p.Text(x + kCardPad, y + 7, w - kCardPad * 2, 18, c.title, pal::redText);
 	int ry = y + kCardHead;
 	for (size_t i = 0; i < c.rows.size(); i++, ry += kRowH) {
-		if (i) p.Fill(x + kCardPad, ry, w - kCardPad * 2, 1, RGB(48, 37, 23));
+		if (i) p.Fill(x + kCardPad, ry, w - kCardPad * 2, 1, pal::hairline);
 		PaintRow(p, c.rows[i], v, x + kCardPad, ry, w - kCardPad * 2, dropAnchor, dropItems, dropSel);
 	}
 	return h;
@@ -355,14 +355,14 @@ void PaintOptionsScreen(Painter &p, const View &v)
 		PaintNavItem(p, navY, page.title, page.subtitle, page.icon, static_cast<int>(i) == current, kActPage, static_cast<int>(i), v.mouseX, v.mouseY);
 	}
 	PaintNavItem(p, navY, "Controls", "Keys and shortcuts", kOrnamentKeys, false, kActControls, 0, v.mouseX, v.mouseY);
-	p.Fill(kNavRight, kNavTop - 2, 1, kFooterTop - kNavTop - 2, pal::lineDim);
+	p.Fill(kNavRight, kNavTop - 2, 1, kFooterTop - kNavTop - 2, pal::hairline);
 
 	const Page &page = pages[current];
 	p.Font(2);
 	const int titleW = p.TextWidth(page.title);
-	p.Text(kContentX, kNavTop, titleW + 4, 30, page.title, pal::goldLight);
+	p.Text(kContentX, kNavTop, titleW + 4, 30, page.title, pal::text);
 	p.Font(3);
-	p.Text(kContentX + titleW + 14, kNavTop + 7, kContentRight - kContentX - titleW - 14, 20, page.blurb, RGB(186, 170, 134), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	p.Text(kContentX + titleW + 14, kNavTop + 7, kContentRight - kContentX - titleW - 14, 20, page.blurb, pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 
 	RECT dropAnchor = {};
 	std::vector<std::string> dropItems;
@@ -373,7 +373,7 @@ void PaintOptionsScreen(Painter &p, const View &v)
 	y = kContentTop;
 	for (const Card &c : page.right) y += PaintCard(p, c, v, rightX, y, rightW, dropAnchor, dropItems, dropSel) + kCardGap;
 
-	p.Fill(18, kFooterTop, kScreenW - 36, 1, pal::line);
+	p.Fill(18, kFooterTop, kScreenW - 36, 1, pal::lineStrong);
 	p.Button(24, kFooterButtonsY, 130, kFooterButtonH, "Reset", kActReset, 0, v.mouseX, v.mouseY);
 	int bx = kScreenW - 24 - 136;
 	p.Button(bx, kFooterButtonsY, 136, kFooterButtonH, "OK", kActOk, 0, v.mouseX, v.mouseY, true, true);
@@ -382,9 +382,9 @@ void PaintOptionsScreen(Painter &p, const View &v)
 	bx -= 10 + 112;
 	p.Button(bx, kFooterButtonsY, 112, kFooterButtonH, "Cancel", kActCancel, 0, v.mouseX, v.mouseY);
 	if (v.dirty) {
-		p.Diamond(bx - 176, kFooterButtonsY + kFooterButtonH / 2, 4, RGB(236, 186, 110));
+		p.Diamond(bx - 176, kFooterButtonsY + kFooterButtonH / 2, 4, pal::redText);
 		p.Font(3);
-		p.Text(bx - 168, kFooterButtonsY, 160, kFooterButtonH, "Changes not applied", RGB(236, 186, 110));
+		p.Text(bx - 168, kFooterButtonsY, 160, kFooterButtonH, "Changes not applied", pal::redText);
 	}
 
 	if (v.dropId && !dropItems.empty()) {

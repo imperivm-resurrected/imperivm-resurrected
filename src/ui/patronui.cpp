@@ -282,7 +282,7 @@ void PaintPatronTip(ui::Painter &p, int screenW, int screenH)
 	const int h = place.empty() ? 58 : 78;
 	const int x = std::max(4, std::min(g_tip.x, screenW - w - 4));
 	const int y = g_tip.y + h > screenH - 4 ? std::max(4, g_tip.y - h - 40) : g_tip.y;
-	p.Fill(x, y, w, h, RGB(20, 16, 11));
+	p.Fill(x, y, w, h, ui::pal::panel);
 	p.Frame(x, y, w, h, c.laurel);
 	p.Fill(x, y, 3, h, c.laurel);
 	p.Font(1);
@@ -290,10 +290,10 @@ void PaintPatronTip(ui::Painter &p, int screenW, int screenH)
 	p.Font(3);
 	int line = y + 30;
 	if (!place.empty()) {
-		p.Text(x + 12, line, w - 20, 18, place, RGB(233, 220, 188), DT_LEFT | DT_TOP | DT_SINGLELINE);
+		p.Text(x + 12, line, w - 20, 18, place, ui::pal::body, DT_LEFT | DT_TOP | DT_SINGLELINE);
 		line += 20;
 	}
-	p.Text(x + 12, line, w - 20, 18, call, RGB(163, 149, 122), DT_LEFT | DT_TOP | DT_SINGLELINE);
+	p.Text(x + 12, line, w - 20, 18, call, ui::pal::caption, DT_LEFT | DT_TOP | DT_SINGLELINE);
 }
 
 void OpenPatronPage()

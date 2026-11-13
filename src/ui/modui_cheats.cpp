@@ -439,9 +439,9 @@ void DrawCheatsPanel(uint32_t *frame, int frameW, int H, float s)
 	}
 	EnsureFonts(s);
 	const DWORD now = GetTickCount();
-	const COLORREF panel = pal::dialog, frameOuter = kGold, frameInner = pal::line;
-	const COLORREF btn = pal::rowHover, btnHot = RGB(92, 72, 48), strong = RGB(122, 82, 30), strongHot = RGB(150, 104, 40);
-	const COLORREF btnFrame = pal::edgeStrong, label = RGB(240, 226, 180);
+	const COLORREF panel = pal::panel, frameOuter = pal::hairline, frameInner = pal::lineStrong;
+	const COLORREF btn = pal::raised, btnHot = pal::lineStrong, strong = pal::red, strongHot = pal::red;
+	const COLORREF btnFrame = pal::edgeHot, label = pal::body;
 	const float line = std::max(1.0f, s), rad = 2.0f * s;
 
 	struct Item {
@@ -549,7 +549,7 @@ void DrawCheatsPanel(uint32_t *frame, int frameW, int H, float s)
 		StrokeRound(buf, W, H, 3 * s, top + 3 * s, panelW - 6 * s, panelH - 6 * s, rad, line, frameInner, 1.0f);
 		std::wstring title = ::W(Tr("Cheats"));
 		CharUpperBuffW(&title[0], static_cast<DWORD>(title.size()));
-		DrawLabel(buf, W, H, title, pad + 4 * s, top + 8 * s, panelW - 2 * pad, 28 * s, DT_LEFT, kGold, 1.0f);
+		DrawLabel(buf, W, H, title, pad + 4 * s, top + 8 * s, panelW - 2 * pad, 28 * s, DT_LEFT, pal::redText, 1.0f);
 		FillRound(buf, W, H, pad, top + headH - 2 * s, panelW - 2 * pad, line, 0, frameInner, 1.0f);
 
 		const bool bar = maxScroll > 0;
@@ -570,7 +570,7 @@ void DrawCheatsPanel(uint32_t *frame, int frameW, int H, float s)
 			if (count < kChMaxBtn) buttons[count++] = {verb, amount, rect, row.y - viewTop + scroll, row.h};
 		};
 		auto ring = [&](const RectF &r) {
-			StrokeRound(buf, W, H, r.x - 1.5f * s, r.y - 1.5f * s, r.w + 3 * s, r.h + 3 * s, rad, 2 * line, pal::focus, 1.0f);
+			StrokeRound(buf, W, H, r.x - 1.5f * s, r.y - 1.5f * s, r.w + 3 * s, r.h + 3 * s, rad, 2 * line, pal::text, 1.0f);
 		};
 		auto fieldText = [&](const RectF &box, const std::string &text, bool editing, bool center, int slot) {
 			EditState e = es;
@@ -610,7 +610,7 @@ void DrawCheatsPanel(uint32_t *frame, int frameW, int H, float s)
 			g_clip.x1 = std::min(g_clip.x1, static_cast<int>(box.x + box.w - 4 * s));
 			if (editing && HasSel(e)) {
 				const float a = textX + edges[indexOf(SelLo(e))], b = textX + edges[indexOf(SelHi(e))];
-				FillRound(buf, W, H, a, box.y + 4 * s, b - a, box.h - 8 * s, 0, RGB(120, 92, 36), 1.0f);
+				FillRound(buf, W, H, a, box.y + 4 * s, b - a, box.h - 8 * s, 0, pal::red, 1.0f);
 			}
 			if (!text.empty()) DrawLabel(buf, W, H, ::W(text), textX, box.y, totalW + 16 * s, box.h, DT_LEFT, label, 1.0f);
 			if (editing && !HasSel(e) && (now / 500) % 2 == 0)
@@ -628,7 +628,7 @@ void DrawCheatsPanel(uint32_t *frame, int frameW, int H, float s)
 			if (it.kind == 0) {
 				std::wstring t = ::W(Tr(it.text));
 				CharUpperBuffW(&t[0], static_cast<DWORD>(t.size()));
-				DrawLabel(buf, W, H, t, pad + 2 * s, y + 4 * s, contentW, 20 * s, DT_LEFT, kDim, 1.0f);
+				DrawLabel(buf, W, H, t, pad + 2 * s, y + 4 * s, contentW, 20 * s, DT_LEFT, pal::textDim, 1.0f);
 				FillRound(buf, W, H, pad, y + secH - 3 * s, contentW, line, 0, frameInner, 0.7f);
 				y += secH;
 				continue;
@@ -644,15 +644,15 @@ void DrawCheatsPanel(uint32_t *frame, int frameW, int H, float s)
 			else if (it.kind == 3) {
 				const bool hot = mouseIn && row.Has(mx, my);
 				button(row, false, hot);
-				DrawLabel(buf, W, H, ::W(it.text), row.x + 8 * s, row.y, row.w - 16 * s, row.h, DT_LEFT | DT_END_ELLIPSIS, it.hero ? kGold : label, 1.0f);
+				DrawLabel(buf, W, H, ::W(it.text), row.x + 8 * s, row.y, row.w - 16 * s, row.h, DT_LEFT | DT_END_ELLIPSIS, it.hero ? pal::redText : label, 1.0f);
 				if (focus == it.verb) ring(row);
 				add(it.verb, 0, visible(row), row);
 			}
 			else if (it.kind == 4) {
 				const bool editing = searchEdit, hot = mouseIn && row.Has(mx, my);
-				FillRound(buf, W, H, row.x, row.y, row.w, row.h, rad, pal::well, 1.0f);
-				StrokeRound(buf, W, H, row.x, row.y, row.w, row.h, rad, line, editing ? kGold : hot ? btnFrame : frameInner, 1.0f);
-				if (search.empty() && !editing) DrawLabel(buf, W, H, ::W(Tr("Search...")), row.x + 8 * s, row.y, row.w - 16 * s, row.h, DT_LEFT, pal::disabledText, 1.0f);
+				FillRound(buf, W, H, row.x, row.y, row.w, row.h, rad, pal::bg, 1.0f);
+				StrokeRound(buf, W, H, row.x, row.y, row.w, row.h, rad, line, editing ? pal::redText : hot ? btnFrame : frameInner, 1.0f);
+				if (search.empty() && !editing) DrawLabel(buf, W, H, ::W(Tr("Search...")), row.x + 8 * s, row.y, row.w - 16 * s, row.h, DT_LEFT, pal::disabled, 1.0f);
 				fieldText(row, search, editing, false, 7);
 				add(it.verb, 0, visible(row), row);
 			}
@@ -669,12 +669,12 @@ void DrawCheatsPanel(uint32_t *frame, int frameW, int H, float s)
 				const bool canDec = cur > 1, canInc = cur < kChMax[r];
 				const bool hDec = mouseIn && dec.Has(mx, my) && canDec, hInc = mouseIn && inc.Has(mx, my) && canInc;
 				const bool editing = editField == r, hVal = mouseIn && val.Has(mx, my);
-				FillRound(buf, W, H, val.x, val.y, val.w, val.h, rad, pal::well, 1.0f);
-				StrokeRound(buf, W, H, val.x, val.y, val.w, val.h, rad, line, editing ? kGold : hVal ? btnFrame : frameInner, 1.0f);
+				FillRound(buf, W, H, val.x, val.y, val.w, val.h, rad, pal::bg, 1.0f);
+				StrokeRound(buf, W, H, val.x, val.y, val.w, val.h, rad, line, editing ? pal::redText : hVal ? btnFrame : frameInner, 1.0f);
 				fieldText(val, editing ? editText : std::to_string(cur), editing, true, r);
 				button(dec, false, hDec);
 				button(inc, false, hInc);
-				const COLORREF dim = pal::disabledText;
+				const COLORREF dim = pal::disabled;
 				const float cyc = row.y + row.h / 2, wd = 9 * s;
 				FillTriangle(buf, W, H, dec.x + dec.w / 2 + wd / 3, cyc - wd / 2, dec.x + dec.w / 2 + wd / 3, cyc + wd / 2, dec.x + dec.w / 2 - wd / 2, cyc, canDec ? label : dim, 1.0f);
 				FillTriangle(buf, W, H, inc.x + inc.w / 2 - wd / 3, cyc - wd / 2, inc.x + inc.w / 2 - wd / 3, cyc + wd / 2, inc.x + inc.w / 2 + wd / 2, cyc, canInc ? label : dim, 1.0f);
@@ -697,8 +697,8 @@ void DrawCheatsPanel(uint32_t *frame, int frameW, int H, float s)
 			thumbH = std::max(28 * s, viewH * viewH / contentH);
 			const float thumbY = viewTop + (viewH - thumbH) * (scroll / maxScroll);
 			const bool grab = g_ch.drag || (mx >= bx - 6 * s && mx < bx + bw + 6 * s && my >= viewTop && my < viewTop + viewH);
-			FillRound(buf, W, H, bx, viewTop, bw, viewH, 0, pal::well, 1.0f);
-			FillRound(buf, W, H, bx, thumbY, bw, thumbH, 0, grab ? pal::edgeHot : RGB(150, 118, 58), 1.0f);
+			FillRound(buf, W, H, bx, viewTop, bw, viewH, 0, pal::bg, 1.0f);
+			FillRound(buf, W, H, bx, thumbY, bw, thumbH, 0, grab ? pal::edgeHot : pal::red, 1.0f);
 			track = {static_cast<LONG>(bx - 6 * s), static_cast<LONG>(viewTop), static_cast<LONG>(bx + bw + 6 * s), static_cast<LONG>(viewTop + viewH)};
 		}
 		cCount = count;
@@ -714,7 +714,7 @@ void DrawCheatsPanel(uint32_t *frame, int frameW, int H, float s)
 		track = cTrack;
 		thumbH = cThumb;
 	}
-	if (hTab) ModUiDrawHoverCard(buf, W, H, open ? "Hide cheats" : "Cheats", kGold, static_cast<int>(tab.x + tab.w + 8 * s), static_cast<int>(tab.y + tab.h / 2), KnownKeys({ControlsModKey(kModKeyCheats)}));
+	if (hTab) ModUiDrawHoverCard(buf, W, H, open ? "Hide cheats" : "Cheats", pal::redText, static_cast<int>(tab.x + tab.w + 8 * s), static_cast<int>(tab.y + tab.h / 2), KnownKeys({ControlsModKey(kModKeyCheats)}));
 	std::lock_guard<std::mutex> lock(g_lock);
 	g_ch.tab = toRect(tab);
 	g_ch.panel = open ? RECT{0, static_cast<LONG>(top), static_cast<LONG>(panelW), static_cast<LONG>(top + panelH)} : RECT{};
