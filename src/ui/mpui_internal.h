@@ -2,6 +2,7 @@
 // Copyright (C) 2026 THIONG
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #pragma once
+#include "ui/fullscreen.h"
 #include "ui/widgets.h"
 #include "core/transferrate.h"
 #include "mods/downloads.h"
@@ -23,7 +24,7 @@
 namespace mpui_impl {
 using namespace ui;
 
-// The lobby and its dialogs are a window of kW x kH; the room is laid out on the whole screen (RoomView).
+// The lobby and its dialogs are a window of kW x kH; the room is laid out on the whole screen (ScreenView).
 const int kW = 1000;
 
 const int kH = 640;
@@ -453,19 +454,6 @@ void PaintMapThumb(Painter &p, const State &st, int x, int y, int size, bool mar
 std::string RoomNotice(const State &st, COLORREF &color);
 
 const int kRoomTeams = 4;
-
-// The room fills the screen: laid out in pixels of a 1920x1080 one, its scale follows the height.
-struct RoomView {
-	float s = 1.0f;
-	int w = 1920, h = 1080;
-};
-RoomView RoomViewFor(int screenW, int screenH);
-// The engraved map under the room, cover-scaled to the canvas; false when the file is missing.
-bool PaintRoomBackdrop(Canvas &canvas);
-// The room's card: the panel colour over the backdrop, a little see-through, with a hairline.
-void PaintRoomCard(Painter &p, int x, int y, int w, int h);
-// The room's type is larger than the shared set: these replace it while the room is painted.
-void UseRoomFonts(Painter &p);
 
 // What the room screen asks of the room that the game does not do yet; mpui_room_link.cpp keeps them together.
 void SetTeamTo(int slot, int team);

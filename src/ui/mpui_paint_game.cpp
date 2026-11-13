@@ -177,7 +177,7 @@ void PaintRoomName(Painter &p, const State &st, int x, int y, int w)
 void PaintMapCard(Painter &p, const State &st, int x, int y, int w, int h)
 {
 	const GameRoomSnapshot &g = st.game;
-	PaintRoomCard(p, x, y, w, h);
+	PaintGlassCard(p, x, y, w, h);
 	const int pad = 20, size = std::min(w - 2 * pad, h / 2);
 	PaintMapThumb(p, st, x + (w - size) / 2, y + pad, size, true);
 	int ty = y + pad + size + 16;
@@ -224,7 +224,7 @@ void PaintOptionsCard(Painter &p, const State &st, int x, int y, int w, int h)
 	const bool host = g.host;
 	const bool canEdit = host && !(g.online && LocalReady(g));
 	const std::string saveName = g.host ? st.hostSave.name : st.room.info.saveName;
-	PaintRoomCard(p, x, y, w, h);
+	PaintGlassCard(p, x, y, w, h);
 	const int listTop = y + 8, listBottom = y + h - kHelpH, listH = listBottom - listTop;
 	const int gx = x + 28, gw = w - 56 - 10;
 	int scroll;

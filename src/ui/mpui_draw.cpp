@@ -326,7 +326,7 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 	st.viewW = kW;
 	st.viewH = kH;
 	if (fullScreen) {
-		const RoomView v = RoomViewFor(w, h);
+		const ScreenView v = ScreenViewFor(w, h);
 		s = v.s;
 		st.viewW = v.w;
 		st.viewH = v.h;
@@ -363,7 +363,7 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 	}
 	PanelRender r(g_canvas, buf, w, h);
 	if (!r.Begin(st.viewW, st.viewH, 16, false, s)) return;
-	if (fullScreen && !PaintRoomBackdrop(r.canvas)) r.p.Fill(0, 0, st.viewW, st.viewH, pal::bg);
+	if (fullScreen && !PaintBackdrop(r.canvas)) r.p.Fill(0, 0, st.viewW, st.viewH, pal::bg);
 	r.Focus(st.tabAction, st.tabArg);
 	if (st.mouseDown || GetTickCount() - st.pressTime < 150) {
 		r.p.pressAction = st.pressAction;
