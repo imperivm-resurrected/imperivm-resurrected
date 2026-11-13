@@ -387,7 +387,22 @@ BattlesSnapshot BattlesRead()
 		s.image = Image(e.path + ".bmp");
 	}
 	if (!s.image) s.image = Image(fallback);
+	for (int tab = 0; tab < kBattlesTabCount; tab++) {
+		if (tab == kBattlesTabConquests) continue;
+		for (int list = 0; list < kBattlesListCount && !s.covers[tab]; list++) {
+			for (const BattlesEntry &e : s.lists[list]) {
+				if (!BattlesInTab(tab, list, e.path)) continue;
+				s.covers[tab] = Image(e.path + ".bmp");
+				if (s.covers[tab]) break;
+			}
+		}
+	}
 	return s;
+}
+
+std::shared_ptr<const BattleImage> BattlesAdventureImage(const std::string &adventurePath)
+{
+	return adventurePath.empty() ? nullptr : Image(adventurePath + ".bmp");
 }
 
 void BattlesOnDescription(void (*callback)())

@@ -2,18 +2,34 @@
 // Copyright (C) 2026 THIONG
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #pragma once
+#include <map>
+#include <memory>
 #include <string>
+#include <vector>
 
 #include "ui/uikit.h"
 
+#include "core/objectivelog.h"
 #include "game/greatbattles.h"
 #include "ui/listbox.h"
 
 namespace battlesui {
 
-enum Action { kActNone = 0, kActTab, kActRow, kActDifficulty, kActStart, kActIntro, kActBack };
+// kActOverview: back from a campaign to the overview; kActOpenTab: a campaign's card (arg: its tab); kActContinue: arg 0 the newest
+// game of all, 1 the newest of the chosen adventure; kActAllSaves: the load screen; kActPage: the adventure's briefing (0) or its
+// diary (1).
+enum Action { kActNone = 0, kActTab, kActRow, kActDifficulty, kActStart, kActIntro, kActBack, kActOverview, kActOpenTab, kActContinue, kActAllSaves, kActPage };
 
 inline int RowArg(int list, int index) { return list << 16 | index; }
+
+// A saved game of one of the screen's adventures.
+struct SaveInfo {
+	std::string vfsPath, name, title, when, played;
+	int list = -1, index = -1, tab = -1;
+	std::shared_ptr<const BattleImage> picture;
+	// The objectives the game had completed when it was saved, newest first; null when the save kept none.
+	std::shared_ptr<const std::vector<ObjectiveNote>> diary;
+};
 
 struct View {
 	BattlesSnapshot snap;
@@ -21,7 +37,20 @@ struct View {
 	int listScroll = 0, descScroll = 0;
 	// What the player has won, for a later version: each one is drawn only when it has text.
 	std::string badge, progress;
+	// The overview of the campaigns comes first; a card opens one. The conquests never have it.
+	bool overview = true;
+	// The newest game of all and the newest of each adventure (by RowArg), and how many adventures with a game each tab has.
+	bool hasLatest = false;
+	SaveInfo latest;
+	std::map<int, SaveInfo> lastByRow;
+	int savedInTab[kBattlesTabCount] = {};
+	// The chosen adventure shows the diary of its newest game instead of its briefing; another choice goes back to the briefing.
+	bool diary = false;
+	// Set once a Continue has started a load: nothing else is pressed meanwhile.
+	bool loading = false;
 };
+
+inline bool ShowsOverview(const View &v) { return v.overview && v.snap.tab != kBattlesTabConquests; }
 
 struct PaintOut {
 	ui::ListGeom list, desc;

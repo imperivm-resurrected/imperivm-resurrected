@@ -135,6 +135,29 @@ void DescriptionsGetRealLineBreaks()
 	CHECK_EQ(BattleDescriptionText("a\\"), std::string("a\\"));
 }
 
+void SavesBelongToTheLongestTitleAfterADash()
+{
+	const std::vector<std::string> titles = {"Galias", "Imperivm I - La guerra de las Galias", "Desembarco en Africa - 204 a.C.", ""};
+	std::string name;
+	// The title has dashes of its own, and so may the name.
+	CHECK_EQ(BattleSaveAdventure("guardar rapidamente-Imperivm I - La guerra de las Galias", titles, &name), 1);
+	CHECK_EQ(name, std::string("guardar rapidamente"));
+	CHECK_EQ(BattleSaveAdventure("antes-del-campamento-Imperivm I - La guerra de las Galias", titles, &name), 1);
+	CHECK_EQ(name, std::string("antes-del-campamento"));
+	CHECK_EQ(BattleSaveAdventure("Autoguardado 17h27-desembarco en africa - 204 a.C.", titles, &name), 2);
+	CHECK_EQ(name, std::string("Autoguardado 17h27"));
+	// A shorter title is only taken when no longer one fits.
+	CHECK_EQ(BattleSaveAdventure("mi partida-Galias", titles, &name), 0);
+	// The title must follow a dash and leave a name before it; an empty title never counts.
+	CHECK_EQ(BattleSaveAdventure("La guerra de las Galias", titles, &name), -1);
+	CHECK(name.empty());
+	CHECK_EQ(BattleSaveAdventure("-Galias", titles, &name), -1);
+	CHECK_EQ(BattleSaveAdventure("partidaGalias", titles, &name), -1);
+	CHECK_EQ(BattleSaveAdventure("partida-Landing in Africa", titles, &name), -1);
+	CHECK_EQ(BattleSaveAdventure("partida-Galias", {}, &name), -1);
+	CHECK_EQ(BattleSaveAdventure("partida-Galias", titles), 0);
+}
+
 }
 
 int main()
@@ -147,5 +170,6 @@ int main()
 	IntrosFollowTheBattleFolder();
 	AdventuresAreSortedByGame();
 	DescriptionsGetRealLineBreaks();
+	SavesBelongToTheLongestTitleAfterADash();
 	return test::Summary("battlelist");
 }

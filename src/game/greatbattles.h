@@ -51,6 +51,8 @@ struct BattlesSnapshot {
 	bool difficultyShown = false;
 	bool intro = false;
 	std::shared_ptr<const BattleImage> image;
+	// A picture for each tab's card on the overview: the first one found among its adventures, in list order; null when none has one.
+	std::shared_ptr<const BattleImage> covers[kBattlesTabCount];
 };
 
 void *BattlesDialogOpen();
@@ -58,6 +60,8 @@ void *BattlesDialogOpen();
 bool BattlesScreenWanted();
 bool BattlesIntroPlaying();
 BattlesSnapshot BattlesRead();
+// The picture next to an adventure (its path without the extension, as in BattlesEntry), or null.
+std::shared_ptr<const BattleImage> BattlesAdventureImage(const std::string &adventurePath);
 // Called on the game thread once the game has written the description of a new choice.
 void BattlesOnDescription(void (*callback)());
 void BattlesSelect(int list, int index);

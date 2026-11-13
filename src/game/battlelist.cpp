@@ -130,6 +130,22 @@ std::string BattleTitleWithoutGame(const std::string &title)
 	return t;
 }
 
+int BattleSaveAdventure(const std::string &saveBaseName, const std::vector<std::string> &titles, std::string *name)
+{
+	int best = -1;
+	size_t bestLen = 0;
+	for (size_t i = 0; i < titles.size(); i++) {
+		const std::string &t = titles[i];
+		if (t.empty() || t.size() <= bestLen || saveBaseName.size() < t.size() + 2) continue;
+		const size_t at = saveBaseName.size() - t.size();
+		if (saveBaseName[at - 1] != '-' || _strnicmp(saveBaseName.c_str() + at, t.c_str(), t.size()) != 0) continue;
+		best = static_cast<int>(i);
+		bestLen = t.size();
+	}
+	if (name) *name = best >= 0 ? saveBaseName.substr(0, saveBaseName.size() - bestLen - 1) : std::string();
+	return best;
+}
+
 std::string BattleDescriptionText(const std::string &raw)
 {
 	std::string out;
