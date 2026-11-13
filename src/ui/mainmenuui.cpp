@@ -92,7 +92,7 @@ void Fail(void *dlg, const char *why)
 // Screens of the mod or the game that take the input while the main menu stays under them.
 bool OtherScreenOnTop()
 {
-	return !MpUiMainMenuVisible() || ModUiIsOpen() || SavesUiIsOpen() || ControlsUiNeedsDraw() || OptionsUiNeedsDraw() || ProfileUiNeedsDraw() ||
+	return !MpUiMainMenuVisible() || MpUiIsOpen() || ModUiIsOpen() || SavesUiIsOpen() || ControlsUiNeedsDraw() || OptionsUiNeedsDraw() || ProfileUiNeedsDraw() ||
 		BattlesUiNeedsDraw() || ConquestUiNeedsDraw() || CreditsUiNeedsDraw() || SupportPanelOpen() || UpdateUiPanelOpen();
 }
 
@@ -401,7 +401,8 @@ void MainMenuUiDestroyed(void *dlg)
 bool MainMenuUiNeedsDraw()
 {
 	std::lock_guard<std::mutex> lock(g_lock);
-	return g_s.shown;
+	// Under another screen only the background shows: the room and other windows don't cover the whole menu.
+	return g_s.shown && g_s.view.interactive;
 }
 
 void MainMenuUiDraw(uint32_t *buf, int w, int h)
