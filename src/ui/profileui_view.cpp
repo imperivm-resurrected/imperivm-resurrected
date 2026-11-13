@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "i18n/tr.h"
+#include "ui/fullscreen.h"
 #include "ui/patronui.h"
 #include "ui/widgets.h"
 
@@ -20,19 +21,14 @@ using namespace ui;
 namespace profileui {
 namespace {
 
-constexpr int kMargin = 24, kTop = 96;
-constexpr int kListX = kMargin, kListW = 290, kListTop = 122, kRowH = 58, kRowGap = 6;
-constexpr int kDetailX = kListX + kListW + 24;
-constexpr int kIdentityY = kTop, kIdentityH = 108, kAvatar = 80;
-constexpr int kTilesY = kIdentityY + kIdentityH + 12, kTileH = 76, kTileGap = 10;
-constexpr int kLowerY = kTilesY + kTileH + 12, kLowerBottom = kScreenH - 68;
-constexpr int kCardPad = 14, kCardHead = 30, kGap = 12;
+constexpr int kListW = 340, kListHead = 56, kListHint = 48, kRowH = 64, kRowGap = 8;
+constexpr int kIdentityH = 128, kAvatar = 96, kTileGap = 12;
+constexpr int kCardPad = 20, kCardHead = 40, kGap = 16;
 // At full width: the summary in two columns over the evolution, and the history beside them.
-constexpr int kWideLeftW = 420, kWideSummaryH = 152;
+constexpr int kWideLeftW = 520, kWideSummaryH = 190;
 // Beside the list: the summary in three columns over the evolution and the history.
-constexpr int kStripH = 112, kNarrowChartW = 384;
-constexpr int kFooterTop = kScreenH - 58, kFooterButtonsY = kScreenH - 48, kFooterButtonH = 36;
-constexpr int kSegH = 20, kSegPad = 8, kDetailCellH = 32;
+constexpr int kStripH = 140, kNarrowChartW = 470;
+constexpr int kSegH = 28, kSegPad = 10, kDetailCellH = 44;
 
 const COLORREF kWonColor = RGB(126, 170, 92), kLostColor = pal::redText, kAbandonedColor = pal::disabled, kMuted = pal::caption;
 const COLORREF kSelectedTop = pal::selected, kRowBody = pal::panel, kRowHot = pal::hairline, kCardBody = pal::panel;
@@ -58,6 +54,25 @@ struct Area {
 	int x = 0, w = 0;
 	bool wide = false;
 };
+
+// Where the parts of the screen go, in the units of ScreenView: the content runs from under the header to the bottom margin.
+struct Frame {
+	ScreenLayout head;
+	int top = 0, bottom = 0, rows = 1, tileH = 88, tilesY = 0, lowerY = 0;
+};
+
+Frame FrameOf(const View &v)
+{
+	Frame f;
+	f.head = ScreenLayoutFor(v.screenW, v.screenH);
+	f.top = f.head.top;
+	f.bottom = v.screenH - f.head.margin;
+	f.rows = std::max(1, (f.bottom - kListHint - f.top - kListHead + kRowGap) / (kRowH + kRowGap));
+	f.tileH = f.head.roomy ? 104 : 88;
+	f.tilesY = f.top + kIdentityH + kGap;
+	f.lowerY = f.tilesY + f.tileH + kGap;
+	return f;
+}
 
 COLORREF Mix(COLORREF a, COLORREF b, float t)
 {
@@ -86,8 +101,9 @@ void PaintRankBar(Painter &p, int x, int y, int w, int h, float fraction, COLORR
 
 Area DetailArea(const View &v)
 {
-	if (ShowsList(v)) return {kDetailX, kScreenW - kMargin - kDetailX, false};
-	return {kMargin, kScreenW - 2 * kMargin, true};
+	const int m = FrameOf(v).head.margin;
+	if (ShowsList(v)) return {m + kListW + 24, v.screenW - 2 * m - kListW - 24, false};
+	return {m, v.screenW - 2 * m, true};
 }
 
 // Names, numbers and texts already in the player's language skip the painter's translation.
@@ -179,59 +195,61 @@ void PaintListRow(Painter &p, const Card &c, int rankCount, int index, bool sele
 		p.Fill(x, y, w, kRowH, hot ? kRowHot : kRowBody);
 		p.Frame(x, y, w, kRowH, pal::hairline);
 	}
-	PaintMonogram(p, x + 12, y + 9, 40, c.name, selected);
-	int nameW = w - 74;
+	PaintMonogram(p, x + 12, y + 10, 44, c.name, selected);
+	const int tx = x + 68;
+	int nameW = w - 80;
 	if (c.active) {
 		p.Font(3);
 		const int bw = p.TextWidth("In use") + 14;
-		PaintBadge(p, x + w - bw - 10, y + 11, bw, 17, "In use", pal::hairline, pal::redText);
+		PaintBadge(p, x + w - bw - 10, y + 11, bw, 21, "In use", pal::hairline, pal::redText);
 		nameW -= bw + 8;
 	}
 	p.Font(1);
-	Raw(p, x + 62, y + 9, nameW, 22, c.name, selected ? pal::text : pal::text);
+	Raw(p, tx, y + 9, nameW, 25, c.name, selected ? pal::text : pal::text);
 	p.Font(3);
 	const std::string games = GamesText(c.summary.games);
 	const COLORREF dim = selected ? pal::textDim : pal::textDim;
 	if (c.rankName.empty() || !c.readable) {
-		Raw(p, x + 62, y + 31, w - 74, 18, games, dim);
+		Raw(p, tx, y + 35, w - 80, 21, games, dim);
 	}
 	else {
-		const int rankW = std::min(w - 74, RawWidth(p, c.rankName));
-		Raw(p, x + 62, y + 31, rankW, 18, c.rankName, RankColor(c.summary.rank, rankCount));
-		Raw(p, x + 62 + rankW, y + 31, w - 74 - rankW, 18, "  \xC2\xB7  " + games, dim);
+		const int rankW = std::min(w - 80, RawWidth(p, c.rankName));
+		Raw(p, tx, y + 35, rankW, 21, c.rankName, RankColor(c.summary.rank, rankCount));
+		Raw(p, tx + rankW, y + 35, w - 80 - rankW, 21, "  \xC2\xB7  " + games, dim);
 	}
 	p.AddHit(x, y, w, kRowH, kActPick, index);
 }
 
-void PaintList(Painter &p, const View &v)
+void PaintList(Painter &p, const View &v, const Frame &f)
 {
+	const int cardX = f.head.margin, x = cardX + 14, w = kListW - 28, rowsTop = f.top + kListHead, rows = f.rows;
+	PaintGlassCard(p, cardX, f.top, kListW, f.bottom - f.top);
 	p.Font(4);
-	p.Text(kListX, kTop, kListW, 20, "Players", pal::redText);
+	p.Text(x, f.top + 18, w, 22, "Players", pal::redText);
 	p.Font(3);
-	Raw(p, kListX, kTop, kListW, 20, std::to_string(v.cards.size()), pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+	Raw(p, x, f.top + 18, w, 22, std::to_string(v.cards.size()), pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 	const int count = static_cast<int>(v.cards.size());
-	const int maxScroll = std::max(0, count - kListRows);
+	const int maxScroll = std::max(0, count - rows);
 	const int scroll = std::max(0, std::min(v.scroll, maxScroll));
-	const int rowW = maxScroll > 0 ? kListW - 12 : kListW;
-	for (int r = 0; r < kListRows && scroll + r < count; r++) {
+	const int rowW = maxScroll > 0 ? w - 12 : w;
+	for (int r = 0; r < rows && scroll + r < count; r++) {
 		const int i = scroll + r;
-		PaintListRow(p, v.cards[i], v.rankCount, i, i == v.selected, kListX, kListTop + r * (kRowH + kRowGap), rowW, v.mouseX, v.mouseY);
+		PaintListRow(p, v.cards[i], v.rankCount, i, i == v.selected, x, rowsTop + r * (kRowH + kRowGap), rowW, v.mouseX, v.mouseY);
 	}
 	if (maxScroll > 0) {
 		ScrollbarLook look;
 		look.minThumb = 24;
-		PaintScrollbar(p, kBarList, kListX + kListW - 6, kListTop, kListRows * (kRowH + kRowGap) - kRowGap, {scroll, maxScroll, kListRows}, v.bar,
-			v.mouseX, v.mouseY, look);
+		PaintScrollbar(p, kBarList, x + w - 6, rowsTop, rows * (kRowH + kRowGap) - kRowGap, {scroll, maxScroll, rows}, v.bar, v.mouseX, v.mouseY, look);
 	}
 	p.Font(3);
-	p.TextWrapped(kListX + 2, kLowerBottom - 34, kListW - 4, 34, "Double-click a player to use it.", kMuted);
+	p.TextWrapped(x + 2, f.bottom - kListHint + 4, w - 4, kListHint - 12, "Double-click a player to use it.", kMuted);
 }
 
-void PaintIdentity(Painter &p, const View &v, const Card &c, const Area &a)
+void PaintIdentity(Painter &p, const View &v, const Card &c, const Area &a, const Frame &f)
 {
-	const int x = a.x, y = kIdentityY, w = a.w;
-	PaintCard(p, x, y, w, kIdentityH);
-	const int ax = x + 14, ay = y + (kIdentityH - kAvatar) / 2;
+	const int x = a.x, y = f.top, w = a.w;
+	PaintGlassCard(p, x, y, w, kIdentityH);
+	const int ax = x + 16, ay = y + (kIdentityH - kAvatar) / 2;
 	const bool steam = c.active && v.avatar && !v.avatar->bgra.empty();
 	if (steam) {
 		p.Image(ax, ay, kAvatar, kAvatar, v.avatar->bgra.data(), v.avatar->width, v.avatar->height);
@@ -240,12 +258,12 @@ void PaintIdentity(Painter &p, const View &v, const Card &c, const Area &a)
 	else {
 		PaintMonogram(p, ax, ay, kAvatar, c.name, true);
 	}
-	const int tx = ax + kAvatar + 18;
-	int right = x + w - 14;
+	const int tx = ax + kAvatar + 22;
+	int right = x + w - 18;
 	if (c.active && ShowsList(v)) {
 		p.Font(3);
 		const int bw = p.TextWidth("In use") + 16;
-		PaintBadge(p, right - bw, y + 14, bw, 18, "In use", pal::hairline, pal::redText);
+		PaintBadge(p, right - bw, y + 18, bw, 22, "In use", pal::hairline, pal::redText);
 		right -= bw + 12;
 	}
 	p.Font(2);
@@ -253,26 +271,26 @@ void PaintIdentity(Painter &p, const View &v, const Card &c, const Area &a)
 	if (tier != PatronTier::None) {
 		const int laurel = PatronLaurelSize(tier);
 		p.raw = true;
-		DrawPatron(p, tx, y + 14 + (30 - laurel) / 2, laurel, tx + laurel + 8, y + 12, right - tx - laurel - 8, 34, c.name, tier,
+		DrawPatron(p, tx, y + 14 + (40 - laurel) / 2, laurel, tx + laurel + 8, y + 12, right - tx - laurel - 8, 42, c.name, tier,
 			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.raw = false;
-		PatronHotspot(p, tx, y + 14 + (30 - laurel) / 2, laurel, v.patron, v.mouseX, v.mouseY, kActPatron);
+		PatronHotspot(p, tx, y + 14 + (40 - laurel) / 2, laurel, v.patron, v.mouseX, v.mouseY, kActPatron);
 	}
 	else {
-		Raw(p, tx, y + 12, right - tx, 34, c.name, pal::text);
+		Raw(p, tx, y + 12, right - tx, 42, c.name, pal::text);
 	}
 	if (!c.readable) {
 		p.Font(3);
-		p.Text(tx, y + 50, x + w - 14 - tx, 20, "Couldn't read this player's statistics.", pal::bad);
+		p.Text(tx, y + 60, x + w - 18 - tx, 24, "Couldn't read this player's statistics.", pal::bad);
 		return;
 	}
 	const ProfileSummary &s = c.summary;
 	if (c.rankName.empty()) {
 		p.Font(1);
-		Raw(p, tx, y + 48, x + w - 14 - tx, 22, kDash, pal::redText);
+		Raw(p, tx, y + 58, x + w - 18 - tx, 26, kDash, pal::redText);
 		return;
 	}
-	const int barW = a.wide ? x + w - 14 - tx : std::min(380, x + w - 14 - tx);
+	const int barW = a.wide ? x + w - 18 - tx : std::min(520, x + w - 18 - tx);
 	const std::string rating = Grouped(static_cast<uint64_t>(std::max<int64_t>(0, s.rating)));
 	float fraction = 1.0f;
 	std::string label;
@@ -290,21 +308,21 @@ void PaintIdentity(Painter &p, const View &v, const Card &c, const Area &a)
 	p.Font(4);
 	const int nextW = s.nextRank >= 0 ? std::min(barW / 2, RawWidth(p, c.nextRankName)) : 0;
 	if (nextW) {
-		Raw(p, barRight - nextW, y + 48, nextW, 22, c.nextRankName, RankColor(s.nextRank, v.rankCount), DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		Raw(p, barRight - nextW, y + 58, nextW, 26, c.nextRankName, RankColor(s.nextRank, v.rankCount), DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
 	p.Font(3);
 	const int aheadW = RawWidth(p, ahead);
 	const int aheadX = barRight - nextW - (nextW ? 6 : 0) - aheadW;
-	Raw(p, aheadX, y + 48, aheadW + 2, 22, ahead, pal::textDim);
+	Raw(p, aheadX, y + 58, aheadW + 2, 26, ahead, pal::textDim);
 	p.Font(1);
-	Raw(p, tx, y + 48, std::max(0, aheadX - 16 - tx), 22, c.rankName, RankColor(s.rank, v.rankCount));
-	PaintRankBar(p, tx, y + 74, barW, 7, fraction, RankColor(s.rank, v.rankCount));
-	p.Frame(tx - 1, y + 73, barW + 2, 9, pal::hairline);
+	Raw(p, tx, y + 58, std::max(0, aheadX - 16 - tx), 26, c.rankName, RankColor(s.rank, v.rankCount));
+	PaintRankBar(p, tx, y + 88, barW, 8, fraction, RankColor(s.rank, v.rankCount));
+	p.Frame(tx - 1, y + 87, barW + 2, 10, pal::hairline);
 	p.Font(3);
-	Raw(p, tx, y + 84, x + w - 14 - tx, 18, label, pal::textDim);
+	Raw(p, tx, y + 100, x + w - 18 - tx, 22, label, pal::textDim);
 }
 
-void PaintTiles(Painter &p, const Card &c, const Area &a)
+void PaintTiles(Painter &p, const Card &c, const Area &a, const Frame &f)
 {
 	const ProfileSummary &s = c.summary;
 	const int tileW = (a.w - 3 * kTileGap) / 4;
@@ -319,24 +337,24 @@ void PaintTiles(Painter &p, const Card &c, const Area &a)
 	const char *labels[4] = {"Games", "Wins", "Hours played", "Kills"};
 	for (int i = 0; i < 4; i++) {
 		const int x = a.x + i * (tileW + kTileGap), w = i == 3 ? a.x + a.w - x : tileW;
-		PaintCard(p, x, kTilesY, w, kTileH);
+		PaintGlassCard(p, x, f.tilesY, w, f.tileH);
 		p.Font(5);
-		Raw(p, x, kTilesY + 6, w, 42, values[i], pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		Raw(p, x, f.tilesY + 6, w, f.tileH - 38, values[i], pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		p.Font(3);
-		p.Text(x + 6, kTilesY + 50, w - 12, 18, labels[i], pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(x + 6, f.tilesY + f.tileH - 32, w - 12, 22, labels[i], pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
 }
 
 void PaintCardTitle(Painter &p, int x, int y, int w, const std::string &title)
 {
 	p.Font(4);
-	p.Text(x + kCardPad, y + 7, w - kCardPad * 2, 18, title, pal::redText);
+	p.Text(x + kCardPad, y + 11, w - kCardPad * 2, 22, title, pal::redText);
 }
 
 // Two columns over the evolution at full width, three in a strip beside the list.
 void PaintSummary(Painter &p, const Card &c, int x, int y, int w, int h, int columns)
 {
-	PaintCard(p, x, y, w, h);
+	PaintGlassCard(p, x, y, w, h);
 	PaintCardTitle(p, x, y, w, "Summary");
 	const ProfileSummary &s = c.summary;
 	const bool ok = c.readable;
@@ -353,32 +371,32 @@ void PaintSummary(Painter &p, const Card &c, int x, int y, int w, int h, int col
 		{"Largest army", army},
 	};
 	constexpr int count = sizeof(rows) / sizeof(rows[0]), colGap = 20;
-	const int rowH = columns > 1 ? 38 : std::min(46, (h - kCardHead - 10) / count), inner = w - kCardPad * 2, colW = (inner - (columns - 1) * colGap) / columns;
+	const int rowH = columns > 1 ? 46 : std::min(54, (h - kCardHead - 10) / count), inner = w - kCardPad * 2, colW = (inner - (columns - 1) * colGap) / columns;
 	for (int i = 0; i < count; i++) {
 		const int cx = x + kCardPad + (i % columns) * (colW + colGap), ry = y + kCardHead + (i / columns) * rowH;
 		if (i >= columns) p.Fill(cx, ry, colW, 1, pal::hairline);
 		p.Font(3);
-		p.Text(cx, ry + 3, colW, 17, rows[i].first, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(cx, ry + 3, colW, 21, rows[i].first, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.Font(4);
-		Raw(p, cx, ry + 19, colW, 18, rows[i].second, pal::text);
+		Raw(p, cx, ry + 24, colW, 20, rows[i].second, pal::text);
 	}
 }
 
-Lower LowerLayout(const Area &a)
+Lower LowerLayout(const Area &a, const Frame &f)
 {
 	Lower l;
-	const int h = kLowerBottom - kLowerY;
+	const int top = f.lowerY, bottom = f.bottom, h = bottom - top;
 	if (a.wide) {
-		l.summary = {a.x, kLowerY, kWideLeftW, kWideSummaryH};
-		l.chart = {a.x, kLowerY + kWideSummaryH + kGap, kWideLeftW, h - kWideSummaryH - kGap};
-		l.history = {a.x + kWideLeftW + kGap, kLowerY, a.w - kWideLeftW - kGap, h};
+		l.summary = {a.x, top, kWideLeftW, kWideSummaryH};
+		l.chart = {a.x, top + kWideSummaryH + kGap, kWideLeftW, h - kWideSummaryH - kGap};
+		l.history = {a.x + kWideLeftW + kGap, top, a.w - kWideLeftW - kGap, h};
 		l.summaryColumns = 2;
 		return l;
 	}
-	const int y = kLowerY + kStripH + kGap;
-	l.summary = {a.x, kLowerY, a.w, kStripH};
-	l.chart = {a.x, y, kNarrowChartW, kLowerBottom - y};
-	l.history = {a.x + kNarrowChartW + kGap, y, a.w - kNarrowChartW - kGap, kLowerBottom - y};
+	const int y = top + kStripH + kGap;
+	l.summary = {a.x, top, a.w, kStripH};
+	l.chart = {a.x, y, kNarrowChartW, bottom - y};
+	l.history = {a.x + kNarrowChartW + kGap, y, a.w - kNarrowChartW - kGap, bottom - y};
 	l.summaryColumns = 3;
 	return l;
 }
@@ -485,7 +503,7 @@ void DashedH(Painter &p, int x, int y, int w, COLORREF c, int dash = 5, int gap 
 	for (int dx = 0; dx < w; dx += dash + gap) p.Fill(x + dx, y, std::min(dash, w - dx), 1, c);
 }
 
-void PaintTip(Painter &p, const Tip &tip)
+void PaintTip(Painter &p, const View &v, const Tip &tip)
 {
 	if (tip.lines.empty()) return;
 	int w = 0;
@@ -494,8 +512,8 @@ void PaintTip(Painter &p, const Tip &tip)
 		w = std::max(w, RawWidth(p, tip.lines[i].first));
 	}
 	w += 22;
-	const int lineH = 18, h = static_cast<int>(tip.lines.size()) * lineH + 12;
-	const int x = std::max(8, std::min(tip.x, kScreenW - 8 - w)), y = std::max(8, std::min(tip.y, kScreenH - 8 - h));
+	const int lineH = 22, h = static_cast<int>(tip.lines.size()) * lineH + 12;
+	const int x = std::max(8, std::min(tip.x, v.screenW - 8 - w)), y = std::max(8, std::min(tip.y, v.screenH - 8 - h));
 	p.Fill(x + 3, y + 3, w, h, pal::shadow);
 	p.Fill(x, y, w, h, pal::panel);
 	p.Frame(x, y, w, h, pal::edge);
@@ -510,7 +528,7 @@ int MouseY(const Painter &p, const View &v) { return static_cast<int>((v.mouseY 
 
 void PaintEvolution(Painter &p, const View &v, const Card &c, const Box &b, Tip &tip)
 {
-	PaintCard(p, b.x, b.y, b.w, b.h);
+	PaintGlassCard(p, b.x, b.y, b.w, b.h);
 	PaintCardTitle(p, b.x, b.y, b.w, "Evolution");
 	const int x0 = b.x + kCardPad, inner = b.w - kCardPad * 2, right = x0 + inner;
 	if (c.games.empty()) {
@@ -521,20 +539,20 @@ void PaintEvolution(Painter &p, const View &v, const Card &c, const Box &b, Tip 
 	// The mode follows the title, the metrics take the row under it and the range goes under the plot.
 	const std::vector<std::string> modes = Translated({"All games", "Skirmish", "Multiplayer"});
 	const int modeW = SegmentsWidth(p, modes);
-	PaintSegments(p, right - modeW, b.y + 6, modeW, modes, v.chartMode, kActChartMode, v.mouseX, v.mouseY);
+	PaintSegments(p, right - modeW, b.y + 8, modeW, modes, v.chartMode, kActChartMode, v.mouseX, v.mouseY);
 	const int cy = b.y + kCardHead + 2;
 	std::vector<std::string> metrics;
 	for (const char *m : kMetricShort) metrics.push_back(Tr(m));
 	PaintSegments(p, x0, cy, inner, metrics, v.metric, kActMetric, v.mouseX, v.mouseY);
 	const std::vector<std::string> ranges = Translated({"Last 20", "Last 50", "All games"});
 	const int rangeW = SegmentsWidth(p, ranges);
-	const int footY = b.y + b.h - kSegH - 8;
+	const int footY = b.y + b.h - kSegH - 10;
 	PaintSegments(p, x0, footY, rangeW, ranges, v.chartRange, kActChartRange, v.mouseX, v.mouseY);
 
 	const std::vector<MatchFacts> facts = FactsOfCard(c);
 	const size_t limit = v.chartRange == kRange20 ? 20 : v.chartRange == kRange50 ? 50 : 0;
 	const std::vector<size_t> shown = MatchSelect(facts, static_cast<MatchMode>(v.chartMode), kOutcomeAll, limit);
-	const int plotTop = cy + kSegH + 24, bottom = footY - 8, plotH = bottom - plotTop;
+	const int plotTop = cy + kSegH + 30, bottom = footY - 10, plotH = bottom - plotTop;
 	if (shown.empty() || plotH < 20) {
 		p.Font(3);
 		p.Text(x0, plotTop, inner, std::max(20, plotH), "No games in this filter.", kMuted, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
@@ -547,12 +565,12 @@ void PaintEvolution(Painter &p, const View &v, const Card &c, const Box &b, Tip 
 	const double average = MatchAverage(values);
 	const int n = static_cast<int>(shown.size());
 	const double slot = static_cast<double>(inner) / n;
-	const int barW = std::max(1, std::min(26, static_cast<int>(slot * 0.72)));
+	const int barW = std::max(1, std::min(32, static_cast<int>(slot * 0.72)));
 	const int mx = MouseX(p, v), my = MouseY(p, v);
 	p.Fill(x0, bottom, inner, 1, pal::lineStrong);
 	DashedH(p, x0, plotTop, inner, kRule);
 	p.Font(3);
-	Raw(p, x0, plotTop - 17, 70, 15, MetricText(metric, top), pal::edgeHot);
+	Raw(p, x0, plotTop - 22, 90, 20, MetricText(metric, top), pal::edgeHot);
 	int hovered = -1;
 	for (int k = 0; k < n; k++) {
 		const size_t game = shown[n - 1 - k];
@@ -574,9 +592,9 @@ void PaintEvolution(Painter &p, const View &v, const Card &c, const Box &b, Tip 
 	const std::string avgText = TrFmt("Average %s", {MetricText(metric, average)});
 	p.Font(3);
 	const int avgW = RawWidth(p, avgText) + 10;
-	const int avgLabelY = avgY - 17 < plotTop - 2 ? avgY + 3 : avgY - 17;
-	p.Fill(right - avgW, avgLabelY, avgW, 15, kCardBody);
-	Raw(p, right - avgW + 5, avgLabelY, avgW - 5, 15, avgText, pal::text);
+	const int avgLabelY = avgY - 21 < plotTop - 2 ? avgY + 3 : avgY - 21;
+	p.Fill(right - avgW, avgLabelY, avgW, 20, kCardBody);
+	Raw(p, right - avgW + 5, avgLabelY, avgW - 5, 20, avgText, pal::text);
 
 	Raw(p, x0 + rangeW + 10, footY, inner - rangeW - 10, kSegH, n == 1 ? Tr("1 game") : TrFmt("%s games", {Grouped(n)}), kMuted,
 		DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
@@ -584,9 +602,9 @@ void PaintEvolution(Painter &p, const View &v, const Card &c, const Box &b, Tip 
 	for (MatchResult r : {kMatchAbandoned, kMatchLost, kMatchWon}) {
 		const int tw = p.TextWidth(Tr(ResultText(r)));
 		lx -= tw;
-		p.Text(lx, plotTop - 18, tw + 2, 16, ResultText(r), pal::textDim);
-		lx -= 14;
-		p.Fill(lx, plotTop - 14, 9, 9, ResultColor(r));
+		p.Text(lx, plotTop - 23, tw + 2, 20, ResultText(r), pal::textDim);
+		lx -= 15;
+		p.Fill(lx, plotTop - 18, 10, 10, ResultColor(r));
 		lx -= 12;
 	}
 
@@ -613,11 +631,11 @@ HistoryGeom GeomOf(const Box &b)
 	HistoryGeom g;
 	g.x0 = b.x + kCardPad;
 	g.inner = b.w - kCardPad * 2;
-	g.wide = g.inner >= 460;
-	g.rowH = g.wide ? 28 : 40;
+	g.wide = g.inner >= 560;
+	g.rowH = g.wide ? 36 : 50;
 	g.columns = g.wide ? 4 : 3;
-	g.listTop = b.y + kCardHead + (g.wide ? 20 : kSegH + 8);
-	g.listBottom = b.y + b.h - 8;
+	g.listTop = b.y + kCardHead + (g.wide ? 26 : kSegH + 10);
+	g.listBottom = b.y + b.h - 10;
 	return g;
 }
 
@@ -667,14 +685,14 @@ void PaintDetailCells(Painter &p, const std::vector<DetailCell> &cells, int x, i
 		// The last cell has the rest of its row.
 		const int cw = i + 1 == cells.size() ? x + w - cx : colW;
 		p.Font(3);
-		Raw(p, cx, cy, cw - 8, 15, cell.label, pal::textDim);
+		Raw(p, cx, cy, cw - 8, 20, cell.label, pal::textDim);
 		p.Font(4);
 		const int vw = std::min(cw - (cell.trend ? 24 : 8), RawWidth(p, cell.value));
-		Raw(p, cx, cy + 15, vw, 17, cell.value, pal::text);
+		Raw(p, cx, cy + 20, vw, 20, cell.value, pal::text);
 		if (cell.trend) {
 			const COLORREF c = cell.good ? pal::ok : pal::bad;
-			if (cell.trend > 0) p.ArrowUp(cx + vw + 5, cy + 20, 9, 7, c);
-			else p.ArrowDown(cx + vw + 5, cy + 20, 9, 7, c);
+			if (cell.trend > 0) p.ArrowUp(cx + vw + 5, cy + 26, 9, 7, c);
+			else p.ArrowDown(cx + vw + 5, cy + 26, 9, 7, c);
 		}
 	}
 }
@@ -696,49 +714,49 @@ void PaintChip(Painter &p, int x, int y, int w, int h, MatchResult r)
 
 void PaintHistory(Painter &p, const View &v, const Card &c, const Box &b, Tip &tip)
 {
-	PaintCard(p, b.x, b.y, b.w, b.h);
+	PaintGlassCard(p, b.x, b.y, b.w, b.h);
 	p.AddHit(b.x, b.y, b.w, b.h, kActHistory, 0);
 	PaintCardTitle(p, b.x, b.y, b.w, "Match history");
 	const HistoryGeom gm = GeomOf(b);
 	const int x0 = gm.x0, right = gm.x0 + gm.inner;
 	if (c.games.empty()) {
-		const int ty = b.y + b.h / 2 - 30;
+		const int ty = b.y + b.h / 2 - 34;
 		p.Font(0);
-		p.Text(x0, ty, gm.inner, 22, c.readable ? "No games recorded yet." : kDash, pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.Text(x0, ty, gm.inner, 26, c.readable ? "No games recorded yet." : kDash, pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		p.Font(3);
-		p.Text(x0 + 20, ty + 30, gm.inner - 40, 60, "Finish a skirmish or a multiplayer game and it will show here.", pal::textDim, DT_CENTER | DT_TOP | DT_WORDBREAK);
+		p.Text(x0 + 20, ty + 34, gm.inner - 40, 66, "Finish a skirmish or a multiplayer game and it will show here.", pal::textDim, DT_CENTER | DT_TOP | DT_WORDBREAK);
 		return;
 	}
 	const std::vector<std::string> outcomes = Translated({"All games", "Victories", "Defeats"});
 	// Beside the title when there is room, under it otherwise.
 	const int segW = gm.wide ? SegmentsWidth(p, outcomes) : gm.inner;
-	PaintSegments(p, gm.wide ? right - segW : x0, gm.wide ? b.y + 6 : b.y + kCardHead, segW, outcomes, v.outcome, kActOutcome, v.mouseX, v.mouseY);
+	PaintSegments(p, gm.wide ? right - segW : x0, gm.wide ? b.y + 8 : b.y + kCardHead, segW, outcomes, v.outcome, kActOutcome, v.mouseX, v.mouseY);
 	const std::vector<size_t> rows = HistoryGames(v);
 	p.Font(4);
 	const int titleW = p.TextWidth(Tr("Match history"));
 	p.Font(3);
-	Raw(p, x0 + titleW + 10, b.y + 7, std::max(0, (gm.wide ? right - segW : right) - x0 - titleW - 20), 18, Grouped(rows.size()), pal::textDim);
+	Raw(p, x0 + titleW + 10, b.y + 11, std::max(0, (gm.wide ? right - segW : right) - x0 - titleW - 20), 22, Grouped(rows.size()), pal::textDim);
 	const std::vector<MatchFacts> facts = FactsOfCard(c);
 	const int maxScroll = HistoryMaxScroll(v);
 	const int scroll = std::max(0, std::min(v.historyScroll, maxScroll));
 	const int listRight = maxScroll > 0 ? right - 12 : right;
 	const int chipW = ChipWidth(p);
 	// Columns of the wide history, from the right.
-	const int klW = 84, timeW = 56, dateW = 96, modeW = 80;
+	const int klW = 110, timeW = 76, dateW = 120, modeW = 110;
 	const int klX = listRight - klW, timeX = klX - timeW - 8, dateX = timeX - dateW - 8, modeX = dateX - modeW - 8, civX = x0 + chipW + 10;
 	if (gm.wide) {
 		p.Font(3);
 		const int hy = b.y + kCardHead;
-		p.Text(x0, hy, chipW, 16, "Result", kHead);
-		p.Text(civX, hy, modeX - civX - 8, 16, "Civilization", kHead);
-		p.Text(modeX, hy, modeW, 16, "Mode", kHead);
-		p.Text(dateX, hy, dateW, 16, "Date", kHead);
-		p.Text(timeX, hy, timeW, 16, "Duration", kHead, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
-		p.Text(klX, hy, klW, 16, "Kills / losses", kHead, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(x0, hy, chipW, 22, "Result", kHead);
+		p.Text(civX, hy, modeX - civX - 8, 22, "Civilization", kHead);
+		p.Text(modeX, hy, modeW, 22, "Mode", kHead);
+		p.Text(dateX, hy, dateW, 22, "Date", kHead);
+		p.Text(timeX, hy, timeW, 22, "Duration", kHead, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+		p.Text(klX, hy, klW, 22, "Kills / losses", kHead, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
 	if (rows.empty()) {
 		p.Font(3);
-		p.Text(x0, gm.listTop + 20, gm.inner, 22, "No games in this filter.", kMuted, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.Text(x0, gm.listTop + 20, gm.inner, 26, "No games in this filter.", kMuted, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		return;
 	}
 	const int mx = MouseX(p, v), my = MouseY(p, v);
@@ -766,7 +784,7 @@ void PaintHistory(Painter &p, const View &v, const Card &c, const Box &b, Tip &t
 		p.Font(3);
 		const int lossesW = RawWidth(p, losses);
 		if (gm.wide) {
-			PaintChip(p, x0 + 6, y + 5, chipW - 6, rh - 10, result);
+			PaintChip(p, x0 + 6, y + 6, chipW - 6, rh - 12, result);
 			p.Font(known ? 4 : 3);
 			Raw(p, civX, y, modeX - civX - 8, rh, CivText(g), known ? pal::text : kMuted);
 			p.Font(3);
@@ -783,18 +801,18 @@ void PaintHistory(Painter &p, const View &v, const Card &c, const Box &b, Tip &t
 			Raw(p, klX, y, klW - lossesW, rh, kl, pal::text, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 		}
 		else {
-			PaintChip(p, x0 + 6, y + 5, chipW - 6, 16, result);
-			Raw(p, listRight - lossesW, y + 3, lossesW, 18, losses, pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+			PaintChip(p, x0 + 6, y + 6, chipW - 6, 20, result);
+			Raw(p, listRight - lossesW, y + 4, lossesW, 22, losses, pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 			p.Font(4);
 			const int killsW = RawWidth(p, kl);
-			Raw(p, listRight - lossesW - killsW, y + 3, killsW, 18, kl, pal::text, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+			Raw(p, listRight - lossesW - killsW, y + 4, killsW, 22, kl, pal::text, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 			p.Font(known ? 4 : 3);
-			Raw(p, civX, y + 3, listRight - lossesW - killsW - civX - 8, 18, CivText(g), known ? pal::text : kMuted);
+			Raw(p, civX, y + 4, listRight - lossesW - killsW - civX - 8, 22, CivText(g), known ? pal::text : kMuted);
 			p.Font(3);
 			const std::string age = AgeText(v, g);
 			const std::string line = ModeText(g) + "  \xC2\xB7  " + age + "  \xC2\xB7  " + Duration(g.durationMs);
-			Raw(p, civX, y + 21, listRight - civX, 16, line, pal::textDim);
-			if (mx >= civX && mx < listRight && my >= y + 20 && my < y + rh && my < gm.listBottom) {
+			Raw(p, civX, y + 27, listRight - civX, 20, line, pal::textDim);
+			if (mx >= civX && mx < listRight && my >= y + 26 && my < y + rh && my < gm.listBottom) {
 				tip.lines = {{DateText(g), pal::text}};
 				tip.x = civX;
 				tip.y = y + rh + 2;
@@ -821,43 +839,36 @@ void PaintHistory(Painter &p, const View &v, const Card &c, const Box &b, Tip &t
 	}
 }
 
-void PaintDetail(Painter &p, const View &v, const Card &c, Tip &tip)
+void PaintDetail(Painter &p, const View &v, const Card &c, const Frame &f, Tip &tip)
 {
 	const Area a = DetailArea(v);
-	PaintIdentity(p, v, c, a);
-	PaintTiles(p, c, a);
-	const Lower l = LowerLayout(a);
+	PaintIdentity(p, v, c, a, f);
+	PaintTiles(p, c, a, f);
+	const Lower l = LowerLayout(a, f);
 	PaintSummary(p, c, l.summary.x, l.summary.y, l.summary.w, l.summary.h, l.summaryColumns);
 	PaintEvolution(p, v, c, l.chart, tip);
 	PaintHistory(p, v, c, l.history, tip);
 }
 
-void PaintFooter(Painter &p, const View &v)
+// The title with the way back at the top right and, for another player than the one in use, the button that changes to it.
+void PaintHeader(Painter &p, const View &v, const Frame &f)
 {
-	p.Fill(18, kFooterTop, kScreenW - 36, 1, pal::lineStrong);
 	const int count = static_cast<int>(v.cards.size());
 	const bool other = v.selected >= 0 && v.selected < count && !v.cards[v.selected].active;
-	int bx = kScreenW - kMargin;
+	int right = PaintHeaderActions(p, f.head, {{"Back", kActBack, true, true}}, v.mouseX, v.mouseY);
 	if (other) {
-		bx -= 200;
-		p.Button(bx, kFooterButtonsY, 200, kFooterButtonH, "Use this player", kActUse, 0, v.mouseX, v.mouseY, true, true);
-		bx -= 10 + 120;
-		p.Button(bx, kFooterButtonsY, 120, kFooterButtonH, "Back", kActBack, 0, v.mouseX, v.mouseY);
+		p.Font(1);
+		const int bw = p.CapsWidth("Use this player", 1) + 56;
+		right -= 12 + bw;
+		p.Button(right, f.head.margin, bw, kHeaderButtonH, "Use this player", kActUse, 0, v.mouseX, v.mouseY, true, true);
 	}
-	else {
-		bx -= 150;
-		p.Button(bx, kFooterButtonsY, 150, kFooterButtonH, "Back", kActBack, 0, v.mouseX, v.mouseY, true, true);
+	PaintScreenTitle(p, f.head, "STATISTICS", {}, right, v.mouseX, v.mouseY);
+	for (const Card &c : v.cards) {
+		if (!c.active) continue;
+		p.raw = true;
+		PaintScreenInfo(p, f.head, TrFmt("You are playing as %s.", {c.name}));
+		p.raw = false;
 	}
-	std::string hint;
-	if (other) {
-		for (const Card &c : v.cards) {
-			if (c.active) hint = TrFmt("You are playing as %s.", {c.name});
-		}
-	}
-	if (hint.empty()) return;
-	p.Font(3);
-	p.Diamond(kMargin + 4, kFooterButtonsY + kFooterButtonH / 2, 4, pal::redText);
-	Raw(p, kMargin + 16, kFooterButtonsY, bx - kMargin - 28, kFooterButtonH, hint, pal::caption);
 }
 
 }
@@ -894,7 +905,7 @@ int HistoryMaxScroll(const View &v)
 {
 	const Card *c = SelectedCard(v);
 	if (!c) return 0;
-	const HistoryGeom gm = GeomOf(LowerLayout(DetailArea(v)).history);
+	const HistoryGeom gm = GeomOf(LowerLayout(DetailArea(v), FrameOf(v)).history);
 	const std::vector<size_t> rows = HistoryGames(v);
 	int extra = 0;
 	if (v.expanded >= 0 && std::find(rows.begin(), rows.end(), static_cast<size_t>(v.expanded)) != rows.end()) {
@@ -919,33 +930,37 @@ void HistoryReveal(View &v, int game)
 	}
 	const int at = it == rows.end() ? 0 : static_cast<int>(it - rows.begin());
 	// The game before it stays in sight when the detail leaves room for it.
-	const HistoryGeom gm = GeomOf(LowerLayout(DetailArea(v)).history);
+	const HistoryGeom gm = GeomOf(LowerLayout(DetailArea(v), FrameOf(v)).history);
 	const int needed = gm.rowH * 2 + DetailHeight(DetailCells(c->games[game], FactsOfCard(*c), !gm.wide).size(), gm.columns);
 	const int first = needed <= gm.listBottom - gm.listTop ? at - 1 : at;
 	v.historyScroll = std::max(0, std::min(first, HistoryMaxScroll(v)));
 }
 
+int ListRows(const View &v)
+{
+	return FrameOf(v).rows;
+}
+
 void PaintProfileScreen(Painter &p, const View &v)
 {
-	PaintWindowFrame(p, kScreenW, kScreenH);
-	PaintWindowHeader(p, kScreenW, "STATISTICS");
+	const Frame f = FrameOf(v);
+	UseScreenFonts(p);
+	// The figures of the tiles and the big monogram: the screen's largest display size would not fit the tiles.
+	p.fonts[5] = BrandFont(BrandFace::Display, f.head.roomy ? 46 : 40, p.s);
+	PaintHeader(p, v, f);
 	const bool list = ShowsList(v);
-	if (list) {
-		PaintList(p, v);
-		p.Fill(kDetailX - 12, kTop, 1, kLowerBottom - kTop, pal::hairline);
-	}
+	if (list) PaintList(p, v, f);
 	Tip tip;
 	if (const Card *c = SelectedCard(v)) {
-		PaintDetail(p, v, *c, tip);
+		PaintDetail(p, v, *c, f, tip);
 	}
 	else if (list) {
 		const Area a = DetailArea(v);
 		p.Font(0);
-		p.Text(a.x, kTop + 120, a.w, 24, "Choose a player.", pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.Text(a.x, f.top + 120, a.w, 26, "Choose a player.", pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 	}
-	PaintFooter(p, v);
-	PaintTip(p, tip);
-	PaintPatronTip(p, kScreenW, kScreenH);
+	PaintTip(p, v, tip);
+	PaintPatronTip(p, v.screenW, v.screenH);
 }
 
 }

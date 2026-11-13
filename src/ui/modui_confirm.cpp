@@ -82,7 +82,7 @@ void PaintConfirm(Painter &p, const State &st)
 		text = why + (inMatch ? Tr(" Anything you have not saved will be lost.") : std::string());
 		yes = "Restart now";
 	}
-	const Dialog d = DialogBegin(p, st.confirmOnly ? cw : kDesignW, st.confirmOnly ? ch : kDesignH, cw, ch, title);
+	const Dialog d = DialogBegin(p, st.confirmOnly ? cw : st.viewW, st.confirmOnly ? ch : st.viewH, cw, ch, title);
 	p.Font(0);
 	const int textH = st.confirmItems.empty() ? 70 : 62;
 	p.TextWrapped(d.BodyX(), d.BodyTop(), d.BodyW(), textH, text, pal::text);

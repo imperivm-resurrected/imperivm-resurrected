@@ -1179,7 +1179,7 @@ void PaintConnecting(Painter &p, const State &st)
 	const int mx = st.mouseX, my = st.mouseY;
 	const bool creating = st.autoHost || st.room.owner;
 	const bool waiting = !st.connecting && st.room.id && !st.room.info.hosting;
-	const Dialog d = DialogBegin(p, kW, kH, 480, 200, creating ? "Creating the game..." : waiting ? "Waiting for the host..." : "Joining the game...");
+	const Dialog d = DialogBegin(p, st.viewW, st.viewH, 480, 200, creating ? "Creating the game..." : waiting ? "Waiting for the host..." : "Joining the game...");
 	PaintBusyBar(p, d.BodyX(), d.y + 72, d.BodyW(), 8, GetTickCount());
 	p.Font(3);
 	p.Text(d.BodyX(), d.y + 90, d.BodyW(), 24,
@@ -1194,7 +1194,7 @@ void PaintSpectate(Painter &p, const State &st)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const OnlineLobby &g = st.room.info;
-	const Dialog d = DialogBegin(p, kW, kH, 520, 188, TrFmt("Watching %s's game", {g.host}));
+	const Dialog d = DialogBegin(p, st.viewW, st.viewH, 520, 188, TrFmt("Watching %s's game", {g.host}));
 	p.Font(3);
 	p.Text(d.BodyX(), d.y + 56, d.BodyW(), 20, g.name, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	const int progress = SpectatorProgress();
@@ -1212,7 +1212,6 @@ void PaintSpectate(Painter &p, const State &st)
 namespace mpui_impl {
 void PaintScreen(Painter &p, const State &st)
 {
-	if (!st.game.active) PaintWindowFrame(p, kW, kH);
 	p.noHover = st.dropOpen || st.passPrompt || st.syncConfirm || st.syncPhase || st.searching || st.connecting || st.recoverAsk ||
 		(st.recoverWaitHost && !st.room.id) || RejoinClientActive() || RejoinClientFailed() || (st.game.active && st.game.picker);
 	if (st.game.active) {
@@ -1225,12 +1224,13 @@ void PaintScreen(Painter &p, const State &st)
 		PaintDropList(p, st);
 		return;
 	}
+	UseScreenFonts(p);
 	PaintHeader(p, st);
 	if (st.view == kViewRanked) PaintRanked(p, st);
 	else if (st.view == kViewCreate) PaintCreate(p, st);
-
 	else PaintList(p, st);
-	PaintChat(p, st);
+	// The menus and dialogs over the lobby keep the shared type their boxes are sized for.
+	UseSharedFonts(p);
 	if (!st.searching && !st.connecting) PaintDropList(p, st);
 	if (st.searching) PaintSearch(p, st);
 	if (RejoinClientActive() || RejoinClientFailed()) {

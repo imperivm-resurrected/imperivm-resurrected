@@ -56,6 +56,8 @@ struct View {
 	// The position in the selected card's games of the one opened in the history, or -1.
 	int expanded = -1;
 	int todayYear = 0, todayMonth = 0, todayDay = 0;
+	// The size of the screen last painted, in its design units (ScreenViewFor): the layout, and so the scrolls, follow it.
+	int screenW = 1920, screenH = 1080;
 };
 
 enum Action {
@@ -63,15 +65,14 @@ enum Action {
 	kActHistory,
 };
 
-constexpr int kScreenW = 1100, kScreenH = 740;
-// How many rows of the list fit; the controller scrolls by rows.
-constexpr int kListRows = 8;
 constexpr int kBarList = 0, kBarHistory = 1;
 
 // The player goes with the Steam account, so the list is left only for installs that still keep several from before.
 inline bool ShowsList(const View &v) { return v.cards.size() > 1; }
 inline bool SelectedIsActive(const View &v) { return v.selected >= 0 && v.selected < static_cast<int>(v.cards.size()) && v.cards[v.selected].active; }
 const Card *SelectedCard(const View &v);
+// How many rows of the list fit; the controller scrolls by rows.
+int ListRows(const View &v);
 
 // The games of the history, as positions in the selected card's games, newest first.
 std::vector<size_t> HistoryGames(const View &v);

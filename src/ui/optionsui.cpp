@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "addr/state.h"
 #include "core/config.h"
 #include "core/log.h"
 #include "core/uiport.h"
@@ -22,6 +23,7 @@
 #include "mods/updater.h"
 #include "ui/modui.h"
 #include "ui/optionsui_view.h"
+#include "ui/fullscreen.h"
 #include "ui/report.h"
 #include "ui/widgets.h"
 
@@ -664,8 +666,16 @@ void OptionsUiDraw(uint32_t *buf, int w, int h)
 		previous = g_s.hits;
 		mouseDown = g_s.mouseDown;
 	}
+	// Over a running game the screen stays a window, so the map shows around it.
+	view.fullScreen = *reinterpret_cast<void **>(addr::kGame) == nullptr;
 	PanelRender r(g_canvas, buf, w, h);
-	if (!r.Begin(kScreenW, kScreenH, 16)) return;
+	if (view.fullScreen) {
+		const ScreenView screen = ScreenViewFor(w, h);
+		view.screenW = screen.w;
+		view.screenH = screen.h;
+		if (!BeginFullScreen(r, screen)) return;
+	}
+	else if (!r.Begin(kScreenW, kScreenH, 16)) return;
 	r.Press(previous, mouseDown, {view.mouseX, view.mouseY});
 	PaintOptionsScreen(r.p, view);
 	r.End();

@@ -96,41 +96,79 @@ uint64_t MemberIdByName(const State &st, const std::string &name, bool skipMe)
 	return 0;
 }
 
+}
+
+namespace mpui_impl {
+namespace {
+const int kCardGap = 32, kToolH = 44;
+
+// Where the parts of the lobby go, in the units of ScreenView: the header of the full screens, a row of tools under it, then the
+// table of rooms with the card of the selected one at its right.
+struct LobbyLayout : ScreenLayout {
+	int toolY = 0, bodyY = 0, bodyH = 0, tableW = 0, detailW = 0;
+};
+
+LobbyLayout LobbyLayoutFor(int w, int h)
+{
+	LobbyLayout l;
+	static_cast<ScreenLayout &>(l) = ScreenLayoutFor(w, h);
+	l.toolY = l.top;
+	l.bodyY = l.toolY + kToolH + (l.roomy ? 28 : 20);
+	l.bodyH = l.h - l.margin - l.bodyY;
+	const int inner = l.w - 2 * l.margin;
+	l.detailW = std::max(420, std::min(560, inner * 3 / 10));
+	l.tableW = inner - l.detailW - kCardGap;
+	return l;
+}
+}
+
+int LobbyTableWidth(int viewW, int viewH)
+{
+	return LobbyLayoutFor(viewW, viewH).tableW;
+}
+
 void PaintHeader(Painter &p, const State &st)
 {
 	const int mx = st.mouseX, my = st.mouseY;
-	// Lined up with the rule under the header, which it ends on.
-	DrawPatronRowGlow(p, 16, 12, 760, 54, PatronOf(SteamOwnId()).tier);
-	if (!PaintAvatar(p, 20, 16, 44, SteamOwnId())) {
-		p.Fill(20, 16, 44, 44, pal::hairline);
-		p.Font(2);
-		p.Text(20, 16, 44, 44, st.player.substr(0, 2), pal::redText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-	}
-	p.Frame(20, 16, 44, 44, pal::redText);
+	const LobbyLayout l = LobbyLayoutFor(st.viewW, st.viewH);
+	const int right = PaintHeaderActions(p, l, {{"Back", kBack, true, true}}, mx, my);
+	PaintScreenTitle(p, l, "Multiplayer",
+		{{"Games", kListView, 0, st.view == kViewList, true}, {"Create game", kCreate, 0, st.view == kViewCreate, true},
+			{"Ranked", kRanked, 0, st.view == kViewRanked, true}},
+		right, mx, my);
+
+	// The caption line is the player's: avatar, name (with the laurel of a patron), the content profile and the open rooms.
+	const int m = l.margin, y = l.infoY, h = l.infoH, avatar = h + 4, ay = y - 2;
+	const PatronInfo own = PatronOf(SteamOwnId());
 	p.Font(1);
-	const PatronTier ownTier = PatronOf(SteamOwnId()).tier;
-	if (ownTier != PatronTier::None) {
-		DrawPatron(p, 74, 15, 22, 100, 14, 274, 24, st.player, ownTier, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-		PatronHotspot(p, 74, 15, 22, PatronOf(SteamOwnId()), mx, my, kPatronLink);
+	const int laurel = own.tier != PatronTier::None ? 22 : 0, nameX = m + avatar + 12 + (laurel ? laurel + 4 : 0);
+	const int nameW = std::min(320, p.TextWidth(st.player) + 4);
+	DrawPatronRowGlow(p, m - 12, y - 8, nameX + nameW + 12 - (m - 12), h + 16, own.tier);
+	if (!PaintAvatar(p, m, ay, avatar, SteamOwnId())) {
+		p.Fill(m, ay, avatar, avatar, pal::hairline);
+		p.Font(3);
+		p.Text(m, ay, avatar, avatar, st.player.substr(0, 2), pal::redText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.Font(1);
 	}
-	else p.Text(74, 14, 300, 24, st.player, pal::text);
-	p.Font(3);
-	p.Text(74, 38, 400, 20, Tr("Content profile: ") + ModsProfileLabel(ModsMountedProfile().name), pal::textDim);
+	p.Frame(m, ay, avatar, avatar, pal::redText);
+	if (laurel) {
+		DrawPatron(p, m + avatar + 12, y + (h - laurel) / 2, laurel, nameX, y, nameW, h, st.player, own.tier, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+		PatronHotspot(p, m + avatar + 12, y + (h - laurel) / 2, laurel, own, mx, my, kPatronLink);
+	}
+	else p.Text(nameX, y, nameW, h, st.player, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	std::string info = Tr("Content profile: ") + ModsProfileLabel(ModsMountedProfile().name);
+	COLORREF color = pal::caption;
 	if (!st.ready) {
-		p.Text(500, 14, 480, 22, st.status.empty() ? "Connecting to Steam..." : st.status, pal::bad, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+		info += "  \xC2\xB7  " + Tr(st.status.empty() ? std::string("Connecting to Steam...") : st.status);
+		color = pal::bad;
 	}
 	else if (!st.room.id) {
 		const size_t n = st.lobbies.size();
-		p.Text(500, 14, 480, 22, n == 1 ? "1 open room" : std::to_string(n) + Tr(" open rooms"), pal::textDim,
-			DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+		info += "  \xC2\xB7  " + (n == 1 ? Tr("1 open room") : std::to_string(n) + Tr(" open rooms"));
 	}
-	PaintRule(p, 66, kW);
-	PaintTabs(p, 20, 72,
-		{{"Games", kListView, 0, st.view == kViewList, true},
-			{"Create game", kCreate, 0, st.view == kViewCreate, true},
-			{"Ranked", kRanked, 0, st.view == kViewRanked, true}},
-		mx, my);
-	p.Fill(16, 118, kW - 32, 1, pal::lineStrong);
+	p.Font(0);
+	const int infoX = nameX + nameW + 20;
+	p.Text(infoX, y, l.w - m - infoX, h, "\xC2\xB7  " + info, color, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }
 }
 
@@ -143,11 +181,11 @@ void DrawLock(Painter &p, int x, int y, COLORREF c)
 	p.Fill(x + 5, y + 10, 2, 4, pal::panel);
 }
 
-void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis)
+void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis, const LobbyLayout &l)
 {
 	const int mx = st.mouseX, my = st.mouseY;
-	const int dx = 632, dw = kW - dx - 16, dy = 172, dh = 396;
-	PaintCard(p, dx, dy, dw, dh);
+	const int dw = l.detailW, dx = l.w - l.margin - dw, dy = l.bodyY, dh = l.bodyH;
+	PaintGlassCard(p, dx, dy, dw, dh);
 	{
 		std::lock_guard<std::mutex> lock(g_chat.mx);
 		g_detail.rect = p.R(dx, dy, dw, dh);
@@ -157,7 +195,7 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis)
 	if (st.selected < 0 || st.selected >= static_cast<int>(vis.size())) {
 		g_detail.geomOut = ListGeom();
 		p.Font(0);
-		p.TextWrapped(dx + 20, dy + 20, dw - 40, 80,
+		p.TextWrapped(dx + 24, dy + 24, dw - 48, 120,
 			vis.empty() ? "When there are rooms, pick one to see its content and join, or press \"Quick game\" and we'll find "
 						  "one for you."
 						: "Pick a room from the list to see its content and join.",
@@ -172,38 +210,38 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis)
 	for (const OnlineMod &m : missing) bytes += m.bytes;
 
 	const bool canReturn = CanReturnToGame(st, g);
-	const int returnRoom = canReturn && g.specLobby ? 48 : 0;
-	const int viewTop = dy + 1, viewH = dh - 70 - returnRoom;
-	const int x = dx + 16, w = dw - 36;
-	const int startY = viewTop + 12;
+	const int returnRoom = canReturn && g.specLobby ? 60 : 0;
+	const int viewTop = dy + 1, viewH = dh - 80 - returnRoom;
+	const int x = dx + 24, w = dw - 52;
+	const int startY = viewTop + 16;
 	int y = startY - st.detail.scroll;
 	p.Clip(dx + 1, viewTop, dw - 2, viewH);
 
 	auto section = [&](const std::string &title) {
-		y += 6;
-		p.Font(1);
-		p.Text(x, y, w, 22, title, pal::text);
-		y += 24;
-		p.Fill(x, y, w, 1, pal::hairline);
 		y += 8;
+		p.Font(1);
+		p.Text(x, y, w, 28, title, pal::text);
+		y += 30;
+		p.Fill(x, y, w, 1, pal::hairline);
+		y += 10;
 		p.Font(3);
 	};
 	auto note = [&](COLORREF bar, COLORREF back, const std::string &text) {
 		p.Font(3);
-		const int th = p.Measure(w - 22, text);
-		p.Fill(x, y, w, th + 14, back);
-		p.Fill(x, y, 3, th + 14, bar);
-		p.TextWrapped(x + 12, y + 7, w - 22, th + 2, text, pal::text);
-		y += th + 22;
+		const int th = p.Measure(w - 28, text);
+		p.Fill(x, y, w, th + 18, back);
+		p.Fill(x, y, 3, th + 18, bar);
+		p.TextWrapped(x + 14, y + 9, w - 28, th + 2, text, pal::text);
+		y += th + 28;
 	};
 
 	p.Font(2);
-	const int nameH = std::max(30, p.Measure(w, g.name));
+	const int nameH = std::max(40, p.Measure(w, g.name));
 	p.TextWrapped(x, y, w, nameH, g.name, pal::redText);
 	y += nameH;
 
 	section("Game content");
-	y = PaintLinesInline(p, OnlineLobbyLines(st, g, true), x, y, w, 20) + 6;
+	y = PaintLinesInline(p, OnlineLobbyLines(st, g, true), x, y, w, 26) + 8;
 	if (!same) {
 		y += 2;
 		note(pal::bad, pal::selected,
@@ -225,44 +263,44 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis)
 			if (s.type == 2) continue;
 			n++;
 			const bool human = s.type == 3, ai = s.type == 1;
-			p.Text(x, y, 24, 20, std::to_string(n), pal::textDim);
+			p.Text(x, y, 28, 26, std::to_string(n), pal::textDim);
 			const PatronInfo patron = human ? PatronOf(LobbyPlayerId(g, s.name)) : PatronInfo();
 			if (patron.tier != PatronTier::None) {
-				DrawPatron(p, x + 26, y + 2, 16, x + 46, y, w - 46 - 80, 20, s.name, patron.tier, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-				PatronHotspot(p, x + 26, y + 2, 16, patron, st.mouseX, st.mouseY, kPatronLink);
+				DrawPatron(p, x + 30, y + 3, 20, x + 54, y, w - 54 - 90, 26, s.name, patron.tier, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+				PatronHotspot(p, x + 30, y + 3, 20, patron, st.mouseX, st.mouseY, kPatronLink);
 			}
-			else p.Text(x + 26, y, w - 26 - 80, 20, human ? s.name : ai ? (s.name.empty() ? "AI" : s.name) : "Free", human ? pal::text : pal::textDim);
+			else p.Text(x + 30, y, w - 30 - 90, 26, human ? s.name : ai ? (s.name.empty() ? "AI" : s.name) : "Free", human ? pal::text : pal::textDim);
 			if (human && LobbyPlayerId(g, s.name)) {
-				const int nameX = patron.tier != PatronTier::None ? x + 46 : x + 26;
-				ProfileHotspot(p, st, nameX, y, w - (nameX - x) - 80, 20, s.name, kProfileLobbySlot + static_cast<int>(&s - g.slots.data()));
+				const int nameX = patron.tier != PatronTier::None ? x + 54 : x + 30;
+				ProfileHotspot(p, st, nameX, y, w - (nameX - x) - 90, 26, s.name, kProfileLobbySlot + static_cast<int>(&s - g.slots.data()));
 			}
 			if (human && !hostShown && PlayerNameMatches(s.name, g.host)) {
 				hostShown = true;
-				p.Text(x + w - 90, y, 90, 20, "host", pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+				p.Text(x + w - 100, y, 100, 26, "host", pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 			}
-			y += 22;
+			y += 28;
 		}
 	}
 	else if (g.playerNames.empty()) {
-		p.Text(x, y, w, 20, std::to_string(g.players) + Tr(" of ") + std::to_string(g.maxPlayers) + Tr(" slots taken"), pal::textDim);
-		y += 24;
+		p.Text(x, y, w, 26, std::to_string(g.players) + Tr(" of ") + std::to_string(g.maxPlayers) + Tr(" slots taken"), pal::textDim);
+		y += 30;
 	}
 	else {
 		for (int i = 0; i < std::max(g.maxPlayers, static_cast<int>(g.playerNames.size())); i++) {
 			const bool taken = i < static_cast<int>(g.playerNames.size());
-			p.Text(x, y, 24, 20, std::to_string(i + 1), pal::textDim);
+			p.Text(x, y, 28, 26, std::to_string(i + 1), pal::textDim);
 			const PatronInfo patron = taken ? PatronOf(LobbyPlayerId(g, g.playerNames[i])) : PatronInfo();
 			if (patron.tier != PatronTier::None) {
-				DrawPatron(p, x + 26, y + 2, 16, x + 46, y, w - 46 - 80, 20, g.playerNames[i], patron.tier, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-				PatronHotspot(p, x + 26, y + 2, 16, patron, st.mouseX, st.mouseY, kPatronLink);
+				DrawPatron(p, x + 30, y + 3, 20, x + 54, y, w - 54 - 90, 26, g.playerNames[i], patron.tier, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+				PatronHotspot(p, x + 30, y + 3, 20, patron, st.mouseX, st.mouseY, kPatronLink);
 			}
-			else p.Text(x + 26, y, w - 26, 20, taken ? g.playerNames[i] : "Free", taken ? pal::text : pal::textDim);
+			else p.Text(x + 30, y, w - 30, 26, taken ? g.playerNames[i] : "Free", taken ? pal::text : pal::textDim);
 			if (taken && LobbyPlayerId(g, g.playerNames[i])) {
-				const int nameX = patron.tier != PatronTier::None ? x + 46 : x + 26;
-				ProfileHotspot(p, st, nameX, y, w - (nameX - x) - 80, 20, g.playerNames[i], kProfileLobbyName + i);
+				const int nameX = patron.tier != PatronTier::None ? x + 54 : x + 30;
+				ProfileHotspot(p, st, nameX, y, w - (nameX - x) - 90, 26, g.playerNames[i], kProfileLobbyName + i);
 			}
-			if (taken && i == 0) p.Text(x + w - 90, y, 90, 20, "host", pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
-			y += 22;
+			if (taken && i == 0) p.Text(x + w - 100, y, 100, 26, "host", pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+			y += 28;
 		}
 	}
 
@@ -292,20 +330,21 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis)
 			return true;
 		};
 		auto heading = [&](const char *title) {
-			y += 4;
+			y += 6;
+			p.Font(4);
+			p.Text(x, y, w, 20, title, pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 			p.Font(3);
-			p.Text(x, y, w, 15, title, pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-			y += 18;
+			y += 24;
 		};
 		auto valueRow = [&](const std::string &label, const std::string &value, COLORREF color) {
-			p.Text(x, y, w / 2, 20, label, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-			p.Text(x + w / 2, y, w - w / 2, 20, value, color, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-			y += 22;
+			p.Text(x, y, w / 2, 26, label, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			p.Text(x + w / 2, y, w - w / 2, 26, value, color, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			y += 28;
 		};
 		auto toggleRow = [&](const std::string &label, bool on) {
-			p.Text(x, y, w - Painter::kToggleW - 10, 20, label, on ? pal::text : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-			p.Toggle(x + w - Painter::kToggleW, y + (20 - Painter::kToggleH) / 2, on, true, false);
-			y += 22;
+			p.Text(x, y, w - kBigToggleW - 12, 26, label, on ? pal::text : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			PaintBigToggle(p, x + w - kBigToggleW, y + (26 - kBigToggleH) / 2, on, true, false);
+			y += 28;
 		};
 		auto comboRow = [&](const char *label, const char *key) {
 			std::string v;
@@ -411,22 +450,23 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis)
 		ListState view = st.detail;
 		view.scroll = std::min(st.detail.scroll, std::max(0, total - viewH + 12));
 		ListGeom geom;
-		ScrollbarPaint(p, dx + dw - 11, viewTop, viewH, total + 12, viewH, view, geom, mx, my);
+		ScrollbarPaint(p, dx + dw - 14, viewTop, viewH, total + 12, viewH, view, geom, mx, my);
 		g_detail.geomOut = geom;
 	}
 
-	p.Fill(dx + 1, dy + dh - 66 - returnRoom, dw - 2, 1, pal::hairline);
-	if (canReturn) p.Button(x, dy + dh - 56 - returnRoom, dw - 32, 42, "Return to the game", kReturnGame, 0, mx, my, st.ready && !RejoinBusy(), true);
+	p.Fill(dx + 1, dy + dh - 76 - returnRoom, dw - 2, 1, pal::hairline);
+	const int bx = dx + 24, bw = dw - 48, bh = 52, by = dy + dh - 64;
+	if (canReturn) p.Button(bx, by - returnRoom, bw, bh, "Return to the game", kReturnGame, 0, mx, my, st.ready && !RejoinBusy(), true);
 	const std::string label = g.kickedMe ? "You were kicked from the room" : g.playing ? "Game in progress" : full ? "Room full" : same ? "Join" : missing.empty() ? "Restart and join" : "Download and join";
 	if (g.specOnly) {
-		if (g.playing) p.Button(x, dy + dh - 56, dw - 32, 42, "Watch the game", kSpectate, 0, mx, my, st.ready, true);
-		else p.Button(x, dy + dh - 56, dw - 32, 42, "Room full", kJoin, 0, mx, my, false, false);
+		if (g.playing) p.Button(bx, by, bw, bh, "Watch the game", kSpectate, 0, mx, my, st.ready, true);
+		else p.Button(bx, by, bw, bh, "Room full", kJoin, 0, mx, my, false, false);
 	}
 	else if (g.playing && g.specLobby) {
-		p.Button(x, dy + dh - 56, dw - 32, 42, "Watch the game", kSpectate, 0, mx, my, st.ready, !canReturn);
+		p.Button(bx, by, bw, bh, "Watch the game", kSpectate, 0, mx, my, st.ready, !canReturn);
 	}
 	else if (!canReturn) {
-		p.Button(x, dy + dh - 56, dw - 32, 42, label, kJoin, 0, mx, my, !g.playing && !full && !g.kickedMe && st.ready, true);
+		p.Button(bx, by, bw, bh, label, kJoin, 0, mx, my, !g.playing && !full && !g.kickedMe && st.ready, true);
 	}
 }
 }
@@ -445,7 +485,7 @@ void ProfileHotspot(Painter &p, const State &st, int x, int y, int w, int h, con
 void PaintPassPrompt(Painter &p, const State &st)
 {
 	const int mx = st.mouseX, my = st.mouseY;
-	const Dialog d = DialogBegin(p, kW, kH, 480, 214, "Password-protected room", pal::redText, 26);
+	const Dialog d = DialogBegin(p, st.viewW, st.viewH, 480, 214, "Password-protected room", pal::redText, 26);
 	DrawLock(p, d.x + 24, d.y + 22, pal::redText);
 	DialogText(p, d, 58, "\"" + st.passLobby.name + Tr("\", hosted by ") + st.passLobby.host + Tr(". Enter the password to join."), pal::textDim, 3);
 	PaintField(p, st, d.x + 24, d.y + 104, d.w - 48 - 98, 34, st.joinPassInput, "Password", st.focus == kJoinPassField, kFieldJoinPass, !st.passShow);
@@ -456,35 +496,43 @@ void PaintPassPrompt(Painter &p, const State &st)
 void PaintList(Painter &p, const State &st)
 {
 	const int mx = st.mouseX, my = st.mouseY;
+	const LobbyLayout l = LobbyLayoutFor(st.viewW, st.viewH);
+	const int m = l.margin, toolY = l.toolY;
 	static const char *const kFilterNames[] = {"All rooms", "Friends'", "No password", "Password protected", "Original game", "With my content", "With open slots", "In progress"};
-	Combo(p, st, 16, 132, 190, 30, kFilterNames[st.filter < 0 || st.filter > 7 ? 0 : st.filter], kDropFilter, 0, true);
-	PaintField(p, st, 214, 132, 254, 30, st.searchInput, "Search room, host or map...", st.focus == kSearchField, kFieldSearch);
-	p.Button(476, 132, 140, 30, st.loading ? "Searching..." : "Refresh", kRefresh, 0, mx, my, st.ready && !st.loading);
-	p.Button(632, 132, kW - 632 - 16, 30, "Quick game", kQuick, 0, mx, my, st.ready, true);
-	const int tx = 16, tw = 600, ty = 172, rowH = 32;
-	p.Fill(tx, ty, tw, 396, pal::bg);
-	p.Frame(tx, ty, tw, 396, pal::lineStrong);
+	const int filterW = 260;
+	Combo(p, st, m, toolY, filterW, kToolH, kFilterNames[st.filter < 0 || st.filter > 7 ? 0 : st.filter], kDropFilter, 0, true);
+	// Refresh closes the row over the table; the main action, Quick game, sits over the room's card and its Join.
+	const int refreshW = std::max(GhostButtonWidth(p, "Refresh", false), GhostButtonWidth(p, "Searching...", false));
+	const int refreshX = m + l.tableW - refreshW, searchX = m + filterW + 12;
+	PaintField(p, st, searchX, toolY, std::min(440, refreshX - 12 - searchX), kToolH, st.searchInput, "Search room, host or map...", st.focus == kSearchField,
+		kFieldSearch);
+	PaintGhostButton(p, refreshX, toolY, refreshW, kToolH, st.loading ? "Searching..." : "Refresh", kRefresh, false, st.ready && !st.loading, mx, my);
+	p.Button(l.w - m - l.detailW, toolY, l.detailW, kToolH, "Quick game", kQuick, 0, mx, my, st.ready, true);
+
+	const int tx = m, tw = l.tableW, ty = l.bodyY, th = l.bodyH, headH = 44, rowH = l.roomy ? 52 : 46;
+	PaintGlassCard(p, tx, ty, tw, th);
 	static const char *const kCols[] = {"Room", "Host", "Players", "Map", "Content"};
+	const float unit = static_cast<float>(tw) / kColumnBaseW;
 	int cx[6];
-	cx[0] = tx + 8;
-	for (int c = 0; c < 4; c++) cx[c + 1] = cx[c] + st.colW[c];
-	cx[5] = tx + tw - 8;
-	p.Fill(tx + 1, ty + 1, tw - 2, 26, pal::panel);
-	p.Fill(tx + 1, ty + 27, tw - 2, 1, pal::lineStrong);
+	cx[0] = tx + 20;
+	for (int c = 0; c < 4; c++) cx[c + 1] = cx[c] + static_cast<int>(st.colW[c] * unit + 0.5f);
+	cx[5] = tx + tw - 20;
+	p.Fill(tx + 1, ty + headH - 1, tw - 2, 1, pal::lineStrong);
+	p.Font(4);
 	for (int c = 0; c < 5; c++) {
 		const int w = cx[c + 1] - cx[c];
-		const bool sorted = st.sortCol == c, hov = p.Hover(cx[c], ty + 1, w - 4, 26, mx, my);
-		p.Font(3);
-		p.Text(cx[c] + 2, ty + 1, w - 20, 26, kCols[c], sorted ? pal::redText : hov ? pal::text : pal::textDim);
+		const bool sorted = st.sortCol == c, hov = p.Hover(cx[c], ty + 1, w - 4, headH - 2, mx, my);
+		p.TextCaps(cx[c], ty + 1, w - 28, headH - 2, kCols[c], sorted ? pal::redText : hov ? pal::text : pal::caption,
+			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 2);
 		if (sorted) {
-			if (st.sortDesc) p.ArrowDown(cx[c + 1] - 16, ty + 12, 8, 4, pal::redText);
-			else p.ArrowUp(cx[c + 1] - 16, ty + 11, 8, 4, pal::redText);
+			if (st.sortDesc) p.ArrowDown(cx[c + 1] - 22, ty + headH / 2 - 2, 10, 5, pal::redText);
+			else p.ArrowUp(cx[c + 1] - 22, ty + headH / 2 - 3, 10, 5, pal::redText);
 		}
-		p.AddHit(cx[c], ty + 1, w - 4, 26, kSort, c);
+		p.AddHit(cx[c], ty + 1, w - 4, headH - 2, kSort, c);
 		if (c < 4) {
-			const bool grab = st.resizeCol == c || p.Hover(cx[c + 1] - 4, ty + 1, 8, 26, mx, my);
-			p.Fill(cx[c + 1] - 1, ty + 5, 1, 18, grab ? pal::redText : pal::lineStrong);
-			p.AddHit(cx[c + 1] - 4, ty + 1, 8, 26, kColResize, c);
+			const bool grab = st.resizeCol == c || p.Hover(cx[c + 1] - 5, ty + 1, 10, headH - 2, mx, my);
+			p.Fill(cx[c + 1] - 1, ty + 12, 1, headH - 24, grab ? pal::redText : pal::lineStrong);
+			p.AddHit(cx[c + 1] - 5, ty + 1, 10, headH - 2, kColResize, c);
 		}
 	}
 	const std::vector<int> vis = Visible(st);
@@ -497,32 +545,41 @@ void PaintList(Painter &p, const State &st)
 		}
 		PatronsWatch(ids);
 	}
+	const int rowsTop = ty + headH;
 	if (vis.empty()) {
 		p.Font(0);
 		const std::string empty = !st.ready ? (st.status.empty() ? "Connecting to Steam..." : st.status)
 			: st.loading ? "Searching for rooms..."
 			: "There are no open rooms with this filter. Create one with \"Create game\" and invite your friends.";
-		p.TextWrapped(tx + 14, ty + 40, tw - 28, 80, empty, pal::textDim);
+		p.TextWrapped(tx + 24, rowsTop + 24, tw - 48, 120, empty, pal::textDim);
 	}
-	for (int r = 0; r < static_cast<int>(vis.size()) && r < 11; r++) {
+	// The table has no scroll of its own: when the arrows take the selection past the rows that fit, the rows follow it.
+	const int fit = std::max(1, (th - headH - 1) / rowH), count = static_cast<int>(vis.size());
+	const int first = std::max(0, std::min(st.selected - fit + 1, count - fit));
+	for (int r = first; r < count && r < first + fit; r++) {
 		const OnlineLobby &g = st.lobbies[vis[r]];
-		const int y = ty + 28 + r * rowH;
-		if (r == st.selected) p.Fill(tx + 1, y, tw - 2, rowH, pal::hairline);
-		else if (p.Hover(tx, y, tw, rowH, mx, my)) p.Fill(tx + 1, y, tw - 2, rowH, pal::selected);
+		const int y = rowsTop + (r - first) * rowH;
+		if (r == st.selected) {
+			p.Fill(tx + 1, y, tw - 2, rowH, pal::selected);
+			p.Fill(tx + 1, y, 3, rowH, pal::red);
+		}
+		else if (p.Hover(tx, y, tw, rowH, mx, my)) p.Fill(tx + 1, y, tw - 2, rowH, pal::raised);
+		p.Fill(tx + 1, y + rowH - 1, tw - 2, 1, pal::hairline);
 		p.AddHit(tx, y, tw, rowH, kSelect, r);
 		auto cell = [&](int c, const std::string &text, COLORREF color) {
-			p.Text(cx[c] + 2, y, cx[c + 1] - cx[c] - 8, rowH, text, color);
+			p.Text(cx[c] + 2, y, cx[c + 1] - cx[c] - 12, rowH, text, color, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		};
 		p.Font(1);
 		if (g.password) DrawLock(p, cx[0] + 4, y + (rowH - 16) / 2, pal::redText);
-		p.Text(cx[0] + 2 + (g.password ? 20 : 0), y, cx[1] - cx[0] - 8 - (g.password ? 20 : 0), rowH, g.name, pal::text);
-		p.Font(3);
+		const int lockW = g.password ? 22 : 0;
+		p.Text(cx[0] + 2 + lockW, y, cx[1] - cx[0] - 12 - lockW, rowH, g.name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Font(0);
 		const PatronInfo hostPatron = PatronOf(g.owner);
 		if (hostPatron.tier != PatronTier::None) {
-			const int hx = cx[1] + 2, hw = cx[2] - cx[1] - 8, ly = y + (rowH - 16) / 2;
-			DrawPatron(p, hx, ly, 16, hx + 20, y, hw - 20, rowH, g.friendHost ? g.host + Tr("  (friend)") : g.host, hostPatron.tier,
+			const int hx = cx[1] + 2, hw = cx[2] - cx[1] - 12, ly = y + (rowH - 20) / 2;
+			DrawPatron(p, hx, ly, 20, hx + 24, y, hw - 24, rowH, g.friendHost ? g.host + Tr("  (friend)") : g.host, hostPatron.tier,
 				DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-			PatronHotspot(p, hx, ly, 16, hostPatron, mx, my, kPatronLink);
+			PatronHotspot(p, hx, ly, 20, hostPatron, mx, my, kPatronLink);
 		}
 		else cell(1, g.friendHost ? g.host + Tr("  (friend)") : g.host, g.friendHost ? pal::redText : pal::textDim);
 		char watching[48];
@@ -534,124 +591,132 @@ void PaintList(Painter &p, const State &st)
 		const std::string mods = ModsColumn(st, g, color);
 		cell(4, mods, color);
 	}
-	PaintLobbyDetail(p, st, vis);
+	PaintLobbyDetail(p, st, vis, l);
 }
 
 void PaintRanked(Painter &p, const State &st)
 {
 	const int mx = st.mouseX, my = st.mouseY;
-	PaintCard(p, 16, 132, 380, 430);
-	p.Fill(150, 184, 112, 112, pal::edge);
-	p.Frame(150, 184, 112, 112, pal::lineStrong);
-	p.Frame(156, 190, 100, 100, pal::lineStrong);
+	const LobbyLayout l = LobbyLayoutFor(st.viewW, st.viewH);
+	const int m = l.margin, top = l.top, h = l.h - m - top;
+	const int cw = 460;
+	PaintGlassCard(p, m, top, cw, h);
+	const int emblem = 140, ex = m + (cw - emblem) / 2, ey = top + std::min(80, h / 8);
+	p.Fill(ex, ey, emblem, emblem, pal::edge);
+	p.Frame(ex, ey, emblem, emblem, pal::lineStrong);
+	p.Frame(ex + 8, ey + 8, emblem - 16, emblem - 16, pal::lineStrong);
 	p.Font(2);
-	p.Text(150, 184, 112, 112, "LEAGUES", pal::redText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	p.Text(ex, ey, emblem, emblem, "LEAGUES", pal::redText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	int y = ey + emblem + 36;
 	p.Font(2);
-	p.Text(16, 322, 380, 40, "Coming soon", pal::redText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	p.Text(m, y, cw, 44, "Coming soon", pal::redText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	y += 48;
 	p.Font(1);
-	p.Text(16, 364, 380, 30, "Ranked play", pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-	p.Fill(176, 404, 60, 1, pal::redText);
-	p.Font(3);
-	p.Text(40, 420, 332, 96, "Elo rating, leagues and seasons will arrive in a future update.", pal::textDim, DT_CENTER | DT_WORDBREAK);
-	const int lx = 412, lw = kW - lx - 16;
-	p.Fill(lx, 132, lw, 430, pal::bg);
-	p.Frame(lx, 132, lw, 430, pal::lineStrong);
-	p.Font(1);
-	p.Text(lx + 12, 138, lw - 160, 26, "Season ranking", pal::redText);
-	p.Font(3);
-	p.Fill(lx + lw - 136, 142, 124, 22, pal::edge);
-	p.Frame(lx + lw - 136, 142, 124, 22, pal::lineStrong);
-	p.Text(lx + lw - 136, 142, 124, 22, "PREVIEW", pal::redText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	p.Text(m, y, cw, 30, "Ranked play", pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	y += 42;
+	p.Fill(m + (cw - 72) / 2, y, 72, 1, pal::redText);
+	y += 20;
+	p.Font(0);
+	p.Text(m + 32, y, cw - 64, 110, "Elo rating, leagues and seasons will arrive in a future update.", pal::textDim, DT_CENTER | DT_WORDBREAK);
+
+	const int lx = m + cw + kCardGap, lw = l.w - m - lx;
+	PaintGlassCard(p, lx, top, lw, h);
+	p.Font(2);
+	p.Text(lx + 24, top + 16, lw - 220, 40, "Season ranking", pal::redText);
+	p.Font(4);
+	p.Fill(lx + lw - 24 - 150, top + 24, 150, 28, pal::edge);
+	p.Frame(lx + lw - 24 - 150, top + 24, 150, 28, pal::lineStrong);
+	p.Text(lx + lw - 24 - 150, top + 24, 150, 28, "PREVIEW", pal::redText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 	struct Row {
 		const char *name, *league;
 		int elo, wins, losses;
 	} rows[] = {{"Scipio", "Caesar", 2210, 88, 21}, {"Vercingetorix", "Caesar", 2154, 75, 30}, {"Hannibal", "Praetorian", 1987, 64, 33},
 		{"Boudica", "Praetorian", 1902, 51, 29}, {"Spartacus", "Praetorian", 1866, 70, 52}, {"Cleopatra", "Gold I", 1790, 40, 25},
 		{"Marco", "Gold I", 1754, 38, 30}, {"Livia", "Gold II", 1702, 33, 28}};
-	const COLORREF dimText = pal::caption;
-	p.Text(lx + 14, 176, 40, 20, "#", pal::textDim);
-	p.Text(lx + 54, 176, 200, 20, "Player", pal::textDim);
-	p.Text(lx + 262, 176, 110, 20, "League", pal::textDim);
-	p.Text(lx + 382, 176, 80, 20, "Elo", pal::textDim);
-	p.Text(lx + 462, 176, 100, 20, "W-L", pal::textDim);
-	p.Fill(lx + 8, 198, lw - 16, 1, pal::lineStrong);
-	int y = 204;
-	for (int i = 0; i < 8; i++, y += 36) {
-		if (i % 2 == 0) p.Fill(lx + 8, y, lw - 16, 34, pal::raised);
-		p.Text(lx + 14, y, 40, 34, std::to_string(i + 1), dimText);
-		p.Text(lx + 54, y, 200, 34, rows[i].name, dimText);
-		p.Text(lx + 262, y, 110, 34, rows[i].league, dimText);
-		p.Text(lx + 382, y, 80, 34, std::to_string(rows[i].elo), dimText);
-		p.Text(lx + 462, y, 100, 34, std::to_string(rows[i].wins) + "-" + std::to_string(rows[i].losses), dimText);
+	const int innerX = lx + 24, innerW = lw - 48;
+	const int colRank = innerX + 12, colName = innerX + 72, colLeague = innerX + innerW * 45 / 100, colElo = innerX + innerW * 68 / 100,
+			  colWl = innerX + innerW * 82 / 100;
+	const int headY = top + 76, rowH = l.roomy ? 52 : 46;
+	p.TextCaps(colRank, headY, 50, 28, "#", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
+	p.TextCaps(colName, headY, colLeague - colName - 12, 28, "Player", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
+	p.TextCaps(colLeague, headY, colElo - colLeague - 12, 28, "League", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
+	p.TextCaps(colElo, headY, colWl - colElo - 12, 28, "Elo", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
+	p.TextCaps(colWl, headY, innerX + innerW - colWl, 28, "W-L", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
+	p.Fill(innerX, headY + 34, innerW, 1, pal::lineStrong);
+	const int backH = 48, backY = top + h - 24 - backH;
+	y = headY + 42;
+	p.Font(0);
+	for (int i = 0; i < 8 && y + rowH <= backY - 16; i++, y += rowH) {
+		if (i % 2 == 0) p.Fill(innerX, y, innerW, rowH - 2, pal::raised);
+		p.Text(colRank, y, 50, rowH - 2, std::to_string(i + 1), pal::caption);
+		p.Text(colName, y, colLeague - colName - 12, rowH - 2, rows[i].name, pal::caption);
+		p.Text(colLeague, y, colElo - colLeague - 12, rowH - 2, rows[i].league, pal::caption);
+		p.Text(colElo, y, colWl - colElo - 12, rowH - 2, std::to_string(rows[i].elo), pal::caption);
+		p.Text(colWl, y, innerX + innerW - colWl, rowH - 2, std::to_string(rows[i].wins) + "-" + std::to_string(rows[i].losses), pal::caption);
 	}
-	p.Button(lx + lw - 180, 132 + 430 - 42, 168, 32, "Back to list", kListView, 0, mx, my);
+	const int backW = 220;
+	p.Button(lx + lw - 24 - backW, backY, backW, backH, "Back to list", kListView, 0, mx, my);
 }
 
 void PaintCreate(Painter &p, const State &st)
 {
 	const int mx = st.mouseX, my = st.mouseY;
-	const int x = 190, w = 620, y0 = 134, h = 478;
-	PaintCard(p, x, y0, w, h);
-	const int lx = x + 24, fx = x + 170, fw = w - 194;
-	int y = y0 + 22;
+	const LobbyLayout l = LobbyLayoutFor(st.viewW, st.viewH);
+	const int w = std::min(l.w - 2 * l.margin, 820), x = (l.w - w) / 2, y0 = l.top, h = l.h - l.margin - l.top;
+	PaintGlassCard(p, x, y0, w, h);
+	const int lx = x + 32, fx = x + 230, fw = w - 262, fieldH = 40, step = 52;
+	int y = y0 + 28;
 	p.Font(0);
-	p.Text(lx, y, 140, 30, "Name", pal::textDim);
-	PaintField(p, st, fx, y, fw, 30, st.nameInput, Tr("Game of ") + st.player, st.focus == kNameField, kFieldName);
-	y += 42;
-	p.Text(lx, y, 140, 30, "Players", pal::textDim);
-	Combo(p, st, fx, y, 200, 30, std::to_string(st.createPlayers) + Tr(" players"), kDropPlayers, 0, true);
-	y += 42;
+	p.Text(lx, y, 190, fieldH, "Name", pal::textDim);
+	PaintField(p, st, fx, y, fw, fieldH, st.nameInput, Tr("Game of ") + st.player, st.focus == kNameField, kFieldName);
+	y += step;
+	p.Text(lx, y, 190, fieldH, "Players", pal::textDim);
+	Combo(p, st, fx, y, 240, fieldH, std::to_string(st.createPlayers) + Tr(" players"), kDropPlayers, 0, true);
+	y += step;
 	static const char *const kVisibility[] = {"Public", "Password protected", "Friends only"};
-	p.Text(lx, y, 140, 30, "Visibility", pal::textDim);
-	Combo(p, st, fx, y, fw, 30, kVisibility[st.createVisibility % 3], kDropVisibility, 0, true);
-	y += 42;
+	p.Text(lx, y, 190, fieldH, "Visibility", pal::textDim);
+	Combo(p, st, fx, y, fw, fieldH, kVisibility[st.createVisibility % 3], kDropVisibility, 0, true);
+	y += step;
 	if (st.createVisibility == 1) {
 		p.Font(0);
-		p.Text(lx, y, 140, 30, "Password", pal::textDim);
-		PaintField(p, st, fx, y, fw - 98, 30, st.passInput, "Room password", st.focus == kPassField, kFieldPass, !st.passShow);
-		p.Font(3);
-		p.Button(fx + fw - 90, y, 90, 30, st.passShow ? "Hide" : "Show", kPassShow, 0, mx, my);
+		p.Text(lx, y, 190, fieldH, "Password", pal::textDim);
+		PaintField(p, st, fx, y, fw - 112, fieldH, st.passInput, "Room password", st.focus == kPassField, kFieldPass, !st.passShow);
+		p.Button(fx + fw - 100, y, 100, fieldH, st.passShow ? "Hide" : "Show", kPassShow, 0, mx, my);
 		p.Font(0);
-		y += 42;
+		y += step;
 	}
 	p.Font(0);
-	p.Text(lx, y, 140, 30, "Game", pal::textDim);
-	Combo(p, st, fx, y, fw, 30, st.createSave >= 0 && st.createSave < static_cast<int>(st.saves.size()) ? SaveLabel(st.saves[st.createSave]) : "New game",
+	p.Text(lx, y, 190, fieldH, "Game", pal::textDim);
+	Combo(p, st, fx, y, fw, fieldH, st.createSave >= 0 && st.createSave < static_cast<int>(st.saves.size()) ? SaveLabel(st.saves[st.createSave]) : "New game",
 		kDropSaveGame, 0, !st.saves.empty());
-	y += 42;
+	y += step;
 	p.Font(0);
-	p.Text(lx, y, 140, 30, "Content", pal::textDim);
-	Combo(p, st, fx, y, fw, 30, ModsProfileLabel(st.createProfile), kDropProfile, 0, st.profiles.size() > 1);
-	y += 38;
+	p.Text(lx, y, 190, fieldH, "Content", pal::textDim);
+	Combo(p, st, fx, y, fw, fieldH, ModsProfileLabel(st.createProfile), kDropProfile, 0, st.profiles.size() > 1);
+	y += fieldH + 8;
 	{
 		const std::vector<ListLine> lines = BuildModLines(st.createProfileInfo.rows, "None: the original game.");
-		const int rows = std::min<int>(6, static_cast<int>(lines.size()));
+		const int rowH = 26, rows = std::min<int>(6, static_cast<int>(lines.size()));
 		g_createModsGeomOut = ListGeom();
 		ListState ls = st.createModsList;
-		ListPaint(p, fx, y, fw, rows * 22 + 8, lines, ls, g_createModsGeomOut, 3, 22);
-		y += rows * 22 + 14;
+		ListPaint(p, fx, y, fw, rows * rowH + 8, lines, ls, g_createModsGeomOut, 3, rowH);
+		y += rows * rowH + 16;
 	}
 	if (st.createSave >= 0 && st.createSave < static_cast<int>(st.saves.size())) {
 		const ModNeeds &needs = CreateSaveNeeds(st.saves[st.createSave].vfsPath, st.createProfile);
 		if (!needs.Satisfied()) {
 			y += 4;
-			p.Text(fx + 4, y, fw, 20, Tr("This game needs: ") + ShortList(needs.Names(true), 2), pal::bad, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-			y += 20;
-			p.Text(fx + 4, y, fw, 20, needs.AllInstalled() ? "They are activated when you create it (the game must restart)." : "You don't have it installed: Options > Content > Browse content.", pal::textDim,
+			p.Font(3);
+			p.Text(fx + 4, y, fw, 24, Tr("This game needs: ") + ShortList(needs.Names(true), 2), pal::bad, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			y += 24;
+			p.Text(fx + 4, y, fw, 24, needs.AllInstalled() ? "They are activated when you create it (the game must restart)." : "You don't have it installed: Options > Content > Browse content.", pal::textDim,
 				DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-			y += 20;
+			y += 24;
 		}
 	}
 	const bool restart = st.createProfile != ModsMountedProfile().name;
-	const int by = y0 + h - 60;
-	const int bw = 320;
-	p.Button(x + (w - bw) / 2, by, bw, 42, restart ? "Restart with this content" : "Create room", kCreateOk, 0, mx, my,
-		st.ready || restart, true);
-}
-
-void PaintChat(Painter &p, const State &st)
-{
-	p.Button(kW - 16 - 140, kH - 16 - 44, 140, 44, "Back", kBack, 0, st.mouseX, st.mouseY);
+	const int bw = 360, bh = 52, by = std::max(y + 16, y0 + h - 28 - bh);
+	p.Button(x + (w - bw) / 2, by, bw, bh, restart ? "Restart with this content" : "Create room", kCreateOk, 0, mx, my, st.ready || restart, true);
 }
 
 ListGeom g_syncGeomOut;
@@ -666,7 +731,7 @@ void PaintSyncConfirm(Painter &p, const State &st)
 	bool updatable = false;
 	for (const OnlineMod &m : missing) updatable = updatable || OlderInstalled(st, m) != nullptr;
 	const bool watch = st.syncWatch;
-	const Dialog d = DialogBegin(p, kW, kH, updatable ? 760 : 560, updatable ? 400 : 340, watch ? "This game uses other content" : "This room uses other content");
+	const Dialog d = DialogBegin(p, st.viewW, st.viewH, updatable ? 760 : 560, updatable ? 400 : 340, watch ? "This game uses other content" : "This room uses other content");
 	const std::vector<ListLine> lines = OnlineLobbyLines(st, g, true);
 	g_syncGeomOut = ListGeom();
 	{
@@ -701,7 +766,7 @@ void PaintSyncProgress(Painter &p, const State &st)
 	const int mx = st.mouseX, my = st.mouseY;
 	const char *title = st.syncPhase == 1 ? (st.syncWatch ? "Entering the spectator room" : "Joining the room") : st.syncPhase == 2 ? "Receiving the room's content"
 		: st.syncPhase == 3 ? "Checking the content" : "Failed";
-	const Dialog d = DialogBegin(p, kW, kH, 520, 200, title, st.syncPhase == 4 ? pal::bad : pal::redText);
+	const Dialog d = DialogBegin(p, st.viewW, st.viewH, 520, 200, title, st.syncPhase == 4 ? pal::bad : pal::redText);
 	p.Font(0);
 	if (st.syncPhase == 4) {
 		p.TextWrapped(d.x + 24, d.y + 60, d.w - 48, 70, st.syncError, pal::text);
@@ -746,7 +811,7 @@ void PaintRejoin(Painter &p, const State &st)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const bool failed = RejoinClientFailed();
-	const Dialog d = DialogBegin(p, kW, kH, 560, 230, failed ? "Could not return" : "Returning to the game", failed ? pal::bad : pal::redText);
+	const Dialog d = DialogBegin(p, st.viewW, st.viewH, 560, 230, failed ? "Could not return" : "Returning to the game", failed ? pal::bad : pal::redText);
 	p.Font(0);
 	p.TextWrapped(d.x + 24, d.y + 62, d.w - 48, 80, RejoinClientStatus(), pal::text);
 	if (failed) {
@@ -762,7 +827,7 @@ void PaintRecover(Painter &p, const State &st)
 	const int mx = st.mouseX, my = st.mouseY;
 	const RecoverInfo &r = st.recover;
 	const bool waiting = !st.recoverAsk;
-	const Dialog d = DialogBegin(p, kW, kH, 560, 250, waiting ? "Waiting for the host" : "Your last online game");
+	const Dialog d = DialogBegin(p, st.viewW, st.viewH, 560, 250, waiting ? "Waiting for the host" : "Your last online game");
 	p.Font(0);
 	std::string text;
 	if (waiting) {
@@ -794,7 +859,7 @@ void PaintSearch(Painter &p, const State &st)
 	char t[32];
 	sprintf_s(t, "%lu:%02lu", secs / 60, secs % 60);
 	if (!st.found) {
-		const Dialog d = DialogBegin(p, kW, kH, 460, 190, Tr("Searching ") + st.searchMode);
+		const Dialog d = DialogBegin(p, st.viewW, st.viewH, 460, 190, Tr("Searching ") + st.searchMode);
 		p.Font(0);
 		p.Text(d.BodyX(), d.y + 62, d.BodyW(), 26, std::string("Time: ") + t + Tr("   ·   preview"), pal::text);
 		PaintBusyBar(p, d.BodyX(), d.y + 100, d.BodyW(), 8, GetTickCount());
@@ -802,7 +867,7 @@ void PaintSearch(Painter &p, const State &st)
 	}
 	else {
 		const int left = 10 - static_cast<int>((GetTickCount() - st.foundAt) / 1000);
-		const Dialog d = DialogBegin(p, kW, kH, 460, 190, "Match found (example)");
+		const Dialog d = DialogBegin(p, st.viewW, st.viewH, 460, 190, "Match found (example)");
 		p.Font(0);
 		p.Text(d.BodyX(), d.y + 58, d.BodyW(), 24, "1v1 vs. Lucius (Gold I, 1,702)  ·  Numantia", pal::text);
 		p.Text(d.BodyX(), d.y + 84, d.BodyW(), 22, Tr("Accept in ") + std::to_string(std::max(0, left)) + " s", pal::textDim);

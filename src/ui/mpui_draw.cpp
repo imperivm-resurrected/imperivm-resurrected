@@ -320,50 +320,18 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 		}
 		st = g_s;
 	}
-	// The room covers the whole screen; the lobby and its dialogs stay a window over the game's menu.
-	const bool fullScreen = st.game.active;
-	float s = std::max(0.6f, std::min(1.6f, std::min((w - 16) / static_cast<float>(kW), (h - 16) / static_cast<float>(kH))));
-	st.viewW = kW;
-	st.viewH = kH;
-	if (fullScreen) {
-		const ScreenView v = ScreenViewFor(w, h);
-		s = v.s;
-		st.viewW = v.w;
-		st.viewH = v.h;
-	}
-	bool menuOnTop = false;
+	// Every screen of the menu, the lobby as much as the room, covers the whole screen over the engraved map.
+	const ScreenView view = ScreenViewFor(w, h);
+	st.viewW = view.w;
+	st.viewH = view.h;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
-		g_s.uiScale = s;
+		g_s.uiScale = view.s;
 		g_s.viewW = st.viewW;
 		g_s.viewH = st.viewH;
-		menuOnTop = MainMenuOnTop();
-	}
-	// The closed room stays in the frame until the game paints again, and the lobby under this list keeps the cover on from then on:
-	// a frame saved in between would be the backdrop of every room that follows.
-	const bool roomInFrame = st.gameWasActive || st.gameClosedAt;
-	const bool cover = st.game.active || st.connecting || roomInFrame || SpectatorCovering() || GetTickCount() - g_flow.lastLobbyUpdate < 1000;
-	const size_t n = static_cast<size_t>(w) * h;
-	static bool triedCache = false;
-	// The room's canvas covers every pixel, so only the lobby's window needs what lies under it.
-	if (!fullScreen) {
-		if (cover && g_bg.size() != n && !triedCache) {
-			triedCache = true;
-			LoadPersistedBackground(w, h);
-		}
-		if (cover && g_bgW == w && g_bgH == h && g_bg.size() == n) {
-			std::copy(g_bg.begin(), g_bg.end(), buf);
-		}
-		else {
-			for (size_t i = 0; i < n; i++) {
-				buf[i] = cover ? 0xff100c08u : 0xff000000u | ((buf[i] >> 1) & 0x7f7f7f);
-			}
-			if (!cover && menuOnTop) SaveBackground(buf, w, h, true);
-		}
 	}
 	PanelRender r(g_canvas, buf, w, h);
-	if (!r.Begin(st.viewW, st.viewH, 16, false, s)) return;
-	if (fullScreen && !PaintBackdrop(r.canvas)) r.p.Fill(0, 0, st.viewW, st.viewH, pal::bg);
+	if (!BeginFullScreen(r, view)) return;
 	r.Focus(st.tabAction, st.tabArg);
 	if (st.mouseDown || GetTickCount() - st.pressTime < 150) {
 		r.p.pressAction = st.pressAction;
@@ -376,7 +344,7 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 	PaintScreen(r.p, st);
 	PaintPatronTip(r.p, st.viewW, st.viewH);
 	WakeGameThread();
-	r.End(fullScreen ? 255 : 250);
+	r.End(255);
 	std::lock_guard<std::mutex> lock(g_lock);
 	g_s.hits = std::move(r.hits);
 	g_s.syncGeom = g_syncGeomOut;

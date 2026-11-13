@@ -50,13 +50,13 @@ struct PaintOut {
 
 enum Action { kActNone = 0, kActJump, kActPause, kActClose };
 
-// The screen is as tall as the frame and as wide as its shape allows, with the game's picture showing at the sides.
+// The screen fills the frame (ScreenViewFor); the roll is laid out for a frame of this height, so its letters keep their size.
 constexpr int kScreenH = 768;
 
+// The pixels of a unit of the roll.
 float ScreenScale(int frameW, int frameH);
-int PanelWidth(int frameW, int frameH);
 // Which line of the index the text is at.
 int CurrentEntry(const std::vector<double> &entries, double scroll, double period, int viewport);
-void PaintCreditsScreen(ui::Painter &p, int panelW, const View &v, PaintOut &out);
+void PaintCreditsScreen(ui::Painter &p, int viewW, int viewH, float rollScale, const View &v, PaintOut &out);
 
 }

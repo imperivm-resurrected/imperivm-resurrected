@@ -17,6 +17,7 @@
 #include "game/credits.h"
 #include "net/patrons.h"
 #include "ui/creditsui_view.h"
+#include "ui/fullscreen.h"
 #include "ui/modui.h"
 #include "ui/widgets.h"
 
@@ -166,15 +167,6 @@ void Close()
 	g_s.closedAt = 0;
 }
 
-// The game's picture stays at the sides, darker, behind the screen.
-void Darken(uint32_t *buf, int w, int h)
-{
-	for (size_t i = 0, n = static_cast<size_t>(w) * h; i < n; i++) {
-		const uint32_t c = buf[i];
-		buf[i] = 0xff000000u | (((c >> 1) & 0x7f7f7f) - ((c >> 3) & 0x1f1f1f));
-	}
-}
-
 }
 
 void CreditsUiGameTick()
@@ -262,13 +254,13 @@ void CreditsUiDraw(uint32_t *buf, int w, int h)
 		previous = g_s.hits;
 		mouseDown = g_s.mouseDown;
 	}
-	Darken(buf, w, h);
 	const float s = ScreenScale(w, h);
+	const ScreenView screen = ScreenViewFor(w, h);
 	PanelRender r(g_canvas, buf, w, h);
-	if (!r.Begin(PanelWidth(w, h), kScreenH, 0, false, s)) return;
+	if (!BeginFullScreen(r, screen)) return;
 	r.Press(previous, mouseDown, {view.mouseX, view.mouseY});
 	PaintOut out;
-	PaintCreditsScreen(r.p, PanelWidth(w, h), view, out);
+	PaintCreditsScreen(r.p, screen.w, screen.h, s, view, out);
 	r.End();
 	std::lock_guard<std::mutex> lock(g_lock);
 	g_s.hits = std::move(r.hits);

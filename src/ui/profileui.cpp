@@ -17,6 +17,7 @@
 #include "game/profiles.h"
 #include "net/patrons.h"
 #include "net/steamnet.h"
+#include "ui/fullscreen.h"
 #include "ui/modui.h"
 #include "ui/patronui.h"
 #include "ui/profileui_view.h"
@@ -120,9 +121,9 @@ void KeepVisible(View &v)
 	const int count = static_cast<int>(v.cards.size());
 	if (v.selected >= 0) {
 		if (v.selected < v.scroll) v.scroll = v.selected;
-		if (v.selected >= v.scroll + kListRows) v.scroll = v.selected - kListRows + 1;
+		if (v.selected >= v.scroll + ListRows(v)) v.scroll = v.selected - ListRows(v) + 1;
 	}
-	v.scroll = std::max(0, std::min(v.scroll, std::max(0, count - kListRows)));
+	v.scroll = std::max(0, std::min(v.scroll, std::max(0, count - ListRows(v))));
 }
 
 // On the game thread: reads the game's dialog and the files of the profiles that changed.
@@ -337,7 +338,7 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, Command &cmd)
 		}
 		else {
 			v.scroll -= steps;
-			v.scroll = std::max(0, std::min(v.scroll, std::max(0, static_cast<int>(v.cards.size()) - kListRows)));
+			v.scroll = std::max(0, std::min(v.scroll, std::max(0, static_cast<int>(v.cards.size()) - ListRows(v))));
 		}
 		return true;
 	}
@@ -401,13 +402,23 @@ void ProfileUiDraw(uint32_t *buf, int w, int h)
 		previous = g_s.hits;
 		mouseDown = g_s.mouseDown;
 	}
+	const ScreenView screen = ScreenViewFor(w, h);
+	view.screenW = screen.w;
+	view.screenH = screen.h;
 	PanelRender r(g_canvas, buf, w, h);
-	if (!r.Begin(kScreenW, kScreenH, 16)) return;
+	if (!BeginFullScreen(r, screen)) return;
 	r.Press(previous, mouseDown, {view.mouseX, view.mouseY});
 	PaintProfileScreen(r.p, view);
 	r.End();
 	std::lock_guard<std::mutex> lock(g_lock);
 	g_s.hits = std::move(r.hits);
+	View &v = g_s.view;
+	if (v.screenW != screen.w || v.screenH != screen.h) {
+		v.screenW = screen.w;
+		v.screenH = screen.h;
+		KeepVisible(v);
+		v.historyScroll = std::max(0, std::min(v.historyScroll, HistoryMaxScroll(v)));
+	}
 }
 
 bool ProfileUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)

@@ -4,9 +4,12 @@
 #include "ui/optionsui_view.h"
 
 #include <algorithm>
+#include <string>
+#include <vector>
 
 #include "core/logcore.h"
 #include "core/version.h"
+#include "ui/fullscreen.h"
 #include "ui/widgets.h"
 
 using namespace ui;
@@ -119,7 +122,19 @@ COLORREF RowText(const Row &r) { return r.enabled || r.kind == kRowToggleSlider 
 constexpr int kNavX = 12, kNavW = 208, kNavH = 56, kNavTop = 92, kNavRight = kNavX + kNavW, kNavIcon = 30;
 constexpr int kContentX = 240, kContentRight = kScreenW - 18, kContentTop = 132;
 constexpr int kFooterTop = 622, kFooterButtonsY = 632, kFooterButtonH = 36;
-constexpr int kRowH = 40, kCardHead = 30, kCardGap = 12, kCardPad = 14, kComboW = 180, kSliderW = 150, kValueW = 44;
+
+// The sizes of the cards and their rows: the window's, and the larger ones of the full screen.
+struct Metrics {
+	int rowH, cardHead, cardPad, cardGap, comboW, controlH, sliderW, valueW, segW, actionW;
+	// Where the label goes in its row, alone or over its hint, and the hint under it.
+	int labelY, labelH, hintLabelY, hintY, hintH;
+	int badgeW, badgeH, titleY, titleH;
+	bool screen;
+};
+constexpr Metrics kWindowMetrics = {40, 30, 14, 12, 180, 28, 150, 44, 128, 130, 8, 22, 2, 22, 16, 54, 16, 7, 18, false};
+constexpr Metrics kScreenMetrics = {56, 46, 24, 24, 260, 38, 240, 64, 160, 170, 16, 24, 6, 30, 20, 76, 22, 16, 22, true};
+// The window's two columns share this width; a page's leftW is the left one's part of it.
+constexpr int kColumnsW = kContentRight - kContentX - kWindowMetrics.cardGap - 8;
 
 void PaintNavItem(Painter &p, int y, const std::string &title, const std::string &subtitle, Ornament icon, bool active, int action, int arg, int mx, int my)
 {
@@ -140,65 +155,67 @@ void PaintNavItem(Painter &p, int y, const std::string &title, const std::string
 	p.AddHit(kNavX, y, kNavW, kNavH, action, arg);
 }
 
-void PaintRowLabel(Painter &p, const Row &r, int x, int y, int w)
+void PaintRowLabel(Painter &p, const Metrics &m, const Row &r, int x, int y, int w)
 {
 	const bool hint = !r.hint.empty();
 	p.Font(0);
-	const int labelY = hint ? y + 2 : y + 8;
-	p.Text(x, labelY, w, 22, r.label, RowText(r), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	const int labelY = y + (hint ? m.hintLabelY : m.labelY);
+	p.Text(x, labelY, w, m.labelH, r.label, RowText(r), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	if (r.restart) {
-		const int used = std::min(w - 62, p.TextWidth(r.label));
-		PaintBadge(p, x + used + 8, labelY + 3, 54, 16, "Restarts", pal::hairline, pal::redText);
+		const int used = std::min(w - m.badgeW - 8, p.TextWidth(r.label));
+		PaintBadge(p, x + used + 8, labelY + (m.labelH - m.badgeH) / 2, m.badgeW, m.badgeH, "Restarts", pal::hairline, pal::redText);
 	}
 	if (hint) {
 		p.Font(3);
-		p.Text(x, y + 22, w, 16, r.hint, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(x, y + m.hintY, w, m.hintH, r.hint, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
 }
 
-void PaintSliderControl(Painter &p, const Row &r, const View &v, int x, int y, int w)
+void PaintSliderControl(Painter &p, const Metrics &m, const Row &r, const View &v, int x, int y, int w)
 {
+	const int cy = y + m.rowH / 2;
 	const float f = r.max > r.min ? static_cast<float>(r.value - r.min) / (r.max - r.min) : 0.0f;
-	const bool hot = r.enabled && (v.dragId == r.id || p.Hover(x - kSliderMargin, y + 4, w + kSliderMargin * 2, kRowH - 8, v.mouseX, v.mouseY));
-	PaintSlider(p, x, y + 10, w, 20, f, r.enabled, hot);
+	const bool hot = r.enabled && (v.dragId == r.id || p.Hover(x - kSliderMargin, y + 4, w + kSliderMargin * 2, m.rowH - 8, v.mouseX, v.mouseY));
+	PaintSlider(p, x, cy - 10, w, 20, f, r.enabled, hot);
 	p.Font(3);
-	p.Text(x + w + 8, y + 10, kValueW - 8, 20, std::to_string(r.shown >= 0 ? r.shown : r.value) + " %", r.enabled ? pal::text : pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
-	if (r.enabled) p.AddHit(x - kSliderMargin, y + 4, w + kSliderMargin * 2, kRowH - 8, kActSlider, r.id);
+	p.Text(x + w + 8, cy - 10, m.valueW - 8, 20, std::to_string(r.shown >= 0 ? r.shown : r.value) + " %", r.enabled ? pal::text : pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+	if (r.enabled) p.AddHit(x - kSliderMargin, y + 4, w + kSliderMargin * 2, m.rowH - 8, kActSlider, r.id);
 }
 
-void PaintRow(Painter &p, const Row &r, const View &v, int x, int y, int w, RECT &dropAnchor, std::vector<std::string> &dropItems, int &dropSel)
+void PaintRow(Painter &p, const Metrics &m, const Row &r, const View &v, int x, int y, int w, RECT &dropAnchor, std::vector<std::string> &dropItems, int &dropSel)
 {
-	const int right = x + w;
+	const int right = x + w, cy = y + m.rowH / 2, toggleY = cy - kBigToggleH / 2, controlY = cy - m.controlH / 2;
 	switch (r.kind) {
 	case kRowToggle: {
 		const int tx = right - kBigToggleW;
-		const bool hot = p.Hover(tx, y + 9, kBigToggleW, kBigToggleH, v.mouseX, v.mouseY);
-		PaintRowLabel(p, r, x, y, w - kBigToggleW - 12);
-		PaintBigToggle(p, tx, y + 9, r.on, r.enabled, hot);
-		if (r.enabled) p.AddHit(tx, y + 6, kBigToggleW, kBigToggleH + 6, kActToggle, r.id);
+		const bool hot = p.Hover(tx, toggleY, kBigToggleW, kBigToggleH, v.mouseX, v.mouseY);
+		PaintRowLabel(p, m, r, x, y, w - kBigToggleW - 12);
+		PaintBigToggle(p, tx, toggleY, r.on, r.enabled, hot);
+		if (r.enabled) p.AddHit(tx, toggleY - 3, kBigToggleW, kBigToggleH + 6, kActToggle, r.id);
 		break;
 	}
 	case kRowSlider: {
-		const int sx = right - kValueW - kSliderW;
-		PaintRowLabel(p, r, x, y, sx - x - kSliderMargin * 2);
-		PaintSliderControl(p, r, v, sx, y, kSliderW);
+		const int sx = right - m.valueW - m.sliderW;
+		PaintRowLabel(p, m, r, x, y, sx - x - kSliderMargin * 2);
+		PaintSliderControl(p, m, r, v, sx, y, m.sliderW);
 		break;
 	}
 	case kRowToggleSlider: {
-		const int sx = right - kValueW - kSliderW;
+		const int sx = right - m.valueW - m.sliderW;
 		const int tx = sx - kSliderMargin * 2 - kBigToggleW;
-		const bool hot = p.Hover(tx, y + 9, kBigToggleW, kBigToggleH, v.mouseX, v.mouseY);
-		PaintRowLabel(p, r, x, y, tx - x - 8);
-		PaintBigToggle(p, tx, y + 9, r.on, true, hot);
-		p.AddHit(tx, y + 6, kBigToggleW, kBigToggleH + 6, kActToggle, r.toggleId);
-		PaintSliderControl(p, r, v, sx, y, kSliderW);
+		const bool hot = p.Hover(tx, toggleY, kBigToggleW, kBigToggleH, v.mouseX, v.mouseY);
+		PaintRowLabel(p, m, r, x, y, tx - x - 8);
+		PaintBigToggle(p, tx, toggleY, r.on, true, hot);
+		p.AddHit(tx, toggleY - 3, kBigToggleW, kBigToggleH + 6, kActToggle, r.toggleId);
+		PaintSliderControl(p, m, r, v, sx, y, m.sliderW);
 		break;
 	}
 	case kRowCombo: {
-		const int cx = right - kComboW;
-		PaintRowLabel(p, r, x, y, w - kComboW - 10);
+		const int cx = right - m.comboW;
+		PaintRowLabel(p, m, r, x, y, w - m.comboW - 10);
 		const std::string text = r.selected >= 0 && r.selected < static_cast<int>(r.items.size()) ? r.items[r.selected] : std::string("—");
-		PaintCombo(p, cx, y + 6, kComboW, 28, text, v.dropId == r.id, r.enabled, v.mouseX, v.mouseY, kActCombo, r.id, v.dropId == r.id ? &dropAnchor : nullptr);
+		PaintCombo(p, cx, controlY, m.comboW, m.controlH, text, v.dropId == r.id, r.enabled, v.mouseX, v.mouseY, kActCombo, r.id,
+			v.dropId == r.id ? &dropAnchor : nullptr);
 		if (v.dropId == r.id) {
 			dropItems = r.items;
 			dropSel = r.selected;
@@ -206,52 +223,59 @@ void PaintRow(Painter &p, const Row &r, const View &v, int x, int y, int w, RECT
 		break;
 	}
 	case kRowSegment: {
-		const int segW = 128, sx = right - segW * static_cast<int>(r.items.size());
-		PaintRowLabel(p, r, x, y, sx - x - 8);
+		const int segW = m.segW, segH = m.controlH, sx = right - segW * static_cast<int>(r.items.size());
+		PaintRowLabel(p, m, r, x, y, sx - x - 8);
 		for (size_t i = 0; i < r.items.size(); i++) {
 			const int bx = sx + static_cast<int>(i) * segW;
 			const bool on = static_cast<int>(i) == r.selected;
-			const bool hot = !on && p.Hover(bx, y + 6, segW, 28, v.mouseX, v.mouseY);
-			if (on) p.Fill(bx, y + 6, segW, 28, pal::text);
-			else p.Fill(bx, y + 6, segW, 28, hot ? pal::button : pal::bg);
-			p.Frame(bx, y + 6, segW, 28, on ? pal::text : pal::edge);
+			const bool hot = !on && p.Hover(bx, controlY, segW, segH, v.mouseX, v.mouseY);
+			if (on) p.Fill(bx, controlY, segW, segH, pal::text);
+			else p.Fill(bx, controlY, segW, segH, hot ? pal::button : pal::bg);
+			p.Frame(bx, controlY, segW, segH, on ? pal::text : pal::edge);
 			p.Font(0);
-			p.Text(bx, y + 6, segW, 28, r.items[i], on ? pal::onLight : pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-			if (!on) p.AddHit(bx, y + 6, segW, 28, kActSegment, r.id << 4 | static_cast<int>(i));
+			p.Text(bx, controlY, segW, segH, r.items[i], on ? pal::onLight : pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			if (!on) p.AddHit(bx, controlY, segW, segH, kActSegment, r.id << 4 | static_cast<int>(i));
 		}
 		break;
 	}
 	case kRowAction: {
-		const int bw = 130, bx = right - bw;
-		PaintRowLabel(p, r, x, y, bx - x - 8);
-		p.Button(bx, y + 6, bw, 28, r.action, kActRow, r.id, v.mouseX, v.mouseY, r.enabled, false, 0);
+		const int bw = m.actionW, bx = right - bw;
+		PaintRowLabel(p, m, r, x, y, bx - x - 8);
+		p.Button(bx, controlY, bw, m.controlH, r.action, kActRow, r.id, v.mouseX, v.mouseY, r.enabled, false, 0);
 		break;
 	}
 	case kRowInfo: {
 		p.Font(0);
 		const int textW = std::min(w / 2, p.TextWidth(r.text) + 4);
 		int tx = right - textW;
-		p.Text(tx, y + 8, textW, 22, r.text, pal::text, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+		p.Text(tx, y + m.labelY, textW, m.labelH, r.text, pal::text, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 		if (!r.badge.empty()) {
-			tx -= 8 + 54;
-			PaintBadge(p, tx, y + 11, 54, 16, r.badge, pal::hairline, pal::redText);
+			tx -= 8 + m.badgeW;
+			PaintBadge(p, tx, y + m.labelY + (m.labelH - m.badgeH) / 2, m.badgeW, m.badgeH, r.badge, pal::hairline, pal::redText);
 		}
-		PaintRowLabel(p, r, x, y, tx - x - 8);
+		PaintRowLabel(p, m, r, x, y, tx - x - 8);
 		break;
 	}
 	}
 }
 
-int PaintCard(Painter &p, const Card &c, const View &v, int x, int y, int w, RECT &dropAnchor, std::vector<std::string> &dropItems, int &dropSel)
+int PaintCard(Painter &p, const Metrics &m, const Card &c, const View &v, int x, int y, int w, RECT &dropAnchor, std::vector<std::string> &dropItems,
+	int &dropSel)
 {
-	const int h = kCardHead + static_cast<int>(c.rows.size()) * kRowH + 4;
-	PaintCard(p, x, y, w, h);
+	const int h = m.cardHead + static_cast<int>(c.rows.size()) * m.rowH + 4;
 	p.Font(4);
-	p.Text(x + kCardPad, y + 7, w - kCardPad * 2, 18, c.title, pal::redText);
-	int ry = y + kCardHead;
-	for (size_t i = 0; i < c.rows.size(); i++, ry += kRowH) {
-		if (i) p.Fill(x + kCardPad, ry, w - kCardPad * 2, 1, pal::hairline);
-		PaintRow(p, c.rows[i], v, x + kCardPad, ry, w - kCardPad * 2, dropAnchor, dropItems, dropSel);
+	if (m.screen) {
+		PaintGlassCard(p, x, y, w, h);
+		p.TextCaps(x + m.cardPad, y + m.titleY, w - m.cardPad * 2, m.titleH, c.title, pal::redText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 2);
+	}
+	else {
+		PaintCard(p, x, y, w, h);
+		p.Text(x + m.cardPad, y + m.titleY, w - m.cardPad * 2, m.titleH, c.title, pal::redText);
+	}
+	int ry = y + m.cardHead;
+	for (size_t i = 0; i < c.rows.size(); i++, ry += m.rowH) {
+		if (i) p.Fill(x + m.cardPad, ry, w - m.cardPad * 2, 1, pal::hairline);
+		PaintRow(p, m, c.rows[i], v, x + m.cardPad, ry, w - m.cardPad * 2, dropAnchor, dropItems, dropSel);
 	}
 	return h;
 }
@@ -344,13 +368,70 @@ std::vector<Page> BuildPages(const Values &v)
 	return pages;
 }
 
+namespace {
+void PaintDrop(Painter &p, const View &v, const RECT &dropAnchor, const std::vector<std::string> &dropItems, int dropSel, int comboW, int canvasW, int canvasH)
+{
+	if (v.dropId && !dropItems.empty()) {
+		PaintDropMenu(p, dropAnchor, ToDropItems(dropItems), dropSel, v.dropScroll, canvasW, canvasH, kActPick, kActDropClose, v.mouseX, v.mouseY, comboW,
+			v.dropBar);
+	}
+}
+
+// Opened from the main menu: the pages are tabs beside the title, and the cards fill the screen over the backdrop.
+void PaintFullScreen(Painter &p, const View &v, const std::vector<Page> &pages, int current)
+{
+	const Metrics &m = kScreenMetrics;
+	const int mx = v.mouseX, my = v.mouseY;
+	UseScreenFonts(p);
+	const ScreenLayout l = ScreenLayoutFor(v.screenW, v.screenH);
+	const int right = PaintHeaderActions(p, l, {{"Back", kActCancel, true, true}}, mx, my);
+	std::vector<TabSpec> tabs;
+	for (size_t i = 0; i < pages.size(); i++) tabs.push_back({pages[i].title, kActPage, static_cast<int>(i), static_cast<int>(i) == current, true});
+	tabs.push_back({"Controls", kActControls, 0, false, true});
+	PaintScreenTitle(p, l, "Options", tabs, right, mx, my);
+	const Page &page = pages[current];
+	PaintScreenInfo(p, l, page.blurb);
+
+	// A row as wide as the screen would put each control far from its label.
+	const int x = l.margin, contentW = std::min(1440, l.w - 2 * l.margin), gap = 32;
+	const int leftW = (contentW - gap) * page.leftW / kColumnsW, rightX = x + leftW + gap, rightW = contentW - leftW - gap;
+	RECT dropAnchor = {};
+	std::vector<std::string> dropItems;
+	int dropSel = -1;
+	int y = l.top;
+	for (const Card &c : page.left) y += PaintCard(p, m, c, v, x, y, leftW, dropAnchor, dropItems, dropSel) + m.cardGap;
+	y = l.top;
+	for (const Card &c : page.right) y += PaintCard(p, m, c, v, rightX, y, rightW, dropAnchor, dropItems, dropSel) + m.cardGap;
+
+	const int buttonH = 48, by = l.h - l.margin - buttonH;
+	p.Button(x, by, 170, buttonH, "Reset", kActReset, 0, mx, my);
+	int bx = l.w - l.margin - 200;
+	p.Button(bx, by, 200, buttonH, "OK", kActOk, 0, mx, my, true, true);
+	bx -= 12 + 170;
+	p.Button(bx, by, 170, buttonH, "Apply", kActApply, 0, mx, my, v.dirty);
+	if (v.dirty) {
+		p.Diamond(bx - 220, by + buttonH / 2, 5, pal::redText);
+		p.Font(3);
+		p.Text(bx - 208, by, 196, buttonH, "Changes not applied", pal::redText);
+	}
+
+	UseSharedFonts(p);
+	PaintDrop(p, v, dropAnchor, dropItems, dropSel, m.comboW, v.screenW, v.screenH);
+}
+}
+
 void PaintOptionsScreen(Painter &p, const View &v)
 {
+	const std::vector<Page> pages = BuildPages(v.values);
+	const int current = std::max(0, std::min(v.page, static_cast<int>(pages.size()) - 1));
+	if (v.fullScreen) {
+		PaintFullScreen(p, v, pages, current);
+		return;
+	}
+	const Metrics &m = kWindowMetrics;
 	PaintWindowFrame(p, kScreenW, kScreenH);
 	PaintWindowHeader(p, kScreenW, "OPTIONS");
 
-	const std::vector<Page> pages = BuildPages(v.values);
-	const int current = std::max(0, std::min(v.page, static_cast<int>(pages.size()) - 1));
 	int navY = kNavTop;
 	for (size_t i = 0; i < pages.size(); i++, navY += kNavH + 3) {
 		const Page &page = pages[i];
@@ -369,11 +450,11 @@ void PaintOptionsScreen(Painter &p, const View &v)
 	RECT dropAnchor = {};
 	std::vector<std::string> dropItems;
 	int dropSel = -1;
-	const int contentW = kContentRight - kContentX, leftW = page.leftW, rightX = kContentX + leftW + kCardGap + 8, rightW = contentW - leftW - kCardGap - 8;
+	const int contentW = kContentRight - kContentX, leftW = page.leftW, rightX = kContentX + leftW + m.cardGap + 8, rightW = contentW - leftW - m.cardGap - 8;
 	int y = kContentTop;
-	for (const Card &c : page.left) y += PaintCard(p, c, v, kContentX, y, leftW, dropAnchor, dropItems, dropSel) + kCardGap;
+	for (const Card &c : page.left) y += PaintCard(p, m, c, v, kContentX, y, leftW, dropAnchor, dropItems, dropSel) + m.cardGap;
 	y = kContentTop;
-	for (const Card &c : page.right) y += PaintCard(p, c, v, rightX, y, rightW, dropAnchor, dropItems, dropSel) + kCardGap;
+	for (const Card &c : page.right) y += PaintCard(p, m, c, v, rightX, y, rightW, dropAnchor, dropItems, dropSel) + m.cardGap;
 
 	p.Fill(18, kFooterTop, kScreenW - 36, 1, pal::lineStrong);
 	p.Button(24, kFooterButtonsY, 130, kFooterButtonH, "Reset", kActReset, 0, v.mouseX, v.mouseY);
@@ -389,10 +470,7 @@ void PaintOptionsScreen(Painter &p, const View &v)
 		p.Text(bx - 168, kFooterButtonsY, 160, kFooterButtonH, "Changes not applied", pal::redText);
 	}
 
-	if (v.dropId && !dropItems.empty()) {
-		PaintDropMenu(p, dropAnchor, ToDropItems(dropItems), dropSel, v.dropScroll, kScreenW, kScreenH, kActPick, kActDropClose, v.mouseX, v.mouseY, kComboW,
-			v.dropBar);
-	}
+	PaintDrop(p, v, dropAnchor, dropItems, dropSel, m.comboW, kScreenW, kScreenH);
 }
 
 }

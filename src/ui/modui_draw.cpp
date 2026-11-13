@@ -71,12 +71,18 @@ void ModUiDraw(uint32_t *buf, int w, int h)
 		int confirmW = kConfirmW, confirmH = kConfirmH;
 		ConfirmSize(st, confirmW, confirmH);
 		PanelRender r(g_canvas, buf, w, h);
-		if (r.Begin(st.confirmOnly ? confirmW : kDesignW, st.confirmOnly ? confirmH : kDesignH, 24, true, s)) {
+		// The content screen fills the whole screen; a question asked on its own stays a dialog over the dimmed game.
+		const ScreenView view = ScreenViewFor(w, h);
+		if (!st.confirmOnly) {
+			st.viewW = view.w;
+			st.viewH = view.h;
+		}
+		if (st.confirmOnly ? r.Begin(confirmW, confirmH, 24, true, s) : BeginFullScreen(r, view)) {
 			r.Focus(st.tabAction, st.tabArg);
 			r.Press(st.hits, st.mouseDown, POINT{st.mouseX, st.mouseY});
 			if (st.confirmOnly) PaintConfirm(r.p, st);
 			else PaintPanel(r.p, st);
-			r.End(st.confirmOnly ? 255 : 248);
+			r.End(255);
 			std::lock_guard<std::mutex> lock(g_lock);
 			g_s.hits = std::move(r.hits);
 			g_s.confirmGeom = g_confirmGeomOut;

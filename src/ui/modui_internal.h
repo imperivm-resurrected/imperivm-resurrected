@@ -14,6 +14,7 @@
 #include <cstdint>
 #include "core/transferrate.h"
 #include "mods/downloads.h"
+#include "ui/fullscreen.h"
 #include "ui/widgets.h"
 #include "ui/keycaps.h"
 #include "ui/modui.h"
@@ -23,27 +24,17 @@
 namespace modui_impl {
 using namespace ui;
 
+// The size the toasts, cards and restart questions are scaled for; the content screen itself fills the whole screen (PanelLayout).
 const int kDesignW = 1000;
 
 const int kDesignH = 640;
 
-const int kRowH = 28;
+const int kRowH = 40;
 
-const int kListX = 16;
+// The height of the fields and buttons in the bars of the content screen, and of its row of actions at the bottom.
+const int kBarH = 40;
 
-const int kContentY = 100;
-
-const int kListY = 130;
-
-const int kListW = 520;
-
-const int kListH = 422;
-const int kInstalledListH = kListH + 32;
-const int kSelectionBarY = 554;
-
-const int kDetailX = kListX + kListW + 16;
-
-const int kFootY = 592;
+const int kFootH = 44;
 
 const char kOriginalName[] = "Original";
 
@@ -163,7 +154,19 @@ struct State {
 	std::string noticeTitle, noticeText;
 	std::string actionYes;
 	std::function<void()> action;
+	// The size of the frame being painted, in its own design units: the whole screen while the content screen is open.
+	int viewW = kDesignW, viewH = kDesignH;
 };
+
+// Where the parts of the content screen go, in the units of ScreenView: under the header of the full screens, the list and the detail of
+// the Installed tab or the grid of Browse content, down to the row of actions at the bottom.
+struct PanelLayout : ScreenLayout {
+	int x = 0, inner = 0;
+	int footY = 0, cardBottom = 0;
+	int listW = 0, detailX = 0, detailW = 0;
+	int selectionBarY = 0;
+};
+PanelLayout PanelLayoutFor(const State &st);
 
 extern std::mutex g_lock;
 extern State g_s;
@@ -228,7 +231,7 @@ struct DropListState {
 };
 extern DropListState g_drop;
 int DropCurrent(const State &st);
-void PaintFacetPanel(Painter &p, const CatalogFilter &f, const CatalogCounts &counts, int toggleAction, int clearAction, int closeAction, int mx, int my);
+void PaintFacetPanel(Painter &p, const PanelLayout &l, const CatalogFilter &f, const CatalogCounts &counts, int toggleAction, int clearAction, int closeAction, int mx, int my);
 void PaintFilterPanel(Painter &p, const State &st);
 void PaintInstalledFilterPanel(Painter &p, const State &st);
 void PaintPanel(Painter &p, const State &st);

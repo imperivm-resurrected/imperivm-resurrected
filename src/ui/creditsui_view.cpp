@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "i18n/tr.h"
+#include "ui/fullscreen.h"
 #include "ui/ornaments.h"
 #include "ui/patronui.h"
 #include "ui/widgets.h"
@@ -21,8 +22,7 @@ using namespace ui;
 namespace creditsui {
 namespace {
 
-constexpr int kMargin = 24, kRailX = 24, kRailW = 232, kBodyTop = 92, kBodyBottom = 696, kFooterTop = 704, kFooterY = 716, kFooterH = 38;
-constexpr int kColumnX = kRailX + kRailW + 30, kColumnMaxW = 690, kFade = 60, kButtonW = 150;
+constexpr int kRailW = 232, kColumnMaxW = 690, kFade = 60;
 // The space above the first line, and so where a line of the index lands when it is chosen.
 constexpr int kLead = 72;
 constexpr int kColumns = 3, kRailLines = 2;
@@ -31,6 +31,11 @@ const COLORREF kSubtitle = pal::textDim, kPlain = pal::body, kNoteColor = pal::c
 const COLORREF kRailHot = pal::raised, kRailCurrent = pal::selected;
 
 enum RowKind { kRowLine, kRowCells, kRowRule };
+
+// Where the rail and the column go, in the units of the roll.
+struct RollFrame {
+	int railX = 0, top = 0, bottom = 0, areaX = 0, areaW = 0;
+};
 
 struct Row {
 	RowKind kind = kRowLine;
@@ -405,16 +410,16 @@ void DrawRule(Painter &p, int centerX, int top, int columnW)
 	DeleteObject(b);
 }
 
-void PaintColumn(Painter &p, const Layout &L, int x, int w, double scroll, double period)
+void PaintColumn(Painter &p, const Layout &L, const RollFrame &f, int x, int w, double scroll, double period)
 {
-	const int top = p.S(kBodyTop), bottom = p.S(kBodyBottom);
+	const int top = p.S(f.top), bottom = p.S(f.bottom);
 	const int left = p.S(x), width = p.S(w), centerX = left + width / 2;
-	p.Clip(x - 12, kBodyTop, w + 24, kBodyBottom - kBodyTop);
+	p.Clip(x - 12, f.top, w + 24, f.bottom - f.top);
 	for (int copy = 0; copy < 2; copy++) {
 		// One whole offset for every row, so that they move together pixel by pixel.
 		const int offset = static_cast<int>(std::floor((copy * period - scroll) * p.s + 0.5));
 		for (const Row &r : L.rows) {
-			const int rowTop = p.S(kBodyTop + r.y) + offset;
+			const int rowTop = p.S(f.top + r.y) + offset;
 			if (rowTop >= bottom) break;
 			if (rowTop + p.S(r.h) <= top) continue;
 			if (r.kind == kRowRule) DrawRule(p, centerX, rowTop, w);
@@ -428,8 +433,9 @@ void PaintColumn(Painter &p, const Layout &L, int x, int w, double scroll, doubl
 	Blit(p, FadeBitmap(pal::panel, false), 1, 64, {areaLeft, bottom - fade, areaRight, bottom});
 }
 
-void PaintRail(Painter &p, const Layout &L, int current, const View &v)
+void PaintRail(Painter &p, const Layout &L, const RollFrame &f, int current, const View &v)
 {
+	const int railX = f.railX;
 	p.Font(0);
 	struct Item {
 		std::vector<std::wstring> lines;
@@ -437,7 +443,7 @@ void PaintRail(Painter &p, const Layout &L, int current, const View &v)
 	};
 	std::vector<Item> items;
 	int total = 0;
-	const int textX = kRailX + 30, textW = kRailW - 38;
+	const int textX = railX + 30, textW = kRailW - 38;
 	// Wrapped in the bold of the current line, so that each line fits either way.
 	p.Font(1);
 	for (const std::string &label : L.labels) {
@@ -460,7 +466,7 @@ void PaintRail(Painter &p, const Layout &L, int current, const View &v)
 		total += it.h + 4;
 		items.push_back(std::move(it));
 	}
-	const int railTop = kBodyTop + 6, railH = kBodyBottom - railTop;
+	const int railTop = f.top + 6, railH = f.bottom - railTop;
 	int y = railTop;
 	// Too many lines for the rail: it follows the current one.
 	if (total > railH && current >= 0) {
@@ -468,60 +474,27 @@ void PaintRail(Painter &p, const Layout &L, int current, const View &v)
 		for (int i = 0; i < current; i++) before += items[i].h + 4;
 		y -= std::max(0, std::min(before - railH / 3, total - railH));
 	}
-	p.Clip(kRailX - 4, railTop, kRailW + 8, railH);
+	p.Clip(railX - 4, railTop, kRailW + 8, railH);
 	for (size_t i = 0; i < items.size(); i++) {
 		const Item &it = items[i];
 		const bool now = static_cast<int>(i) == current;
-		const bool hot = !now && p.Hover(kRailX, y, kRailW, it.h, v.mouseX, v.mouseY);
+		const bool hot = !now && p.Hover(railX, y, kRailW, it.h, v.mouseX, v.mouseY);
 		if (now) {
-			p.Fill(kRailX, y, kRailW, it.h, kRailCurrent);
-			p.Fill(kRailX, y, 3, it.h, pal::red);
+			p.Fill(railX, y, kRailW, it.h, kRailCurrent);
+			p.Fill(railX, y, 3, it.h, pal::red);
 		}
 		else if (hot) {
-			p.Fill(kRailX, y, kRailW, it.h, kRailHot);
+			p.Fill(railX, y, kRailW, it.h, kRailHot);
 		}
 		p.Font(now ? 1 : 0);
 		for (size_t l = 0; l < it.lines.size(); l++) {
 			p.LineW(textX, y + 7 + static_cast<int>(l) * 19, textW, 19, it.lines[l], now ? pal::text : pal::textDim);
 		}
 		const int hitTop = std::max(y, railTop), hitBottom = std::min(y + it.h, railTop + railH);
-		if (hitBottom > hitTop) p.AddHit(kRailX, hitTop, kRailW, hitBottom - hitTop, kActJump, static_cast<int>(i));
+		if (hitBottom > hitTop) p.AddHit(railX, hitTop, kRailW, hitBottom - hitTop, kActJump, static_cast<int>(i));
 		y += it.h + 4;
 	}
 	p.Unclip();
-}
-
-// The frame of the other screens; the edges of the column fade into its plain colour.
-void PaintFrame(Painter &p, int w, int h) { PaintWindowFrame(p, w, h); }
-
-void PaintFooter(Painter &p, int panelW, const View &v)
-{
-	p.Fill(18, kFooterTop, panelW - 36, 1, pal::lineStrong);
-	int bx = panelW - kMargin - kButtonW;
-	p.Button(bx, kFooterY, kButtonW, kFooterH, "Close", kActClose, 0, v.mouseX, v.mouseY);
-	bx -= 10 + kButtonW;
-	p.Button(bx, kFooterY, kButtonW, kFooterH, v.paused ? "Resume" : "Pause", kActPause, 0, v.mouseX, v.mouseY);
-	int right = bx - 16;
-	if (v.fast) {
-		const int bw = 40;
-		p.raw = true;
-		PaintBadge(p, bx - 12 - bw, kFooterY + 10, bw, 18, "\xC3\x97" "2", pal::hairline, pal::redText);
-		p.raw = false;
-		right = bx - 12 - bw - 14;
-	}
-	p.Diamond(kMargin + 4, kFooterY + kFooterH / 2, 4, pal::redText);
-	p.Font(3);
-	const std::string hint = Tr("Wheel or drag to scroll \xC2\xB7 Space pauses \xC2\xB7 Tab doubles the speed \xC2\xB7 Esc closes");
-	const int x = kMargin + 16, w = right - x;
-	p.raw = true;
-	if (p.TextWidth(hint) <= w) {
-		p.Text(x, kFooterY, w, kFooterH, hint, pal::caption);
-	}
-	else {
-		const int h = std::min(kFooterH, p.Measure(w, hint));
-		p.TextWrapped(x, kFooterY + (kFooterH - h) / 2, w, h, hint, pal::caption);
-	}
-	p.raw = false;
 }
 
 }
@@ -530,12 +503,6 @@ float ScreenScale(int frameW, int frameH)
 {
 	(void)frameW;
 	return std::max(0.6f, std::min(1.6f, frameH / static_cast<float>(kScreenH)));
-}
-
-int PanelWidth(int frameW, int frameH)
-{
-	const int screenW = static_cast<int>(frameW / ScreenScale(frameW, frameH));
-	return std::min(screenW, std::min(1180, std::max(900, screenW - 160)));
 }
 
 int CurrentEntry(const std::vector<double> &entries, double scroll, double period, int viewport)
@@ -551,28 +518,59 @@ int CurrentEntry(const std::vector<double> &entries, double scroll, double perio
 	return current;
 }
 
-void PaintCreditsScreen(Painter &p, int panelW, const View &v, PaintOut &out)
+void PaintCreditsScreen(Painter &p, int viewW, int viewH, float rollScale, const View &v, PaintOut &out)
 {
-	PaintFrame(p, panelW, kScreenH);
-	PaintWindowHeader(p, panelW, Utf8(Upper(W(Tr("Credits")))));
-	const int areaX = kColumnX, areaW = panelW - kMargin - areaX;
-	const int columnW = std::min(kColumnMaxW, areaW - 24), columnX = areaX + (areaW - columnW) / 2;
-	p.Fill(kRailX + kRailW + 14, kBodyTop + 8, 1, kBodyBottom - kBodyTop - 16, pal::hairline);
+	UseScreenFonts(p);
+	const ScreenLayout l = ScreenLayoutFor(viewW, viewH);
+	int right = PaintHeaderActions(p, l, {{v.paused ? "Resume" : "Pause", kActPause, false, true}, {"Close", kActClose, true, true}}, v.mouseX, v.mouseY);
+	if (v.fast) {
+		const int bw = 56, bh = 28;
+		right -= 16 + bw;
+		p.raw = true;
+		PaintBadge(p, right, l.margin + (kHeaderButtonH - bh) / 2, bw, bh, "\xC3\x97" "2", pal::hairline, pal::redText);
+		p.raw = false;
+	}
+	PaintScreenTitle(p, l, "Credits", {}, right, v.mouseX, v.mouseY);
+	p.raw = true;
+	PaintScreenInfo(p, l, Tr("Wheel or drag to scroll \xC2\xB7 Space pauses \xC2\xB7 Tab doubles the speed \xC2\xB7 Esc closes"));
+	p.raw = false;
+	const int cardX = l.margin, cardY = l.top, cardW = viewW - 2 * l.margin, cardH = viewH - l.margin - l.top;
+	PaintGlassCard(p, cardX, cardY, cardW, cardH);
+
+	// The roll keeps the size of its letters on every screen: it is laid out in its own units, of rollScale pixels, in the type the
+	// shared set has at that scale.
+	Painter q = p;
+	q.s = rollScale;
+	q.fonts[0] = BrandFont(BrandFace::Body, 15, q.s);
+	q.fonts[1] = BrandFont(BrandFace::BodyBold, 15, q.s);
+	q.fonts[2] = BrandFont(BrandFace::Display, 22, q.s);
+	q.fonts[3] = BrandFont(BrandFace::Ui, 13, q.s);
+	q.fonts[4] = BrandFont(BrandFace::UiStrong, 13, q.s);
+	q.fonts[5] = BrandFont(BrandFace::Display, 30, q.s);
+	const float k = p.s / q.s;
+	auto roll = [k](int design) { return static_cast<int>(design * k); };
+	RollFrame f;
+	f.railX = roll(cardX) + 20;
+	f.top = roll(cardY) + 12;
+	f.bottom = roll(cardY + cardH) - 12;
+	f.areaX = f.railX + kRailW + 30;
+	f.areaW = roll(cardX + cardW) - 24 - f.areaX;
+	const int columnW = std::min(kColumnMaxW, f.areaW - 24), columnX = f.areaX + (f.areaW - columnW) / 2;
+	q.Fill(f.railX + kRailW + 14, f.top + 8, 1, f.bottom - f.top - 16, pal::hairline);
 	out = PaintOut();
-	out.viewport = kBodyBottom - kBodyTop;
-	RECT column = p.R(areaX, kBodyTop, areaW, kBodyBottom - kBodyTop);
-	OffsetRect(&column, p.ox, p.oy);
+	out.viewport = f.bottom - f.top;
+	RECT column = q.R(f.areaX, f.top, f.areaW, f.bottom - f.top);
+	OffsetRect(&column, q.ox, q.oy);
 	out.column = column;
 	if (v.content) {
-		const Layout &L = CachedLayout(p, *v.content, columnW);
+		const Layout &L = CachedLayout(q, *v.content, columnW);
 		out.period = L.height + out.viewport * 0.5;
 		double scroll = std::fmod(v.scroll, out.period);
 		if (scroll < 0) scroll += out.period;
 		for (int y : L.entryY) out.entries.push_back(std::max(0, y - kLead));
-		PaintColumn(p, L, columnX, columnW, scroll, out.period);
-		PaintRail(p, L, CurrentEntry(out.entries, scroll, out.period, out.viewport), v);
+		PaintColumn(q, L, f, columnX, columnW, scroll, out.period);
+		PaintRail(q, L, f, CurrentEntry(out.entries, scroll, out.period, out.viewport), v);
 	}
-	PaintFooter(p, panelW, v);
 }
 
 }

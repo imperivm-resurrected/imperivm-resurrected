@@ -89,8 +89,9 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 			const int c = g_s.resizeCol & 3;
 			int others = 0;
 			for (int i = 0; i < 4; i++) others += i == c ? 0 : g_s.colW[i];
-			const int want = g_s.resizeStartW + static_cast<int>((g_s.mouseX - g_s.resizeStartX) / g_s.uiScale);
-			g_s.colW[c] = std::max(50, std::min(want, 600 - 70 - others));
+			const float units = g_s.uiScale * LobbyTableWidth(g_s.viewW, g_s.viewH) / kColumnBaseW;
+			const int want = g_s.resizeStartW + static_cast<int>((g_s.mouseX - g_s.resizeStartX) / units);
+			g_s.colW[c] = std::max(50, std::min(want, kColumnBaseW - 70 - others));
 		}
 		return false;
 	case WM_LBUTTONDOWN:

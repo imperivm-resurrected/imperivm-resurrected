@@ -24,11 +24,6 @@
 namespace mpui_impl {
 using namespace ui;
 
-// The lobby and its dialogs are a window of kW x kH; the room is laid out on the whole screen (ScreenView).
-const int kW = 1000;
-
-const int kH = 640;
-
 const int kIdMultiplayer = 0x1003;
 
 const int kIdLoadGame = 0x1004;
@@ -299,8 +294,8 @@ struct State {
 	int colW[5] = {170, 110, 80, 110, 0};
 	int resizeCol = -1, resizeStartX = 0, resizeStartW = 0;
 	float uiScale = 1.0f;
-	// The size of the frame being painted, in its own design units: kW x kH for the lobby, the screen for the room.
-	int viewW = kW, viewH = kH;
+	// The size of the frame being painted, in the units of ScreenView: dialogs and menus over it are placed in it.
+	int viewW = 1920, viewH = 1080;
 	int dropKind = 0, dropIndex = 0, dropScroll = 0;
 	ScrollDrag dropBar;
 	int roomTab = 0;
@@ -440,12 +435,15 @@ uint64_t MemberIdByName(const State &st, const std::string &name, bool skipMe = 
 // The argument of kProfile says where the player was clicked.
 const int kProfileLobbySlot = 0, kProfileLobbyName = 0x1000, kProfileRoomSlot = 0x2000;
 void ProfileHotspot(ui::Painter &p, const State &st, int x, int y, int w, int h, const std::string &name, int arg);
+// The lobby's table of rooms is this wide in a frame of viewW x viewH; the widths of its columns are kept in units of a table
+// kColumnBaseW wide, so the ones the player dragged follow the screen.
+int LobbyTableWidth(int viewW, int viewH);
+const int kColumnBaseW = 600;
 void PaintHeader(Painter &p, const State &st);
 void PaintPassPrompt(Painter &p, const State &st);
 void PaintList(Painter &p, const State &st);
 void PaintRanked(Painter &p, const State &st);
 void PaintCreate(Painter &p, const State &st);
-void PaintChat(Painter &p, const State &st);
 std::map<std::string, std::string> PublishedOptions(const State &st);
 std::string RoomOptionText(const State &st, int id, const char *published);
 std::string RoomMapLabel(const State &st);

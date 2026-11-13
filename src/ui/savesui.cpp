@@ -21,6 +21,7 @@
 #include "ui/mpui.h"
 #include "mods/savelib.h"
 #include "ui/savesui.h"
+#include "ui/fullscreen.h"
 #include "ui/textedit.h"
 #include "ui/widgets.h"
 #include "i18n/tr.h"
@@ -33,10 +34,54 @@ using namespace ui;
 
 namespace {
 const int kDesignW = 1000, kDesignH = 640;
-const int kLX = 16, kLY = 140, kLW = 580, kLH = 436;
-const int kDX = 612, kDY = 140, kDW = 372, kDH = 436;
-const int kRowSingle = 46, kRowHeader = 34, kRowChild = 32;
 const int kTabCount = 5;
+
+// Where the parts of the screen go. Over a running game it stays the window of kDesignW x kDesignH; over the menus it fills the screen,
+// in the units of ScreenView.
+struct Layout {
+	bool full = false;
+	int w = kDesignW, h = kDesignH;
+	ScreenLayout screen;
+	int tabsY = 56, toolY = 100, toolH = 28;
+	int lx = 16, ly = 140, lw = 580, lh = 436;
+	int dx = 612, dy = 140, dw = 372, dh = 436;
+	int rowSingle = 46, rowHeader = 34, rowChild = 32;
+	int buttonY = 590, buttonH = 36, buttonW = 120;
+	// The detail card's thumbnail width, and the step and box of its lines of text.
+	int thumbW = 256, line = 19, lineH = 18;
+};
+
+const int kScreenTabH = 52;
+
+Layout LayoutFor(bool full, int w, int h)
+{
+	Layout l;
+	if (!full) return l;
+	l.full = true;
+	l.w = w;
+	l.h = h;
+	l.screen = ScreenLayoutFor(w, h);
+	const int m = l.screen.margin, inner = w - 2 * m, gap = l.screen.roomy ? 24 : 18;
+	l.tabsY = l.screen.top;
+	l.toolY = l.tabsY + kScreenTabH + gap;
+	l.toolH = 40;
+	l.buttonH = 48;
+	l.buttonW = 170;
+	l.buttonY = h - m - l.buttonH;
+	l.ly = l.dy = l.toolY + l.toolH + gap;
+	l.lh = l.dh = l.buttonY - gap - l.ly;
+	l.dw = std::max(420, std::min(560, inner * 32 / 100));
+	l.lx = m;
+	l.lw = inner - l.dw - 32;
+	l.dx = l.lx + l.lw + 32;
+	l.rowSingle = 62;
+	l.rowHeader = 46;
+	l.rowChild = 42;
+	l.thumbW = std::min({384, l.dw - 48, l.dh * 45 / 100 * 4 / 3});
+	l.line = 25;
+	l.lineH = 24;
+	return l;
+}
 const char *const kTabNames[kTabCount] = {"Single player", "Adventure", "Conquest", "Replays", "Multiplayer"};
 
 typedef void *(__fastcall *GetChild_t)(void *dlg, void *edx, int id, const char *cls);
@@ -135,6 +180,8 @@ struct State {
 	ListState modList;
 	ListGeom modGeom;
 	std::string modListKey;
+	// The layout of the last frame: the rows and the list's height depend on it.
+	Layout lay;
 };
 
 std::mutex g_lock;
@@ -347,21 +394,21 @@ View BuildView(const State &st)
 		if (g.recs.size() == 1 && legacy) {
 			r.kind = 0;
 			r.rec = g.recs[0];
-			add(r, kRowSingle);
+			add(r, st.lay.rowSingle);
 			continue;
 		}
 		r.kind = 1;
 		r.title = g.title;
 		r.rec = g.recs[0];
 		r.collapsed = st.collapsed.count(g.key) != 0;
-		add(r, kRowHeader);
+		add(r, st.lay.rowHeader);
 		if (r.collapsed) continue;
 		for (int i : g.recs) {
 			Row c;
 			c.kind = 2;
 			c.rec = i;
 			c.key = g.key;
-			add(c, kRowChild);
+			add(c, st.lay.rowChild);
 		}
 	}
 	v.total = y;
@@ -535,10 +582,10 @@ void ScrollToSelection(State &st)
 	for (const Row &r : v.rows) {
 		if (RowId(st, r) != prim) continue;
 		if (r.y < st.list.scroll) st.list.scroll = r.y;
-		else if (r.y + r.h > st.list.scroll + kLH - 2) st.list.scroll = r.y + r.h - (kLH - 2);
+		else if (r.y + r.h > st.list.scroll + st.lay.lh - 2) st.list.scroll = r.y + r.h - (st.lay.lh - 2);
 		break;
 	}
-	st.list.scroll = std::max(0, std::min(st.list.scroll, std::max(0, v.total - (kLH - 2))));
+	st.list.scroll = std::max(0, std::min(st.list.scroll, std::max(0, v.total - (st.lay.lh - 2))));
 }
 
 void MoveSelection(State &st, int delta, bool toEnd = false, bool extend = false)
@@ -1022,34 +1069,42 @@ void PaintRowText(Painter &p, const State &st, const SaveRec &r, int x, int y, i
 	const ModCheck mc = st.mode == 0 ? CheckFor(st, r) : ModCheck();
 	const bool warn = mc.warn || mc.blocked;
 	const std::string &nm = !title.empty() ? title : r.name;
+	const bool full = st.lay.full;
 	if (child) {
+		const int timeW = full ? 190 : 150;
 		p.Font(0);
-		if (!editing) p.Text(x + 30, y, w - 190 - (warn ? 26 : 0), h, nm, r.autosave ? pal::textDim : pal::text);
+		if (!editing) p.Text(x + 30, y, w - timeW - 40 - (warn ? 26 : 0), h, nm, r.autosave ? pal::textDim : pal::text);
 		p.Font(3);
 		const std::string when = TimeText(r.time);
-		p.Text(x + w - 160, y, 150, h, when, pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+		p.Text(x + w - timeW - 10, y, timeW, h, when, pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 		if (warn) PaintAlertIcon(p, x + w - 10 - p.TextWidth(when) - 24, y + (h - 16) / 2, mc.blocked);
 		return;
 	}
+	const int nameY = full ? 8 : 4, nameH = full ? 26 : 22, subY = full ? 36 : 25, subH = full ? 22 : 18, sizeW = full ? 134 : 104;
 	p.Font(1);
-	if (!editing) p.Text(x + 12, y + 4, w - 130, 22, nm, r.autosave ? pal::textDim : pal::text);
+	if (!editing) p.Text(x + 12, y + nameY, w - sizeW - 26, nameH, nm, r.autosave ? pal::textDim : pal::text);
 	p.Font(3);
 	std::string sub = TimeText(r.time);
 	if (r.autosave) sub += "  ·  Autosave";
 	if (const std::string camp = CampaignOf(st, r); !camp.empty()) sub += "  ·  " + camp;
 	if (mc.blocked) sub += "  ·  missing content";
 	else if (warn) sub += "  ·  different content";
-	p.Text(x + 12, y + 25, w - 24, 18, sub, warn ? pal::bad : pal::textDim);
-	p.Text(x + w - 116, y + 4, 104, 22, HumanBytes(r.size), pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
-	if (warn) PaintAlertIcon(p, x + w - 12 - p.TextWidth(HumanBytes(r.size)) - 24, y + 7, mc.blocked);
+	p.Text(x + 12, y + subY, w - 24, subH, sub, warn ? pal::bad : pal::textDim);
+	p.Text(x + w - 12 - sizeW, y + nameY, sizeW, nameH, HumanBytes(r.size), pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+	if (warn) PaintAlertIcon(p, x + w - 12 - p.TextWidth(HumanBytes(r.size)) - 24, y + nameY + (nameH - 16) / 2, mc.blocked);
 }
 
 void PaintList(Painter &p, State &st, const View &v)
 {
 	const int mx = st.mouseX, my = st.mouseY;
-	p.Fill(kLX, kLY, kLW, kLH, pal::panel);
-	p.Frame(kLX, kLY, kLW, kLH, pal::lineStrong);
-	p.AddHit(kLX, kLY, kLW, kLH, kBlank, 0);
+	const Layout &l = st.lay;
+	const int lx = l.lx, ly = l.ly, lw = l.lw, lh = l.lh;
+	if (l.full) PaintGlassCard(p, lx, ly, lw, lh);
+	else {
+		p.Fill(lx, ly, lw, lh, pal::panel);
+		p.Frame(lx, ly, lw, lh, pal::lineStrong);
+	}
+	p.AddHit(lx, ly, lw, lh, kBlank, 0);
 	st.rowPaths.clear();
 	st.hdrKeys.clear();
 	st.hdrPaths.clear();
@@ -1057,30 +1112,30 @@ void PaintList(Painter &p, State &st, const View &v)
 		p.Font(0);
 		const bool filtered = !st.search.empty();
 		const std::string text = filtered ? "No games match the search." : "There are no saved games.";
-		p.Text(kLX + 10, kLY + 14, kLW - 20, 24, text, pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.Text(lx + 10, ly + 14, lw - 20, l.full ? 30 : 24, text, pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		bool hiddenAutos = false;
 		for (const SaveRec &r : st.recs) hiddenAutos = hiddenAutos || (r.autosave && ListMatches(st, r, st.tab));
 		if (!st.showAuto && !filtered && hiddenAutos) {
 			p.Font(3);
-			p.Text(kLX + 10, kLY + 40, kLW - 20, 20, "Check \"Show autosaves\" to see the automatic ones too.", pal::textDim,
+			p.Text(lx + 10, ly + (l.full ? 48 : 40), lw - 20, l.full ? 24 : 20, "Check \"Show autosaves\" to see the automatic ones too.", pal::textDim,
 				DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		}
 		st.listGeom = ListGeom();
 		return;
 	}
-	const int innerH = kLH - 2;
+	const int innerH = lh - 2;
 	const int maxScroll = ListMaxScroll(v.total, innerH);
 	st.list.scroll = std::max(0, std::min(st.list.scroll, maxScroll));
 	const bool bar = maxScroll > 0;
-	const int rx = kLX + 1, rw = kLW - 2 - (bar ? 14 : 0);
-	p.Clip(kLX + 1, kLY + 1, kLW - 2, innerH);
+	const int rx = lx + 1, rw = lw - 2 - (bar ? 14 : 0);
+	p.Clip(lx + 1, ly + 1, lw - 2, innerH);
 	for (const Row &r : v.rows) {
-		const int ry = kLY + 1 + r.y - st.list.scroll;
-		if (ry + r.h < kLY + 1 || ry > kLY + kLH - 1) continue;
+		const int ry = ly + 1 + r.y - st.list.scroll;
+		if (ry + r.h < ly + 1 || ry > ly + lh - 1) continue;
 		const SaveRec &rec = st.recs[r.rec];
 		const bool selected = RowSelected(st, r);
 		const bool editing = st.renaming && st.sel.size() == 1 && RowId(st, r) == PrimaryId(st);
-		const int top = std::max(ry, kLY + 1), bottom = std::min(ry + r.h, kLY + kLH - 1);
+		const int top = std::max(ry, ly + 1), bottom = std::min(ry + r.h, ly + lh - 1);
 		if (r.kind == 1) {
 			const bool hovH = p.Hover(rx, top, rw, std::max(0, bottom - top), mx, my);
 			p.Fill(rx, ry, rw, r.h, selected ? pal::lineStrong : hovH ? pal::hairline : pal::field);
@@ -1090,9 +1145,10 @@ void PaintList(Painter &p, State &st, const View &v)
 			const COLORREF arrow = p.Hover(rx, top, 30, std::max(0, bottom - top), mx, my) ? pal::text : pal::redText;
 			if (r.collapsed) p.ArrowRight(rx + 12, ry + r.h / 2 - 5, 7, 10, arrow);
 			else p.ArrowDown(rx + 10, ry + r.h / 2 - 3, 10, 6, arrow);
-			if (!editing) p.Text(rx + 28, ry, rw - 300, r.h, r.title, pal::redText);
+			const int countW = l.full ? 320 : 250;
+			if (!editing) p.Text(rx + 28, ry, rw - countW - 50, r.h, r.title, pal::redText);
 			p.Font(3);
-			if (!editing) p.Text(rx + rw - 260, ry, 250, r.h, std::to_string(r.count) + (r.count == 1 ? Tr(" save  ·  ") : Tr(" saves  ·  ")) + TimeText(rec.time), pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+			if (!editing) p.Text(rx + rw - countW - 10, ry, countW, r.h, std::to_string(r.count) + (r.count == 1 ? Tr(" save  ·  ") : Tr(" saves  ·  ")) + TimeText(rec.time), pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 			if (bottom > top) {
 				st.hdrKeys.push_back(r.key);
 				st.hdrPaths.push_back(rec.vfsPath);
@@ -1102,12 +1158,13 @@ void PaintList(Painter &p, State &st, const View &v)
 			}
 			if (editing) {
 				PaintEditField(p, rx + 26, ry + 3, rw - 34, r.h - 6, st.renameText, "Game name", st.focus == kFocusRename, false, st.edit, kRenameField);
-				p.Clip(kLX + 1, kLY + 1, kLW - 2, innerH);
+				p.Clip(lx + 1, ly + 1, lw - 2, innerH);
 			}
 			continue;
 		}
 		const bool hov = p.Hover(rx, top, rw, std::max(0, bottom - top), mx, my);
-		p.Fill(rx, ry, rw, r.h, selected ? pal::lineStrong : hov ? pal::hairline : (r.kind == 2 ? pal::panel : pal::panel));
+		// Over the backdrop the card's see-through colour stays under the rows that are neither chosen nor under the mouse.
+		if (selected || hov || !l.full) p.Fill(rx, ry, rw, r.h, selected ? pal::lineStrong : hov ? pal::hairline : pal::panel);
 		if (selected) p.Frame(rx, ry, rw, r.h, pal::redText);
 		else p.Fill(rx, ry + r.h - 1, rw, 1, pal::selected);
 		PaintRowText(p, st, rec, rx, ry, rw, r.h, r.kind == 2, r.title, editing);
@@ -1116,13 +1173,13 @@ void PaintList(Painter &p, State &st, const View &v)
 			p.AddHit(rx, top, rw, bottom - top, kRow, static_cast<int>(st.rowPaths.size()) - 1);
 		}
 		if (editing) {
-			const int fx = r.kind == 2 ? rx + 26 : rx + 8, fw = r.kind == 2 ? rw - 26 - 170 : rw - 8 - 130;
-			PaintEditField(p, fx, ry + 3, fw, r.kind == 2 ? r.h - 6 : 24, st.renameText, "Name", st.focus == kFocusRename, false, st.edit, kRenameField);
-			p.Clip(kLX + 1, kLY + 1, kLW - 2, innerH);
+			const int fx = r.kind == 2 ? rx + 26 : rx + 8, fw = r.kind == 2 ? rw - 26 - (l.full ? 210 : 170) : rw - 8 - (l.full ? 160 : 130);
+			PaintEditField(p, fx, ry + 3, fw, r.kind == 2 ? r.h - 6 : l.full ? 32 : 24, st.renameText, "Name", st.focus == kFocusRename, false, st.edit, kRenameField);
+			p.Clip(lx + 1, ly + 1, lw - 2, innerH);
 		}
 	}
 	p.Unclip();
-	ScrollbarPaint(p, kLX + kLW - 10, kLY + 3, kLH - 6, v.total, innerH, st.list, st.listGeom, mx, my);
+	ScrollbarPaint(p, lx + lw - 10, ly + 3, lh - 6, v.total, innerH, st.list, st.listGeom, mx, my);
 }
 
 struct Thumb {
@@ -1157,10 +1214,9 @@ std::string MapLabel(const MpSaveInfo &info, const SaveRec &rec)
 	return dim.empty() ? name : name + " (" + dim + ")";
 }
 
-int PaintPlayers(Painter &p, const MpSaveInfo &info, const std::vector<int> &states, int x, int y, int w, int maxH)
+int PaintPlayers(Painter &p, const MpSaveInfo &info, const std::vector<int> &states, int x, int y, int w, int maxH, int rowH)
 {
 	p.Font(3);
-	const int rowH = 20;
 	int cx = x, cy = y;
 	bool any = false;
 	for (size_t i = 0; i < info.players.size() && i < 8; i++) {
@@ -1175,8 +1231,8 @@ int PaintPlayers(Painter &p, const MpSaveInfo &info, const std::vector<int> &sta
 		const int c = pl.color555;
 		const bool defeated = i < states.size() && states[i] == 2;
 		const int r = ((c >> 10) & 31) * 255 / 31, g = ((c >> 5) & 31) * 255 / 31, b = (c & 31) * 255 / 31;
-		p.Fill(cx, cy + 5, 10, 10, defeated ? RGB(r / 3 + 30, g / 3 + 30, b / 3 + 30) : RGB(r, g, b));
-		p.Frame(cx, cy + 5, 10, 10, pal::panel);
+		p.Fill(cx, cy + (rowH - 10) / 2, 10, 10, defeated ? RGB(r / 3 + 30, g / 3 + 30, b / 3 + 30) : RGB(r, g, b));
+		p.Frame(cx, cy + (rowH - 10) / 2, 10, 10, pal::panel);
 		p.Text(cx + 15, cy, tw + 4, rowH, pl.name, defeated ? pal::textDim : pal::text);
 		if (defeated) p.Fill(cx + 13, cy + rowH / 2, tw + 4, 1, pal::textDim);
 		cx += 15 + tw + 16;
@@ -1187,25 +1243,28 @@ int PaintPlayers(Painter &p, const MpSaveInfo &info, const std::vector<int> &sta
 
 void PaintDetailBody(Painter &p, State &st)
 {
-	PaintCard(p, kDX, kDY, kDW, kDH);
+	const Layout &l = st.lay;
+	const int dx = l.dx, dy = l.dy, dw = l.dw, dh = l.dh, titleH = l.full ? 28 : 24;
+	if (l.full) PaintGlassCard(p, dx, dy, dw, dh);
+	else PaintCard(p, dx, dy, dw, dh);
 	if (st.sel.size() > 1) {
 		const DelPlan plan = PlanDelete(st);
 		uint64_t bytes = 0;
 		for (const SaveRec &r : plan.list) bytes += r.size;
-		const int x = kDX + 12, w = kDW - 24;
+		const int x = dx + 12, w = dw - 24;
 		p.Font(1);
-		p.Text(x, kDY + 16, w, 24, std::to_string(plan.rows) + Tr(" items selected"), pal::redText);
+		p.Text(x, dy + 16, w, titleH, std::to_string(plan.rows) + Tr(" items selected"), pal::redText);
 		p.Font(3);
-		p.Text(x, kDY + 48, w, 18, CountsText(plan.list) + "  ·  " + HumanBytes(bytes), pal::textDim);
+		p.Text(x, dy + 24 + titleH, w, l.lineH, CountsText(plan.list) + "  ·  " + HumanBytes(bytes), pal::textDim);
 		return;
 	}
 	const SaveRec *rec = FindRec(st, st.selPath);
 	if (!rec) {
 		p.Font(0);
-		p.Text(kDX + 10, kDY + 10, kDW - 20, 24, "Select a game", pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.Text(dx + 10, dy + 10, dw - 20, 24, "Select a game", pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		return;
 	}
-	const int tw = 256, th = tw * 3 / 4, tx = kDX + (kDW - tw) / 2, ty = kDY + 12;
+	const int tw = l.thumbW, th = tw * 3 / 4, tx = dx + (dw - tw) / 2, ty = dy + 12;
 	p.Fill(tx, ty, tw, th, pal::bg);
 	if (g_thumb.path != st.selPath || g_thumb.time != rec->time) {
 		g_thumb.path = st.selPath;
@@ -1223,36 +1282,36 @@ void PaintDetailBody(Painter &p, State &st)
 	}
 	p.Frame(tx, ty, tw, th, pal::lineStrong);
 	int y = ty + th + 10;
-	const int x = kDX + 12, w = kDW - 24;
+	const int x = dx + 12, w = dw - 24;
 	const bool group = !st.selGroup.empty();
 	const std::string key = SaveLibGroupKey(*rec);
 	const std::string title = PartidaTitle(st, key, rec->kind);
 	p.Font(1);
-	p.Text(x, y, w, 24, group ? title : rec->name, pal::redText);
-	y += 26;
+	p.Text(x, y, w, titleH, group ? title : rec->name, pal::redText);
+	y += titleH + 2;
 	p.Font(3);
 	std::string line = (group ? Tr("Last saved: ") : "") + TimeText(rec->time) + "  ·  " + HumanBytes(rec->size);
-	p.Text(x, y, w, 18, line, pal::textDim);
-	y += 19;
+	p.Text(x, y, w, l.lineH, line, pal::textDim);
+	y += l.line;
 	if (const std::string camp = CampaignOf(st, *rec); !camp.empty()) {
-		p.Text(x, y, w, 18, (rec->kind == kSaveAdventure ? Tr("Adventure: ") : Tr("Conquest: ")) + camp, pal::text);
-		y += 19;
+		p.Text(x, y, w, l.lineH, (rec->kind == kSaveAdventure ? Tr("Adventure: ") : Tr("Conquest: ")) + camp, pal::text);
+		y += l.line;
 	}
 	const std::string map = MapLabel(st.info, *rec);
 	if (!map.empty()) {
-		p.Text(x, y, w, 18, Tr("Map: ") + map, pal::text);
-		y += 19;
+		p.Text(x, y, w, l.lineH, Tr("Map: ") + map, pal::text);
+		y += l.line;
 	}
 	if (rec->playSeconds >= 0) {
-		p.Text(x, y, w, 18, Tr("Play time: ") + PlayTimeText(rec->playSeconds), pal::text);
-		y += 19;
+		p.Text(x, y, w, l.lineH, Tr("Play time: ") + PlayTimeText(rec->playSeconds), pal::text);
+		y += l.line;
 	}
 	if (rec->online) {
-		p.Text(x, y, w, 18, "Online game", pal::ok);
-		y += 19;
+		p.Text(x, y, w, l.lineH, "Online game", pal::ok);
+		y += l.line;
 	}
-	if (st.info.valid) y += PaintPlayers(p, st.info, rec->playerStates, x, y + 2, w, kDY + kDH - 70 - y) + 2;
-	const int bottom = kDY + kDH - 8;
+	if (st.info.valid) y += PaintPlayers(p, st.info, rec->playerStates, x, y + 2, w, dy + dh - 70 - y, l.full ? 24 : 20) + 2;
+	const int bottom = dy + dh - 8;
 	if (st.mode == 0 && y + 30 <= bottom) {
 		const ModCheck mc = CheckFor(st, *rec);
 		std::vector<ListLine> lines;
@@ -1275,7 +1334,7 @@ void PaintDetailBody(Painter &p, State &st)
 		if (!lines.empty()) {
 			p.Fill(x, y + 2, w, 1, pal::hairline);
 			y += 8;
-			const int rowH = 19;
+			const int rowH = l.line;
 			const int h = std::min(bottom - y, static_cast<int>(lines.size()) * rowH + 8);
 			if (h >= rowH + 8) ListPaint(p, x, y, w, h, lines, st.modList, st.modGeom, 3, rowH);
 		}
@@ -1284,7 +1343,7 @@ void PaintDetailBody(Painter &p, State &st)
 
 void PaintDetail(Painter &p, State &st)
 {
-	p.Clip(kDX, kDY, kDW, kDH);
+	p.Clip(st.lay.dx, st.lay.dy, st.lay.dw, st.lay.dh);
 	PaintDetailBody(p, st);
 	p.Unclip();
 }
@@ -1293,10 +1352,11 @@ void PaintConfirm(Painter &p, State &st)
 {
 	if (!st.confirm) return;
 	const int mx = st.mouseX, my = st.mouseY;
+	UseSharedFonts(p);
 	if (st.confirm == 2) {
 		std::string name = st.nameText;
 		while (!name.empty() && name.back() == ' ') name.pop_back();
-		const Dialog d = DialogBegin(p, kDesignW, kDesignH, 560, 210, "Overwrite game");
+		const Dialog d = DialogBegin(p, st.lay.w, st.lay.h, 560, 210, "Overwrite game");
 		DialogText(p, d, 60, Tr("A save named \"") + name + Tr("\" already exists. Overwrite it?"));
 		DialogButtons(p, d, {{"Overwrite", kSaveOver, 0, true}, {"Cancel", kDelNo}}, mx, my);
 		return;
@@ -1315,19 +1375,72 @@ void PaintConfirm(Painter &p, State &st)
 	else {
 		question = TrFmt("Delete \"%s\"?", {rec->name});
 	}
-	const Dialog d = DialogBegin(p, kDesignW, kDesignH, 560, 210, several ? "Delete selection" : whole ? "Delete game" : "Delete save");
+	const Dialog d = DialogBegin(p, st.lay.w, st.lay.h, 560, 210, several ? "Delete selection" : whole ? "Delete game" : "Delete save");
 	DialogText(p, d, 60, question);
 	DialogButtons(p, d, {{whole ? "Delete all" : "Delete", kDelOne, 0, true}, {"Cancel", kDelNo}}, mx, my);
+}
+
+// The header of the screen over the menus: the title, a line on what the list holds, Back at the top right and the tabs in a row of their
+// own, as five of them don't fit on the title's line at 720p.
+void PaintScreenHeader(Painter &p, const State &st, const View &v)
+{
+	const int mx = st.mouseX, my = st.mouseY;
+	const Layout &l = st.lay;
+	const ScreenLayout &sl = l.screen;
+	const int right = PaintHeaderActions(p, sl, {{"Back", kClose, true, true}}, mx, my);
+	PaintScreenTitle(p, sl, "Load game", {}, right, mx, my);
+	std::string kind = Tr(kTabNames[st.tab]);
+	for (char &c : kind) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+	PaintScreenInfo(p, sl, Tr("Saved ") + kind + Tr(" games") + (v.counts[st.tab] ? " (" + std::to_string(v.counts[st.tab]) + ")" : "") + "  \xC2\xB7  " +
+			Tr("Content profile: ") + ModsProfileLabel(st.activeProfile));
+	p.Fill(sl.margin, l.tabsY + kScreenTabH - 1, l.w - 2 * sl.margin, 1, pal::hairline);
+	int x = sl.margin;
+	for (int t = 0; t < kTabCount; t++) {
+		const std::string label = Tr(kTabNames[t]) + (v.counts[t] ? " (" + std::to_string(v.counts[t]) + ")" : "");
+		p.Font(2);
+		const int tabW = p.CapsWidth(label, 1) + 40;
+		PaintTabs(p, x, l.tabsY, {{label, kTab, t, st.tab == t, true}}, mx, my, tabW, kScreenTabH, 2);
+		x += tabW + 6;
+	}
 }
 
 void PaintPanel(Painter &p, State &st)
 {
 	const int mx = st.mouseX, my = st.mouseY;
-	PaintWindowFrame(p, kDesignW, kDesignH);
+	const Layout &l = st.lay;
 	p.noHover = st.confirm != 0;
 	const View v = BuildView(st);
-
 	const bool save = st.mode == 1;
+	if (l.full) {
+		UseScreenFonts(p);
+		PaintScreenHeader(p, st, v);
+		const int ty = l.toolY, th = l.toolH, searchW = 340, sortW = 200, clearW = 26, clearH = 24;
+		PaintEditField(p, l.lx, ty, searchW, th, st.search, "Search...", st.focus == kFocusSearch, false, st.edit, kSearchField);
+		if (!st.search.empty()) {
+			p.Font(1);
+			p.Button(l.lx + searchW - clearW - 6, ty + (th - clearH) / 2, clearW, clearH, "\xC3\x97", kClearSearch, 0, mx, my, true, false, 1);
+		}
+		const int sortX = l.lx + searchW + 16;
+		p.Button(sortX, ty, sortW, th, st.sort == 0 ? "Sort: date" : "Sort: name", kSort, 0, mx, my);
+		PaintSwitch(p, sortX + sortW + 24, ty + (th - 24) / 2, st.showAuto, "Show autosaves", true, kShowAuto, 0, mx, my);
+		PaintList(p, st, v);
+		PaintDetail(p, st);
+		const SaveRec *rec = FindRec(st, st.selPath);
+		const bool room = rec && rec->online && rec->kind == kSaveStrategy && !InGame();
+		const ModCheck loadCheck = rec ? CheckFor(st, *rec) : ModCheck();
+		const bool one = st.sel.size() <= 1;
+		const char *loadLabel = loadCheck.needsActivation ? "Enable and restart" : room ? "Load in a room" : "Load";
+		p.Font(1);
+		const int loadW = std::max(l.buttonW + 50, p.CapsWidth(loadLabel, 1) + 48), gap = 12;
+		p.Button(l.lx, l.buttonY, loadW, l.buttonH, loadLabel, kLoad, 0, mx, my, rec != nullptr && !st.renaming && !loadCheck.blocked && one, true);
+		int bx = l.lx + loadW + gap;
+		p.Button(bx, l.buttonY, l.buttonW, l.buttonH, "Rename", kRename, 0, mx, my, rec != nullptr && !st.renaming && one);
+		bx += l.buttonW + gap;
+		p.Button(bx, l.buttonY, l.buttonW, l.buttonH, "Delete", kDelete, 0, mx, my, rec != nullptr && !st.renaming);
+		PaintConfirm(p, st);
+		return;
+	}
+	PaintWindowFrame(p, kDesignW, kDesignH);
 	PaintTitle(p, 20, 12, 300, save ? "Save game" : "Load game");
 	p.Font(3);
 	PaintRule(p, 52, kDesignW);
@@ -1843,7 +1956,17 @@ void DrawImpl(uint32_t *buf, int w, int h)
 		st = g_s;
 	}
 	PanelRender r(g_canvas, buf, w, h);
-	if (!r.Begin(kDesignW, kDesignH)) return;
+	// Over the menus the screen fills the screen; over a running game, and to save, it stays a window so the game shows around it.
+	const bool full = !InGame() && st.mode == 0;
+	if (full) {
+		const ScreenView view = ScreenViewFor(w, h);
+		if (!BeginFullScreen(r, view)) return;
+		st.lay = LayoutFor(true, view.w, view.h);
+	}
+	else {
+		if (!r.Begin(kDesignW, kDesignH)) return;
+		st.lay = LayoutFor(false, kDesignW, kDesignH);
+	}
 	r.Focus(st.tabAction, st.tabArg);
 	r.Press(st.hits, st.mouseDown, POINT{st.mouseX, st.mouseY});
 	st.modGeom = ListGeom();
@@ -1857,6 +1980,7 @@ void DrawImpl(uint32_t *buf, int w, int h)
 	g_s.hdrPaths = std::move(st.hdrPaths);
 	g_s.listGeom = st.listGeom;
 	g_s.modGeom = st.modGeom;
+	g_s.lay = st.lay;
 	if (g_s.modListKey != st.modListKey) {
 		g_s.modListKey = st.modListKey;
 		g_s.modList = ListState();

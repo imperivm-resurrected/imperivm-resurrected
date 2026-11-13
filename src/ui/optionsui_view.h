@@ -78,6 +78,9 @@ struct View {
 	int dragId = 0;
 	bool dirty = false;
 	Values values;
+	// Out of a game the screen fills the whole screen, laid out in these units (ScreenView); over a game it stays a window.
+	bool fullScreen = false;
+	int screenW = 0, screenH = 0;
 };
 
 constexpr int kScreenW = 1100, kScreenH = 680;
