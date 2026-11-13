@@ -961,11 +961,11 @@ void PaintDropList(Painter &p, const State &st)
 	if (st.dropKind == kDropColor) {
 		const int mx = st.mouseX, my = st.mouseY, cell = 34, gap = 6, pad = 10;
 		const int w = pad * 2 + 6 * cell + 5 * gap, h = pad * 2 + 2 * cell + gap;
-		const int x = std::min<int>(g_dropAnchor.left, kW - 16 - w);
+		const int x = std::min<int>(g_dropAnchor.left, st.viewW - 16 - w);
 		int y = g_dropAnchor.bottom + 4;
-		if (y + h > kH - 8) y = g_dropAnchor.top - 4 - h;
+		if (y + h > st.viewH - 8) y = g_dropAnchor.top - 4 - h;
 		p.hits->clear();
-		p.AddHit(0, 0, kW, kH, kGDropClose, 0);
+		p.AddHit(0, 0, st.viewW, st.viewH, kGDropClose, 0);
 		p.Fill(x + 4, y + 4, w, h, pal::shadow);
 		p.Fill(x, y, w, h, pal::panel);
 		p.Frame(x, y, w, h, pal::lineStrong);
@@ -1007,7 +1007,7 @@ void PaintDropList(Painter &p, const State &st)
 	if (st.dropKind == kDropBonus) {
 		for (size_t i = 0; i < shown.size() && i < st.game.bonuses.size(); i++) shown[i].tip = st.game.bonuses[i].description;
 	}
-	PaintDropMenu(p, g_dropAnchor, shown, sel, st.dropScroll, kW, kH, kGDropPick, kGDropClose, st.mouseX, st.mouseY, st.dropKind == kDropBonus ? 150 : 200,
+	PaintDropMenu(p, g_dropAnchor, shown, sel, st.dropScroll, st.viewW, st.viewH, kGDropPick, kGDropClose, st.mouseX, st.mouseY, st.dropKind == kDropBonus ? 150 : 200,
 		st.dropBar);
 }
 }
@@ -1129,15 +1129,17 @@ void PaintChatLog(Painter &p, const State &st, int x, int y, int w, int h)
 		const PatronTier tier = PatronOf(l.id).tier;
 		if (tier != PatronTier::None) patronBand(tier, py - 2, it.h + 2);
 		p.Font(3);
-		p.Text(x + pad, py, it.timeW, 18, ChatTime(l.minute), pal::textDim, DT_LEFT | DT_TOP | DT_SINGLELINE);
+		// The boxes reach below the line: the name is in a larger type than the line is measured in, and DrawText clips.
+		const int boxH = it.lineH + 6;
+		p.Text(x + pad, py, it.timeW, boxH, ChatTime(l.minute), pal::textDim, DT_LEFT | DT_TOP | DT_SINGLELINE);
 		const int laurelX = x + pad + it.timeW + 6;
 		p.Font(1);
 		if (tier != PatronTier::None) {
 			const int nameX = laurelX + kChatLaurel + 3;
-			DrawPatron(p, laurelX, py + 1, kChatLaurel, nameX, py, x + pad + textW - nameX, 18, l.who + ":", tier, DT_LEFT | DT_TOP | DT_SINGLELINE);
+			DrawPatron(p, laurelX, py + 1, kChatLaurel, nameX, py, x + pad + textW - nameX, boxH, l.who + ":", tier, DT_LEFT | DT_TOP | DT_SINGLELINE);
 			if (py + 1 >= y && py + 1 + kChatLaurel <= y + h) PatronHotspot(p, laurelX, py + 1, kChatLaurel, PatronOf(l.id), st.mouseX, st.mouseY, kPatronLink);
 		}
-		else p.Text(laurelX, py, textW - it.timeW - 6, 18, l.who + ":", me ? pal::redText : pal::text, DT_LEFT | DT_TOP | DT_SINGLELINE);
+		else p.Text(laurelX, py, textW - it.timeW - 6, boxH, l.who + ":", me ? pal::redText : pal::text, DT_LEFT | DT_TOP | DT_SINGLELINE);
 		p.Font(3);
 		for (size_t k = 0; k < it.lines.size(); k++) {
 			const int shift = k == 0 ? it.indent : 0;

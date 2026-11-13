@@ -1,23 +1,28 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 THIONG
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
+#include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <functional>
 #include <initializer_list>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <vector>
 
 #include "ui/textedit.h"
 #include "MinHook.h"
+#include "core/log.h"
 #include "core/names.h"
 #include "game/mappreview.h"
 #include "net/rejoin.h"
 #include "net/spectator.h"
 
+#include "ui/brandart.h"
 #include "ui/mpui_internal.h"
 #include "ui/patronui.h"
 #include "game/gamemodes.h"
@@ -26,8 +31,35 @@ using namespace mpui_impl;
 
 namespace mpui_impl {
 namespace {
-const int kMargin = 24, kTableTop = 80, kTableHeadH = 30, kRowH = 40, kFieldH = 26, kBottomH = 174, kSideW = 340, kAvatar = 26;
+const int kTableHeadH = 44, kMinRowH = 44, kMaxRowH = 64, kFieldH = 38, kAvatar = 40, kBlockGap = 40;
 const COLORREF kAvatarDisc = RGB(0x2e, 0x29, 0x26);
+
+// Where the parts of the room go, in the units of RoomView: the mockup's sizes on a 1920x1080 screen, tighter on a shorter one.
+struct RoomLayout {
+	int w = 1920, h = 1080, margin = 64;
+	int titleY = 0, titleH = 0, titleSize = 84, infoY = 0, infoH = 26;
+	// Where the table, or the Game tab, starts.
+	int top = 0;
+	int bottomY = 0, bottomH = 0, radius = 75;
+};
+
+RoomLayout LayoutFor(const State &st)
+{
+	RoomLayout l;
+	l.w = st.viewW;
+	l.h = st.viewH;
+	l.margin = std::max(32, std::min(64, std::min(l.w * 64 / 1920, l.h * 64 / 1080)));
+	const bool roomy = l.h >= 1000;
+	l.titleSize = roomy ? 84 : 68;
+	l.titleH = l.titleSize + 20;
+	l.titleY = l.margin - 14;
+	l.infoY = l.titleY + l.titleH;
+	l.top = l.infoY + l.infoH + (roomy ? 36 : 24);
+	l.bottomH = roomy ? 264 : 220;
+	l.radius = roomy ? 75 : 60;
+	l.bottomY = l.h - l.margin - l.bottomH;
+	return l;
+}
 
 COLORREF Mix(COLORREF a, COLORREF b, int percent)
 {
@@ -274,7 +306,7 @@ std::string Initials(const std::string &name)
 void PaintMonogram(Painter &p, int x, int y, int size, const std::string &letters)
 {
 	PaintDisc(p, x + size / 2.0f, y + size / 2.0f, size / 2.0f, kAvatarDisc, kAvatarDisc);
-	p.Font(4);
+	SelectObject(p.dc, BrandFont(BrandFace::UiStrong, size * 3 / 8, p.s));
 	p.TextCaps(x, y, size, size, letters, pal::body, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 0);
 }
 
@@ -286,20 +318,20 @@ void PaintValueBox(Painter &p, const State &st, int x, int y, int w, const std::
 	const bool hot = editable && p.Hover(x, y, w, h, st.mouseX, st.mouseY);
 	if (editable) p.Fill(x, y, w, h, pal::field);
 	p.Frame(x, y, w, h, !editable ? pal::hairline : open || hot ? pal::edgeHot : pal::edge);
-	int tx = x + 8;
+	int tx = x + 12;
 	if (swatch != CLR_INVALID) {
-		const int size = 14, sy = y + (h - size) / 2;
+		const int size = 20, sy = y + (h - size) / 2;
 		p.Fill(tx, sy, size, size, swatch);
 		p.Frame(tx, sy, size, size, pal::bg);
-		tx += size + 8;
+		tx += size + 10;
 	}
-	const int right = x + w - (editable ? 22 : 6);
+	const int right = x + w - (editable ? 28 : 8);
 	if (!text.empty() && right > tx) {
 		p.Font(0);
 		p.Text(tx, y, right - tx, h, text, ink, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
 	if (editable) {
-		p.ArrowDown(x + w - 16, y + h / 2 - 2, 8, 4, open || hot ? pal::text : pal::textDim);
+		p.ArrowDown(x + w - 21, y + h / 2 - 3, 10, 5, open || hot ? pal::text : pal::textDim);
 		p.AddHit(x, y, w, h, action, arg);
 	}
 	if (open) g_dropAnchor = {x, y, x + w, y + h};
@@ -314,7 +346,7 @@ void SlotCombo(Painter &p, const State &st, int x, int y, int w, const std::stri
 int GhostWidth(Painter &p, const std::string &label, bool arrow)
 {
 	p.Font(4);
-	return p.CapsWidth(label, 1) + 36 + (arrow ? 14 : 0);
+	return p.CapsWidth(label, 2) + 48 + (arrow ? 18 : 0);
 }
 
 // A button with only its outline, for the actions that leave the room rather than play in it.
@@ -326,32 +358,42 @@ void PaintGhostButton(Painter &p, const State &st, int x, int y, int w, int h, c
 	p.Frame(x, y, w, h, !enabled ? pal::hairline : hot || down ? pal::edgeHot : pal::edge);
 	const COLORREF ink = !enabled ? pal::disabled : hot || down ? pal::text : pal::textDim;
 	p.Font(4);
-	const int textW = p.CapsWidth(label, 1);
-	int tx = x + (w - textW - (arrow ? 14 : 0)) / 2;
+	const int textW = p.CapsWidth(label, 2);
+	int tx = x + (w - textW - (arrow ? 18 : 0)) / 2;
 	if (arrow) {
 		const int cy = y + h / 2;
-		p.ArrowLeft(tx, cy - 4, 5, 8, ink);
-		p.Fill(tx + 4, cy, 6, 1, ink);
-		tx += 14;
+		p.ArrowLeft(tx, cy - 5, 6, 10, ink);
+		p.Fill(tx + 5, cy, 7, 1, ink);
+		tx += 18;
 	}
-	p.TextCaps(tx, y, textW + 2, h, label, ink, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1);
+	p.TextCaps(tx, y, textW + 2, h, label, ink, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
 	if (enabled) p.AddHit(x, y, w, h, action, 0);
 }
 
 // Where each column of the player table starts; the player's column takes what the others leave.
 struct Columns {
-	int player = 0, playerW = 0, team = 0, teamW = 96, civ = 0, civW = 128, color = 0, colorW = 52, bonus = 0, bonusW = 108, diff = 0, diffW = 96,
-		status = 0, statusW = 116, kick = 0, kickW = 24;
+	int player = 0, playerW = 0, team = 0, teamW = 0, civ = 0, civW = 0, color = 0, colorW = 0, bonus = 0, bonusW = 0, diff = 0, diffW = 0,
+		status = 0, statusW = 0, kick = 0, kickW = 32;
 	bool bonusOn = false, statusOn = false;
 };
 
+// The columns grow from the narrow widths, a table of 1150 that still fits "No team" and the longest civilization, to the wide ones of
+// the full-width table at 1080p; the player's column takes the rest.
 Columns TableColumns(int x, int w, bool bonusOn, bool statusOn)
 {
 	Columns c;
 	c.bonusOn = bonusOn;
 	c.statusOn = statusOn;
-	const int gap = 10;
-	int right = x + w - 12;
+	const float t = std::max(0.0f, std::min(1.0f, (w - 1150) / 550.0f));
+	auto width = [t](int narrow, int wide) { return narrow + static_cast<int>((wide - narrow) * t + 0.5f); };
+	c.teamW = width(140, 190);
+	c.civW = width(170, 230);
+	c.colorW = width(64, 76);
+	c.bonusW = width(150, 200);
+	c.diffW = width(130, 180);
+	c.statusW = width(150, 190);
+	const int gap = width(12, 16);
+	int right = x + w - 16;
 	c.kick = right - c.kickW;
 	right = c.kick - 8;
 	if (statusOn) {
@@ -369,8 +411,8 @@ Columns TableColumns(int x, int w, bool bonusOn, bool statusOn)
 	c.civ = right - c.civW;
 	right = c.civ - gap;
 	c.team = right - c.teamW;
-	right = c.team - 16;
-	c.player = x + 16;
+	right = c.team - 24;
+	c.player = x + 20;
 	c.playerW = right - c.player;
 	return c;
 }
@@ -489,12 +531,12 @@ void PaintWho(Painter &p, const State &st, int x, int cy, int w, uint64_t who, c
 	const int mx = st.mouseX, my = st.mouseY;
 	const int ay = cy - kAvatar / 2;
 	if (!PaintRoundAvatar(p, x, ay, kAvatar, who)) PaintMonogram(p, x, ay, kAvatar, Initials(name));
-	int tx = x + kAvatar + 10;
+	int tx = x + kAvatar + 14;
 	const PatronInfo patron = who ? PatronOf(who) : PatronInfo();
 	const int laurel = PatronLaurelSize(patron.tier);
 	if (patron.tier != PatronTier::None) tx += laurel + 4;
 	const int nameW = std::max(20, x + w - tx);
-	const int nameY = sub.empty() ? cy - 11 : cy - 17, nameH = sub.empty() ? 22 : 18;
+	const int nameY = sub.empty() ? cy - 13 : cy - 24, nameH = sub.empty() ? 26 : 24;
 	const UINT fmt = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS;
 	p.Font(1);
 	if (patron.tier != PatronTier::None) {
@@ -511,13 +553,13 @@ void PaintWho(Painter &p, const State &st, int x, int cy, int w, uint64_t who, c
 	}
 	if (!sub.empty()) {
 		p.Font(3);
-		if (subCaps) p.TextCaps(tx, cy + 2, nameW, 15, sub, subColor, fmt, 1);
-		else p.Text(tx, cy + 2, nameW, 15, sub, subColor, fmt);
+		if (subCaps) p.TextCaps(tx, cy + 1, nameW, 19, sub, subColor, fmt, 2);
+		else p.Text(tx, cy + 1, nameW, 19, sub, subColor, fmt);
 	}
 }
 
 const DWORD kHoverMs = 120;
-const int kCheckR = 9;
+const int kCheckR = 12;
 
 void PaintReadyCheck(Painter &p, int cx, int cy, bool ready, bool hot)
 {
@@ -525,27 +567,27 @@ void PaintReadyCheck(Painter &p, int cx, int cy, bool ready, bool hot)
 	if (ready) {
 		const COLORREF fill = hot ? pal::body : pal::text;
 		PaintDisc(p, fx, fy, r, fill, fill);
-		PaintCheckMark(p, fx, fy, 10.0f, 2.2f, pal::bg);
+		PaintCheckMark(p, fx, fy, 13.0f, 2.6f, pal::bg);
 	}
 	else {
-		PaintRing(p, fx, fy, r - 0.75f, 1.5f, hot ? pal::text : pal::edgeHot);
+		PaintRing(p, fx, fy, r - 1.0f, 2.0f, hot ? pal::text : pal::edgeHot);
 	}
 }
 
 void PaintStatus(Painter &p, const Columns &c, int cy, bool ready, bool hot)
 {
 	PaintReadyCheck(p, c.status + kCheckR, cy, ready, hot);
-	const int tx = c.status + 2 * kCheckR + 8;
+	const int tx = c.status + 2 * kCheckR + 10;
 	p.Font(3);
-	p.Text(tx, cy - 10, c.status + c.statusW - tx, 20, ready ? "Ready" : "Not ready", ready || hot ? pal::text : pal::caption,
+	p.Text(tx, cy - 12, c.status + c.statusW - tx, 24, ready ? "Ready" : "Not ready", ready || hot ? pal::text : pal::caption,
 		DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }
 
 void PaintKick(Painter &p, const State &st, int x, int cy, int action, int arg)
 {
-	const int size = 24;
+	const int size = 32;
 	const bool hov = p.Hover(x, cy - size / 2, size, size, st.mouseX, st.mouseY);
-	PaintCross(p, x + size / 2.0f, static_cast<float>(cy), 8.0f, 1.6f, hov ? pal::redText : pal::disabled);
+	PaintCross(p, x + size / 2.0f, static_cast<float>(cy), 11.0f, 2.0f, hov ? pal::redText : pal::disabled);
 	p.AddHit(x, cy - size / 2, size, size, action, arg);
 }
 
@@ -596,7 +638,7 @@ void PaintSlotRow(Painter &p, const State &st, const TableCtx &t, int i, const A
 	// The seat buttons end the player's column, or sit in the empty part of a free slot's row. On a player's row they show under the
 	// mouse, and always while the host moves a player.
 	const bool compact = !s.used && arrival.Empty();
-	const int seatW = 62, seatX = compact ? c.civ : c.player + c.playerW - seatW;
+	const int seatW = 92, seatH = 32, seatX = compact ? c.civ : c.player + c.playerW - seatW;
 	std::string seatLabel;
 	int seatAction = 0;
 	bool seatStrong = false, seatAlways = false;
@@ -637,37 +679,37 @@ void PaintSlotRow(Painter &p, const State &st, const TableCtx &t, int i, const A
 		if (!seatShown) return;
 		if (seatAction < 0) {
 			p.Font(3);
-			p.Text(seatX, cy - 11, seatW, 22, seatLabel, pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			p.Text(seatX, cy - seatH / 2, seatW, seatH, seatLabel, pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		}
 		else {
-			p.Button(seatX, cy - 11, seatW, 22, seatLabel, seatAction, i, mx, my, true, seatStrong, 3);
+			p.Button(seatX, cy - seatH / 2, seatW, seatH, seatLabel, seatAction, i, mx, my, true, seatStrong, 4);
 		}
 	};
-	const int nameRight = compact ? c.civ - 12 : seatShown ? seatX - 8 : c.player + c.playerW;
+	const int nameRight = compact ? c.civ - 16 : seatShown ? seatX - 12 : c.player + c.playerW;
 	const UINT line = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS;
 	auto waiting = [&]() {
 		if (!c.statusOn) return;
 		p.Font(3);
-		p.Text(c.status, cy - 11, c.kick + c.kickW - c.status, 22, "Waiting for a player...", pal::caption, line);
+		p.Text(c.status, cy - 12, c.kick + c.kickW - c.status, 24, "Waiting for a player...", pal::caption, line);
 	};
 
 	if (!arrival.Empty()) {
 		PaintWho(p, st, c.player, cy, nameRight - c.player, arrival.id, arrival.name, arrival.status, pal::caption, false);
-		if (c.statusOn) p.Spinner(c.status + kCheckR, cy, 8, 3, GetTickCount());
+		if (c.statusOn) p.Spinner(c.status + kCheckR, cy, 10, 4, GetTickCount());
 		if (g.host) PaintKick(p, st, c.kick, cy, kGKickJoining, i);
 		return;
 	}
 
 	if (!s.used) {
 		p.Font(3);
-		const int textX = c.player, boxW = std::min(190, nameRight - textX);
+		const int textX = c.player, boxW = std::min(260, nameRight - textX);
 		if (g.host && !s.local && (s.type == 0 || s.type == 2) && load) {
 			const bool saved = i < static_cast<int>(st.savePlayers.size()) && st.savePlayers[i].used() && !st.savePlayers[i].ai();
 			const std::string text = s.type == 2 ? std::string("Closed") : saved ? Tr("Slot for ") + st.savePlayers[i].name : std::string("Open slot");
-			p.Text(textX, cy - 11, nameRight - textX, 22, text, pal::caption, line);
+			p.Text(textX, cy - 12, nameRight - textX, 24, text, pal::caption, line);
 		}
 		else if (!s.exists || s.type == 4) {
-			p.Text(textX, cy - 11, nameRight - textX, 22, "This map has no more positions", pal::disabled, line);
+			p.Text(textX, cy - 12, nameRight - textX, 24, "This map has no more positions", pal::disabled, line);
 		}
 		else if (g.host && !s.local && (s.aiAllowed || g.online)) {
 			int sel = 0;
@@ -678,14 +720,14 @@ void PaintSlotRow(Painter &p, const State &st, const TableCtx &t, int i, const A
 		}
 		else if (load && s.type == 0) {
 			const std::string owner = SaveSlotNameFromOptions(st.room.info.optionsText, i);
-			p.Text(textX, cy - 11, nameRight - textX, 22, owner.empty() ? std::string("Open slot") : Tr("Slot for ") + owner, pal::caption, line);
+			p.Text(textX, cy - 12, nameRight - textX, 24, owner.empty() ? std::string("Open slot") : Tr("Slot for ") + owner, pal::caption, line);
 		}
 		else if (g.online && (s.type == 0 || s.type == 2)) {
 			PaintValueBox(p, st, textX, ctlY, boxW, s.type == 2 ? "Closed" : "Open slot", pal::caption, false, false, 0, 0);
 			if (s.type == 0) waiting();
 		}
 		else {
-			p.Text(textX, cy - 11, nameRight - textX, 22, s.type == 2 ? "Closed" : "Waiting for a player...", pal::caption, line);
+			p.Text(textX, cy - 12, nameRight - textX, 24, s.type == 2 ? "Closed" : "Waiting for a player...", pal::caption, line);
 		}
 		paintSeat();
 		return;
@@ -694,7 +736,7 @@ void PaintSlotRow(Painter &p, const State &st, const TableCtx &t, int i, const A
 	if (s.type == 1) {
 		PaintMonogram(p, c.player, cy - kAvatar / 2, kAvatar, Tr("AI"));
 		p.Font(1);
-		p.Text(c.player + kAvatar + 10, cy - 11, std::max(20, nameRight - c.player - kAvatar - 10), 22, "AI", pal::text, line);
+		p.Text(c.player + kAvatar + 14, cy - 13, std::max(20, nameRight - c.player - kAvatar - 14), 26, "AI", pal::text, line);
 	}
 	else {
 		PaintWho(p, st, c.player, cy, nameRight - c.player, who, SlotLabel(s), i == t.f.hostSlot ? std::string("Host") : std::string(), pal::redText, true,
@@ -738,11 +780,11 @@ void PaintSlotRow(Painter &p, const State &st, const TableCtx &t, int i, const A
 	}
 	else {
 		p.Font(0);
-		p.Text(c.diff + 8, ctlY, c.diffW - 8, kFieldH, "—", pal::disabled, line);
+		p.Text(c.diff + 12, ctlY, c.diffW - 12, kFieldH, "—", pal::disabled, line);
 	}
 	if (c.statusOn) {
 		if (s.type == 3 && !s.exists) {
-			PaintBadge(p, c.status, cy - 10, std::min(c.statusW, 80), 20, "No slot", pal::red, pal::body);
+			PaintBadge(p, c.status, cy - 13, std::min(c.statusW, 100), 26, "No slot", pal::red, pal::body);
 		}
 		else if (s.type == 1) {
 			PaintStatus(p, c, cy, true, false);
@@ -750,22 +792,24 @@ void PaintSlotRow(Painter &p, const State &st, const TableCtx &t, int i, const A
 		else {
 			const bool toggles = s.local && (t.f.mapReady || s.ready) && !(st.map.needsPack && !g.host);
 			const int hx = c.status - 4, hw = c.statusW + 8;
-			const bool hot = toggles && p.Hover(hx, cy - 14, hw, 28, mx, my);
+			const bool hot = toggles && p.Hover(hx, cy - 18, hw, 36, mx, my);
 			PaintStatus(p, c, cy, s.ready, hot);
-			if (toggles) p.AddHit(hx, cy - 14, hw, 28, kGReady, 0);
+			if (toggles) p.AddHit(hx, cy - 18, hw, 36, kGReady, 0);
 		}
 	}
 	if (g.host && g.online && s.type == 3 && !s.local && !moving) PaintKick(p, st, c.kick, cy, kGKick, i);
 }
 
-void PaintPlayerTable(Painter &p, const State &st, const RoomFacts &f, int x, int y, int w)
+// The rows are as tall as the mockup's while they fit in `maxH`, and no shorter than the controls in them.
+void PaintPlayerTable(Painter &p, const State &st, const RoomFacts &f, int x, int y, int w, int maxH)
 {
 	const GameRoomSnapshot &g = st.game;
 	Arrival arriving[8];
 	PlaceArrivals(st, f, arriving);
 	int rows = 0;
 	for (int i = 0; i < 8; i++) rows += g.slots[i].exists || g.slots[i].used || !arriving[i].Empty() ? 1 : 0;
-	PaintCard(p, x, y, w, kTableHeadH + std::max(1, rows) * kRowH);
+	const int rowH = std::max(kMinRowH, std::min(kMaxRowH, (maxH - kTableHeadH) / std::max(1, rows)));
+	PaintRoomCard(p, x, y, w, kTableHeadH + std::max(1, rows) * rowH);
 	TableCtx t;
 	t.f = f;
 	t.x = x;
@@ -775,56 +819,59 @@ void PaintPlayerTable(Painter &p, const State &st, const RoomFacts &f, int x, in
 	const Columns &c = t.c;
 	p.Font(4);
 	const int hy = y + 2, hh = kTableHeadH - 4;
-	const UINT head = DT_LEFT | DT_VCENTER | DT_SINGLELINE;
-	p.TextCaps(c.player, hy, c.playerW, hh, "Player", pal::caption, head, 1);
-	p.TextCaps(c.team, hy, c.teamW, hh, "Team", pal::caption, head, 1);
-	p.TextCaps(c.civ, hy, c.civW, hh, "Civilization", pal::caption, head, 1);
-	p.TextCaps(c.color, hy, c.colorW + 8, hh, "Color", pal::caption, head, 1);
-	if (c.bonusOn) p.TextCaps(c.bonus, hy, c.bonusW, hh, "Bonus", pal::caption, head, 1);
-	p.TextCaps(c.diff, hy, c.diffW, hh, "Difficulty", pal::caption, head, 1);
-	if (c.statusOn) p.TextCaps(c.status, hy, c.statusW, hh, "Status", pal::caption, head, 1);
+	const UINT head = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS;
+	p.TextCaps(c.player, hy, c.playerW, hh, "Player", pal::caption, head, 2);
+	p.TextCaps(c.team, hy, c.teamW, hh, "Team", pal::caption, head, 2);
+	p.TextCaps(c.civ, hy, c.civW, hh, "Civilization", pal::caption, head, 2);
+	p.TextCaps(c.color, hy, c.colorW + 8, hh, "Color", pal::caption, head, 2);
+	if (c.bonusOn) p.TextCaps(c.bonus, hy, c.bonusW, hh, "Bonus", pal::caption, head, 2);
+	p.TextCaps(c.diff, hy, c.diffW, hh, "Difficulty", pal::caption, head, 2);
+	if (c.statusOn) p.TextCaps(c.status, hy, c.statusW, hh, "Status", pal::caption, head, 2);
 
 	int rowY = y + kTableHeadH, hovered = -1;
 	for (int i = 0; i < 8; i++) {
 		const GameRoomSlot &s = g.slots[i];
 		if (!s.exists && !s.used && arriving[i].Empty()) continue;
-		if (p.Hover(x + 1, rowY, w - 2, kRowH, st.mouseX, st.mouseY)) hovered = i;
+		if (p.Hover(x + 1, rowY, w - 2, rowH, st.mouseX, st.mouseY)) hovered = i;
 		if (hovered == i && g_anim.hoverRow != i) g_anim.hoverAt = GetTickCount();
 		const int hoverPercent = static_cast<int>(std::min<DWORD>(kHoverMs, Since(g_anim.hoverAt)) * 100 / kHoverMs);
-		PaintSlotRow(p, st, t, i, arriving[i], rowY, kRowH, hoverPercent);
-		rowY += kRowH;
+		PaintSlotRow(p, st, t, i, arriving[i], rowY, rowH, hoverPercent);
+		rowY += rowH;
 	}
 	g_anim.hoverRow = hovered;
 }
 
-void PaintRoomHeader(Painter &p, const State &st, const RoomFacts &f)
+void PaintRoomHeader(Painter &p, const State &st, const RoomFacts &f, const RoomLayout &l)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const GameRoomSnapshot &g = st.game;
 	const std::string title = !g.online ? Tr("Skirmish") : st.room.id ? st.room.info.name : Tr("Local network game");
+	const int m = l.margin;
 
-	const int buttonY = 16, buttonH = 32;
+	const int buttonY = m, buttonH = 44;
 	const int leaveW = GhostWidth(p, "Leave", true);
-	int buttonsLeft = kW - kMargin - leaveW;
+	int buttonsLeft = l.w - m - leaveW;
 	PaintGhostButton(p, st, buttonsLeft, buttonY, leaveW, buttonH, "Leave", kGCancel, true, true);
 	if (g.online && st.room.id) {
 		const int inviteW = GhostWidth(p, "Invite", false);
-		buttonsLeft -= 8 + inviteW;
+		buttonsLeft -= 12 + inviteW;
 		PaintGhostButton(p, st, buttonsLeft, buttonY, inviteW, buttonH, "Invite", kInvite, false, !RoomHasNoSeat(st));
 	}
 
-	const int tabW = 90, tabsW = 2 * tabW + 6, tabGap = 28;
-	p.Font(5);
-	const int titleMax = std::max(120, buttonsLeft - 24 - tabsW - tabGap - kMargin);
-	const int titleW = std::min(titleMax, p.CapsWidth(title, 2) + 4);
-	p.TextCaps(kMargin, 8, titleW, 42, title, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
-	PaintTabs(p, kMargin + titleW + tabGap, 12, {{"Game", kGTab, 1, st.roomTab == 1, true}, {"Room", kGTab, 0, st.roomTab != 1, true}}, mx, my, tabW,
-		38);
+	// The tabs follow the title on its baseline; a long title gives way to them and ends in an ellipsis.
+	p.Font(2);
+	const int tabW = std::max(p.CapsWidth("Game", 2), p.CapsWidth("Room", 2)) + 44, tabsW = 2 * tabW + 6, tabGap = 48, tabH = 52;
+	SelectObject(p.dc, BrandFont(BrandFace::Display, l.titleSize, p.s));
+	const int titleMax = std::max(160, buttonsLeft - 32 - tabsW - tabGap - m);
+	const int titleW = std::min(titleMax, p.CapsWidth(title, 1) + 4);
+	p.TextCaps(m, l.titleY, titleW, l.titleH, title, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
+	PaintTabs(p, m + titleW + tabGap, l.titleY + l.titleH - tabH - 4, {{"Game", kGTab, 1, st.roomTab == 1, true}, {"Room", kGTab, 0, st.roomTab != 1, true}},
+		mx, my, tabW, tabH, 2);
 
-	p.Font(3);
+	p.Font(0);
+	const UINT line = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS;
 	if (f.withoutSlot) {
-		p.Text(kMargin, 50, kW - 2 * kMargin, 18, Tr("The map is for ") + std::to_string(f.positions) + Tr(" players"), pal::bad,
-			DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+		p.Text(m, l.infoY, l.w - 2 * m, l.infoH, Tr("The map is for ") + std::to_string(f.positions) + Tr(" players"), pal::bad, line);
 		return;
 	}
 	std::string info;
@@ -836,9 +883,113 @@ void PaintRoomHeader(Painter &p, const State &st, const RoomFacts &f)
 		add(Tr(st.room.id ? "Online on Steam" : "Local network"));
 	}
 	add(TrFmt("%d of %d players", {std::to_string(f.humans + f.ai), std::to_string(f.positions)}));
-	p.Text(kMargin, 50, kW - 2 * kMargin, 18, info, pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	p.Text(m, l.infoY, l.w - 2 * m, l.infoH, info, pal::caption, line);
 }
 
+}
+
+RoomView RoomViewFor(int screenW, int screenH)
+{
+	RoomView v;
+	// Below 0.8 the captions would shrink past reading at 720p: shorter screens get fewer design units instead, and the layout tightens.
+	v.s = std::max(0.8f, std::min(1.6f, screenH / 1080.0f));
+	v.s = std::max(0.6f, std::min(v.s, screenW / 1200.0f));
+	v.w = static_cast<int>(std::ceil(screenW / v.s - 0.01f));
+	v.h = static_cast<int>(std::ceil(screenH / v.s - 0.01f));
+	return v;
+}
+
+namespace {
+struct Backdrop {
+	Picture map;
+	// 0 not read yet, 1 read, -1 missing.
+	int state = 0;
+	std::vector<uint32_t> scaled;
+	int w = 0, h = 0;
+};
+Backdrop g_backdrop;
+
+// Cover-scaled with bilinear sampling: the map is a little smaller than 1080p and much smaller than 4K, so most screens enlarge it.
+void ScaleBackdrop(Backdrop &b, int w, int h)
+{
+	const Picture &m = b.map;
+	b.scaled.assign(static_cast<size_t>(w) * h, 0);
+	b.w = w;
+	b.h = h;
+	const float scale = std::max(static_cast<float>(w) / m.w, static_cast<float>(h) / m.h);
+	const float offX = (m.w - w / scale) / 2, offY = (m.h - h / scale) / 2;
+	std::vector<int> x0(w), x1(w);
+	std::vector<uint32_t> fx(w);
+	for (int x = 0; x < w; x++) {
+		const float sx = std::max(0.0f, std::min(m.w - 1.0f, offX + (x + 0.5f) / scale - 0.5f));
+		x0[x] = static_cast<int>(sx);
+		x1[x] = std::min(m.w - 1, x0[x] + 1);
+		fx[x] = static_cast<uint32_t>((sx - x0[x]) * 256);
+	}
+	for (int y = 0; y < h; y++) {
+		const float sy = std::max(0.0f, std::min(m.h - 1.0f, offY + (y + 0.5f) / scale - 0.5f));
+		const int y0 = static_cast<int>(sy), y1 = std::min(m.h - 1, y0 + 1);
+		const uint32_t fy = static_cast<uint32_t>((sy - y0) * 256);
+		const uint32_t *r0 = &m.px[static_cast<size_t>(y0) * m.w], *r1 = &m.px[static_cast<size_t>(y1) * m.w];
+		uint32_t *out = &b.scaled[static_cast<size_t>(y) * w];
+		for (int x = 0; x < w; x++) {
+			const uint32_t a = r0[x0[x]], bb = r0[x1[x]], c = r1[x0[x]], d = r1[x1[x]], wx = fx[x];
+			uint32_t px = 0;
+			for (int shift = 0; shift < 24; shift += 8) {
+				const uint32_t top = ((a >> shift) & 255) * (256 - wx) + ((bb >> shift) & 255) * wx;
+				const uint32_t bottom = ((c >> shift) & 255) * (256 - wx) + ((d >> shift) & 255) * wx;
+				px |= ((top * (256 - fy) + bottom * fy) >> 16) << shift;
+			}
+			out[x] = px;
+		}
+	}
+}
+}
+
+bool PaintRoomBackdrop(Canvas &canvas)
+{
+	Backdrop &b = g_backdrop;
+	if (!b.state) {
+		b.state = LoadPicture(BrandFile(L"backdrop-map.jpg"), b.map) ? 1 : -1;
+		if (b.state > 0) LogI("ui", "room backdrop %dx%d", b.map.w, b.map.h);
+		else LogW("ui", "room backdrop: brand/backdrop-map.jpg is missing or unreadable; the room keeps its flat background");
+	}
+	if (b.state < 0 || !canvas.bits || canvas.w <= 0 || canvas.h <= 0) return false;
+	if (b.w != canvas.w || b.h != canvas.h) ScaleBackdrop(b, canvas.w, canvas.h);
+	GdiFlush();
+	std::copy(b.scaled.begin(), b.scaled.end(), canvas.bits);
+	return true;
+}
+
+void PaintRoomCard(Painter &p, int x, int y, int w, int h)
+{
+	static uint32_t *bits = nullptr;
+	static HBITMAP dot = NewBitmap(1, 1, bits);
+	if (!dot) {
+		PaintCard(p, x, y, w, h);
+		return;
+	}
+	const RECT r = p.R(x, y, w, h);
+	GdiFlush();
+	*bits = PixelOf(pal::panel);
+	HDC mem = CreateCompatibleDC(p.dc);
+	HGDIOBJ old = SelectObject(mem, dot);
+	// The panel at 88 %, so the engraved map shows faintly through the cards.
+	BLENDFUNCTION blend = {AC_SRC_OVER, 0, 224, 0};
+	GdiAlphaBlend(p.dc, r.left, r.top, r.right - r.left, r.bottom - r.top, mem, 0, 0, 1, 1, blend);
+	SelectObject(mem, old);
+	DeleteDC(mem);
+	p.Frame(x, y, w, h, pal::hairline);
+}
+
+void UseRoomFonts(Painter &p)
+{
+	p.fonts[0] = BrandFont(BrandFace::Body, 17, p.s);
+	p.fonts[1] = BrandFont(BrandFace::BodyBold, 17, p.s);
+	p.fonts[2] = BrandFont(BrandFace::Display, 30, p.s);
+	p.fonts[3] = BrandFont(BrandFace::Ui, 15, p.s);
+	p.fonts[4] = BrandFont(BrandFace::UiStrong, 13, p.s);
+	p.fonts[5] = BrandFont(BrandFace::Display, 72, p.s);
 }
 
 void PaintMapThumb(Painter &p, const State &st, int x, int y, int size, bool markers)
@@ -912,21 +1063,24 @@ std::string RoomNotice(const State &st, COLORREF &color)
 }
 
 namespace {
-void PaintSummary(Painter &p, const State &st, int x, int y, int w, int h)
+void PaintSummary(Painter &p, const State &st, int cardX, int cardY, int cardW, int cardH)
 {
-	const bool hot = p.Hover(x, y, w, h, st.mouseX, st.mouseY);
+	const bool hot = p.Hover(cardX, cardY, cardW, cardH, st.mouseX, st.mouseY);
+	PaintRoomCard(p, cardX, cardY, cardW, cardH);
+	if (hot) p.Frame(cardX, cardY, cardW, cardH, pal::edge);
+	const int pad = 24, x = cardX + pad, y = cardY + 20, w = cardW - 2 * pad, h = cardH - 20 - pad;
 	p.Font(4);
-	p.TextCaps(x, y, w, 18, "Game summary", hot ? pal::text : pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1);
+	p.TextCaps(x, y, w, 20, "Game summary", hot ? pal::text : pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
 	COLORREF noticeColor = pal::textDim;
 	const std::string notice = RoomNotice(st, noticeColor);
-	const int noticeH = notice.empty() ? 0 : 34;
-	const int top = y + 26, bottom = y + h - (noticeH ? noticeH + 4 : 0);
-	const int thumb = std::max(0, std::min(96, bottom - top));
-	if (thumb >= 32) {
+	const int noticeH = notice.empty() ? 0 : 40;
+	const int top = y + 34, bottom = y + h - (noticeH ? noticeH + 6 : 0);
+	const int thumb = std::max(0, std::min({156, bottom - top, w / 3}));
+	if (thumb >= 48) {
 		PaintMapThumb(p, st, x, top, thumb, false);
 		if (hot) p.Frame(x, top, thumb, thumb, pal::edgeHot);
 	}
-	const int gx = thumb >= 32 ? x + thumb + 16 : x, gw = x + w - gx;
+	const int gx = thumb >= 48 ? x + thumb + 24 : x, gw = x + w - gx;
 	struct Line {
 		const char *label;
 		int id;
@@ -934,17 +1088,17 @@ void PaintSummary(Painter &p, const State &st, int x, int y, int w, int h)
 	};
 	static const Line kLines[] = {{"Map", 0, nullptr}, {"Mode", 0x1002, "Game type"}, {"Size", 0x01000008, "Map size"}, {"Population", 0x1004, "Population"},
 		{"Starting gold", 0x1005, "Starting gold"}, {"Limit", 0x1003, "Limit"}};
-	const int columns = gw >= 480 ? 3 : 2, colGap = 16, colW = (gw - (columns - 1) * colGap) / columns, cellH = 36;
+	const int columns = gw >= 420 ? 3 : 2, colGap = 20, colW = (gw - (columns - 1) * colGap) / columns, cellH = 52;
 	const UINT line = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS;
 	int shown = 0;
 	for (const Line &l : kLines) {
 		const int lx = gx + (shown % columns) * (colW + colGap), ly = top + (shown / columns) * cellH;
 		if (ly + cellH - 2 > bottom) break;
 		const std::string v = l.published ? RoomOptionText(st, l.id, l.published) : RoomMapLabel(st);
-		p.Font(3);
-		p.Text(lx, ly, colW, 15, l.label, pal::caption, line);
+		p.Font(4);
+		p.TextCaps(lx, ly, colW, 18, l.label, pal::caption, line, 2);
 		p.Font(0);
-		p.Text(lx, ly + 15, colW, 19, v.empty() ? std::string("—") : v, pal::text, line);
+		p.Text(lx, ly + 20, colW, 26, v.empty() ? std::string("—") : v, pal::text, line);
 		shown++;
 	}
 	if (!notice.empty()) {
@@ -953,26 +1107,27 @@ void PaintSummary(Painter &p, const State &st, int x, int y, int w, int h)
 		p.TextWrapped(x, y + h - noticeH, w, noticeH, notice, noticeColor);
 		p.Unclip();
 	}
-	p.AddHit(x, y, w, h, kGTab, 1);
+	p.AddHit(cardX, cardY, cardW, cardH, kGTab, 1);
 }
 
-// The largest display font that fits the word in the disc.
-void FitCaps(Painter &p, const char *text, int width)
+// The largest display size, up to about two thirds of the radius, that fits the word in the disc.
+void FitCaps(Painter &p, const char *text, int width, int radius)
 {
-	for (int font : {5, 2, 1}) {
-		p.Font(font);
+	for (int size = radius * 2 / 3; size > 20; size -= 4) {
+		SelectObject(p.dc, BrandFont(BrandFace::Display, size, p.s));
 		if (p.CapsWidth(text, 1) <= width) return;
 	}
+	SelectObject(p.dc, BrandFont(BrandFace::Display, 20, p.s));
 }
 
-void PaintReadyBlock(Painter &p, const State &st, const RoomFacts &f, int x, int y, int w, int h)
+void PaintReadyBlock(Painter &p, const State &st, const RoomFacts &f, int x, int y, int w, int h, int radius)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const GameRoomSnapshot &g = st.game;
 	const GameRoomSlot &me = g.slots[g.localSlot & 7];
-	const int radius = 46, ringR = radius + 6, cx = x + w / 2, cy = y + ringR + 2;
+	const int ringR = radius + 9, cx = x + w / 2, cy = y + ringR + 4;
 	if (g.online && !g.host && st.map.needsPack) {
-		p.Button(x + 8, cy - 22, w - 16, 44, "Download and rejoin", kGResync, 0, mx, my, true, true);
+		p.Button(x + 8, cy - 24, w - 16, 48, "Download and rejoin", kGResync, 0, mx, my, true, true);
 		return;
 	}
 	enum Look { kAsk, kIsReady, kStart, kWait, kCount };
@@ -1011,31 +1166,31 @@ void PaintReadyBlock(Painter &p, const State &st, const RoomFacts &f, int x, int
 		break;
 	}
 	// A gap of the page's colour between the disc and its ring.
-	PaintRing(p, fx, fy, static_cast<float>(ringR), 1.2f, ring);
+	PaintRing(p, fx, fy, static_cast<float>(ringR), 1.5f, ring);
 	PaintDisc(p, fx, fy + (down ? 1 : 0), fr, fill, fill);
 	const int textY = cy + (down ? 1 : 0);
 	const UINT center = DT_CENTER | DT_VCENTER | DT_SINGLELINE;
 	switch (look) {
 	case kAsk:
-		FitCaps(p, "Ready?", radius * 2 - 14);
-		p.TextCaps(cx - radius, textY - 20, radius * 2, 40, "Ready?", ink, center, 1);
+		FitCaps(p, "Ready?", radius * 2 - 24, radius);
+		p.TextCaps(cx - radius, textY - radius / 2, radius * 2, radius, "Ready?", ink, center, 1);
 		break;
 	case kStart:
-		FitCaps(p, "Start", radius * 2 - 14);
-		p.TextCaps(cx - radius, textY - 20, radius * 2, 40, "Start", ink, center, 1);
+		FitCaps(p, "Start", radius * 2 - 24, radius);
+		p.TextCaps(cx - radius, textY - radius / 2, radius * 2, radius, "Start", ink, center, 1);
 		break;
 	case kIsReady:
-		FitCaps(p, "Ready", radius * 2 - 14);
-		p.TextCaps(cx - radius, textY - 20, radius * 2, 40, "Ready", ink, center, 1);
+		FitCaps(p, "Ready", radius * 2 - 24, radius);
+		p.TextCaps(cx - radius, textY - radius / 2, radius * 2, radius, "Ready", ink, center, 1);
 		break;
 	case kCount: {
 		const float done = 1.0f - std::max(0, std::min(5000, left)) / 5000.0f;
-		PaintRing(p, fx, fy, static_cast<float>(ringR), 3.0f, pal::red, 255, done);
+		PaintRing(p, fx, fy, static_cast<float>(ringR), 4.0f, pal::red, 255, done);
 		p.Font(5);
-		p.Text(cx - radius, textY - 22, radius * 2, 44, std::to_string((left + 999) / 1000), ink, center);
+		p.Text(cx - radius, textY - radius * 2 / 3, radius * 2, radius * 4 / 3, std::to_string((left + 999) / 1000), ink, center);
 		break;
 	}
-	case kWait: p.Spinner(cx, cy, 16, 5, GetTickCount()); break;
+	case kWait: p.Spinner(cx, cy, 22, 6, GetTickCount()); break;
 	}
 	if (enabled) p.AddHit(cx - radius, cy - radius, radius * 2, radius * 2, action, 0);
 	if (!g.online) return;
@@ -1057,11 +1212,11 @@ void PaintReadyBlock(Painter &p, const State &st, const RoomFacts &f, int x, int
 	case kWait: caption = !f.saveReady ? "Waiting for the saved game..." : "Waiting for the scenario..."; break;
 	default: break;
 	}
-	int ty = cy + ringR + 8;
+	int ty = cy + ringR + 12;
 	if (!count.empty()) {
-		p.Font(4);
-		p.Text(x, ty, w, 16, count, pal::text, center);
-		ty += 18;
+		p.Font(1);
+		p.Text(x, ty, w, 24, count, pal::text, center);
+		ty += 28;
 	}
 	const int captionH = y + h - ty;
 	if (!caption.empty() && captionH > 10) {
@@ -1076,32 +1231,34 @@ void PaintReadyBlock(Painter &p, const State &st, const RoomFacts &f, int x, int
 	}
 }
 
-void PaintChatBlock(Painter &p, const State &st, int x, int y, int w, int h)
+void PaintChatBlock(Painter &p, const State &st, int cardX, int cardY, int cardW, int cardH)
 {
+	PaintRoomCard(p, cardX, cardY, cardW, cardH);
+	const int pad = 20, x = cardX + pad, y = cardY + 20, w = cardW - 2 * pad, h = cardH - 20 - pad;
 	p.Font(4);
-	p.TextCaps(x, y, w, 18, "Chat", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1);
-	const int fieldH = 28, sendW = 66, logTop = y + 26;
-	PaintChatLog(p, st, x, logTop, w, y + h - fieldH - 8 - logTop);
-	PaintField(p, st, x, y + h - fieldH, w - sendW - 8, fieldH, st.chatInput, "Type a message...", st.focus == kChatField, kChatFocus);
+	p.TextCaps(x, y, w, 20, "Chat", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
+	const int fieldH = 40, sendW = 104, logTop = y + 30;
+	PaintChatLog(p, st, x, logTop, w, y + h - fieldH - 10 - logTop);
+	PaintField(p, st, x, y + h - fieldH, w - sendW - 10, fieldH, st.chatInput, "Type a message...", st.focus == kChatField, kChatFocus);
 	p.Button(x + w - sendW, y + h - fieldH, sendW, fieldH, "Send", kChatSend, 0, st.mouseX, st.mouseY, true, false, 4);
 }
 
-void PaintRoomTab(Painter &p, const State &st, const RoomFacts &f)
+void PaintRoomTab(Painter &p, const State &st, const RoomFacts &f, const RoomLayout &l)
 {
 	const GameRoomSnapshot &g = st.game;
-	PaintPlayerTable(p, st, f, kMargin, kTableTop, kW - 2 * kMargin);
-	const int by = kH - 16 - kBottomH, gap = 16;
+	const int m = l.margin, inner = l.w - 2 * m, by = l.bottomY, bh = l.bottomH, gap = kBlockGap;
+	PaintPlayerTable(p, st, f, m, l.top, inner, by - 32 - l.top);
 	if (g.online) {
-		const int centerX = kMargin + kSideW + gap, centerW = kW - 2 * centerX;
-		PaintSummary(p, st, kMargin, by, kSideW, kBottomH);
-		PaintReadyBlock(p, st, f, centerX, by, centerW, kBottomH);
-		PaintChatBlock(p, st, kW - kMargin - kSideW, by, kSideW, kBottomH);
+		const int centerW = std::max(280, std::min(380, inner / 5)), sideW = (inner - centerW - 2 * gap) / 2;
+		PaintSummary(p, st, m, by, sideW, bh);
+		PaintReadyBlock(p, st, f, m + sideW + gap, by, centerW, bh, l.radius);
+		PaintChatBlock(p, st, l.w - m - sideW, by, sideW, bh);
 	}
 	else {
 		// Without a chat the summary takes its place and the button moves to the right edge.
-		const int readyW = 240;
-		PaintSummary(p, st, kMargin, by, kW - 2 * kMargin - readyW - gap, kBottomH);
-		PaintReadyBlock(p, st, f, kW - kMargin - readyW, by, readyW, kBottomH);
+		const int readyW = 340;
+		PaintSummary(p, st, m, by, inner - readyW - gap, bh);
+		PaintReadyBlock(p, st, f, l.w - m - readyW, by, readyW, bh, l.radius);
 	}
 }
 
@@ -1110,7 +1267,7 @@ void PaintRoomDialogs(Painter &p, const State &st)
 	const int mx = st.mouseX, my = st.mouseY;
 	const GameRoomSnapshot &g = st.game;
 	if (st.dropAsk) {
-		const int w = 520, h = 210, x = (kW - w) / 2, y = 180;
+		const int w = 520, h = 210, x = (st.viewW - w) / 2, y = (st.viewH - h) / 2;
 		p.hits->clear();
 		p.Fill(x - 2, y - 2, w + 4, h + 4, pal::bg);
 		p.Fill(x, y, w, h, pal::raised);
@@ -1128,7 +1285,7 @@ void PaintRoomDialogs(Painter &p, const State &st)
 		p.Button(x + w - 256, y + h - 46, 236, 32, "Keep the map as it was", kDropNo, 0, mx, my, true, true);
 	}
 	else if (st.swapAskFrom) {
-		const int w = 470, h = 170, x = (kW - w) / 2, y = 190;
+		const int w = 470, h = 170, x = (st.viewW - w) / 2, y = (st.viewH - h) / 2;
 		p.hits->clear();
 		p.Fill(x - 2, y - 2, w + 4, h + 4, pal::bg);
 		p.Fill(x, y, w, h, pal::raised);
@@ -1152,9 +1309,9 @@ void PaintRoomDialogs(Painter &p, const State &st)
 void PaintGameRoom(Painter &p, const State &st)
 {
 	const RoomFacts f = Facts(st);
-	p.Fill(0, 0, kW, kH, pal::bg);
-	p.Frame(0, 0, kW, kH, pal::hairline);
-	PaintRoomHeader(p, st, f);
+	const RoomLayout l = LayoutFor(st);
+	UseRoomFonts(p);
+	PaintRoomHeader(p, st, f, l);
 	if (st.roomTab == 1) {
 		{
 			std::lock_guard<std::mutex> lock(g_chat.mx);
@@ -1163,7 +1320,7 @@ void PaintGameRoom(Painter &p, const State &st)
 		// The host's slot menus and the seat buttons rely on where the arrivals go, also while the table is hidden.
 		Arrival arriving[8];
 		PlaceArrivals(st, f, arriving);
-		PaintGameTab(p, st, kTableTop);
+		PaintGameTab(p, st, l.margin, l.top, l.w - 2 * l.margin, l.h - l.margin - l.top);
 	}
 	else {
 		{
@@ -1171,8 +1328,10 @@ void PaintGameRoom(Painter &p, const State &st)
 			g_optRect = {};
 		}
 		g_optGeomOut = ListGeom();
-		PaintRoomTab(p, st, f);
+		PaintRoomTab(p, st, f, l);
 	}
+	// The dialogs, menus and the scenario picker over the room keep the shared type their boxes are sized for.
+	std::copy(std::begin(g_fonts), std::end(g_fonts), std::begin(p.fonts));
 	PaintRoomDialogs(p, st);
 }
 
@@ -1214,7 +1373,7 @@ void PaintSpectate(Painter &p, const State &st)
 namespace mpui_impl {
 void PaintScreen(Painter &p, const State &st)
 {
-	PaintWindowFrame(p, kW, kH);
+	if (!st.game.active) PaintWindowFrame(p, kW, kH);
 	p.noHover = st.dropOpen || st.passPrompt || st.syncConfirm || st.syncPhase || st.searching || st.connecting || st.recoverAsk ||
 		(st.recoverWaitHost && !st.room.id) || RejoinClientActive() || RejoinClientFailed() || (st.game.active && st.game.picker);
 	if (st.game.active) {

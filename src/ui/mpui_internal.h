@@ -23,6 +23,7 @@
 namespace mpui_impl {
 using namespace ui;
 
+// The lobby and its dialogs are a window of kW x kH; the room is laid out on the whole screen (RoomView).
 const int kW = 1000;
 
 const int kH = 640;
@@ -297,6 +298,8 @@ struct State {
 	int colW[5] = {170, 110, 80, 110, 0};
 	int resizeCol = -1, resizeStartX = 0, resizeStartW = 0;
 	float uiScale = 1.0f;
+	// The size of the frame being painted, in its own design units: kW x kH for the lobby, the screen for the room.
+	int viewW = kW, viewH = kH;
 	int dropKind = 0, dropIndex = 0, dropScroll = 0;
 	ScrollDrag dropBar;
 	int roomTab = 0;
@@ -445,11 +448,24 @@ void PaintChat(Painter &p, const State &st);
 std::map<std::string, std::string> PublishedOptions(const State &st);
 std::string RoomOptionText(const State &st, int id, const char *published);
 std::string RoomMapLabel(const State &st);
-void PaintGameTab(Painter &p, const State &st, int top);
+void PaintGameTab(Painter &p, const State &st, int x, int y, int w, int h);
 void PaintMapThumb(Painter &p, const State &st, int x, int y, int size, bool markers);
 std::string RoomNotice(const State &st, COLORREF &color);
 
 const int kRoomTeams = 4;
+
+// The room fills the screen: laid out in pixels of a 1920x1080 one, its scale follows the height.
+struct RoomView {
+	float s = 1.0f;
+	int w = 1920, h = 1080;
+};
+RoomView RoomViewFor(int screenW, int screenH);
+// The engraved map under the room, cover-scaled to the canvas; false when the file is missing.
+bool PaintRoomBackdrop(Canvas &canvas);
+// The room's card: the panel colour over the backdrop, a little see-through, with a hairline.
+void PaintRoomCard(Painter &p, int x, int y, int w, int h);
+// The room's type is larger than the shared set: these replace it while the room is painted.
+void UseRoomFonts(Painter &p);
 
 // What the room screen asks of the room that the game does not do yet; mpui_room_link.cpp keeps them together.
 void SetTeamTo(int slot, int team);

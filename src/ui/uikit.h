@@ -683,6 +683,40 @@ inline const wchar_t *UiFace()
 	return LoadBrandFonts() ? pal::kFontUi : pal::kFontUiFallback;
 }
 
+enum class BrandFace { Body, BodyBold, Ui, UiStrong, Display };
+
+// A brand face at a size the shared set doesn't have, for the screens laid out on the whole screen. Made once per size in pixels and
+// never deleted: a frame's DC may still hold the last one, and only a change of resolution adds new ones.
+inline HFONT BrandFont(BrandFace face, int size, float s)
+{
+	static std::mutex lock;
+	static std::map<std::pair<int, int>, HFONT> cache;
+	const int px = std::max(1, static_cast<int>(size * s + 0.5f));
+	std::lock_guard<std::mutex> guard(lock);
+	const auto key = std::make_pair(static_cast<int>(face), px);
+	const auto it = cache.find(key);
+	if (it != cache.end()) return it->second;
+	const bool brand = LoadBrandFonts();
+	const wchar_t *name = pal::kFontBodyFallback;
+	int weight = FW_NORMAL;
+	switch (face) {
+	case BrandFace::Body: name = brand ? pal::kFontBody : pal::kFontBodyFallback; break;
+	case BrandFace::BodyBold:
+		name = brand ? pal::kFontBody : pal::kFontBodyFallback;
+		weight = FW_BOLD;
+		break;
+	case BrandFace::Ui: name = brand ? pal::kFontUi : pal::kFontUiFallback; break;
+	case BrandFace::UiStrong:
+		name = brand ? pal::kFontUiStrong : pal::kFontUiFallback;
+		weight = brand ? FW_NORMAL : FW_SEMIBOLD;
+		break;
+	// League Gothic has one weight: asking it bold would make Windows smear a fake one.
+	case BrandFace::Display: name = brand ? pal::kFontDisplay : pal::kFontDisplayFallback; break;
+	}
+	return cache[key] = CreateFontW(-px, 0, 0, 0, weight, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+			   DEFAULT_PITCH, name);
+}
+
 inline void EnsureFonts(float s)
 {
 	if (g_fonts[0] && g_fontScale == s) return;

@@ -61,7 +61,7 @@ std::string RoomMapLabel(const State &st)
 
 namespace mpui_impl {
 namespace {
-const int kCellH = 28, kSectionH = 26, kHelpH = 38;
+const int kCellH = 40, kSectionH = 36, kHelpH = 56, kBoxH = 30;
 
 struct OptionGrid {
 	Painter &p;
@@ -95,13 +95,13 @@ struct OptionGrid {
 	void Section(const char *title)
 	{
 		EndRow();
-		y += 6;
-		if (Shown(kSectionH - 6)) {
+		y += 10;
+		if (Shown(kSectionH - 10)) {
 			p.Font(4);
-			p.Text(x, y, w, kSectionH - 8, title, pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-			p.Fill(x, y + kSectionH - 9, w, 1, pal::hairline);
+			p.TextCaps(x, y, w, kSectionH - 14, title, pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
+			p.Fill(x, y + kSectionH - 13, w, 1, pal::hairline);
 		}
-		y += kSectionH - 6;
+		y += kSectionH - 10;
 	}
 	// Hover and the help line of a cell; returns whether the mouse is on it.
 	bool Hover(const char *cellHelp)
@@ -117,18 +117,18 @@ struct OptionGrid {
 	void Combo(const char *label, const std::string &value, bool special, bool enabled, int kind, int index, const char *cellHelp)
 	{
 		Hover(cellHelp);
-		const int cx = CellX(), boxW = std::min(178, colW / 2 + 24), boxX = cx + colW - boxW, cy = y + (kCellH - 24) / 2;
+		const int cx = CellX(), boxW = std::min(240, colW / 2 + 24), boxX = cx + colW - boxW, cy = y + (kCellH - kBoxH) / 2;
 		p.Font(3);
 		p.Text(cx, y, boxX - cx - 8, kCellH, label, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		if (Shown(kCellH)) {
 			if (enabled) {
-				mpui_impl::Combo(p, st, boxX, cy, boxW, 24, value, kind, index, true);
-				if (special) p.Fill(boxX + 1, cy + 22, boxW - 26, 1, kSpecial);
+				mpui_impl::Combo(p, st, boxX, cy, boxW, kBoxH, value, kind, index, true);
+				if (special) p.Fill(boxX + 1, cy + kBoxH - 2, boxW - 26, 1, kSpecial);
 			}
 			else {
-				p.Frame(boxX, cy, boxW, 24, pal::hairline);
-				p.Font(special ? 4 : 0);
-				p.Text(boxX + 8, cy, boxW - 14, 24, value, special ? kSpecial : pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+				p.Frame(boxX, cy, boxW, kBoxH, pal::hairline);
+				p.Font(special ? 1 : 0);
+				p.Text(boxX + 8, cy, boxW - 14, kBoxH, value, special ? kSpecial : pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 			}
 		}
 		Next();
@@ -158,41 +158,41 @@ void PaintRoomName(Painter &p, const State &st, int x, int y, int w)
 {
 	const GameRoomSnapshot &g = st.game;
 	p.Font(4);
-	p.Text(x, y, 130, 28, "Room name", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-	const int fx = x + 136, fw = std::min(460, w - 136);
+	p.TextCaps(x, y, 160, 38, "Room name", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 2);
+	const int fx = x + 168, fw = std::min(560, w - 168);
 	if (g.host) {
 		const bool focused = st.focus == kRoomNameField;
-		PaintField(p, st, fx, y, fw, 28, focused ? st.roomNameInput : st.room.info.name, "", focused, kFieldRoomName);
+		PaintField(p, st, fx, y, fw, 38, focused ? st.roomNameInput : st.room.info.name, "", focused, kFieldRoomName);
 		if (focused) {
 			p.Font(3);
-			p.Text(fx + fw + 12, y, x + w - fx - fw - 12, 28, "Press Enter to rename the room", pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			p.Text(fx + fw + 16, y, x + w - fx - fw - 16, 38, "Press Enter to rename the room", pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		}
 	}
 	else {
 		p.Font(0);
-		p.Text(fx, y, fw, 28, st.room.info.name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(fx, y, fw, 38, st.room.info.name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
 }
 
 void PaintMapCard(Painter &p, const State &st, int x, int y, int w, int h)
 {
 	const GameRoomSnapshot &g = st.game;
-	PaintCard(p, x, y, w, h);
-	const int pad = 12, size = w - 2 * pad;
-	PaintMapThumb(p, st, x + pad, y + pad, size, true);
-	int ty = y + pad + size + 10;
-	const int tx = x + pad, tw = size;
+	PaintRoomCard(p, x, y, w, h);
+	const int pad = 20, size = std::min(w - 2 * pad, h / 2);
+	PaintMapThumb(p, st, x + (w - size) / 2, y + pad, size, true);
+	int ty = y + pad + size + 16;
+	const int tx = x + pad, tw = w - 2 * pad;
 	p.Font(1);
 	const std::string map = RoomMapLabel(st);
-	p.Text(tx, ty, tw, 22, map.empty() ? std::string("—") : map, pal::redText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-	ty += 26;
+	p.Text(tx, ty, tw, 26, map.empty() ? std::string("—") : map, pal::redText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	ty += 34;
 	p.Font(3);
 	auto line = [&](const std::string &label, const std::string &value, COLORREF color) {
-		if (ty + 18 > y + h - 8) return;
-		p.Text(tx, ty, tw, 18, label, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-		p.Text(tx, ty, tw, 18, value.empty() ? std::string("—") : value, color, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		p.Fill(tx, ty + 18, tw, 1, pal::selected);
-		ty += 20;
+		if (ty + 26 > y + h - pad) return;
+		p.Text(tx, ty, tw, 26, label, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+		p.Text(tx, ty, tw, 26, value.empty() ? std::string("—") : value, color, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Fill(tx, ty + 26, tw, 1, pal::hairline);
+		ty += 30;
 	};
 	const std::shared_ptr<const MapPreviewData> d = g.scenario.empty() ? nullptr : MapPreviewGet(g.scenario);
 	if (d && !d->failed) {
@@ -208,10 +208,10 @@ void PaintMapCard(Painter &p, const State &st, int x, int y, int w, int h)
 	if (positions < 8) line(Tr("Positions"), std::to_string(positions), pal::text);
 	COLORREF color = pal::textDim;
 	const std::string notice = RoomNotice(st, color);
-	if (!notice.empty() && ty + 20 < y + h - 8) {
-		ty += 6;
-		p.Clip(tx, ty, tw, y + h - 8 - ty);
-		p.TextWrapped(tx, ty, tw, y + h - 8 - ty, notice, color);
+	if (!notice.empty() && ty + 24 < y + h - pad) {
+		ty += 8;
+		p.Clip(tx, ty, tw, y + h - pad - ty);
+		p.TextWrapped(tx, ty, tw, y + h - pad - ty, notice, color);
 		p.Unclip();
 	}
 }
@@ -224,9 +224,9 @@ void PaintOptionsCard(Painter &p, const State &st, int x, int y, int w, int h)
 	const bool host = g.host;
 	const bool canEdit = host && !(g.online && LocalReady(g));
 	const std::string saveName = g.host ? st.hostSave.name : st.room.info.saveName;
-	PaintCard(p, x, y, w, h);
-	const int listTop = y + 4, listBottom = y + h - kHelpH, listH = listBottom - listTop;
-	const int gx = x + 16, gw = w - 32 - 10;
+	PaintRoomCard(p, x, y, w, h);
+	const int listTop = y + 8, listBottom = y + h - kHelpH, listH = listBottom - listTop;
+	const int gx = x + 28, gw = w - 56 - 10;
 	int scroll;
 	{
 		std::lock_guard<std::mutex> lock(g_chat.mx);
@@ -237,7 +237,7 @@ void PaintOptionsCard(Painter &p, const State &st, int x, int y, int w, int h)
 	p.Clip(x + 1, listTop, w - 2, listH);
 	if (!host && g.online && st.room.info.optionsText.empty()) {
 		p.Font(3);
-		p.TextWrapped(gx, grid.y + 12, gw, 60, "The host is choosing the map and options.", pal::textDim);
+		p.TextWrapped(gx, grid.y + 16, gw, 60, "The host is choosing the map and options.", pal::textDim);
 		grid.y += 72;
 	}
 	else {
@@ -352,7 +352,7 @@ void PaintOptionsCard(Painter &p, const State &st, int x, int y, int w, int h)
 		}
 		if (g.online && st.room.id) {
 			grid.Section("CONTENT");
-			grid.y = PaintLinesInline(p, OnlineLobbyLines(st, st.room.info, false), gx, grid.y, gw, 20) + 4;
+			grid.y = PaintLinesInline(p, OnlineLobbyLines(st, st.room.info, false), gx, grid.y, gw, 26) + 4;
 		}
 		grid.EndRow();
 	}
@@ -368,28 +368,28 @@ void PaintOptionsCard(Painter &p, const State &st, int x, int y, int w, int h)
 		ListState view = st.opt;
 		view.scroll = std::min(scroll, maxScroll);
 		ListGeom geom;
-		ScrollbarPaint(p, x + w - 11, listTop, listH, contentH, listH, view, geom, mx, my);
+		ScrollbarPaint(p, x + w - 14, listTop, listH, contentH, listH, view, geom, mx, my);
 		g_optGeomOut = geom;
 	}
-	p.Fill(x + 12, listBottom, w - 24, 1, pal::hairline);
+	p.Fill(x + 20, listBottom, w - 40, 1, pal::hairline);
 	p.Font(3);
 	const std::string help = grid.help ? std::string(grid.help) : !host && g.online ? std::string("Only the host can change the options.") : std::string();
-	p.Clip(x + 12, listBottom + 2, w - 24, kHelpH - 4);
-	p.TextWrapped(x + 16, listBottom + 4, w - 32, kHelpH - 6, help, pal::textDim);
+	p.Clip(x + 20, listBottom + 2, w - 40, kHelpH - 4);
+	p.TextWrapped(x + 28, listBottom + 8, w - 56, kHelpH - 10, help, pal::textDim);
 	p.Unclip();
 }
 }
 
-void PaintGameTab(Painter &p, const State &st, int top)
+void PaintGameTab(Painter &p, const State &st, int x, int y, int w, int h)
 {
 	const GameRoomSnapshot &g = st.game;
-	int y = top;
+	const int bottom = y + h, gap = 24;
 	if (g.online && st.room.id) {
-		PaintRoomName(p, st, 24, y + 2, kW - 48);
-		y += 38;
+		PaintRoomName(p, st, x, y, w);
+		y += 38 + 20;
 	}
-	const int bottom = kH - 16, mapW = 300;
-	PaintMapCard(p, st, 16, y, mapW, bottom - y);
-	PaintOptionsCard(p, st, 16 + mapW + 12, y, kW - 32 - mapW - 12, bottom - y);
+	const int mapW = std::max(300, std::min(440, w / 4));
+	PaintMapCard(p, st, x, y, mapW, bottom - y);
+	PaintOptionsCard(p, st, x + mapW + gap, y, w - mapW - gap, bottom - y);
 }
 }

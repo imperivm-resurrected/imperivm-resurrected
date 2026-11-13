@@ -163,7 +163,7 @@ void PaintScenarioPicker(Painter &p, const State &st)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const GameRoomSnapshot &g = st.game;
-	const Dialog dlg = DialogBegin(p, kW, kH, kDlgW, kDlgH, "Choose scenario");
+	const Dialog dlg = DialogBegin(p, st.viewW, st.viewH, kDlgW, kDlgH, "Choose scenario");
 	const int x = dlg.x, y = dlg.y;
 	const int lx = x + 20, ly = y + 98;
 	const bool confirming = st.pickDelete >= 0;
@@ -326,7 +326,7 @@ void PaintScenarioPicker(Painter &p, const State &st)
 	if (confirming) {
 		p.noHover = false;
 		const std::string name = st.pickDelete < static_cast<int>(g.pickerItems.size()) ? g.pickerItems[st.pickDelete] : "";
-		const Dialog c = DialogBegin(p, kW, kH, 560, 220, "Delete map");
+		const Dialog c = DialogBegin(p, st.viewW, st.viewH, 560, 220, "Delete map");
 		DialogText(p, c, 60, TrFmt("\"%s\" will be moved to the recycle bin. You can restore it from there.", {name}));
 		DialogButtons(p, c, {{"Delete", kPickDeleteYes, 0, true}, {"Cancel", kPickDeleteNo}}, mx, my);
 	}
