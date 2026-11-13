@@ -9,12 +9,12 @@
 //   D. classes: per map and class, the objects of the original and of the conversion, the class used, whether it
 //      exists, and the behaviours Great Battles of Rome gives a class that Imperivm I did not.
 //
-// Anything that would change what happens in the game and is not explained in KNOWN below is an error. compareCensus
-// reads the "I1PROBE census" lines of a --probe build's log and compares what was in the world with the map.
+// Anything that would change what happens in the game and is not explained in KNOWN below is an error.
 'use strict';
 const X = require('./xml');
 const S = require('./script');
 const M = require('./mapping');
+const { SCRIPT_DIR } = require('./i1classes');
 
 const lower = (s) => s.toLowerCase();
 const text = (buf) => buf.toString('latin1');
@@ -291,10 +291,12 @@ function inherited(classes, id, fn) {
 	return undefined;
 }
 
+// A behaviour of an Imperivm I class ported into the campaign's mod (lib/i1classes.js) is Imperivm I's own script: it is
+// compared as the script it was ported from.
 const behaviorsOf = (classes, id) => {
 	const all = [];
 	for (let c = classInfo(classes, id), n = 0; c && n < 32; c = c.parent && classInfo(classes, c.parent), n++) all.push(...c.behaviors);
-	return all.map(lower);
+	return all.map(lower).map((x) => (x.startsWith(SCRIPT_DIR) ? 'data/subai/' + x.slice(SCRIPT_DIR.length) : x));
 };
 
 function tableD(i1Files, outFiles, ctx, errors, warnings) {
@@ -429,6 +431,8 @@ function classLiterals(i1Files, outFiles, ctx, errors) {
 				if (t.type !== 'string') continue;
 				const v = t.text.slice(1, -1);
 				if (!i1Ids.has(lower(v)) && !gbrIds.has(lower(v))) continue;
+				// A command verb that differs from a class only in case ("hide" and Imperivm I's class Hide) is the verb.
+				if (ctx.gbr.commands.has(lower(v)) && i1Ids.get(lower(v)) !== v && gbrIds.get(lower(v)) !== v) continue;
 				const k = `${map}|${v}`;
 				per.set(k, (per.get(k) || 0) + 1);
 			}
@@ -549,7 +553,7 @@ function tableC(i1Files, outFiles, ctx, errors, warnings) {
 		let exists;
 		let arity;
 		if (kind === 'function') {
-			exists = gbr.functions.has(name) || (ctx.modFunctions && ctx.modFunctions.has(name));
+			exists = gbr.functions.has(name);
 			arity = gbr.arity.get(name) || null;
 		} else {
 			exists = gbr.methods.has(name) || BUILTIN_MEMBERS.has(name);
@@ -621,7 +625,10 @@ function tableC(i1Files, outFiles, ctx, errors, warnings) {
 				status = n.out ? 'check' : 'ok';
 			} else {
 				const ta = normalizeScript(ctx.i1.data.read(g.sa.replace(/^data\//i, '')));
-				const tb = normalizeScript(gbr.readData(g.sb));
+				// A command of an Imperivm I class runs Imperivm I's script, ported: compared as the script it comes from.
+				const tb = lower(g.sb).startsWith(SCRIPT_DIR)
+					? normalizeScript(ctx.i1.data.read('subai/' + g.sb.slice(SCRIPT_DIR.length)))
+					: normalizeScript(gbr.readData(g.sb));
 				if (ta !== null && ta === tb) diff = 'same script';
 				else {
 					const la = lines(ta);
@@ -714,7 +721,7 @@ function table(headers, rows) {
 }
 
 // input: {i1Files, outFiles, refFiles, gbr, i1, gbrExe: Buffer, i1Exe: Buffer, classPairs, referenced, sequenceName,
-// removedClasses, knownBehaviors, modFunctions}. Returns {errors, warnings, text, tables}.
+// removedClasses, knownBehaviors}. Returns {errors, warnings, text, tables}.
 function auditAdventure(input) {
 	const errors = [];
 	const warnings = [];
@@ -791,10 +798,6 @@ function auditAdventure(input) {
 		out.push(table(['map', 'conversation', 'actor', 'I1 class', 'GBR class', 'title (es)', 'picture'], input.actorRows));
 		for (const r of input.actorRows) if (/^NONE/.test(r[6])) warnings.push(`D: map ${r[0]} ${r[1]}: actor ${r[2]} has no picture (${r[6]})`);
 	}
-	if (input.sight) {
-		out.push('', 'D. Unit sight, also the radius in which a unit picks a target on its own (gbr.exe 005DCA61): Great Battles of Rome -> Imperivm I, set by the I1_Sight sequence');
-		out.push(table(['GBR class', 'GBR sight', 'I1 sight', 'I1 class'], input.sight.map((r) => [r.gbr, String(r.base), String(r.i1), r.from])));
-	}
 	out.push('', 'D. Bits of the objects\' flags');
 	out.push(table(['bit', 'meaning', 'I1', 'out', 'GBR adventures'], D.bitsRows));
 	out.push('', 'A/D. UnitFlags bits (objects with the bit: original / converted / GBR adventures). Imperivm I reads only the high 16 bits (Imperivm.exe 0050E50B), Great Battles of Rome all 32 (gbr.exe 005DD6A9)');
@@ -803,42 +806,4 @@ function auditAdventure(input) {
 	return { errors, warnings, text: out.join('\n') + '\n', tables: { A, B, C, D, L } };
 }
 
-// "I1PROBE census ..." lines of a --probe build's log against the converted maps. Returns the text of a table.
-function compareCensus(logText, outFiles, mapNames) {
-	const seen = new Map();
-	for (const line of logText.split(/\r?\n/)) {
-		const m = /I1PROBE census map=(.*?) round=(\d+) player=(\d+) class=(.*?) kind=\S+.*?(?: inholder=(\d))?$/.exec(line);
-		if (!m) continue;
-		const key = `${m[1]}|${m[2]}`;
-		if (!seen.has(key)) seen.set(key, new Map());
-		const k = `${m[4]}|${m[3]}`;
-		const e = seen.get(key).get(k) || { n: 0, held: 0 };
-		e.n++;
-		if (m[5] === '1') e.held++;
-		seen.get(key).set(k, e);
-	}
-	const rows = [];
-	const byName = new Map([...mapNames].map(([id, n]) => [lower(n), id]));
-	for (const [key, counts] of seen) {
-		const [mapName, round] = key.split('|');
-		const id = byName.get(lower(mapName)) || mapName;
-		const p = [...outFiles.keys()].find((k) => lower(k) === lower(`Maps/${id}/map.obj.xml`));
-		const expected = new Map();
-		if (p) {
-			for (const o of mapObjects(outFiles.get(p)).objects) {
-				if (o.flags & 0x08000000 || !(o.flags & 0xc00000)) continue;
-				const k = `${o.cls}|${o.player}`;
-				expected.set(k, (expected.get(k) || 0) + 1);
-			}
-		}
-		for (const k of [...new Set([...expected.keys(), ...counts.keys()])].sort()) {
-			const [cls, player] = k.split('|');
-			const got = counts.get(k) || { n: 0, held: 0 };
-			const want = expected.get(k) || 0;
-			rows.push([id, round, cls, player, String(want), String(got.n), String(got.held), got.n === want ? '' : got.n < want ? 'MISSING' : 'more (spawned)']);
-		}
-	}
-	return table(['map', 'round', 'class', 'player', 'in map', 'in world', 'in holder', ''], rows) + '\n';
-}
-
-module.exports = { auditAdventure, compareCensus, exeStrings, inventory, calls, mapObjects, kindOf, KNOWN, FLAG_BITS };
+module.exports = { auditAdventure, exeStrings, inventory, calls, mapObjects, kindOf, KNOWN, FLAG_BITS };

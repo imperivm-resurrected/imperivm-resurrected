@@ -95,11 +95,19 @@ function renameFunctions(src, renames) {
 }
 
 // Replaces string literals that are exactly a name in `map` ({"OldClass": "NewClass"}), keeping the quote style.
+// Calls whose first argument is the name of a named object or of a conversation actor, never a class: "Larax" there is
+// the hero the map names Larax, whatever class the campaign gives him (GetNamedObj("Larax"), Conv.SetActor("Larax", u)).
+const NAME_ARGUMENT_CALLS = new Set(['GetNamedObj', 'SetActor']);
+
 function replaceStringLiterals(src, map) {
 	const tokens = tokenize(src);
 	const hits = {};
-	for (const t of tokens) {
+	for (let i = 0; i < tokens.length; i++) {
+		const t = tokens[i];
 		if (t.type !== 'string' || t.text.length < 2) continue;
+		const open = prevCode(tokens, i - 1);
+		const fn = open >= 0 && tokens[open].text === '(' ? prevCode(tokens, open - 1) : -1;
+		if (fn >= 0 && NAME_ARGUMENT_CALLS.has(tokens[fn].text)) continue;
 		const q = t.text[0];
 		const body = t.text.slice(1, -1);
 		if (t.text[t.text.length - 1] !== q || !Object.prototype.hasOwnProperty.call(map, body)) continue;
@@ -111,33 +119,57 @@ function replaceStringLiterals(src, map) {
 
 const REDUCE_VARS = 'ObjList i1rg_list;\nint i1rg_i, i1rg_n;\n';
 
-// Imperivm I's ReduceGroup(group) erases part of a group that a script has just spawned: two thirds on easy, one third on
-// normal and none on hard (its code in Imperivm.exe), skipping what is already dead. Great Battles of Rome does not have it,
-// so each call becomes the same loop in script, with its variables declared after the signature line.
+// A free call `name(...)` at token i: {open, close, args: [text of each top-level argument]}, or null.
+function freeCall(tokens, i, names) {
+	if (tokens[i].type !== 'ident' || !names.includes(tokens[i].text)) return null;
+	const p = prevCode(tokens, i - 1);
+	if (p >= 0 && tokens[p].text === '.') return null;
+	const open = nextCode(tokens, i + 1);
+	if (open >= tokens.length || tokens[open].text !== '(') return null;
+	const close = closingParen(tokens, open);
+	if (close < 0) return null;
+	const args = [];
+	let depth = 0;
+	let from = open + 1;
+	for (let k = open + 1; k < close; k++) {
+		const t = tokens[k].text;
+		if (tokens[k].type !== 'other') continue;
+		if (t === '(') depth++;
+		else if (t === ')') depth--;
+		else if (t === ',' && depth === 0) {
+			args.push(join(tokens.slice(from, k)).trim());
+			from = k + 1;
+		}
+	}
+	args.push(join(tokens.slice(from, close)).trim());
+	return { open, close, args };
+}
+
+// ReduceGroup(group) of Imperivm I and II erases part of the group's members: two thirds on easy, one third on normal and
+// none on hard. Both games (Imperivm.exe 004CB1A0, Imperivm II.exe 004CC800) take the group's whole QueryList (virtual slot
+// +0x20 returns this+0x1a: Imperivm.exe 004C4B60, Imperivm II.exe 00485090), n = count * (2 - difficulty) / 3, and erase the
+// first n that are units and not heroes. Great Battles of Rome has no ReduceGroup; its Group() holds the same members.
 function expandReduceGroup(src) {
 	const tokens = tokenize(src);
-	let count = 0;
+	const reduces = [];
 	for (let i = 0; i < tokens.length; i++) {
-		if (tokens[i].type !== 'ident' || tokens[i].text !== 'ReduceGroup') continue;
-		const p = prevCode(tokens, i - 1);
-		if (p >= 0 && tokens[p].text === '.') continue;
-		const open = nextCode(tokens, i + 1);
-		if (open >= tokens.length || tokens[open].text !== '(') continue;
-		const close = closingParen(tokens, open);
-		if (close < 0) continue;
-		const semi = nextCode(tokens, close + 1);
-		if (semi >= tokens.length || tokens[semi].text !== ';') continue;
-		const arg = join(tokens.slice(open + 1, close)).trim();
+		const r = freeCall(tokens, i, ['ReduceGroup']);
+		if (!r) continue;
+		const semi = nextCode(tokens, r.close + 1);
+		if (semi < tokens.length && tokens[semi].text === ';') reduces.push({ i, semi, arg: r.args[0] });
+	}
+	if (!reduces.length) return { src, count: 0 };
+	// From the end, so that the indexes before each change stay valid.
+	for (const r of [...reduces].reverse()) {
 		const code =
-			'{ i1rg_list = Group(' + arg + ').GetObjList(); ' +
+			'{ i1rg_list = Group(' + r.arg + ').GetObjList(); ' +
 			'i1rg_n = (i1rg_list.count * (2 - GetDifficulty())) / 3; ' +
 			'for (i1rg_i = 0; i1rg_i < i1rg_list.count && i1rg_n > 0; i1rg_i += 1) { ' +
-			'if (!i1rg_list[i1rg_i].IsDead()) { i1rg_list[i1rg_i].Erase(); i1rg_n = i1rg_n - 1; } } }';
-		tokens.splice(i, semi - i + 1, { type: 'other', text: code });
-		count++;
+			'if (i1rg_list[i1rg_i].AsUnit().IsValid() && !i1rg_list[i1rg_i].AsHero().IsValid()) ' +
+			'{ i1rg_list[i1rg_i].Erase(); i1rg_n = i1rg_n - 1; } } }';
+		tokens.splice(r.i, r.semi - r.i + 1, { type: 'other', text: code });
 	}
-	if (!count) return { src, count };
-	return { src: insertDeclarations(join(tokens), REDUCE_VARS), count };
+	return { src: insertDeclarations(join(tokens), REDUCE_VARS), count: reduces.length };
 }
 
 // Declarations go after the leading comment lines (the signature), before the script's own declarations.
@@ -601,7 +633,124 @@ function rewriteCall(src, name, replace) {
 	return { src: join(tokens), found };
 }
 
+// Unit::AddBonus and RemoveBonus take (minattack, maxattack, defense_slash, defense_pierce, maxhealth) in Imperivm I
+// (Imperivm.exe 005ce520) and (damage, armor_slash, armor_pierce, maxhealth, maxstamina) in Great Battles of Rome (gbr.exe
+// 005e07f0; imperivm-re/analisis/i1-vs-gbr/heroes-y-unidades.md H9): the damage is the mean of the two attacks, as for
+// items. Returns {src, count}.
+function bonusArguments(src) {
+	const tokens = tokenize(src);
+	let count = 0;
+	for (const method of ['AddBonus', 'RemoveBonus']) {
+		for (const c of methodCalls(tokens, method)) {
+			const args = argsOf(tokens, c.open, c.close);
+			if (args.length !== 5) continue;
+			const [mn, mx, ds, dp, hp] = args;
+			tokens.splice(c.open + 1, c.close - c.open - 1, { type: 'other', text: `((${mn}) + (${mx})) / 2, ${ds}, ${dp}, ${hp}, 0` });
+			count++;
+		}
+	}
+	return { src: join(tokens), count };
+}
+
+// An AI script of Imperivm I made to run in Great Battles of Rome's AI: GAIKA::Eval also counts the hidden enemies there
+// (one argument more, i1ai_hidden), and CalcMaxTake.vs is called with an out argument for the surplus (pOverneed, 0: Imperivm
+// I's AI had none). Returns {src, count}.
+function aiScriptFixes(src, name) {
+	// ai.ini declares the signature each script compiles with (not its first line): CalcMaxTake.vs takes gbr.exe's.
+	if (/^ai\.ini$/i.test(name)) {
+		const re = /^(CalcMaxTake\.vs[ \t]*=[ \t]*int,[ \t]*int idPlayer,[ \t]*GAIKA g)[ \t]*(?=\r?$)/im;
+		return re.test(src) ? { src: src.replace(re, '$1, int *pOverneed'), count: 1 } : { src, count: 0 };
+	}
+	const tokens = tokenize(src);
+	let count = 0;
+	// GAIKA::Eval and GAIKA::Count (the one with 5 arguments; Squad::Count has 1).
+	for (const method of ['Eval', 'Count']) {
+		for (const c of methodCalls(tokens, method)) {
+			const args = argsOf(tokens, c.open, c.close);
+			if (args.length !== 5) continue;
+			tokens.splice(c.close, 0, { type: 'other', text: ', i1ai_hidden' });
+			count++;
+		}
+	}
+	let s = join(tokens);
+	if (count) s = insertDeclarations(s, 'int i1ai_hidden;\n');
+	if (/^calcmaxtake\.vs$/i.test(name) && /^\/\/int, int idPlayer, GAIKA g[ \t]*(?=\r?$)/m.test(s)) {
+		// The line keeps its CR: the game reads the signature up to the end of the line as the file writes it.
+		s = s.replace(/^\/\/int, int idPlayer, GAIKA g[ \t]*(?=\r?$)/m, '//int, int idPlayer, GAIKA g, int *pOverneed');
+		// The surplus is set as Great Battles of Rome's own CalcMaxTake.vs sets it, with an operation (own - nMaxNeed).
+		if (!count) s = insertDeclarations(s, 'int i1ai_hidden;\n');
+		const eol = s.includes('\r\n') ? '\r\n' : '\n';
+		s = s.replace(/\breturn\b/, `pOverneed = i1ai_hidden - i1ai_hidden;${eol}return`);
+		count++;
+	}
+	return { src: s, count };
+}
+
+// AIStart(player[, profile[, difficulty]]) with Imperivm I's AI (lib/i1classes.js writes it as profiles of their own):
+// DEFAULT, or none, becomes `prefix`, another profile `prefix` + its name ("defensive" -> "I1DEFENSIVE"). A profile given
+// by a variable is left as it is. Returns {src, count}.
+function aiProfile(src, prefix) {
+	let count = 0;
+	const r = rewriteCall(src, 'AIStart', (arg) => {
+		const parts = arg.split(',');
+		if (parts.length === 1) {
+			count++;
+			return `${arg}, "${prefix}"`;
+		}
+		const m = /^\s*"([^"]*)"\s*$/.exec(parts[1]);
+		if (!m) return arg;
+		count++;
+		parts[1] = ` "${prefix}${/^default$/i.test(m[1]) ? '' : m[1].toUpperCase()}"`;
+		return parts.join(',');
+	});
+	return { src: r.src, count };
+}
+
+// Druid::FindUnit2HTL(mode) of Imperivm I and II looks for a unit to heal (1) or to learn from (3); Great Battles of Rome
+// has one method for each. A constant mode becomes its method; Imperivm II's idle and stand-position scripts pass a
+// variable (`tgt = .FindUnit2HTL(action).AsUnit();`), which becomes an if on it. Returns {script, count, unsupported:
+// [lines]}.
+function druidTargeting(source) {
+	const code = [];
+	let offset = 0;
+	for (const t of tokenize(source)) {
+		const end = offset + t.text.length;
+		if (t.type !== 'space' && t.type !== 'comment') code.push({ ...t, start: offset, end });
+		offset = end;
+	}
+	const edits = [];
+	const unsupported = [];
+	for (let i = 1; i < code.length; i++) {
+		if (code[i].text !== 'FindUnit2HTL' || code[i - 1].text !== '.') continue;
+		const [open, mode, close] = code.slice(i + 1, i + 4);
+		if (open && open.text === '(' && close && close.text === ')' && mode && (mode.text === '1' || mode.text === '3')) {
+			edits.push({ start: code[i].start, end: close.end, text: mode.text === '1' ? 'FindUnitToHeal()' : 'FindUnitToLearn()' });
+			continue;
+		}
+		const target = code[i - 3];
+		const before = code[i - 4];
+		const tail = code.slice(i + 4, i + 9).map((t) => t.text).join('');
+		if (open && open.text === '(' && mode && mode.type === 'ident' && close && close.text === ')' && code[i - 2] && code[i - 2].text === '=' &&
+			target && target.type === 'ident' && tail === '.AsUnit();' && (!before || [';', '{', '}'].includes(before.text))) {
+			edits.push({
+				start: target.start,
+				end: code[i + 8].end,
+				text: `{ if (${mode.text} == 1) ${target.text} = .FindUnitToHeal(); else ${target.text} = .FindUnitToLearn(); }`,
+			});
+			continue;
+		}
+		unsupported.push(source.slice(0, code[i].start).split('\n').length);
+	}
+	let script = source;
+	for (const e of edits.reverse()) script = script.slice(0, e.start) + e.text + script.slice(e.end);
+	return { script, count: edits.length, unsupported };
+}
+
 module.exports = {
+	druidTargeting,
+	bonusArguments,
+	aiScriptFixes,
+	aiProfile,
 	tokenize,
 	listCalls,
 	renameFunctions,

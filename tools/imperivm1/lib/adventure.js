@@ -7,7 +7,6 @@ const S = require('./script');
 const X = require('./xml');
 const G = require('./grid');
 const M = require('./mapping');
-const { addProbe, addActorProbes, censusSequence, sceneSequence, probeSequences } = require('./probe');
 
 const EOL = '\r\n';
 const LANGS = ['English', 'Spanish', 'Italian'];
@@ -93,7 +92,9 @@ function decorRemap(i1, gbr, report) {
 }
 
 // Class id (any case) -> {id, gbr} for every class of Imperivm I; gbr is the GBR id to write or null if there is none.
-function classResolver(i1, gbr, keep, report) {
+// i1Classes: the campaign's own classes (lib/i1classes.js planI1Classes): byGbr, lower-case GBR class -> its version used
+// in its place, and byI1, lower-case Imperivm I class -> the class made from Imperivm I's own file.
+function classResolver(i1, gbr, keep, report, i1Classes = { byGbr: new Map(), byI1: new Map() }) {
 	const gbrIds = new Map();
 	for (const c of gbr.classes.values()) {
 		gbrIds.set(lower(c.id), c.id);
@@ -109,9 +110,12 @@ function classResolver(i1, gbr, keep, report) {
 		gbrIds,
 		substitutes,
 		resolve(id) {
-			if (gbrIds.has(lower(id))) return { to: id, substituted: false };
-			if (substitutes[lower(id)]) return { to: substitutes[lower(id)], substituted: true };
-			return { to: null, substituted: false };
+			if (i1Classes.byI1.has(lower(id))) return { to: i1Classes.byI1.get(lower(id)), substituted: true };
+			let r = { to: null, substituted: false };
+			if (gbrIds.has(lower(id))) r = { to: id, substituted: false };
+			else if (substitutes[lower(id)]) r = { to: substitutes[lower(id)], substituted: true };
+			if (r.to && i1Classes.byGbr.has(lower(r.to))) return { to: i1Classes.byGbr.get(lower(r.to)), substituted: true };
+			return r;
 		},
 		i1DisplayName(id) {
 			const c = [...i1.classes.values()].find((x) => lower(x.id) === lower(id));
@@ -338,6 +342,12 @@ function convertScript(src, ctx, where) {
 	const rp = S.replaceStringLiterals(s, paths);
 	s = rp.src;
 	for (const [k, n] of Object.entries(rp.hits)) ctx.report.count('Pictures renamed in scripts', `${k} -> ${paths[k] || '(none)'}`, n);
+	const rb = S.bonusArguments(s);
+	s = rb.src;
+	if (rb.count) ctx.report.count('Unit bonuses', 'AddBonus/RemoveBonus put in the order of Great Battles of Rome (damage = the mean of the two attacks)', rb.count);
+	const rai = S.aiProfile(s, M.AI_PROFILE);
+	s = rai.src;
+	if (rai.count) ctx.report.count('Computer players', 'AIStart with the AI of Imperivm I (profile ' + M.AI_PROFILE + ')', rai.count);
 	const r6 = S.replaceStringLiterals(s, M.RESEARCH_RENAMES);
 	s = r6.src;
 	for (const [k, n] of Object.entries(r6.hits)) ctx.report.count('Researches renamed', `${k} -> ${M.RESEARCH_RENAMES[k]}`, n);
@@ -358,13 +368,18 @@ function convertItems(src, ctx, extra = []) {
 		items.push(id);
 		let use = a('usescript');
 		const vsFile = a('vs_file');
+		// Imperivm I's own script, which the item ran there; Great Battles of Rome's of the same file only when it has none.
 		if (!use && vsFile) {
-			if (ctx.gbr.hasData(vsFile)) use = 'file://' + vsFile;
-			else if (ctx.i1Data(vsFile)) use = X.gameEscape(ctx.i1Data(vsFile).toString('latin1'));
+			if (ctx.i1Data(vsFile)) use = X.gameEscape(ctx.i1Data(vsFile).toString('latin1'));
+			else if (ctx.gbr.hasData(vsFile)) use = 'file://' + vsFile;
 			else ctx.report.add('Dropped', `item "${id}": script ${vsFile} not found`);
 		}
 		if (use && !/^file:\/\//.test(use)) use = X.gameEscape(convertScript(X.gameUnescape(use), ctx, `itemsCustom.xml "${id}"`));
-		if (a('scripttarget', 'None') !== 'None') ctx.report.add('Dropped', `item "${id}": scripttarget=${a('scripttarget')} (Great Battles of Rome has none)`);
+		// What the use asks for: Imperivm I's scripttarget; Great Battles of Rome runs use_script, else object_script (asks
+		// for an object), else location_script (asks for a point) (gbr.exe CVXCmdUseItem::Execute 004e63f0).
+		const target = lower(a('scripttarget', 'None'));
+		const slot = target === 'object' ? 'object_script' : target === 'location' ? 'location_script' : 'use_script';
+		if (slot !== 'use_script') ctx.report.add('Items', `"${id}": used on ${target === 'object' ? 'an object' : 'a point'} (${slot})`);
 		const damage = Math.round((b('attack') + b('maxattack')) / 2);
 		if (b('attack') || b('maxattack')) ctx.report.add('Items', `"${id}": attack ${b('attack')} / max attack ${b('maxattack')} -> damage ${damage} (their average)`);
 		const fields = [
@@ -376,9 +391,9 @@ function convertItems(src, ctx, extra = []) {
 			['description', a('description')],
 			['usecount', a('usecount', '0') || '0'],
 			['customdata', '0'],
-			['use_script', use],
-			['location_script', ''],
-			['object_script', ''],
+			['use_script', slot === 'use_script' ? use : ''],
+			['location_script', slot === 'location_script' ? use : ''],
+			['object_script', slot === 'object_script' ? use : ''],
 			['kill_script', ''],
 			['die_script', ''],
 			['attachedkill_script', ''],
@@ -410,108 +425,6 @@ function convertItems(src, ctx, extra = []) {
 	}
 	out.push('\t</items>', '');
 	return { text: out.join(EOL), items };
-}
-
-// Imperivm I has no sentries. Great Battles of Rome's townhalls give each settlement 20 (InitialStrongholdSentries) once
-// the settlement is ready and 4 more every 30 s, and its gates and walls place one at each post while the settlement has
-// one available (Settlement::GetSentry, gbr.exe 005C49B0: takes one if +0xF4 > 0). The game's switch (NoSentries in
-// data/const.ini) belongs to the game, not to an adventure, so every 2 s this sequence brings each settlement's maximum
-// (+0x104, AddMaxSentries adds to it as it is, 005C2B30) to 0, takes the available ones (GetSentry) and gives each back
-// as dead (DelSentry lowers the count, 005C2A60), and erases any sentry already placed. With the maximum at 0 the
-// townhall adds none (it adds only while the count is under the maximum).
-const NO_SENTRIES_SCRIPT = [
-	'//void',
-	'ObjList i1s_l;',
-	'Settlement i1s_s;',
-	'int i1s_p, i1s_i, i1s_m, i1s_k;',
-	'',
-	'while (1)',
-	'{',
-	'\tfor (i1s_p = 0; i1s_p <= 16; i1s_p += 1)',
-	'\t{',
-	'\t\ti1s_l = ClassPlayerObjs("Building", i1s_p).GetObjList();',
-	'\t\tfor (i1s_i = 0; i1s_i < i1s_l.count; i1s_i += 1)',
-	'\t\t{',
-	'\t\t\ti1s_s = i1s_l[i1s_i].AsBuilding().settlement;',
-	'\t\t\tif (i1s_s.IsValid())',
-	'\t\t\t{',
-	'\t\t\t\ti1s_m = i1s_s.GetMaxSentries();',
-	'\t\t\t\tif (i1s_m != 0) i1s_s.AddMaxSentries(0 - i1s_m);',
-	'\t\t\t\tfor (i1s_k = 0; i1s_k < 100; i1s_k += 1)',
-	'\t\t\t\t{',
-	'\t\t\t\t\tif (i1s_s.GetSentry() == 0) break;',
-	'\t\t\t\t\ti1s_s.DelSentry();',
-	'\t\t\t\t}',
-	'\t\t\t}',
-	'\t\t}',
-	'\t\tClassPlayerObjs("Sentry", i1s_p).Erase();',
-	'\t}',
-	'\tSleep(2000);',
-	'}',
-	'',
-].join(EOL);
-
-// Sight. Great Battles of Rome gives units 100 to 150 more sight than Imperivm I (Unit 400 -> 500, Ranged 450 -> 600,
-// ShipL 600 -> 700), and a unit's sight (+0xD0) is also the radius in which it picks a target to fight on its own: the
-// squad-sight search builds its circle from the squad leader's +0xD0 (gbr.exe 005DCA61-005DCA9B). So the ambushes the
-// campaign stages a little further than 400 from their victims started on their own (Kormaris: Teuton riders 475 from
-// the axemen NO_Protector5/6 killed them in the first 13 s). Returns [{gbr, i1, from}] for every unit class of Great
-// Battles of Rome that stands for an Imperivm I class with another sight; conflicts take the first and are reported.
-function sightRules(i1, gbr, classes, report) {
-	const byId = (all) => {
-		const m = new Map();
-		for (const c of all.values()) for (const id of [c.id, c.altid].filter(Boolean)) if (!m.has(lower(id))) m.set(lower(id), c);
-		return m;
-	};
-	const I = byId(i1.classes);
-	const Gc = byId(gbr.classes);
-	const up = (m, id, fn) => {
-		for (let c = m.get(lower(id || '')), n = 0; c && n < 32; c = c.parent && m.get(lower(c.parent)), n++) {
-			const v = fn(c);
-			if (v) return v;
-		}
-		return null;
-	};
-	const rules = new Map();
-	for (const c of i1.classes.values()) {
-		if (!/^CVX(Unit|Hero|Druid|FlyingUnit|Wagon|Ship)$/.test(up(I, c.id, (x) => x.cpp) || '')) continue;
-		const to = classes.resolve(c.id).to;
-		if (!to || !Gc.has(lower(to))) continue;
-		const a = Number(up(I, c.id, (x) => x.sight));
-		const b = Number(up(Gc, to, (x) => x.sight));
-		if (!a || !b || a === b) continue;
-		const id = Gc.get(lower(to)).id;
-		if (rules.has(id)) {
-			if (rules.get(id).i1 !== a) report.add('Sight', `${id}: ${c.id} has sight ${a}, ${rules.get(id).from} ${rules.get(id).i1}; ${rules.get(id).i1} kept`);
-			continue;
-		}
-		rules.set(id, { gbr: id, i1: a, base: b, from: c.id });
-	}
-	return [...rules.values()].sort((x, y) => x.gbr.localeCompare(y.gbr));
-}
-
-// Every 500 ms, a unit of one of those classes that still has Great Battles of Rome's sight gets Imperivm I's (units
-// spawned later get it too). The check goes by sight first, so the class comparisons run only for those not done yet.
-function sightScript(rules) {
-	const bySight = new Map();
-	for (const r of rules) {
-		if (!bySight.has(r.base)) bySight.set(r.base, []);
-		bySight.get(r.base).push(r);
-	}
-	const lines = ['//void', 'ObjList i1v_l;', 'Obj i1v_o;', 'int i1v_p, i1v_i, i1v_s;', 'str i1v_c;', '', 'while (1)', '{', '\tfor (i1v_p = 0; i1v_p <= 16; i1v_p += 1)', '\t{'];
-	// Great Battles of Rome's sneak_behavior.vs hides Gaul druids (and huntresses, mountaineers) after 20 s without attacking;
-	// Imperivm I's never hid on their own. The mod's patch of that script skips the units of players with I1NoSneak set
-	// (the script language has no env on a unit: only global, per player and per settlement).
-	lines.push('\t\tif (EnvReadInt(i1v_p, "I1NoSneak") != 1) EnvWriteInt(i1v_p, "I1NoSneak", 1);');
-	lines.push('\t\ti1v_l = ClassPlayerObjs("Unit", i1v_p).GetObjList();', '\t\tfor (i1v_i = 0; i1v_i < i1v_l.count; i1v_i += 1)', '\t\t{', '\t\t\ti1v_o = i1v_l[i1v_i];',
-		'\t\t\ti1v_s = i1v_o.sight;');
-	for (const [base, rs] of [...bySight].sort((a, b) => a[0] - b[0])) {
-		lines.push(`\t\t\tif (i1v_s == ${base})`, '\t\t\t{', '\t\t\t\ti1v_c = i1v_o.class();');
-		rs.forEach((r, k) => lines.push(`\t\t\t\t${k ? 'else ' : ''}if (i1v_c == "${r.gbr}") i1v_o.SetSight(${r.i1});`));
-		lines.push('\t\t\t}');
-	}
-	lines.push('\t\t}', '\t}', '\tSleep(500);', '}', '');
-	return lines.join(EOL);
 }
 
 // Adds a sequence to a map: a new seqN.vs and its entry in the map's sequences.xml. Returns the script's path.
@@ -622,11 +535,11 @@ function setResult(src, id, value) {
 
 function convertAdventure(input) {
 	const { files, gbr, i1, local, advName, name, keep, movies } = input;
-	const report = new Report();
+	const report = input.report || new Report();
 	const out = new Map();
 	const terrain = terrainRemap(i1.terrains, gbr.terrains, report);
 	const decors = decorRemap(i1.decors, gbr.decors, report);
-	const classes = classResolver(i1, gbr, keep, report);
+	const classes = classResolver(i1, gbr, keep, report, input.i1Classes);
 	const classLiterals = {};
 	for (const c of i1.classes.values()) {
 		const r = classes.resolve(c.id);
@@ -810,17 +723,6 @@ function convertAdventure(input) {
 					report.count('Groups spawned into another player\'s settlement', `${p}: ${group} set to player ${player} ${where} ${anchor.source.replace(/^\^\\s\*/, '').replace(/\\/g, '')}`);
 				}
 			}
-			const probed = input.probe ? addProbe(p, s) : null;
-			if (probed) {
-				s = probed;
-				report.add('Probe', `${p}: I1PROBE diagnostics added (Mod_Log, needs Imperivm Resurrected)`);
-			}
-			const actors = input.probe ? addActorProbes(p, s) : null;
-			if (actors) {
-				s = actors;
-				report.count('Probe', 'scripts whose conversation actors are logged (I1PROBE actor lines)');
-			}
-			// After the probe, whose anchors are the original Run() lines.
 			const q = S.queueConversations(s);
 			s = q.src;
 			if (q.count) report.count('Conversations', 'Conversation.Run() calls made to wait for the running one, as in Imperivm I', q.count);
@@ -830,10 +732,12 @@ function convertAdventure(input) {
 			report.count('Copied as they are', /\.[a-z0-9]+$/i.exec(base) ? /\.[a-z0-9]+$/i.exec(base)[0].toLowerCase() : base);
 		}
 	}
-	// Items: the adventure's own, and the items of Imperivm I that the maps give but Great Battles of Rome lacks.
+	// Items: the adventure's own, and every item of Imperivm I that the maps give, also those Great Battles of Rome has
+	// under the same id with other values: the game looks in the adventure's itemsCustom.xml first (gbr.exe 00535640).
 	const itemsPath = [...files.keys()].find((k) => /^itemsCustom\.xml$/i.test(k)) || 'itemsCustom.xml';
 	const ownItems = files.has(itemsPath) ? text(files.get(itemsPath)) : '\t<items>\r\n\t</items>\r\n';
-	const known = new Set([...gbr.items, ...[...ownItems.matchAll(/\sid="([^"]*)"/g)].map((m) => m[1])].map(lower));
+	const known = new Set([...ownItems.matchAll(/\sid="([^"]*)"/g)].map((m) => lower(m[1])));
+	const gbrItems = new Set([...gbr.items].map(lower));
 	const wanted = new Set();
 	for (const [p, buf] of out) {
 		if (/map\.obj\.xml$/i.test(p)) for (const m of text(buf).matchAll(/\sslot\d+="([^"]+)"/g)) wanted.add(m[1]);
@@ -850,7 +754,7 @@ function convertAdventure(input) {
 		if (known.has(lower(w))) continue;
 		const it = i1Items.find((e) => lower(e.attrs.get('id') || '') === lower(w));
 		if (it) extra.push(it);
-		else report.add('Check warnings', `item "${w}" exists in neither game`);
+		else if (!gbrItems.has(lower(w))) report.add('Check warnings', `item "${w}" exists in neither game`);
 	}
 	ctx.i1Data = (p) => i1.data.read(p.replace(/^data\//i, ''));
 	const items = convertItems(ownItems, ctx, extra);
@@ -941,23 +845,6 @@ function convertAdventure(input) {
 		if (![...out.keys()].some((k) => lower(k) === lower(`Local/${lang}/itemsCustom.loc.xml`))) out.set(`Local/${lang}/itemsCustom.loc.xml`, bytes('<translationtable/>' + EOL));
 	}
 
-	// Sequences every map runs: no sentries, and with --probe the census of what is in the world.
-	const sight = sightRules(i1, gbr, classes, report);
-	for (const r of sight) report.add('Sight', `${r.gbr}: ${r.base} -> ${r.i1} (Imperivm I's ${r.from})`);
-	const sightSrc = sightScript(sight);
-	for (const id of mapNames.keys()) {
-		addMapSequence(out, id, 'I1_Sight', sightSrc);
-		report.count('Sight', 'maps given the I1_Sight sequence (units get Imperivm I\'s sight and never hide on their own)');
-		addMapSequence(out, id, 'I1_NoSentries', NO_SENTRIES_SCRIPT);
-		report.count('Sentries', 'maps given the I1_NoSentries sequence (no sentries, as in Imperivm I)');
-		if (input.probe) {
-			addMapSequence(out, id, 'I1_Census', censusSequence());
-			if (id === '11937') addMapSequence(out, id, 'I1_SceneProbe', sceneSequence());
-			for (const ps of probeSequences()) if (ps.map === id) addMapSequence(out, id, ps.name, ps.script);
-			report.count('Probe', 'maps given the I1_Census sequence (I1PROBE census lines)');
-		}
-	}
-
 	alignPhraseActors(out, report);
 	const actorRows = conversationActors({ files, out, gbr, i1, classes, namedObjects, report });
 	// Every adventure of Great Battles of Rome has these two folders, empty. Without "Conversations" the game cannot load
@@ -965,7 +852,7 @@ function convertAdventure(input) {
 	// vxlog.log), and the code that loads the map's conversations throws when that load fails.
 	const dirs = ['Conversations', 'Resources'];
 	report.add('Adventure', 'empty Conversations and Resources folders, as in Great Battles of Rome\'s adventures');
-	return { files: out, dirs, report, mapNames, customItems, terrain, decors, classes, actorRows, sight };
+	return { files: out, dirs, report, mapNames, customItems, terrain, decors, classes, classLiterals, actorRows };
 }
 
 // The actors of the conversations. A phrase's title is the actor's name looked up in the translation tables, and its
@@ -1197,6 +1084,4 @@ module.exports = {
 	addMapSequence,
 	classNameTable,
 	addEntries,
-	NO_SENTRIES_SCRIPT,
-	sightScript,
 };
