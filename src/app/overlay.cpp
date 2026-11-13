@@ -33,17 +33,12 @@
 namespace {
 
 using ui::Canvas;
-using ui::kBad;
-using ui::kDim;
-using ui::kGold;
-using ui::kOk;
-using ui::kText;
 
-const COLORREF kWarn = RGB(230, 190, 90);
-const COLORREF kPanel = RGB(22, 17, 11);
-const COLORREF kGraphBg = RGB(12, 9, 6);
-const COLORREF kGrid = RGB(52, 41, 27);
-const COLORREF kBorder = RGB(150, 116, 60);
+const COLORREF kWarn = ui::pal::warn;
+const COLORREF kPanel = ui::pal::panel;
+const COLORREF kGraphBg = ui::pal::bg;
+const COLORREF kGrid = ui::pal::hairline;
+const COLORREF kBorder = ui::pal::edge;
 const int kHist = 120;
 const int kStutterMs = 150;
 const int kStutterWindow = 30;
@@ -169,16 +164,16 @@ COLORREF PeerColor(const NetPeerStat &n, size_t index)
 	return kPalette[index % (sizeof(kPalette) / sizeof(kPalette[0]))];
 }
 
-COLORREF FpsColor(int fps) { return fps >= 50 ? kOk : fps >= 25 ? kWarn : kBad; }
-COLORREF MemColor(double pct) { return pct < 0.7 ? kOk : pct < 0.85 ? kWarn : kBad; }
-COLORREF PingColor(int ping) { return ping < 120 ? kOk : ping < 250 ? kWarn : kBad; }
-COLORREF TurnColor(int ms) { return ms < 170 ? kOk : ms < 320 ? kWarn : kBad; }
-COLORREF LagColor(int ms) { return ms < 3000 ? kOk : ms < 6000 ? kWarn : kBad; }
-COLORREF LoadColor(int load) { return load < 70 ? kOk : load < 90 ? kWarn : kBad; }
+COLORREF FpsColor(int fps) { return fps >= 50 ? ui::pal::ok : fps >= 25 ? kWarn : ui::pal::bad; }
+COLORREF MemColor(double pct) { return pct < 0.7 ? ui::pal::ok : pct < 0.85 ? kWarn : ui::pal::bad; }
+COLORREF PingColor(int ping) { return ping < 120 ? ui::pal::ok : ping < 250 ? kWarn : ui::pal::bad; }
+COLORREF TurnColor(int ms) { return ms < 170 ? ui::pal::ok : ms < 320 ? kWarn : ui::pal::bad; }
+COLORREF LagColor(int ms) { return ms < 3000 ? ui::pal::ok : ms < 6000 ? kWarn : ui::pal::bad; }
+COLORREF LoadColor(int load) { return load < 70 ? ui::pal::ok : load < 90 ? kWarn : ui::pal::bad; }
 
 struct Cell {
 	std::wstring text;
-	COLORREF color = kText;
+	COLORREF color = ui::pal::text;
 	bool bold = false;
 };
 struct Row {
@@ -203,12 +198,12 @@ std::vector<Row> BuildRows(bool perf, bool net, bool compact, const std::vector<
 	const int stutters = RecentStutters();
 	if (compact) {
 		Row r;
-		r.cells.push_back({L"⋮", kDim});
+		r.cells.push_back({L"⋮", ui::pal::textDim});
 		if (perf) {
-			r.cells.push_back({last.playing ? std::to_wstring(last.fps) + L" FPS" : L"— FPS", last.playing ? FpsColor(last.fps) : kDim, true});
+			r.cells.push_back({last.playing ? std::to_wstring(last.fps) + L" FPS" : L"— FPS", last.playing ? FpsColor(last.fps) : ui::pal::textDim, true});
 			if (last.load >= 0) r.cells.push_back({L"CPU " + std::to_wstring(last.load) + L" %", LoadColor(last.load), true});
 			r.cells.push_back({Fmt(L"%.1f GB", last.memUsed), MemColor(memPct), true});
-			if (stutters) r.cells.push_back({TrW(L"stutters ") + std::to_wstring(stutters), kBad, true});
+			if (stutters) r.cells.push_back({TrW(L"stutters ") + std::to_wstring(stutters), ui::pal::bad, true});
 		}
 		if (net) {
 			int worst = -1;
@@ -225,7 +220,7 @@ std::vector<Row> BuildRows(bool perf, bool net, bool compact, const std::vector<
 	{
 		Row t;
 		t.kind = Row::kTitle;
-		t.cells.push_back({perf ? TrW(L"Performance") : TrW(L"Network"), kGold, true});
+		t.cells.push_back({perf ? TrW(L"Performance") : TrW(L"Network"), ui::pal::redText, true});
 		rows.push_back(t);
 	}
 	if (perf) {
@@ -239,13 +234,13 @@ std::vector<Row> BuildRows(bool perf, bool net, bool compact, const std::vector<
 		}
 		auto num = [&](int v) { return played ? std::to_wstring(v) : std::wstring(L"—"); };
 		Row r;
-		r.cells.push_back({L"FPS", kDim});
+		r.cells.push_back({L"FPS", ui::pal::textDim});
 		if (last.playing) r.cells.push_back({std::to_wstring(last.fps), FpsColor(last.fps), true});
-		else r.cells.push_back({L"—", kDim, true});
-		r.cells.push_back({TrW(L"min ") + num(minFps), kDim});
-		r.cells.push_back({TrW(L"avg ") + num(played ? (sum + played / 2) / played : 0), kDim});
-		r.cells.push_back({TrW(L"max ") + num(maxFps), kDim});
-		if (stutters) r.cells.push_back({TrW(L"stutters ") + std::to_wstring(stutters), kBad, true});
+		else r.cells.push_back({L"—", ui::pal::textDim, true});
+		r.cells.push_back({TrW(L"min ") + num(minFps), ui::pal::textDim});
+		r.cells.push_back({TrW(L"avg ") + num(played ? (sum + played / 2) / played : 0), ui::pal::textDim});
+		r.cells.push_back({TrW(L"max ") + num(maxFps), ui::pal::textDim});
+		if (stutters) r.cells.push_back({TrW(L"stutters ") + std::to_wstring(stutters), ui::pal::bad, true});
 		rows.push_back(r);
 		Row g;
 		g.kind = Row::kGraphFps;
@@ -260,19 +255,19 @@ std::vector<Row> BuildRows(bool perf, bool net, bool compact, const std::vector<
 		}
 		auto pct = [&](int v) { return loads ? std::to_wstring(v) + L" %" : std::wstring(L"—"); };
 		Row l;
-		l.cells.push_back({L"CPU", kDim});
-		l.cells.push_back({last.load >= 0 ? std::to_wstring(last.load) + L" %" : L"—", last.load >= 0 ? LoadColor(last.load) : kDim, true});
-		l.cells.push_back({TrW(L"min ") + pct(minLoad), kDim});
-		l.cells.push_back({TrW(L"avg ") + pct(loads ? (sumLoad + loads / 2) / loads : 0), kDim});
-		l.cells.push_back({TrW(L"max ") + pct(maxLoad), kDim});
+		l.cells.push_back({L"CPU", ui::pal::textDim});
+		l.cells.push_back({last.load >= 0 ? std::to_wstring(last.load) + L" %" : L"—", last.load >= 0 ? LoadColor(last.load) : ui::pal::textDim, true});
+		l.cells.push_back({TrW(L"min ") + pct(minLoad), ui::pal::textDim});
+		l.cells.push_back({TrW(L"avg ") + pct(loads ? (sumLoad + loads / 2) / loads : 0), ui::pal::textDim});
+		l.cells.push_back({TrW(L"max ") + pct(maxLoad), ui::pal::textDim});
 		rows.push_back(l);
 		Row gc;
 		gc.kind = Row::kGraphCpu;
 		rows.push_back(gc);
 		Row m;
-		m.cells.push_back({TrW(L"Memory"), kDim});
+		m.cells.push_back({TrW(L"Memory"), ui::pal::textDim});
 		m.cells.push_back({Fmt(L"%.1f", last.memUsed) + L" / " + Fmt(L"%.1f GB", last.memTotal), MemColor(memPct), true});
-		if (memPct >= 0.85) m.cells.push_back({TrW(L"near the limit!"), kBad, true});
+		if (memPct >= 0.85) m.cells.push_back({TrW(L"near the limit!"), ui::pal::bad, true});
 		rows.push_back(m);
 		Row gm;
 		gm.kind = Row::kGraphMem;
@@ -282,7 +277,7 @@ std::vector<Row> BuildRows(bool perf, bool net, bool compact, const std::vector<
 		if (perf) {
 			Row h;
 			h.kind = Row::kTitle;
-			h.cells.push_back({TrW(L"Network"), kGold, true});
+			h.cells.push_back({TrW(L"Network"), ui::pal::redText, true});
 			rows.push_back(h);
 		}
 		for (size_t i = 0; i < stats.size(); i++) {
@@ -293,21 +288,21 @@ std::vector<Row> BuildRows(bool perf, bool net, bool compact, const std::vector<
 			r.hasSwatch = true;
 			std::wstring name = Wide(n.name);
 			if (name.size() > 16) name = name.substr(0, 15) + L"…";
-			r.cells.push_back({name, kText});
+			r.cells.push_back({name, ui::pal::text});
 			if (!n.connected) {
 				r.cells.push_back({TrW(L"connecting…"), kWarn});
 			}
 			else {
 				r.cells.push_back({std::to_wstring(n.ping) + L" ms", PingColor(n.ping), true});
-				r.cells.push_back({n.relay ? L"relay" : TrW(L"direct"), kDim});
+				r.cells.push_back({n.relay ? L"relay" : TrW(L"direct"), ui::pal::textDim});
 				if (n.quality >= 0) {
 					const double loss = (1.0 - n.quality) * 100.0;
-					r.cells.push_back({TrW(L"loss ") + Fmt(loss < 10 ? L"%.1f%%" : L"%.0f%%", loss), loss < 2 ? kOk : loss < 8 ? kWarn : kBad});
+					r.cells.push_back({TrW(L"loss ") + Fmt(loss < 10 ? L"%.1f%%" : L"%.0f%%", loss), loss < 2 ? ui::pal::ok : loss < 8 ? kWarn : ui::pal::bad});
 				}
 				else {
-					r.cells.push_back({L"", kDim});
+					r.cells.push_back({L"", ui::pal::textDim});
 				}
-				r.cells.push_back({L"↓" + Fmt(L"%.1f", n.inKBs) + L"  ↑" + Fmt(L"%.1f KB/s", n.outKBs), kDim});
+				r.cells.push_back({L"↓" + Fmt(L"%.1f", n.inKBs) + L"  ↑" + Fmt(L"%.1f KB/s", n.outKBs), ui::pal::textDim});
 			}
 			rows.push_back(r);
 		}
@@ -325,18 +320,18 @@ std::vector<Row> BuildRows(bool perf, bool net, bool compact, const std::vector<
 		}
 		if (last.lagMs >= 0) {
 			Row t;
-			t.cells.push_back({TrW(L"Delay"), kDim});
+			t.cells.push_back({TrW(L"Delay"), ui::pal::textDim});
 			t.cells.push_back({Fmt(L"%.1f s", last.lagMs / 1000.0), LagColor(last.lagMs), true});
-			t.cells.push_back({TrW(L"behind live"), kDim});
-			if (last.delaySec > 0) t.cells.push_back({TrW(L"plus " + std::to_wstring(last.delaySec) + L" s set by the host"), kDim});
+			t.cells.push_back({TrW(L"behind live"), ui::pal::textDim});
+			if (last.delaySec > 0) t.cells.push_back({TrW(L"plus " + std::to_wstring(last.delaySec) + L" s set by the host"), ui::pal::textDim});
 			rows.push_back(t);
 		}
 		else if (shown >= 0) {
 			Row t;
-			t.cells.push_back({TrW(L"Turn"), kDim});
+			t.cells.push_back({TrW(L"Turn"), ui::pal::textDim});
 			t.cells.push_back({std::to_wstring(shown) + L" ms", TurnColor(shown), true});
-			t.cells.push_back({TrW(L"max ") + std::to_wstring(shownMax), kDim});
-			t.cells.push_back({TrW(L"order ≈ ") + std::to_wstring(shown * 3 / 2) + L" ms", kDim});
+			t.cells.push_back({TrW(L"max ") + std::to_wstring(shownMax), ui::pal::textDim});
+			t.cells.push_back({TrW(L"order ≈ ") + std::to_wstring(shown * 3 / 2) + L" ms", ui::pal::textDim});
 			rows.push_back(t);
 			Row gt;
 			gt.kind = Row::kGraphTurn;
@@ -365,7 +360,7 @@ struct Graph {
 		FillRectColor(dc, x, y, w, h, kGraphBg);
 		for (double v : guides) FillRectColor(dc, x, Y(v), w, 1, kGrid);
 		SelectObject(dc, g_small);
-		SetTextColor(dc, kDim);
+		SetTextColor(dc, ui::pal::textDim);
 		RECT tr = {x, y, x + w - static_cast<int>(3 * s), y + h};
 		DrawTextW(dc, label.c_str(), static_cast<int>(label.size()), &tr, DT_RIGHT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX);
 	}
@@ -457,7 +452,7 @@ void Render(const std::vector<Row> &rows, float s, bool compact, const std::map<
 				g.top = NiceTop(maxFps, 30, 60);
 				g.Back({30, 60}, std::to_wstring(static_cast<int>(g.top)), s);
 				for (size_t k = 0; k < n; k++) {
-					if (g_hist[k].stutters) FillRectColor(c, g.X(k, n), g.y, (std::max)(1, static_cast<int>(2 * s)), g.h, RGB(120, 34, 28));
+					if (g_hist[k].stutters) FillRectColor(c, g.X(k, n), g.y, (std::max)(1, static_cast<int>(2 * s)), g.h, ui::pal::redPressed);
 				}
 				std::vector<POINT> pts;
 				for (size_t k = 0; k < n; k++) {
@@ -465,11 +460,11 @@ void Render(const std::vector<Row> &rows, float s, bool compact, const std::map<
 						pts.push_back({g.X(k, n), g.Y(g_hist[k].fps)});
 					}
 					else {
-						g.Line(pts, kOk, s);
+						g.Line(pts, ui::pal::ok, s);
 						pts.clear();
 					}
 				}
-				g.Line(pts, kOk, s);
+				g.Line(pts, ui::pal::ok, s);
 			}
 			else if (r.kind == Row::kGraphCpu) {
 				g.top = 100;
@@ -480,11 +475,11 @@ void Render(const std::vector<Row> &rows, float s, bool compact, const std::map<
 						pts.push_back({g.X(k, n), g.Y(g_hist[k].load)});
 					}
 					else {
-						g.Line(pts, kOk, s);
+						g.Line(pts, ui::pal::ok, s);
 						pts.clear();
 					}
 				}
-				g.Line(pts, n && g_hist[n - 1].load >= 0 ? LoadColor(g_hist[n - 1].load) : kOk, s);
+				g.Line(pts, n && g_hist[n - 1].load >= 0 ? LoadColor(g_hist[n - 1].load) : ui::pal::ok, s);
 			}
 			else if (r.kind == Row::kGraphMem) {
 				double total = 0, maxUsed = 0;
@@ -496,7 +491,7 @@ void Render(const std::vector<Row> &rows, float s, bool compact, const std::map<
 				g.top = NiceTop(maxUsed, 0.5, 1.0);
 				if (total > 0) g.top = (std::min)(g.top, total);
 				g.Back({g.top / 2}, Fmt(L"%.1f GB", g.top), s);
-				if (total > 0 && limit <= g.top) FillRectColor(c, g.x, g.Y(limit), g.w, 1, RGB(140, 50, 40));
+				if (total > 0 && limit <= g.top) FillRectColor(c, g.x, g.Y(limit), g.w, 1, ui::pal::red);
 				std::vector<POINT> pts;
 				for (size_t k = 0; k < n; k++) pts.push_back({g.X(k, n), g.Y(g_hist[k].memUsed)});
 				const double pct = total > 0 && n ? g_hist[n - 1].memUsed / total : 0;
@@ -514,13 +509,13 @@ void Render(const std::vector<Row> &rows, float s, bool compact, const std::map<
 						avg.push_back({g.X(k, n), g.Y(g_hist[k].turnAvg)});
 					}
 					else {
-						g.Line(hi, RGB(120, 92, 54), s);
-						g.Line(avg, kOk, s);
+						g.Line(hi, ui::pal::caption, s);
+						g.Line(avg, ui::pal::ok, s);
 						hi.clear();
 						avg.clear();
 					}
 				}
-				g.Line(hi, RGB(120, 92, 54), s);
+				g.Line(hi, ui::pal::caption, s);
 				int lastAvg = 0;
 				for (size_t k = n; k > 0; k--) {
 					if (g_hist[k - 1].turnAvg >= 0) {
@@ -550,7 +545,7 @@ void Render(const std::vector<Row> &rows, float s, bool compact, const std::map<
 								pts.clear();
 							}
 							if (p.loss > 2) FillRectColor(c, g.X(k, n) - static_cast<int>(1 * s), g.y + g.h - static_cast<int>(4 * s),
-												(std::max)(2, static_cast<int>(3 * s)), (std::max)(2, static_cast<int>(3 * s)), kBad);
+												(std::max)(2, static_cast<int>(3 * s)), (std::max)(2, static_cast<int>(3 * s)), ui::pal::bad);
 						}
 					}
 					g.Line(pts, pc.second, s);
@@ -560,7 +555,7 @@ void Render(const std::vector<Row> &rows, float s, bool compact, const std::map<
 			continue;
 		}
 		if (r.kind == Row::kTitle && i > 0) {
-			FillRectColor(c, pad, y - static_cast<int>(2 * s), inner, 1, RGB(70, 54, 34));
+			FillRectColor(c, pad, y - static_cast<int>(2 * s), inner, 1, ui::pal::hairline);
 		}
 		int x = pad;
 		for (size_t k = 0; k < r.cells.size(); k++) {

@@ -34,9 +34,9 @@ constexpr int kStripH = 112, kNarrowChartW = 384;
 constexpr int kFooterTop = kScreenH - 58, kFooterButtonsY = kScreenH - 48, kFooterButtonH = 36;
 constexpr int kSegH = 20, kSegPad = 8, kDetailCellH = 32;
 
-const COLORREF kWonColor = RGB(126, 170, 92), kLostColor = RGB(184, 86, 66), kAbandonedColor = RGB(118, 110, 98), kMuted = RGB(140, 126, 98);
-const COLORREF kSelectedTop = RGB(96, 34, 24), kRowBody = RGB(25, 19, 13), kRowHot = RGB(50, 38, 22), kCardBody = RGB(25, 19, 13);
-const COLORREF kHead = RGB(130, 116, 90), kRule = RGB(48, 37, 23);
+const COLORREF kWonColor = RGB(126, 170, 92), kLostColor = pal::redText, kAbandonedColor = pal::disabled, kMuted = pal::caption;
+const COLORREF kSelectedTop = pal::selected, kRowBody = pal::panel, kRowHot = pal::hairline, kCardBody = pal::panel;
+const COLORREF kHead = pal::edgeHot, kRule = pal::hairline;
 const char kDash[] = "\xE2\x80\x94";
 
 struct Box {
@@ -71,7 +71,7 @@ COLORREF RankColor(int rank, int count)
 {
 	static const COLORREF stops[] = {RGB(164, 108, 64), RGB(206, 140, 70), RGB(184, 198, 222), RGB(244, 196, 80), RGB(230, 90, 80), RGB(196, 128, 244)};
 	constexpr int last = sizeof(stops) / sizeof(stops[0]) - 1;
-	if (rank < 0 || count <= 0) return kGold;
+	if (rank < 0 || count <= 0) return pal::redText;
 	const float t = count > 1 ? std::min(1.0f, static_cast<float>(rank) / (count - 1)) * last : 0.0f;
 	const int i = std::min(last - 1, static_cast<int>(t));
 	return Mix(stops[i], stops[i + 1], t - i);
@@ -79,9 +79,9 @@ COLORREF RankColor(int rank, int count)
 
 void PaintRankBar(Painter &p, int x, int y, int w, int h, float fraction, COLORREF c)
 {
-	p.Fill(x, y, w, h, pal::well);
+	p.Fill(x, y, w, h, pal::bg);
 	const int filled = static_cast<int>(w * std::max(0.0f, std::min(1.0f, fraction)));
-	if (filled > 0) p.FillV(x, y, filled, h, Mix(c, RGB(255, 255, 255), 0.2f), Mix(c, RGB(0, 0, 0), 0.4f));
+	if (filled > 0) p.Fill(x, y, filled, h, Mix(c, RGB(255, 255, 255), 0.2f));
 }
 
 Area DetailArea(const View &v)
@@ -162,37 +162,36 @@ std::string GamesAndWins(int games, int wins)
 
 void PaintMonogram(Painter &p, int x, int y, int size, const std::string &name, bool strong)
 {
-	p.FillV(x, y, size, size, strong ? RGB(70, 50, 24) : RGB(44, 33, 20), strong ? RGB(40, 28, 14) : RGB(28, 21, 13));
-	p.Frame(x, y, size, size, strong ? kGold : pal::bronze);
+	p.Fill(x, y, size, size, strong ? pal::selected : pal::raised);
+	p.Frame(x, y, size, size, strong ? pal::redText : pal::caption);
 	p.Font(size >= 60 ? 5 : 1);
-	Raw(p, x, y, size, size, Initials(name), strong ? pal::goldLight : kGold, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	Raw(p, x, y, size, size, Initials(name), strong ? pal::text : pal::redText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 }
 
 void PaintListRow(Painter &p, const Card &c, int rankCount, int index, bool selected, int x, int y, int w, int mx, int my)
 {
 	const bool hot = !selected && p.Hover(x, y, w, kRowH, mx, my);
 	if (selected) {
-		p.FillH(x, y, w, kRowH, kSelectedTop, pal::panel);
-		p.Frame(x, y, w, kRowH, pal::bronze);
-		p.FillV(x, y, 4, kRowH, pal::goldLight, pal::bronze);
+		p.Fill(x, y, w, kRowH, pal::selected);
+		p.Fill(x, y, 3, kRowH, pal::red);
 	}
 	else {
 		p.Fill(x, y, w, kRowH, hot ? kRowHot : kRowBody);
-		p.Frame(x, y, w, kRowH, pal::lineDim);
+		p.Frame(x, y, w, kRowH, pal::hairline);
 	}
 	PaintMonogram(p, x + 12, y + 9, 40, c.name, selected);
 	int nameW = w - 74;
 	if (c.active) {
 		p.Font(3);
 		const int bw = p.TextWidth("In use") + 14;
-		PaintBadge(p, x + w - bw - 10, y + 11, bw, 17, "In use", RGB(70, 46, 18), RGB(236, 186, 110));
+		PaintBadge(p, x + w - bw - 10, y + 11, bw, 17, "In use", pal::hairline, pal::redText);
 		nameW -= bw + 8;
 	}
 	p.Font(1);
-	Raw(p, x + 62, y + 9, nameW, 22, c.name, selected ? pal::goldLight : kText);
+	Raw(p, x + 62, y + 9, nameW, 22, c.name, selected ? pal::text : pal::text);
 	p.Font(3);
 	const std::string games = GamesText(c.summary.games);
-	const COLORREF dim = selected ? RGB(200, 180, 136) : kDim;
+	const COLORREF dim = selected ? pal::textDim : pal::textDim;
 	if (c.rankName.empty() || !c.readable) {
 		Raw(p, x + 62, y + 31, w - 74, 18, games, dim);
 	}
@@ -207,9 +206,9 @@ void PaintListRow(Painter &p, const Card &c, int rankCount, int index, bool sele
 void PaintList(Painter &p, const View &v)
 {
 	p.Font(4);
-	p.Text(kListX, kTop, kListW, 20, "Players", kGold);
+	p.Text(kListX, kTop, kListW, 20, "Players", pal::redText);
 	p.Font(3);
-	Raw(p, kListX, kTop, kListW, 20, std::to_string(v.cards.size()), kDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+	Raw(p, kListX, kTop, kListW, 20, std::to_string(v.cards.size()), pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 	const int count = static_cast<int>(v.cards.size());
 	const int maxScroll = std::max(0, count - kListRows);
 	const int scroll = std::max(0, std::min(v.scroll, maxScroll));
@@ -236,7 +235,7 @@ void PaintIdentity(Painter &p, const View &v, const Card &c, const Area &a)
 	const bool steam = c.active && v.avatar && !v.avatar->bgra.empty();
 	if (steam) {
 		p.Image(ax, ay, kAvatar, kAvatar, v.avatar->bgra.data(), v.avatar->width, v.avatar->height);
-		p.Frame(ax, ay, kAvatar, kAvatar, kGold);
+		p.Frame(ax, ay, kAvatar, kAvatar, pal::redText);
 	}
 	else {
 		PaintMonogram(p, ax, ay, kAvatar, c.name, true);
@@ -246,7 +245,7 @@ void PaintIdentity(Painter &p, const View &v, const Card &c, const Area &a)
 	if (c.active && ShowsList(v)) {
 		p.Font(3);
 		const int bw = p.TextWidth("In use") + 16;
-		PaintBadge(p, right - bw, y + 14, bw, 18, "In use", RGB(70, 46, 18), RGB(236, 186, 110));
+		PaintBadge(p, right - bw, y + 14, bw, 18, "In use", pal::hairline, pal::redText);
 		right -= bw + 12;
 	}
 	p.Font(2);
@@ -260,17 +259,17 @@ void PaintIdentity(Painter &p, const View &v, const Card &c, const Area &a)
 		PatronHotspot(p, tx, y + 14 + (30 - laurel) / 2, laurel, v.patron, v.mouseX, v.mouseY, kActPatron);
 	}
 	else {
-		Raw(p, tx, y + 12, right - tx, 34, c.name, pal::goldLight);
+		Raw(p, tx, y + 12, right - tx, 34, c.name, pal::text);
 	}
 	if (!c.readable) {
 		p.Font(3);
-		p.Text(tx, y + 50, x + w - 14 - tx, 20, "Couldn't read this player's statistics.", kBad);
+		p.Text(tx, y + 50, x + w - 14 - tx, 20, "Couldn't read this player's statistics.", pal::bad);
 		return;
 	}
 	const ProfileSummary &s = c.summary;
 	if (c.rankName.empty()) {
 		p.Font(1);
-		Raw(p, tx, y + 48, x + w - 14 - tx, 22, kDash, kGold);
+		Raw(p, tx, y + 48, x + w - 14 - tx, 22, kDash, pal::redText);
 		return;
 	}
 	const int barW = a.wide ? x + w - 14 - tx : std::min(380, x + w - 14 - tx);
@@ -296,13 +295,13 @@ void PaintIdentity(Painter &p, const View &v, const Card &c, const Area &a)
 	p.Font(3);
 	const int aheadW = RawWidth(p, ahead);
 	const int aheadX = barRight - nextW - (nextW ? 6 : 0) - aheadW;
-	Raw(p, aheadX, y + 48, aheadW + 2, 22, ahead, kDim);
+	Raw(p, aheadX, y + 48, aheadW + 2, 22, ahead, pal::textDim);
 	p.Font(1);
 	Raw(p, tx, y + 48, std::max(0, aheadX - 16 - tx), 22, c.rankName, RankColor(s.rank, v.rankCount));
 	PaintRankBar(p, tx, y + 74, barW, 7, fraction, RankColor(s.rank, v.rankCount));
-	p.Frame(tx - 1, y + 73, barW + 2, 9, pal::lineDim);
+	p.Frame(tx - 1, y + 73, barW + 2, 9, pal::hairline);
 	p.Font(3);
-	Raw(p, tx, y + 84, x + w - 14 - tx, 18, label, RGB(196, 178, 136));
+	Raw(p, tx, y + 84, x + w - 14 - tx, 18, label, pal::textDim);
 }
 
 void PaintTiles(Painter &p, const Card &c, const Area &a)
@@ -322,16 +321,16 @@ void PaintTiles(Painter &p, const Card &c, const Area &a)
 		const int x = a.x + i * (tileW + kTileGap), w = i == 3 ? a.x + a.w - x : tileW;
 		PaintCard(p, x, kTilesY, w, kTileH);
 		p.Font(5);
-		Raw(p, x, kTilesY + 6, w, 42, values[i], pal::goldLight, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		Raw(p, x, kTilesY + 6, w, 42, values[i], pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		p.Font(3);
-		p.Text(x + 6, kTilesY + 50, w - 12, 18, labels[i], kDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(x + 6, kTilesY + 50, w - 12, 18, labels[i], pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
 }
 
 void PaintCardTitle(Painter &p, int x, int y, int w, const std::string &title)
 {
 	p.Font(4);
-	p.Text(x + kCardPad, y + 7, w - kCardPad * 2, 18, title, kGold);
+	p.Text(x + kCardPad, y + 7, w - kCardPad * 2, 18, title, pal::redText);
 }
 
 // Two columns over the evolution at full width, three in a strip beside the list.
@@ -357,11 +356,11 @@ void PaintSummary(Painter &p, const Card &c, int x, int y, int w, int h, int col
 	const int rowH = columns > 1 ? 38 : std::min(46, (h - kCardHead - 10) / count), inner = w - kCardPad * 2, colW = (inner - (columns - 1) * colGap) / columns;
 	for (int i = 0; i < count; i++) {
 		const int cx = x + kCardPad + (i % columns) * (colW + colGap), ry = y + kCardHead + (i / columns) * rowH;
-		if (i >= columns) p.Fill(cx, ry, colW, 1, RGB(48, 37, 23));
+		if (i >= columns) p.Fill(cx, ry, colW, 1, pal::hairline);
 		p.Font(3);
-		p.Text(cx, ry + 3, colW, 17, rows[i].first, kDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(cx, ry + 3, colW, 17, rows[i].first, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.Font(4);
-		Raw(p, cx, ry + 19, colW, 18, rows[i].second, kText);
+		Raw(p, cx, ry + 19, colW, 18, rows[i].second, pal::text);
 	}
 }
 
@@ -465,10 +464,10 @@ void PaintSegments(Painter &p, int x, int y, int w, const std::vector<std::strin
 		const int bw = i == n - 1 ? x + w - bx : widths[i] + extra / n;
 		const bool on = i == selected;
 		const bool hot = !on && p.Hover(bx, y, bw, kSegH, mx, my);
-		if (on) p.FillV(bx, y, bw, kSegH, pal::goldLight, kGold);
-		else p.Fill(bx, y, bw, kSegH, hot ? pal::fieldHover : pal::well);
-		p.Frame(bx, y, bw, kSegH, on ? pal::goldLight : pal::edge);
-		p.Text(bx + 2, y, bw - 4, kSegH, labels[i], on ? RGB(34, 22, 8) : kText, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		if (on) p.Fill(bx, y, bw, kSegH, pal::text);
+		else p.Fill(bx, y, bw, kSegH, hot ? pal::buttonHover : pal::field);
+		p.Frame(bx, y, bw, kSegH, on ? pal::text : hot ? pal::edgeHot : pal::edge);
+		p.Text(bx + 2, y, bw - 4, kSegH, labels[i], on ? pal::onLight : pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		if (!on) p.AddHit(bx, y, bw, kSegH, action, i);
 		bx += bw - 1;
 	}
@@ -498,7 +497,7 @@ void PaintTip(Painter &p, const Tip &tip)
 	const int lineH = 18, h = static_cast<int>(tip.lines.size()) * lineH + 12;
 	const int x = std::max(8, std::min(tip.x, kScreenW - 8 - w)), y = std::max(8, std::min(tip.y, kScreenH - 8 - h));
 	p.Fill(x + 3, y + 3, w, h, pal::shadow);
-	p.Fill(x, y, w, h, pal::dialog);
+	p.Fill(x, y, w, h, pal::panel);
 	p.Frame(x, y, w, h, pal::edge);
 	for (size_t i = 0; i < tip.lines.size(); i++) {
 		p.Font(i == 0 ? 4 : 3);
@@ -550,10 +549,10 @@ void PaintEvolution(Painter &p, const View &v, const Card &c, const Box &b, Tip 
 	const double slot = static_cast<double>(inner) / n;
 	const int barW = std::max(1, std::min(26, static_cast<int>(slot * 0.72)));
 	const int mx = MouseX(p, v), my = MouseY(p, v);
-	p.Fill(x0, bottom, inner, 1, pal::line);
+	p.Fill(x0, bottom, inner, 1, pal::lineStrong);
 	DashedH(p, x0, plotTop, inner, kRule);
 	p.Font(3);
-	Raw(p, x0, plotTop - 17, 70, 15, MetricText(metric, top), RGB(120, 108, 84));
+	Raw(p, x0, plotTop - 17, 70, 15, MetricText(metric, top), pal::edgeHot);
 	int hovered = -1;
 	for (int k = 0; k < n; k++) {
 		const size_t game = shown[n - 1 - k];
@@ -565,19 +564,19 @@ void PaintEvolution(Painter &p, const View &v, const Card &c, const Box &b, Tip 
 		const MatchResult r = MatchResultOf(facts[game]);
 		const COLORREF color = ResultColor(r);
 		const COLORREF lit = hot ? Mix(color, RGB(255, 255, 255), 0.3f) : color;
-		p.FillV(bx, bottom - bh, barW, bh, lit, Mix(lit, RGB(0, 0, 0), 0.4f));
-		if (static_cast<int>(game) == v.expanded) p.Frame(bx - 1, bottom - bh - 1, barW + 2, bh + 2, pal::goldLight);
+		p.Fill(bx, bottom - bh, barW, bh, lit);
+		if (static_cast<int>(game) == v.expanded) p.Frame(bx - 1, bottom - bh - 1, barW + 2, bh + 2, pal::text);
 		p.AddHit(sx, plotTop - 4, sw, bottom - plotTop + 4, kActBar, static_cast<int>(game));
 		if (hot) hovered = k;
 	}
 	const int avgY = bottom - std::min(plotH, static_cast<int>(plotH * average / top + 0.5));
-	DashedH(p, x0, avgY, inner, pal::goldLight, 6, 4);
+	DashedH(p, x0, avgY, inner, pal::text, 6, 4);
 	const std::string avgText = TrFmt("Average %s", {MetricText(metric, average)});
 	p.Font(3);
 	const int avgW = RawWidth(p, avgText) + 10;
 	const int avgLabelY = avgY - 17 < plotTop - 2 ? avgY + 3 : avgY - 17;
 	p.Fill(right - avgW, avgLabelY, avgW, 15, kCardBody);
-	Raw(p, right - avgW + 5, avgLabelY, avgW - 5, 15, avgText, pal::goldLight);
+	Raw(p, right - avgW + 5, avgLabelY, avgW - 5, 15, avgText, pal::text);
 
 	Raw(p, x0 + rangeW + 10, footY, inner - rangeW - 10, kSegH, n == 1 ? Tr("1 game") : TrFmt("%s games", {Grouped(n)}), kMuted,
 		DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
@@ -585,7 +584,7 @@ void PaintEvolution(Painter &p, const View &v, const Card &c, const Box &b, Tip 
 	for (MatchResult r : {kMatchAbandoned, kMatchLost, kMatchWon}) {
 		const int tw = p.TextWidth(Tr(ResultText(r)));
 		lx -= tw;
-		p.Text(lx, plotTop - 18, tw + 2, 16, ResultText(r), kDim);
+		p.Text(lx, plotTop - 18, tw + 2, 16, ResultText(r), pal::textDim);
 		lx -= 14;
 		p.Fill(lx, plotTop - 14, 9, 9, ResultColor(r));
 		lx -= 12;
@@ -595,10 +594,10 @@ void PaintEvolution(Painter &p, const View &v, const Card &c, const Box &b, Tip 
 		const size_t game = shown[n - 1 - hovered];
 		const GameRow &g = c.games[game];
 		const MatchResult r = MatchResultOf(facts[game]);
-		tip.lines.push_back({DateText(g) + "  \xC2\xB7  " + Tr(ResultText(r)), ResultColor(r) == kAbandonedColor ? kDim : Mix(ResultColor(r), RGB(255, 255, 255), 0.35f)});
-		tip.lines.push_back({CivText(g) + " \xC2\xB7 " + ModeText(g), kText});
-		tip.lines.push_back({Tr(kMetricLong[metric]) + ": " + MetricText(metric, values[n - 1 - hovered]), pal::goldLight});
-		tip.lines.push_back({TrFmt("Kills %s \xC2\xB7 Losses %s", {Grouped(g.kills), Grouped(g.losses)}) + " \xC2\xB7 " + Duration(g.durationMs), kDim});
+		tip.lines.push_back({DateText(g) + "  \xC2\xB7  " + Tr(ResultText(r)), ResultColor(r) == kAbandonedColor ? pal::textDim : Mix(ResultColor(r), RGB(255, 255, 255), 0.35f)});
+		tip.lines.push_back({CivText(g) + " \xC2\xB7 " + ModeText(g), pal::text});
+		tip.lines.push_back({Tr(kMetricLong[metric]) + ": " + MetricText(metric, values[n - 1 - hovered]), pal::text});
+		tip.lines.push_back({TrFmt("Kills %s \xC2\xB7 Losses %s", {Grouped(g.kills), Grouped(g.losses)}) + " \xC2\xB7 " + Duration(g.durationMs), pal::textDim});
 		tip.x = x0 + static_cast<int>(hovered * slot + slot) + 10;
 		tip.y = plotTop;
 	}
@@ -668,12 +667,12 @@ void PaintDetailCells(Painter &p, const std::vector<DetailCell> &cells, int x, i
 		// The last cell has the rest of its row.
 		const int cw = i + 1 == cells.size() ? x + w - cx : colW;
 		p.Font(3);
-		Raw(p, cx, cy, cw - 8, 15, cell.label, kDim);
+		Raw(p, cx, cy, cw - 8, 15, cell.label, pal::textDim);
 		p.Font(4);
 		const int vw = std::min(cw - (cell.trend ? 24 : 8), RawWidth(p, cell.value));
-		Raw(p, cx, cy + 15, vw, 17, cell.value, kText);
+		Raw(p, cx, cy + 15, vw, 17, cell.value, pal::text);
 		if (cell.trend) {
-			const COLORREF c = cell.good ? kOk : kBad;
+			const COLORREF c = cell.good ? pal::ok : pal::bad;
 			if (cell.trend > 0) p.ArrowUp(cx + vw + 5, cy + 20, 9, 7, c);
 			else p.ArrowDown(cx + vw + 5, cy + 20, 9, 7, c);
 		}
@@ -690,8 +689,8 @@ int ChipWidth(Painter &p)
 
 void PaintChip(Painter &p, int x, int y, int w, int h, MatchResult r)
 {
-	const COLORREF bg = r == kMatchWon ? RGB(46, 70, 34) : r == kMatchLost ? RGB(84, 34, 26) : RGB(52, 48, 42);
-	const COLORREF fg = r == kMatchWon ? RGB(170, 220, 140) : r == kMatchLost ? RGB(240, 150, 128) : RGB(176, 168, 152);
+	const COLORREF bg = r == kMatchWon ? RGB(46, 70, 34) : r == kMatchLost ? pal::redPressed : pal::button;
+	const COLORREF fg = r == kMatchWon ? RGB(170, 220, 140) : r == kMatchLost ? pal::onRed : pal::textDim;
 	PaintBadge(p, x, y, w, h, ResultText(r), bg, fg);
 }
 
@@ -705,9 +704,9 @@ void PaintHistory(Painter &p, const View &v, const Card &c, const Box &b, Tip &t
 	if (c.games.empty()) {
 		const int ty = b.y + b.h / 2 - 30;
 		p.Font(0);
-		p.Text(x0, ty, gm.inner, 22, c.readable ? "No games recorded yet." : kDash, kText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.Text(x0, ty, gm.inner, 22, c.readable ? "No games recorded yet." : kDash, pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		p.Font(3);
-		p.Text(x0 + 20, ty + 30, gm.inner - 40, 60, "Finish a skirmish or a multiplayer game and it will show here.", kDim, DT_CENTER | DT_TOP | DT_WORDBREAK);
+		p.Text(x0 + 20, ty + 30, gm.inner - 40, 60, "Finish a skirmish or a multiplayer game and it will show here.", pal::textDim, DT_CENTER | DT_TOP | DT_WORDBREAK);
 		return;
 	}
 	const std::vector<std::string> outcomes = Translated({"All games", "Victories", "Defeats"});
@@ -718,7 +717,7 @@ void PaintHistory(Painter &p, const View &v, const Card &c, const Box &b, Tip &t
 	p.Font(4);
 	const int titleW = p.TextWidth(Tr("Match history"));
 	p.Font(3);
-	Raw(p, x0 + titleW + 10, b.y + 7, std::max(0, (gm.wide ? right - segW : right) - x0 - titleW - 20), 18, Grouped(rows.size()), kDim);
+	Raw(p, x0 + titleW + 10, b.y + 7, std::max(0, (gm.wide ? right - segW : right) - x0 - titleW - 20), 18, Grouped(rows.size()), pal::textDim);
 	const std::vector<MatchFacts> facts = FactsOfCard(c);
 	const int maxScroll = HistoryMaxScroll(v);
 	const int scroll = std::max(0, std::min(v.historyScroll, maxScroll));
@@ -753,8 +752,8 @@ void PaintHistory(Painter &p, const View &v, const Card &c, const Box &b, Tip &t
 		const int rh = gm.rowH, w = listRight - x0;
 		const bool hot = my >= gm.listTop && my < gm.listBottom && p.Hover(x0, y, w, rh, v.mouseX, v.mouseY);
 		if (open) {
-			p.FillH(x0, y, w, rh, kSelectedTop, pal::panel);
-			p.FillV(x0, y, 3, rh, pal::goldLight, pal::bronze);
+			p.Fill(x0, y, w, rh, kSelectedTop);
+			p.Fill(x0, y, 3, rh, pal::red);
 		}
 		else if (hot) {
 			p.Fill(x0, y, w, rh, kRowHot);
@@ -769,34 +768,34 @@ void PaintHistory(Painter &p, const View &v, const Card &c, const Box &b, Tip &t
 		if (gm.wide) {
 			PaintChip(p, x0 + 6, y + 5, chipW - 6, rh - 10, result);
 			p.Font(known ? 4 : 3);
-			Raw(p, civX, y, modeX - civX - 8, rh, CivText(g), known ? kText : kMuted);
+			Raw(p, civX, y, modeX - civX - 8, rh, CivText(g), known ? pal::text : kMuted);
 			p.Font(3);
-			Raw(p, modeX, y, modeW, rh, ModeText(g), kDim);
-			Raw(p, dateX, y, dateW, rh, AgeText(v, g), kDim);
+			Raw(p, modeX, y, modeW, rh, ModeText(g), pal::textDim);
+			Raw(p, dateX, y, dateW, rh, AgeText(v, g), pal::textDim);
 			if (mx >= dateX && mx < dateX + dateW && my >= y && my < y + rh && my < gm.listBottom) {
-				tip.lines = {{DateText(g), kText}};
+				tip.lines = {{DateText(g), pal::text}};
 				tip.x = dateX;
 				tip.y = y + rh + 2;
 			}
-			Raw(p, timeX, y, timeW, rh, Duration(g.durationMs), kDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
-			Raw(p, listRight - lossesW, y, lossesW, rh, losses, kDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+			Raw(p, timeX, y, timeW, rh, Duration(g.durationMs), pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+			Raw(p, listRight - lossesW, y, lossesW, rh, losses, pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 			p.Font(4);
-			Raw(p, klX, y, klW - lossesW, rh, kl, kText, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+			Raw(p, klX, y, klW - lossesW, rh, kl, pal::text, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 		}
 		else {
 			PaintChip(p, x0 + 6, y + 5, chipW - 6, 16, result);
-			Raw(p, listRight - lossesW, y + 3, lossesW, 18, losses, kDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+			Raw(p, listRight - lossesW, y + 3, lossesW, 18, losses, pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 			p.Font(4);
 			const int killsW = RawWidth(p, kl);
-			Raw(p, listRight - lossesW - killsW, y + 3, killsW, 18, kl, kText, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+			Raw(p, listRight - lossesW - killsW, y + 3, killsW, 18, kl, pal::text, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 			p.Font(known ? 4 : 3);
-			Raw(p, civX, y + 3, listRight - lossesW - killsW - civX - 8, 18, CivText(g), known ? kText : kMuted);
+			Raw(p, civX, y + 3, listRight - lossesW - killsW - civX - 8, 18, CivText(g), known ? pal::text : kMuted);
 			p.Font(3);
 			const std::string age = AgeText(v, g);
 			const std::string line = ModeText(g) + "  \xC2\xB7  " + age + "  \xC2\xB7  " + Duration(g.durationMs);
-			Raw(p, civX, y + 21, listRight - civX, 16, line, kDim);
+			Raw(p, civX, y + 21, listRight - civX, 16, line, pal::textDim);
 			if (mx >= civX && mx < listRight && my >= y + 20 && my < y + rh && my < gm.listBottom) {
-				tip.lines = {{DateText(g), kText}};
+				tip.lines = {{DateText(g), pal::text}};
 				tip.x = civX;
 				tip.y = y + rh + 2;
 			}
@@ -806,8 +805,8 @@ void PaintHistory(Painter &p, const View &v, const Card &c, const Box &b, Tip &t
 		if (open) {
 			const std::vector<DetailCell> cells = DetailCells(g, facts, !gm.wide);
 			const int dh = DetailHeight(cells.size(), gm.columns);
-			p.Fill(x0, y, w, dh, RGB(32, 24, 15));
-			p.Fill(x0, y, 3, dh, pal::bronze);
+			p.Fill(x0, y, w, dh, pal::raised);
+			p.Fill(x0, y, 3, dh, pal::red);
 			PaintDetailCells(p, cells, x0 + 16, y + 6, w - 24, gm.columns);
 			y += dh;
 		}
@@ -835,7 +834,7 @@ void PaintDetail(Painter &p, const View &v, const Card &c, Tip &tip)
 
 void PaintFooter(Painter &p, const View &v)
 {
-	p.Fill(18, kFooterTop, kScreenW - 36, 1, pal::line);
+	p.Fill(18, kFooterTop, kScreenW - 36, 1, pal::lineStrong);
 	const int count = static_cast<int>(v.cards.size());
 	const bool other = v.selected >= 0 && v.selected < count && !v.cards[v.selected].active;
 	int bx = kScreenW - kMargin;
@@ -857,8 +856,8 @@ void PaintFooter(Painter &p, const View &v)
 	}
 	if (hint.empty()) return;
 	p.Font(3);
-	p.Diamond(kMargin + 4, kFooterButtonsY + kFooterButtonH / 2, 4, kGold);
-	Raw(p, kMargin + 16, kFooterButtonsY, bx - kMargin - 28, kFooterButtonH, hint, RGB(186, 170, 134));
+	p.Diamond(kMargin + 4, kFooterButtonsY + kFooterButtonH / 2, 4, pal::redText);
+	Raw(p, kMargin + 16, kFooterButtonsY, bx - kMargin - 28, kFooterButtonH, hint, pal::caption);
 }
 
 }
@@ -933,7 +932,7 @@ void PaintProfileScreen(Painter &p, const View &v)
 	const bool list = ShowsList(v);
 	if (list) {
 		PaintList(p, v);
-		p.Fill(kDetailX - 12, kTop, 1, kLowerBottom - kTop, pal::lineDim);
+		p.Fill(kDetailX - 12, kTop, 1, kLowerBottom - kTop, pal::hairline);
 	}
 	Tip tip;
 	if (const Card *c = SelectedCard(v)) {
@@ -942,7 +941,7 @@ void PaintProfileScreen(Painter &p, const View &v)
 	else if (list) {
 		const Area a = DetailArea(v);
 		p.Font(0);
-		p.Text(a.x, kTop + 120, a.w, 24, "Choose a player.", kDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.Text(a.x, kTop + 120, a.w, 24, "Choose a player.", pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 	}
 	PaintFooter(p, v);
 	PaintTip(p, tip);

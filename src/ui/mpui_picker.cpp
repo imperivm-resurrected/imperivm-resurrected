@@ -173,19 +173,19 @@ void PaintScenarioPicker(Painter &p, const State &st)
 	static const char *const kSortNames[] = {"Name", "Players", "Size"};
 	PaintPickCombo(p, st, lx + 278, y + 60, kListW - 278, 28, Tr("Sort: ") + Tr(kSortNames[st.pickSort % 3]));
 
-	p.Fill(lx, ly, kListW, kRows * kRowH + 4, pal::well);
-	p.Frame(lx, ly, kListW, kRows * kRowH + 4, pal::line);
+	p.Fill(lx, ly, kListW, kRows * kRowH + 4, pal::bg);
+	p.Frame(lx, ly, kListW, kRows * kRowH + 4, pal::lineStrong);
 	const std::vector<int> view = PickView(st);
 	const int count = static_cast<int>(view.size());
 	const int scroll = std::max(0, std::min(st.pick.scroll, count - kRows));
 	p.Font(0);
-	if (!g.pickerItems.size()) p.Text(lx + 12, ly + 8, kListW - 24, 28, "There are no scenarios for multiplayer", kDim);
-	else if (!count) p.Text(lx + 12, ly + 8, kListW - 24, 28, "No map matches the search.", kDim);
+	if (!g.pickerItems.size()) p.Text(lx + 12, ly + 8, kListW - 24, 28, "There are no scenarios for multiplayer", pal::textDim);
+	else if (!count) p.Text(lx + 12, ly + 8, kListW - 24, 28, "No map matches the search.", pal::textDim);
 	for (int r = 0; r < kRows && scroll + r < count; r++) {
 		const int i = view[scroll + r], ry = ly + 2 + r * kRowH;
 		const bool hov = p.Hover(lx + 2, ry, kListW - 20, kRowH, mx, my);
-		if (i == st.pickSel) p.Fill(lx + 2, ry, kListW - 4, kRowH, pal::rowSelected);
-		else if (hov) p.Fill(lx + 2, ry, kListW - 4, kRowH, pal::rowHover);
+		if (i == st.pickSel) p.Fill(lx + 2, ry, kListW - 4, kRowH, pal::selected);
+		else if (hov) p.Fill(lx + 2, ry, kListW - 4, kRowH, pal::raised);
 		const std::shared_ptr<const MapPreviewData> d = MapPreviewGet(g.pickerPaths[i]);
 		const bool inUse = PickInUse(st, i);
 		int textRight = lx + kListW - 22;
@@ -194,19 +194,19 @@ void PaintScenarioPicker(Painter &p, const State &st)
 			const std::string tag = Tr("In use");
 			const int w = p.TextWidth(tag) + 14;
 			textRight -= w + 6;
-			PaintBadge(p, textRight + 6, ry + 6, w, 18, tag, RGB(40, 80, 44), kOk);
+			PaintBadge(p, textRight + 6, ry + 6, w, 18, tag, RGB(40, 80, 44), pal::ok);
 		}
 		p.Font(0);
-		p.Text(lx + 12, ry + 2, textRight - lx - 18, 22, g.pickerItems[i].empty() ? "-" : g.pickerItems[i], i == st.pickSel ? pal::focus : kText,
+		p.Text(lx + 12, ry + 2, textRight - lx - 18, 22, g.pickerItems[i].empty() ? "-" : g.pickerItems[i], i == st.pickSel ? pal::text : pal::text,
 			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.Font(3);
 		if (!d) {
-			p.Text(lx + 12, ry + 24, 200, 16, "Reading...", kDim);
+			p.Text(lx + 12, ry + 24, 200, 16, "Reading...", pal::textDim);
 		}
 		else if (!d->failed) {
 			const std::string sub = RowSubtitle(*d), origin = OriginText(*d);
-			p.Text(lx + 12, ry + 24, 200, 16, sub, kDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-			p.Text(lx + 200, ry + 24, kListW - 224, 16, origin, d->origin.kind == kMapMod ? kGold : kDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			p.Text(lx + 12, ry + 24, 200, 16, sub, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			p.Text(lx + 200, ry + 24, kListW - 224, 16, origin, d->origin.kind == kMapMod ? pal::redText : pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		}
 		p.AddHit(lx + 2, ry, kListW - 20, kRowH, kPickRow, i);
 	}
@@ -224,11 +224,11 @@ void PaintScenarioPicker(Painter &p, const State &st)
 	const std::shared_ptr<const MapPreviewData> d = has ? MapPreviewGet(g.pickerPaths[st.pickSel]) : nullptr;
 	if (!has) {
 		p.Font(0);
-		p.TextWrapped(dx + 16, ly + 14, dw - 32, 80, "Pick a scenario from the list to see its preview and description.", kDim);
+		p.TextWrapped(dx + 16, ly + 14, dw - 32, 80, "Pick a scenario from the list to see its preview and description.", pal::textDim);
 	}
 	else {
 		const int px = dx + 14, py = ly + 14;
-		p.Fill(px, py, kPreview, kPreview, RGB(22, 17, 12));
+		p.Fill(px, py, kPreview, kPreview, pal::panel);
 		int ix = px, iy = py, iw = kPreview, ih = kPreview;
 		if (d && !d->failed && d->image.w > 0) {
 			ih = kPreview * d->image.h / d->image.w;
@@ -244,34 +244,34 @@ void PaintScenarioPicker(Painter &p, const State &st)
 				if (!pl.hasStart || !pl.human || d->info.units <= 0) continue;
 				const int cx = ix + static_cast<int>(static_cast<long long>(pl.x) * iw / d->info.units);
 				const int cy = iy + static_cast<int>(static_cast<long long>(pl.y) * ih / d->info.units);
-				p.Ellipse(cx - 6, cy - 6, 12, 12, RGB(10, 8, 6));
+				p.Ellipse(cx - 6, cy - 6, 12, 12, pal::bg);
 				p.Ellipse(cx - 5, cy - 5, 10, 10, SlotColor(g, pl));
 			}
 		}
 		else {
 			p.Font(3);
-			p.Text(px, py, kPreview, kPreview, !d ? "Reading..." : "No preview", kDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			p.Text(px, py, kPreview, kPreview, !d ? "Reading..." : "No preview", pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		}
-		p.Frame(px, py, kPreview, kPreview, pal::line);
+		p.Frame(px, py, kPreview, kPreview, pal::lineStrong);
 
 		const int tx = px + kPreview + 16, tw = x + kDlgW - 34 - tx;
 		p.Font(1);
-		const int nameH = p.TextWrapped(tx, py, tw, 56, g.pickerItems[st.pickSel], kGold);
+		const int nameH = p.TextWrapped(tx, py, tw, 56, g.pickerItems[st.pickSel], pal::redText);
 		int ty = py + std::max(24, nameH) + 6;
 		p.Font(0);
 		if (d && !d->failed) {
 			if (d->humans > 0) {
-				p.Text(tx, ty, tw, 22, std::to_string(d->humans) + " " + Tr(d->humans == 1 ? "player" : "players"), kText);
+				p.Text(tx, ty, tw, 22, std::to_string(d->humans) + " " + Tr(d->humans == 1 ? "player" : "players"), pal::text);
 				ty += 24;
 			}
 			if (d->info.units > 0) {
-				p.Text(tx, ty, tw, 22, Tr("Size: ") + Tr(MapSizeName(d->info.units)), kText);
+				p.Text(tx, ty, tw, 22, Tr("Size: ") + Tr(MapSizeName(d->info.units)), pal::text);
 				ty += 24;
 			}
-			p.Text(tx, ty, tw, 22, Tr("From: ") + OriginText(*d), d->origin.kind == kMapMod ? kGold : kText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			p.Text(tx, ty, tw, 22, Tr("From: ") + OriginText(*d), d->origin.kind == kMapMod ? pal::redText : pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 			ty += 24;
 			if (PickInUse(st, st.pickSel)) {
-				p.Text(tx, ty, tw, 22, "In use in this room", kOk);
+				p.Text(tx, ty, tw, 22, "In use in this room", pal::ok);
 				ty += 24;
 			}
 		}
@@ -285,20 +285,20 @@ void PaintScenarioPicker(Painter &p, const State &st)
 				const int col = n % 2, row = n / 2;
 				const int cx = px + col * colW, cy = py2 + row * 20;
 				p.Fill(cx, cy + 4, 12, 12, SlotColor(g, pl));
-				p.Frame(cx, cy + 4, 12, 12, RGB(10, 8, 6));
+				p.Frame(cx, cy + 4, 12, 12, pal::bg);
 				p.Text(cx + 18, cy, colW - 22, 20, TrFmt("Player %s", {std::to_string(pl.slot + 1)}) + ": " + CivText(pl, named),
-					pl.human ? kText : kDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+					pl.human ? pal::text : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 				n++;
 			}
 			py2 += ((n + 1) / 2) * 20 + 8;
 		}
 		const int descH = ly + kRows * kRowH + 4 - 10 - py2;
 		if (descH > 30) {
-			p.Fill(px, py2 - 4, dw - 28, 1, pal::lineDim);
+			p.Fill(px, py2 - 4, dw - 28, 1, pal::hairline);
 			p.Font(3);
 			const std::string body = MapDescriptionBody(g.pickerDescription, d && !d->failed && !d->info.players.empty());
 			p.Clip(px, py2, dw - 28, descH);
-			p.TextWrapped(px, py2 + 2, dw - 28, descH, body.empty() ? "No description." : body, body.empty() ? kDim : kText);
+			p.TextWrapped(px, py2 + 2, dw - 28, descH, body.empty() ? "No description." : body, body.empty() ? pal::textDim : pal::text);
 			p.Unclip();
 		}
 	}
@@ -307,7 +307,7 @@ void PaintScenarioPicker(Painter &p, const State &st)
 	const bool canDelete = has && Deletable(d.get()) && !PickInUse(st, st.pickSel);
 	p.Button(lx, footer, 190, kDialogBtnH, "Delete map...", kPickDelete, 0, mx, my, canDelete && !confirming, false, 1);
 	std::string note;
-	COLORREF noteColor = kDim;
+	COLORREF noteColor = pal::textDim;
 	if (has && d && !d->failed && !canDelete) {
 		if (d->origin.kind == kMapMod) note = TrFmt("This map comes from the content pack %s: uninstall that pack to remove it", {d->origin.modName});
 		else if (d->origin.kind == kMapBase) note = "This map is part of the game and cannot be deleted";
@@ -315,7 +315,7 @@ void PaintScenarioPicker(Painter &p, const State &st)
 	}
 	if (note.empty() && !st.pickNote.empty() && GetTickCount() < st.pickNoteUntil) {
 		note = st.pickNote;
-		noteColor = kOk;
+		noteColor = pal::ok;
 	}
 	if (!note.empty()) {
 		p.Font(3);

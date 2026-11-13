@@ -65,11 +65,11 @@ std::string StatusText(const Card &c, Status s)
 COLORREF StatusColor(Status s)
 {
 	switch (s) {
-	case kStatusWar: return kBad;
-	case kStatusAllied: return kOk;
-	case kStatusYouOffered: return kGold;
-	case kStatusPeace: return kText;
-	default: return pal::goldLight;
+	case kStatusWar: return pal::bad;
+	case kStatusAllied: return pal::ok;
+	case kStatusYouOffered: return pal::redText;
+	case kStatusPeace: return pal::text;
+	default: return pal::text;
 	}
 }
 
@@ -77,23 +77,19 @@ void Raw(Painter &p, bool on) { p.raw = on; }
 
 void PaintCheck(Painter &p, int x, int y, int size, bool on, bool enabled, bool hot)
 {
-	p.Fill(x, y, size, size, pal::well);
-	p.Frame(x, y, size, size, !enabled ? pal::disabledEdge : hot ? pal::focus : on ? kGold : pal::edge);
-	if (on) {
-		if (enabled) p.FillV(x + 4, y + 4, size - 8, size - 8, pal::goldLight, RGB(190, 140, 56));
-		else p.Fill(x + 4, y + 4, size - 8, size - 8, RGB(130, 112, 80));
-	}
+	p.Fill(x, y, size, size, on && enabled ? pal::red : pal::field);
+	p.Frame(x, y, size, size, !enabled ? pal::hairline : on ? (hot ? pal::redText : pal::red) : hot ? pal::edgeHot : pal::edge);
+	if (on) p.Fill(x + 4, y + 4, size - 8, size - 8, enabled ? pal::onRed : pal::disabled);
 }
 
 void PaintDot(Painter &p, int cx, int cy, bool on)
 {
 	if (on) {
-		p.Ellipse(cx - 7, cy - 7, 14, 14, RGB(62, 44, 14));
-		p.Ellipse(cx - 6, cy - 6, 12, 12, pal::goldLight);
+		p.Ellipse(cx - 6, cy - 6, 12, 12, pal::red);
 	}
 	else {
-		p.Ellipse(cx - 6, cy - 6, 12, 12, pal::lineDim);
-		p.Ellipse(cx - 4, cy - 4, 8, 8, pal::well);
+		p.Ellipse(cx - 6, cy - 6, 12, 12, pal::hairline);
+		p.Ellipse(cx - 4, cy - 4, 8, 8, pal::field);
 	}
 }
 
@@ -105,15 +101,15 @@ void PaintSegments(Painter &p, const View &v, int index, int x, int y, int w, Pr
 		const bool active = i == current, custom = i == kPresetCustom;
 		const bool clickable = !v.locked && !custom && !active;
 		const bool hot = clickable && p.Hover(sx, y, sw, kSegH, v.mouseX, v.mouseY);
-		if (active) p.FillV(sx, y, sw, kSegH, v.locked ? RGB(84, 66, 38) : RGB(150, 106, 40), v.locked ? RGB(60, 48, 30) : RGB(98, 66, 22));
-		else p.Fill(sx, y, sw, kSegH, hot ? pal::fieldHover : pal::well);
-		if (i > 0) p.Fill(sx, y + 1, 1, kSegH - 2, pal::lineDim);
+		if (active) p.Fill(sx, y, sw, kSegH, v.locked ? pal::lineStrong : pal::red);
+		else p.Fill(sx, y, sw, kSegH, hot ? pal::buttonHover : pal::field);
+		if (i > 0) p.Fill(sx, y + 1, 1, kSegH - 2, pal::hairline);
 		p.Font(active ? 1 : 0);
-		const COLORREF c = active ? pal::goldLight : custom || v.locked ? pal::disabledText : hot ? pal::focus : kText;
+		const COLORREF c = active ? (v.locked ? pal::text : pal::onRed) : custom || v.locked ? pal::disabled : pal::textDim;
 		p.Text(sx, y, sw, kSegH, kPresetLabels[i], c, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		if (clickable) p.AddHit(sx, y, sw, kSegH, kActPreset, index * kArgStride + i);
 	}
-	p.Frame(x, y, w, kSegH, v.locked ? pal::disabledEdge : pal::edge);
+	p.Frame(x, y, w, kSegH, v.locked ? pal::hairline : pal::edge);
 }
 
 // The hovered permission's explanation, drawn last so that it lies over the cards.
@@ -136,18 +132,18 @@ void PaintPlayerCard(Painter &p, const View &v, int index, int x, int y, int w, 
 	p.Font(3);
 	Raw(p, true);
 	const int tagW = std::min(iw / 2, p.TextWidth(tag) + 4);
-	p.Text(ix + iw - tagW, y + 12, tagW, 24, tag, kDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+	p.Text(ix + iw - tagW, y + 12, tagW, 24, tag, pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 	p.Font(1);
-	p.Text(ix, y + 12, iw - tagW - 10, 24, c.name, pal::goldLight, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	p.Text(ix, y + 12, iw - tagW - 10, 24, c.name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 
 	const std::string text = StatusText(c, status);
 	if (IsOffer(status)) {
 		const int by = y + kStatusY, bw = iw, accW = v.locked ? 0 : 96;
-		p.FillV(ix, by, bw, kStatusH, RGB(104, 74, 26), RGB(70, 48, 16));
-		p.Frame(ix, by, bw, kStatusH, kGold);
-		p.Diamond(ix + 14, by + kStatusH / 2, 5, pal::goldLight);
+		p.Fill(ix, by, bw, kStatusH, pal::selected);
+		p.Frame(ix, by, bw, kStatusH, pal::redText);
+		p.Diamond(ix + 14, by + kStatusH / 2, 5, pal::redText);
 		p.Font(1);
-		p.Text(ix + 28, by, bw - 40 - accW, kStatusH, text, pal::goldLight, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(ix + 28, by, bw - 40 - accW, kStatusH, text, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		Raw(p, false);
 		if (!v.locked) p.Button(ix + bw - accW - 4, by + 4, accW, kStatusH - 8, "Accept", kActAccept, index, v.mouseX, v.mouseY, true, true);
 	}
@@ -162,20 +158,20 @@ void PaintPlayerCard(Painter &p, const View &v, int index, int x, int y, int w, 
 
 	const int youX = ix + iw - kColW * 2, theyX = ix + iw - kColW;
 	p.Font(3);
-	p.Text(ix, y + kTableY, iw - kColW * 2, 20, "Permission", kDim);
-	p.Text(youX, y + kTableY, kColW, 20, "You give", kDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-	p.Text(theyX, y + kTableY, kColW, 20, "They give", kDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-	p.Fill(ix, y + kTableY + 21, iw, 1, pal::lineDim);
+	p.Text(ix, y + kTableY, iw - kColW * 2, 20, "Permission", pal::textDim);
+	p.Text(youX, y + kTableY, kColW, 20, "You give", pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	p.Text(theyX, y + kTableY, kColW, 20, "They give", pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	p.Fill(ix, y + kTableY + 21, iw, 1, pal::hairline);
 	for (int i = 0; i < 4; i++) {
 		const Permission &perm = kPermissions[i];
 		const int ry = y + kTableY + 24 + i * kTableRowH;
 		const bool rowHot = p.Hover(ix, ry, iw, kTableRowH, v.mouseX, v.mouseY);
 		if (rowHot) {
-			p.Fill(ix, ry, iw, kTableRowH, RGB(36, 28, 19));
+			p.Fill(ix, ry, iw, kTableRowH, pal::raised);
 			tip = {ix + 8, ry + kTableRowH + 4, perm.tip};
 		}
 		p.Font(0);
-		p.Text(ix + 4, ry, iw - kColW * 2 - 4, kTableRowH, perm.label, kText);
+		p.Text(ix + 4, ry, iw - kColW * 2 - 4, kTableRowH, perm.label, pal::text);
 		const bool on = (c.mine & perm.bit) != 0, enabled = !v.locked;
 		const int size = 18, cx = youX + (kColW - size) / 2, cy = ry + (kTableRowH - size) / 2;
 		PaintCheck(p, cx, cy, size, on, enabled, enabled && rowHot && p.Hover(youX, ry, kColW, kTableRowH, v.mouseX, v.mouseY));
@@ -194,9 +190,9 @@ void PaintTip(Painter &p, const Tip &tip, int panelH)
 	if (y + h > panelH - 8) y = std::max(8, tip.y - kTableRowH - 8 - h);
 	const int x = std::min(tip.x, kPanelW - 8 - w);
 	p.Fill(x + 3, y + 3, w, h, pal::shadow);
-	p.Fill(x, y, w, h, pal::dialog);
+	p.Fill(x, y, w, h, pal::panel);
 	p.Frame(x, y, w, h, pal::edge);
-	p.TextWrapped(x + 10, y + 7, w - 20, h - 10, tip.text, kText);
+	p.TextWrapped(x + 10, y + 7, w - 20, h - 10, tip.text, pal::text);
 }
 
 void PaintCardsBar(Painter &p, const View &v, int x, int top, int h)
@@ -204,7 +200,7 @@ void PaintCardsBar(Painter &p, const View &v, int x, int top, int h)
 	ScrollbarLook look;
 	look.minThumb = 30;
 	look.grip = 6;
-	look.track = pal::well;
+	look.track = pal::bg;
 	PaintScrollbar(p, kBarCards, x, top, h, {v.scroll, MaxScroll(v), kVisibleRows}, v.bar, v.mouseX, v.mouseY, look);
 }
 
@@ -221,7 +217,7 @@ void PaintDiplomacy(Painter &p, const View &v)
 	PaintWindowHeader(p, kPanelW, "DIPLOMACY");
 	if (v.locked) {
 		p.Font(4);
-		p.Text(kPad, kCardsTop - 4, kPanelW - kPad * 2, kNoticeH - 6, "Diplomacy is locked in this game: you can look but not change it.", kGold,
+		p.Text(kPad, kCardsTop - 4, kPanelW - kPad * 2, kNoticeH - 6, "Diplomacy is locked in this game: you can look but not change it.", pal::redText,
 			DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 	}
 
@@ -241,14 +237,14 @@ void PaintDiplomacy(Painter &p, const View &v)
 	if (scrolling) PaintCardsBar(p, v, kPanelW - kPad - 6, top, bottom - top);
 
 	const int ruleY = bottom + kFooterGap;
-	PaintOrnateRule(p, ruleY, kPanelW);
+	PaintRule(p, ruleY, kPanelW);
 	const int fy = ruleY + 1 + kFooterGap;
 	const bool hot = !v.locked && p.Hover(kPad, fy, 420, kFooterH, v.mouseX, v.mouseY);
 	PaintCheck(p, kPad, fy + 4, 20, v.alliedVictory, !v.locked, hot);
 	p.Font(1);
-	p.Text(kPad + 32, fy, 420, 26, "Allied victory", v.locked ? kDim : kText);
+	p.Text(kPad + 32, fy, 420, 26, "Allied victory", v.locked ? pal::textDim : pal::text);
 	p.Font(3);
-	p.Text(kPad + 32, fy + 24, 470, 22, "Win together with your allies. Both of you need it on.", kDim);
+	p.Text(kPad + 32, fy + 24, 470, 22, "Win together with your allies. Both of you need it on.", pal::textDim);
 	if (!v.locked) p.AddHit(kPad, fy, 420, kFooterH, kActAllied);
 
 	constexpr int btnW = 150, btnH = 42, btnGap = 12;

@@ -35,8 +35,8 @@ constexpr int kBigW = 52, kBigH = 60, kIconW = 65, kIconH = 76, kSmall = 20, kCa
 constexpr int kLinkRowH = 28, kResultIconW = 40, kResultIconH = 46;
 constexpr int kChipH = 50, kChipGap = 10, kChips = 4, kCellH = 46, kKeyW = 220;
 constexpr int kGroupH = 32, kItemH = 26, kSectionH = 24, kToggleW = 26;
-const COLORREF kPlain = RGB(208, 194, 158), kLink = RGB(226, 186, 104), kLinkHot = RGB(250, 226, 160), kCurrentBg = RGB(60, 43, 22),
-			   kHotBg = RGB(38, 30, 20), kCardBg = RGB(25, 19, 13), kCardHot = RGB(46, 35, 22);
+const COLORREF kPlain = pal::body, kLink = pal::redText, kLinkHot = pal::text, kCurrentBg = pal::selected, kHotBg = pal::raised,
+			   kCardBg = pal::raised, kCardHot = pal::selected;
 
 const char *const kIconHealth = "UI/help/health ico.bmp", *const kIconSlash = "UI/help/sattack ico.bmp", *const kIconPierce = "UI/help/pattack ico.bmp",
 				  *const kIconDefense = "UI/help/defense ico.bmp", *const kIconSpeed = "UI/help/speed ico.bmp", *const kIconSight = "UI/help/sight ico.bmp",
@@ -76,7 +76,7 @@ HFONT LinkFont(float s)
 	if (font && scale == s) return font;
 	if (font) DeleteObject(font);
 	font = CreateFontW(-static_cast<int>(15 * s + 0.5f), 0, 0, 0, FW_NORMAL, FALSE, TRUE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-		CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Georgia");
+		CLEARTYPE_QUALITY, DEFAULT_PITCH, BodyFace());
 	scale = s;
 	return font;
 }
@@ -177,7 +177,7 @@ int TextCapsWidth(Painter &p, const std::string &key)
 
 void DrawTextCaps(Painter &p, int x, int y, int h, const std::string &key, int maxW)
 {
-	const COLORREF edge = RGB(122, 98, 64), fg = RGB(240, 222, 170);
+	const COLORREF edge = pal::edgeHot, fg = pal::body;
 	if (TextCapsWidth(p, key) > maxW) {
 		DrawCap(p, x, y, std::min(maxW, CapWidth(p, key)), h, key, 0, edge, fg);
 		return;
@@ -185,7 +185,7 @@ void DrawTextCaps(Painter &p, int x, int y, int h, const std::string &key, int m
 	const std::vector<std::string> parts = TextCaps(key);
 	for (size_t i = 0; i < parts.size(); i++) {
 		if (i) {
-			p.Text(x, y, kPlusW, h - 2, "+", kDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			p.Text(x, y, kPlusW, h - 2, "+", pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 			x += kPlusW;
 		}
 		const int w = CapWidth(p, parts[i]);
@@ -675,8 +675,8 @@ void DrawIcon(Painter &p, const View &v, PaintOut &out, const std::string &path,
 	const std::shared_ptr<const BattleImage> img = Image(v, out, path, missing);
 	if (!img || img->w <= 0 || img->h <= 0) {
 		if (frame && !missing) {
-			p.Fill(x, y, boxW, boxH, pal::well);
-			p.Frame(x, y, boxW, boxH, pal::lineDim);
+			p.Fill(x, y, boxW, boxH, pal::bg);
+			p.Frame(x, y, boxW, boxH, pal::hairline);
 		}
 		return;
 	}
@@ -684,8 +684,8 @@ void DrawIcon(Painter &p, const View &v, PaintOut &out, const std::string &path,
 	const int w = std::max(1, static_cast<int>(img->w * scale + 0.5f)), h = std::max(1, static_cast<int>(img->h * scale + 0.5f));
 	const int ix = x + (boxW - w) / 2, iy = y + (boxH - h) / 2;
 	if (frame) {
-		p.Fill(ix, iy, w, h, pal::well);
-		p.Frame(ix - 1, iy - 1, w + 2, h + 2, pal::line);
+		p.Fill(ix, iy, w, h, pal::bg);
+		p.Frame(ix - 1, iy - 1, w + 2, h + 2, pal::lineStrong);
 	}
 	const RECT r = p.R(ix, iy, w, h);
 	const int pw = r.right - r.left, ph = r.bottom - r.top;
@@ -723,9 +723,9 @@ struct Pane {
 	void Heading(const Block &b, int x, int y)
 	{
 		p.Font(2);
-		DrawLines(p, x, y, kContentW, b.lines, pal::goldLight, false, 30);
+		DrawLines(p, x, y, kContentW, b.lines, pal::text, false, 30);
 		const int lineY = y + static_cast<int>(b.lines.size()) * 30 + 2;
-		p.FillH(x, lineY, kContentW, 1, pal::line, pal::panel);
+		p.Fill(x, lineY, kContentW, 1, pal::lineStrong);
 	}
 
 	void Link(const Block &b, int x, int y)
@@ -750,7 +750,7 @@ struct Pane {
 		}
 		else {
 			p.Font(b.more.empty() ? 0 : 1);
-			DrawLines(p, textX, textY, textW, b.lines, b.more.empty() ? kPlain : kText, false);
+			DrawLines(p, textX, textY, textW, b.lines, b.more.empty() ? kPlain : pal::text, false);
 		}
 		p.Font(0);
 		DrawLines(p, textX, textY + textH, textW, b.more, kPlain, false);
@@ -762,10 +762,10 @@ struct Pane {
 	{
 		const bool hot = Hot(x, y, w, h);
 		p.Fill(x, y, w, h, hot ? kCardHot : kCardBg);
-		p.Frame(x, y, w, h, hot ? pal::edgeHot : pal::lineDim);
+		p.Frame(x, y, w, h, hot ? pal::edgeHot : pal::hairline);
 		DrawIcon(p, v, out, cd.image, x + (w - kIconW) / 2, y + 10, kIconW, kIconH, true);
 		p.Font(4);
-		CenterWrapped(p, x + 6, y + kIconH + 18, w - 12, h - kIconH - 20, cd.label, hot ? pal::goldLight : kText);
+		CenterWrapped(p, x + 6, y + kIconH + 18, w - 12, h - kIconH - 20, cd.label, pal::text);
 		Hit(x, y, w, h, kActGo, cd.target);
 	}
 
@@ -782,12 +782,12 @@ struct Pane {
 	{
 		const bool hot = Hot(x, y, w, kChipH);
 		p.Fill(x, y, w, kChipH, hot ? kCardHot : kCardBg);
-		p.Frame(x, y, w, kChipH, hot ? pal::edgeHot : pal::lineDim);
+		p.Frame(x, y, w, kChipH, hot ? pal::edgeHot : pal::hairline);
 		DrawIcon(p, v, out, cd.image, x + 5, y + 4, 36, 42, false);
 		p.Font(4);
-		p.Text(x + 48, y + 6, w - 54, 20, cd.label, hot ? pal::goldLight : kText);
+		p.Text(x + 48, y + 6, w - 54, 20, cd.label, pal::text);
 		p.Font(3);
-		p.Text(x + 48, y + 25, w - 54, 18, cd.sub, kDim);
+		p.Text(x + 48, y + 25, w - 54, 18, cd.sub, pal::textDim);
 		Hit(x, y, w, kChipH, kActGo, cd.target);
 	}
 
@@ -807,18 +807,16 @@ struct Pane {
 			for (size_t i = 0; i < cards.size(); i++) Chip(cards[i], x + static_cast<int>(i) * (chipW + kChipGap), y, chipW);
 			y += kChipH + 8;
 		};
-		row(b.strong, Tr("Strong against"), kOk);
-		row(b.weak, Tr("Weak against"), kBad);
+		row(b.strong, Tr("Strong against"), pal::ok);
+		row(b.weak, Tr("Weak against"), pal::bad);
 		p.Font(3);
-		p.Text(x, y, kContentW, 18, Tr("From the counters the computer players recruit"), RGB(140, 128, 102));
+		p.Text(x, y, kContentW, 18, Tr("From the counters the computer players recruit"), pal::caption);
 	}
 
 	void Stats(const Block &b, int x, int y)
 	{
-		p.FillV(x, y, kContentW, std::min(b.h, 60), RGB(40, 30, 18), kCardBg);
-		if (b.h > 60) p.Fill(x, y + 60, kContentW, b.h - 60, kCardBg);
-		p.Frame(x, y, kContentW, b.h, pal::line);
-		PaintFrameCorners(p, x, y, kContentW, b.h, 12);
+		p.Fill(x, y, kContentW, b.h, kCardBg);
+		p.Frame(x, y, kContentW, b.h, pal::hairline);
 		DrawIcon(p, v, out, b.image, x + 18, y + 18, kIconW, kIconH, true);
 		const int gridX = x + 18 + kIconW + 26, gridW = kContentW - (gridX - x) - 14, cellW = gridW / 3;
 		for (size_t i = 0; i < b.cells.size(); i++) {
@@ -830,18 +828,18 @@ struct Pane {
 				tx += 24;
 			}
 			p.Font(3);
-			p.Text(tx, cy, cellW - (tx - cx) - 6, 20, c.label, kDim);
+			p.Text(tx, cy, cellW - (tx - cx) - 6, 20, c.label, pal::textDim);
 			p.Font(1);
-			p.Text(tx, cy + 19, cellW - (tx - cx) - 6, 22, c.value, pal::goldLight);
+			p.Text(tx, cy + 19, cellW - (tx - cx) - 6, 22, c.value, pal::text);
 		}
 		if (b.cards.empty()) return;
 		const int rows = (static_cast<int>(b.cells.size()) + 2) / 3;
 		const int ry = y + 16 + std::max(kIconH + 4, rows * kCellH) + 6;
-		p.Fill(x + 14, ry, kContentW - 28, 1, pal::lineDim);
+		p.Fill(x + 14, ry, kContentW - 28, 1, pal::hairline);
 		p.Font(3);
 		const std::string label = Tr("Recruited at");
 		const int lw = p.TextWidth(label);
-		p.Text(x + 18, ry + 8, lw + 4, 22, label, kDim);
+		p.Text(x + 18, ry + 8, lw + 4, 22, label, pal::textDim);
 		int lx = x + 18 + lw + 14;
 		SelectObject(p.dc, LinkFont(p.s));
 		for (const helpui::Card &cd : b.cards) {
@@ -858,8 +856,8 @@ struct Pane {
 	void Result(const Block &b, int x, int y)
 	{
 		const bool hot = Hot(x, y, kContentW, b.h);
-		if (hot) p.FillH(x, y, kContentW, b.h, kHotBg, pal::panel);
-		p.Fill(x, y, 3, b.h, hot ? kGold : pal::lineDim);
+		if (hot) p.Fill(x, y, kContentW, b.h, kHotBg);
+		p.Fill(x, y, 3, b.h, hot ? pal::redText : pal::hairline);
 		int tx = x + 16;
 		if (!b.image.empty()) {
 			DrawIcon(p, v, out, b.image, tx, y + 8, kResultIconW, kResultIconH, false);
@@ -869,11 +867,11 @@ struct Pane {
 		int ty = y + 10;
 		if (hot) SelectObject(p.dc, LinkFont(p.s));
 		else p.Font(1);
-		p.Text(tx, ty, tw, 24, b.title, hot ? kLinkHot : pal::goldLight);
+		p.Text(tx, ty, tw, 24, b.title, hot ? kLinkHot : pal::text);
 		ty += 24;
 		if (!b.context.empty()) {
 			p.Font(3);
-			p.Text(tx, ty, tw, 18, b.context, kDim);
+			p.Text(tx, ty, tw, 18, b.context, pal::textDim);
 			ty += 18;
 		}
 		p.Font(0);
@@ -890,7 +888,7 @@ struct Pane {
 			SelectObject(p.dc, LinkFont(p.s));
 			const int w = std::min(colW - 16, PixelWidthDesign(label));
 			const bool hot = Hot(cx, cy, w + 16, kLinkRowH);
-			p.Diamond(cx + 4, cy + kLinkRowH / 2, 3, hot ? pal::focus : pal::bronze);
+			p.Diamond(cx + 4, cy + kLinkRowH / 2, 3, hot ? pal::text : pal::redText);
 			SelectObject(p.dc, LinkFont(p.s));
 			RECT r = p.R(cx + 16, cy, colW - 16, kLinkRowH);
 			SetTextColor(p.dc, hot ? kLinkHot : kLink);
@@ -910,7 +908,7 @@ struct Pane {
 
 	void Control(const Block &b, int x, int y)
 	{
-		p.Fill(x, y + b.h - 1, kContentW, 1, RGB(44, 34, 23));
+		p.Fill(x, y + b.h - 1, kContentW, 1, pal::hairline);
 		// The caps say Shift or Mayús in the player's language, as on the Controls screen.
 		p.raw = false;
 		const int keysW = b.keys.empty() ? 0 : KeysWidth(p, b.keys);
@@ -918,16 +916,16 @@ struct Pane {
 		const int nameW = kContentW - std::max(keysW, 90) - 24;
 		p.Font(0);
 		if (b.context.empty()) {
-			p.Text(x + 6, y, nameW, b.h, b.title, kText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			p.Text(x + 6, y, nameW, b.h, b.title, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		}
 		else {
-			p.Text(x + 6, y + 4, nameW, 20, b.title, kText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			p.Text(x + 6, y + 4, nameW, 20, b.title, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 			p.Font(3);
-			p.Text(x + 6, y + 24, nameW, 16, b.context, kDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			p.Text(x + 6, y + 24, nameW, 16, b.context, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		}
 		if (b.keys.empty()) {
 			p.Font(3);
-			p.Text(x + kContentW - 96, y, 90, b.h, Tr("No key"), RGB(140, 124, 96), DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+			p.Text(x + kContentW - 96, y, 90, b.h, Tr("No key"), pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 			return;
 		}
 		p.raw = false;
@@ -952,7 +950,7 @@ struct Pane {
 				break;
 			case kKindNote:
 				p.Font(3);
-				DrawLines(p, x, y, kContentW, b.lines, kDim, false, 18);
+				DrawLines(p, x, y, kContentW, b.lines, pal::textDim, false, 18);
 				break;
 			case kKindIconText:
 			case kKindLink: Link(b, x, y); break;
@@ -971,7 +969,7 @@ struct Pane {
 			ScrollbarLook look;
 			look.width = kScrollW;
 			look.minThumb = 30;
-			look.track = pal::well;
+			look.track = pal::bg;
 			PaintScrollbar(p, kBarPage, kPaneX + kPaneW - kScrollW, kViewTop, kPaneBottom - kViewTop, {scroll, page.height - out.viewH, out.viewH}, v.bar,
 				v.mouseX, v.mouseY, look);
 		}
@@ -1058,22 +1056,22 @@ void PaintNav(Painter &p, const Content &c, const View &v, PaintOut &out)
 		if (r.kind == 0) {
 			p.Font(4);
 			const std::wstring up = Upper(W(r.label));
-			SpacedLine(p, kNavX + 4, ry + 6, 20, up, 2, pal::section);
+			SpacedLine(p, kNavX + 4, ry + 6, 20, up, 2, pal::caption);
 			const int tw = static_cast<int>(PixelWidth(p, up, 2) / p.s) + 14;
-			if (tw < kNavW - 8) p.FillH(kNavX + 4 + tw, ry + 16, kNavW - 8 - tw, 1, pal::line, pal::panel);
+			if (tw < kNavW - 8) p.Fill(kNavX + 4 + tw, ry + 16, kNavW - 8 - tw, 1, pal::lineStrong);
 			continue;
 		}
 		const bool hot = inside && !r.current && p.Hover(kNavX, ry, kNavW, r.h, v.mouseX, v.mouseY);
 		if (r.current) {
-			p.FillH(kNavX, ry, kNavW, r.h, kCurrentBg, pal::panel);
-			p.Fill(kNavX, ry + 3, 3, r.h - 6, kGold);
+			p.Fill(kNavX, ry, kNavW, r.h, kCurrentBg);
+			p.Fill(kNavX, ry + 3, 3, r.h - 6, pal::redText);
 		}
 		else if (hot) {
-			p.FillH(kNavX, ry, kNavW, r.h, kHotBg, pal::panel);
+			p.Fill(kNavX, ry, kNavW, r.h, kHotBg);
 		}
 		const int textX = kNavX + (r.kind == 2 ? 30 : 14), textW = kNavW - (textX - kNavX) - (r.listing ? kToggleW : 6);
 		p.Font(r.current ? 1 : 0);
-		p.Text(textX, ry, textW, r.h, r.label, r.current ? pal::goldLight : hot ? kText : r.kind == 2 ? RGB(176, 162, 130) : kDim);
+		p.Text(textX, ry, textW, r.h, r.label, r.current ? pal::text : hot ? pal::text : r.kind == 2 ? pal::caption : pal::textDim);
 		const HelpPlace target = r.kind == 2 ? HelpPlace{c.index.groups[r.g].items[r.i].topic, r.s, std::string()}
 											: HelpPlace{c.index.groups[r.g].items[r.i].topic, -1, std::string()};
 		out.targets.push_back(target);
@@ -1081,7 +1079,7 @@ void PaintNav(Painter &p, const Content &c, const View &v, PaintOut &out)
 		if (r.listing) {
 			const int ax = kNavX + kNavW - kToggleW + 8, ay = ry + r.h / 2;
 			const bool arrowHot = inside && p.Hover(kNavX + kNavW - kToggleW, ry, kToggleW, r.h, v.mouseX, v.mouseY);
-			const COLORREF ac = arrowHot ? pal::focus : kGold;
+			const COLORREF ac = arrowHot ? pal::text : pal::redText;
 			if (r.open) p.ArrowDown(ax, ay - 3, 9, 6, ac);
 			else p.ArrowRight(ax + 2, ay - 5, 6, 9, ac);
 			if (hitH > 0) p.AddHit(kNavX + kNavW - kToggleW, hitTop, kToggleW, hitH, kActToggle, r.g * 1000 + r.i);
@@ -1092,7 +1090,7 @@ void PaintNav(Painter &p, const Content &c, const View &v, PaintOut &out)
 		ScrollbarLook look;
 		look.width = 4;
 		look.minThumb = 30;
-		look.track = pal::well;
+		look.track = pal::bg;
 		PaintScrollbar(p, kBarNav, kNavX + kNavW + 5, kNavTop, viewH, {scroll, y - viewH, viewH}, v.bar, v.mouseX, v.mouseY, look);
 	}
 }
@@ -1102,10 +1100,9 @@ void NavButton(Painter &p, int x, int y, bool left, bool enabled, int action, co
 	const int w = 34, h = kBarH;
 	const bool hot = enabled && p.Hover(x, y, w, h, v.mouseX, v.mouseY);
 	const bool down = enabled && p.pressAction == action;
-	if (!enabled) p.Fill(x, y, w, h, RGB(30, 24, 17));
-	else p.FillV(x, y, w, h, down ? RGB(26, 19, 11) : hot ? RGB(82, 63, 38) : RGB(62, 47, 28), down ? RGB(44, 34, 21) : hot ? RGB(54, 41, 24) : RGB(36, 27, 16));
-	p.Frame(x, y, w, h, !enabled ? pal::disabledEdge : hot ? pal::edgeHot : pal::edge);
-	const COLORREF c = !enabled ? RGB(96, 84, 64) : hot ? pal::focus : kGold;
+	p.Fill(x, y, w, h, !enabled ? pal::field : down || hot ? pal::buttonHover : pal::button);
+	p.Frame(x, y, w, h, !enabled ? pal::hairline : hot ? pal::edgeHot : pal::edge);
+	const COLORREF c = !enabled ? pal::disabled : pal::text;
 	if (left) p.ArrowLeft(x + 12, y + 8, 9, 12, c);
 	else p.ArrowRight(x + 13, y + 8, 9, 12, c);
 	if (enabled) p.AddHit(x, y, w, h, action, 0);
@@ -1146,14 +1143,14 @@ void PaintBar(Painter &p, const Content *c, const View &v, PaintOut &out)
 	int x = x0;
 	for (size_t i = 0; i < crumbs.size(); i++) {
 		if (i) {
-			p.Text(x, kBarY, sepW, kBarH, sep, RGB(120, 100, 66));
+			p.Text(x, kBarY, sepW, kBarH, sep, pal::disabled);
 			x += sepW;
 		}
 		const bool last = i + 1 == crumbs.size(), dead = crumbs[i].place.topic == -2;
 		const int w = std::min(p.TextWidth(crumbs[i].label), right - x);
 		if (w <= 0) break;
 		const bool hot = !last && !dead && p.Hover(x, kBarY, w, kBarH, v.mouseX, v.mouseY);
-		p.Text(x, kBarY, w + 2, kBarH, crumbs[i].label, last ? kText : hot ? kLinkHot : kDim);
+		p.Text(x, kBarY, w + 2, kBarH, crumbs[i].label, last ? pal::text : hot ? kLinkHot : pal::textDim);
 		if (!last && !dead) {
 			out.targets.push_back(crumbs[i].place);
 			p.AddHit(x, kBarY, w, kBarH, kActGo, static_cast<int>(out.targets.size()) - 1);
@@ -1167,16 +1164,16 @@ void PaintTitle(Painter &p, const std::wstring &title)
 	const std::wstring up = Upper(title);
 	p.Font(5);
 	if (PixelWidth(p, up, 3) <= p.S(kPaneW)) {
-		SpacedLine(p, kPaneX, kTitleY, kTitleH, up, 3, pal::goldLight);
+		SpacedLine(p, kPaneX, kTitleY, kTitleH, up, 3, pal::text);
 		return;
 	}
 	p.Font(2);
 	if (PixelWidth(p, up, 2) <= p.S(kPaneW)) {
-		SpacedLine(p, kPaneX, kTitleY, kTitleH, up, 2, pal::goldLight);
+		SpacedLine(p, kPaneX, kTitleY, kTitleH, up, 2, pal::text);
 		return;
 	}
 	RECT r = p.R(kPaneX, kTitleY, kPaneW, kTitleH);
-	SetTextColor(p.dc, pal::goldLight);
+	SetTextColor(p.dc, pal::text);
 	DrawTextW(p.dc, title.c_str(), static_cast<int>(title.size()), &r, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
 }
 
@@ -1186,22 +1183,22 @@ void PaintSearch(Painter &p, const View &v)
 	if (v.query.empty()) {
 		// A lens: a ring and its handle, solid.
 		const int cx = kNavX + kNavW - 22, cy = kSearchY + 13;
-		p.Ellipse(cx - 6, cy - 6, 12, 12, kDim);
-		p.Ellipse(cx - 4, cy - 4, 8, 8, v.searchFocused ? RGB(30, 24, 16) : pal::well);
-		p.Line(cx + 4, cy + 4, cx + 9, cy + 9, kDim, 2);
+		p.Ellipse(cx - 6, cy - 6, 12, 12, pal::textDim);
+		p.Ellipse(cx - 4, cy - 4, 8, 8, v.searchFocused ? pal::field : pal::bg);
+		p.Line(cx + 4, cy + 4, cx + 9, cy + 9, pal::textDim, 2);
 		return;
 	}
 	const int bx = kNavX + kNavW - 28;
 	const bool hot = p.Hover(bx, kSearchY + 4, 24, kSearchH - 8, v.mouseX, v.mouseY);
-	p.Fill(bx, kSearchY + 4, 24, kSearchH - 8, hot ? RGB(70, 54, 32) : RGB(44, 34, 21));
+	p.Fill(bx, kSearchY + 4, 24, kSearchH - 8, hot ? pal::buttonHover : pal::button);
 	p.Font(1);
-	p.Text(bx, kSearchY + 4, 24, kSearchH - 8, "\xC3\x97", hot ? pal::focus : kGold, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	p.Text(bx, kSearchY + 4, 24, kSearchH - 8, "\xC3\x97", hot ? pal::text : pal::redText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 	p.AddHit(bx, kSearchY + 4, 24, kSearchH - 8, kActClearSearch, 0);
 }
 
 void PaintClose(Painter &p, const View &v)
 {
-	p.FillH(kNavX, kNavBottom + 6, kNavW, 1, pal::line, pal::panel);
+	p.Fill(kNavX, kNavBottom + 6, kNavW, 1, pal::lineStrong);
 	p.Button(kNavX, kCloseY, kNavW, kCloseH, Tr("Close"), kActClose, 0, v.mouseX, v.mouseY);
 }
 
@@ -1255,7 +1252,7 @@ void PaintHelpScreen(Painter &p, const View &v, PaintOut &out)
 	p.raw = true;
 	PaintWindowFrame(p, kScreenW, kScreenH);
 	PaintWindowHeader(p, kScreenW, Utf8(Upper(W(Tr("Help")))));
-	p.Fill(kDividerX, kTop + 4, 1, kPaneBottom - kTop - 4, pal::lineDim);
+	p.Fill(kDividerX, kTop + 4, 1, kPaneBottom - kTop - 4, pal::hairline);
 	PaintSearch(p, v);
 	const Content *c = v.content.get();
 	RECT content = p.R(kPaneX, kViewTop, kPaneW, kPaneBottom - kViewTop);
@@ -1269,7 +1266,7 @@ void PaintHelpScreen(Painter &p, const View &v, PaintOut &out)
 		b.Build();
 		out.contentH = b.page.height;
 		PaintTitle(p, b.page.title);
-		PaintOrnament(p, kOrnamentRule, kPaneX - 6, kRuleY - 5, kPaneW + 12, 10, kGold);
+		p.Fill(kPaneX, kRuleY, kPaneW, 1, pal::hairline);
 		Pane pane{p, v, out};
 		pane.scroll = std::max(0, std::min(v.scroll, std::max(0, b.page.height - out.viewH)));
 		out.scroll = pane.scroll;

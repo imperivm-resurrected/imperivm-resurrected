@@ -261,6 +261,12 @@ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
+## League Gothic and Archivo — folder `mod/fonts`
+SIL Open Font License 1.1. The full license of each is next to its files (`LeagueGothic-OFL.txt`, `Archivo-OFL.txt`).
+
+- League Gothic: Copyright 2010 The League Gothic Project Authors (https://github.com/theleagueof/league-gothic).
+- Archivo: Copyright 2020 The Archivo Project Authors (https://github.com/Omnibus-Type/Archivo).
+
 ## Syncrash — AlvaroPeyleth
 The crash protection in `src/hooks/tweaks.cpp` (`InstallCrashFix`) is based on their research. MIT. https://github.com/AlvaroPeyleth/Imperivm-Syncrash
 

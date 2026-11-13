@@ -1733,14 +1733,14 @@ void ControlsDrawBarKeys(uint32_t *buf, int w, int h)
 			fontPx = px;
 		}
 		RECT r = {0, 0, tw, th};
-		HBRUSH edge = CreateSolidBrush(RGB(200, 160, 80)), face = CreateSolidBrush(RGB(24, 18, 12));
+		HBRUSH edge = CreateSolidBrush(RGB(90, 85, 80)), face = CreateSolidBrush(RGB(24, 21, 19));
 		FillRect(dc, &r, edge);
 		RECT in = {1, 1, tw - 1, th - 1};
 		FillRect(dc, &in, face);
 		DeleteObject(edge);
 		DeleteObject(face);
 		SelectObject(dc, font);
-		SetTextColor(dc, RGB(255, 232, 160));
+		SetTextColor(dc, RGB(241, 238, 232));
 		const std::string label = Tr(k.label);
 		int wl = MultiByteToWideChar(CP_UTF8, 0, label.c_str(), -1, nullptr, 0);
 		std::wstring wtext(wl > 0 ? wl - 1 : 0, L'\0');

@@ -100,9 +100,9 @@ void DrawSpectatorBar(uint32_t *buf, int W, int H, float s, int topY)
 	double posX = 0.5, posTop = -1;
 	SpectatorBarPos(posX, posTop, 0);
 	EnsureFonts(s);
-	const COLORREF panel = pal::dialog, frameOuter = kGold, frameInner = pal::line;
-	const COLORREF btn = pal::rowHover, btnHot = RGB(92, 72, 48), strong = RGB(122, 82, 30), strongHot = RGB(150, 104, 40);
-	const COLORREF btnFrame = pal::edgeStrong, label = RGB(240, 226, 180), red = RGB(226, 70, 58);
+	const COLORREF panel = pal::panel, frameOuter = pal::hairline, frameInner = pal::lineStrong;
+	const COLORREF btn = pal::raised, btnHot = pal::lineStrong, strong = pal::red, strongHot = pal::red;
+	const COLORREF btnFrame = pal::edgeHot, label = pal::body, red = pal::redText;
 	const float line = std::max(1.0f, s), rad = 2.0f * s;
 	const float pad = 12 * s, gap = 8 * s;
 	const float pillH = 32 * s;
@@ -208,7 +208,7 @@ void DrawSpectatorBar(uint32_t *buf, int W, int H, float s, int topY)
 		{
 			wchar_t text[12];
 			swprintf_s(text, L"×%d", st.speed);
-			DrawLabel(buf, W, H, text, rSpeed.x, rSpeed.y, rSpeed.w, rSpeed.h, DT_CENTER, st.broadcast && st.atLive ? kDim : label, 1.0f);
+			DrawLabel(buf, W, H, text, rSpeed.x, rSpeed.y, rSpeed.w, rSpeed.h, DT_CENTER, st.broadcast && st.atLive ? pal::textDim : label, 1.0f);
 		}
 		button(rUi, false, st.uiHidden, hUi);
 		DrawLabel(buf, W, H, L"UI", rUi.x, rUi.y, rUi.w, rUi.h, DT_CENTER, label, 1.0f);
@@ -217,7 +217,7 @@ void DrawSpectatorBar(uint32_t *buf, int W, int H, float s, int topY)
 			button(rLive, st.ended, st.atLive, hLive);
 			const float dx = rLive.x + 16 * s;
 			if (st.atLive && !st.ended) FillDisc(buf, W, H, dx, cy, 6.5f * s, red, 0.3f);
-			if (!st.ended) FillDisc(buf, W, H, dx, cy, 4 * s, st.atLive ? red : RGB(150, 130, 100), 1.0f);
+			if (!st.ended) FillDisc(buf, W, H, dx, cy, 4 * s, st.atLive ? red : pal::caption, 1.0f);
 			std::wstring text = ::W(Tr(st.ended ? "Leave" : "Go live"));
 			CharUpperBuffW(&text[0], static_cast<DWORD>(text.size()));
 			DrawLabel(buf, W, H, text, st.ended ? rLive.x : rLive.x + 28 * s, rLive.y, st.ended ? rLive.w : rLive.w - 34 * s, rLive.h, st.ended ? DT_CENTER : (DT_LEFT | DT_END_ELLIPSIS), label, 1.0f);
@@ -227,15 +227,15 @@ void DrawSpectatorBar(uint32_t *buf, int W, int H, float s, int topY)
 		const float trackX0 = rTrack.x + 6 * s, trackX1 = rTrack.x + rTrack.w - 6 * s, trackLen = std::max(1.0f, trackX1 - trackX0);
 		{
 			const float th = (hTrack ? 10.0f : 8.0f) * s;
-			FillRound(buf, W, H, trackX0, cy - th / 2, trackLen, th, 1.0f * s, pal::well, 1.0f);
+			FillRound(buf, W, H, trackX0, cy - th / 2, trackLen, th, 1.0f * s, pal::bg, 1.0f);
 			StrokeRound(buf, W, H, trackX0, cy - th / 2, trackLen, th, 1.0f * s, line, frameInner, 1.0f);
 			const float fillLen = static_cast<float>(trackLen * frac);
-			if (fillLen > 1.0f) FillRound(buf, W, H, trackX0 + line, cy - th / 2 + line, std::max(1.0f, fillLen - line), th - 2 * line, 0.5f * s, st.busy ? RGB(120, 160, 210) : kGold, 1.0f);
+			if (fillLen > 1.0f) FillRound(buf, W, H, trackX0 + line, cy - th / 2 + line, std::max(1.0f, fillLen - line), th - 2 * line, 0.5f * s, st.busy ? RGB(120, 160, 210) : pal::redText, 1.0f);
 			const float hw = (hTrack ? 10.0f : 8.0f) * s, hh = (hTrack ? 22.0f : 18.0f) * s, hx = trackX0 + fillLen;
 			FillRound(buf, W, H, hx - hw / 2, cy - hh / 2, hw, hh, rad, hTrack ? strongHot : strong, 1.0f);
 			StrokeRound(buf, W, H, hx - hw / 2, cy - hh / 2, hw, hh, rad, line, btnFrame, 1.0f);
-			DrawLabel(buf, W, H, ClockText(drag ? static_cast<unsigned>(dragFrac * st.total) : shownCur), rCur.x, rCur.y, rCur.w, rCur.h, DT_RIGHT, kText, 1.0f);
-			DrawLabel(buf, W, H, ClockText(st.total), rTotal.x, rTotal.y, rTotal.w, rTotal.h, DT_LEFT, kDim, 1.0f);
+			DrawLabel(buf, W, H, ClockText(drag ? static_cast<unsigned>(dragFrac * st.total) : shownCur), rCur.x, rCur.y, rCur.w, rCur.h, DT_RIGHT, pal::text, 1.0f);
+			DrawLabel(buf, W, H, ClockText(st.total), rTotal.x, rTotal.y, rTotal.w, rTotal.h, DT_LEFT, pal::textDim, 1.0f);
 			if (hTrack && !drag) {
 				const double f = std::max(0.0, std::min(1.0, static_cast<double>((mx - trackX0) / trackLen)));
 				const std::wstring t = ClockText(static_cast<unsigned>(f * st.total));
@@ -258,7 +258,7 @@ void DrawSpectatorBar(uint32_t *buf, int W, int H, float s, int topY)
 	}
 	if (!tipFor.empty()) {
 		const float tipY = by + barH + 30 * s > H - 40 * s ? by - 30 * s : by + barH + 30 * s;
-		ModUiDrawHoverCard(buf, W, H, tipFor, kGold, static_cast<int>(std::max(4.0f, tipX)), static_cast<int>(tipY), KnownKeys(tipKeys));
+		ModUiDrawHoverCard(buf, W, H, tipFor, pal::redText, static_cast<int>(std::max(4.0f, tipX)), static_cast<int>(tipY), KnownKeys(tipKeys));
 	}
 	std::lock_guard<std::mutex> lock(g_lock);
 	auto store = [&](int i, const RectF &r) { g_spec.btn[i] = {static_cast<LONG>(r.x), static_cast<LONG>(r.y), static_cast<LONG>(r.x + r.w), static_cast<LONG>(r.y + r.h)}; };
@@ -291,7 +291,7 @@ void DrawWatchersBadge(uint32_t *buf, int W, int H)
 	if (SpectatorControls(watching)) return;
 	static HFONT font = CreateFontW(-kBadgeFontPx, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
 		CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
-	const COLORREF panel = pal::dialog, frame = kGold, ink = RGB(240, 226, 180);
+	const COLORREF panel = pal::panel, frame = pal::hairline, ink = pal::body;
 	wchar_t text[16];
 	swprintf_s(text, L"%d", watchers);
 	if (!g_spec.text.Ensure(400, 64)) return;

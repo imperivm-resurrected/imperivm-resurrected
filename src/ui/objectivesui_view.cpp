@@ -24,8 +24,8 @@ constexpr int kGroupH = 30, kGroupGap = 12, kRowH = 54, kEmptyRowH = 40, kIconBo
 // A title too long for one line takes a second one, and what is under it moves down by kTitleLineH.
 constexpr int kTitleY = 98, kTitleH = 48, kTitleLineH = 28, kStatusY = 152, kStatusH = 30, kRuleY = 196, kTextTop = 212;
 constexpr int kLineH = 23, kGapLine = 10, kScrollW = 4, kMapButtonW = 176;
-const COLORREF kPlain = RGB(208, 194, 158), kCurrentBg = RGB(60, 43, 22), kHotBg = RGB(38, 30, 20);
-const COLORREF kDoneText = RGB(122, 150, 100), kDoneDim = RGB(92, 112, 78), kDoneMark = RGB(108, 138, 88), kTagText = RGB(34, 24, 12);
+const COLORREF kPlain = pal::body, kCurrentBg = pal::selected, kHotBg = pal::raised;
+const COLORREF kDoneText = pal::ok, kDoneDim = RGB(92, 112, 78), kDoneMark = pal::ok, kTagText = pal::onRed;
 
 std::wstring Upper(std::wstring w)
 {
@@ -117,7 +117,7 @@ bool InCheck(double x, double y)
 void NoteIcon(Painter &p, const ObjectiveEntry &e, int x, int y, bool selected)
 {
 	if (e.done) p.Shape(x, y, kIconBox, kIconBox, InCheck, kDoneMark);
-	else p.Shape(x, y, kIconBox, kIconBox, e.note.onMap ? InPin : InFlag, selected ? pal::goldLight : kGold);
+	else p.Shape(x, y, kIconBox, kIconBox, e.note.onMap ? InPin : InFlag, selected ? pal::text : pal::redText);
 }
 
 int TagWidth(Painter &p, const std::string &label)
@@ -129,7 +129,7 @@ int TagWidth(Painter &p, const std::string &label)
 int Tag(Painter &p, int x, int y, const std::string &label)
 {
 	const int w = TagWidth(p, label), h = 17;
-	p.Fill(x, y, w, h, kGold);
+	p.Fill(x, y, w, h, pal::red);
 	SpacedLine(p, x + 6, y, h, Upper(W(label)), 1, kTagText);
 	return w;
 }
@@ -165,7 +165,7 @@ void ScrollBar(Painter &p, const View &v, int id, int x, int top, int viewH, int
 	ScrollbarLook look;
 	look.width = kScrollW;
 	look.minThumb = 30;
-	look.track = pal::well;
+	look.track = pal::bg;
 	PaintScrollbar(p, id, x, top, viewH, {scroll, total - viewH, viewH}, v.bar, v.mouseX, v.mouseY, look);
 }
 
@@ -209,13 +209,13 @@ void PaintGroup(Painter &p, int y, const Row &r)
 {
 	p.Font(4);
 	const std::wstring up = Upper(W(Tr(r.done ? "Completed" : "In progress")));
-	SpacedLine(p, kListX + 4, y + 8, 18, up, 2, pal::section);
+	SpacedLine(p, kListX + 4, y + 8, 18, up, 2, pal::caption);
 	const int tw = static_cast<int>(PixelWidth(p, up, 2) / p.s) + 12;
 	const std::string count = std::to_string(r.count);
 	const int cw = p.TextWidth(count);
-	p.Text(kListX + kListW - cw - 4, y + 8, cw + 2, 18, count, kDim);
+	p.Text(kListX + kListW - cw - 4, y + 8, cw + 2, 18, count, pal::textDim);
 	const int lineW = kListW - tw - cw - 22;
-	if (lineW > 0) p.FillH(kListX + 4 + tw, y + 17, lineW, 1, pal::line, pal::panel);
+	if (lineW > 0) p.Fill(kListX + 4 + tw, y + 17, lineW, 1, pal::lineStrong);
 }
 
 void PaintNoteRow(Painter &p, const View &v, int y, const Row &r, bool inside, int hitTop, int hitH)
@@ -224,11 +224,11 @@ void PaintNoteRow(Painter &p, const View &v, int y, const Row &r, bool inside, i
 	const bool selected = r.index == v.selected;
 	const bool hot = inside && !selected && p.Hover(kListX, y, kListW, r.h, v.mouseX, v.mouseY);
 	if (selected) {
-		p.FillH(kListX, y, kListW, r.h, kCurrentBg, pal::panel);
-		p.Fill(kListX, y + 4, 3, r.h - 8, kGold);
+		p.Fill(kListX, y, kListW, r.h, kCurrentBg);
+		p.Fill(kListX, y + 4, 3, r.h - 8, pal::redText);
 	}
 	else if (hot) {
-		p.FillH(kListX, y, kListW, r.h, kHotBg, pal::panel);
+		p.Fill(kListX, y, kListW, r.h, kHotBg);
 	}
 	NoteIcon(p, e, kListX + 12, y + 9, selected);
 	const int textX = kListX + 42;
@@ -240,7 +240,7 @@ void PaintNoteRow(Painter &p, const View &v, int y, const Row &r, bool inside, i
 	}
 	p.Font(selected ? 1 : 0);
 	const std::string title = e.note.title.empty() ? e.note.id : e.note.title;
-	const COLORREF titleColor = e.done ? kDoneText : selected ? pal::goldLight : hot ? kText : kPlain;
+	const COLORREF titleColor = e.done ? kDoneText : selected ? pal::text : hot ? pal::text : kPlain;
 	p.Text(textX, y + 7, textW, 22, title, titleColor);
 	if (e.done) {
 		const int struck = std::min(textW, p.TextWidth(title));
@@ -248,7 +248,7 @@ void PaintNoteRow(Painter &p, const View &v, int y, const Row &r, bool inside, i
 	}
 	p.Font(3);
 	const std::string excerpt = Excerpt(e.note.text);
-	if (!excerpt.empty()) p.Text(textX, y + 29, kListX + kListW - 10 - textX, 18, excerpt, e.done ? kDoneDim : selected ? kText : kDim);
+	if (!excerpt.empty()) p.Text(textX, y + 29, kListX + kListW - 10 - textX, 18, excerpt, e.done ? kDoneDim : selected ? pal::text : pal::textDim);
 	if (hitH > 0) p.AddHit(kListX, hitTop, kListW, hitH, kActSelect, r.index);
 }
 
@@ -284,7 +284,7 @@ void PaintList(Painter &p, const View &v, PaintOut &out)
 		if (r.kind == 0) PaintGroup(p, y, r);
 		else if (r.kind == 2) {
 			p.Font(3);
-			p.Text(kListX + 14, y, kListW - 20, r.h, Tr("Nothing in progress right now"), kDim);
+			p.Text(kListX + 14, y, kListW - 20, r.h, Tr("Nothing in progress right now"), pal::textDim);
 		}
 		else PaintNoteRow(p, v, y, r, inside, hitTop, hitH);
 	}
@@ -332,15 +332,15 @@ void PaintStatus(Painter &p, const View &v, const ObjectiveEntry &e, int dy)
 	if (e.fresh) x += Tag(p, x, top + 7, Tr("New")) + 10;
 	p.Font(3);
 	const std::string state = Tr("In progress");
-	p.Text(x, top, p.TextWidth(state) + 4, kStatusH, state, kText);
+	p.Text(x, top, p.TextWidth(state) + 4, kStatusH, state, pal::text);
 	x += p.TextWidth(state) + 10;
 	if (e.note.onMap) {
-		p.Text(x, top, 12, kStatusH, "\xC2\xB7", kDim);
+		p.Text(x, top, 12, kStatusH, "\xC2\xB7", pal::textDim);
 		x += 14;
-		p.Shape(x, y, kIconBox, kIconBox, InPin, kGold);
+		p.Shape(x, y, kIconBox, kIconBox, InPin, pal::redText);
 		x += kIconBox + 6;
 		const std::string marked = Tr("Marked on the map");
-		p.Text(x, top, kPaneX + kPaneW - kMapButtonW - 12 - x, kStatusH, marked, kDim);
+		p.Text(x, top, kPaneX + kPaneW - kMapButtonW - 12 - x, kStatusH, marked, pal::textDim);
 		p.Button(kPaneX + kPaneW - kMapButtonW, top, kMapButtonW, kStatusH, Tr("Show on map"), kActShowOnMap, 0, v.mouseX, v.mouseY, true, true, 4);
 	}
 }
@@ -365,7 +365,7 @@ void PaintText(Painter &p, const View &v, const ObjectiveEntry &e, PaintOut &out
 			y += kGapLine;
 			continue;
 		}
-		if (y + kLineH > textTop && y < kBottom) p.LineW(kPaneX, y + 2, width, kLineH, l, e.done ? RGB(168, 160, 136) : kPlain);
+		if (y + kLineH > textTop && y < kBottom) p.LineW(kPaneX, y + 2, width, kLineH, l, e.done ? pal::textDim : kPlain);
 		y += kLineH;
 	}
 	p.Unclip();
@@ -377,11 +377,11 @@ void PaintEmpty(Painter &p)
 	const int cx = kPaneX + kPaneW / 2, top = 236;
 	const int big = 3 * kIconBox;
 	// The flag of the list, three times larger.
-	p.Shape(cx - big / 2, top, big, big, InFlag, pal::bronze);
+	p.Shape(cx - big / 2, top, big, big, InFlag, pal::edge);
 	p.Font(2);
-	p.Text(kPaneX, top + 80, kPaneW, 32, Tr("No objectives yet"), pal::goldLight, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	p.Text(kPaneX, top + 80, kPaneW, 32, Tr("No objectives yet"), pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 	p.Font(0);
-	p.Text(kPaneX + 40, top + 116, kPaneW - 80, 48, Tr("When the mission gives you an objective, it shows here."), kDim, DT_CENTER | DT_TOP | DT_WORDBREAK);
+	p.Text(kPaneX + 40, top + 116, kPaneW - 80, 48, Tr("When the mission gives you an objective, it shows here."), pal::textDim, DT_CENTER | DT_TOP | DT_WORDBREAK);
 }
 
 }
@@ -393,9 +393,9 @@ void PaintObjectivesScreen(Painter &p, const View &v, PaintOut &out)
 	p.raw = true;
 	PaintWindowFrame(p, kScreenW, kScreenH);
 	PaintWindowHeader(p, kScreenW, Utf8(Upper(W(Tr("Objectives")))));
-	p.Fill(kDividerX, kTop + 4, 1, kBottom - kTop - 4, pal::lineDim);
+	p.Fill(kDividerX, kTop + 4, 1, kBottom - kTop - 4, pal::hairline);
 	PaintList(p, v, out);
-	p.FillH(kListX, kListBottom + 6, kListW, 1, pal::line, pal::panel);
+	p.Fill(kListX, kListBottom + 6, kListW, 1, pal::lineStrong);
 	p.Button(kListX, kCloseY, kListW, kCloseH, Tr("Close"), kActClose, 0, v.mouseX, v.mouseY);
 	if (v.selected < 0 || v.selected >= static_cast<int>(v.entries.size())) {
 		PaintEmpty(p);
@@ -403,9 +403,9 @@ void PaintObjectivesScreen(Painter &p, const View &v, PaintOut &out)
 		return;
 	}
 	const ObjectiveEntry &e = v.entries[v.selected];
-	const int dy = PaintTitle(p, e.note.title.empty() ? e.note.id : e.note.title, e.done ? kDoneText : pal::goldLight);
+	const int dy = PaintTitle(p, e.note.title.empty() ? e.note.id : e.note.title, e.done ? kDoneText : pal::text);
 	PaintStatus(p, v, e, dy);
-	PaintOrnament(p, kOrnamentRule, kPaneX - 6, kRuleY + dy - 5, kPaneW + 12, 10, kGold);
+	p.Fill(kPaneX, kRuleY + dy, kPaneW, 1, pal::hairline);
 	PaintText(p, v, e, out, dy);
 	p.raw = false;
 }

@@ -209,7 +209,7 @@ ProfileSummary ProfileSummaryFor(const std::string &profile)
 		if (!ModsFind(folder, m)) {
 			r.name = folder;
 			r.status = Tr("not installed");
-			r.color = kBad;
+			r.color = pal::bad;
 		}
 		else {
 			r.name = m.name + (m.version.empty() || m.name.find(m.version) != std::string::npos ? "" : " " + m.version);

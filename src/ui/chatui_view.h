@@ -20,7 +20,7 @@ struct Line {
 	std::string clock;
 	int scope = kChatAll;
 	std::string name, toName, text;
-	COLORREF color = RGB(232, 216, 160);
+	COLORREF color = ui::pal::text;
 	bool location = false;
 	// The type of a ping (ChatPingType), or -1.
 	int ping = -1;
@@ -52,7 +52,7 @@ struct View {
 	int topLine = -1;
 	int targetScope = kChatAll;
 	std::string targetName;
-	COLORREF targetColor = RGB(232, 216, 160);
+	COLORREF targetColor = ui::pal::text;
 	std::string text;
 	ui::EditState edit;
 	bool withLocation = false;

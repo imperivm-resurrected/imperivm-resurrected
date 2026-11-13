@@ -83,35 +83,10 @@ struct PanelRender {
 	}
 };
 
-// dirX and dirY say where the corner opens: +1 to the right or down, -1 to the left or up.
-inline void PaintCorner(Painter &p, int x, int y, int dirX, int dirY, int size = 22)
-{
-	const auto bar = [&](int ax, int ay, int w, int h, COLORREF c) {
-		p.Fill(dirX > 0 ? x + ax : x - ax - w, dirY > 0 ? y + ay : y - ay - h, w, h, c);
-	};
-	bar(0, 0, size, 2, pal::goldLight);
-	bar(0, 0, 2, size, pal::goldLight);
-	bar(6, 6, size - 10, 1, kGold);
-	bar(6, 6, 1, size - 10, kGold);
-	p.Diamond(x + dirX * 6, y + dirY * 6, 3, pal::goldLight);
-}
-
-inline void PaintFrameCorners(Painter &p, int x, int y, int w, int h, int size = 22)
-{
-	PaintCorner(p, x, y, 1, 1, size);
-	PaintCorner(p, x + w, y, -1, 1, size);
-	PaintCorner(p, x, y + h, 1, -1, size);
-	PaintCorner(p, x + w, y + h, -1, -1, size);
-}
-
 inline void PaintWindowFrame(Painter &p, int w, int h)
 {
-	const int glow = std::min(h, 120);
-	p.FillV(0, 0, w, glow, pal::panelTop, pal::panel);
-	p.Fill(0, glow, w, h - glow, pal::panel);
-	p.Frame(0, 0, w, h, kGold);
-	p.Frame(4, 4, w - 8, h - 8, pal::lineDim);
-	PaintFrameCorners(p, 0, 0, w, h);
+	p.Fill(0, 0, w, h, pal::panel);
+	p.Frame(0, 0, w, h, pal::hairline);
 }
 
 // Premultiplied 32-bit bitmaps for GdiAlphaBlend, one per ornament, size, side and colour; there are only a handful.
@@ -160,78 +135,50 @@ inline void PaintOrnament(Painter &p, Ornament ornament, int x, int y, int w, in
 
 constexpr int kWindowHeaderH = 84;
 
-// The title between laurels over an ornate rule. Returns where the content can start.
-inline int PaintWindowHeader(Painter &p, int w, const std::string &title, int letterSpacing = 6)
+// The screen title, big and uppercase, over a hairline. Returns where the content can start.
+inline int PaintWindowHeader(Painter &p, int w, const std::string &title, int letterSpacing = 3)
 {
-	constexpr int branchW = 66, branchH = 42, gap = 30, margin = 24;
+	constexpr int margin = 24;
 	p.Font(5);
-	SetTextCharacterExtra(p.dc, p.S(letterSpacing));
-	const int textW = p.TextWidth(title);
-	// A room's name can be long: it gets the width of the laurels and the spacing of its letters when it needs them.
-	if (textW <= w - 2 * (branchW + gap + margin)) {
-		// DT_CENTER ignores the spacing and would push the title to the right.
-		p.Text((w - textW + letterSpacing) / 2, 12, textW + margin, 48, title, pal::goldLight, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-		SetTextCharacterExtra(p.dc, 0);
-		PaintOrnament(p, kOrnamentLaurel, (w - textW) / 2 - gap - branchW, 15, branchW, branchH, pal::goldLight);
-		PaintOrnament(p, kOrnamentLaurel, (w + textW) / 2 + gap, 15, branchW, branchH, pal::goldLight, true);
-	}
-	else {
-		SetTextCharacterExtra(p.dc, 0);
-		p.Text(margin, 12, w - 2 * margin, 48, title, pal::goldLight, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-	}
-	PaintOrnament(p, kOrnamentRule, 18, 62, w - 36, 12, kGold);
+	p.TextCaps(margin, 12, w - 2 * margin, 48, title, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE, letterSpacing);
+	p.Fill(margin, 66, w - 2 * margin, 1, pal::hairline);
 	return kWindowHeaderH;
 }
 
-inline void PaintOrnateRule(Painter &p, int centerY, int w, int h = 10)
-{
-	PaintOrnament(p, kOrnamentRule, 18, centerY - h / 2, w - 36, h, kGold);
-}
-
-// The glow stays at the top so that rows striped over the card keep one contrast from top to bottom.
 inline void PaintCard(Painter &p, int x, int y, int w, int h)
 {
-	constexpr int glow = 44;
-	const COLORREF body = RGB(25, 19, 13);
-	p.FillV(x, y, w, std::min(h, glow), RGB(36, 28, 18), body);
-	if (h > glow) p.Fill(x, y + glow, w, h - glow, body);
-	p.Frame(x, y, w, h, pal::lineDim);
+	p.Fill(x, y, w, h, pal::panel);
+	p.Frame(x, y, w, h, pal::hairline);
 }
 
 constexpr int kBigToggleW = 44, kBigToggleH = 22;
 
 inline void PaintBigToggle(Painter &p, int x, int y, bool on, bool enabled, bool hot)
 {
-	if (on && enabled) p.FillV(x, y, kBigToggleW, kBigToggleH, RGB(84, 50, 17), RGB(124, 80, 28));
-	else p.Fill(x, y, kBigToggleW, kBigToggleH, on ? RGB(70, 56, 34) : pal::well);
-	p.Frame(x, y, kBigToggleW, kBigToggleH, !enabled ? pal::disabledEdge : hot ? pal::focus : on ? kGold : pal::edge);
-	const int knobW = 18, kx = on ? x + kBigToggleW - knobW - 3 : x + 3;
-	if (on && enabled) p.FillV(kx, y + 3, knobW, kBigToggleH - 6, RGB(250, 226, 160), RGB(205, 160, 72));
-	else p.FillV(kx, y + 3, knobW, kBigToggleH - 6, RGB(150, 134, 104), RGB(98, 86, 66));
+	p.Fill(x, y, kBigToggleW, kBigToggleH, !enabled ? pal::field : on ? pal::red : pal::field);
+	p.Frame(x, y, kBigToggleW, kBigToggleH, !enabled ? pal::hairline : on ? (hot ? pal::redText : pal::red) : hot ? pal::edgeHot : pal::edge);
+	const int knobW = 16, kx = on ? x + kBigToggleW - knobW - 3 : x + 3;
+	p.Fill(kx, y + 3, knobW, kBigToggleH - 6, !enabled ? pal::disabled : on ? pal::onRed : pal::caption);
 }
 
 inline void PaintSlider(Painter &p, int x, int y, int w, int h, float fraction, bool enabled, bool hot)
 {
 	constexpr int trackH = 5;
 	const int cy = y + h / 2, filled = static_cast<int>(w * std::max(0.0f, std::min(1.0f, fraction)));
-	p.Fill(x, cy - trackH / 2, w, trackH, pal::well);
-	p.Frame(x, cy - trackH / 2, w, trackH, pal::lineDim);
-	if (filled > 0) {
-		if (enabled) p.FillH(x, cy - trackH / 2, filled, trackH, pal::bronze, pal::goldLight);
-		else p.Fill(x, cy - trackH / 2, filled, trackH, pal::disabledEdge);
-	}
+	p.Fill(x, cy - trackH / 2, w, trackH, pal::field);
+	p.Frame(x, cy - trackH / 2, w, trackH, pal::edge);
+	if (filled > 0) p.Fill(x, cy - trackH / 2, filled, trackH, enabled ? pal::red : pal::disabled);
 	if (!enabled) return;
-	p.Diamond(x + filled, cy, hot ? 8 : 7, RGB(62, 44, 14));
-	p.Diamond(x + filled, cy, hot ? 7 : 6, hot ? pal::focus : pal::goldLight);
+	p.Fill(x + filled - 3, cy - 8, 6, 16, hot ? pal::onRed : pal::text);
 }
 
 inline void PaintTitle(Painter &p, int x, int y, int w, const std::string &title)
 {
 	p.Font(2);
-	p.Text(x, y, w, 36, title, pal::goldLight);
+	p.Text(x, y, w, 36, title, pal::text);
 }
 
-inline void PaintRule(Painter &p, int y, int w, COLORREF c = pal::line)
+inline void PaintRule(Painter &p, int y, int w, COLORREF c = pal::hairline)
 {
 	p.Fill(16, y, w - 32, 1, c);
 }
@@ -240,13 +187,12 @@ inline void PaintCombo(Painter &p, int x, int y, int w, int h, const std::string
 	int arg, RECT *anchor = nullptr)
 {
 	const bool hov = enabled && p.Hover(x, y, w, h, mx, my);
-	p.Fill(x, y, w, h, open ? pal::fieldOpen : hov ? pal::fieldHover : pal::field);
-	p.Frame(x, y, w, h, !enabled ? pal::disabledEdge : open || hov ? pal::edgeHot : pal::edge);
+	p.Fill(x, y, w, h, enabled ? pal::field : pal::raised);
+	p.Frame(x, y, w, h, !enabled ? pal::hairline : open || hov ? pal::edgeHot : pal::edge);
 	p.Font(0);
-	p.Text(x + 8, y, w - 30, h, text, enabled ? kText : kDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+	p.Text(x + 8, y, w - 30, h, text, enabled ? pal::text : pal::disabled, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 	if (enabled) {
-		p.Fill(x + w - 24, y + 4, 1, h - 8, pal::divider);
-		p.ArrowDown(x + w - 17, y + h / 2 - 2, 10, 5, open || hov ? pal::focus : kGold);
+		p.ArrowDown(x + w - 17, y + h / 2 - 2, 10, 5, pal::textDim);
 		p.AddHit(x, y, w, h, action, arg);
 	}
 	if (open && anchor) *anchor = {x, y, x + w, y + h};
@@ -254,7 +200,7 @@ inline void PaintCombo(Painter &p, int x, int y, int w, int h, const std::string
 
 struct DropItem {
 	std::string text;
-	COLORREF color = kText;
+	COLORREF color = pal::text;
 	bool disabled = false;
 	std::string tip;
 };
@@ -302,8 +248,8 @@ inline DropLayout PaintDropMenu(Painter &p, const RECT &anchor, const std::vecto
 	p.hits->clear();
 	p.AddHit(0, 0, canvasW, canvasH, closeAction, 0);
 	p.Fill(d.x + 4, d.y + 4, d.w, d.h, pal::shadow);
-	p.Fill(d.x, d.y, d.w, d.h, pal::dialog);
-	p.Frame(d.x, d.y, d.w, d.h, kGold);
+	p.Fill(d.x, d.y, d.w, d.h, pal::panel);
+	p.Frame(d.x, d.y, d.w, d.h, pal::edge);
 	p.Font(0);
 	const int textW = d.w - 26;
 	int tipRow = -1;
@@ -312,9 +258,9 @@ inline DropLayout PaintDropMenu(Painter &p, const RECT &anchor, const std::vecto
 		const int ry = d.y + 2 + r * kMenuRowH;
 		const DropItem &it = items[i];
 		const bool hov = !it.disabled && p.Hover(d.x + 2, ry, d.w - 4, kMenuRowH, mx, my);
-		if (i == selected) p.Fill(d.x + 2, ry, d.w - 4, kMenuRowH, pal::rowSelected);
-		else if (hov) p.Fill(d.x + 2, ry, d.w - 4, kMenuRowH, pal::rowHover);
-		const COLORREF c = it.disabled ? kDim : i == selected ? pal::focus : it.color;
+		if (i == selected) p.Fill(d.x + 2, ry, d.w - 4, kMenuRowH, pal::selected);
+		else if (hov) p.Fill(d.x + 2, ry, d.w - 4, kMenuRowH, pal::raised);
+		const COLORREF c = it.disabled ? pal::disabled : i == selected ? pal::text : it.color;
 		p.Text(d.x + 10, ry, textW, kMenuRowH, it.text.empty() ? "—" : it.text, c);
 		if (!it.disabled) p.AddHit(d.x + 2, ry, d.w - 4, kMenuRowH, pickAction, i);
 		if (hov && !it.tip.empty()) tipRow = r;
@@ -327,9 +273,9 @@ inline DropLayout PaintDropMenu(Painter &p, const RECT &anchor, const std::vecto
 		if (tx + tw > canvasW - 8) tx = d.x - 8 - tw;
 		const int ty = std::max(8, std::min(d.y + 2 + tipRow * kMenuRowH, canvasH - 8 - th));
 		p.Fill(tx + 3, ty + 3, tw, th, pal::shadow);
-		p.Fill(tx, ty, tw, th, pal::dialog);
+		p.Fill(tx, ty, tw, th, pal::panel);
 		p.Frame(tx, ty, tw, th, pal::edge);
-		p.TextWrapped(tx + 10, ty + 7, tw - 20, th - 10, it.tip, kText);
+		p.TextWrapped(tx + 10, ty + 7, tw - 20, th - 10, it.tip, pal::text);
 		p.Font(0);
 	}
 	if (count > d.rows) {
@@ -337,7 +283,7 @@ inline DropLayout PaintDropMenu(Painter &p, const RECT &anchor, const std::vecto
 		look.width = 5;
 		look.minThumb = 16;
 		look.grip = 3;
-		look.track = pal::well;
+		look.track = pal::bg;
 		PaintScrollbar(p, kDropMenuBar, d.x + d.w - 8, d.y + 2, d.h - 4, {d.scroll, DropMaxScroll(count, d.rows), d.rows}, drag, mx, my, look);
 	}
 	return d;
@@ -354,16 +300,15 @@ struct TabSpec {
 constexpr int kTabH = 46;
 constexpr int kTabsY = 56, kTabsH = 34;
 
-inline void PaintTabs(Painter &p, int x, int y, const std::vector<TabSpec> &tabs, int mx, int my, int tabW = 190, int h = kTabH)
+// Text tabs: the active one is bright with a red underline. The hairline under the whole row is the caller's (PaintTabBar).
+inline void PaintTabs(Painter &p, int x, int y, const std::vector<TabSpec> &tabs, int mx, int my, int tabW = 190, int h = kTabH, int font = 1)
 {
 	for (const TabSpec &t : tabs) {
 		const bool hov = t.enabled && p.Hover(x, y, tabW, h, mx, my);
-		if (t.active) p.FillV(x, y, tabW, h, RGB(30, 22, 14), RGB(64, 46, 25));
-		else if (hov) p.Fill(x, y, tabW, h, RGB(38, 30, 21));
-		p.Font(1);
-		p.Text(x, y, tabW, h - 4, t.label, !t.enabled ? RGB(110, 96, 76) : t.active ? kGold : hov ? kText : kDim,
-			DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-		if (t.active) p.Fill(x + 16, y + h - 4, tabW - 32, 3, kGold);
+		p.Font(font);
+		p.TextCaps(x, y, tabW, h - 3, t.label, !t.enabled ? pal::disabled : t.active || hov ? pal::text : pal::caption,
+			DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
+		if (t.active) p.Fill(x, y + h - 3, tabW, 3, pal::red);
 		if (t.enabled && !t.active) p.AddHit(x, y, tabW, h, t.action, t.arg);
 		x += tabW + 6;
 	}
@@ -371,8 +316,8 @@ inline void PaintTabs(Painter &p, int x, int y, const std::vector<TabSpec> &tabs
 
 inline void PaintTabBar(Painter &p, int w, const std::vector<TabSpec> &tabs, int mx, int my, int tabW = 190)
 {
+	p.Fill(16, kTabsY + kTabsH - 1, w - 32, 1, pal::hairline);
 	PaintTabs(p, 16, kTabsY, tabs, mx, my, tabW, kTabsH);
-	PaintRule(p, kTabsY + kTabsH, w);
 }
 
 struct Dialog {
@@ -386,7 +331,7 @@ struct Dialog {
 
 constexpr int kDialogBtnH = 40;
 
-inline Dialog DialogBegin(Painter &p, int canvasW, int canvasH, int w, int h, const std::string &title, COLORREF titleColor = kGold,
+inline Dialog DialogBegin(Painter &p, int canvasW, int canvasH, int w, int h, const std::string &title, COLORREF titleColor = pal::text,
 	int titleIndent = 0)
 {
 	Dialog d;
@@ -397,17 +342,15 @@ inline Dialog DialogBegin(Painter &p, int canvasW, int canvasH, int w, int h, co
 	p.hits->clear();
 	p.noHover = false;
 	p.Fill(d.x + 6, d.y + 6, w, h, pal::shadow);
-	p.FillV(d.x, d.y, w, std::min(h, 72), pal::dialogTop, pal::dialog);
-	if (h > 72) p.Fill(d.x, d.y + 72, w, h - 72, pal::dialog);
-	p.Frame(d.x, d.y, w, h, kGold);
-	PaintFrameCorners(p, d.x, d.y, w, h, 14);
+	p.Fill(d.x, d.y, w, h, pal::panel);
+	p.Frame(d.x, d.y, w, h, pal::hairline);
 	p.Font(2);
-	p.Text(d.x + d.pad + titleIndent, d.y + 16, w - d.pad * 2 - titleIndent, 32, title, titleColor, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-	PaintOrnament(p, kOrnamentRule, d.x + 14, d.y + 47, w - 28, 8, kGold);
+	p.TextCaps(d.x + d.pad + titleIndent, d.y + 16, w - d.pad * 2 - titleIndent, 32, title, titleColor, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
+	p.Fill(d.x + d.pad, d.y + 52, w - d.pad * 2, 1, pal::hairline);
 	return d;
 }
 
-inline int DialogText(Painter &p, const Dialog &d, int yOffset, const std::string &text, COLORREF c = kText, int font = 0)
+inline int DialogText(Painter &p, const Dialog &d, int yOffset, const std::string &text, COLORREF c = pal::text, int font = 0)
 {
 	p.Font(font);
 	const int top = d.y + yOffset;
@@ -429,7 +372,7 @@ inline void DialogButtons(Painter &p, const Dialog &d, const std::vector<DialogB
 	std::vector<int> widths;
 	int total = -gap;
 	for (const DialogButton &b : buttons) {
-		widths.push_back(std::max(minW, p.TextWidth(b.label) + 44));
+		widths.push_back(std::max(minW, p.CapsWidth(b.label, 1) + 44));
 		total += widths.back() + gap;
 	}
 	int x = center ? d.x + (d.w - total) / 2 : d.x + d.w - d.pad - total;
@@ -448,29 +391,29 @@ inline void PaintSwitch(Painter &p, int x, int y, bool on, const std::string &la
 	const int w = Painter::kToggleW + 10 + textW;
 	const bool hov = enabled && p.Hover(x, y, w, h, mx, my);
 	p.Toggle(x, y + (h - Painter::kToggleH) / 2, on, enabled, hov);
-	p.Text(x + Painter::kToggleW + 10, y, textW, h, label, on && enabled ? kText : kDim);
+	p.Text(x + Painter::kToggleW + 10, y, textW, h, label, on && enabled ? pal::text : pal::caption);
 	if (enabled) p.AddHit(x, y, w, h, action, arg);
 }
 
 inline void PaintAlertIcon(Painter &p, int x, int y, bool severe, int size = 16)
 {
-	p.Fill(x, y, size, size, severe ? kBad : kGold);
+	p.Fill(x, y, size, size, severe ? pal::bad : pal::warn);
 	p.Font(1);
-	p.Text(x, y, size, size, "!", RGB(20, 15, 10), DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	p.Text(x, y, size, size, "!", pal::bg, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 }
 
 inline void PaintProgress(Painter &p, int x, int y, int w, int h, float fraction)
 {
-	p.Fill(x, y, w, h, pal::well);
+	p.Fill(x, y, w, h, pal::field);
 	const int filled = static_cast<int>(w * std::max(0.0f, std::min(1.0f, fraction)));
-	if (filled > 0) p.FillV(x, y, filled, h, pal::goldLight, pal::bronze);
+	if (filled > 0) p.Fill(x, y, filled, h, pal::red);
 }
 
 inline void PaintBusyBar(Painter &p, int x, int y, int w, int h, DWORD now)
 {
 	const int seg = std::max(20, w / 8);
-	p.Fill(x, y, w, h, pal::well);
-	p.Fill(x + static_cast<int>((now / 8) % (w - seg)), y, seg, h, kGold);
+	p.Fill(x, y, w, h, pal::field);
+	p.Fill(x + static_cast<int>((now / 8) % (w - seg)), y, seg, h, pal::red);
 }
 
 inline void PaintBadge(Painter &p, int x, int y, int w, int h, const std::string &text, COLORREF bg, COLORREF fg)

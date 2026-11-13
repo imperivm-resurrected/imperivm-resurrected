@@ -27,8 +27,8 @@ constexpr int kColumnX = kRailX + kRailW + 30, kColumnMaxW = 690, kFade = 60, kB
 constexpr int kLead = 72;
 constexpr int kColumns = 3, kRailLines = 2;
 
-const COLORREF kSubtitle = RGB(196, 176, 132), kPlain = RGB(208, 194, 158), kNoteColor = RGB(150, 136, 108);
-const COLORREF kRailHot = RGB(38, 30, 20), kRailCurrent = RGB(60, 43, 22);
+const COLORREF kSubtitle = pal::textDim, kPlain = pal::body, kNoteColor = pal::caption;
+const COLORREF kRailHot = pal::raised, kRailCurrent = pal::selected;
 
 enum RowKind { kRowLine, kRowCells, kRowRule };
 
@@ -36,7 +36,7 @@ struct Row {
 	RowKind kind = kRowLine;
 	int y = 0, h = 0;
 	int font = 0, spacing = 0;
-	COLORREF color = kText;
+	COLORREF color = pal::text;
 	std::wstring text;
 	// In pixels, measured with the spacing of its letters.
 	int width = 0;
@@ -144,16 +144,16 @@ struct Builder {
 		Space(kLastHeading);
 		const std::wstring up = Upper(W(text));
 		if (PixelWidth(p, up, 5, 4) <= Fits()) {
-			Line(up, 5, 4, pal::goldLight, 48);
+			Line(up, 5, 4, pal::text, 48);
 		}
 		else if (PixelWidth(p, up, 2, 2) <= Fits()) {
-			Line(up, 2, 2, pal::goldLight, 36);
+			Line(up, 2, 2, pal::text, 36);
 		}
 		else {
 			// A sentence: in its own letters, over a few lines.
 			p.Font(2);
-			if (p.WrapLines(text, 0, width).size() <= 3) Wrapped(text, 2, pal::goldLight, 30);
-			else Wrapped(text, 1, pal::goldLight, 22);
+			if (p.WrapLines(text, 0, width).size() <= 3) Wrapped(text, 2, pal::text, 30);
+			else Wrapped(text, 1, pal::text, 22);
 		}
 	}
 
@@ -167,8 +167,8 @@ struct Builder {
 	{
 		Space(kLastRole);
 		const std::wstring up = Upper(W(text));
-		if (PixelWidth(p, up, 4, 2) <= Fits()) Line(up, 4, 2, kGold, 22);
-		else Wrapped(Utf8(up), 4, kGold, 20);
+		if (PixelWidth(p, up, 4, 2) <= Fits()) Line(up, 4, 2, pal::redText, 22);
+		else Wrapped(Utf8(up), 4, pal::redText, 20);
 	}
 
 	void Note(const std::string &text)
@@ -202,8 +202,8 @@ struct Builder {
 		if (names.size() <= kCreditsColumnsFrom) {
 			for (size_t i = 0; i < names.size(); i++) {
 				const std::wstring w = W(names[i]);
-				if (PixelWidth(p, w, 0, 0) <= Fits() - (patrons ? p.S(28) : 0)) Line(w, 0, 0, kText, 25, patrons ? tiers[i] : PatronTier::None);
-				else Wrapped(names[i], 0, kText, 23);
+				if (PixelWidth(p, w, 0, 0) <= Fits() - (patrons ? p.S(28) : 0)) Line(w, 0, 0, pal::text, 25, patrons ? tiers[i] : PatronTier::None);
+				else Wrapped(names[i], 0, pal::text, 23);
 			}
 			return;
 		}
@@ -213,7 +213,7 @@ struct Builder {
 			r.y = y;
 			r.h = 24;
 			r.font = 0;
-			r.color = kText;
+			r.color = pal::text;
 			for (size_t c = i; c < names.size() && c < i + kColumns; c++) {
 				r.cells.push_back(W(names[c]));
 				if (patrons) r.tiers.push_back(tiers[c]);
@@ -255,7 +255,7 @@ void BuildLayout(Painter &p, const Content &c, int width, Layout &out)
 	b.Subtitle(c.mod.tagline, kPlain);
 	b.Role(Tr("Created by"));
 	b.Space(kLastNames);
-	b.Line(W(c.mod.author), 2, 3, pal::goldLight, 34);
+	b.Line(W(c.mod.author), 2, 3, pal::text, 34);
 	std::string summary;
 	for (const std::string &l : c.mod.summary) {
 		std::string part = l;
@@ -375,7 +375,7 @@ HFONT SmallFont(float s)
 	if (font && scale == s) return font;
 	if (font) DeleteObject(font);
 	font = CreateFontW(-static_cast<int>(13 * s + 0.5f), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-		CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Georgia");
+		CLEARTYPE_QUALITY, DEFAULT_PITCH, BodyFace());
 	scale = s;
 	return font;
 }
@@ -398,9 +398,11 @@ void DrawCells(Painter &p, const Row &r, int left, int width, int top)
 
 void DrawRule(Painter &p, int centerX, int top, int columnW)
 {
-	const int w = p.S(std::min(columnW, 460)), h = p.S(12);
-	const RECT r = {centerX - w / 2, top, centerX - w / 2 + w, top + h};
-	Blit(p, OrnamentBitmap(kOrnamentRule, w, h, false, kGold), w, h, r);
+	const int w = p.S(std::min(columnW, 460)), y = top + p.S(6);
+	const RECT r = {centerX - w / 2, y, centerX - w / 2 + w, y + std::max(1, p.S(1))};
+	HBRUSH b = CreateSolidBrush(pal::lineStrong);
+	FillRect(p.dc, &r, b);
+	DeleteObject(b);
 }
 
 void PaintColumn(Painter &p, const Layout &L, int x, int w, double scroll, double period)
@@ -472,15 +474,15 @@ void PaintRail(Painter &p, const Layout &L, int current, const View &v)
 		const bool now = static_cast<int>(i) == current;
 		const bool hot = !now && p.Hover(kRailX, y, kRailW, it.h, v.mouseX, v.mouseY);
 		if (now) {
-			p.FillH(kRailX, y, kRailW, it.h, kRailCurrent, pal::panel);
-			p.Fill(kRailX + 6, y + 7 + 9, 16, 2, kGold);
+			p.Fill(kRailX, y, kRailW, it.h, kRailCurrent);
+			p.Fill(kRailX, y, 3, it.h, pal::red);
 		}
 		else if (hot) {
-			p.FillH(kRailX, y, kRailW, it.h, kRailHot, pal::panel);
+			p.Fill(kRailX, y, kRailW, it.h, kRailHot);
 		}
 		p.Font(now ? 1 : 0);
 		for (size_t l = 0; l < it.lines.size(); l++) {
-			p.LineW(textX, y + 7 + static_cast<int>(l) * 19, textW, 19, it.lines[l], now ? pal::goldLight : hot ? kText : kDim);
+			p.LineW(textX, y + 7 + static_cast<int>(l) * 19, textW, 19, it.lines[l], now ? pal::text : pal::textDim);
 		}
 		const int hitTop = std::max(y, railTop), hitBottom = std::min(y + it.h, railTop + railH);
 		if (hitBottom > hitTop) p.AddHit(kRailX, hitTop, kRailW, hitBottom - hitTop, kActJump, static_cast<int>(i));
@@ -489,20 +491,12 @@ void PaintRail(Painter &p, const Layout &L, int current, const View &v)
 	p.Unclip();
 }
 
-// The frame of the other screens with its glow kept above the column, whose edges fade into the plain colour below it.
-void PaintFrame(Painter &p, int w, int h)
-{
-	constexpr int glow = kBodyTop - 12;
-	p.FillV(0, 0, w, glow, pal::panelTop, pal::panel);
-	p.Fill(0, glow, w, h - glow, pal::panel);
-	p.Frame(0, 0, w, h, kGold);
-	p.Frame(4, 4, w - 8, h - 8, pal::lineDim);
-	PaintFrameCorners(p, 0, 0, w, h);
-}
+// The frame of the other screens; the edges of the column fade into its plain colour.
+void PaintFrame(Painter &p, int w, int h) { PaintWindowFrame(p, w, h); }
 
 void PaintFooter(Painter &p, int panelW, const View &v)
 {
-	p.Fill(18, kFooterTop, panelW - 36, 1, pal::line);
+	p.Fill(18, kFooterTop, panelW - 36, 1, pal::lineStrong);
 	int bx = panelW - kMargin - kButtonW;
 	p.Button(bx, kFooterY, kButtonW, kFooterH, "Close", kActClose, 0, v.mouseX, v.mouseY);
 	bx -= 10 + kButtonW;
@@ -511,21 +505,21 @@ void PaintFooter(Painter &p, int panelW, const View &v)
 	if (v.fast) {
 		const int bw = 40;
 		p.raw = true;
-		PaintBadge(p, bx - 12 - bw, kFooterY + 10, bw, 18, "\xC3\x97" "2", RGB(70, 46, 18), RGB(236, 186, 110));
+		PaintBadge(p, bx - 12 - bw, kFooterY + 10, bw, 18, "\xC3\x97" "2", pal::hairline, pal::redText);
 		p.raw = false;
 		right = bx - 12 - bw - 14;
 	}
-	p.Diamond(kMargin + 4, kFooterY + kFooterH / 2, 4, kGold);
+	p.Diamond(kMargin + 4, kFooterY + kFooterH / 2, 4, pal::redText);
 	p.Font(3);
 	const std::string hint = Tr("Wheel or drag to scroll \xC2\xB7 Space pauses \xC2\xB7 Tab doubles the speed \xC2\xB7 Esc closes");
 	const int x = kMargin + 16, w = right - x;
 	p.raw = true;
 	if (p.TextWidth(hint) <= w) {
-		p.Text(x, kFooterY, w, kFooterH, hint, RGB(186, 170, 134));
+		p.Text(x, kFooterY, w, kFooterH, hint, pal::caption);
 	}
 	else {
 		const int h = std::min(kFooterH, p.Measure(w, hint));
-		p.TextWrapped(x, kFooterY + (kFooterH - h) / 2, w, h, hint, RGB(186, 170, 134));
+		p.TextWrapped(x, kFooterY + (kFooterH - h) / 2, w, h, hint, pal::caption);
 	}
 	p.raw = false;
 }
@@ -563,7 +557,7 @@ void PaintCreditsScreen(Painter &p, int panelW, const View &v, PaintOut &out)
 	PaintWindowHeader(p, panelW, Utf8(Upper(W(Tr("Credits")))));
 	const int areaX = kColumnX, areaW = panelW - kMargin - areaX;
 	const int columnW = std::min(kColumnMaxW, areaW - 24), columnX = areaX + (areaW - columnW) / 2;
-	p.Fill(kRailX + kRailW + 14, kBodyTop + 8, 1, kBodyBottom - kBodyTop - 16, pal::lineDim);
+	p.Fill(kRailX + kRailW + 14, kBodyTop + 8, 1, kBodyBottom - kBodyTop - 16, pal::hairline);
 	out = PaintOut();
 	out.viewport = kBodyBottom - kBodyTop;
 	RECT column = p.R(areaX, kBodyTop, areaW, kBodyBottom - kBodyTop);

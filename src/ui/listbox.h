@@ -14,7 +14,7 @@ namespace ui {
 
 struct ListLine {
 	std::string text;
-	COLORREF color = RGB(232, 216, 160);
+	COLORREF color = pal::textDim;
 	bool heading = false;
 };
 
@@ -59,8 +59,8 @@ inline void ListPaint(Painter &p, int x, int y, int w, int h, const std::vector<
 	const int maxScroll = ListMaxScroll(total, visible);
 	st.scroll = std::max(0, std::min(st.scroll, maxScroll));
 	const bool bar = maxScroll > 0;
-	p.Fill(x, y, w, h, pal::well);
-	p.Frame(x, y, w, h, pal::line);
+	p.Fill(x, y, w, h, pal::bg);
+	p.Frame(x, y, w, h, pal::lineStrong);
 	const int textW = w - 12 - (bar ? 12 : 0);
 	for (int i = 0; i < visible && st.scroll + i < total; i++) {
 		const ListLine &l = lines[st.scroll + i];

@@ -89,7 +89,7 @@ void ModUiDraw(uint32_t *buf, int w, int h)
 		const int alpha = std::max(0, static_cast<int>(240 * std::min({1.0f, shown / 200.0f, left / 500.0f})));
 		Card card;
 		card.text = st.toast;
-		card.accent = st.toastErr ? kBad : kGold;
+		card.accent = st.toastErr ? pal::bad : pal::redText;
 		DrawCard(g_toastCanvas, buf, w, h, card, s, alpha);
 	}
 	bool iconShown = false;

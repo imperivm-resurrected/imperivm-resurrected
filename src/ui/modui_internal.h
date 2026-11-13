@@ -263,7 +263,7 @@ struct Card {
 	std::string text;
 	std::string sub;
 	float progress = -1;
-	COLORREF accent = kGold;
+	COLORREF accent = pal::redText;
 	bool close = false;
 	bool corner = false;
 	int fixedW = 0;

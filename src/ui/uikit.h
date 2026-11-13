@@ -78,6 +78,28 @@ inline std::wstring W(const std::string &s)
 	return w;
 }
 
+// The one place that defines the colours of the interface.
+namespace pal {
+constexpr COLORREF bg = RGB(0x12, 0x11, 0x10), panel = RGB(0x18, 0x15, 0x13), raised = RGB(0x1c, 0x19, 0x17), selected = RGB(0x21, 0x1c, 0x1a),
+				   field = RGB(0x1f, 0x1b, 0x19), button = RGB(0x2a, 0x26, 0x24), buttonHover = RGB(0x38, 0x33, 0x2f),
+				   shadow = RGB(0x08, 0x08, 0x07);
+constexpr COLORREF hairline = RGB(0x2a, 0x27, 0x25), edge = RGB(0x33, 0x30, 0x2d), lineStrong = RGB(0x3a, 0x35, 0x32), edgeHot = RGB(0x5a, 0x55, 0x50);
+constexpr COLORREF text = RGB(0xf1, 0xee, 0xe8), body = RGB(0xd9, 0xd6, 0xcf), textDim = RGB(0xbd, 0xbb, 0xb4), caption = RGB(0x9e, 0x9b, 0x94),
+				   disabled = RGB(0x6f, 0x6b, 0x66), onRed = RGB(0xff, 0xff, 0xff), onLight = RGB(0x12, 0x11, 0x10);
+// red fills things; redText is the red that reads on dark backgrounds, the brand red fails contrast for small text.
+constexpr COLORREF red = RGB(0xc4, 0x16, 0x1c), redPressed = RGB(0x9c, 0x10, 0x16), redText = RGB(0xe3, 0x47, 0x4c);
+constexpr COLORREF ok = RGB(0x8c, 0xc8, 0x78), bad = redText, warn = RGB(0xe6, 0xbe, 0x5a);
+// Every typeface of the interface; a different family only needs to change here. The brand's ship in
+// imperivm-resurrected\fonts (LoadBrandFonts); the second of each pair is Windows' own, for when they are missing.
+// Archivo's static SemiBold is a family of its own for GDI ("Archivo SemiBold", regular weight).
+constexpr const wchar_t *kFontBody = L"Archivo", *kFontUi = L"Archivo", *kFontUiStrong = L"Archivo SemiBold", *kFontDisplay = L"League Gothic";
+constexpr const wchar_t *kFontBodyFallback = L"Georgia", *kFontUiFallback = L"Segoe UI", *kFontDisplayFallback = L"Georgia";
+constexpr const wchar_t *kBrandFontFiles[] = {L"LeagueGothic.ttf", L"Archivo-Regular.ttf", L"Archivo-Medium.ttf", L"Archivo-SemiBold.ttf", L"Archivo-Bold.ttf"};
+}
+
+// A token as a pixel of the frame buffers (0xRRGGBB), for screens that paint them directly.
+constexpr uint32_t PixelOf(COLORREF c) { return ((c & 0xff) << 16) | (c & 0xff00) | ((c >> 16) & 0xff); }
+
 constexpr int kFontCount = 6;
 
 inline bool InUnitEllipse(double x, double y) { return (x - 0.5) * (x - 0.5) + (y - 0.5) * (y - 0.5) <= 0.25; }
@@ -157,25 +179,6 @@ struct Painter {
 		FillRect(dc, &r, b);
 		DeleteObject(b);
 	}
-	void FillGradient(int x, int y, int w, int h, COLORREF from, COLORREF to, ULONG mode)
-	{
-		const RECT r = R(x, y, w, h);
-		TRIVERTEX v[2] = {};
-		v[0].x = r.left;
-		v[0].y = r.top;
-		v[0].Red = static_cast<COLOR16>(GetRValue(from) << 8);
-		v[0].Green = static_cast<COLOR16>(GetGValue(from) << 8);
-		v[0].Blue = static_cast<COLOR16>(GetBValue(from) << 8);
-		v[1].x = r.right;
-		v[1].y = r.bottom;
-		v[1].Red = static_cast<COLOR16>(GetRValue(to) << 8);
-		v[1].Green = static_cast<COLOR16>(GetGValue(to) << 8);
-		v[1].Blue = static_cast<COLOR16>(GetBValue(to) << 8);
-		GRADIENT_RECT rect = {0, 1};
-		GdiGradientFill(dc, v, 2, &rect, 1, mode);
-	}
-	void FillV(int x, int y, int w, int h, COLORREF top, COLORREF bottom) { FillGradient(x, y, w, h, top, bottom, GRADIENT_FILL_RECT_V); }
-	void FillH(int x, int y, int w, int h, COLORREF left, COLORREF right) { FillGradient(x, y, w, h, left, right, GRADIENT_FILL_RECT_H); }
 	// A shape over a box in pixels, with smooth edges.
 	bool ShapeAt(const RECT &r, bool (*inside)(double, double), COLORREF c)
 	{
@@ -243,7 +246,7 @@ struct Painter {
 			const double a = i * 6.283185307 / n - 1.570796327;
 			const int px = cx + static_cast<int>(std::lround(std::cos(a) * radius)), py = cy + static_cast<int>(std::lround(std::sin(a) * radius));
 			const int k = std::max(0, 255 - ((head - i + n) % n) * 22);
-			Ellipse(px - dot / 2, py - dot / 2, dot, dot, RGB(43 + (214 - 43) * k / 255, 34 + (170 - 34) * k / 255, 20 + (84 - 20) * k / 255));
+			Ellipse(px - dot / 2, py - dot / 2, dot, dot, RGB(42 + (227 - 42) * k / 255, 39 + (71 - 39) * k / 255, 37 + (76 - 37) * k / 255));
 		}
 	}
 	void ArrowDown(int x, int y, int w, int h, COLORREF c)
@@ -323,6 +326,34 @@ struct Painter {
 		SetTextColor(dc, c);
 		std::wstring ws = W(raw ? t : Tr(t));
 		DrawTextW(dc, ws.c_str(), static_cast<int>(ws.size()), &r, fmt | DT_NOPREFIX | DT_END_ELLIPSIS);
+	}
+	// Uppercase, with the letter spacing a plain DrawText cannot align on its own.
+	void TextCaps(int x, int y, int w, int h, const std::string &t, COLORREF c, UINT fmt = DT_LEFT | DT_VCENTER | DT_SINGLELINE, int spacing = 1)
+	{
+		std::wstring ws = W(raw ? t : Tr(t));
+		if (!ws.empty()) CharUpperBuffW(&ws[0], static_cast<DWORD>(ws.size()));
+		SetTextColor(dc, c);
+		const int old = SetTextCharacterExtra(dc, S(spacing));
+		RECT r = R(x, y, w, h);
+		SIZE sz = {};
+		GetTextExtentPoint32W(dc, ws.c_str(), static_cast<int>(ws.size()), &sz);
+		const int avail = r.right - r.left;
+		if (sz.cx < avail) {
+			if (fmt & DT_CENTER) r.left += (avail - sz.cx) / 2;
+			else if (fmt & DT_RIGHT) r.left = r.right - sz.cx;
+		}
+		DrawTextW(dc, ws.c_str(), static_cast<int>(ws.size()), &r, ((fmt & ~(DT_CENTER | DT_RIGHT)) | DT_LEFT) | DT_NOPREFIX | DT_END_ELLIPSIS);
+		SetTextCharacterExtra(dc, old);
+	}
+	int CapsWidth(const std::string &t, int spacing = 1)
+	{
+		std::wstring ws = W(raw ? t : Tr(t));
+		if (!ws.empty()) CharUpperBuffW(&ws[0], static_cast<DWORD>(ws.size()));
+		const int old = SetTextCharacterExtra(dc, S(spacing));
+		SIZE sz = {};
+		GetTextExtentPoint32W(dc, ws.c_str(), static_cast<int>(ws.size()), &sz);
+		SetTextCharacterExtra(dc, old);
+		return static_cast<int>(sz.cx / s + 0.99f);
 	}
 	int TextWrapped(int x, int y, int w, int h, const std::string &t, COLORREF c)
 	{
@@ -418,8 +449,8 @@ struct Painter {
 		OffsetRect(&r, ox, oy);
 		hits->push_back({r, action, arg});
 		if (action >= 0 && action == focusAction && arg == focusArg) {
-			Frame(x, y, w, h, RGB(255, 236, 170));
-			Frame(x + 1, y + 1, w - 2, h - 2, RGB(255, 236, 170));
+			Frame(x, y, w, h, pal::text);
+			Frame(x + 1, y + 1, w - 2, h - 2, pal::text);
 		}
 	}
 	bool Hover(int x, int y, int w, int h, int mx, int my) const
@@ -433,35 +464,20 @@ struct Painter {
 	static const int kToggleW = 26, kToggleH = 13;
 	void Toggle(int x, int y, bool on, bool enabled, bool hover)
 	{
-		const COLORREF edge = !enabled ? RGB(90, 76, 56) : hover ? RGB(255, 236, 170) : on ? RGB(212, 169, 78) : RGB(120, 96, 60);
-		if (on && enabled) FillV(x, y, kToggleW, kToggleH, RGB(84, 50, 17), RGB(124, 80, 28));
-		else Fill(x, y, kToggleW, kToggleH, on ? RGB(70, 56, 34) : RGB(12, 8, 5));
-		Frame(x, y, kToggleW, kToggleH, edge);
+		Fill(x, y, kToggleW, kToggleH, !enabled ? pal::field : on ? (hover ? pal::redPressed : pal::red) : pal::field);
+		Frame(x, y, kToggleW, kToggleH, !enabled ? pal::hairline : on ? (hover ? pal::redPressed : pal::red) : hover ? pal::edgeHot : pal::edge);
 		const int kx = on ? x + kToggleW - kToggleH + 2 : x + 2, knob = kToggleH - 4;
-		if (on && enabled) FillV(kx, y + 2, knob, knob, RGB(250, 226, 160), RGB(205, 160, 72));
-		else Fill(kx, y + 2, knob, knob, on ? RGB(190, 170, 130) : RGB(140, 122, 94));
+		Fill(kx, y + 2, knob, knob, !enabled ? pal::disabled : on ? pal::onRed : pal::caption);
 	}
 	void Button(int x, int y, int w, int h, const std::string &label, int action, int arg, int mx, int my,
 		bool enabled = true, bool strong = false, int font = 1)
 	{
 		const bool hov = enabled && Hover(x, y, w, h, mx, my);
 		const bool down = enabled && action == pressAction && arg == pressArg;
-		if (!enabled) {
-			Fill(x, y, w, h, RGB(44, 37, 29));
-		}
-		else if (down) {
-			FillV(x, y, w, h, strong ? RGB(84, 56, 18) : RGB(26, 19, 11), strong ? RGB(112, 76, 26) : RGB(44, 34, 21));
-		}
-		else if (strong) {
-			FillV(x, y, w, h, hov ? RGB(190, 138, 56) : RGB(168, 119, 44), hov ? RGB(134, 94, 34) : RGB(112, 77, 26));
-		}
-		else {
-			FillV(x, y, w, h, hov ? RGB(82, 63, 38) : RGB(62, 47, 28), hov ? RGB(54, 41, 24) : RGB(36, 27, 16));
-		}
-		Frame(x, y, w, h, !enabled ? RGB(90, 76, 56) : down || hov ? RGB(250, 226, 160) : strong ? RGB(226, 184, 96) : RGB(150, 116, 60));
-		if (enabled) Fill(x + 1, y + 1, w - 2, 1, down ? RGB(16, 11, 7) : strong ? RGB(226, 186, 104) : RGB(92, 73, 46));
+		const COLORREF fill = !enabled ? pal::field : strong ? (hov || down ? pal::redPressed : pal::red) : (hov || down ? pal::buttonHover : pal::button);
+		Fill(x, y, w, h, fill);
 		Font(font);
-		Text(x, y + (down ? 1 : 0), w, h, label, enabled ? RGB(240, 226, 180) : RGB(130, 118, 96), DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		TextCaps(x, y, w, h, label, !enabled ? pal::disabled : strong ? pal::onRed : pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
 		if (enabled) AddHit(x, y, w, h, action, arg);
 	}
 };
@@ -495,19 +511,6 @@ inline std::string TransferText(uint64_t done, uint64_t total, double perSecond)
 	return out;
 }
 
-const COLORREF kText = RGB(232, 216, 160), kDim = RGB(160, 146, 116), kGold = RGB(214, 170, 84),
-			   kBad = RGB(236, 110, 90), kOk = RGB(140, 200, 120);
-
-namespace pal {
-constexpr COLORREF goldLight = RGB(243, 217, 143), bronze = RGB(127, 98, 48), panelTop = RGB(42, 31, 18), dialogTop = RGB(46, 34, 20);
-constexpr COLORREF panel = RGB(24, 18, 12), dialog = RGB(27, 21, 14), well = RGB(14, 10, 7), wellRaised = RGB(22, 17, 12),
-				   shadow = RGB(8, 6, 4), line = RGB(110, 84, 44), lineDim = RGB(70, 54, 34), divider = RGB(90, 70, 40),
-				   edge = RGB(150, 116, 60), edgeHot = RGB(230, 196, 120), edgeStrong = RGB(200, 160, 80), focus = RGB(255, 236, 170),
-				   field = RGB(34, 27, 19), fieldHover = RGB(58, 46, 32), fieldOpen = RGB(46, 36, 24), rowHover = RGB(66, 52, 36),
-				   rowSelected = RGB(96, 70, 30), track = RGB(36, 28, 18), thumb = RGB(150, 116, 60), thumbHot = RGB(230, 196, 120),
-				   disabledEdge = RGB(90, 76, 56), disabledText = RGB(130, 118, 96), section = RGB(176, 140, 76);
-}
-
 // The bar a screen is dragging, kept between messages: the id it painted it with and how far below the thumb's top it was taken.
 struct ScrollDrag {
 	int id = -1;
@@ -527,7 +530,7 @@ struct ScrollbarLook {
 	int minThumb = 20;
 	// How far to each side of the thumb the mouse still takes the bar.
 	int grip = 4;
-	COLORREF track = pal::track, thumb = pal::thumb;
+	COLORREF track = pal::field, thumb = pal::lineStrong;
 };
 
 // Draws the track and the thumb, lit while the mouse is over the bar or drags it, and returns where the thumb went.
@@ -538,7 +541,7 @@ inline ThumbSpan DrawScrollbar(Painter &p, int x, int y, int h, const ScrollSpan
 	const int trackW = look.trackWidth < 0 ? look.width : look.trackWidth;
 	if (trackW > 0) p.Fill(x + (look.width - trackW) / 2, y, trackW, h, look.track);
 	const bool hot = dragged || p.Hover(x - look.grip, y, look.width + 2 * look.grip, h, mx, my);
-	p.Fill(x, y + t.top, look.width, t.len, hot ? pal::thumbHot : look.thumb);
+	p.Fill(x, y + t.top, look.width, t.len, hot ? pal::edgeHot : look.thumb);
 	return t;
 }
 
@@ -655,6 +658,31 @@ struct Canvas {
 inline HFONT g_fonts[kFontCount] = {};
 inline float g_fontScale = 0;
 
+// The brand's typefaces, for this process only (nothing is installed in Windows): true when all of them loaded.
+inline bool LoadBrandFonts()
+{
+	static int loaded = -1;
+	if (loaded >= 0) return loaded != 0;
+	wchar_t exe[MAX_PATH] = {};
+	GetModuleFileNameW(nullptr, exe, MAX_PATH);
+	std::wstring dir(exe);
+	dir = dir.substr(0, dir.find_last_of(L'\\') + 1) + L"imperivm-resurrected\\fonts\\";
+	int ok = 0;
+	for (const wchar_t *file : pal::kBrandFontFiles) ok += AddFontResourceExW((dir + file).c_str(), FR_PRIVATE, nullptr) > 0 ? 1 : 0;
+	loaded = ok == static_cast<int>(sizeof(pal::kBrandFontFiles) / sizeof(pal::kBrandFontFiles[0])) ? 1 : 0;
+	return loaded != 0;
+}
+
+// The text and interface families for screens that make their own fonts.
+inline const wchar_t *BodyFace()
+{
+	return LoadBrandFonts() ? pal::kFontBody : pal::kFontBodyFallback;
+}
+inline const wchar_t *UiFace()
+{
+	return LoadBrandFonts() ? pal::kFontUi : pal::kFontUiFallback;
+}
+
 inline void EnsureFonts(float s)
 {
 	if (g_fonts[0] && g_fontScale == s) return;
@@ -665,12 +693,23 @@ inline void EnsureFonts(float s)
 		return CreateFontW(-static_cast<int>(size * s + 0.5f), 0, 0, 0, weight, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
 			OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, face);
 	};
-	g_fonts[0] = make(15, FW_NORMAL, L"Georgia");
-	g_fonts[1] = make(15, FW_BOLD, L"Georgia");
-	g_fonts[2] = make(22, FW_BOLD, L"Georgia");
-	g_fonts[3] = make(13, FW_NORMAL, L"Segoe UI");
-	g_fonts[4] = make(13, FW_SEMIBOLD, L"Segoe UI");
-	g_fonts[5] = make(30, FW_NORMAL, L"Georgia");
+	if (LoadBrandFonts()) {
+		// League Gothic has one weight: asking it bold would make Windows smear a fake one.
+		g_fonts[0] = make(15, FW_NORMAL, pal::kFontBody);
+		g_fonts[1] = make(15, FW_BOLD, pal::kFontBody);
+		g_fonts[2] = make(22, FW_NORMAL, pal::kFontDisplay);
+		g_fonts[3] = make(13, FW_NORMAL, pal::kFontUi);
+		g_fonts[4] = make(13, FW_NORMAL, pal::kFontUiStrong);
+		g_fonts[5] = make(30, FW_NORMAL, pal::kFontDisplay);
+	}
+	else {
+		g_fonts[0] = make(15, FW_NORMAL, pal::kFontBodyFallback);
+		g_fonts[1] = make(15, FW_BOLD, pal::kFontBodyFallback);
+		g_fonts[2] = make(22, FW_BOLD, pal::kFontDisplayFallback);
+		g_fonts[3] = make(13, FW_NORMAL, pal::kFontUiFallback);
+		g_fonts[4] = make(13, FW_SEMIBOLD, pal::kFontUiFallback);
+		g_fonts[5] = make(30, FW_NORMAL, pal::kFontDisplayFallback);
+	}
 	g_fontScale = s;
 }
 

@@ -23,10 +23,9 @@ namespace {
 using namespace ui;
 
 constexpr int kWidth = 500, kBarH = 28, kRowH = 19, kGap = 6, kPad = 8, kIdleRows = 8, kTypingRows = 16, kIcon = 15, kIconGap = 4, kGripH = 12;
-constexpr COLORREF kCream = RGB(242, 232, 206), kClock = RGB(178, 166, 140), kAllies = RGB(146, 214, 122), kAll = RGB(228, 188, 98),
-				   kPrivate = RGB(224, 156, 234), kNote = RGB(214, 202, 172), kPanel = RGB(14, 10, 6), kAttack = RGB(240, 98, 66),
-				   kDanger = RGB(246, 166, 52), kMuted = RGB(184, 172, 146), kHelpKey = RGB(236, 200, 112),
-				   kGameLine = RGB(230, 206, 140);
+constexpr COLORREF kCream = pal::text, kClock = pal::caption, kAllies = RGB(146, 214, 122), kAll = pal::warn, kPrivate = RGB(224, 156, 234),
+				   kNote = pal::body, kPanel = pal::shadow, kAttack = pal::redText, kDanger = pal::warn, kMuted = pal::textDim,
+				   kHelpKey = pal::redText, kGameLine = pal::body;
 constexpr int kHelpKeyColumn = 150;
 
 struct Fonts {
@@ -65,7 +64,7 @@ Extent ExtentOf(Ornament ornament)
 }
 
 int PingOf(const Line &l) { return l.ping >= 0 ? l.ping : l.location && l.text.empty() ? kPingHere : -1; }
-COLORREF PingColor(int type) { return type == kPingAttack ? kAttack : type == kPingDanger ? kDanger : kAll; }
+COLORREF PingColor(int type) { return type == kPingAttack ? kAttack : type == kPingDanger ? kDanger : pal::text; }
 Ornament PingOrnament(int type) { return type == kPingAttack ? kOrnamentSwords : type == kPingDanger ? kOrnamentFlag : kOrnamentPin; }
 std::string PingText(const Line &l)
 {
@@ -87,10 +86,10 @@ void EnsureChatFonts(float s)
 	for (HFONT f : {g_f.text, g_f.name, g_f.meta, g_f.chip}) {
 		if (f) DeleteObject(f);
 	}
-	g_f.text = MakeFont(s, 15, FW_NORMAL, L"Georgia");
-	g_f.name = MakeFont(s, 15, FW_BOLD, L"Georgia");
-	g_f.meta = MakeFont(s, 12, FW_SEMIBOLD, L"Segoe UI");
-	g_f.chip = MakeFont(s, 13, FW_BOLD, L"Georgia");
+	g_f.text = MakeFont(s, 15, FW_NORMAL, BodyFace());
+	g_f.name = MakeFont(s, 15, FW_BOLD, BodyFace());
+	g_f.meta = MakeFont(s, 12, FW_SEMIBOLD, UiFace());
+	g_f.chip = MakeFont(s, 13, FW_BOLD, BodyFace());
 	g_f.s = s;
 }
 
@@ -256,22 +255,21 @@ Layout Plan(Painter &p, const View &v, int widthDesign, int heightDesign)
 	return L;
 }
 
-// The help as a small table: a heading over a rule, section titles, and rows with the command (gold) or its keys (caps) on the
+// The help as a small table: a heading over a rule, section titles, and rows with the command (red) or its keys (caps) on the
 // left and a short description in a second column.
 void PaintLocalRow(Painter &p, const Line &l, const Row &row, const Measured &m, int w, int y)
 {
 	switch (l.localKind) {
 	case kLocalHeading: {
 		SelectObject(p.dc, g_f.name);
-		ShadowLine(p, kPad, y, W(l.text), pal::goldLight);
+		ShadowLine(p, kPad, y, W(l.text), pal::text);
 		const int tw = WidthOf(p.dc, g_f.name, W(l.text), p.s);
-		p.Fill(kPad + tw + 10, y + kRowH / 2, std::max(0, w - 2 * kPad - tw - 10), 1, kGold);
-		p.Diamond(w - kPad, y + kRowH / 2, 2, pal::goldLight);
+		p.Fill(kPad + tw + 10, y + kRowH / 2, std::max(0, w - 2 * kPad - tw - 10), 1, pal::lineStrong);
 		return;
 	}
 	case kLocalSection:
 		SelectObject(p.dc, g_f.meta);
-		ShadowLine(p, kPad, y + 4, W(l.text), pal::section);
+		ShadowLine(p, kPad, y + 4, W(l.text), pal::caption);
 		return;
 	case kLocalRow: {
 		int right = kPad + 8;
@@ -282,13 +280,13 @@ void PaintLocalRow(Painter &p, const Line &l, const Row &row, const Measured &m,
 			const std::string cap = Tr(vk == VK_CONTROL ? "Ctrl" : vk == VK_SHIFT ? "Shift" : "Alt");
 			p.Font(4);
 			const int cw = CapWidth(p, cap), capH = kRowH - 3;
-			DrawCap(p, right, y + 2, cw, capH, cap, vk, RGB(122, 98, 64), RGB(240, 222, 170));
+			DrawCap(p, right, y + 2, cw, capH, cap, vk, pal::edgeHot, pal::body);
 			right += cw;
-			p.Text(right, y + 2, 12, capH - 2, "+", kDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			p.Text(right, y + 2, 12, capH - 2, "+", pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 			right += 12;
 			const int icon = capH;
 			PaintOrnament(p, kOrnamentMouse, right - 1, y + 1, icon + 2, icon + 2, RGB(0, 0, 0));
-			PaintOrnament(p, kOrnamentMouse, right, y + 2, icon, icon, RGB(240, 222, 170));
+			PaintOrnament(p, kOrnamentMouse, right, y + 2, icon, icon, pal::text);
 			right += icon;
 		}
 		else if (!l.keys.empty()) {
@@ -361,29 +359,27 @@ void PaintRow(Painter &p, const View &v, const Layout &L, int r, int y)
 void PaintChip(Painter &p, const View &v, int x, int y, int w, int h)
 {
 	const bool hot = p.Hover(x, y, w, h, v.mouseX, v.mouseY);
-	if (v.targetScope == kChatAllies) p.FillV(x, y, w, h, hot ? RGB(64, 110, 54) : RGB(52, 92, 44), RGB(26, 52, 22));
-	else if (v.targetScope == kChatAll) p.FillV(x, y, w, h, hot ? RGB(190, 138, 56) : RGB(168, 119, 44), RGB(104, 70, 24));
-	else p.FillV(x, y, w, h, hot ? RGB(70, 54, 34) : RGB(56, 42, 26), RGB(30, 22, 14));
-	const COLORREF edge = v.targetScope == kChatAllies ? kAllies : v.targetScope == kChatAll ? pal::goldLight : Readable(v.targetColor);
-	p.Frame(x, y, w, h, hot ? pal::focus : edge);
-	p.Fill(x + 1, y + 1, w - 2, 1, v.targetScope == kChatAll ? RGB(226, 186, 104) : RGB(92, 73, 46));
+	if (v.targetScope == kChatAllies) p.Fill(x, y, w, h, hot ? RGB(64, 110, 54) : RGB(52, 92, 44));
+	else p.Fill(x, y, w, h, hot ? pal::buttonHover : pal::button);
+	const COLORREF edge = v.targetScope == kChatAllies ? kAllies : v.targetScope == kChatAll ? pal::edgeHot : Readable(v.targetColor);
+	p.Frame(x, y, w, h, hot ? pal::text : edge);
 	SelectObject(p.dc, g_f.chip);
 	const std::string label = v.targetScope == kChatPrivate ? v.targetName : Tr(TagOf(v.targetScope));
-	const COLORREF text = v.targetScope == kChatPrivate ? Readable(v.targetColor) : v.targetScope == kChatAll ? RGB(40, 24, 8) : RGB(236, 248, 226);
+	const COLORREF text = v.targetScope == kChatPrivate ? Readable(v.targetColor) : v.targetScope == kChatAll ? pal::text : RGB(236, 248, 226);
 	p.Text(x + 8, y, w - 22, h, label, text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-	PaintOrnament(p, kOrnamentChevron, x + w - 15, y + h / 2 - 5, 10, 10, v.targetScope == kChatAll ? RGB(70, 44, 14) : edge);
+	PaintOrnament(p, kOrnamentChevron, x + w - 15, y + h / 2 - 5, 10, 10, v.targetScope == kChatAll ? pal::textDim : edge);
 	p.AddHit(x, y, w, h, kActChip);
 }
 
 void PaintPinButton(Painter &p, const View &v, int x, int y, int size)
 {
 	const bool hot = p.Hover(x, y, size, size, v.mouseX, v.mouseY);
-	if (v.withLocation) p.FillV(x, y, size, size, hot ? RGB(190, 138, 56) : RGB(168, 119, 44), RGB(104, 70, 24));
-	else p.FillV(x, y, size, size, hot ? RGB(82, 63, 38) : RGB(62, 47, 28), hot ? RGB(54, 41, 24) : RGB(36, 27, 16));
-	p.Frame(x, y, size, size, hot ? pal::focus : v.withLocation ? pal::goldLight : pal::edge);
+	if (v.withLocation) p.Fill(x, y, size, size, hot ? pal::redPressed : pal::red);
+	else p.Fill(x, y, size, size, hot ? pal::buttonHover : pal::button);
+	p.Frame(x, y, size, size, v.withLocation ? (hot ? pal::redPressed : pal::red) : hot ? pal::edgeHot : pal::edge);
 	const int icon = size - 8;
-	if (v.withLocation) PaintPin(p, x + (size - icon) / 2, y + 4, icon, RGB(52, 30, 8), RGB(226, 186, 104));
-	else PaintPin(p, x + (size - icon) / 2, y + 4, icon, hot ? pal::focus : pal::goldLight);
+	if (v.withLocation) PaintPin(p, x + (size - icon) / 2, y + 4, icon, pal::onRed, pal::redPressed);
+	else PaintPin(p, x + (size - icon) / 2, y + 4, icon, pal::textDim);
 	p.AddHit(x, y, size, size, kActPin);
 }
 
@@ -400,7 +396,7 @@ void PaintBar(Painter &p, const View &v, const Layout &L)
 	PaintEditField(p, fieldX, y, fieldW, kBarH, v.text, "", true, false, v.edit, kActField);
 	if (v.text.empty()) {
 		p.Font(0);
-		p.Text(fieldX + 12, y, fieldW - 16, kBarH, Tr("Type a message\xe2\x80\xa6"), RGB(120, 108, 86), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(fieldX + 12, y, fieldW - 16, kBarH, Tr("Type a message\xe2\x80\xa6"), pal::disabled, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
 	PaintPinButton(p, v, pinX, y, kBarH);
 }
@@ -413,14 +409,12 @@ void PaintPass(Painter &p, const View &v, const Layout &L, int pw, int ph, bool 
 	DeleteObject(bg);
 	g_outline = !L.typing;
 	if (L.typing) {
-		p.Fill(0, 0, L.w, 1, kGold);
-		p.Fill(0, L.height - 1, L.w, 1, pal::lineDim);
-		p.Diamond(0, 0, 3, pal::goldLight);
-		p.Diamond(L.w - 1, 0, 3, pal::goldLight);
+		p.Fill(0, 0, L.w, 1, pal::redText);
+		p.Fill(0, L.height - 1, L.w, 1, pal::hairline);
 		// The strip the panel is dragged by.
 		const bool hot = v.dragging || p.Hover(0, 0, L.w, kGripH, v.mouseX, v.mouseY);
-		if (hot) p.Fill(1, 1, L.w - 2, kGripH - 1, RGB(48, 36, 20));
-		PaintOrnament(p, kOrnamentRule, L.w / 2 - 50, 3, 100, 7, hot ? pal::focus : kGold);
+		if (hot) p.Fill(1, 1, L.w - 2, kGripH - 1, pal::selected);
+		p.Fill(L.w / 2 - 24, 4, 48, 3, hot ? pal::text : pal::edgeHot);
 		p.AddHit(0, 0, L.w, kGripH, kActGrip);
 	}
 	for (int i = 0; i < L.shown; i++) PaintRow(p, v, L, L.first + i, L.rowsTop + i * kRowH);
@@ -499,18 +493,18 @@ void PaintMenuPass(Painter &p, const PingMenuView &v, int size, bool white)
 		const bool hot = v.hover == t;
 		const int x = c + dx, y = c + dy, r = kMenuButton + (hot ? 3 : 0);
 		p.Ellipse(x - r - 1, y - r - 1, 2 * r + 2, 2 * r + 2, RGB(0, 0, 0));
-		p.Ellipse(x - r, y - r, 2 * r, 2 * r, hot ? pal::focus : kGold);
-		p.Ellipse(x - r + 2, y - r + 2, 2 * r - 4, 2 * r - 4, hot ? RGB(112, 78, 32) : RGB(26, 20, 13));
+		p.Ellipse(x - r, y - r, 2 * r, 2 * r, hot ? pal::text : pal::red);
+		p.Ellipse(x - r + 2, y - r + 2, 2 * r - 4, 2 * r - 4, hot ? pal::redPressed : pal::panel);
 		const int icon = hot ? 30 : 26;
 		PaintOrnament(p, PingOrnament(t), x - icon / 2, y - icon / 2, icon, icon, PingColor(t));
 		SelectObject(p.dc, g_f.chip);
 		const std::wstring label = W(Tr(kMenuLabels[t]));
 		const int lw = WidthOf(p.dc, g_f.chip, label, p.s);
 		const int ly = t == kPingHere ? y - r - 20 : y + r + 3;
-		ShadowLine(p, x - lw / 2, ly, label, hot ? pal::focus : kText);
+		ShadowLine(p, x - lw / 2, ly, label, pal::text);
 	}
 	p.Diamond(px, py, 6, RGB(0, 0, 0));
-	p.Diamond(px, py, 5, pal::goldLight);
+	p.Diamond(px, py, 5, pal::redText);
 }
 
 }

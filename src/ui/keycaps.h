@@ -18,8 +18,8 @@ bool IsArrow(unsigned short vk);
 std::vector<std::string> CapTexts(ControlKey k);
 int CapWidth(Painter &p, const std::string &text);
 void DrawCap(Painter &p, int x, int y, int w, int h, const std::string &text, unsigned short vk, COLORREF edge, COLORREF fg,
-	COLORREF face = RGB(60, 47, 32));
-void DrawKey(Painter &p, int x, int y, int w, int h, ControlKey k, COLORREF edge, COLORREF fg, COLORREF face = RGB(60, 47, 32));
+	COLORREF face = pal::edge);
+void DrawKey(Painter &p, int x, int y, int w, int h, ControlKey k, COLORREF edge, COLORREF fg, COLORREF face = pal::edge);
 std::vector<ControlKey> KnownKeys(const std::vector<ControlKey> &keys);
 int KeysWidth(Painter &p, const std::vector<ControlKey> &keys);
 void DrawKeys(Painter &p, int x, int y, int h, const std::vector<ControlKey> &keys);

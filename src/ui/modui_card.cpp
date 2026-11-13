@@ -65,7 +65,7 @@ RECT DrawKeysCard(Canvas &canvas, uint32_t *buf, int w, int h, const Card &c, fl
 	if (!canvas.Ensure(tw, th)) return {0, 0, 0, 0};
 	HDC dc = canvas.dc;
 	RECT all = {0, 0, tw, th};
-	HBRUSH b = CreateSolidBrush(RGB(26, 21, 15));
+	HBRUSH b = CreateSolidBrush(pal::panel);
 	FillRect(dc, &all, b);
 	DeleteObject(b);
 	HBRUSH frame = CreateSolidBrush(pal::edge);
@@ -77,7 +77,7 @@ RECT DrawKeysCard(Canvas &canvas, uint32_t *buf, int w, int h, const Card &c, fl
 	DeleteObject(ab);
 	SelectObject(dc, g_fonts[3]);
 	SetBkMode(dc, TRANSPARENT);
-	SetTextColor(dc, RGB(236, 224, 196));
+	SetTextColor(dc, pal::body);
 	RECT r = {bar + padX, 0, bar + padX + static_cast<int>(text.cx), th};
 	DrawTextW(dc, ws.c_str(), static_cast<int>(ws.size()), &r, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 	Painter p = CardPainter(dc, s);
@@ -112,7 +112,7 @@ RECT DrawCard(Canvas &canvas, uint32_t *buf, int w, int h, const Card &c, float 
 	if (!canvas.Ensure(tw, th)) return {0, 0, 0, 0};
 	HDC dc = canvas.dc;
 	RECT all = {0, 0, tw, th};
-	HBRUSH b = CreateSolidBrush(RGB(26, 21, 15));
+	HBRUSH b = CreateSolidBrush(pal::panel);
 	FillRect(dc, &all, b);
 	DeleteObject(b);
 	HBRUSH frame = CreateSolidBrush(pal::edge);
@@ -124,29 +124,29 @@ RECT DrawCard(Canvas &canvas, uint32_t *buf, int w, int h, const Card &c, float 
 	DeleteObject(ab);
 	SelectObject(dc, g_fonts[3]);
 	SetBkMode(dc, TRANSPARENT);
-	SetTextColor(dc, RGB(236, 224, 196));
+	SetTextColor(dc, pal::body);
 	RECT r = {bar + padX, padY, tw - padX - closeW, padY + static_cast<int>(calc.bottom)};
 	DrawTextW(dc, ws.c_str(), static_cast<int>(ws.size()), &r, (c.corner ? DT_LEFT : DT_CENTER) | DT_WORDBREAK | DT_NOPREFIX);
 	if (c.progress >= 0) {
 		const int by = padY + static_cast<int>(calc.bottom) + gap;
 		RECT track = {bar + padX, by, tw - padX - closeW, by + barH};
-		HBRUSH tb = CreateSolidBrush(RGB(14, 11, 8));
+		HBRUSH tb = CreateSolidBrush(pal::bg);
 		FillRect(dc, &track, tb);
 		DeleteObject(tb);
 		RECT fill = track;
 		fill.right = track.left + static_cast<LONG>((track.right - track.left) * std::max(0.0f, std::min(1.0f, c.progress)));
-		HBRUSH fb = CreateSolidBrush(RGB(214, 170, 84));
+		HBRUSH fb = CreateSolidBrush(pal::redText);
 		FillRect(dc, &fill, fb);
 		DeleteObject(fb);
 		if (subH) {
-			SetTextColor(dc, RGB(160, 146, 116));
+			SetTextColor(dc, pal::caption);
 			RECT sr = {bar + padX, by + barH + static_cast<int>(4 * s), tw - padX - closeW, th};
 			DrawTextW(dc, sub.c_str(), static_cast<int>(sub.size()), &sr, DT_LEFT | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
 		}
 	}
 	if (c.close) {
 		const int sz = static_cast<int>(8 * s), cx = tw - static_cast<int>(16 * s), cy = static_cast<int>(16 * s);
-		HPEN pen = CreatePen(PS_SOLID, std::max(1, static_cast<int>(1.5f * s)), RGB(190, 170, 130));
+		HPEN pen = CreatePen(PS_SOLID, std::max(1, static_cast<int>(1.5f * s)), pal::caption);
 		HGDIOBJ old = SelectObject(dc, pen);
 		MoveToEx(dc, cx - sz / 2, cy - sz / 2, nullptr);
 		LineTo(dc, cx + sz / 2 + 1, cy + sz / 2 + 1);
