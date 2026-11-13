@@ -17,6 +17,9 @@ struct NativeButtonState {
 };
 NativeButtonState NativeButton(void *dlg, int id);
 void NativeButtonClick(void *dlg, int id);
+// A hidden button is neither drawn nor pressed by the game, and NativeButtonClick still clicks it.
+void NativeButtonSetVisible(void *dlg, int id, bool visible);
+bool NativeWindowVisible(void *window);
 void ToggleGameMenu();
 void EndMenuLoadGame(void *dlg);
 bool GameHasSeveralHumans();

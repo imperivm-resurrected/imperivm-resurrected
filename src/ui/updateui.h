@@ -9,3 +9,4 @@
 void UpdateUiDrawCorner(uint32_t *buf, int w, int h, const RECT &heart);
 void UpdateUiDrawPanel(uint32_t *buf, int w, int h);
 bool UpdateUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp);
+bool UpdateUiPanelOpen();

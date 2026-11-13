@@ -120,7 +120,7 @@ void DrawDiscordCorner(uint32_t *buf, int w, int h)
 	const std::vector<uint32_t> &icon = ScaledIcon(size);
 	const bool hover = g_hover.x >= r.left && g_hover.x < r.right && g_hover.y >= r.top && g_hover.y < r.bottom;
 	const int cy = (r.top + r.bottom) / 2;
-	const uint32_t tint = hover ? 0x5865F2u : 0xFFFFFFu;
+	const uint32_t tint = hover ? 0x5865F2u : PixelOf(pal::text);
 	const int shadow = std::max(1, size / 24);
 	auto blend = [&](int x, int y, uint32_t color, unsigned a) {
 		if (x < 0 || x >= w || y < 0 || y >= h || !a) return;
@@ -163,7 +163,7 @@ void DrawVersionCorner(uint32_t *buf, int w, int h)
 	EnsureFonts(s);
 	const std::wstring ws = W(std::string("Imperivm Resurrected  ") + ModVersionText());
 	HDC measure = CreateCompatibleDC(nullptr);
-	HGDIOBJ old = SelectObject(measure, g_fonts[1]);
+	HGDIOBJ old = SelectObject(measure, g_fonts[3]);
 	SIZE sz = {};
 	GetTextExtentPoint32W(measure, ws.c_str(), static_cast<int>(ws.size()), &sz);
 	SelectObject(measure, old);
@@ -175,7 +175,7 @@ void DrawVersionCorner(uint32_t *buf, int w, int h)
 	HBRUSH black = CreateSolidBrush(RGB(0, 0, 0));
 	FillRect(dc, &all, black);
 	DeleteObject(black);
-	SelectObject(dc, g_fonts[1]);
+	SelectObject(dc, g_fonts[3]);
 	SetBkMode(dc, TRANSPARENT);
 	SetTextColor(dc, RGB(255, 255, 255));
 	RECT tr = {pad, pad, cw, ch};
@@ -209,7 +209,7 @@ void DrawVersionCorner(uint32_t *buf, int w, int h)
 				const unsigned a = (g_versionCanvas.bits[static_cast<size_t>(y) * cw + x] >> 8) & 0xff;
 				if (!a) continue;
 				if (pass == 0) blend(left + x + shadow, top + y + shadow, 0x000000u, a * 190 / 255);
-				else blend(left + x, top + y, 0xFFFFFFu, a);
+				else blend(left + x, top + y, PixelOf(pal::textDim), a);
 			}
 		}
 	}

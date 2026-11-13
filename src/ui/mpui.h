@@ -14,6 +14,8 @@ void MpUiRejoinInGame();
 void InstallMpUi(bool knownExe);
 bool MpUiIsOpen();
 bool MpUiMainMenuVisible();
+// The game's main menu dialog while no game runs, also under other screens; null otherwise.
+void *MpUiMainMenu();
 bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp);
 bool MpUiNeedsDraw();
 void MpUiDraw(uint32_t *buf, int w, int h);

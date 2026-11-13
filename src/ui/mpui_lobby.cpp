@@ -31,6 +31,11 @@ bool MpUiMainMenuVisible()
 	return !g_s.open && MainMenuOnTop();
 }
 
+void *MpUiMainMenu()
+{
+	return *reinterpret_cast<void **>(addr::kGame) == nullptr ? g_mainMenu : nullptr;
+}
+
 bool MpUiIsOpen()
 {
 	std::lock_guard<std::mutex> lock(g_lock);

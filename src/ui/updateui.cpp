@@ -151,7 +151,7 @@ std::vector<NoteBlock> ParseNotes(const std::string &text)
 
 int NoteFont(int style) { return style == kNoteText || style == kNoteCode ? 3 : 4; }
 
-COLORREF NoteColor(int style) { return style == kNoteText ? kDim : style == kNoteCode ? RGB(232, 192, 104) : kText; }
+COLORREF NoteColor(int style) { return style == kNoteText ? pal::textDim : style == kNoteCode ? pal::redText : pal::text; }
 
 NotesLayout LayoutNotes(Painter &p, const std::vector<NoteBlock> &blocks, int width)
 {
@@ -284,6 +284,12 @@ std::string HoverText(const UpdaterInfo &i)
 
 }
 
+bool UpdateUiPanelOpen()
+{
+	std::lock_guard<std::mutex> lock(g_lock);
+	return g_open;
+}
+
 void UpdateUiDrawCorner(uint32_t *buf, int w, int h, const RECT &heart)
 {
 	const UpdaterInfo info = UpdaterGetInfo();
@@ -312,7 +318,7 @@ void UpdateUiDrawCorner(uint32_t *buf, int w, int h, const RECT &heart)
 			}
 		}
 	}
-	if (hover) ModUiDrawHoverCard(buf, w, h, HoverText(info), RGB(232, 192, 104), g_icon.right + size / 3, (g_icon.top + g_icon.bottom) / 2);
+	if (hover) ModUiDrawHoverCard(buf, w, h, HoverText(info), pal::redText, g_icon.right + size / 3, (g_icon.top + g_icon.bottom) / 2);
 }
 
 void UpdateUiDrawPanel(uint32_t *buf, int w, int h)
@@ -416,18 +422,18 @@ void UpdateUiDrawPanel(uint32_t *buf, int w, int h)
 	PaintTitle(p, x, y, w2, title);
 	y += 40;
 	p.Font(3);
-	p.TextWrapped(x, y, w2, lineH, line, info.state == UpdaterInfo::kFailed ? kBad : kText);
+	p.TextWrapped(x, y, w2, lineH, line, info.state == UpdaterInfo::kFailed ? pal::bad : pal::text);
 	y += lineH;
 	if (!notes.empty()) {
 		p.Font(1);
-		p.Text(x, y + 4, w2, 22, "What's new", kText);
-		p.Fill(x, y + 28, w2, 1, pal::lineDim);
+		p.Text(x, y + 4, w2, 22, "What's new", pal::text);
+		p.Fill(x, y + 28, w2, 1, pal::hairline);
 		p.Font(3);
 		const int top = y + 34, offset = static_cast<int>(scroll);
 		p.Clip(x, top, w2, viewH);
 		for (int by : layout.bullets) {
 			const int dot = std::max(4, layout.lineH / 4);
-			p.Ellipse(x + 4, top - offset + by + (layout.lineH - dot) / 2, dot, dot, RGB(214, 170, 84));
+			p.Ellipse(x + 4, top - offset + by + (layout.lineH - dot) / 2, dot, dot, pal::redText);
 		}
 		for (const NoteWord &word : layout.words) {
 			if (word.y + layout.lineH < offset || word.y > offset + viewH) continue;
@@ -444,8 +450,8 @@ void UpdateUiDrawPanel(uint32_t *buf, int w, int h)
 			ScrollbarLook look;
 			look.width = kNotesBarW;
 			look.minThumb = 28;
-			look.track = RGB(30, 24, 16);
-			look.thumb = RGB(150, 118, 58);
+			look.track = pal::raised;
+			look.thumb = pal::red;
 			PaintScrollbar(p, kNotesBar, x + w2 - kNotesBarW, top, viewH, {offset, contentH - viewH, viewH}, bar, mx, my, look);
 		}
 		RECT view = p.R(x, top, w2, viewH);
@@ -460,7 +466,7 @@ void UpdateUiDrawPanel(uint32_t *buf, int w, int h)
 	if (barH) {
 		PaintProgress(p, x, y + 6, w2, 12, info.percent / 100.0f);
 		p.Font(3);
-		p.Text(x, y + 18, w2, 16, std::to_string(info.percent) + " %", kDim, DT_RIGHT | DT_TOP | DT_SINGLELINE);
+		p.Text(x, y + 18, w2, 16, std::to_string(info.percent) + " %", pal::textDim, DT_RIGHT | DT_TOP | DT_SINGLELINE);
 		y += barH;
 	}
 	int bx = kPanelW - 28;

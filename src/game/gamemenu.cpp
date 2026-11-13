@@ -24,6 +24,7 @@ typedef int(__fastcall *IsKindOf_t)(void *obj, void *edx, const char *cls);
 typedef bool(__fastcall *HasFlags_t)(void *window, void *edx, unsigned flags);
 typedef void *(__fastcall *GetChild_t)(void *dlg, void *edx, int id, const char *cls);
 typedef void(__fastcall *SendNotify_t)(void *ctrl, void *edx, int target, unsigned msg, int id, int value, int extra);
+typedef void(__fastcall *ModifyFlags_t)(void *window, void *edx, unsigned set, unsigned clear, int invalidate);
 typedef int(__fastcall *ConfirmSetup_t)(void *dlg, void *edx, const char *text, void *owner);
 
 ConfirmSetup_t g_origConfirmSetup = nullptr;
@@ -134,6 +135,18 @@ void NativeButtonClick(void *dlg, int id)
 	char *b = static_cast<char *>(button);
 	reinterpret_cast<SendNotify_t>((*reinterpret_cast<void ***>(button))[0x6c / 4])(button, nullptr, *reinterpret_cast<int *>(b + 0x34), kMsgButtonClick,
 		*reinterpret_cast<int *>(b + 0x30), *reinterpret_cast<short *>(b + 0x7e), 0);
+}
+
+void NativeButtonSetVisible(void *dlg, int id, bool visible)
+{
+	void *button = FindChild(dlg, id, addr::kClassNameCUIButton);
+	if (!button) return;
+	reinterpret_cast<ModifyFlags_t>(addr::kModifyFlags)(button, nullptr, visible ? kFlagVisible : 0, visible ? 0 : kFlagVisible, 1);
+}
+
+bool NativeWindowVisible(void *window)
+{
+	return window && HasFlags(window, kFlagVisible);
 }
 
 bool GameHasSeveralHumans()

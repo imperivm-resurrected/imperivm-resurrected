@@ -9,6 +9,7 @@
 #include "hooks/hookcount.h"
 #include "core/log.h"
 #include "ui/conquestui.h"
+#include "ui/mainmenuui.h"
 #include "ui/modui.h"
 #include "mods/vfs.h"
 #include "ui/savesui.h"
@@ -201,6 +202,7 @@ int __fastcall HookMainMenuOnShow(void *dlg)
 {
 	const int r = g_origMainMenuOnShow(dlg);
 	HideGameReleaseLabel(dlg);
+	MainMenuUiShown(dlg);
 	return r;
 }
 
@@ -210,6 +212,7 @@ MainMenuDtor_t g_origMainMenuDtor = nullptr;
 void __fastcall HookMainMenuDtor(void *dlg)
 {
 	if (dlg == g_mainMenu) g_mainMenu = nullptr;
+	MainMenuUiDestroyed(dlg);
 	g_origMainMenuDtor(dlg);
 }
 

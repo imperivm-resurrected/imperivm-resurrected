@@ -222,8 +222,8 @@ void SupportDrawCorner(uint32_t *buf, int w, int h, const RECT &d)
 	const bool hover = !g_open && g_mx >= g_heart.left && g_mx < g_heart.right && g_my >= g_heart.top && g_my < g_heart.bottom;
 	const int shadow = std::max(1, size / 24);
 	DrawHeart(buf, w, h, g_heart.left, g_heart.top, size, 0x000000u, 130, shadow, shadow);
-	DrawHeart(buf, w, h, g_heart.left, g_heart.top, size, hover ? 0xE74C3Cu : 0xFFFFFFu, hover ? 255 : 235, 0, 0);
-	if (hover) ModUiDrawHoverCard(buf, w, h, "Support the project", RGB(231, 76, 60), g_heart.right + size / 3, (g_heart.top + g_heart.bottom) / 2);
+	DrawHeart(buf, w, h, g_heart.left, g_heart.top, size, hover ? PixelOf(pal::redText) : PixelOf(pal::text), hover ? 255 : 235, 0, 0);
+	if (hover) ModUiDrawHoverCard(buf, w, h, "Support the project", pal::redText, g_heart.right + size / 3, (g_heart.top + g_heart.bottom) / 2);
 }
 
 namespace {
@@ -232,7 +232,7 @@ namespace {
 void PodiumCard(Painter &p, int x, int y, int w, int h, const PatronRollEntry &e, int laurel, bool big)
 {
 	const PatronColors c = PatronColorsOf(e.tier);
-	p.Fill(x, y, w, h, PatronBlend(RGB(24, 19, 13), c.laurel, 12));
+	p.Fill(x, y, w, h, PatronBlend(pal::panel, c.laurel, 12));
 	p.Fill(x, y, w, 3, c.laurel);
 	const UINT center = DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS;
 	int cy = y + (big ? 14 : 8);
@@ -247,7 +247,7 @@ void PodiumCard(Painter &p, int x, int y, int w, int h, const PatronRollEntry &e
 		DrawPatron(p, lx, y + (h - laurel) / 2, laurel, lx + laurel + 8, y + 6, w - laurel - 26, 26, e.name, e.tier,
 			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.Font(3);
-		p.Text(lx + laurel + 8, y + h - 34, w - laurel - 26, 22, place + (e.hideAmount ? std::string() : "  \xC2\xB7  " + Euros(e.amount)), kDim,
+		p.Text(lx + laurel + 8, y + h - 34, w - laurel - 26, 22, place + (e.hideAmount ? std::string() : "  \xC2\xB7  " + Euros(e.amount)), pal::textDim,
 			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		return;
 	}
@@ -256,7 +256,7 @@ void PodiumCard(Painter &p, int x, int y, int w, int h, const PatronRollEntry &e
 	cy += 28;
 	if (!e.hideAmount) {
 		p.Font(3);
-		p.Text(x, cy, w, 22, Euros(e.amount), kText, center);
+		p.Text(x, cy, w, 22, Euros(e.amount), pal::text, center);
 	}
 }
 
@@ -308,18 +308,18 @@ void SupportDrawPanel(uint32_t *buf, int w, int h)
 			p.Font(1);
 			const int tw = p.TextWidth(labels[i]) + 28;
 			const bool active = tab == i, hov = !active && p.Hover(tx, kTabRowY, tw, 34, mx, my);
-			p.Text(tx, kTabRowY, tw, 34, labels[i], active ? kGold : hov ? kText : kDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-			if (active) p.Fill(tx + 6, kTabRowY + 32, tw - 12, 3, kGold);
+			p.Text(tx, kTabRowY, tw, 34, labels[i], active ? pal::redText : hov ? pal::text : pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			if (active) p.Fill(tx + 6, kTabRowY + 32, tw - 12, 3, pal::redText);
 			p.AddHit(tx, kTabRowY, tw, 34, i == 0 ? kTabSupport : kTabRoll, 0);
 			tx += tw + 8;
 		}
-		p.Fill(x, kTabRowY + 35, w2, 1, pal::lineDim);
+		p.Fill(x, kTabRowY + 35, w2, 1, pal::hairline);
 	}
 	y = kContentY;
 
 	if (tab == 0) {
 		p.Font(3);
-		p.TextWrapped(x, y, w2, 40, "Imperivm Resurrected is free. If you like it, you can help keep it going.", kDim);
+		p.TextWrapped(x, y, w2, 40, "Imperivm Resurrected is free. If you like it, you can help keep it going.", pal::textDim);
 		y += 44;
 		// The top three as a teaser: a click goes to the whole roll.
 		if (!roll.empty()) {
@@ -337,23 +337,23 @@ void SupportDrawPanel(uint32_t *buf, int w, int h)
 		}
 		else {
 			p.Font(3);
-			p.Text(x, y, w2, kPodiumMiniH - 8, state == 0 ? "Loading..." : "No patrons yet. Be the first!", kDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+			p.Text(x, y, w2, kPodiumMiniH - 8, state == 0 ? "Loading..." : "No patrons yet. Be the first!", pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 		}
 		y += kPodiumMiniH + 16;
 		int index = 0;
 		auto header = [&](const char *title) {
 			p.Font(1);
-			p.Text(x, y + 4, w2, 22, title, kText);
-			p.Fill(x, y + 28, w2, 1, pal::lineDim);
+			p.Text(x, y + 4, w2, 22, title, pal::text);
+			p.Fill(x, y + 28, w2, 1, pal::hairline);
 			y += kSectionH;
 		};
 		auto section = [&](const char *title, const std::vector<Row> &rows) {
 			header(title);
 			for (const Row &r : rows) {
 				p.Font(3);
-				p.Text(x, y, 200, 18, r.label, kDim);
+				p.Text(x, y, 200, 18, r.label, pal::textDim);
 				p.Font(0);
-				p.Text(x, y + 20, w2 - 130, 24, r.value, kText);
+				p.Text(x, y + 20, w2 - 130, 24, r.value, pal::text);
 				const bool done = copied == index;
 				p.Button(x + w2 - 110, y + 6, 110, 32, r.open ? "Open link" : done ? "Copied" : "Copy", (r.open ? kOpenBase : kCopyBase) + index, 0, mx, my,
 					true, done);
@@ -368,9 +368,9 @@ void SupportDrawPanel(uint32_t *buf, int w, int h)
 		for (const char *label : {"Open folder", "Create report", "Creating..."}) bw = std::max(bw, p.TextWidth(label) + 32);
 		auto problemRow = [&](const char *label, const char *value, const char *button, int action, bool enabled) {
 			p.Font(3);
-			p.Text(x, y, 200, 18, label, kDim);
+			p.Text(x, y, 200, 18, label, pal::textDim);
 			p.Font(0);
-			p.Text(x, y + 20, w2 - bw - 20, 24, value, kText);
+			p.Text(x, y + 20, w2 - bw - 20, 24, value, pal::text);
 			p.Button(x + w2 - bw, y + 6, bw, 32, button, action, 0, mx, my, enabled);
 			y += kRowH;
 		};
@@ -383,7 +383,7 @@ void SupportDrawPanel(uint32_t *buf, int w, int h)
 		int maxScroll = 0;
 		if (roll.empty()) {
 			p.Font(3);
-			p.TextWrapped(x, y + 10, w2, 60, state == 0 ? "Loading..." : "No patrons yet. Be the first!", kDim);
+			p.TextWrapped(x, y + 10, w2, 60, state == 0 ? "Loading..." : "No patrons yet. Be the first!", pal::textDim);
 		}
 		else {
 			// The podium as on the website: first in the middle and highest, second on the left, third on the right.
@@ -405,9 +405,9 @@ void SupportDrawPanel(uint32_t *buf, int w, int h)
 				const int ry = y + (i - 3) * kRollRowH - scroll;
 				if (ry + kRollRowH < y || ry > y + listH) continue;
 				const PatronRollEntry &e = roll[i];
-				if (i % 2) p.Fill(x, ry, w2, kRollRowH, RGB(30, 24, 17));
+				if (i % 2) p.Fill(x, ry, w2, kRollRowH, pal::raised);
 				p.Font(1);
-				p.Text(x + 6, ry, 52, kRollRowH, PatronRoman(e.place), kDim, fmt);
+				p.Text(x + 6, ry, 52, kRollRowH, PatronRoman(e.place), pal::textDim, fmt);
 				const std::string amount = e.hideAmount ? std::string() : Euros(e.amount);
 				p.Font(3);
 				const int amountW = amount.empty() ? 0 : p.TextWidth(amount) + 12;
@@ -415,7 +415,7 @@ void SupportDrawPanel(uint32_t *buf, int w, int h)
 				DrawPatron(p, x + 60, ry + (kRollRowH - 22) / 2, 22, x + 90, ry, w2 - 90 - amountW - (maxScroll ? 12 : 0), kRollRowH, e.name, e.tier, fmt);
 				if (!amount.empty()) {
 					p.Font(3);
-					p.Text(x + w2 - amountW - (maxScroll ? 12 : 0), ry, amountW, kRollRowH, amount, kText, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+					p.Text(x + w2 - amountW - (maxScroll ? 12 : 0), ry, amountW, kRollRowH, amount, pal::text, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 				}
 			}
 			p.Unclip();
@@ -423,13 +423,13 @@ void SupportDrawPanel(uint32_t *buf, int w, int h)
 				ScrollbarLook look;
 				look.width = 4;
 				look.minThumb = 30;
-				look.track = pal::lineDim;
-				look.thumb = kGold;
+				look.track = pal::hairline;
+				look.thumb = pal::redText;
 				PaintScrollbar(p, kRollBar, x + w2 - 5, y, listH, {scroll, maxScroll, listH}, bar, mx, my, look);
 			}
 			else if (rows <= 0) {
 				p.Font(3);
-				p.Text(x, y, w2, 30, "Only three patrons so far: there is room for yours.", kDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+				p.Text(x, y, w2, 30, "Only three patrons so far: there is room for yours.", pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 			}
 		}
 		p.Button(x, H - 60, 220, 38, "See it on the website", kWholeRoll, 0, mx, my, true, false);
