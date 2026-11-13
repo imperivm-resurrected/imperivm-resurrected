@@ -1016,32 +1016,6 @@ namespace mpui_impl {
 namespace {
 const int kChatLaurel = 15;
 
-COLORREF ChatColor(uint64_t id, bool me)
-{
-	static const COLORREF kNames[] = {RGB(120, 190, 235), RGB(140, 205, 120), RGB(232, 140, 110), RGB(196, 152, 236),
-		RGB(110, 214, 204), RGB(238, 154, 196)};
-	return me ? pal::redText : kNames[id % 6];
-}
-
-COLORREF ChatNameColor(const State &st, const OnlineChatLine &l, bool me)
-{
-	if (st.game.active) {
-		for (int i = 0; i < 8; i++) {
-			const GameRoomSlot &s = st.game.slots[i];
-			if (!s.used || s.type != 3 || !(me ? s.local : PlayerNameMatches(s.name, l.who))) continue;
-			COLORREF c = PlayerColor(st.game, s.color);
-			int r = GetRValue(c), g = GetGValue(c), b = GetBValue(c);
-			if (r * 3 + g * 6 + b < 900) {
-				r += (255 - r) * 45 / 100;
-				g += (255 - g) * 45 / 100;
-				b += (255 - b) * 45 / 100;
-			}
-			return RGB(r, g, b);
-		}
-	}
-	return ChatColor(l.id, me);
-}
-
 std::string ChatTime(int minute)
 {
 	char buf[8];
@@ -1061,13 +1035,11 @@ void PaintChatLog(Painter &p, const State &st, int x, int y, int w, int h)
 		g_chat.scroll = g_chat.lastTotal = g_chat.unread = 0;
 		g_chat.serial = st.room.chatSerial;
 	}
-	p.Fill(x, y, w, h, pal::bg);
-	p.Frame(x, y, w, h, pal::hairline);
 	g_chat.rect = p.R(x, y, w, h);
 	OffsetRect(&g_chat.rect, p.ox, p.oy);
 	g_chat.rectValid = true;
 	if (chat.empty()) return;
-	const int pad = 10, barW = 6, textW = w - pad * 2 - barW - 2;
+	const int pad = 2, barW = 6, textW = w - pad * 2 - barW - 2;
 	struct Item {
 		int y, h, timeW, indent, lineH;
 		std::string text;
@@ -1078,6 +1050,9 @@ void PaintChatLog(Painter &p, const State &st, int x, int y, int w, int h)
 	p.Font(3);
 	const int timeW = p.TextWidth("00:00");
 	const int lineH = p.Measure(textW, "A");
+	const std::string systemText = Tr("System") + " \xC2\xB7 ";
+	const std::wstring systemTag = W(systemText);
+	const int systemW = static_cast<int>(std::ceil(p.TextWidthExact(systemText)));
 	for (const OnlineChatLine &l : chat) {
 		Item it;
 		it.indent = 0;
@@ -1087,9 +1062,10 @@ void PaintChatLog(Painter &p, const State &st, int x, int y, int w, int h)
 			it.h = lineH + 8;
 		}
 		else if (l.system) {
-			it.text = "\xE2\x80\x94 " + l.text;
 			p.Font(3);
-			it.h = p.Measure(textW, it.text);
+			it.indent = systemW;
+			it.lines = p.WrapLines(l.text, it.indent, textW);
+			it.h = static_cast<int>(it.lines.size()) * lineH;
 		}
 		else {
 			p.Font(1);
@@ -1113,7 +1089,8 @@ void PaintChatLog(Painter &p, const State &st, int x, int y, int w, int h)
 	const int maxScroll = std::max(0, total - h);
 	g_chat.scroll = std::max(0, std::min(g_chat.scroll, maxScroll));
 	if (g_chat.scroll == 0) g_chat.unread = 0;
-	const int top = total > h ? total - h - g_chat.scroll : 0;
+	// Below zero while the lines don't fill the box: the newest line stays at its bottom, by the field.
+	const int top = total - h - g_chat.scroll;
 	p.Clip(x + 1, y + 1, w - 2, h - 2);
 	for (size_t i = 0; i < chat.size(); i++) {
 		const Item &it = items[i];
@@ -1141,7 +1118,11 @@ void PaintChatLog(Painter &p, const State &st, int x, int y, int w, int h)
 		}
 		if (l.system) {
 			p.Font(3);
-			p.TextWrapped(x + pad, py, textW, it.h + 2, it.text, pal::textDim);
+			p.LineW(x + pad, py, it.indent, it.lineH, systemTag, pal::caption);
+			for (size_t k = 0; k < it.lines.size(); k++) {
+				const int shift = k == 0 ? it.indent : 0;
+				p.LineW(x + pad + shift, py + static_cast<int>(k) * it.lineH, textW - shift, it.lineH, it.lines[k], pal::textDim);
+			}
 			continue;
 		}
 		const bool me = l.id == SteamOwnId();
@@ -1156,7 +1137,7 @@ void PaintChatLog(Painter &p, const State &st, int x, int y, int w, int h)
 			DrawPatron(p, laurelX, py + 1, kChatLaurel, nameX, py, x + pad + textW - nameX, 18, l.who + ":", tier, DT_LEFT | DT_TOP | DT_SINGLELINE);
 			if (py + 1 >= y && py + 1 + kChatLaurel <= y + h) PatronHotspot(p, laurelX, py + 1, kChatLaurel, PatronOf(l.id), st.mouseX, st.mouseY, kPatronLink);
 		}
-		else p.Text(laurelX, py, textW - it.timeW - 6, 18, l.who + ":", ChatNameColor(st, l, me), DT_LEFT | DT_TOP | DT_SINGLELINE);
+		else p.Text(laurelX, py, textW - it.timeW - 6, 18, l.who + ":", me ? pal::redText : pal::text, DT_LEFT | DT_TOP | DT_SINGLELINE);
 		p.Font(3);
 		for (size_t k = 0; k < it.lines.size(); k++) {
 			const int shift = k == 0 ? it.indent : 0;

@@ -1856,5 +1856,11 @@
 {"en":"%s campaigns","es":"%s campañas","it":"%s campagne"},
 {"en":"Briefing","es":"Informe","it":"Briefing"},
 {"en":"Diary","es":"Diario","it":"Diario"},
-{"en":"Last objective: %s","es":"Último objetivo: %s","it":"Ultimo obiettivo: %s"}
+{"en":"Last objective: %s","es":"Último objetivo: %s","it":"Ultimo obiettivo: %s"},
+{"en":"Online on Steam","es":"En línea en Steam","it":"Online su Steam"},
+{"en":"%d of %d players","es":"%d de %d jugadores","it":"%d su %d giocatori"},
+{"en":"Status","es":"Estado","it":"Stato"},
+{"en":"Game summary","es":"Resumen de la partida","it":"Riepilogo della partita"},
+{"en":"Chat","es":"=","it":"="},
+{"en":"The game starts when everyone is ready","es":"La partida empieza cuando todos estén listos","it":"La partita inizia quando sono tutti pronti"}
 ]

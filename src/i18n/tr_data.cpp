@@ -1864,5 +1864,11 @@ extern const TrRow kTrRows[] = {
 	{"Briefing", "Informe", "Briefing"},
 	{"Diary", "Diario", "Diario"},
 	{"Last objective: %s", "Último objetivo: %s", "Ultimo obiettivo: %s"},
+	{"Online on Steam", "En línea en Steam", "Online su Steam"},
+	{"%d of %d players", "%d de %d jugadores", "%d su %d giocatori"},
+	{"Status", "Estado", "Stato"},
+	{"Game summary", "Resumen de la partida", "Riepilogo della partita"},
+	{"Chat", "=", "="},
+	{"The game starts when everyone is ready", "La partida empieza cuando todos estén listos", "La partita inizia quando sono tutti pronti"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);
