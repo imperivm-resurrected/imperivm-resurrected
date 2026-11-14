@@ -49,7 +49,7 @@ std::string MetaText(const TourneyDetail &d)
 {
 	std::string out = OrganizerText(d);
 	if (!out.empty()) out += "   \xC2\xB7   ";
-	out += FormatText(d) + "   \xC2\xB7   " + TrFmt("%s players", {std::to_string(d.entries)}) + "   \xC2\xB7   " + ContentText(d) + "   \xC2\xB7   " +
+	out += FormatText(d) + "   \xC2\xB7   " + (d.entries == 1 ? Tr("1 player") : TrFmt("%s players", {std::to_string(d.entries)})) + "   \xC2\xB7   " + ContentText(d) + "   \xC2\xB7   " +
 		PresetText(d.settings) + "   \xC2\xB7   ";
 	if (d.status == TourneyStatus::Running) out += TrFmt("Since %s", {HourText(d.startsAt)});
 	else if (d.status == TourneyStatus::Finished) out += DayText(d.startsAt);
@@ -204,7 +204,7 @@ void PaintBracket(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out)
 		p.TextCaps(hx, oy, stageW, 20, stage, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
 		UseFace(p, BrandFace::Ui, 12);
 		const int bestOf = first ? first->bestOf : r == d.rounds ? d.finalBestOf : d.bestOf;
-		const TourneyMap map = TourneyMapOfRound(d, r);
+		const TourneyMap map = TourneyMapOfRound(d, r, d.rounds);
 		p.Text(hx + stageW + 8, oy, bm.boxW - stageW - 8, 20, TrFmt("Bo%s", {std::to_string(bestOf)}) + (map.Known() ? " \xC2\xB7 " + MapText(map) : std::string()), pal::caption,
 			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.raw = false;
@@ -340,8 +340,10 @@ void PaintRules(Painter &p, Ctx &c, int x, int y, int w, int h)
 	ry += 10;
 	PaintSectionLabel(p, x, ry, w, 22, "Maps and options");
 	ry += 32;
-	const int rounds = std::max(d.rounds, 1);
-	for (int r = 1; r <= rounds && !d.maps.empty(); r++) row(d.rounds ? StageText(TourneyStageOf(r, d.rounds), r) : Tr("Every round"), MapText(TourneyMapOfRound(d, r)));
+	// Before the bracket is drawn, a list of maps by stage is shown for the full bracket of the cup's places.
+	const int planned = d.rounds ? d.rounds : d.maps.size() > 1 ? TourneyFullRounds(d.maxEntries) : 0;
+	const int rounds = std::max(planned, 1);
+	for (int r = 1; r <= rounds && !d.maps.empty(); r++) row(planned ? StageText(TourneyStageOf(r, planned), r) : Tr("Every round"), MapText(TourneyMapOfRound(d, r, planned)));
 	if (d.maps.empty()) row(Tr("Maps"), Tr("Chosen in the room"));
 	row(Tr("Content"), ContentText(d));
 	const TourneyRoomRules rules = TourneyRulesOf(d.settings);
@@ -558,7 +560,7 @@ int PaintStatusCard(Painter &p, Ctx &c, int x, int y, int w)
 	}
 	p.Font(3);
 	p.raw = true;
-	const TourneyMap map = TourneyMapOfRound(d, live->round);
+	const TourneyMap map = TourneyMapOfRound(d, live->round, d.rounds);
 	p.Text(x + pad, cy + 4, w - 2 * pad, 20, (map.Known() ? MapText(map) + " \xC2\xB7 " : std::string()) + (live->startedAt ? TrFmt("%s of play", {DurationText(NowMs() - live->startedAt)}) : std::string()),
 		pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	p.Text(x + pad, cy + 26, w - 2 * pad, 20, (TourneySpecDelay(d.settings) ? TrFmt("Spectators with a %s s delay", {std::to_string(TourneySpecDelay(d.settings))}) : Tr("No spectators")), pal::textDim,

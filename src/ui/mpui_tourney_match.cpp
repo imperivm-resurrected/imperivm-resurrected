@@ -140,11 +140,15 @@ bool PaintMatchHeader(Painter &p, const State &st, const Ui &u)
 	if (left > 0) {
 		const int bw = 300, bx = l.w - l.margin - bw, by = l.margin + kHeaderButtonH + 10;
 		PaintCaps(p, bx, by, bw, 18, "Time to enter", pal::warn, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
-		UseDisplay(p, l.roomy ? 56 : 46);
+		const int clockH = l.roomy ? 56 : 46;
+		UseDisplay(p, clockH);
 		p.raw = true;
-		p.Text(bx, by + 18, bw, l.roomy ? 56 : 46, TourneyClock(left), pal::warn, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+		const std::string clock = TourneyClock(left);
+		const int clockW = p.CapsWidth(clock, 0);
+		p.Text(bx, by + 18, bw, clockH, clock, pal::warn, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+		// The hour goes beside the clock, not under it, so the block ends above the content.
 		p.Font(3);
-		p.Text(bx, by + (l.roomy ? 74 : 64), bw, 20, TrFmt("until %s", {HourText(next.deadlineAt)}), pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+		p.Text(bx, by + 18 + clockH - 26, bw - clockW - 14, 20, TrFmt("until %s", {HourText(next.deadlineAt)}), pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 		p.raw = false;
 		titleRight = std::min(right, bx - 20);
 	}

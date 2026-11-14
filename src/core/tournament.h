@@ -146,7 +146,11 @@ struct TourneySummary {
 bool TourneyParseSummary(const Json &j, TourneySummary &out);
 bool TourneyParseList(const Json &j, std::vector<TourneySummary> &out);
 // The map of a round (1 is the first); the last one repeats. Empty when the tournament gives none.
-TourneyMap TourneyMapOfRound(const TourneySummary &t, int round);
+// The rounds of a full bracket for this many places: 4 -> 2, 8 -> 3, 16 -> 4, 32 -> 5.
+int TourneyFullRounds(int maxEntries);
+// The map of a round of a bracket of rounds: a list that covers every round counts from the final backwards (with fewer players
+// than places the final keeps its map); a shorter one runs from the first round and its last map repeats.
+TourneyMap TourneyMapOfRound(const TourneySummary &t, int round, int rounds);
 
 // A side of a match in the bracket.
 struct TourneyCard {

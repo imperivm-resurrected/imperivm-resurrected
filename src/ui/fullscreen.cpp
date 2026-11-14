@@ -266,13 +266,16 @@ void PaintGhostButton(Painter &p, int x, int y, int w, int h, const std::string 
 	p.Frame(x, y, w, h, !enabled ? pal::hairline : hot || down ? pal::edgeHot : pal::edge);
 	const COLORREF ink = !enabled ? pal::disabled : hot || down ? pal::text : pal::textDim;
 	p.Font(4);
-	const int textW = p.CapsWidth(label, 2);
+	// A long label in a narrow button closes its letter spacing, and is shortened only if it still doesn't fit.
+	const int room = w - 20 - (arrow ? kBackArrowW : 0);
+	const int spacing = p.CapsWidth(label, 2) <= room ? 2 : 1;
+	const int textW = std::min(p.CapsWidth(label, spacing), room);
 	int tx = x + (w - textW - (arrow ? kBackArrowW : 0)) / 2;
 	if (arrow) {
 		PaintBackArrow(p, tx, y + h / 2, ink);
 		tx += kBackArrowW;
 	}
-	p.TextCaps(tx, y, textW + 2, h, label, ink, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
+	p.TextCaps(tx, y, textW + 2, h, label, ink, DT_LEFT | DT_VCENTER | DT_SINGLELINE, spacing);
 	if (enabled) p.AddHit(x, y, w, h, action, arg);
 }
 

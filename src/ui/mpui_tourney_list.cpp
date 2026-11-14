@@ -367,7 +367,7 @@ int PaintLiveCard(Painter &p, const State &st, const TourneyListsView &lists, in
 	cy += 30;
 	p.Font(3);
 	p.raw = true;
-	p.Text(x + pad, cy, w - 2 * pad, 20, (m ? StageText(m->stage, m->round) + " \xC2\xB7 " : std::string()) + TrFmt("%s players", {std::to_string(t->entries)}),
+	p.Text(x + pad, cy, w - 2 * pad, 20, (m ? StageText(m->stage, m->round) + " \xC2\xB7 " : std::string()) + (t->entries == 1 ? Tr("1 player") : TrFmt("%s players", {std::to_string(t->entries)})),
 		pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	p.raw = false;
 	cy += 34;

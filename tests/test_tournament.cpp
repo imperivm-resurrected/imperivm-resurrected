@@ -114,10 +114,16 @@ void List()
 	CHECK(t.settings.hideCivs);
 	CHECK_EQ(t.settings.specDelay, 120);
 	CHECK_EQ(static_cast<int>(t.maps.size()), 2);
-	CHECK_EQ(TourneyMapOfRound(t, 1).name, std::string("mediterranean"));
-	CHECK_EQ(TourneyMapOfRound(t, 2).name, std::string("mountain_passes"));
-	// The last map repeats for the later rounds.
-	CHECK_EQ(TourneyMapOfRound(t, 3).name, std::string("mountain_passes"));
+	CHECK_EQ(TourneyMapOfRound(t, 1, 3).name, std::string("mediterranean"));
+	CHECK_EQ(TourneyMapOfRound(t, 2, 3).name, std::string("mountain_passes"));
+	// A short list: the last map repeats for the later rounds.
+	CHECK_EQ(TourneyMapOfRound(t, 3, 3).name, std::string("mountain_passes"));
+	// A list that covers the bracket counts from the final: two players in a cup of four play the final's map.
+	CHECK_EQ(TourneyMapOfRound(t, 1, 1).name, std::string("mountain_passes"));
+	CHECK_EQ(TourneyMapOfRound(t, 1, 2).name, std::string("mediterranean"));
+	CHECK_EQ(TourneyFullRounds(4), 2);
+	CHECK_EQ(TourneyFullRounds(8), 3);
+	CHECK_EQ(TourneyFullRounds(32), 5);
 	CHECK(Same(t.startsAt, 1794662871362LL));
 	CHECK_EQ(t.noshowMinutes, 10);
 	CHECK(!TourneyParseList(Parse("{\"error\":\"x\"}"), list));

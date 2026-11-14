@@ -427,10 +427,20 @@ bool TourneyParseList(const Json &j, std::vector<TourneySummary> &out)
 	return true;
 }
 
-TourneyMap TourneyMapOfRound(const TourneySummary &t, int round)
+int TourneyFullRounds(int maxEntries)
+{
+	int rounds = 0;
+	for (int n = 1; n < maxEntries; n *= 2) rounds++;
+	return rounds;
+}
+
+TourneyMap TourneyMapOfRound(const TourneySummary &t, int round, int rounds)
 {
 	if (t.maps.empty()) return TourneyMap();
-	return t.maps[static_cast<size_t>(std::max(1, std::min(round, static_cast<int>(t.maps.size())))) - 1];
+	const int count = static_cast<int>(t.maps.size());
+	// A list that covers every round is read from the final backwards, as the server does.
+	if (rounds > 0 && count >= rounds) return t.maps[static_cast<size_t>(std::max(0, std::min(count - 1, count - rounds + round - 1)))];
+	return t.maps[static_cast<size_t>(std::max(1, std::min(round, count))) - 1];
 }
 
 bool TourneyParseDetail(const Json &j, TourneyDetail &out)

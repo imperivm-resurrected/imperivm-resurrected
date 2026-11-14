@@ -895,11 +895,16 @@ TourneyCupForm NewCupForm(const std::string &player, int64_t nowMs)
 	while (TourneyTextLength(f.name) > kTourneyCupNameMax) f.name.erase(static_cast<size_t>(PrevCp(f.name, static_cast<int>(f.name.size()))));
 	f.minEntries = TourneyCupDefaultMinimum(f.maxEntries);
 	TourneyFitMaps(f.maps, TourneyRoundsFor(f.maxEntries));
-	// The first full hour at least two hours away: time for the players to see it and sign up.
+	// The first full hour at least two hours away, so the players see it and sign up; at night or in the morning, the evening
+	// instead (19:00), when people play.
 	int64_t lo = 0, hi = 0;
 	CupStartBounds(nowMs, lo, hi);
 	const int64_t local = LocalMs(nowMs + 2 * kHourMs);
-	f.startsAt = UtcMs(TourneySnapStart((local + kHourMs - 1) / kHourMs * kHourMs, lo, hi));
+	int64_t start = (local + kHourMs - 1) / kHourMs * kHourMs;
+	const int64_t day = 24 * kHourMs, hour = (start % day) / kHourMs;
+	if (hour >= 23) start = start - start % day + day + 19 * kHourMs;
+	else if (hour < 10) start = start - start % day + 19 * kHourMs;
+	f.startsAt = UtcMs(TourneySnapStart(start, lo, hi));
 	return f;
 }
 

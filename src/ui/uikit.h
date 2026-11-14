@@ -338,6 +338,19 @@ struct Painter {
 		SIZE sz = {};
 		GetTextExtentPoint32W(dc, ws.c_str(), static_cast<int>(ws.size()), &sz);
 		const int avail = r.right - r.left;
+		// DrawText's own ellipsis leaves out the letter spacing, so a spaced label was cut mid-letter: trim it here instead.
+		if (sz.cx > avail && (fmt & DT_SINGLELINE) && ws.size() > 1) {
+			const std::wstring dots = L"\x2026";
+			std::wstring cut = ws;
+			while (cut.size() > 1) {
+				cut.pop_back();
+				while (!cut.empty() && cut.back() == L' ') cut.pop_back();
+				const std::wstring tryText = cut + dots;
+				GetTextExtentPoint32W(dc, tryText.c_str(), static_cast<int>(tryText.size()), &sz);
+				if (sz.cx <= avail) break;
+			}
+			ws = cut + dots;
+		}
 		if (sz.cx < avail) {
 			if (fmt & DT_CENTER) r.left += (avail - sz.cx) / 2;
 			else if (fmt & DT_RIGHT) r.left = r.right - sz.cx;
@@ -477,6 +490,8 @@ struct Painter {
 		const COLORREF fill = !enabled ? pal::field : strong ? (hov || down ? pal::redPressed : pal::red) : (hov || down ? pal::buttonHover : pal::button);
 		Fill(x, y, w, h, fill);
 		Font(font);
+		// A label too long for a narrow button takes the small type before it is shortened.
+		if (font == 1 && CapsWidth(label, 1) > w - 16) Font(4);
 		TextCaps(x, y, w, h, label, !enabled ? pal::disabled : strong ? pal::onRed : pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
 		if (enabled) AddHit(x, y, w, h, action, arg);
 	}
