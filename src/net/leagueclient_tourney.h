@@ -60,7 +60,8 @@ void LeagueTourneySignUp(int64_t tournament);
 void LeagueTourneyWithdraw(int64_t tournament);
 // With the content key of this computer's rooms, which must be the tournament's.
 void LeagueTourneyCheckIn(int64_t tournament);
-void LeagueTourneyClaimRoom(int64_t match);
+// `staleLobby`: the room the server gave to join, which could not be entered; the server forgets it if it is still the match's.
+void LeagueTourneyClaimRoom(int64_t match, uint64_t staleLobby = 0);
 void LeagueTourneyRegisterRoom(int64_t match, uint64_t lobby, uint64_t specLobby);
 // "I am in the room"; `started` when the game starts.
 void LeagueTourneyPresence(int64_t match, bool started);

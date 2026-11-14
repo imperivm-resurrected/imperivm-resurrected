@@ -6,7 +6,6 @@
 #include <windows.h>
 
 #include <cstdint>
-#include <map>
 #include <set>
 #include <string>
 
@@ -49,6 +48,8 @@ struct RoomFlow {
 	DWORD at = 0;
 	uint64_t lobby = 0, registeredLobby = 0, registeredSpec = 0;
 	uint64_t opponent = 0;
+	// The room the server sent this player to and that could not be entered, once told to the server as gone.
+	uint64_t stale = 0;
 	std::string waitingFor;
 	TourneyMap map;
 	TourneySettings settings;
@@ -88,8 +89,6 @@ struct Ui {
 	std::string championSlug;
 	// A tournament of the player's that ended: its result is shown when the tab opens next.
 	std::string pendingChampion;
-	// The rooms this computer made, by match: a series' next game may find its old room gone.
-	std::map<int64_t, uint64_t> ownRooms;
 	DWORD lastNoticeAt = 0;
 };
 

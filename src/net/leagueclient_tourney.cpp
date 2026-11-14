@@ -329,9 +329,11 @@ void LeagueTourneyCheckIn(int64_t tournament)
 	Start(TourneyOp::CheckIn, tournament, "POST", "/v1/tournaments/" + std::to_string(tournament) + "/checkin", body.Dump());
 }
 
-void LeagueTourneyClaimRoom(int64_t match)
+void LeagueTourneyClaimRoom(int64_t match, uint64_t staleLobby)
 {
-	Start(TourneyOp::Claim, match, "POST", MatchPath(match, "/room/claim"));
+	Json body = Json::MakeObject();
+	if (staleLobby) body.Set("stale", Json::MakeString(std::to_string(staleLobby)));
+	Start(TourneyOp::Claim, match, "POST", MatchPath(match, "/room/claim"), staleLobby ? body.Dump() : std::string());
 }
 
 void LeagueTourneyRegisterRoom(int64_t match, uint64_t lobby, uint64_t specLobby)

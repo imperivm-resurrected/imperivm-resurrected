@@ -33,6 +33,8 @@ Ui g_tourney;
 namespace {
 
 const DWORD kClaimRetryMs = 5000, kFlowTimeoutMs = 45000, kPresenceEveryMs = 30000, kJoinWaitMs = 6000;
+// Not in the room the server gave after this long: it is taken as gone (Steam enters a room in a few seconds).
+const DWORD kStaleAfterMs = 20000;
 
 // Under g_lock: the tournament of an id, from the lists and the player's own.
 std::string SlugOf(int64_t tournament)
@@ -149,19 +151,6 @@ void TakeResults()
 				break;
 			}
 			if (r.claim.kind == TourneyClaim::Create) CreateRoom(r.claim);
-			else if (r.claim.kind == TourneyClaim::Join && g_tourney.ownRooms.count(f.match) && g_tourney.ownRooms[f.match] == r.claim.lobby &&
-					 !std::any_of(g_s.lobbies.begin(), g_s.lobbies.end(), [&](const OnlineLobby &l) { return l.id == r.claim.lobby; })) {
-				// The server still sends the room this computer made for an earlier game of the series, which closed when that game
-				// ended: it is made again, and its claim, still this player's, lets it be registered anew.
-				LogI("league", "the room of tournament match %lld closed after its last game; making it again", static_cast<long long>(f.match));
-				const TourneyNext next = LeagueTourneyMine().mine.next;
-				TourneyClaim again;
-				again.kind = TourneyClaim::Create;
-				again.map = next.map;
-				again.settings = next.settings;
-				again.contentKey = next.contentKey;
-				CreateRoom(again);
-			}
 			else if (r.claim.kind == TourneyClaim::Join) {
 				LogI("league", "joining the room of tournament match %lld", static_cast<long long>(f.match));
 				f.phase = RoomFlow::kJoining;
@@ -267,7 +256,6 @@ void StepRoom()
 		if (inRoom == f.match && g_s.room.owner) {
 			f.lobby = g_s.room.id;
 			f.registeredLobby = f.lobby;
-			g_tourney.ownRooms[f.match] = f.lobby;
 			f.registeredSpec = g_s.room.info.specLobby;
 			LeagueTourneyRegisterRoom(f.match, f.lobby, f.registeredSpec);
 			f.phase = RoomFlow::kInRoom;
@@ -283,7 +271,19 @@ void StepRoom()
 			f.phase = RoomFlow::kInRoom;
 			f.at = now;
 		}
-		else if (now - f.at > kFlowTimeoutMs && !g_s.syncConfirm && !g_s.syncPhase) {
+		else if (now - f.at > (f.stale ? kFlowTimeoutMs : kStaleAfterMs) && !g_s.syncConfirm && !g_s.syncPhase) {
+			if (f.lobby && !f.stale) {
+				// The room the server sent this player to is gone (it closed, or Steam lost it): the server forgets it and answers
+				// with another room, or lets this player open one.
+				LogI("league", "could not enter the room of tournament match %lld; telling the league it is gone", static_cast<long long>(f.match));
+				f.stale = f.lobby;
+				f.lobby = 0;
+				f.phase = RoomFlow::kClaiming;
+				f.at = now;
+				g_tourney.join = PendingJoin();
+				LeagueTourneyClaimRoom(f.match, f.stale);
+				break;
+			}
 			Toast("Could not enter the tournament room. Try again.", true);
 			f = RoomFlow();
 		}
