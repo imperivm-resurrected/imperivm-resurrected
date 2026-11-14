@@ -32,5 +32,5 @@ cl /nologo /c /O2 /MT /W0 /DNDEBUG /DHAVE_CONFIG_H /DLZMA_API_STATIC /I%XZ% /I%X
 cl /nologo /c /O2 /MT /W0 /DNDEBUG /I%BZ% /Fobuild\ %BZ%\*.c || exit /b 1
 rc /nologo /Isrc /fo build\winmm.res src\app\winmm.rc || exit /b 1
 cl /nologo /c /O2 /MT /W3 /EHsc /std:c++17 /utf-8 /DNDEBUG /Isrc /I%MA% /I%MZ% /I%LA%\libarchive /I%MH%\include /I"%STEAMWORKS_SDK%\public" /Fobuild\ src\core\*.cpp src\i18n\*.cpp src\app\*.cpp src\hooks\*.cpp src\game\*.cpp src\mods\*.cpp src\net\*.cpp src\ui\*.cpp || exit /b 1
-link /nologo /DLL /MAP:build\winmm.map /OUT:build\winmm.dll /DEF:src\app\winmm.def build\*.obj build\winmm.res d3d11.lib dxgi.lib d3dcompiler.lib user32.lib gdi32.lib kernel32.lib ole32.lib bcrypt.lib shell32.lib ws2_32.lib winhttp.lib comdlg32.lib advapi32.lib windowscodecs.lib strmiids.lib || exit /b 1
+link /nologo /DLL /MAP:build\winmm.map /OUT:build\winmm.dll /DEF:src\app\winmm.def build\*.obj build\winmm.res d3d11.lib dxgi.lib d3dcompiler.lib user32.lib gdi32.lib kernel32.lib ole32.lib bcrypt.lib shell32.lib ws2_32.lib winhttp.lib comdlg32.lib advapi32.lib crypt32.lib windowscodecs.lib strmiids.lib || exit /b 1
 echo OK: build\winmm.dll

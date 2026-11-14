@@ -69,9 +69,16 @@ struct Config {
 	int natureVolume = -1;
 	int conversationVolume = 100;
 	std::string outputDevice;
+
+	// [League]: the server's address (empty: the public one) and the account linked to this computer. The token is kept encrypted
+	// for this Windows user; here it is plain. Only the league client touches these, under its own lock.
+	std::string leagueUrl;
+	std::string leagueToken, leagueSteamId, leagueName;
 };
 
 const Config &GetConfig();
 Config &MutableConfig();
 void SaveConfig();
 void LoadConfig();
+// Writes only the league account ([League] Token, SteamId and Name), or removes it when the token is empty.
+void SaveLeagueAccount();

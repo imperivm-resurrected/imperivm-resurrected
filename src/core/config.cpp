@@ -2,6 +2,7 @@
 // Copyright (C) 2026 THIONG
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include <windows.h>
+#include <wincrypt.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -15,6 +16,65 @@
 #include "core/version.h"
 
 static Config g_config;
+
+namespace {
+
+std::string IniPath()
+{
+	char path[MAX_PATH];
+	GetModuleFileNameA(nullptr, path, MAX_PATH);
+	char *slash = strrchr(path, '\\');
+	if (slash) strcpy_s(slash + 1, MAX_PATH - (slash + 1 - path), "imperivm-mod.ini");
+	return path;
+}
+
+const char kProtectedPrefix[] = "dpapi:";
+
+// The token is encrypted for this Windows user, so a copied imperivm-mod.ini doesn't carry a usable one. A token written by hand stays
+// as it is.
+std::string ProtectSecret(const std::string &plain)
+{
+	DATA_BLOB in = {static_cast<DWORD>(plain.size()), reinterpret_cast<BYTE *>(const_cast<char *>(plain.data()))};
+	DATA_BLOB out = {};
+	if (!CryptProtectData(&in, L"Imperivm Resurrected league", nullptr, nullptr, nullptr, CRYPTPROTECT_UI_FORBIDDEN, &out)) return plain;
+	DWORD n = 0;
+	std::string text;
+	if (CryptBinaryToStringA(out.pbData, out.cbData, CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF, nullptr, &n) && n) {
+		text.assign(n, '\0');
+		if (CryptBinaryToStringA(out.pbData, out.cbData, CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF, &text[0], &n)) text.resize(n);
+		else text.clear();
+	}
+	LocalFree(out.pbData);
+	return text.empty() ? plain : kProtectedPrefix + text;
+}
+
+std::string RevealSecret(const std::string &stored)
+{
+	if (stored.compare(0, sizeof(kProtectedPrefix) - 1, kProtectedPrefix) != 0) return stored;
+	const std::string text = stored.substr(sizeof(kProtectedPrefix) - 1);
+	DWORD n = 0;
+	if (!CryptStringToBinaryA(text.c_str(), static_cast<DWORD>(text.size()), CRYPT_STRING_BASE64, nullptr, &n, nullptr, nullptr) || !n) return std::string();
+	std::string bytes(n, '\0');
+	if (!CryptStringToBinaryA(text.c_str(), static_cast<DWORD>(text.size()), CRYPT_STRING_BASE64, reinterpret_cast<BYTE *>(&bytes[0]), &n, nullptr, nullptr)) {
+		return std::string();
+	}
+	DATA_BLOB in = {n, reinterpret_cast<BYTE *>(&bytes[0])};
+	DATA_BLOB out = {};
+	if (!CryptUnprotectData(&in, nullptr, nullptr, nullptr, nullptr, CRYPTPROTECT_UI_FORBIDDEN, &out)) return std::string();
+	std::string plain(reinterpret_cast<const char *>(out.pbData), out.cbData);
+	SecureZeroMemory(out.pbData, out.cbData);
+	LocalFree(out.pbData);
+	return plain;
+}
+
+std::string ReadIniString(const char *section, const char *key, const std::string &path)
+{
+	char buf[2048] = {};
+	GetPrivateProfileStringA(section, key, "", buf, sizeof(buf), path.c_str());
+	return buf;
+}
+
+}
 
 const Config &GetConfig()
 {
@@ -123,6 +183,13 @@ void LoadConfig()
 	char dumpStart[2048] = {};
 	GetPrivateProfileStringA("Debug", "DumpAtStartup", "", dumpStart, sizeof(dumpStart), path);
 	g_config.dumpAtStartup = dumpStart;
+	g_config.leagueUrl = ReadIniString("League", "Url", path);
+	g_config.leagueToken = RevealSecret(ReadIniString("League", "Token", path));
+	g_config.leagueSteamId = ReadIniString("League", "SteamId", path);
+	g_config.leagueName = ReadIniString("League", "Name", path);
+	if (g_config.leagueToken.empty() && !ReadIniString("League", "Token", path).empty()) {
+		LogW("boot", "config: the league token can't be read on this Windows user; the account has to be linked again");
+	}
 
 	LogI("boot", "config: Render(Enabled=%d VSync=%d Brightness=%d FakeModeChange=%d) Display(Mode=%s "
 		"Resolution=%dx%d TrapMouse=%d ExtendedView=%d) Game(ScrollSpeed=%.2f Autosave=%d every %d min, %d slots) Online(RejoinMode=%s)",
@@ -196,4 +263,13 @@ void SaveConfig()
 	WritePrivateProfileStringA("Sound", "ConversationVolume", std::to_string(g_config.conversationVolume).c_str(), path);
 	WritePrivateProfileStringA("Sound", "OutputDevice", g_config.outputDevice.c_str(), path);
 	WritePrivateProfileStringA("Debug", "LogLevel", LogLevelName(g_config.logLevel), path);
+}
+
+void SaveLeagueAccount()
+{
+	const std::string path = IniPath();
+	const bool linked = !g_config.leagueToken.empty();
+	WritePrivateProfileStringA("League", "Token", linked ? ProtectSecret(g_config.leagueToken).c_str() : nullptr, path.c_str());
+	WritePrivateProfileStringA("League", "SteamId", linked ? g_config.leagueSteamId.c_str() : nullptr, path.c_str());
+	WritePrivateProfileStringA("League", "Name", linked ? g_config.leagueName.c_str() : nullptr, path.c_str());
 }

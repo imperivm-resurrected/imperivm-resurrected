@@ -109,7 +109,7 @@ if(IMPERIVM_BUILD_DLL)
 	target_compile_definitions(winmm PRIVATE $<$<NOT:$<CONFIG:Debug>>:NDEBUG>)
 	target_compile_options(winmm PRIVATE $<$<NOT:$<CONFIG:Debug>>:/O2>)
 	target_link_libraries(winmm PRIVATE
-		d3d11 dxgi d3dcompiler user32 gdi32 kernel32 ole32 bcrypt shell32 ws2_32 winhttp comdlg32 advapi32 windowscodecs strmiids)
+		d3d11 dxgi d3dcompiler user32 gdi32 kernel32 ole32 bcrypt shell32 ws2_32 winhttp comdlg32 advapi32 crypt32 windowscodecs strmiids)
 endif()
 
 if(IMPERIVM_BUILD_TESTS)
