@@ -71,6 +71,7 @@ LeaguePlayerCard CardOf(const Json &j)
 	c.division = LeagueTierHasDivisions(c.tier) ? LeagueDivisionFromJson(j.Get("division")) : 0;
 	c.accepted = j.GetBool("accepted");
 	c.host = j.GetBool("host");
+	c.inRoom = j.GetBool("inRoom");
 	return c;
 }
 
@@ -262,6 +263,11 @@ bool LeagueParseMatch(const Json &j, LeagueMatchTicket &out)
 	out.map = MapOf(j.Get("map"));
 	out.settings = LeagueParseRoomSettings(j.Get("settings"));
 	out.acceptBy = Int64(j, "acceptBy");
+	out.readyAt = Int64(j, "readyAt");
+	out.roomDueAt = Int64(j, "roomDueAt");
+	out.startedAt = Int64(j, "startedAt");
+	out.abandonedBy = IdText(j.Get("abandonedBy"));
+	out.fault = IdText(j.Get("fault"));
 	if (const Json *players = j.Get("players"); players && players->type == Json::Array) {
 		for (const Json &p : players->arr) {
 			if (p.type == Json::Object) out.players.push_back(CardOf(p));
@@ -287,6 +293,21 @@ uint64_t LeagueTicketLobby(const LeagueMatchTicket &t)
 std::string LeagueRankedRoomTag(int64_t matchId)
 {
 	return "ranked:" + std::to_string(static_cast<long long>(matchId));
+}
+
+bool LeagueTicketAbandonable(const LeagueMatchTicket &t)
+{
+	return (t.status == LeagueMatchStatus::Ready || t.status == LeagueMatchStatus::Playing) && !t.startedAt;
+}
+
+bool LeagueAbandonCosts(const LeagueMatchTicket &t, const std::string &steamId, int64_t nowMs)
+{
+	if (!LeagueTicketAbandonable(t) || steamId.empty()) return false;
+	if (t.status == LeagueMatchStatus::Ready) return t.roomDueAt && nowMs >= t.roomDueAt ? t.host == steamId : true;
+	for (const LeaguePlayerCard &p : t.players) {
+		if (!p.inRoom) return false;
+	}
+	return t.players.size() == 2;
 }
 
 bool LeagueParseBoard(const Json &j, LeagueBoard &out)

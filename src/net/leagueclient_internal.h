@@ -44,5 +44,7 @@ void RankedTick();
 void RankedGameReported(const LeagueReport &report, const std::string &ownSteamId);
 // The server answered a report (from the sending thread); only ranked ones matter here.
 void RankedReportAnswered(const Json &report, const std::string &answer);
+// The game of a ranked match is being played on this computer: the server is told once, and the match can no longer be called off.
+void RankedGameStarted(int64_t matchId);
 
 }

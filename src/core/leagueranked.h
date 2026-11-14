@@ -52,6 +52,8 @@ struct LeaguePlayerCard {
 	LeagueTier tier = LeagueTier::None;
 	int division = 0;
 	bool accepted = false, host = false;
+	// Said "I am in the room" in the last 90 s (only in the ticket).
+	bool inRoom = false;
 };
 
 enum class LeagueQueueStatus { Unknown, Idle, Searching, Found };
@@ -91,6 +93,11 @@ struct LeagueMatchTicket {
 	LeagueMapFacts map;
 	LeagueRoomSettings settings;
 	int64_t acceptBy = 0;
+	// When both accepted, until when calling off a match without a room is the caller's fault (afterwards the host's), and when
+	// its game started (0 while it has not).
+	int64_t readyAt = 0, roomDueAt = 0, startedAt = 0;
+	// A match called off before its game (outcome "abandoned"): who called it off (a SteamID or "system") and who got the lock.
+	std::string abandonedBy, fault;
 	std::vector<LeaguePlayerCard> players;
 	LeagueRankedResult ranked;
 };
@@ -101,6 +108,11 @@ const LeaguePlayerCard *LeagueTicketPlayer(const LeagueMatchTicket &t, const std
 uint64_t LeagueTicketLobby(const LeagueMatchTicket &t);
 // "ranked:<id>", what the host's Steam room carries in its "irm" data.
 std::string LeagueRankedRoomTag(int64_t matchId);
+// The match may still be called off: both accepted and its game has not started.
+bool LeagueTicketAbandonable(const LeagueMatchTicket &t);
+// Whether calling it off now would lock that player out of the queue, as the server decides it: without a room, whoever walks away
+// before roomDueAt and the host after it; with a room both players are in, whoever leaves it; with one never reached, nobody.
+bool LeagueAbandonCosts(const LeagueMatchTicket &t, const std::string &steamId, int64_t nowMs);
 
 struct LeagueBoardRow {
 	int position = 0;

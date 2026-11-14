@@ -357,6 +357,9 @@ void MatchTick()
 void LeagueMatchPlaying(const LeagueMatchInfo &info)
 {
 	if (!info.lobby || SpectatorWatching() || SpectatorViewing() || reinterpret_cast<IsDemo_t>(addr::kIsDemoPlayback)()) return;
+	LeagueMatchKind kind = LeagueMatchKind::Normal;
+	int64_t matchId = 0;
+	if (LeagueParseRoomTag(info.roomTag, kind, matchId) && kind == LeagueMatchKind::Ranked) RankedGameStarted(matchId);
 	std::lock_guard<std::mutex> lock(g_mx);
 	if (!g_match.active || g_match.info.lobby != info.lobby) {
 		g_match = Match();

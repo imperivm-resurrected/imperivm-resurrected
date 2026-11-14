@@ -162,6 +162,14 @@ void Ticket()
 	CHECK(!LeagueParseMatch(Parse(R"({"id":9,"status":"lost"})"), t));
 	CHECK(!LeagueParseMatch(Parse(R"({"error":"not_found","message":"Match not found"})"), t));
 
+	CHECK(LeagueParseMatch(Parse(R"({"id":9,"status":"cancelled","outcome":"abandoned","abandonedBy":"system","fault":"76561198000000001",
+		"readyAt":1000,"roomDueAt":181000,"startedAt":null})"),
+		t));
+	CHECK_EQ(t.abandonedBy, std::string("system"));
+	CHECK_EQ(t.fault, std::string("76561198000000001"));
+	CHECK_EQ(static_cast<unsigned long long>(t.roomDueAt), 181000ULL);
+	CHECK(!LeagueTicketAbandonable(t));
+
 	// The tag the host's room carries is the one the report reads back.
 	CHECK_EQ(LeagueRankedRoomTag(42), std::string("ranked:42"));
 	LeagueMatchKind kind = LeagueMatchKind::Normal;
@@ -169,6 +177,37 @@ void Ticket()
 	CHECK(LeagueParseRoomTag(LeagueRankedRoomTag(42), kind, id));
 	CHECK(kind == LeagueMatchKind::Ranked);
 	CHECK_EQ(static_cast<unsigned long long>(id), 42ULL);
+}
+
+// Who calling off a match before its game would lock out, as the server decides it.
+void AbandonCost()
+{
+	const std::string host = "76561198000000001", guest = "76561198000000002";
+	LeagueMatchTicket t;
+	CHECK(LeagueParseMatch(Parse(R"({"id":42,"status":"ready","host":"76561198000000001","readyAt":1000,"roomDueAt":181000,"startedAt":null,
+		"players":[{"steamId":"76561198000000001","inRoom":false},{"steamId":"76561198000000002","inRoom":false}]})"),
+		t));
+	CHECK(LeagueTicketAbandonable(t));
+	// No room yet: within the host's time whoever walks away; after it, the host.
+	CHECK(LeagueAbandonCosts(t, guest, 60000));
+	CHECK(LeagueAbandonCosts(t, host, 60000));
+	CHECK(!LeagueAbandonCosts(t, guest, 181000));
+	CHECK(LeagueAbandonCosts(t, host, 181000));
+
+	CHECK(LeagueParseMatch(Parse(R"({"id":42,"status":"playing","host":"76561198000000001","lobby":"5","startedAt":null,
+		"players":[{"steamId":"76561198000000001","inRoom":true},{"steamId":"76561198000000002","inRoom":false}]})"),
+		t));
+	// A room the guest never reached: nobody.
+	CHECK(!LeagueAbandonCosts(t, host, 60000));
+	CHECK(!LeagueAbandonCosts(t, guest, 60000));
+	t.players[1].inRoom = true;
+	// Both in it: whoever leaves.
+	CHECK(LeagueAbandonCosts(t, guest, 60000));
+	CHECK(LeagueAbandonCosts(t, host, 60000));
+
+	t.startedAt = 70000;
+	CHECK(!LeagueTicketAbandonable(t));
+	CHECK(!LeagueAbandonCosts(t, guest, 80000));
 }
 
 void Board()
@@ -483,6 +522,7 @@ int main()
 	Season();
 	Queue();
 	Ticket();
+	AbandonCost();
 	Board();
 	ReportAndErrors();
 	MeBadges();

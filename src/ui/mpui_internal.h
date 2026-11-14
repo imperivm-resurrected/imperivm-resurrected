@@ -105,7 +105,7 @@ inline int DropArg(int kind, int index)
 // The ranked tab: what the player asked of its screens, as the argument of kRankedAct (rows of the leaderboard from kRkRow).
 enum RankedArg {
 	kRkSearch = 1, kRkCancel, kRkAccept, kRkDecline, kRkBoard, kRkHub, kRkBoardPrev, kRkBoardNext, kRkBoardTop, kRkBoardMe, kRkRoom,
-	kRkResultClose, kRkAgain, kRkResultBoard, kRkSkip, kRkSteam, kRkNotice, kRkRow = 0x100,
+	kRkResultClose, kRkAgain, kRkResultBoard, kRkSkip, kRkSteam, kRkNotice, kRkAbandon, kRkRow = 0x100,
 };
 enum RankedSub { kRankedHub, kRankedBoard };
 const int kRankedBoardRows = 13;

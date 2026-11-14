@@ -135,6 +135,9 @@ struct LeagueRankedView {
 	// This player's side and the other one in the ticket.
 	LeaguePlayerCard me, opponent;
 	bool host = false, roomRegistered = false, answering = false;
+	// Calling off the match is on its way; the last match called off before its game.
+	bool abandoning = false;
+	int64_t calledOff = 0;
 	// The queue is locked until then (ms since 1970) after declining or letting a match go.
 	int64_t banUntil = 0;
 	// The last thing that happened, as an English text to translate (with its values filled in by the server's), and whether it is bad.
@@ -163,6 +166,12 @@ void LeagueMatchAnswer(bool accept);
 void LeagueRankedRoomOpened(uint64_t lobby);
 // Polls the match again now: the room failed and the interface tries once more.
 void LeagueRankedRetryRoom();
+// Calls off the match before its game starts, when its room can't be made or joined: no Glory changes, and only whoever clearly
+// failed gets the lock (the server decides). `automatic` when the room's own retries gave up.
+void LeagueMatchAbandon(bool automatic);
+// The match's room is open on this computer: "I am in the room" goes to the server every 30 s, which is what tells a room that
+// worked for both players from one that did not.
+void LeagueRankedInRoom();
 // The player closed the result screen.
 void LeagueRankedResultSeen();
 void LeagueRankedClearNotice();

@@ -26,7 +26,7 @@ using namespace leagueclient_impl;
 
 namespace {
 
-const DWORD kQueuePollMs = 5000, kMatchPollMs = 3000, kPlayingPollMs = 10000, kResultPollMs = 10000, kRetryMs = 6000;
+const DWORD kQueuePollMs = 5000, kMatchPollMs = 3000, kPlayingPollMs = 10000, kResultPollMs = 10000, kRetryMs = 6000, kPresenceMs = 30000;
 const DWORD kSeasonKeepMs = 10 * 60 * 1000, kSeasonRetryMs = 60 * 1000, kBoardKeepMs = 60 * 1000, kRecoverAfterMs = 3000;
 const int kHubRows = 10, kAroundRows = 5;
 const size_t kRecentMax = 20;
@@ -57,6 +57,11 @@ struct Queue {
 	bool noticeBad = false;
 	unsigned foundSerial = 0;
 	bool rejoined = false;
+	bool abandoning = false;
+	int64_t calledOff = 0;
+	// The last "I am in the room", and the match whose start the server was told of.
+	DWORD presenceAt = 0;
+	int64_t startedSent = 0;
 };
 
 struct Board {
@@ -152,8 +157,10 @@ void ToIdle(Queue &q)
 	q.ticket = LeagueMatchTicket();
 	q.found = LeagueQueueAnswer();
 	q.answering = false;
+	q.abandoning = false;
 	q.wantLobby = q.roomLobby = 0;
 	q.roomRegistered = q.registering = false;
+	q.presenceAt = 0;
 	q.gen++;
 }
 
@@ -439,9 +446,31 @@ void PollQueueThread(unsigned gen, bool recovering)
 	if (rejoin) JoinThread(gen, contentKey);
 }
 
+// Under g_mx: the match was called off before its game (abandoned). Both are free to search again, unless this player was at fault.
+void CalledOff(const LeagueMatchTicket &t)
+{
+	const std::string me = OwnId();
+	LogI("league", "ranked: match %lld called off before its game by %s, %s at fault", static_cast<long long>(t.id),
+		t.abandonedBy == me ? "this player" : t.abandonedBy == "system" ? "the server" : "the other player",
+		t.fault.empty() ? "nobody" : t.fault == me ? "this player" : "the other player");
+	ToIdle(g_q);
+	g_q.calledOff = t.id;
+	if (t.fault == me) {
+		SetNotice(g_q, t.abandonedBy == me ? "You called off the match: you can't search for a few minutes."
+										   : "Your room did not open in time: the match was called off and you can't search for a few minutes.",
+			true);
+	}
+	else if (!t.fault.empty()) SetNotice(g_q, "The match was called off and it doesn't count against you. You can search again.", false);
+	else SetNotice(g_q, "The match was called off before it started. Nobody is penalised: you can search again.", false);
+}
+
 // Under g_mx: the ticket says the match was called off. Whoever had accepted goes back to the head of the queue.
 void Cancelled(const LeagueMatchTicket &t)
 {
+	if (t.outcome == "abandoned") {
+		CalledOff(t);
+		return;
+	}
 	const LeaguePlayerCard *mine = LeagueTicketPlayer(t, OwnId(), false);
 	const bool accepted = mine && mine->accepted;
 	const bool declinedByOther = t.outcome == "declined";
@@ -569,6 +598,48 @@ void RegisterThread(unsigned gen, int64_t id, uint64_t lobby)
 	g_q.phase = LeagueRankedPhase::Playing;
 	g_q.nextPoll = GetTickCount() + kPlayingPollMs;
 	LogI("room", "ranked: room %llu registered for match %lld", lobby, static_cast<long long>(id));
+}
+
+void AbandonThread(unsigned gen, int64_t id, bool automatic)
+{
+	const Answer a = Call("POST", MatchPath(id, "/abandon"), "", true);
+	{
+		std::lock_guard<std::mutex> lock(g_mx);
+		g_q.abandoning = false;
+		if (gen != g_q.gen || id != g_q.matchId) return;
+		if (!a.r.Ok()) {
+			LogW("league", "ranked: could not call off match %lld (%s)", static_cast<long long>(id), a.r.Describe().c_str());
+			if (a.error.code == "started") SetNotice(g_q, "The game has started: the match can't be called off.", true);
+			else if (a.r.status == 404) {
+				ToIdle(g_q);
+				SetNotice(g_q, "The match no longer exists.", true);
+			}
+			else if (!automatic) SetNotice(g_q, FailureNotice(a), true);
+			g_q.nextPoll = 0;
+			return;
+		}
+		LeagueMatchTicket t;
+		if (a.parsed && LeagueParseMatch(a.j, t) && t.outcome == "abandoned") CalledOff(t);
+		else ToIdle(g_q);
+		if (a.parsed && a.j.GetNumber("queueBanUntil") > 0) g_q.banUntil = static_cast<int64_t>(a.j.GetNumber("queueBanUntil"));
+		LogI("league", "ranked: match %lld called off%s", static_cast<long long>(id), automatic ? " after its room failed" : "");
+	}
+	LeagueMeRefresh(true);
+}
+
+void PresenceThread(int64_t id, bool started)
+{
+	Json body = Json::MakeObject();
+	if (started) body.Set("started", Json::MakeBool(true));
+	const Answer a = Call("POST", MatchPath(id, "/presence"), body.Dump(), true);
+	if (a.r.Ok()) {
+		if (started) LogI("league", "ranked: the server knows the game of match %lld started", static_cast<long long>(id));
+		return;
+	}
+	LogD("league", "ranked: the presence in match %lld was not taken (%s)", static_cast<long long>(id), a.r.Describe().c_str());
+	std::lock_guard<std::mutex> lock(g_mx);
+	// The start is told again on the next try.
+	if (started && g_q.startedSent == id) g_q.startedSent = 0;
 }
 
 void PollResultThread(int64_t id)
@@ -730,6 +801,17 @@ void RankedReportAnswered(const Json &report, const std::string &answer)
 	LeagueBoardRefresh(true);
 }
 
+void RankedGameStarted(int64_t matchId)
+{
+	if (matchId <= 0) return;
+	{
+		std::lock_guard<std::mutex> lock(g_mx);
+		if (g_q.startedSent == matchId) return;
+		g_q.startedSent = matchId;
+	}
+	SafeThread(PresenceThread, matchId, true).detach();
+}
+
 }
 
 LeagueRankedView LeagueRankedState()
@@ -766,6 +848,8 @@ LeagueRankedView LeagueRankedState()
 	else v.opponent = g_q.found.opponent;
 	v.roomRegistered = g_q.roomRegistered;
 	v.answering = g_q.answering;
+	v.abandoning = g_q.abandoning;
+	v.calledOff = g_q.calledOff;
 	v.banUntil = g_q.banUntil;
 	v.notice = g_q.notice;
 	v.noticeBad = g_q.noticeBad;
@@ -880,6 +964,26 @@ void LeagueRankedRetryRoom()
 	std::lock_guard<std::mutex> lock(g_mx);
 	g_q.nextPoll = 0;
 	g_q.registerAt = 0;
+}
+
+void LeagueMatchAbandon(bool automatic)
+{
+	std::lock_guard<std::mutex> lock(g_mx);
+	if ((g_q.phase != LeagueRankedPhase::Ready && g_q.phase != LeagueRankedPhase::Playing) || g_q.abandoning || !g_q.matchId) return;
+	if (g_q.ticketLoaded && !LeagueTicketAbandonable(g_q.ticket)) return;
+	g_q.abandoning = true;
+	LogI("league", "ranked: calling off match %lld%s", static_cast<long long>(g_q.matchId), automatic ? " (its room failed)" : "");
+	SafeThread(AbandonThread, g_q.gen, g_q.matchId, automatic).detach();
+}
+
+void LeagueRankedInRoom()
+{
+	std::lock_guard<std::mutex> lock(g_mx);
+	if ((g_q.phase != LeagueRankedPhase::Ready && g_q.phase != LeagueRankedPhase::Playing) || !g_q.matchId) return;
+	const DWORD now = GetTickCount();
+	if (g_q.presenceAt && now - g_q.presenceAt < kPresenceMs) return;
+	g_q.presenceAt = now;
+	SafeThread(PresenceThread, g_q.matchId, false).detach();
 }
 
 void LeagueRankedResultSeen()

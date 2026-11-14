@@ -44,6 +44,9 @@ struct RoomAuto {
 	int createTries = 0, joinTries = 0;
 	uint64_t joinLobby = 0, invitedLobby = 0;
 	bool warned = false, settingsLogged = false, mapWarned = false;
+	// The room's retries gave up and the match was called off; the called-off match whose room this computer left.
+	bool abandoned = false;
+	int64_t leftCalledOff = 0;
 	std::map<int, DWORD> setAt;
 };
 RoomAuto g_auto;
@@ -237,9 +240,11 @@ void ResetRoom()
 {
 	const unsigned serial = g_auto.foundSerial;
 	const bool init = g_auto.init;
+	const int64_t left = g_auto.leftCalledOff;
 	g_auto = RoomAuto();
 	g_auto.foundSerial = serial;
 	g_auto.init = init;
+	g_auto.leftCalledOff = left;
 }
 
 bool OwnsRoom()
@@ -257,12 +262,32 @@ void OpenRankedTab()
 	g_s.ranked.sub = kRankedHub;
 }
 
-// Both accepted: the host makes the room, the other one joins it as soon as the server knows it.
+const int kCreateTries = 3, kJoinTries = 6;
+const DWORD kCreateWaitMs = 30000, kJoinWaitMs = 15000;
+
+// The room's own retries gave up: the match is called off, once (the server decides who, if anyone, is at fault).
+bool GiveUpRoom(const LeagueRankedView &v)
+{
+	if (g_auto.abandoned || v.abandoning || !LeagueTicketAbandonable(v.ticket)) return false;
+	g_auto.abandoned = true;
+	LeagueMatchAbandon(true);
+	return true;
+}
+
+// Both accepted: the host makes the room, the other one joins it as soon as the server knows it. When that fails every time,
+// the match is called off.
 void RoomStep(const LeagueRankedView &v, DWORD now)
 {
 	const bool live = (v.phase == LeagueRankedPhase::Ready || v.phase == LeagueRankedPhase::Playing) && v.ticketLoaded && v.matchId;
 	if (!live) {
 		if (g_auto.match) ResetRoom();
+		// A match called off while this computer waited in its room: the room is of no use any more.
+		if (v.calledOff && v.calledOff != g_auto.leftCalledOff && g_s.open && !InGame() && g_s.room.id && g_s.room.info.leagueTag == LeagueRankedRoomTag(v.calledOff)) {
+			g_auto.leftCalledOff = v.calledOff;
+			LogI("league", "ranked: match %lld was called off; leaving its room", static_cast<long long>(v.calledOff));
+			ModUiToast("The ranked match was called off, so you left its room.");
+			DoAction(kLeave, 0);
+		}
 		return;
 	}
 	if (g_auto.match != v.matchId) {
@@ -273,6 +298,7 @@ void RoomStep(const LeagueRankedView &v, DWORD now)
 	const std::string tag = LeagueRankedRoomTag(v.matchId);
 	// The guest may be in the room before its data says what it is for.
 	if (g_s.room.id && (g_s.room.info.leagueTag == tag || g_s.room.id == LeagueTicketLobby(v.ticket))) {
+		LeagueRankedInRoom();
 		if (!v.host || !OwnsRoom()) return;
 		LeagueRankedRoomOpened(g_s.room.id);
 		if (g_auto.invitedLobby != g_s.room.id) {
@@ -306,14 +332,28 @@ void RoomStep(const LeagueRankedView &v, DWORD now)
 		OpenRankedTab();
 	}
 	if (v.host) {
-		if (g_auto.createTries >= 3 || (g_auto.createdAt && now - g_auto.createdAt < 30000)) return;
+		if (g_auto.createdAt && now - g_auto.createdAt < kCreateWaitMs) return;
+		if (g_auto.createTries >= kCreateTries) {
+			if (GiveUpRoom(v)) {
+				LogW("league", "ranked: Steam could not create the room after %d tries; calling the match off", g_auto.createTries);
+				ModUiToast("The room of your ranked match could not be made: the match is called off.", true);
+			}
+			return;
+		}
 		g_auto.createdAt = now;
 		g_auto.createTries++;
 		CreateRoom(v);
 		return;
 	}
 	const uint64_t lobby = LeagueTicketLobby(v.ticket);
-	if (!lobby || g_auto.joinTries >= 6 || (g_auto.joinLobby == lobby && now - g_auto.joinAt < 15000)) return;
+	if (lobby && g_auto.joinTries >= kJoinTries && now - g_auto.joinAt >= kJoinWaitMs) {
+		if (GiveUpRoom(v)) {
+			LogW("league", "ranked: could not enter the host's room after %d tries; calling the match off", g_auto.joinTries);
+			ModUiToast("Could not enter the host's room: the ranked match is called off.", true);
+		}
+		return;
+	}
+	if (!lobby || g_auto.joinTries >= kJoinTries || (g_auto.joinLobby == lobby && now - g_auto.joinAt < kJoinWaitMs)) return;
 	g_auto.joinLobby = lobby;
 	g_auto.joinAt = now;
 	g_auto.joinTries++;
@@ -500,6 +540,7 @@ void RankedAction(int arg)
 		ResetRoom();
 		LeagueRankedRetryRoom();
 		break;
+	case kRkAbandon: LeagueMatchAbandon(false); break;
 	case kRkResultClose:
 		r.resultOpen = false;
 		r.sub = kRankedHub;

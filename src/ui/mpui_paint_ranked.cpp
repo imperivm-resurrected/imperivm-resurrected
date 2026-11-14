@@ -314,9 +314,16 @@ void PaintRankCard(Painter &p, const State &st, const HubLayout &h)
 			RawText(p, x + 16, y + 308, w - 32, 22, TrFmt("Map: %s", {v.ticket.map.name}), pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		}
 		if ((v.phase == LeagueRankedPhase::Ready || v.phase == LeagueRankedPhase::Playing) && !inRoom) {
-			p.Button(ix, y + cardH - 140, iw, 56, "Go to the room", kRankedAct, kRkRoom, mx, my, !st.connecting, true);
+			p.Button(ix, y + cardH - 196, iw, 56, "Go to the room", kRankedAct, kRkRoom, mx, my, !st.connecting, true);
+			const bool canCallOff = v.ticketLoaded && LeagueTicketAbandonable(v.ticket) && !v.abandoning;
+			Ghost(p, ix, y + cardH - 128, iw, 44, v.abandoning ? "Cancelling..." : "Cancel match", kRkAbandon, canCallOff, mx, my);
 			p.Font(3);
-			p.TextWrapped(ix, y + cardH - 72, iw, 44, "If the room does not open, press it again: the league keeps your match.", pal::caption);
+			// The server's rule: whether cancelling now locks this player out of the queue for a while.
+			const bool costs = v.ticketLoaded && LeagueAbandonCosts(v.ticket, v.me.steamId, now);
+			p.TextWrapped(ix, y + cardH - 72, iw, 44,
+				costs ? "Cancelling now counts as declining: you couldn't search for a few minutes."
+					  : "If the room won't open, press it again or cancel the match: that doesn't count against you.",
+				pal::caption);
 		}
 		return;
 	}
