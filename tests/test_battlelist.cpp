@@ -158,6 +158,39 @@ void SavesBelongToTheLongestTitleAfterADash()
 	CHECK_EQ(BattleSaveAdventure("partida-Galias", titles), 0);
 }
 
+void CampaignPacksPreferTheActiveOne()
+{
+	const BattlePackFiles data = {"imperivm1-campaign-data", true, {"data/i1/stats.ini"}};
+	const BattlePackFiles galia = {"imperivm1-campaign", false,
+		{"adventures/readme.txt", "adventures/imperivm i - la guerra de las galias.bfhp", "adventures/imperivm i - la guerra de las galias.bmp"}};
+	const BattlePackFiles hispania = {"imperivm2-hispania", false, {"adventures/imperivm ii - hispania.bfhp"}};
+	const BattlePackFiles numancia = {"imperivm2-numancia", true, {"adventures\\Imperivm II - Numancia.bfhp"}};
+	const BattlePackFiles mine = {"my-maps", true, {"adventures/mi aventura.bfhp", "maps/imperivm i - galia.bfhp", "adventures/imperivm i - galia.txt"}};
+
+	BattleCampaignPack p = BattleCampaignPackOf({data, mine}, kBattleGameImperivm1);
+	CHECK(!p.installed);
+	CHECK(!p.active);
+	CHECK(p.folder.empty());
+	p = BattleCampaignPackOf({data, galia, mine}, kBattleGameImperivm1);
+	CHECK(p.installed);
+	CHECK(!p.active);
+	CHECK_EQ(p.folder, std::string("imperivm1-campaign"));
+	CHECK_EQ(p.adventure, std::string("adventures/imperivm i - la guerra de las galias.bfhp"));
+	CHECK(!BattleCampaignPackOf({galia}, kBattleGameImperivm2).installed);
+	CHECK(!BattleCampaignPackOf({galia}, kBattleGameOther).installed);
+	// An inactive pack listed first gives way to an active one.
+	p = BattleCampaignPackOf({hispania, numancia}, kBattleGameImperivm2);
+	CHECK(p.installed);
+	CHECK(p.active);
+	CHECK_EQ(p.folder, std::string("imperivm2-numancia"));
+	p = BattleCampaignPackOf({hispania, mine}, kBattleGameImperivm2);
+	CHECK(!p.active);
+	CHECK_EQ(p.folder, std::string("imperivm2-hispania"));
+	CHECK_EQ(BattlePicturePath(p.adventure), std::string("adventures/imperivm ii - hispania.bmp"));
+	CHECK_EQ(BattlePicturePath("adventures/Galia.BFHP"), std::string("adventures/Galia.bmp"));
+	CHECK(BattlePicturePath("adventures/galia.bmp").empty());
+}
+
 }
 
 int main()
@@ -171,5 +204,6 @@ int main()
 	AdventuresAreSortedByGame();
 	DescriptionsGetRealLineBreaks();
 	SavesBelongToTheLongestTitleAfterADash();
+	CampaignPacksPreferTheActiveOne();
 	return test::Summary("battlelist");
 }

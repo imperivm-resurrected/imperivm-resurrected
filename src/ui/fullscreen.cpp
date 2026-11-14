@@ -7,7 +7,10 @@
 #include <cmath>
 #include <cstdint>
 #include <iterator>
+#include <map>
+#include <mutex>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "core/log.h"
@@ -90,6 +93,84 @@ HBITMAP NewDot(uint32_t *&bits)
 	bits = static_cast<uint32_t *>(raw);
 	return bmp;
 }
+
+struct Isotype {
+	Picture pic;
+	// 0 not read yet, 1 read, -1 missing.
+	int state = 0;
+	// Premultiplied for GdiAlphaBlend, one per size in pixels; a screen only asks for a few.
+	std::map<std::pair<int, int>, HBITMAP> scaled;
+};
+Isotype g_isotype;
+std::mutex g_isotypeLock;
+
+// Each target pixel is the average of the source pixels it covers, weighted by their alpha.
+HBITMAP ScaledIsotype(const Picture &pic, int w, int h)
+{
+	BITMAPINFO bi = {};
+	bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
+	bi.bmiHeader.biWidth = w;
+	bi.bmiHeader.biHeight = -h;
+	bi.bmiHeader.biPlanes = 1;
+	bi.bmiHeader.biBitCount = 32;
+	bi.bmiHeader.biCompression = BI_RGB;
+	void *raw = nullptr;
+	HBITMAP bmp = CreateDIBSection(nullptr, &bi, DIB_RGB_COLORS, &raw, nullptr, 0);
+	if (!bmp || !raw) {
+		if (bmp) DeleteObject(bmp);
+		return nullptr;
+	}
+	uint32_t *dst = static_cast<uint32_t *>(raw);
+	for (int y = 0; y < h; y++) {
+		const int y0 = y * pic.h / h, y1 = std::max(y0 + 1, (y + 1) * pic.h / h);
+		for (int x = 0; x < w; x++) {
+			const int x0 = x * pic.w / w, x1 = std::max(x0 + 1, (x + 1) * pic.w / w);
+			uint64_t a = 0, r = 0, g = 0, b = 0, count = 0;
+			for (int yy = y0; yy < y1 && yy < pic.h; yy++) {
+				for (int xx = x0; xx < x1 && xx < pic.w; xx++) {
+					const uint32_t px = pic.px[static_cast<size_t>(yy) * pic.w + xx], pa = px >> 24;
+					a += pa;
+					r += ((px >> 16) & 0xff) * pa;
+					g += ((px >> 8) & 0xff) * pa;
+					b += (px & 0xff) * pa;
+					count++;
+				}
+			}
+			uint32_t out = 0;
+			if (count && a) {
+				const uint64_t div = count * 255;
+				out = static_cast<uint32_t>(a / count) << 24 | static_cast<uint32_t>(r / div) << 16 | static_cast<uint32_t>(g / div) << 8 |
+					static_cast<uint32_t>(b / div);
+			}
+			dst[static_cast<size_t>(y) * w + x] = out;
+		}
+	}
+	return bmp;
+}
+}
+
+void PaintIsotype(Painter &p, int cx, int cy, int h, int alpha)
+{
+	std::lock_guard<std::mutex> lock(g_isotypeLock);
+	Isotype &iso = g_isotype;
+	if (!iso.state) {
+		iso.state = LoadPicture(BrandFile(L"isotype.png"), iso.pic) ? 1 : -1;
+		if (iso.state < 0) LogW("ui", "brand/isotype.png is missing or unreadable; the missing pictures stay plain");
+	}
+	if (iso.state < 0 || h <= 0 || iso.pic.h <= 0) return;
+	const int w = std::max(1, h * iso.pic.w / iso.pic.h);
+	const RECT r = p.R(cx - w / 2, cy - h / 2, w, h);
+	const int pw = r.right - r.left, ph = r.bottom - r.top;
+	if (pw <= 0 || ph <= 0) return;
+	HBITMAP &bmp = iso.scaled[{pw, ph}];
+	if (!bmp) bmp = ScaledIsotype(iso.pic, pw, ph);
+	if (!bmp) return;
+	HDC mem = CreateCompatibleDC(p.dc);
+	HGDIOBJ old = SelectObject(mem, bmp);
+	BLENDFUNCTION blend = {AC_SRC_OVER, 0, static_cast<BYTE>(std::max(0, std::min(255, alpha))), AC_SRC_ALPHA};
+	GdiAlphaBlend(p.dc, r.left, r.top, pw, ph, mem, 0, 0, pw, ph, blend);
+	SelectObject(mem, old);
+	DeleteDC(mem);
 }
 
 bool PaintBackdrop(Canvas &canvas)

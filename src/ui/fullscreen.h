@@ -25,6 +25,10 @@ bool BeginFullScreen(PanelRender &r, const ScreenView &view);
 // A card of the full screens: the panel colour over the backdrop, a little see-through, with a hairline.
 void PaintGlassCard(Painter &p, int x, int y, int w, int h);
 
+// The brand's isotype `h` tall, centred on (cx, cy), blended at `alpha` (0-255) over what is there: the mark of a missing picture.
+// Nothing is drawn when brand/isotype.png is missing.
+void PaintIsotype(Painter &p, int cx, int cy, int h, int alpha);
+
 // The full screens' type is larger than the shared set: UseScreenFonts puts it in the painter, UseSharedFonts gives the shared set back
 // for the dialogs and menus over the screen, whose boxes are sized for it.
 void UseScreenFonts(Painter &p);

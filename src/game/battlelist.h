@@ -35,6 +35,24 @@ BattleGame BattleGameOf(const std::string &adventurePath);
 // "Imperivm I - La guerra de las Galias" without the game's name, which its tab already shows; other titles stay whole.
 std::string BattleTitleWithoutGame(const std::string &title);
 
+// The adventures an installed content pack brings (paths inside the pack, as "adventures/imperivm i - galia.bfhp") and whether the
+// game mounted it.
+struct BattlePackFiles {
+	std::string folder;
+	bool active = false;
+	std::vector<std::string> files;
+};
+
+// The pack that brings a game's campaign, an active one before an inactive one: `adventure` is its .bfhp inside the pack, which has
+// the picture next to it. Not installed when no pack has an adventure of that game.
+struct BattleCampaignPack {
+	bool installed = false, active = false;
+	std::string folder, adventure;
+};
+BattleCampaignPack BattleCampaignPackOf(const std::vector<BattlePackFiles> &packs, BattleGame game);
+// "adventures/imperivm i - galia.bfhp" gives "adventures/imperivm i - galia.bmp"; empty when it is not an adventure.
+std::string BattlePicturePath(const std::string &adventureFile);
+
 // The adventure's text keeps the "\n" of its file as two characters.
 std::string BattleDescriptionText(const std::string &raw);
 

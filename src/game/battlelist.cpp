@@ -130,6 +130,33 @@ std::string BattleTitleWithoutGame(const std::string &title)
 	return t;
 }
 
+BattleCampaignPack BattleCampaignPackOf(const std::vector<BattlePackFiles> &packs, BattleGame game)
+{
+	BattleCampaignPack out;
+	if (game == kBattleGameOther) return out;
+	for (const BattlePackFiles &pack : packs) {
+		if (out.active) break;
+		if (out.installed && !pack.active) continue;
+		for (const std::string &file : pack.files) {
+			const bool adventure = file.size() > 11 && (_strnicmp(file.c_str(), "adventures/", 11) == 0 || _strnicmp(file.c_str(), "adventures\\", 11) == 0) &&
+				EndsWithNoCase(file, ".bfhp");
+			if (!adventure || BattleGameOf(file) != game) continue;
+			out.installed = true;
+			out.active = pack.active;
+			out.folder = pack.folder;
+			out.adventure = file;
+			break;
+		}
+	}
+	return out;
+}
+
+std::string BattlePicturePath(const std::string &adventureFile)
+{
+	if (!EndsWithNoCase(adventureFile, ".bfhp")) return "";
+	return adventureFile.substr(0, adventureFile.size() - 5) + ".bmp";
+}
+
 int BattleSaveAdventure(const std::string &saveBaseName, const std::vector<std::string> &titles, std::string *name)
 {
 	int best = -1;

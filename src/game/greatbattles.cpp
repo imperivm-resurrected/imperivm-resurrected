@@ -375,7 +375,6 @@ BattlesSnapshot BattlesRead()
 		s.difficulty = reinterpret_cast<ComboGetSelected_t>(addr::kComboGetSelected)(combo);
 		s.difficultyShown = reinterpret_cast<HasFlags_t>(addr::kWindowHasFlags)(combo, nullptr, kFlagVisible) != 0 && !s.difficulties.empty();
 	}
-	const std::string fallback = s.tab == kBattlesTabConquests ? "CurrentLang/ConquestDefault.bmp" : "CurrentLang/AdventureDefault.BMP";
 	if (s.selList >= 0) {
 		const BattlesEntry &e = s.lists[s.selList][s.selIndex];
 		void *text = Child(dlg, kIdDescription, addr::kClassNameCUITextW);
@@ -386,7 +385,8 @@ BattlesSnapshot BattlesRead()
 		s.intro = s.tab == kBattlesTabGreat && !IntroFile(e.path).empty();
 		s.image = Image(e.path + ".bmp");
 	}
-	if (!s.image) s.image = Image(fallback);
+	// The game's own stand-in for an adventure without a picture is a flat grey box: the screen draws its own mark instead.
+	if (!s.image && s.tab == kBattlesTabConquests) s.image = Image("CurrentLang/ConquestDefault.bmp");
 	for (int tab = 0; tab < kBattlesTabCount; tab++) {
 		if (tab == kBattlesTabConquests) continue;
 		for (int list = 0; list < kBattlesListCount && !s.covers[tab]; list++) {

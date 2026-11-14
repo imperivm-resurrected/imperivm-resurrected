@@ -11,14 +11,15 @@
 
 #include "core/objectivelog.h"
 #include "game/greatbattles.h"
+#include "ui/fullscreen.h"
 #include "ui/listbox.h"
 
 namespace battlesui {
 
 // kActOverview: back from a campaign to the overview; kActOpenTab: a campaign's card (arg: its tab); kActContinue: arg 0 the newest
 // game of all, 1 the newest of the chosen adventure; kActAllSaves: the load screen; kActPage: the adventure's briefing (0) or its
-// diary (1).
-enum Action { kActNone = 0, kActTab, kActRow, kActDifficulty, kActStart, kActIntro, kActBack, kActOverview, kActOpenTab, kActContinue, kActAllSaves, kActPage };
+// diary (1); kActContent: the content packs screen.
+enum Action { kActNone = 0, kActTab, kActRow, kActDifficulty, kActStart, kActIntro, kActBack, kActOverview, kActOpenTab, kActContinue, kActAllSaves, kActPage, kActContent };
 
 inline int RowArg(int list, int index) { return list << 16 | index; }
 
@@ -48,6 +49,10 @@ struct View {
 	bool diary = false;
 	// Set once a Continue has started a load: nothing else is pressed meanwhile.
 	bool loading = false;
+	// The content packs of the Imperivm I and II campaigns, by tab, for a game whose list has none of their adventures because its
+	// pack is not active; and the picture next to each one's adventure.
+	BattleCampaignPack packs[kBattlesTabCount];
+	std::shared_ptr<const BattleImage> packCovers[kBattlesTabCount];
 };
 
 inline bool ShowsOverview(const View &v) { return v.overview && v.snap.tab != kBattlesTabConquests; }
@@ -56,7 +61,8 @@ struct PaintOut {
 	ui::ListGeom list, desc;
 };
 
-// The screen fills the frame: its height is always 768 and its width follows the frame's shape.
+// The screen fills the frame: its height is always 768 and its width follows the frame's shape. Its header is the full screens'
+// one, drawn in their units (`brand`, ScreenViewFor) so that it matches theirs.
 constexpr int kScreenH = 768;
 constexpr int kListRowH = 38, kDescLineH = 20;
 
@@ -64,6 +70,6 @@ float ScreenScale(int frameW, int frameH);
 int ScreenWidth(int frameW, int frameH);
 // Where a row starts inside the list's content, for keeping the chosen one in view; -1 when it is not there.
 int RowTop(const BattlesSnapshot &s, int list, int index);
-void PaintBattlesScreen(ui::Painter &p, int screenW, const View &v, PaintOut &out);
+void PaintBattlesScreen(ui::Painter &p, int screenW, const ui::ScreenView &brand, const View &v, PaintOut &out);
 
 }

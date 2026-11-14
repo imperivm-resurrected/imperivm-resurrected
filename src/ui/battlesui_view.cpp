@@ -17,8 +17,7 @@ using namespace ui;
 namespace battlesui {
 namespace {
 
-constexpr int kMargin = 24, kGap = 16, kTabsY = 90, kTabsH = 38, kBodyTop = 142, kBodyBottom = 702, kFooterY = 714, kFooterH = 38;
-constexpr int kPad = 20, kHeaderH = 30, kHeaderGap = 14, kButtonH = 40, kSegmentH = 34, kWideCard = 820;
+constexpr int kGap = 16, kPad = 20, kHeaderH = 30, kHeaderGap = 14, kButtonH = 40, kSegmentH = 34, kWideCard = 820;
 
 // The pictures are illustrations and keep their own gold frame.
 const COLORREF kFrameGold = RGB(214, 170, 84), kFrameGoldDim = RGB(127, 98, 48);
@@ -46,15 +45,18 @@ int RawWrapped(Painter &p, int x, int y, int w, int h, const std::string &t, COL
 	return used;
 }
 
-std::string Upper(const std::string &text)
+// League Gothic is only ever drawn in capitals.
+std::string Caps(const std::string &text)
 {
-	std::wstring w = W(Tr(text));
+	std::wstring w = W(text);
 	if (!w.empty()) CharUpperBuffW(&w[0], static_cast<DWORD>(w.size()));
 	const int n = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), static_cast<int>(w.size()), nullptr, 0, nullptr, nullptr);
 	std::string out(n > 0 ? n : 0, '\0');
 	if (n > 0) WideCharToMultiByte(CP_UTF8, 0, w.c_str(), static_cast<int>(w.size()), &out[0], n, nullptr, nullptr);
 	return out;
 }
+
+std::string Upper(const std::string &text) { return Caps(Tr(text)); }
 
 // The names of the games stay as they are in every language.
 const char *TabName(int tab)
@@ -212,25 +214,32 @@ void PaintDifficulty(Painter &p, int x, int y, int w, const View &v)
 
 constexpr int kDifficultyH = 22 + kSegmentH;
 
+// Where a picture is missing: a dark box with the brand's mark faintly in its middle.
+void PaintPlaceholder(Painter &p, int x, int y, int w, int h)
+{
+	p.Fill(x, y, w, h, pal::bg);
+	p.Frame(x, y, w, h, pal::hairline);
+	PaintIsotype(p, x + w / 2, y + h / 2, h * 35 / 100, 46);
+}
+
+bool HasPixels(const BattleImage *img) { return img && img->w > 0 && img->h > 0; }
+
 // The picture keeps its shape inside the box and sits at its top left.
 RECT PaintPicture(Painter &p, int x, int y, int boxW, int boxH, const BattleImage *img)
 {
 	int w = boxW, h = boxH;
-	if (img && img->w > 0 && img->h > 0) {
-		h = w * img->h / img->w;
-		if (h > boxH) {
-			h = boxH;
-			w = h * img->w / img->h;
-		}
-	}
-	else {
+	if (!HasPixels(img)) {
 		h = std::min(boxH, w * 360 / 440);
+		PaintPlaceholder(p, x, y, w, h);
+		return {x, y, x + w, y + h};
+	}
+	h = w * img->h / img->w;
+	if (h > boxH) {
+		h = boxH;
+		w = h * img->w / img->h;
 	}
 	p.Fill(x - 4, y - 4, w + 8, h + 8, pal::bg);
-	if (img) p.Image(x, y, w, h, img->bgra.data(), img->w, img->h);
-	else {
-		p.Diamond(x + w / 2, y + h / 2, 8, pal::lineStrong);
-	}
+	p.Image(x, y, w, h, img->bgra.data(), img->w, img->h);
 	p.Frame(x - 4, y - 4, w + 8, h + 8, kFrameGold);
 	p.Frame(x - 1, y - 1, w + 2, h + 2, kFrameGoldDim);
 	return {x, y, x + w, y + h};
@@ -247,8 +256,11 @@ int PaintTitle(Painter &p, int x, int y, int w, const BattleTitle &t, int tab, c
 	SetTextCharacterExtra(p.dc, 0);
 	y += 24;
 	p.Font(2);
-	const int th = std::min(p.Measure(w, t.name), 90);
-	p.TextWrapped(x, y, w, th + 4, t.name, pal::text);
+	const std::string name = Caps(t.name);
+	p.raw = true;
+	const int th = std::min(p.Measure(w, name), 90);
+	p.raw = false;
+	RawWrapped(p, x, y, w, th + 4, name, pal::text);
 	y += th + 8;
 	if (!v.badge.empty()) {
 		p.Font(4);
@@ -403,10 +415,21 @@ void PaintDetail(Painter &p, int x, int y, int w, int h, const View &v, PaintOut
 	if (s.selList < 0 || s.selIndex < 0 || s.selIndex >= static_cast<int>(s.lists[s.selList].size())) {
 		bool empty = true;
 		for (const Line &l : BuildLines(s)) empty = empty && l.header;
-		if (s.open && empty) {
+		if (!s.open || !empty) return;
+		if (!v.packs[s.tab].installed) {
 			p.Font(0);
 			p.Text(x, y + h / 2 - 20, w, 40, EmptyText(s.tab), pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			return;
 		}
+		// The campaign is in the mods folder, but the content profile in use leaves it out.
+		const int cy = y + h / 2;
+		p.Font(2);
+		Raw(p, x + kPad, cy - 70, w - kPad * 2, 32, Upper("Not active"), pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Font(0);
+		p.Text(x + kPad, cy - 34, w - kPad * 2, 24, "Activate it in Additional content", pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Font(1);
+		const int bw = std::max(220, p.TextWidth("Additional content") + 48);
+		p.Button(x + (w - bw) / 2, cy + 8, bw, kButtonH, "Additional content", kActContent, 0, v.mouseX, v.mouseY, !s.starting && !v.loading, true);
 		return;
 	}
 	const BattleTitle title = SplitBattleTitle(BattleTitleWithoutGame(s.lists[s.selList][s.selIndex].title));
@@ -454,25 +477,31 @@ void PaintDetail(Painter &p, int x, int y, int w, int h, const View &v, PaintOut
 	PaintButtons(p, innerX + innerW, buttonsY, v);
 }
 
-// A picture kept in shape and centred in its box, or a lozenge when there is none.
+// A picture kept in shape and centred in its box, or the placeholder when there is none.
 void PaintFitted(Painter &p, int x, int y, int w, int h, const BattleImage *img)
 {
+	if (!HasPixels(img)) {
+		PaintPlaceholder(p, x, y, w, h);
+		return;
+	}
 	p.Fill(x, y, w, h, pal::bg);
-	if (img && img->w > 0 && img->h > 0) {
-		int iw = w, ih = w * img->h / img->w;
-		if (ih > h) {
-			ih = h;
-			iw = h * img->w / img->h;
-		}
-		p.Image(x + (w - iw) / 2, y + (h - ih) / 2, iw, ih, img->bgra.data(), img->w, img->h);
+	int iw = w, ih = w * img->h / img->w;
+	if (ih > h) {
+		ih = h;
+		iw = h * img->w / img->h;
 	}
-	else {
-		p.Diamond(x + w / 2, y + h / 2, 7, pal::lineStrong);
-	}
+	p.Image(x + (w - iw) / 2, y + (h - ih) / 2, iw, ih, img->bgra.data(), img->w, img->h);
 	p.Frame(x, y, w, h, pal::hairline);
 }
 
-constexpr int kBannerY = 96, kBannerH = 226, kCampaignsY = 338, kCardsY = 376;
+
+constexpr int kBannerH = 226, kCampaignsGap = 16, kCampaignsH = 38, kHeaderTabH = 52;
+const int kOverviewTabs[] = {kBattlesTabImperivm1, kBattlesTabImperivm2, kBattlesTabGreat, kBattlesTabCustom};
+
+// Where the content goes under the header, in this screen's units.
+struct Body {
+	int x = 0, top = 0, w = 0, bottom = 0;
+};
 
 // The newest game of all, ready to go on; or, with none, where to begin.
 void PaintContinue(Painter &p, int x, int y, int w, int h, const View &v)
@@ -491,7 +520,7 @@ void PaintContinue(Painter &p, int x, int y, int w, int h, const View &v)
 	const SaveInfo &g = v.latest;
 	const int picW = 290, picH = h - 40;
 	PaintFitted(p, x + 20, y + 20, picW, picH, g.picture.get());
-	p.Frame(x + 17, y + 17, picW + 6, picH + 6, kFrameGold);
+	if (HasPixels(g.picture.get())) p.Frame(x + 17, y + 17, picW + 6, picH + 6, kFrameGold);
 	const int tx = x + 20 + picW + 30, tw = x + w - 24 - tx;
 	p.Font(4);
 	SetTextCharacterExtra(p.dc, p.S(1));
@@ -500,7 +529,7 @@ void PaintContinue(Painter &p, int x, int y, int w, int h, const View &v)
 	p.Font(3);
 	p.Text(tx, y + 44, tw, 18, TabName(g.tab), pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	p.Font(2);
-	Raw(p, tx, y + 62, tw, 32, SplitBattleTitle(BattleTitleWithoutGame(g.title)).name, pal::text);
+	Raw(p, tx, y + 62, tw, 32, Caps(SplitBattleTitle(BattleTitleWithoutGame(g.title)).name), pal::text);
 	p.Font(0);
 	Raw(p, tx, y + 100, tw, 22, g.name, pal::text);
 	std::string when = TrFmt("Saved %s", {g.when});
@@ -531,15 +560,17 @@ std::string CountText(int tab, int n)
 {
 	if (tab == kBattlesTabGreat) return n == 1 ? Tr("1 battle") : TrFmt("%s battles", {std::to_string(n)});
 	if (tab == kBattlesTabCustom) return n == 1 ? Tr("1 adventure") : TrFmt("%s adventures", {std::to_string(n)});
+	if (tab == kBattlesTabConquests) return n == 1 ? Tr("1 conquest") : TrFmt("%s conquests", {std::to_string(n)});
 	return n == 1 ? Tr("1 campaign") : TrFmt("%s campaigns", {std::to_string(n)});
 }
 
 // The name a card shows: the campaign itself when its game has only one, the count when it has more.
-std::string CardTitle(const BattlesSnapshot &s, int tab, int n)
+std::string CardTitle(const View &v, int tab, int n)
 {
+	const BattlesSnapshot &s = v.snap;
 	if (tab == kBattlesTabGreat) return Tr("Great Battles of Rome");
 	if (tab == kBattlesTabCustom) return Tr("Custom adventures");
-	if (n == 0) return Tr("Not installed");
+	if (n == 0) return Tr(v.packs[tab].installed ? "Not active" : "Not installed");
 	if (n > 1) return CountText(tab, n);
 	for (const BattlesEntry &e : s.lists[kBattlesOthers]) {
 		if (BattlesInTab(tab, kBattlesOthers, e.path)) return SplitBattleTitle(BattleTitleWithoutGame(e.title)).name;
@@ -555,17 +586,21 @@ void PaintCampaignCard(Painter &p, int x, int y, int w, int h, int tab, const Vi
 	const int n = AdventuresIn(s, tab);
 	PaintGlassCard(p, x, y, w, h);
 	if (hot) p.Frame(x, y, w, h, pal::edgeHot);
-	PaintFitted(p, x + 12, y + 12, w - 24, 150, s.covers[tab].get());
-	const int tx = x + 16, tw = w - 32;
+	// A shorter card keeps room for its texts by giving the picture less height.
+	const int picH = std::max(90, std::min(150, h - 148));
+	// A campaign whose pack is not active is not in the game's list: its picture comes from the pack.
+	PaintFitted(p, x + 12, y + 12, w - 24, picH, s.covers[tab] ? s.covers[tab].get() : v.packCovers[tab].get());
+	const int tx = x + 16, tw = w - 32, ty = y + 22 + picH;
 	p.Font(4);
 	SetTextCharacterExtra(p.dc, p.S(1));
-	Raw(p, tx, y + 172, tw, 18, Upper(TabName(tab)), pal::redText);
+	Raw(p, tx, ty, tw, 18, Upper(TabName(tab)), pal::redText);
 	SetTextCharacterExtra(p.dc, 0);
 	p.Font(2);
-	RawWrapped(p, tx, y + 194, tw, 58, CardTitle(s, tab, n), n == 0 ? pal::textDim : pal::text);
+	RawWrapped(p, tx, ty + 22, tw, 58, Caps(CardTitle(v, tab, n)), n == 0 ? pal::textDim : pal::text);
 	p.Fill(tx, y + h - 42, tw, 1, pal::hairline);
 	p.Font(3);
 	if (n > 0) Raw(p, tx, y + h - 36, tw, 24, CountText(tab, n), pal::textDim);
+	else if (v.packs[tab].installed) p.Text(tx, y + h - 36, tw, 24, "Activate it in Additional content", pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	if (v.savedInTab[tab] > 0) {
 		p.Font(4);
 		const std::string badge = Tr("In progress");
@@ -576,14 +611,123 @@ void PaintCampaignCard(Painter &p, int x, int y, int w, int h, int tab, const Vi
 	if (enabled) p.AddHit(x, y, w, h, kActOpenTab, tab);
 }
 
-void PaintOverview(Painter &p, int W, const View &v)
+void PaintOverview(Painter &p, const Body &b, const View &v)
 {
-	PaintContinue(p, kMargin, kBannerY, W - kMargin * 2, kBannerH, v);
-	PaintGroupHeader(p, kMargin + 4, kCampaignsY, W - kMargin * 2 - 8, Upper("Campaigns"));
-	const int tabs[] = {kBattlesTabImperivm1, kBattlesTabImperivm2, kBattlesTabGreat, kBattlesTabCustom};
-	const int count = static_cast<int>(sizeof(tabs) / sizeof(tabs[0]));
-	const int cardW = (W - kMargin * 2 - kGap * (count - 1)) / count;
-	for (int i = 0; i < count; i++) PaintCampaignCard(p, kMargin + i * (cardW + kGap), kCardsY, cardW, kBodyBottom - kCardsY, tabs[i], v);
+	PaintContinue(p, b.x, b.top, b.w, kBannerH, v);
+	const int campaignsY = b.top + kBannerH + kCampaignsGap, cardsY = campaignsY + kCampaignsH;
+	PaintGroupHeader(p, b.x + 4, campaignsY, b.w - 8, Upper("Campaigns"));
+	const int count = static_cast<int>(sizeof(kOverviewTabs) / sizeof(kOverviewTabs[0]));
+	const int cardW = (b.w - kGap * (count - 1)) / count;
+	for (int i = 0; i < count; i++) PaintCampaignCard(p, b.x + i * (cardW + kGap), cardsY, cardW, b.bottom - cardsY, kOverviewTabs[i], v);
+}
+
+// The caption under the title: how many adventures there are and how many have a game going.
+std::string CaptionOf(const View &v)
+{
+	const BattlesSnapshot &s = v.snap;
+	if (!s.open) return "";
+	if (s.tab == kBattlesTabConquests) return CountText(s.tab, AdventuresIn(s, s.tab));
+	std::string text;
+	int saved = 0;
+	if (ShowsOverview(v)) {
+		int n = 0;
+		for (int tab : kOverviewTabs) {
+			n += AdventuresIn(s, tab);
+			saved += v.savedInTab[tab];
+		}
+		text = n == 1 ? Tr("1 adventure") : TrFmt("%s adventures", {std::to_string(n)});
+	}
+	else {
+		const int n = AdventuresIn(s, s.tab);
+		if (n == 0 && (s.tab == kBattlesTabImperivm1 || s.tab == kBattlesTabImperivm2)) return Tr(v.packs[s.tab].installed ? "Not active" : "Not installed");
+		text = CountText(s.tab, n);
+		saved = v.savedInTab[s.tab];
+	}
+	if (saved > 0) text += "  \xC2\xB7  " + TrFmt("%s in progress", {std::to_string(saved)});
+	return text;
+}
+
+// The tabs on the title's baseline, as the lobby has them, while they fit before `right`: first all as wide as the widest, as there,
+// then each as wide as its name with less and less room around it; in a row of their own under the caption when none of that fits.
+// Returns where the content starts, in the units of `l`.
+int PaintHeaderTabs(Painter &h, const ScreenLayout &l, const std::string &title, const std::vector<TabSpec> &tabs, int right, int mx, int my)
+{
+	struct Fit {
+		bool even;
+		int pad, gap;
+	};
+	static const Fit kFits[] = {{true, 44, 48}, {false, 44, 48}, {false, 32, 40}, {false, 24, 32}, {false, 16, 24}};
+	SelectObject(h.dc, BrandFont(BrandFace::Display, l.titleSize, h.s));
+	// As PaintScreenTitle measures the title when it has no tabs.
+	const int titleW = std::min(std::max(160, right - 32 - l.margin), h.CapsWidth(title, 1) + 4);
+	h.Font(2);
+	std::vector<int> names;
+	int widest = 0;
+	for (const TabSpec &t : tabs) {
+		names.push_back(h.CapsWidth(t.label, 2));
+		widest = std::max(widest, names.back());
+	}
+	const auto rowW = [&](const Fit &f) {
+		int w = (static_cast<int>(names.size()) - 1) * 6;
+		for (int n : names) w += (f.even ? widest : n) + f.pad;
+		return w;
+	};
+	const Fit *fit = nullptr;
+	for (const Fit &f : kFits) {
+		if (!fit && l.margin + titleW + f.gap + rowW(f) + 32 <= right) fit = &f;
+	}
+	int x = l.margin + titleW + (fit ? fit->gap : 0), y = l.titleY + l.titleH - kHeaderTabH - 4, top = l.top;
+	if (!fit) {
+		fit = &kFits[sizeof(kFits) / sizeof(kFits[0]) - 1];
+		for (const Fit &f : kFits) {
+			if (rowW(f) <= l.w - 2 * l.margin) {
+				fit = &f;
+				break;
+			}
+		}
+		x = l.margin;
+		y = l.infoY + l.infoH + (l.roomy ? 20 : 14);
+		top = y + kHeaderTabH + (l.roomy ? 28 : 20);
+	}
+	for (size_t i = 0; i < tabs.size(); i++) {
+		const int w = (fit->even ? widest : names[i]) + fit->pad;
+		PaintTabs(h, x, y, {tabs[i]}, mx, my, w, kHeaderTabH, 2);
+		x += w + 6;
+	}
+	return top;
+}
+
+// The header of the full screens, the lobby's, drawn in their units over the same canvas so that it comes out at the size it has
+// there; returns where the content goes, in this screen's units.
+Body PaintHeader(Painter &p, int screenW, const ScreenView &brand, const View &v)
+{
+	const float k = brand.s / p.s;
+	Painter h = p;
+	h.s = brand.s;
+	UseScreenFonts(h);
+	const ScreenLayout l = ScreenLayoutFor(static_cast<int>(screenW / k + 0.5f), static_cast<int>(kScreenH / k + 0.5f));
+	const BattlesSnapshot &s = v.snap;
+	// The Conquest button of the main menu opens the same screen with only the conquests: it has no tabs.
+	const bool conquests = s.tab == kBattlesTabConquests, overview = ShowsOverview(v);
+	// On the overview Back leaves the screen and in a campaign it goes back to the overview; the conquests have no overview.
+	const int back = overview || conquests ? kActBack : kActOverview;
+	const int right = PaintHeaderActions(h, l, {{"Back", back, true, !s.starting && !v.loading}}, v.mouseX, v.mouseY);
+	const std::string title = conquests ? "Conquests" : "Great Battles";
+	PaintScreenTitle(h, l, title, {}, right, v.mouseX, v.mouseY);
+	int top = l.top;
+	if (!overview && !conquests) {
+		std::vector<TabSpec> tabs;
+		for (int tab : kOverviewTabs) tabs.push_back({TabName(tab), kActTab, tab, s.tab == tab, !s.starting && !s.switching});
+		top = PaintHeaderTabs(h, l, title, tabs, right, v.mouseX, v.mouseY);
+	}
+	h.raw = true;
+	PaintScreenInfo(h, l, CaptionOf(v));
+	Body b;
+	b.x = static_cast<int>(l.margin * k + 0.5f);
+	b.top = static_cast<int>(top * k + 0.5f);
+	b.w = screenW - 2 * b.x;
+	b.bottom = kScreenH - b.x;
+	return b;
 }
 
 }
@@ -610,41 +754,19 @@ int ScreenWidth(int frameW, int frameH)
 	return std::max(1000, static_cast<int>(frameW / ScreenScale(frameW, frameH) + 0.5f));
 }
 
-void PaintBattlesScreen(Painter &p, int screenW, const View &v, PaintOut &out)
+void PaintBattlesScreen(Painter &p, int screenW, const ScreenView &brand, const View &v, PaintOut &out)
 {
-	const int W = screenW;
-	// The Conquest button of the main menu opens the same screen with only the conquests: it has no tabs.
-	const bool conquests = v.snap.tab == kBattlesTabConquests;
-	PaintWindowHeader(p, W, Upper(conquests ? "Conquests" : "Great Battles"));
-
-	// The overview: the game to go on with and a card per campaign; Back leaves the screen.
+	const Body b = PaintHeader(p, screenW, brand, v);
+	// The overview: the game to go on with and a card per campaign.
 	if (ShowsOverview(v)) {
 		out = PaintOut();
-		PaintOverview(p, W, v);
-		p.Button(kMargin, kFooterY, 150, kFooterH, "Back", kActBack, 0, v.mouseX, v.mouseY, !v.snap.starting && !v.loading);
+		PaintOverview(p, b, v);
 		return;
 	}
-
-	if (!conquests) {
-		const std::pair<int, const char *> kTabs[] = {{kBattlesTabImperivm1, TabName(kBattlesTabImperivm1)}, {kBattlesTabImperivm2, TabName(kBattlesTabImperivm2)},
-			{kBattlesTabGreat, TabName(kBattlesTabGreat)}, {kBattlesTabCustom, TabName(kBattlesTabCustom)}};
-		p.Font(1);
-		int tabW = 160;
-		for (const auto &t : kTabs) tabW = std::max(tabW, p.TextWidth(t.second) + 40);
-		tabW = std::min(tabW, (W - kMargin * 2 - 18) / 4);
-		std::vector<TabSpec> tabs;
-		for (const auto &t : kTabs) tabs.push_back({t.second, kActTab, t.first, v.snap.tab == t.first, !v.snap.starting && !v.snap.switching});
-		PaintTabs(p, kMargin, kTabsY, tabs, v.mouseX, v.mouseY, tabW, kTabsH);
-	}
-	p.Fill(kMargin, kTabsY + kTabsH - 1, W - kMargin * 2, 1, pal::hairline);
-
-	const int listW = std::max(320, std::min(420, W * 30 / 100));
-	PaintList(p, kMargin, kBodyTop, listW, kBodyBottom - kBodyTop, v, out);
-	const int detailX = kMargin + listW + kGap;
-	PaintDetail(p, detailX, kBodyTop, W - kMargin - detailX, kBodyBottom - kBodyTop, v, out);
-
-	// In a campaign Back goes to the overview; the conquests have none and leave.
-	p.Button(kMargin, kFooterY, 150, kFooterH, "Back", conquests ? kActBack : kActOverview, 0, v.mouseX, v.mouseY, !v.snap.starting && !v.loading);
+	const int listW = std::max(320, std::min(420, screenW * 30 / 100));
+	PaintList(p, b.x, b.top, listW, b.bottom - b.top, v, out);
+	const int detailX = b.x + listW + kGap;
+	PaintDetail(p, detailX, b.top, b.x + b.w - detailX, b.bottom - b.top, v, out);
 }
 
 }

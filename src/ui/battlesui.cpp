@@ -16,6 +16,7 @@
 #include "core/log.h"
 #include "game/battlelist.h"
 #include "game/greatbattles.h"
+#include "mods/mods.h"
 #include "mods/savelib.h"
 #include "ui/battlesui_view.h"
 #include "ui/fullscreen.h"
@@ -57,9 +58,15 @@ struct SavesCache {
 	std::shared_ptr<const BattleImage> thumb;
 	// The diary of each save already read, by its path, with the save's time: a save written again is read again.
 	std::map<std::string, std::pair<uint64_t, std::shared_ptr<const std::vector<ObjectiveNote>>>> diaries;
+	// The content packs of the Imperivm I and II campaigns, from the mods' scan, and their pictures: read again when the scan changes
+	// or the content screen, opened from here, closes.
+	bool packsRead = false;
+	uint64_t packsSerial = 0;
+	BattleCampaignPack packs[kBattlesTabCount];
+	std::shared_ptr<const BattleImage> packCovers[kBattlesTabCount];
 };
 SavesCache g_saves;
-bool g_savesWasOpen = false;
+bool g_savesWasOpen = false, g_modsWasOpen = false;
 
 std::string TimeText(uint64_t ft)
 {
@@ -131,6 +138,61 @@ std::shared_ptr<const std::vector<ObjectiveNote>> DiaryOf(const SaveRec &rec)
 	return notes;
 }
 
+// The picture next to the adventure of a pack, read from the mods folder: an inactive pack is not in the game's files.
+std::shared_ptr<const BattleImage> PackPicture(const BattleCampaignPack &pack)
+{
+	std::string rel = BattlePicturePath(pack.adventure);
+	if (!pack.installed || rel.empty()) return nullptr;
+	std::replace(rel.begin(), rel.end(), '/', '\\');
+	const std::string file = ModsFolderPath() + "\\" + pack.folder + "\\" + rel;
+	const DWORD kMaxBytes = 32u << 20;
+	HANDLE f = CreateFileA(file.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
+	if (f == INVALID_HANDLE_VALUE) return nullptr;
+	std::vector<unsigned char> data;
+	LARGE_INTEGER size = {};
+	DWORD got = 0;
+	if (GetFileSizeEx(f, &size) && size.QuadPart > 0 && size.QuadPart <= static_cast<LONGLONG>(kMaxBytes)) {
+		data.resize(static_cast<size_t>(size.QuadPart));
+		if (!ReadFile(f, data.data(), static_cast<DWORD>(data.size()), &got, nullptr)) got = 0;
+		data.resize(got);
+	}
+	CloseHandle(f);
+	auto img = std::make_shared<BattleImage>();
+	if (DecodeBattleBmp(data.data(), data.size(), *img)) return img;
+	LogW("ui", "adventure screen: the picture of the pack %s could not be read", pack.folder.c_str());
+	return nullptr;
+}
+
+// Whether the campaigns of Imperivm I and II are in a content pack, and whether the game mounted it: a pack left out of the profile
+// in use keeps its adventures out of the game's list.
+void ReadPacks(View &v)
+{
+	const uint64_t serial = ModsListSerial();
+	if (!g_saves.packsRead || g_saves.packsSerial != serial) {
+		g_saves.packsRead = true;
+		g_saves.packsSerial = serial;
+		const std::vector<std::string> mounted = ModsMountedProfile().mods;
+		std::vector<BattlePackFiles> packs;
+		for (const ModInfo &m : ModsList()) {
+			BattlePackFiles pack;
+			pack.folder = m.folder;
+			pack.active = std::find(mounted.begin(), mounted.end(), m.folder) != mounted.end();
+			for (const std::string &path : m.paths) {
+				if (path.size() > 5 && _stricmp(path.c_str() + path.size() - 5, ".bfhp") == 0) pack.files.push_back(path);
+			}
+			if (!pack.files.empty()) packs.push_back(std::move(pack));
+		}
+		for (int tab : {kBattlesTabImperivm1, kBattlesTabImperivm2}) {
+			const BattleCampaignPack found = BattleCampaignPackOf(packs, tab == kBattlesTabImperivm1 ? kBattleGameImperivm1 : kBattleGameImperivm2);
+			if (found.folder != g_saves.packs[tab].folder || found.adventure != g_saves.packs[tab].adventure) g_saves.packCovers[tab] = PackPicture(found);
+			g_saves.packs[tab] = found;
+			if (found.installed && !found.active) LogI("ui", "adventure screen: the pack %s has the campaign of tab %d but is not active", found.folder.c_str(), tab);
+		}
+	}
+	std::copy(std::begin(g_saves.packs), std::end(g_saves.packs), std::begin(v.packs));
+	std::copy(std::begin(g_saves.packCovers), std::end(g_saves.packCovers), std::begin(v.packCovers));
+}
+
 // Which adventure of the screen each game belongs to (by the title the game puts at the end of its name), the newest one of each, and
 // the newest of all. Conquests have their own games, which the overview does not show.
 void ReadSaves(const BattlesSnapshot &s, View &v)
@@ -199,6 +261,7 @@ void Refresh()
 	BattlesSnapshot snap = BattlesRead();
 	View saves;
 	ReadSaves(snap, saves);
+	if (snap.open) ReadPacks(saves);
 	std::lock_guard<std::mutex> lock(g_lock);
 	View &v = g_s.view;
 	if (!g_s.active) LogD("ui", "the new adventure screen opens");
@@ -212,6 +275,10 @@ void Refresh()
 	v.latest = std::move(saves.latest);
 	v.lastByRow = std::move(saves.lastByRow);
 	std::copy(std::begin(saves.savedInTab), std::end(saves.savedInTab), std::begin(v.savedInTab));
+	if (snap.open) {
+		std::copy(std::begin(saves.packs), std::end(saves.packs), std::begin(v.packs));
+		std::copy(std::begin(saves.packCovers), std::end(saves.packCovers), std::begin(v.packCovers));
+	}
 	if (v.loading && GetTickCount() - g_s.loadingAt > kLoadingMs) v.loading = false;
 	g_s.active = true;
 	g_s.lastRead = GetTickCount();
@@ -267,6 +334,7 @@ void Execute(const Command &cmd)
 		return;
 	}
 	case kActAllSaves: SavesUiOpen(); return;
+	case kActContent: ModUiOpen(); return;
 	case kActPage: {
 		std::lock_guard<std::mutex> lock(g_lock);
 		g_s.view.diary = cmd.arg == 1;
@@ -415,6 +483,7 @@ void BattlesUiGameTick()
 	if (!BattlesScreenWanted()) {
 		g_saves = SavesCache();
 		g_savesWasOpen = false;
+		g_modsWasOpen = false;
 		std::lock_guard<std::mutex> lock(g_lock);
 		if (g_s.active) g_s = State();
 		return;
@@ -423,6 +492,10 @@ void BattlesUiGameTick()
 	const bool savesOpen = SavesUiNeedsDraw();
 	if (g_savesWasOpen && !savesOpen) g_saves.rescan = true;
 	g_savesWasOpen = savesOpen;
+	// A pack may have been turned on or off on the content screen, opened from here.
+	const bool modsOpen = ModUiIsOpen();
+	if (g_modsWasOpen && !modsOpen) g_saves.packsRead = false;
+	g_modsWasOpen = modsOpen;
 	bool due = false;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
@@ -458,7 +531,7 @@ void BattlesUiDraw(uint32_t *buf, int w, int h)
 	if (!BeginFullScreen(r, ScreenView{s, screenW, kScreenH})) return;
 	r.Press(previous, mouseDown, {view.mouseX, view.mouseY});
 	PaintOut out;
-	PaintBattlesScreen(r.p, screenW, view, out);
+	PaintBattlesScreen(r.p, screenW, ScreenViewFor(w, h), view, out);
 	r.End();
 	std::lock_guard<std::mutex> lock(g_lock);
 	g_s.hits = std::move(r.hits);
