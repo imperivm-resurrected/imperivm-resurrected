@@ -6,6 +6,7 @@
 #include <shellapi.h>
 #include <winhttp.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <mutex>
 #include <string>
@@ -300,6 +301,11 @@ std::string AccountSteamId()
 
 HttpReply Http(const char *method, const std::string &path, const std::string &body, bool auth)
 {
+	return HttpWith(method, path, body, auth, HttpOptions());
+}
+
+HttpReply HttpWith(const char *method, const std::string &path, const std::string &body, bool auth, const HttpOptions &options)
+{
 	HttpReply out;
 	std::string token, steamId;
 	if (auth && !AccountFor(token, steamId)) {
@@ -322,7 +328,7 @@ HttpReply Http(const char *method, const std::string &path, const std::string &b
 	const std::wstring agent = UserAgent();
 	HINTERNET s = WinHttpOpen(agent.c_str(), WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
 	if (!s) s = WinHttpOpen(agent.c_str(), WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-	if (s) WinHttpSetTimeouts(s, kResolveMs, kConnectMs, kSendMs, kReceiveMs);
+	if (s) WinHttpSetTimeouts(s, kResolveMs, kConnectMs, options.sendMs ? options.sendMs : kSendMs, options.receiveMs ? options.receiveMs : kReceiveMs);
 	HINTERNET c = s ? WinHttpConnect(s, std::wstring(uc.lpszHostName, uc.dwHostNameLength).c_str(), uc.nPort, 0) : nullptr;
 	HINTERNET r = c ? WinHttpOpenRequest(c, winpath::Widen(method, CP_UTF8).c_str(), object.c_str(), nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
 						  secure ? WINHTTP_FLAG_SECURE : 0)
@@ -337,12 +343,22 @@ HttpReply Http(const char *method, const std::string &path, const std::string &b
 		close();
 		return out;
 	}
-	std::wstring headers = L"Accept: application/json\r\n";
-	if (!body.empty()) headers += L"Content-Type: application/json; charset=utf-8\r\n";
+	std::wstring headers = winpath::Widen(std::string("Accept: ") + (options.accept ? options.accept : "application/json") + "\r\n", CP_UTF8);
+	if (!body.empty()) headers += winpath::Widen(std::string("Content-Type: ") + (options.contentType ? options.contentType : "application/json; charset=utf-8") + "\r\n", CP_UTF8);
 	if (auth) headers += L"Authorization: Bearer " + winpath::Widen(token, CP_UTF8) + L"\r\n";
 	const DWORD size = static_cast<DWORD>(body.size());
-	if (!WinHttpSendRequest(r, headers.c_str(), static_cast<DWORD>(-1), size ? const_cast<char *>(body.data()) : WINHTTP_NO_REQUEST_DATA, size, size, 0) ||
-		!WinHttpReceiveResponse(r, nullptr)) {
+	// With a progress to tell, the body goes in pieces.
+	const bool pieces = options.progress && size > 0;
+	bool sent = WinHttpSendRequest(r, headers.c_str(), static_cast<DWORD>(-1), size && !pieces ? const_cast<char *>(body.data()) : WINHTTP_NO_REQUEST_DATA,
+					pieces ? 0 : size, size, 0) != FALSE;
+	for (DWORD at = 0; sent && pieces && at < size;) {
+		DWORD wrote = 0;
+		const DWORD piece = std::min<DWORD>(64 * 1024, size - at);
+		sent = WinHttpWriteData(r, body.data() + at, piece, &wrote) != FALSE && wrote > 0;
+		at += wrote;
+		options.progress(at, size);
+	}
+	if (!sent || !WinHttpReceiveResponse(r, nullptr)) {
 		out.failure = "network error " + std::to_string(GetLastError());
 		close();
 		return out;
@@ -350,7 +366,10 @@ HttpReply Http(const char *method, const std::string &path, const std::string &b
 	DWORD code = 0, codeSize = sizeof(code);
 	WinHttpQueryHeaders(r, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &code, &codeSize, WINHTTP_NO_HEADER_INDEX);
 	out.status = static_cast<int>(code);
-	char buf[8192];
+	DWORD length = 0, lengthSize = sizeof(length);
+	if (!WinHttpQueryHeaders(r, WINHTTP_QUERY_CONTENT_LENGTH | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &length, &lengthSize, WINHTTP_NO_HEADER_INDEX)) length = 0;
+	const size_t most = options.maxBody ? options.maxBody : kMaxBody;
+	char buf[16384];
 	for (;;) {
 		DWORD n = 0;
 		if (!WinHttpReadData(r, buf, sizeof(buf), &n)) {
@@ -358,11 +377,12 @@ HttpReply Http(const char *method, const std::string &path, const std::string &b
 			break;
 		}
 		if (!n) break;
-		if (out.body.size() + n > kMaxBody) {
+		if (out.body.size() + n > most) {
 			out.failure = "answer too large";
 			break;
 		}
 		out.body.append(buf, n);
+		if (options.progress && !pieces) options.progress(out.body.size(), length);
 	}
 	close();
 	if (auth && out.status == 401) Forget("the server answered 401 to the token");

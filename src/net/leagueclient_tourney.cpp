@@ -19,7 +19,9 @@
 #include "core/guard.h"
 #include "core/json.h"
 #include "core/log.h"
+#include "core/sha256.h"
 #include "core/tournament.h"
+#include "game/cupmaps.h"
 #include "net/leagueclient_internal.h"
 #include "net/steamnet.h"
 
@@ -69,6 +71,7 @@ std::map<int64_t, std::string> g_codeIds;
 // Until when the reads wait after the server said too many requests (0: they don't).
 DWORD g_quietUntil = 0;
 std::set<std::pair<int, int64_t>> g_busy;
+TourneyUploadView g_upload;
 std::deque<TourneyOpResult> g_results;
 std::deque<TourneyNotice> g_notices;
 TourneyTold g_told;
@@ -90,6 +93,7 @@ const char *OpName(TourneyOp op)
 	case TourneyOp::CheckinNow: return "early check-in";
 	case TourneyOp::StartNow: return "early start";
 	case TourneyOp::RemoveEntry: return "entry removal";
+	case TourneyOp::Edit: return "cup change";
 	default: return "resolution";
 	}
 }
@@ -259,13 +263,17 @@ void Run(TourneyOp op, int64_t id, std::string method, std::string path, std::st
 		out.needed = no.needed;
 		out.retryAfter = no.retryAfter;
 		out.slug = no.slug;
+		out.requirement = no.requirement;
+		out.have = no.have;
+		out.need = no.need;
+		out.hash = no.hash;
 		if (r.status == 0 || r.status >= 500) LogW("league", "tournament %s failed (%s)", OpName(op), r.Describe().c_str());
 		else LogI("league", "tournament %s refused (%s)", OpName(op), r.Describe().c_str());
 	}
-	else if (op == TourneyOp::Create && !(parsed && TourneyParseCreated(j, created))) {
+	else if ((op == TourneyOp::Create || op == TourneyOp::Edit) && !(parsed && TourneyParseCreated(j, created))) {
 		out.ok = false;
 		out.error = "bad_answer";
-		LogW("league", "the league made the cup but its answer could not be read");
+		LogW("league", "the league took the cup but its answer could not be read");
 	}
 	else if (op == TourneyOp::FindCode && !(parsed && TourneyParseDetail(j, found))) {
 		out.ok = false;
@@ -281,18 +289,19 @@ void Run(TourneyOp op, int64_t id, std::string method, std::string path, std::st
 		const Json *entry = j.Get("entry");
 		out.waitlist = entry && entry->GetString("status") == "waitlist";
 	}
-	if (out.ok && op == TourneyOp::Create) {
+	if (out.ok && (op == TourneyOp::Create || op == TourneyOp::Edit)) {
 		out.tournament = created.id;
 		out.slug = created.slug;
 		out.inviteCode = created.inviteCode;
-		LogI("league", "cup made: %s (%lld)%s", created.slug.c_str(), static_cast<long long>(created.id), created.inviteCode.empty() ? "" : ", private");
+		LogI("league", "cup %s: %s (%lld)%s", op == TourneyOp::Create ? "made" : "changed", created.slug.c_str(), static_cast<long long>(created.id),
+			created.inviteCode.empty() ? "" : ", private");
 	}
 	if (out.ok && op == TourneyOp::FindCode) {
 		out.tournament = found.id;
 		out.slug = found.slug;
 		out.inviteCode = code;
 	}
-	if (out.ok && op != TourneyOp::Presence && op != TourneyOp::Create && op != TourneyOp::FindCode) {
+	if (out.ok && op != TourneyOp::Presence && op != TourneyOp::Create && op != TourneyOp::Edit && op != TourneyOp::FindCode) {
 		LogI("league", "tournament %s done (%lld)", OpName(op), static_cast<long long>(id));
 	}
 	TourneyNext next;
@@ -301,6 +310,14 @@ void Run(TourneyOp op, int64_t id, std::string method, std::string path, std::st
 	g_busy.erase({static_cast<int>(op), id});
 	if (fresh && g_mine.mine.next.match == next.match) g_mine.mine.next = next;
 	if (out.ok && op == TourneyOp::Create) RememberCode(created.slug, created.id, created.inviteCode);
+	if (out.ok && op == TourneyOp::Edit) {
+		// A cup made open has no code any more, and its page is read by its slug again.
+		if (created.inviteCode.empty()) {
+			g_codes.erase(created.slug);
+			g_codeIds.erase(created.id);
+		}
+		else RememberCode(created.slug, created.id, created.inviteCode);
+	}
 	if (out.ok && op == TourneyOp::FindCode) {
 		RememberCode(found.slug, found.id, code);
 		Page &p = g_pages[found.slug];
@@ -337,6 +354,94 @@ std::string TourneyPath(int64_t tournament, const char *what)
 std::string MatchPath(int64_t match, const char *what)
 {
 	return "/v1/tournaments/matches/" + std::to_string(match) + what;
+}
+
+// A cup made or changed whose scenario could not go up: the answer comes now, and the cup is not sent.
+void UploadFailed(TourneyOp op, int64_t id, const TourneyMap &m, const HttpReply &r, const std::string &error)
+{
+	TourneyOpResult out;
+	out.op = op;
+	out.id = id;
+	out.status = r.status;
+	out.mapTitle = m.title.empty() ? TourneyScenarioStem(m.file) : m.title;
+	Json j;
+	const TourneyRefusal no = !r.body.empty() && Json::Parse(r.body, j) ? TourneyParseRefusal(j) : TourneyRefusal();
+	out.error = !error.empty() ? error : r.failure == "not linked" ? "not_linked" : r.status == 413 ? "too_large" : r.status == 429 ? "rate_limited" : no.code;
+	if (out.error.empty()) out.error = r.status ? "upload_refused" : "upload_failed";
+	out.message = no.message;
+	out.retryAfter = no.retryAfter;
+	if (r.status == 0 || r.status >= 500) LogW("league", "the scenario %s could not go up (%s)", m.file.c_str(), error.empty() ? r.Describe().c_str() : error.c_str());
+	else LogI("league", "the scenario %s was refused (%s)", m.file.c_str(), error.empty() ? r.Describe().c_str() : error.c_str());
+	std::lock_guard<std::mutex> lock(g_mx);
+	g_busy.erase({static_cast<int>(op), id});
+	g_upload = TourneyUploadView();
+	g_results.push_back(out);
+}
+
+// The organizer's scenarios go up one by one, each once, and then the cup.
+void Publish(TourneyOp op, int64_t id, TourneyCupForm form, bool descriptionOnly)
+{
+	std::vector<TourneyMap> uploads;
+	for (const TourneyMap &m : form.maps) {
+		if (descriptionOnly || m.kind != TourneyMapKind::Upload) continue;
+		bool seen = false;
+		for (const TourneyMap &u : uploads) seen = seen || u.hash == m.hash;
+		if (!seen) uploads.push_back(m);
+	}
+	for (size_t i = 0; i < uploads.size(); i++) {
+		const TourneyMap &m = uploads[i];
+		{
+			std::lock_guard<std::mutex> lock(g_mx);
+			g_upload.active = true;
+			g_upload.index = static_cast<int>(i) + 1;
+			g_upload.count = static_cast<int>(uploads.size());
+			g_upload.done = 0;
+			g_upload.total = static_cast<uint64_t>(m.bytes);
+			g_upload.title = m.title;
+		}
+		std::string bytes;
+		if (!CupScenarioRead(m.file, bytes)) {
+			UploadFailed(op, id, m, HttpReply(), "map_unreadable");
+			return;
+		}
+		Sha256 h;
+		h.Add(bytes);
+		if (h.Hex() != m.hash) {
+			UploadFailed(op, id, m, HttpReply(), "map_changed");
+			return;
+		}
+		HttpOptions o;
+		o.contentType = "application/octet-stream";
+		o.sendMs = 300000;
+		o.receiveMs = 60000;
+		o.progress = [](uint64_t done, uint64_t total) {
+			std::lock_guard<std::mutex> lock(g_mx);
+			g_upload.done = done;
+			g_upload.total = total;
+		};
+		const HttpReply r = HttpWith("PUT", "/v1/maps/" + m.hash, bytes, true, o);
+		if (!r.Ok()) {
+			UploadFailed(op, id, m, r, std::string());
+			return;
+		}
+		LogI("league", "scenario %s up (%u bytes, %s)", m.file.c_str(), static_cast<unsigned>(bytes.size()), r.status == 201 ? "new" : "the league had it");
+	}
+	{
+		std::lock_guard<std::mutex> lock(g_mx);
+		g_upload = TourneyUploadView();
+	}
+	const bool edit = op == TourneyOp::Edit;
+	const std::string body = descriptionOnly ? TourneyCupDescriptionJson(form.description).Dump() : TourneyCupJson(form, edit).Dump();
+	Run(op, id, edit ? "PATCH" : "POST", edit ? TourneyPath(id, "") : std::string("/v1/tournaments"), body, std::string());
+}
+
+void StartPublish(TourneyOp op, int64_t id, const TourneyCupForm &form, bool descriptionOnly)
+{
+	{
+		std::lock_guard<std::mutex> lock(g_mx);
+		if (!g_busy.insert({static_cast<int>(op), id}).second) return;
+	}
+	SafeThread(Publish, op, id, form, descriptionOnly).detach();
 }
 
 }
@@ -499,7 +604,18 @@ void LeagueTourneyDispute(int64_t match, const std::string &text)
 
 void LeagueTourneyCreate(const TourneyCupForm &form)
 {
-	Start(TourneyOp::Create, 0, "POST", "/v1/tournaments", TourneyCupJson(form).Dump());
+	StartPublish(TourneyOp::Create, 0, form, false);
+}
+
+void LeagueTourneyEdit(int64_t tournament, const TourneyCupForm &form, bool descriptionOnly)
+{
+	StartPublish(TourneyOp::Edit, tournament, form, descriptionOnly);
+}
+
+TourneyUploadView LeagueTourneyUploading()
+{
+	std::lock_guard<std::mutex> lock(g_mx);
+	return g_upload;
 }
 
 void LeagueTourneyFindByCode(const std::string &code)

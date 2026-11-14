@@ -41,7 +41,7 @@ void LeagueTourneyWatching();
 enum class TourneyOp {
 	SignUp, Withdraw, CheckIn, Claim, Register, Presence, NoShow, Dispute,
 	// A community cup: made, found by its code, and its organizer's actions.
-	Create, FindCode, Cancel, CheckinNow, StartNow, RemoveEntry, Resolve,
+	Create, FindCode, Cancel, CheckinNow, StartNow, RemoveEntry, Resolve, Edit,
 };
 
 // The answer to something the player did.
@@ -66,6 +66,10 @@ struct TourneyOpResult {
 	// The cup made (and its code when private), the one a code found, or the one the player already organises.
 	int64_t tournament = 0;
 	std::string slug, inviteCode;
+	// requirement: "games" or "tier", what the player has and what the cup asks.
+	std::string requirement, have, need;
+	// A scenario of the cup that could not go up (its title), or the uploaded one the league does not have (map_missing: its SHA-256).
+	std::string mapTitle, hash;
 };
 // In a private cup the code the player found it with goes along.
 void LeagueTourneySignUp(int64_t tournament);
@@ -79,7 +83,19 @@ void LeagueTourneyRegisterRoom(int64_t match, uint64_t lobby, uint64_t specLobby
 void LeagueTourneyPresence(int64_t match, bool started);
 void LeagueTourneyClaimNoShow(int64_t match);
 void LeagueTourneyDispute(int64_t match, const std::string &text);
+// The organizer's own scenarios of the form go up first (PUT /v1/maps/:sha256), each once, then the cup is made (POST /v1/tournaments).
+// A scenario that changed since it was chosen fails with "map_changed".
 void LeagueTourneyCreate(const TourneyCupForm &form);
+// The same for a change of the organizer's cup (PATCH /v1/tournaments/:id); `descriptionOnly` once someone else signed up.
+void LeagueTourneyEdit(int64_t tournament, const TourneyCupForm &form, bool descriptionOnly);
+// The scenarios going up for a cup being made or changed: which of how many, and its bytes.
+struct TourneyUploadView {
+	bool active = false;
+	int index = 0, count = 0;
+	uint64_t done = 0, total = 0;
+	std::string title;
+};
+TourneyUploadView LeagueTourneyUploading();
 // The cup of an invitation code; its page is read by the code from then on, which also opens the private ones.
 void LeagueTourneyFindByCode(const std::string &code);
 // The code the player found or made a cup with; empty when none.
@@ -98,6 +114,22 @@ struct TourneyDisputesView {
 };
 // The open disputes of the player's cup as last read; read again in the background when older than `maxAgeMs`.
 TourneyDisputesView LeagueTourneyDisputes(int64_t tournament, int maxAgeMs = 15000);
+
+// The scenario of a cup's round on this computer.
+enum class CupMapStatus { Checking, Ready, Downloading, Failed, Missing, Different };
+struct CupMapState {
+	CupMapStatus status = CupMapStatus::Checking;
+	uint64_t got = 0, total = 0;
+	// Failed: "not_found" (the league does not have it), "network", "hash" (what came is not the file), "save", "too_large" or "pack".
+	std::string reason;
+	// The content pack that brings its own copy of the file, when that is what is in the way.
+	std::string pack;
+};
+// A round's map on this computer; Ready for a random one. A scenario is looked for the first time it is asked and every minute after;
+// an uploaded one the player lacks is downloaded from the league (GET /v1/maps/:sha256), checked and kept in Scenarios.
+CupMapState LeagueCupMap(const TourneyMap &m);
+// The downloads of these maps that failed are tried again.
+void LeagueCupMapsRetry(const std::vector<TourneyMap> &maps);
 
 // A cup being made and a code being looked up go by the id 0.
 bool LeagueTourneyBusy(TourneyOp op, int64_t id);
