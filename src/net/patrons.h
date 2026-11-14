@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+#include "core/league.h"
+
 // Players who support the mod, read from the honour roll of imperivmresurrected.com by SteamID.
 // Dev is the team of the mod, shown with its own laurel whether or not they are on the roll.
 enum class PatronTier { None, Gold, Silver, Bronze, Top10, Patron, Dev };
@@ -17,8 +19,13 @@ struct PatronInfo {
 
 // Called from UpdateRoom while it holds the room lock: these never take it.
 PatronInfo PatronOf(uint64_t id);
-// Looks up the ids that are not known yet, or were looked up too long ago, in the background.
+// The badge the player shows to the right of their name, from the same lookup (the league server's players lookup).
+LeagueBadge PlayerBadgeOf(uint64_t id);
+// Looks up the ids that are not known yet, or were looked up too long ago, in the background: the league server's players lookup,
+// or the honour roll's own when that one fails.
 void PatronsWatch(const std::vector<uint64_t> &ids);
+// Drops what is known of a player, so the next PatronsWatch asks again: their badge changed.
+void PatronsForget(uint64_t id);
 // For a player who has just joined and whose lookup has not finished: the notice is posted to the room when it does.
 void PatronsAnnounceLater(uint64_t room, uint64_t id, const std::string &name);
 std::string PatronJoinedNotice(const std::string &name, PatronTier tier);

@@ -35,6 +35,7 @@
 #include "ui/chatui.h"
 #include "ui/helpui.h"
 #include "ui/objectivesui.h"
+#include "net/leagueclient.h"
 #include "net/netdrop.h"
 #include "net/rejoin.h"
 #include "net/spectator.h"
@@ -586,6 +587,7 @@ int WINAPI HookSetDIBitsToDevice(HDC hdc, int xDest, int yDest, DWORD w, DWORD h
 	SpectatorGameThreadTick();
 	ZoomFogNoteImage();
 	NetDropTick();
+	LeagueGameThreadTick();
 	HWND hwnd = WindowFromDC(hdc);
 	const BITMAPINFOHEADER &hdr = bmi->bmiHeader;
 	bool usable = !g_failed && hwnd && hdr.biBitCount == 16 &&

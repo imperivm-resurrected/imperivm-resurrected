@@ -10,6 +10,7 @@
 #include "hooks/dmshim.h"
 #include "i18n/tr.h"
 #include "mods/downloads.h"
+#include "net/leagueclient.h"
 #include "net/steamnet.h"
 
 #include <map>
@@ -25,9 +26,12 @@ const size_t kMaxPerLookup = 16;
 const DWORD kKeepMs = 15 * 60 * 1000;
 // After a failed lookup, so a server that is down is not asked every second.
 const DWORD kRetryMs = 2 * 60 * 1000;
+// After the league server's lookup fails, the honour roll's is asked alone for a while.
+const DWORD kPlayersRouteRestMs = 15 * 60 * 1000;
 
 struct Entry {
 	PatronInfo info;
+	LeagueBadge badge;
 	DWORD at = 0;
 	bool known = false;
 };
@@ -42,6 +46,7 @@ std::map<uint64_t, Entry> g_cache;
 std::map<uint64_t, Pending> g_announce;
 bool g_busy = false;
 DWORD g_failedAt = 0;
+DWORD g_playersRouteFailedAt = 0;
 
 std::vector<PatronRollEntry> g_roll;
 int g_rollState = 0;
@@ -99,20 +104,56 @@ PatronTier TierFromName(const std::string &s)
 	return PatronTier::None;
 }
 
+// The league server's lookup: patrons and badges. False when it can't be used.
+bool LookupPlayers(const std::string &list, std::map<uint64_t, LeagueLookupEntry> &out)
+{
+	{
+		std::lock_guard<std::mutex> lock(g_mx);
+		if (g_playersRouteFailedAt && GetTickCount() - g_playersRouteFailedAt < kPlayersRouteRestMs) return false;
+	}
+	Json j;
+	std::string err = LeagueGetJson("/v1/players/lookup?ids=" + list, j);
+	if (err.empty() && !LeagueParsePlayersLookup(j, out)) err = "unexpected answer";
+	if (err.empty()) return true;
+	LogI("patrons", "the league's players lookup failed (%s); using the honour roll's for a while", err.c_str());
+	std::lock_guard<std::mutex> lock(g_mx);
+	g_playersRouteFailedAt = GetTickCount();
+	return false;
+}
+
+// The honour roll's own lookup, without badges.
+bool LookupPatrons(const std::string &list, std::map<uint64_t, LeagueLookupEntry> &out)
+{
+	Json j;
+	const std::string err = DlHttpGetJson(kLookupUrl + list, j);
+	const Json *found = err.empty() ? j.Get("patrons") : nullptr;
+	if (!found || found->type != Json::Object) {
+		LogW("patrons", "could not look up players (%s)", err.empty() ? "unexpected answer" : err.c_str());
+		return false;
+	}
+	for (const auto &kv : found->obj) {
+		const uint64_t id = _strtoui64(kv.first.c_str(), nullptr, 10);
+		if (!id) continue;
+		LeagueLookupEntry &e = out[id];
+		e.patronTier = kv.second.GetString("tier");
+		e.patronPlace = static_cast<int>(kv.second.GetNumber("place"));
+	}
+	return true;
+}
+
 void Lookup(std::vector<uint64_t> ids)
 {
-	std::string url = kLookupUrl;
-	for (size_t i = 0; i < ids.size(); i++) url += (i ? "," : "") + std::to_string(ids[i]);
-	Json j;
-	const std::string err = DlHttpGetJson(url, j);
-	const Json *found = err.empty() ? j.Get("patrons") : nullptr;
-	if (!err.empty()) LogW("patrons", "could not look up %u players (%s)", static_cast<unsigned>(ids.size()), err.c_str());
+	std::string list;
+	for (size_t i = 0; i < ids.size(); i++) list += (i ? "," : "") + std::to_string(ids[i]);
+	std::map<uint64_t, LeagueLookupEntry> found;
+	const bool badges = LookupPlayers(list, found);
+	const bool ok = badges || LookupPatrons(list, found);
 
 	std::vector<Pending> notices;
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
 		g_busy = false;
-		if (!found) {
+		if (!ok) {
 			g_failedAt = GetTickCount();
 			for (uint64_t id : ids) g_announce.erase(id);
 			return;
@@ -120,12 +161,16 @@ void Lookup(std::vector<uint64_t> ids)
 		const DWORD now = GetTickCount();
 		for (uint64_t id : ids) {
 			Entry &e = g_cache[id];
+			const LeagueBadge badge = e.badge;
 			e = Entry();
 			e.at = now;
 			e.known = true;
-			if (const Json *p = found->Get(std::to_string(id))) {
-				e.info.place = static_cast<int>(p->GetNumber("place"));
-				e.info.tier = TierFromName(p->GetString("tier"));
+			e.badge = badges ? LeagueBadge() : badge;
+			auto p = found.find(id);
+			if (p != found.end()) {
+				e.info.place = p->second.patronPlace;
+				e.info.tier = TierFromName(p->second.patronTier);
+				if (badges) e.badge = p->second.badge;
 			}
 			auto a = g_announce.find(id);
 			if (a == g_announce.end()) continue;
@@ -147,6 +192,13 @@ PatronInfo PatronOf(uint64_t id)
 	return it == g_cache.end() ? PatronInfo() : it->second.info;
 }
 
+LeagueBadge PlayerBadgeOf(uint64_t id)
+{
+	std::lock_guard<std::mutex> lock(g_mx);
+	auto it = g_cache.find(id);
+	return it == g_cache.end() ? LeagueBadge() : it->second.badge;
+}
+
 void PatronsWatch(const std::vector<uint64_t> &ids)
 {
 	std::vector<uint64_t> wanted;
@@ -164,6 +216,12 @@ void PatronsWatch(const std::vector<uint64_t> &ids)
 		g_failedAt = 0;
 	}
 	SafeThread(Lookup, wanted).detach();
+}
+
+void PatronsForget(uint64_t id)
+{
+	std::lock_guard<std::mutex> lock(g_mx);
+	g_cache.erase(id);
 }
 
 void PatronsRollRefresh()
