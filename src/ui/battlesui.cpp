@@ -18,6 +18,7 @@
 #include "game/greatbattles.h"
 #include "mods/savelib.h"
 #include "ui/battlesui_view.h"
+#include "ui/fullscreen.h"
 #include "ui/modui.h"
 #include "ui/savesui.h"
 #include "ui/widgets.h"
@@ -451,10 +452,10 @@ void BattlesUiDraw(uint32_t *buf, int w, int h)
 	}
 	const float s = ScreenScale(w, h);
 	const int screenW = ScreenWidth(w, h);
-	const uint32_t back = 0xff000000u | GetRValue(pal::panel) << 16 | GetGValue(pal::panel) << 8 | GetBValue(pal::panel);
-	std::fill(buf, buf + static_cast<size_t>(w) * h, back);
+	// The canvas can fall a pixel short of the frame, or past it on a narrow one: the page colour fills what it leaves.
+	std::fill(buf, buf + static_cast<size_t>(w) * h, 0xff000000u | PixelOf(pal::bg));
 	PanelRender r(g_canvas, buf, w, h);
-	if (!r.Begin(screenW, kScreenH, 0, false, s)) return;
+	if (!BeginFullScreen(r, ScreenView{s, screenW, kScreenH})) return;
 	r.Press(previous, mouseDown, {view.mouseX, view.mouseY});
 	PaintOut out;
 	PaintBattlesScreen(r.p, screenW, view, out);

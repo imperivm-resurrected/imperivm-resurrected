@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "game/battlelist.h"
+#include "ui/fullscreen.h"
 #include "ui/widgets.h"
 
 using namespace ui;
@@ -147,7 +148,7 @@ void PaintRow(Painter &p, const Line &l, bool selected, int x, int y, int w, int
 
 void PaintList(Painter &p, int x, int y, int w, int h, const View &v, PaintOut &out)
 {
-	PaintCard(p, x, y, w, h);
+	PaintGlassCard(p, x, y, w, h);
 	const BattlesSnapshot &s = v.snap;
 	const std::vector<Line> lines = BuildLines(s);
 	const bool counter = !v.progress.empty();
@@ -396,7 +397,7 @@ void PaintPages(Painter &p, int x, int y, int w, const View &v, const SaveInfo *
 
 void PaintDetail(Painter &p, int x, int y, int w, int h, const View &v, PaintOut &out)
 {
-	PaintCard(p, x, y, w, h);
+	PaintGlassCard(p, x, y, w, h);
 	const BattlesSnapshot &s = v.snap;
 	out.desc = ListGeom();
 	if (s.selList < 0 || s.selIndex < 0 || s.selIndex >= static_cast<int>(s.lists[s.selList].size())) {
@@ -476,7 +477,7 @@ constexpr int kBannerY = 96, kBannerH = 226, kCampaignsY = 338, kCardsY = 376;
 // The newest game of all, ready to go on; or, with none, where to begin.
 void PaintContinue(Painter &p, int x, int y, int w, int h, const View &v)
 {
-	PaintCard(p, x, y, w, h);
+	PaintGlassCard(p, x, y, w, h);
 	const BattlesSnapshot &s = v.snap;
 	const bool ready = s.open && !s.starting && !s.switching && !v.loading;
 	const int bw = 210, by = y + h - 20 - kButtonH;
@@ -552,7 +553,7 @@ void PaintCampaignCard(Painter &p, int x, int y, int w, int h, int tab, const Vi
 	const bool enabled = s.open && !s.starting && !s.switching && !v.loading;
 	const bool hot = enabled && p.Hover(x, y, w, h, v.mouseX, v.mouseY);
 	const int n = AdventuresIn(s, tab);
-	PaintCard(p, x, y, w, h);
+	PaintGlassCard(p, x, y, w, h);
 	if (hot) p.Frame(x, y, w, h, pal::edgeHot);
 	PaintFitted(p, x + 12, y + 12, w - 24, 150, s.covers[tab].get());
 	const int tx = x + 16, tw = w - 32;
@@ -612,7 +613,6 @@ int ScreenWidth(int frameW, int frameH)
 void PaintBattlesScreen(Painter &p, int screenW, const View &v, PaintOut &out)
 {
 	const int W = screenW;
-	PaintWindowFrame(p, W, kScreenH);
 	// The Conquest button of the main menu opens the same screen with only the conquests: it has no tabs.
 	const bool conquests = v.snap.tab == kBattlesTabConquests;
 	PaintWindowHeader(p, W, Upper(conquests ? "Conquests" : "Great Battles"));
