@@ -98,6 +98,20 @@ void PaintMapBox(Painter &p, int x, int y, int w, int h)
 	p.Shape(x + 210 * w / 258, y + 34 * h / 130, 12, 12, InUnitEllipse, RGB(0x2f, 0x6f, 0xd1));
 }
 
+// The round's map on this computer, in a line of the checks before the room.
+std::string MapCheckText(const TourneyMap &m, const CupMapState &s)
+{
+	if (!m.Scenario()) return Tr("Random map: nothing to download");
+	switch (s.status) {
+	case CupMapStatus::Ready: return Tr("The round's scenario is here, the same as everyone's");
+	case CupMapStatus::Checking: return Tr("Checking your copy of the round's scenario...");
+	case CupMapStatus::Downloading: return Tr("Downloading the round's scenario...");
+	case CupMapStatus::Missing: return Tr("You don't have the round's scenario");
+	case CupMapStatus::Different: return Tr("Your copy of the round's scenario is not the game's");
+	default: return Tr("The round's scenario could not be downloaded");
+	}
+}
+
 std::string PlaceText(int placement, int rounds)
 {
 	if (placement == 1) return Tr("Champion");
@@ -196,7 +210,7 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 	p.Text(ccx, my0 + 300, centerW, 24, n.map.Known() ? MapText(mapOnly) : Tr("Chosen in the room"), pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	// The size alone, as MapText writes it after the name.
 	const std::string full = MapText(n.map), name = MapText(mapOnly);
-	std::string sub = Tr(n.map.type == "scenario" ? "Scenario" : "Random map");
+	std::string sub = Tr(n.map.Scenario() ? "Scenario" : "Random map");
 	if (n.map.Known() && full.size() > name.size()) sub += full.substr(name.size());
 	sub += " \xC2\xB7 " + Tr("2 players");
 	p.Font(3);
@@ -229,11 +243,18 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 		else if (n.lobby) line = Tr("The room is open. You enter as a player; the map and the rules are the tournament's.");
 		else line = Tr("Nobody has opened the room yet: you will open it, with the map and the rules of the tournament.");
 	}
+	// Before the room: this computer's copy of the round's scenario, when it is not the cup's.
+	const std::string mapWarning = CupMapWarning(n.map);
+	COLORREF lineInk = pal::textDim;
+	if (!mapWarning.empty() && !inRoom && !live && n.status != TourneyMatchStatus::Disputed) {
+		line = mapWarning;
+		lineInk = pal::warn;
+	}
 	const int bw = 460, bh = l.roomy ? 72 : 60, by = cy + cardH + (l.roomy ? 24 : 16);
 	p.Button((l.w - bw) / 2, by, bw, bh, label, kTourney, ArgOf(kSubGo, n.match), mx, my, enabled, true, 2);
 	p.Font(0);
 	p.raw = true;
-	p.Text(m, by + bh + 8, inner, 24, line, pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	p.Text(m, by + bh + 8, inner, 24, line, lineInk, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	p.raw = false;
 
 	// Three cards: what is checked, the rules and what to do if something fails.
@@ -242,6 +263,7 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 	PaintGlassCard(p, m, ry, cw, rh);
 	PaintCaps(p, m + pad, ry + 20, cw - 2 * pad, 20, "Ready to enter", pal::caption);
 	const bool sameContent = n.contentKey.empty() || n.contentKey == SteamOwnGameplayKey();
+	const CupMapState mapState = LeagueCupMap(n.map);
 	const TourneyMyEntry *entry = MyEntry(mine, n.tournamentId);
 	struct Check {
 		bool ok;
@@ -249,7 +271,7 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 	} checks[] = {
 		{sameContent, sameContent ? TrFmt("%s active, the same content as the room", {n.contentName.empty() ? Tr("The mod's rules") : n.contentName})
 								  : TrFmt("This tournament needs %s: switch your content profile", {n.contentName.empty() ? Tr("other content") : n.contentName})},
-		{true, n.map.type == "scenario" ? Tr("A scenario: the room sends it if you don't have it") : Tr("Random map: nothing to download")},
+		{mapState.status == CupMapStatus::Ready, MapCheckText(n.map, mapState)},
 		{st.ready, st.ready ? Tr("Steam is ready") : Tr("Steam is not available. Open Steam and try again.")},
 		{!entry || entry->checkedIn, Tr(!entry || entry->checkedIn ? "Check-in done" : "Check-in missing")},
 	};
@@ -281,7 +303,7 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 	}
 	const std::pair<std::string, std::string> rules[] = {{Tr("Settings"), PresetText(n.settings)}, {Tr("Map"), n.map.Known() ? MapText(n.map) : Tr("Chosen in the room")},
 		{Tr("Civilizations"), Tr(n.settings.hideCivs ? "Hidden until the game starts" : "Visible in the room")},
-		{Tr("Spectators"), TrFmt("With a %s s delay", {std::to_string(TourneySpecDelay(n.settings))})}, {Tr("After"), after}};
+		{Tr("Spectators"), TourneySpecDelay(n.settings) ? TrFmt("With a %s s delay", {std::to_string(TourneySpecDelay(n.settings))}) : Tr("No spectators")}, {Tr("After"), after}};
 	ly = ry + 54;
 	for (const auto &r : rules) {
 		if (ly + 26 > ry + rh || r.second.empty()) continue;

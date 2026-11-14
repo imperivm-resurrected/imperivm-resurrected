@@ -344,9 +344,14 @@ void PaintRules(Painter &p, Ctx &c, int x, int y, int w, int h)
 	for (int r = 1; r <= rounds && !d.maps.empty(); r++) row(d.rounds ? StageText(TourneyStageOf(r, d.rounds), r) : Tr("Every round"), MapText(TourneyMapOfRound(d, r)));
 	if (d.maps.empty()) row(Tr("Maps"), Tr("Chosen in the room"));
 	row(Tr("Content"), ContentText(d));
-	row(Tr("Settings"), PresetText(d.settings));
-	row(Tr("Civilizations"), Tr(d.settings.hideCivs ? "Hidden until the game starts" : "Visible in the room"));
-	row(Tr("Spectators"), TrFmt("With a %s s delay", {std::to_string(TourneySpecDelay(d.settings))}));
+	const TourneyRoomRules rules = TourneyRulesOf(d.settings);
+	row(Tr("Settings"), PresetText(d.settings) + " (" + PresetSummary(rules.preset) + ")");
+	row(Tr("Civilizations"), Tr(rules.hideCivs ? "Hidden until the game starts" : "Visible in the room"));
+	row(Tr("Map and diplomacy"), Tr(rules.fog ? "fog" : "no fog") + ", " + Tr(rules.explored ? "map explored" : "map unexplored") + ", " +
+		Tr(rules.lockedDiplomacy ? "diplomacy locked" : "free diplomacy"));
+	const int delay = TourneySpecDelay(d.settings);
+	row(Tr("Spectators"), delay ? TrFmt("With a %s s delay", {std::to_string(delay)}) : Tr("No spectators"));
+	if (!d.official) row(Tr("Requirements"), RequirementsText(d.requirements));
 	ry += 10;
 	if (ry + 120 > y + h) return;
 	PaintSectionLabel(p, x, ry, w, 22, "If something fails");
@@ -466,7 +471,9 @@ int PaintStatusCard(Painter &p, Ctx &c, int x, int y, int w)
 	const TourneyMyEntry *e = MyEntry(c.mine, d.id);
 	const bool in = e && TourneyEntryActive(e->status);
 	if (d.status == TourneyStatus::Signup || d.status == TourneyStatus::Checkin) {
-		const int h = 236;
+		const bool reqs = d.requirements.Any();
+		const TourneyUnmet unmet = in || IsOrganizer(d) ? TourneyUnmet::None : CupUnmet(d.requirements, c.mine);
+		const int h = reqs ? 262 : 236;
 		PaintGlassCard(p, x, y, w, h);
 		PaintCaps(p, x + pad, y + 20, w - 2 * pad, 20, d.status == TourneyStatus::Checkin ? "Check-in" : "Sign-up", pal::caption);
 		UseFace(p, BrandFace::UiStrong, 18);
@@ -480,15 +487,27 @@ int PaintStatusCard(Painter &p, Ctx &c, int x, int y, int w)
 		const std::string window = d.status == TourneyStatus::Checkin ? TrFmt("Check-in open until %s", {HourText(d.startsAt)})
 																	   : TrFmt("Check-in %s, from %s to %s", {DayText(d.checkinOpensAt), HourText(d.checkinOpensAt), HourText(d.startsAt)});
 		p.Text(x + pad, y + 98, w - 2 * pad, 22, window, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		int ly = y + 122;
+		if (reqs) {
+			p.Text(x + pad, ly, w - 2 * pad, 22, Tr("Requirements") + ": " + RequirementsText(d.requirements), pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			ly += 26;
+		}
 		std::string status;
+		COLORREF ink = pal::ok;
 		if (in) status = e->status == TourneyEntryStatus::Waitlist ? Tr("You are on the waiting list.") : e->checkedIn ? Tr("You are checked in.") : Tr("You are signed up.");
-		p.Text(x + pad, y + 122, w - 2 * pad, 22, status, pal::ok, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		else if (unmet != TourneyUnmet::None) {
+			status = UnmetText(d.requirements, unmet, c.mine);
+			ink = pal::bad;
+		}
+		p.Font(3);
+		const int sh = std::min(44, p.Measure(w - 2 * pad, status));
+		p.TextWrapped(x + pad, ly, w - 2 * pad, sh + 2, status, ink);
 		p.raw = false;
 		const int by = y + h - 22 - 44, bw = w - 2 * pad;
 		if (!LeagueLinked()) p.Button(x + pad, by, bw, 44, "Link to sign up", kLeagueLink, 0, mx, my, true, true);
 		else if (!in) {
 			const bool busy = LeagueTourneyBusy(TourneyOp::SignUp, d.id);
-			p.Button(x + pad, by, bw, 44, busy ? "Signing up..." : "Sign up", kTourney, ArgOf(kSubSignUp, d.id), mx, my, !busy, true);
+			p.Button(x + pad, by, bw, 44, busy ? "Signing up..." : "Sign up", kTourney, ArgOf(kSubSignUp, d.id), mx, my, !busy && unmet == TourneyUnmet::None, true);
 		}
 		else if (d.status == TourneyStatus::Checkin && !e->checkedIn) {
 			const int half = (bw - 10) / 2;
@@ -542,7 +561,7 @@ int PaintStatusCard(Painter &p, Ctx &c, int x, int y, int w)
 	const TourneyMap map = TourneyMapOfRound(d, live->round);
 	p.Text(x + pad, cy + 4, w - 2 * pad, 20, (map.Known() ? MapText(map) + " \xC2\xB7 " : std::string()) + (live->startedAt ? TrFmt("%s of play", {DurationText(NowMs() - live->startedAt)}) : std::string()),
 		pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-	p.Text(x + pad, cy + 26, w - 2 * pad, 20, TrFmt("Spectators with a %s s delay", {std::to_string(TourneySpecDelay(d.settings))}), pal::textDim,
+	p.Text(x + pad, cy + 26, w - 2 * pad, 20, (TourneySpecDelay(d.settings) ? TrFmt("Spectators with a %s s delay", {std::to_string(TourneySpecDelay(d.settings))}) : Tr("No spectators")), pal::textDim,
 		DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	p.raw = false;
 	p.Button(x + pad, y + h - 20 - 40, w - 2 * pad, 40, "Watch live", kTourney, ArgOf(kSubWatch, live->id), mx, my, live->lobby != 0);
@@ -757,7 +776,13 @@ int PaintOrganizerCard(Painter &p, Ctx &c, int x, int y, int w)
 	}
 	if (on) {
 		const std::string cancel = Tr(cancelling ? "Cancelling..." : "Cancel the cup");
-		PaintSecondButton(p, x + pad, cy, bw, 40, cancel, ArgOf(kSubCancelCup, d.id), !cancelling, mx, my);
+		if (d.status == TourneyStatus::Running) PaintSecondButton(p, x + pad, cy, bw, 40, cancel, ArgOf(kSubCancelCup, d.id), !cancelling, mx, my);
+		else {
+			const int half = (bw - 10) / 2;
+			const bool editing = LeagueTourneyBusy(TourneyOp::Edit, d.id);
+			PaintSecondButton(p, x + pad, cy, half, 40, Tr("Edit"), ArgOf(kSubEdit, d.id), !editing && !cancelling, mx, my);
+			PaintSecondButton(p, x + pad + half + 10, cy, bw - half - 10, 40, cancel, ArgOf(kSubCancelCup, d.id), !cancelling, mx, my);
+		}
 	}
 	return h;
 }
@@ -884,6 +909,11 @@ void PaintPageScreen(Painter &p, const State &st, const Ui &u, PaintOut &out)
 	p.Clip(sx, y, sideW, bottom - y);
 	if (organizer) sy += PaintOrganizerCard(p, c, sx, sy, sideW) + 12;
 	sy += PaintStatusCard(p, c, sx, sy, sideW) + 12;
+	if (CupHasScenarios(page.detail) && page.detail.status != TourneyStatus::Finished && page.detail.status != TourneyStatus::Cancelled) {
+		int mapsH = 0;
+		PaintCupMapsState(p, st, page.detail, sx, sy, sideW, mapsH);
+		sy += mapsH + 12;
+	}
 	if (bottom - sy > 150) sy += PaintProgressCard(p, c, sx, sy, sideW) + 12;
 	if (page.detail.official && bottom - sy > 120) PaintPrizesCard(p, sx, sy, sideW);
 	p.Unclip();

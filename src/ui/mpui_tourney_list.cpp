@@ -51,7 +51,8 @@ Act ActionFor(const TourneySummary &t, const TourneyMineView &mine)
 			a.label = busy ? "Signing up..." : "Sign up";
 			a.arg = ArgOf(kSubSignUp, t.id);
 			a.strong = true;
-			a.enabled = !busy;
+			// A cup whose requirements the player doesn't meet: its row says why.
+			a.enabled = !busy && CupUnmet(t.requirements, mine) == TourneyUnmet::None;
 		}
 		else if (t.status == TourneyStatus::Checkin && !e->checkedIn) {
 			const bool busy = LeagueTourneyBusy(TourneyOp::CheckIn, t.id);
@@ -305,8 +306,15 @@ void PaintTable(Painter &p, const State &st, const Ui &u, const TourneyListsView
 		if (e && e->placement) sub = TrFmt("You finished in place %s", {std::to_string(e->placement)});
 		else if (mineIn) sub = Tr(e->status == TourneyEntryStatus::Waitlist ? "You are on the waiting list" : "You are in");
 		if (!t.official && (mineIn || (e && e->placement)) && !organizer.empty()) sub = organizer + " \xC2\xB7 " + sub;
+		COLORREF subInk = mineIn || IsOrganizer(t) ? pal::redText : pal::caption;
+		const bool open = t.status == TourneyStatus::Signup || t.status == TourneyStatus::Checkin;
+		if (open && !mineIn && !IsOrganizer(t) && t.requirements.Any()) {
+			const TourneyUnmet unmet = CupUnmet(t.requirements, mine);
+			sub += " \xC2\xB7 " + (unmet == TourneyUnmet::None ? RequirementsText(t.requirements) : TrFmt("you can't sign up: %s", {RequirementsText(t.requirements)}));
+			if (unmet != TourneyUnmet::None) subInk = pal::bad;
+		}
 		p.raw = true;
-		p.Text(cx[0], ry + 36, colW[0], 20, sub, mineIn || IsOrganizer(t) ? pal::redText : pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(cx[0], ry + 36, colW[0], 20, sub, subInk, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.raw = false;
 		p.Font(0);
 		p.raw = true;
@@ -385,7 +393,7 @@ int PaintLiveCard(Painter &p, const State &st, const TourneyListsView &lists, in
 	p.Font(3);
 	p.raw = true;
 	const std::string played = m->status == TourneyMatchStatus::Live && m->startedAt ? TrFmt("%s of play", {DurationText(NowMs() - m->startedAt)}) : Tr("Waiting for the players");
-	p.Text(x + pad, cy, w - 2 * pad, 20, played + " \xC2\xB7 " + TrFmt("spectators %s s behind", {std::to_string(TourneySpecDelay(t->settings))}), pal::textDim,
+	p.Text(x + pad, cy, w - 2 * pad, 20, played + " \xC2\xB7 " + (TourneySpecDelay(t->settings) ? TrFmt("spectators %s s behind", {std::to_string(TourneySpecDelay(t->settings))}) : Tr("no spectators")), pal::textDim,
 		DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	p.raw = false;
 	cy += 34;

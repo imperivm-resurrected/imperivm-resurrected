@@ -25,13 +25,22 @@ enum Sub {
 	kSubShow = 1, kSubFilter, kSubOpen, kSubBack, kSubPageTab, kSubSignUp, kSubWithdraw, kSubCheckIn, kSubMatch, kSubGo, kSubWatch, kSubNoShow,
 	kSubDispute, kSubDisputeSend, kSubDisputeCancel, kSubChampion, kSubField, kSubPan,
 	// The community cups: the form, the code, and the organizer's page (kSubManage opens it on its tab).
-	kSubCreate, kSubCupSet, kSubCupMapMenu, kSubCupSubmit, kSubCupOpenActive, kSubJoin, kSubJoinSend, kSubJoinCancel, kSubCopyCode, kSubCodeClose,
+	kSubCreate, kSubCupSet, kSubCupMenu, kSubCupSubmit, kSubCupOpenActive, kSubJoin, kSubJoinSend, kSubJoinCancel, kSubCopyCode, kSubCodeClose,
 	kSubManage, kSubCancelCup, kSubCheckinNow, kSubStartNow, kSubRemove, kSubGameA, kSubGameB, kSubReplay, kSubWalkover, kSubWalkoverA,
 	kSubWalkoverB, kSubWalkoverNobody, kSubWalkoverCancel,
+	// The full form: a section of it brought into view, the map chooser of a round, changing a cup, and its maps tried again.
+	kSubCupSection, kSubMapOpen, kSubChooserTab, kSubChooserRow, kSubChooserType, kSubChooserSize, kSubChooserOk, kSubChooserCancel, kSubEdit,
+	kSubMapsRetry,
 };
 
 // What kSubCupSet changes in the form: the high bits of its value; the low 16 are the choice.
-enum CupSetting { kCupPlaces = 1, kCupMinimum, kCupBestOf, kCupFinal, kCupSeeding, kCupCheckin, kCupPrivate, kCupPlay, kCupQuickStart, kCupShift, kCupMapAdd, kCupMapRemove };
+enum CupSetting {
+	kCupPlaces = 1, kCupMinimum, kCupBestOf, kCupFinal, kCupSeeding, kCupCheckin, kCupPrivate, kCupPlay, kCupPreset, kCupHideCivs, kCupFog,
+	kCupExplored, kCupDiplomacy, kCupSpectators, kCupDay, kCupMinute, kCupNoshow,
+};
+
+// The menus of the form (kDropTourney), by the index they open with.
+enum CupMenu { kCupMenuHour = 0x100, kCupMenuGames, kCupMenuTier };
 
 inline int CupArg(int setting, int choice)
 {
@@ -47,7 +56,7 @@ inline int ArgOf(int sub, int64_t value)
 }
 
 // The tab's scroll bars, as their hits name them.
-enum Bar { kBarList = 0x7100, kBarBracketY, kBarBracketX, kBarSide };
+enum Bar { kBarList = 0x7100, kBarBracketY, kBarBracketX, kBarSide, kBarForm, kBarChooser };
 
 // Where something scrolls, in the canvas' pixels, and how far it can go.
 struct ScrollArea {
@@ -88,6 +97,10 @@ struct RoomLock {
 	int64_t presenceMatch = 0;
 	DWORD presenceAt = 0;
 	bool startedSent = false;
+	// A scenario being chosen in the room's selector: the item picked and when, and the warning about this computer's copy, once.
+	int pick = -1;
+	DWORD pickAt = 0;
+	bool mapWarned = false;
 };
 
 struct Ui {
@@ -109,6 +122,19 @@ struct Ui {
 	// The cup being made, what the server answered against it, and the cup the player already organises when that was the answer.
 	TourneyCupForm cup;
 	std::string cupError, cupErrorSlug;
+	// The cup being changed instead (0 when making one), its slug, and whether only its description can change by now.
+	int64_t cupEditId = 0;
+	std::string cupEditSlug;
+	bool cupLocked = false;
+	// The form's scroll, and where its three sections start in it.
+	int formScroll = 0;
+	int sectionTop[3] = {};
+	ScrollArea formArea;
+	// The map chooser of a round (-1 closed): its tab (random, the game's, the player's), the random type and size chosen, the scenario
+	// chosen by its file, and its list's scroll.
+	int chooserRound = -1, chooserTab = 0, chooserType = 0, chooserSize = 0, chooserScroll = 0;
+	std::string chooserFile;
+	ScrollArea chooserArea;
 	// The dialog of the invitation code: open, what is typed and why it was not found.
 	bool joinOpen = false;
 	std::string joinCode, joinError;
@@ -123,7 +149,9 @@ extern Ui g_tourney;
 
 // What a frame painted that the input needs: the scrolling areas.
 struct PaintOut {
-	ScrollArea listArea, bracketArea, sideArea;
+	ScrollArea listArea, bracketArea, sideArea, formArea, chooserArea;
+	int sectionTop[3] = {};
+	bool form = false;
 };
 
 // The screens; `u` is a copy of g_tourney taken for the frame.
@@ -132,7 +160,7 @@ void PaintPageScreen(Painter &p, const State &st, const Ui &u, PaintOut &out);
 void PaintMatchScreen(Painter &p, const State &st, const Ui &u);
 void PaintChampionScreen(Painter &p, const State &st, const Ui &u);
 void PaintDisputeDialog(Painter &p, const State &st, const Ui &u);
-void PaintCreateScreen(Painter &p, const State &st, const Ui &u);
+void PaintCreateScreen(Painter &p, const State &st, const Ui &u, PaintOut &out);
 void PaintJoinDialog(Painter &p, const State &st, const Ui &u);
 void PaintCodeDialog(Painter &p, const State &st, const Ui &u);
 void PaintWalkoverDialog(Painter &p, const State &st, const Ui &u);
@@ -142,18 +170,50 @@ bool PaintChampionHeader(Painter &p, const State &st, const Ui &u);
 bool PaintCreateHeader(Painter &p, const State &st, const Ui &u);
 
 // The community cups (mpui_tourney_cup.cpp).
-// A new form: the player's name for the cup, a map, and the start in about an hour.
+// A new form: the player's name for the cup, a map for each round, and the start at the first full hour two hours from now.
 TourneyCupForm NewCupForm(const std::string &player, int64_t nowMs);
 // The organizer's content profile as the form sends it: none for the base game.
 void OwnCupContent(std::string &key, std::string &name);
-// The league's map choices, in the order of the menu, and the label of each.
-std::vector<TourneyMap> CupMapChoices();
 // A choice of kSubCupSet applied to the form.
 void ApplyCupSetting(TourneyCupForm &f, int setting, int choice, int64_t nowMs);
 // What the player is told about a problem of the form.
 std::string CupProblemText(TourneyCupProblem problem);
 // The organizer plays this match of their cup: the league team settles its disputes, not them.
 bool OrganizerPlays(const TourneyDetail &d, const TourneyMatch &m);
+// The earliest and latest start the form offers, in this computer's local time (see LocalMs).
+void CupStartBounds(int64_t nowMs, int64_t &localMin, int64_t &localMax);
+// The menus of the form: their items and the one chosen now, and what picking an item does.
+std::vector<std::string> CupMenuItems(const TourneyCupForm &f, int menu, int &selected);
+void CupMenuPick(TourneyCupForm &f, int menu, int item, int64_t nowMs);
+// What keeps this player out of a cup: the online games they have (-1 when not known yet) and their rank this season.
+TourneyUnmet CupUnmet(const TourneyRequirements &r, const TourneyMineView &mine);
+// "10 online games · up to Centurion", or "Anyone can sign up".
+std::string RequirementsText(const TourneyRequirements &r);
+// Why the player cannot sign up, for the button's line: "You need 10 online games; you have 3."
+std::string UnmetText(const TourneyRequirements &r, TourneyUnmet unmet, const TourneyMineView &mine);
+// "Competitive · civilizations hidden · fog · unexplored map · diplomacy locked · spectators 120 s behind".
+std::string RulesText(const TourneySettings &s);
+// What the preset puts in the room: "5000 gold · normal population · no bonuses".
+std::string PresetSummary(TourneyPreset p);
+
+// The map chooser of a round (mpui_tourney_chooser.cpp).
+// Opens it on the round's map.
+void OpenMapChooser(Ui &u, int round);
+// The map chosen in it, or one not Known() while there is none.
+TourneyMap ChooserMap(const Ui &u);
+void PaintMapChooser(Painter &p, const State &st, const Ui &u, PaintOut &out);
+// A round's map in the form and the Summary: "Random · Mediterranean · medium", "Island War · the game's", "My map · yours".
+std::string CupMapLine(const TourneyMap &m);
+// The cup's maps on this computer, for its page: whether they are all here, and a line of each.
+void PaintCupMapsState(Painter &p, const State &st, const TourneyDetail &d, int x, int y, int w, int &h);
+// The cup has scenarios this computer has to have.
+bool CupHasScenarios(const TourneySummary &t);
+// What is wrong with this computer's copy of a round's scenario, for the warning before the room; empty when nothing is.
+std::string CupMapWarning(const TourneyMap &m);
+
+// The room of the player's match (mpui_tourney_room.cpp), on the game thread under g_lock: the host puts the tournament's preset, switches
+// and map in it, a scenario picked in the room's own selector, until they all hold; true once they do.
+bool ApplyTourneyRoom(const TourneyNext &next, RoomLock &k);
 
 // Shared drawing.
 const int kCardGap = 32;
@@ -200,6 +260,11 @@ const TourneyMyEntry *MyEntry(const TourneyMineView &mine, int64_t tournament);
 // The official tournament the tab features: the soonest one open, else one being played, else the latest one over.
 const TourneySummary *Featured(const TourneyListsView &lists);
 int64_t NowMs();
+// A time in this computer's local time, as milliseconds counted from 1 January 1970 there (core's calendar), and back.
+int64_t LocalMs(int64_t utcMs);
+int64_t UtcMs(int64_t localMs);
+// "Saturday 21 November".
+std::string LongDayText(int64_t ms);
 // The player organises this cup.
 bool IsOrganizer(const TourneySummary &t);
 // "By Furio", "You organise it"; empty for an official tournament.
