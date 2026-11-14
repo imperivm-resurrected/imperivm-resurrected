@@ -42,6 +42,10 @@ void DoAction(int action, int arg)
 		break;
 	}
 	case kRanked: g_s.view = kViewRanked; break;
+	case kLeagueLink: LeagueLinkStart(); break;
+	case kLeagueOpen: LeagueOpenLinkPage(); break;
+	case kLeagueCancel: LeagueLinkCancel(); break;
+	case kLeagueUnlink: LeagueUnlink(); break;
 	case kCreate:
 		if (g_s.nameInput.empty()) g_s.nameInput = Tr("Game of ") + g_s.player;
 		g_s.view = kViewCreate;

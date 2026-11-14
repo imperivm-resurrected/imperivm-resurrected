@@ -1918,5 +1918,10 @@ extern const TrRow kTrRows[] = {
 	{"The code expired before it was confirmed. Ask for a new one.", "El código caducó antes de confirmarlo. Pide uno nuevo.", "Il codice è scaduto prima della conferma. Chiedine uno nuovo."},
 	{"That code was confirmed with another Steam account. Sign in on the website with this one.", "Ese código se confirmó con otra cuenta de Steam. Entra en la web con esta.", "Quel codice è stato confermato con un altro account Steam. Accedi al sito con questo."},
 	{"Steam is not available. Open Steam and try again.", "Steam no está disponible. Abre Steam y vuelve a intentarlo.", "Steam non è disponibile. Apri Steam e riprova."},
+	{"Ranks", "Rangos", "Ranghi"},
+	{"Ranked 1 vs 1 is on its way. Six ranks of three divisions, 100 Glory each; above them, Praetorian and Imperator go to the best of the leaderboard.", "La clasificatoria 1 contra 1 está en camino. Seis rangos de tres divisiones, de 100 de Gloria cada una; por encima, Pretoriano e Imperator son para los mejores de la clasificación.", "Le classificate 1 contro 1 sono in arrivo. Sei ranghi di tre divisioni, da 100 di Gloria ciascuna; sopra di loro, Pretoriano e Imperator vanno ai migliori della classifica."},
+	{"From %s Glory", "Desde %s de Gloria", "Da %s di Gloria"},
+	{"Places 1 to 10", "Puestos 1 a 10", "Posizioni da 1 a 10"},
+	{"Places 11 to 50", "Puestos 11 a 50", "Posizioni da 11 a 50"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

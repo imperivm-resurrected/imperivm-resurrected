@@ -626,64 +626,51 @@ void PaintRanked(Painter &p, const State &st)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const LobbyLayout l = LobbyLayoutFor(st.viewW, st.viewH);
-	const int m = l.margin, top = l.top, h = l.h - m - top;
-	const int cw = 460;
+	const int m = l.margin, top = l.top, h = l.h - m - top, pad = l.roomy ? 32 : 24;
+	const int cw = std::min(560, std::max(440, (l.w - 2 * m) * 3 / 10));
+	LeagueMeRefresh();
+	PatronsWatch({SteamOwnId()});
 	PaintGlassCard(p, m, top, cw, h);
-	const int emblem = 140, ex = m + (cw - emblem) / 2, ey = top + std::min(80, h / 8);
-	p.Fill(ex, ey, emblem, emblem, pal::edge);
-	p.Frame(ex, ey, emblem, emblem, pal::lineStrong);
-	p.Frame(ex + 8, ey + 8, emblem - 16, emblem - 16, pal::lineStrong);
-	p.Font(2);
-	p.Text(ex, ey, emblem, emblem, "LEAGUES", pal::redText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-	int y = ey + emblem + 36;
-	p.Font(2);
-	p.Text(m, y, cw, 44, "Coming soon", pal::redText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-	y += 48;
-	p.Font(1);
-	p.Text(m, y, cw, 30, "Ranked play", pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-	y += 42;
-	p.Fill(m + (cw - 72) / 2, y, 72, 1, pal::redText);
-	y += 20;
-	p.Font(0);
-	p.Text(m + 32, y, cw - 64, 110, "Elo rating, leagues and seasons will arrive in a future update.", pal::textDim, DT_CENTER | DT_WORDBREAK);
+	PaintLeagueAccount(p, m + pad, top + pad, cw - 2 * pad, {kLeagueLink, kLeagueOpen, kLeagueCancel, kLeagueUnlink}, mx, my);
 
-	const int lx = m + cw + kCardGap, lw = l.w - m - lx;
+	// The ranks of the league, with the emblems players will wear next to their names.
+	const int lx = m + cw + kCardGap, lw = l.w - m - lx, ix = lx + pad, iw = lw - 2 * pad;
 	PaintGlassCard(p, lx, top, lw, h);
-	p.Font(2);
-	p.Text(lx + 24, top + 16, lw - 220, 40, "Season ranking", pal::redText);
-	p.Font(4);
-	p.Fill(lx + lw - 24 - 150, top + 24, 150, 28, pal::edge);
-	p.Frame(lx + lw - 24 - 150, top + 24, 150, 28, pal::lineStrong);
-	p.Text(lx + lw - 24 - 150, top + 24, 150, 28, "PREVIEW", pal::redText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-	struct Row {
-		const char *name, *league;
-		int elo, wins, losses;
-	} rows[] = {{"Scipio", "Caesar", 2210, 88, 21}, {"Vercingetorix", "Caesar", 2154, 75, 30}, {"Hannibal", "Praetorian", 1987, 64, 33},
-		{"Boudica", "Praetorian", 1902, 51, 29}, {"Spartacus", "Praetorian", 1866, 70, 52}, {"Cleopatra", "Gold I", 1790, 40, 25},
-		{"Marco", "Gold I", 1754, 38, 30}, {"Livia", "Gold II", 1702, 33, 28}};
-	const int innerX = lx + 24, innerW = lw - 48;
-	const int colRank = innerX + 12, colName = innerX + 72, colLeague = innerX + innerW * 45 / 100, colElo = innerX + innerW * 68 / 100,
-			  colWl = innerX + innerW * 82 / 100;
-	const int headY = top + 76, rowH = l.roomy ? 52 : 46;
-	p.TextCaps(colRank, headY, 50, 28, "#", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
-	p.TextCaps(colName, headY, colLeague - colName - 12, 28, "Player", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
-	p.TextCaps(colLeague, headY, colElo - colLeague - 12, 28, "League", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
-	p.TextCaps(colElo, headY, colWl - colElo - 12, 28, "Elo", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
-	p.TextCaps(colWl, headY, innerX + innerW - colWl, 28, "W-L", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
-	p.Fill(innerX, headY + 34, innerW, 1, pal::lineStrong);
-	const int backH = 48, backY = top + h - 24 - backH;
-	y = headY + 42;
+	PaintSectionLabel(p, ix, top + pad, iw, 22, "Ranks");
+	int y = top + pad + 34;
 	p.Font(0);
-	for (int i = 0; i < 8 && y + rowH <= backY - 16; i++, y += rowH) {
-		if (i % 2 == 0) p.Fill(innerX, y, innerW, rowH - 2, pal::raised);
-		p.Text(colRank, y, 50, rowH - 2, std::to_string(i + 1), pal::caption);
-		p.Text(colName, y, colLeague - colName - 12, rowH - 2, rows[i].name, pal::caption);
-		p.Text(colLeague, y, colElo - colLeague - 12, rowH - 2, rows[i].league, pal::caption);
-		p.Text(colElo, y, colWl - colElo - 12, rowH - 2, std::to_string(rows[i].elo), pal::caption);
-		p.Text(colWl, y, innerX + innerW - colWl, rowH - 2, std::to_string(rows[i].wins) + "-" + std::to_string(rows[i].losses), pal::caption);
+	const std::string intro = "Ranked 1 vs 1 is on its way. Six ranks of three divisions, 100 Glory each; above them, Praetorian and Imperator go to the best "
+							  "of the leaderboard.";
+	const int introH = p.Measure(iw, intro);
+	p.TextWrapped(ix, y, iw, introH + 2, intro, pal::textDim);
+	y += introH + 24;
+	const LeagueMeView me = LeagueMeState();
+	const LeagueTier mine = me.loaded && me.me.ranked.present ? me.me.ranked.tier : LeagueTier::None;
+	const int cols = 4, gap = 16;
+	const int cellW = (iw - gap * (cols - 1)) / cols, rowRoom = (top + h - pad - y - gap) / 2;
+	const int emblem = std::max(40, std::min({cellW - 32, rowRoom - 84, 136}));
+	const int cellH = emblem + 84;
+	for (int i = 0; i < kLeagueTierCount; i++) {
+		const LeagueTier tier = static_cast<LeagueTier>(i + 1);
+		const int cx = ix + (i % cols) * (cellW + gap), cy = y + (i / cols) * (cellH + gap);
+		const bool own = tier == mine;
+		p.Fill(cx, cy, cellW, cellH, own ? pal::selected : pal::raised);
+		p.Frame(cx, cy, cellW, cellH, own ? LeagueTierInk(tier) : pal::hairline);
+		DrawLeagueEmblem(p, cx + (cellW - emblem) / 2, cy + 12, emblem, tier);
+		p.Font(2);
+		p.TextCaps(cx + 8, cy + 16 + emblem, cellW - 16, 34, LeagueTierName(tier), LeagueTierInk(tier), DT_CENTER | DT_VCENTER | DT_SINGLELINE, 2);
+		const int from = LeagueTierGloryFrom(tier);
+		p.Font(3);
+		p.raw = true;
+		p.Text(cx + 8, cy + 52 + emblem, cellW - 16, 22,
+			from >= 0 ? TrFmt("From %s Glory", {std::to_string(from)}) : Tr(tier == LeagueTier::Imperator ? "Places 1 to 10" : "Places 11 to 50"),
+			own ? pal::text : pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.raw = false;
+		if (own) {
+			p.Font(4);
+			p.TextCaps(cx + 10, cy + 8, cellW - 20, 18, "You", LeagueTierInk(tier), DT_RIGHT | DT_VCENTER | DT_SINGLELINE, 2);
+		}
 	}
-	const int backW = 220;
-	p.Button(lx + lw - 24 - backW, backY, backW, backH, "Back to list", kListView, 0, mx, my);
 }
 
 void PaintCreate(Painter &p, const State &st)

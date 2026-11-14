@@ -1910,5 +1910,10 @@
 {"en":"Couldn't reach the league server. Check your connection and try again.","es":"No se pudo contactar con el servidor de la liga. Revisa tu conexión y vuelve a intentarlo.","it":"Impossibile contattare il server della lega. Controlla la connessione e riprova."},
 {"en":"The code expired before it was confirmed. Ask for a new one.","es":"El código caducó antes de confirmarlo. Pide uno nuevo.","it":"Il codice è scaduto prima della conferma. Chiedine uno nuovo."},
 {"en":"That code was confirmed with another Steam account. Sign in on the website with this one.","es":"Ese código se confirmó con otra cuenta de Steam. Entra en la web con esta.","it":"Quel codice è stato confermato con un altro account Steam. Accedi al sito con questo."},
-{"en":"Steam is not available. Open Steam and try again.","es":"Steam no está disponible. Abre Steam y vuelve a intentarlo.","it":"Steam non è disponibile. Apri Steam e riprova."}
+{"en":"Steam is not available. Open Steam and try again.","es":"Steam no está disponible. Abre Steam y vuelve a intentarlo.","it":"Steam non è disponibile. Apri Steam e riprova."},
+{"en":"Ranks","es":"Rangos","it":"Ranghi"},
+{"en":"Ranked 1 vs 1 is on its way. Six ranks of three divisions, 100 Glory each; above them, Praetorian and Imperator go to the best of the leaderboard.","es":"La clasificatoria 1 contra 1 está en camino. Seis rangos de tres divisiones, de 100 de Gloria cada una; por encima, Pretoriano e Imperator son para los mejores de la clasificación.","it":"Le classificate 1 contro 1 sono in arrivo. Sei ranghi di tre divisioni, da 100 di Gloria ciascuna; sopra di loro, Pretoriano e Imperator vanno ai migliori della classifica."},
+{"en":"From %s Glory","es":"Desde %s de Gloria","it":"Da %s di Gloria"},
+{"en":"Places 1 to 10","es":"Puestos 1 a 10","it":"Posizioni da 1 a 10"},
+{"en":"Places 11 to 50","es":"Puestos 11 a 50","it":"Posizioni da 11 a 50"}
 ]

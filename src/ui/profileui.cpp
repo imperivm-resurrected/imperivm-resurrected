@@ -15,6 +15,7 @@
 #include "core/log.h"
 #include "game/playerini.h"
 #include "game/profiles.h"
+#include "net/leagueclient.h"
 #include "net/patrons.h"
 #include "net/steamnet.h"
 #include "ui/fullscreen.h"
@@ -251,8 +252,17 @@ void Act(View &v, int action, int arg, Command &cmd)
 		break;
 	case kActBack:
 	case kActPatron:
+	case kActLeagueLink:
+	case kActLeagueOpen:
+	case kActLeagueCancel:
+	case kActLeagueUnlink:
 		cmd.action = action;
 		break;
+	case kActLeague:
+		v.leagueOpen = true;
+		cmd.action = action;
+		break;
+	case kActLeagueClose: v.leagueOpen = false; break;
 	case kActMetric: v.metric = std::max(0, std::min(arg, kMetricCount - 1)); break;
 	case kActChartMode: v.chartMode = arg; break;
 	case kActChartRange: v.chartRange = arg; break;
@@ -297,6 +307,11 @@ void Execute(const Command &cmd)
 		break;
 	}
 	case kActPatron: OpenPatronPage(); break;
+	case kActLeague: LeagueMeRefresh(true); break;
+	case kActLeagueLink: LeagueLinkStart(); break;
+	case kActLeagueOpen: LeagueOpenLinkPage(); break;
+	case kActLeagueCancel: LeagueLinkCancel(); break;
+	case kActLeagueUnlink: LeagueUnlink(); break;
 	default: break;
 	}
 }
@@ -334,6 +349,7 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, Command &cmd)
 		g_s.mouseDown = false;
 		return true;
 	case WM_MOUSEWHEEL: {
+		if (v.leagueOpen) return true;
 		// The wheel's position comes in screen coordinates; the last move tells where the mouse is over the screen.
 		const int steps = GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA;
 		if (OverHistory(g_s, {v.mouseX, v.mouseY})) {
@@ -348,6 +364,10 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, Command &cmd)
 	case WM_KEYDOWN:
 	case WM_CHAR:
 		if (msg == WM_CHAR) return true;
+		if (v.leagueOpen) {
+			if (wp == VK_ESCAPE || wp == VK_RETURN) v.leagueOpen = false;
+			return true;
+		}
 		switch (wp) {
 		case VK_ESCAPE: Act(v, kActBack, 0, cmd); break;
 		case VK_RETURN: Act(v, kActUse, 0, cmd); break;

@@ -861,7 +861,7 @@ void PaintHeader(Painter &p, const View &v, const Frame &f)
 {
 	const int count = static_cast<int>(v.cards.size());
 	const bool other = v.selected >= 0 && v.selected < count && !v.cards[v.selected].active;
-	int right = PaintHeaderActions(p, f.head, {{"Back", kActBack, true, true}}, v.mouseX, v.mouseY);
+	int right = PaintHeaderActions(p, f.head, {{"League account", kActLeague, false, true}, {"Back", kActBack, true, true}}, v.mouseX, v.mouseY);
 	if (other) {
 		p.Font(1);
 		const int bw = p.CapsWidth("Use this player", 1) + 56;
@@ -951,6 +951,7 @@ void PaintProfileScreen(Painter &p, const View &v)
 {
 	const Frame f = FrameOf(v);
 	UseScreenFonts(p);
+	p.noHover = v.leagueOpen;
 	// The figures of the tiles and the big monogram: the screen's largest display size would not fit the tiles.
 	p.fonts[5] = BrandFont(BrandFace::Display, f.head.roomy ? 46 : 40, p.s);
 	PaintHeader(p, v, f);
@@ -967,6 +968,11 @@ void PaintProfileScreen(Painter &p, const View &v)
 	}
 	PaintTip(p, v, tip);
 	PaintPatronTip(p, v.screenW, v.screenH);
+	PaintLeagueBadgeTip(p, v.screenW, v.screenH);
+	if (!v.leagueOpen) return;
+	const Dialog d = DialogBegin(p, v.screenW, v.screenH, 640, 520, "League");
+	PaintLeagueAccount(p, d.BodyX(), d.BodyTop() + 6, d.BodyW(), {kActLeagueLink, kActLeagueOpen, kActLeagueCancel, kActLeagueUnlink}, v.mouseX, v.mouseY);
+	DialogButtons(p, d, {{"Close", kActLeagueClose}}, v.mouseX, v.mouseY);
 	PaintLeagueBadgeTip(p, v.screenW, v.screenH);
 }
 
