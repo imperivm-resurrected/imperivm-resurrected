@@ -472,6 +472,47 @@ LeagueImage Rasterize(const Scene &scene, int size)
 	return img;
 }
 
+// ---- The phalerae of the tournaments (TorneoCampeon, TorneoCuadro): the mockups' colours of each metal. ----
+
+struct PhaleraShades {
+	uint32_t deep, rim, body, edge, light, inner, bright;
+};
+
+PhaleraShades ShadesOf(LeagueMetal metal)
+{
+	switch (metal) {
+	case LeagueMetal::Silver: return {0x1A1C20, 0x6F757B, 0x22252A, 0x9AA0A6, 0xC9CED4, 0x2E3238, 0xEEF2F5};
+	case LeagueMetal::Bronze: return {0x1F1610, 0x7A4A26, 0x2A1E16, 0xB0703C, 0xCF8A55, 0x3A2618, 0xEDB58A};
+	// The champion of a season's final: gold over the brand's red.
+	case LeagueMetal::Season: return {0x220607, 0x8A0E13, 0x3E0507, 0xC99A2E, 0xF2D06B, 0x5A0A0E, 0xF3D98A};
+	default: return {0x1F1912, 0x8A6A22, 0x2A2116, 0xC99A2E, 0xE0B54A, 0x3A2C14, 0xF3D98A};
+	}
+}
+
+Ring Circle(double cx, double cy, double r)
+{
+	Ring out = Arc(cx, cy, r, r, 0, 2 * kPi, 96);
+	out.pop_back();
+	return out;
+}
+
+// A ring `width` wide centred on the circle of radius `r`.
+void Band(Scene &s, double cx, double cy, double r, double width, uint32_t rgb)
+{
+	s.shapes.push_back({{{Circle(cx, cy, r + width / 2), Circle(cx, cy, r - width / 2)}}, rgb, 1});
+}
+
+// The eight-pointed star of the phalerae, a point upwards.
+Ring Star(double cx, double cy, double outer, double inner)
+{
+	Ring out;
+	for (int k = 0; k < 16; k++) {
+		const double a = -kPi / 2 + k * kPi / 8, r = k % 2 ? inner : outer;
+		out.push_back({cx + r * std::cos(a), cy + r * std::sin(a)});
+	}
+	return out;
+}
+
 }
 
 LeagueColors LeagueTierColors(LeagueTier t)
@@ -505,20 +546,50 @@ LeagueImage LeagueVexillumPixels(LeagueTier tier, int scale)
 	return Paint(table, c, scale);
 }
 
-LeagueImage LeagueTrophyPixels(int scale)
+LeagueColors LeagueMetalColors(LeagueMetal metal)
 {
-	const LeagueColors c = LeagueTierColors(LeagueTier::Legate);
-	Grid grid;
-	for (int y = 0; y < kLeagueBadgeGrid; y++) {
-		for (int x = 0; x < kLeagueBadgeGrid; x++) {
-			const double dx = x + 0.5 - 10, dy = y + 0.5 - 10, d = std::sqrt(dx * dx + dy * dy);
-			const int i = y * kLeagueBadgeGrid + x;
-			if (d > 9) continue;
-			grid.Over(i, d > 8 ? c.border : (d > 6.2 && d <= 7.2) || (d <= 3.2 && d > 1.6) ? c.light : c.body, 1);
-			if (dx < 0 && d <= 8) grid.Over(i, kWhite, 0.12f);
-		}
+	const PhaleraShades s = ShadesOf(metal);
+	return {s.edge, s.body, s.light, s.light};
+}
+
+LeagueImage LeagueTrophyImage(LeagueMetal metal, int size)
+{
+	// The mockups' 32-unit phalera, scaled to the 160 units of the scenes: a rim, a ring and the star, nothing finer than a pixel at 20.
+	const PhaleraShades c = ShadesOf(metal);
+	Scene s;
+	s.Fill(Circle(80, 80, 76), c.edge);
+	s.Fill(Circle(80, 80, 68), c.body);
+	s.Fill(Ellipse(52, 52, 42, 42), kWhite, 0.06);
+	Band(s, 80, 80, 52, 10, c.light);
+	s.Fill(Star(80, 80, 38, 16), c.light);
+	return Rasterize(s, std::max(8, std::min(512, size)));
+}
+
+LeagueImage LeagueTrophyPixels(LeagueMetal metal, int scale)
+{
+	return LeagueTrophyImage(metal, kLeagueBadgeGrid * std::max(1, scale));
+}
+
+LeagueImage LeaguePhaleraImage(LeagueMetal metal, int size)
+{
+	// TorneoCampeon's 200-unit phalera at 0.8.
+	const PhaleraShades c = ShadesOf(metal);
+	Scene s;
+	s.Fill(Circle(80, 80, 78.4), c.rim);
+	s.Fill(Circle(80, 80, 77.6), c.deep);
+	s.Fill(Circle(80, 80, 74.4), c.edge);
+	s.Fill(Circle(80, 80, 72.8), c.body);
+	Band(s, 80, 80, 66.4, 2.4, c.light);
+	for (int k = 0; k < 16; k++) {
+		const double a = k * kPi / 8;
+		s.Fill(Circle(80 + 59.2 * std::cos(a), 80 + 59.2 * std::sin(a), 3.2), c.light);
 	}
-	return FromGrid(grid, scale);
+	s.Fill(Circle(80, 80, 51.2), c.edge);
+	s.Fill(Circle(80, 80, 46.4), c.inner);
+	s.Fill(Star(80, 80, 36.8, 15.2), c.light);
+	s.Fill(Star(80, 80, 24, 10.4), c.bright);
+	s.Fill(Circle(80, 80, 5.6), c.inner);
+	return Rasterize(s, std::max(8, std::min(512, size)));
 }
 
 LeagueImage LeagueEmblemImage(LeagueTier tier, int size)

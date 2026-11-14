@@ -16,6 +16,9 @@ constexpr int kLeagueBadgeSize = 20, kLeagueBadgeGap = 6;
 void DrawLeagueBadge(ui::Painter &p, int x, int y, int size, const LeagueBadge &badge);
 // The emblem of a rank drawn from its shapes, for 48 px and up; None is the unranked outline with its question mark.
 void DrawLeagueEmblem(ui::Painter &p, int x, int y, int size, LeagueTier tier);
+// A tournament's phalera in a square of `size`: the plain one up to 47 px, the champion's one with rivets from 48.
+void DrawLeaguePhalera(ui::Painter &p, int x, int y, int size, LeagueMetal metal);
+COLORREF LeagueMetalInk(LeagueMetal metal);
 // What a badge takes after a name, gap included; 0 without one. Take it off the name's box before drawing the name.
 int LeagueBadgeRoom(const LeagueBadge &badge);
 // The badge 6 px after a name drawn in the box (nameX, y, nameW, h) with the painter's current font, centred on the box's height,

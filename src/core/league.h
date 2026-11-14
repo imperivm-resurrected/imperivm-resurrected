@@ -43,14 +43,22 @@ std::string LeagueRankText(const std::string &tierName, int division);
 
 enum class LeagueBadgeKind { None, Rank, Season, Trophy };
 
+// The metal of a tournament's phalera: gold for the champion, silver for the finalist, bronze for the semifinalists; Season for the
+// champion of a season's final.
+enum class LeagueMetal { None, Gold, Silver, Bronze, Season };
+// The server's id ("gold", "silver", "bronze", "season"); None for anything else.
+LeagueMetal LeagueMetalFromId(const std::string &id);
+
 // The one badge a player shows to the right of their name.
 struct LeagueBadge {
 	LeagueBadgeKind kind = LeagueBadgeKind::None;
 	std::string id;
 	LeagueTier tier = LeagueTier::None;
 	int division = 0;
+	// A trophy's phalera; gold when the server does not say.
+	LeagueMetal metal = LeagueMetal::None;
 	bool Shown() const { return kind != LeagueBadgeKind::None; }
-	bool operator==(const LeagueBadge &o) const { return kind == o.kind && id == o.id && tier == o.tier && division == o.division; }
+	bool operator==(const LeagueBadge &o) const { return kind == o.kind && id == o.id && tier == o.tier && division == o.division && metal == o.metal; }
 };
 // {kind, id, tier?, division?}, or null. A rank badge without a known tier is not shown.
 LeagueBadge LeagueBadgeFromJson(const Json *v);

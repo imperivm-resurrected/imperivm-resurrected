@@ -64,10 +64,27 @@ void OtherBadges()
 	CHECK_EQ(vex.At(9, 19), Opaque(0x7A6553));
 	CHECK_EQ(vex.At(9, 0), Opaque(0xEEF2F5));
 	CHECK_EQ(Alpha(vex.At(0, 19)), 0u);
-	const LeagueImage trophy = LeagueTrophyPixels(1);
+	const LeagueImage trophy = LeagueTrophyPixels(LeagueMetal::Gold, 1);
+	CHECK_EQ(trophy.w, 20);
 	CHECK_EQ(Alpha(trophy.At(10, 10)), 255u);
 	CHECK_EQ(Alpha(trophy.At(0, 0)), 0u);
 	CHECK_EQ(Alpha(trophy.At(19, 19)), 0u);
+	// The star in the middle is the metal's light; the three metals differ.
+	CHECK_EQ(trophy.At(10, 10), Opaque(0xE0B54A));
+	CHECK_EQ(LeagueTrophyPixels(LeagueMetal::Silver, 1).At(10, 10), Opaque(0xC9CED4));
+	CHECK_EQ(LeagueTrophyPixels(LeagueMetal::Bronze, 1).At(10, 10), Opaque(0xCF8A55));
+	// Drawn from its shapes, the 40-pixel one is not the 20 one blown up: its rim is still one pixel of the edge's colour.
+	const LeagueImage big = LeagueTrophyPixels(LeagueMetal::Gold, 2);
+	CHECK_EQ(big.w, 40);
+	CHECK_EQ(Alpha(big.At(20, 20)), 255u);
+	CHECK_EQ(LeagueMetalColors(LeagueMetal::Bronze).light, 0xCF8A55u);
+	CHECK_EQ(LeagueMetalColors(LeagueMetal::None).light, 0xE0B54Au);
+	const LeagueImage phalera = LeaguePhaleraImage(LeagueMetal::Gold, 200);
+	CHECK_EQ(phalera.w, 200);
+	CHECK_EQ(Alpha(phalera.At(0, 0)), 0u);
+	CHECK_EQ(Alpha(phalera.At(100, 100)), 255u);
+	// Outside the star's tips, the dark of the inner disc.
+	CHECK_EQ(phalera.At(135, 135), Opaque(0x3A2C14));
 }
 
 void Emblems()

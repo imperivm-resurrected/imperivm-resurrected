@@ -119,6 +119,18 @@ void Badges()
 	CHECK(b.tier == LeagueTier::Tribune);
 	const Json trophy = Parse("{\"kind\": \"trophy\", \"id\": \"cup-1\"}");
 	CHECK(LeagueBadgeFromJson(&trophy).kind == LeagueBadgeKind::Trophy);
+	// Without its metal a trophy is the champion's gold; the lookup sends the metal as the tier.
+	CHECK(LeagueBadgeFromJson(&trophy).metal == LeagueMetal::Gold);
+	const Json bronze = Parse("{\"kind\": \"trophy\", \"id\": 7, \"tier\": \"bronze\"}");
+	b = LeagueBadgeFromJson(&bronze);
+	CHECK(b.metal == LeagueMetal::Bronze);
+	CHECK(b.tier == LeagueTier::None);
+	CHECK_EQ(b.id, std::string("7"));
+	CHECK(LeagueMetalFromId("Silver") == LeagueMetal::Silver);
+	CHECK(LeagueMetalFromId("season") == LeagueMetal::Season);
+	CHECK(LeagueMetalFromId("platinum") == LeagueMetal::None);
+	const Json silver = Parse("{\"kind\": \"trophy\", \"id\": 7, \"tier\": \"silver\"}");
+	CHECK(!(LeagueBadgeFromJson(&bronze) == LeagueBadgeFromJson(&silver)));
 	const Json none = Parse("{\"kind\": \"none\"}");
 	CHECK(!LeagueBadgeFromJson(&none).Shown());
 	CHECK(!LeagueBadgeFromJson(nullptr).Shown());
