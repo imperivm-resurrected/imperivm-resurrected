@@ -50,7 +50,7 @@ enum Action {
 	kFieldPickSearch, kPickDelete, kPickDeleteYes, kPickDeleteNo, kGResync, kPatronLink, kProfile, kGTab, kFieldRoomName,
 	kLeagueLink, kLeagueOpen, kLeagueCancel, kLeagueUnlink,
 	kRankedAct,
-	kTourney, kFieldTourney,
+	kTourney, kFieldTourney, kFieldCupName, kFieldCupDescription, kFieldCupCode,
 	kLinkOfferYes, kLinkOfferNo,
 };
 
@@ -89,11 +89,11 @@ struct JoinFlowState {
 extern JoinFlowState g_flow;
 enum View { kViewList, kViewRanked, kViewCreate, kViewTournaments };
 
-enum Field { kNoField, kChatField, kNameField, kPassField, kJoinPassField, kSearchField, kPickSearchField, kRoomNameField, kTourneyField };
+enum Field { kNoField, kChatField, kNameField, kPassField, kJoinPassField, kSearchField, kPickSearchField, kRoomNameField, kTourneyField, kCupNameField, kCupDescriptionField, kCupCodeField };
 
 enum { kPredTeam, kPredRace, kPredAi, kPredReady, kPredOptSel, kPredOptVal, kPredColor };
 
-enum { kDropRace, kDropAi, kDropOption, kDropColor, kDropSlot, kDropSites, kDropModOption, kDropPreset, kDropFilter, kDropPlayers, kDropProfile, kDropVisibility, kDropSaveGame, kDropSpectators, kDropPickSort, kDropBonus, kDropTeam };
+enum { kDropRace, kDropAi, kDropOption, kDropColor, kDropSlot, kDropSites, kDropModOption, kDropPreset, kDropFilter, kDropPlayers, kDropProfile, kDropVisibility, kDropSaveGame, kDropSpectators, kDropPickSort, kDropBonus, kDropTeam, kDropTourney };
 
 // The argument of kGDropOpen: the kind in the low bits and the slot or option index above them.
 const int kDropKindBits = 5, kDropKindMask = (1 << kDropKindBits) - 1;
@@ -327,6 +327,9 @@ struct State {
 	RankedScreen ranked;
 	// The offer to link the account over Ranked or Tournaments: open now, and already made in this session.
 	bool linkOffer = false, linkOffered = false;
+	// The items of a menu the Tournaments tab opened (kDropTourney) and the one chosen now.
+	std::vector<std::string> tourneyDropItems;
+	int tourneyDropSel = -1;
 };
 
 extern std::mutex g_lock;

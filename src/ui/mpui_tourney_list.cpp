@@ -32,6 +32,12 @@ Act ActionFor(const TourneySummary &t, const TourneyMineView &mine)
 	Act a;
 	const TourneyMyEntry *e = MyEntry(mine, t.id);
 	const bool in = e && TourneyEntryActive(e->status);
+	const bool needsMe = in && t.status == TourneyStatus::Checkin && !e->checkedIn;
+	if (IsOrganizer(t) && t.status != TourneyStatus::Finished && t.status != TourneyStatus::Cancelled && !needsMe) {
+		a.label = "Manage";
+		a.arg = ArgOf(kSubManage, t.id);
+		return a;
+	}
 	switch (t.status) {
 	case TourneyStatus::Signup:
 	case TourneyStatus::Checkin:
@@ -196,6 +202,29 @@ void PaintFeatured(Painter &p, const State &st, const TourneySummary *t, const T
 	p.Button(rx + rightW - viewW, by, viewW, 40, "View", kTourney, ArgOf(kSubOpen, t->id), mx, my);
 }
 
+// "Create a cup" and "Join with a code" at the right of the list's tabs; returns where they start.
+int PaintCupButtons(Painter &p, const TourneyMineView &mine, int right, int y, int h, int mx, int my)
+{
+	const TourneyOrganize &o = mine.mine.organize;
+	std::string label = Tr("Create a cup");
+	bool enabled = true;
+	if (o.activeId) label = Tr("Manage my cup");
+	else if (LeagueLinked() && mine.loaded && o.known && !o.allowed) {
+		const int missing = std::max(1, o.GamesMissing());
+		label = missing == 1 ? Tr("Create a cup \xC2\xB7 1 online game to go") : TrFmt("Create a cup \xC2\xB7 %s online games to go", {std::to_string(missing)});
+		enabled = false;
+	}
+	p.Font(1);
+	p.raw = true;
+	const int cw = p.CapsWidth(label, 1) + 48;
+	p.Button(right - cw, y, cw, h, label, kTourney, ArgOf(kSubCreate, 0), mx, my, enabled, true);
+	p.raw = false;
+	const std::string join = Tr("Join with a code");
+	const int jw = SecondButtonWidth(p, join);
+	PaintSecondButton(p, right - cw - 12 - jw, y, jw, h, join, ArgOf(kSubJoin, 0), true, mx, my);
+	return right - cw - 12 - jw;
+}
+
 void PaintSubTabs(Painter &p, const Ui &u, const TourneyListsView &lists, int x, int y, int h, int mx, int my)
 {
 	struct Tab {
@@ -270,11 +299,15 @@ void PaintTable(Painter &p, const State &st, const Ui &u, const TourneyListsView
 		p.Text(cx[0], ry + 12, colW[0], 24, t.name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.raw = false;
 		p.Font(3);
-		const bool mineIn = e && (TourneyEntryActive(e->status) || e->placement);
-		std::string sub = Tr(t.official ? "Official cup" : "Community");
+	const bool mineIn = e && (TourneyEntryActive(e->status) || e->placement);
+		const std::string organizer = OrganizerText(t);
+		std::string sub = t.official ? Tr("Official cup") : organizer.empty() ? Tr("Community") : organizer;
 		if (e && e->placement) sub = TrFmt("You finished in place %s", {std::to_string(e->placement)});
 		else if (mineIn) sub = Tr(e->status == TourneyEntryStatus::Waitlist ? "You are on the waiting list" : "You are in");
-		p.Text(cx[0], ry + 36, colW[0], 20, sub, mineIn ? pal::redText : pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		if (!t.official && (mineIn || (e && e->placement)) && !organizer.empty()) sub = organizer + " \xC2\xB7 " + sub;
+		p.raw = true;
+		p.Text(cx[0], ry + 36, colW[0], 20, sub, mineIn || IsOrganizer(t) ? pal::redText : pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.raw = false;
 		p.Font(0);
 		p.raw = true;
 		p.Text(cx[1], ry, colW[1], rowH, FormatText(t), pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
@@ -361,12 +394,59 @@ int PaintLiveCard(Painter &p, const State &st, const TourneyListsView &lists, in
 	return h;
 }
 
+// A line of "My tournaments": a cup the player organises or one they are in.
+struct MineRow {
+	std::string name, line;
+	int arg = 0;
+	bool warn = false;
+};
+
+std::string OrganizedLine(const TourneyOrganized &c, bool &warn)
+{
+	warn = false;
+	switch (c.status) {
+	case TourneyStatus::Signup:
+		return TrFmt("You organise it \xC2\xB7 %s of %s \xC2\xB7 starts %s", {std::to_string(c.entries), std::to_string(c.maxEntries), WhenText(c.startsAt)});
+	case TourneyStatus::Checkin: return TrFmt("You organise it \xC2\xB7 %s of %s checked in", {std::to_string(c.checkedIn), std::to_string(c.entries)});
+	case TourneyStatus::Running:
+		warn = c.openDisputes > 0;
+		if (c.openDisputes == 1) return Tr("You organise it \xC2\xB7 1 dispute to settle");
+		if (c.openDisputes > 1) return TrFmt("You organise it \xC2\xB7 %s disputes to settle", {std::to_string(c.openDisputes)});
+		return Tr("You organise it \xC2\xB7 being played");
+	case TourneyStatus::Finished: return Tr("You organised it \xC2\xB7 over");
+	default: return Tr("You organised it \xC2\xB7 cancelled");
+	}
+}
+
 int PaintMineCard(Painter &p, const State &st, const TourneyMineView &mine, int x, int y, int w)
 {
 	const int mx = st.mouseX, my = st.mouseY, pad = 24;
-	std::vector<const TourneyMyEntry *> rows;
+	std::vector<MineRow> rows;
+	for (const TourneyOrganized &c : mine.mine.organized) {
+		MineRow r;
+		r.name = c.name;
+		r.line = OrganizedLine(c, r.warn);
+		r.arg = ArgOf(kSubManage, c.id);
+		rows.push_back(r);
+	}
 	for (const TourneyMyEntry &e : mine.mine.entries) {
-		if (TourneyEntryActive(e.status) || e.tournamentStatus == TourneyStatus::Finished) rows.push_back(&e);
+		if (!(TourneyEntryActive(e.status) || e.tournamentStatus == TourneyStatus::Finished) || TourneyOrganizedOf(mine.mine, e.tournamentId)) continue;
+		MineRow r;
+		r.name = e.name;
+		r.arg = ArgOf(kSubOpen, e.tournamentId);
+		std::string &line = r.line;
+		if (e.tournamentStatus == TourneyStatus::Finished) line = e.placement ? TrFmt("Over \xC2\xB7 you finished in place %s", {std::to_string(e.placement)}) : Tr("Over");
+		else if (e.tournamentStatus == TourneyStatus::Running) {
+			const TourneyNext &n = mine.mine.next;
+			line = n.present && n.tournamentId == e.tournamentId
+				? TrFmt("Playing \xC2\xB7 %s, %s", {StageText(n.stage, n.round),
+					Tr(n.status == TourneyMatchStatus::Ready ? "ready" : n.status == TourneyMatchStatus::Live ? "live" : "waiting for your opponent")})
+				: Tr("Playing");
+		}
+		else if (e.status == TourneyEntryStatus::Waitlist) line = Tr("Waiting list");
+		else if (e.tournamentStatus == TourneyStatus::Checkin) line = Tr(e.checkedIn ? "Signed up \xC2\xB7 checked in" : "Signed up \xC2\xB7 check in now");
+		else line = TrFmt("Signed up \xC2\xB7 starts %s", {WhenText(e.startsAt)});
+		rows.push_back(r);
 	}
 	const int shown = std::min<int>(3, static_cast<int>(rows.size()));
 	const int h = 56 + std::max(1, shown) * 62 + 86;
@@ -379,28 +459,16 @@ int PaintMineCard(Painter &p, const State &st, const TourneyMineView &mine, int 
 		cy += 62;
 	}
 	for (int i = 0; i < shown; i++) {
-		const TourneyMyEntry &e = *rows[static_cast<size_t>(i)];
+		const MineRow &r = rows[static_cast<size_t>(i)];
 		if (i) p.Fill(x + pad, cy - 6, w - 2 * pad, 1, pal::hairline);
 		const bool hot = p.Hover(x + pad, cy, w - 2 * pad, 56, mx, my);
 		UseFace(p, BrandFace::UiStrong, 17);
 		p.raw = true;
-		p.Text(x + pad, cy, w - 2 * pad, 26, e.name, hot ? pal::redText : pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		std::string line;
-		if (e.tournamentStatus == TourneyStatus::Finished) line = e.placement ? TrFmt("Over \xC2\xB7 you finished in place %s", {std::to_string(e.placement)}) : Tr("Over");
-		else if (e.tournamentStatus == TourneyStatus::Running) {
-			const TourneyNext &n = mine.mine.next;
-			line = n.present && n.tournamentId == e.tournamentId
-				? TrFmt("Playing \xC2\xB7 %s, %s", {StageText(n.stage, n.round),
-					Tr(n.status == TourneyMatchStatus::Ready ? "ready" : n.status == TourneyMatchStatus::Live ? "live" : "waiting for your opponent")})
-				: Tr("Playing");
-		}
-		else if (e.status == TourneyEntryStatus::Waitlist) line = Tr("Waiting list");
-		else if (e.tournamentStatus == TourneyStatus::Checkin) line = Tr(e.checkedIn ? "Signed up \xC2\xB7 checked in" : "Signed up \xC2\xB7 check in now");
-		else line = TrFmt("Signed up \xC2\xB7 starts %s", {WhenText(e.startsAt)});
+		p.Text(x + pad, cy, w - 2 * pad, 26, r.name, hot ? pal::redText : pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.Font(3);
-		p.Text(x + pad, cy + 28, w - 2 * pad, 20, line, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(x + pad, cy + 28, w - 2 * pad, 20, r.line, r.warn ? pal::warn : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.raw = false;
-		p.AddHit(x + pad, cy, w - 2 * pad, 56, kTourney, ArgOf(kSubOpen, e.tournamentId));
+		p.AddHit(x + pad, cy, w - 2 * pad, 56, kTourney, r.arg);
 		cy += 62;
 	}
 	const int noteY = y + h - 82;
@@ -461,6 +529,7 @@ void PaintListScreen(Painter &p, const State &st, const Ui &u, PaintOut &out)
 	PaintFeatured(p, st, Featured(lists), mine, m, top, mainW, featH);
 	const int tabsY = top + featH + (l.roomy ? 24 : 16);
 	PaintSubTabs(p, u, lists, m, tabsY, 40, mx, my);
+	PaintCupButtons(p, mine, m + mainW, tabsY - 2, 40, mx, my);
 	const int tableY = tabsY + 40 + 14;
 	PaintTable(p, st, u, lists, mine, m, tableY, mainW, bottom - tableY, out);
 

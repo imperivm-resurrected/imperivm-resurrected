@@ -31,7 +31,8 @@ void DoAction(int action, int arg)
 	}
 	if (TourneyBlocksAction(action, arg)) return;
 	if (action != kChatFocus && action != kFieldName && action != kFieldPass && action != kChatSend &&
-		action != kFieldJoinPass && action != kJoin && action != kFieldSearch && action != kPassShow && action != kFieldRoomName && action != kFieldTourney) {
+		action != kFieldJoinPass && action != kJoin && action != kFieldSearch && action != kPassShow && action != kFieldRoomName && action != kFieldTourney &&
+		action != kFieldCupName && action != kFieldCupDescription && action != kFieldCupCode) {
 		g_s.focus = kNoField;
 	}
 	switch (action) {
@@ -69,6 +70,9 @@ void DoAction(int action, int arg)
 		if (arg == kTourneyShowArg) OfferLink();
 		break;
 	case kFieldTourney: FocusField(kTourneyField); break;
+	case kFieldCupName: FocusField(kCupNameField); break;
+	case kFieldCupDescription: FocusField(kCupDescriptionField); break;
+	case kFieldCupCode: FocusField(kCupCodeField); break;
 	case kCreate:
 		if (g_s.nameInput.empty()) g_s.nameInput = Tr("Game of ") + g_s.player;
 		g_s.view = kViewCreate;
@@ -246,6 +250,9 @@ void DoAction(int action, int arg)
 		}
 		else if (g_s.dropKind == kDropVisibility) {
 			g_s.createVisibility = std::max(0, std::min(2, arg));
+		}
+		else if (g_s.dropKind == kDropTourney) {
+			TourneyDropPick(idx, arg);
 		}
 		else if (g_s.dropKind == kDropPlayers) {
 			g_s.createPlayers = std::max(2, std::min(8, arg + 2));
@@ -776,7 +783,10 @@ std::string &FocusedText()
 	case kSearchField: return g_s.searchInput;
 	case kPickSearchField: return g_s.pickSearch;
 	case kRoomNameField: return g_s.roomNameInput;
-	case kTourneyField: return TourneyFieldText();
+	case kTourneyField:
+	case kCupNameField:
+	case kCupDescriptionField:
+	case kCupCodeField: return TourneyFieldText(g_s.focus);
 	default: return g_s.passInput;
 	}
 }
@@ -785,14 +795,16 @@ int FieldOfAction(int action)
 {
 	return action == kChatFocus ? kChatField : action == kFieldName ? kNameField : action == kFieldPass ? kPassField
 		: action == kFieldJoinPass ? kJoinPassField : action == kFieldSearch ? kSearchField
-		: action == kFieldPickSearch ? kPickSearchField : action == kFieldRoomName ? kRoomNameField : action == kFieldTourney ? kTourneyField : kNoField;
+		: action == kFieldPickSearch ? kPickSearchField : action == kFieldRoomName ? kRoomNameField : action == kFieldTourney ? kTourneyField : action == kFieldCupName ? kCupNameField
+		: action == kFieldCupDescription ? kCupDescriptionField : action == kFieldCupCode ? kCupCodeField : kNoField;
 }
 
 int ActionOfField(int field)
 {
 	return field == kChatField ? kChatFocus : field == kNameField ? kFieldName : field == kPassField ? kFieldPass
 		: field == kJoinPassField ? kFieldJoinPass : field == kSearchField ? kFieldSearch
-		: field == kPickSearchField ? kFieldPickSearch : field == kRoomNameField ? kFieldRoomName : field == kTourneyField ? kFieldTourney : -1;
+		: field == kPickSearchField ? kFieldPickSearch : field == kRoomNameField ? kFieldRoomName : field == kTourneyField ? kFieldTourney : field == kCupNameField ? kFieldCupName
+		: field == kCupDescriptionField ? kFieldCupDescription : field == kCupCodeField ? kFieldCupCode : -1;
 }
 
 void FocusField(int field)
@@ -833,8 +845,12 @@ void TabStep(bool back)
 void FieldKey(UINT msg, WPARAM wp)
 {
 	std::string &text = FocusedText();
+	const int field = g_s.focus;
+	const size_t limit = TourneyOwnsField(field) ? TourneyFieldBytes(field) : 200;
 	if (msg == WM_CHAR) {
-		if (EditChar(text, g_s.edit, wp, 200) && g_s.focus == kPickSearchField) g_s.pick.scroll = 0;
+		const bool typed = EditChar(text, g_s.edit, wp, limit);
+		if (typed && g_s.focus == kPickSearchField) g_s.pick.scroll = 0;
+		if (typed && TourneyOwnsField(field)) TourneyFieldEdited(field);
 	}
 	else if (g_s.focus == kPickSearchField && (wp == VK_UP || wp == VK_DOWN || wp == VK_PRIOR || wp == VK_NEXT)) {
 		PickMove(wp);
@@ -843,7 +859,7 @@ void FieldKey(UINT msg, WPARAM wp)
 		if (g_s.focus == kPickSearchField) DoAction(kPickOk, 0);
 		else if (g_s.focus == kChatField) DoAction(kChatSend, 0);
 		else if (g_s.focus == kJoinPassField) DoAction(kPassOk, 0);
-		else if (g_s.focus == kTourneyField) TourneyFieldEnter();
+		else if (TourneyOwnsField(g_s.focus)) TourneyFieldEnter(g_s.focus);
 		else if (g_s.focus == kRoomNameField) {
 			if (!g_s.roomNameInput.empty() && g_s.roomNameInput != g_s.room.info.name) RenameRoom(g_s.roomNameInput);
 			g_s.focus = kNoField;
@@ -860,7 +876,9 @@ void FieldKey(UINT msg, WPARAM wp)
 		}
 	}
 	else {
-		if (EditKey(text, g_s.edit, wp, 200) == 2 && g_s.focus == kPickSearchField) g_s.pick.scroll = 0;
+		const int edited = EditKey(text, g_s.edit, wp, limit);
+		if (edited == 2 && g_s.focus == kPickSearchField) g_s.pick.scroll = 0;
+		if (edited == 2 && TourneyOwnsField(field)) TourneyFieldEdited(field);
 	}
 }
 

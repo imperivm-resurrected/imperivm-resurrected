@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <functional>
 #include <mutex>
 #include <set>
 #include <string>
@@ -26,6 +27,7 @@
 #include "ui/leagueui.h"
 #include "ui/modui.h"
 #include "ui/mpui_tourney_internal.h"
+#include "ui/textedit.h"
 
 namespace mpui_tourney_impl {
 
@@ -52,6 +54,10 @@ std::string SlugOf(int64_t tournament)
 	for (const TourneyMyEntry &e : mine.mine.entries) {
 		if (e.tournamentId == tournament) return e.slug;
 	}
+	if (mine.mine.organize.activeId == tournament) return mine.mine.organize.activeSlug;
+	if (const TourneyOrganized *c = TourneyOrganizedOf(mine.mine, tournament)) return c->slug;
+	const TourneyPageView page = LeagueTourneyPage(g_tourney.slug, 60000);
+	if (page.loaded && page.detail.id == tournament) return page.detail.slug;
 	return std::string();
 }
 
@@ -94,6 +100,56 @@ void Flash()
 	if (!hwnd || GetForegroundWindow() == hwnd) return;
 	FLASHWINFO fi = {sizeof(fi), hwnd, FLASHW_ALL | FLASHW_TIMERNOFG, 5, 0};
 	FlashWindowEx(&fi);
+}
+
+// Under g_lock: the page of a tournament, on one of its tabs.
+void OpenPage(const std::string &slug, int tab)
+{
+	Ui &u = g_tourney;
+	if (slug.empty()) return;
+	u.slug = slug;
+	u.screen = kScreenPage;
+	u.pageTab = tab;
+	u.bracketX = u.bracketY = u.sideScroll = 0;
+}
+
+// Under g_lock: the cup being made, once the server answered.
+void CupMade(const TourneyOpResult &r)
+{
+	Ui &u = g_tourney;
+	if (!r.ok) {
+		u.cupError = ResultText(r);
+		u.cupErrorSlug = r.error == "already_organizing" ? r.slug : std::string();
+		return;
+	}
+	u.cupError.clear();
+	u.cupErrorSlug.clear();
+	if (u.screen == kScreenCreate) OpenPage(r.slug, kOrganizerTab);
+	if (!r.inviteCode.empty()) u.shownCode = r.inviteCode;
+	else Toast("Your cup is published: it is in the list of tournaments.");
+}
+
+// Under g_lock: the cup of a code, once the server answered.
+void CodeFound(const TourneyOpResult &r)
+{
+	Ui &u = g_tourney;
+	if (!u.joinOpen) return;
+	if (!r.ok) {
+		u.joinError = r.status == 404 || r.error == "not_found" ? Tr("No cup has that code. Check it with the organiser.") : ResultText(r);
+		FocusField(kCupCodeField);
+		return;
+	}
+	u.joinOpen = false;
+	u.joinCode.clear();
+	u.joinError.clear();
+	if (g_s.focus == kCupCodeField) g_s.focus = kNoField;
+	OpenPage(r.slug, 0);
+}
+
+// Under g_lock: asks first, then runs `act` (which only talks to the league: the dialog answers outside this lock).
+void Confirm(const std::string &title, const std::string &text, const std::string &yes, std::function<void()> act)
+{
+	ModUiAsk(title, text, yes, std::move(act));
 }
 
 std::string StageOf(const TourneyNotice &n)
@@ -172,6 +228,8 @@ void TakeResults()
 			if (!r.ok) Toast(ResultText(r), true);
 			break;
 		case TourneyOp::Presence: break;
+		case TourneyOp::Create: CupMade(r); break;
+		case TourneyOp::FindCode: CodeFound(r); break;
 		default: Toast(ResultText(r), !r.ok); break;
 		}
 	}
@@ -523,6 +581,11 @@ std::string ResultText(const TourneyOpResult &r)
 		case TourneyOp::CheckIn: return Tr("Check-in done. See you at the start!");
 		case TourneyOp::NoShow: return Tr("Your opponent did not come: the win is yours.");
 		case TourneyOp::Dispute: return Tr("The organisers will review the match.");
+		case TourneyOp::Cancel: return Tr("The cup is cancelled. Its players will see it on its page.");
+		case TourneyOp::CheckinNow: return Tr("The check-in is open: the cup starts when it closes.");
+		case TourneyOp::StartNow: return Tr("The cup has started: the bracket is drawn.");
+		case TourneyOp::RemoveEntry: return Tr("The player is out of the cup.");
+		case TourneyOp::Resolve: return Tr("Done: the match is settled.");
 		default: return std::string();
 		}
 	}
@@ -540,8 +603,25 @@ std::string ResultText(const TourneyOpResult &r)
 	if (e == "not_in_room") return Tr("You have to be in the room to claim the win.");
 	if (e == "opponent_present") return Tr("Your opponent is in the room.");
 	if (e == "not_claimed") return Tr("Someone else is opening the room.");
+	if (e == "not_eligible") {
+		return TrFmt("To organise a cup you need %s online games registered by the league; you have %s.", {std::to_string(r.gamesNeeded), std::to_string(r.gamesPlayed)});
+	}
+	if (e == "already_organizing") return Tr("You already organise a cup that is not over. Finish it or cancel it first.");
+	if (e == "invite_required") return Tr("This cup is private: you need its code to sign up.");
+	if (e == "not_enough") return TrFmt("%s players have checked in and the cup needs %s to start.", {std::to_string(r.checkedIn), std::to_string(r.needed)});
+	if (e == "own_match") return Tr("You play this match: the league's team settles it.");
+	if (e == "not_organizer") return Tr("Only the organiser of the cup can do that.");
+	if (e == "wrong_status") return Tr("The cup has moved on: that cannot be done at this stage any more.");
+	if (e == "removed") return Tr("The organiser took you off this cup: you cannot sign up again.");
+	if (e == "rate_limited") {
+		if (r.op == TourneyOp::FindCode) return TrFmt("Too many wrong codes. Try again in %s.", {WaitText(r.retryAfter > 0 ? r.retryAfter : 600)});
+		if (r.op == TourneyOp::Create) return r.retryAfter > 0 ? TrFmt("You can make up to 5 cups a day. Try again in %s.", {WaitText(r.retryAfter)}) : Tr("You can make up to 5 cups a day. Try again later.");
+		return r.retryAfter > 0 ? TrFmt("Too many requests in a short time. Try again in %s.", {WaitText(r.retryAfter)}) : Tr("Too many requests in a short time. Try again in a moment.");
+	}
+	if (e == "not_ready" && r.op == TourneyOp::Resolve) return Tr("That match is not being played any more.");
 	if (e == "not_found") return Tr("The league could not find it. It may have changed: try again.");
 	if (!r.status) return Tr("Couldn't reach the league server. Check your connection and try again.");
+	if (r.op == TourneyOp::Create && r.status == 400) return Tr("The league did not accept the cup's details. Check them and try again.");
 	return Tr("The league server refused the request. Try again later.");
 }
 
@@ -552,18 +632,60 @@ const TourneyMyEntry *MyEntry(const TourneyMineView &mine, int64_t tournament)
 
 const TourneySummary *Featured(const TourneyListsView &lists)
 {
-	for (const TourneySummary &t : lists.open) {
-		if (t.official) return &t;
-	}
-	for (const TourneySummary &t : lists.live) {
-		if (t.official) return &t;
-	}
-	if (!lists.open.empty()) return &lists.open.front();
-	if (!lists.live.empty()) return &lists.live.front();
-	for (const TourneySummary &t : lists.finished) {
-		if (t.official) return &t;
+	for (const std::vector<TourneySummary> *list : {&lists.open, &lists.live, &lists.finished}) {
+		for (const TourneySummary &t : *list) {
+			if (t.official) return &t;
+		}
 	}
 	return nullptr;
+}
+
+bool IsOrganizer(const TourneySummary &t)
+{
+	return !t.official && t.organizer.steamId && t.organizer.steamId == SteamOwnId();
+}
+
+std::string OrganizerText(const TourneySummary &t)
+{
+	if (t.official || !t.organizer.Present()) return std::string();
+	if (IsOrganizer(t)) return Tr("You organise it");
+	return TrFmt("By %s", {t.organizer.name.empty() ? Tr("a player") : t.organizer.name});
+}
+
+std::string WaitText(int seconds)
+{
+	if (seconds < 60) return TrFmt("%s s", {std::to_string(std::max(1, seconds))});
+	if (seconds < 3600) return TrFmt("%s min", {std::to_string((seconds + 59) / 60)});
+	return TrFmt("%s h", {std::to_string((seconds + 3599) / 3600)});
+}
+
+int SecondButtonWidth(Painter &p, const std::string &label)
+{
+	return GhostButtonWidth(p, label, false);
+}
+
+void PaintSecondButton(Painter &p, int x, int y, int w, int h, const std::string &label, int arg, bool enabled, int mx, int my)
+{
+	PaintGhostButton(p, x, y, w, h, label, kTourney, false, enabled, mx, my, arg);
+}
+
+void PaintSegments(Painter &p, int x, int y, int w, int h, const std::vector<std::string> &labels, int selected, const std::vector<int> &args, int mx, int my)
+{
+	const int n = static_cast<int>(labels.size());
+	if (!n) return;
+	const int gap = 2;
+	int cx = x;
+	for (int i = 0; i < n; i++) {
+		const int cw = i + 1 == n ? x + w - cx : (w - gap * (n - 1)) / n;
+		const bool on = i == selected, hot = !on && p.Hover(cx, y, cw, h, mx, my);
+		p.Fill(cx, y, cw, h, on ? pal::text : hot ? pal::button : pal::field);
+		UseFace(p, BrandFace::UiStrong, 15);
+		p.raw = true;
+		p.Text(cx + 4, y, cw - 8, h, labels[static_cast<size_t>(i)], on ? pal::onLight : hot ? pal::text : pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.raw = false;
+		if (!on && i < static_cast<int>(args.size())) p.AddHit(cx, y, cw, h, kTourney, args[static_cast<size_t>(i)]);
+		cx += cw + gap;
+	}
 }
 
 int TagWidth(Painter &p, const std::string &text)
@@ -705,15 +827,21 @@ void PaintTournaments(Painter &p, const State &st)
 	}
 	LeagueTourneyWatching();
 	PaintOut out;
+	const bool dialog = u.disputeMatch || u.joinOpen || !u.shownCode.empty() || u.walkoverMatch;
+	if (dialog) p.noHover = true;
 	switch (u.screen) {
 	case kScreenPage: PaintPageScreen(p, st, u, out); break;
 	case kScreenMatch: PaintMatchScreen(p, st, u); break;
 	case kScreenChampion: PaintChampionScreen(p, st, u); break;
+	case kScreenCreate: PaintCreateScreen(p, st, u); break;
 	default: PaintListScreen(p, st, u, out); break;
 	}
-	if (u.disputeMatch) {
+	if (dialog) {
 		UseSharedFonts(p);
-		PaintDisputeDialog(p, st, u);
+		if (u.disputeMatch) PaintDisputeDialog(p, st, u);
+		else if (u.walkoverMatch) PaintWalkoverDialog(p, st, u);
+		else if (!u.shownCode.empty()) PaintCodeDialog(p, st, u);
+		else PaintJoinDialog(p, st, u);
 		UseScreenFonts(p);
 	}
 	std::lock_guard<std::mutex> lock(g_lock);
@@ -733,6 +861,7 @@ bool PaintTourneyHeader(Painter &p, const State &st)
 	case kScreenPage: return PaintPageHeader(p, st, u);
 	case kScreenMatch: return PaintMatchHeader(p, st, u);
 	case kScreenChampion: return PaintChampionHeader(p, st, u);
+	case kScreenCreate: return PaintCreateHeader(p, st, u);
 	default: return false;
 	}
 }
@@ -757,15 +886,8 @@ void TourneyAction(int arg)
 		u.filter = static_cast<int>(value);
 		u.listScroll = 0;
 		break;
-	case kSubOpen: {
-		const std::string slug = SlugOf(value);
-		if (slug.empty()) break;
-		u.slug = slug;
-		u.screen = kScreenPage;
-		u.pageTab = 0;
-		u.bracketX = u.bracketY = u.sideScroll = 0;
-		break;
-	}
+	case kSubOpen: OpenPage(SlugOf(value), 0); break;
+	case kSubManage: OpenPage(SlugOf(value), kOrganizerTab); break;
 	case kSubBack: TourneyBack(); break;
 	case kSubPageTab:
 		u.pageTab = static_cast<int>(value);
@@ -847,7 +969,7 @@ void TourneyAction(int arg)
 		u.disputeText.clear();
 		FocusField(kTourneyField);
 		break;
-	case kSubDisputeSend: TourneyFieldEnter(); break;
+	case kSubDisputeSend: TourneyFieldEnter(kTourneyField); break;
 	case kSubDisputeCancel:
 		u.disputeMatch = 0;
 		u.disputeText.clear();
@@ -866,6 +988,140 @@ void TourneyAction(int arg)
 		u.bracketX = std::max(0, std::min(u.bracketArea.maxX, u.bracketX + (value ? page : -page)));
 		break;
 	}
+	case kSubCreate: {
+		if (!LeagueLinked()) {
+			Toast("Link your league account first.");
+			break;
+		}
+		const TourneyOrganize o = LeagueTourneyMine().mine.organize;
+		if (o.activeId) {
+			OpenPage(o.activeSlug.empty() ? SlugOf(o.activeId) : o.activeSlug, kOrganizerTab);
+			break;
+		}
+		if (o.known && !o.allowed) {
+			Toast(TrFmt("To organise a cup you need %s online games registered by the league; you have %s.", {std::to_string(o.gamesNeeded), std::to_string(o.gamesPlayed)}));
+			break;
+		}
+		if (u.screen != kScreenCreate) {
+			u.cup = NewCupForm(g_s.player, NowMs());
+			u.cupError.clear();
+			u.cupErrorSlug.clear();
+		}
+		u.screen = kScreenCreate;
+		break;
+	}
+	case kSubCupSet:
+		ApplyCupSetting(u.cup, static_cast<int>(value >> 16), static_cast<int>(value & 0xFFFF), NowMs());
+		u.cupError.clear();
+		break;
+	case kSubCupMapMenu: {
+		const std::vector<TourneyMap> choices = CupMapChoices();
+		const int index = static_cast<int>(value);
+		if (index < 0 || index >= static_cast<int>(u.cup.maps.size())) break;
+		g_s.tourneyDropItems.clear();
+		g_s.tourneyDropSel = -1;
+		for (size_t i = 0; i < choices.size(); i++) {
+			g_s.tourneyDropItems.push_back(MapText(choices[i]));
+			if (choices[i].name == u.cup.maps[static_cast<size_t>(index)].name && choices[i].size == u.cup.maps[static_cast<size_t>(index)].size) g_s.tourneyDropSel = static_cast<int>(i);
+		}
+		g_s.dropOpen = true;
+		g_s.dropKind = kDropTourney;
+		g_s.dropIndex = index;
+		g_s.dropScroll = ClampDropScroll(g_s.tourneyDropSel - kDropRows / 2, static_cast<int>(choices.size()));
+		break;
+	}
+	case kSubCupSubmit: {
+		if (LeagueTourneyBusy(TourneyOp::Create, 0)) break;
+		OwnCupContent(u.cup.contentKey, u.cup.contentName);
+		if (!TourneyCheckCup(u.cup, NowMs()).empty()) {
+			Toast("Some of the cup's details need fixing: they are marked in red.", true);
+			break;
+		}
+		u.cupError.clear();
+		u.cupErrorSlug.clear();
+		LogI("league", "making a cup of %d places, %s", u.cup.maxEntries, u.cup.isPrivate ? "private" : "open");
+		LeagueTourneyCreate(u.cup);
+		break;
+	}
+	case kSubCupOpenActive: OpenPage(u.cupErrorSlug, kOrganizerTab); break;
+	case kSubJoin:
+		u.joinOpen = true;
+		u.joinCode.clear();
+		u.joinError.clear();
+		FocusField(kCupCodeField);
+		break;
+	case kSubJoinSend: TourneyFieldEnter(kCupCodeField); break;
+	case kSubJoinCancel:
+		u.joinOpen = false;
+		u.joinError.clear();
+		g_s.focus = kNoField;
+		break;
+	case kSubCopyCode: {
+		const std::string code = !u.shownCode.empty() ? u.shownCode : LeagueTourneyCodeOf(u.slug);
+		if (code.empty()) break;
+		ClipboardSet(code);
+		Toast(TrFmt("Code %s copied: paste it to your players.", {code}));
+		break;
+	}
+	case kSubCodeClose: u.shownCode.clear(); break;
+	case kSubCancelCup: {
+		const int64_t tournament = value;
+		Confirm(Tr("Cancel the cup"), Tr("The cup ends here for everyone and leaves the list. This cannot be undone. Cancel it?"), Tr("Cancel the cup"),
+			[tournament] { LeagueTourneyCancel(tournament); });
+		break;
+	}
+	case kSubCheckinNow: {
+		const int64_t tournament = value;
+		Confirm(Tr("Open the check-in now"), Tr("The start moves forward to the end of the check-in. Whoever does not check in in time loses the place. Open it?"),
+			Tr("Open the check-in"), [tournament] { LeagueTourneyCheckinNow(tournament); });
+		break;
+	}
+	case kSubStartNow: {
+		const int64_t tournament = value;
+		Confirm(Tr("Start now"), Tr("The bracket is drawn with the players checked in; whoever has not checked in is out. Start the cup?"), Tr("Start"),
+			[tournament] { LeagueTourneyStartNow(tournament); });
+		break;
+	}
+	case kSubRemove: {
+		const TourneyPageView page = LeagueTourneyPage(u.slug, 60000);
+		const TourneyEntrant *e = page.loaded ? TourneyEntrantOf(page.detail, value) : nullptr;
+		if (!e) break;
+		const int64_t tournament = page.detail.id, entry = value;
+		Confirm(Tr("Take a player off"), TrFmt("%s will be out of your cup. Take them off?", {e->name}), Tr("Take off"),
+			[tournament, entry] { LeagueTourneyRemoveEntry(tournament, entry); });
+		break;
+	}
+	case kSubGameA:
+	case kSubGameB:
+	case kSubReplay: {
+		const TourneyPageView page = LeagueTourneyPage(u.slug, 60000);
+		const TourneyMatch *m = nullptr;
+		for (const TourneyMatch &x : page.detail.matches) {
+			if (x.id == value) m = &x;
+		}
+		if (!m) break;
+		const int64_t match = value;
+		if (sub == kSubReplay) {
+			Confirm(Tr("Play the game again"), TrFmt("The game of %s against %s does not count and is played again. Go ahead?", {m->a.name, m->b.name}), Tr("Play it again"),
+				[match] { LeagueTourneyResolve(match, TourneyVerdict::Replay); });
+			break;
+		}
+		const std::string winner = sub == kSubGameA ? m->a.name : m->b.name;
+		const TourneyVerdict verdict = sub == kSubGameA ? TourneyVerdict::GameToA : TourneyVerdict::GameToB;
+		Confirm(Tr("Settle the dispute"), TrFmt("The disputed game goes to %s. Go ahead?", {winner}), TrFmt("To %s", {winner}),
+			[match, verdict] { LeagueTourneyResolve(match, verdict); });
+		break;
+	}
+	case kSubWalkover: u.walkoverMatch = value; break;
+	case kSubWalkoverA:
+	case kSubWalkoverB:
+	case kSubWalkoverNobody:
+		if (u.walkoverMatch) {
+			LeagueTourneyResolve(u.walkoverMatch, sub == kSubWalkoverA ? TourneyVerdict::WalkoverToA : sub == kSubWalkoverB ? TourneyVerdict::WalkoverToB : TourneyVerdict::WalkoverNobody);
+		}
+		u.walkoverMatch = 0;
+		break;
+	case kSubWalkoverCancel: u.walkoverMatch = 0; break;
 	default: break;
 	}
 }
@@ -878,8 +1134,21 @@ bool TourneyBack()
 		g_s.focus = kNoField;
 		return true;
 	}
+	if (u.walkoverMatch) {
+		u.walkoverMatch = 0;
+		return true;
+	}
+	if (u.joinOpen) {
+		u.joinOpen = false;
+		g_s.focus = kNoField;
+		return true;
+	}
+	if (!u.shownCode.empty()) {
+		u.shownCode.clear();
+		return true;
+	}
 	if (u.screen == kScreenList) return false;
-	u.screen = u.screen == kScreenPage || u.slug.empty() ? kScreenList : kScreenPage;
+	u.screen = u.screen == kScreenPage || u.screen == kScreenCreate || u.slug.empty() ? kScreenList : kScreenPage;
 	return true;
 }
 
@@ -916,14 +1185,73 @@ bool TourneyScrollTo(int bar, int pos)
 	}
 }
 
-std::string &TourneyFieldText()
+bool TourneyOwnsField(int field)
 {
-	return g_tourney.disputeText;
+	return field == kTourneyField || field == kCupNameField || field == kCupDescriptionField || field == kCupCodeField;
 }
 
-void TourneyFieldEnter()
+std::string &TourneyFieldText(int field)
 {
 	Ui &u = g_tourney;
+	switch (field) {
+	case kCupNameField: return u.cup.name;
+	case kCupDescriptionField: return u.cup.description;
+	case kCupCodeField: return u.joinCode;
+	default: return u.disputeText;
+	}
+}
+
+size_t TourneyFieldBytes(int field)
+{
+	switch (field) {
+	case kCupNameField: return 4 * kTourneyCupNameMax;
+	case kCupDescriptionField: return 4 * kTourneyCupDescriptionMax;
+	case kCupCodeField: return 24;
+	default: return 200;
+	}
+}
+
+void TourneyFieldEdited(int field)
+{
+	std::string &text = TourneyFieldText(field);
+	if (field == kCupCodeField) {
+		const std::string tidy = TourneyTidyCode(text).substr(0, kTourneyCodeLength);
+		if (tidy != text) {
+			text = tidy;
+			EditToEnd(text, g_s.edit);
+		}
+		g_tourney.joinError.clear();
+		return;
+	}
+	const int most = field == kCupNameField ? kTourneyCupNameMax : field == kCupDescriptionField ? kTourneyCupDescriptionMax : 0;
+	if (!most) return;
+	while (TourneyTextLength(text) > most) text.erase(static_cast<size_t>(PrevCp(text, static_cast<int>(text.size()))));
+	EditFix(text, g_s.edit);
+	g_tourney.cupError.clear();
+}
+
+void TourneyFieldEnter(int field)
+{
+	Ui &u = g_tourney;
+	if (field == kCupNameField) {
+		FocusField(kCupDescriptionField);
+		return;
+	}
+	if (field == kCupDescriptionField) {
+		g_s.focus = kNoField;
+		return;
+	}
+	if (field == kCupCodeField) {
+		const std::string code = TourneyTidyCode(u.joinCode);
+		if (!TourneyCodeValid(code)) {
+			u.joinError = Tr("A code has 6 letters and digits, without 0, O, 1 or I.");
+			FocusField(kCupCodeField);
+			return;
+		}
+		u.joinError.clear();
+		LeagueTourneyFindByCode(code);
+		return;
+	}
 	std::string text = u.disputeText;
 	while (!text.empty() && text.back() == ' ') text.pop_back();
 	if (text.size() < 4) {
@@ -935,6 +1263,15 @@ void TourneyFieldEnter()
 	u.disputeMatch = 0;
 	u.disputeText.clear();
 	g_s.focus = kNoField;
+}
+
+void TourneyDropPick(int index, int item)
+{
+	TourneyCupForm &f = g_tourney.cup;
+	const std::vector<TourneyMap> choices = CupMapChoices();
+	if (index < 0 || index >= static_cast<int>(f.maps.size()) || item < 0 || item >= static_cast<int>(choices.size())) return;
+	f.maps[static_cast<size_t>(index)] = choices[static_cast<size_t>(item)];
+	g_tourney.cupError.clear();
 }
 
 bool TourneyBlocksAction(int action, int arg)

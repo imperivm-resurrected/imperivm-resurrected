@@ -956,6 +956,10 @@ std::vector<std::string> DropItems(const State &st, int &sel)
 		for (const SaveEntry &e : st.saves) items.push_back(SaveLabel(e));
 		return items;
 	}
+	if (st.dropKind == kDropTourney) {
+		sel = st.tourneyDropSel;
+		return st.tourneyDropItems;
+	}
 	if (st.dropKind == kDropVisibility) {
 		sel = st.createVisibility;
 		return {"Public", "Password protected", "Friends only"};

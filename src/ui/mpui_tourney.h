@@ -2,12 +2,13 @@
 // Copyright (C) 2026 THIONG
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #pragma once
+#include <cstddef>
 #include <string>
 
 #include "net/steamnet.h"
 #include "ui/uikit.h"
 
-// The Tournaments tab of the multiplayer screen (TorneoLista, TorneoCuadro, TorneoPartida, TorneoCampeon) and the rooms of the
+// The Tournaments tab of the multiplayer screen (TorneoLista, TorneoCuadro, TorneoPartida, TorneoCampeon, TorneoCrear) and the rooms of the
 // tournament matches. Every action of the tab goes through the screen's one action kTourney, with what to do in its argument. The
 // functions marked "locked" run with the screen's lock held; the others take it.
 
@@ -29,10 +30,18 @@ bool TourneyBack();
 bool TourneyWheel(int delta, bool shift);
 // Locked. A scroll bar of the tab dragged or paged.
 bool TourneyScrollTo(int bar, int pos);
-// Locked. The text of the dispute's field, while it has the focus.
-std::string &TourneyFieldText();
-// Locked. Return in the dispute's field.
-void TourneyFieldEnter();
+// The text fields of the tab: the dispute's, the cup's name and description, the invitation code.
+bool TourneyOwnsField(int field);
+// Locked. The text of one of the tab's fields, while it has the focus.
+std::string &TourneyFieldText(int field);
+// The bytes a field takes as it is typed; TourneyFieldEdited cuts it to its characters.
+size_t TourneyFieldBytes(int field);
+// Locked. After a key in one of the tab's fields: its length kept, the code in capitals.
+void TourneyFieldEdited(int field);
+// Locked. Return in one of the tab's fields.
+void TourneyFieldEnter(int field);
+// Locked. An item of a menu the tab opened (kDropTourney) picked.
+void TourneyDropPick(int index, int item);
 // Locked. What the tournament fixes in its room (map, options, open seats) cannot be changed: true, with a notice, for such an action.
 bool TourneyBlocksAction(int action, int arg);
 // A room of a tournament match, which the lobby lists first with its tag.
