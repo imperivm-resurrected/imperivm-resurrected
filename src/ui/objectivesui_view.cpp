@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "i18n/tr.h"
+#include "ui/fullscreen.h"
 #include "ui/ornaments.h"
 #include "ui/widgets.h"
 
@@ -31,14 +32,6 @@ std::wstring Upper(std::wstring w)
 {
 	if (!w.empty()) CharUpperBuffW(&w[0], static_cast<DWORD>(w.size()));
 	return w;
-}
-
-std::string Utf8(const std::wstring &w)
-{
-	const int n = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), static_cast<int>(w.size()), nullptr, 0, nullptr, nullptr);
-	std::string out(n > 0 ? n : 0, '\0');
-	if (n > 0) WideCharToMultiByte(CP_UTF8, 0, w.c_str(), static_cast<int>(w.size()), &out[0], n, nullptr, nullptr);
-	return out;
 }
 
 int PixelWidth(Painter &p, const std::wstring &w, int spacing)
@@ -391,8 +384,8 @@ void PaintObjectivesScreen(Painter &p, const View &v, PaintOut &out)
 	out = PaintOut();
 	// The notes are the game's words, already translated; the screen's own words go through Tr here.
 	p.raw = true;
-	PaintWindowFrame(p, kScreenW, kScreenH);
-	PaintWindowHeader(p, kScreenW, Utf8(Upper(W(Tr("Objectives")))));
+	PaintWindowCard(p, kScreenW, kScreenH);
+	PaintWindowHeading(p, kScreenW, Tr("Objectives"));
 	p.Fill(kDividerX, kTop + 4, 1, kBottom - kTop - 4, pal::hairline);
 	PaintList(p, v, out);
 	p.Fill(kListX, kListBottom + 6, kListW, 1, pal::lineStrong);

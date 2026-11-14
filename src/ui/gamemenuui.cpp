@@ -12,6 +12,7 @@
 #include "game/gamemenu.h"
 #include "game/gamestats.h"
 #include "game/options.h"
+#include "ui/fullscreen.h"
 #include "ui/gamemenuui_view.h"
 #include "ui/modui.h"
 #include "ui/mpui.h"
@@ -239,7 +240,7 @@ void GameMenuUiDraw(uint32_t *buf, int w, int h)
 	const int designW = screen == kScreenConfirm ? kConfirmW : screen == kScreenStats ? kStatsW : kMenuW;
 	const int designH = screen == kScreenConfirm ? kConfirmH : screen == kScreenStats ? kStatsH : MenuHeight(view);
 	PanelRender r(g_canvas, buf, w, h);
-	if (!r.Begin(designW, designH, 16)) return;
+	if (!BeginWindow(r, designW, designH, 16)) return;
 	r.Press(previous, mouseDown, {view.mouseX, view.mouseY});
 	if (screen == kScreenConfirm) PaintConfirm(r.p, view);
 	else if (screen == kScreenStats) PaintStatistics(r.p, view);

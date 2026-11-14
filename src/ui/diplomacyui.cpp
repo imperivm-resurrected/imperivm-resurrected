@@ -11,6 +11,7 @@
 #include "game/diplomacy.h"
 #include "game/diplomacyrules.h"
 #include "ui/diplomacyui_view.h"
+#include "ui/fullscreen.h"
 #include "ui/modui.h"
 #include "ui/mpui.h"
 #include "ui/widgets.h"
@@ -183,7 +184,7 @@ void DiplomacyUiDraw(uint32_t *buf, int w, int h)
 	}
 	if (!dlg) return;
 	PanelRender r(g_canvas, buf, w, h);
-	if (!r.Begin(kPanelW, PanelHeight(view), 16, true, FitScale(w, h, kPanelW, PanelHeight(view, true), 16))) return;
+	if (!BeginWindow(r, kPanelW, PanelHeight(view), 16, FitScale(w, h, kPanelW, PanelHeight(view, true), 16))) return;
 	r.Press(previous, mouseDown, {view.mouseX, view.mouseY});
 	PaintDiplomacy(r.p, view);
 	r.End();

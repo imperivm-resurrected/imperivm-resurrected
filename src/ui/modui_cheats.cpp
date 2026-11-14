@@ -456,7 +456,7 @@ void DrawCheatsPanel(uint32_t *frame, int frameW, int H, float s)
 	EnsureFonts(s);
 	const DWORD now = GetTickCount();
 	const COLORREF panel = pal::panel, frameOuter = pal::hairline, frameInner = pal::lineStrong;
-	const COLORREF btn = pal::raised, btnHot = pal::lineStrong, strong = pal::red, strongHot = pal::red;
+	const COLORREF btn = pal::button, btnHot = pal::buttonHover, strong = pal::red, strongHot = pal::redPressed;
 	const COLORREF btnFrame = pal::edgeHot, label = pal::body;
 	const float line = std::max(1.0f, s), rad = 2.0f * s;
 
@@ -527,7 +527,6 @@ void DrawCheatsPanel(uint32_t *frame, int frameW, int H, float s)
 	RectF tab{open ? panelW : 0.0f, tabY, tabW, tabH};
 	const bool hTab = tab.Has(mx, my);
 	FillRound(buf, W, H, tab.x, tab.y, tab.w, tab.h, rad, hTab ? strongHot : strong, 1.0f);
-	StrokeRound(buf, W, H, tab.x, tab.y, tab.w, tab.h, rad, line, btnFrame, 1.0f);
 	{
 		const float cx = tab.x + tab.w / 2, cy = tab.y + tab.h / 2, wd = 9 * s;
 		if (open) FillTriangle(buf, W, H, cx + wd / 2, cy - wd, cx + wd / 2, cy + wd, cx - wd / 2, cy, label, 1.0f);
@@ -562,11 +561,10 @@ void DrawCheatsPanel(uint32_t *frame, int frameW, int H, float s)
 		const int W = cacheW;
 		FillRound(buf, W, H, 0, top, panelW, panelH, rad, panel, 0.97f);
 		StrokeRound(buf, W, H, 0, top, panelW, panelH, rad, line, frameOuter, 1.0f);
-		StrokeRound(buf, W, H, 3 * s, top + 3 * s, panelW - 6 * s, panelH - 6 * s, rad, line, frameInner, 1.0f);
 		std::wstring title = ::W(Tr("Cheats"));
 		CharUpperBuffW(&title[0], static_cast<DWORD>(title.size()));
-		DrawLabel(buf, W, H, title, pad + 4 * s, top + 8 * s, panelW - 2 * pad, 28 * s, DT_LEFT, pal::redText, 1.0f);
-		FillRound(buf, W, H, pad, top + headH - 2 * s, panelW - 2 * pad, line, 0, frameInner, 1.0f);
+		DrawLabel(buf, W, H, title, pad + 2 * s, top + 4 * s, panelW - 2 * pad, 30 * s, DT_LEFT, pal::text, 1.0f, BrandFont(BrandFace::Display, 26, s));
+		FillRound(buf, W, H, pad, top + headH - 2 * s, panelW - 2 * pad, line, 0, frameOuter, 1.0f);
 
 		const bool bar = maxScroll > 0;
 		const float contentW = panelW - 2 * pad - (bar ? 12 * s : 0);
@@ -579,7 +577,6 @@ void DrawCheatsPanel(uint32_t *frame, int frameW, int H, float s)
 		};
 		auto button = [&](const RectF &r, bool isStrong, bool hot) {
 			FillRound(buf, W, H, r.x, r.y, r.w, r.h, rad, isStrong ? (hot ? strongHot : strong) : (hot ? btnHot : btn), 1.0f);
-			StrokeRound(buf, W, H, r.x, r.y, r.w, r.h, rad, line, btnFrame, 1.0f);
 		};
 		const bool mouseIn = mx >= 0 && mx < panelW && my >= viewTop && my < viewTop + viewH;
 		auto add = [&](int verb, int amount, const RECT &rect, const RectF &row) {

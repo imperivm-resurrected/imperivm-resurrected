@@ -675,7 +675,7 @@ void OptionsUiDraw(uint32_t *buf, int w, int h)
 		view.screenH = screen.h;
 		if (!BeginFullScreen(r, screen)) return;
 	}
-	else if (!r.Begin(kScreenW, kScreenH, 16)) return;
+	else if (!BeginWindow(r, kScreenW, kScreenH, 16)) return;
 	r.Press(previous, mouseDown, {view.mouseX, view.mouseY});
 	PaintOptionsScreen(r.p, view);
 	r.End();

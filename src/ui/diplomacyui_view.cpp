@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "game/diplomacyrules.h"
+#include "ui/fullscreen.h"
 #include "ui/widgets.h"
 
 using namespace ui;
@@ -122,7 +123,7 @@ void PaintPlayerCard(Painter &p, const View &v, int index, int x, int y, int w, 
 {
 	const Card &c = v.cards[index];
 	const Status status = StatusOf(c.mine, c.theirs);
-	ui::PaintCard(p, x, y, w, kCardH);
+	PaintGlassCard(p, x, y, w, kCardH);
 	p.Fill(x, y, 6, kCardH, ColorOf(c.rgb));
 	p.Fill(x + 6, y, 1, kCardH, pal::shadow);
 
@@ -213,8 +214,8 @@ int PanelHeight(const View &v, bool fullHeight) { return CardsBottom(v, fullHeig
 void PaintDiplomacy(Painter &p, const View &v)
 {
 	const int h = PanelHeight(v);
-	PaintWindowFrame(p, kPanelW, h);
-	PaintWindowHeader(p, kPanelW, "DIPLOMACY");
+	PaintWindowCard(p, kPanelW, h);
+	PaintWindowHeading(p, kPanelW, "Diplomacy", "Choose what you give each player; what they give you is their choice.");
 	if (v.locked) {
 		p.Font(4);
 		p.Text(kPad, kCardsTop - 4, kPanelW - kPad * 2, kNoticeH - 6, "Diplomacy is locked in this game: you can look but not change it.", pal::redText,

@@ -1862,5 +1862,8 @@
 {"en":"Status","es":"Estado","it":"Stato"},
 {"en":"Game summary","es":"Resumen de la partida","it":"Riepilogo della partita"},
 {"en":"Chat","es":"=","it":"="},
-{"en":"The game starts when everyone is ready","es":"La partida empieza cuando todos estén listos","it":"La partita inizia quando sono tutti pronti"}
+{"en":"The game starts when everyone is ready","es":"La partida empieza cuando todos estén listos","it":"La partita inizia quando sono tutti pronti"},
+{"en":"Choose what you give each player; what they give you is their choice.","es":"Elige qué das a cada jugador; lo que te dan ellos lo eligen ellos.","it":"Scegli cosa dai a ogni giocatore; cosa ti danno loro lo scelgono loro."},
+{"en":"Click a key to change it; right-click it to remove it.","es":"Haz clic en una tecla para cambiarla; con el botón derecho, la quitas.","it":"Fai clic su un tasto per cambiarlo; con il tasto destro lo togli."},
+{"en":"Hover over a key to see what it does; click it to pin it.","es":"Pasa el ratón por una tecla para ver qué hace; haz clic para fijarla.","it":"Passa il mouse su un tasto per vedere cosa fa; fai clic per fissarlo."}
 ]

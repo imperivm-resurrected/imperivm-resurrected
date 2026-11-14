@@ -20,6 +20,7 @@
 #include "ui/helpui_view.h"
 #include "game/controls.h"
 #include "ui/controlsui.h"
+#include "ui/fullscreen.h"
 #include "ui/modui.h"
 #include "ui/widgets.h"
 
@@ -539,7 +540,7 @@ void HelpUiDraw(uint32_t *buf, int w, int h)
 		mouseDown = g_s.mouseDown;
 	}
 	PanelRender r(g_canvas, buf, w, h);
-	if (!r.Begin(kScreenW, kScreenH, 40)) return;
+	if (!BeginWindow(r, kScreenW, kScreenH, 40)) return;
 	r.Press(previous, mouseDown, {view.mouseX, view.mouseY});
 	PaintOut out;
 	PaintHelpScreen(r.p, view, out);

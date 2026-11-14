@@ -101,8 +101,8 @@ void DrawSpectatorBar(uint32_t *buf, int W, int H, float s, int topY)
 	SpectatorBarPos(posX, posTop, 0);
 	EnsureFonts(s);
 	const COLORREF panel = pal::panel, frameOuter = pal::hairline, frameInner = pal::lineStrong;
-	const COLORREF btn = pal::raised, btnHot = pal::lineStrong, strong = pal::red, strongHot = pal::red;
-	const COLORREF btnFrame = pal::edgeHot, label = pal::body, red = pal::redText;
+	const COLORREF btn = pal::button, btnHot = pal::buttonHover, strong = pal::red, strongHot = pal::redPressed;
+	const COLORREF label = pal::body, red = pal::redText;
 	const float line = std::max(1.0f, s), rad = 2.0f * s;
 	const float pad = 12 * s, gap = 8 * s;
 	const float pillH = 32 * s;
@@ -119,12 +119,10 @@ void DrawSpectatorBar(uint32_t *buf, int W, int H, float s, int topY)
 	const float mx = static_cast<float>(mouse.x), my = static_cast<float>(mouse.y);
 	FillRound(buf, W, H, bx, by, barW, barH, rad, panel, 0.96f);
 	StrokeRound(buf, W, H, bx, by, barW, barH, rad, line, frameOuter, 1.0f);
-	StrokeRound(buf, W, H, bx + 3 * s, by + 3 * s, barW - 6 * s, barH - 6 * s, rad, line, frameInner, 1.0f);
 
 	auto button = [&](const RectF &r, bool isStrong, bool active, bool hot) {
 		const bool useStrong = isStrong || active;
 		FillRound(buf, W, H, r.x, r.y, r.w, r.h, rad, useStrong ? (hot ? strongHot : strong) : (hot ? btnHot : btn), 1.0f);
-		StrokeRound(buf, W, H, r.x, r.y, r.w, r.h, rad, line, btnFrame, 1.0f);
 	};
 	auto chevron = [&](float cx, float cyy, float hgt, int dir, COLORREF c) {
 		const float wd = hgt * 0.62f;
@@ -233,7 +231,6 @@ void DrawSpectatorBar(uint32_t *buf, int W, int H, float s, int topY)
 			if (fillLen > 1.0f) FillRound(buf, W, H, trackX0 + line, cy - th / 2 + line, std::max(1.0f, fillLen - line), th - 2 * line, 0.5f * s, st.busy ? RGB(120, 160, 210) : pal::redText, 1.0f);
 			const float hw = (hTrack ? 10.0f : 8.0f) * s, hh = (hTrack ? 22.0f : 18.0f) * s, hx = trackX0 + fillLen;
 			FillRound(buf, W, H, hx - hw / 2, cy - hh / 2, hw, hh, rad, hTrack ? strongHot : strong, 1.0f);
-			StrokeRound(buf, W, H, hx - hw / 2, cy - hh / 2, hw, hh, rad, line, btnFrame, 1.0f);
 			DrawLabel(buf, W, H, ClockText(drag ? static_cast<unsigned>(dragFrac * st.total) : shownCur), rCur.x, rCur.y, rCur.w, rCur.h, DT_RIGHT, pal::text, 1.0f);
 			DrawLabel(buf, W, H, ClockText(st.total), rTotal.x, rTotal.y, rTotal.w, rTotal.h, DT_LEFT, pal::textDim, 1.0f);
 			if (hTrack && !drag) {

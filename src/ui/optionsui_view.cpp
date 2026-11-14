@@ -119,8 +119,7 @@ Row Info(const char *label, int id, const std::string &text, const std::string &
 
 COLORREF RowText(const Row &r) { return r.enabled || r.kind == kRowToggleSlider ? pal::text : pal::textDim; }
 
-constexpr int kNavX = 12, kNavW = 208, kNavH = 56, kNavTop = 92, kNavRight = kNavX + kNavW, kNavIcon = 30;
-constexpr int kContentX = 240, kContentRight = kScreenW - 18, kContentTop = 132;
+constexpr int kContentX = 24, kContentRight = kScreenW - 18, kContentTop = 100;
 constexpr int kFooterTop = 622, kFooterButtonsY = 632, kFooterButtonH = 36;
 
 // The sizes of the cards and their rows: the window's, and the larger ones of the full screen.
@@ -133,27 +132,8 @@ struct Metrics {
 };
 constexpr Metrics kWindowMetrics = {40, 30, 14, 12, 180, 28, 150, 44, 128, 130, 8, 22, 2, 22, 16, 54, 16, 7, 18, false};
 constexpr Metrics kScreenMetrics = {56, 46, 24, 24, 260, 38, 240, 64, 160, 170, 16, 24, 6, 30, 20, 76, 22, 16, 22, true};
-// The window's two columns share this width; a page's leftW is the left one's part of it.
-constexpr int kColumnsW = kContentRight - kContentX - kWindowMetrics.cardGap - 8;
-
-void PaintNavItem(Painter &p, int y, const std::string &title, const std::string &subtitle, Ornament icon, bool active, int action, int arg, int mx, int my)
-{
-	const bool hot = !active && p.Hover(kNavX, y, kNavW, kNavH, mx, my);
-	if (active) {
-		p.Fill(kNavX, y, kNavW, kNavH, pal::selected);
-		p.Fill(kNavX, y, 3, kNavH, pal::red);
-	}
-	else if (hot) {
-		p.Fill(kNavX, y, kNavW, kNavH, pal::raised);
-	}
-	const COLORREF iconColor = active ? pal::text : hot ? pal::redText : pal::caption;
-	PaintOrnament(p, icon, kNavX + 15, y + (kNavH - kNavIcon) / 2, kNavIcon, kNavIcon, iconColor);
-	p.Font(1);
-	p.Text(kNavX + 56, y + 9, kNavW - 62, 20, title, active ? pal::text : pal::textDim);
-	p.Font(3);
-	p.Text(kNavX + 56, y + 29, kNavW - 62, 16, subtitle, active ? pal::caption : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-	p.AddHit(kNavX, y, kNavW, kNavH, action, arg);
-}
+// The pages' columns were drawn for this width: a page's leftW is the left one's part of it, and the window and the screen scale it to theirs.
+constexpr int kColumnsW = 822;
 
 void PaintRowLabel(Painter &p, const Metrics &m, const Row &r, int x, int y, int w)
 {
@@ -288,9 +268,7 @@ std::vector<Page> BuildPages(const Values &v)
 	{
 		Page page;
 		page.title = "Display";
-		page.subtitle = "Image and panels";
 		page.blurb = "How the game looks on your monitor.";
-		page.icon = kOrnamentScreen;
 		Row mode;
 		mode.label = "Mode";
 		mode.hint = "Alt+Enter switches";
@@ -312,9 +290,7 @@ std::vector<Page> BuildPages(const Values &v)
 	{
 		Page page;
 		page.title = "Sound";
-		page.subtitle = "Volume and alerts";
 		page.blurb = "Turn each kind of sound on or off and set its volume.";
-		page.icon = kOrnamentSound;
 		page.leftW = 500;
 		// Below 1 nature sounds follow the effects volume.
 		Row nature = ToggleSlider(v, "Nature sounds", kNatureOn, kNatureVolume, 1, 100);
@@ -330,9 +306,7 @@ std::vector<Page> BuildPages(const Values &v)
 	{
 		Page page;
 		page.title = "Game";
-		page.subtitle = "Pace and saves";
 		page.blurb = "How you play and how your games are saved.";
-		page.icon = kOrnamentSwords;
 		Row speed = Slider(v, "Game speed", kGameSpeed, 1, 100);
 		speed.shown = GameSpeedPercent(speed.value);
 		page.left.push_back({"Pace", {speed, Slider(v, "Scroll speed", kScrollSpeed, 1, 100), Toggle(v, "Smooth camera", kSmoothCamera),
@@ -352,9 +326,7 @@ std::vector<Page> BuildPages(const Values &v)
 	{
 		Page page;
 		page.title = "System";
-		page.subtitle = "Updates and logs";
 		page.blurb = "Updates of the mod, and what to do when something fails.";
-		page.icon = kOrnamentGear;
 		page.left.push_back({"About", {Info("Mod version", kModVersion, ModVersionText(), IsBetaVersion(ModVersionText()) ? "Beta" : "")}});
 		Row check = ActionRow("New version", kCheckUpdates, "Check now");
 		const auto status = v.texts.find(kCheckUpdates);
@@ -377,6 +349,14 @@ void PaintDrop(Painter &p, const View &v, const RECT &dropAnchor, const std::vec
 	}
 }
 
+std::vector<TabSpec> PageTabs(const std::vector<Page> &pages, int current)
+{
+	std::vector<TabSpec> tabs;
+	for (size_t i = 0; i < pages.size(); i++) tabs.push_back({pages[i].title, kActPage, static_cast<int>(i), static_cast<int>(i) == current, true});
+	tabs.push_back({"Controls", kActControls, 0, false, true});
+	return tabs;
+}
+
 // Opened from the main menu: the pages are tabs beside the title, and the cards fill the screen over the backdrop.
 void PaintFullScreen(Painter &p, const View &v, const std::vector<Page> &pages, int current)
 {
@@ -385,10 +365,7 @@ void PaintFullScreen(Painter &p, const View &v, const std::vector<Page> &pages, 
 	UseScreenFonts(p);
 	const ScreenLayout l = ScreenLayoutFor(v.screenW, v.screenH);
 	const int right = PaintHeaderActions(p, l, {{"Back", kActCancel, true, true}}, mx, my);
-	std::vector<TabSpec> tabs;
-	for (size_t i = 0; i < pages.size(); i++) tabs.push_back({pages[i].title, kActPage, static_cast<int>(i), static_cast<int>(i) == current, true});
-	tabs.push_back({"Controls", kActControls, 0, false, true});
-	PaintScreenTitle(p, l, "Options", tabs, right, mx, my);
+	PaintScreenTitle(p, l, "Options", PageTabs(pages, current), right, mx, my);
 	const Page &page = pages[current];
 	PaintScreenInfo(p, l, page.blurb);
 
@@ -429,28 +406,15 @@ void PaintOptionsScreen(Painter &p, const View &v)
 		return;
 	}
 	const Metrics &m = kWindowMetrics;
-	PaintWindowFrame(p, kScreenW, kScreenH);
-	PaintWindowHeader(p, kScreenW, "OPTIONS");
-
-	int navY = kNavTop;
-	for (size_t i = 0; i < pages.size(); i++, navY += kNavH + 3) {
-		const Page &page = pages[i];
-		PaintNavItem(p, navY, page.title, page.subtitle, page.icon, static_cast<int>(i) == current, kActPage, static_cast<int>(i), v.mouseX, v.mouseY);
-	}
-	PaintNavItem(p, navY, "Controls", "Keys and shortcuts", kOrnamentKeys, false, kActControls, 0, v.mouseX, v.mouseY);
-	p.Fill(kNavRight, kNavTop - 2, 1, kFooterTop - kNavTop - 2, pal::hairline);
-
+	PaintWindowCard(p, kScreenW, kScreenH);
 	const Page &page = pages[current];
-	p.Font(2);
-	const int titleW = p.TextWidth(page.title);
-	p.Text(kContentX, kNavTop, titleW + 4, 30, page.title, pal::text);
-	p.Font(3);
-	p.Text(kContentX + titleW + 14, kNavTop + 7, kContentRight - kContentX - titleW - 14, 20, page.blurb, pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	PaintWindowHeading(p, kScreenW, "Options", page.blurb, PageTabs(pages, current), 0, v.mouseX, v.mouseY);
 
 	RECT dropAnchor = {};
 	std::vector<std::string> dropItems;
 	int dropSel = -1;
-	const int contentW = kContentRight - kContentX, leftW = page.leftW, rightX = kContentX + leftW + m.cardGap + 8, rightW = contentW - leftW - m.cardGap - 8;
+	const int contentW = kContentRight - kContentX, gap = m.cardGap + 8;
+	const int leftW = (contentW - gap) * page.leftW / kColumnsW, rightX = kContentX + leftW + gap, rightW = contentW - leftW - gap;
 	int y = kContentTop;
 	for (const Card &c : page.left) y += PaintCard(p, m, c, v, kContentX, y, leftW, dropAnchor, dropItems, dropSel) + m.cardGap;
 	y = kContentTop;

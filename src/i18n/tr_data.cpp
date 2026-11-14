@@ -1870,5 +1870,8 @@ extern const TrRow kTrRows[] = {
 	{"Game summary", "Resumen de la partida", "Riepilogo della partita"},
 	{"Chat", "=", "="},
 	{"The game starts when everyone is ready", "La partida empieza cuando todos estén listos", "La partita inizia quando sono tutti pronti"},
+	{"Choose what you give each player; what they give you is their choice.", "Elige qué das a cada jugador; lo que te dan ellos lo eligen ellos.", "Scegli cosa dai a ogni giocatore; cosa ti danno loro lo scelgono loro."},
+	{"Click a key to change it; right-click it to remove it.", "Haz clic en una tecla para cambiarla; con el botón derecho, la quitas.", "Fai clic su un tasto per cambiarlo; con il tasto destro lo togli."},
+	{"Hover over a key to see what it does; click it to pin it.", "Pasa el ratón por una tecla para ver qué hace; haz clic para fijarla.", "Passa il mouse su un tasto per vedere cosa fa; fai clic per fissarlo."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

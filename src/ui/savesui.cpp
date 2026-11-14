@@ -1099,11 +1099,7 @@ void PaintList(Painter &p, State &st, const View &v)
 	const int mx = st.mouseX, my = st.mouseY;
 	const Layout &l = st.lay;
 	const int lx = l.lx, ly = l.ly, lw = l.lw, lh = l.lh;
-	if (l.full) PaintGlassCard(p, lx, ly, lw, lh);
-	else {
-		p.Fill(lx, ly, lw, lh, pal::panel);
-		p.Frame(lx, ly, lw, lh, pal::lineStrong);
-	}
+	PaintGlassCard(p, lx, ly, lw, lh);
 	p.AddHit(lx, ly, lw, lh, kBlank, 0);
 	st.rowPaths.clear();
 	st.hdrKeys.clear();
@@ -1163,8 +1159,8 @@ void PaintList(Painter &p, State &st, const View &v)
 			continue;
 		}
 		const bool hov = p.Hover(rx, top, rw, std::max(0, bottom - top), mx, my);
-		// Over the backdrop the card's see-through colour stays under the rows that are neither chosen nor under the mouse.
-		if (selected || hov || !l.full) p.Fill(rx, ry, rw, r.h, selected ? pal::lineStrong : hov ? pal::hairline : pal::panel);
+		// The card's see-through colour stays under the rows that are neither chosen nor under the mouse.
+		if (selected || hov) p.Fill(rx, ry, rw, r.h, selected ? pal::lineStrong : pal::hairline);
 		if (selected) p.Frame(rx, ry, rw, r.h, pal::redText);
 		else p.Fill(rx, ry + r.h - 1, rw, 1, pal::selected);
 		PaintRowText(p, st, rec, rx, ry, rw, r.h, r.kind == 2, r.title, editing);
@@ -1245,8 +1241,7 @@ void PaintDetailBody(Painter &p, State &st)
 {
 	const Layout &l = st.lay;
 	const int dx = l.dx, dy = l.dy, dw = l.dw, dh = l.dh, titleH = l.full ? 28 : 24;
-	if (l.full) PaintGlassCard(p, dx, dy, dw, dh);
-	else PaintCard(p, dx, dy, dw, dh);
+	PaintGlassCard(p, dx, dy, dw, dh);
 	if (st.sel.size() > 1) {
 		const DelPlan plan = PlanDelete(st);
 		uint64_t bytes = 0;
@@ -1440,9 +1435,8 @@ void PaintPanel(Painter &p, State &st)
 		PaintConfirm(p, st);
 		return;
 	}
-	PaintWindowFrame(p, kDesignW, kDesignH);
-	PaintTitle(p, 20, 12, 300, save ? "Save game" : "Load game");
-	p.Font(3);
+	PaintWindowCard(p, kDesignW, kDesignH);
+	PaintWindowTitle(p, 20, 6, 600, 44, save ? "Save game" : "Load game", 38);
 	PaintRule(p, 52, kDesignW);
 
 	if (save) {
@@ -1964,7 +1958,7 @@ void DrawImpl(uint32_t *buf, int w, int h)
 		st.lay = LayoutFor(true, view.w, view.h);
 	}
 	else {
-		if (!r.Begin(kDesignW, kDesignH)) return;
+		if (!BeginWindow(r, kDesignW, kDesignH)) return;
 		st.lay = LayoutFor(false, kDesignW, kDesignH);
 	}
 	r.Focus(st.tabAction, st.tabArg);

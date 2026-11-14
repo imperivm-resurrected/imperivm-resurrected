@@ -12,6 +12,7 @@
 #include "core/log.h"
 #include "core/objectivelog.h"
 #include "game/objectives.h"
+#include "ui/fullscreen.h"
 #include "ui/modui.h"
 #include "ui/objectivesui_view.h"
 #include "ui/widgets.h"
@@ -259,7 +260,7 @@ void ObjectivesUiDraw(uint32_t *buf, int w, int h)
 		mouseDown = g_s.mouseDown;
 	}
 	PanelRender r(g_canvas, buf, w, h);
-	if (!r.Begin(kScreenW, kScreenH, 40)) return;
+	if (!BeginWindow(r, kScreenW, kScreenH, 40)) return;
 	r.Press(previous, mouseDown, {view.mouseX, view.mouseY});
 	PaintOut out;
 	PaintObjectivesScreen(r.p, view, out);

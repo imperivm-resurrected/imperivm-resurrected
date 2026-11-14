@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <iterator>
 
+#include "ui/fullscreen.h"
 #include "ui/widgets.h"
 
 using namespace ui;
@@ -103,7 +104,7 @@ void PaintRail(Painter &p, const View &v, const std::vector<const StatsPlayerInf
 		Chip(p, kPad + (i % 2) * (chipW + 6), 92 + (i / 2) * 34, chipW, 28, kGroupLabels[i], v.stats.group == i, kActGroup, i, v);
 	}
 	constexpr int kListY = 166, kRowH = 42;
-	PaintCard(p, kPad, kListY, kRailW, std::max(1, static_cast<int>(players.size())) * kRowH + 4);
+	PaintGlassCard(p, kPad, kListY, kRailW, std::max(1, static_cast<int>(players.size())) * kRowH + 4);
 	int y = kListY + 2;
 	for (const StatsPlayerInfo *info : players) {
 		const bool hidden = (v.stats.hidden >> info->index & 1) != 0, inGroup = InGroup(*info, v.stats.group), on = !hidden && inGroup;
@@ -197,7 +198,7 @@ int ValueAt(const std::vector<StatsPoint> &points, uint32_t ms, bool &found)
 
 void PaintLines(Painter &p, const View &v, const std::vector<Series> &series, int top, int bottom)
 {
-	PaintCard(p, kMainX, top, kMainW, bottom - top);
+	PaintGlassCard(p, kMainX, top, kMainW, bottom - top);
 	// A strip above the plot for its notes, so that no line ever runs under them.
 	constexpr int kNotesH = 24;
 	const int plotX = kMainX + 62, plotW = kMainW - 62 - 18, plotY = top + 12 + kNotesH, plotH = bottom - plotY - 32, notesY = top + 7;
@@ -368,7 +369,7 @@ void PaintBoard(Painter &p, const View &v, std::vector<BoardRow> rows, bool mark
 		return v.stats.sortAscending ? a.values[selected] < b.values[selected] : a.values[selected] > b.values[selected];
 	});
 	const int tableH = kHeadH + std::max(1, static_cast<int>(rows.size())) * kRowH + 4;
-	PaintCard(p, kMainX, top, kMainW, tableH);
+	PaintGlassCard(p, kMainX, top, kMainW, tableH);
 	const int colX = kMainX + kPadIn + kNameW, colW = (kMainW - kPadIn * 2 - kNameW - kColGap * 3) / 4;
 	int best[4] = {}, lowest[4] = {};
 	for (int c = 0; c < 4 && !rows.empty(); c++) lowest[c] = rows.front().values[c];
@@ -498,7 +499,7 @@ void PaintSummary(Painter &p, const View &v, const std::vector<const StatsPlayer
 	const std::vector<StatsPlayerInfo> shown = ShownPlayers(v, players);
 
 	constexpr int kBannerH = 58;
-	PaintCard(p, kMainX, top, kMainW, kBannerH);
+	PaintGlassCard(p, kMainX, top, kMainW, kBannerH);
 	const int winner = StatsWinningTeam(history, all);
 	std::string title = Tr("No winner yet");
 	for (const StatsTeam &team : StatsTeams(all)) {
@@ -515,7 +516,7 @@ void PaintSummary(Painter &p, const View &v, const std::vector<const StatsPlayer
 	const int awardW = (kMainW - kAwardGap * 2) / 3;
 	for (int i = 0; i < 6; i++) {
 		const int x = kMainX + (i % 3) * (awardW + kAwardGap), y = top + kBannerH + kAwardGap + (i / 3) * (kAwardH + kAwardGap);
-		PaintCard(p, x, y, awardW, kAwardH);
+		PaintGlassCard(p, x, y, awardW, kAwardH);
 		p.Font(4);
 		p.Text(x + 12, y + 7, awardW - 24, 18, kAwards[i].label, pal::redText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		const int best = StatsBestPlayer(history, shown, kAwards[i].metric);
@@ -531,7 +532,7 @@ void PaintSummary(Painter &p, const View &v, const std::vector<const StatsPlayer
 
 	const int listY = top + kBannerH + kAwardGap + 2 * (kAwardH + kAwardGap), listH = bottom - listY, listW = (kMainW - kAwardGap) / 2;
 	constexpr int kListRow = 24, kListHead = 30;
-	PaintCard(p, kMainX, listY, listW, listH);
+	PaintGlassCard(p, kMainX, listY, listW, listH);
 	p.Font(4);
 	p.Text(kMainX + 12, listY + 7, listW - 24, 18, "Ranking", pal::redText);
 	std::vector<StatsPlayerInfo> ranking = shown;
@@ -553,7 +554,7 @@ void PaintSummary(Painter &p, const View &v, const std::vector<const StatsPlayer
 	}
 
 	const int momentsX = kMainX + listW + kAwardGap;
-	PaintCard(p, momentsX, listY, listW, listH);
+	PaintGlassCard(p, momentsX, listY, listW, listH);
 	p.Font(4);
 	p.Text(momentsX + 12, listY + 7, listW - 24, 18, "Key moments", pal::redText);
 	const std::vector<StatsElimination> eliminations = StatsEliminations(history, all);
@@ -584,8 +585,8 @@ int MenuHeight(const View &v)
 
 void PaintMenu(Painter &p, const View &v)
 {
-	PaintWindowFrame(p, kMenuW, MenuHeight(v));
-	int y = PaintWindowHeader(p, kMenuW, v.title, v.titleSpacing);
+	PaintWindowCard(p, kMenuW, MenuHeight(v));
+	int y = PaintWindowHeading(p, kMenuW, v.title, std::string(), {}, 0, v.mouseX, v.mouseY, kWindowHeaderH, v.titleSpacing);
 	for (const std::string &note : v.notes) {
 		p.Font(3);
 		DrawCentered(p, p.R(kMarginX - 10, y, kMenuW - (kMarginX - 10) * 2, kNoteH - 6), note, pal::text);
@@ -601,7 +602,7 @@ void PaintMenu(Painter &p, const View &v)
 void PaintConfirm(Painter &p, const View &v)
 {
 	constexpr int kPadIn = 36, kTextTop = 30, kRuleY = 136, kButtonW = 150, kButtonsY = 158, kButtonsGap = 16;
-	PaintWindowFrame(p, kConfirmW, kConfirmH);
+	PaintWindowCard(p, kConfirmW, kConfirmH);
 	p.Font(1);
 	DrawCentered(p, p.R(kPadIn, kTextTop, kConfirmW - kPadIn * 2, kRuleY - kTextTop - 8), v.question, pal::text);
 	PaintRule(p, kRuleY, kConfirmW);
@@ -623,8 +624,8 @@ void FinishChartDrag(View &v, int mouseX)
 
 void PaintStatistics(Painter &p, const View &v)
 {
-	PaintWindowFrame(p, kStatsW, kStatsH);
-	PaintWindowHeader(p, kStatsW, "STATISTICS");
+	PaintWindowCard(p, kStatsW, kStatsH);
+	PaintWindowHeading(p, kStatsW, "Statistics");
 
 	const std::vector<const StatsPlayerInfo *> players = ListedPlayers(v);
 	PaintRail(p, v, players);

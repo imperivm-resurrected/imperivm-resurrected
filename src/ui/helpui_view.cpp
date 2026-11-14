@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "i18n/tr.h"
+#include "ui/fullscreen.h"
 #include "ui/keycaps.h"
 #include "ui/ornaments.h"
 #include "ui/widgets.h"
@@ -1250,8 +1251,8 @@ void PaintHelpScreen(Painter &p, const View &v, PaintOut &out)
 	out = PaintOut();
 	// The help's own words are not keys of the mod's translations.
 	p.raw = true;
-	PaintWindowFrame(p, kScreenW, kScreenH);
-	PaintWindowHeader(p, kScreenW, Utf8(Upper(W(Tr("Help")))));
+	PaintWindowCard(p, kScreenW, kScreenH);
+	PaintWindowHeading(p, kScreenW, Tr("Help"));
 	p.Fill(kDividerX, kTop + 4, 1, kPaneBottom - kTop - 4, pal::hairline);
 	PaintSearch(p, v);
 	const Content *c = v.content.get();
