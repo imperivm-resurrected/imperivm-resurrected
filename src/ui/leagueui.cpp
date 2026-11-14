@@ -27,7 +27,7 @@ using namespace ui;
 
 namespace {
 
-enum Art { kArtBadge, kArtVexillum, kArtTrophy, kArtEmblem, kArtPhalera };
+enum Art { kArtBadge, kArtVexillum, kArtTrophy, kArtEmblem, kArtPhalera, kArtFounder };
 
 std::mutex g_cacheMx;
 
@@ -48,6 +48,7 @@ HBITMAP Bitmap(Art art, int variant, int size)
 	case kArtVexillum: img = LeagueVexillumPixels(tier, size); break;
 	case kArtTrophy: img = LeagueTrophyImage(metal, size); break;
 	case kArtPhalera: img = LeaguePhaleraImage(metal, size); break;
+	case kArtFounder: img = LeagueFounderPixels(size); break;
 	default: img = LeagueEmblemImage(tier, size); break;
 	}
 	BITMAPINFO bi = {};
@@ -178,6 +179,7 @@ std::string ChoiceLabel(const LeagueBadgeChoice &c)
 	}
 	if (c.kind == "season") {
 		const std::string season = TrFmt("Season %s", {c.id});
+		if (c.look.founder) return season + ": " + Tr("League Founder");
 		return c.look.tier != LeagueTier::None ? season + ": " + Tr(LeagueTierName(c.look.tier)) : season;
 	}
 	if (c.kind == "trophy") return c.look.title.empty() ? Tr("Tournament trophy") : c.look.title;
@@ -229,7 +231,9 @@ void DrawLeagueBadge(Painter &p, int x, int y, int size, const LeagueBadge &badg
 	const RECT r = p.R(x, y, size, size);
 	const int px = std::max(1, static_cast<int>(r.right - r.left));
 	const int scale = std::max(1, static_cast<int>(std::lround(px / static_cast<double>(kLeagueBadgeGrid))));
-	const Art art = badge.kind == LeagueBadgeKind::Trophy ? kArtTrophy : badge.kind == LeagueBadgeKind::Season ? kArtVexillum : kArtBadge;
+	const Art art = badge.kind == LeagueBadgeKind::Trophy ? kArtTrophy
+		: badge.kind == LeagueBadgeKind::Season		  ? (badge.founder ? kArtFounder : kArtVexillum)
+													  : kArtBadge;
 	const int side = kLeagueBadgeGrid * scale;
 	// The phalera is drawn from its shapes at the size it is shown; the shields are pixels repeated `scale` times.
 	const int variant = art == kArtTrophy ? static_cast<int>(badge.metal) : static_cast<int>(badge.tier);
@@ -367,7 +371,7 @@ void PaintLeagueBadgeTip(Painter &p, int screenW, int screenH)
 	if (!g_tip.show) return;
 	g_tip.show = false;
 	const LeagueBadge &b = g_tip.badge;
-	const COLORREF ink = b.kind == LeagueBadgeKind::Trophy ? LeagueMetalInk(b.metal) : LeagueTierInk(b.tier);
+	const COLORREF ink = b.kind == LeagueBadgeKind::Trophy ? LeagueMetalInk(b.metal) : b.founder ? Ref(LeagueFounderColors().text) : LeagueTierInk(b.tier);
 	std::string title, line;
 	switch (b.kind) {
 	case LeagueBadgeKind::Rank:
@@ -375,6 +379,11 @@ void PaintLeagueBadgeTip(Painter &p, int screenW, int screenH)
 		line = Tr(LeagueTierHasDivisions(b.tier) ? "Ranked 1 vs 1 league" : "Ranked 1 vs 1 league, by place in the leaderboard");
 		break;
 	case LeagueBadgeKind::Season:
+		if (b.founder) {
+			title = Tr("League Founder");
+			line = Tr("Played the league's test season");
+			break;
+		}
 		title = TrFmt("Season %s", {b.id});
 		line = b.tier != LeagueTier::None ? TrFmt("Reached %s", {LeagueRankLabel(b.tier, b.division)}) : Tr("Emblem of a past season");
 		break;

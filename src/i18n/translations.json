@@ -2743,6 +2743,8 @@
 {"en":"Problems can only be reported up to 24 hours after the game.","es":"Solo se puede informar de un problema hasta 24 horas después de la partida.","it":"I problemi si possono segnalare solo fino a 24 ore dopo la partita."},
 {"en":" has left the game.","es":" ha abandonado la partida.","it":" ha abbandonato la partita."},
 {"en":"You can surrender from minute 5.","es":"Puedes rendirte a partir del minuto 5.","it":"Puoi arrenderti a partire dal minuto 5."},
+{"en":"League Founder","es":"Fundador de la Liga","it":"Fondatore della Lega"},
+{"en":"Played the league's test season","es":"Jugó la temporada de prueba de la liga","it":"Ha giocato la stagione di prova della lega"},
 {"en":"Ranked match paused","es":"Partida clasificatoria en pausa","it":"Partita classificata in pausa"},
 {"en":"%s is coming back into the game...","es":"%s está volviendo a la partida...","it":"%s sta tornando nella partita..."},
 {"en":"Waiting for %s: %s to come back","es":"Esperando a %s: %s para volver","it":"In attesa di %s: %s per tornare"},

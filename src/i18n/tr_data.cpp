@@ -2750,6 +2750,8 @@ extern const TrRow kTrRows[] = {
 	{"Problems can only be reported up to 24 hours after the game.", "Solo se puede informar de un problema hasta 24 horas después de la partida.", "I problemi si possono segnalare solo fino a 24 ore dopo la partita."},
 	{" has left the game.", " ha abandonado la partida.", " ha abbandonato la partita."},
 	{"You can surrender from minute 5.", "Puedes rendirte a partir del minuto 5.", "Puoi arrenderti a partire dal minuto 5."},
+	{"League Founder", "Fundador de la Liga", "Fondatore della Lega"},
+	{"Played the league's test season", "Jugó la temporada de prueba de la liga", "Ha giocato la stagione di prova della lega"},
 	{"Ranked match paused", "Partida clasificatoria en pausa", "Partita classificata in pausa"},
 	{"%s is coming back into the game...", "%s está volviendo a la partida...", "%s sta tornando nella partita..."},
 	{"Waiting for %s: %s to come back", "Esperando a %s: %s para volver", "In attesa di %s: %s per tornare"},
