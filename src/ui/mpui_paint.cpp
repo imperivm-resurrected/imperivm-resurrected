@@ -136,11 +136,13 @@ void PaintHeader(Painter &p, const State &st)
 	const int mx = st.mouseX, my = st.mouseY;
 	const LobbyLayout l = LobbyLayoutFor(st.viewW, st.viewH);
 	if (st.view == kViewTournaments && PaintTourneyHeader(p, st)) return;
-	const int right = PaintRankedPill(p, st, PaintHeaderActions(p, l, {{"Back", kBack, true, true}}, mx, my));
-	PaintScreenTitle(p, l, "Multiplayer",
+	// The title and the tabs keep their place whether the search's pill is there or not: the pill takes what is left before "Back".
+	const int right = PaintHeaderActions(p, l, {{"Back", kBack, true, true}}, mx, my);
+	const int tabsEnd = PaintScreenTitle(p, l, "Multiplayer",
 		{{"Games", kListView, 0, st.view == kViewList, true}, {"Create game", kCreate, 0, st.view == kViewCreate, true},
 			{"Ranked", kRanked, 0, st.view == kViewRanked, true}, {"Tournaments", kTourney, kTourneyShowArg, st.view == kViewTournaments, true}},
 		right, mx, my);
+	PaintRankedPill(p, st, right, tabsEnd + 16);
 
 	// The caption line is the player's: avatar, name (with the laurel of a patron), the content profile and the open rooms.
 	const int m = l.margin, y = l.infoY, h = l.infoH, avatar = h + 4, ay = y - 2;

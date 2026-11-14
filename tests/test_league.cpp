@@ -134,6 +134,14 @@ void Badges()
 	const Json none = Parse("{\"kind\": \"none\"}");
 	CHECK(!LeagueBadgeFromJson(&none).Shown());
 	CHECK(!LeagueBadgeFromJson(nullptr).Shown());
+	// The test season leaves the Founder's emblem, whose tier is no rank.
+	const Json founder = Parse("{\"kind\": \"season\", \"id\": 0, \"tier\": \"founder\"}");
+	b = LeagueBadgeFromJson(&founder);
+	CHECK(b.kind == LeagueBadgeKind::Season);
+	CHECK(b.founder);
+	CHECK(b.tier == LeagueTier::None);
+	CHECK(!(b == LeagueBadgeFromJson(&season)));
+	CHECK(!LeagueBadgeFromJson(&season).founder);
 }
 
 void Lookup()
@@ -171,9 +179,23 @@ void Me()
 	CHECK_EQ(me.ranked.position, 131);
 	CHECK(!me.badge.Shown());
 	CHECK_EQ(static_cast<unsigned>(me.badges.size()), 1u);
+	CHECK_EQ(static_cast<int>(me.ban.until), 0);
+	CHECK(me.ban.kind.empty());
 	LeagueMe empty;
 	CHECK(LeagueParseMe(Parse("{\"steamId\": \"1\", \"ranked\": null}"), empty));
 	CHECK(!empty.ranked.present);
+
+	// The lock out of the queue and why; an older server says only until when.
+	LeagueMe banned;
+	CHECK(LeagueParseMe(Parse("{\"steamId\": \"1\", \"ban\": {\"until\": 1700000300000, \"kind\": \"Abandoned\"}, \"queueBanUntil\": 1700000300000}"), banned));
+	CHECK_EQ(static_cast<unsigned long long>(banned.ban.until), 1700000300000ULL);
+	CHECK_EQ(banned.ban.kind, std::string("abandoned"));
+	CHECK(LeagueParseMe(Parse("{\"steamId\": \"1\", \"ban\": null, \"queueBanUntil\": 99}"), banned));
+	CHECK_EQ(static_cast<int>(banned.ban.until), 99);
+	CHECK(banned.ban.kind.empty());
+	CHECK(LeagueParseMe(Parse("{\"steamId\": \"1\", \"ban\": {\"until\": 77, \"kind\": \"desync\"}}"), banned));
+	CHECK_EQ(static_cast<int>(banned.queueBanUntil), 77);
+	CHECK_EQ(banned.ban.kind, std::string("desync"));
 }
 
 void Link()
@@ -333,11 +355,11 @@ void Resolve()
 	CHECK_EQ(o.results, std::vector<std::string>({"left", "win"}));
 	CHECK_EQ(o.endedBy, std::string("disconnect"));
 
-	// A desync voids it: nobody wins and nobody is said to have left.
+	// A desync voids it: nobody wins and nobody is said to have left; the report says it was a desync, not a drop.
 	o = LeagueResolve(seats, true);
 	CHECK(!o.localLeft);
 	CHECK_EQ(o.results, std::vector<std::string>({"loss", "loss"}));
-	CHECK_EQ(o.endedBy, std::string("disconnect"));
+	CHECK_EQ(o.endedBy, std::string("desync"));
 
 	// Two humans against an AI: while the AI stands, this player closing the game leaves it, and their partner has not won yet.
 	// Once the AI is beaten, the humans' team is the only one left.
@@ -357,6 +379,46 @@ void Resolve()
 	CHECK(!o.localLeft);
 	CHECK_EQ(o.results, std::vector<std::string>({"loss", "loss", "loss"}));
 	CHECK_EQ(o.endedBy, std::string("disconnect"));
+}
+
+void ResolveRankedDrop()
+{
+	std::vector<LeagueSeat> seats = {Seat(0, 11, 0, 1, true), Seat(1, 22, 1, 1)};
+	seats[1].left = true;
+	LeagueDropRules rules;
+	rules.ranked = true;
+
+	// The wait for the one who left is over (or the win was claimed): this player wins, by "opponent_left".
+	rules.claimable = true;
+	LeagueOutcome o = LeagueResolve(seats, false, rules);
+	CHECK(!o.localLeft);
+	CHECK_EQ(o.results, std::vector<std::string>({"win", "left"}));
+	CHECK_EQ(o.endedBy, std::string("opponent_left"));
+
+	// Closing the game while still waiting is leaving it too: no win, and not a claim.
+	rules.claimable = false;
+	o = LeagueResolve(seats, false, rules);
+	CHECK(o.localLeft);
+	CHECK_EQ(o.results, std::vector<std::string>({"left", "left"}));
+	CHECK_EQ(o.endedBy, std::string("disconnect"));
+
+	// A normal game keeps its rules: the one who stayed wins, by a drop.
+	o = LeagueResolve(seats, false);
+	CHECK_EQ(o.results, std::vector<std::string>({"win", "left"}));
+	CHECK_EQ(o.endedBy, std::string("disconnect"));
+
+	// Nobody left: a ranked game ends as any other.
+	seats[1].left = false;
+	seats[0].state = 3;
+	seats[1].state = 2;
+	o = LeagueResolve(seats, false, rules);
+	CHECK_EQ(o.results, std::vector<std::string>({"win", "loss"}));
+	CHECK_EQ(o.endedBy, std::string("victory"));
+	// A desync is a desync whoever stands.
+	CHECK_EQ(LeagueResolve(seats, true, rules).endedBy, std::string("desync"));
+	// A surrender of the loser stays a surrender.
+	seats[1].surrendered = true;
+	CHECK_EQ(LeagueResolve(seats, false, rules).endedBy, std::string("surrender"));
 }
 
 void ReportPlayers()
@@ -394,7 +456,7 @@ void ReportJson()
 	r.hashes = {123456u, 4294967295u};
 	const std::string text = LeagueReportJson(r).Dump();
 	CHECK_EQ(text, std::string("{\"key\":\"42:1763112345678\",\"kind\":\"normal\",\"map\":{\"name\":\"Crossroads\",\"type\":\"Crossroads\",\"size\":\"Large\"},"
-							   "\"contentKey\":\"c7d1e0aa\",\"startedAt\":1763112345678,\"durationMs\":1874000,\"endedBy\":\"victory\",\"players\":"
+							   "\"contentKey\":\"c7d1e0aa\",\"startedAt\":1763112345678,\"durationMs\":1874000,\"endedBy\":\"victory\",\"dropAtMs\":null,\"players\":"
 							   "[{\"steamId\":\"76561198000000001\",\"name\":\"Marcus \\\"Rex\\\"\",\"team\":1,\"civ\":\"Carthage\",\"result\":\"win\"}],"
 							   "\"hashes\":[123456, 4294967295]}"));
 	// A normal game never carries a match id; a ranked one does.
@@ -404,6 +466,15 @@ void ReportJson()
 	const Json ranked = LeagueReportJson(r);
 	CHECK_EQ(ranked.GetString("kind"), std::string("ranked"));
 	CHECK_EQ(static_cast<int>(ranked.GetNumber("matchId")), 9);
+	// The game's time when the other side left; null when nobody did.
+	CHECK(ranked.Get("dropAtMs") && ranked.Get("dropAtMs")->type == Json::Null);
+	r.endedBy = "opponent_left";
+	r.dropAtMs = 412000;
+	const Json dropped = LeagueReportJson(r);
+	CHECK_EQ(dropped.GetString("endedBy"), std::string("opponent_left"));
+	CHECK_EQ(static_cast<int>(dropped.GetNumber("dropAtMs")), 412000);
+	r.dropAtMs = 0;
+	CHECK_EQ(static_cast<int>(LeagueReportJson(r).Get("dropAtMs")->type), static_cast<int>(Json::Number));
 }
 
 void Checkpoints()
@@ -498,6 +569,7 @@ int main()
 	KeyAndTags();
 	Map();
 	Resolve();
+	ResolveRankedDrop();
 	ReportPlayers();
 	ReportJson();
 	Checkpoints();

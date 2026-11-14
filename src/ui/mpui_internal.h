@@ -52,6 +52,7 @@ enum Action {
 	kRankedAct,
 	kTourney, kFieldTourney, kFieldCupName, kFieldCupDescription, kFieldCupCode,
 	kLinkOfferYes, kLinkOfferNo,
+	kFieldRanked,
 };
 
 typedef int(__cdecl *HostGame_t)(int, unsigned, int);
@@ -89,7 +90,7 @@ struct JoinFlowState {
 extern JoinFlowState g_flow;
 enum View { kViewList, kViewRanked, kViewCreate, kViewTournaments };
 
-enum Field { kNoField, kChatField, kNameField, kPassField, kJoinPassField, kSearchField, kPickSearchField, kRoomNameField, kTourneyField, kCupNameField, kCupDescriptionField, kCupCodeField };
+enum Field { kNoField, kChatField, kNameField, kPassField, kJoinPassField, kSearchField, kPickSearchField, kRoomNameField, kTourneyField, kCupNameField, kCupDescriptionField, kCupCodeField, kRankedField };
 
 enum { kPredTeam, kPredRace, kPredAi, kPredReady, kPredOptSel, kPredOptVal, kPredColor };
 
@@ -103,12 +104,15 @@ inline int DropArg(int kind, int index)
 	return kind | (index << kDropKindBits);
 }
 
-// The ranked tab: what the player asked of its screens, as the argument of kRankedAct (rows of the leaderboard from kRkRow).
+// The ranked tab: what the player asked of its screens, as the argument of kRankedAct (rows of the leaderboard from kRkRow, "Report a
+// problem" of the hub's games from kRkDisputeRecent and of the history's from kRkDisputeHistory).
 enum RankedArg {
 	kRkSearch = 1, kRkCancel, kRkAccept, kRkDecline, kRkBoard, kRkHub, kRkBoardPrev, kRkBoardNext, kRkBoardTop, kRkBoardMe, kRkRoom,
-	kRkResultClose, kRkAgain, kRkResultBoard, kRkSkip, kRkSteam, kRkNotice, kRkAbandon, kRkRow = 0x100,
+	kRkResultClose, kRkAgain, kRkResultBoard, kRkSkip, kRkSteam, kRkNotice, kRkAbandon, kRkHistory, kRkHistoryPrev, kRkHistoryNext,
+	kRkHistoryNewest, kRkDisputeResult, kRkDisputeSend, kRkDisputeCancel, kRkRow = 0x100, kRkDisputeRecent = 0x200, kRkDisputeHistory = 0x300,
+	kRkArgEnd = 0x400,
 };
-enum RankedSub { kRankedHub, kRankedBoard };
+enum RankedSub { kRankedHub, kRankedBoard, kRankedHistory };
 const int kRankedBoardRows = 13;
 
 struct RankedScreen {
@@ -118,6 +122,12 @@ struct RankedScreen {
 	bool resultOpen = false;
 	int64_t resultMatch = 0;
 	DWORD resultAt = 0;
+	// The history's pages already passed, newest first: the `before` of each, to go back.
+	std::vector<int64_t> historyBack;
+	// "Report a problem": the match it is about (0: the dialog is closed), what the player wrote, and the last answer already shown.
+	int64_t disputeMatch = 0;
+	std::string disputeText;
+	unsigned disputeSeen = 0;
 	LeagueRankedView view;
 };
 
@@ -537,8 +547,12 @@ bool RankedRoomLocked(const State &st);
 bool RankedRoomAction(int action, int arg);
 // The hub (linked account) and the full leaderboard; false when the account is not linked and the tab shows the link card.
 bool PaintRankedTab(Painter &p, const State &st);
-// The pill of the search in the header, left of `right`; returns where the title must end.
-int PaintRankedPill(Painter &p, const State &st, int right);
+// The pill of the search in the header, between `left` and `right`: shorter where the room is short.
+void PaintRankedPill(Painter &p, const State &st, int right, int left);
+// "Report a problem" with a ranked game: the dialog over the tab, its text field, and sending it.
+void PaintRankedDispute(Painter &p, const State &st);
+std::string &RankedFieldText();
+void RankedFieldEnter();
 // The result screen over the whole lobby, with its own header.
 void PaintRankedResult(Painter &p, const State &st);
 // A small mark for the header of a ranked room; returns how wide it came out.

@@ -319,6 +319,11 @@ bool RejoinReloading()
 	return g_reload.phase != kRNone;
 }
 
+bool RejoinHosting()
+{
+	return g_session.role == kHost;
+}
+
 bool RejoinPendingLoad()
 {
 	return g_session.pendingLoad;

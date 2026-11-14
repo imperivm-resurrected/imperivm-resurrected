@@ -22,6 +22,8 @@ bool RejoinClientFailed();
 void RejoinClientDismiss();
 bool RejoinBusy();
 bool RejoinReloading();
+// This computer is bringing a player who dropped back into its game.
+bool RejoinHosting();
 
 bool RejoinPendingLoad();
 void RejoinAfterLoad(void *game, bool loaded);

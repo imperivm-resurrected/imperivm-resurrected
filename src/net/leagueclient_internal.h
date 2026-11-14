@@ -9,6 +9,7 @@
 
 #include "core/json.h"
 #include "core/league.h"
+#include "core/leagueranked.h"
 
 namespace leagueclient_impl {
 
@@ -59,6 +60,11 @@ void RankedGameReported(const LeagueReport &report, const std::string &ownSteamI
 // The server answered a report (from the sending thread); only ranked ones matter here.
 void RankedReportAnswered(const Json &report, const std::string &answer);
 // The game of a ranked match is being played on this computer: the server is told once, and the match can no longer be called off.
+// While it is played the match is not polled.
 void RankedGameStarted(int64_t matchId);
+// The game of a ranked match is over on this computer without a report: the match is polled again, so the queue follows the server.
+void RankedGameEnded(int64_t matchId);
+// The ticket of the ranked match being followed, when it is that one.
+bool RankedTicketOf(int64_t matchId, LeagueMatchTicket &out);
 
 }

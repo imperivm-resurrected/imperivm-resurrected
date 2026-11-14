@@ -5,7 +5,9 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstdio>
+#include <cstdlib>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -28,10 +30,12 @@ namespace {
 
 const DWORD kQueuePollMs = 5000, kMatchPollMs = 3000, kPlayingPollMs = 10000, kResultPollMs = 10000, kRetryMs = 6000, kPresenceMs = 30000;
 const DWORD kSeasonKeepMs = 10 * 60 * 1000, kSeasonRetryMs = 60 * 1000, kBoardKeepMs = 60 * 1000, kRecoverAfterMs = 3000;
+const DWORD kRecentKeepMs = 60 * 1000, kRecentRetryMs = 20 * 1000, kStatsKeepMs = 15 * 1000;
 const int kHubRows = 10, kAroundRows = 5;
-const size_t kRecentMax = 20;
 // A game only one side reported is settled by the server 15 minutes after the report; the screen stops asking a little later.
 const int64_t kAwaitMaxMs = 20 * 60 * 1000;
+// How far ahead of this computer's clock the server's is, from the last answer that said its time.
+std::atomic<int64_t> g_clockOffset{0};
 
 struct Queue {
 	LeagueRankedPhase phase = LeagueRankedPhase::Idle;
@@ -53,6 +57,7 @@ struct Queue {
 	bool roomRegistered = false, registering = false;
 	DWORD registerAt = 0;
 	int64_t banUntil = 0;
+	std::string banKind;
 	std::string notice;
 	bool noticeBad = false;
 	unsigned foundSerial = 0;
@@ -62,6 +67,8 @@ struct Queue {
 	// The last "I am in the room", and the match whose start the server was told of.
 	DWORD presenceAt = 0;
 	int64_t startedSent = 0;
+	// The match's game is being played here: presence said it started, and the match is not polled until it ends.
+	bool inGame = false;
 };
 
 struct Board {
@@ -88,9 +95,30 @@ struct Result {
 	bool polling = false;
 };
 
-struct Recent {
-	bool loaded = false;
-	std::vector<LeagueRankedGame> games;
+// The player's ranked games as the server lists them: the hub's latest and a page of the full history.
+struct History {
+	bool recentLoading = false, recentLoaded = false, recentFailed = false;
+	DWORD recentAt = 0;
+	std::vector<LeagueHistoryGame> recent;
+	bool pageLoading = false, pageLoaded = false;
+	unsigned pageGen = 0;
+	int64_t pageBefore = 0;
+	LeagueHistoryPage page;
+	std::string pageError;
+};
+
+struct Stats {
+	bool loading = false, loaded = false;
+	DWORD at = 0;
+	LeagueStats stats;
+};
+
+struct Dispute {
+	bool busy = false;
+	std::vector<int64_t> sent;
+	std::string notice;
+	bool bad = false;
+	unsigned serial = 0;
 };
 
 struct Badge {
@@ -103,7 +131,9 @@ Queue g_q;
 Board g_board;
 Season g_season;
 Result g_result;
-Recent g_recent;
+History g_history;
+Stats g_stats;
+Dispute g_dispute;
 Badge g_badge;
 
 // A request and what came back.
@@ -117,9 +147,20 @@ struct Answer {
 Answer Call(const char *method, const std::string &path, const std::string &body, bool auth)
 {
 	Answer a;
+	const int64_t sent = NowMs();
 	a.r = Http(method, path, body, auth);
+	const int64_t received = NowMs();
 	a.parsed = !a.r.body.empty() && Json::Parse(a.r.body, a.j);
 	if (!a.r.Ok() && a.parsed) a.error = LeagueParseError(a.j);
+	// The queue, the match and the stats say the server's time: the countdowns follow its clock, not this computer's.
+	if (a.parsed && a.j.type == Json::Object) {
+		const int64_t serverNow = static_cast<int64_t>(a.j.GetNumber("serverNow"));
+		if (serverNow > 0) {
+			const int64_t offset = LeagueClockOffsetMs(serverNow, sent, received);
+			const int64_t before = g_clockOffset.exchange(offset);
+			if (std::abs(offset - before) > 5000) LogI("league", "the server's clock is %lld s ahead of this computer's", static_cast<long long>(offset / 1000));
+		}
+	}
 	return a;
 }
 
@@ -167,6 +208,7 @@ void ToIdle(Queue &q)
 	q.wantLobby = q.roomLobby = 0;
 	q.roomRegistered = q.registering = false;
 	q.presenceAt = 0;
+	q.inGame = false;
 	q.gen++;
 }
 
@@ -176,95 +218,18 @@ void SetNotice(Queue &q, const std::string &text, bool bad)
 	q.noticeBad = bad;
 }
 
-std::string RecentPath()
-{
-	char path[MAX_PATH];
-	GetModuleFileNameA(nullptr, path, MAX_PATH);
-	std::string p = path;
-	return p.substr(0, p.find_last_of('\\') + 1) + "imperivm-resurrected\\league\\ranked.json";
-}
-
-// Under g_mx.
-void LoadRecent()
-{
-	if (g_recent.loaded) return;
-	g_recent.loaded = true;
-	Json j;
-	if (!ReadJsonFile(RecentPath(), j) || j.type != Json::Array) return;
-	for (const Json &e : j.arr) {
-		if (e.type != Json::Object) continue;
-		LeagueRankedGame g;
-		g.matchId = static_cast<int64_t>(e.GetNumber("matchId"));
-		g.at = static_cast<int64_t>(e.GetNumber("at"));
-		g.opponent = e.GetString("opponent");
-		g.opponentId = e.GetString("opponentId");
-		g.map = e.GetString("map");
-		g.won = e.GetBool("won");
-		g.delta = static_cast<int>(e.GetNumber("delta"));
-		g.durationMs = static_cast<uint32_t>(e.GetNumber("durationMs"));
-		g.status = e.GetString("status");
-		g.tierAfter = LeagueTierFromId(e.GetString("tierAfter"));
-		g.divisionAfter = static_cast<int>(e.GetNumber("divisionAfter"));
-		if (g.matchId > 0) g_recent.games.push_back(g);
-	}
-}
-
-// Under g_mx.
-void SaveRecent()
-{
-	Json list = Json::MakeArray();
-	for (const LeagueRankedGame &g : g_recent.games) {
-		Json e = Json::MakeObject();
-		e.Set("matchId", Json::MakeNumber(static_cast<double>(g.matchId)));
-		e.Set("at", Json::MakeNumber(static_cast<double>(g.at)));
-		e.Set("opponent", Json::MakeString(g.opponent));
-		e.Set("opponentId", Json::MakeString(g.opponentId));
-		e.Set("map", Json::MakeString(g.map));
-		e.Set("won", Json::MakeBool(g.won));
-		e.Set("delta", Json::MakeNumber(g.delta));
-		e.Set("durationMs", Json::MakeNumber(g.durationMs));
-		e.Set("status", Json::MakeString(g.status));
-		e.Set("tierAfter", Json::MakeString(LeagueTierId(g.tierAfter)));
-		e.Set("divisionAfter", Json::MakeNumber(g.divisionAfter));
-		list.arr.push_back(e);
-	}
-	const std::string path = RecentPath(), dir = path.substr(0, path.find_last_of('\\'));
-	CreateDirectoryA(dir.substr(0, dir.find_last_of('\\')).c_str(), nullptr);
-	CreateDirectoryA(dir.c_str(), nullptr);
-	if (!WriteJsonFile(path, list)) LogW("league", "could not keep the list of ranked games");
-}
-
-// Under g_mx: the game goes first, replacing an older entry of the same match.
-void KeepRecent(const LeagueRankedGame &g)
-{
-	LoadRecent();
-	auto &games = g_recent.games;
-	games.erase(std::remove_if(games.begin(), games.end(), [&](const LeagueRankedGame &o) { return o.matchId == g.matchId; }), games.end());
-	games.insert(games.begin(), g);
-	if (games.size() > kRecentMax) games.resize(kRecentMax);
-	SaveRecent();
-}
-
-// Under g_mx: what an answer of the server says of a ranked game this computer remembers.
+// Under g_mx: what an answer of the server says of the ranked game the result screen shows.
 void ApplyAnswer(int64_t matchId, const LeagueReportAnswer &answer)
 {
-	LoadRecent();
-	for (LeagueRankedGame &g : g_recent.games) {
-		if (g.matchId != matchId) continue;
-		g.status = answer.status;
-		if (answer.ranked.present) {
-			g.delta = answer.ranked.delta;
-			g.tierAfter = answer.ranked.tierAfter;
-			g.divisionAfter = answer.ranked.divisionAfter;
-		}
-		SaveRecent();
-		break;
-	}
 	LeagueRankedOutcome &v = g_result.view;
 	if (v.state == LeagueResultState::None || v.game.matchId != matchId) return;
 	v.answer = answer;
 	v.game.status = answer.status;
-	if (answer.ranked.present) v.game.delta = answer.ranked.delta;
+	if (answer.ranked.present) {
+		v.game.delta = answer.ranked.delta;
+		v.game.tierAfter = answer.ranked.tierAfter;
+		v.game.divisionAfter = answer.ranked.divisionAfter;
+	}
 	v.state = answer.status == "awaiting_other" ? LeagueResultState::Awaiting : LeagueResultState::Ready;
 	v.serial++;
 	g_result.nextPoll = GetTickCount() + kResultPollMs;
@@ -330,6 +295,87 @@ void FetchPage(unsigned gen, int offset, int limit, bool aroundMe)
 	else g_board.pageError = !a.r.status ? "Couldn't reach the league server. Check your connection and try again." : "The league server refused the request. Try again later.";
 }
 
+std::string HistoryPath(int64_t before, int limit)
+{
+	std::string path = "/v1/league/matches?mine=1&limit=" + std::to_string(limit);
+	if (before > 0) path += "&before=" + std::to_string(static_cast<long long>(before));
+	return path;
+}
+
+void FetchRecent()
+{
+	const Answer a = Call("GET", HistoryPath(0, kLeagueRecentGames), "", true);
+	LeagueHistoryPage page;
+	const bool ok = a.r.Ok() && a.parsed && LeagueParseHistory(a.j, page);
+	if (!ok && a.r.status != 401) LogW("league", "could not read the player's ranked games (%s)", a.r.Describe().c_str());
+	std::lock_guard<std::mutex> lock(g_mx);
+	g_history.recentLoading = false;
+	g_history.recentAt = GetTickCount();
+	g_history.recentFailed = !ok;
+	if (!ok) return;
+	g_history.recentLoaded = true;
+	g_history.recent = page.games;
+}
+
+void FetchHistory(unsigned gen, int64_t before)
+{
+	const Answer a = Call("GET", HistoryPath(before, kLeagueHistoryPage), "", true);
+	LeagueHistoryPage page;
+	const bool ok = a.r.Ok() && a.parsed && LeagueParseHistory(a.j, page);
+	if (!ok) LogW("league", "could not read a page of the ranked history (%s)", a.r.Describe().c_str());
+	std::lock_guard<std::mutex> lock(g_mx);
+	if (gen != g_history.pageGen) return;
+	g_history.pageLoading = false;
+	if (ok) {
+		g_history.pageLoaded = true;
+		g_history.page = page;
+		g_history.pageBefore = before;
+		g_history.pageError.clear();
+	}
+	else g_history.pageError = !a.r.status ? "Couldn't reach the league server. Check your connection and try again." : "The league server refused the request. Try again later.";
+}
+
+void FetchStats()
+{
+	const Answer a = Call("GET", "/v1/league/stats", "", false);
+	LeagueStats s;
+	const bool ok = a.r.Ok() && a.parsed && LeagueParseStats(a.j, s);
+	if (!ok && a.r.status != 404) LogD("league", "could not read who uses the queue (%s)", a.r.Describe().c_str());
+	std::lock_guard<std::mutex> lock(g_mx);
+	g_stats.loading = false;
+	g_stats.at = GetTickCount();
+	if (!ok) return;
+	g_stats.loaded = true;
+	g_stats.stats = s;
+}
+
+void DisputeThread(int64_t id, std::string text)
+{
+	Json body = Json::MakeObject();
+	body.Set("text", Json::MakeString(text));
+	const Answer a = Call("POST", MatchPath(id, "/dispute"), body.Dump(), true);
+	std::lock_guard<std::mutex> lock(g_mx);
+	g_dispute.busy = false;
+	g_dispute.serial++;
+	if (a.r.Ok()) {
+		g_dispute.sent.push_back(id);
+		g_dispute.notice = "Thanks: the league will review the game. The result stays as it is until then.";
+		g_dispute.bad = false;
+		LogI("league", "ranked: a problem with match %lld was reported", static_cast<long long>(id));
+		return;
+	}
+	LogW("league", "ranked: the problem with match %lld was not taken (%s)", static_cast<long long>(id), a.r.Describe().c_str());
+	g_dispute.bad = true;
+	const std::string &code = a.error.code;
+	if (code == "already_reported") {
+		g_dispute.sent.push_back(id);
+		g_dispute.notice = "A problem with this game was already reported.";
+	}
+	else if (code == "too_late") g_dispute.notice = "Problems can only be reported up to 24 hours after the game.";
+	else if (a.r.status == 400) g_dispute.notice = "Say in a few words what went wrong.";
+	else g_dispute.notice = FailureNotice(a);
+}
+
 void LeaveThread()
 {
 	const Answer a = Call("DELETE", "/v1/league/queue", "", true);
@@ -363,7 +409,7 @@ void JoinThread(unsigned gen, std::string contentKey)
 		if (gen != g_q.gen) leave = ok;
 		else if (ok) {
 			g_q.phase = LeagueRankedPhase::Searching;
-			g_q.since = q.since ? q.since : NowMs();
+			g_q.since = q.since ? q.since : NowMs() + g_clockOffset;
 			g_q.searching = q.searching;
 			g_q.estimate = q.estimateSec;
 			g_q.nextPoll = GetTickCount() + kQueuePollMs;
@@ -375,7 +421,8 @@ void JoinThread(unsigned gen, std::string contentKey)
 			if (code == "in_match" && a.error.matchId) ResumeMatch(a.error.matchId);
 			else if (code == "banned") {
 				g_q.banUntil = a.error.until;
-				SetNotice(g_q, "You declined or let a match go: you can't search for a while.", true);
+				g_q.banKind = a.error.kind;
+				SetNotice(g_q, LeagueBanText(a.error.kind), true);
 			}
 			else if (code == "wrong_content") SetNotice(g_q, "This season is played with other gameplay content. Change your content profile to search.", true);
 			else if (code == "no_season") SetNotice(g_q, "No ranked season is being played now.", true);
@@ -575,6 +622,7 @@ void AnswerThread(unsigned gen, int64_t id, bool accept)
 		}
 		ToIdle(g_q);
 		g_q.banUntil = a.parsed ? static_cast<int64_t>(a.j.GetNumber("queueBanUntil")) : 0;
+		g_q.banKind = "declined";
 		SetNotice(g_q, "You declined the match: you can't search for a few minutes.", true);
 		LogI("league", "ranked: match %lld declined", static_cast<long long>(id));
 		refreshMe = true;
@@ -628,7 +676,10 @@ void AbandonThread(unsigned gen, int64_t id, bool automatic)
 		LeagueMatchTicket t;
 		if (a.parsed && LeagueParseMatch(a.j, t) && t.outcome == "abandoned") CalledOff(t);
 		else ToIdle(g_q);
-		if (a.parsed && a.j.GetNumber("queueBanUntil") > 0) g_q.banUntil = static_cast<int64_t>(a.j.GetNumber("queueBanUntil"));
+		if (a.parsed && a.j.GetNumber("queueBanUntil") > 0) {
+			g_q.banUntil = static_cast<int64_t>(a.j.GetNumber("queueBanUntil"));
+			g_q.banKind = "declined";
+		}
 		LogI("league", "ranked: match %lld called off%s", static_cast<long long>(id), automatic ? " after its room failed" : "");
 	}
 	LeagueMeRefresh(true);
@@ -673,6 +724,7 @@ void PollResultThread(int64_t id)
 	if (refresh) {
 		LeagueMeRefresh(true);
 		LeagueBoardRefresh(true);
+		LeagueRecentRefresh(true);
 	}
 }
 
@@ -736,7 +788,8 @@ void RankedTick()
 		case LeagueRankedPhase::Accepted:
 		case LeagueRankedPhase::Ready:
 		case LeagueRankedPhase::Playing:
-			if (g_q.matchId) {
+			// During the game the presence with `started` is all the server needs; the report ends the match.
+			if (g_q.matchId && !g_q.inGame) {
 				g_q.busy = true;
 				SafeThread(PollMatchThread, g_q.gen, g_q.matchId).detach();
 			}
@@ -770,7 +823,10 @@ void RankedGameReported(const LeagueReport &report, const std::string &ownSteamI
 	g.durationMs = report.durationMs;
 	g.map = report.map.name;
 	for (const LeagueReportPlayer &p : report.players) {
-		if (p.steamId == ownSteamId) g.won = p.result == "win";
+		if (p.steamId == ownSteamId) {
+			g.won = p.result == "win";
+			g.left = p.result == "left";
+		}
 		else {
 			g.opponent = p.name;
 			g.opponentId = p.steamId;
@@ -786,9 +842,26 @@ void RankedGameReported(const LeagueReport &report, const std::string &ownSteamI
 	g_result.view.answer = LeagueReportAnswer();
 	g_result.view.serial++;
 	g_result.since = NowMs();
-	KeepRecent(g);
+	g_q.inGame = false;
 	if (g_q.matchId == report.matchId) ToIdle(g_q);
-	LogI("league", "ranked: match %lld played (%s); waiting for the server", static_cast<long long>(report.matchId), g.won ? "won" : "lost");
+	LogI("league", "ranked: match %lld played (%s); waiting for the server", static_cast<long long>(report.matchId), g.won ? "won" : g.left ? "left" : "lost");
+}
+
+void RankedGameEnded(int64_t matchId)
+{
+	std::lock_guard<std::mutex> lock(g_mx);
+	if (!g_q.inGame || (matchId && matchId != g_q.matchId)) return;
+	g_q.inGame = false;
+	g_q.nextPoll = 0;
+	LogW("league", "ranked: the game of match %lld ended without a report; following the server", static_cast<long long>(g_q.matchId));
+}
+
+bool RankedTicketOf(int64_t matchId, LeagueMatchTicket &out)
+{
+	std::lock_guard<std::mutex> lock(g_mx);
+	if (!matchId || !g_q.ticketLoaded || g_q.ticket.id != matchId) return false;
+	out = g_q.ticket;
+	return true;
 }
 
 void RankedReportAnswered(const Json &report, const std::string &answer)
@@ -806,6 +879,7 @@ void RankedReportAnswered(const Json &report, const std::string &answer)
 		a.ranked.present ? (" (" + std::to_string(a.ranked.delta) + " Glory)").c_str() : "");
 	LeagueMeRefresh(true);
 	LeagueBoardRefresh(true);
+	LeagueRecentRefresh(true);
 }
 
 void RankedGameStarted(int64_t matchId)
@@ -813,6 +887,7 @@ void RankedGameStarted(int64_t matchId)
 	if (matchId <= 0) return;
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
+		if (g_q.matchId == matchId) g_q.inGame = true;
 		if (g_q.startedSent == matchId) return;
 		g_q.startedSent = matchId;
 	}
@@ -858,15 +933,86 @@ LeagueRankedView LeagueRankedState()
 	v.abandoning = g_q.abandoning;
 	v.calledOff = g_q.calledOff;
 	v.banUntil = g_q.banUntil;
+	v.banKind = g_q.banKind;
 	v.notice = g_q.notice;
 	v.noticeBad = g_q.noticeBad;
 	v.foundSerial = g_q.foundSerial;
 	v.result = g_result.view;
-	LoadRecent();
-	v.recent = g_recent.games;
+	v.recentLoaded = g_history.recentLoaded;
+	v.recentFailed = g_history.recentFailed;
+	v.recent = g_history.recent;
+	v.historyLoading = g_history.pageLoading;
+	v.historyLoaded = g_history.pageLoaded;
+	v.historyBefore = g_history.pageBefore;
+	v.history = g_history.page;
+	v.historyError = g_history.pageError;
+	v.statsLoaded = g_stats.loaded;
+	v.stats = g_stats.stats;
+	v.disputeBusy = g_dispute.busy;
+	v.disputed = g_dispute.sent;
+	v.disputeNotice = g_dispute.notice;
+	v.disputeBad = g_dispute.bad;
+	v.disputeSerial = g_dispute.serial;
 	v.badgeBusy = g_badge.busy;
 	v.badgeError = g_badge.error;
 	return v;
+}
+
+void LeagueRecentRefresh(bool force)
+{
+	if (!LeagueLinked()) return;
+	{
+		std::lock_guard<std::mutex> lock(g_mx);
+		if (g_history.recentLoading) return;
+		const DWORD keep = g_history.recentFailed ? kRecentRetryMs : kRecentKeepMs;
+		if (!force && g_history.recentAt && GetTickCount() - g_history.recentAt < keep) return;
+		g_history.recentLoading = true;
+	}
+	SafeThread(FetchRecent).detach();
+}
+
+void LeagueHistoryRequest(int64_t before)
+{
+	if (!LeagueLinked()) return;
+	unsigned gen = 0;
+	{
+		std::lock_guard<std::mutex> lock(g_mx);
+		gen = ++g_history.pageGen;
+		g_history.pageLoading = true;
+	}
+	SafeThread(FetchHistory, gen, std::max<int64_t>(0, before)).detach();
+}
+
+void LeagueStatsRefresh()
+{
+	{
+		std::lock_guard<std::mutex> lock(g_mx);
+		if (g_stats.loading || (g_stats.at && GetTickCount() - g_stats.at < kStatsKeepMs)) return;
+		g_stats.loading = true;
+	}
+	SafeThread(FetchStats).detach();
+}
+
+void LeagueMatchDispute(int64_t matchId, const std::string &text)
+{
+	if (matchId <= 0) return;
+	{
+		std::lock_guard<std::mutex> lock(g_mx);
+		if (g_dispute.busy) return;
+		g_dispute.busy = true;
+	}
+	LogI("league", "ranked: reporting a problem with match %lld", static_cast<long long>(matchId));
+	SafeThread(DisputeThread, matchId, text).detach();
+}
+
+int64_t LeagueServerClockOffsetMs()
+{
+	return g_clockOffset;
+}
+
+int64_t LeagueServerNowMs()
+{
+	return NowMs() + g_clockOffset;
 }
 
 void LeagueSeasonRefresh(bool force)
@@ -922,17 +1068,18 @@ void LeagueQueueJoin()
 		SetNotice(g_q, "Steam is not available. Open Steam and try again.", true);
 		return;
 	}
-	const int64_t ban = std::max(g_q.banUntil, me.me.queueBanUntil);
-	if (ban > NowMs()) {
+	const int64_t ban = std::max(g_q.banUntil, me.me.ban.until);
+	if (ban > NowMs() + g_clockOffset) {
+		if (me.me.ban.until >= g_q.banUntil) g_q.banKind = me.me.ban.kind;
 		g_q.banUntil = ban;
-		SetNotice(g_q, "You declined or let a match go: you can't search for a while.", true);
+		SetNotice(g_q, LeagueBanText(g_q.banKind), true);
 		return;
 	}
 	g_q.gen++;
 	g_q.phase = LeagueRankedPhase::Joining;
 	g_q.busy = true;
 	g_q.rejoined = false;
-	g_q.since = NowMs();
+	g_q.since = NowMs() + g_clockOffset;
 	g_q.notice.clear();
 	LogI("league", "ranked: entering the 1v1 queue");
 	SafeThread(JoinThread, g_q.gen, contentKey).detach();

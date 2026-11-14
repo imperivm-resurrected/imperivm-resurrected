@@ -290,7 +290,7 @@ int PaintHeaderActions(Painter &p, const ScreenLayout &l, const std::vector<Ghos
 	return std::min(left, l.w - l.margin);
 }
 
-void PaintScreenTitle(Painter &p, const ScreenLayout &l, const std::string &title, const std::vector<TabSpec> &tabs, int right, int mx, int my)
+int PaintScreenTitle(Painter &p, const ScreenLayout &l, const std::string &title, const std::vector<TabSpec> &tabs, int right, int mx, int my)
 {
 	const int m = l.margin, tabGap = 48, tabH = 52;
 	p.Font(2);
@@ -302,6 +302,7 @@ void PaintScreenTitle(Painter &p, const ScreenLayout &l, const std::string &titl
 	const int titleW = std::min(titleMax, p.CapsWidth(title, 1) + 4);
 	p.TextCaps(m, l.titleY, titleW, l.titleH, title, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
 	if (count) PaintTabs(p, m + titleW + tabGap, l.titleY + l.titleH - tabH - 4, tabs, mx, my, tabW, tabH, 2);
+	return m + titleW + tabsW;
 }
 
 void PaintScreenInfo(Painter &p, const ScreenLayout &l, const std::string &text, COLORREF color)

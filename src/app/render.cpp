@@ -27,6 +27,7 @@
 #include "ui/mpui.h"
 #include "ui/diplomacyui.h"
 #include "ui/gamemenuui.h"
+#include "ui/leaguedropui.h"
 #include "ui/mainmenuui.h"
 #include "ui/optionsui.h"
 #include "ui/profileui.h"
@@ -403,8 +404,8 @@ DWORD WINAPI RenderThread(LPVOID)
 		}
 		const bool overlay = GetConfig().showPerf || GetConfig().showNet;
 		if (newFrame && !MpUiNeedsDraw()) MpUiObserveFrame(local.data(), fw, fh);
-		const bool needSaves = SavesUiNeedsDraw(), needMods = ModUiNeedsDraw(), needMp = MpUiNeedsDraw(), needControls = ControlsUiNeedsDraw(), needOptions = OptionsUiNeedsDraw(), needGameMenu = GameMenuUiNeedsDraw(), needDiplomacy = DiplomacyUiNeedsDraw(), needConquest = ConquestUiNeedsDraw(), needProfile = ProfileUiNeedsDraw(), needBattles = BattlesUiNeedsDraw(), needCredits = CreditsUiNeedsDraw(), needChat = ChatUiNeedsDraw(), needHelp = HelpUiNeedsDraw(), needObjectives = ObjectivesUiNeedsDraw(), needMainMenu = MainMenuUiNeedsDraw();
-		const bool ui = !video && (needSaves || needMods || needMp || needControls || needOptions || needGameMenu || needDiplomacy || needConquest || needProfile || needBattles || needCredits || needChat || needHelp || needObjectives || needMainMenu);
+		const bool needSaves = SavesUiNeedsDraw(), needMods = ModUiNeedsDraw(), needMp = MpUiNeedsDraw(), needControls = ControlsUiNeedsDraw(), needOptions = OptionsUiNeedsDraw(), needGameMenu = GameMenuUiNeedsDraw(), needDrop = LeagueDropUiNeedsDraw(), needDiplomacy = DiplomacyUiNeedsDraw(), needConquest = ConquestUiNeedsDraw(), needProfile = ProfileUiNeedsDraw(), needBattles = BattlesUiNeedsDraw(), needCredits = CreditsUiNeedsDraw(), needChat = ChatUiNeedsDraw(), needHelp = HelpUiNeedsDraw(), needObjectives = ObjectivesUiNeedsDraw(), needMainMenu = MainMenuUiNeedsDraw();
+		const bool ui = !video && (needSaves || needMods || needMp || needControls || needOptions || needGameMenu || needDrop || needDiplomacy || needConquest || needProfile || needBattles || needCredits || needChat || needHelp || needObjectives || needMainMenu);
 		// The credits scroll on their own: they are drawn on every pass, at the pace of the screen.
 		if (ui && (newFrame || needCredits || now - lastUiDraw >= 33)) {
 			if (!newFrame) {
@@ -425,6 +426,7 @@ DWORD WINAPI RenderThread(LPVOID)
 				SavesUiDraw(local.data(), fw, fh);
 				if (needOptions) OptionsUiDraw(local.data(), fw, fh);
 				if (needDiplomacy) DiplomacyUiDraw(local.data(), fw, fh);
+				if (needDrop) LeagueDropUiDraw(local.data(), fw, fh);
 				if (needGameMenu) GameMenuUiDraw(local.data(), fw, fh);
 				if (needProfile) ProfileUiDraw(local.data(), fw, fh);
 				if (needCredits) CreditsUiDraw(local.data(), fw, fh);
@@ -574,6 +576,7 @@ int WINAPI HookSetDIBitsToDevice(HDC hdc, int xDest, int yDest, DWORD w, DWORD h
 	MpUiGameThreadTick();
 	OptionsUiGameTick();
 	GameMenuUiGameTick();
+	LeagueDropUiGameTick();
 	MainMenuUiGameTick();
 	DiplomacyUiGameTick();
 	ConquestUiGameTick();

@@ -546,6 +546,22 @@ LeagueImage LeagueVexillumPixels(LeagueTier tier, int scale)
 	return Paint(table, c, scale);
 }
 
+LeagueColors LeagueFounderColors()
+{
+	// Gold over the brand's red, as the champion of a season's final, so it reads apart from every rank.
+	return {0x5A0A0E, 0x8A0E13, 0xF2D06B, 0xF2D06B};
+}
+
+LeagueImage LeagueFounderPixels(int scale)
+{
+	// The vexillum with a gold trim and a gold lozenge on the red cloth, in place of a rank's bar.
+	const std::vector<Px> table = {{9, 0, 2, 2, kL, 1}, {3, 2, 14, 1, kL, 1}, {2, 2, 1, 1, kL, 1}, {17, 2, 1, 1, kL, 1}, {4, 3, 12, 12, kL, 1},
+		{5, 3, 10, 11, kB, 1}, {6, 4, 8, 9, kC, 1}, {6, 4, 4, 9, kWhite, 0.12f}, {9, 5, 2, 1, kL, 1}, {8, 6, 4, 1, kL, 1}, {7, 7, 6, 2, kL, 1},
+		{8, 9, 4, 1, kL, 1}, {9, 10, 2, 1, kL, 1}, {5, 15, 1, 1, kL, 1}, {7, 15, 1, 1, kL, 1}, {12, 15, 1, 1, kL, 1}, {14, 15, 1, 1, kL, 1},
+		{9, 15, 2, 5, 0x7A6553, 1}};
+	return Paint(table, LeagueFounderColors(), scale);
+}
+
 LeagueColors LeagueMetalColors(LeagueMetal metal)
 {
 	const PhaleraShades s = ShadesOf(metal);

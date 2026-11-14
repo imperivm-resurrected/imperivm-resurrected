@@ -30,6 +30,9 @@ constexpr int kLeagueBadgeGrid = 20;
 LeagueImage LeagueBadgePixels(LeagueTier tier, int scale);
 // A past season's vexillum, in the colours of the rank reached there.
 LeagueImage LeagueVexillumPixels(LeagueTier tier, int scale);
+// The Founder's vexillum, which the test season gives everyone who played it: gold over red, with a lozenge.
+LeagueImage LeagueFounderPixels(int scale);
+LeagueColors LeagueFounderColors();
 // The colours of a phalera's metal: `border` its rim, `body` the dark of the disc, `light` its ring and star, `text` its name over the
 // dark panels.
 LeagueColors LeagueMetalColors(LeagueMetal metal);

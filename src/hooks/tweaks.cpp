@@ -4,6 +4,7 @@
 #include <windows.h>
 #include <intrin.h>
 
+#include <atomic>
 #include <cstdint>
 #include <cstring>
 #include <vector>
@@ -391,6 +392,7 @@ int __cdecl HookGateInside(int *sp)
 }
 
 bool g_quietPause = false;
+std::atomic<bool> g_pauseHeld{false};
 
 typedef void(__fastcall *PauseRequest_t)(void *game, void *edx, int param);
 PauseRequest_t g_origRequestPause = nullptr, g_origRequestUnpause = nullptr, g_origRequestToggle = nullptr;
@@ -452,6 +454,7 @@ void __fastcall HookRequestUnpause(void *game, void *edx, int param)
 {
 	const bool only = OnlyHumanOnline(static_cast<char *>(game));
 	LogPauseRequest("Resume", static_cast<char *>(game), only, _ReturnAddress());
+	if (only && g_pauseHeld) return;
 	if (only) return SetPausedNow(static_cast<char *>(game), 0);
 	g_origRequestUnpause(game, edx, param);
 }
@@ -463,6 +466,7 @@ void __fastcall HookRequestToggle(void *game, void *edx, int param)
 	if (only) {
 		typedef int(__fastcall * IsPaused_t)(void *game);
 		const int paused = reinterpret_cast<IsPaused_t>((*reinterpret_cast<void ***>(game))[22])(game);
+		if (paused && g_pauseHeld) return;
 		return SetPausedNow(static_cast<char *>(game), paused ? 0 : 1, false);
 	}
 	g_origRequestToggle(game, edx, param);
@@ -483,6 +487,7 @@ FocusStep FocusChanged(bool active)
 			return kFocusPaused;
 		}
 		if (!g_focusPause.Return(game, game && GamePaused(game))) return kFocusNothing;
+		if (g_pauseHeld) return kFocusNothing;
 		CallSetPaused(game, 0, true);
 		return kFocusResumed;
 	}
@@ -590,6 +595,21 @@ void TweaksWindowActive(bool active)
 bool TweaksOnlyHumanOnline(void *game)
 {
 	return OnlyHumanOnline(static_cast<char *>(game));
+}
+
+void TweaksSetPausedQuietly(void *game, bool paused)
+{
+	if (game) CallSetPaused(static_cast<char *>(game), paused ? 1 : 0, true);
+}
+
+bool TweaksGamePaused(void *game)
+{
+	return game && GamePaused(static_cast<char *>(game));
+}
+
+void TweaksHoldPause(bool held)
+{
+	g_pauseHeld = held;
 }
 
 namespace {

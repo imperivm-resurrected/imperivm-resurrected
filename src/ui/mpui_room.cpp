@@ -10,6 +10,7 @@
 #include "ui/mpui_internal.h"
 #include "game/civs.h"
 #include "core/log.h"
+#include "net/leagueclient.h"
 
 using namespace mpui_impl;
 
@@ -420,6 +421,12 @@ unsigned __fastcall HookGameMenuMsg(void *dlg, void *edx, int *msg)
 	if (msg && static_cast<unsigned>(msg[0x10 / 4]) == kMsgButtonClick) {
 		void *sender = reinterpret_cast<void *>(msg[0xc / 4]);
 		const int id = sender ? reinterpret_cast<GetId_t>((*reinterpret_cast<void ***>(sender))[0x1c / 4])(sender) : 0;
+		// Surrender, before the command is queued: every computer runs it, so it can only be stopped here.
+		if (id == 0x1005 && LeagueSurrenderLocked()) {
+			LogI("league", "ranked: surrender refused before minute 5");
+			ModUiToast("You can surrender from minute 5.", true);
+			return 0;
+		}
 		if (id == 0x1005 || id == 0x1006) {
 			g_userQuit.tick = GetTickCount();
 			g_userQuit.id = id;

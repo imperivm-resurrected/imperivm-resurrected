@@ -219,6 +219,7 @@ bool LeagueParseQueue(const Json &j, LeagueQueueAnswer &out)
 	out.since = Int64(j, "since");
 	out.searching = Int(j, "searching");
 	out.estimateSec = Int(j, "estimateSec");
+	out.serverNow = Int64(j, "serverNow");
 	out.matchId = IdNumber(j.Get("matchId"));
 	if (const Json *m = j.Get("match"); m && m->type == Json::Object) {
 		out.matchId = IdNumber(m->Get("id"));
@@ -246,6 +247,7 @@ LeagueRankedResult LeagueParseRankedResult(const Json *v)
 	r.demoted = v->GetBool("demoted");
 	r.shield = Int(*v, "shield");
 	r.placementLeft = Int(*v, "placementLeft");
+	r.placed = v->GetBool("placed");
 	return r;
 }
 
@@ -274,6 +276,7 @@ bool LeagueParseMatch(const Json &j, LeagueMatchTicket &out)
 		}
 	}
 	out.ranked = LeagueParseRankedResult(j.Get("ranked"));
+	out.serverNow = Int64(j, "serverNow");
 	return out.id > 0 && out.status != LeagueMatchStatus::Unknown;
 }
 
@@ -374,6 +377,7 @@ LeagueError LeagueParseError(const Json &j)
 	e.code = j.GetString("error");
 	e.message = j.GetString("message");
 	e.contentKey = j.GetString("contentKey");
+	e.kind = Lower(j.GetString("kind"));
 	e.until = Int64(j, "until");
 	if (!e.until) e.until = Int64(j, "queueBanUntil");
 	e.matchId = IdNumber(j.Get("matchId"));
@@ -386,6 +390,139 @@ int64_t LeagueRetryAfterMs(int httpStatus, const LeagueError &e, int64_t normalM
 	if (httpStatus != 429) return normalMs;
 	const int64_t asked = e.retryAfter > 0 ? static_cast<int64_t>(std::min(e.retryAfter, 3600)) * 1000 : 5000;
 	return std::max(asked, normalMs);
+}
+
+const char *LeagueBanText(const std::string &kind)
+{
+	const std::string k = Lower(kind);
+	if (k == "abandoned") return "You left a ranked game: you can't search for a while.";
+	if (k == "desync") return "Too many of your games went out of sync: you can't search for a while.";
+	return "You declined or let a match go: you can't search for a while.";
+}
+
+bool LeagueParseStats(const Json &j, LeagueStats &out)
+{
+	if (j.type != Json::Object || !j.Get("searching")) return false;
+	out = LeagueStats();
+	out.searching = std::max(0, Int(j, "searching"));
+	out.playing = std::max(0, Int(j, "playing"));
+	out.gamesToday = std::max(0, Int(j, "gamesToday"));
+	out.serverNow = Int64(j, "serverNow");
+	return true;
+}
+
+int64_t LeagueClockOffsetMs(int64_t serverNow, int64_t sentAtMs, int64_t receivedAtMs)
+{
+	if (serverNow <= 0) return 0;
+	if (receivedAtMs < sentAtMs) receivedAtMs = sentAtMs;
+	return serverNow - (sentAtMs + (receivedAtMs - sentAtMs) / 2);
+}
+
+bool LeagueParseHistory(const Json &j, LeagueHistoryPage &out)
+{
+	if (j.type != Json::Object) return false;
+	const Json *list = j.Get("matches");
+	if (!list || list->type != Json::Array) return false;
+	out = LeagueHistoryPage();
+	out.more = j.GetBool("more");
+	for (const Json &m : list->arr) {
+		if (m.type != Json::Object) continue;
+		LeagueHistoryGame g;
+		g.id = IdNumber(m.Get("id"));
+		g.playedAt = Int64(m, "playedAt");
+		g.durationMs = static_cast<uint32_t>(std::max(0.0, m.GetNumber("durationMs")));
+		g.map = MapOf(m.Get("map"));
+		if (const Json *o = m.Get("opponent"); o && o->type == Json::Object) g.opponent = CardOf(*o);
+		g.myCiv = m.GetString("myCiv");
+		g.opponentCiv = m.GetString("opponentCiv");
+		g.endedBy = Lower(m.GetString("endedBy"));
+		const std::string result = Lower(m.GetString("result"));
+		g.result = result == "win" ? LeagueGameResult::Win
+			: result == "loss"	   ? LeagueGameResult::Loss
+			: result == "void"	   ? LeagueGameResult::Void
+			: result == "disputed" ? LeagueGameResult::Disputed
+								   : LeagueGameResult::Pending;
+		const Json *delta = m.Get("gloryDelta");
+		g.hasDelta = delta && delta->type == Json::Number;
+		g.gloryDelta = g.hasDelta ? static_cast<int>(delta->num) : 0;
+		g.placed = m.GetBool("placed");
+		if (g.placed) g.hasDelta = false;
+		if (g.id > 0) out.games.push_back(g);
+	}
+	return true;
+}
+
+int64_t LeagueHistoryNextBefore(const LeagueHistoryPage &p)
+{
+	return p.more && !p.games.empty() ? p.games.back().playedAt : 0;
+}
+
+bool LeagueDisputeOpen(int64_t playedAt, int64_t nowMs)
+{
+	return playedAt > 0 && nowMs - playedAt < kLeagueDisputeWindowMs;
+}
+
+bool LeaguePlaceShown(int position, int total)
+{
+	return position > 0 && total > 0 && position <= std::max(1, total / 2);
+}
+
+bool LeagueImperatorLineAfter(const LeagueBoardRow &row, const LeagueBoardRow *next)
+{
+	return row.tier == LeagueTier::Imperator && next && next->tier != LeagueTier::Imperator;
+}
+
+bool LeagueSurrenderAllowed(bool ranked, uint32_t gameMs)
+{
+	return !ranked || gameMs >= kLeagueSurrenderFromMs;
+}
+
+void LeagueDropGone(LeagueDropWait &w, int64_t nowMs, uint32_t gameMs)
+{
+	if (w.claimed) return;
+	w.gone = true;
+	w.since = nowMs;
+	w.dropAtMs = gameMs;
+}
+
+void LeagueDropBack(LeagueDropWait &w)
+{
+	if (w.claimed) return;
+	w.gone = false;
+	w.since = 0;
+}
+
+bool LeagueDropClaim(LeagueDropWait &w, int64_t nowMs)
+{
+	if (LeagueDropPhaseAt(w, nowMs) != LeagueDropPhase::Claimable) return false;
+	w.claimed = true;
+	return true;
+}
+
+LeagueDropPhase LeagueDropPhaseAt(const LeagueDropWait &w, int64_t nowMs)
+{
+	if (w.claimed) return LeagueDropPhase::Claimed;
+	if (!w.gone) return LeagueDropPhase::None;
+	return nowMs - w.since >= kLeagueDropWaitMs ? LeagueDropPhase::Claimable : LeagueDropPhase::Waiting;
+}
+
+int64_t LeagueDropLeftMs(const LeagueDropWait &w, int64_t nowMs)
+{
+	if (!w.gone || w.claimed) return 0;
+	return std::max<int64_t>(0, kLeagueDropWaitMs - (nowMs - w.since));
+}
+
+void LeagueSeatsFromTicket(std::vector<LeagueSeat> &seats, const LeagueMatchTicket &t, uint64_t ownId)
+{
+	const LeaguePlayerCard *other = LeagueTicketPlayer(t, std::to_string(ownId), true);
+	const uint64_t otherId = other ? _strtoui64(other->steamId.c_str(), nullptr, 10) : 0;
+	int unknown = 0;
+	for (const LeagueSeat &s : seats) unknown += s.human && !s.local && !s.steamId ? 1 : 0;
+	for (LeagueSeat &s : seats) {
+		if (!s.human || s.steamId) continue;
+		if (s.local) s.steamId = ownId;
+		else if (unknown == 1 && otherId && otherId != ownId) s.steamId = otherId;
+	}
 }
 
 LeagueGloryPlace LeagueGloryPlaceOf(int glory)
@@ -473,7 +610,7 @@ std::vector<LeagueBadgeChoice> LeagueBadgeChoices(const LeagueMe &me)
 LeagueResultKind LeagueResultKindOf(const LeagueRankedResult &r)
 {
 	if (r.tierAfter == LeagueTier::None) return LeagueResultKind::Placement;
-	if (r.tierBefore == LeagueTier::None) return LeagueResultKind::PlacementDone;
+	if (r.placed || r.tierBefore == LeagueTier::None) return LeagueResultKind::PlacementDone;
 	if (r.promoted) return LeagueResultKind::Promotion;
 	if (r.demoted) return LeagueResultKind::Demotion;
 	return LeagueResultKind::Steady;

@@ -64,8 +64,8 @@ void PaintGhostButton(Painter &p, int x, int y, int w, int h, const std::string 
 // The outlined buttons at the top right of a full screen, in the order given; returns where the leftmost one starts.
 int PaintHeaderActions(Painter &p, const ScreenLayout &l, const std::vector<GhostButton> &buttons, int mx, int my);
 // The big title at the top left, with the tabs on its baseline, all before `right`: a long title gives way to the tabs and ends in an
-// ellipsis. It needs the screen's fonts (UseScreenFonts).
-void PaintScreenTitle(Painter &p, const ScreenLayout &l, const std::string &title, const std::vector<TabSpec> &tabs, int right, int mx, int my);
+// ellipsis. It needs the screen's fonts (UseScreenFonts). Returns where the title and its tabs end.
+int PaintScreenTitle(Painter &p, const ScreenLayout &l, const std::string &title, const std::vector<TabSpec> &tabs, int right, int mx, int my);
 // The caption line under the title.
 void PaintScreenInfo(Painter &p, const ScreenLayout &l, const std::string &text, COLORREF color = pal::caption);
 
