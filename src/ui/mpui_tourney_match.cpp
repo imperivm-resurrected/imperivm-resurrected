@@ -378,10 +378,19 @@ void PaintChampionScreen(Painter &p, const State &st, const Ui &u)
 	const int size = std::min(400, blockH - 20), px = m + 40, pcy = top + blockH / 2;
 	PaintRing(p, px + size / 2, pcy, size * 8 / 10, pal::hairline);
 	PaintRing(p, px + size / 2, pcy, size * 11 / 10, RGB(0x22, 0x1f, 0x1d));
-	DrawLeaguePhalera(p, px, pcy - size / 2, size, LeagueMetal::Gold);
+	// Only official cups award phalerae; a community cup crowns its champion with a laurel and no prize.
+	if (d.official) DrawLeaguePhalera(p, px, pcy - size / 2, size, LeagueMetal::Gold);
+	else {
+		PaintOrnament(p, kOrnamentLaurel, px, pcy - size / 2, size / 2, size, kGold);
+		PaintOrnament(p, kOrnamentLaurel, px + size / 2, pcy - size / 2, size / 2, size, kGold, true);
+		UseDisplay(p, size * 45 / 100);
+		p.raw = true;
+		p.Text(px, pcy - size / 2, size, size, "1", kGold, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.raw = false;
+	}
 	const int pathW = std::min(540, inner * 28 / 100), pathX = m + inner - pathW;
 	const int tx = px + size + 56, tw = pathX - 40 - tx;
-	PaintCaps(p, tx, top + 30, tw, 20, champ ? Tr("Gold phalera") + " \xC2\xB7 " + Tr("1st place") : Tr("No champion"), kGold);
+	PaintCaps(p, tx, top + 30, tw, 20, champ ? (d.official ? Tr("Gold phalera") + " \xC2\xB7 " + Tr("1st place") : Tr("Champion of the cup")) : Tr("No champion"), kGold);
 	const TourneyMatch *final = d.rounds ? TourneyMatchAt(d, d.rounds, 0) : nullptr;
 	if (champ) {
 		int nameSize = std::min(210, blockH * 45 / 100);
@@ -470,9 +479,11 @@ void PaintChampionScreen(Painter &p, const State &st, const Ui &u)
 	int py = ry + 56;
 	for (const Step &s : steps) {
 		const std::vector<const TourneyEntrant *> who = TourneyPlaced(d, s.place);
+		// A bracket without semifinals has no third place.
+		if (s.place == 3 && who.empty() && d.rounds < 2) break;
 		UseDisplay(p, 30);
 		p.Text(m + pad, py, 50, rowH, s.label, s.ink, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-		DrawLeaguePhalera(p, m + pad + 56, py + (rowH - 40) / 2, 40, s.metal);
+		if (d.official) DrawLeaguePhalera(p, m + pad + 56, py + (rowH - 40) / 2, 40, s.metal);
 		std::string names;
 		for (const TourneyEntrant *e : who) {
 			names += (names.empty() ? "" : " " + Tr("and") + " ") + e->name;
