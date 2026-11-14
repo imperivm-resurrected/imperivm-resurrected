@@ -326,8 +326,25 @@ bool LeagueParseLinkStart(const Json &j, LeagueLinkCode &out)
 	out.code = j.GetString("code");
 	out.pollToken = j.GetString("pollToken");
 	out.url = j.GetString("url");
+	out.steamUrl = j.GetString("steamUrl");
 	out.expiresAt = Int64(j, "expiresAt");
 	return !out.code.empty() && !out.pollToken.empty();
+}
+
+std::string LeagueSteamLinkUrl(const std::string &steamUrl, const std::string &base)
+{
+	static const char kPath[] = "/v1/link/steam?";
+	const std::string s = Trim(steamUrl);
+	if (s.empty() || !CleanUrl(s) || LeagueBaseUrl(base) != base) return std::string();
+	// The same scheme, host and port as the server, compared without case, and then its page; nothing else after the address.
+	if (s.size() <= base.size() || Lower(s.substr(0, base.size())) != Lower(base)) return std::string();
+	if (s.compare(base.size(), strlen(kPath), kPath) != 0 || s.find('#') != std::string::npos) return std::string();
+	return s;
+}
+
+bool LeagueOfferLinkNow(bool linked, bool linking, bool steamReady, bool offeredThisSession, bool declined)
+{
+	return !linked && !linking && steamReady && !offeredThisSession && !declined;
 }
 
 LeagueLinkPoll LeagueParseLinkPoll(int httpStatus, const Json &j)

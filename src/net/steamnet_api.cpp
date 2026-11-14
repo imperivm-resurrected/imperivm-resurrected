@@ -283,6 +283,28 @@ void SteamOpenProfile(uint64_t id)
 	});
 }
 
+void SteamOpenWebPage(const std::string &url)
+{
+	if (_strnicmp(url.c_str(), "https://", 8) != 0 && _strnicmp(url.c_str(), "http://", 7) != 0) return;
+	auto browser = [url] {
+		ShellExecuteA(nullptr, "open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+		LogI("steam", "web page opened in the browser");
+	};
+	if (!SteamOnlineReady()) {
+		browser();
+		return;
+	}
+	Post([url, browser] {
+		ISteamUtils *utils = S.SteamAPI_SteamUtils_v011();
+		if (!g_steam.friends || !utils || !S.SteamAPI_ISteamFriends_ActivateGameOverlayToWebPage || !S.SteamAPI_ISteamUtils_IsOverlayEnabled(utils)) {
+			browser();
+			return;
+		}
+		S.SteamAPI_ISteamFriends_ActivateGameOverlayToWebPage(g_steam.friends, url.c_str(), k_EActivateGameOverlayToWebPageMode_Modal);
+		LogI("steam", "web page opened in the overlay");
+	});
+}
+
 void SteamInviteFriends()
 {
 	if (!SteamOnlineReady()) return;

@@ -187,6 +187,7 @@ void LoadConfig()
 	g_config.leagueToken = RevealSecret(ReadIniString("League", "Token", path));
 	g_config.leagueSteamId = ReadIniString("League", "SteamId", path);
 	g_config.leagueName = ReadIniString("League", "Name", path);
+	g_config.leagueOfferLink = GetPrivateProfileIntA("League", "OfferLink", 1, path) != 0;
 	if (g_config.leagueToken.empty() && !ReadIniString("League", "Token", path).empty()) {
 		LogW("boot", "config: the league token can't be read on this Windows user; the account has to be linked again");
 	}
@@ -272,4 +273,9 @@ void SaveLeagueAccount()
 	WritePrivateProfileStringA("League", "Token", linked ? ProtectSecret(g_config.leagueToken).c_str() : nullptr, path.c_str());
 	WritePrivateProfileStringA("League", "SteamId", linked ? g_config.leagueSteamId.c_str() : nullptr, path.c_str());
 	WritePrivateProfileStringA("League", "Name", linked ? g_config.leagueName.c_str() : nullptr, path.c_str());
+}
+
+void SaveLeagueOffer()
+{
+	WritePrivateProfileStringA("League", "OfferLink", g_config.leagueOfferLink ? nullptr : "0", IniPath().c_str());
 }

@@ -210,6 +210,49 @@ void Link()
 	CHECK_EQ(LeagueBrowserUrl(""), std::string(kLeagueLinkPage));
 }
 
+void SteamLink()
+{
+	LeagueLinkCode s;
+	CHECK(LeagueParseLinkStart(Parse("{\"code\": \"ABCD-2345\", \"pollToken\": \"pt\", \"steamUrl\": "
+									 "\"https://api.imperivmresurrected.com/v1/link/steam?code=ABCD-2345&lang=es\"}"),
+		s));
+	CHECK_EQ(s.steamUrl, std::string("https://api.imperivmresurrected.com/v1/link/steam?code=ABCD-2345&lang=es"));
+	CHECK(LeagueParseLinkStart(Parse("{\"code\": \"ABCD-2345\", \"pollToken\": \"pt\"}"), s));
+	CHECK(s.steamUrl.empty());
+
+	const std::string base = kLeagueDefaultUrl;
+	const std::string page = base + "/v1/link/steam?code=ABCD-2345&lang=es";
+	CHECK_EQ(LeagueSteamLinkUrl(page, base), page);
+	CHECK_EQ(LeagueSteamLinkUrl("  " + page + " ", base), page);
+	CHECK_EQ(LeagueSteamLinkUrl("HTTPS://API.imperivmresurrected.com/v1/link/steam?code=X", base),
+		std::string("HTTPS://API.imperivmresurrected.com/v1/link/steam?code=X"));
+	CHECK_EQ(LeagueSteamLinkUrl("http://localhost:8787/v1/link/steam?code=X", "http://localhost:8787"),
+		std::string("http://localhost:8787/v1/link/steam?code=X"));
+	// Only the league server's own page: no other host, port, scheme or path, and nothing a shell or a browser could misread.
+	CHECK(LeagueSteamLinkUrl("", base).empty());
+	CHECK(LeagueSteamLinkUrl("https://evil.example/v1/link/steam?code=X", base).empty());
+	CHECK(LeagueSteamLinkUrl("https://api.imperivmresurrected.com.evil.example/v1/link/steam?code=X", base).empty());
+	CHECK(LeagueSteamLinkUrl("https://api.imperivmresurrected.com@evil.example/v1/link/steam?code=X", base).empty());
+	CHECK(LeagueSteamLinkUrl("https://api.imperivmresurrected.com:8443/v1/link/steam?code=X", base).empty());
+	CHECK(LeagueSteamLinkUrl("http://api.imperivmresurrected.com/v1/link/steam?code=X", base).empty());
+	CHECK(LeagueSteamLinkUrl("https://api.imperivmresurrected.com/v1/link/steamy?code=X", base).empty());
+	CHECK(LeagueSteamLinkUrl("https://api.imperivmresurrected.com/v1/link/steam", base).empty());
+	CHECK(LeagueSteamLinkUrl("https://api.imperivmresurrected.com/v1/link/steam?code=X#y", base).empty());
+	CHECK(LeagueSteamLinkUrl("https://api.imperivmresurrected.com/v1/link/steam?code=\"x\" y", base).empty());
+	CHECK(LeagueSteamLinkUrl("file:///C:/Windows/system32/calc.exe", "file:///C:").empty());
+	CHECK(LeagueSteamLinkUrl("http://evil.example/v1/link/steam?code=X", "http://evil.example").empty());
+}
+
+void LinkOffer()
+{
+	CHECK(LeagueOfferLinkNow(false, false, true, false, false));
+	CHECK(!LeagueOfferLinkNow(true, false, true, false, false));
+	CHECK(!LeagueOfferLinkNow(false, true, true, false, false));
+	CHECK(!LeagueOfferLinkNow(false, false, false, false, false));
+	CHECK(!LeagueOfferLinkNow(false, false, true, true, false));
+	CHECK(!LeagueOfferLinkNow(false, false, true, false, true));
+}
+
 void KeyAndTags()
 {
 	CHECK_EQ(LeagueMatchKey(109775243145236713ULL, 1763112345678LL), std::string("109775243145236713:1763112345678"));
@@ -450,6 +493,8 @@ int main()
 	Lookup();
 	Me();
 	Link();
+	SteamLink();
+	LinkOffer();
 	KeyAndTags();
 	Map();
 	Resolve();

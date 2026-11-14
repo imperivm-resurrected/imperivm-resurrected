@@ -212,6 +212,11 @@ bool LoadSteam()
 	}
 	STEAM_FUNCS(RESOLVE)
 #undef RESOLVE
+#define RESOLVE_OPTIONAL(name)                                                                \
+	S.name = reinterpret_cast<decltype(S.name)>(GetProcAddress(h, #name));                    \
+	if (!S.name) LogI("steam", "%s is missing in steam_api.dll; doing without it", #name);
+	STEAM_OPTIONAL_FUNCS(RESOLVE_OPTIONAL)
+#undef RESOLVE_OPTIONAL
 	if (!ok) {
 		std::lock_guard<std::mutex> lock(g_lock);
 		g_status = "steam_api.dll is from another version";

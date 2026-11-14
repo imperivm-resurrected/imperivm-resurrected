@@ -54,6 +54,9 @@
 	X(SteamAPI_ISteamFriends_GetMediumFriendAvatar) X(SteamAPI_ISteamFriends_RequestUserInformation)       \
 	X(SteamAPI_ISteamUtils_GetImageSize) X(SteamAPI_ISteamUtils_GetImageRGBA)
 
+// Used when steam_api.dll has them; without them only that feature falls back, and online play still starts.
+#define STEAM_OPTIONAL_FUNCS(X) X(SteamAPI_ISteamFriends_ActivateGameOverlayToWebPage)
+
 namespace steamnet_impl {
 
 const char kProtocol[] = "1";
@@ -61,6 +64,7 @@ const char kProtocol[] = "1";
 struct SteamFns {
 #define DECLARE(name) decltype(&::name) name = nullptr;
 	STEAM_FUNCS(DECLARE)
+	STEAM_OPTIONAL_FUNCS(DECLARE)
 #undef DECLARE
 };
 

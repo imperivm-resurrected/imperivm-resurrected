@@ -181,6 +181,9 @@ void SteamInviteFriends();
 void SteamInviteToRoom(uint64_t user);
 // In the Steam overlay, or in the Steam client when the overlay is off.
 void SteamOpenProfile(uint64_t id);
+// A web page in the Steam overlay's browser, on its own over the game until the player closes it; in the default browser when
+// the overlay is off or Steam is not running. Only http and https addresses.
+void SteamOpenWebPage(const std::string &url);
 void SteamSetHosting(bool hosting);
 void SteamSetPlaying(bool playing);
 void SteamPublishWatchers(int count);

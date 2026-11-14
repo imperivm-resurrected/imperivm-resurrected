@@ -96,12 +96,18 @@ struct LeagueMe {
 };
 bool LeagueParseMe(const Json &j, LeagueMe &out);
 
-// POST /v1/link/start.
+// POST /v1/link/start. `steamUrl` is the server's page that links with one Steam sign-in; servers before it send none.
 struct LeagueLinkCode {
-	std::string code, pollToken, url;
+	std::string code, pollToken, url, steamUrl;
 	int64_t expiresAt = 0;
 };
 bool LeagueParseLinkStart(const Json &j, LeagueLinkCode &out);
+// The Steam sign-in page of a link code when it is the league server's own (`base`, as LeagueBaseUrl gives it) /v1/link/steam
+// page; empty for anything else, and then the player types the code on the website.
+std::string LeagueSteamLinkUrl(const std::string &steamUrl, const std::string &base);
+// Whether opening the Ranked or Tournaments tab offers to link the account: to a player who is not linked nor linking, while
+// Steam runs, once a session, and never again once they said "Not now".
+bool LeagueOfferLinkNow(bool linked, bool linking, bool steamReady, bool offeredThisSession, bool declined);
 
 // GET /v1/link/poll.
 enum class LeaguePollStatus { Unknown, Pending, Linked, Expired };

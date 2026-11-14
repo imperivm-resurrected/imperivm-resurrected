@@ -74,6 +74,8 @@ struct Config {
 	// for this Windows user; here it is plain. Only the league client touches these, under its own lock.
 	std::string leagueUrl;
 	std::string leagueToken, leagueSteamId, leagueName;
+	// [League] OfferLink: Ranked and Tournaments offer to link the account until the player says "Not now".
+	bool leagueOfferLink = true;
 };
 
 const Config &GetConfig();
@@ -82,3 +84,5 @@ void SaveConfig();
 void LoadConfig();
 // Writes only the league account ([League] Token, SteamId and Name), or removes it when the token is empty.
 void SaveLeagueAccount();
+// Writes only [League] OfferLink.
+void SaveLeagueOffer();

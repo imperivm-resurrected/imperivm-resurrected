@@ -26,8 +26,9 @@ enum class LeagueLinkPhase { Unlinked, Starting, Waiting, Linked, Unlinking };
 
 struct LeagueLinkView {
 	LeagueLinkPhase phase = LeagueLinkPhase::Unlinked;
-	// While waiting: the code to type on the website and its page.
-	std::string code, url;
+	// While waiting: the code to type on the website and its page, and the server's page that links with one Steam sign-in
+	// (empty when the server has none: then the player types the code).
+	std::string code, url, steamUrl;
 	int64_t expiresAt = 0;
 	// The name the account was linked with.
 	std::string name;
@@ -41,13 +42,18 @@ struct LeagueLinkView {
 LeagueLinkView LeagueLinkState();
 // The account is linked to the Steam user playing now.
 bool LeagueLinked();
-// Asks the server for a code and waits, polling, until the player confirms it on the website or it expires.
+// Asks the server for a code and opens its Steam sign-in page in the Steam overlay (the browser when the overlay is off), then
+// waits, polling, until the player signs in there or types the code on the website, or the code expires.
 void LeagueLinkStart();
 void LeagueLinkCancel();
 // Revokes the token on the server and forgets it here.
 void LeagueUnlink();
-// The website's page for the code, in the browser.
+// The page of the code again: the Steam sign-in when the server gave one, the website's page otherwise.
 void LeagueOpenLinkPage();
+// The player said "Not now" to the offer to link: Ranked and Tournaments no longer offer it on their own (kept in the
+// configuration).
+bool LeagueLinkOfferDeclined();
+void LeagueDeclineLinkOffer();
 
 struct LeagueMeView {
 	bool loaded = false, loading = false;

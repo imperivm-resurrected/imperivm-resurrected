@@ -16,9 +16,11 @@
 #include "core/guard.h"
 #include "core/json.h"
 #include "core/league.h"
+#include "core/leagueranked.h"
 #include "core/log.h"
 #include "core/version.h"
 #include "core/winpath.h"
+#include "mods/mods.h"
 #include "net/leagueclient_internal.h"
 #include "net/patrons.h"
 #include "net/steamnet.h"
@@ -39,7 +41,7 @@ struct Account {
 // What the screens see of the link: the phases in between, the code and the last failure.
 struct Link {
 	LeagueLinkPhase phase = LeagueLinkPhase::Unlinked;
-	std::string code, url, pollToken, error;
+	std::string code, url, steamUrl, pollToken, error;
 	int64_t expiresAt = 0;
 	bool polling = false;
 	DWORD nextPoll = 0;
@@ -127,27 +129,37 @@ void StartLink(unsigned serial)
 	Json body = Json::MakeObject();
 	body.Set("steamId", Json::MakeString(std::to_string(SteamOwnId())));
 	body.Set("name", Json::MakeString(SteamOnlinePlayerName()));
+	body.Set("lang", Json::MakeString(LeagueLangCode(ModsLanguage())));
 	const HttpReply r = Http("POST", "/v1/link/start", body.Dump(), false);
 	Json j;
 	LeagueLinkCode start;
 	const bool ok = r.Ok() && Json::Parse(r.body, j) && LeagueParseLinkStart(j, start);
-	if (ok) LogI("league", "link: code issued, valid until %lld", static_cast<long long>(start.expiresAt));
-	else LogW("league", "link: could not get a code (%s)", r.Describe().c_str());
-	std::lock_guard<std::mutex> lock(g_mx);
-	if (g_link.serial != serial || g_link.phase != LeagueLinkPhase::Starting) return;
-	if (!ok) {
-		g_link.phase = LeagueLinkPhase::Unlinked;
-		if (r.status == 429) g_link.error = "Too many link codes were asked for this account. Try again in a few minutes.";
-		else if (r.status) g_link.error = "The league server refused the request. Try again later.";
-		else g_link.error = "Couldn't reach the league server. Check your connection and try again.";
-		return;
+	const std::string steamUrl = ok ? LeagueSteamLinkUrl(start.steamUrl, LeagueApiBase()) : std::string();
+	if (ok) {
+		LogI("league", "link: code issued, valid until %lld%s", static_cast<long long>(start.expiresAt),
+			steamUrl.empty() ? (start.steamUrl.empty() ? "; the server has no Steam sign-in page" : "; its Steam sign-in page is not the server's, ignored")
+							 : "");
 	}
-	g_link.phase = LeagueLinkPhase::Waiting;
-	g_link.code = start.code;
-	g_link.url = start.url;
-	g_link.pollToken = start.pollToken;
-	g_link.expiresAt = start.expiresAt;
-	g_link.nextPoll = GetTickCount() + kPollEveryMs;
+	else LogW("league", "link: could not get a code (%s)", r.Describe().c_str());
+	{
+		std::lock_guard<std::mutex> lock(g_mx);
+		if (g_link.serial != serial || g_link.phase != LeagueLinkPhase::Starting) return;
+		if (!ok) {
+			g_link.phase = LeagueLinkPhase::Unlinked;
+			if (r.status == 429) g_link.error = "Too many link codes were asked for this account. Try again in a few minutes.";
+			else if (r.status) g_link.error = "The league server refused the request. Try again later.";
+			else g_link.error = "Couldn't reach the league server. Check your connection and try again.";
+			return;
+		}
+		g_link.phase = LeagueLinkPhase::Waiting;
+		g_link.code = start.code;
+		g_link.url = start.url;
+		g_link.steamUrl = steamUrl;
+		g_link.pollToken = start.pollToken;
+		g_link.expiresAt = start.expiresAt;
+		g_link.nextPoll = GetTickCount() + kPollEveryMs;
+	}
+	if (!steamUrl.empty()) SteamOpenWebPage(steamUrl);
 }
 
 void PollLink(unsigned serial, std::string pollToken)
@@ -392,6 +404,7 @@ LeagueLinkView LeagueLinkState()
 	v.phase = g_link.phase != LeagueLinkPhase::Unlinked ? g_link.phase : valid ? LeagueLinkPhase::Linked : LeagueLinkPhase::Unlinked;
 	v.code = g_link.code;
 	v.url = g_link.url;
+	v.steamUrl = g_link.steamUrl;
 	v.expiresAt = g_link.expiresAt;
 	v.error = g_link.error;
 	v.name = valid ? g_account.name : std::string();
@@ -450,12 +463,31 @@ void LeagueUnlink()
 
 void LeagueOpenLinkPage()
 {
-	std::string url;
+	std::string url, steamUrl;
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
 		url = g_link.url;
+		steamUrl = g_link.steamUrl;
 	}
-	Open(LeagueBrowserUrl(url));
+	if (!steamUrl.empty()) SteamOpenWebPage(steamUrl);
+	else Open(LeagueBrowserUrl(url));
+}
+
+bool LeagueLinkOfferDeclined()
+{
+	std::lock_guard<std::mutex> lock(g_mx);
+	return !GetConfig().leagueOfferLink;
+}
+
+void LeagueDeclineLinkOffer()
+{
+	{
+		std::lock_guard<std::mutex> lock(g_mx);
+		if (!GetConfig().leagueOfferLink) return;
+		MutableConfig().leagueOfferLink = false;
+		SaveLeagueOffer();
+	}
+	LogI("league", "link: the offer to link was declined; not shown again");
 }
 
 LeagueMeView LeagueMeState()
