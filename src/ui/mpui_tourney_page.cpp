@@ -226,7 +226,7 @@ void PaintBracket(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out)
 		HLine(p, fx, fx + 40, fy, TourneyMatchOver(final->status) ? kLinePath : pal::lineStrong);
 		const int cx = fx + 40 + champW / 2, size = 76;
 		const TourneyEntrant *champ = TourneyEntrantOf(d, TourneyChampion(d));
-		if (champ) DrawLeaguePhalera(p, cx - size / 2, fy - size / 2 - 30, size, LeagueMetal::Gold);
+		if (champ) DrawCupCrown(p, cx - size / 2, fy - size / 2 - 30, size, d.official);
 		else {
 			PaintRing(p, cx, fy - 30, size / 2, kGoldDark);
 			PaintRing(p, cx, fy - 30, size / 2 - 6, kGoldDark);
@@ -296,6 +296,10 @@ void PaintEntrants(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out
 				ink = pal::ok;
 			}
 			break;
+		}
+		if (*FinishedEntrantText(d, e)) {
+			status = FinishedEntrantText(d, e);
+			ink = e.placement == 1 ? kGold : pal::textDim;
 		}
 		p.Font(3);
 		p.Text(x + w / 2 + 40, ry, w / 4, rowH, status, ink, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
@@ -525,7 +529,7 @@ int PaintStatusCard(Painter &p, Ctx &c, int x, int y, int w)
 		PaintGlassCard(p, x, y, w, h);
 		PaintCaps(p, x + pad, y + 20, w - 2 * pad, 20, "Champion", kGold);
 		const TourneyEntrant *champ = TourneyEntrantOf(d, TourneyChampion(d));
-		DrawLeaguePhalera(p, x + pad, y + 54, 64, LeagueMetal::Gold);
+		DrawCupCrown(p, x + pad, y + 54, 64, d.official);
 		UseDisplay(p, 40);
 		p.raw = true;
 		p.TextCaps(x + pad + 80, y + 54, w - 2 * pad - 80, 64, champ ? champ->name : Tr("No champion"), pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
@@ -615,7 +619,8 @@ void PaintOrganizer(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &ou
 		const int removeW = 110;
 		PaintName(p, x + 42, ry, lw - 42 - 150 - removeW, rowH, e->name, e->steamId, e->steamId == SteamOwnId() ? pal::redText : pal::text, mx, my);
 		if (e->steamId) c.ids.push_back(e->steamId);
-		const char *status = e->status == TourneyEntryStatus::Waitlist ? "Waiting list" : e->status == TourneyEntryStatus::Out ? "Knocked out"
+		const char *status = *FinishedEntrantText(d, *e) ? FinishedEntrantText(d, *e)
+			: e->status == TourneyEntryStatus::Waitlist ? "Waiting list" : e->status == TourneyEntryStatus::Out ? "Knocked out"
 			: e->status == TourneyEntryStatus::Playing ? "Still in" : e->checkedIn ? "Checked in" : "Signed up";
 		p.Font(3);
 		p.Text(x + lw - 150 - removeW, ry, 140, rowH, status, e->checkedIn && e->status == TourneyEntryStatus::Signed ? pal::ok : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);

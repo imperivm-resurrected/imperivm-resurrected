@@ -727,6 +727,31 @@ int SecondButtonWidth(Painter &p, const std::string &label)
 	return GhostButtonWidth(p, label, false);
 }
 
+void DrawCupCrown(Painter &p, int x, int y, int size, bool official)
+{
+	if (official) {
+		DrawLeaguePhalera(p, x, y, size, LeagueMetal::Gold);
+		return;
+	}
+	const COLORREF gold = RGB(0xe0, 0xb5, 0x4a);
+	PaintOrnament(p, kOrnamentLaurel, x, y, size / 2, size, gold);
+	PaintOrnament(p, kOrnamentLaurel, x + size / 2, y, size / 2, size, gold, true);
+	UseDisplay(p, size * 45 / 100);
+	const bool raw = p.raw;
+	p.raw = true;
+	p.Text(x, y, size, size, "1", gold, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	p.raw = raw;
+}
+
+const char *FinishedEntrantText(const TourneyDetail &d, const TourneyEntrant &e)
+{
+	if (d.status != TourneyStatus::Finished || (e.status != TourneyEntryStatus::Playing && e.status != TourneyEntryStatus::Out)) return "";
+	if (e.placement == 1) return "Champion";
+	if (e.placement == 2) return "Finalist";
+	if (e.placement == 3) return "Semifinals";
+	return "Knocked out";
+}
+
 void PaintSecondButton(Painter &p, int x, int y, int w, int h, const std::string &label, int arg, bool enabled, int mx, int my)
 {
 	PaintGhostButton(p, x, y, w, h, label, kTourney, false, enabled, mx, my, arg);

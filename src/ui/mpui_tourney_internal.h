@@ -273,6 +273,11 @@ std::string OrganizerText(const TourneySummary &t);
 std::string WaitText(int seconds);
 // The secondary button beside a main one: only its outline, as the header's.
 void PaintSecondButton(Painter &p, int x, int y, int w, int h, const std::string &label, int arg, bool enabled, int mx, int my);
+// The champion's mark in a square of `size`: the gold phalera of an official cup, or a laurel around a 1 for a community cup,
+// which awards no prize.
+void DrawCupCrown(Painter &p, int x, int y, int size, bool official);
+// What became of a player once the cup is over: champion, finalist, semifinals or knocked out; empty while it is played.
+const char *FinishedEntrantText(const TourneyDetail &d, const TourneyEntrant &e);
 int SecondButtonWidth(Painter &p, const std::string &label);
 // A row of choices, the one on filled: the form's segmented controls, with their labels already translated. `args[i]` is each choice's kTourney
 // argument.
