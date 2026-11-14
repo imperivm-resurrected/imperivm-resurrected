@@ -83,6 +83,27 @@ void LeagueMatchPlaying(const LeagueMatchInfo &info);
 void LeagueMatchEnded();
 void LeagueMatchSurrendered(int player);
 void LeagueMatchDesync();
+// The online game being played is a ranked one (its room's tag says so).
+bool LeagueMatchRanked();
+// A ranked game cannot be surrendered yet: its clock is under minute 5.
+bool LeagueSurrenderLocked();
+
+// A ranked 1v1 whose opponent dropped (2-clasificatoria-sistema.md §8.3): the game stays paused while it waits for them, and after 3
+// minutes the player may claim the win. Nobody takes the place of the one who left.
+struct LeagueDropView {
+	LeagueDropPhase phase = LeagueDropPhase::None;
+	std::string opponent;
+	// What is left of the wait.
+	int64_t leftMs = 0;
+	// The one who left is coming back into the game now (the rejoin runs).
+	bool returning = false;
+};
+LeagueDropView LeagueDropState();
+// Takes the win once the wait is over: the report says "opponent_left", whatever happens before the game is closed.
+bool LeagueDropClaimWin();
+// The wait holds the game's pause; the rejoin of the one who left lets it go just before it brings them in.
+bool LeagueDropHoldsPause();
+void LeagueDropReleasePause();
 // From the lockstep, after every tick: keeps the state hash every client compared for the ticks that are multiples of 1000.
 void LeagueSyncAfterAdvance(void *transport);
 // Every frame on the game thread: follows the players of the game being recorded, polls a pending link, sends waiting reports and

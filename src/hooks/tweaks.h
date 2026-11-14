@@ -24,6 +24,11 @@ std::vector<ResSize> TweaksResolutionList();
 void TweaksApplySmoothScroll();
 void TweaksFrameTick();
 bool TweaksOnlyHumanOnline(void *game);
+// Pauses or resumes the match at once, without the game's pause notice: only for a player alone in it, whose pause no one else follows.
+void TweaksSetPausedQuietly(void *game, bool paused);
+bool TweaksGamePaused(void *game);
+// While held, the pause stays: the pause key, the menu and the window coming back do not resume the match.
+void TweaksHoldPause(bool held);
 // The game window goes to the background or comes back (WM_ACTIVATEAPP), on the game thread.
 void TweaksWindowActive(bool active);
 void TweaksOnConfigLoaded(void (*callback)());

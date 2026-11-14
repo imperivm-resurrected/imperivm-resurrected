@@ -9,6 +9,7 @@
 #include "core/config.h"
 #include "core/log.h"
 #include "mods/modvars.h"
+#include "net/leagueclient.h"
 #include "net/mpsave.h"
 #include "net/steamnet.h"
 #include "i18n/tr.h"
@@ -99,7 +100,10 @@ void HostOnRequest(uint64_t peer, int number)
 		return HostDeny(peer, std::string(kDenyOut) + "the host is no longer in that game");
 	}
 	void *game = Game();
-	if (reinterpret_cast<IntThis_t>(Vt(game)[kSlotIsPaused])(game)) return HostDeny(peer, "the game is paused; ask them to resume it and try again");
+	// A ranked game waiting for the one who dropped is paused for them: that pause is let go when they are in the room.
+	if (reinterpret_cast<IntThis_t>(Vt(game)[kSlotIsPaused])(game) && !LeagueDropHoldsPause()) {
+		return HostDeny(peer, "the game is paused; ask them to resume it and try again");
+	}
 	char *t = Transport();
 	const int slot = SlotOfNumber(number);
 	const int hostIndex = *reinterpret_cast<int *>(t + 0x4c);
@@ -242,6 +246,8 @@ void HostTick()
 			if (m.id != g_session.peer || !m.number) continue;
 			g_session.ignoreFreezeUntil = 0;
 			g_session.peerName = m.name;
+			// The freeze is a command of the game: it only runs while the game does.
+			LeagueDropReleasePause();
 			if (!QueueFreezeCommand(g_session.slot)) return HostCancel("could not pause the game");
 			g_session.phase = kHWaitFreeze;
 			g_session.deadline = GetTickCount() + 30000;

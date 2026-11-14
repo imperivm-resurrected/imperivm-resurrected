@@ -141,7 +141,8 @@ char *__cdecl HookLocFormat(void *db, char *out, const char *key, ...)
 		const char *raw = va_arg(args, const char *);
 		std::string name = raw ? raw : "";
 		if (name.empty()) name = "A player";
-		const std::string text = g_inQuit > 0 ? name + Tr(" has left the game; their army is controlled by the AI.")
+		// Nobody takes the place of a player who leaves a ranked game.
+		const std::string text = g_inQuit > 0 ? name + Tr(LeagueMatchRanked() ? " has left the game." : " has left the game; their army is controlled by the AI.")
 											   : name + Tr(" has disconnected. They can rejoin the game from Multiplayer.");
 		strncpy_s(out, 1024, text.c_str(), _TRUNCATE);
 		va_end(args);
@@ -167,7 +168,9 @@ void __cdecl HookCreateAI(int player, char *profile, short difficulty)
 		LogI("match", "broadcast: player %d dropped in the game; the AI does not replace them", player);
 		return;
 	}
-	if (g_inSplit > 0 && game && player >= 0 && player < 16 && !demo) {
+	// In a ranked game nobody takes the place of the one who leaves either: the other one waits for them and then claims the win.
+	const bool rankedQuit = g_inQuit > 0 && LeagueMatchRanked();
+	if ((g_inSplit > 0 || rankedQuit) && game && player >= 0 && player < 16 && !demo) {
 		char *slot = static_cast<char *>(game) + player * 800 + 0x12cc;
 		const std::string name = StripAiSuffix(slot + 0x90);
 		bool first;
@@ -175,7 +178,8 @@ void __cdecl HookCreateAI(int player, char *profile, short difficulty)
 			std::lock_guard<std::mutex> lock(g_lock);
 			first = g_dropped.insert(player).second;
 		}
-		if (first) {
+		if (first && rankedQuit) LogI("match", "ranked game: player %d (%s) left; the AI does not replace them", player, name.c_str());
+		else if (first) {
 			LogI("match", "online game: player %d (%s) dropped; the AI does not replace them", player, name.c_str());
 			UiToast((name.empty() ? std::string("A player") : name) + Tr(" has disconnected. Their spot is now free: they can rejoin the game from Multiplayer."));
 		}

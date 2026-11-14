@@ -29,6 +29,7 @@
 #include "ui/diplomacyui.h"
 #include "ui/mpui.h"
 #include "ui/gamemenuui.h"
+#include "ui/leaguedropui.h"
 #include "ui/mainmenuui.h"
 #include "ui/optionsui.h"
 #include "ui/profileui.h"
@@ -63,7 +64,7 @@ LRESULT GameWindowHandler(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 	bool uiHandled = false;
 	Guard("interface message", [&] {
 		uiHandled = ChatUiHandleMessage(msg, wp, lp) || UpdateUiHandleMessage(msg, wp, lp) || ControlsUiHandleMessage(msg, wp, lp) || SupportHandleMessage(msg, wp, lp) || HelpUiHandleMessage(msg, wp, lp) || ObjectivesUiHandleMessage(msg, wp, lp) ||
-			GameMenuUiHandleMessage(msg, wp, lp) || DiplomacyUiHandleMessage(msg, wp, lp) || OptionsUiHandleMessage(msg, wp, lp) || ConquestUiHandleMessage(msg, wp, lp) || ProfileUiHandleMessage(msg, wp, lp) || BattlesUiHandleMessage(msg, wp, lp) || CreditsUiHandleMessage(msg, wp, lp) || ModUiHandleCornerMessage(msg, wp, lp) || MainMenuUiHandleMessage(msg, wp, lp) || SavesUiHandleMessage(msg, wp, lp) || ModUiHandleMessage(msg, wp, lp) || MpUiHandleMessage(msg, wp, lp);
+			GameMenuUiHandleMessage(msg, wp, lp) || LeagueDropUiHandleMessage(msg, wp, lp) || DiplomacyUiHandleMessage(msg, wp, lp) || OptionsUiHandleMessage(msg, wp, lp) || ConquestUiHandleMessage(msg, wp, lp) || ProfileUiHandleMessage(msg, wp, lp) || BattlesUiHandleMessage(msg, wp, lp) || CreditsUiHandleMessage(msg, wp, lp) || ModUiHandleCornerMessage(msg, wp, lp) || MainMenuUiHandleMessage(msg, wp, lp) || SavesUiHandleMessage(msg, wp, lp) || ModUiHandleMessage(msg, wp, lp) || MpUiHandleMessage(msg, wp, lp);
 	});
 	// A press taken by a screen keeps the mouse until it is let go, so a scroll bar's thumb follows it out of the window too.
 	if (msg == WM_LBUTTONUP && g_uiCapture) {
