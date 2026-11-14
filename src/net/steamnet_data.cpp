@@ -187,6 +187,8 @@ OnlineLobby ReadLobby(uint64 id)
 	l.specLobby = _strtoui64(Data(id, "sl").c_str(), nullptr, 10);
 	l.specDelay = atoi(Data(id, l.spectate ? "delay" : "sd").c_str());
 	l.started = _atoi64(Data(id, "t0").c_str());
+	l.startedMs = _atoi64(Data(id, "t0ms").c_str());
+	l.leagueTag = Data(id, "irm");
 	l.players = S.SteamAPI_ISteamMatchmaking_GetNumLobbyMembers(g_steam.mm, id);
 	l.maxPlayers = S.SteamAPI_ISteamMatchmaking_GetLobbyMemberLimit(g_steam.mm, id);
 	{

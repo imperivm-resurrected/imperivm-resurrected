@@ -174,6 +174,7 @@ int g_specType = k_ELobbyTypePublic;
 
 namespace steamnet_impl {
 long long g_startedAt = 0;
+std::atomic<long long> g_startedAtMs{0};
 
 OnlineCreateSettings g_creating;
 }

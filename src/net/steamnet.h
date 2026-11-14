@@ -66,6 +66,10 @@ struct OnlineLobby {
 	int watching = 0;
 	int specDelay = 0;
 	long long started = 0;
+	// When the host started the game, in milliseconds since 1970 ("t0ms"): the same for every player, for the league's report.
+	long long startedMs = 0;
+	// "irm": what a ranked or tournament room is for the league server, "ranked:<id>" or "tournament:<id>".
+	std::string leagueTag;
 };
 
 struct OnlineMember {
@@ -220,6 +224,9 @@ int SteamLobbyNumberOf(uint64_t id);
 void SteamSetSpectators(bool allow, int delaySeconds);
 bool SteamSpectatorsOpen(int &delaySeconds);
 long long SteamGameStartedAt();
+// The host's start of the game being played, in milliseconds since 1970: this computer's own when it hosts, the room's otherwise.
+// 0 until the room says it.
+long long SteamGameStartedAtMs();
 std::vector<uint64_t> SteamSpectatorIds();
 void SteamSpectatorSend(uint64_t peer, uint8_t type, const std::string &data);
 void SteamResetStaleSession(uint64_t peer);

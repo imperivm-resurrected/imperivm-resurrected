@@ -399,6 +399,7 @@ void Leave()
 	AbortDownload();
 	if (g_spectate.lobby || g_spectate.wanted) CloseSpectators();
 	g_startedAt = 0;
+	g_startedAtMs = 0;
 	if (!g_lobby) {
 		g_leave.at = 0;
 		g_leave.active = false;

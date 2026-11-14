@@ -513,6 +513,11 @@ void SteamSetPlaying(bool playing)
 			S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, "playing", playing ? "1" : "");
 			S.SteamAPI_ISteamMatchmaking_SetLobbyJoinable(g_steam.mm, g_lobby, !playing);
 			g_startedAt = playing ? static_cast<long long>(time(nullptr)) : 0;
+			FILETIME ft;
+			GetSystemTimeAsFileTime(&ft);
+			const unsigned long long now = (static_cast<unsigned long long>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
+			g_startedAtMs = playing ? static_cast<long long>((now - 116444736000000000ULL) / 10000ULL) : 0;
+			S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, "t0ms", playing ? std::to_string(g_startedAtMs.load()).c_str() : "");
 			MirrorSpectators();
 			LogI("steam", "room %s", playing ? "in game (closed to new players)" : "open again");
 		}
@@ -538,6 +543,13 @@ bool SteamSpectatorsOpen(int &delaySeconds)
 long long SteamGameStartedAt()
 {
 	return *reinterpret_cast<volatile long long *>(&g_startedAt);
+}
+
+long long SteamGameStartedAtMs()
+{
+	if (const long long own = g_startedAtMs) return own;
+	std::lock_guard<std::mutex> lock(g_lock);
+	return g_room.info.startedMs;
 }
 
 std::vector<uint64_t> SteamSpectatorIds()
