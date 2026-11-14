@@ -2046,6 +2046,7 @@
 {"en":"Signed up · starts %s","es":"Inscrito · empieza: %s","it":"Iscritto · inizia: %s"},
 {"en":"When the check-in opens or your match is ready, we tell you here and in any menu of the game.","es":"Cuando abra el check-in o tu partida esté lista, te avisamos aquí y en cualquier menú del juego.","it":"Quando apre il check-in o la tua partita è pronta, ti avvisiamo qui e in qualsiasi menu del gioco."},
 {"en":"Latest champions","es":"Últimos campeones","it":"Ultimi campioni"},
+{"en":"%s has %s to come to the room (until %s)","es":"%s tiene %s para entrar en la sala (hasta las %s)","it":"%s ha %s per entrare nella stanza (fino alle %s)"},
 {"en":"Champion of the cup","es":"Campeón de la copa","it":"Campione della coppa"},
 {"en":"No champion","es":"Sin campeón","it":"Nessun campione"},
 {"en":"The champions of the cups will show here.","es":"Aquí saldrán los campeones de las copas.","it":"Qui compariranno i campioni delle coppe."},

@@ -44,6 +44,10 @@ void TourneyFieldEnter(int field);
 void TourneyDropPick(int index, int item);
 // Locked. What the tournament fixes in its room (map, options, open seats) cannot be changed: true, with a notice, for such an action.
 bool TourneyBlocksAction(int action, int arg);
+// The room of this player's tournament match: `note` gets the line under its title (how long the rival has to come) and, once the
+// rival let the time run out, a button that claims the win is painted left of `right` at `y`. Returns where the header's
+// buttons start now.
+int PaintTourneyRoomStatus(ui::Painter &p, const mpui_impl::State &st, int right, int y, std::string &note);
 // A room of a tournament match, which the lobby lists first with its tag.
 bool TourneyLobby(const OnlineLobby &g);
 // A room of a tournament match that is not this player's: they can only watch it.

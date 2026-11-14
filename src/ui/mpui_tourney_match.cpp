@@ -603,3 +603,23 @@ void PaintDisputeDialog(Painter &p, const State &st, const Ui &u)
 }
 
 }
+
+int PaintTourneyRoomStatus(Painter &p, const State &st, int right, int y, std::string &note)
+{
+	LeagueMatchKind kind = LeagueMatchKind::Normal;
+	int64_t id = 0;
+	if (!st.room.id || !LeagueParseRoomTag(st.room.info.leagueTag, kind, id) || kind != LeagueMatchKind::Tournament) return right;
+	const TourneyNext n = LeagueTourneyMine().mine.next;
+	if (!n.present || n.match != id) return right;
+	if (n.canClaimNoShow) {
+		p.Font(1);
+		const int w = p.CapsWidth(Tr("Claim the win"), 1) + 48, x = right - 12 - w;
+		p.Button(x, y, w, kHeaderButtonH, "Claim the win", kTourney, ArgOf(kSubNoShow, n.match), st.mouseX, st.mouseY, !LeagueTourneyBusy(TourneyOp::NoShow, n.match), true);
+		note = TrFmt("%s did not come to the room in time: you can claim the win.", {n.opponent.name});
+		return x;
+	}
+	const int64_t left = n.deadlineAt - NowMs();
+	if (n.status == TourneyMatchStatus::Ready && !n.opponent.inRoom && left > 0)
+		note = TrFmt("%s has %s to come to the room (until %s)", {n.opponent.name, TourneyClock(left), HourText(n.deadlineAt)});
+	return right;
+}

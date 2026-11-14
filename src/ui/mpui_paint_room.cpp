@@ -816,7 +816,8 @@ void PaintRoomHeader(Painter &p, const State &st, const RoomFacts &f, const Room
 	std::vector<GhostButton> buttons;
 	if (g.online && st.room.id && !RankedRoomLocked(st)) buttons.push_back({"Invite", kInvite, false, !RoomHasNoSeat(st)});
 	buttons.push_back({"Leave", kGCancel, true, true});
-	const int buttonsLeft = PaintHeaderActions(p, l, buttons, mx, my);
+	std::string tourneyNote;
+	const int buttonsLeft = PaintTourneyRoomStatus(p, st, PaintHeaderActions(p, l, buttons, mx, my), l.margin, tourneyNote);
 	PaintScreenTitle(p, l, title, {{"Game", kGTab, 1, st.roomTab == 1, true}, {"Room", kGTab, 0, st.roomTab != 1, true}}, buttonsLeft, mx, my);
 
 	if (f.withoutSlot) {
@@ -832,6 +833,7 @@ void PaintRoomHeader(Painter &p, const State &st, const RoomFacts &f, const Room
 		add(Tr(st.room.id ? "Online on Steam" : "Local network"));
 	}
 	add(TrFmt("%d of %d players", {std::to_string(f.humans + f.ai), std::to_string(f.positions)}));
+	add(tourneyNote);
 	if (RankedRoomLocked(st)) {
 		ScreenLayout shifted = l;
 		const int mark = PaintRankedMark(p, l.margin, l.infoY, l.infoH);

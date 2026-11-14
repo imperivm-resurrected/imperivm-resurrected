@@ -2053,6 +2053,7 @@ extern const TrRow kTrRows[] = {
 	{"Signed up · starts %s", "Inscrito · empieza: %s", "Iscritto · inizia: %s"},
 	{"When the check-in opens or your match is ready, we tell you here and in any menu of the game.", "Cuando abra el check-in o tu partida esté lista, te avisamos aquí y en cualquier menú del juego.", "Quando apre il check-in o la tua partita è pronta, ti avvisiamo qui e in qualsiasi menu del gioco."},
 	{"Latest champions", "Últimos campeones", "Ultimi campioni"},
+	{"%s has %s to come to the room (until %s)", "%s tiene %s para entrar en la sala (hasta las %s)", "%s ha %s per entrare nella stanza (fino alle %s)"},
 	{"Champion of the cup", "Campeón de la copa", "Campione della coppa"},
 	{"No champion", "Sin campeón", "Nessun campione"},
 	{"The champions of the cups will show here.", "Aquí saldrán los campeones de las copas.", "Qui compariranno i campioni delle coppe."},
