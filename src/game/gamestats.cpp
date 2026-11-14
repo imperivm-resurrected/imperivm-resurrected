@@ -16,7 +16,7 @@
 namespace {
 const size_t kGameClock = 0x1258, kLocalPlayer = 0x12c8, kPlayersStart = 0x12cc, kPlayerSize = 800;
 const size_t kGameStats = 0x258, kStatsRecordSize = 0xd0;
-const size_t kPlayerId = 8, kPlayerDiplomacy = 0x24, kPlayerActive = 0x64, kPlayerAi = 0x88, kPlayerName = 0x94, kPlayerNameCapacity = 0xa8, kPlayerState = 0x290, kPlayerColor = 0x314;
+const size_t kPlayerId = 8, kPlayerDiplomacy = 0x24, kPlayerActive = 0x64, kPlayerControl = 0x80, kPlayerAi = 0x88, kPlayerName = 0x94, kPlayerNameCapacity = 0xa8, kPlayerState = 0x290, kPlayerColor = 0x314;
 const size_t kSettingsSlots = 0xac, kSettingsSlotSize = 0xc0;
 const int kStatePlaying = 1, kSlotAi = 1, kSettingsSlotCount = 8;
 const char kFileSuffix[] = ".stats";
@@ -73,6 +73,7 @@ bool ReadTotals(int player, Totals &totals)
 
 struct RawPlayer {
 	bool active = false, playing = false, human = false, local = false, ally = false;
+	int state = 0, control = 0;
 	char name[64] = {};
 	uint32_t rgb = 0;
 };
@@ -84,6 +85,8 @@ bool ReadPlayer(const char *game, int index, RawPlayer &out)
 		const int state = Field<int>(player, kPlayerState);
 		out.active = Field<int>(player, kPlayerActive) != 0 || state != 0;
 		if (!out.active) return true;
+		out.state = state;
+		out.control = Field<int>(player, kPlayerControl);
 		out.playing = state == kStatePlaying;
 		// A player that lost has no AI object any more, so the game's settings say it better.
 		const char *settings = *reinterpret_cast<const char *const *>(addr::kGameSettings);
@@ -328,4 +331,38 @@ std::shared_ptr<const StatsSnapshot> GameStatsSnapshot()
 		g_dirty = false;
 	}
 	return g_snapshot;
+}
+
+bool GameStatsLive(std::vector<StatsLivePlayer> &players, uint32_t &clockMs)
+{
+	players.clear();
+	const char *game = *reinterpret_cast<char **>(addr::kGame);
+	if (!game || !*reinterpret_cast<void **>(addr::kMap) || !ReadClock(game, clockMs)) return false;
+	bool active[kStatMaxPlayers] = {};
+	for (int index = 0; index < kStatMaxPlayers; index++) {
+		RawPlayer raw;
+		if (!ReadPlayer(game, index, raw) || !raw.active) continue;
+		StatsLivePlayer p;
+		p.info.index = index;
+		p.info.name = raw.name;
+		p.info.rgb = raw.rgb;
+		p.info.human = raw.human;
+		p.info.local = raw.local;
+		p.info.ally = raw.ally;
+		p.state = raw.state;
+		// 3 is the map's neutral player and 4 an unused slot: neither plays, nor joins two teams into one through its alliances.
+		p.playable = raw.control != 3 && raw.control != 4;
+		active[index] = p.playable;
+		players.push_back(p);
+	}
+	bool allied[kStatMaxPlayers][kStatMaxPlayers] = {};
+	for (int a = 0; a < kStatMaxPlayers; a++) {
+		for (int b = a + 1; active[a] && b < kStatMaxPlayers; b++) {
+			if (active[b]) allied[a][b] = ReadAllied(game, a, b);
+		}
+	}
+	int teams[kStatMaxPlayers];
+	StatsGroupTeams(active, allied, teams);
+	for (StatsLivePlayer &p : players) p.info.team = teams[p.info.index];
+	return true;
 }
