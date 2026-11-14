@@ -119,6 +119,7 @@ void OnCallback(int id, const void *data)
 		set("mode", g_creating.mode);
 		set("pw", g_creating.password.empty() ? "" : Fnv(g_creating.password));
 		set("vis", std::to_string(g_creating.visibility));
+		if (!g_creating.leagueTag.empty()) set("irm", g_creating.leagueTag);
 		set("key", OwnKey());
 		PublishMods("");
 		set("irver", ModVersionText());
@@ -128,8 +129,8 @@ void OnCallback(int id, const void *data)
 		LogI("steam", "room created");
 		SetPresence();
 		UpdateRoom();
-		g_spectate.visibility = g_creating.visibility;
-		if (g_creating.spectators) OpenSpectators(g_creating.specDelay, g_creating.visibility);
+		g_spectate.visibility = g_creating.specVisibility >= 0 ? g_creating.specVisibility : g_creating.visibility;
+		if (g_creating.spectators) OpenSpectators(g_creating.specDelay, g_spectate.visibility);
 		break;
 	}
 	case LobbyMatchList_t::k_iCallback: {

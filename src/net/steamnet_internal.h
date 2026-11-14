@@ -41,6 +41,7 @@
 	X(SteamAPI_ISteamMatchmaking_SetLobbyMemberLimit)                                                      \
 	X(SteamAPI_ISteamMatchmaking_SendLobbyChatMsg) X(SteamAPI_ISteamMatchmaking_GetLobbyChatEntry)         \
 	X(SteamAPI_ISteamMatchmaking_SetLobbyJoinable) X(SteamAPI_ISteamMatchmaking_RequestLobbyData)           \
+	X(SteamAPI_ISteamMatchmaking_InviteUserToLobby)                                                        \
 	X(SteamAPI_ISteamFriends_GetFriendCount) X(SteamAPI_ISteamFriends_GetFriendByIndex)                    \
 	X(SteamAPI_ISteamFriends_GetFriendGamePlayed) X(SteamAPI_ISteamFriends_HasFriend)                      \
 	X(SteamAPI_SteamNetworkingUtils_SteamAPI_v004) X(SteamAPI_ISteamNetworkingUtils_InitRelayNetworkAccess) \

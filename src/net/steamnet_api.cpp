@@ -291,6 +291,16 @@ void SteamInviteFriends()
 	});
 }
 
+void SteamInviteToRoom(uint64_t user)
+{
+	if (!SteamOnlineReady() || !user) return;
+	Post([user] {
+		if (!g_lobby || user == g_steam.me) return;
+		const bool sent = S.SteamAPI_ISteamMatchmaking_InviteUserToLobby(g_steam.mm, g_lobby, user);
+		LogI("steam", "%s invited to the room%s", Name(user).c_str(), sent ? "" : " (Steam refused the invitation)");
+	});
+}
+
 std::string SteamTakeNotice()
 {
 	std::lock_guard<std::mutex> lock(g_lock);

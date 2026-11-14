@@ -110,6 +110,10 @@ struct OnlineCreateSettings {
 	int visibility = 0;
 	bool spectators = true;
 	int specDelay = 30;
+	// A ranked or tournament room: its "irm" data for the league ("ranked:<id>"), and who may watch it: -1 the room's own visibility,
+	// 0 everyone, so the game of a private room still shows in the list for spectators.
+	std::string leagueTag;
+	int specVisibility = -1;
 };
 
 void StartSteamOnline();
@@ -173,6 +177,8 @@ std::string SteamScenarioModName();
 void SteamReportDownloadProgress(uint64_t got, uint64_t total);
 void SteamSendChat(const std::string &text);
 void SteamInviteFriends();
+// The owner of the room invites one player to it, as the Steam overlay would: a private room is entered by invitation.
+void SteamInviteToRoom(uint64_t user);
 // In the Steam overlay, or in the Steam client when the overlay is off.
 void SteamOpenProfile(uint64_t id);
 void SteamSetHosting(bool hosting);
