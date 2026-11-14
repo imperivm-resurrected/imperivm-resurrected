@@ -8,6 +8,7 @@
 #include "game/civs.h"
 #include "net/rejoin.h"
 
+#include "ui/leagueui.h"
 #include "ui/mpui_internal.h"
 #include "ui/patronui.h"
 
@@ -140,6 +141,7 @@ void PaintHeader(Painter &p, const State &st)
 	// The caption line is the player's: avatar, name (with the laurel of a patron), the content profile and the open rooms.
 	const int m = l.margin, y = l.infoY, h = l.infoH, avatar = h + 4, ay = y - 2;
 	const PatronInfo own = PatronOf(SteamOwnId());
+	const LeagueBadge ownBadge = PlayerBadgeOf(SteamOwnId());
 	p.Font(1);
 	const int laurel = own.tier != PatronTier::None ? 22 : 0, nameX = m + avatar + 12 + (laurel ? laurel + 4 : 0);
 	const int nameW = std::min(320, p.TextWidth(st.player) + 4);
@@ -156,6 +158,7 @@ void PaintHeader(Painter &p, const State &st)
 		PatronHotspot(p, m + avatar + 12, y + (h - laurel) / 2, laurel, own, mx, my, kPatronLink);
 	}
 	else p.Text(nameX, y, nameW, h, st.player, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	DrawBadgeAfterName(p, nameX, y, nameW, h, st.player, ownBadge, mx, my);
 	std::string info = Tr("Content profile: ") + ModsProfileLabel(ModsMountedProfile().name);
 	COLORREF color = pal::caption;
 	if (!st.ready) {
@@ -167,7 +170,7 @@ void PaintHeader(Painter &p, const State &st)
 		info += "  \xC2\xB7  " + (n == 1 ? Tr("1 open room") : std::to_string(n) + Tr(" open rooms"));
 	}
 	p.Font(0);
-	const int infoX = nameX + nameW + 20;
+	const int infoX = nameX + nameW + LeagueBadgeRoom(ownBadge) + 20;
 	p.Text(infoX, y, l.w - m - infoX, h, "\xC2\xB7  " + info, color, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }
 }
@@ -264,12 +267,20 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis, 
 			n++;
 			const bool human = s.type == 3, ai = s.type == 1;
 			p.Text(x, y, 28, 26, std::to_string(n), pal::textDim);
-			const PatronInfo patron = human ? PatronOf(LobbyPlayerId(g, s.name)) : PatronInfo();
+			const uint64_t pid = human ? LobbyPlayerId(g, s.name) : 0;
+			const PatronInfo patron = human ? PatronOf(pid) : PatronInfo();
+			const LeagueBadge badge = pid ? PlayerBadgeOf(pid) : LeagueBadge();
 			if (patron.tier != PatronTier::None) {
-				DrawPatron(p, x + 30, y + 3, 20, x + 54, y, w - 54 - 90, 26, s.name, patron.tier, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+				const int nameW = w - 54 - 90 - LeagueBadgeRoom(badge);
+				DrawPatron(p, x + 30, y + 3, 20, x + 54, y, nameW, 26, s.name, patron.tier, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 				PatronHotspot(p, x + 30, y + 3, 20, patron, st.mouseX, st.mouseY, kPatronLink);
+				DrawBadgeAfterName(p, x + 54, y, nameW, 26, s.name, badge, st.mouseX, st.mouseY);
 			}
-			else p.Text(x + 30, y, w - 30 - 90, 26, human ? s.name : ai ? (s.name.empty() ? "AI" : s.name) : "Free", human ? pal::text : pal::textDim);
+			else {
+				const int nameW = w - 30 - 90 - LeagueBadgeRoom(badge);
+				p.Text(x + 30, y, nameW, 26, human ? s.name : ai ? (s.name.empty() ? "AI" : s.name) : "Free", human ? pal::text : pal::textDim);
+				if (human) DrawBadgeAfterName(p, x + 30, y, nameW, 26, s.name, badge, st.mouseX, st.mouseY);
+			}
 			if (human && LobbyPlayerId(g, s.name)) {
 				const int nameX = patron.tier != PatronTier::None ? x + 54 : x + 30;
 				ProfileHotspot(p, st, nameX, y, w - (nameX - x) - 90, 26, s.name, kProfileLobbySlot + static_cast<int>(&s - g.slots.data()));
@@ -289,12 +300,20 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis, 
 		for (int i = 0; i < std::max(g.maxPlayers, static_cast<int>(g.playerNames.size())); i++) {
 			const bool taken = i < static_cast<int>(g.playerNames.size());
 			p.Text(x, y, 28, 26, std::to_string(i + 1), pal::textDim);
-			const PatronInfo patron = taken ? PatronOf(LobbyPlayerId(g, g.playerNames[i])) : PatronInfo();
+			const uint64_t pid = taken ? LobbyPlayerId(g, g.playerNames[i]) : 0;
+			const PatronInfo patron = taken ? PatronOf(pid) : PatronInfo();
+			const LeagueBadge badge = pid ? PlayerBadgeOf(pid) : LeagueBadge();
 			if (patron.tier != PatronTier::None) {
-				DrawPatron(p, x + 30, y + 3, 20, x + 54, y, w - 54 - 90, 26, g.playerNames[i], patron.tier, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+				const int nameW = w - 54 - 90 - LeagueBadgeRoom(badge);
+				DrawPatron(p, x + 30, y + 3, 20, x + 54, y, nameW, 26, g.playerNames[i], patron.tier, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 				PatronHotspot(p, x + 30, y + 3, 20, patron, st.mouseX, st.mouseY, kPatronLink);
+				DrawBadgeAfterName(p, x + 54, y, nameW, 26, g.playerNames[i], badge, st.mouseX, st.mouseY);
 			}
-			else p.Text(x + 30, y, w - 30, 26, taken ? g.playerNames[i] : "Free", taken ? pal::text : pal::textDim);
+			else {
+				const int nameW = w - 30 - (i == 0 ? 90 : 0) - LeagueBadgeRoom(badge);
+				p.Text(x + 30, y, nameW, 26, taken ? g.playerNames[i] : "Free", taken ? pal::text : pal::textDim);
+				if (taken) DrawBadgeAfterName(p, x + 30, y, nameW, 26, g.playerNames[i], badge, st.mouseX, st.mouseY);
+			}
 			if (taken && LobbyPlayerId(g, g.playerNames[i])) {
 				const int nameX = patron.tier != PatronTier::None ? x + 54 : x + 30;
 				ProfileHotspot(p, st, nameX, y, w - (nameX - x) - 90, 26, g.playerNames[i], kProfileLobbyName + i);
@@ -577,13 +596,20 @@ void PaintList(Painter &p, const State &st)
 		p.Text(cx[0] + 2 + lockW, y, cx[1] - cx[0] - 12 - lockW, rowH, g.name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.Font(0);
 		const PatronInfo hostPatron = PatronOf(g.owner);
+		const LeagueBadge hostBadge = PlayerBadgeOf(g.owner);
+		const std::string hostText = g.friendHost ? g.host + Tr("  (friend)") : g.host;
+		const int hx = textX(1), hw = cx[2] - textX(1) - 12;
 		if (hostPatron.tier != PatronTier::None) {
-			const int hx = textX(1), hw = cx[2] - textX(1) - 12, ly = y + (rowH - 20) / 2;
-			DrawPatron(p, hx, ly, 20, hx + 24, y, hw - 24, rowH, g.friendHost ? g.host + Tr("  (friend)") : g.host, hostPatron.tier,
-				DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			const int ly = y + (rowH - 20) / 2, nameW = hw - 24 - LeagueBadgeRoom(hostBadge);
+			DrawPatron(p, hx, ly, 20, hx + 24, y, nameW, rowH, hostText, hostPatron.tier, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 			PatronHotspot(p, hx, ly, 20, hostPatron, mx, my, kPatronLink);
+			DrawBadgeAfterName(p, hx + 24, y, nameW, rowH, hostText, hostBadge, mx, my);
 		}
-		else cell(1, g.friendHost ? g.host + Tr("  (friend)") : g.host, g.friendHost ? pal::redText : pal::textDim);
+		else {
+			const int nameW = hw - LeagueBadgeRoom(hostBadge);
+			p.Text(hx, y, nameW, rowH, hostText, g.friendHost ? pal::redText : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			DrawBadgeAfterName(p, hx, y, nameW, rowH, hostText, hostBadge, mx, my);
+		}
 		char watching[48];
 		snprintf(watching, sizeof(watching), "In game  ·  %d watching", g.spectators);
 		cell(2, g.playing ? (g.spectators > 0 ? std::string(watching) : std::string("In game")) : std::to_string(g.players) + " / " + std::to_string(g.maxPlayers),

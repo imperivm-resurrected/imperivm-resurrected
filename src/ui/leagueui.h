@@ -1,0 +1,36 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 THIONG
+// Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
+#pragma once
+#include <string>
+
+#include "core/league.h"
+#include "ui/uikit.h"
+
+// The league next to names and on the screens: a player's badge to the right of their name (the patron's laurel stays on the left,
+// and the name keeps its colour), the big emblems and the card to link the account.
+
+constexpr int kLeagueBadgeSize = 20, kLeagueBadgeGap = 6;
+
+// The badge in a square of `size`. It is a pixel drawing, so it is drawn at the whole scale nearest the screen's and centred.
+void DrawLeagueBadge(ui::Painter &p, int x, int y, int size, const LeagueBadge &badge);
+// The emblem of a rank drawn from its shapes, for 48 px and up; None is the unranked outline with its question mark.
+void DrawLeagueEmblem(ui::Painter &p, int x, int y, int size, LeagueTier tier);
+// What a badge takes after a name, gap included; 0 without one. Take it off the name's box before drawing the name.
+int LeagueBadgeRoom(const LeagueBadge &badge);
+// The badge 6 px after a name drawn in the box (nameX, y, nameW, h) with the painter's current font, centred on the box's height,
+// with its tooltip under the mouse.
+void DrawBadgeAfterName(ui::Painter &p, int nameX, int y, int nameW, int h, const std::string &name, const LeagueBadge &badge, int mx, int my);
+// The tooltip of the badge under the mouse, drawn after everything else.
+void PaintLeagueBadgeTip(ui::Painter &p, int screenW, int screenH);
+// "Centurion II", translated.
+std::string LeagueRankLabel(LeagueTier tier, int division);
+COLORREF LeagueTierInk(LeagueTier tier);
+
+// The actions of the screen that shows the account card.
+struct LeagueLinkActions {
+	int start = 0, open = 0, cancel = 0, unlink = 0;
+};
+// The league account from (x, y), `w` wide: what linking is for and the button, the code and the website's address while it waits,
+// or the linked account and its rank. Returns how tall it came out.
+int PaintLeagueAccount(ui::Painter &p, int x, int y, int w, const LeagueLinkActions &actions, int mx, int my);

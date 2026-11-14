@@ -13,6 +13,7 @@
 #include "addr/state.h"
 
 #include "game/mappreview.h"
+#include "ui/leagueui.h"
 #include "ui/mpui_internal.h"
 #include "ui/patronui.h"
 
@@ -343,6 +344,7 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 	g_chat.geomOut = ListGeom();
 	PaintScreen(r.p, st);
 	PaintPatronTip(r.p, st.viewW, st.viewH);
+	PaintLeagueBadgeTip(r.p, st.viewW, st.viewH);
 	WakeGameThread();
 	r.End(255);
 	std::lock_guard<std::mutex> lock(g_lock);

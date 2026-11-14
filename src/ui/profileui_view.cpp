@@ -13,6 +13,7 @@
 
 #include "i18n/tr.h"
 #include "ui/fullscreen.h"
+#include "ui/leagueui.h"
 #include "ui/patronui.h"
 #include "ui/widgets.h"
 
@@ -268,17 +269,22 @@ void PaintIdentity(Painter &p, const View &v, const Card &c, const Area &a, cons
 	}
 	p.Font(2);
 	const PatronTier tier = c.active ? v.patron.tier : PatronTier::None;
+	const LeagueBadge badge = c.active ? v.badge : LeagueBadge();
+	const int laurelW = tier != PatronTier::None ? PatronLaurelSize(tier) + 8 : 0;
+	const int nameW = right - tx - laurelW - LeagueBadgeRoom(badge);
 	if (tier != PatronTier::None) {
 		const int laurel = PatronLaurelSize(tier);
 		p.raw = true;
-		DrawPatron(p, tx, y + 14 + (40 - laurel) / 2, laurel, tx + laurel + 8, y + 12, right - tx - laurel - 8, 42, c.name, tier,
-			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		DrawPatron(p, tx, y + 14 + (40 - laurel) / 2, laurel, tx + laurelW, y + 12, nameW, 42, c.name, tier, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.raw = false;
 		PatronHotspot(p, tx, y + 14 + (40 - laurel) / 2, laurel, v.patron, v.mouseX, v.mouseY, kActPatron);
 	}
 	else {
-		Raw(p, tx, y + 12, right - tx, 42, c.name, pal::text);
+		Raw(p, tx, y + 12, nameW, 42, c.name, pal::text);
 	}
+	p.raw = true;
+	DrawBadgeAfterName(p, tx + laurelW, y + 12, nameW, 42, c.name, badge, v.mouseX, v.mouseY);
+	p.raw = false;
 	if (!c.readable) {
 		p.Font(3);
 		p.Text(tx, y + 60, x + w - 18 - tx, 24, "Couldn't read this player's statistics.", pal::bad);
@@ -961,6 +967,7 @@ void PaintProfileScreen(Painter &p, const View &v)
 	}
 	PaintTip(p, v, tip);
 	PaintPatronTip(p, v.screenW, v.screenH);
+	PaintLeagueBadgeTip(p, v.screenW, v.screenH);
 }
 
 }

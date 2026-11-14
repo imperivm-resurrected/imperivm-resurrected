@@ -172,6 +172,8 @@ void Refresh()
 	const uint64_t me = SteamOwnId();
 	std::shared_ptr<const OnlineAvatar> avatar = me ? SteamAvatar(me) : nullptr;
 	const PatronInfo patron = me ? PatronOf(me) : PatronInfo();
+	if (me) PatronsWatch({me});
+	const LeagueBadge badge = me ? PlayerBadgeOf(me) : LeagueBadge();
 
 	std::lock_guard<std::mutex> lock(g_lock);
 	if (fresh) {
@@ -191,6 +193,7 @@ void Refresh()
 	v.selected = native.selected;
 	v.avatar = avatar;
 	v.patron = patron;
+	v.badge = badge;
 	v.rankCount = static_cast<int>(g_s.ranks.size());
 	SYSTEMTIME now;
 	GetLocalTime(&now);

@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "core/league.h"
 #include "core/matchhistory.h"
 #include "game/playerini.h"
 #include "net/patrons.h"
@@ -49,6 +50,7 @@ struct View {
 	// Steam is the identity of the computer, so its avatar and laurel go only on the profile in use.
 	std::shared_ptr<const OnlineAvatar> avatar;
 	PatronInfo patron;
+	LeagueBadge badge;
 	// The ranks of the game's constants, which spread the colours of the ranks.
 	int rankCount = 0;
 	int metric = kMetricKills, chartMode = kModeAll, chartRange = kRange20;

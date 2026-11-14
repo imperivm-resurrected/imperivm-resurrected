@@ -21,6 +21,7 @@
 #include "net/spectator.h"
 
 #include "ui/fullscreen.h"
+#include "ui/leagueui.h"
 #include "ui/mpui_internal.h"
 #include "ui/patronui.h"
 #include "game/gamemodes.h"
@@ -493,23 +494,27 @@ void PaintWho(Painter &p, const State &st, int x, int cy, int w, uint64_t who, c
 	if (!PaintRoundAvatar(p, x, ay, kAvatar, who)) PaintMonogram(p, x, ay, kAvatar, Initials(name));
 	int tx = x + kAvatar + 14;
 	const PatronInfo patron = who ? PatronOf(who) : PatronInfo();
+	const LeagueBadge badge = who ? PlayerBadgeOf(who) : LeagueBadge();
 	const int laurel = PatronLaurelSize(patron.tier);
 	if (patron.tier != PatronTier::None) tx += laurel + 4;
 	const int nameW = std::max(20, x + w - tx);
+	// The badge goes after the name, so the name gives up its room.
+	const int textW = std::max(20, nameW - LeagueBadgeRoom(badge));
 	const int nameY = sub.empty() ? cy - 13 : cy - 24, nameH = sub.empty() ? 26 : 24;
 	const UINT fmt = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS;
 	p.Font(1);
 	if (patron.tier != PatronTier::None) {
 		const int lx = tx - laurel - 4, ly = cy - laurel / 2;
-		DrawPatron(p, lx, ly, laurel, tx, nameY, nameW, nameH, name, patron.tier, fmt);
+		DrawPatron(p, lx, ly, laurel, tx, nameY, textW, nameH, name, patron.tier, fmt);
 		PatronHotspot(p, lx, ly, laurel, patron, mx, my, kPatronLink);
 	}
 	else {
-		p.Text(tx, nameY, nameW, nameH, name, pal::text, fmt);
+		p.Text(tx, nameY, textW, nameH, name, pal::text, fmt);
 	}
+	DrawBadgeAfterName(p, tx, nameY, textW, nameH, name, badge, mx, my);
 	if (who && profileArg >= 0) {
 		p.AddHit(x, ay, kAvatar, kAvatar, kProfile, profileArg);
-		ProfileHotspot(p, st, tx, nameY, nameW, nameH, name, profileArg);
+		ProfileHotspot(p, st, tx, nameY, textW, nameH, name, profileArg);
 	}
 	if (!sub.empty()) {
 		p.Font(3);
