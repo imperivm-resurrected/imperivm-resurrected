@@ -15,6 +15,7 @@
 #include "hooks/audio.h"
 #include "hooks/displaymode.h"
 #include "hooks/tweaks.h"
+#include "net/leagueclient.h"
 #include "net/rejoin.h"
 #include "net/spectator.h"
 #include "ui/battlesui.h"
@@ -44,11 +45,14 @@ LRESULT GameWindowHandler(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
 	if (msg == kMsgMpUiWake) {
 		MpUiWakeHandled();
+		// The multiplayer screens can stand while the game sends no frames; the league's polls (queue, match, cups, link)
+		// would stop with them and the server would drop the player from the queue.
 		Guard("game queue", [] {
 			AutosaveQuitIfReady();
 			MpUiGameThreadTick();
 			RejoinMenuTick();
 			SpectatorGameThreadTick();
+			LeagueGameThreadTick();
 		});
 		return 0;
 	}
