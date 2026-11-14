@@ -2340,6 +2340,7 @@ extern const TrRow kTrRows[] = {
 	{"Win rate", "Victorias", "Vittorie"},
 	{"Rank shield: 1 more game", "Escudo de rango: 1 partida más", "Scudo di rango: ancora 1 partita"},
 	{"Rank shield: %s more games", "Escudo de rango: %s partidas más", "Scudo di rango: ancora %s partite"},
+	{"Season %s  ·  1 game", "Temporada %s  ·  1 partida", "Stagione %s  ·  1 partita"},
 	{"Season %s  ·  %s games", "Temporada %s  ·  %s partidas", "Stagione %s  ·  %s partite"},
 	{"Search for a match  1 vs 1", "Buscar partida  1 contra 1", "Cerca partita  1 contro 1"},
 	{"The season is not being played now.", "La temporada no se está jugando ahora.", "La stagione non è in corso ora."},

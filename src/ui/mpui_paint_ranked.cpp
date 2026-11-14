@@ -517,7 +517,8 @@ void PaintRankCard(Painter &p, const State &st, const HubLayout &h)
 	}
 	else {
 		p.Font(3);
-		RawText(p, ix, y + 462, iw, 22, TrFmt("Season %s  \xC2\xB7  %s games", {std::to_string(rk.season), std::to_string(rk.wins + rk.losses)}), pal::caption);
+		RawText(p, ix, y + 462, iw, 22, (rk.wins + rk.losses == 1 ? TrFmt("Season %s  \xC2\xB7  1 game", {std::to_string(rk.season)})
+																		  : TrFmt("Season %s  \xC2\xB7  %s games", {std::to_string(rk.season), std::to_string(rk.wins + rk.losses)})), pal::caption);
 	}
 	const int64_t ban = BanOf(v).until;
 	const bool canSearch = v.linked && v.seasonLoaded && v.season.active && ban <= now && v.phase == LeagueRankedPhase::Idle;

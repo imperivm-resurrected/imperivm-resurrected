@@ -60,6 +60,8 @@ struct Queue {
 	std::string banKind;
 	std::string notice;
 	bool noticeBad = false;
+	// When the notice was set: a good one (a match called off with no harm) fades after a minute; a bad one stays until it is resolved.
+	DWORD noticeAt = 0;
 	unsigned foundSerial = 0;
 	bool rejoined = false;
 	bool abandoning = false;
@@ -216,6 +218,7 @@ void SetNotice(Queue &q, const std::string &text, bool bad)
 {
 	q.notice = text;
 	q.noticeBad = bad;
+	q.noticeAt = GetTickCount();
 }
 
 // Under g_mx: what an answer of the server says of the ranked game the result screen shows.
@@ -934,7 +937,7 @@ LeagueRankedView LeagueRankedState()
 	v.calledOff = g_q.calledOff;
 	v.banUntil = g_q.banUntil;
 	v.banKind = g_q.banKind;
-	v.notice = g_q.notice;
+	v.notice = g_q.noticeBad || GetTickCount() - g_q.noticeAt < 60000 ? g_q.notice : std::string();
 	v.noticeBad = g_q.noticeBad;
 	v.foundSerial = g_q.foundSerial;
 	v.result = g_result.view;
