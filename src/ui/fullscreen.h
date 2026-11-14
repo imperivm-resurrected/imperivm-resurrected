@@ -58,8 +58,9 @@ constexpr int kBackArrowW = 22;
 void PaintBackArrow(Painter &p, int x, int cy, COLORREF ink);
 
 int GhostButtonWidth(Painter &p, const std::string &label, bool arrow);
-// A button with only its outline, for the actions that leave a screen rather than act in it; `arrow` points back.
-void PaintGhostButton(Painter &p, int x, int y, int w, int h, const std::string &label, int action, bool arrow, bool enabled, int mx, int my);
+// A button with only its outline, for the actions that leave a screen rather than act in it, and for the second action beside a main
+// one; `arrow` points back.
+void PaintGhostButton(Painter &p, int x, int y, int w, int h, const std::string &label, int action, bool arrow, bool enabled, int mx, int my, int arg = 0);
 // The outlined buttons at the top right of a full screen, in the order given; returns where the leftmost one starts.
 int PaintHeaderActions(Painter &p, const ScreenLayout &l, const std::vector<GhostButton> &buttons, int mx, int my);
 // The big title at the top left, with the tabs on its baseline, all before `right`: a long title gives way to the tabs and ends in an

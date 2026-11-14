@@ -258,10 +258,10 @@ int GhostButtonWidth(Painter &p, const std::string &label, bool arrow)
 	return p.CapsWidth(label, 2) + 48 + (arrow ? kBackArrowW : 0);
 }
 
-void PaintGhostButton(Painter &p, int x, int y, int w, int h, const std::string &label, int action, bool arrow, bool enabled, int mx, int my)
+void PaintGhostButton(Painter &p, int x, int y, int w, int h, const std::string &label, int action, bool arrow, bool enabled, int mx, int my, int arg)
 {
 	const bool hot = enabled && p.Hover(x, y, w, h, mx, my);
-	const bool down = enabled && p.pressAction == action && p.pressArg == 0;
+	const bool down = enabled && p.pressAction == action && p.pressArg == arg;
 	if (down) p.Fill(x, y, w, h, pal::raised);
 	p.Frame(x, y, w, h, !enabled ? pal::hairline : hot || down ? pal::edgeHot : pal::edge);
 	const COLORREF ink = !enabled ? pal::disabled : hot || down ? pal::text : pal::textDim;
@@ -273,7 +273,7 @@ void PaintGhostButton(Painter &p, int x, int y, int w, int h, const std::string 
 		tx += kBackArrowW;
 	}
 	p.TextCaps(tx, y, textW + 2, h, label, ink, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
-	if (enabled) p.AddHit(x, y, w, h, action, 0);
+	if (enabled) p.AddHit(x, y, w, h, action, arg);
 }
 
 int PaintHeaderActions(Painter &p, const ScreenLayout &l, const std::vector<GhostButton> &buttons, int mx, int my)
