@@ -39,6 +39,12 @@ std::string LeagueRankLabel(LeagueTier tier, int division);
 std::string LeagueMapText(const std::string &id);
 COLORREF LeagueTierInk(LeagueTier tier);
 
+// The Steam mark, a disc with its piston, in a square of `size`: `ink` for the disc and `back` for what is cut out of it.
+void DrawSteamMark(ui::Painter &p, int x, int y, int size, COLORREF ink, COLORREF back);
+// A button with the Steam mark before its label, for linking the account.
+void PaintSteamButton(ui::Painter &p, int x, int y, int w, int h, const std::string &label, int action, int arg, int mx, int my, bool enabled,
+	bool strong);
+
 // The actions of the screen that shows the account card. With `badge`, the linked account also offers the badge next to the name;
 // its argument is the position in LeagueBadgeChoices.
 struct LeagueLinkActions {
@@ -46,6 +52,7 @@ struct LeagueLinkActions {
 };
 // The badge next to the name, picked among the player's own (the choice at `index` of LeagueBadgeChoices).
 void LeagueChooseBadgeAt(int index);
-// The league account from (x, y), `w` wide: what linking is for and the button, the code and the website's address while it waits,
-// or the linked account and its rank. Returns how tall it came out.
+// The league account from (x, y), `w` wide: what linking is for and the button; while it waits, the Steam sign-in that opened (with
+// the code for the website as the way out) or, from a server without it, the code and the website's address; or the linked
+// account with its Steam picture and rank. Returns how tall it came out.
 int PaintLeagueAccount(ui::Painter &p, int x, int y, int w, const LeagueLinkActions &actions, int mx, int my);

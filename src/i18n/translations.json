@@ -1883,7 +1883,6 @@
 {"en":"Link your Steam account to the Imperivm Resurrected league. From then on every online game you play is recorded, and ranked play will use it.","es":"Vincula tu cuenta de Steam a la liga de Imperivm Resurrected. Desde entonces se registra cada partida online que juegues, y la clasificatoria la usará.","it":"Collega il tuo account Steam alla lega di Imperivm Resurrected. Da quel momento ogni partita online che giochi viene registrata, e le classificate lo useranno."},
 {"en":"This computer was linked by another Steam user. Link it again for yours.","es":"Este ordenador lo vinculó otro usuario de Steam. Vincúlalo de nuevo para el tuyo.","it":"Questo computer è stato collegato da un altro utente Steam. Collegalo di nuovo per il tuo."},
 {"en":"Steam is not available. Open Steam to link your account.","es":"Steam no está disponible. Abre Steam para vincular tu cuenta.","it":"Steam non è disponibile. Apri Steam per collegare il tuo account."},
-{"en":"Link account","es":"Vincular cuenta","it":"Collega account"},
 {"en":"Ranked 1 vs 1 league","es":"Liga clasificatoria 1 contra 1","it":"Lega classificata 1 contro 1"},
 {"en":"Ranked 1 vs 1 league, by place in the leaderboard","es":"Liga clasificatoria 1 contra 1, por puesto en la clasificación","it":"Lega classificata 1 contro 1, per posizione in classifica"},
 {"en":"Season %s","es":"Temporada %s","it":"Stagione %s"},
@@ -2405,5 +2404,12 @@
 {"en":"Current rank: %s","es":"Rango actual: %s","it":"Rango attuale: %s"},
 {"en":"Current rank (none yet)","es":"Rango actual (aún ninguno)","it":"Rango attuale (ancora nessuno)"},
 {"en":"Saving...","es":"Guardando...","it":"Salvataggio..."},
-{"en":"Others see it in rooms, in the list of games and in the chat.","es":"Los demás la ven en las salas, en la lista de partidas y en el chat.","it":"Gli altri la vedono nelle stanze, nell'elenco delle partite e nella chat."}
+{"en":"Others see it in rooms, in the list of games and in the chat.","es":"Los demás la ven en las salas, en la lista de partidas y en el chat.","it":"Gli altri la vedono nelle stanze, nell'elenco delle partite e nella chat."},
+{"en":"Link with Steam","es":"Vincular con Steam","it":"Collega con Steam"},
+{"en":"Sign in to Steam in the window that opened...","es":"Inicia sesión en Steam en la ventana que se ha abierto...","it":"Accedi a Steam nella finestra che si è aperta..."},
+{"en":"The link is valid for %s.","es":"El enlace vale durante %s.","it":"Il link vale per %s."},
+{"en":"Open again","es":"Volver a abrir","it":"Riapri"},
+{"en":"Not opening? Type this code at %s: %s","es":"¿No se abre? Escribe este código en %s: %s","it":"Non si apre? Scrivi questo codice su %s: %s"},
+{"en":"Link your Steam account to play ranked and tournaments.","es":"Vincula tu cuenta de Steam para jugar la clasificatoria y los torneos.","it":"Collega il tuo account Steam per giocare le classificate e i tornei."},
+{"en":"Sign in to Steam once in the window that opens. There is nothing to type.","es":"Inicia sesión en Steam una vez en la ventana que se abre. No hay que escribir nada.","it":"Accedi a Steam una volta nella finestra che si apre. Non c'è niente da scrivere."}
 ]

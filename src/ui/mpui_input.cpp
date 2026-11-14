@@ -155,6 +155,7 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		return true;
 	}
 	case WM_MOUSEWHEEL: {
+		if (LinkOfferShown(g_s)) return true;
 		if (g_s.syncConfirm) {
 			ListWheel(g_s.syncList, g_s.syncGeom, POINT{g_s.mouseX, g_s.mouseY}, GET_WHEEL_DELTA_WPARAM(wp));
 			return true;
@@ -216,6 +217,9 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		}
 		else if (g_s.passPrompt && wp == VK_ESCAPE) {
 			DoAction(kPassCancel, 0);
+		}
+		else if (LinkOfferShown(g_s) && (wp == VK_ESCAPE || (wp == VK_RETURN && g_s.tabAction < 0))) {
+			DoAction(wp == VK_ESCAPE ? kLinkOfferNo : kLinkOfferYes, 0);
 		}
 		else if (g_s.dropOpen && (wp == VK_UP || wp == VK_DOWN || wp == VK_LEFT || wp == VK_RIGHT || wp == VK_HOME || wp == VK_END)) {
 			DropKeyMove(wp);

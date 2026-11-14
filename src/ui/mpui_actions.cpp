@@ -47,13 +47,27 @@ void DoAction(int action, int arg)
 		SteamRefreshLobbies();
 		break;
 	}
-	case kRanked: g_s.view = kViewRanked; break;
+	case kRanked:
+		g_s.view = kViewRanked;
+		OfferLink();
+		break;
 	case kRankedAct: RankedAction(arg); break;
 	case kLeagueLink: LeagueLinkStart(); break;
 	case kLeagueOpen: LeagueOpenLinkPage(); break;
 	case kLeagueCancel: LeagueLinkCancel(); break;
 	case kLeagueUnlink: LeagueUnlink(); break;
-	case kTourney: TourneyAction(arg); break;
+	case kLinkOfferYes:
+		g_s.linkOffer = false;
+		LeagueLinkStart();
+		break;
+	case kLinkOfferNo:
+		g_s.linkOffer = false;
+		LeagueDeclineLinkOffer();
+		break;
+	case kTourney:
+		TourneyAction(arg);
+		if (arg == kTourneyShowArg) OfferLink();
+		break;
 	case kFieldTourney: FocusField(kTourneyField); break;
 	case kCreate:
 		if (g_s.nameInput.empty()) g_s.nameInput = Tr("Game of ") + g_s.player;
@@ -742,6 +756,15 @@ void DoAction(int action, int arg)
 		break;
 	}
 	}
+}
+
+void OfferLink()
+{
+	const LeagueLinkPhase phase = LeagueLinkState().phase;
+	const bool linking = phase == LeagueLinkPhase::Starting || phase == LeagueLinkPhase::Waiting || phase == LeagueLinkPhase::Unlinking;
+	if (!LeagueOfferLinkNow(phase == LeagueLinkPhase::Linked, linking, SteamOwnId() != 0, g_s.linkOffered, LeagueLinkOfferDeclined())) return;
+	g_s.linkOffered = true;
+	g_s.linkOffer = true;
 }
 
 std::string &FocusedText()

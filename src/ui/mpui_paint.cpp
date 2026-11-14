@@ -688,6 +688,31 @@ void PaintRanked(Painter &p, const State &st)
 	}
 }
 
+bool LinkOfferShown(const State &st)
+{
+	return st.linkOffer && !st.room.id && !st.game.active && (st.view == kViewRanked || st.view == kViewTournaments) && !LeagueLinked();
+}
+
+void PaintLinkOffer(Painter &p, const State &st)
+{
+	const int mx = st.mouseX, my = st.mouseY;
+	const Dialog d = DialogBegin(p, st.viewW, st.viewH, 580, 252, "League");
+	const int mark = 48, tx = d.BodyX() + mark + 20, tw = d.BodyW() - mark - 20;
+	DrawSteamMark(p, d.BodyX(), d.y + 80, mark, pal::text, pal::panel);
+	p.Font(0);
+	const std::string lead = "Link your Steam account to play ranked and tournaments.";
+	const int leadH = p.Measure(tw, lead);
+	p.TextWrapped(tx, d.y + 76, tw, leadH + 2, lead, pal::text);
+	p.Font(3);
+	const std::string note = "Sign in to Steam once in the window that opens. There is nothing to type.";
+	p.TextWrapped(tx, d.y + 84 + leadH, tw, p.Measure(tw, note) + 2, note, pal::textDim);
+	p.Font(1);
+	const int noW = std::max(120, p.CapsWidth("Not now", 1) + 44), yesW = std::max(220, p.CapsWidth("Link with Steam", 1) + 76);
+	const int by = d.FooterTop(), right = d.x + d.w - d.pad;
+	PaintSteamButton(p, right - noW - 12 - yesW, by, yesW, kDialogBtnH, "Link with Steam", kLinkOfferYes, 0, mx, my, true, true);
+	p.Button(right - noW, by, noW, kDialogBtnH, "Not now", kLinkOfferNo, 0, mx, my);
+}
+
 void PaintCreate(Painter &p, const State &st)
 {
 	const int mx = st.mouseX, my = st.mouseY;

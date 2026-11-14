@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdio>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <tuple>
@@ -403,6 +404,36 @@ void PaintLeagueBadgeTip(Painter &p, int screenW, int screenH)
 	p.raw = false;
 }
 
+void DrawSteamMark(Painter &p, int x, int y, int size, COLORREF ink, COLORREF back)
+{
+	// In hundredths of the size: the big wheel up and to the right, the small one down and to the left, and the rod between them.
+	auto at = [size](int hundredths) { return size * hundredths / 100; };
+	auto disc = [&](int cx, int cy, int diameter, COLORREF c) { p.Ellipse(x + at(cx) - at(diameter) / 2, y + at(cy) - at(diameter) / 2, at(diameter), at(diameter), c); };
+	disc(50, 50, 100, ink);
+	p.Line(x + at(30), y + at(70), x + at(64), y + at(38), back, std::max(2, at(15)));
+	p.Line(x + at(4), y + at(60), x + at(30), y + at(70), back, std::max(1, at(9)));
+	disc(64, 38, 44, back);
+	disc(64, 38, 26, ink);
+	disc(30, 70, 26, back);
+	disc(30, 70, 12, ink);
+}
+
+void PaintSteamButton(Painter &p, int x, int y, int w, int h, const std::string &label, int action, int arg, int mx, int my, bool enabled, bool strong)
+{
+	const bool hot = enabled && p.Hover(x, y, w, h, mx, my);
+	const bool down = enabled && action == p.pressAction && arg == p.pressArg;
+	const COLORREF fill = !enabled ? pal::field : strong ? (hot || down ? pal::redPressed : pal::red) : (hot || down ? pal::buttonHover : pal::button);
+	const COLORREF ink = !enabled ? pal::disabled : strong ? pal::onRed : pal::text;
+	p.Fill(x, y, w, h, fill);
+	p.Font(1);
+	const int mark = std::min(22, h - 16), gap = 10;
+	const int textW = std::min(p.CapsWidth(label, 1), std::max(0, w - mark - gap - 24));
+	const int left = x + std::max(12, (w - mark - gap - textW) / 2);
+	DrawSteamMark(p, left, y + (h - mark) / 2, mark, ink, fill);
+	p.TextCaps(left + mark + gap, y, textW + 4, h, label, ink, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1);
+	if (enabled) p.AddHit(x, y, w, h, action, arg);
+}
+
 int PaintLeagueAccount(Painter &p, int x, int y, int w, const LeagueLinkActions &actions, int mx, int my)
 {
 	const LeagueLinkView link = LeagueLinkState();
@@ -420,6 +451,31 @@ int PaintLeagueAccount(Painter &p, int x, int y, int w, const LeagueLinkActions 
 		cy += 40;
 		break;
 	case LeagueLinkPhase::Waiting: {
+		if (!link.steamUrl.empty()) {
+			p.Spinner(x + 11, cy + 12, 9, 4, GetTickCount());
+			p.Font(0);
+			cy += std::max(24, Wrapped(p, x + 32, cy, w - 32, "Sign in to Steam in the window that opened...", pal::body)) + 4;
+			const int64_t left = link.expiresAt ? link.expiresAt - EpochMs() : 0;
+			if (left > 0) {
+				p.Font(3);
+				p.raw = true;
+				p.Text(x + 32, cy, w - 32, 22, TrFmt("The link is valid for %s.", {Clock(left)}), pal::caption);
+				p.raw = false;
+				cy += 24;
+			}
+			cy += 14;
+			const int openW = std::min({w, 240, std::max(160, w - 112)}), cancelW = std::min(160, std::max(0, w - openW - 12));
+			PaintSteamButton(p, x, cy, openW, 44, "Open again", actions.open, 0, mx, my, true, false);
+			if (cancelW >= 100) PaintGhostButton(p, x + openW + 12, cy, cancelW, 44, "Cancel", actions.cancel, false, true, mx, my);
+			cy += 44 + 18;
+			p.Fill(x, cy, w, 1, pal::hairline);
+			cy += 12;
+			p.Font(3);
+			p.raw = true;
+			cy += Wrapped(p, x, cy, w, TrFmt("Not opening? Type this code at %s: %s", {LeagueUrlDisplay(link.url), LeagueCodeDisplay(link.code)}), pal::caption);
+			p.raw = false;
+			break;
+		}
 		p.Font(0);
 		cy += Wrapped(p, x, cy, w, "Open this page, sign in with Steam and enter the code:", pal::body) + 8;
 		p.Font(1);
@@ -445,16 +501,20 @@ int PaintLeagueAccount(Painter &p, int x, int y, int w, const LeagueLinkActions 
 		const LeagueBadge badge = PlayerBadgeOf(SteamOwnId());
 		const LeagueMeView me = LeagueMeState();
 		const std::string name = !link.name.empty() ? link.name : SteamOnlinePlayerName();
+		const int av = 62, tx = x + av + 14, tw = std::max(0, w - av - 14);
+		const std::shared_ptr<const OnlineAvatar> avatar = SteamAvatar(SteamOwnId());
+		if (avatar) p.Image(x, cy, av, av, avatar->bgra.data(), avatar->width, avatar->height);
+		else p.Fill(x, cy, av, av, pal::raised);
+		p.Frame(x, cy, av, av, pal::edge);
 		p.Font(3);
-		p.Text(x, cy, w, 22, "Linked as", pal::caption);
-		cy += 24;
+		p.Text(tx, cy + 4, tw, 22, "Linked as", pal::caption);
 		p.Font(2);
 		p.raw = true;
-		const int nameW = w - LeagueBadgeRoom(badge);
-		p.Text(x, cy, nameW, 38, name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		DrawBadgeAfterName(p, x, cy, nameW, 38, name, badge, mx, my);
+		const int nameW = tw - LeagueBadgeRoom(badge);
+		p.Text(tx, cy + 24, nameW, 38, name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		DrawBadgeAfterName(p, tx, cy + 24, nameW, 38, name, badge, mx, my);
 		p.raw = false;
-		cy += 44;
+		cy += av + 12;
 		const LeagueRanked &rk = me.me.ranked;
 		p.Font(0);
 		if (!me.loaded) p.Text(x, cy, w, 26, me.loading ? "Reading your rank..." : "Your rank will show here.", pal::caption);
@@ -489,7 +549,7 @@ int PaintLeagueAccount(Painter &p, int x, int y, int w, const LeagueLinkActions 
 		if (link.otherAccount) cy += Wrapped(p, x, cy, w, "This computer was linked by another Steam user. Link it again for yours.", pal::caption) + 12;
 		if (!link.steamReady) cy += Wrapped(p, x, cy, w, "Steam is not available. Open Steam to link your account.", pal::warn) + 12;
 		error();
-		p.Button(x, cy, std::min(w, 280), 48, "Link account", actions.start, 0, mx, my, link.steamReady, true);
+		PaintSteamButton(p, x, cy, std::min(w, 300), 48, "Link with Steam", actions.start, 0, mx, my, link.steamReady, true);
 		cy += 48;
 		break;
 	}

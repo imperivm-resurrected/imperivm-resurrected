@@ -1226,8 +1226,9 @@ void PaintSpectate(Painter &p, const State &st)
 namespace mpui_impl {
 void PaintScreen(Painter &p, const State &st)
 {
+	const bool linkOffer = LinkOfferShown(st);
 	p.noHover = st.dropOpen || st.passPrompt || st.syncConfirm || st.syncPhase || st.searching || st.connecting || st.recoverAsk ||
-		(st.recoverWaitHost && !st.room.id) || RejoinClientActive() || RejoinClientFailed() || (st.game.active && st.game.picker);
+		(st.recoverWaitHost && !st.room.id) || RejoinClientActive() || RejoinClientFailed() || (st.game.active && st.game.picker) || linkOffer;
 	if (st.game.active) {
 		PaintGameRoom(p, st);
 		if (st.game.picker && !SaveMapPicking(st)) {
@@ -1259,6 +1260,7 @@ void PaintScreen(Painter &p, const State &st)
 	if (st.passPrompt) PaintPassPrompt(p, st);
 	else if (st.syncConfirm) PaintSyncConfirm(p, st);
 	else if (st.syncPhase) PaintSyncProgress(p, st);
+	else if (linkOffer) PaintLinkOffer(p, st);
 	if (st.room.id && st.room.info.spectate && !st.game.active && !st.syncPhase && !st.syncConfirm) {
 		PaintSpectate(p, st);
 		return;

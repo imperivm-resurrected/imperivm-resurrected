@@ -1890,7 +1890,6 @@ extern const TrRow kTrRows[] = {
 	{"Link your Steam account to the Imperivm Resurrected league. From then on every online game you play is recorded, and ranked play will use it.", "Vincula tu cuenta de Steam a la liga de Imperivm Resurrected. Desde entonces se registra cada partida online que juegues, y la clasificatoria la usará.", "Collega il tuo account Steam alla lega di Imperivm Resurrected. Da quel momento ogni partita online che giochi viene registrata, e le classificate lo useranno."},
 	{"This computer was linked by another Steam user. Link it again for yours.", "Este ordenador lo vinculó otro usuario de Steam. Vincúlalo de nuevo para el tuyo.", "Questo computer è stato collegato da un altro utente Steam. Collegalo di nuovo per il tuo."},
 	{"Steam is not available. Open Steam to link your account.", "Steam no está disponible. Abre Steam para vincular tu cuenta.", "Steam non è disponibile. Apri Steam per collegare il tuo account."},
-	{"Link account", "Vincular cuenta", "Collega account"},
 	{"Ranked 1 vs 1 league", "Liga clasificatoria 1 contra 1", "Lega classificata 1 contro 1"},
 	{"Ranked 1 vs 1 league, by place in the leaderboard", "Liga clasificatoria 1 contra 1, por puesto en la clasificación", "Lega classificata 1 contro 1, per posizione in classifica"},
 	{"Season %s", "Temporada %s", "Stagione %s"},
@@ -2413,5 +2412,12 @@ extern const TrRow kTrRows[] = {
 	{"Current rank (none yet)", "Rango actual (aún ninguno)", "Rango attuale (ancora nessuno)"},
 	{"Saving...", "Guardando...", "Salvataggio..."},
 	{"Others see it in rooms, in the list of games and in the chat.", "Los demás la ven en las salas, en la lista de partidas y en el chat.", "Gli altri la vedono nelle stanze, nell'elenco delle partite e nella chat."},
+	{"Link with Steam", "Vincular con Steam", "Collega con Steam"},
+	{"Sign in to Steam in the window that opened...", "Inicia sesión en Steam en la ventana que se ha abierto...", "Accedi a Steam nella finestra che si è aperta..."},
+	{"The link is valid for %s.", "El enlace vale durante %s.", "Il link vale per %s."},
+	{"Open again", "Volver a abrir", "Riapri"},
+	{"Not opening? Type this code at %s: %s", "¿No se abre? Escribe este código en %s: %s", "Non si apre? Scrivi questo codice su %s: %s"},
+	{"Link your Steam account to play ranked and tournaments.", "Vincula tu cuenta de Steam para jugar la clasificatoria y los torneos.", "Collega il tuo account Steam per giocare le classificate e i tornei."},
+	{"Sign in to Steam once in the window that opens. There is nothing to type.", "Inicia sesión en Steam una vez en la ventana que se abre. No hay que escribir nada.", "Accedi a Steam una volta nella finestra che si apre. Non c'è niente da scrivere."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

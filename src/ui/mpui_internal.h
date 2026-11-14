@@ -51,6 +51,7 @@ enum Action {
 	kLeagueLink, kLeagueOpen, kLeagueCancel, kLeagueUnlink,
 	kRankedAct,
 	kTourney, kFieldTourney,
+	kLinkOfferYes, kLinkOfferNo,
 };
 
 typedef int(__cdecl *HostGame_t)(int, unsigned, int);
@@ -324,6 +325,8 @@ struct State {
 	int roomTab = 0;
 	std::string roomNameInput;
 	RankedScreen ranked;
+	// The offer to link the account over Ranked or Tournaments: open now, and already made in this session.
+	bool linkOffer = false, linkOffered = false;
 };
 
 extern std::mutex g_lock;
@@ -470,6 +473,11 @@ void PaintPassPrompt(Painter &p, const State &st);
 void PaintList(Painter &p, const State &st);
 void PaintRanked(Painter &p, const State &st);
 void PaintCreate(Painter &p, const State &st);
+// The first visit to Ranked or Tournaments of a player who is not linked offers to link the account (see LeagueOfferLinkNow).
+void OfferLink();
+// The offer is on screen: over Ranked or Tournaments, outside a room, while the account is still not linked.
+bool LinkOfferShown(const State &st);
+void PaintLinkOffer(Painter &p, const State &st);
 std::map<std::string, std::string> PublishedOptions(const State &st);
 std::string RoomOptionText(const State &st, int id, const char *published);
 std::string RoomMapLabel(const State &st);
