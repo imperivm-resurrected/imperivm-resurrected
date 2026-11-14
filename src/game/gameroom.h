@@ -48,6 +48,8 @@ struct GameRoomOption {
 	bool value = false;
 	std::vector<std::string> items;
 	std::vector<char> itemDisabled;
+	// The league's id behind each item of the map type and size lists (core/leaguemaps.h), empty where there is none.
+	std::vector<std::string> keys;
 	int sel = -1;
 };
 

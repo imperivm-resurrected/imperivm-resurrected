@@ -25,6 +25,7 @@
 #include "game/roomprefs.h"
 #include "game/roomcountdown.h"
 #include "game/roomname.h"
+#include "core/leaguemaps.h"
 #include "core/log.h"
 #include "core/names.h"
 #include "addr/engine.h"
@@ -215,11 +216,48 @@ const int kMapSizeCombo = 0x01000008;
 const int kMapSizes = 3;
 const size_t kTemplateEntrySize = 0x44;
 const size_t kTemplateSizeField = 0x38;
+const size_t kTemplatePathText = 0x04, kTemplatePathCapacity = 0x18;
 
 const char *TemplateName(const char *entry)
 {
 	const unsigned capacity = *reinterpret_cast<const unsigned *>(entry + 0x34);
 	return capacity < 0x10 ? entry + 0x20 : *reinterpret_cast<const char *const *>(entry + 0x20);
+}
+
+// The template behind item `index` of the map type list: the item's data is its entry in the options' template list, whose
+// entries (RandomMapEntry) hold the file's path at +0x00 (a std::string), the template's name at +0x1c and its size at +0x38.
+// The path is copied into `out`; false for the predefined map (item 0) or when it can't be read.
+bool TemplatePathOf(void *options, void *typeCombo, unsigned index, char *out, size_t size)
+{
+	__try {
+		const char *list = *reinterpret_cast<char *const *>(static_cast<char *>(typeCombo) + 0x64);
+		const unsigned count = *reinterpret_cast<const unsigned *>(list + 0x58);
+		if (index == 0 || index >= count) return false;
+		const char *items = *reinterpret_cast<const char *const *>(list + 0x94);
+		const unsigned entry = *reinterpret_cast<const unsigned *>(items + index * 0x14 + 0xc);
+		const char *begin = *reinterpret_cast<char *const *>(static_cast<char *>(options) + 0x6c);
+		const char *end = *reinterpret_cast<char *const *>(static_cast<char *>(options) + 0x70);
+		if (!begin || end <= begin || entry >= static_cast<unsigned>((end - begin) / kTemplateEntrySize)) return false;
+		const char *e = begin + entry * kTemplateEntrySize;
+		const unsigned capacity = *reinterpret_cast<const unsigned *>(e + kTemplatePathCapacity);
+		const char *path = capacity < 0x10 ? e + kTemplatePathText : *reinterpret_cast<const char *const *>(e + kTemplatePathText);
+		return path && strncpy_s(out, size, path, _TRUNCATE) == 0;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return false;
+	}
+}
+
+// The league's ids of the items of the map type list (their template files) or of the size list (their order); empty where unknown.
+std::vector<std::string> MapKeys(void *options, void *combo, int id, const std::vector<int> &order)
+{
+	std::vector<std::string> keys;
+	for (int real : order) {
+		char path[MAX_PATH] = {};
+		if (id == kMapSizeCombo) keys.push_back(order.size() == static_cast<size_t>(kMapSizes) ? LeagueMapSizeIdAt(real) : std::string());
+		else keys.push_back(TemplatePathOf(options, combo, static_cast<unsigned>(real), path, sizeof(path)) ? LeagueMapIdOfTemplate(path) : std::string());
+	}
+	return keys;
 }
 
 bool SizesOfMapType(void *options, void *typeCombo, int selected, bool fits[kMapSizes])
@@ -581,6 +619,7 @@ void TakeSnapshot()
 					if (o.sel >= 0 && o.sel < static_cast<int>(o.items.size())) {
 						s.optionsText += std::string(d.label) + ": " + o.items[o.sel] + "\n";
 					}
+					if (d.id == 0x1000 || d.id == kMapSizeCombo) o.keys = MapKeys(opts, c, d.id, order);
 				}
 				if (d.id == kMapSizeCombo && !d.checkbox) {
 					void *typeCombo = Combo(opts, 0x1000);
@@ -600,7 +639,10 @@ void TakeSnapshot()
 						continue;
 					}
 					std::string list;
-					for (size_t i = 0; i < o.items.size(); i++) list += (i ? " | " : "") + std::to_string(i) + "=\"" + o.items[i] + "\"";
+					for (size_t i = 0; i < o.items.size(); i++) {
+						list += (i ? " | " : "") + std::to_string(i) + "=\"" + o.items[i] + "\"";
+						if (i < o.keys.size() && !o.keys[i].empty()) list += " (" + o.keys[i] + ")";
+					}
 					LogI("room", "options: 0x%x %s, chosen %d of %d: %s", o.id, o.label.c_str(), o.sel, static_cast<int>(o.items.size()), list.c_str());
 				}
 			}

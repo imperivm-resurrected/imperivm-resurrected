@@ -18,31 +18,6 @@ std::string Lower(std::string s)
 	return s;
 }
 
-// Plain ASCII lower case, with the accents of Spanish and Italian taken off and anything that is not a letter or a digit as a space.
-std::string Folded(const std::string &s)
-{
-	static const std::pair<const char *, char> kAccents[] = {{"\xC3\xA1", 'a'}, {"\xC3\xA9", 'e'}, {"\xC3\xAD", 'i'}, {"\xC3\xB3", 'o'},
-		{"\xC3\xBA", 'u'}, {"\xC3\xB1", 'n'}, {"\xC3\xA0", 'a'}, {"\xC3\xA8", 'e'}, {"\xC3\xAC", 'i'}, {"\xC3\xB2", 'o'}, {"\xC3\xB9", 'u'},
-		{"\xC3\x81", 'a'}, {"\xC3\x89", 'e'}, {"\xC3\x8D", 'i'}, {"\xC3\x93", 'o'}, {"\xC3\x9A", 'u'}, {"\xC3\x91", 'n'}, {"\xC3\xBC", 'u'}};
-	std::string out;
-	for (size_t i = 0; i < s.size();) {
-		bool replaced = false;
-		for (const auto &a : kAccents) {
-			if (s.compare(i, 2, a.first) == 0) {
-				out += a.second;
-				i += 2;
-				replaced = true;
-				break;
-			}
-		}
-		if (replaced) continue;
-		const unsigned char c = static_cast<unsigned char>(s[i]);
-		out += isalnum(c) ? static_cast<char>(tolower(c)) : ' ';
-		i++;
-	}
-	return out;
-}
-
 int Int(const Json &j, const char *key, int def = 0)
 {
 	const Json *v = j.Get(key);
@@ -92,11 +67,6 @@ TourneyNextSide SideFromJson(const Json *v)
 	s.seed = Int(*v, "seed");
 	s.inRoom = v->GetBool("inRoom");
 	return s;
-}
-
-bool Contains(const std::string &hay, const char *needle)
-{
-	return hay.find(needle) != std::string::npos;
 }
 
 }
@@ -189,47 +159,6 @@ TourneyMap TourneyMapFromJson(const Json *v)
 	m.type = Text(*v, "type");
 	m.size = Text(*v, "size");
 	return m;
-}
-
-bool TourneyMapItemMatches(const std::string &item, const std::string &id)
-{
-	struct Alias {
-		const char *id;
-		std::vector<const char *> stems, never;
-	};
-	// The game's names change with its language; the stems cover the English, Spanish and Italian ones.
-	static const Alias kAliases[] = {
-		{"mediterranean", {"mediterr"}, {}},
-		{"coastal", {"cost", "coast"}, {}},
-		{"continent", {"contin"}, {}},
-		{"mountain passes", {"mountain", "montan", "pasos", "passi", "valich"}, {}},
-		{"tournament", {"torneo", "tournament"}, {}},
-		{"islands", {"isla", "island", "isol"}, {}},
-		{"small", {"small", "peque", "picc"}, {}},
-		{"medium", {"medium", "medi"}, {}},
-		{"large", {"large", "grand"}, {"muy", "very", "molto", "enorm", "huge"}},
-		{"huge", {"huge", "enorm", "muy grand", "very large", "molto grand"}, {}},
-	};
-	std::string want = Folded(id);
-	const size_t first = want.find_first_not_of(' ');
-	if (first == std::string::npos) return false;
-	want = want.substr(first, want.find_last_not_of(' ') - first + 1);
-	const std::string have = " " + Folded(item) + " ";
-	const Alias *alias = nullptr;
-	for (const Alias &a : kAliases) {
-		if (want == a.id) alias = &a;
-	}
-	if (alias) {
-		for (const char *word : alias->never) {
-			if (Contains(have, word)) return false;
-		}
-	}
-	if (Contains(have, want.c_str())) return true;
-	if (!alias) return false;
-	for (const char *stem : alias->stems) {
-		if (Contains(have, stem)) return true;
-	}
-	return false;
 }
 
 TourneySettings TourneySettingsFromJson(const Json *v)

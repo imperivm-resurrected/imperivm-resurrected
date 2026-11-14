@@ -32,15 +32,12 @@ TourneyStage TourneyStageOf(int round, int rounds);
 // "Final", "Semifinal"...: the English name, the key of its translation. Empty for Unknown.
 const char *TourneyStageName(TourneyStage s);
 
-// A map of a round: the server's ids ("mountain_passes", "random", "small").
+// A map of a round: the server's ids ("mountain_passes", "random", "medium"); core/leaguemaps.h finds them in the room.
 struct TourneyMap {
 	std::string name, type, size;
 	bool Known() const { return !name.empty(); }
 };
 TourneyMap TourneyMapFromJson(const Json *v);
-// Whether one of the game's items for the map type or size ("Random map: Mountain passes", "Small") is the server's id. Accents, case,
-// underscores and the Spanish and Italian names are allowed.
-bool TourneyMapItemMatches(const std::string &item, const std::string &id);
 
 // The options a tournament room is locked to.
 struct TourneySettings {

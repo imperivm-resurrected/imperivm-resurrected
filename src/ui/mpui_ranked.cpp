@@ -13,6 +13,7 @@
 
 #include "addr/state.h"
 #include "core/league.h"
+#include "core/leaguemaps.h"
 #include "core/leagueranked.h"
 #include "core/log.h"
 #include "hooks/dmshim.h"
@@ -43,7 +44,7 @@ struct RoomAuto {
 	DWORD createdAt = 0, joinAt = 0, kickAt = 0, settingsAt = 0;
 	int createTries = 0, joinTries = 0;
 	uint64_t joinLobby = 0, invitedLobby = 0;
-	bool warned = false, settingsLogged = false, mapWarned = false;
+	bool warned = false, settingsLogged = false, mapWarned = false, textWarned = false;
 	// The room's retries gave up and the match was called off; the called-off match whose room this computer left.
 	bool abandoned = false;
 	int64_t leftCalledOff = 0;
@@ -93,17 +94,6 @@ bool Contains(const std::string &haystack, const std::string &needle)
 	return !needle.empty() && haystack.find(needle) != std::string::npos;
 }
 
-// The words a size goes by in the game's languages.
-std::vector<std::string> SizeWords(const std::string &size)
-{
-	const std::string s = Plain(size);
-	if (s == "small" || s == "pequeno" || s == "piccola") return {"small", "pequen", "piccol"};
-	if (s == "medium" || s == "mediano" || s == "media") return {"medium", "median", "medi"};
-	if (s == "large" || s == "grande") return {"large", "grand"};
-	if (s == "huge" || s == "enorme" || s == "giant") return {"huge", "enorm", "gigant"};
-	return {s};
-}
-
 // Under g_lock, on the game thread: one change of the room at most every 3 s per option, so the host never fights the game.
 bool Due(int id)
 {
@@ -131,18 +121,38 @@ void SetCombo(const GameRoomSnapshot &g, int id, const std::vector<std::string> 
 	for (const GameRoomOption &o : g.options) {
 		if (o.id != id || o.checkbox) continue;
 		const int want = FindItem(o, words, exact);
-		if (want < 0) {
+		if (want >= 0 && o.sel != want && Due(id)) {
+			GameRoomSetOption(id, want);
+			Predict(kPredOptSel, id, want);
+		}
+		return;
+	}
+}
+
+// The ticket's map type or size, by the game's id behind each item (core/leaguemaps.h); by the item's text only when the ids can't
+// be read, which is logged. A size the chosen type does not offer waits until the type is right.
+void SetMapItem(const GameRoomSnapshot &g, int id, const std::string &want)
+{
+	for (const GameRoomOption &o : g.options) {
+		if (o.id != id || o.checkbox) continue;
+		bool byText = false;
+		const int k = LeagueMapItemFor(o.keys, o.items, o.itemDisabled, want, byText);
+		if (k < 0) {
 			if (id == kOptMapType && !g_auto.mapWarned) {
 				g_auto.mapWarned = true;
 				std::string items;
-				for (const std::string &i : o.items) items += (items.empty() ? "" : ", ") + i;
-				LogW("league", "ranked: the season's map \"%s\" is not among the room's map types (%s)", words.empty() ? "" : words[0].c_str(), items.c_str());
+				for (size_t i = 0; i < o.items.size(); i++) items += (i ? ", " : "") + o.items[i] + (i < o.keys.size() && !o.keys[i].empty() ? "=" + o.keys[i] : "");
+				LogW("league", "ranked: the season's map \"%s\" is not among the room's map types (%s)", want.c_str(), items.c_str());
 			}
 			return;
 		}
-		if (o.sel != want && Due(id)) {
-			GameRoomSetOption(id, want);
-			Predict(kPredOptSel, id, want);
+		if (byText && !g_auto.textWarned) {
+			g_auto.textWarned = true;
+			LogW("league", "ranked: no map id behind the room's items; \"%s\" picked by its name (\"%s\")", want.c_str(), o.items[k].c_str());
+		}
+		if (o.sel != k && Due(id)) {
+			GameRoomSetOption(id, k);
+			Predict(kPredOptSel, id, k);
 		}
 		return;
 	}
@@ -169,8 +179,9 @@ void ApplySettings(const LeagueMatchTicket &t)
 	const LeagueRoomSettings &s = t.settings;
 	const bool competitive = s.preset.empty() || s.preset == "competitive";
 	const Preset &preset = kPresets[kCompetitive];
-	if (!t.map.size.empty()) SetCombo(g, kOptMapSize, SizeWords(t.map.size), false);
-	if (!t.map.name.empty()) SetCombo(g, kOptMapType, {Plain(t.map.name)}, false);
+	// The type first: the sizes the game offers depend on it.
+	if (!t.map.name.empty()) SetMapItem(g, kOptMapType, t.map.name);
+	if (!t.map.size.empty()) SetMapItem(g, kOptMapSize, t.map.size);
 	unsigned base = competitive ? preset.rules : 0;
 	if (s.diplomacy == "locked") base |= kRuleLockDiplomacy;
 	else if (s.diplomacy == "free" || s.diplomacy == "open") base &= ~kRuleLockDiplomacy;
@@ -450,16 +461,6 @@ std::string YesNo(int flag, const char *unknown = "—")
 	return flag < 0 ? std::string(unknown) : Tr(flag ? "Yes" : "No");
 }
 
-std::string MapSize(const std::string &size)
-{
-	const std::string s = Plain(size);
-	if (s == "small") return Tr("Small");
-	if (s == "medium") return Tr("Medium");
-	if (s == "large") return Tr("Large");
-	if (s == "huge") return Tr("Huge");
-	return size;
-}
-
 }
 
 bool RankedRoomLocked(const State &st)
@@ -718,12 +719,12 @@ void PaintSearch(Painter &p, const State &st)
 	p.TextCaps(dx + 164, my2 + 18, 300, 16, "Map", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
 	SelectObject(p.dc, BrandFont(BrandFace::Display, 44, p.s));
 	p.raw = true;
-	p.TextCaps(dx + 164, my2 + 36, 330, 46, map.name.empty() ? Tr("Chosen by the league") : map.name, pal::text,
+	p.TextCaps(dx + 164, my2 + 36, 330, 46, map.name.empty() ? Tr("Chosen by the league") : LeagueMapText(map.name), pal::text,
 		DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
 	p.raw = false;
 	p.Font(0);
 	std::string mapLine = Tr("2 players");
-	if (!map.size.empty()) mapLine += "  \xC2\xB7  " + MapSize(map.size);
+	if (!map.size.empty()) mapLine += "  \xC2\xB7  " + LeagueMapText(map.size);
 	if (!map.type.empty()) mapLine += "  \xC2\xB7  " + Tr(Plain(map.type) == "random" ? "Random map" : "Scenario");
 	p.Text(dx + 164, my2 + 84, 330, 22, mapLine, pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	p.Fill(dx + 532, my2 + 16, 1, 96, pal::hairline);

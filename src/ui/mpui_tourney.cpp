@@ -14,6 +14,7 @@
 
 #include "ui/mpui_tourney.h"
 #include "addr/state.h"
+#include "core/leaguemaps.h"
 #include "core/log.h"
 #include "core/tournament.h"
 #include "game/gameroom.h"
@@ -364,18 +365,25 @@ void StepInRoom(const TourneyNext &next)
 		if (want.empty()) return;
 		for (GameRoomOption &o : g_s.game.options) {
 			if (o.id != id) continue;
-			for (size_t i = 0; i < o.items.size(); i++) {
-				if (!TourneyMapItemMatches(o.items[i], want)) continue;
-				if (o.sel != static_cast<int>(i)) {
-					o.sel = static_cast<int>(i);
-					Predict(kPredOptSel, o.id, static_cast<int>(i));
-					GameRoomSetOption(o.id, static_cast<int>(i));
-					done = false;
+			bool byText = false;
+			const int i = LeagueMapItemFor(o.keys, o.items, o.itemDisabled, want, byText);
+			if (i < 0) {
+				// The size waits for the type set just now, which decides the sizes the game offers. Otherwise the game has no such
+				// map here: the host picks it by hand.
+				if (done || id != 0x01000008) {
+					k.mapAllowed = true;
+					LogW("league", "the tournament's map \"%s\" is not in the room's list (0x%x)", want.c_str(), id);
 				}
 				return;
 			}
-			// The game has no such map here: the host picks it by hand.
-			k.mapAllowed = true;
+			if (byText) LogW("league", "no map id behind the room's items; \"%s\" picked by its name (\"%s\")", want.c_str(), o.items[i].c_str());
+			if (o.sel != i) {
+				o.sel = i;
+				Predict(kPredOptSel, o.id, i);
+				GameRoomSetOption(o.id, i);
+				done = false;
+			}
+			return;
 		}
 	};
 	pick(0x1000, next.map.name);
@@ -500,21 +508,9 @@ std::string PresetText(const TourneySettings &s)
 
 std::string MapText(const TourneyMap &m)
 {
-	static const std::pair<const char *, const char *> kNames[] = {{"mediterranean", "Mediterranean"}, {"coastal", "Coastal"}, {"continent", "Continent"},
-		{"mountain_passes", "Mountain passes"}, {"tournament", "Tournament"}, {"islands", "Islands"}, {"small", "small"}, {"medium", "medium"},
-		{"large", "large"}, {"huge", "huge"}};
-	auto name = [&](const std::string &id) {
-		for (const auto &n : kNames) {
-			if (id == n.first) return Tr(n.second);
-		}
-		std::string out = id;
-		std::replace(out.begin(), out.end(), '_', ' ');
-		if (!out.empty()) out[0] = static_cast<char>(toupper(static_cast<unsigned char>(out[0])));
-		return out;
-	};
 	if (!m.Known()) return Tr("Chosen in the room");
-	std::string out = name(m.name);
-	if (!m.size.empty()) out += " \xC2\xB7 " + name(m.size);
+	std::string out = LeagueMapText(m.name);
+	if (!m.size.empty()) out += " \xC2\xB7 " + LeagueMapText(m.size);
 	return out;
 }
 

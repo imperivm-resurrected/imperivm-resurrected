@@ -35,6 +35,8 @@ void DrawBadgeAfterName(ui::Painter &p, int nameX, int y, int nameW, int h, cons
 void PaintLeagueBadgeTip(ui::Painter &p, int screenW, int screenH);
 // "Centurion II", translated.
 std::string LeagueRankLabel(LeagueTier tier, int division);
+// A map type or size of the league by its id ("mountain_passes" -> "Montañoso"), translated; an id it doesn't know, as words.
+std::string LeagueMapText(const std::string &id);
 COLORREF LeagueTierInk(LeagueTier tier);
 
 // The actions of the screen that shows the account card. With `badge`, the linked account also offers the badge next to the name;

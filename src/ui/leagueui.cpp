@@ -4,6 +4,7 @@
 #include "ui/leagueui.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <map>
@@ -13,6 +14,7 @@
 #include <cstdint>
 #include <vector>
 
+#include "core/leaguemaps.h"
 #include "i18n/tr.h"
 #include "net/leagueclient.h"
 #include "net/patrons.h"
@@ -343,6 +345,15 @@ void DrawBadgeAfterName(Painter &p, int nameX, int y, int nameW, int h, const st
 std::string LeagueRankLabel(LeagueTier tier, int division)
 {
 	return LeagueRankText(Tr(LeagueTierName(tier)), division);
+}
+
+std::string LeagueMapText(const std::string &id)
+{
+	if (const char *name = LeagueMapName(id)) return Tr(name);
+	std::string out = id;
+	std::replace(out.begin(), out.end(), '_', ' ');
+	if (!out.empty()) out[0] = static_cast<char>(toupper(static_cast<unsigned char>(out[0])));
+	return out;
 }
 
 COLORREF LeagueTierInk(LeagueTier tier)

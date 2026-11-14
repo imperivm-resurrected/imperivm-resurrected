@@ -311,7 +311,7 @@ void PaintRankCard(Painter &p, const State &st, const HubLayout &h)
 		p.Text(x + 16, y + 280, w - 32, 24, line, pal::body, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		if (!v.ticket.map.name.empty()) {
 			p.Font(3);
-			RawText(p, x + 16, y + 308, w - 32, 22, TrFmt("Map: %s", {v.ticket.map.name}), pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			RawText(p, x + 16, y + 308, w - 32, 22, TrFmt("Map: %s", {LeagueMapText(v.ticket.map.name)}), pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		}
 		if ((v.phase == LeagueRankedPhase::Ready || v.phase == LeagueRankedPhase::Playing) && !inRoom) {
 			p.Button(ix, y + cardH - 196, iw, 56, "Go to the room", kRankedAct, kRkRoom, mx, my, !st.connecting, true);

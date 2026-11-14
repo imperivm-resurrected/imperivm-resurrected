@@ -265,25 +265,6 @@ void Tags()
 	CHECK(Same(TourneyMatchOfTag(""), 0));
 }
 
-void Maps()
-{
-	CHECK(TourneyMapItemMatches("Random map: Mediterranean", "mediterranean"));
-	CHECK(TourneyMapItemMatches("Mapa aleatorio: Mediterr\xC3\xA1neo", "mediterranean"));
-	CHECK(TourneyMapItemMatches("Mapa aleatorio: Pasos de monta\xC3\xB1" "a", "mountain_passes"));
-	CHECK(TourneyMapItemMatches("Random map: Mountain passes", "mountain_passes"));
-	CHECK(!TourneyMapItemMatches("Random map: Continent", "mountain_passes"));
-	CHECK(TourneyMapItemMatches("Peque\xC3\xB1o", "small"));
-	CHECK(TourneyMapItemMatches("Piccola", "small"));
-	CHECK(TourneyMapItemMatches("Grande", "large"));
-	// "Very large" is not "large".
-	CHECK(!TourneyMapItemMatches("Muy grande", "large"));
-	CHECK(TourneyMapItemMatches("Muy grande", "huge"));
-	CHECK(!TourneyMapItemMatches("Random map: Coastal", "mediterranean"));
-	CHECK(!TourneyMapItemMatches("Anything", ""));
-	// An id the table does not know still matches by its words.
-	CHECK(TourneyMapItemMatches("Random map: Great Steppe", "great_steppe"));
-}
-
 void Notices()
 {
 	TourneyMine m;
@@ -366,7 +347,6 @@ int main()
 	Mine();
 	Claim();
 	Tags();
-	Maps();
 	Notices();
 	Clock();
 	Bracket();
