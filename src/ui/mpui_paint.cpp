@@ -698,7 +698,7 @@ void PaintLinkOffer(Painter &p, const State &st)
 	const int mx = st.mouseX, my = st.mouseY;
 	const Dialog d = DialogBegin(p, st.viewW, st.viewH, 580, 252, "League");
 	const int mark = 48, tx = d.BodyX() + mark + 20, tw = d.BodyW() - mark - 20;
-	DrawSteamMark(p, d.BodyX(), d.y + 80, mark, pal::text, pal::panel);
+	DrawSteamMark(p, d.BodyX(), d.y + 80, mark, pal::text);
 	p.Font(0);
 	const std::string lead = "Link your Steam account to play ranked and tournaments.";
 	const int leadH = p.Measure(tw, lead);

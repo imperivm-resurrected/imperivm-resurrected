@@ -300,6 +300,10 @@ from https://partner.steamgames.com under Valve's terms. See `ADDITIONAL-PERMISS
 The release zip carries Valve's unmodified `steam_api.dll` (the redistributable library of the Steamworks SDK) next to `winmm.dll`, so that the
 online features work on a game folder that does not have it. It belongs to Valve Corporation and is not covered by this repository's license.
 
+## Steam logo — `src/ui/ornaments.cpp`
+The outline of the Steam logo comes from Simple Icons (https://simpleicons.org), under CC0 1.0. Steam and the Steam logo are trademarks of Valve
+Corporation; the mod shows the logo only next to the actions that sign in with Steam.
+
 ## Imperivm
 Imperivm III: Great Battles of Rome HD and all its files, data, images and sounds belong to their authors and owners. This repository does not
 include them. Unofficial community project.

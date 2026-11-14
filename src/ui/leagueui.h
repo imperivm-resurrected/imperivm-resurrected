@@ -39,8 +39,8 @@ std::string LeagueRankLabel(LeagueTier tier, int division);
 std::string LeagueMapText(const std::string &id);
 COLORREF LeagueTierInk(LeagueTier tier);
 
-// The Steam mark, a disc with its piston, in a square of `size`: `ink` for the disc and `back` for what is cut out of it.
-void DrawSteamMark(ui::Painter &p, int x, int y, int size, COLORREF ink, COLORREF back);
+// The Steam logo in a square of `size`, in `ink`: what is cut out of the disc shows what is behind.
+void DrawSteamMark(ui::Painter &p, int x, int y, int size, COLORREF ink);
 // A button with the Steam mark before its label, for linking the account.
 void PaintSteamButton(ui::Painter &p, int x, int y, int w, int h, const std::string &label, int action, int arg, int mx, int my, bool enabled,
 	bool strong);

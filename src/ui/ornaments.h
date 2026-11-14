@@ -17,6 +17,8 @@ enum Ornament {
 	kOrnamentChevron,  // a solid arrowhead pointing right
 	kOrnamentFlag,  // a banner flying from a pole, to the right
 	kOrnamentMouse,  // a mouse seen from above, its left button solid and the right one outlined
+	kOrnamentSteam,  // the Steam logo: a disc with its piston cut out
+	kOrnamentBack,  // an arrow pointing left, drawn with a pen: meant for a square
 	kOrnamentCount
 };
 

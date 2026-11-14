@@ -246,10 +246,16 @@ ScreenLayout ScreenLayoutFor(int w, int h)
 	return l;
 }
 
+void PaintBackArrow(Painter &p, int x, int cy, COLORREF ink)
+{
+	const int size = 14;
+	PaintOrnament(p, kOrnamentBack, x, cy - size / 2, size, size, ink);
+}
+
 int GhostButtonWidth(Painter &p, const std::string &label, bool arrow)
 {
 	p.Font(4);
-	return p.CapsWidth(label, 2) + 48 + (arrow ? 18 : 0);
+	return p.CapsWidth(label, 2) + 48 + (arrow ? kBackArrowW : 0);
 }
 
 void PaintGhostButton(Painter &p, int x, int y, int w, int h, const std::string &label, int action, bool arrow, bool enabled, int mx, int my)
@@ -261,12 +267,10 @@ void PaintGhostButton(Painter &p, int x, int y, int w, int h, const std::string 
 	const COLORREF ink = !enabled ? pal::disabled : hot || down ? pal::text : pal::textDim;
 	p.Font(4);
 	const int textW = p.CapsWidth(label, 2);
-	int tx = x + (w - textW - (arrow ? 18 : 0)) / 2;
+	int tx = x + (w - textW - (arrow ? kBackArrowW : 0)) / 2;
 	if (arrow) {
-		const int cy = y + h / 2;
-		p.ArrowLeft(tx, cy - 5, 6, 10, ink);
-		p.Fill(tx + 5, cy, 7, 1, ink);
-		tx += 18;
+		PaintBackArrow(p, tx, y + h / 2, ink);
+		tx += kBackArrowW;
 	}
 	p.TextCaps(tx, y, textW + 2, h, label, ink, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
 	if (enabled) p.AddHit(x, y, w, h, action, 0);

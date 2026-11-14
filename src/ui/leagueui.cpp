@@ -404,19 +404,7 @@ void PaintLeagueBadgeTip(Painter &p, int screenW, int screenH)
 	p.raw = false;
 }
 
-void DrawSteamMark(Painter &p, int x, int y, int size, COLORREF ink, COLORREF back)
-{
-	// In hundredths of the size: the big wheel up and to the right, the small one down and to the left, and the rod between them.
-	auto at = [size](int hundredths) { return size * hundredths / 100; };
-	auto disc = [&](int cx, int cy, int diameter, COLORREF c) { p.Ellipse(x + at(cx) - at(diameter) / 2, y + at(cy) - at(diameter) / 2, at(diameter), at(diameter), c); };
-	disc(50, 50, 100, ink);
-	p.Line(x + at(30), y + at(70), x + at(64), y + at(38), back, std::max(2, at(15)));
-	p.Line(x + at(4), y + at(60), x + at(30), y + at(70), back, std::max(1, at(9)));
-	disc(64, 38, 44, back);
-	disc(64, 38, 26, ink);
-	disc(30, 70, 26, back);
-	disc(30, 70, 12, ink);
-}
+void DrawSteamMark(Painter &p, int x, int y, int size, COLORREF ink) { PaintOrnament(p, kOrnamentSteam, x, y, size, size, ink); }
 
 void PaintSteamButton(Painter &p, int x, int y, int w, int h, const std::string &label, int action, int arg, int mx, int my, bool enabled, bool strong)
 {
@@ -426,10 +414,10 @@ void PaintSteamButton(Painter &p, int x, int y, int w, int h, const std::string 
 	const COLORREF ink = !enabled ? pal::disabled : strong ? pal::onRed : pal::text;
 	p.Fill(x, y, w, h, fill);
 	p.Font(1);
-	const int mark = std::min(22, h - 16), gap = 10;
+	const int mark = std::min(24, h - 16), gap = 10;
 	const int textW = std::min(p.CapsWidth(label, 1), std::max(0, w - mark - gap - 24));
 	const int left = x + std::max(12, (w - mark - gap - textW) / 2);
-	DrawSteamMark(p, left, y + (h - mark) / 2, mark, ink, fill);
+	DrawSteamMark(p, left, y + (h - mark) / 2, mark, ink);
 	p.TextCaps(left + mark + gap, y, textW + 4, h, label, ink, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1);
 	if (enabled) p.AddHit(x, y, w, h, action, arg);
 }

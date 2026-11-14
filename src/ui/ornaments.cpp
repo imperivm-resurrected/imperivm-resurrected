@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <utility>
 
 namespace {
 const double kPi = 3.14159265358979;
@@ -217,6 +218,199 @@ bool InFlag(double x, double y)
 	return InRoundRect(x, y, 0.16, 0.04, 0.27, 0.96, 0.03) || InCircle(x, y, 0.215, 0.05, 0.07) || InPolygon(x, y, cloth);
 }
 
+double SegmentDistance(double x, double y, const Point &a, const Point &b)
+{
+	const double dx = b.x - a.x, dy = b.y - a.y;
+	const double t = std::max(0.0, std::min(1.0, ((x - a.x) * dx + (y - a.y) * dy) / (dx * dx + dy * dy)));
+	return std::hypot(x - a.x - t * dx, y - a.y - t * dy);
+}
+
+bool InBack(double x, double y)
+{
+	static const Point tip = {0.14, 0.5}, tail = {0.88, 0.5}, upper = {0.47, 0.17}, lower = {0.47, 0.83};
+	const double pen = 0.06;
+	return SegmentDistance(x, y, tip, tail) <= pen || SegmentDistance(x, y, tip, upper) <= pen || SegmentDistance(x, y, tip, lower) <= pen;
+}
+
+// The Steam logo as Simple Icons draws it (CC0 1.0; the logo is Valve's trademark), in a square of 24 units.
+const char kSteamPath[] =
+	"M11.979 0C5.678 0 .511 4.86.022 11.037l6.432 2.658c.545-.371 1.203-.59 1.912-.59.063 0 .125.004.188.006l2.861-4.142V8.91c0-2.495 2.028-4.524 "
+	"4.524-4.524 2.494 0 4.524 2.031 4.524 4.527s-2.03 4.525-4.524 4.525h-.105l-4.076 2.911c0 .052.004.105.004.159 0 1.875-1.515 3.396-3.39 "
+	"3.396-1.635 0-3.016-1.173-3.331-2.727L.436 15.27C1.862 20.307 6.486 24 11.979 24c6.627 0 11.999-5.373 11.999-12S18.605 0 11.979 0zM7.54 "
+	"18.21l-1.473-.61c.262.543.714.999 1.314 1.25 1.297.539 2.793-.076 3.332-1.375.263-.63.264-1.319.005-1.949s-.75-1.121-1.377-1.383c-.624-.26-"
+	"1.29-.249-1.878-.03l1.523.63c.956.4 1.409 1.5 1.009 2.455-.397.957-1.497 1.41-2.454 1.012H7.54zm11.415-9.303c0-1.662-1.353-3.015-3.015-"
+	"3.015-1.665 0-3.015 1.353-3.015 3.015 0 1.665 1.35 3.015 3.015 3.015 1.663 0 3.015-1.35 3.015-3.015zm-5.273-.005c0-1.252 1.013-2.266 "
+	"2.265-2.266 1.249 0 2.266 1.014 2.266 2.266 0 1.251-1.017 2.265-2.266 2.265-1.253 0-2.265-1.014-2.265-2.265z";
+const double kSteamUnits = 24;
+// Each curve of a path becomes this many straight pieces, and each row of pixels is crossed by this many lines.
+const int kCurvePieces = 16, kFillLines = 32;
+
+bool IsSeparator(char c) { return c == ' ' || c == ',' || c == '\t' || c == '\r' || c == '\n'; }
+
+// A number of an SVG path, which can start right where the last one ended ("4.86.022" is 4.86 then .022). Read by hand: strtod follows
+// the locale's decimal point.
+bool ReadNumber(const char *&s, double &out)
+{
+	while (IsSeparator(*s)) s++;
+	const char *p = s;
+	const bool negative = *p == '-';
+	if (*p == '-' || *p == '+') p++;
+	double value = 0;
+	bool digits = false;
+	for (; *p >= '0' && *p <= '9'; p++, digits = true) value = value * 10 + (*p - '0');
+	if (*p == '.') {
+		p++;
+		for (double unit = 0.1; *p >= '0' && *p <= '9'; p++, unit /= 10, digits = true) value += (*p - '0') * unit;
+	}
+	if (!digits) return false;
+	out = negative ? -value : value;
+	s = p;
+	return true;
+}
+
+// The outlines of an SVG path, its curves cut into straight pieces. It knows the commands M, L, H, V, C, S and Z, in either case: what the
+// logos drawn here use. An unknown command or a missing number ends it.
+std::vector<std::vector<Point>> PathOutlines(const char *s)
+{
+	std::vector<std::vector<Point>> out;
+	Point at = {0, 0}, start = {0, 0}, control = {0, 0};
+	char command = 0;
+	bool curved = false;
+	const auto to = [&](Point p) {
+		if (out.empty()) out.push_back({at});
+		out.back().push_back(p);
+		at = p;
+	};
+	const auto cubic = [&](Point a, Point b, Point end) {
+		const Point from = at;
+		for (int i = 1; i <= kCurvePieces; i++) {
+			const double t = static_cast<double>(i) / kCurvePieces, u = 1 - t;
+			to({u * u * u * from.x + 3 * u * u * t * a.x + 3 * u * t * t * b.x + t * t * t * end.x,
+				u * u * u * from.y + 3 * u * u * t * a.y + 3 * u * t * t * b.y + t * t * t * end.y});
+		}
+		control = b;
+	};
+	for (;;) {
+		while (IsSeparator(*s)) s++;
+		if (!*s) break;
+		if ((*s >= 'A' && *s <= 'Z') || (*s >= 'a' && *s <= 'z')) command = *s++;
+		const bool relative = command >= 'a';
+		const double bx = relative ? at.x : 0, by = relative ? at.y : 0;
+		double n[6];
+		const auto read = [&](int count) {
+			for (int i = 0; i < count; i++) {
+				if (!ReadNumber(s, n[i])) return false;
+			}
+			return true;
+		};
+		bool curve = false;
+		switch (relative ? command - 'a' + 'A' : command) {
+		case 'M':
+			if (!read(2)) return out;
+			at = start = {bx + n[0], by + n[1]};
+			out.push_back({at});
+			command = relative ? 'l' : 'L';
+			break;
+		case 'L':
+			if (!read(2)) return out;
+			to({bx + n[0], by + n[1]});
+			break;
+		case 'H':
+			if (!read(1)) return out;
+			to({bx + n[0], at.y});
+			break;
+		case 'V':
+			if (!read(1)) return out;
+			to({at.x, by + n[0]});
+			break;
+		case 'C':
+			if (!read(6)) return out;
+			cubic({bx + n[0], by + n[1]}, {bx + n[2], by + n[3]}, {bx + n[4], by + n[5]});
+			curve = true;
+			break;
+		case 'S':
+			if (!read(4)) return out;
+			// The first control point mirrors the last one of the curve before, or is the current point when there was none.
+			cubic(curved ? Point{2 * at.x - control.x, 2 * at.y - control.y} : at, {bx + n[0], by + n[1]}, {bx + n[2], by + n[3]});
+			curve = true;
+			break;
+		case 'Z':
+			at = start;
+			command = 0;
+			break;
+		default: return out;
+		}
+		curved = curve;
+	}
+	return out;
+}
+
+void AddSpan(std::vector<double> &row, int width, double from, double to)
+{
+	from = std::max(from, 0.0);
+	to = std::min(to, static_cast<double>(width));
+	if (to <= from) return;
+	const int first = static_cast<int>(from), last = static_cast<int>(to);
+	if (first == last) {
+		row[first] += to - from;
+		return;
+	}
+	row[first] += first + 1 - from;
+	for (int x = first + 1; x < last; x++) row[x] += 1;
+	if (last < width) row[last] += to - last;
+}
+
+// How much of each pixel the outlines cover, filled by the nonzero rule as SVG does. Each of kFillLines lines across a row of pixels adds
+// the exact length of what it crosses inside, so an edge gets its share in every pixel it passes through.
+std::vector<uint8_t> FillOutlines(int width, int height, const std::vector<std::vector<Point>> &outlines, double units)
+{
+	struct Edge {
+		double x0, y0, x1, y1;
+		int winding;
+	};
+	const double sx = width / units, sy = height / units;
+	std::vector<Edge> edges;
+	for (const std::vector<Point> &o : outlines) {
+		for (size_t i = 0; i < o.size(); i++) {
+			const Point a = {o[i].x * sx, o[i].y * sy}, b = {o[(i + 1) % o.size()].x * sx, o[(i + 1) % o.size()].y * sy};
+			if (a.y < b.y) edges.push_back({a.x, a.y, b.x, b.y, 1});
+			else if (b.y < a.y) edges.push_back({b.x, b.y, a.x, a.y, -1});
+		}
+	}
+	std::vector<uint8_t> mask(static_cast<size_t>(width) * height);
+	std::vector<double> row(static_cast<size_t>(width) + 1);
+	std::vector<std::pair<double, int>> crossings;
+	for (int y = 0; y < height; y++) {
+		std::fill(row.begin(), row.end(), 0.0);
+		for (int k = 0; k < kFillLines; k++) {
+			const double ly = y + (k + 0.5) / kFillLines;
+			crossings.clear();
+			for (const Edge &e : edges) {
+				if (ly >= e.y0 && ly < e.y1) crossings.push_back({e.x0 + (ly - e.y0) * (e.x1 - e.x0) / (e.y1 - e.y0), e.winding});
+			}
+			std::sort(crossings.begin(), crossings.end());
+			int winding = 0;
+			double from = 0;
+			for (const std::pair<double, int> &c : crossings) {
+				const int before = winding;
+				winding += c.second;
+				if (before == 0 && winding != 0) from = c.first;
+				else if (before != 0 && winding == 0) AddSpan(row, width, from, c.first);
+			}
+		}
+		for (int x = 0; x < width; x++) {
+			mask[static_cast<size_t>(y) * width + x] = static_cast<uint8_t>(std::min(255.0, row[x] * 255 / kFillLines + 0.5));
+		}
+	}
+	return mask;
+}
+
+std::vector<uint8_t> SteamMask(int width, int height)
+{
+	static const std::vector<std::vector<Point>> outlines = PathOutlines(kSteamPath);
+	return FillOutlines(width, height, outlines, kSteamUnits);
+}
+
 bool InMouse(double x, double y)
 {
 	const double x0 = 0.2, x1 = 0.8, y0 = 0.04, y1 = 0.96, mid = 0.5, split = 0.42, wall = 0.075;
@@ -284,6 +478,8 @@ std::vector<uint8_t> OrnamentMask(Ornament ornament, int width, int height)
 	case kOrnamentChevron: return Coverage(width, height, InChevron);
 	case kOrnamentFlag: return Coverage(width, height, InFlag);
 	case kOrnamentMouse: return Coverage(width, height, InMouse);
+	case kOrnamentSteam: return SteamMask(width, height);
+	case kOrnamentBack: return Coverage(width, height, InBack);
 	default: return {};
 	}
 }

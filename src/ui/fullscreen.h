@@ -53,6 +53,10 @@ struct GhostButton {
 	bool enabled = true;
 };
 
+// The arrow of the buttons that go back, with its gap before the label: kBackArrowW wide, centred on `cy`.
+constexpr int kBackArrowW = 22;
+void PaintBackArrow(Painter &p, int x, int cy, COLORREF ink);
+
 int GhostButtonWidth(Painter &p, const std::string &label, bool arrow);
 // A button with only its outline, for the actions that leave a screen rather than act in it; `arrow` points back.
 void PaintGhostButton(Painter &p, int x, int y, int w, int h, const std::string &label, int action, bool arrow, bool enabled, int mx, int my);

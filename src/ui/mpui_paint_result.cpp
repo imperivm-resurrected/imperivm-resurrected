@@ -72,12 +72,9 @@ void Ghost(Painter &p, int x, int y, int w, int h, const std::string &label, int
 	p.Frame(x, y, w, h, hot ? pal::edgeHot : pal::edge);
 	const COLORREF ink = hot ? pal::text : pal::textDim;
 	p.Font(4);
-	const int tw = p.CapsWidth(label, 2), tx = x + (w - tw - (arrow ? 18 : 0)) / 2;
-	if (arrow) {
-		p.ArrowLeft(tx, y + h / 2 - 5, 6, 10, ink);
-		p.Fill(tx + 5, y + h / 2, 7, 1, ink);
-	}
-	p.TextCaps(tx + (arrow ? 18 : 0), y, tw + 2, h, label, ink, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
+	const int tw = p.CapsWidth(label, 2), tx = x + (w - tw - (arrow ? kBackArrowW : 0)) / 2;
+	if (arrow) PaintBackArrow(p, tx, y + h / 2, ink);
+	p.TextCaps(tx + (arrow ? kBackArrowW : 0), y, tw + 2, h, label, ink, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
 	p.AddHit(x, y, w, h, kRankedAct, arg);
 }
 

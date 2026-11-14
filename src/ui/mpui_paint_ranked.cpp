@@ -581,8 +581,8 @@ void PaintBoard(Painter &p, const State &st)
 		const int w = 150;
 		const bool hot = p.Hover(tx, top, w, 44, mx, my);
 		p.Frame(tx, top, w, 44, hot ? pal::edgeHot : pal::edge);
-		p.ArrowLeft(tx + 22, top + 17, 6, 10, hot ? pal::text : pal::textDim);
-		Caps(p, tx + 36, top, w - 44, 44, "Summary", hot ? pal::text : pal::textDim);
+		PaintBackArrow(p, tx + 18, top + 22, hot ? pal::text : pal::textDim);
+		Caps(p, tx + 18 + kBackArrowW, top, w - 26 - kBackArrowW, 44, "Summary", hot ? pal::text : pal::textDim);
 		p.AddHit(tx, top, w, 44, kRankedAct, kRkHub);
 		tx += w + 16;
 	}

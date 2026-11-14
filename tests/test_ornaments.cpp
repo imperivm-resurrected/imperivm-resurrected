@@ -91,6 +91,37 @@ static void PinAndChevronShapes()
 	CHECK_EQ(at(chevron, 0.9, 0.1), 0);
 }
 
+// The Steam logo is filled from its outline: a disc with the piston cut out, and a ring left inside the big wheel.
+static void SteamLogoShape()
+{
+	const int size = 96;  // four pixels to each unit of the logo's 24
+	const std::vector<uint8_t> m = OrnamentMask(kOrnamentSteam, size, size);
+	const auto at = [&](double ux, double uy) { return static_cast<int>(m[static_cast<size_t>(uy * 4) * size + static_cast<size_t>(ux * 4)]); };
+	CHECK_EQ(at(0.5, 0.5), 0);  // outside the disc
+	CHECK_EQ(at(23.5, 23.5), 0);
+	CHECK_EQ(at(6, 6), 255);  // the disc
+	CHECK_EQ(at(21.5, 8.9), 255);  // the disc right of the big wheel
+	CHECK_EQ(at(15.94, 8.91), 0);  // the middle of the big wheel
+	CHECK(at(18.6, 8.9) >= 250);  // its ring
+	CHECK_EQ(at(19.7, 8.9), 0);  // the gap around the ring
+	CHECK_EQ(at(13, 12.5), 0);  // the rod
+}
+
+static void BackArrowShape()
+{
+	const int size = 40;
+	const std::vector<uint8_t> m = OrnamentMask(kOrnamentBack, size, size);
+	const auto at = [&](int x, int y) { return static_cast<int>(m[static_cast<size_t>(y) * size + x]); };
+	CHECK_EQ(at(12, 20), 255);  // the shaft
+	CHECK_EQ(at(33, 20), 255);
+	CHECK_EQ(at(6, 20), 255);  // the tip
+	CHECK_EQ(at(13, 12), 255);  // the upper stroke of the head
+	CHECK_EQ(at(13, 27), 255);  // the lower one
+	CHECK_EQ(at(24, 12), 0);  // between the head and the shaft
+	CHECK_EQ(at(36, 4), 0);
+	CHECK_EQ(at(1, 1), 0);
+}
+
 static bool BelowShallowLine(double x, double y) { return y > 0.3 + 0.12 * x; }
 
 // A shallow edge crosses many pixels a little at a time: each of them has to get its own share, not one of a few steps.
@@ -167,5 +198,7 @@ int main()
 	IconsAreLegibleWhenSmall();
 	RuleFadesOutAtBothEnds();
 	PinAndChevronShapes();
+	SteamLogoShape();
+	BackArrowShape();
 	return test::Summary("ornaments");
 }
