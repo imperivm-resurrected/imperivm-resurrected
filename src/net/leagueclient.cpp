@@ -137,7 +137,9 @@ void StartLink(unsigned serial)
 	if (g_link.serial != serial || g_link.phase != LeagueLinkPhase::Starting) return;
 	if (!ok) {
 		g_link.phase = LeagueLinkPhase::Unlinked;
-		g_link.error = r.status ? "The league server refused the request. Try again later." : "Couldn't reach the league server. Check your connection and try again.";
+		if (r.status == 429) g_link.error = "Too many link codes were asked for this account. Try again in a few minutes.";
+		else if (r.status) g_link.error = "The league server refused the request. Try again later.";
+		else g_link.error = "Couldn't reach the league server. Check your connection and try again.";
 		return;
 	}
 	g_link.phase = LeagueLinkPhase::Waiting;

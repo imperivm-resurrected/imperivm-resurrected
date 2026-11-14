@@ -147,8 +147,13 @@ bool LeagueParseReportAnswer(const Json &j, LeagueReportAnswer &out);
 struct LeagueError {
 	std::string code, message, contentKey;
 	int64_t until = 0, matchId = 0;
+	// Too many requests (429 rate_limited): whole seconds to wait before asking again; 0 when not said.
+	int retryAfter = 0;
 };
 LeagueError LeagueParseError(const Json &j);
+// How long to wait before the next poll: after a 429, what the server asks (at least 1 s, 5 s when it does not say), and never
+// less than `normalMs`; after anything else, `normalMs`.
+int64_t LeagueRetryAfterMs(int httpStatus, const LeagueError &e, int64_t normalMs);
 
 // Where some Glory leaves a player: their rank and how far into its division (0 to 99). Legate I has no top: `capped` is false there
 // and `into` keeps counting.

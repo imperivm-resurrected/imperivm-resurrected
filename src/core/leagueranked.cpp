@@ -377,7 +377,15 @@ LeagueError LeagueParseError(const Json &j)
 	e.until = Int64(j, "until");
 	if (!e.until) e.until = Int64(j, "queueBanUntil");
 	e.matchId = IdNumber(j.Get("matchId"));
+	e.retryAfter = std::max(0, Int(j, "retryAfter"));
 	return e;
+}
+
+int64_t LeagueRetryAfterMs(int httpStatus, const LeagueError &e, int64_t normalMs)
+{
+	if (httpStatus != 429) return normalMs;
+	const int64_t asked = e.retryAfter > 0 ? static_cast<int64_t>(std::min(e.retryAfter, 3600)) * 1000 : 5000;
+	return std::max(asked, normalMs);
 }
 
 LeagueGloryPlace LeagueGloryPlaceOf(int glory)

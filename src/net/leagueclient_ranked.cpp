@@ -148,6 +148,12 @@ std::string FailureNotice(const Answer &a)
 	return "The league server refused the request. Try again later.";
 }
 
+// After a poll the server did not answer: the usual retry, or as long as the server asks when polled too often (429), quietly.
+DWORD RetryIn(const Answer &a, DWORD normalMs)
+{
+	return static_cast<DWORD>(LeagueRetryAfterMs(a.r.status, a.error, a.r.status == 429 ? normalMs : kRetryMs));
+}
+
 // Under g_mx: back to not searching, forgetting the match.
 void ToIdle(Queue &q)
 {
@@ -373,6 +379,7 @@ void JoinThread(unsigned gen, std::string contentKey)
 			}
 			else if (code == "wrong_content") SetNotice(g_q, "This season is played with other gameplay content. Change your content profile to search.", true);
 			else if (code == "no_season") SetNotice(g_q, "No ranked season is being played now.", true);
+			else if (a.r.status == 429) SetNotice(g_q, "You searched too often: wait a few seconds and search again.", false);
 			else SetNotice(g_q, FailureNotice(a), true);
 			LogW("league", "ranked: could not enter the queue (%s)", a.r.Describe().c_str());
 		}
@@ -391,7 +398,7 @@ void PollQueueThread(unsigned gen, bool recovering)
 		std::lock_guard<std::mutex> lock(g_mx);
 		g_q.busy = false;
 		if (gen != g_q.gen) return;
-		g_q.nextPoll = GetTickCount() + (ok ? kQueuePollMs : kRetryMs);
+		g_q.nextPoll = GetTickCount() + (ok ? kQueuePollMs : RetryIn(a, kQueuePollMs));
 		if (!ok) {
 			if (a.r.status == 401 || a.r.failure == "not linked") {
 				ToIdle(g_q);
@@ -498,7 +505,7 @@ void PollMatchThread(unsigned gen, int64_t id)
 		std::lock_guard<std::mutex> lock(g_mx);
 		g_q.busy = false;
 		if (gen != g_q.gen || id != g_q.matchId) return;
-		g_q.nextPoll = GetTickCount() + (ok ? kMatchPollMs : kRetryMs);
+		g_q.nextPoll = GetTickCount() + (ok ? kMatchPollMs : RetryIn(a, kMatchPollMs));
 		if (!ok) {
 			if (a.r.status == 404 || a.r.status == 401) {
 				ToIdle(g_q);
@@ -651,7 +658,7 @@ void PollResultThread(int64_t id)
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
 		g_result.polling = false;
-		g_result.nextPoll = GetTickCount() + kResultPollMs;
+		g_result.nextPoll = GetTickCount() + (a.r.status == 429 ? RetryIn(a, kResultPollMs) : kResultPollMs);
 		LeagueRankedOutcome &v = g_result.view;
 		if (!ok || v.state != LeagueResultState::Awaiting || v.game.matchId != id || t.status != LeagueMatchStatus::Done) return;
 		LeagueReportAnswer answer = v.answer;

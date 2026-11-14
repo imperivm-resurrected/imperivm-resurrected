@@ -265,6 +265,22 @@ void ReportAndErrors()
 	CHECK_EQ(e.contentKey, std::string("c7d1"));
 	e = LeagueParseError(Parse(R"({"status":"cancelled","queueBanUntil":99})"));
 	CHECK_EQ(static_cast<unsigned long long>(e.until), 99ULL);
+
+	// Too many requests: the poll waits what the server asks, never less than its usual pace.
+	e = LeagueParseError(Parse(R"({"retryAfter":2,"error":"rate_limited","message":"Too many requests; wait a moment"})"));
+	CHECK_EQ(e.code, std::string("rate_limited"));
+	CHECK_EQ(e.retryAfter, 2);
+	CHECK_EQ(static_cast<int>(LeagueRetryAfterMs(429, e, 1000)), 2000);
+	CHECK_EQ(static_cast<int>(LeagueRetryAfterMs(429, e, 5000)), 5000);
+	e.retryAfter = 45;
+	CHECK_EQ(static_cast<int>(LeagueRetryAfterMs(429, e, 3000)), 45000);
+	CHECK_EQ(static_cast<int>(LeagueRetryAfterMs(429, LeagueError(), 0)), 5000);
+	e.retryAfter = 100000;
+	CHECK_EQ(static_cast<int>(LeagueRetryAfterMs(429, e, 0)), 3600000);
+	// Anything else keeps the usual retry.
+	CHECK_EQ(static_cast<int>(LeagueRetryAfterMs(503, e, 6000)), 6000);
+	CHECK_EQ(static_cast<int>(LeagueRetryAfterMs(0, e, 6000)), 6000);
+	CHECK_EQ(LeagueParseError(Parse(R"({"retryAfter":-3})")).retryAfter, 0);
 }
 
 void MeBadges()
