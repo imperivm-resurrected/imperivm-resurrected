@@ -52,13 +52,6 @@ struct RoomAuto {
 };
 RoomAuto g_auto;
 
-int64_t EpochNowMs()
-{
-	FILETIME ft;
-	GetSystemTimeAsFileTime(&ft);
-	return static_cast<int64_t>((((static_cast<unsigned long long>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime) - 116444736000000000ULL) / 10000ULL);
-}
-
 bool InGame()
 {
 	return *reinterpret_cast<void **>(addr::kGame) != nullptr;
@@ -496,14 +489,99 @@ bool RankedRoomAction(int action, int arg)
 	}
 }
 
+namespace {
+
+void OpenDispute(int64_t matchId)
+{
+	RankedScreen &r = g_s.ranked;
+	if (matchId <= 0 || r.view.disputeBusy) return;
+	r.disputeMatch = matchId;
+	r.disputeText.clear();
+	FocusField(kRankedField);
+}
+
+}
+
+std::string &RankedFieldText()
+{
+	return g_s.ranked.disputeText;
+}
+
+void RankedFieldEnter()
+{
+	RankedScreen &r = g_s.ranked;
+	std::string text = r.disputeText;
+	while (!text.empty() && text.back() == ' ') text.pop_back();
+	while (!text.empty() && text.front() == ' ') text.erase(text.begin());
+	if (text.size() < 4) {
+		ModUiToast("Say in a few words what went wrong.");
+		FocusField(kRankedField);
+		return;
+	}
+	LeagueMatchDispute(r.disputeMatch, text);
+	r.disputeMatch = 0;
+	r.disputeText.clear();
+	g_s.focus = kNoField;
+}
+
+void PaintRankedDispute(Painter &p, const State &st)
+{
+	const int mx = st.mouseX, my = st.mouseY;
+	const Dialog d = DialogBegin(p, st.viewW, st.viewH, 620, 290, "Report a problem", pal::redText);
+	DialogText(p, d, 64, "Tell the league in a few words what went wrong with this game. The result stays as it is; the team reviews the game.",
+		pal::textDim, 3);
+	PaintEditField(p, d.BodyX(), d.y + 136, d.BodyW(), 40, st.ranked.disputeText, Tr("What happened?"), st.focus == kRankedField, false, st.edit,
+		kFieldRanked);
+	DialogButtons(p, d, {{"Send", kRankedAct, kRkDisputeSend, true, !st.ranked.view.disputeBusy}, {"Cancel", kRankedAct, kRkDisputeCancel}}, mx, my);
+}
+
 void RankedAction(int arg)
 {
 	RankedScreen &r = g_s.ranked;
-	if (arg >= kRkRow) {
+	if (arg >= kRkDisputeHistory && arg < kRkArgEnd) {
+		const size_t i = static_cast<size_t>(arg - kRkDisputeHistory);
+		if (i < r.view.history.games.size()) OpenDispute(r.view.history.games[i].id);
+		return;
+	}
+	if (arg >= kRkDisputeRecent && arg < kRkDisputeHistory) {
+		const size_t i = static_cast<size_t>(arg - kRkDisputeRecent);
+		if (i < r.view.recent.size()) OpenDispute(r.view.recent[i].id);
+		return;
+	}
+	if (arg >= kRkRow && arg < kRkDisputeRecent) {
 		r.boardSel = arg - kRkRow;
 		return;
 	}
 	switch (arg) {
+	case kRkHistory:
+		r.sub = kRankedHistory;
+		r.historyBack.clear();
+		LeagueHistoryRequest(0);
+		break;
+	case kRkHistoryNewest:
+		r.historyBack.clear();
+		LeagueHistoryRequest(0);
+		break;
+	case kRkHistoryNext:
+		if (r.view.historyLoaded && r.view.history.more) {
+			r.historyBack.push_back(r.view.historyBefore);
+			LeagueHistoryRequest(LeagueHistoryNextBefore(r.view.history));
+		}
+		break;
+	case kRkHistoryPrev:
+		if (!r.historyBack.empty()) {
+			const int64_t before = r.historyBack.back();
+			r.historyBack.pop_back();
+			LeagueHistoryRequest(before);
+		}
+		break;
+	case kRkDisputeResult: OpenDispute(r.view.result.game.matchId); break;
+	case kRkDisputeSend: RankedFieldEnter(); break;
+	case kRkDisputeCancel:
+		r.disputeMatch = 0;
+		r.disputeText.clear();
+		g_s.focus = kNoField;
+		break;
 	case kRkSearch:
 		LeagueQueueJoin();
 		break;
@@ -576,6 +654,14 @@ void RankedFrame()
 	const LeagueResultState before = r.view.result.state;
 	r.view = LeagueRankedState();
 	const LeagueRankedView &v = r.view;
+	if (v.disputeSerial != r.disputeSeen) {
+		r.disputeSeen = v.disputeSerial;
+		if (!v.disputeNotice.empty()) ModUiToast(v.disputeNotice, v.disputeBad);
+	}
+	if (r.disputeMatch && g_s.view != kViewRanked) {
+		r.disputeMatch = 0;
+		if (g_s.focus == kRankedField) g_s.focus = kNoField;
+	}
 	// The match found is answered in a dialog over any tab; the room's own screen hides it.
 	g_s.searching = !g_s.game.active && (v.phase == LeagueRankedPhase::Found || v.phase == LeagueRankedPhase::Accepted);
 	g_s.found = g_s.searching;
@@ -624,37 +710,55 @@ void RankedGameThreadTick()
 	}
 }
 
-int PaintRankedPill(Painter &p, const State &st, int right)
+void PaintRankedPill(Painter &p, const State &st, int right, int left)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const LeagueRankedView &v = st.ranked.view;
 	const bool searching = v.phase == LeagueRankedPhase::Joining || v.phase == LeagueRankedPhase::Searching;
 	const bool ready = (v.phase == LeagueRankedPhase::Ready || v.phase == LeagueRankedPhase::Playing) && !st.room.id && !st.connecting;
-	if (!searching && !ready) return right;
+	if (!searching && !ready) return;
 	const ScreenLayout l = ScreenLayoutFor(st.viewW, st.viewH);
-	const int h = kHeaderButtonH, w = searching ? 340 : 360, x = right - 12 - w, y = l.margin;
-	p.Fill(x, y, w, h, pal::selected);
-	p.Fill(x, y, 3, h, pal::red);
+	const int h = kHeaderButtonH, y = l.margin, room = right - 12 - left;
+	p.Font(4);
 	if (searching) {
-		p.Spinner(x + 26, y + h / 2, 9, 4, GetTickCount());
-		p.Font(4);
-		p.TextCaps(x + 46, y, 160, h, "Searching 1 vs 1", pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
+		const std::string clock = LeagueClockText(LeagueServerNowMs() - v.since);
 		SelectObject(p.dc, BrandFont(BrandFace::Display, 26, p.s));
 		p.raw = true;
-		p.Text(x + 210, y, 80, h, LeagueClockText(EpochNowMs() - v.since), pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+		const int clockW = std::max(p.TextWidth("00:00"), p.TextWidth(clock)) + 8;
+		p.raw = false;
+		// The spinner, the label, the time and the cross: the label shortens, and goes, before anything overlaps.
+		p.Font(4);
+		const int fixed = 46 + clockW + 44;
+		const char *label = "Searching 1 vs 1";
+		int labelW = p.CapsWidth(label, 2) + 14;
+		if (fixed + labelW > room) {
+			label = "1 vs 1";
+			labelW = p.CapsWidth(label, 2) + 14;
+		}
+		if (fixed + labelW > room) labelW = 0;
+		const int w = fixed + labelW, x = right - 12 - w;
+		p.Fill(x, y, w, h, pal::selected);
+		p.Fill(x, y, 3, h, pal::red);
+		p.Spinner(x + 26, y + h / 2, 9, 4, GetTickCount());
+		if (labelW) p.TextCaps(x + 46, y, labelW, h, label, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
+		SelectObject(p.dc, BrandFont(BrandFace::Display, 26, p.s));
+		p.raw = true;
+		p.Text(x + 46 + labelW, y, clockW, h, clock, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 		p.raw = false;
 		const bool hot = p.Hover(x + w - 44, y, 44, h, mx, my);
 		p.Line(x + w - 28, y + 15, x + w - 16, y + 27, hot ? pal::text : pal::textDim, 2);
 		p.Line(x + w - 28, y + 27, x + w - 16, y + 15, hot ? pal::text : pal::textDim, 2);
 		p.AddHit(x + w - 44, y, 44, h, kRankedAct, kRkCancel);
 		p.AddHit(x, y, w - 44, h, kRanked, 0);
+		return;
 	}
-	else {
-		p.Font(4);
-		p.TextCaps(x + 20, y, w - 40, h, "Ranked match ready  \xC2\xB7  go to the room", pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
-		p.AddHit(x, y, w, h, kRankedAct, kRkRoom);
-	}
-	return x;
+	const char *label = "Ranked match ready  \xC2\xB7  go to the room";
+	if (p.CapsWidth(label, 2) + 40 > room) label = "Go to the room";
+	const int w = std::min(std::max(160, room), p.CapsWidth(label, 2) + 40), x = right - 12 - w;
+	p.Fill(x, y, w, h, pal::selected);
+	p.Fill(x, y, 3, h, pal::red);
+	p.TextCaps(x + 20, y, w - 30, h, label, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 2);
+	p.AddHit(x, y, w, h, kRankedAct, kRkRoom);
 }
 
 void PaintSearch(Painter &p, const State &st)
@@ -691,8 +795,8 @@ void PaintSearch(Painter &p, const State &st)
 	const std::string otherName = !o.name.empty() ? o.name : Tr("Opponent");
 	PaintSide(p, dx + dw - 32 - cardW, cy, cardW, cardH, _strtoui64(o.steamId.c_str(), nullptr, 10), otherName, o.tier, o.division, false, otherAccepted);
 
-	// The countdown to answer, in the middle.
-	const int64_t now = EpochNowMs();
+	// The countdown to answer, in the middle, on the server's clock.
+	const int64_t now = LeagueServerNowMs();
 	const int64_t acceptBy = v.found.acceptBy;
 	const int mid = dx + dw / 2;
 	SelectObject(p.dc, BrandFont(BrandFace::Display, 34, p.s));

@@ -32,7 +32,7 @@ void DoAction(int action, int arg)
 	if (TourneyBlocksAction(action, arg)) return;
 	if (action != kChatFocus && action != kFieldName && action != kFieldPass && action != kChatSend &&
 		action != kFieldJoinPass && action != kJoin && action != kFieldSearch && action != kPassShow && action != kFieldRoomName && action != kFieldTourney &&
-		action != kFieldCupName && action != kFieldCupDescription && action != kFieldCupCode) {
+		action != kFieldCupName && action != kFieldCupDescription && action != kFieldCupCode && action != kFieldRanked) {
 		g_s.focus = kNoField;
 	}
 	switch (action) {
@@ -73,6 +73,7 @@ void DoAction(int action, int arg)
 	case kFieldCupName: FocusField(kCupNameField); break;
 	case kFieldCupDescription: FocusField(kCupDescriptionField); break;
 	case kFieldCupCode: FocusField(kCupCodeField); break;
+	case kFieldRanked: FocusField(kRankedField); break;
 	case kCreate:
 		if (g_s.nameInput.empty()) g_s.nameInput = Tr("Game of ") + g_s.player;
 		g_s.view = kViewCreate;
@@ -85,6 +86,10 @@ void DoAction(int action, int arg)
 		LogI("lobby", "menu closed (classic menu)");
 		break;
 	case kBack:
+		if (g_s.view == kViewRanked && g_s.ranked.disputeMatch) {
+			RankedAction(kRkDisputeCancel);
+			break;
+		}
 		if (g_s.recoverAsk || g_s.recoverWaitHost) {
 			DoAction(kRecoverNo, 0);
 			break;
@@ -787,6 +792,7 @@ std::string &FocusedText()
 	case kCupNameField:
 	case kCupDescriptionField:
 	case kCupCodeField: return TourneyFieldText(g_s.focus);
+	case kRankedField: return RankedFieldText();
 	default: return g_s.passInput;
 	}
 }
@@ -796,7 +802,7 @@ int FieldOfAction(int action)
 	return action == kChatFocus ? kChatField : action == kFieldName ? kNameField : action == kFieldPass ? kPassField
 		: action == kFieldJoinPass ? kJoinPassField : action == kFieldSearch ? kSearchField
 		: action == kFieldPickSearch ? kPickSearchField : action == kFieldRoomName ? kRoomNameField : action == kFieldTourney ? kTourneyField : action == kFieldCupName ? kCupNameField
-		: action == kFieldCupDescription ? kCupDescriptionField : action == kFieldCupCode ? kCupCodeField : kNoField;
+		: action == kFieldCupDescription ? kCupDescriptionField : action == kFieldCupCode ? kCupCodeField : action == kFieldRanked ? kRankedField : kNoField;
 }
 
 int ActionOfField(int field)
@@ -804,7 +810,7 @@ int ActionOfField(int field)
 	return field == kChatField ? kChatFocus : field == kNameField ? kFieldName : field == kPassField ? kFieldPass
 		: field == kJoinPassField ? kFieldJoinPass : field == kSearchField ? kFieldSearch
 		: field == kPickSearchField ? kFieldPickSearch : field == kRoomNameField ? kFieldRoomName : field == kTourneyField ? kFieldTourney : field == kCupNameField ? kFieldCupName
-		: field == kCupDescriptionField ? kFieldCupDescription : field == kCupCodeField ? kFieldCupCode : -1;
+		: field == kCupDescriptionField ? kFieldCupDescription : field == kCupCodeField ? kFieldCupCode : field == kRankedField ? kFieldRanked : -1;
 }
 
 void FocusField(int field)
@@ -860,6 +866,7 @@ void FieldKey(UINT msg, WPARAM wp)
 		else if (g_s.focus == kChatField) DoAction(kChatSend, 0);
 		else if (g_s.focus == kJoinPassField) DoAction(kPassOk, 0);
 		else if (TourneyOwnsField(g_s.focus)) TourneyFieldEnter(g_s.focus);
+		else if (g_s.focus == kRankedField) RankedFieldEnter();
 		else if (g_s.focus == kRoomNameField) {
 			if (!g_s.roomNameInput.empty() && g_s.roomNameInput != g_s.room.info.name) RenameRoom(g_s.roomNameInput);
 			g_s.focus = kNoField;

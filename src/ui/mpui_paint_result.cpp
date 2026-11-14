@@ -5,6 +5,8 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <cstdio>
+#include <ctime>
 #include <string>
 
 #include "core/league.h"
@@ -52,6 +54,17 @@ std::string RankName(LeagueTier t, int division)
 std::string Signed(int v)
 {
 	return v > 0 ? "+" + std::to_string(v) : v < 0 ? "\xE2\x88\x92" + std::to_string(-v) : "0";
+}
+
+// "21:40" in this computer's time.
+std::string ClockOf(int64_t ms)
+{
+	const time_t t = static_cast<time_t>(ms / 1000);
+	tm local = {};
+	if (localtime_s(&local, &t) != 0) return std::string();
+	char buf[16];
+	sprintf_s(buf, "%02d:%02d", local.tm_hour, local.tm_min);
+	return buf;
 }
 
 // How a finished ranked game came out on the server, for the words of the screen.
@@ -188,7 +201,11 @@ void PaintStage(Painter &p, const State &st, int x, int y, int w, int h, Verdict
 	if (rated && f.deltaShown) {
 		Display(p, 56);
 		p.raw = true;
-		p.Text(x, y + 414, w, 56, Signed(r.delta) + " " + Tr("Glory"), r.delta >= 0 ? pal::ok : pal::bad, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		// The game that ends the placement gives a rank, not Glory won or lost.
+		if (f.kind == LeagueResultKind::PlacementDone) {
+			p.TextCaps(x, y + 414, w, 56, TrFmt("Placed in %s", {RankName(r.tierAfter, r.divisionAfter)}), Ink(r.tierAfter), DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
+		}
+		else p.Text(x, y + 414, w, 56, Signed(r.delta) + " " + Tr("Glory"), r.delta >= 0 ? pal::ok : pal::bad, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		p.raw = false;
 	}
 
@@ -244,6 +261,15 @@ void PaintStage(Painter &p, const State &st, int x, int y, int w, int h, Verdict
 		Ghost(p, cx + 102, y + 666, 252, 66, "See the leaderboard", kRkResultBoard, false, mx, my);
 	}
 	p.Font(3);
+	// Whoever left the game is locked out of the queue for a while: they read it here, with when they can search again.
+	if (o.game.left) {
+		const LeagueBan ban = LeagueMeState().me.ban;
+		const int64_t now = LeagueServerNowMs();
+		std::string line = Tr("You left the game before it ended: the league locks your search for a while.");
+		if (ban.until > now) line += " " + TrFmt("You can search again at %s.", {ClockOf(ban.until - LeagueServerClockOffsetMs())});
+		RawText(p, x + 20, y + 746, w - 40, 22, line, pal::bad);
+		return;
+	}
 	const char *footer = verdict == Verdict::Rated && o.answer.status == "confirmed" ? "Result confirmed by both players."
 		: verdict == Verdict::Rated ? "The league settled the game with the reports it got."
 		: f.done || !rated			? "If your opponent leaves before minute 3 the game does not count, and whoever left gets the penalty."
@@ -261,7 +287,7 @@ void PaintSummary(Painter &p, const State &st, int x, int y, int w, int h)
 	PaintIsotype(p, ix + 44, y + 96, 80, 160);
 	Display(p, 38);
 	p.raw = true;
-	p.TextCaps(ix + 108, y + 56, iw - 108, 40, g.map.empty() ? Tr("Ranked match") : g.map, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
+	p.TextCaps(ix + 108, y + 56, iw - 108, 40, g.map.empty() ? Tr("Ranked match") : LeagueMapText(g.map), pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
 	p.raw = false;
 	p.Font(0);
 	std::string facts = Tr("1 vs 1");
@@ -293,6 +319,17 @@ void PaintSummary(Painter &p, const State &st, int x, int y, int w, int h)
 	p.Text(ix, y + 252, iw, 26, line, verdict == Verdict::Rated && v.result.answer.status == "confirmed" ? pal::ok : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 	p.Font(3);
 	p.TextWrapped(ix, y + 290, iw, 60, "The league checks that both reports describe the same game before it gives any Glory.", pal::caption);
+	// "Report a problem": the result stays, and the league's team reviews the game.
+	const int by = y + h - 68;
+	if (g.matchId <= 0 || by < y + 352) return;
+	const bool reported = std::find(v.disputed.begin(), v.disputed.end(), g.matchId) != v.disputed.end();
+	if (reported) {
+		p.Font(3);
+		p.Text(ix, by, iw, 44, "Problem reported: the league will review the game.", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	}
+	else if (v.result.state != LeagueResultState::Sending && LeagueDisputeOpen(g.at, LeagueServerNowMs())) {
+		Ghost(p, ix, by, iw, 44, "Report a problem", kRkDisputeResult, false, st.mouseX, st.mouseY);
+	}
 }
 
 void PaintPlace(Painter &p, const State &st, int x, int y, int w, int h)
@@ -348,7 +385,7 @@ void PaintRankedResult(Painter &p, const State &st)
 		p.TextCaps(l.margin, l.titleY, l.w - 2 * l.margin - bw - 32, l.titleH, title, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
 		std::string info = Tr("Ranked 1 vs 1");
 		if (v.seasonLoaded) info += "  \xC2\xB7  " + TrFmt("Season %s", {std::to_string(v.season.number)});
-		if (!o.game.map.empty()) info += "  \xC2\xB7  " + o.game.map;
+		if (!o.game.map.empty()) info += "  \xC2\xB7  " + LeagueMapText(o.game.map);
 		if (o.game.durationMs) info += "  \xC2\xB7  " + TrFmt("%s min", {std::to_string(o.game.durationMs / 60000)});
 		if (!o.game.opponent.empty()) info += "  \xC2\xB7  " + TrFmt("against %s", {o.game.opponent});
 		p.raw = true;

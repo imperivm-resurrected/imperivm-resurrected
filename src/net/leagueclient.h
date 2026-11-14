@@ -95,11 +95,14 @@ void LeagueGameThreadTick();
 //   Ready: both accepted; the server's host makes the Steam room. Playing: the room is registered and the game may be running.
 enum class LeagueRankedPhase { Idle, Joining, Searching, Found, Accepted, Ready, Playing };
 
-// A ranked game as this computer remembers it (the server has no list of a player's games yet).
+// The ranked game just played on this computer, for the result screen (the list of games is the server's).
 struct LeagueRankedGame {
 	int64_t matchId = 0, at = 0;
+	// `map` is the league's id of the map.
 	std::string opponent, opponentId, map;
 	bool won = false;
+	// This player left the game before it was decided: the league locks the queue for them.
+	bool left = false;
 	int delta = 0;
 	uint32_t durationMs = 0;
 	// "confirmed", "awaiting_other", "disputed"... as the last answer said; empty until the server answered.
@@ -144,15 +147,32 @@ struct LeagueRankedView {
 	// Calling off the match is on its way; the last match called off before its game.
 	bool abandoning = false;
 	int64_t calledOff = 0;
-	// The queue is locked until then (ms since 1970) after declining or letting a match go.
+	// The queue is locked until then (server time, ms since 1970), and why ("declined", "abandoned", "desync"; empty when not said).
 	int64_t banUntil = 0;
+	std::string banKind;
 	// The last thing that happened, as an English text to translate (with its values filled in by the server's), and whether it is bad.
 	std::string notice;
 	bool noticeBad = false;
 	// Counts the matches found, so the interface can call the player once per match.
 	unsigned foundSerial = 0;
 	LeagueRankedOutcome result;
-	std::vector<LeagueRankedGame> recent;
+	// The player's latest ranked games for the hub, newest first.
+	bool recentLoaded = false, recentFailed = false;
+	std::vector<LeagueHistoryGame> recent;
+	// The page of the full history: the games played before `historyBefore` (0: the newest).
+	bool historyLoading = false, historyLoaded = false;
+	int64_t historyBefore = 0;
+	LeagueHistoryPage history;
+	std::string historyError;
+	// Who uses the queue now.
+	bool statsLoaded = false;
+	LeagueStats stats;
+	// "Report a problem": a report on its way, the matches reported in this session and the last answer (its serial changes with each).
+	bool disputeBusy = false;
+	std::vector<int64_t> disputed;
+	std::string disputeNotice;
+	bool disputeBad = false;
+	unsigned disputeSerial = 0;
 	// Choosing the badge.
 	bool badgeBusy = false;
 	std::string badgeError;
@@ -164,6 +184,18 @@ void LeagueSeasonRefresh(bool force = false);
 void LeagueBoardRefresh(bool force = false);
 // A page of the full leaderboard: `limit` rows from `offset`, or the page around the player.
 void LeagueBoardRequest(int offset, int limit, bool aroundMe);
+// The hub's latest ranked games (GET /v1/league/matches?mine=1), at most once a minute unless forced.
+constexpr int kLeagueRecentGames = 5, kLeagueHistoryPage = 10;
+void LeagueRecentRefresh(bool force = false);
+// A page of the full history: the games played before `before` (0: the newest).
+void LeagueHistoryRequest(int64_t before);
+// GET /v1/league/stats, at most every 15 s.
+void LeagueStatsRefresh();
+// "Report a problem" with a ranked game (POST /v1/league/matches/:id/dispute): the result stays, and the league reviews it.
+void LeagueMatchDispute(int64_t matchId, const std::string &text);
+// The league server's clock now (ms since 1970), from this computer's corrected by the serverNow of its answers; and how far ahead it is.
+int64_t LeagueServerNowMs();
+int64_t LeagueServerClockOffsetMs();
 // Enters the queue with this computer's gameplay content. Refused (with a notice) when not linked, banned or already in a match.
 void LeagueQueueJoin();
 void LeagueQueueLeave();
