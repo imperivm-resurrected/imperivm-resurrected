@@ -228,6 +228,16 @@ std::string LeagueRankText(const std::string &tierName, int division)
 	return d.empty() ? tierName : tierName + " " + d;
 }
 
+LeagueMetal LeagueMetalFromId(const std::string &id)
+{
+	const std::string s = Lower(Trim(id));
+	if (s == "gold") return LeagueMetal::Gold;
+	if (s == "silver") return LeagueMetal::Silver;
+	if (s == "bronze") return LeagueMetal::Bronze;
+	if (s == "season") return LeagueMetal::Season;
+	return LeagueMetal::None;
+}
+
 LeagueBadge LeagueBadgeFromJson(const Json *v)
 {
 	LeagueBadge b;
@@ -241,7 +251,13 @@ LeagueBadge LeagueBadgeFromJson(const Json *v)
 		b.kind = b.tier == LeagueTier::None ? LeagueBadgeKind::None : LeagueBadgeKind::Rank;
 	}
 	else if (kind == "season") b.kind = LeagueBadgeKind::Season;
-	else if (kind == "trophy") b.kind = LeagueBadgeKind::Trophy;
+	else if (kind == "trophy") {
+		b.kind = LeagueBadgeKind::Trophy;
+		const Json *metal = v->Get("tier");
+		b.metal = metal && metal->type == Json::String ? LeagueMetalFromId(metal->str) : LeagueMetal::None;
+		if (b.metal == LeagueMetal::None) b.metal = LeagueMetal::Gold;
+		b.tier = LeagueTier::None;
+	}
 	b.season = Int(*v, "season");
 	b.title = v->GetString("title");
 	if (!LeagueTierHasDivisions(b.tier)) b.division = 0;

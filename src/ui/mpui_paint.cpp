@@ -10,6 +10,7 @@
 
 #include "ui/leagueui.h"
 #include "ui/mpui_internal.h"
+#include "ui/mpui_tourney.h"
 #include "ui/patronui.h"
 
 using namespace mpui_impl;
@@ -134,10 +135,11 @@ void PaintHeader(Painter &p, const State &st)
 	if (st.ranked.resultOpen) return;
 	const int mx = st.mouseX, my = st.mouseY;
 	const LobbyLayout l = LobbyLayoutFor(st.viewW, st.viewH);
+	if (st.view == kViewTournaments && PaintTourneyHeader(p, st)) return;
 	const int right = PaintRankedPill(p, st, PaintHeaderActions(p, l, {{"Back", kBack, true, true}}, mx, my));
 	PaintScreenTitle(p, l, "Multiplayer",
 		{{"Games", kListView, 0, st.view == kViewList, true}, {"Create game", kCreate, 0, st.view == kViewCreate, true},
-			{"Ranked", kRanked, 0, st.view == kViewRanked, true}},
+			{"Ranked", kRanked, 0, st.view == kViewRanked, true}, {"Tournaments", kTourney, kTourneyShowArg, st.view == kViewTournaments, true}},
 		right, mx, my);
 
 	// The caption line is the player's: avatar, name (with the laurel of a patron), the content profile and the open rooms.
@@ -479,7 +481,12 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis, 
 	const int bx = dx + 24, bw = dw - 48, bh = 52, by = dy + dh - 64;
 	if (canReturn) p.Button(bx, by - returnRoom, bw, bh, "Return to the game", kReturnGame, 0, mx, my, st.ready && !RejoinBusy(), true);
 	const std::string label = g.kickedMe ? "You were kicked from the room" : g.playing ? "Game in progress" : full ? "Room full" : same ? "Join" : missing.empty() ? "Restart and join" : "Download and join";
-	if (g.specOnly) {
+	if (TourneyLobbyWatchOnly(g)) {
+		// Only its two players enter the room of a tournament match; anyone else watches it once it starts.
+		if (g.playing && g.specLobby) p.Button(bx, by, bw, bh, "Watch the game", kSpectate, 0, mx, my, st.ready, true);
+		else p.Button(bx, by, bw, bh, "Tournament match: watch it once it starts", kJoin, 0, mx, my, false, false);
+	}
+	else if (g.specOnly) {
 		if (g.playing) p.Button(bx, by, bw, bh, "Watch the game", kSpectate, 0, mx, my, st.ready, true);
 		else p.Button(bx, by, bw, bh, "Room full", kJoin, 0, mx, my, false, false);
 	}
@@ -594,7 +601,12 @@ void PaintList(Painter &p, const State &st)
 		};
 		p.Font(1);
 		if (g.password) DrawLock(p, cx[0] + 4, y + (rowH - 16) / 2, pal::redText);
-		const int lockW = g.password ? 22 : 0;
+		int lockW = g.password ? 22 : 0;
+		if (TourneyLobby(g)) {
+			PaintBadge(p, cx[0] + 2 + lockW, y + (rowH - 22) / 2, 112, 22, "TOURNAMENT", pal::red, pal::onRed);
+			lockW += 120;
+			p.Font(1);
+		}
 		p.Text(cx[0] + 2 + lockW, y, cx[1] - cx[0] - 12 - lockW, rowH, g.name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.Font(0);
 		const PatronInfo hostPatron = PatronOf(g.owner);

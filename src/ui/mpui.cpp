@@ -9,6 +9,7 @@
 #include "core/names.h"
 
 #include "ui/mpui_internal.h"
+#include "ui/mpui_tourney.h"
 
 using namespace mpui_impl;
 
@@ -162,6 +163,9 @@ std::vector<int> Visible(const State &st)
 		}
 	};
 	std::stable_sort(out.begin(), out.end(), [&](int a, int b) {
+		// The rooms of tournament matches go first, as the matches people come to watch.
+		const bool ta = TourneyLobby(st.lobbies[a]), tb = TourneyLobby(st.lobbies[b]);
+		if (ta != tb) return ta;
 		const std::string ka = key(st.lobbies[a]), kb = key(st.lobbies[b]);
 		const int c = _stricmp(ka.c_str(), kb.c_str());
 		if (c != 0) return st.sortDesc ? c > 0 : c < 0;

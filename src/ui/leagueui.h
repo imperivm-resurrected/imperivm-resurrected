@@ -23,6 +23,9 @@ void PaintTint(ui::Painter &p, int x, int y, int w, int h, COLORREF c, int alpha
 void PaintArc(ui::Painter &p, int cx, int cy, int radius, int width, COLORREF c, float fraction);
 // The rays behind a new rank's emblem, `radius` long, at `alpha`.
 void PaintRays(ui::Painter &p, int cx, int cy, int radius, COLORREF c, int alpha);
+// A tournament's phalera in a square of `size`: the plain one up to 47 px, the champion's one with rivets from 48.
+void DrawLeaguePhalera(ui::Painter &p, int x, int y, int size, LeagueMetal metal);
+COLORREF LeagueMetalInk(LeagueMetal metal);
 // What a badge takes after a name, gap included; 0 without one. Take it off the name's box before drawing the name.
 int LeagueBadgeRoom(const LeagueBadge &badge);
 // The badge 6 px after a name drawn in the box (nameX, y, nameW, h) with the painter's current font, centred on the box's height,

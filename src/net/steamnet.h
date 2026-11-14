@@ -110,8 +110,8 @@ struct OnlineCreateSettings {
 	int visibility = 0;
 	bool spectators = true;
 	int specDelay = 30;
-	// A ranked or tournament room: its "irm" data for the league ("ranked:<id>"), and who may watch it: -1 the room's own visibility,
-	// 0 everyone, so the game of a private room still shows in the list for spectators.
+	// A ranked or tournament room: its "irm" data for the league ("ranked:<id>" or "tournament:<id>"), and who may watch it: -1 the
+	// room's own visibility, 0 everyone, so the game of a private room still shows in the list for spectators.
 	std::string leagueTag;
 	int specVisibility = -1;
 };

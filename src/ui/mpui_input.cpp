@@ -8,6 +8,7 @@
 #include "core/log.h"
 
 #include "ui/mpui_internal.h"
+#include "ui/mpui_tourney.h"
 
 using namespace mpui_impl;
 
@@ -74,7 +75,10 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 			ListMove(g_s.detail, g_s.detailGeom, at);
 			ChatBarMove(at);
 			ScrollTo to;
-			if (ScrollbarMouse(g_s.dropBar, g_s.hits, msg, wp, at, to) && to.id == kDropMenuBar) g_s.dropScroll = to.pos;
+			if (ScrollbarMouse(g_s.dropBar, g_s.hits, msg, wp, at, to)) {
+				if (to.id == kDropMenuBar) g_s.dropScroll = to.pos;
+				else TourneyScrollTo(to.id, to.pos);
+			}
 		}
 		if (g_s.syncConfirm || g_s.view == kViewCreate) {
 			const POINT at = {g_s.mouseX, g_s.mouseY};
@@ -104,6 +108,7 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 			ScrollTo to;
 			if (ScrollbarMouse(g_s.dropBar, g_s.hits, msg, wp, pt, to)) {
 				if (to.id == kDropMenuBar) g_s.dropScroll = to.pos;
+				else TourneyScrollTo(to.id, to.pos);
 				return true;
 			}
 		}
@@ -155,6 +160,7 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 			return true;
 		}
 		if (g_s.view == kViewCreate && !g_s.dropOpen && ListWheel(g_s.createModsList, g_s.createModsGeom, POINT{g_s.mouseX, g_s.mouseY}, GET_WHEEL_DELTA_WPARAM(wp))) return true;
+		if (g_s.view == kViewTournaments && !g_s.dropOpen && !g_s.room.id && TourneyWheel(GET_WHEEL_DELTA_WPARAM(wp), (GET_KEYSTATE_WPARAM(wp) & MK_SHIFT) != 0)) return true;
 	}
 		{
 			std::lock_guard<std::mutex> lock(g_chat.mx);

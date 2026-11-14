@@ -24,23 +24,27 @@ using namespace ui;
 
 namespace {
 
-enum Art { kArtBadge, kArtVexillum, kArtTrophy, kArtEmblem };
+enum Art { kArtBadge, kArtVexillum, kArtTrophy, kArtEmblem, kArtPhalera };
 
 std::mutex g_cacheMx;
 
-// Premultiplied 32-bit bitmaps for AlphaBlend, one per picture and size; there are only a handful.
-HBITMAP Bitmap(Art art, LeagueTier tier, int size)
+// Premultiplied 32-bit bitmaps for AlphaBlend, one per picture and size; there are only a handful. `variant` is the tier, or the metal of
+// a phalera.
+HBITMAP Bitmap(Art art, int variant, int size)
 {
 	std::lock_guard<std::mutex> lock(g_cacheMx);
 	static std::map<std::tuple<int, int, int>, HBITMAP> cache;
-	const auto key = std::make_tuple(static_cast<int>(art), static_cast<int>(tier), size);
+	const auto key = std::make_tuple(static_cast<int>(art), variant, size);
 	auto it = cache.find(key);
 	if (it != cache.end()) return it->second;
+	const LeagueTier tier = static_cast<LeagueTier>(variant);
+	const LeagueMetal metal = static_cast<LeagueMetal>(variant);
 	LeagueImage img;
 	switch (art) {
 	case kArtBadge: img = LeagueBadgePixels(tier, size); break;
 	case kArtVexillum: img = LeagueVexillumPixels(tier, size); break;
-	case kArtTrophy: img = LeagueTrophyPixels(size); break;
+	case kArtTrophy: img = LeagueTrophyImage(metal, size); break;
+	case kArtPhalera: img = LeaguePhaleraImage(metal, size); break;
 	default: img = LeagueEmblemImage(tier, size); break;
 	}
 	BITMAPINFO bi = {};
@@ -224,14 +228,29 @@ void DrawLeagueBadge(Painter &p, int x, int y, int size, const LeagueBadge &badg
 	const int scale = std::max(1, static_cast<int>(std::lround(px / static_cast<double>(kLeagueBadgeGrid))));
 	const Art art = badge.kind == LeagueBadgeKind::Trophy ? kArtTrophy : badge.kind == LeagueBadgeKind::Season ? kArtVexillum : kArtBadge;
 	const int side = kLeagueBadgeGrid * scale;
-	Blit(p, Bitmap(art, badge.tier, scale), r.left + (px - side) / 2, r.top + (static_cast<int>(r.bottom - r.top) - side) / 2, side, side);
+	// The phalera is drawn from its shapes at the size it is shown; the shields are pixels repeated `scale` times.
+	const int variant = art == kArtTrophy ? static_cast<int>(badge.metal) : static_cast<int>(badge.tier);
+	Blit(p, Bitmap(art, variant, art == kArtTrophy ? side : scale), r.left + (px - side) / 2, r.top + (static_cast<int>(r.bottom - r.top) - side) / 2, side,
+		side);
+}
+
+void DrawLeaguePhalera(Painter &p, int x, int y, int size, LeagueMetal metal)
+{
+	const RECT r = p.R(x, y, size, size);
+	const int px = std::max(8, static_cast<int>(r.right - r.left));
+	Blit(p, Bitmap(px >= 48 ? kArtPhalera : kArtTrophy, static_cast<int>(metal), px), r.left, r.top, px, px);
+}
+
+COLORREF LeagueMetalInk(LeagueMetal metal)
+{
+	return Ref(LeagueMetalColors(metal).text);
 }
 
 void DrawLeagueEmblem(Painter &p, int x, int y, int size, LeagueTier tier, int alpha)
 {
 	const RECT r = p.R(x, y, size, size);
 	const int px = std::max(8, static_cast<int>(r.right - r.left));
-	Blit(p, Bitmap(kArtEmblem, tier, px), r.left, r.top, px, px, alpha);
+	Blit(p, Bitmap(kArtEmblem, static_cast<int>(tier), px), r.left, r.top, px, px, alpha);
 	if (tier != LeagueTier::None || alpha < 128) return;
 	// The unranked shield carries a question mark, as on the website.
 	BigFont font(p, std::max(12, size * 56 / 160));
@@ -336,7 +355,7 @@ void PaintLeagueBadgeTip(Painter &p, int screenW, int screenH)
 	if (!g_tip.show) return;
 	g_tip.show = false;
 	const LeagueBadge &b = g_tip.badge;
-	const COLORREF ink = b.kind == LeagueBadgeKind::Trophy ? LeagueTierInk(LeagueTier::Legate) : LeagueTierInk(b.tier);
+	const COLORREF ink = b.kind == LeagueBadgeKind::Trophy ? LeagueMetalInk(b.metal) : LeagueTierInk(b.tier);
 	std::string title, line;
 	switch (b.kind) {
 	case LeagueBadgeKind::Rank:
@@ -348,8 +367,11 @@ void PaintLeagueBadgeTip(Painter &p, int screenW, int screenH)
 		line = b.tier != LeagueTier::None ? TrFmt("Reached %s", {LeagueRankLabel(b.tier, b.division)}) : Tr("Emblem of a past season");
 		break;
 	default:
-		title = Tr("Tournament trophy");
-		line = Tr("Won in an official tournament");
+		title = Tr(b.metal == LeagueMetal::Silver ? "Silver phalera" : b.metal == LeagueMetal::Bronze ? "Bronze phalera" : b.metal == LeagueMetal::Season ? "Season phalera" : "Gold phalera");
+		line = Tr(b.metal == LeagueMetal::Silver ? "Finalist of an official tournament"
+				: b.metal == LeagueMetal::Bronze ? "Semifinalist of an official tournament"
+				: b.metal == LeagueMetal::Season ? "Champion of a season's final"
+												 : "Champion of an official tournament");
 		break;
 	}
 	p.raw = true;

@@ -23,6 +23,7 @@
 #include "ui/fullscreen.h"
 #include "ui/leagueui.h"
 #include "ui/mpui_internal.h"
+#include "ui/mpui_tourney.h"
 #include "ui/patronui.h"
 #include "game/gamemodes.h"
 
@@ -1241,6 +1242,7 @@ void PaintScreen(Painter &p, const State &st)
 	PaintHeader(p, st);
 	if (st.view == kViewRanked) PaintRanked(p, st);
 	else if (st.view == kViewCreate) PaintCreate(p, st);
+	else if (st.view == kViewTournaments) PaintTournaments(p, st);
 	else PaintList(p, st);
 	// The menus and dialogs over the lobby keep the shared type their boxes are sized for.
 	UseSharedFonts(p);

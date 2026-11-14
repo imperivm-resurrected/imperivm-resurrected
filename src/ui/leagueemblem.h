@@ -30,7 +30,15 @@ constexpr int kLeagueBadgeGrid = 20;
 LeagueImage LeagueBadgePixels(LeagueTier tier, int scale);
 // A past season's vexillum, in the colours of the rank reached there.
 LeagueImage LeagueVexillumPixels(LeagueTier tier, int scale);
-// The phalera of a tournament trophy.
-LeagueImage LeagueTrophyPixels(int scale);
+// The colours of a phalera's metal: `border` its rim, `body` the dark of the disc, `light` its ring and star, `text` its name over the
+// dark panels.
+LeagueColors LeagueMetalColors(LeagueMetal metal);
+// The phalera of a tournament trophy (a disc with a ring and an eight-pointed star) drawn from its shapes `size` pixels wide, plain
+// enough to read next to a name.
+LeagueImage LeagueTrophyImage(LeagueMetal metal, int size);
+// The same at 20 * scale pixels, as the badges go next to a name.
+LeagueImage LeagueTrophyPixels(LeagueMetal metal, int scale);
+// The phalera of the champion's screen, with its rivets and its double star: for 48 px and up.
+LeagueImage LeaguePhaleraImage(LeagueMetal metal, int size);
 // The emblem drawn from its shapes, smooth at any size: for 48 px and up (the screens show it at 160).
 LeagueImage LeagueEmblemImage(LeagueTier tier, int size);

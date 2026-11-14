@@ -1,0 +1,484 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 THIONG
+// Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
+#include <algorithm>
+#include <cstdint>
+#include <string>
+#include <vector>
+
+#include "core/tournament.h"
+#include "i18n/tr.h"
+#include "net/leagueclient.h"
+#include "net/leagueclient_tourney.h"
+#include "net/patrons.h"
+#include "ui/fullscreen.h"
+#include "ui/leagueui.h"
+#include "ui/mpui_tourney_internal.h"
+
+namespace mpui_tourney_impl {
+namespace {
+
+// What the player can do with a tournament from the list: the one button of its row or of the featured card.
+struct Act {
+	std::string label;
+	int arg = 0;
+	bool strong = false, enabled = true;
+	// A state instead of a button: "Signed up", "Checked in".
+	std::string done;
+};
+
+Act ActionFor(const TourneySummary &t, const TourneyMineView &mine)
+{
+	Act a;
+	const TourneyMyEntry *e = MyEntry(mine, t.id);
+	const bool in = e && TourneyEntryActive(e->status);
+	switch (t.status) {
+	case TourneyStatus::Signup:
+	case TourneyStatus::Checkin:
+		if (!LeagueLinked()) {
+			a.label = "Link to sign up";
+			a.arg = -1;
+			a.strong = true;
+		}
+		else if (!in) {
+			const bool busy = LeagueTourneyBusy(TourneyOp::SignUp, t.id);
+			a.label = busy ? "Signing up..." : "Sign up";
+			a.arg = ArgOf(kSubSignUp, t.id);
+			a.strong = true;
+			a.enabled = !busy;
+		}
+		else if (t.status == TourneyStatus::Checkin && !e->checkedIn) {
+			const bool busy = LeagueTourneyBusy(TourneyOp::CheckIn, t.id);
+			a.label = busy ? "Checking in..." : "Check in";
+			a.arg = ArgOf(kSubCheckIn, t.id);
+			a.strong = true;
+			a.enabled = !busy;
+		}
+		else a.done = e->checkedIn ? "Checked in" : e->status == TourneyEntryStatus::Waitlist ? "Waiting list" : "Signed up";
+		break;
+	case TourneyStatus::Running:
+		if (mine.mine.next.present && mine.mine.next.tournamentId == t.id) {
+			a.label = "Your match";
+			a.arg = ArgOf(kSubMatch, mine.mine.next.match);
+			a.strong = true;
+		}
+		else {
+			a.label = "Bracket";
+			a.arg = ArgOf(kSubOpen, t.id);
+		}
+		break;
+	default:
+		a.label = "Result";
+		a.arg = ArgOf(kSubChampion, t.id);
+		break;
+	}
+	return a;
+}
+
+void PaintAct(Painter &p, const Act &a, int x, int y, int w, int h, int mx, int my)
+{
+	if (!a.done.empty()) {
+		PaintCheck(p, x, y + (h - 18) / 2, 18, true);
+		p.Font(1);
+		p.Text(x + 26, y, w - 26, h, a.done, pal::ok, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		return;
+	}
+	if (a.label.empty()) return;
+	if (a.arg == -1) p.Button(x, y, w, h, a.label, kLeagueLink, 0, mx, my, true, true);
+	else p.Button(x, y, w, h, a.label, kTourney, a.arg, mx, my, a.enabled, a.strong);
+}
+
+std::string StatusCaption(const TourneySummary &t)
+{
+	switch (t.status) {
+	case TourneyStatus::Signup: return Tr("Sign-up open");
+	case TourneyStatus::Checkin: return Tr("Check-in open");
+	case TourneyStatus::Running: return Tr("Live");
+	case TourneyStatus::Finished: return Tr("Over");
+	default: return Tr("Cancelled");
+	}
+}
+
+std::string WindowText(const TourneySummary &t)
+{
+	switch (t.status) {
+	case TourneyStatus::Signup: return TrFmt("Check-in %s, from %s to %s", {DayText(t.checkinOpensAt), HourText(t.checkinOpensAt), HourText(t.startsAt)});
+	case TourneyStatus::Checkin: return TrFmt("Check-in open until %s", {HourText(t.startsAt)});
+	case TourneyStatus::Running: return TrFmt("Started at %s", {HourText(t.startsAt)});
+	default: return TrFmt("Played on %s", {DayText(t.startsAt)});
+	}
+}
+
+void PaintFeatured(Painter &p, const State &st, const TourneySummary *t, const TourneyMineView &mine, int x, int y, int w, int h)
+{
+	const int mx = st.mouseX, my = st.mouseY;
+	PaintGlassCard(p, x, y, w, h);
+	p.Fill(x, y, 4, h, pal::red);
+	const int logoW = 150, rightW = std::min(330, w / 3), pad = 32;
+	PaintIsotype(p, x + pad + logoW / 2, y + h / 2 - 18, std::min(120, h - 90), 255);
+	if (!t) {
+		const int tx = x + pad + logoW + pad;
+		PaintCaps(p, tx, y + 40, w - tx + x - pad, 20, "Official cups", pal::redText);
+		UseDisplay(p, 46);
+		p.TextCaps(tx, y + 66, w - tx + x - pad, 56, "No cup open right now", pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
+		p.Font(0);
+		p.TextWrapped(tx, y + 132, w - tx + x - pad, 60, "The official cups are announced on Discord and open here for sign-up a few days before.", pal::textDim);
+		return;
+	}
+	const int tagW = TagWidth(p, t->official ? "Official" : "Community");
+	PaintTag(p, x + pad + (logoW - tagW) / 2, y + h - 52, t->official ? "Official" : "Community", pal::red, pal::onRed);
+	const int tx = x + pad + logoW + pad, rx = x + w - pad - rightW, tw = rx - pad - tx;
+	PaintCaps(p, tx, y + 28, tw, 20, Tr(t->official ? "Official cup" : "Tournament") + " \xC2\xB7 " + StatusCaption(*t), pal::redText);
+	UseDisplay(p, h >= 220 ? 58 : 48);
+	p.raw = true;
+	p.TextCaps(tx, y + 50, tw, h >= 220 ? 62 : 52, t->name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
+	p.raw = false;
+	int ly = y + (h >= 220 ? 120 : 106);
+	p.Font(0);
+	p.raw = true;
+	p.Text(tx, ly, tw, 24, WhenText(t->startsAt) + "   \xC2\xB7   " + FormatText(*t) + "   \xC2\xB7   " + ContentText(*t) + ", " + PresetText(t->settings), pal::body,
+		DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	p.raw = false;
+	ly += 36;
+	if (t->official) {
+		DrawLeaguePhalera(p, tx, ly, 22, LeagueMetal::Gold);
+		p.Font(0);
+		p.Text(tx + 32, ly - 1, tw - 32, 24, "Gold, silver and bronze phalerae for the podium, next to the name for ever", pal::textDim,
+			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	}
+
+	// The places, who signed up and what to do.
+	int ry = y + 30;
+	UseDisplay(p, 40);
+	p.raw = true;
+	const std::string count = std::to_string(t->entries);
+	const int countW = p.TextWidth(count) + 4;
+	p.Text(rx, ry, countW, 44, count, pal::text, DT_LEFT | DT_BOTTOM | DT_SINGLELINE);
+	p.Font(0);
+	p.Text(rx + countW + 6, ry, rightW - countW - 6, 40, TrFmt("of %s signed up", {std::to_string(t->maxEntries)}), pal::caption, DT_LEFT | DT_BOTTOM | DT_SINGLELINE);
+	const int left = std::max(0, t->maxEntries - t->entries);
+	p.Font(3);
+	if (t->status == TourneyStatus::Signup || t->status == TourneyStatus::Checkin) {
+		p.Text(rx, ry, rightW, 40, left ? TrFmt("%s places", {std::to_string(left)}) : Tr("Waiting list"), pal::caption, DT_RIGHT | DT_BOTTOM | DT_SINGLELINE);
+	}
+	p.raw = false;
+	ry += 50;
+	p.Fill(rx, ry, rightW, 6, pal::button);
+	if (t->maxEntries > 0) p.Fill(rx, ry, rightW * std::min(t->entries, t->maxEntries) / t->maxEntries, 6, pal::red);
+	ry += 18;
+	const TourneyPageView page = LeagueTourneyPage(t->slug, 30000);
+	std::vector<const TourneyEntrant *> who;
+	for (const TourneyEntrant &e : page.detail.entrants) {
+		if (e.status == TourneyEntryStatus::Signed || e.status == TourneyEntryStatus::Playing || e.status == TourneyEntryStatus::Out) who.push_back(&e);
+	}
+	if (!who.empty() && h >= 220) {
+		int ax = rx;
+		for (size_t i = 0; i < who.size() && i < 6; i++) {
+			PaintPlayerDisc(p, ax, ry, 30, who[i]->steamId, who[i]->name, pal::panel);
+			ax += 24;
+		}
+		std::string names = who[0]->name;
+		if (who.size() == 2) names = who[0]->name + ", " + who[1]->name;
+		else if (who.size() > 2) names = TrFmt("%s, %s and %s more", {who[0]->name, who[1]->name, std::to_string(who.size() - 2)});
+		p.Font(3);
+		p.raw = true;
+		p.Text(ax + 14, ry, rx + rightW - ax - 14, 30, names, pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.raw = false;
+		ry += 40;
+	}
+	p.Font(3);
+	p.raw = true;
+	p.Text(rx, ry, rightW, 22, WindowText(*t), pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	p.raw = false;
+	const int by = y + h - 30 - 40, viewW = 96;
+	const Act a = ActionFor(*t, mine);
+	PaintAct(p, a, rx, by, rightW - viewW - 10, 40, mx, my);
+	p.Button(rx + rightW - viewW, by, viewW, 40, "View", kTourney, ArgOf(kSubOpen, t->id), mx, my);
+}
+
+void PaintSubTabs(Painter &p, const Ui &u, const TourneyListsView &lists, int x, int y, int h, int mx, int my)
+{
+	struct Tab {
+		const char *label;
+		size_t count;
+	} tabs[] = {{"Sign-up open", lists.open.size()}, {"Live", lists.live.size()}, {"Finished", 0}};
+	for (int i = 0; i < 3; i++) {
+		UseFace(p, BrandFace::UiStrong, 13);
+		const int textW = p.CapsWidth(tabs[i].label, 2);
+		const std::string n = tabs[i].count ? std::to_string(tabs[i].count) : std::string();
+		const int countW = n.empty() ? 0 : 12 + static_cast<int>(n.size()) * 8;
+		const int w = textW + (countW ? countW + 8 : 0);
+		const bool on = u.filter == i, hot = p.Hover(x, y, w, h, mx, my);
+		p.TextCaps(x, y, textW + 2, h - 10, tabs[i].label, on || hot ? pal::text : pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
+		if (countW) {
+			p.Fill(x + textW + 8, y + (h - 10 - 20) / 2, countW, 20, pal::button);
+			UseFace(p, BrandFace::Ui, 12);
+			p.raw = true;
+			p.Text(x + textW + 8, y + (h - 10 - 20) / 2, countW, 20, n, pal::body, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			p.raw = false;
+		}
+		if (on) p.Fill(x, y + h - 2, w, 2, pal::red);
+		else p.AddHit(x, y, w, h, kTourney, ArgOf(kSubFilter, i));
+		x += w + 28;
+	}
+}
+
+void PaintTable(Painter &p, const State &st, const Ui &u, const TourneyListsView &lists, const TourneyMineView &mine, int x, int y, int w, int h, PaintOut &out)
+{
+	const int mx = st.mouseX, my = st.mouseY;
+	PaintGlassCard(p, x, y, w, h);
+	const std::vector<TourneySummary> &rows = u.filter == 1 ? lists.live : u.filter == 2 ? lists.finished : lists.open;
+	// The mockup's grid: the name takes what the other columns leave.
+	const int pad = 16, gap = 16;
+	int colW[6] = {0, 210, 130, 180, 160, 150};
+	const float fit = std::min(1.0f, (w - 2 * pad - 5 * gap - 260) / 830.0f);
+	for (int c = 1; c < 6; c++) colW[c] = static_cast<int>(colW[c] * std::max(0.6f, fit));
+	colW[0] = w - 2 * pad - 5 * gap - colW[1] - colW[2] - colW[3] - colW[4] - colW[5];
+	int cx[6];
+	cx[0] = x + pad;
+	for (int c = 1; c < 6; c++) cx[c] = cx[c - 1] + colW[c - 1] + gap;
+	static const char *const kHeads[] = {"Tournament", "Format", "Places", "Content", "Starts"};
+	for (int c = 0; c < 5; c++) PaintCaps(p, cx[c], y + 14, colW[c], 18, kHeads[c], pal::caption);
+	const int top = y + 44, rowH = 68, viewH = y + h - top;
+	const int total = static_cast<int>(rows.size()) * rowH;
+	const int maxScroll = std::max(0, total - viewH), scroll = std::min(u.listScroll, maxScroll);
+	out.listArea.valid = true;
+	out.listArea.r = p.R(x, top, w, viewH);
+	OffsetRect(&out.listArea.r, p.ox, p.oy);
+	out.listArea.max = maxScroll;
+	if (rows.empty()) {
+		p.Font(0);
+		const char *empty = !lists.loaded ? (lists.failed ? "Couldn't reach the league server. Check your connection and try again." : "Reading the tournaments...")
+			: u.filter == 0 ? "No tournament is open for sign-up now. The official cups are announced on Discord."
+			: u.filter == 1 ? "No tournament is being played now."
+							: "No tournament has finished yet.";
+		p.TextWrapped(x + 24, top + 20, w - 48, 80, empty, pal::textDim);
+		return;
+	}
+	p.Clip(x + 1, top, w - 2, viewH);
+	for (size_t i = 0; i < rows.size(); i++) {
+		const TourneySummary &t = rows[i];
+		const int ry = top + static_cast<int>(i) * rowH - scroll;
+		if (ry + rowH < top || ry > top + viewH) continue;
+		p.Fill(x + 1, ry, w - 2, 1, pal::hairline);
+		const int vy = std::max(ry, top), vh = std::min(ry + rowH, top + viewH) - vy;
+		if (vh > 0 && p.Hover(x, vy, w, vh, mx, my)) p.Fill(x + 1, ry + 1, w - 2, rowH - 1, pal::raised);
+		if (vh > 0) p.AddHit(x, vy, w, vh, kTourney, ArgOf(kSubOpen, t.id));
+		const TourneyMyEntry *e = MyEntry(mine, t.id);
+		p.Font(1);
+		p.raw = true;
+		p.Text(cx[0], ry + 12, colW[0], 24, t.name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.raw = false;
+		p.Font(3);
+		const bool mineIn = e && (TourneyEntryActive(e->status) || e->placement);
+		std::string sub = Tr(t.official ? "Official cup" : "Community");
+		if (e && e->placement) sub = TrFmt("You finished in place %s", {std::to_string(e->placement)});
+		else if (mineIn) sub = Tr(e->status == TourneyEntryStatus::Waitlist ? "You are on the waiting list" : "You are in");
+		p.Text(cx[0], ry + 36, colW[0], 20, sub, mineIn ? pal::redText : pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Font(0);
+		p.raw = true;
+		p.Text(cx[1], ry, colW[1], rowH, FormatText(t), pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(cx[2], ry + 14, colW[2], 22, TrFmt("%s of %s players", {std::to_string(t.entries), std::to_string(t.maxEntries)}), pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+		const int barW = std::min(110, colW[2]);
+		p.Fill(cx[2], ry + 42, barW, 4, pal::button);
+		if (t.maxEntries > 0) p.Fill(cx[2], ry + 42, barW * std::min(t.entries, t.maxEntries) / t.maxEntries, 4, pal::textDim);
+		p.Text(cx[3], ry, colW[3], rowH, ContentText(t), pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(cx[4], ry, colW[4], rowH, t.status == TourneyStatus::Finished ? DayText(t.startsAt) : WhenText(t.startsAt), pal::body,
+			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.raw = false;
+		PaintAct(p, ActionFor(t, mine), cx[5], ry + (rowH - 38) / 2, colW[5], 38, mx, my);
+	}
+	p.Unclip();
+	if (maxScroll > 0) PaintScrollbar(p, kBarList, x + w - 10, top, viewH, {scroll, maxScroll, viewH}, st.dropBar, mx, my);
+}
+
+// The match being played that the side card shows: a live one, else one ready, of the first tournament being played.
+const TourneyMatch *LiveMatch(const TourneyDetail &d)
+{
+	const TourneyMatch *ready = nullptr;
+	for (const TourneyMatch &m : d.matches) {
+		if (m.status == TourneyMatchStatus::Live) return &m;
+		if (m.status == TourneyMatchStatus::Ready && !ready) ready = &m;
+	}
+	return ready;
+}
+
+int PaintLiveCard(Painter &p, const State &st, const TourneyListsView &lists, int x, int y, int w, std::vector<uint64_t> &ids)
+{
+	const int mx = st.mouseX, my = st.mouseY, pad = 24;
+	const TourneySummary *t = lists.live.empty() ? nullptr : &lists.live.front();
+	const TourneyPageView page = t ? LeagueTourneyPage(t->slug, 15000) : TourneyPageView();
+	const TourneyMatch *m = page.loaded ? LiveMatch(page.detail) : nullptr;
+	const int h = m ? 248 : t ? 150 : 104;
+	PaintGlassCard(p, x, y, w, h);
+	p.Shape(x + pad, y + 28, 8, 8, InUnitEllipse, t ? pal::red : pal::disabled);
+	PaintCaps(p, x + pad + 18, y + 22, w - 2 * pad, 20, "Live", t ? pal::redText : pal::caption);
+	if (!t) {
+		p.Font(0);
+		p.Text(x + pad, y + 54, w - 2 * pad, 26, "Nothing is being played now.", pal::textDim);
+		return h;
+	}
+	int cy = y + 52;
+	UseFace(p, BrandFace::UiStrong, 20);
+	p.raw = true;
+	p.Text(x + pad, cy, w - 2 * pad, 28, t->name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	p.raw = false;
+	cy += 30;
+	p.Font(3);
+	p.raw = true;
+	p.Text(x + pad, cy, w - 2 * pad, 20, (m ? StageText(m->stage, m->round) + " \xC2\xB7 " : std::string()) + TrFmt("%s players", {std::to_string(t->entries)}),
+		pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	p.raw = false;
+	cy += 34;
+	if (!m) {
+		p.Button(x + pad, cy, w - 2 * pad, 38, "See the bracket", kTourney, ArgOf(kSubOpen, t->id), mx, my);
+		return h;
+	}
+	const int half = (w - 2 * pad - 50) / 2;
+	PaintPlayerDisc(p, x + pad, cy, 32, m->a.steamId, m->a.name);
+	p.Font(1);
+	PaintName(p, x + pad + 42, cy, half - 42, 32, m->a.name, m->a.steamId, pal::text, mx, my);
+	UseDisplay(p, 26);
+	p.TextCaps(x + pad + half, cy, 50, 32, "Vs", pal::redText, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
+	const int bx = x + w - pad - 32;
+	PaintPlayerDisc(p, bx, cy, 32, m->b.steamId, m->b.name);
+	p.Font(1);
+	p.raw = true;
+	p.Text(x + pad + half + 50, cy, half - 42, 32, m->b.name, pal::text, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	p.raw = false;
+	ids.push_back(m->a.steamId);
+	ids.push_back(m->b.steamId);
+	cy += 46;
+	p.Font(3);
+	p.raw = true;
+	const std::string played = m->status == TourneyMatchStatus::Live && m->startedAt ? TrFmt("%s of play", {DurationText(NowMs() - m->startedAt)}) : Tr("Waiting for the players");
+	p.Text(x + pad, cy, w - 2 * pad, 20, played + " \xC2\xB7 " + TrFmt("spectators %s s behind", {std::to_string(TourneySpecDelay(t->settings))}), pal::textDim,
+		DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	p.raw = false;
+	cy += 34;
+	const bool watchable = m->status == TourneyMatchStatus::Live && m->lobby;
+	p.Button(x + pad, cy, w - 2 * pad, 38, watchable ? "Watch the game" : "See the bracket", kTourney, watchable ? ArgOf(kSubWatch, m->id) : ArgOf(kSubOpen, t->id), mx, my);
+	return h;
+}
+
+int PaintMineCard(Painter &p, const State &st, const TourneyMineView &mine, int x, int y, int w)
+{
+	const int mx = st.mouseX, my = st.mouseY, pad = 24;
+	std::vector<const TourneyMyEntry *> rows;
+	for (const TourneyMyEntry &e : mine.mine.entries) {
+		if (TourneyEntryActive(e.status) || e.tournamentStatus == TourneyStatus::Finished) rows.push_back(&e);
+	}
+	const int shown = std::min<int>(3, static_cast<int>(rows.size()));
+	const int h = 56 + std::max(1, shown) * 62 + 86;
+	PaintGlassCard(p, x, y, w, h);
+	PaintCaps(p, x + pad, y + 22, w - 2 * pad, 20, "My tournaments", pal::caption);
+	int cy = y + 52;
+	if (rows.empty()) {
+		p.Font(0);
+		p.Text(x + pad, cy, w - 2 * pad, 50, mine.loaded ? "You are not in any tournament." : "Reading your tournaments...", pal::textDim);
+		cy += 62;
+	}
+	for (int i = 0; i < shown; i++) {
+		const TourneyMyEntry &e = *rows[static_cast<size_t>(i)];
+		if (i) p.Fill(x + pad, cy - 6, w - 2 * pad, 1, pal::hairline);
+		const bool hot = p.Hover(x + pad, cy, w - 2 * pad, 56, mx, my);
+		UseFace(p, BrandFace::UiStrong, 17);
+		p.raw = true;
+		p.Text(x + pad, cy, w - 2 * pad, 26, e.name, hot ? pal::redText : pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		std::string line;
+		if (e.tournamentStatus == TourneyStatus::Finished) line = e.placement ? TrFmt("Over \xC2\xB7 you finished in place %s", {std::to_string(e.placement)}) : Tr("Over");
+		else if (e.tournamentStatus == TourneyStatus::Running) {
+			const TourneyNext &n = mine.mine.next;
+			line = n.present && n.tournamentId == e.tournamentId
+				? TrFmt("Playing \xC2\xB7 %s, %s", {StageText(n.stage, n.round),
+					Tr(n.status == TourneyMatchStatus::Ready ? "ready" : n.status == TourneyMatchStatus::Live ? "live" : "waiting for your opponent")})
+				: Tr("Playing");
+		}
+		else if (e.status == TourneyEntryStatus::Waitlist) line = Tr("Waiting list");
+		else if (e.tournamentStatus == TourneyStatus::Checkin) line = Tr(e.checkedIn ? "Signed up \xC2\xB7 checked in" : "Signed up \xC2\xB7 check in now");
+		else line = TrFmt("Signed up \xC2\xB7 starts %s", {WhenText(e.startsAt)});
+		p.Font(3);
+		p.Text(x + pad, cy + 28, w - 2 * pad, 20, line, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.raw = false;
+		p.AddHit(x + pad, cy, w - 2 * pad, 56, kTourney, ArgOf(kSubOpen, e.tournamentId));
+		cy += 62;
+	}
+	const int noteY = y + h - 82;
+	p.Fill(x + pad, noteY, w - 2 * pad, 66, pal::raised);
+	p.Fill(x + pad, noteY, 3, 66, pal::edgeHot);
+	p.Font(3);
+	p.TextWrapped(x + pad + 14, noteY + 10, w - 2 * pad - 24, 50, "When the check-in opens or your match is ready, we tell you here and in any menu of the game.", pal::body);
+	return h;
+}
+
+void PaintChampionsCard(Painter &p, const State &st, const TourneyListsView &lists, int x, int y, int w, int h, std::vector<uint64_t> &ids)
+{
+	const int mx = st.mouseX, my = st.mouseY, pad = 24;
+	PaintGlassCard(p, x, y, w, h);
+	PaintCaps(p, x + pad, y + 22, w - 2 * pad, 20, "Latest champions", pal::caption);
+	int cy = y + 56;
+	int shown = 0;
+	for (const TourneySummary &t : lists.finished) {
+		if (shown >= 4 || cy + 44 > y + h - 12) break;
+		const TourneyPageView page = LeagueTourneyPage(t.slug, 300000);
+		const TourneyEntrant *champ = page.loaded ? TourneyEntrantOf(page.detail, TourneyChampion(page.detail)) : nullptr;
+		if (t.official) DrawLeaguePhalera(p, x + pad, cy + 4, 30, LeagueMetal::Gold);
+		else PaintRing(p, x + pad + 15, cy + 19, 15, pal::edgeHot);
+		const int tx = x + pad + 44, tagW = t.official ? 80 : 0;
+		p.Font(1);
+		if (champ) {
+			PaintName(p, tx, cy, w - pad - tx + x - tagW, 22, champ->name, champ->steamId, pal::text, mx, my);
+			ids.push_back(champ->steamId);
+		}
+		else p.Text(tx, cy, w - pad - tx + x - tagW, 22, page.loaded ? "No champion" : "...", pal::textDim);
+		p.Font(3);
+		p.raw = true;
+		p.Text(tx, cy + 22, w - pad - tx + x - tagW, 20, t.name, pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.raw = false;
+		if (t.official) PaintTag(p, x + w - pad - 72, cy + 8, "Official", pal::edgeHot, pal::textDim, true);
+		p.AddHit(x + pad, cy, w - 2 * pad, 44, kTourney, ArgOf(kSubChampion, t.id));
+		cy += 58;
+		shown++;
+	}
+	if (!shown) {
+		p.Font(0);
+		p.Text(x + pad, cy, w - 2 * pad, 26, "The champions of the cups will show here.", pal::textDim);
+	}
+}
+
+}
+
+void PaintListScreen(Painter &p, const State &st, const Ui &u, PaintOut &out)
+{
+	const int mx = st.mouseX, my = st.mouseY;
+	LeagueTourneyListsRefresh();
+	const TourneyListsView lists = LeagueTourneyLists();
+	const TourneyMineView mine = LeagueTourneyMine();
+	const ScreenLayout l = ScreenLayoutFor(st.viewW, st.viewH);
+	const int m = l.margin, top = l.top, bottom = l.h - m, inner = l.w - 2 * m;
+	const int sideW = std::max(360, std::min(480, inner * 27 / 100)), mainW = inner - sideW - kCardGap, sx = m + mainW + kCardGap;
+	const int featH = l.roomy ? 232 : 200;
+	PaintFeatured(p, st, Featured(lists), mine, m, top, mainW, featH);
+	const int tabsY = top + featH + (l.roomy ? 24 : 16);
+	PaintSubTabs(p, u, lists, m, tabsY, 40, mx, my);
+	const int tableY = tabsY + 40 + 14;
+	PaintTable(p, st, u, lists, mine, m, tableY, mainW, bottom - tableY, out);
+
+	std::vector<uint64_t> ids;
+	int y = top;
+	if (!LeagueLinked()) {
+		const LeagueLinkView link = LeagueLinkState();
+		const int h = link.phase == LeagueLinkPhase::Waiting || link.phase == LeagueLinkPhase::Starting ? 330 : 270;
+		PaintGlassCard(p, sx, y, sideW, h);
+		p.Clip(sx, y, sideW, h);
+		PaintLeagueAccount(p, sx + 24, y + 22, sideW - 48, {kLeagueLink, kLeagueOpen, kLeagueCancel, kLeagueUnlink}, mx, my);
+		p.Unclip();
+		y += h + 20;
+	}
+	y += PaintLiveCard(p, st, lists, sx, y, sideW, ids) + 20;
+	if (LeagueLinked() && bottom - y > 300) y += PaintMineCard(p, st, mine, sx, y, sideW) + 20;
+	if (bottom - y > 120) PaintChampionsCard(p, st, lists, sx, y, sideW, bottom - y, ids);
+	PatronsWatch(ids);
+}
+
+}
