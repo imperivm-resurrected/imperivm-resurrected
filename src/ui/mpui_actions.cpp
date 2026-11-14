@@ -13,6 +13,7 @@
 #include "net/rejoin.h"
 
 #include "ui/mpui_internal.h"
+#include "ui/mpui_tourney.h"
 #include "ui/patronui.h"
 
 using namespace mpui_impl;
@@ -25,7 +26,7 @@ void DoAction(int action, int arg)
 		return;
 	}
 	if (action != kChatFocus && action != kFieldName && action != kFieldPass && action != kChatSend &&
-		action != kFieldJoinPass && action != kJoin && action != kFieldSearch && action != kPassShow && action != kFieldRoomName) {
+		action != kFieldJoinPass && action != kJoin && action != kFieldSearch && action != kPassShow && action != kFieldRoomName && action != kFieldTourney) {
 		g_s.focus = kNoField;
 	}
 	switch (action) {
@@ -46,6 +47,8 @@ void DoAction(int action, int arg)
 	case kLeagueOpen: LeagueOpenLinkPage(); break;
 	case kLeagueCancel: LeagueLinkCancel(); break;
 	case kLeagueUnlink: LeagueUnlink(); break;
+	case kTourney: TourneyAction(arg); break;
+	case kFieldTourney: FocusField(kTourneyField); break;
 	case kCreate:
 		if (g_s.nameInput.empty()) g_s.nameInput = Tr("Game of ") + g_s.player;
 		g_s.view = kViewCreate;
@@ -74,7 +77,9 @@ void DoAction(int action, int arg)
 		else if (g_s.connecting || (g_s.room.id && !g_s.game.active)) {
 			DoAction(kLeave, 0);
 		}
-		else if (g_s.view != kViewList) g_s.view = kViewList;
+		else if (g_s.view != kViewList) {
+			if (g_s.view != kViewTournaments || !TourneyBack()) g_s.view = kViewList;
+		}
 		else {
 			g_s.open = false;
 			LogI("lobby", "menu closed (Back)");
@@ -754,6 +759,7 @@ std::string &FocusedText()
 	case kSearchField: return g_s.searchInput;
 	case kPickSearchField: return g_s.pickSearch;
 	case kRoomNameField: return g_s.roomNameInput;
+	case kTourneyField: return TourneyFieldText();
 	default: return g_s.passInput;
 	}
 }
@@ -762,14 +768,14 @@ int FieldOfAction(int action)
 {
 	return action == kChatFocus ? kChatField : action == kFieldName ? kNameField : action == kFieldPass ? kPassField
 		: action == kFieldJoinPass ? kJoinPassField : action == kFieldSearch ? kSearchField
-		: action == kFieldPickSearch ? kPickSearchField : action == kFieldRoomName ? kRoomNameField : kNoField;
+		: action == kFieldPickSearch ? kPickSearchField : action == kFieldRoomName ? kRoomNameField : action == kFieldTourney ? kTourneyField : kNoField;
 }
 
 int ActionOfField(int field)
 {
 	return field == kChatField ? kChatFocus : field == kNameField ? kFieldName : field == kPassField ? kFieldPass
 		: field == kJoinPassField ? kFieldJoinPass : field == kSearchField ? kFieldSearch
-		: field == kPickSearchField ? kFieldPickSearch : field == kRoomNameField ? kFieldRoomName : -1;
+		: field == kPickSearchField ? kFieldPickSearch : field == kRoomNameField ? kFieldRoomName : field == kTourneyField ? kFieldTourney : -1;
 }
 
 void FocusField(int field)
@@ -820,6 +826,7 @@ void FieldKey(UINT msg, WPARAM wp)
 		if (g_s.focus == kPickSearchField) DoAction(kPickOk, 0);
 		else if (g_s.focus == kChatField) DoAction(kChatSend, 0);
 		else if (g_s.focus == kJoinPassField) DoAction(kPassOk, 0);
+		else if (g_s.focus == kTourneyField) TourneyFieldEnter();
 		else if (g_s.focus == kRoomNameField) {
 			if (!g_s.roomNameInput.empty() && g_s.roomNameInput != g_s.room.info.name) RenameRoom(g_s.roomNameInput);
 			g_s.focus = kNoField;

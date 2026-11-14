@@ -14,6 +14,7 @@
 #include "addr/ui.h"
 
 #include "ui/mpui_internal.h"
+#include "ui/mpui_tourney.h"
 
 using namespace mpui_impl;
 
@@ -520,6 +521,7 @@ void MpUiGameThreadTick()
 			ModUiToast("Couldn't join the game. Try again in a moment.");
 		}
 	}
+	TourneyGameThreadTick();
 	void *dlg = nullptr;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);

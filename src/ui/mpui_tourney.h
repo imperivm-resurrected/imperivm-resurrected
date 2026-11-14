@@ -1,0 +1,43 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 THIONG
+// Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
+#pragma once
+#include <string>
+
+#include "net/steamnet.h"
+#include "ui/uikit.h"
+
+// The Tournaments tab of the multiplayer screen (TorneoLista, TorneoCuadro, TorneoPartida, TorneoCampeon) and the rooms of the
+// tournament matches. Every action of the tab goes through the screen's one action kTourney, with what to do in its argument. The
+// functions marked "locked" run with the screen's lock held; the others take it.
+
+namespace mpui_impl {
+struct State;
+}
+
+// The argument of kTourney that opens the tab.
+constexpr int kTourneyShowArg = 1 << 24;
+
+void PaintTournaments(ui::Painter &p, const mpui_impl::State &st);
+// The header of the tab's own screens (a tournament's page, the next match, the champion): false on the list, which keeps the screen's.
+bool PaintTourneyHeader(ui::Painter &p, const mpui_impl::State &st);
+// Locked.
+void TourneyAction(int arg);
+// Locked. Esc and Back go from the tab's inner screens to the list; false on the list.
+bool TourneyBack();
+// Locked. The wheel over a list or the bracket; false when it is over nothing of the tab.
+bool TourneyWheel(int delta, bool shift);
+// Locked. A scroll bar of the tab dragged or paged.
+bool TourneyScrollTo(int bar, int pos);
+// Locked. The text of the dispute's field, while it has the focus.
+std::string &TourneyFieldText();
+// Locked. Return in the dispute's field.
+void TourneyFieldEnter();
+// Locked. What the tournament fixes in its room (map, options, open seats) cannot be changed: true, with a notice, for such an action.
+bool TourneyBlocksAction(int action, int arg);
+// A room of a tournament match, which the lobby lists first with its tag.
+bool TourneyLobby(const OnlineLobby &g);
+// A room of a tournament match that is not this player's: they can only watch it.
+bool TourneyLobbyWatchOnly(const OnlineLobby &g);
+// Every frame on the game thread: the notices in any menu, the answers of the server and the room of the player's match.
+void TourneyGameThreadTick();

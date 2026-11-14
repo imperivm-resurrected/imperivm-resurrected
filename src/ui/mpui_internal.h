@@ -49,6 +49,7 @@ enum Action {
 	kGKick, kGKickJoining, kDiscord, kPassOk, kPassCancel, kGSeat, kGMove, kGMoveTo, kGSwapAsk, kSwapAccept, kSwapDecline, kDropYes, kDropNo, kPassShow, kGSiteToggle, kGRuleToggle, kSpectate, kReturnGame,
 	kFieldPickSearch, kPickDelete, kPickDeleteYes, kPickDeleteNo, kGResync, kPatronLink, kProfile, kGTab, kFieldRoomName,
 	kLeagueLink, kLeagueOpen, kLeagueCancel, kLeagueUnlink,
+	kTourney, kFieldTourney,
 };
 
 typedef int(__cdecl *HostGame_t)(int, unsigned, int);
@@ -84,9 +85,9 @@ struct JoinFlowState {
 	bool nameSwapPending = false;
 };
 extern JoinFlowState g_flow;
-enum View { kViewList, kViewRanked, kViewCreate };
+enum View { kViewList, kViewRanked, kViewCreate, kViewTournaments };
 
-enum Field { kNoField, kChatField, kNameField, kPassField, kJoinPassField, kSearchField, kPickSearchField, kRoomNameField };
+enum Field { kNoField, kChatField, kNameField, kPassField, kJoinPassField, kSearchField, kPickSearchField, kRoomNameField, kTourneyField };
 
 enum { kPredTeam, kPredRace, kPredAi, kPredReady, kPredOptSel, kPredOptVal, kPredColor };
 
