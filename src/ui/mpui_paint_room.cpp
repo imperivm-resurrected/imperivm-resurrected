@@ -714,7 +714,7 @@ void PaintSlotRow(Painter &p, const State &st, const TableCtx &t, int i, const A
 	{
 		const int team = s.team > 0 && s.team <= kRoomTeams ? s.team : 0;
 		const std::string text = team ? TrFmt("Team %d", {std::to_string(team)}) : Tr("No team");
-		SlotCombo(p, st, c.team, ctlY, c.teamW, text, team ? pal::text : pal::textDim, kDropTeam, i, !load && own && !frozen);
+		SlotCombo(p, st, c.team, ctlY, c.teamW, text, team ? pal::text : pal::textDim, kDropTeam, i, !load && own && !frozen && !RankedRoomLocked(st));
 		if (team) p.Fill(c.team + 1, ctlY + kFieldH - 3, c.teamW - 2, 2, TeamColor(team));
 	}
 	{
@@ -740,7 +740,7 @@ void PaintSlotRow(Painter &p, const State &st, const TableCtx &t, int i, const A
 		// The level is one of the slot's own choices, next to Open and Closed, as the game keeps them.
 		int sel = 0;
 		const std::vector<SlotChoice> choices = SlotChoices(g, s, sel);
-		const bool editable = g.host && !s.local && !load && choices.size() > 1 && !moving && !(g.online && LocalReady(g));
+		const bool editable = g.host && !s.local && !load && choices.size() > 1 && !moving && !(g.online && LocalReady(g)) && !RankedRoomLocked(st);
 		SlotCombo(p, st, c.diff, ctlY, c.diffW, AiLevel(s), pal::text, kDropSlot, i, editable);
 	}
 	else {
@@ -762,7 +762,7 @@ void PaintSlotRow(Painter &p, const State &st, const TableCtx &t, int i, const A
 			if (toggles) p.AddHit(hx, cy - 18, hw, 36, kGReady, 0);
 		}
 	}
-	if (g.host && g.online && s.type == 3 && !s.local && !moving) PaintKick(p, st, c.kick, cy, kGKick, i);
+	if (g.host && g.online && s.type == 3 && !s.local && !moving && !RankedRoomLocked(st)) PaintKick(p, st, c.kick, cy, kGKick, i);
 }
 
 // The rows are as tall as the mockup's while they fit in `maxH`, and no shorter than the controls in them.
@@ -813,7 +813,7 @@ void PaintRoomHeader(Painter &p, const State &st, const RoomFacts &f, const Room
 	const std::string title = !g.online ? Tr("Skirmish") : st.room.id ? st.room.info.name : Tr("Local network game");
 
 	std::vector<GhostButton> buttons;
-	if (g.online && st.room.id) buttons.push_back({"Invite", kInvite, false, !RoomHasNoSeat(st)});
+	if (g.online && st.room.id && !RankedRoomLocked(st)) buttons.push_back({"Invite", kInvite, false, !RoomHasNoSeat(st)});
 	buttons.push_back({"Leave", kGCancel, true, true});
 	const int buttonsLeft = PaintHeaderActions(p, l, buttons, mx, my);
 	PaintScreenTitle(p, l, title, {{"Game", kGTab, 1, st.roomTab == 1, true}, {"Room", kGTab, 0, st.roomTab != 1, true}}, buttonsLeft, mx, my);
@@ -831,6 +831,14 @@ void PaintRoomHeader(Painter &p, const State &st, const RoomFacts &f, const Room
 		add(Tr(st.room.id ? "Online on Steam" : "Local network"));
 	}
 	add(TrFmt("%d of %d players", {std::to_string(f.humans + f.ai), std::to_string(f.positions)}));
+	if (RankedRoomLocked(st)) {
+		ScreenLayout shifted = l;
+		const int mark = PaintRankedMark(p, l.margin, l.infoY, l.infoH);
+		shifted.margin += mark + 16;
+		add(Tr("the league sets the options"));
+		PaintScreenInfo(p, shifted, info);
+		return;
+	}
 	PaintScreenInfo(p, l, info);
 }
 

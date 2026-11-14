@@ -20,6 +20,10 @@ using namespace mpui_impl;
 namespace mpui_impl {
 void DoAction(int action, int arg)
 {
+	if (g_s.game.active && RankedRoomAction(action, arg)) {
+		ModUiToast("This is a ranked room: the league sets its options and its players.");
+		return;
+	}
 	if (g_s.game.active && RoomActionFrozen(g_s.game, action, arg)) {
 		ModUiToast("You are ready: press \"Not ready\" to change this.");
 		return;
@@ -42,6 +46,7 @@ void DoAction(int action, int arg)
 		break;
 	}
 	case kRanked: g_s.view = kViewRanked; break;
+	case kRankedAct: RankedAction(arg); break;
 	case kLeagueLink: LeagueLinkStart(); break;
 	case kLeagueOpen: LeagueOpenLinkPage(); break;
 	case kLeagueCancel: LeagueLinkCancel(); break;
@@ -655,23 +660,11 @@ void DoAction(int action, int arg)
 		g_s.syncConfirm = false;
 		g_s.syncPhase = 0;
 		break;
-	case kCancelSearch: g_s.searching = false; break;
-	case kAccept:
-		g_s.searching = false;
-		g_s.found = false;
-		ModUiToast("Preview: ranked matches will arrive with the league server");
-		break;
-	case kDecline:
-		g_s.found = false;
-		g_s.searching = false;
-		break;
-	case kQueue1v1:
-	case kQueue2v2:
-		g_s.searching = true;
-		g_s.searchMode = action == kQueue1v1 ? "ranked 1v1" : "ranked 2v2";
-		g_s.searchStart = GetTickCount();
-		g_s.found = false;
-		break;
+	case kCancelSearch: RankedAction(kRkCancel); break;
+	case kAccept: RankedAction(kRkAccept); break;
+	case kDecline: RankedAction(kRkDecline); break;
+	case kQueue1v1: RankedAction(kRkSearch); break;
+	case kQueue2v2: ModUiToast("Ranked 2 vs 2 is not open yet."); break;
 	case kPlayersPrev: g_s.createPlayers = std::max(2, g_s.createPlayers - 1); break;
 	case kPlayersNext: g_s.createPlayers = std::min(8, g_s.createPlayers + 1); break;
 	case kMapPrev: g_s.createMap = (g_s.createMap + 4) % 5; break;

@@ -49,6 +49,7 @@ enum Action {
 	kGKick, kGKickJoining, kDiscord, kPassOk, kPassCancel, kGSeat, kGMove, kGMoveTo, kGSwapAsk, kSwapAccept, kSwapDecline, kDropYes, kDropNo, kPassShow, kGSiteToggle, kGRuleToggle, kSpectate, kReturnGame,
 	kFieldPickSearch, kPickDelete, kPickDeleteYes, kPickDeleteNo, kGResync, kPatronLink, kProfile, kGTab, kFieldRoomName,
 	kLeagueLink, kLeagueOpen, kLeagueCancel, kLeagueUnlink,
+	kRankedAct,
 };
 
 typedef int(__cdecl *HostGame_t)(int, unsigned, int);
@@ -99,6 +100,24 @@ inline int DropArg(int kind, int index)
 {
 	return kind | (index << kDropKindBits);
 }
+
+// The ranked tab: what the player asked of its screens, as the argument of kRankedAct (rows of the leaderboard from kRkRow).
+enum RankedArg {
+	kRkSearch = 1, kRkCancel, kRkAccept, kRkDecline, kRkBoard, kRkHub, kRkBoardPrev, kRkBoardNext, kRkBoardTop, kRkBoardMe, kRkRoom,
+	kRkResultClose, kRkAgain, kRkResultBoard, kRkSkip, kRkSteam, kRkNotice, kRkRow = 0x100,
+};
+enum RankedSub { kRankedHub, kRankedBoard };
+const int kRankedBoardRows = 13;
+
+struct RankedScreen {
+	int sub = kRankedHub;
+	int boardOffset = 0, boardSel = -1;
+	// The result screen is open while resultOpen; resultAt is when it opened, for the animation.
+	bool resultOpen = false;
+	int64_t resultMatch = 0;
+	DWORD resultAt = 0;
+	LeagueRankedView view;
+};
 
 struct SaveEntry {
 	std::string name, vfsPath, file;
@@ -303,6 +322,7 @@ struct State {
 	ScrollDrag dropBar;
 	int roomTab = 0;
 	std::string roomNameInput;
+	RankedScreen ranked;
 };
 
 extern std::mutex g_lock;
@@ -492,6 +512,25 @@ bool PickInUse(const State &st, int index);
 void PickMove(WPARAM key);
 int PickRowsShown();
 void OpenMpMenu(bool checkRecover);
+
+// The ranked tab (mpui_ranked.cpp, mpui_paint_ranked.cpp, mpui_paint_result.cpp).
+void RankedAction(int arg);
+// Under g_lock at the start of every frame of the screen: reads the queue and opens the result when one comes.
+void RankedFrame();
+// Every frame on the game thread, under g_lock, open screen or not: calls the player when a match is found, makes or joins the room of a
+// ranked match, fixes its options and keeps strangers out.
+void RankedGameThreadTick();
+// The room is the Steam room of a ranked match: its options, slots and seats are the server's.
+bool RankedRoomLocked(const State &st);
+bool RankedRoomAction(int action, int arg);
+// The hub (linked account) and the full leaderboard; false when the account is not linked and the tab shows the link card.
+bool PaintRankedTab(Painter &p, const State &st);
+// The pill of the search in the header, left of `right`; returns where the title must end.
+int PaintRankedPill(Painter &p, const State &st, int right);
+// The result screen over the whole lobby, with its own header.
+void PaintRankedResult(Painter &p, const State &st);
+// A small mark for the header of a ranked room; returns how wide it came out.
+int PaintRankedMark(Painter &p, int x, int y, int h);
 extern std::atomic<bool> g_menuRefresh;
 extern std::atomic<HWND> g_wakeWnd;
 void RunMenuRefresh(void *dlg);

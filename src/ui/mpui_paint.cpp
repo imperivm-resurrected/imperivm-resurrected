@@ -130,9 +130,11 @@ int LobbyTableWidth(int viewW, int viewH)
 
 void PaintHeader(Painter &p, const State &st)
 {
+	// The result of a ranked game has a header of its own.
+	if (st.ranked.resultOpen) return;
 	const int mx = st.mouseX, my = st.mouseY;
 	const LobbyLayout l = LobbyLayoutFor(st.viewW, st.viewH);
-	const int right = PaintHeaderActions(p, l, {{"Back", kBack, true, true}}, mx, my);
+	const int right = PaintRankedPill(p, st, PaintHeaderActions(p, l, {{"Back", kBack, true, true}}, mx, my));
 	PaintScreenTitle(p, l, "Multiplayer",
 		{{"Games", kListView, 0, st.view == kViewList, true}, {"Create game", kCreate, 0, st.view == kViewCreate, true},
 			{"Ranked", kRanked, 0, st.view == kViewRanked, true}},
@@ -624,6 +626,7 @@ void PaintList(Painter &p, const State &st)
 
 void PaintRanked(Painter &p, const State &st)
 {
+	if (PaintRankedTab(p, st)) return;
 	const int mx = st.mouseX, my = st.mouseY;
 	const LobbyLayout l = LobbyLayoutFor(st.viewW, st.viewH);
 	const int m = l.margin, top = l.top, h = l.h - m - top, pad = l.roomy ? 32 : 24;
@@ -865,29 +868,6 @@ void PaintRecover(Painter &p, const State &st)
 		return;
 	}
 	DialogButtons(p, d, {{r.host ? "Continue the game" : "Return to the game", kRecoverYes, 0, true}, {"Not now", kRecoverNo}}, mx, my);
-}
-
-void PaintSearch(Painter &p, const State &st)
-{
-	const int mx = st.mouseX, my = st.mouseY;
-	const DWORD secs = (GetTickCount() - st.searchStart) / 1000;
-	char t[32];
-	sprintf_s(t, "%lu:%02lu", secs / 60, secs % 60);
-	if (!st.found) {
-		const Dialog d = DialogBegin(p, st.viewW, st.viewH, 460, 190, Tr("Searching ") + st.searchMode);
-		p.Font(0);
-		p.Text(d.BodyX(), d.y + 62, d.BodyW(), 26, std::string("Time: ") + t + Tr("   ·   preview"), pal::text);
-		PaintBusyBar(p, d.BodyX(), d.y + 100, d.BodyW(), 8, GetTickCount());
-		DialogButtons(p, d, {{"Cancel", kCancelSearch}}, mx, my, true);
-	}
-	else {
-		const int left = 10 - static_cast<int>((GetTickCount() - st.foundAt) / 1000);
-		const Dialog d = DialogBegin(p, st.viewW, st.viewH, 460, 190, "Match found (example)");
-		p.Font(0);
-		p.Text(d.BodyX(), d.y + 58, d.BodyW(), 24, "1v1 vs. Lucius (Gold I, 1,702)  ·  Numantia", pal::text);
-		p.Text(d.BodyX(), d.y + 84, d.BodyW(), 22, Tr("Accept in ") + std::to_string(std::max(0, left)) + " s", pal::textDim);
-		DialogButtons(p, d, {{"OK", kAccept, 0, true}, {"Decline", kDecline}}, mx, my);
-	}
 }
 
 COLORREF PlayerColor(const GameRoomSnapshot &g, int index)

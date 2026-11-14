@@ -160,7 +160,7 @@ void PaintRoomName(Painter &p, const State &st, int x, int y, int w)
 	p.Font(4);
 	p.TextCaps(x, y, 160, 38, "Room name", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 2);
 	const int fx = x + 168, fw = std::min(560, w - 168);
-	if (g.host) {
+	if (g.host && !RankedRoomLocked(st)) {
 		const bool focused = st.focus == kRoomNameField;
 		PaintField(p, st, fx, y, fw, 38, focused ? st.roomNameInput : st.room.info.name, "", focused, kFieldRoomName);
 		if (focused) {
@@ -222,7 +222,7 @@ void PaintOptionsCard(Painter &p, const State &st, int x, int y, int w, int h)
 	const GameRoomSnapshot &g = st.game;
 	const bool load = g.online && (g.host ? !st.hostSave.name.empty() : !st.room.info.saveName.empty());
 	const bool host = g.host;
-	const bool canEdit = host && !(g.online && LocalReady(g));
+	const bool canEdit = host && !(g.online && LocalReady(g)) && !RankedRoomLocked(st);
 	const std::string saveName = g.host ? st.hostSave.name : st.room.info.saveName;
 	PaintGlassCard(p, x, y, w, h);
 	const int listTop = y + 8, listBottom = y + h - kHelpH, listH = listBottom - listTop;

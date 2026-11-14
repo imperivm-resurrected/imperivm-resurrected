@@ -14,8 +14,15 @@ constexpr int kLeagueBadgeSize = 20, kLeagueBadgeGap = 6;
 
 // The badge in a square of `size`. It is a pixel drawing, so it is drawn at the whole scale nearest the screen's and centred.
 void DrawLeagueBadge(ui::Painter &p, int x, int y, int size, const LeagueBadge &badge);
-// The emblem of a rank drawn from its shapes, for 48 px and up; None is the unranked outline with its question mark.
-void DrawLeagueEmblem(ui::Painter &p, int x, int y, int size, LeagueTier tier);
+// The emblem of a rank drawn from its shapes, for 48 px and up; None is the unranked outline with its question mark. `alpha` (0-255)
+// fades it, for the result's animation.
+void DrawLeagueEmblem(ui::Painter &p, int x, int y, int size, LeagueTier tier, int alpha = 255);
+// A colour laid over what is there at `alpha` (0-255): glows, flashes and the faint part of a bar.
+void PaintTint(ui::Painter &p, int x, int y, int w, int h, COLORREF c, int alpha);
+// A ring `width` thick around (cx, cy) that runs clockwise from the top over `fraction` of the turn.
+void PaintArc(ui::Painter &p, int cx, int cy, int radius, int width, COLORREF c, float fraction);
+// The rays behind a new rank's emblem, `radius` long, at `alpha`.
+void PaintRays(ui::Painter &p, int cx, int cy, int radius, COLORREF c, int alpha);
 // What a badge takes after a name, gap included; 0 without one. Take it off the name's box before drawing the name.
 int LeagueBadgeRoom(const LeagueBadge &badge);
 // The badge 6 px after a name drawn in the box (nameX, y, nameW, h) with the painter's current font, centred on the box's height,

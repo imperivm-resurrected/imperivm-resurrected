@@ -11,6 +11,7 @@
 #include <string>
 #include <tuple>
 #include <cstdint>
+#include <vector>
 
 #include "i18n/tr.h"
 #include "net/leagueclient.h"
@@ -56,15 +57,54 @@ HBITMAP Bitmap(Art art, LeagueTier tier, int size)
 	return bmp;
 }
 
-void Blit(Painter &p, HBITMAP bmp, int left, int top, int w, int h)
+void Blit(Painter &p, HBITMAP bmp, int left, int top, int w, int h, int alpha = 255)
 {
-	if (!bmp) return;
+	if (!bmp || alpha <= 0) return;
 	HDC mem = CreateCompatibleDC(p.dc);
 	HGDIOBJ old = SelectObject(mem, bmp);
-	BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+	BLENDFUNCTION blend = {AC_SRC_OVER, 0, static_cast<BYTE>(std::min(255, alpha)), AC_SRC_ALPHA};
 	GdiAlphaBlend(p.dc, left, top, w, h, mem, 0, 0, w, h, blend);
 	SelectObject(mem, old);
 	DeleteDC(mem);
+}
+
+HBITMAP NewDib(int w, int h, uint32_t *&bits)
+{
+	BITMAPINFO bi = {};
+	bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
+	bi.bmiHeader.biWidth = w;
+	bi.bmiHeader.biHeight = -h;
+	bi.bmiHeader.biPlanes = 1;
+	bi.bmiHeader.biBitCount = 32;
+	bi.bmiHeader.biCompression = BI_RGB;
+	void *raw = nullptr;
+	HBITMAP bmp = CreateDIBSection(nullptr, &bi, DIB_RGB_COLORS, &raw, nullptr, 0);
+	bits = static_cast<uint32_t *>(raw);
+	return bits ? bmp : nullptr;
+}
+
+uint32_t Premultiplied(COLORREF c, uint32_t a)
+{
+	return (a << 24) | ((GetRValue(c) * a / 255) << 16) | ((GetGValue(c) * a / 255) << 8) | (GetBValue(c) * a / 255);
+}
+
+// A per-pixel picture of `size` square from a coverage function of the pixel's centre (relative to the middle, in pixels).
+template <class F> void PaintCoverage(Painter &p, int left, int top, int size, COLORREF c, int alpha, F coverage)
+{
+	if (size <= 0 || alpha <= 0) return;
+	uint32_t *bits = nullptr;
+	HBITMAP bmp = NewDib(size, size, bits);
+	if (!bmp) return;
+	const float mid = size / 2.0f;
+	for (int y = 0; y < size; y++) {
+		for (int x = 0; x < size; x++) {
+			const float a = coverage(x + 0.5f - mid, y + 0.5f - mid);
+			bits[static_cast<size_t>(y) * size + x] = Premultiplied(c, static_cast<uint32_t>(255 * std::max(0.0f, std::min(1.0f, a))));
+		}
+	}
+	GdiFlush();
+	Blit(p, bmp, left, top, size, size, alpha);
+	DeleteObject(bmp);
 }
 
 struct Tip {
@@ -143,17 +183,71 @@ void DrawLeagueBadge(Painter &p, int x, int y, int size, const LeagueBadge &badg
 	Blit(p, Bitmap(art, badge.tier, scale), r.left + (px - side) / 2, r.top + (static_cast<int>(r.bottom - r.top) - side) / 2, side, side);
 }
 
-void DrawLeagueEmblem(Painter &p, int x, int y, int size, LeagueTier tier)
+void DrawLeagueEmblem(Painter &p, int x, int y, int size, LeagueTier tier, int alpha)
 {
 	const RECT r = p.R(x, y, size, size);
 	const int px = std::max(8, static_cast<int>(r.right - r.left));
-	Blit(p, Bitmap(kArtEmblem, tier, px), r.left, r.top, px, px);
-	if (tier != LeagueTier::None) return;
+	Blit(p, Bitmap(kArtEmblem, tier, px), r.left, r.top, px, px, alpha);
+	if (tier != LeagueTier::None || alpha < 128) return;
 	// The unranked shield carries a question mark, as on the website.
 	BigFont font(p, std::max(12, size * 56 / 160));
 	p.raw = true;
 	p.Text(x, y + size * 22 / 160, size, size, "?", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 	p.raw = false;
+}
+
+void PaintTint(Painter &p, int x, int y, int w, int h, COLORREF c, int alpha)
+{
+	if (w <= 0 || h <= 0 || alpha <= 0) return;
+	if (alpha >= 255) {
+		p.Fill(x, y, w, h, c);
+		return;
+	}
+	static uint32_t *bits = nullptr;
+	static HBITMAP dot = NewDib(1, 1, bits);
+	if (!dot) return;
+	GdiFlush();
+	*bits = Premultiplied(c, 255);
+	const RECT r = p.R(x, y, w, h);
+	HDC mem = CreateCompatibleDC(p.dc);
+	HGDIOBJ old = SelectObject(mem, dot);
+	BLENDFUNCTION blend = {AC_SRC_OVER, 0, static_cast<BYTE>(alpha), 0};
+	GdiAlphaBlend(p.dc, r.left, r.top, r.right - r.left, r.bottom - r.top, mem, 0, 0, 1, 1, blend);
+	SelectObject(mem, old);
+	DeleteDC(mem);
+}
+
+void PaintArc(Painter &p, int cx, int cy, int radius, int width, COLORREF c, float fraction)
+{
+	if (fraction <= 0) return;
+	const float outer = (radius + width / 2.0f + 1) * p.s, r = radius * p.s, half = width * p.s / 2;
+	const int size = static_cast<int>(std::ceil(outer * 2));
+	const float end = std::min(1.0f, fraction) * 6.2831853f;
+	PaintCoverage(p, p.S(cx) - size / 2, p.S(cy) - size / 2, size, c, 255, [=](float dx, float dy) {
+		float d = half - std::fabs(std::hypot(dx, dy) - r) + 0.5f;
+		if (fraction < 1.0f) {
+			float a = std::atan2(dx, -dy);
+			if (a < 0) a += 6.2831853f;
+			d = std::min(d, std::min(a, end - a) * r + 0.5f);
+		}
+		return d;
+	});
+}
+
+void PaintRays(Painter &p, int cx, int cy, int radius, COLORREF c, int alpha)
+{
+	if (alpha <= 0) return;
+	const float R = radius * p.s;
+	const int size = static_cast<int>(std::ceil(R * 2));
+	PaintCoverage(p, p.S(cx) - size / 2, p.S(cy) - size / 2, size, c, alpha, [=](float dx, float dy) {
+		const float d = std::hypot(dx, dy);
+		if (d >= R) return 0.0f;
+		// Eighteen rays, wider towards the edge, that fade out before it.
+		const float wave = std::cos(std::atan2(dy, dx) * 18.0f);
+		const float ray = std::max(0.0f, std::min(1.0f, (wave - 0.55f) * 4.0f));
+		const float fade = 1.0f - d / R;
+		return ray * fade * fade * 0.9f;
+	});
 }
 
 int LeagueBadgeRoom(const LeagueBadge &badge)

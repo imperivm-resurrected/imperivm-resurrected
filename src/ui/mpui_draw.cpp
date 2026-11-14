@@ -311,14 +311,7 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 		}
 		const std::string notice = SteamTakeNotice();
 		if (!notice.empty()) ModUiToast(notice);
-		if (g_s.searching && !g_s.found && GetTickCount() - g_s.searchStart > 7000) {
-			g_s.found = true;
-			g_s.foundAt = GetTickCount();
-		}
-		if (g_s.searching && g_s.found && GetTickCount() - g_s.foundAt > 10000) {
-			g_s.found = false;
-			g_s.searchStart = GetTickCount();
-		}
+		RankedFrame();
 		st = g_s;
 	}
 	// Every screen of the menu, the lobby as much as the room, covers the whole screen over the engraved map.

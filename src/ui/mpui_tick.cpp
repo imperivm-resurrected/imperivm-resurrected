@@ -514,6 +514,7 @@ void MpUiGameThreadTick()
 			g_userQuit.tick = 0;
 			SteamLeaveLobby();
 		}
+		RankedGameThreadTick();
 		if (g_s.connecting && GetTickCount() - g_s.connectStart > 65000) {
 			g_s.connecting = false;
 			g_s.classicPending = false;
