@@ -543,6 +543,8 @@ void RankedFrame();
 // ranked match, fixes its options and keeps strangers out.
 void RankedGameThreadTick();
 // The room is the Steam room of a ranked match: its options, slots and seats are the server's.
+// The player left the room of their ranked match by hand: it is not made or joined again by itself.
+void RankedRoomLeftByUser();
 bool RankedRoomLocked(const State &st);
 bool RankedRoomAction(int action, int arg);
 // The hub (linked account) and the full leaderboard; false when the account is not linked and the tab shows the link card.

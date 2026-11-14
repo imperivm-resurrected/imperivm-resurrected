@@ -440,6 +440,7 @@ void LeaveGameRoom()
 	// Taken now: while the room closes the game reports it as offline for a moment, and an online room would close to the main
 	// menu instead of the list.
 	g_s.gameWasOnline = g_s.game.online;
+	if (RankedRoomLocked(g_s)) RankedRoomLeftByUser();
 	g_s.leftByUser = true;
 	GameRoomCancel();
 	if (g_s.game.online && g_s.room.id) {

@@ -48,6 +48,8 @@ struct RoomAuto {
 	// The room's retries gave up and the match was called off; the called-off match whose room this computer left.
 	bool abandoned = false;
 	int64_t leftCalledOff = 0;
+	// The match whose room the player left by hand: no room is made or joined for it again until they ask (Go to the room).
+	int64_t userLeft = 0;
 	std::map<int, DWORD> setAt;
 };
 RoomAuto g_auto;
@@ -323,6 +325,7 @@ void RoomStep(const LeagueRankedView &v, DWORD now)
 		}
 		return;
 	}
+	if (g_auto.userLeft == v.matchId) return;
 	if (g_s.room.id || GameRoomActive()) {
 		if (!g_auto.warned) {
 			g_auto.warned = true;
@@ -454,6 +457,14 @@ std::string YesNo(int flag, const char *unknown = "—")
 	return flag < 0 ? std::string(unknown) : Tr(flag ? "Yes" : "No");
 }
 
+}
+
+void RankedRoomLeftByUser()
+{
+	if (!g_auto.match) return;
+	g_auto.userLeft = g_auto.match;
+	LogI("league", "ranked: the player left the room of match %lld; it is not made again until they ask", static_cast<long long>(g_auto.match));
+	ModUiToast("You left your ranked match's room. Go back to it, or cancel the match, from Ranked.");
 }
 
 bool RankedRoomLocked(const State &st)
