@@ -32,5 +32,7 @@ std::string UrlEncode(const std::string &s);
 
 // The matches module, run from LeagueGameThreadTick.
 void MatchTick();
+// The tournaments module, run from LeagueGameThreadTick: polls the player's tournaments at their pace.
+void TourneyTick();
 
 }
