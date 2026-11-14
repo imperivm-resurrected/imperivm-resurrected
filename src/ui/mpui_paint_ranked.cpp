@@ -918,7 +918,9 @@ void PaintHistory(Painter &p, const State &st)
 	// The columns as wide as a 1920 screen gives them, narrower together on a smaller one.
 	const float fit = std::min(1.0f, (inner - 48 - 6 * 16 - 200) / 1250.0f);
 	auto scaled = [fit](int w) { return static_cast<int>(w * fit); };
-	const int reportW = scaled(230), playedW = scaled(170), durationW = scaled(90), civsW = scaled(300), mapW = scaled(230), resultW = scaled(230);
+	// The length and the report button keep room for their Spanish and Italian labels on a 1600 screen.
+	const int reportW = std::max(220, scaled(230)), playedW = scaled(170), durationW = std::max(100, scaled(90)), civsW = scaled(300), mapW = scaled(230),
+			  resultW = scaled(200);
 	const int opponentW = std::max(200, inner - 48 - resultW - mapW - civsW - durationW - playedW - reportW - 6 * 16);
 	int cx = 24;
 	auto col = [&cx](const char *label, int w) {
