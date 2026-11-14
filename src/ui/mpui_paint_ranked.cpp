@@ -988,7 +988,7 @@ void PaintHistory(Painter &p, const State &st)
 			p.Text(m + cols[6].x, ry, cols[6].w, rowH, "Problem reported", pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 		}
 		else if (LeagueDisputeOpen(g.playedAt, now)) {
-			Ghost(p, m + cols[6].x, ry + 10, cols[6].w, rowH - 20, "Report a problem", kRkDisputeHistory + static_cast<int>(i), !v.disputeBusy, mx, my);
+			Ghost(p, m + cols[6].x, ry + 10, cols[6].w, rowH - 20, "Report", kRkDisputeHistory + static_cast<int>(i), !v.disputeBusy, mx, my);
 		}
 		ry += rowH;
 		p.Fill(m + 1, ry - 1, inner - 2, 1, pal::hairline);
