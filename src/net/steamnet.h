@@ -110,6 +110,8 @@ struct OnlineCreateSettings {
 	int visibility = 0;
 	bool spectators = true;
 	int specDelay = 30;
+	// "irm" in the lobby data: the league's match this room is for, "tournament:<id>" or "ranked:<id>"; empty for any other room.
+	std::string leagueTag;
 };
 
 void StartSteamOnline();
