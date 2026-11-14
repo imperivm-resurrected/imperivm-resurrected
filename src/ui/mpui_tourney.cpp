@@ -423,6 +423,15 @@ void StepInRoom(const TourneyNext &next)
 	}
 	const DWORD now = GetTickCount();
 	const bool mine = next.present && next.match == match;
+	if (mine) k.wasMine = true;
+	else if (k.wasMine && !g_s.inOnlineGame && !g_s.game.busy && LeagueTourneyMine().loaded) {
+		// Settled while the player waited here (a no-show claimed or given): out of the room and back to the tournaments.
+		LogI("league", "tournament match %lld is settled; out of its room", static_cast<long long>(match));
+		k = RoomLock();
+		LeaveGameRoom();
+		g_s.view = kViewTournaments;
+		return;
+	}
 	if (mine && (!k.presenceAt || now - k.presenceAt >= kPresenceEveryMs)) {
 		k.presenceAt = now;
 		LeagueTourneyPresence(match, false);

@@ -101,6 +101,8 @@ struct RoomLock {
 	int pick = -1;
 	DWORD pickAt = 0;
 	bool mapWarned = false;
+	// This room was the player's match: once the match is settled without a game (a no-show), the room has nothing left to do.
+	bool wasMine = false;
 };
 
 struct Ui {

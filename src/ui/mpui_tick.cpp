@@ -60,7 +60,7 @@ void MpUiGameThreadTick()
 			g_s.connecting = false;
 			g_s.gameWasActive = true;
 			const GameRoomSnapshot snap = GameRoomGet();
-			g_s.gameWasOnline = snap.online;
+			if (!g_s.leftByUser) g_s.gameWasOnline = snap.online;
 			static DWORD foodForcedAt = 0;
 			if (snap.host && !snap.busy && g_s.hostSave.name.empty() && GetTickCount() - foodForcedAt > 1000) {
 				for (const GameRoomOption &o : snap.options) {
