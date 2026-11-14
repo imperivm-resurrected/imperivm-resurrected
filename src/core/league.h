@@ -49,6 +49,9 @@ struct LeagueBadge {
 	std::string id;
 	LeagueTier tier = LeagueTier::None;
 	int division = 0;
+	// From the player's own list of badges: the season it was won in and a trophy's title. Not part of the comparison.
+	int season = 0;
+	std::string title;
 	bool Shown() const { return kind != LeagueBadgeKind::None; }
 	bool operator==(const LeagueBadge &o) const { return kind == o.kind && id == o.id && tier == o.tier && division == o.division; }
 };
@@ -69,7 +72,7 @@ struct LeagueRanked {
 	std::string queue;
 	LeagueTier tier = LeagueTier::None;
 	int division = 0;
-	int glory = 0, placementLeft = 0, shield = 0, wins = 0, losses = 0, position = 0;
+	int season = 0, glory = 0, placementLeft = 0, shield = 0, wins = 0, losses = 0, position = 0;
 	bool elite = false;
 };
 
@@ -79,6 +82,8 @@ struct LeagueMe {
 	LeagueRanked ranked;
 	int64_t queueBanUntil = 0;
 	LeagueBadge badge;
+	// The choice as the server keeps it: "rank" (the live rank, the default), "season", "trophy" or "none", and its id.
+	std::string badgeKind, badgeId;
 	std::vector<LeagueBadge> badges;
 };
 bool LeagueParseMe(const Json &j, LeagueMe &out);

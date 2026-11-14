@@ -242,6 +242,8 @@ LeagueBadge LeagueBadgeFromJson(const Json *v)
 	}
 	else if (kind == "season") b.kind = LeagueBadgeKind::Season;
 	else if (kind == "trophy") b.kind = LeagueBadgeKind::Trophy;
+	b.season = Int(*v, "season");
+	b.title = v->GetString("title");
 	if (!LeagueTierHasDivisions(b.tier)) b.division = 0;
 	if (b.kind == LeagueBadgeKind::None) b = LeagueBadge();
 	return b;
@@ -276,6 +278,7 @@ bool LeagueParseMe(const Json &j, LeagueMe &out)
 		LeagueRanked &k = out.ranked;
 		k.present = true;
 		k.queue = r->GetString("queue", "1v1");
+		k.season = Int(*r, "season");
 		k.tier = LeagueTierFromJson(r->Get("tier"));
 		k.division = LeagueTierHasDivisions(k.tier) ? LeagueDivisionFromJson(r->Get("division")) : 0;
 		k.glory = Int(*r, "glory");
@@ -288,6 +291,10 @@ bool LeagueParseMe(const Json &j, LeagueMe &out)
 	}
 	out.queueBanUntil = Int64(j, "queueBanUntil");
 	out.badge = LeagueBadgeFromJson(j.Get("badge"));
+	if (const Json *b = j.Get("badge"); b && b->type == Json::Object) {
+		out.badgeKind = Lower(b->GetString("kind"));
+		out.badgeId = IdText(b->Get("id"));
+	}
 	if (const Json *list = j.Get("badges"); list && list->type == Json::Array) {
 		for (const Json &b : list->arr) {
 			const LeagueBadge badge = LeagueBadgeFromJson(&b);

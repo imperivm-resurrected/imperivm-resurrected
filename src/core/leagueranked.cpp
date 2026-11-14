@@ -1,0 +1,578 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 THIONG
+// Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
+#include "core/leagueranked.h"
+
+#include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
+
+namespace {
+
+std::string Lower(std::string s)
+{
+	for (char &c : s) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+	return s;
+}
+
+int Int(const Json &j, const char *key, int def = 0)
+{
+	return static_cast<int>(j.GetNumber(key, def));
+}
+
+int64_t Int64(const Json &j, const char *key)
+{
+	return static_cast<int64_t>(j.GetNumber(key));
+}
+
+// An id the server may send as text or as a number.
+std::string IdText(const Json *v)
+{
+	if (!v) return std::string();
+	if (v->type == Json::String) return v->str;
+	if (v->type == Json::Number) return std::to_string(static_cast<long long>(v->num));
+	return std::string();
+}
+
+int64_t IdNumber(const Json *v)
+{
+	return _strtoi64(IdText(v).c_str(), nullptr, 10);
+}
+
+// -1 when the key is missing or not a yes/no.
+int Flag(const Json &j, const char *key)
+{
+	const Json *v = j.Get(key);
+	if (!v || v->type != Json::Bool) return -1;
+	return v->b ? 1 : 0;
+}
+
+LeagueMapFacts MapOf(const Json *v)
+{
+	LeagueMapFacts m;
+	if (!v) return m;
+	if (v->type == Json::String) m.name = v->str;
+	else if (v->type == Json::Object) {
+		m.name = v->GetString("name");
+		m.type = v->GetString("type");
+		m.size = v->GetString("size");
+	}
+	return m;
+}
+
+LeaguePlayerCard CardOf(const Json &j)
+{
+	LeaguePlayerCard c;
+	c.steamId = IdText(j.Get("steamId"));
+	c.name = j.GetString("name");
+	c.tier = LeagueTierFromJson(j.Get("tier"));
+	c.division = LeagueTierHasDivisions(c.tier) ? LeagueDivisionFromJson(j.Get("division")) : 0;
+	c.accepted = j.GetBool("accepted");
+	c.host = j.GetBool("host");
+	return c;
+}
+
+LeagueMatchStatus MatchStatusOf(const std::string &s)
+{
+	const std::string l = Lower(s);
+	if (l == "accepting") return LeagueMatchStatus::Accepting;
+	if (l == "ready") return LeagueMatchStatus::Ready;
+	if (l == "playing") return LeagueMatchStatus::Playing;
+	if (l == "done") return LeagueMatchStatus::Done;
+	if (l == "cancelled" || l == "canceled") return LeagueMatchStatus::Cancelled;
+	return LeagueMatchStatus::Unknown;
+}
+
+const LeagueTier kDivisionTiers[] = {LeagueTier::Recruit, LeagueTier::Legionary, LeagueTier::Signifer, LeagueTier::Centurion, LeagueTier::Tribune,
+	LeagueTier::Legate};
+const int kTopIndex = 17;
+
+int DivisionIndex(int glory)
+{
+	return std::min(kTopIndex, std::max(0, glory) / 100);
+}
+
+float Clamp01(float v)
+{
+	return v < 0 ? 0 : v > 1 ? 1 : v;
+}
+
+float EaseInOut(float t)
+{
+	t = Clamp01(t);
+	return t < 0.5f ? 4 * t * t * t : 1 - std::pow(-2 * t + 2, 3.0f) / 2;
+}
+
+// Where a moment falls in [from, to), 0 to 1.
+float Phase(uint32_t ms, uint32_t from, uint32_t to)
+{
+	if (ms <= from) return 0;
+	if (ms >= to) return 1;
+	return static_cast<float>(ms - from) / static_cast<float>(to - from);
+}
+
+float BarOf(int glory)
+{
+	const LeagueGloryPlace p = LeagueGloryPlaceOf(glory);
+	return p.capped ? p.into / 100.0f : 1.0f;
+}
+
+int Lerp(int a, int b, float t)
+{
+	return a + static_cast<int>(std::lround((b - a) * t));
+}
+
+// The one-frame flash when the bar arrives: white, fading over 60 ms.
+int FlashAt(uint32_t ms, uint32_t at)
+{
+	if (ms < at || ms >= at + 60) return 0;
+	return static_cast<int>(255 * (1.0f - (ms - at) / 60.0f));
+}
+
+}
+
+LeagueRoomSettings LeagueParseRoomSettings(const Json *v)
+{
+	LeagueRoomSettings s;
+	if (!v || v->type != Json::Object) return s;
+	s.preset = Lower(v->GetString("preset"));
+	s.hideCivs = Flag(*v, "hideCivs");
+	s.fog = Flag(*v, "fog");
+	s.explored = Flag(*v, "explored");
+	s.cheats = Flag(*v, "cheats");
+	s.diplomacy = Lower(v->GetString("diplomacy"));
+	if (const Json *d = v->Get("specDelay"); d && d->type == Json::Number) s.specDelay = std::max(0, static_cast<int>(d->num));
+	else if (const Json *off = v->Get("spectators"); off && off->type == Json::Bool && !off->b) s.specDelay = 0;
+	if (const Json *p = v->Get("pauses"); p && p->type == Json::Object) {
+		s.pauseCount = Int(*p, "count", -1);
+		s.pauseSeconds = Int(*p, "totalSec", -1);
+	}
+	return s;
+}
+
+bool LeagueParseSeason(const Json &j, LeagueSeason &out)
+{
+	if (j.type != Json::Object || !j.Get("endsAt")) return false;
+	out = LeagueSeason();
+	out.number = Int(j, "number");
+	out.name = j.GetString("name");
+	out.theme = j.GetString("theme");
+	out.contentKey = j.GetString("contentKey");
+	if (const Json *names = j.Get("names"); names && names->type == Json::Object) {
+		for (const auto &kv : names->obj) {
+			if (kv.second.type == Json::String && !kv.second.str.empty()) out.names[Lower(kv.first)] = kv.second.str;
+		}
+	}
+	out.startsAt = Int64(j, "startsAt");
+	out.endsAt = Int64(j, "endsAt");
+	out.beta = j.GetBool("beta");
+	out.active = j.GetBool("active", true);
+	if (const Json *maps = j.Get("maps"); maps && maps->type == Json::Array) {
+		for (const Json &m : maps->arr) {
+			const LeagueMapFacts f = MapOf(&m);
+			if (!f.name.empty()) out.maps.push_back(f);
+		}
+	}
+	out.settings = LeagueParseRoomSettings(j.Get("settings"));
+	return true;
+}
+
+std::string LeagueSeasonName(const LeagueSeason &s, const std::string &lang)
+{
+	auto it = s.names.find(lang);
+	return it != s.names.end() ? it->second : s.name;
+}
+
+int LeagueDaysLeft(int64_t endsAt, int64_t nowMs)
+{
+	if (endsAt <= nowMs) return 0;
+	const int64_t day = 86400000;
+	return static_cast<int>((endsAt - nowMs + day - 1) / day);
+}
+
+float LeagueSeasonElapsed(const LeagueSeason &s, int64_t nowMs)
+{
+	if (s.endsAt <= s.startsAt) return 0;
+	return Clamp01(static_cast<float>(static_cast<double>(nowMs - s.startsAt) / static_cast<double>(s.endsAt - s.startsAt)));
+}
+
+std::string LeagueLangCode(const std::string &gameLanguage)
+{
+	const std::string l = Lower(gameLanguage);
+	if (l.compare(0, 2, "es") == 0 || l.compare(0, 4, "span") == 0 || l.compare(0, 4, "cast") == 0) return "es";
+	if (l.compare(0, 2, "it") == 0) return "it";
+	return "en";
+}
+
+bool LeagueParseQueue(const Json &j, LeagueQueueAnswer &out)
+{
+	if (j.type != Json::Object) return false;
+	out = LeagueQueueAnswer();
+	const std::string status = Lower(j.GetString("status"));
+	if (status == "idle") out.status = LeagueQueueStatus::Idle;
+	else if (status == "searching") out.status = LeagueQueueStatus::Searching;
+	else if (status == "found") out.status = LeagueQueueStatus::Found;
+	else return false;
+	out.since = Int64(j, "since");
+	out.searching = Int(j, "searching");
+	out.estimateSec = Int(j, "estimateSec");
+	out.matchId = IdNumber(j.Get("matchId"));
+	if (const Json *m = j.Get("match"); m && m->type == Json::Object) {
+		out.matchId = IdNumber(m->Get("id"));
+		if (const Json *o = m->Get("opponent"); o && o->type == Json::Object) out.opponent = CardOf(*o);
+		out.map = MapOf(m->Get("map"));
+		out.acceptBy = Int64(*m, "acceptBy");
+		out.accepted = m->GetBool("accepted");
+	}
+	return out.status != LeagueQueueStatus::Found || out.matchId > 0;
+}
+
+LeagueRankedResult LeagueParseRankedResult(const Json *v)
+{
+	LeagueRankedResult r;
+	if (!v || v->type != Json::Object) return r;
+	r.present = true;
+	r.gloryBefore = Int(*v, "gloryBefore");
+	r.gloryAfter = Int(*v, "gloryAfter");
+	r.delta = Int(*v, "delta");
+	r.tierBefore = LeagueTierFromJson(v->Get("tierBefore"));
+	r.tierAfter = LeagueTierFromJson(v->Get("tierAfter"));
+	r.divisionBefore = LeagueTierHasDivisions(r.tierBefore) ? LeagueDivisionFromJson(v->Get("divisionBefore")) : 0;
+	r.divisionAfter = LeagueTierHasDivisions(r.tierAfter) ? LeagueDivisionFromJson(v->Get("divisionAfter")) : 0;
+	r.promoted = v->GetBool("promoted");
+	r.demoted = v->GetBool("demoted");
+	r.shield = Int(*v, "shield");
+	r.placementLeft = Int(*v, "placementLeft");
+	return r;
+}
+
+bool LeagueParseMatch(const Json &j, LeagueMatchTicket &out)
+{
+	if (j.type != Json::Object) return false;
+	out = LeagueMatchTicket();
+	out.id = IdNumber(j.Get("id"));
+	out.status = MatchStatusOf(j.GetString("status"));
+	out.host = IdText(j.Get("host"));
+	out.lobby = IdText(j.Get("lobby"));
+	out.lobbyKey = j.GetString("lobbyKey");
+	out.contentKey = j.GetString("contentKey");
+	out.outcome = j.GetString("outcome");
+	out.map = MapOf(j.Get("map"));
+	out.settings = LeagueParseRoomSettings(j.Get("settings"));
+	out.acceptBy = Int64(j, "acceptBy");
+	if (const Json *players = j.Get("players"); players && players->type == Json::Array) {
+		for (const Json &p : players->arr) {
+			if (p.type == Json::Object) out.players.push_back(CardOf(p));
+		}
+	}
+	out.ranked = LeagueParseRankedResult(j.Get("ranked"));
+	return out.id > 0 && out.status != LeagueMatchStatus::Unknown;
+}
+
+const LeaguePlayerCard *LeagueTicketPlayer(const LeagueMatchTicket &t, const std::string &steamId, bool other)
+{
+	for (const LeaguePlayerCard &p : t.players) {
+		if ((p.steamId == steamId) != other) return &p;
+	}
+	return nullptr;
+}
+
+uint64_t LeagueTicketLobby(const LeagueMatchTicket &t)
+{
+	return _strtoui64(t.lobby.c_str(), nullptr, 10);
+}
+
+std::string LeagueRankedRoomTag(int64_t matchId)
+{
+	return "ranked:" + std::to_string(static_cast<long long>(matchId));
+}
+
+bool LeagueParseBoard(const Json &j, LeagueBoard &out)
+{
+	if (j.type != Json::Object) return false;
+	const Json *rows = j.Get("rows");
+	if (!rows || rows->type != Json::Array) return false;
+	out = LeagueBoard();
+	out.season = Int(j, "season");
+	out.total = Int(j, "total");
+	out.offset = Int(j, "offset");
+	out.me = Int(j, "me");
+	for (const Json &r : rows->arr) {
+		if (r.type != Json::Object) continue;
+		LeagueBoardRow row;
+		row.position = Int(r, "position");
+		row.steamId = IdText(r.Get("steamId"));
+		row.name = r.GetString("name");
+		row.tier = LeagueTierFromJson(r.Get("tier"));
+		row.division = LeagueTierHasDivisions(row.tier) ? LeagueDivisionFromJson(r.Get("division")) : 0;
+		row.glory = Int(r, "glory");
+		row.wins = Int(r, "wins");
+		row.losses = Int(r, "losses");
+		if (row.position > 0) out.rows.push_back(row);
+	}
+	return true;
+}
+
+const LeagueBoardRow *LeagueBoardFind(const LeagueBoard &b, const std::string &steamId)
+{
+	if (steamId.empty()) return nullptr;
+	for (const LeagueBoardRow &r : b.rows) {
+		if (r.steamId == steamId) return &r;
+	}
+	return nullptr;
+}
+
+int LeagueBoardPageOf(int position, int limit)
+{
+	if (position <= 0 || limit <= 0) return 0;
+	return (position - 1) / limit * limit;
+}
+
+int LeagueWinRate(int wins, int losses)
+{
+	const int games = wins + losses;
+	return games > 0 ? static_cast<int>(std::lround(100.0 * wins / games)) : 0;
+}
+
+bool LeagueParseReportAnswer(const Json &j, LeagueReportAnswer &out)
+{
+	if (j.type != Json::Object) return false;
+	out = LeagueReportAnswer();
+	out.status = Lower(j.GetString("status"));
+	out.outcome = j.GetString("outcome");
+	out.ranked = LeagueParseRankedResult(j.Get("ranked"));
+	return !out.status.empty();
+}
+
+LeagueError LeagueParseError(const Json &j)
+{
+	LeagueError e;
+	if (j.type != Json::Object) return e;
+	e.code = j.GetString("error");
+	e.message = j.GetString("message");
+	e.contentKey = j.GetString("contentKey");
+	e.until = Int64(j, "until");
+	if (!e.until) e.until = Int64(j, "queueBanUntil");
+	e.matchId = IdNumber(j.Get("matchId"));
+	return e;
+}
+
+LeagueGloryPlace LeagueGloryPlaceOf(int glory)
+{
+	LeagueGloryPlace p;
+	const int index = DivisionIndex(glory);
+	p.tier = kDivisionTiers[index / 3];
+	p.division = 3 - index % 3;
+	p.into = std::max(0, glory) - index * 100;
+	p.capped = index < kTopIndex;
+	return p;
+}
+
+void LeagueNextDivision(LeagueTier tier, int division, LeagueTier &nextTier, int &nextDivision)
+{
+	nextTier = LeagueTier::None;
+	nextDivision = 0;
+	if (!LeagueTierHasDivisions(tier) || division < 1 || division > 3) return;
+	if (division > 1) {
+		nextTier = tier;
+		nextDivision = division - 1;
+	}
+	else if (tier != LeagueTier::Legate) {
+		nextTier = static_cast<LeagueTier>(static_cast<int>(tier) + 1);
+		nextDivision = 3;
+	}
+}
+
+int LeagueWinsToNext(int glory)
+{
+	const LeagueGloryPlace p = LeagueGloryPlaceOf(glory);
+	if (!p.capped) return 0;
+	return std::max(1, (100 - p.into + 19) / 20);
+}
+
+float LeagueCountdownFraction(int64_t acceptBy, int64_t nowMs, int64_t windowMs)
+{
+	if (windowMs <= 0) return 0;
+	return Clamp01(static_cast<float>(acceptBy - nowMs) / static_cast<float>(windowMs));
+}
+
+int LeagueCountdownSeconds(int64_t acceptBy, int64_t nowMs)
+{
+	if (acceptBy <= nowMs) return 0;
+	return static_cast<int>((acceptBy - nowMs + 999) / 1000);
+}
+
+std::string LeagueClockText(int64_t ms)
+{
+	const long long s = std::max<int64_t>(0, ms) / 1000;
+	char buf[32];
+	sprintf_s(buf, "%lld:%02lld", s / 60, s % 60);
+	return buf;
+}
+
+std::vector<LeagueBadgeChoice> LeagueBadgeChoices(const LeagueMe &me)
+{
+	std::vector<LeagueBadgeChoice> out;
+	const std::string chosen = me.badgeKind.empty() ? std::string("rank") : me.badgeKind;
+	LeagueBadgeChoice rank;
+	rank.kind = "rank";
+	if (me.ranked.present && me.ranked.tier != LeagueTier::None) {
+		rank.look.kind = LeagueBadgeKind::Rank;
+		rank.look.tier = me.ranked.tier;
+		rank.look.division = me.ranked.division;
+	}
+	rank.chosen = chosen == "rank";
+	out.push_back(rank);
+	for (const LeagueBadge &b : me.badges) {
+		if (b.kind != LeagueBadgeKind::Season && b.kind != LeagueBadgeKind::Trophy) continue;
+		LeagueBadgeChoice c;
+		c.kind = b.kind == LeagueBadgeKind::Season ? "season" : "trophy";
+		c.id = b.id;
+		c.look = b;
+		c.chosen = chosen == c.kind && me.badgeId == b.id;
+		out.push_back(c);
+	}
+	LeagueBadgeChoice none;
+	none.kind = "none";
+	none.chosen = chosen == "none";
+	out.push_back(none);
+	return out;
+}
+
+LeagueResultKind LeagueResultKindOf(const LeagueRankedResult &r)
+{
+	if (r.tierAfter == LeagueTier::None) return LeagueResultKind::Placement;
+	if (r.tierBefore == LeagueTier::None) return LeagueResultKind::PlacementDone;
+	if (r.promoted) return LeagueResultKind::Promotion;
+	if (r.demoted) return LeagueResultKind::Demotion;
+	return LeagueResultKind::Steady;
+}
+
+int LeagueResultDurationMs(LeagueResultKind kind)
+{
+	switch (kind) {
+	case LeagueResultKind::Promotion: return 2400;
+	case LeagueResultKind::Demotion: return 1800;
+	case LeagueResultKind::Placement: return 600;
+	case LeagueResultKind::PlacementDone: return 2000;
+	default: return 1200;
+	}
+}
+
+LeagueResultFrame LeagueResultAt(const LeagueRankedResult &r, uint32_t ms)
+{
+	LeagueResultFrame f;
+	f.kind = LeagueResultKindOf(r);
+	const uint32_t end = static_cast<uint32_t>(LeagueResultDurationMs(f.kind));
+	if (ms > end) ms = end;
+	f.done = ms >= end;
+	const float before = BarOf(r.gloryBefore), after = BarOf(r.gloryAfter);
+	f.tier = r.tierBefore;
+	f.division = r.divisionBefore;
+	f.glory = r.gloryBefore;
+	f.bar = before;
+	switch (f.kind) {
+	case LeagueResultKind::Steady: {
+		f.deltaShown = ms >= 300;
+		const float e = EaseInOut(Phase(ms, 300, 1100));
+		f.bar = before + (after - before) * e;
+		f.glory = Lerp(r.gloryBefore, r.gloryAfter, e);
+		if (f.deltaShown && !f.done) {
+			f.ghostLoss = after < before;
+			f.ghostFrom = std::min(before, after);
+			f.ghostTo = std::max(before, after);
+		}
+		f.flash = FlashAt(ms, 1100);
+		f.tier = r.tierAfter;
+		f.division = r.divisionAfter;
+		break;
+	}
+	case LeagueResultKind::Promotion: {
+		f.deltaShown = true;
+		const int top = (DivisionIndex(r.gloryBefore) + 1) * 100;
+		const bool newTier = r.tierAfter != r.tierBefore;
+		if (ms < 800) {
+			const float e = EaseInOut(Phase(ms, 0, 600));
+			f.bar = before + (1.0f - before) * e;
+			f.glory = Lerp(r.gloryBefore, top, e);
+			f.ghostFrom = before;
+			f.ghostTo = 1.0f;
+			f.flash = FlashAt(ms, 600);
+			f.oldAlpha = 255 - static_cast<int>(153 * Phase(ms, 600, 800));
+			break;
+		}
+		f.switched = true;
+		f.tier = r.tierAfter;
+		f.division = r.divisionAfter;
+		f.oldAlpha = 0;
+		const float in = Phase(ms, 800, 1400);
+		f.newScale = 85 + static_cast<int>(std::lround(15 * EaseInOut(in)));
+		f.newAlpha = static_cast<int>(255 * in);
+		f.rays = newTier ? static_cast<int>(160 * in) : 0;
+		const float e = EaseInOut(Phase(ms, 1400, 2000));
+		f.bar = after * e;
+		f.glory = Lerp(top, r.gloryAfter, e);
+		if (ms >= 1400 && !f.done) {
+			f.ghostFrom = 0;
+			f.ghostTo = after;
+		}
+		f.shieldShown = ms >= 2000 && r.shield > 0;
+		break;
+	}
+	case LeagueResultKind::Demotion: {
+		f.deltaShown = true;
+		if (ms < 800) {
+			f.oldAlpha = 255 - static_cast<int>(153 * Phase(ms, 400, 800));
+			break;
+		}
+		f.switched = true;
+		f.tier = r.tierAfter;
+		f.division = r.divisionAfter;
+		f.oldAlpha = 0;
+		f.newAlpha = static_cast<int>(255 * Phase(ms, 800, 1200));
+		const int top = (DivisionIndex(r.gloryAfter) + 1) * 100;
+		const float e = EaseInOut(Phase(ms, 1200, 1600));
+		f.bar = 1.0f + (after - 1.0f) * e;
+		f.glory = Lerp(top, r.gloryAfter, e);
+		if (ms >= 1200) {
+			f.ghostLoss = true;
+			f.ghostFrom = f.bar;
+			f.ghostTo = 1.0f;
+		}
+		break;
+	}
+	case LeagueResultKind::Placement:
+		f.bar = 0;
+		f.glory = 0;
+		break;
+	case LeagueResultKind::PlacementDone: {
+		f.deltaShown = true;
+		f.bar = 0;
+		f.glory = 0;
+		if (ms < 800) {
+			f.oldAlpha = 255 - static_cast<int>(153 * Phase(ms, 600, 800));
+			break;
+		}
+		f.switched = true;
+		f.tier = r.tierAfter;
+		f.division = r.divisionAfter;
+		f.oldAlpha = 0;
+		const float in = Phase(ms, 800, 1400);
+		f.newScale = 85 + static_cast<int>(std::lround(15 * EaseInOut(in)));
+		f.newAlpha = static_cast<int>(255 * in);
+		f.rays = static_cast<int>(160 * in);
+		const float e = EaseInOut(Phase(ms, 1400, 2000));
+		f.bar = after * e;
+		f.glory = Lerp(0, r.gloryAfter, e);
+		break;
+	}
+	}
+	if (!f.switched && f.kind != LeagueResultKind::Steady) f.newAlpha = 0;
+	if (f.switched && f.done) {
+		f.newScale = 100;
+		f.newAlpha = 255;
+	}
+	return f;
+}
