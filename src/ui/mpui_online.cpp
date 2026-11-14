@@ -7,6 +7,7 @@
 #include "ui/modui.h"
 
 #include "ui/mpui_internal.h"
+#include "ui/mpui_tourney.h"
 
 using namespace mpui_impl;
 
@@ -200,6 +201,10 @@ void TryJoinNow(const OnlineLobby &lobby, const std::string &password, bool watc
 	}
 	if (g.playing && !watch) {
 		ModUiToast("That game has already started: you can't join midway.");
+		return;
+	}
+	if (!watch && TourneyLobbyWatchOnly(g)) {
+		ModUiToast("This room is for a tournament match: you can watch it once it starts.");
 		return;
 	}
 	const std::string mismatch = SteamVersionMismatch(g.version, g.rulesLevel);

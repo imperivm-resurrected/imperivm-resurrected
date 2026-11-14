@@ -25,6 +25,7 @@ void DoAction(int action, int arg)
 		ModUiToast("You are ready: press \"Not ready\" to change this.");
 		return;
 	}
+	if (TourneyBlocksAction(action, arg)) return;
 	if (action != kChatFocus && action != kFieldName && action != kFieldPass && action != kChatSend &&
 		action != kFieldJoinPass && action != kJoin && action != kFieldSearch && action != kPassShow && action != kFieldRoomName && action != kFieldTourney) {
 		g_s.focus = kNoField;
