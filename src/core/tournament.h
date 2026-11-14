@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "core/json.h"
+#include "core/league.h"
 
 // The league's official tournaments (imperivm-league, src/tournaments.ts): the shapes of the server's answers, the decisions that only
 // depend on them and the geometry of the bracket on screen. Nothing here talks to the network or draws.
@@ -32,22 +33,91 @@ TourneyStage TourneyStageOf(int round, int rounds);
 // "Final", "Semifinal"...: the English name, the key of its translation. Empty for Unknown.
 const char *TourneyStageName(TourneyStage s);
 
-// A map of a round: the server's ids ("mountain_passes", "random", "medium"); core/leaguemaps.h finds them in the room.
+// What a round is played on: a random map of the league's list, a scenario of the game's own, which every player has, or one of the
+// organizer's, which the league keeps and each player downloads.
+enum class TourneyMapKind { Random, Game, Upload };
+
+// A map of a round. A random one goes by the server's ids ("mountain_passes", "random", "medium"; core/leaguemaps.h finds them in the
+// room); a scenario by its file in Scenarios and the SHA-256 of that file.
 struct TourneyMap {
 	std::string name, type, size;
-	bool Known() const { return !name.empty(); }
+	TourneyMapKind kind = TourneyMapKind::Random;
+	// A scenario: its title, its file ("Torneo_1vs1_Egypt.BFHP"), the file's SHA-256 in lower-case hex, its bytes and its human seats.
+	std::string title, file, hash;
+	int64_t bytes = 0;
+	int players = 0;
+	bool Scenario() const { return kind != TourneyMapKind::Random; }
+	bool Known() const { return Scenario() ? !file.empty() : !name.empty(); }
 };
+// {kind: "random", name, type, size} (no kind is random too) or {kind: "scenario", source: "game"|"upload", title, file, hash, bytes,
+// players}.
 TourneyMap TourneyMapFromJson(const Json *v);
+Json TourneyMapJson(const TourneyMap &m);
+// The same map: the same type and size, or the same scenario file and contents.
+bool TourneySameMap(const TourneyMap &a, const TourneyMap &b);
+// A scenario's file as a cup may name it: a plain name in Scenarios ending in .bfhp, without folders.
+bool TourneyScenarioFileValid(const std::string &file);
+// The file without its extension ("Torneo_1vs1_Egypt"), as the room's selector names it after "Scenarios\".
+std::string TourneyScenarioStem(const std::string &file);
+// 64 lower-case hex digits.
+bool TourneySha256Valid(const std::string &hash);
+// The largest scenario the league keeps.
+constexpr int64_t kTourneyScenarioMaxBytes = 16LL * 1024 * 1024;
 
-// The options a tournament room is locked to.
+// The presets of a room's options, as the normal room has them (mpui's kPresets).
+enum class TourneyPreset { Competitive, Classic, Various };
+const char *TourneyPresetId(TourneyPreset p);
+// Unknown ids are the competitive one, as the rooms of the official tournaments.
+TourneyPreset TourneyPresetFromId(const std::string &id);
+bool TourneyPresetValid(const std::string &id);
+
+// The options a tournament room is locked to: a preset, and switches that override it.
 struct TourneySettings {
 	std::string preset;
 	bool hideCivs = false;
-	int specDelay = 0;
+	// 1 on, 0 off, -1 when the tournament does not say: the preset's.
+	int fog = -1, explored = -1;
+	// "locked", "free", or empty: the preset's.
+	std::string diplomacy;
+	// Seconds behind the game; 0 without spectators; -1 when the tournament does not say.
+	int specDelay = -1;
 };
 TourneySettings TourneySettingsFromJson(const Json *v);
-// The spectators' delay of a tournament room: the tournament's, 120 s when it says nothing, never under 60 s.
+Json TourneySettingsJson(const TourneySettings &s);
+// What a tournament room ends up with once its switches are laid over the preset.
+struct TourneyRoomRules {
+	TourneyPreset preset = TourneyPreset::Competitive;
+	bool hideCivs = false, fog = true, explored = false, lockedDiplomacy = true;
+};
+// A preset's own fog, map and diplomacy: competitive with fog, unexplored and locked; classic the same but free; various without fog,
+// explored and free.
+TourneyRoomRules TourneyPresetRules(TourneyPreset p);
+TourneyRoomRules TourneyRulesOf(const TourneySettings &s);
+// The spectators' delay of a tournament room: 0 without spectators, 120 s when it says nothing, otherwise from 60 to 600 s.
 int TourneySpecDelay(const TourneySettings &s);
+// The spectators' delays a cup can choose: none, 60, 120 or 300 s.
+bool TourneySpecDelayValid(int seconds);
+// A new cup's: competitive, civilizations hidden, spectators 120 s behind, and the preset's fog, map and diplomacy.
+TourneySettings TourneyCupDefaultSettings();
+// The settings with every switch written, as the cup's form keeps them.
+TourneySettings TourneyExplicitSettings(const TourneySettings &s);
+
+// Who may sign up for a cup: the online games registered by the league, and the highest rank of the season (None: any). A player
+// without a rank this season may always sign up.
+struct TourneyRequirements {
+	int minGames = 0;
+	LeagueTier maxTier = LeagueTier::None;
+	bool Any() const { return minGames > 0 || maxTier != LeagueTier::None; }
+};
+constexpr int kTourneyMinGamesMax = 100;
+// {minGames, maxTier: null | "recruit"..."legate"}.
+TourneyRequirements TourneyRequirementsFromJson(const Json *v);
+Json TourneyRequirementsJson(const TourneyRequirements &r);
+// The ranks a cup can cap: Recruit to Legate.
+bool TourneyMaxTierValid(LeagueTier t);
+enum class TourneyUnmet { None, Games, Tier };
+// What keeps a player out of a cup, from their online games and their rank this season (None when not ranked).
+TourneyUnmet TourneyCheckRequirements(const TourneyRequirements &r, int gamesPlayed, LeagueTier tier);
 
 // The player who made a community cup; nobody for the official ones.
 struct TourneyOrganizer {
@@ -69,6 +139,7 @@ struct TourneySummary {
 	TourneyStatus status = TourneyStatus::Unknown;
 	int maxEntries = 0, minEntries = 0, entries = 0, bestOf = 1, finalBestOf = 1, noshowMinutes = 0;
 	TourneySettings settings;
+	TourneyRequirements requirements;
 	std::vector<TourneyMap> maps;
 	int64_t signupOpensAt = 0, checkinOpensAt = 0, startsAt = 0;
 };
@@ -267,6 +338,10 @@ struct TourneyRefusal {
 	int gamesPlayed = 0, gamesNeeded = 0, checkedIn = 0, needed = 0;
 	// rate_limited: whole seconds to wait.
 	int retryAfter = 0;
+	// requirement: "games" or "tier", and what the player has and the cup asks (a number of games, or a rank's id).
+	std::string requirement, have, need;
+	// map_missing: the SHA-256 of the uploaded scenario the league does not have.
+	std::string hash;
 };
 TourneyRefusal TourneyParseRefusal(const Json &j);
 
@@ -283,26 +358,69 @@ constexpr int kTourneyCodeLength = 6;
 std::string TourneyTidyCode(const std::string &typed);
 bool TourneyCodeValid(const std::string &code);
 
-// What a player chooses to make a community cup (POST /v1/tournaments).
+// What a player chooses to make a community cup (POST /v1/tournaments) or to change it (PATCH /v1/tournaments/:id).
 struct TourneyCupForm {
 	std::string name, description;
 	int maxEntries = 8, minEntries = 4, bestOf = 1, finalBestOf = 3;
 	bool randomSeeding = false;
-	// One per round from the first, the last one repeated: the league's ids (core/leaguemaps.h).
+	// One per round from the first, the last one repeated.
 	std::vector<TourneyMap> maps;
 	int64_t startsAt = 0;
-	int checkinMinutes = 30;
+	int checkinMinutes = 30, noshowMinutes = 15;
 	bool isPrivate = false, play = true;
 	// The organizer's content profile; empty when it is the base game.
 	std::string contentKey, contentName;
+	TourneySettings settings = TourneyCupDefaultSettings();
+	TourneyRequirements requirements;
 };
 constexpr int kTourneyCupNameMin = 3, kTourneyCupNameMax = 40, kTourneyCupDescriptionMax = 200, kTourneyCupMapsMax = 5;
 constexpr int64_t kTourneyCupLeadMinMs = 20 * 60000LL, kTourneyCupLeadMaxMs = 14 * 86400000LL;
-enum class TourneyCupProblem { NameShort, NameLong, DescriptionLong, Places, Minimum, Series, NoMaps, TooManyMaps, BadMap, StartSoon, StartLate, Checkin };
+enum class TourneyCupProblem {
+	NameShort, NameLong, DescriptionLong, Places, Minimum, Series, Settings, NoMaps, TooManyMaps, BadMap, MapTooLarge, StartSoon, StartLate, Checkin,
+	Noshow, Requirements,
+};
 // What the server would refuse in the form, in the order of the form; none when it can be sent.
 std::vector<TourneyCupProblem> TourneyCheckCup(const TourneyCupForm &f, int64_t nowMs);
-// The request's body: the name and description trimmed, the description and the content left out when empty.
-Json TourneyCupJson(const TourneyCupForm &f);
+// The request's body: the name and description trimmed, the description and the content left out when empty. For a change (`edit`) the
+// description and the content are always written, empty or null, so that they can be taken away.
+Json TourneyCupJson(const TourneyCupForm &f, bool edit = false);
+// The body of a change once other players signed up: only the description.
+Json TourneyCupDescriptionJson(const std::string &description);
+// The maps of a form for `rounds` rounds: one each, the missing ones as the last.
+void TourneyFitMaps(std::vector<TourneyMap> &maps, int rounds);
+// A cup's form as its page shows it: the check-in from its opening, "I play too" from the organizer's own entry.
+TourneyCupForm TourneyCupFormOf(const TourneyDetail &d);
+// Someone other than the organizer signed up: from then on only the description can change.
+bool TourneyCupLocked(const TourneyDetail &d);
+
+// The Summary's figures: the rounds, the series (one per pair of players) and the games at most, and the minutes it lasts: 40 a game and
+// 10 between rounds, each round as long as its longest series.
+struct TourneyEstimate {
+	int rounds = 0, series = 0, maxGames = 0, minutes = 0;
+};
+TourneyEstimate TourneyEstimateFor(int places, int bestOf, int finalBestOf);
+
+// The cup's calendar, in this computer's time: a day is the number of days since 1 January 1970 and a time is milliseconds from then,
+// both counted in local time.
+int64_t TourneyDayOf(int64_t localMs);
+// 0 is Monday.
+int TourneyWeekdayOf(int64_t day);
+void TourneyCivilDate(int64_t day, int &year, int &month, int &dayOfMonth);
+// The weeks the calendar shows: from the Monday of `firstDay`'s week, as many as reach `lastDay`.
+struct TourneyCalendar {
+	int64_t first = 0;
+	int rows = 0;
+};
+TourneyCalendar TourneyCalendarOf(int64_t firstDay, int64_t lastDay);
+constexpr int64_t kTourneyQuarterMs = 15 * 60000LL;
+// The start the calendar keeps for `wantMs`: on a quarter of an hour, no earlier than `minMs` and no later than `maxMs`.
+int64_t TourneySnapStart(int64_t wantMs, int64_t minMs, int64_t maxMs);
+// A day with at least one start between the two.
+bool TourneyDayOpen(int64_t day, int64_t minMs, int64_t maxMs);
+// The same time of day on another day, kept between the two.
+int64_t TourneyOnDay(int64_t localMs, int64_t day, int64_t minMs, int64_t maxMs);
+// The time of day moved to `hour` and `minute`, kept between the two.
+int64_t TourneyAtTime(int64_t localMs, int hour, int minute, int64_t minMs, int64_t maxMs);
 // The minimum of players a cup of `places` starts with unless the organizer says otherwise: 4, or the places when fewer.
 int TourneyCupDefaultMinimum(int places);
 // The rounds of a single elimination bracket for `places` players.

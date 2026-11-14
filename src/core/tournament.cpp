@@ -9,6 +9,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <initializer_list>
+#include <utility>
 
 #include "core/leaguemaps.h"
 
@@ -162,10 +164,97 @@ TourneyMap TourneyMapFromJson(const Json *v)
 {
 	TourneyMap m;
 	if (!v || v->type != Json::Object) return m;
+	if (Lower(Text(*v, "kind")) == "scenario") {
+		m.kind = Lower(Text(*v, "source")) == "upload" ? TourneyMapKind::Upload : TourneyMapKind::Game;
+		m.title = Text(*v, "title");
+		m.file = Text(*v, "file");
+		m.hash = Lower(Text(*v, "hash"));
+		m.bytes = Int64(*v, "bytes");
+		m.players = Int(*v, "players");
+		// A file the mod would not write is no file: the round shows no map rather than a path out of Scenarios.
+		if (!TourneyScenarioFileValid(m.file)) m.file.clear();
+		if (m.title.empty()) m.title = TourneyScenarioStem(m.file);
+		return m;
+	}
 	m.name = Text(*v, "name");
 	m.type = Text(*v, "type");
 	m.size = Text(*v, "size");
 	return m;
+}
+
+Json TourneyMapJson(const TourneyMap &m)
+{
+	Json j = Json::MakeObject();
+	if (!m.Scenario()) {
+		j.Set("kind", Json::MakeString("random"));
+		j.Set("name", Json::MakeString(m.name));
+		j.Set("type", Json::MakeString(m.type.empty() ? "random" : m.type));
+		j.Set("size", Json::MakeString(m.size));
+		return j;
+	}
+	j.Set("kind", Json::MakeString("scenario"));
+	j.Set("source", Json::MakeString(m.kind == TourneyMapKind::Upload ? "upload" : "game"));
+	j.Set("title", Json::MakeString(m.title.empty() ? TourneyScenarioStem(m.file) : m.title));
+	j.Set("file", Json::MakeString(m.file));
+	j.Set("hash", Json::MakeString(m.hash));
+	j.Set("bytes", Json::MakeNumber(static_cast<double>(m.bytes)));
+	j.Set("players", Json::MakeNumber(m.players));
+	return j;
+}
+
+bool TourneySameMap(const TourneyMap &a, const TourneyMap &b)
+{
+	if (a.Scenario() != b.Scenario()) return false;
+	if (!a.Scenario()) return a.name == b.name && a.size == b.size;
+	return a.kind == b.kind && _stricmp(a.file.c_str(), b.file.c_str()) == 0 && a.hash == b.hash;
+}
+
+bool TourneyScenarioFileValid(const std::string &file)
+{
+	if (file.size() < 6 || file.size() > 120 || _stricmp(file.c_str() + file.size() - 5, ".bfhp") != 0) return false;
+	if (file[0] == '.' || file[0] == ' ' || file.find("..") != std::string::npos) return false;
+	for (unsigned char c : file) {
+		if (c < 0x20 || strchr("\\/:*?\"<>|", c)) return false;
+	}
+	return true;
+}
+
+std::string TourneyScenarioStem(const std::string &file)
+{
+	const size_t dot = file.find_last_of('.');
+	return dot == std::string::npos ? file : file.substr(0, dot);
+}
+
+bool TourneySha256Valid(const std::string &hash)
+{
+	if (hash.size() != 64) return false;
+	for (char c : hash) {
+		if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return false;
+	}
+	return true;
+}
+
+const char *TourneyPresetId(TourneyPreset p)
+{
+	switch (p) {
+	case TourneyPreset::Classic: return "classic";
+	case TourneyPreset::Various: return "various";
+	default: return "competitive";
+	}
+}
+
+TourneyPreset TourneyPresetFromId(const std::string &id)
+{
+	const std::string s = Lower(id);
+	if (s == "classic") return TourneyPreset::Classic;
+	if (s == "various") return TourneyPreset::Various;
+	return TourneyPreset::Competitive;
+}
+
+bool TourneyPresetValid(const std::string &id)
+{
+	const std::string s = Lower(id);
+	return s == "competitive" || s == "classic" || s == "various";
 }
 
 TourneySettings TourneySettingsFromJson(const Json *v)
@@ -174,14 +263,110 @@ TourneySettings TourneySettingsFromJson(const Json *v)
 	if (!v || v->type != Json::Object) return s;
 	s.preset = Text(*v, "preset");
 	s.hideCivs = v->GetBool("hideCivs");
-	s.specDelay = Int(*v, "specDelay");
+	if (const Json *fog = v->Get("fog"); fog && fog->type == Json::Bool) s.fog = fog->b ? 1 : 0;
+	if (const Json *explored = v->Get("explored"); explored && explored->type == Json::Bool) s.explored = explored->b ? 1 : 0;
+	const std::string diplomacy = Lower(Text(*v, "diplomacy"));
+	if (diplomacy == "locked" || diplomacy == "free") s.diplomacy = diplomacy;
+	if (const Json *delay = v->Get("specDelay"); delay && delay->type == Json::Number) s.specDelay = std::max(0, static_cast<int>(delay->num));
 	return s;
+}
+
+Json TourneySettingsJson(const TourneySettings &s)
+{
+	const TourneyRoomRules r = TourneyRulesOf(s);
+	Json j = Json::MakeObject();
+	j.Set("preset", Json::MakeString(TourneyPresetId(r.preset)));
+	j.Set("hideCivs", Json::MakeBool(r.hideCivs));
+	j.Set("fog", Json::MakeBool(r.fog));
+	j.Set("explored", Json::MakeBool(r.explored));
+	j.Set("diplomacy", Json::MakeString(r.lockedDiplomacy ? "locked" : "free"));
+	j.Set("specDelay", Json::MakeNumber(TourneySpecDelay(s)));
+	return j;
+}
+
+TourneyRoomRules TourneyPresetRules(TourneyPreset p)
+{
+	TourneyRoomRules r;
+	r.preset = p;
+	r.fog = p != TourneyPreset::Various;
+	r.explored = p == TourneyPreset::Various;
+	r.lockedDiplomacy = p == TourneyPreset::Competitive;
+	return r;
+}
+
+TourneyRoomRules TourneyRulesOf(const TourneySettings &s)
+{
+	TourneyRoomRules r = TourneyPresetRules(TourneyPresetFromId(s.preset));
+	r.hideCivs = s.hideCivs;
+	if (s.fog >= 0) r.fog = s.fog != 0;
+	if (s.explored >= 0) r.explored = s.explored != 0;
+	if (!s.diplomacy.empty()) r.lockedDiplomacy = s.diplomacy == "locked";
+	return r;
 }
 
 int TourneySpecDelay(const TourneySettings &s)
 {
-	if (s.specDelay <= 0) return 120;
+	if (s.specDelay < 0) return 120;
+	if (s.specDelay == 0) return 0;
 	return std::max(60, std::min(600, s.specDelay));
+}
+
+bool TourneySpecDelayValid(int seconds)
+{
+	return seconds == 0 || seconds == 60 || seconds == 120 || seconds == 300;
+}
+
+TourneySettings TourneyCupDefaultSettings()
+{
+	TourneySettings s;
+	s.preset = TourneyPresetId(TourneyPreset::Competitive);
+	s.hideCivs = true;
+	s.specDelay = 120;
+	return TourneyExplicitSettings(s);
+}
+
+TourneySettings TourneyExplicitSettings(const TourneySettings &s)
+{
+	const TourneyRoomRules r = TourneyRulesOf(s);
+	TourneySettings out = s;
+	out.preset = TourneyPresetId(r.preset);
+	out.fog = r.fog ? 1 : 0;
+	out.explored = r.explored ? 1 : 0;
+	out.diplomacy = r.lockedDiplomacy ? "locked" : "free";
+	out.specDelay = TourneySpecDelay(s);
+	return out;
+}
+
+TourneyRequirements TourneyRequirementsFromJson(const Json *v)
+{
+	TourneyRequirements r;
+	if (!v || v->type != Json::Object) return r;
+	r.minGames = std::max(0, Int(*v, "minGames"));
+	const Json *tier = v->Get("maxTier");
+	r.maxTier = tier && tier->type == Json::String ? LeagueTierFromId(tier->str) : LeagueTier::None;
+	if (!TourneyMaxTierValid(r.maxTier)) r.maxTier = LeagueTier::None;
+	return r;
+}
+
+Json TourneyRequirementsJson(const TourneyRequirements &r)
+{
+	Json j = Json::MakeObject();
+	j.Set("minGames", Json::MakeNumber(r.minGames));
+	// The league's tier ids are the English names ("signifer"), not LeagueTierId's Spanish ones.
+	j.Set("maxTier", TourneyMaxTierValid(r.maxTier) ? Json::MakeString(Lower(LeagueTierName(r.maxTier))) : Json());
+	return j;
+}
+
+bool TourneyMaxTierValid(LeagueTier t)
+{
+	return t >= LeagueTier::Recruit && t <= LeagueTier::Legate;
+}
+
+TourneyUnmet TourneyCheckRequirements(const TourneyRequirements &r, int gamesPlayed, LeagueTier tier)
+{
+	if (r.minGames > 0 && gamesPlayed < r.minGames) return TourneyUnmet::Games;
+	if (TourneyMaxTierValid(r.maxTier) && tier != LeagueTier::None && static_cast<int>(tier) > static_cast<int>(r.maxTier)) return TourneyUnmet::Tier;
+	return TourneyUnmet::None;
 }
 
 TourneyOrganizer TourneyOrganizerFromJson(const Json *v)
@@ -218,6 +403,7 @@ bool TourneyParseSummary(const Json &j, TourneySummary &out)
 	out.contentKey = Text(j, "contentKey");
 	out.contentName = Text(j, "contentName");
 	out.settings = TourneySettingsFromJson(j.Get("settings"));
+	out.requirements = TourneyRequirementsFromJson(j.Get("requirements"));
 	out.maps.clear();
 	if (const Json *maps = j.Get("maps"); maps && maps->type == Json::Array) {
 		for (const Json &m : maps->arr) out.maps.push_back(TourneyMapFromJson(&m));
@@ -643,6 +829,13 @@ TourneyRefusal TourneyParseRefusal(const Json &j)
 	r.checkedIn = Int(j, "checkedIn");
 	r.needed = Int(j, "needed");
 	r.retryAfter = std::max(0, Int(j, "retryAfter"));
+	r.requirement = Text(j, "kind");
+	for (const auto &field : {std::make_pair("have", &r.have), std::make_pair("need", &r.need)}) {
+		const Json *v = j.Get(field.first);
+		if (v && v->type == Json::Number) *field.second = std::to_string(static_cast<long long>(std::llround(v->num)));
+		else if (v && v->type == Json::String) *field.second = v->str;
+	}
+	r.hash = Lower(Text(j, "hash"));
 	return r;
 }
 
@@ -716,49 +909,187 @@ std::vector<TourneyCupProblem> TourneyCheckCup(const TourneyCupForm &f, int64_t 
 	if (!places) out.push_back(TourneyCupProblem::Places);
 	else if (f.minEntries < 2 || f.minEntries > f.maxEntries) out.push_back(TourneyCupProblem::Minimum);
 	if ((f.bestOf != 1 && f.bestOf != 3) || (f.finalBestOf != 1 && f.finalBestOf != 3 && f.finalBestOf != 5)) out.push_back(TourneyCupProblem::Series);
+	if (!TourneyPresetValid(f.settings.preset) || !TourneySpecDelayValid(f.settings.specDelay)) out.push_back(TourneyCupProblem::Settings);
 	if (f.maps.empty()) out.push_back(TourneyCupProblem::NoMaps);
 	else if (static_cast<int>(f.maps.size()) > kTourneyCupMapsMax) out.push_back(TourneyCupProblem::TooManyMaps);
 	else {
+		bool bad = false, large = false;
 		for (const TourneyMap &m : f.maps) {
-			if (LeagueMapValid(m.name, m.size)) continue;
-			out.push_back(TourneyCupProblem::BadMap);
-			break;
+			if (!m.Scenario()) {
+				bad = bad || !LeagueMapValid(m.name, m.size);
+				continue;
+			}
+			bad = bad || !TourneyScenarioFileValid(m.file) || !TourneySha256Valid(m.hash) || m.bytes <= 0 || m.players < 2;
+			large = large || m.bytes > kTourneyScenarioMaxBytes;
 		}
+		if (bad) out.push_back(TourneyCupProblem::BadMap);
+		else if (large) out.push_back(TourneyCupProblem::MapTooLarge);
 	}
 	if (f.startsAt < nowMs + kTourneyCupLeadMinMs) out.push_back(TourneyCupProblem::StartSoon);
 	else if (f.startsAt > nowMs + kTourneyCupLeadMaxMs) out.push_back(TourneyCupProblem::StartLate);
 	if (f.checkinMinutes != 15 && f.checkinMinutes != 30) out.push_back(TourneyCupProblem::Checkin);
+	if (f.noshowMinutes != 10 && f.noshowMinutes != 15 && f.noshowMinutes != 20) out.push_back(TourneyCupProblem::Noshow);
+	const TourneyRequirements &r = f.requirements;
+	if (r.minGames < 0 || r.minGames > kTourneyMinGamesMax || (r.maxTier != LeagueTier::None && !TourneyMaxTierValid(r.maxTier))) out.push_back(TourneyCupProblem::Requirements);
 	return out;
 }
 
-Json TourneyCupJson(const TourneyCupForm &f)
+Json TourneyCupJson(const TourneyCupForm &f, bool edit)
 {
 	Json body = Json::MakeObject();
 	body.Set("name", Json::MakeString(TourneyTrim(f.name)));
 	const std::string description = TourneyTrim(f.description);
-	if (!description.empty()) body.Set("description", Json::MakeString(description));
+	if (!description.empty() || edit) body.Set("description", Json::MakeString(description));
 	body.Set("maxEntries", Json::MakeNumber(f.maxEntries));
 	body.Set("minEntries", Json::MakeNumber(f.minEntries));
 	body.Set("bestOf", Json::MakeNumber(f.bestOf));
 	body.Set("finalBestOf", Json::MakeNumber(f.finalBestOf));
 	body.Set("seeding", Json::MakeString(f.randomSeeding ? "random" : "rating"));
 	Json maps = Json::MakeArray();
-	for (const TourneyMap &m : f.maps) {
-		Json map = Json::MakeObject();
-		map.Set("name", Json::MakeString(m.name));
-		map.Set("size", Json::MakeString(m.size));
-		maps.arr.push_back(map);
-	}
+	for (const TourneyMap &m : f.maps) maps.arr.push_back(TourneyMapJson(m));
 	body.Set("maps", maps);
 	body.Set("startsAt", Json::MakeNumber(static_cast<double>(f.startsAt)));
 	body.Set("checkinMinutes", Json::MakeNumber(f.checkinMinutes));
+	body.Set("noshowMinutes", Json::MakeNumber(f.noshowMinutes));
+	body.Set("settings", TourneySettingsJson(f.settings));
+	body.Set("requirements", TourneyRequirementsJson(f.requirements));
 	body.Set("private", Json::MakeBool(f.isPrivate));
 	body.Set("play", Json::MakeBool(f.play));
 	if (!f.contentKey.empty()) {
 		body.Set("contentKey", Json::MakeString(f.contentKey));
-		if (!f.contentName.empty()) body.Set("contentName", Json::MakeString(f.contentName));
+		if (!f.contentName.empty() || edit) body.Set("contentName", f.contentName.empty() ? Json() : Json::MakeString(f.contentName));
+	}
+	else if (edit) {
+		body.Set("contentKey", Json());
+		body.Set("contentName", Json());
 	}
 	return body;
+}
+
+Json TourneyCupDescriptionJson(const std::string &description)
+{
+	Json body = Json::MakeObject();
+	body.Set("description", Json::MakeString(TourneyTrim(description)));
+	return body;
+}
+
+void TourneyFitMaps(std::vector<TourneyMap> &maps, int rounds)
+{
+	rounds = std::max(1, std::min(rounds, kTourneyCupMapsMax));
+	if (maps.empty()) maps.push_back({"mediterranean", "random", "medium"});
+	while (static_cast<int>(maps.size()) < rounds) maps.push_back(maps.back());
+	maps.resize(static_cast<size_t>(rounds));
+}
+
+TourneyCupForm TourneyCupFormOf(const TourneyDetail &d)
+{
+	TourneyCupForm f;
+	f.name = d.name;
+	f.description = d.description;
+	f.maxEntries = d.maxEntries;
+	f.minEntries = d.minEntries;
+	f.bestOf = d.bestOf;
+	f.finalBestOf = d.finalBestOf;
+	f.randomSeeding = Lower(d.seeding) == "random";
+	f.maps = d.maps;
+	TourneyFitMaps(f.maps, TourneyRoundsFor(d.maxEntries));
+	f.startsAt = d.startsAt;
+	const int64_t checkin = d.checkinOpensAt && d.startsAt > d.checkinOpensAt ? (d.startsAt - d.checkinOpensAt + 30000) / 60000 : 30;
+	f.checkinMinutes = checkin <= 22 ? 15 : 30;
+	f.noshowMinutes = d.noshowMinutes == 10 || d.noshowMinutes == 20 ? d.noshowMinutes : 15;
+	f.isPrivate = d.isPrivate;
+	const TourneyEntrant *own = TourneyEntrantBySteamId(d, d.organizer.steamId);
+	f.play = own && TourneyEntryActive(own->status);
+	f.contentKey = d.contentKey;
+	f.contentName = d.contentName;
+	TourneySettings s = d.settings;
+	if (!TourneyPresetValid(s.preset)) s.preset = TourneyPresetId(TourneyPreset::Competitive);
+	if (!TourneySpecDelayValid(TourneySpecDelay(s))) s.specDelay = 120;
+	f.settings = TourneyExplicitSettings(s);
+	f.requirements = d.requirements;
+	return f;
+}
+
+bool TourneyCupLocked(const TourneyDetail &d)
+{
+	for (const TourneyEntrant &e : d.entrants) {
+		if (e.steamId && e.steamId == d.organizer.steamId) continue;
+		if (TourneyEntryActive(e.status) || e.status == TourneyEntryStatus::Out) return true;
+	}
+	return false;
+}
+
+TourneyEstimate TourneyEstimateFor(int places, int bestOf, int finalBestOf)
+{
+	TourneyEstimate e;
+	if (places < 2) return e;
+	bestOf = std::max(1, bestOf);
+	finalBestOf = std::max(1, finalBestOf);
+	e.rounds = TourneyRoundsFor(places);
+	e.series = places - 1;
+	e.maxGames = (places - 2) * bestOf + finalBestOf;
+	e.minutes = 40 * ((e.rounds - 1) * bestOf + finalBestOf) + 10 * (e.rounds - 1);
+	return e;
+}
+
+int64_t TourneyDayOf(int64_t localMs)
+{
+	const int64_t day = 86400000LL;
+	return localMs >= 0 ? localMs / day : -((-localMs + day - 1) / day);
+}
+
+int TourneyWeekdayOf(int64_t day)
+{
+	// 1 January 1970 was a Thursday.
+	return static_cast<int>(((day + 3) % 7 + 7) % 7);
+}
+
+void TourneyCivilDate(int64_t day, int &year, int &month, int &dayOfMonth)
+{
+	// Howard Hinnant's civil_from_days.
+	const int64_t z = day + 719468, era = (z >= 0 ? z : z - 146096) / 146097;
+	const int64_t doe = z - era * 146097, yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+	const int64_t doy = doe - (365 * yoe + yoe / 4 - yoe / 100), mp = (5 * doy + 2) / 153;
+	dayOfMonth = static_cast<int>(doy - (153 * mp + 2) / 5 + 1);
+	month = static_cast<int>(mp < 10 ? mp + 3 : mp - 9);
+	year = static_cast<int>(yoe + era * 400 + (month <= 2 ? 1 : 0));
+}
+
+TourneyCalendar TourneyCalendarOf(int64_t firstDay, int64_t lastDay)
+{
+	TourneyCalendar c;
+	c.first = firstDay - TourneyWeekdayOf(firstDay);
+	c.rows = static_cast<int>((std::max(lastDay, firstDay) - c.first) / 7 + 1);
+	return c;
+}
+
+int64_t TourneySnapStart(int64_t wantMs, int64_t minMs, int64_t maxMs)
+{
+	const int64_t q = kTourneyQuarterMs;
+	const auto up = [q](int64_t v) { return v >= 0 ? (v + q - 1) / q * q : -(-v / q * q); };
+	const auto down = [q](int64_t v) { return v >= 0 ? v / q * q : -((-v + q - 1) / q * q); };
+	const int64_t lo = up(minMs), hi = std::max(lo, down(maxMs));
+	return std::max(lo, std::min(hi, up(wantMs)));
+}
+
+bool TourneyDayOpen(int64_t day, int64_t minMs, int64_t maxMs)
+{
+	const int64_t start = day * 86400000LL, end = start + 86400000LL - kTourneyQuarterMs;
+	const int64_t lo = TourneySnapStart(minMs, minMs, maxMs), hi = TourneySnapStart(maxMs, minMs, maxMs);
+	return lo <= end && hi >= start;
+}
+
+int64_t TourneyOnDay(int64_t localMs, int64_t day, int64_t minMs, int64_t maxMs)
+{
+	const int64_t timeOfDay = localMs - TourneyDayOf(localMs) * 86400000LL;
+	return TourneySnapStart(day * 86400000LL + timeOfDay, minMs, maxMs);
+}
+
+int64_t TourneyAtTime(int64_t localMs, int hour, int minute, int64_t minMs, int64_t maxMs)
+{
+	hour = std::max(0, std::min(23, hour));
+	minute = std::max(0, std::min(59, minute));
+	return TourneySnapStart(TourneyDayOf(localMs) * 86400000LL + (hour * 60LL + minute) * 60000LL, minMs, maxMs);
 }
 
 int TourneyBoxX(const TourneyBracketMetrics &m, int round)

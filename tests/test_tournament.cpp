@@ -7,7 +7,9 @@
 #include <string>
 #include <vector>
 
+#include "core/basescenarios.h"
 #include "core/json.h"
+#include "core/league.h"
 #include "core/tournament.h"
 
 namespace {
@@ -506,6 +508,360 @@ void CupForm()
 	CHECK_EQ(TourneyRoundsFor(6), 3);
 }
 
+// The full form (bloque A): the three kinds of map, the room's rules, the requirements and the body of a cup made or changed.
+const char *kUploadMap = "3f427effca4af745528c37a2a7a238be65d76299da19db079ced5f863e36d2b5";
+
+void Maps()
+{
+	TourneyMap m = TourneyMapFromJson(nullptr);
+	CHECK(!m.Known());
+	Json j = Parse(R"({"name":"mountain_passes","type":"random","size":"medium"})");
+	m = TourneyMapFromJson(&j);
+	CHECK(m.kind == TourneyMapKind::Random);
+	CHECK(!m.Scenario());
+	CHECK(m.Known());
+	CHECK_EQ(m.name, std::string("mountain_passes"));
+	j = Parse(R"({"kind":"random","name":"island","type":"random","size":"small"})");
+	m = TourneyMapFromJson(&j);
+	CHECK(m.kind == TourneyMapKind::Random && m.size == "small");
+
+	j = Parse(R"({"kind":"scenario","source":"game","title":"Torneo 1vs1 Egypt","file":"Torneo_1vs1_Egypt.BFHP",
+"hash":"7C4198A92AC1524D2AA26B48C25BB63914FE4A9CF3FDC691574ED5687A89CA35","bytes":1003008,"players":2})");
+	m = TourneyMapFromJson(&j);
+	CHECK(m.kind == TourneyMapKind::Game);
+	CHECK(m.Scenario() && m.Known());
+	CHECK_EQ(m.file, std::string("Torneo_1vs1_Egypt.BFHP"));
+	CHECK_EQ(m.hash, std::string("7c4198a92ac1524d2aa26b48c25bb63914fe4a9cf3fdc691574ed5687a89ca35"));
+	CHECK(Same(m.bytes, 1003008));
+	CHECK_EQ(m.players, 2);
+	CHECK_EQ(TourneyScenarioStem(m.file), std::string("Torneo_1vs1_Egypt"));
+
+	j = Parse(std::string(R"({"kind":"scenario","source":"upload","file":"Mi mapa.bfhp","hash":")") + kUploadMap + R"(","bytes":1421824,"players":4})");
+	m = TourneyMapFromJson(&j);
+	CHECK(m.kind == TourneyMapKind::Upload);
+	// Without a title the file's name shows.
+	CHECK_EQ(m.title, std::string("Mi mapa"));
+	Json back;
+	CHECK(Json::Parse(TourneyMapJson(m).Dump(), back));
+	CHECK_EQ(back.GetString("kind"), std::string("scenario"));
+	CHECK_EQ(back.GetString("source"), std::string("upload"));
+	CHECK_EQ(back.GetString("file"), std::string("Mi mapa.bfhp"));
+	CHECK_EQ(back.GetString("hash"), std::string(kUploadMap));
+	CHECK_EQ(static_cast<int>(back.GetNumber("bytes")), 1421824);
+	CHECK_EQ(static_cast<int>(back.GetNumber("players")), 4);
+	TourneyMap again = TourneyMapFromJson(&back);
+	CHECK(TourneySameMap(m, again));
+	again.hash[0] = '0';
+	CHECK(!TourneySameMap(m, again));
+	CHECK(Json::Parse(TourneyMapJson({"coastal", "random", "large"}).Dump(), back));
+	CHECK_EQ(back.GetString("kind"), std::string("random"));
+	CHECK_EQ(back.GetString("type"), std::string("random"));
+	CHECK_EQ(back.GetString("size"), std::string("large"));
+	CHECK(TourneySameMap({"coastal", "random", "large"}, TourneyMapFromJson(&back)));
+	CHECK(!TourneySameMap({"coastal", "random", "large"}, m));
+
+	// A file the mod would not write is dropped.
+	for (const char *file : {"..\\\\gbr.bfhp", "maps/a.bfhp", "a.exe", ".bfhp", "C:a.bfhp"}) {
+		j = Parse(std::string(R"({"kind":"scenario","source":"upload","file":")") + file + R"(","hash":"x"})");
+		CHECK(!TourneyMapFromJson(&j).Known());
+		CHECK(!TourneyScenarioFileValid(file));
+	}
+	CHECK(TourneyScenarioFileValid("Island War.BFHP"));
+	CHECK(TourneySha256Valid(kUploadMap));
+	CHECK(!TourneySha256Valid("3F427EFFCA4AF745528C37A2A7A238BE65D76299DA19DB079CED5F863E36D2B5"));
+	CHECK(!TourneySha256Valid("abc"));
+}
+
+void Settings()
+{
+	Json j = Parse(R"({"preset":"various","hideCivs":false,"fog":true,"explored":false,"diplomacy":"locked","specDelay":0})");
+	TourneySettings s = TourneySettingsFromJson(&j);
+	CHECK_EQ(s.fog, 1);
+	CHECK_EQ(s.explored, 0);
+	CHECK_EQ(s.diplomacy, std::string("locked"));
+	// No spectators.
+	CHECK_EQ(TourneySpecDelay(s), 0);
+	TourneyRoomRules r = TourneyRulesOf(s);
+	CHECK(r.preset == TourneyPreset::Various);
+	CHECK(r.fog && !r.explored && r.lockedDiplomacy && !r.hideCivs);
+
+	// The official tournaments only give the preset: the switches are the preset's.
+	j = Parse(R"({"preset":"competitive","hideCivs":true,"specDelay":120})");
+	s = TourneySettingsFromJson(&j);
+	CHECK_EQ(s.fog, -1);
+	r = TourneyRulesOf(s);
+	CHECK(r.fog && !r.explored && r.lockedDiplomacy && r.hideCivs);
+	r = TourneyPresetRules(TourneyPreset::Classic);
+	CHECK(r.fog && !r.explored && !r.lockedDiplomacy);
+	r = TourneyPresetRules(TourneyPreset::Various);
+	CHECK(!r.fog && r.explored && !r.lockedDiplomacy);
+	CHECK(TourneyPresetFromId("CLASSIC") == TourneyPreset::Classic);
+	CHECK(TourneyPresetFromId("odd") == TourneyPreset::Competitive);
+	CHECK(!TourneyPresetValid("odd"));
+
+	TourneySettings d = TourneyCupDefaultSettings();
+	CHECK_EQ(d.preset, std::string("competitive"));
+	CHECK(d.hideCivs);
+	CHECK_EQ(d.specDelay, 120);
+	CHECK(d.fog == 1 && d.explored == 0 && d.diplomacy == "locked");
+	Json back;
+	CHECK(Json::Parse(TourneySettingsJson(d).Dump(), back));
+	CHECK_EQ(back.GetString("preset"), std::string("competitive"));
+	CHECK(back.GetBool("hideCivs"));
+	CHECK(back.GetBool("fog"));
+	CHECK(!back.GetBool("explored", true));
+	CHECK_EQ(back.GetString("diplomacy"), std::string("locked"));
+	CHECK_EQ(static_cast<int>(back.GetNumber("specDelay", -1)), 120);
+	TourneySettings none;
+	none.specDelay = 0;
+	CHECK(Json::Parse(TourneySettingsJson(none).Dump(), back));
+	CHECK_EQ(static_cast<int>(back.GetNumber("specDelay", -1)), 0);
+	for (int ok : {0, 60, 120, 300}) CHECK(TourneySpecDelayValid(ok));
+	CHECK(!TourneySpecDelayValid(90));
+	TourneySettings classic;
+	classic.preset = "classic";
+	classic.fog = 0;
+	const TourneySettings full = TourneyExplicitSettings(classic);
+	CHECK(full.fog == 0 && full.explored == 0 && full.diplomacy == "free" && full.specDelay == 120);
+}
+
+void Requirements()
+{
+	TourneyRequirements r = TourneyRequirementsFromJson(nullptr);
+	CHECK(!r.Any());
+	Json j = Parse(R"({"minGames":10,"maxTier":"centurion"})");
+	r = TourneyRequirementsFromJson(&j);
+	CHECK(r.Any());
+	CHECK_EQ(r.minGames, 10);
+	CHECK(r.maxTier == LeagueTier::Centurion);
+	j = Parse(R"({"minGames":0,"maxTier":null})");
+	r = TourneyRequirementsFromJson(&j);
+	CHECK(!r.Any());
+	// Pretorian and Imperator are no cap.
+	j = Parse(R"({"minGames":0,"maxTier":"imperator"})");
+	CHECK(TourneyRequirementsFromJson(&j).maxTier == LeagueTier::None);
+
+	TourneyRequirements cup;
+	cup.minGames = 10;
+	cup.maxTier = LeagueTier::Signifer;
+	Json back;
+	CHECK(Json::Parse(TourneyRequirementsJson(cup).Dump(), back));
+	CHECK_EQ(static_cast<int>(back.GetNumber("minGames")), 10);
+	CHECK_EQ(back.GetString("maxTier"), std::string("signifer"));
+	CHECK(Json::Parse(TourneyRequirementsJson(TourneyRequirements()).Dump(), back));
+	CHECK(back.Get("maxTier") && back.Get("maxTier")->type == Json::Null);
+
+	CHECK(TourneyCheckRequirements(cup, 3, LeagueTier::Recruit) == TourneyUnmet::Games);
+	CHECK(TourneyCheckRequirements(cup, 10, LeagueTier::Signifer) == TourneyUnmet::None);
+	CHECK(TourneyCheckRequirements(cup, 12, LeagueTier::Centurion) == TourneyUnmet::Tier);
+	// Without a rank this season the cap lets the player in.
+	CHECK(TourneyCheckRequirements(cup, 40, LeagueTier::None) == TourneyUnmet::None);
+	CHECK(TourneyCheckRequirements(TourneyRequirements(), 0, LeagueTier::Imperator) == TourneyUnmet::None);
+
+	TourneyRefusal no = TourneyParseRefusal(Parse(R"({"error":"requirement","message":"m","kind":"games","have":3,"need":10})"));
+	CHECK_EQ(no.code, std::string("requirement"));
+	CHECK_EQ(no.requirement, std::string("games"));
+	CHECK_EQ(no.have, std::string("3"));
+	CHECK_EQ(no.need, std::string("10"));
+	no = TourneyParseRefusal(Parse(R"({"error":"requirement","kind":"tier","have":"tribune","need":"centurion"})"));
+	CHECK_EQ(no.requirement, std::string("tier"));
+	CHECK_EQ(no.have, std::string("tribune"));
+	CHECK_EQ(no.need, std::string("centurion"));
+	no = TourneyParseRefusal(Parse(std::string(R"({"error":"map_missing","hash":")") + kUploadMap + "\"}"));
+	CHECK_EQ(no.hash, std::string(kUploadMap));
+
+	TourneySummary t;
+	CHECK(TourneyParseSummary(Parse(R"({"id":7,"slug":"novatos","requirements":{"minGames":5,"maxTier":"legionary"},
+"settings":{"preset":"classic","hideCivs":false,"fog":false,"explored":true,"diplomacy":"free","specDelay":300}})"), t));
+	CHECK_EQ(t.requirements.minGames, 5);
+	CHECK(t.requirements.maxTier == LeagueTier::Legionary);
+	CHECK_EQ(TourneySpecDelay(t.settings), 300);
+}
+
+void CupFull()
+{
+	const int64_t now = 1794600000000LL;
+	TourneyCupForm f;
+	f.name = "Copa de novatos";
+	f.startsAt = now + 3600000;
+	TourneyMap game;
+	game.kind = TourneyMapKind::Game;
+	game.title = "Torneo 1vs1 Egypt";
+	game.file = "Torneo_1vs1_Egypt.BFHP";
+	game.hash = "7c4198a92ac1524d2aa26b48c25bb63914fe4a9cf3fdc691574ed5687a89ca35";
+	game.bytes = 1003008;
+	game.players = 2;
+	TourneyMap upload = game;
+	upload.kind = TourneyMapKind::Upload;
+	upload.file = "Mi mapa.bfhp";
+	upload.hash = kUploadMap;
+	f.maps = {{"mediterranean", "random", "medium"}, game, upload};
+	f.requirements.minGames = 10;
+	f.requirements.maxTier = LeagueTier::Centurion;
+	f.noshowMinutes = 10;
+	CHECK(TourneyCheckCup(f, now).empty());
+
+	TourneyCupForm bad = f;
+	bad.maps[2].players = 1;
+	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::BadMap));
+	bad = f;
+	bad.maps[1].hash = "abc";
+	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::BadMap));
+	bad = f;
+	bad.maps[2].bytes = kTourneyScenarioMaxBytes + 1;
+	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::MapTooLarge));
+	bad = f;
+	bad.noshowMinutes = 30;
+	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::Noshow));
+	bad = f;
+	bad.requirements.minGames = 101;
+	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::Requirements));
+	bad = f;
+	bad.requirements.maxTier = LeagueTier::Praetorian;
+	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::Requirements));
+	bad = f;
+	bad.settings.specDelay = 30;
+	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::Settings));
+	bad = f;
+	bad.settings.preset = "chaos";
+	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::Settings));
+
+	Json back;
+	CHECK(Json::Parse(TourneyCupJson(f).Dump(), back));
+	CHECK_EQ(static_cast<int>(back.GetNumber("noshowMinutes")), 10);
+	const Json *settings = back.Get("settings");
+	CHECK(settings && settings->GetString("preset") == "competitive" && settings->GetBool("hideCivs") && settings->GetString("diplomacy") == "locked");
+	CHECK(settings && static_cast<int>(settings->GetNumber("specDelay")) == 120);
+	const Json *req = back.Get("requirements");
+	CHECK(req && static_cast<int>(req->GetNumber("minGames")) == 10 && req->GetString("maxTier") == "centurion");
+	const Json *maps = back.Get("maps");
+	CHECK(maps && maps->arr.size() == 3);
+	CHECK(maps && maps->arr.size() == 3 && maps->arr[0].GetString("kind") == "random" && maps->arr[0].GetString("name") == "mediterranean");
+	CHECK(maps && maps->arr.size() == 3 && maps->arr[1].GetString("source") == "game" && maps->arr[1].GetString("file") == "Torneo_1vs1_Egypt.BFHP");
+	CHECK(maps && maps->arr.size() == 3 && maps->arr[2].GetString("source") == "upload" && maps->arr[2].GetString("hash") == kUploadMap);
+	CHECK(back.Get("description") == nullptr);
+	CHECK(back.Get("contentKey") == nullptr);
+
+	// A change writes the description and the content even when there are none, so that they go away.
+	CHECK(Json::Parse(TourneyCupJson(f, true).Dump(), back));
+	CHECK(back.Get("description") && back.GetString("description").empty());
+	CHECK(back.Get("contentKey") && back.Get("contentKey")->type == Json::Null);
+	CHECK(Json::Parse(TourneyCupDescriptionJson("  Solo la tarde  ").Dump(), back));
+	CHECK_EQ(back.GetString("description"), std::string("Solo la tarde"));
+	CHECK_EQ(static_cast<int>(back.obj.size()), 1);
+
+	std::vector<TourneyMap> fit = {game};
+	TourneyFitMaps(fit, 3);
+	CHECK_EQ(static_cast<int>(fit.size()), 3);
+	CHECK(fit.size() == 3 && TourneySameMap(fit[2], game));
+	TourneyFitMaps(fit, 2);
+	CHECK_EQ(static_cast<int>(fit.size()), 2);
+	fit.clear();
+	TourneyFitMaps(fit, 1);
+	CHECK(fit.size() == 1 && fit[0].name == "mediterranean");
+
+	TourneyDetail d;
+	CHECK(TourneyParseDetail(Parse(std::string(R"({"id":7,"slug":"novatos","name":"Copa de novatos","description":"Para empezar","official":false,
+"private":true,"organizer":{"steamId":"76561198000000994","name":"Furio"},"status":"signup","maxEntries":8,"minEntries":4,"bestOf":3,"finalBestOf":5,
+"seeding":"random","contentKey":null,"settings":{"preset":"various","hideCivs":false,"specDelay":60},"requirements":{"minGames":5,"maxTier":null},
+"maps":[{"kind":"scenario","source":"upload","title":"Mi mapa","file":"Mi mapa.bfhp","hash":")") + kUploadMap + R"(","bytes":1421824,"players":2}],
+"startsAt":1794662871362,"checkinOpensAt":1794661971362,"noshowMinutes":20,
+"entries":[{"entryId":1,"steamId":"76561198000000994","name":"Furio","status":"signed"}],"matches":[]})"), d));
+	TourneyCupForm edit = TourneyCupFormOf(d);
+	CHECK_EQ(edit.name, std::string("Copa de novatos"));
+	CHECK_EQ(edit.checkinMinutes, 15);
+	CHECK_EQ(edit.noshowMinutes, 20);
+	CHECK(edit.isPrivate && edit.play && edit.randomSeeding);
+	CHECK_EQ(edit.bestOf, 3);
+	CHECK_EQ(edit.finalBestOf, 5);
+	CHECK_EQ(static_cast<int>(edit.maps.size()), 3);
+	CHECK(edit.maps.size() == 3 && edit.maps[2].kind == TourneyMapKind::Upload);
+	CHECK(edit.settings.preset == "various" && edit.settings.fog == 0 && edit.settings.explored == 1 && edit.settings.specDelay == 60);
+	CHECK_EQ(edit.requirements.minGames, 5);
+	// Only the organizer is in: everything can still change.
+	CHECK(!TourneyCupLocked(d));
+	d.entrants.push_back({2, 76561198000000990ULL, "Varo", TourneyEntryStatus::Waitlist});
+	CHECK(TourneyCupLocked(d));
+	d.entrants.back().status = TourneyEntryStatus::Withdrawn;
+	CHECK(!TourneyCupLocked(d));
+	d.entrants.erase(d.entrants.begin());
+	CHECK(!TourneyCupFormOf(d).play);
+}
+
+void Estimate()
+{
+	// The mockup's cup: eight players, rounds of one game and a final of three.
+	TourneyEstimate e = TourneyEstimateFor(8, 1, 3);
+	CHECK_EQ(e.rounds, 3);
+	CHECK_EQ(e.series, 7);
+	CHECK_EQ(e.maxGames, 9);
+	CHECK_EQ(e.minutes, 40 * 5 + 10 * 2);
+	e = TourneyEstimateFor(4, 1, 1);
+	CHECK(e.rounds == 2 && e.series == 3 && e.maxGames == 3 && e.minutes == 90);
+	e = TourneyEstimateFor(16, 3, 5);
+	CHECK(e.rounds == 4 && e.series == 15 && e.maxGames == 47 && e.minutes == 40 * 14 + 30);
+	e = TourneyEstimateFor(1, 1, 1);
+	CHECK(e.rounds == 0 && e.minutes == 0);
+}
+
+void Calendar()
+{
+	const int64_t day = 86400000LL, hour = 3600000LL, minute = 60000LL;
+	CHECK(Same(TourneyDayOf(0), 0));
+	CHECK(Same(TourneyDayOf(day - 1), 0));
+	CHECK(Same(TourneyDayOf(-1), -1));
+	CHECK_EQ(TourneyWeekdayOf(0), 3);
+	CHECK_EQ(TourneyWeekdayOf(-1), 2);
+	// Saturday 14 November 2026.
+	const int64_t today = 20771;
+	CHECK_EQ(TourneyWeekdayOf(today), 5);
+	int y = 0, m = 0, d = 0;
+	TourneyCivilDate(today, y, m, d);
+	CHECK(y == 2026 && m == 11 && d == 14);
+	TourneyCivilDate(19782, y, m, d);
+	CHECK(y == 2024 && m == 2 && d == 29);
+	TourneyCivilDate(-1, y, m, d);
+	CHECK(y == 1969 && m == 12 && d == 31);
+
+	// From Monday 9 November to Saturday 28: three weeks.
+	TourneyCalendar c = TourneyCalendarOf(today, today + 14);
+	CHECK(Same(c.first, today - 5));
+	CHECK_EQ(c.rows, 3);
+	c = TourneyCalendarOf(today - 5, today - 5 + 13);
+	CHECK(Same(c.first, today - 5));
+	CHECK_EQ(c.rows, 2);
+
+	// Now is 18:07: the earliest start is 18:27, the first quarter after it 18:30, and the last one two weeks on.
+	const int64_t now = today * day + 18 * hour + 7 * minute, lo = now + 20 * minute, hi = now + 14 * day;
+	CHECK(Same(TourneySnapStart(now, lo, hi), today * day + 18 * hour + 30 * minute));
+	CHECK(Same(TourneySnapStart(today * day + 19 * hour + 1 * minute, lo, hi), today * day + 19 * hour + 15 * minute));
+	CHECK(Same(TourneySnapStart(hi + day, lo, hi), (today + 14) * day + 18 * hour));
+	CHECK(TourneyDayOpen(today, lo, hi));
+	CHECK(TourneyDayOpen(today + 14, lo, hi));
+	CHECK(!TourneyDayOpen(today - 1, lo, hi));
+	CHECK(!TourneyDayOpen(today + 15, lo, hi));
+	// Late at night today has no start left.
+	const int64_t late = today * day + 23 * hour + 50 * minute;
+	CHECK(!TourneyDayOpen(today, late + 20 * minute, late + 14 * day));
+	// The same hour on another day, and back within the window on the last one.
+	const int64_t at = today * day + 21 * hour;
+	CHECK(Same(TourneyOnDay(at, today + 3, lo, hi), (today + 3) * day + 21 * hour));
+	CHECK(Same(TourneyOnDay(at, today + 14, lo, hi), (today + 14) * day + 18 * hour));
+	CHECK(Same(TourneyOnDay(today * day + 10 * hour, today, lo, hi), today * day + 18 * hour + 30 * minute));
+	CHECK(Same(TourneyAtTime(at, 20, 45, lo, hi), today * day + 20 * hour + 45 * minute));
+	CHECK(Same(TourneyAtTime(at, 9, 0, lo, hi), today * day + 18 * hour + 30 * minute));
+	CHECK(Same(TourneyAtTime(at, 30, 99, lo, hi), (today + 1) * day));
+}
+
+void BaseScenarios()
+{
+	CHECK(BaseScenarioSha256("torneo_1vs1_egypt.bfhp") != nullptr);
+	CHECK(BaseScenarioIs("Torneo_1vs1_Egypt.BFHP", "7c4198a92ac1524d2aa26b48c25bb63914fe4a9cf3fdc691574ed5687a89ca35"));
+	CHECK(!BaseScenarioIs("Torneo_1vs1_Egypt.BFHP", kUploadMap));
+	CHECK(BaseScenarioSha256("Hispania of Numida.BFHP") == nullptr);
+	CHECK(BaseScenarioSha256("") == nullptr);
+}
+
 void Clock()
 {
 	CHECK_EQ(TourneyClock(552000), std::string("09:12"));
@@ -567,6 +923,13 @@ int main()
 	Notices();
 	Community();
 	CupForm();
+	Maps();
+	Settings();
+	Requirements();
+	CupFull();
+	Estimate();
+	Calendar();
+	BaseScenarios();
 	Clock();
 	Bracket();
 	return test::Summary("tournament");
