@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "core/log.h"
+#include "ui/fullscreen.h"
 #include "ui/modui.h"
 #include "mods/updater.h"
 #include "ui/updateui.h"
@@ -407,7 +408,7 @@ void UpdateUiDrawPanel(uint32_t *buf, int w, int h)
 	const int H = 24 + 40 + lineH + notesH + barH + 80;
 	const float s = std::max(0.6f, std::min(sw, (h - 24) / static_cast<float>(H)));
 	PanelRender r(g_panelCanvas, buf, w, h);
-	if (!r.Begin(kPanelW, H, 24, true, s)) return;
+	if (!BeginWindow(r, kPanelW, H, 24, s)) return;
 	r.Focus(g_tabAction, 0);
 	Painter &p = r.p;
 	const int ox = r.ox, oy = r.oy, pw = r.pw, ph = r.ph;
@@ -417,16 +418,14 @@ void UpdateUiDrawPanel(uint32_t *buf, int w, int h)
 		mx = g_mx;
 		my = g_my;
 	}
-	PaintWindowFrame(p, kPanelW, H);
-	int y = 20;
-	PaintTitle(p, x, y, w2, title);
-	y += 40;
+	PaintWindowCard(p, kPanelW, H);
+	PaintWindowTitle(p, x, 14, w2, 42, title, 38);
+	int y = 60;
 	p.Font(3);
 	p.TextWrapped(x, y, w2, lineH, line, info.state == UpdaterInfo::kFailed ? pal::bad : pal::text);
 	y += lineH;
 	if (!notes.empty()) {
-		p.Font(1);
-		p.Text(x, y + 4, w2, 22, "What's new", pal::text);
+		PaintSectionLabel(p, x, y + 4, w2, 22, "What's new");
 		p.Fill(x, y + 28, w2, 1, pal::hairline);
 		p.Font(3);
 		const int top = y + 34, offset = static_cast<int>(scroll);

@@ -17,6 +17,7 @@
 #include "net/patrons.h"
 #include "core/guard.h"
 #include "core/log.h"
+#include "ui/fullscreen.h"
 #include "ui/modui.h"
 #include "ui/patronui.h"
 #include "ui/report.h"
@@ -275,7 +276,7 @@ void SupportDrawPanel(uint32_t *buf, int w, int h)
 	BuildRows(donate, contact);
 	const int H = PanelHeight(donate, contact);
 	PanelRender r(g_panelCanvas, buf, w, h);
-	if (!r.Begin(kPanelW, H)) return;
+	if (!BeginWindow(r, kPanelW, H)) return;
 	r.Focus(g_tabAction, 0);
 	Painter &p = r.p;
 	const int ox = r.ox, oy = r.oy, pw = r.pw, ph = r.ph;
@@ -291,10 +292,9 @@ void SupportDrawPanel(uint32_t *buf, int w, int h)
 		copiedAt = g_copiedAt;
 	}
 	if (copied >= 0 && GetTickCount() - copiedAt > 2000) copied = -1;
-	PaintWindowFrame(p, kPanelW, H);
+	PaintWindowCard(p, kPanelW, H);
 	const int x = 28, w2 = kPanelW - 56;
-	int y = 20;
-	PaintTitle(p, x, y, w2, "Support the project");
+	PaintWindowTitle(p, x, 12, w2, 46, "Support the project", 42);
 
 	PatronsRollRefresh();
 	int state = 0;
@@ -306,16 +306,16 @@ void SupportDrawPanel(uint32_t *buf, int w, int h)
 		const char *const labels[2] = {"Support", "Honour roll"};
 		for (int i = 0; i < 2; i++) {
 			p.Font(1);
-			const int tw = p.TextWidth(labels[i]) + 28;
+			const int tw = p.CapsWidth(labels[i], 1) + 32;
 			const bool active = tab == i, hov = !active && p.Hover(tx, kTabRowY, tw, 34, mx, my);
-			p.Text(tx, kTabRowY, tw, 34, labels[i], active ? pal::redText : hov ? pal::text : pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-			if (active) p.Fill(tx + 6, kTabRowY + 32, tw - 12, 3, pal::redText);
+			p.TextCaps(tx, kTabRowY, tw, 32, labels[i], active || hov ? pal::text : pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
+			if (active) p.Fill(tx, kTabRowY + 32, tw, 3, pal::red);
 			p.AddHit(tx, kTabRowY, tw, 34, i == 0 ? kTabSupport : kTabRoll, 0);
 			tx += tw + 8;
 		}
 		p.Fill(x, kTabRowY + 35, w2, 1, pal::hairline);
 	}
-	y = kContentY;
+	int y = kContentY;
 
 	if (tab == 0) {
 		p.Font(3);
@@ -342,8 +342,7 @@ void SupportDrawPanel(uint32_t *buf, int w, int h)
 		y += kPodiumMiniH + 16;
 		int index = 0;
 		auto header = [&](const char *title) {
-			p.Font(1);
-			p.Text(x, y + 4, w2, 22, title, pal::text);
+			PaintSectionLabel(p, x, y + 4, w2, 22, title);
 			p.Fill(x, y + 28, w2, 1, pal::hairline);
 			y += kSectionH;
 		};
