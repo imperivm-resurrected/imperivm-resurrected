@@ -210,8 +210,9 @@ void CreateRoom(const TourneyClaim &claim)
 	s.mode = "Tournament";
 	s.maxPlayers = 2;
 	s.visibility = 0;
-	s.spectators = true;
 	s.specDelay = TourneySpecDelay(claim.settings);
+	s.spectators = s.specDelay != 0;
+	if (!s.spectators) s.specDelay = 120;
 	s.leagueTag = TourneyRoomTag(f.match);
 	g_s.hostSave = SaveEntry();
 	g_s.hostSavePublished = false;
@@ -440,58 +441,26 @@ void StepInRoom(const TourneyNext &next)
 			SteamKick(m.id);
 		}
 	}
-	if (!mine || !g_s.game.active || !g_s.game.host || g_s.game.busy || k.applied || k.tries >= 12 || now - k.at < 800) return;
+	// This computer's copy of a scenario that is not the cup's is told once, before the game starts.
+	if (mine && !k.mapWarned && next.map.Scenario()) {
+		const CupMapStatus map = LeagueCupMap(next.map).status;
+		if (map != CupMapStatus::Checking) {
+			k.mapWarned = true;
+			const std::string warning = map == CupMapStatus::Downloading ? std::string() : CupMapWarning(next.map);
+			if (!warning.empty()) Toast(warning, true);
+		}
+	}
+	if (!mine || !g_s.game.active || !g_s.game.host || g_s.game.busy || k.applied || k.tries >= 24 || now - k.at < 800) return;
 	k.at = now;
 	k.tries++;
-	bool done = true;
 	k.applying = true;
-	for (int i = 0; i < kPresetCount; i++) {
-		if (_stricmp(kPresets[i].name, next.settings.preset.c_str()) != 0) continue;
-		// The hidden civilizations are the tournament's on top of the preset, which does not have them.
-		if (MatchPreset(g_s.game.siteFlags, g_s.game.rules & ~kRuleBlindPick, HostOptionGetter(g_s.game)) != i) {
-			g_s.dropKind = kDropPreset;
-			g_s.dropIndex = 0;
-			DoAction(kGDropPick, i);
-			done = false;
-		}
-	}
-	if (next.settings.hideCivs && !(g_s.game.rules & kRuleBlindPick)) {
-		g_s.game.rules |= kRuleBlindPick;
-		GameRoomSetRules(g_s.game.rules);
-		done = false;
-	}
-	auto pick = [&](int id, const std::string &want) {
-		if (want.empty()) return;
-		for (GameRoomOption &o : g_s.game.options) {
-			if (o.id != id) continue;
-			bool byText = false;
-			const int i = LeagueMapItemFor(o.keys, o.items, o.itemDisabled, want, byText);
-			if (i < 0) {
-				// The size waits for the type set just now, which decides the sizes the game offers. Otherwise the game has no such
-				// map here: the host picks it by hand.
-				if (done || id != 0x01000008) {
-					k.mapAllowed = true;
-					LogW("league", "the tournament's map \"%s\" is not in the room's list (0x%x)", want.c_str(), id);
-				}
-				return;
-			}
-			if (byText) LogW("league", "no map id behind the room's items; \"%s\" picked by its name (\"%s\")", want.c_str(), o.items[i].c_str());
-			if (o.sel != i) {
-				o.sel = i;
-				Predict(kPredOptSel, o.id, i);
-				GameRoomSetOption(o.id, i);
-				done = false;
-			}
-			return;
-		}
-	};
-	pick(0x1000, next.map.name);
-	pick(0x01000008, next.map.size);
+	const bool done = ApplyTourneyRoom(next, k);
 	k.applying = false;
 	if (done) {
 		k.applied = true;
 		LogI("league", "the tournament's options are set in the room%s", k.mapAllowed ? " (the map is the host's to pick)" : "");
 	}
+	else if (k.tries >= 24) LogW("league", "the tournament's options could not all be set in the room");
 }
 
 std::string Initials(const std::string &name)
@@ -1487,6 +1456,10 @@ bool TourneyBlocksAction(int action, int arg)
 	case kGRuleToggle:
 	case kGSiteToggle:
 	case kGOptToggle: blocked = true; break;
+	// The room's selector, while the tournament picks its scenario in it.
+	case kPickRow:
+	case kPickOk:
+	case kPickCancel: blocked = !g_tourney.lock.mapAllowed && LeagueTourneyMine().mine.next.map.Scenario(); break;
 	case kGDropOpen: {
 		const int kind = arg & kDropKindMask, index = arg >> kDropKindBits;
 		if (kind == kDropOption) {
