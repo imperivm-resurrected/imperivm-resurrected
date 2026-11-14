@@ -222,4 +222,67 @@ void PaintScreenInfo(Painter &p, const ScreenLayout &l, const std::string &text,
 	p.Text(l.margin, l.infoY, l.w - 2 * l.margin, l.infoH, text, color, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }
 
+bool BeginWindow(PanelRender &r, int designW, int designH, int margin, float forceScale)
+{
+	if (!r.Begin(designW, designH, margin, true, forceScale)) return false;
+	// Without what lies under it, the glass would blend over the window's previous frame and keep its ghost.
+	const Canvas &c = r.canvas;
+	const uint32_t outside = PixelOf(pal::bg);
+	GdiFlush();
+	for (int y = 0; y < c.h; y++) {
+		uint32_t *row = c.bits + static_cast<size_t>(y) * c.w;
+		const int sy = r.oy + y;
+		if (sy < 0 || sy >= r.h) {
+			std::fill(row, row + c.w, outside);
+			continue;
+		}
+		const uint32_t *src = r.buf + static_cast<size_t>(sy) * r.w;
+		for (int x = 0; x < c.w; x++) {
+			const int sx = r.ox + x;
+			row[x] = sx >= 0 && sx < r.w ? src[sx] : outside;
+		}
+	}
+	return true;
+}
+
+void PaintWindowCard(Painter &p, int w, int h)
+{
+	PaintGlassCard(p, 0, 0, w, h);
+}
+
+int PaintWindowTitle(Painter &p, int x, int y, int w, int h, const std::string &title, int size, int letterSpacing)
+{
+	SelectObject(p.dc, BrandFont(BrandFace::Display, size, p.s));
+	const int titleW = std::min(w, p.CapsWidth(title, letterSpacing) + 4);
+	p.TextCaps(x, y, titleW, h, title, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, letterSpacing);
+	return titleW;
+}
+
+int PaintWindowHeading(Painter &p, int w, const std::string &title, const std::string &caption, const std::vector<TabSpec> &tabs, int right, int mx,
+	int my, int height, int letterSpacing)
+{
+	constexpr int m = 24, tabGap = 32, tabH = 34, captionH = 20, ruleGap = 4;
+	if (right <= 0) right = w - m;
+	const int titleSize = height >= 76 ? 44 : 38, titleH = titleSize + 4;
+	const int titleY = caption.empty() ? (height - ruleGap - titleH) / 2 : std::max(4, height - ruleGap - 4 - captionH - titleH);
+	p.Font(1);
+	int tabW = 0;
+	for (const TabSpec &t : tabs) tabW = std::max(tabW, p.CapsWidth(t.label, 1) + 32);
+	const int count = static_cast<int>(tabs.size()), tabsW = count ? count * tabW + (count - 1) * 6 + tabGap : 0;
+	const int titleW = PaintWindowTitle(p, m, titleY, std::max(120, right - m - tabsW), titleH, title, titleSize, letterSpacing);
+	if (count) PaintTabs(p, m + titleW + tabGap, titleY + titleH - tabH, tabs, mx, my, tabW, tabH, 1);
+	if (!caption.empty()) {
+		p.Font(0);
+		p.Text(m, titleY + titleH, right - m, captionH, caption, pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	}
+	p.Fill(m, height - ruleGap, w - 2 * m, 1, pal::hairline);
+	return height;
+}
+
+void PaintSectionLabel(Painter &p, int x, int y, int w, int h, const std::string &text)
+{
+	p.Font(4);
+	p.TextCaps(x, y, w, h, text, pal::redText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 2);
+}
+
 }

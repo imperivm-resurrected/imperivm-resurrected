@@ -60,4 +60,18 @@ void PaintScreenTitle(Painter &p, const ScreenLayout &l, const std::string &titl
 // The caption line under the title.
 void PaintScreenInfo(Painter &p, const ScreenLayout &l, const std::string &text, COLORREF color = pal::caption);
 
+// The windows over a running game keep their size and the map around them, with the look of the full screens but no backdrop.
+// BeginWindow starts one: the game's frame under the window goes into its canvas first, so the glass card lets it through faintly.
+bool BeginWindow(PanelRender &r, int designW, int designH, int margin = 24, float forceScale = 0.0f);
+// The whole window as one glass card.
+void PaintWindowCard(Painter &p, int w, int h);
+// A window's title: League Gothic, uppercase, `size` pixels, at the left of its box; returns how wide it came out.
+int PaintWindowTitle(Painter &p, int x, int y, int w, int h, const std::string &title, int size = 44, int letterSpacing = 1);
+// The header of a window, `height` tall: the title, the caption under it, the tabs on the title's baseline before `right` (0: the
+// window's margin) and a hairline under all. Returns where the content can start.
+int PaintWindowHeading(Painter &p, int w, const std::string &title, const std::string &caption = std::string(), const std::vector<TabSpec> &tabs = {},
+	int right = 0, int mx = -10000, int my = -10000, int height = kWindowHeaderH, int letterSpacing = 1);
+// A section's name inside a card or a dialog: small red capitals, as the cards of the full screens title theirs.
+void PaintSectionLabel(Painter &p, int x, int y, int w, int h, const std::string &text);
+
 }
