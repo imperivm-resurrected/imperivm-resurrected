@@ -63,6 +63,8 @@ struct LeagueQueueAnswer {
 	LeagueQueueStatus status = LeagueQueueStatus::Unknown;
 	int64_t since = 0;
 	int searching = 0, estimateSec = 0;
+	// The server's clock when it answered (ms since 1970); 0 when it does not say.
+	int64_t serverNow = 0;
 	// Found: the match waiting for answers. Idle: the match being played, if any (a restarted mod finds it so).
 	int64_t matchId = 0;
 	LeaguePlayerCard opponent;
@@ -82,6 +84,8 @@ struct LeagueRankedResult {
 	int divisionBefore = 0, divisionAfter = 0;
 	bool promoted = false, demoted = false;
 	int shield = 0, placementLeft = 0;
+	// The game that ended the placement: it gives a rank, not a change of Glory (`delta` is null and reads 0).
+	bool placed = false;
 };
 LeagueRankedResult LeagueParseRankedResult(const Json *v);
 
@@ -100,6 +104,7 @@ struct LeagueMatchTicket {
 	std::string abandonedBy, fault;
 	std::vector<LeaguePlayerCard> players;
 	LeagueRankedResult ranked;
+	int64_t serverNow = 0;
 };
 bool LeagueParseMatch(const Json &j, LeagueMatchTicket &out);
 // The player of the ticket with that SteamID, or the other one; null when there is none.
@@ -146,6 +151,8 @@ bool LeagueParseReportAnswer(const Json &j, LeagueReportAnswer &out);
 // The body of an error: {error, message} and what some errors add.
 struct LeagueError {
 	std::string code, message, contentKey;
+	// Why a player is locked out of the queue (409 banned): "declined", "abandoned" or "desync".
+	std::string kind;
 	int64_t until = 0, matchId = 0;
 	// Too many requests (429 rate_limited): whole seconds to wait before asking again; 0 when not said.
 	int retryAfter = 0;
@@ -154,6 +161,78 @@ LeagueError LeagueParseError(const Json &j);
 // How long to wait before the next poll: after a 429, what the server asks (at least 1 s, 5 s when it does not say), and never
 // less than `normalMs`; after anything else, `normalMs`.
 int64_t LeagueRetryAfterMs(int httpStatus, const LeagueError &e, int64_t normalMs);
+// Why the queue is locked, as the English text to translate: a match declined or let go (also when the server does not say), a game
+// left, or too many games out of sync.
+const char *LeagueBanText(const std::string &kind);
+
+// GET /v1/league/stats: who uses the queue now, for the hub before searching.
+struct LeagueStats {
+	int searching = 0, playing = 0, gamesToday = 0;
+	int64_t serverNow = 0;
+};
+bool LeagueParseStats(const Json &j, LeagueStats &out);
+
+// How far ahead of this computer's clock the server's is, from an answer's serverNow and this computer's clock when the request left
+// and when the answer came (it was written about halfway). 0 without serverNow.
+int64_t LeagueClockOffsetMs(int64_t serverNow, int64_t sentAtMs, int64_t receivedAtMs);
+
+// One ranked game of the player, as GET /v1/league/matches?mine=1 lists it.
+enum class LeagueGameResult { Pending, Win, Loss, Void, Disputed };
+struct LeagueHistoryGame {
+	int64_t id = 0, playedAt = 0;
+	uint32_t durationMs = 0;
+	LeagueMapFacts map;
+	LeaguePlayerCard opponent;
+	std::string myCiv, opponentCiv, endedBy;
+	LeagueGameResult result = LeagueGameResult::Pending;
+	// The Glory it gave: none until it counts, nor for the game that ended the placement (`placed`).
+	bool hasDelta = false;
+	int gloryDelta = 0;
+	bool placed = false;
+};
+struct LeagueHistoryPage {
+	std::vector<LeagueHistoryGame> games;
+	bool more = false;
+};
+bool LeagueParseHistory(const Json &j, LeagueHistoryPage &out);
+// The `before` of the next, older page: when the last game of this one was played; 0 when there is none.
+int64_t LeagueHistoryNextBefore(const LeagueHistoryPage &p);
+// "Report a problem" stays open for a day after the game.
+constexpr int64_t kLeagueDisputeWindowMs = 24LL * 3600 * 1000;
+bool LeagueDisputeOpen(int64_t playedAt, int64_t nowMs);
+
+// The place in the leaderboard only shows in its top half: below it, the bar to the next division says more.
+bool LeaguePlaceShown(int position, int total);
+// The line that closes the Imperators: under the last one, when someone who is not one follows.
+bool LeagueImperatorLineAfter(const LeagueBoardRow &row, const LeagueBoardRow *next);
+
+// A ranked game can only be surrendered from minute 5 of the game's clock.
+constexpr uint32_t kLeagueSurrenderFromMs = 5 * 60 * 1000;
+bool LeagueSurrenderAllowed(bool ranked, uint32_t gameMs);
+
+// A ranked 1v1 whose opponent dropped waits 3 minutes for them, paused (2-clasificatoria-sistema.md §8.3); then the one who stayed may
+// claim the win. The times are this computer's clock in ms: the game's own does not run while it is paused.
+constexpr int64_t kLeagueDropWaitMs = 3 * 60 * 1000;
+enum class LeagueDropPhase { None, Waiting, Claimable, Claimed };
+struct LeagueDropWait {
+	bool gone = false, claimed = false;
+	int64_t since = 0;
+	// The game's time when they left, for the report.
+	uint32_t dropAtMs = 0;
+};
+// The opponent left at `gameMs` of the game (leaving again starts the wait again).
+void LeagueDropGone(LeagueDropWait &w, int64_t nowMs, uint32_t gameMs);
+// They came back: the game goes on.
+void LeagueDropBack(LeagueDropWait &w);
+// The player claims the win: only once the wait is over. True when it was taken.
+bool LeagueDropClaim(LeagueDropWait &w, int64_t nowMs);
+LeagueDropPhase LeagueDropPhaseAt(const LeagueDropWait &w, int64_t nowMs);
+// What is left of the wait, never negative.
+int64_t LeagueDropLeftMs(const LeagueDropWait &w, int64_t nowMs);
+
+// The accounts of a ranked 1v1 that the game's names could not tell, from its ticket: this computer's seat is `ownId` and the other
+// human is the ticket's other player.
+void LeagueSeatsFromTicket(std::vector<LeagueSeat> &seats, const LeagueMatchTicket &t, uint64_t ownId);
 
 // Where some Glory leaves a player: their rank and how far into its division (0 to 99). Legate I has no top: `capped` is false there
 // and `into` keeps counting.

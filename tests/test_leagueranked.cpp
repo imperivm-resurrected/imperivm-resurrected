@@ -531,6 +531,231 @@ void DemotionAndPlacement()
 	CHECK(f.rays > 0);
 }
 
+void History()
+{
+	// As the server lists the player's games (GET /v1/league/matches?mine=1).
+	LeagueHistoryPage page;
+	CHECK(LeagueParseHistory(Parse(R"({"matches":[
+		{"id":41,"playedAt":1700000900000,"durationMs":1442000,"map":{"name":"mountain_passes","size":"medium"},
+		 "opponent":{"steamId":"76561198000000002","name":"Ambiorix","tier":"centurion","division":2},"myCiv":"rome","opponentCiv":"gauls",
+		 "result":"win","gloryDelta":19,"placed":false,"endedBy":"victory"},
+		{"id":40,"playedAt":1700000500000,"durationMs":null,"map":{"name":"continent","size":"small"},
+		 "opponent":{"steamId":"76561198000000003","name":null,"tier":null,"division":null},"myCiv":null,"opponentCiv":null,
+		 "result":"pending","gloryDelta":null,"placed":false,"endedBy":null},
+		{"id":39,"playedAt":1700000100000,"durationMs":900000,"map":{"name":"island","size":"small"},
+		 "opponent":{"steamId":"76561198000000004","name":"Livia","tier":"imperator","division":null},"myCiv":"carthage","opponentCiv":"egypt",
+		 "result":"loss","gloryDelta":null,"placed":true,"endedBy":"opponent_left"},
+		{"id":38,"playedAt":1700000000000,"durationMs":60000,"map":{"name":"island"},"opponent":{"steamId":"5"},"result":"void","gloryDelta":0},
+		{"id":37,"playedAt":1699999000000,"durationMs":60000,"map":null,"opponent":{"steamId":"6"},"result":"disputed","gloryDelta":-12},
+		{"id":0,"playedAt":1},"junk"],"more":true})"),
+		page));
+	CHECK(page.more);
+	CHECK_EQ(static_cast<int>(page.games.size()), 5);
+	const LeagueHistoryGame &won = page.games[0];
+	CHECK_EQ(static_cast<int>(won.id), 41);
+	CHECK(won.result == LeagueGameResult::Win);
+	CHECK(won.hasDelta);
+	CHECK_EQ(won.gloryDelta, 19);
+	CHECK(!won.placed);
+	CHECK_EQ(won.map.name, std::string("mountain_passes"));
+	CHECK_EQ(won.map.size, std::string("medium"));
+	CHECK_EQ(won.opponent.name, std::string("Ambiorix"));
+	CHECK_EQ(TierNumber(won.opponent.tier), TierNumber(LeagueTier::Centurion));
+	CHECK_EQ(won.opponent.division, 2);
+	CHECK_EQ(won.myCiv, std::string("rome"));
+	CHECK_EQ(won.opponentCiv, std::string("gauls"));
+	CHECK_EQ(static_cast<int>(won.durationMs), 1442000);
+	CHECK_EQ(won.endedBy, std::string("victory"));
+	// What the server does not know yet stays empty.
+	const LeagueHistoryGame &pending = page.games[1];
+	CHECK(pending.result == LeagueGameResult::Pending);
+	CHECK(!pending.hasDelta);
+	CHECK_EQ(static_cast<int>(pending.durationMs), 0);
+	CHECK(pending.opponent.name.empty());
+	CHECK_EQ(TierNumber(pending.opponent.tier), TierNumber(LeagueTier::None));
+	CHECK(pending.myCiv.empty());
+	// The game that ended the placement places, it gives no Glory.
+	const LeagueHistoryGame &placed = page.games[2];
+	CHECK(placed.placed);
+	CHECK(!placed.hasDelta);
+	CHECK(placed.result == LeagueGameResult::Loss);
+	CHECK_EQ(TierNumber(placed.opponent.tier), TierNumber(LeagueTier::Imperator));
+	CHECK_EQ(placed.opponent.division, 0);
+	CHECK(page.games[3].result == LeagueGameResult::Void);
+	CHECK(page.games[3].hasDelta);
+	CHECK(page.games[4].result == LeagueGameResult::Disputed);
+	CHECK(page.games[4].map.name.empty());
+	// The next page goes on before the last game of this one; there is none without more.
+	CHECK_EQ(static_cast<unsigned long long>(LeagueHistoryNextBefore(page)), 1699999000000ULL);
+	page.more = false;
+	CHECK_EQ(static_cast<int>(LeagueHistoryNextBefore(page)), 0);
+	CHECK(LeagueParseHistory(Parse(R"({"matches":[],"more":false})"), page));
+	CHECK(page.games.empty());
+	CHECK_EQ(static_cast<int>(LeagueHistoryNextBefore(page)), 0);
+	CHECK(!LeagueParseHistory(Parse(R"({"rows":[]})"), page));
+	CHECK(!LeagueParseHistory(Parse("[]"), page));
+
+	// "Report a problem" stays open for a day after the game.
+	const int64_t day = 24LL * 3600 * 1000;
+	CHECK(LeagueDisputeOpen(1000, 1000 + day - 1));
+	CHECK(!LeagueDisputeOpen(1000, 1000 + day));
+	CHECK(!LeagueDisputeOpen(0, 5));
+}
+
+void StatsAndClock()
+{
+	LeagueStats s;
+	CHECK(LeagueParseStats(Parse(R"({"searching":3,"playing":2,"gamesToday":14,"serverNow":1700000000000})"), s));
+	CHECK_EQ(s.searching, 3);
+	CHECK_EQ(s.playing, 2);
+	CHECK_EQ(s.gamesToday, 14);
+	CHECK_EQ(static_cast<unsigned long long>(s.serverNow), 1700000000000ULL);
+	CHECK(LeagueParseStats(Parse(R"({"searching":0,"playing":-1})"), s));
+	CHECK_EQ(s.searching, 0);
+	CHECK_EQ(s.playing, 0);
+	CHECK_EQ(s.gamesToday, 0);
+	CHECK(!LeagueParseStats(Parse(R"({"error":"rate_limited"})"), s));
+
+	// The answer was written about halfway between the request and its answer.
+	CHECK_EQ(static_cast<int>(LeagueClockOffsetMs(1000500, 1000000, 1000200)), 400);
+	// A computer 5 minutes ahead.
+	CHECK_EQ(static_cast<int>(LeagueClockOffsetMs(1000000, 1300000, 1300000)), -300000);
+	CHECK_EQ(static_cast<int>(LeagueClockOffsetMs(0, 1000, 1200)), 0);
+	CHECK_EQ(static_cast<int>(LeagueClockOffsetMs(5000, 1000, 900)), 4000);
+
+	// The queue and the match say the server's time.
+	LeagueQueueAnswer q;
+	CHECK(LeagueParseQueue(Parse(R"({"status":"searching","since":1000,"searching":2,"estimateSec":30,"serverNow":2500})"), q));
+	CHECK_EQ(static_cast<int>(q.serverNow), 2500);
+	CHECK(LeagueParseQueue(Parse(R"({"status":"idle","matchId":null,"serverNow":7})"), q));
+	CHECK_EQ(static_cast<int>(q.serverNow), 7);
+	LeagueMatchTicket t;
+	CHECK(LeagueParseMatch(Parse(R"({"id":9,"status":"ready","serverNow":1700000000123})"), t));
+	CHECK_EQ(static_cast<unsigned long long>(t.serverNow), 1700000000123ULL);
+}
+
+void BanAndPlacement()
+{
+	// 409 banned says why.
+	LeagueError e = LeagueParseError(Parse(R"({"error":"banned","message":"You cannot search for a while","until":1700000300000,"kind":"desync"})"));
+	CHECK_EQ(e.kind, std::string("desync"));
+	CHECK_EQ(std::string(LeagueBanText(e.kind)), std::string("Too many of your games went out of sync: you can't search for a while."));
+	CHECK_EQ(std::string(LeagueBanText("abandoned")), std::string("You left a ranked game: you can't search for a while."));
+	CHECK_EQ(std::string(LeagueBanText("declined")), std::string("You declined or let a match go: you can't search for a while."));
+	// An older server does not say why: declining is what locked the queue then.
+	CHECK_EQ(std::string(LeagueBanText("")), std::string(LeagueBanText("declined")));
+
+	// The end of the placement: `placed`, no delta, and the screen shows the rank reached.
+	LeagueReportAnswer a;
+	CHECK(LeagueParseReportAnswer(Parse(R"({"status":"confirmed","ranked":{"gloryBefore":0,"gloryAfter":975,"delta":null,"placed":true,
+		"tierBefore":null,"divisionBefore":null,"tierAfter":"centurion","divisionAfter":2,"promoted":false,"demoted":false,"shield":0,"placementLeft":0}})"),
+		a));
+	CHECK(a.ranked.placed);
+	CHECK_EQ(a.ranked.delta, 0);
+	CHECK(LeagueResultKindOf(a.ranked) == LeagueResultKind::PlacementDone);
+	// Even when the server had a provisional tier before it.
+	a.ranked.tierBefore = LeagueTier::Signifer;
+	a.ranked.divisionBefore = 1;
+	CHECK(LeagueResultKindOf(a.ranked) == LeagueResultKind::PlacementDone);
+	a.ranked.placed = false;
+	CHECK(LeagueResultKindOf(a.ranked) != LeagueResultKind::PlacementDone);
+	CHECK(!LeagueParseRankedResult(nullptr).placed);
+}
+
+void PlaceAndLines()
+{
+	// The place shows in the top half of the leaderboard only.
+	CHECK(LeaguePlaceShown(1, 612));
+	CHECK(LeaguePlaceShown(306, 612));
+	CHECK(!LeaguePlaceShown(307, 612));
+	CHECK(!LeaguePlaceShown(540, 612));
+	CHECK(LeaguePlaceShown(1, 1));
+	CHECK(!LeaguePlaceShown(0, 50));
+	CHECK(!LeaguePlaceShown(3, 0));
+
+	// The line under the last Imperator, only when one exists and someone who is not one follows.
+	LeagueBoardRow imperator, praetorian, legate;
+	imperator.tier = LeagueTier::Imperator;
+	praetorian.tier = LeagueTier::Praetorian;
+	legate.tier = LeagueTier::Legate;
+	CHECK(LeagueImperatorLineAfter(imperator, &praetorian));
+	CHECK(LeagueImperatorLineAfter(imperator, &legate));
+	CHECK(!LeagueImperatorLineAfter(imperator, &imperator));
+	CHECK(!LeagueImperatorLineAfter(imperator, nullptr));
+	CHECK(!LeagueImperatorLineAfter(legate, &legate));
+	CHECK(!LeagueImperatorLineAfter(praetorian, &legate));
+
+	// Surrender from minute 5 of a ranked game; any time in the others.
+	CHECK(!LeagueSurrenderAllowed(true, 0));
+	CHECK(!LeagueSurrenderAllowed(true, 299999));
+	CHECK(LeagueSurrenderAllowed(true, 300000));
+	CHECK(LeagueSurrenderAllowed(false, 0));
+}
+
+void DropWait()
+{
+	LeagueDropWait w;
+	CHECK(LeagueDropPhaseAt(w, 0) == LeagueDropPhase::None);
+	CHECK_EQ(static_cast<int>(LeagueDropLeftMs(w, 0)), 0);
+	CHECK(!LeagueDropClaim(w, 0));
+
+	// The opponent leaves at minute 7 of the game: 3 minutes of this computer's clock to come back.
+	LeagueDropGone(w, 10000, 420000);
+	CHECK(LeagueDropPhaseAt(w, 10000) == LeagueDropPhase::Waiting);
+	CHECK_EQ(static_cast<int>(w.dropAtMs), 420000);
+	CHECK_EQ(static_cast<int>(LeagueDropLeftMs(w, 10000)), 180000);
+	CHECK_EQ(LeagueClockText(LeagueDropLeftMs(w, 29000) + 999), std::string("2:41"));
+	CHECK(!LeagueDropClaim(w, 189999));
+	CHECK(LeagueDropPhaseAt(w, 189999) == LeagueDropPhase::Waiting);
+
+	// They come back: the game goes on, and a new drop waits the whole time again.
+	LeagueDropBack(w);
+	CHECK(LeagueDropPhaseAt(w, 500000) == LeagueDropPhase::None);
+	LeagueDropGone(w, 600000, 900000);
+	CHECK_EQ(static_cast<int>(w.dropAtMs), 900000);
+	CHECK(LeagueDropPhaseAt(w, 779999) == LeagueDropPhase::Waiting);
+	CHECK(LeagueDropPhaseAt(w, 780000) == LeagueDropPhase::Claimable);
+	CHECK_EQ(static_cast<int>(LeagueDropLeftMs(w, 900000)), 0);
+
+	// The claim, once the wait is over; afterwards nothing changes it.
+	CHECK(LeagueDropClaim(w, 780000));
+	CHECK(LeagueDropPhaseAt(w, 780000) == LeagueDropPhase::Claimed);
+	CHECK(!LeagueDropClaim(w, 790000));
+	LeagueDropBack(w);
+	LeagueDropGone(w, 800000, 1);
+	CHECK(LeagueDropPhaseAt(w, 800000) == LeagueDropPhase::Claimed);
+	CHECK_EQ(static_cast<int>(w.dropAtMs), 900000);
+}
+
+void SeatsFromTicket()
+{
+	LeagueMatchTicket t;
+	CHECK(LeagueParseMatch(Parse(R"({"id":9,"status":"playing","players":[{"steamId":"11","name":"Me"},{"steamId":"22","name":"Other"}]})"), t));
+	auto seat = [](int index, bool human, bool local, uint64_t id) {
+		LeagueSeat s;
+		s.index = index;
+		s.human = human;
+		s.local = local;
+		s.steamId = id;
+		return s;
+	};
+	// The game's names told neither account: this computer is the first player of the ticket, the other human the second.
+	std::vector<LeagueSeat> seats = {seat(0, true, true, 0), seat(1, true, false, 0), seat(2, false, false, 0)};
+	LeagueSeatsFromTicket(seats, t, 11);
+	CHECK_EQ(static_cast<unsigned long long>(seats[0].steamId), 11ULL);
+	CHECK_EQ(static_cast<unsigned long long>(seats[1].steamId), 22ULL);
+	CHECK_EQ(static_cast<unsigned long long>(seats[2].steamId), 0ULL);
+	// An account already told is kept.
+	seats = {seat(0, true, true, 11), seat(1, true, false, 33)};
+	LeagueSeatsFromTicket(seats, t, 11);
+	CHECK_EQ(static_cast<unsigned long long>(seats[1].steamId), 33ULL);
+	// Two humans not told apart: neither gets the other's account.
+	seats = {seat(0, true, true, 11), seat(1, true, false, 0), seat(2, true, false, 0)};
+	LeagueSeatsFromTicket(seats, t, 11);
+	CHECK_EQ(static_cast<unsigned long long>(seats[1].steamId), 0ULL);
+	CHECK_EQ(static_cast<unsigned long long>(seats[2].steamId), 0ULL);
+}
+
 }
 
 int main()
@@ -547,5 +772,11 @@ int main()
 	SteadyAnimation();
 	PromotionAnimation();
 	DemotionAndPlacement();
+	History();
+	StatsAndClock();
+	BanAndPlacement();
+	PlaceAndLines();
+	DropWait();
+	SeatsFromTicket();
 	return test::Summary("leagueranked");
 }

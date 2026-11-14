@@ -250,7 +250,11 @@ LeagueBadge LeagueBadgeFromJson(const Json *v)
 		if (b.tier == LeagueTier::None) b.tier = LeagueTierFromId(b.id);
 		b.kind = b.tier == LeagueTier::None ? LeagueBadgeKind::None : LeagueBadgeKind::Rank;
 	}
-	else if (kind == "season") b.kind = LeagueBadgeKind::Season;
+	else if (kind == "season") {
+		b.kind = LeagueBadgeKind::Season;
+		const Json *tier = v->Get("tier");
+		b.founder = tier && tier->type == Json::String && Folded(tier->str) == "founder";
+	}
 	else if (kind == "trophy") {
 		b.kind = LeagueBadgeKind::Trophy;
 		const Json *metal = v->Get("tier");
@@ -306,6 +310,12 @@ bool LeagueParseMe(const Json &j, LeagueMe &out)
 		k.elite = r->GetBool("elite");
 	}
 	out.queueBanUntil = Int64(j, "queueBanUntil");
+	if (const Json *ban = j.Get("ban"); ban && ban->type == Json::Object) {
+		out.ban.until = Int64(*ban, "until");
+		out.ban.kind = Lower(ban->GetString("kind"));
+	}
+	if (!out.ban.until) out.ban.until = out.queueBanUntil;
+	if (!out.queueBanUntil) out.queueBanUntil = out.ban.until;
 	out.badge = LeagueBadgeFromJson(j.Get("badge"));
 	if (const Json *b = j.Get("badge"); b && b->type == Json::Object) {
 		out.badgeKind = Lower(b->GetString("kind"));
@@ -455,6 +465,7 @@ Json LeagueReportJson(const LeagueReport &r)
 	o.Set("startedAt", Json::MakeNumber(static_cast<double>(r.startedAt)));
 	o.Set("durationMs", Json::MakeNumber(r.durationMs));
 	o.Set("endedBy", Json::MakeString(r.endedBy));
+	o.Set("dropAtMs", r.dropAtMs >= 0 ? Json::MakeNumber(static_cast<double>(r.dropAtMs)) : Json());
 	Json players = Json::MakeArray();
 	for (const LeagueReportPlayer &p : r.players) {
 		Json e = Json::MakeObject();
@@ -503,7 +514,7 @@ void LeagueCheckpoints::Clear()
 	any_ = false;
 }
 
-LeagueOutcome LeagueResolve(const std::vector<LeagueSeat> &input, bool desync)
+LeagueOutcome LeagueResolve(const std::vector<LeagueSeat> &input, bool desync, const LeagueDropRules &rules)
 {
 	std::vector<LeagueSeat> seats = input;
 	LeagueOutcome out;
@@ -515,12 +526,15 @@ LeagueOutcome LeagueResolve(const std::vector<LeagueSeat> &input, bool desync)
 		return teams;
 	};
 	std::set<int> winners;
+	bool otherLeft = false;
 	for (const LeagueSeat &s : seats) {
 		if (s.state == 3) winners.insert(s.team);
+		otherLeft = otherLeft || (s.left && !s.local);
 	}
+	const bool waiting = rules.ranked && otherLeft && !rules.claimable;
 	if (winners.empty() && !desync) {
 		std::set<int> up = standing();
-		if (up.size() != 1) {
+		if (up.size() != 1 || waiting) {
 			for (LeagueSeat &s : seats) {
 				if (s.local && s.state == 1 && !s.left) {
 					s.left = true;
@@ -538,8 +552,9 @@ LeagueOutcome LeagueResolve(const std::vector<LeagueSeat> &input, bool desync)
 		anyLeft = anyLeft || s.left;
 		loserSurrendered = loserSurrendered || (s.surrendered && !winners.count(s.team));
 	}
-	if (desync) out.endedBy = "disconnect";
+	if (desync) out.endedBy = "desync";
 	else if (loserSurrendered) out.endedBy = "surrender";
+	else if (rules.ranked && otherLeft && !out.localLeft) out.endedBy = "opponent_left";
 	else if (anyLeft || winners.empty()) out.endedBy = "disconnect";
 	else out.endedBy = "victory";
 	return out;

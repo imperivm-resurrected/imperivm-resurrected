@@ -60,8 +60,13 @@ struct LeagueBadge {
 	std::string title;
 	// A trophy's phalera; gold when the server does not say.
 	LeagueMetal metal = LeagueMetal::None;
+	// The emblem of the test season (its tier is "founder"), which everyone who played it keeps instead of a rank's.
+	bool founder = false;
 	bool Shown() const { return kind != LeagueBadgeKind::None; }
-	bool operator==(const LeagueBadge &o) const { return kind == o.kind && id == o.id && tier == o.tier && division == o.division && metal == o.metal; }
+	bool operator==(const LeagueBadge &o) const
+	{
+		return kind == o.kind && id == o.id && tier == o.tier && division == o.division && metal == o.metal && founder == o.founder;
+	}
 };
 // {kind, id, tier?, division?}, or null. A rank badge without a known tier is not shown.
 LeagueBadge LeagueBadgeFromJson(const Json *v);
@@ -84,11 +89,20 @@ struct LeagueRanked {
 	bool elite = false;
 };
 
+// A lock out of the ranked queue: until when (server time, ms since 1970) and why ("declined", "abandoned", "desync"; empty when the
+// server does not say).
+struct LeagueBan {
+	int64_t until = 0;
+	std::string kind;
+};
+
 // GET /v1/league/me.
 struct LeagueMe {
 	std::string steamId, name;
 	LeagueRanked ranked;
 	int64_t queueBanUntil = 0;
+	// `ban` of the server, or what queueBanUntil says when it sends none.
+	LeagueBan ban;
 	LeagueBadge badge;
 	// The choice as the server keeps it: "rank" (the live rank, the default), "season", "trophy" or "none", and its id.
 	std::string badgeKind, badgeId;
@@ -154,6 +168,8 @@ struct LeagueReport {
 	int64_t startedAt = 0;
 	uint32_t durationMs = 0;
 	std::string endedBy;
+	// The game's time when the other side left and did not come back; negative when nobody did (null in the report).
+	int64_t dropAtMs = -1;
 	std::vector<LeagueReportPlayer> players;
 	std::vector<uint32_t> hashes;
 };
@@ -183,7 +199,9 @@ private:
 // A human player of the game as the end of the game left them.
 struct LeagueSeat {
 	int index = 0;
+	// 0 for the AI, and for a human whose account could not be told.
 	uint64_t steamId = 0;
+	bool human = false;
 	std::string name, civ;
 	// The game's alliance: the lowest player index among the allies, the same on every computer.
 	int team = 0;
@@ -202,9 +220,17 @@ struct LeagueOutcome {
 	// The local player closed a game nobody had won yet.
 	bool localLeft = false;
 };
+// How a ranked 1v1 ends when the other player dropped (2-clasificatoria-sistema.md §8.3): it waits for them, and once the wait is over
+// the one who stayed claims the win ("opponent_left", which the league gives to whoever reports it). Closing the game before that is
+// leaving it too, as any undecided game closed ("disconnect").
+struct LeagueDropRules {
+	bool ranked = false;
+	// The wait for the one who left is over (or the win was claimed).
+	bool claimable = false;
+};
 // Who won: the victorious team, or the only team still standing. A game that closed undecided on this computer, without a desync,
-// is this player leaving it.
-LeagueOutcome LeagueResolve(const std::vector<LeagueSeat> &seats, bool desync);
+// is this player leaving it. A desync ends it as "desync", whoever stands.
+LeagueOutcome LeagueResolve(const std::vector<LeagueSeat> &seats, bool desync, const LeagueDropRules &rules = LeagueDropRules());
 // The players of the report: the seats with a SteamID, by player index, with teams numbered from 1 in the order of the game's.
 std::vector<LeagueReportPlayer> LeagueReportPlayers(const std::vector<LeagueSeat> &seats, const LeagueOutcome &outcome);
 
