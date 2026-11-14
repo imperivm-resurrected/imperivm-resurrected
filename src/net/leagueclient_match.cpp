@@ -161,7 +161,10 @@ void SendDue()
 		const HttpReply r = Http("POST", "/v1/league/matches/report", item.body.Dump(), true);
 		Json answer;
 		const std::string status = r.Ok() && Json::Parse(r.body, answer) ? answer.GetString("status", "recorded") : std::string();
-		if (r.Ok()) LogI("league", "game report sent: %s", status.empty() ? "accepted" : status.c_str());
+		if (r.Ok()) {
+			LogI("league", "game report sent: %s", status.empty() ? "accepted" : status.c_str());
+			RankedReportAnswered(item.body, r.body);
+		}
 		else if (Retriable(r.status)) LogW("league", "game report not sent (%s); trying again later", r.Describe().c_str());
 		else LogE("league", "the server refused a game report (%s); it is dropped", r.Describe().c_str());
 		std::lock_guard<std::mutex> lock(g_mx);
@@ -399,6 +402,7 @@ void LeagueMatchEnded()
 		LogI("league", "the account is not linked: the game is not reported");
 		return;
 	}
+	if (report.kind == LeagueMatchKind::Ranked) RankedGameReported(report, steamId);
 	LeagueQueuedReport item;
 	item.steamId = steamId;
 	item.body = LeagueReportJson(report);

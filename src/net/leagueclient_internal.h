@@ -5,6 +5,9 @@
 #include <cstdint>
 #include <string>
 
+#include "core/json.h"
+#include "core/league.h"
+
 namespace leagueclient_impl {
 
 struct HttpReply {
@@ -32,5 +35,12 @@ std::string UrlEncode(const std::string &s);
 
 // The matches module, run from LeagueGameThreadTick.
 void MatchTick();
+
+// The ranked module, run from LeagueGameThreadTick.
+void RankedTick();
+// A ranked game ended on this computer and its report is on its way: the result screen waits for the answer.
+void RankedGameReported(const LeagueReport &report, const std::string &ownSteamId);
+// The server answered a report (from the sending thread); only ranked ones matter here.
+void RankedReportAnswered(const Json &report, const std::string &answer);
 
 }
