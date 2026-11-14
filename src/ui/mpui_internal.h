@@ -18,6 +18,7 @@
 #include "mods/mods.h"
 #include "ui/mpui.h"
 #include "game/gameroom.h"
+#include "net/leagueclient.h"
 #include "net/mpsave.h"
 #include "net/steamnet.h"
 
@@ -251,6 +252,7 @@ struct State {
 	bool inOnlineGame = false;
 	bool leftByUser = false;
 	DWORD camTick = 0;
+	DWORD leagueTick = 0;
 	bool closedByUser = false;
 	bool startingCover = false;
 	RecoverInfo recover;
@@ -338,6 +340,8 @@ extern std::string g_syncResult;
 void SyncTick();
 uint64_t UnixNow();
 void RecordOnlineGame(const OnlineRoom &room);
+// What the league's report needs of the room of the online game being played.
+LeagueMatchInfo LeagueInfoOfRoom(const OnlineRoom &room);
 void RecordOnlineGameRaw(const RecoverInfo &r);
 void ClearOnlineGame();
 void CheckRecover();

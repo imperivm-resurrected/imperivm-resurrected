@@ -30,4 +30,7 @@ std::string AccountSteamId();
 int64_t NowMs();
 std::string UrlEncode(const std::string &s);
 
+// The matches module, run from LeagueGameThreadTick.
+void MatchTick();
+
 }

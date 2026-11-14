@@ -8,6 +8,7 @@
 #include "hooks/hookcount.h"
 #include "core/config.h"
 #include "core/log.h"
+#include "net/leagueclient.h"
 #include "net/nettune.h"
 #include "game/cheats.h"
 #include "net/steamnet.h"
@@ -122,6 +123,7 @@ void *__fastcall HookAdvanceTick(void *tp)
 {
 	void *r = AdvanceTickInner(tp);
 	NetTuneAfterAdvance(tp);
+	LeagueSyncAfterAdvance(tp);
 	return r;
 }
 
@@ -175,6 +177,7 @@ void __stdcall HookDesync(unsigned tick, unsigned hash, unsigned compared)
 	LogE("match", "DESYNC at tick %u: my fingerprint %08x, the other's %08x. Fingerprints: slots %08x threads %08x "
 		"pathfinder %08x exploration %08x scriptstate %08x netcmds %08x extra %08x ai %08x",
 		tick, hash, compared, h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7]);
+	LeagueMatchDesync();
 	if (WriteMoves(static_cast<int>(tick) - kMovesTicksWritten)) {
 		LogI("match", "object moves of the last %d ticks in %s (send the problem report of every player)", kMovesTicksWritten, kMovesFile);
 	}

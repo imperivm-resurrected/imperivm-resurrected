@@ -11,6 +11,7 @@
 #include <cstdint>
 
 #include "net/netdrop.h"
+#include "net/leagueclient.h"
 #include "net/spectator.h"
 #include "MinHook.h"
 #include "hooks/hookcount.h"
@@ -125,6 +126,7 @@ void __fastcall HookSurrender(void *cmd)
 	if (!reinterpret_cast<IsDemo_t>(addr::kIsDemoPlayback)()) {
 		const std::string name = PlayerName(index);
 		LogI("match", "online game: player %d (%s) surrenders", index, name.c_str());
+		LeagueMatchSurrendered(index);
 		ConsoleMessage((name.empty() ? std::string("A player") : name) + Tr(" has surrendered."));
 	}
 	g_origSurrender(cmd);

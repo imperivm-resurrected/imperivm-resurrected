@@ -306,6 +306,8 @@ void MpUiGameThreadTick()
 					g_s.inOnlineGame = true;
 					g_s.classicPending = false;
 					RecordOnlineGame(g_s.room);
+					LeagueMatchPlaying(LeagueInfoOfRoom(SteamCurrentRoom()));
+					g_s.leagueTick = GetTickCount();
 					NetDropReset();
 				}
 				if (g_s.hostSavePublished) {
@@ -499,7 +501,12 @@ void MpUiGameThreadTick()
 				SteamBroadcastCamera(player, x, y);
 			}
 		}
+		if (g_s.inOnlineGame && *reinterpret_cast<void **>(addr::kGame) != nullptr && GetTickCount() - g_s.leagueTick > 2000) {
+			g_s.leagueTick = GetTickCount();
+			LeagueMatchPlaying(LeagueInfoOfRoom(SteamCurrentRoom()));
+		}
 		if (g_s.inOnlineGame && *reinterpret_cast<void **>(addr::kGame) == nullptr && !RejoinReloading()) {
+			LeagueMatchEnded();
 			g_s.inOnlineGame = false;
 			g_s.classicPending = false;
 			if (g_userQuit.tick && GetTickCount() - g_userQuit.tick < 120000) ClearOnlineGame();

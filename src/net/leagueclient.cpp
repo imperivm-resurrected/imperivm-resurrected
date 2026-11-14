@@ -499,4 +499,5 @@ void LeagueGameThreadTick()
 		}
 	}
 	if (!pollToken.empty()) SafeThread(PollLink, serial, pollToken).detach();
+	MatchTick();
 }

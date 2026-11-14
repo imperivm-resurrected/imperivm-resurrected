@@ -62,6 +62,18 @@ void RecordOnlineGame(const OnlineRoom &room)
 	WritePrivateProfileStringA("Online", "GameInProgress", value.c_str(), IniFile().c_str());
 }
 
+LeagueMatchInfo LeagueInfoOfRoom(const OnlineRoom &room)
+{
+	LeagueMatchInfo info;
+	info.lobby = room.id;
+	info.startedAtMs = SteamGameStartedAtMs();
+	info.map = LeagueMapFromOptions(room.info.optionsText, room.info.map);
+	info.contentKey = !room.info.gameplayKey.empty() ? room.info.gameplayKey : SteamOwnGameplayKey();
+	info.roomTag = room.info.leagueTag;
+	for (const OnlineMember &m : room.members) info.members.emplace_back(m.id, m.name);
+	return info;
+}
+
 void RecordOnlineGameRaw(const RecoverInfo &r)
 {
 	const std::string value = std::to_string(r.start) + "|" + (r.host ? "1" : "0") + "|" + std::to_string(r.hostId) + "|" + r.hostName + "|" + r.others +

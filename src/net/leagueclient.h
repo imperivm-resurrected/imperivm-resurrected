@@ -56,5 +56,27 @@ LeagueMeView LeagueMeState();
 // GET /v1/league/me in the background, at most once a minute unless forced.
 void LeagueMeRefresh(bool force = false);
 
-// Every frame on the game thread: polls a pending link.
+// What the multiplayer screen knows of the online game being played. The kind of game comes from the room's "irm" tag, which ranked
+// and tournament rooms carry (ranked:<id>, tournament:<id>); any other room is a normal game.
+struct LeagueMatchInfo {
+	uint64_t lobby = 0;
+	// The host's start, the same for every player; 0 until the room's data says it.
+	int64_t startedAtMs = 0;
+	LeagueMapFacts map;
+	std::string contentKey, roomTag;
+	// Steam id and name of the room's members, to tell who is who among the game's players.
+	std::vector<std::pair<uint64_t, std::string>> members;
+};
+
+// On the game thread, every few seconds while this computer plays an online game (never as a spectator): starts recording it, or
+// keeps recording it after a rejoin.
+void LeagueMatchPlaying(const LeagueMatchInfo &info);
+// The game is over for this computer (it is back in the menu). The report goes to the server in the background when the account is
+// linked; when it cannot be sent, it waits on disk and is tried again.
+void LeagueMatchEnded();
+void LeagueMatchSurrendered(int player);
+void LeagueMatchDesync();
+// From the lockstep, after every tick: keeps the state hash every client compared for the ticks that are multiples of 1000.
+void LeagueSyncAfterAdvance(void *transport);
+// Every frame on the game thread: follows the players of the game being recorded, polls a pending link and sends waiting reports.
 void LeagueGameThreadTick();
