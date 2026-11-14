@@ -19,6 +19,7 @@
 #include "net/patrons.h"
 #include "net/steamnet.h"
 #include "ui/fullscreen.h"
+#include "ui/leagueui.h"
 #include "ui/modui.h"
 #include "ui/patronui.h"
 #include "ui/profileui_view.h"
@@ -258,6 +259,10 @@ void Act(View &v, int action, int arg, Command &cmd)
 	case kActLeagueUnlink:
 		cmd.action = action;
 		break;
+	case kActLeagueBadge:
+		cmd.action = action;
+		cmd.arg = arg;
+		break;
 	case kActLeague:
 		v.leagueOpen = true;
 		cmd.action = action;
@@ -312,6 +317,7 @@ void Execute(const Command &cmd)
 	case kActLeagueOpen: LeagueOpenLinkPage(); break;
 	case kActLeagueCancel: LeagueLinkCancel(); break;
 	case kActLeagueUnlink: LeagueUnlink(); break;
+	case kActLeagueBadge: LeagueChooseBadgeAt(cmd.arg); break;
 	default: break;
 	}
 }

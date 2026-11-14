@@ -66,7 +66,7 @@ struct View {
 
 enum Action {
 	kActNone = 0, kActPick, kActUse, kActBack, kActPatron, kActMetric, kActChartMode, kActChartRange, kActOutcome, kActBar, kActGame,
-	kActHistory, kActLeague, kActLeagueClose, kActLeagueLink, kActLeagueOpen, kActLeagueCancel, kActLeagueUnlink,
+	kActHistory, kActLeague, kActLeagueClose, kActLeagueLink, kActLeagueOpen, kActLeagueCancel, kActLeagueUnlink, kActLeagueBadge,
 };
 
 constexpr int kBarList = 0, kBarHistory = 1;

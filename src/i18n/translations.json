@@ -2074,5 +2074,10 @@
 {"en":"The league settled the game with the reports it got.","es":"La liga resolvió la partida con los informes que recibió.","it":"La lega ha deciso la partita con i rapporti ricevuti."},
 {"en":"The league checks that both reports describe the same game before it gives any Glory.","es":"La liga comprueba que los dos informes describen la misma partida antes de dar Gloria.","it":"La lega verifica che i due rapporti descrivano la stessa partita prima di dare Gloria."},
 {"en":"Your place  ·  1 vs 1","es":"Tu puesto  ·  1 contra 1","it":"La tua posizione  ·  1 contro 1"},
-{"en":"You will be on the leaderboard once your placement games are over.","es":"Entrarás en la clasificación al terminar tus partidas de colocación.","it":"Entrerai in classifica una volta finite le partite di piazzamento."}
+{"en":"You will be on the leaderboard once your placement games are over.","es":"Entrarás en la clasificación al terminar tus partidas de colocación.","it":"Entrerai in classifica una volta finite le partite di piazzamento."},
+{"en":"Badge next to your name","es":"Insignia junto a tu nombre","it":"Insegna accanto al tuo nome"},
+{"en":"Current rank: %s","es":"Rango actual: %s","it":"Rango attuale: %s"},
+{"en":"Current rank (none yet)","es":"Rango actual (aún ninguno)","it":"Rango attuale (ancora nessuno)"},
+{"en":"Saving...","es":"Guardando...","it":"Salvataggio..."},
+{"en":"Others see it in rooms, in the list of games and in the chat.","es":"Los demás la ven en las salas, en la lista de partidas y en el chat.","it":"Gli altri la vedono nelle stanze, nell'elenco delle partite e nella chat."}
 ]

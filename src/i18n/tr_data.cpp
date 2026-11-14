@@ -2082,5 +2082,10 @@ extern const TrRow kTrRows[] = {
 	{"The league checks that both reports describe the same game before it gives any Glory.", "La liga comprueba que los dos informes describen la misma partida antes de dar Gloria.", "La lega verifica che i due rapporti descrivano la stessa partita prima di dare Gloria."},
 	{"Your place  ·  1 vs 1", "Tu puesto  ·  1 contra 1", "La tua posizione  ·  1 contro 1"},
 	{"You will be on the leaderboard once your placement games are over.", "Entrarás en la clasificación al terminar tus partidas de colocación.", "Entrerai in classifica una volta finite le partite di piazzamento."},
+	{"Badge next to your name", "Insignia junto a tu nombre", "Insegna accanto al tuo nome"},
+	{"Current rank: %s", "Rango actual: %s", "Rango attuale: %s"},
+	{"Current rank (none yet)", "Rango actual (aún ninguno)", "Rango attuale (ancora nessuno)"},
+	{"Saving...", "Guardando...", "Salvataggio..."},
+	{"Others see it in rooms, in the list of games and in the chat.", "Los demás la ven en las salas, en la lista de partidas y en el chat.", "Gli altri la vedono nelle stanze, nell'elenco delle partite e nella chat."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

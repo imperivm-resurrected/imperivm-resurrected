@@ -34,10 +34,13 @@ void PaintLeagueBadgeTip(ui::Painter &p, int screenW, int screenH);
 std::string LeagueRankLabel(LeagueTier tier, int division);
 COLORREF LeagueTierInk(LeagueTier tier);
 
-// The actions of the screen that shows the account card.
+// The actions of the screen that shows the account card. With `badge`, the linked account also offers the badge next to the name;
+// its argument is the position in LeagueBadgeChoices.
 struct LeagueLinkActions {
-	int start = 0, open = 0, cancel = 0, unlink = 0;
+	int start = 0, open = 0, cancel = 0, unlink = 0, badge = 0;
 };
+// The badge next to the name, picked among the player's own (the choice at `index` of LeagueBadgeChoices).
+void LeagueChooseBadgeAt(int index);
 // The league account from (x, y), `w` wide: what linking is for and the button, the code and the website's address while it waits,
 // or the linked account and its rank. Returns how tall it came out.
 int PaintLeagueAccount(ui::Painter &p, int x, int y, int w, const LeagueLinkActions &actions, int mx, int my);

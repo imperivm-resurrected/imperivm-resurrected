@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "i18n/tr.h"
+#include "net/leagueclient.h"
 #include "ui/fullscreen.h"
 #include "ui/leagueui.h"
 #include "ui/patronui.h"
@@ -970,8 +971,9 @@ void PaintProfileScreen(Painter &p, const View &v)
 	PaintPatronTip(p, v.screenW, v.screenH);
 	PaintLeagueBadgeTip(p, v.screenW, v.screenH);
 	if (!v.leagueOpen) return;
-	const Dialog d = DialogBegin(p, v.screenW, v.screenH, 640, 520, "League");
-	PaintLeagueAccount(p, d.BodyX(), d.BodyTop() + 6, d.BodyW(), {kActLeagueLink, kActLeagueOpen, kActLeagueCancel, kActLeagueUnlink}, v.mouseX, v.mouseY);
+	const Dialog d = DialogBegin(p, v.screenW, v.screenH, 640, std::min(v.screenH - 40, LeagueLinked() ? 760 : 520), "League");
+	PaintLeagueAccount(p, d.BodyX(), d.BodyTop() + 6, d.BodyW(), {kActLeagueLink, kActLeagueOpen, kActLeagueCancel, kActLeagueUnlink, kActLeagueBadge},
+		v.mouseX, v.mouseY);
 	DialogButtons(p, d, {{"Close", kActLeagueClose}}, v.mouseX, v.mouseY);
 	PaintLeagueBadgeTip(p, v.screenW, v.screenH);
 }

@@ -162,6 +162,50 @@ void Busy(Painter &p, int x, int y, int w, const std::string &text)
 	p.Text(x + 32, y, w - 32, 24, text, pal::textDim);
 }
 
+// What a badge of the list is called next to its picture.
+std::string ChoiceLabel(const LeagueBadgeChoice &c)
+{
+	if (c.kind == "rank") {
+		return c.look.tier != LeagueTier::None ? TrFmt("Current rank: %s", {LeagueRankText(Tr(LeagueTierName(c.look.tier)), c.look.division)})
+											   : Tr("Current rank (none yet)");
+	}
+	if (c.kind == "season") {
+		const std::string season = TrFmt("Season %s", {c.id});
+		return c.look.tier != LeagueTier::None ? season + ": " + Tr(LeagueTierName(c.look.tier)) : season;
+	}
+	if (c.kind == "trophy") return c.look.title.empty() ? Tr("Tournament trophy") : c.look.title;
+	return Tr("None");
+}
+
+// The badge shown to the right of the name, one row per badge of the player's. Returns how tall it came out.
+int PaintBadgeChoice(Painter &p, int x, int y, int w, const LeagueMe &me, int action, int mx, int my)
+{
+	const LeagueRankedView ranked = LeagueRankedState();
+	int cy = y;
+	PaintSectionLabel(p, x, cy, w, 22, "Badge next to your name");
+	cy += 30;
+	const std::vector<LeagueBadgeChoice> choices = LeagueBadgeChoices(me);
+	const int rowH = 34;
+	for (size_t i = 0; i < choices.size(); i++) {
+		const LeagueBadgeChoice &c = choices[i];
+		const bool hot = !ranked.badgeBusy && !c.chosen && p.Hover(x, cy, w, rowH, mx, my);
+		if (c.chosen || hot) p.Fill(x, cy, w, rowH, c.chosen ? pal::selected : pal::raised);
+		if (c.chosen) p.Fill(x, cy, 3, rowH, pal::red);
+		if (c.look.Shown()) DrawLeagueBadge(p, x + 12, cy + (rowH - kLeagueBadgeSize) / 2, kLeagueBadgeSize, c.look);
+		else p.Frame(x + 14, cy + (rowH - 16) / 2, 16, 16, pal::edge);
+		p.Font(c.chosen ? 1 : 0);
+		Raw(p, x + 44, cy, w - 52, rowH, ChoiceLabel(c), c.chosen ? pal::text : pal::body);
+		if (!c.chosen && !ranked.badgeBusy) p.AddHit(x, cy, w, rowH, action, static_cast<int>(i));
+		cy += rowH + 2;
+	}
+	p.Font(3);
+	if (ranked.badgeBusy) Busy(p, x, cy + 4, w, "Saving...");
+	else if (!ranked.badgeError.empty()) Wrapped(p, x, cy + 4, w, ranked.badgeError, pal::bad);
+	else Wrapped(p, x, cy + 4, w, "Others see it in rooms, in the list of games and in the chat.", pal::caption);
+	cy += 28;
+	return cy - y;
+}
+
 std::string Clock(int64_t ms)
 {
 	const int64_t s = std::max<int64_t>(0, ms / 1000);
@@ -248,6 +292,15 @@ void PaintRays(Painter &p, int cx, int cy, int radius, COLORREF c, int alpha)
 		const float fade = 1.0f - d / R;
 		return ray * fade * fade * 0.9f;
 	});
+}
+
+void LeagueChooseBadgeAt(int index)
+{
+	const LeagueMeView me = LeagueMeState();
+	if (!me.loaded) return;
+	const std::vector<LeagueBadgeChoice> choices = LeagueBadgeChoices(me.me);
+	if (index < 0 || index >= static_cast<int>(choices.size()) || choices[index].chosen) return;
+	LeagueBadgeChoose(choices[index].kind, choices[index].id);
 }
 
 int LeagueBadgeRoom(const LeagueBadge &badge)
@@ -382,6 +435,7 @@ int PaintLeagueAccount(Painter &p, int x, int y, int w, const LeagueLinkActions 
 		cy += 34;
 		p.Font(3);
 		cy += Wrapped(p, x, cy, w, "Your online games are reported to the league, which keeps the record of every game.", pal::caption) + 18;
+		if (actions.badge && me.loaded) cy += PaintBadgeChoice(p, x, cy, w, me.me, actions.badge, mx, my) + 12;
 		error();
 		PaintGhostButton(p, x, cy, std::min(w, 200), 44, "Unlink", actions.unlink, false, true, mx, my);
 		cy += 44;
