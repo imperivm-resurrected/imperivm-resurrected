@@ -289,6 +289,223 @@ void Notices()
 	CHECK(TourneyNewNotices(m, fresh).empty());
 }
 
+// The community cups (fase 2): who organises them, the organizer's views and the refusals of their actions.
+void Community()
+{
+	std::vector<TourneySummary> list;
+	CHECK(TourneyParseList(Parse(R"({"tournaments":[{"id":7,"slug":"copa-del-barrio","name":"Copa del barrio","official":false,"private":false,
+"organizer":{"steamId":"76561198000000994","name":"Furio"},"status":"signup","maxEntries":8,"entries":3},
+{"id":2,"slug":"copa-de-los-idus","name":"Copa de los Idus","official":true,"organizer":null,"status":"signup"}]})"), list));
+	CHECK_EQ(static_cast<int>(list.size()), 2);
+	CHECK(!list[0].official);
+	CHECK(!list[0].isPrivate);
+	CHECK(list[0].organizer.Present());
+	CHECK(list[0].organizer.steamId == 76561198000000994ULL);
+	CHECK_EQ(list[0].organizer.name, std::string("Furio"));
+	CHECK(list[1].official);
+	CHECK(!list[1].organizer.Present());
+
+	TourneyDetail d;
+	CHECK(TourneyParseDetail(Parse(R"({"id":7,"slug":"copa-del-barrio","private":true,"organizer":{"steamId":"76561198000000994","name":"Furio"},
+"status":"checkin","entries":[{"entryId":3,"steamId":"76561198000000990","name":"Late","status":"signed","checkedIn":false}],"matches":[]})"), d));
+	CHECK(d.isPrivate);
+	CHECK_EQ(d.organizer.name, std::string("Furio"));
+
+	TourneyNext n;
+	CHECK(TourneyParseNext(Parse(R"({"tournament":{"id":7,"slug":"copa-del-barrio","name":"Copa del barrio","official":false,"private":true,
+"organizer":{"steamId":"76561198000000994","name":"Furio"}},"match":9,"round":1,"rounds":2,"status":"ready"})"), n));
+	CHECK(n.isPrivate);
+	CHECK(n.organizer.steamId == 76561198000000994ULL);
+
+	TourneyMine m;
+	CHECK(TourneyParseMine(Parse(R"({"next":null,"checkin":null,"entries":[],
+"organize":{"allowed":false,"gamesPlayed":3,"gamesNeeded":10,"active":{"id":7,"slug":"copa-del-barrio"}},
+"organized":[{"id":7,"slug":"copa-del-barrio","name":"Copa del barrio","status":"checkin","private":true,"inviteCode":"K7RX2M","entries":5,
+"checkedIn":3,"maxEntries":8,"minEntries":4,"startsAt":1794662871362,"checkinOpensAt":1794661071362,"openDisputes":2},
+{"id":5,"slug":"vieja","name":"Vieja","status":"finished","private":false,"inviteCode":null,"entries":4,"checkedIn":4,"maxEntries":4,"minEntries":4,
+"startsAt":1794000000000,"checkinOpensAt":1793998200000,"openDisputes":0},{"id":0,"slug":"bad"}]})"), m));
+	CHECK(m.organize.known);
+	CHECK(!m.organize.allowed);
+	CHECK_EQ(m.organize.GamesMissing(), 7);
+	CHECK(Same(m.organize.activeId, 7));
+	CHECK_EQ(m.organize.activeSlug, std::string("copa-del-barrio"));
+	CHECK_EQ(static_cast<int>(m.organized.size()), 2);
+	const TourneyOrganized *own = TourneyOrganizedOf(m, 7);
+	CHECK(own != nullptr);
+	CHECK(own && own->status == TourneyStatus::Checkin && own->isPrivate && own->inviteCode == "K7RX2M");
+	CHECK(own && own->entries == 5 && own->checkedIn == 3 && own->minEntries == 4 && own->openDisputes == 2);
+	CHECK(own && Same(own->checkinOpensAt, 1794661071362LL));
+	CHECK(TourneyOrganizedOf(m, 5) && TourneyOrganizedOf(m, 5)->inviteCode.empty());
+	CHECK(TourneyOrganizedOf(m, 9) == nullptr);
+	// A cup of the player's on makes the mod ask every 30 s, even when they don't play it.
+	CHECK(TourneyHasActiveEntry(m));
+	m.organized[0].status = TourneyStatus::Cancelled;
+	CHECK(!TourneyHasActiveEntry(m));
+	TourneyMine old;
+	CHECK(TourneyParseMine(Parse(R"({"next":null,"entries":[]})"), old));
+	CHECK(!old.organize.known);
+	CHECK(old.organized.empty());
+	TourneyOrganize allowed;
+	allowed.gamesPlayed = 12;
+	allowed.gamesNeeded = 10;
+	CHECK_EQ(allowed.GamesMissing(), 0);
+
+	std::vector<TourneyDispute> disputes;
+	CHECK(TourneyParseDisputes(Parse(R"({"disputes":[{"matchId":12,"text":"He left and the mod gave him the win","openedBy":"76561198000000990",
+"createdAt":1794663000000},{"matchId":13,"text":"x","openedBy":{"steamId":"76561198000000991","name":"Varo"},"createdAt":1},
+{"matchId":14,"text":"y","openedBy":"Tulia"},{"text":"no match"}]})"), disputes));
+	CHECK_EQ(static_cast<int>(disputes.size()), 3);
+	CHECK(disputes.size() == 3 && Same(disputes[0].matchId, 12) && disputes[0].openedBy == 76561198000000990ULL && disputes[0].openedByName.empty());
+	CHECK(disputes.size() == 3 && Same(disputes[0].createdAt, 1794663000000LL));
+	CHECK(disputes.size() == 3 && disputes[1].openedBy == 76561198000000991ULL && disputes[1].openedByName == "Varo");
+	CHECK(disputes.size() == 3 && disputes[2].openedBy == 0 && disputes[2].openedByName == "Tulia");
+	CHECK(!TourneyParseDisputes(Parse(R"({"error":"not_organizer"})"), disputes));
+
+	TourneyRefusal r = TourneyParseRefusal(Parse(R"({"error":"not_eligible","message":"Play more","gamesPlayed":4,"gamesNeeded":10})"));
+	CHECK_EQ(r.code, std::string("not_eligible"));
+	CHECK_EQ(r.gamesPlayed, 4);
+	CHECK_EQ(r.gamesNeeded, 10);
+	r = TourneyParseRefusal(Parse(R"({"error":"already_organizing","message":"x","slug":"copa-del-barrio"})"));
+	CHECK_EQ(r.slug, std::string("copa-del-barrio"));
+	r = TourneyParseRefusal(Parse(R"({"error":"not_enough","checkedIn":3,"needed":4})"));
+	CHECK_EQ(r.code, std::string("not_enough"));
+	CHECK_EQ(r.checkedIn, 3);
+	CHECK_EQ(r.needed, 4);
+	r = TourneyParseRefusal(Parse(R"({"error":"rate_limited","message":"Too many","retryAfter":3600})"));
+	CHECK_EQ(r.retryAfter, 3600);
+	for (const char *code : {"invite_required", "own_match", "not_organizer"}) {
+		r = TourneyParseRefusal(Parse(std::string("{\"error\":\"") + code + "\",\"message\":\"m\"}"));
+		CHECK_EQ(r.code, std::string(code));
+		CHECK_EQ(r.message, std::string("m"));
+	}
+	CHECK(TourneyParseRefusal(Parse("[]")).code.empty());
+
+	TourneyCreated c;
+	CHECK(TourneyParseCreated(Parse(R"({"id":7,"slug":"copa-del-barrio","inviteCode":"K7RX2M"})"), c));
+	CHECK(Same(c.id, 7));
+	CHECK_EQ(c.inviteCode, std::string("K7RX2M"));
+	CHECK(TourneyParseCreated(Parse(R"({"id":8,"slug":"abierta","inviteCode":null})"), c));
+	CHECK(c.inviteCode.empty());
+	CHECK(!TourneyParseCreated(Parse(R"({"error":"bad_request"})"), c));
+
+	CHECK_EQ(TourneyTidyCode(" k7r-x2m "), std::string("K7RX2M"));
+	CHECK(TourneyCodeValid("K7RX2M"));
+	CHECK(TourneyCodeValid(TourneyTidyCode("k7rx2m")));
+	CHECK(!TourneyCodeValid("K0RX2M"));
+	CHECK(!TourneyCodeValid("KORX2M"));
+	CHECK(!TourneyCodeValid("K1RX2M"));
+	CHECK(!TourneyCodeValid("KIRX2M"));
+	CHECK(!TourneyCodeValid("K7RX2"));
+	CHECK(!TourneyCodeValid("K7RX2MM"));
+	CHECK(!TourneyCodeValid("K7RX2!"));
+}
+
+bool HasProblem(const std::vector<TourneyCupProblem> &list, TourneyCupProblem p)
+{
+	for (TourneyCupProblem x : list) {
+		if (x == p) return true;
+	}
+	return false;
+}
+
+void CupForm()
+{
+	const int64_t now = 1794600000000LL;
+	TourneyCupForm f;
+	f.name = "  Copa de Espa\xC3\xB1" "a  ";
+	f.maps = {{"mediterranean", "random", "medium"}, {"island", "random", "small"}};
+	f.startsAt = now + 3600000;
+	CHECK(TourneyCheckCup(f, now).empty());
+	CHECK_EQ(TourneyTextLength("Copa de Espa\xC3\xB1" "a"), 14);
+	CHECK_EQ(TourneyTextLength("\xF0\x9F\x8F\x86"), 2);
+	CHECK_EQ(TourneyTrim("  a b \t"), std::string("a b"));
+	CHECK_EQ(TourneyTrim("   "), std::string());
+
+	TourneyCupForm bad = f;
+	bad.name = " ab ";
+	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::NameShort));
+	bad.name = std::string(41, 'x');
+	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::NameLong));
+	bad = f;
+	bad.description = std::string(201, 'x');
+	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::DescriptionLong));
+	bad.description = std::string(200, 'x');
+	CHECK(TourneyCheckCup(bad, now).empty());
+	bad = f;
+	bad.maxEntries = 6;
+	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::Places));
+	bad.maxEntries = 4;
+	bad.minEntries = 5;
+	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::Minimum));
+	bad.minEntries = 1;
+	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::Minimum));
+	bad = f;
+	bad.bestOf = 5;
+	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::Series));
+	bad = f;
+	bad.finalBestOf = 2;
+	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::Series));
+	bad = f;
+	bad.maps.clear();
+	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::NoMaps));
+	bad.maps.assign(6, {"coastal", "random", "medium"});
+	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::TooManyMaps));
+	// The Mediterranean has no small map for two.
+	bad.maps = {{"mediterranean", "random", "small"}};
+	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::BadMap));
+	bad = f;
+	bad.startsAt = now + 19 * 60000;
+	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::StartSoon));
+	bad.startsAt = now + 20 * 60000;
+	CHECK(TourneyCheckCup(bad, now).empty());
+	bad.startsAt = now + 15 * 86400000LL;
+	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::StartLate));
+	bad = f;
+	bad.checkinMinutes = 20;
+	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::Checkin));
+
+	Json body = TourneyCupJson(f);
+	Json back;
+	CHECK(Json::Parse(body.Dump(), back));
+	CHECK_EQ(back.GetString("name"), std::string("Copa de Espa\xC3\xB1" "a"));
+	CHECK(back.Get("description") == nullptr);
+	CHECK_EQ(static_cast<int>(back.GetNumber("maxEntries")), 8);
+	CHECK_EQ(static_cast<int>(back.GetNumber("minEntries")), 4);
+	CHECK_EQ(static_cast<int>(back.GetNumber("bestOf")), 1);
+	CHECK_EQ(static_cast<int>(back.GetNumber("finalBestOf")), 3);
+	CHECK_EQ(back.GetString("seeding"), std::string("rating"));
+	CHECK(Same(static_cast<int64_t>(back.GetNumber("startsAt")), now + 3600000));
+	CHECK_EQ(static_cast<int>(back.GetNumber("checkinMinutes")), 30);
+	CHECK(!back.GetBool("private", true));
+	CHECK(back.GetBool("play"));
+	CHECK(back.Get("contentKey") == nullptr);
+	CHECK(back.Get("contentName") == nullptr);
+	const Json *maps = back.Get("maps");
+	CHECK(maps && maps->type == Json::Array && maps->arr.size() == 2);
+	CHECK(maps && maps->arr.size() == 2 && maps->arr[1].GetString("name") == "island" && maps->arr[1].GetString("size") == "small");
+	f.description = " Una tarde ";
+	f.randomSeeding = true;
+	f.isPrivate = true;
+	f.play = false;
+	f.contentKey = "c35f0a1b2c3d4e5f";
+	f.contentName = "Caesar Mod";
+	CHECK(Json::Parse(TourneyCupJson(f).Dump(), back));
+	CHECK_EQ(back.GetString("description"), std::string("Una tarde"));
+	CHECK_EQ(back.GetString("seeding"), std::string("random"));
+	CHECK(back.GetBool("private"));
+	CHECK(!back.GetBool("play", true));
+	CHECK_EQ(back.GetString("contentKey"), std::string("c35f0a1b2c3d4e5f"));
+	CHECK_EQ(back.GetString("contentName"), std::string("Caesar Mod"));
+
+	CHECK_EQ(TourneyCupDefaultMinimum(4), 4);
+	CHECK_EQ(TourneyCupDefaultMinimum(16), 4);
+	CHECK_EQ(TourneyCupDefaultMinimum(2), 2);
+	CHECK_EQ(TourneyRoundsFor(4), 2);
+	CHECK_EQ(TourneyRoundsFor(8), 3);
+	CHECK_EQ(TourneyRoundsFor(16), 4);
+	CHECK_EQ(TourneyRoundsFor(6), 3);
+}
+
 void Clock()
 {
 	CHECK_EQ(TourneyClock(552000), std::string("09:12"));
@@ -348,6 +565,8 @@ int main()
 	Claim();
 	Tags();
 	Notices();
+	Community();
+	CupForm();
 	Clock();
 	Bracket();
 	return test::Summary("tournament");

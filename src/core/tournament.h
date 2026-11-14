@@ -49,11 +49,22 @@ TourneySettings TourneySettingsFromJson(const Json *v);
 // The spectators' delay of a tournament room: the tournament's, 120 s when it says nothing, never under 60 s.
 int TourneySpecDelay(const TourneySettings &s);
 
+// The player who made a community cup; nobody for the official ones.
+struct TourneyOrganizer {
+	uint64_t steamId = 0;
+	std::string name;
+	bool Present() const { return steamId != 0 || !name.empty(); }
+};
+TourneyOrganizer TourneyOrganizerFromJson(const Json *v);
+
 // GET /v1/tournaments: one tournament of the list.
 struct TourneySummary {
 	int64_t id = 0;
 	std::string slug, name, description, format, seeding, contentKey, contentName;
 	bool official = false;
+	// A community cup that only its code opens (GET /v1/tournaments/code/:code); the list never has them.
+	bool isPrivate = false;
+	TourneyOrganizer organizer;
 	int season = -1;
 	TourneyStatus status = TourneyStatus::Unknown;
 	int maxEntries = 0, minEntries = 0, entries = 0, bestOf = 1, finalBestOf = 1, noshowMinutes = 0;
@@ -135,7 +146,8 @@ struct TourneyNext {
 	bool present = false;
 	int64_t tournamentId = 0, match = 0;
 	std::string slug, name, contentKey, contentName, lobbyKey;
-	bool official = false;
+	bool official = false, isPrivate = false;
+	TourneyOrganizer organizer;
 	int round = 0, rounds = 0, bestOf = 1, game = 1, scoreMe = 0, scoreThem = 0;
 	TourneyStage stage = TourneyStage::Unknown;
 	TourneyMatchStatus status = TourneyMatchStatus::Unknown;
@@ -165,15 +177,37 @@ struct TourneyMyEntry {
 	int seed = 0, placement = 0;
 };
 
+// Whether the player may make a community cup, and the one they organise now (sign-up, check-in or being played).
+struct TourneyOrganize {
+	bool known = false, allowed = false;
+	int gamesPlayed = 0, gamesNeeded = 0;
+	int64_t activeId = 0;
+	std::string activeSlug;
+	// The online games still to play before making a cup.
+	int GamesMissing() const { return gamesNeeded > gamesPlayed ? gamesNeeded - gamesPlayed : 0; }
+};
+
+// A community cup the player organises: still on, or over in the last day.
+struct TourneyOrganized {
+	int64_t id = 0, startsAt = 0, checkinOpensAt = 0;
+	std::string slug, name, inviteCode;
+	TourneyStatus status = TourneyStatus::Unknown;
+	bool isPrivate = false;
+	int entries = 0, checkedIn = 0, maxEntries = 0, minEntries = 0, openDisputes = 0;
+};
+
 // GET /v1/me/tournaments.
 struct TourneyMine {
 	TourneyNext next;
 	TourneyCheckin checkin;
 	std::vector<TourneyMyEntry> entries;
+	TourneyOrganize organize;
+	std::vector<TourneyOrganized> organized;
 };
 bool TourneyParseMine(const Json &j, TourneyMine &out);
 const TourneyMyEntry *TourneyMyEntryOf(const TourneyMine &m, int64_t tournamentId);
-// A tournament not over yet that the player is still in: it is what makes the mod ask every 30 s.
+const TourneyOrganized *TourneyOrganizedOf(const TourneyMine &m, int64_t tournamentId);
+// A tournament not over yet that the player is still in, or a cup of theirs not over yet: it is what makes the mod ask every 30 s.
 bool TourneyHasActiveEntry(const TourneyMine &m);
 // How often to ask for the player's tournaments: 30 s with one of their own on, 60 s while the Tournaments tab is open, otherwise never.
 int TourneyPollEveryMs(bool activeEntry, bool tabOpen);
@@ -212,6 +246,70 @@ std::vector<TourneyNotice> TourneyNewNotices(const TourneyMine &mine, TourneyTol
 
 // "09:12", or "1:02:03" past the hour; 0 for a past time.
 std::string TourneyClock(int64_t ms);
+
+// GET /v1/tournaments/:id/disputes: the results a player of a cup disputed, for its organizer.
+struct TourneyDispute {
+	int64_t matchId = 0, createdAt = 0;
+	std::string text;
+	// Who opened it: a SteamID, or a name when the server gives one.
+	uint64_t openedBy = 0;
+	std::string openedByName;
+};
+bool TourneyParseDisputes(const Json &j, std::vector<TourneyDispute> &out);
+
+// The body of a refusal, {error, message}, with what each error adds.
+struct TourneyRefusal {
+	std::string code, message, contentName;
+	// already_organizing: the cup the player organises now.
+	std::string slug;
+	int64_t until = 0;
+	// not_eligible: the online games played and needed; not_enough: the players checked in and needed.
+	int gamesPlayed = 0, gamesNeeded = 0, checkedIn = 0, needed = 0;
+	// rate_limited: whole seconds to wait.
+	int retryAfter = 0;
+};
+TourneyRefusal TourneyParseRefusal(const Json &j);
+
+// POST /v1/tournaments: the cup made, with its code when it is private.
+struct TourneyCreated {
+	int64_t id = 0;
+	std::string slug, inviteCode;
+};
+bool TourneyParseCreated(const Json &j, TourneyCreated &out);
+
+// The invitation code of a private cup: six letters and digits without 0, O, 1 or I.
+constexpr int kTourneyCodeLength = 6;
+// The code as the player typed or pasted it: upper case, without spaces, dashes or dots.
+std::string TourneyTidyCode(const std::string &typed);
+bool TourneyCodeValid(const std::string &code);
+
+// What a player chooses to make a community cup (POST /v1/tournaments).
+struct TourneyCupForm {
+	std::string name, description;
+	int maxEntries = 8, minEntries = 4, bestOf = 1, finalBestOf = 3;
+	bool randomSeeding = false;
+	// One per round from the first, the last one repeated: the league's ids (core/leaguemaps.h).
+	std::vector<TourneyMap> maps;
+	int64_t startsAt = 0;
+	int checkinMinutes = 30;
+	bool isPrivate = false, play = true;
+	// The organizer's content profile; empty when it is the base game.
+	std::string contentKey, contentName;
+};
+constexpr int kTourneyCupNameMin = 3, kTourneyCupNameMax = 40, kTourneyCupDescriptionMax = 200, kTourneyCupMapsMax = 5;
+constexpr int64_t kTourneyCupLeadMinMs = 20 * 60000LL, kTourneyCupLeadMaxMs = 14 * 86400000LL;
+enum class TourneyCupProblem { NameShort, NameLong, DescriptionLong, Places, Minimum, Series, NoMaps, TooManyMaps, BadMap, StartSoon, StartLate, Checkin };
+// What the server would refuse in the form, in the order of the form; none when it can be sent.
+std::vector<TourneyCupProblem> TourneyCheckCup(const TourneyCupForm &f, int64_t nowMs);
+// The request's body: the name and description trimmed, the description and the content left out when empty.
+Json TourneyCupJson(const TourneyCupForm &f);
+// The minimum of players a cup of `places` starts with unless the organizer says otherwise: 4, or the places when fewer.
+int TourneyCupDefaultMinimum(int places);
+// The rounds of a single elimination bracket for `places` players.
+int TourneyRoundsFor(int places);
+// The characters of a UTF-8 text, as the server counts them.
+int TourneyTextLength(const std::string &text);
+std::string TourneyTrim(const std::string &text);
 
 // The bracket on screen: each round a column, each match a box centred between the two that feed it.
 struct TourneyBracketMetrics {

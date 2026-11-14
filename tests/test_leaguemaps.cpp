@@ -102,10 +102,30 @@ void ByText()
 
 }
 
+void Choices()
+{
+	const std::vector<std::string> types = LeagueMapTypes();
+	CHECK_EQ(static_cast<int>(types.size()), 9);
+	CHECK(!types.empty() && types.front() == "coastal");
+	CHECK(!types.empty() && types.back() == "tournament");
+	for (const std::string &t : types) CHECK(LeagueMapName(t) != nullptr);
+	CHECK(LeagueMapSizesOf("coastal") == std::vector<std::string>({"medium", "large"}));
+	CHECK(LeagueMapSizesOf("island") == std::vector<std::string>({"small", "medium", "large"}));
+	CHECK(LeagueMapSizesOf("randommap") == std::vector<std::string>({"small", "medium", "large"}));
+	CHECK(LeagueMapSizesOf("empty").empty());
+	CHECK(LeagueMapSizesOf("medium").empty());
+	CHECK(LeagueMapValid("continent", "small"));
+	CHECK(LeagueMapValid("tournament", "large"));
+	CHECK(!LeagueMapValid("mediterranean", "small"));
+	CHECK(!LeagueMapValid("mediterranean", "huge"));
+	CHECK(!LeagueMapValid("", "medium"));
+}
+
 int main()
 {
 	Ids();
 	ById();
 	ByText();
+	Choices();
 	return test::Summary("leaguemaps");
 }

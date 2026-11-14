@@ -23,3 +23,9 @@ int LeagueMapItemFor(const std::vector<std::string> &keys, const std::vector<std
 	const std::string &id, bool &byText);
 // The English name of a map type or size ("Mountainous", "Normal"), the key of its translation; null for an id it doesn't know.
 const char *LeagueMapName(const std::string &id);
+// The random map types in the order of the room's list, and the sizes each lets two players in on, as the server's list
+// (src/maps.ts): small only on "continent", "island" and "randommap".
+std::vector<std::string> LeagueMapTypes();
+std::vector<std::string> LeagueMapSizesOf(const std::string &type);
+// A type and a size the league accepts for a tournament round.
+bool LeagueMapValid(const std::string &type, const std::string &size);

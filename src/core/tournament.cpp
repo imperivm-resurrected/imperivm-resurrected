@@ -10,6 +10,8 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "core/leaguemaps.h"
+
 namespace {
 
 std::string Lower(std::string s)
@@ -54,6 +56,11 @@ TourneyCard CardFromJson(const Json *v)
 	c.name = Text(*v, "name");
 	c.seed = Int(*v, "seed");
 	return c;
+}
+
+bool Active(TourneyStatus s)
+{
+	return s == TourneyStatus::Signup || s == TourneyStatus::Checkin || s == TourneyStatus::Running;
 }
 
 TourneyNextSide SideFromJson(const Json *v)
@@ -177,6 +184,15 @@ int TourneySpecDelay(const TourneySettings &s)
 	return std::max(60, std::min(600, s.specDelay));
 }
 
+TourneyOrganizer TourneyOrganizerFromJson(const Json *v)
+{
+	TourneyOrganizer o;
+	if (!v || v->type != Json::Object) return o;
+	o.steamId = Id64(v->Get("steamId"));
+	o.name = Text(*v, "name");
+	return o;
+}
+
 bool TourneyParseSummary(const Json &j, TourneySummary &out)
 {
 	if (j.type != Json::Object) return false;
@@ -186,6 +202,8 @@ bool TourneyParseSummary(const Json &j, TourneySummary &out)
 	out.name = Text(j, "name");
 	out.description = Text(j, "description");
 	out.official = j.GetBool("official");
+	out.isPrivate = j.GetBool("private");
+	out.organizer = TourneyOrganizerFromJson(j.Get("organizer"));
 	const Json *season = j.Get("season");
 	out.season = season && season->type == Json::Number ? static_cast<int>(season->num) : -1;
 	out.format = Text(j, "format");
@@ -359,11 +377,15 @@ bool TourneyParseNext(const Json &j, TourneyNext &out)
 	if (j.type != Json::Object) return false;
 	out.match = Int64(j, "match");
 	if (!out.match) return false;
+	out.isPrivate = j.GetBool("private");
+	out.organizer = TourneyOrganizerFromJson(j.Get("organizer"));
 	if (const Json *t = j.Get("tournament"); t && t->type == Json::Object) {
 		out.tournamentId = Int64(*t, "id");
 		out.slug = Text(*t, "slug");
 		out.name = Text(*t, "name");
 		out.official = t->GetBool("official");
+		out.isPrivate = out.isPrivate || t->GetBool("private");
+		if (!out.organizer.Present()) out.organizer = TourneyOrganizerFromJson(t->Get("organizer"));
 	}
 	out.round = Int(j, "round");
 	out.rounds = Int(j, "rounds");
@@ -432,6 +454,37 @@ bool TourneyParseMine(const Json &j, TourneyMine &out)
 			if (x.tournamentId) out.entries.push_back(x);
 		}
 	}
+	if (const Json *o = j.Get("organize"); o && o->type == Json::Object) {
+		TourneyOrganize &g = out.organize;
+		g.known = true;
+		g.allowed = o->GetBool("allowed");
+		g.gamesPlayed = Int(*o, "gamesPlayed");
+		g.gamesNeeded = Int(*o, "gamesNeeded");
+		if (const Json *a = o->Get("active"); a && a->type == Json::Object) {
+			g.activeId = Int64(*a, "id");
+			g.activeSlug = Text(*a, "slug");
+		}
+	}
+	if (const Json *list = j.Get("organized"); list && list->type == Json::Array) {
+		for (const Json &c : list->arr) {
+			if (c.type != Json::Object) continue;
+			TourneyOrganized x;
+			x.id = Int64(c, "id");
+			x.slug = Text(c, "slug");
+			x.name = Text(c, "name");
+			x.status = TourneyStatusFromId(Text(c, "status"));
+			x.isPrivate = c.GetBool("private");
+			x.inviteCode = Text(c, "inviteCode");
+			x.entries = Int(c, "entries");
+			x.checkedIn = Int(c, "checkedIn");
+			x.maxEntries = Int(c, "maxEntries");
+			x.minEntries = Int(c, "minEntries");
+			x.startsAt = Int64(c, "startsAt");
+			x.checkinOpensAt = Int64(c, "checkinOpensAt");
+			x.openDisputes = Int(c, "openDisputes");
+			if (x.id && !x.slug.empty()) out.organized.push_back(x);
+		}
+	}
 	return true;
 }
 
@@ -443,11 +496,21 @@ const TourneyMyEntry *TourneyMyEntryOf(const TourneyMine &m, int64_t tournamentI
 	return nullptr;
 }
 
+const TourneyOrganized *TourneyOrganizedOf(const TourneyMine &m, int64_t tournamentId)
+{
+	for (const TourneyOrganized &c : m.organized) {
+		if (tournamentId && c.id == tournamentId) return &c;
+	}
+	return nullptr;
+}
+
 bool TourneyHasActiveEntry(const TourneyMine &m)
 {
 	for (const TourneyMyEntry &e : m.entries) {
-		const bool on = e.tournamentStatus == TourneyStatus::Signup || e.tournamentStatus == TourneyStatus::Checkin || e.tournamentStatus == TourneyStatus::Running;
-		if (on && TourneyEntryActive(e.status)) return true;
+		if (Active(e.tournamentStatus) && TourneyEntryActive(e.status)) return true;
+	}
+	for (const TourneyOrganized &c : m.organized) {
+		if (Active(c.status)) return true;
 	}
 	return m.next.present;
 }
@@ -541,6 +604,161 @@ std::string TourneyClock(int64_t ms)
 	if (s >= 3600) sprintf_s(buf, "%lld:%02lld:%02lld", static_cast<long long>(s / 3600), static_cast<long long>(s / 60 % 60), static_cast<long long>(s % 60));
 	else sprintf_s(buf, "%02lld:%02lld", static_cast<long long>(s / 60), static_cast<long long>(s % 60));
 	return buf;
+}
+
+bool TourneyParseDisputes(const Json &j, std::vector<TourneyDispute> &out)
+{
+	const Json *list = j.Get("disputes");
+	if (!list || list->type != Json::Array) return false;
+	out.clear();
+	for (const Json &d : list->arr) {
+		if (d.type != Json::Object) continue;
+		TourneyDispute x;
+		x.matchId = Int64(d, "matchId");
+		x.text = Text(d, "text");
+		x.createdAt = Int64(d, "createdAt");
+		const Json *by = d.Get("openedBy");
+		if (by && by->type == Json::Object) {
+			x.openedBy = Id64(by->Get("steamId"));
+			x.openedByName = Text(*by, "name");
+		}
+		else if (by && by->type == Json::String && !by->str.empty() && by->str.find_first_not_of("0123456789") == std::string::npos) x.openedBy = Id64(by);
+		else if (by && by->type == Json::String) x.openedByName = by->str;
+		if (x.matchId) out.push_back(x);
+	}
+	return true;
+}
+
+TourneyRefusal TourneyParseRefusal(const Json &j)
+{
+	TourneyRefusal r;
+	if (j.type != Json::Object) return r;
+	r.code = Text(j, "error");
+	r.message = Text(j, "message");
+	r.contentName = Text(j, "contentName");
+	r.slug = Text(j, "slug");
+	r.until = Int64(j, "until");
+	r.gamesPlayed = Int(j, "gamesPlayed");
+	r.gamesNeeded = Int(j, "gamesNeeded");
+	r.checkedIn = Int(j, "checkedIn");
+	r.needed = Int(j, "needed");
+	r.retryAfter = std::max(0, Int(j, "retryAfter"));
+	return r;
+}
+
+bool TourneyParseCreated(const Json &j, TourneyCreated &out)
+{
+	out = TourneyCreated();
+	if (j.type != Json::Object) return false;
+	out.id = Int64(j, "id");
+	out.slug = Text(j, "slug");
+	out.inviteCode = Text(j, "inviteCode");
+	return out.id != 0 && !out.slug.empty();
+}
+
+std::string TourneyTidyCode(const std::string &typed)
+{
+	std::string out;
+	for (char c : typed) {
+		if (c == ' ' || c == '-' || c == '.' || c == '_') continue;
+		out += static_cast<char>(toupper(static_cast<unsigned char>(c)));
+	}
+	return out;
+}
+
+bool TourneyCodeValid(const std::string &code)
+{
+	if (static_cast<int>(code.size()) != kTourneyCodeLength) return false;
+	for (char c : code) {
+		const bool letter = c >= 'A' && c <= 'Z' && c != 'O' && c != 'I', digit = c >= '2' && c <= '9';
+		if (!letter && !digit) return false;
+	}
+	return true;
+}
+
+int TourneyTextLength(const std::string &text)
+{
+	int n = 0;
+	for (unsigned char c : text) {
+		// JavaScript counts UTF-16 units: a character past the first 65536 (four bytes in UTF-8) is two of them.
+		if ((c & 0xC0) != 0x80) n += c >= 0xF0 ? 2 : 1;
+	}
+	return n;
+}
+
+std::string TourneyTrim(const std::string &text)
+{
+	const size_t a = text.find_first_not_of(" \t\r\n");
+	if (a == std::string::npos) return std::string();
+	return text.substr(a, text.find_last_not_of(" \t\r\n") - a + 1);
+}
+
+int TourneyCupDefaultMinimum(int places)
+{
+	return std::max(2, std::min(4, places));
+}
+
+int TourneyRoundsFor(int places)
+{
+	int rounds = 0;
+	while ((1 << rounds) < places && rounds < 16) rounds++;
+	return rounds;
+}
+
+std::vector<TourneyCupProblem> TourneyCheckCup(const TourneyCupForm &f, int64_t nowMs)
+{
+	std::vector<TourneyCupProblem> out;
+	const int name = TourneyTextLength(TourneyTrim(f.name));
+	if (name < kTourneyCupNameMin) out.push_back(TourneyCupProblem::NameShort);
+	else if (name > kTourneyCupNameMax) out.push_back(TourneyCupProblem::NameLong);
+	if (TourneyTextLength(TourneyTrim(f.description)) > kTourneyCupDescriptionMax) out.push_back(TourneyCupProblem::DescriptionLong);
+	const bool places = f.maxEntries == 4 || f.maxEntries == 8 || f.maxEntries == 16;
+	if (!places) out.push_back(TourneyCupProblem::Places);
+	else if (f.minEntries < 2 || f.minEntries > f.maxEntries) out.push_back(TourneyCupProblem::Minimum);
+	if ((f.bestOf != 1 && f.bestOf != 3) || (f.finalBestOf != 1 && f.finalBestOf != 3 && f.finalBestOf != 5)) out.push_back(TourneyCupProblem::Series);
+	if (f.maps.empty()) out.push_back(TourneyCupProblem::NoMaps);
+	else if (static_cast<int>(f.maps.size()) > kTourneyCupMapsMax) out.push_back(TourneyCupProblem::TooManyMaps);
+	else {
+		for (const TourneyMap &m : f.maps) {
+			if (LeagueMapValid(m.name, m.size)) continue;
+			out.push_back(TourneyCupProblem::BadMap);
+			break;
+		}
+	}
+	if (f.startsAt < nowMs + kTourneyCupLeadMinMs) out.push_back(TourneyCupProblem::StartSoon);
+	else if (f.startsAt > nowMs + kTourneyCupLeadMaxMs) out.push_back(TourneyCupProblem::StartLate);
+	if (f.checkinMinutes != 15 && f.checkinMinutes != 30) out.push_back(TourneyCupProblem::Checkin);
+	return out;
+}
+
+Json TourneyCupJson(const TourneyCupForm &f)
+{
+	Json body = Json::MakeObject();
+	body.Set("name", Json::MakeString(TourneyTrim(f.name)));
+	const std::string description = TourneyTrim(f.description);
+	if (!description.empty()) body.Set("description", Json::MakeString(description));
+	body.Set("maxEntries", Json::MakeNumber(f.maxEntries));
+	body.Set("minEntries", Json::MakeNumber(f.minEntries));
+	body.Set("bestOf", Json::MakeNumber(f.bestOf));
+	body.Set("finalBestOf", Json::MakeNumber(f.finalBestOf));
+	body.Set("seeding", Json::MakeString(f.randomSeeding ? "random" : "rating"));
+	Json maps = Json::MakeArray();
+	for (const TourneyMap &m : f.maps) {
+		Json map = Json::MakeObject();
+		map.Set("name", Json::MakeString(m.name));
+		map.Set("size", Json::MakeString(m.size));
+		maps.arr.push_back(map);
+	}
+	body.Set("maps", maps);
+	body.Set("startsAt", Json::MakeNumber(static_cast<double>(f.startsAt)));
+	body.Set("checkinMinutes", Json::MakeNumber(f.checkinMinutes));
+	body.Set("private", Json::MakeBool(f.isPrivate));
+	body.Set("play", Json::MakeBool(f.play));
+	if (!f.contentKey.empty()) {
+		body.Set("contentKey", Json::MakeString(f.contentKey));
+		if (!f.contentName.empty()) body.Set("contentName", Json::MakeString(f.contentName));
+	}
+	return body;
 }
 
 int TourneyBoxX(const TourneyBracketMetrics &m, int round)

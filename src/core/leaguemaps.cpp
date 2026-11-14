@@ -33,6 +33,10 @@ const MapId kMaps[] = {
 
 const char *const kSizes[] = {"small", "medium", "large"};
 
+// The types whose template lets two players in on a small map.
+const char *const kSmallTypes[] = {"continent", "island", "randommap"};
+const size_t kTypeCount = 9;
+
 const MapId *Find(const std::string &id)
 {
 	for (const MapId &m : kMaps) {
@@ -156,4 +160,33 @@ const char *LeagueMapName(const std::string &id)
 {
 	const MapId *m = Find(Lower(id));
 	return m ? m->name : nullptr;
+}
+
+std::vector<std::string> LeagueMapTypes()
+{
+	std::vector<std::string> out;
+	for (size_t i = 0; i < kTypeCount; i++) out.push_back(kMaps[i].id);
+	return out;
+}
+
+std::vector<std::string> LeagueMapSizesOf(const std::string &type)
+{
+	std::vector<std::string> out;
+	bool known = false;
+	for (size_t i = 0; i < kTypeCount; i++) known = known || type == kMaps[i].id;
+	if (!known) return out;
+	bool small = false;
+	for (const char *t : kSmallTypes) small = small || type == t;
+	for (const char *s : kSizes) {
+		if (small || strcmp(s, "small") != 0) out.push_back(s);
+	}
+	return out;
+}
+
+bool LeagueMapValid(const std::string &type, const std::string &size)
+{
+	for (const std::string &s : LeagueMapSizesOf(type)) {
+		if (s == size) return true;
+	}
+	return false;
 }
