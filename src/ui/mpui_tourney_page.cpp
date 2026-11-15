@@ -150,9 +150,9 @@ void PaintBox(Painter &p, Ctx &c, const TourneyMatch &m, int x, int y, const Tou
 		ink = pal::redText;
 	}
 	else if (mine && m.status == TourneyMatchStatus::Ready) {
-		// Paced by rounds, the match is open until the round's deadline, days away: its day and hour say more than a countdown.
-		if (TourneyByRounds(c.d) && m.deadlineAt > NowMs()) label = Tr("Room open") + " \xC2\xB7 " + TrFmt("Deadline: %s", {WhenText(m.deadlineAt)});
-		else label = m.deadlineAt > NowMs() ? TrFmt("Room open \xC2\xB7 %s to enter", {TourneyClock(m.deadlineAt - NowMs())}) : Tr("Room open");
+		// Paced by rounds, the match is open until the round's deadline, days away, which the progress card gives: no countdown here.
+		if (TourneyByRounds(c.d) || m.deadlineAt <= NowMs()) label = Tr("Room open");
+		else label = TrFmt("Room open \xC2\xB7 %s to enter", {TourneyClock(m.deadlineAt - NowMs())});
 		ink = pal::warn;
 	}
 	else if (m.status == TourneyMatchStatus::Disputed) {
@@ -937,6 +937,8 @@ bool PaintBanner(Painter &p, Ctx &c, int x, int y, int w)
 			text = TrFmt("%s did not come to the room in time: you can claim the win.", {n.opponent.name});
 			buttons.push_back({Tr("Claim the win"), ArgOf(kSubNoShow, n.match)});
 		}
+		// Paced by rounds, the match waits until the round's deadline, days away: its day and hour, not a countdown.
+		else if (TourneyByRounds(d) && left > 0) text = TrFmt("Deadline: %s", {WhenText(n.deadlineAt)});
 		else if (n.opponent.inRoom && left > 0) text = TrFmt("%s is already in the room. If you don't enter within %s, they can claim the win by no-show.", {n.opponent.name, TourneyClock(left)});
 		else if (left > 0) text = TrFmt("Enter the room within %s, or the match counts as a no-show.", {TourneyClock(left)});
 		else text = Tr("The waiting time is over: enter the room now.");
@@ -1310,7 +1312,10 @@ int PaintOrganizerCard(Painter &p, Ctx &c, int x, int y, int w)
 int PaintProgressCard(Painter &p, Ctx &c, int x, int y, int w)
 {
 	const TourneyDetail &d = c.d;
-	const int pad = 22, h = 150;
+	// A Swiss tournament or one paced by rounds: the round open now and, with a deadline, until when, on a line of its own.
+	const int round = d.status == TourneyStatus::Running ? TourneyCurrentRound(d) : 0;
+	const bool rounds = round > 0 && (TourneyIsSwiss(d) || TourneyByRounds(d)), deadline = rounds && TourneyByRounds(d) && d.roundEndsAt;
+	const int pad = 22, h = deadline ? 174 : 150;
 	PaintGlassCard(p, x, y, w, h);
 	PaintCaps(p, x + pad, y + 20, w - 2 * pad, 20, "Progress", pal::caption);
 	int done = 0, total = 0;
@@ -1324,15 +1329,11 @@ int PaintProgressCard(Painter &p, Ctx &c, int x, int y, int w)
 	p.Fill(x + pad, y + 86, w - 2 * pad, 6, pal::button);
 	if (total) p.Fill(x + pad, y + 86, (w - 2 * pad) * done / total, 6, pal::red);
 	std::string when = d.status == TourneyStatus::Running || d.status == TourneyStatus::Finished ? TrFmt("Started at %s", {HourText(d.startsAt)}) : TrFmt("Starts %s", {WhenText(d.startsAt)});
-	// A Swiss tournament or one paced by rounds: the round open now and, with a deadline, until when.
-	const int round = d.status == TourneyStatus::Running ? TourneyCurrentRound(d) : 0;
-	if (round > 0 && (TourneyIsSwiss(d) || TourneyByRounds(d))) {
-		when = TourneyIsSwiss(d) ? TrFmt("Round %s of %s", {std::to_string(round), std::to_string(TourneySwissTotalRounds(d))}) : TrFmt("Round %s", {std::to_string(round)});
-		if (TourneyByRounds(d) && d.roundEndsAt) when += " \xC2\xB7 " + TrFmt("Deadline: %s", {WhenText(d.roundEndsAt)});
-	}
+	if (rounds) when = TourneyIsSwiss(d) ? TrFmt("Round %s of %s", {std::to_string(round), std::to_string(TourneySwissTotalRounds(d))}) : TrFmt("Round %s", {std::to_string(round)});
 	p.Font(3);
 	p.raw = true;
 	p.Text(x + pad, y + 104, w - 2 * pad, 22, when, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	if (deadline) p.Text(x + pad, y + 128, w - 2 * pad, 22, TrFmt("Deadline: %s", {WhenText(d.roundEndsAt)}), pal::warn, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	p.raw = false;
 	return h;
 }
@@ -1451,7 +1452,7 @@ void PaintPageScreen(Painter &p, const State &st, const Ui &u, PaintOut &out)
 		PaintCupMapsState(p, st, page.detail, sx, sy, sideW, mapsH);
 		sy += mapsH + 12;
 	}
-	if (bottom - sy > 150) sy += PaintProgressCard(p, c, sx, sy, sideW) + 12;
+	if (bottom - sy > (TourneyByRounds(page.detail) ? 174 : 150)) sy += PaintProgressCard(p, c, sx, sy, sideW) + 12;
 	if (page.detail.official && bottom - sy > 120) PaintPrizesCard(p, page.detail, sx, sy, sideW);
 	p.Unclip();
 	PatronsWatch(c.ids);
