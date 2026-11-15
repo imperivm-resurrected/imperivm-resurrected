@@ -155,6 +155,31 @@ bool ReadRecord(const char *game, int index, StatSample &s, int &killRatio, int 
 	}
 }
 
+// CPlayerStats +0x54: the game's std::string with the name of the unit that reached the highest level (+0x50).
+const size_t kRecordBestUnit = 0x54;
+
+bool ReadFacts(const char *game, int index, GameRecordFacts &out, char *unit, size_t unitSize)
+{
+	__try {
+		const char *record = game + kGameStats + (index + 1) * kStatsRecordSize;
+		out.killed = Field<uint32_t>(record, 0x44);
+		out.lost = Field<uint32_t>(record, 0x48);
+		out.armyMax = Field<uint32_t>(record, 0x4c);
+		out.bestLevel = Field<uint32_t>(record, 0x50);
+		out.gold = Field<uint32_t>(record, 0xac) + Field<uint32_t>(record, 0xb0) + Field<uint32_t>(record, 0xb4);
+		const char *s = record + kRecordBestUnit;
+		const unsigned size = Field<unsigned>(s, 0x14), cap = Field<unsigned>(s, 0x18);
+		const char *text = cap < 0x10 ? s + 4 : Field<const char *>(s, 4);
+		size_t n = 0;
+		for (; text && n + 1 < unitSize && n < size && text[n]; n++) unit[n] = text[n];
+		unit[n] = 0;
+		return true;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return false;
+	}
+}
+
 void Sample(const char *game, uint32_t clock)
 {
 	bool active[kStatMaxPlayers] = {};
@@ -364,5 +389,16 @@ bool GameStatsLive(std::vector<StatsLivePlayer> &players, uint32_t &clockMs)
 	int teams[kStatMaxPlayers];
 	StatsGroupTeams(active, allied, teams);
 	for (StatsLivePlayer &p : players) p.info.team = teams[p.info.index];
+	return true;
+}
+
+bool GameStatsRecordOf(int player, GameRecordFacts &out)
+{
+	out = GameRecordFacts();
+	const char *game = *reinterpret_cast<char **>(addr::kGame);
+	if (!game || !*reinterpret_cast<void **>(addr::kMap) || player < 0 || player >= kStatMaxPlayers) return false;
+	char unit[128] = {};
+	if (!ReadFacts(game, player, out, unit, sizeof(unit))) return false;
+	out.bestUnit = unit;
 	return true;
 }

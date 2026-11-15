@@ -70,6 +70,9 @@ struct Match {
 	LeagueDropWait drop;
 	std::string dropName;
 	bool pauseHeld = false;
+	// The game's record of this player as last read, for the result screen: the game is gone when it is shown.
+	GameRecordFacts facts;
+	bool factsRead = false;
 };
 
 struct Outbox {
@@ -284,6 +287,13 @@ void Poll(Match &m)
 		// defeat the player in the same second, so leaving is judged on the state before.
 		if (p.state >= 1 && p.state <= 3 && s.state != 3 && !(s.state == 2 && p.state == 1)) s.state = p.state;
 		if (m.surrendered.count(s.index)) s.surrendered = true;
+		if (s.local && m.ranked) {
+			GameRecordFacts facts;
+			if (GameStatsRecordOf(s.index, facts)) {
+				m.facts = facts;
+				m.factsRead = true;
+			}
+		}
 		if (!s.human || s.local || mask < 0 || s.index >= 8 || s.index == localIndex) continue;
 		const bool connected = (mask & (1 << s.index)) != 0;
 		if (s.connected && !connected && before == 1 && !m.decided) {
@@ -498,8 +508,9 @@ void LeagueMatchEnded()
 {
 	LeagueReport report;
 	std::string why;
-	bool ready = false, ranked = false;
+	bool ready = false, ranked = false, factsRead = false;
 	int64_t rankedId = 0;
+	GameRecordFacts facts;
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
 		g_rankedNow = false;
@@ -510,6 +521,8 @@ void LeagueMatchEnded()
 			Poll(g_match);
 			ranked = g_match.ranked;
 			rankedId = g_match.rankedId;
+			facts = g_match.facts;
+			factsRead = g_match.factsRead;
 			if (g_match.pauseHeld) TweaksHoldPause(false);
 			ready = BuildReport(g_match, report, why);
 			g_match = Match();
@@ -531,7 +544,7 @@ void LeagueMatchEnded()
 		if (ranked) RankedGameEnded(rankedId);
 		return;
 	}
-	if (report.kind == LeagueMatchKind::Ranked) RankedGameReported(report, steamId);
+	if (report.kind == LeagueMatchKind::Ranked) RankedGameReported(report, steamId, facts, factsRead);
 	LeagueQueuedReport item;
 	item.steamId = steamId;
 	item.body = LeagueReportJson(report);

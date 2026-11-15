@@ -818,13 +818,20 @@ void RankedTick()
 	}
 }
 
-void RankedGameReported(const LeagueReport &report, const std::string &ownSteamId)
+void RankedGameReported(const LeagueReport &report, const std::string &ownSteamId, const GameRecordFacts &facts, bool read)
 {
 	LeagueRankedGame g;
 	g.matchId = report.matchId;
 	g.at = NowMs();
 	g.durationMs = report.durationMs;
 	g.map = report.map.name;
+	g.stats = read;
+	g.killed = facts.killed;
+	g.lost = facts.lost;
+	g.armyMax = facts.armyMax;
+	g.gold = facts.gold;
+	g.bestLevel = facts.bestLevel;
+	g.bestUnit = facts.bestUnit;
 	for (const LeagueReportPlayer &p : report.players) {
 		if (p.steamId == ownSteamId) {
 			g.won = p.result == "win";

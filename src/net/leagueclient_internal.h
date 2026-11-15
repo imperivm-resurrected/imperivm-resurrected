@@ -10,6 +10,7 @@
 #include "core/json.h"
 #include "core/league.h"
 #include "core/leagueranked.h"
+#include "game/gamestats.h"
 
 namespace leagueclient_impl {
 
@@ -59,8 +60,9 @@ void TourneyTick();
 
 // The ranked module, run from LeagueGameThreadTick.
 void RankedTick();
-// A ranked game ended on this computer and its report is on its way: the result screen waits for the answer.
-void RankedGameReported(const LeagueReport &report, const std::string &ownSteamId);
+// A ranked game ended on this computer and its report is on its way: the result screen waits for the answer, and shows what the game
+// recorded of this player (`facts`, when `read`).
+void RankedGameReported(const LeagueReport &report, const std::string &ownSteamId, const GameRecordFacts &facts, bool read);
 // The server answered a report (from the sending thread); only ranked ones matter here.
 void RankedReportAnswered(const Json &report, const std::string &answer);
 // The game of a ranked match is being played on this computer: the server is told once, and the match can no longer be called off.
