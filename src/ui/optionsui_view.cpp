@@ -321,6 +321,8 @@ std::vector<Page> BuildPages(const Values &v)
 		const bool autosave = Check(v, kAutosave);
 		page.right.push_back({"Autosave", {Toggle(v, "Autosave", kAutosave), Combo(v, "Every", kAutosaveEvery, "", false, autosave), Combo(v, "Copies", kAutosaveCopies, "", false, autosave),
 			Toggle(v, "Save when leaving the game", kSaveOnExit)}});
+		page.right.push_back({"Multiplayer", {Toggle(v, "Show badges in the chat", kChatBadges, "The rank or emblem after each name"),
+			Toggle(v, "Sound when a match is found", kMatchFoundSound, "Ranked: also with the game in the background")}});
 		pages.push_back(page);
 	}
 	{

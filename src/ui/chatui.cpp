@@ -11,6 +11,7 @@
 
 #include "core/config.h"
 #include "core/log.h"
+#include "core/names.h"
 #include "core/uiport.h"
 #include "i18n/tr.h"
 #include "game/chat.h"
@@ -18,6 +19,8 @@
 #include "game/cheats.h"
 #include "game/controls.h"
 #include "game/zoomview.h"
+#include "net/patrons.h"
+#include "net/steamnet.h"
 #include "ui/battlesui.h"
 #include "ui/chatui_view.h"
 #include "ui/keycaps.h"
@@ -75,6 +78,8 @@ struct State {
 	// The help just shown starts at the top of the panel until the player scrolls.
 	uint32_t helpSerial = 0;
 	ScrollDrag bar;
+	// The league badges of the room's players by name, for the lines they write.
+	std::vector<std::pair<std::string, LeagueBadge>> badges;
 };
 
 std::mutex g_lock;
@@ -85,6 +90,9 @@ bool g_haveMouse = false;
 WPARAM g_swallowVk = 0, g_openVk = 0, g_lastDownVk = 0;
 DWORD g_lastDownAt = 0;
 bool g_swallowLeftUp = false, g_swallowRightUp = false;
+// Game thread only: when the badges were last read.
+DWORD g_badgesAt = 0;
+const DWORD kBadgesEveryMs = 2000;
 int g_frameW = 1280, g_frameH = 768;
 // The menu shows once the button has been held this long, or as soon as the mouse leaves the dead zone; a quick click sends the
 // default type without it ever appearing.
@@ -668,7 +676,34 @@ Line LineOf(const ChatEntry &e, int alpha)
 	l.error = e.error;
 	for (const uint32_t k : e.keys) l.keys.push_back({static_cast<unsigned short>(k & 0xffff), static_cast<unsigned char>(k >> 16)});
 	l.alpha = alpha;
+	if (!e.local && !e.name.empty()) {
+		for (const auto &b : g_s.badges) {
+			if (SamePlayerName(b.first, e.name)) l.badge = b.second;
+		}
+		for (const auto &b : g_s.badges) {
+			if (!l.badge.Shown() && PlayerNameMatches(b.first, e.name)) l.badge = b.second;
+		}
+	}
 	return l;
+}
+
+// The room's players and their badges, as the room shows them; none when the options hide them.
+std::vector<std::pair<std::string, LeagueBadge>> ReadBadges()
+{
+	std::vector<std::pair<std::string, LeagueBadge>> out;
+	if (!GetConfig().chatBadges) return out;
+	const OnlineRoom room = SteamCurrentRoom();
+	std::vector<uint64_t> ids;
+	for (const OnlineMember &m : room.members) {
+		if (m.id) ids.push_back(m.id);
+	}
+	if (ids.empty()) return out;
+	PatronsWatch(ids);
+	for (const OnlineMember &m : room.members) {
+		const LeagueBadge badge = PlayerBadgeOf(m.id);
+		if (badge.Shown() && !m.name.empty()) out.push_back({m.name, badge});
+	}
+	return out;
 }
 
 }
@@ -692,6 +727,12 @@ void ChatUiGameTick()
 		read = open || now - g_s.matchRead >= kReadEveryMs;
 		serial = g_s.serial;
 	}
+	const bool readBadges = now - g_badgesAt >= kBadgesEveryMs;
+	std::vector<std::pair<std::string, LeagueBadge>> badges;
+	if (readBadges) {
+		g_badgesAt = now;
+		badges = ReadBadges();
+	}
 	const uint32_t fresh = ChatLogSerial();
 	std::vector<ChatEntry> lines;
 	const bool newLines = fresh != serial;
@@ -700,6 +741,7 @@ void ChatUiGameTick()
 	if (read) m = ChatReadMatch();
 	const bool other = open && OtherScreenOpen();
 	std::lock_guard<std::mutex> lock(g_lock);
+	if (readBadges) g_s.badges = std::move(badges);
 	if (newLines) {
 		g_s.lines = std::move(lines);
 		g_s.serial = fresh;

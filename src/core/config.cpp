@@ -188,6 +188,8 @@ void LoadConfig()
 	g_config.leagueSteamId = ReadIniString("League", "SteamId", path);
 	g_config.leagueName = ReadIniString("League", "Name", path);
 	g_config.leagueOfferLink = GetPrivateProfileIntA("League", "OfferLink", 1, path) != 0;
+	g_config.chatBadges = GetPrivateProfileIntA("League", "ChatBadges", 1, path) != 0;
+	g_config.matchFoundSound = GetPrivateProfileIntA("League", "MatchFoundSound", 1, path) != 0;
 	if (g_config.leagueToken.empty() && !ReadIniString("League", "Token", path).empty()) {
 		LogW("boot", "config: the league token can't be read on this Windows user; the account has to be linked again");
 	}
@@ -263,6 +265,8 @@ void SaveConfig()
 	WritePrivateProfileStringA("Sound", "NatureVolume", g_config.natureVolume > 0 ? std::to_string(g_config.natureVolume).c_str() : nullptr, path);
 	WritePrivateProfileStringA("Sound", "ConversationVolume", std::to_string(g_config.conversationVolume).c_str(), path);
 	WritePrivateProfileStringA("Sound", "OutputDevice", g_config.outputDevice.c_str(), path);
+	WritePrivateProfileStringA("League", "ChatBadges", g_config.chatBadges ? "1" : "0", path);
+	WritePrivateProfileStringA("League", "MatchFoundSound", g_config.matchFoundSound ? "1" : "0", path);
 	WritePrivateProfileStringA("Debug", "LogLevel", LogLevelName(g_config.logLevel), path);
 }
 

@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "addr/state.h"
+#include "core/config.h"
 #include "core/league.h"
 #include "core/leaguemaps.h"
 #include "core/leagueplay.h"
@@ -378,7 +379,7 @@ void CallPlayer()
 		FLASHWINFO fi = {sizeof(fi), wnd, FLASHW_ALL | FLASHW_TIMERNOFG, 0, 0};
 		FlashWindowEx(&fi);
 	}
-	UiSoundPlay(1);
+	if (GetConfig().matchFoundSound) UiSoundPlay(1);
 	if (!g_s.open && !InGame() && MainMenuOnTop()) OpenRankedTab();
 	else if (!g_s.open) ModUiToast("Ranked match found! Open Multiplayer to accept it.");
 }
