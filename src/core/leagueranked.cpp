@@ -72,7 +72,33 @@ LeaguePlayerCard CardOf(const Json &j)
 	c.accepted = j.GetBool("accepted");
 	c.host = j.GetBool("host");
 	c.inRoom = j.GetBool("inRoom");
+	for (const char *key : {"wins", "losses", "glory", "place"}) {
+		const Json *v = j.Get(key);
+		c.standing = c.standing || (v && v->type == Json::Number);
+	}
+	c.wins = std::max(0, Int(j, "wins"));
+	c.losses = std::max(0, Int(j, "losses"));
+	c.glory = std::max(0, Int(j, "glory"));
+	c.place = std::max(0, Int(j, "place"));
 	return c;
+}
+
+// 0 to 1, or -1 when it is missing or out of range.
+double ExpectedOf(const Json *v)
+{
+	if (!v || v->type != Json::Number || !(v->num >= 0 && v->num <= 1)) return -1;
+	return v->num;
+}
+
+LeagueSearchWindow WindowOf(const Json *v)
+{
+	LeagueSearchWindow w;
+	if (!v || v->type != Json::Object) return w;
+	w.present = true;
+	const Json *from = v->Get("from"), *to = v->Get("to");
+	if (from && from->type == Json::Number && from->num > 0) w.from = static_cast<int>(from->num);
+	if (to && to->type == Json::Number && to->num >= 0 && to->num < 1e9) w.to = static_cast<int>(to->num);
+	return w;
 }
 
 LeagueMatchStatus MatchStatusOf(const std::string &s)
@@ -150,6 +176,7 @@ LeagueRoomSettings LeagueParseRoomSettings(const Json *v)
 		s.pauseCount = Int(*p, "count", -1);
 		s.pauseSeconds = Int(*p, "totalSec", -1);
 	}
+	else if (p && p->type == Json::Number) s.pauseCount = std::max(0, static_cast<int>(p->num));
 	return s;
 }
 
@@ -221,13 +248,16 @@ bool LeagueParseQueue(const Json &j, LeagueQueueAnswer &out)
 	out.estimateSec = Int(j, "estimateSec");
 	out.serverNow = Int64(j, "serverNow");
 	out.matchId = IdNumber(j.Get("matchId"));
+	out.window = WindowOf(j.Get("window"));
 	if (const Json *m = j.Get("match"); m && m->type == Json::Object) {
 		out.matchId = IdNumber(m->Get("id"));
 		if (const Json *o = m->Get("opponent"); o && o->type == Json::Object) out.opponent = CardOf(*o);
 		out.map = MapOf(m->Get("map"));
 		out.acceptBy = Int64(*m, "acceptBy");
 		out.accepted = m->GetBool("accepted");
+		out.expected = ExpectedOf(m->Get("expected"));
 	}
+	if (out.expected < 0) out.expected = ExpectedOf(j.Get("expected"));
 	return out.status != LeagueQueueStatus::Found || out.matchId > 0;
 }
 
@@ -275,6 +305,8 @@ bool LeagueParseMatch(const Json &j, LeagueMatchTicket &out)
 			if (p.type == Json::Object) out.players.push_back(CardOf(p));
 		}
 	}
+	if (const Json *o = j.Get("opponent"); o && o->type == Json::Object) out.opponent = CardOf(*o);
+	out.expected = ExpectedOf(j.Get("expected"));
 	out.ranked = LeagueParseRankedResult(j.Get("ranked"));
 	out.serverNow = Int64(j, "serverNow");
 	return out.id > 0 && out.status != LeagueMatchStatus::Unknown;
@@ -377,6 +409,7 @@ LeagueError LeagueParseError(const Json &j)
 	e.code = j.GetString("error");
 	e.message = j.GetString("message");
 	e.contentKey = j.GetString("contentKey");
+	e.contentName = j.GetString("contentName");
 	e.kind = Lower(j.GetString("kind"));
 	e.until = Int64(j, "until");
 	if (!e.until) e.until = Int64(j, "queueBanUntil");
