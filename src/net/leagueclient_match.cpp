@@ -430,6 +430,16 @@ namespace leagueclient_impl {
 
 void MatchTick()
 {
+	bool ranked = false, held = false, over = false;
+	int64_t rankedId = 0;
+	{
+		std::lock_guard<std::mutex> lock(g_mx);
+		ranked = g_match.active && g_match.ranked;
+		rankedId = g_match.rankedId;
+		held = g_match.pauseHeld;
+		over = g_match.decided || g_match.desync;
+	}
+	PauseTick(ranked, rankedId, held, over);
 	std::lock_guard<std::mutex> lock(g_mx);
 	if (g_match.active && GetTickCount() - g_match.lastPoll >= kPollMs) {
 		g_match.lastPoll = GetTickCount();

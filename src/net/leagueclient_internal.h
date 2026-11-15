@@ -50,6 +50,10 @@ std::string UrlEncode(const std::string &s);
 
 // The matches module, run from LeagueGameThreadTick.
 void MatchTick();
+// The limit on each player's own pauses in a ranked game, every frame on the game thread: `ranked` while a ranked game is recorded,
+// with its match for the ticket's settings; `held` while the wait for an opponent who dropped holds the pause, which is nobody's;
+// `over` once the game is decided.
+void PauseTick(bool ranked, int64_t matchId, bool held, bool over);
 // The tournaments module, run from LeagueGameThreadTick: polls the player's tournaments at their pace.
 void TourneyTick();
 
