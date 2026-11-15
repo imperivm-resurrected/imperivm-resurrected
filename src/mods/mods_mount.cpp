@@ -340,6 +340,49 @@ bool ModsApplyWithoutRestart()
 	return failed.empty();
 }
 
+std::string ModsProfileWithGameplayKey(const std::string &key)
+{
+	if (key.empty()) return std::string();
+	std::vector<std::string> names = ModsProfileNames();
+	const std::string active = ModsActiveProfileName();
+	names.insert(names.begin(), active.empty() ? std::string(kOriginal) : active);
+	for (const std::string &name : names) {
+		const ModProfile p = ModsLoadProfile(name);
+		const std::string hash = ModsProfileGameplayHash(p);
+		if (hash.size() >= key.size() && hash.compare(0, key.size(), key) == 0) return p.name;
+	}
+	return std::string();
+}
+
+bool ModsSwitchesWithoutRestart(const std::string &profile)
+{
+	ModProfile mounted;
+	std::map<std::string, std::string> chosen;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		if (!g_mount.known || !g_mount.layerList) return false;
+		mounted = g_mount.profile;
+		chosen = g_mount.chosen;
+	}
+	ModProfile target = ModsLoadProfile(profile);
+	target.mods.erase(std::remove_if(target.mods.begin(), target.mods.end(), [](const std::string &f) {
+		ModInfo m;
+		return !ModsFind(f, m);
+	}), target.mods.end());
+	if (!target.choices.empty() && ChosenFolders(target, ModsList()) != chosen) return false;
+	for (const std::string &f : target.mods) {
+		ModInfo m;
+		if (!ContainsFolder(mounted.mods, f) && (!ModsLoadsWithoutRestart(f) || !ModsFind(f, m) || !m.hasLoose)) return false;
+	}
+	for (const std::string &f : mounted.mods) {
+		if (ContainsFolder(target.mods, f)) continue;
+		if (!ModsLoadsWithoutRestart(f)) return false;
+		std::lock_guard<std::mutex> lock(g_lock);
+		if (!g_mount.looseLayers.count(Lower("mods/" + f + "/"))) return false;
+	}
+	return true;
+}
+
 namespace mods_impl {
 void __cdecl HookMountPakFilesInDir(const char *dir, void *list, const char *lang)
 {

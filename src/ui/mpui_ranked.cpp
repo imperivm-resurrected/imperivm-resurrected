@@ -21,6 +21,7 @@
 #include "hooks/dmshim.h"
 #include "i18n/tr.h"
 #include "mods/modoptions.h"
+#include "mods/mods.h"
 #include "net/leagueclient.h"
 #include "net/steamnet.h"
 #include "ui/leaguemapthumb.h"
@@ -581,6 +582,33 @@ void PaintRankedDispute(Painter &p, const State &st)
 	DialogButtons(p, d, {{"Send", kRankedAct, kRkDisputeSend, true, !st.ranked.view.disputeBusy}, {"Cancel", kRankedAct, kRkDisputeCancel}}, mx, my);
 }
 
+void PaintRankedContent(Painter &p, const State &st)
+{
+	const RankedScreen &r = st.ranked;
+	const std::string label = r.contentProfile.empty() ? std::string() : ModsProfileLabel(r.contentProfile);
+	const std::string name = !r.contentName.empty() ? r.contentName : label;
+	std::string text = Tr("This season is played with other gameplay content. Change your content profile to search.");
+	if (!name.empty() && r.contentSwitchable) {
+		text = TrFmt("This season is played with \"%s\". Your content profile \"%s\" has it: switch to it and the search starts.", {name, label});
+	}
+	else if (!name.empty() && !label.empty()) {
+		text = TrFmt("This season is played with \"%s\". Activate the content profile \"%s\" in Content and restart the game to search.", {name, label});
+	}
+	else if (!name.empty()) text = TrFmt("This season is played with \"%s\". Install it, activate it in Content and restart the game to search.", {name});
+	p.Font(0);
+	p.raw = true;
+	const int textH = p.Measure(620 - 48, text);
+	p.raw = false;
+	const Dialog d = DialogBegin(p, st.viewW, st.viewH, 620, std::max(220, 60 + 16 + textH + 24 + kDialogBtnH + 16), "The season's content", pal::redText);
+	p.raw = true;
+	DialogText(p, d, 76, text, pal::text, 0);
+	p.raw = false;
+	if (r.contentSwitchable) {
+		DialogButtons(p, d, {{"Switch to the season's content", kRankedAct, kRkContentSwitch, true}, {"Close", kRankedAct, kRkContentClose}}, st.mouseX, st.mouseY);
+	}
+	else DialogButtons(p, d, {{"Close", kRankedAct, kRkContentClose, true}}, st.mouseX, st.mouseY);
+}
+
 void RankedAction(int arg)
 {
 	RankedScreen &r = g_s.ranked;
@@ -690,6 +718,24 @@ void RankedAction(int arg)
 		break;
 	}
 	case kRkNotice: LeagueRankedClearNotice(); break;
+	case kRkContentClose: r.contentOpen = false; break;
+	case kRkContentSwitch: {
+		r.contentOpen = false;
+		if (!r.contentSwitchable || r.contentProfile.empty()) break;
+		const std::string profile = r.contentProfile;
+		ModsSetActiveProfileName(profile);
+		ModsApplyWithoutRestart();
+		if (ModsRestartNeeded()) {
+			LogW("league", "ranked: the content profile \"%s\" needs a restart after all", profile.c_str());
+			ModUiToast("The content could not be switched without restarting the game.", true);
+			break;
+		}
+		LogI("league", "ranked: switched to the content profile \"%s\" of the season; searching", profile.c_str());
+		LeagueRankedClearNotice();
+		ModUiToast(TrFmt("Content profile \"%s\" active: searching.", {ModsProfileLabel(profile)}));
+		LeagueQueueJoin();
+		break;
+	}
 	default: break;
 	}
 }
@@ -704,6 +750,19 @@ void RankedFrame()
 		r.disputeSeen = v.disputeSerial;
 		if (!v.disputeNotice.empty()) ModUiToast(v.disputeNotice, v.disputeBad);
 	}
+	// The queue answered that the season needs other content: the dialog offers the profile that has it.
+	if (v.wrongContentSerial != r.contentSeen) {
+		r.contentSeen = v.wrongContentSerial;
+		if (!v.seasonContentKey.empty()) {
+			r.contentName = v.seasonContentName;
+			r.contentProfile = ModsProfileWithGameplayKey(v.seasonContentKey);
+			r.contentSwitchable = !r.contentProfile.empty() && ModsSwitchesWithoutRestart(r.contentProfile);
+			r.contentOpen = true;
+			LogI("league", "ranked: the season needs other content (%s); profile with it: %s, %s", v.seasonContentName.empty() ? "unnamed" : v.seasonContentName.c_str(),
+				r.contentProfile.empty() ? "none" : r.contentProfile.c_str(), r.contentSwitchable ? "switches without a restart" : "needs a restart");
+		}
+	}
+	if (r.contentOpen && g_s.view != kViewRanked) r.contentOpen = false;
 	if (r.disputeMatch && g_s.view != kViewRanked) {
 		r.disputeMatch = 0;
 		if (g_s.focus == kRankedField) g_s.focus = kNoField;

@@ -90,6 +90,10 @@ void DoAction(int action, int arg)
 			RankedAction(kRkDisputeCancel);
 			break;
 		}
+		if (g_s.view == kViewRanked && g_s.ranked.contentOpen) {
+			RankedAction(kRkContentClose);
+			break;
+		}
 		if (g_s.recoverAsk || g_s.recoverWaitHost) {
 			DoAction(kRecoverNo, 0);
 			break;

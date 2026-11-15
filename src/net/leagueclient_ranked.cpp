@@ -62,6 +62,8 @@ struct Queue {
 	std::string banKind;
 	std::string notice;
 	bool noticeBad = false;
+	std::string contentKey, contentName;
+	unsigned wrongContent = 0;
 	// When the notice was set: a good one (a match called off with no harm) fades after a minute; a bad one stays until it is resolved.
 	DWORD noticeAt = 0;
 	unsigned foundSerial = 0;
@@ -431,7 +433,12 @@ void JoinThread(unsigned gen, std::string contentKey)
 				g_q.banKind = a.error.kind;
 				SetNotice(g_q, LeagueBanText(a.error.kind), true);
 			}
-			else if (code == "wrong_content") SetNotice(g_q, "This season is played with other gameplay content. Change your content profile to search.", true);
+			else if (code == "wrong_content") {
+				SetNotice(g_q, "This season is played with other gameplay content. Change your content profile to search.", true);
+				g_q.contentKey = a.error.contentKey;
+				g_q.contentName = a.error.contentName;
+				g_q.wrongContent++;
+			}
 			else if (code == "no_season") SetNotice(g_q, "No ranked season is being played now.", true);
 			else if (a.r.status == 429) SetNotice(g_q, "You searched too often: wait a few seconds and search again.", false);
 			else SetNotice(g_q, FailureNotice(a), true);
@@ -952,6 +959,9 @@ LeagueRankedView LeagueRankedState()
 	v.banKind = g_q.banKind;
 	v.notice = g_q.noticeBad || GetTickCount() - g_q.noticeAt < 60000 ? g_q.notice : std::string();
 	v.noticeBad = g_q.noticeBad;
+	v.seasonContentKey = g_q.contentKey;
+	v.seasonContentName = g_q.contentName;
+	v.wrongContentSerial = g_q.wrongContent;
 	v.foundSerial = g_q.foundSerial;
 	v.result = g_result.view;
 	v.recentLoaded = g_history.recentLoaded;

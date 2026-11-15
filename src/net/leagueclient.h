@@ -181,6 +181,9 @@ struct LeagueRankedView {
 	// The last thing that happened, as an English text to translate (with its values filled in by the server's), and whether it is bad.
 	std::string notice;
 	bool noticeBad = false;
+	// The season is played with other gameplay content (wrong_content): its key and name, and a count of the times the queue said so.
+	std::string seasonContentKey, seasonContentName;
+	unsigned wrongContentSerial = 0;
 	// Counts the matches found, so the interface can call the player once per match.
 	unsigned foundSerial = 0;
 	LeagueRankedOutcome result;

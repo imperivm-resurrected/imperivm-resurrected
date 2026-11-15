@@ -1013,7 +1013,7 @@ void PaintHistory(Painter &p, const State &st)
 
 bool PaintRankedTab(Painter &p, const State &st)
 {
-	const bool dialog = st.ranked.disputeMatch != 0;
+	const bool dialog = st.ranked.disputeMatch != 0 || st.ranked.contentOpen;
 	if (dialog) p.noHover = true;
 	if (st.ranked.resultOpen) PaintRankedResult(p, st);
 	else if (!st.ranked.view.linked) return false;
@@ -1030,7 +1030,8 @@ bool PaintRankedTab(Painter &p, const State &st)
 	}
 	if (dialog) {
 		UseSharedFonts(p);
-		PaintRankedDispute(p, st);
+		if (st.ranked.disputeMatch) PaintRankedDispute(p, st);
+		else PaintRankedContent(p, st);
 		UseScreenFonts(p);
 	}
 	return true;
