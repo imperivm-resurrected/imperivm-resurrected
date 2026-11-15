@@ -7,6 +7,7 @@
 #include <mutex>
 #include <set>
 #include <string>
+#include <vector>
 #include <atomic>
 #include <cstdint>
 
@@ -23,7 +24,11 @@
 #include "addr/ui.h"
 #include "addr/world.h"
 #include "addr/media.h"
+#include "core/leagueranked.h"
+#include "core/leagueteam.h"
 #include "core/uiport.h"
+#include "game/gamestats.h"
+#include "net/steamnet.h"
 
 namespace {
 const unsigned kGameConsole = 0x44cc;
@@ -67,6 +72,16 @@ int g_inSplit = 0;
 
 std::mutex g_lock;
 std::set<int> g_dropped;
+// The players of a ranked 2v2 the AI plays for since they dropped: they may come back, and then it goes.
+std::set<int> g_dropAi;
+
+// The rules of a ranked 2v2 hold for the game played or watched: its players know it from their room, a spectator of the broadcast from
+// the spectator room, which copies the game room's mode. Whatever changes the game under them must be the same in all those copies.
+bool TeamRules(bool demo)
+{
+	if (!demo) return LeagueMatchRankedTeam();
+	return SpectatorViewing() && SteamCurrentRoom().info.mode == kLeagueTeamRoomMode;
+}
 
 std::string ReadString(const char *s)
 {
@@ -119,17 +134,53 @@ void ConsoleMessage(const std::string &text)
 	if (console) reinterpret_cast<ConsolePrintf_t>(addr::kConsolePrintf)(console, "%s", text.c_str());
 }
 
+// The other player of that one's alliance, from the game's state; -1 when there is none.
+int AllyOf(int index)
+{
+	std::vector<StatsLivePlayer> players;
+	uint32_t clock = 0;
+	if (!GameStatsLive(players, clock)) return -1;
+	int team = -1;
+	for (const StatsLivePlayer &p : players) {
+		if (p.info.index == index) team = p.info.team;
+	}
+	for (const StatsLivePlayer &p : players) {
+		if (p.playable && p.info.index != index && p.info.team == team) return p.info.index;
+	}
+	return -1;
+}
+
+// A ranked 2v2's player surrenders while the AI plays for their partner, who dropped or left: the team gives up, so the partner's army
+// is defeated with them, as the surrender itself does (the game's slot 0x48, OnPlayerGameOver). Every computer, and a spectator of the
+// broadcast, runs the surrender on the same tick and decides this by the game's state, so all of them do it.
+void SurrenderTeam(int index, bool demo)
+{
+	char *game = *reinterpret_cast<char **>(addr::kGame);
+	if (!game || index < 0 || index >= 16 || !TeamRules(demo)) return;
+	const int partner = AllyOf(index);
+	if (partner < 0 || partner >= 16) return;
+	char *slot = game + partner * 800 + 0x12cc;
+	if (!*reinterpret_cast<void **>(slot + 0x88) || *reinterpret_cast<int *>(slot + 0x290) != 1) return;
+	int who = partner;
+	void **vt = *reinterpret_cast<void ***>(game);
+	reinterpret_cast<void(__fastcall *)(void *, void *, int *, int)>(vt[0x48 / 4])(game, nullptr, &who, 1);
+	LeagueMatchSurrendered(partner);
+	LogI("match", "ranked 2v2: player %d surrenders with the partner the AI plays for (%d)", index, partner);
+}
+
 void __fastcall HookSurrender(void *cmd)
 {
 	char *player = *reinterpret_cast<char **>(static_cast<char *>(cmd) + 4);
 	const int index = player ? *reinterpret_cast<int *>(player + 8) : -1;
-	if (!reinterpret_cast<IsDemo_t>(addr::kIsDemoPlayback)()) {
+	const bool demo = reinterpret_cast<IsDemo_t>(addr::kIsDemoPlayback)() != 0;
+	if (!demo) {
 		const std::string name = PlayerName(index);
 		LogI("match", "online game: player %d (%s) surrenders", index, name.c_str());
 		LeagueMatchSurrendered(index);
 		ConsoleMessage((name.empty() ? std::string("A player") : name) + Tr(" has surrendered."));
 	}
 	g_origSurrender(cmd);
+	SurrenderTeam(index, demo);
 }
 
 char *__cdecl HookLocFormat(void *db, char *out, const char *key, ...)
@@ -141,9 +192,12 @@ char *__cdecl HookLocFormat(void *db, char *out, const char *key, ...)
 		const char *raw = va_arg(args, const char *);
 		std::string name = raw ? raw : "";
 		if (name.empty()) name = "A player";
-		// Nobody takes the place of a player who leaves a ranked game.
-		const std::string text = g_inQuit > 0 ? name + Tr(LeagueMatchRanked() ? " has left the game." : " has left the game; their army is controlled by the AI.")
-											   : name + Tr(" has disconnected. They can rejoin the game from Multiplayer.");
+		// Nobody takes the place of a player who leaves a ranked 1v1; in a ranked 2v2 the AI plays for whoever drops while they come back.
+		const bool team = LeagueMatchRankedTeam();
+		std::string text;
+		if (g_inQuit > 0) text = name + Tr(LeagueMatchRanked() && !team ? " has left the game." : " has left the game; their army is controlled by the AI.");
+		else if (team) text = TrFmt("%s has dropped: the AI controls them. They have %s to come back.", {name, LeagueClockText(kLeagueTeamDropWaitMs)});
+		else text = name + Tr(" has disconnected. They can rejoin the game from Multiplayer.");
 		strncpy_s(out, 1024, text.c_str(), _TRUNCATE);
 		va_end(args);
 		return out;
@@ -164,11 +218,32 @@ void __cdecl HookCreateAI(int player, char *profile, short difficulty)
 	// A live broadcast is the replay of a game played with this rule, so its drops must not bring the AI either, or
 	// the spectator's copy drifts from the game. Saved replays keep the game's behaviour: they may come from without the mod.
 	const bool demo = reinterpret_cast<IsDemo_t>(addr::kIsDemoPlayback)() != 0;
-	if (g_inSplit > 0 && demo && SpectatorViewing() && game && player >= 0 && player < 16) {
+	const bool team = (g_inSplit > 0 || g_inQuit > 0) && TeamRules(demo);
+	if (g_inSplit > 0 && demo && SpectatorViewing() && game && player >= 0 && player < 16 && !team) {
 		LogI("match", "broadcast: player %d dropped in the game; the AI does not replace them", player);
 		return;
 	}
-	// In a ranked game nobody takes the place of the one who leaves either: the other one waits for them and then claims the win.
+	// In a ranked 2v2 the AI plays for whoever drops, as the game itself does, and their return takes it away (NetDropAiRelease); one who
+	// quits keeps it, as in a normal game. Its broadcast does the same.
+	if (team && game && player >= 0 && player < 16) {
+		char *slot = static_cast<char *>(game) + player * 800 + 0x12cc;
+		const std::string name = ReadString(slot + 0x90);
+		bool first;
+		{
+			std::lock_guard<std::mutex> lock(g_lock);
+			first = g_dropped.insert(player).second;
+			if (g_inSplit > 0) g_dropAi.insert(player);
+			else g_dropAi.erase(player);
+		}
+		if (g_inQuit > 0 && !demo) LeagueMatchPlayerQuit(player);
+		if (first) {
+			LogI("match", "ranked 2v2: player %d (%s) %s; the AI plays for them%s", player, name.c_str(), g_inSplit > 0 ? "dropped" : "left",
+				g_inSplit > 0 ? " until they come back" : "");
+		}
+		g_origCreateAI(player, profile, difficulty);
+		return;
+	}
+	// In a ranked 1v1 nobody takes the place of the one who leaves either: the other one waits for them and then claims the win.
 	const bool rankedQuit = g_inQuit > 0 && LeagueMatchRanked();
 	if ((g_inSplit > 0 || rankedQuit) && game && player >= 0 && player < 16 && !demo) {
 		char *slot = static_cast<char *>(game) + player * 800 + 0x12cc;
@@ -220,6 +295,34 @@ void NetDropReset()
 {
 	std::lock_guard<std::mutex> lock(g_lock);
 	g_dropped.clear();
+	g_dropAi.clear();
+}
+
+bool NetDropAiReturnable(int player)
+{
+	std::lock_guard<std::mutex> lock(g_lock);
+	return g_dropAi.count(player) != 0;
+}
+
+void NetDropAiRelease(int player)
+{
+	char *game = *reinterpret_cast<char **>(addr::kGame);
+	if (!game || player < 0 || player >= 16 || !TeamRules(reinterpret_cast<IsDemo_t>(addr::kIsDemoPlayback)() != 0)) return;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		g_dropAi.erase(player);
+		g_dropped.erase(player);
+	}
+	char *slot = game + player * 800 + 0x12cc;
+	void **ai = reinterpret_cast<void **>(slot + 0x88);
+	if (!*ai) return;
+	// What the game's script native AIStop does, and CreatePlayerAI before it makes a new one: the AI's deleting
+	// destructor (vtable slot 0, with 1), then no AI.
+	void **vt = *reinterpret_cast<void ***>(*ai);
+	reinterpret_cast<void(__fastcall *)(void *, void *, int)>(vt[0])(*ai, nullptr, 1);
+	*ai = nullptr;
+	const std::string name = StripAiSuffix(slot + 0x90);
+	LogI("match", "ranked 2v2: player %d (%s) is coming back; the AI stops playing for them", player, name.c_str());
 }
 
 void InstallNetDrop(bool knownExe)

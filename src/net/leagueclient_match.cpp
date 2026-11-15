@@ -22,6 +22,7 @@
 #include "core/json.h"
 #include "core/league.h"
 #include "core/leagueranked.h"
+#include "core/leagueteam.h"
 #include "core/log.h"
 #include "core/names.h"
 #include "game/civs.h"
@@ -53,6 +54,8 @@ struct Seat {
 	int team = 0, state = 0;
 	// The game's time when they left.
 	uint32_t leftAt = 0;
+	// A ranked 2v2: they quit on purpose, or they left for good (they quit, or did not come back in 5 minutes).
+	bool quit = false, gone = false;
 };
 
 struct Match {
@@ -64,8 +67,10 @@ struct Match {
 	uint32_t clockMs = 0, decidedMs = 0;
 	bool decided = false, desync = false;
 	DWORD lastPoll = 0;
-	// A ranked match (the room's tag) and the wait for an opponent who dropped, which holds the game's pause.
-	bool ranked = false;
+	// A ranked match (the room's tag) and the wait for an opponent who dropped, which holds the game's pause. A ranked 2v2 (`team`)
+	// has no such wait: the AI plays for whoever drops.
+	bool ranked = false, team = false;
+	std::set<int> quitters;
 	int64_t rankedId = 0;
 	LeagueDropWait drop;
 	std::string dropName;
@@ -85,7 +90,17 @@ std::mutex g_mx;
 Match g_match;
 Outbox g_out;
 // Read from the game's hooks without the lock.
-std::atomic<bool> g_rankedNow{false};
+std::atomic<bool> g_rankedNow{false}, g_teamNow{false};
+
+// A name without the "(AI)" the game puts after a player the AI plays for, so the 2v2's seats keep their names.
+std::string WithoutAiSuffix(const std::string &name)
+{
+	const size_t open = name.find_last_of('(');
+	if (open == std::string::npos || open == 0 || name.back() != ')' || name.size() - open > 6) return name;
+	std::string clean = name.substr(0, open);
+	while (!clean.empty() && clean.back() == ' ') clean.pop_back();
+	return clean.empty() ? name : clean;
+}
 
 int64_t TickMs()
 {
@@ -277,9 +292,12 @@ void Poll(Match &m)
 			s.civ = CivOf(s.index);
 			s.state = p.state;
 		}
-		if (s.name != p.info.name || (s.human && !s.steamId)) {
-			s.name = p.info.name;
-			if (s.human) s.steamId = SteamIdOf(m, s);
+		const std::string name = m.team ? WithoutAiSuffix(p.info.name) : p.info.name;
+		if (s.name != name || (s.human && !s.steamId)) {
+			s.name = name;
+			// In a 2v2 an account once told is kept, whatever the name of a player the AI plays for turns into.
+			const uint64_t id = s.human ? SteamIdOf(m, s) : 0;
+			if (id || !m.team) s.steamId = id;
 		}
 		s.team = p.info.team;
 		const int before = s.state;
@@ -287,6 +305,11 @@ void Poll(Match &m)
 		// defeat the player in the same second, so leaving is judged on the state before.
 		if (p.state >= 1 && p.state <= 3 && s.state != 3 && !(s.state == 2 && p.state == 1)) s.state = p.state;
 		if (m.surrendered.count(s.index)) s.surrendered = true;
+		if (m.team && m.quitters.count(s.index) && !s.quit) {
+			s.quit = s.gone = true;
+			if (!s.left) s.leftAt = clock;
+			LogI("league", "ranked 2v2: player %d left on purpose; the AI keeps their army", s.index);
+		}
 		if (s.local && m.ranked) {
 			GameRecordFacts facts;
 			if (GameStatsRecordOf(s.index, facts)) {
@@ -298,14 +321,19 @@ void Poll(Match &m)
 		const bool connected = (mask & (1 << s.index)) != 0;
 		if (s.connected && !connected && before == 1 && !m.decided) {
 			s.left = true;
-			s.leftAt = clock;
+			if (!s.quit) s.leftAt = clock;
 			LogI("league", "player %d left the game while playing", s.index);
 		}
-		else if (!s.connected && connected && s.left) {
+		else if (!s.connected && connected && s.left && !s.gone) {
 			s.left = false;
 			LogI("league", "player %d is back in the game", s.index);
 		}
 		s.connected = connected;
+		// The 2v2's five minutes to come back are over: they left it for good, and the AI keeps their army.
+		if (m.team && s.left && !s.gone && !m.decided && LeagueTeamDropOver(s.leftAt, clock)) {
+			s.gone = true;
+			LogI("league", "ranked 2v2: player %d did not come back in %d minutes; they left the game", s.index, static_cast<int>(kLeagueTeamDropWaitMs / 60000));
+		}
 	}
 	if (!m.decided) {
 		for (const auto &kv : m.seats) {
@@ -316,7 +344,7 @@ void Poll(Match &m)
 			break;
 		}
 	}
-	if (m.ranked) DropStep(m);
+	if (m.ranked && !m.team) DropStep(m);
 }
 
 // Under g_mx, on the game thread. The opponent is gone and nobody else plays this game, so pausing it here holds it for both.
@@ -367,13 +395,13 @@ void DropStep(Match &m)
 	HoldPause(m, waiting && !RejoinHosting());
 }
 
-// The game's time when the other side left and did not come back; -1 when nobody did.
+// The game's time when the other side left and did not come back; -1 when nobody did. In a 2v2, only who left for good counts.
 int64_t DropAtOf(const Match &m)
 {
 	int64_t at = -1;
 	for (const auto &kv : m.seats) {
 		const Seat &s = kv.second;
-		if (s.local || !s.human || !s.left) continue;
+		if (s.local || !s.human || !s.left || (m.team && !s.gone)) continue;
 		if (at < 0 || s.leftAt < at) at = s.leftAt;
 	}
 	return at;
@@ -396,6 +424,11 @@ bool BuildReport(const Match &m, LeagueReport &r, std::string &why)
 		seat.local = s.local;
 		seat.left = s.left;
 		seat.surrendered = s.surrendered;
+		// A 2v2's player who dropped is still in it while their five minutes last; the one closing the game leaves it now.
+		if (m.team) {
+			seat.left = s.gone;
+			seat.leftAtMs = s.gone ? s.leftAt : s.local ? m.clockMs : -1;
+		}
 		seats.push_back(seat);
 	}
 	// The ticket of a ranked match knows both accounts: a report must go, or the server keeps the queue locked for hours.
@@ -408,10 +441,19 @@ bool BuildReport(const Match &m, LeagueReport &r, std::string &why)
 	if (unknown) LogW("league", "%d human players of the game could not be matched to a Steam account", unknown);
 	LeagueDropRules rules;
 	rules.ranked = m.ranked;
+	rules.team = m.team;
 	const LeagueDropPhase drop = LeagueDropPhaseAt(m.drop, TickMs());
 	rules.claimable = drop == LeagueDropPhase::Claimable || drop == LeagueDropPhase::Claimed;
 	const LeagueOutcome outcome = LeagueResolve(seats, m.desync, rules);
 	r.players = LeagueReportPlayers(seats, outcome);
+	// A 2v2's teams are the ticket's sides, whichever player has the lower index in the game.
+	if (m.team && ticket.id) {
+		const std::vector<LeagueMatchTeam> sides = LeagueTicketTeams(ticket);
+		const bool known = std::all_of(r.players.begin(), r.players.end(), [&](const LeagueReportPlayer &p) { return LeagueSideOf(sides, p.steamId) != 0; });
+		if (known) {
+			for (LeagueReportPlayer &p : r.players) p.team = LeagueSideOf(sides, p.steamId);
+		}
+	}
 	if (r.players.size() < 2) {
 		why = "fewer than two players with a Steam account";
 		return false;
@@ -450,6 +492,7 @@ void MatchTick()
 		over = g_match.decided || g_match.desync;
 	}
 	PauseTick(ranked, rankedId, held, over);
+	TeamTick();
 	std::lock_guard<std::mutex> lock(g_mx);
 	if (g_match.active && GetTickCount() - g_match.lastPoll >= kPollMs) {
 		g_match.lastPoll = GetTickCount();
@@ -475,6 +518,8 @@ void LeagueMatchPlaying(const LeagueMatchInfo &info)
 	int64_t matchId = 0;
 	const bool ranked = LeagueParseRoomTag(info.roomTag, kind, matchId) && kind == LeagueMatchKind::Ranked;
 	if (ranked) RankedGameStarted(matchId);
+	// By the room's data only: whether the AI plays for a player who drops has to be the same on every computer.
+	const bool team = ranked && info.team;
 	std::lock_guard<std::mutex> lock(g_mx);
 	if (!g_match.active || g_match.info.lobby != info.lobby) {
 		if (g_match.pauseHeld) TweaksHoldPause(false);
@@ -483,9 +528,11 @@ void LeagueMatchPlaying(const LeagueMatchInfo &info)
 		g_match.info = info;
 		g_match.localStartMs = NowMs();
 		g_match.ranked = ranked;
+		g_match.team = team;
 		g_match.rankedId = ranked ? matchId : 0;
 		g_rankedNow = ranked;
-		LogI("league", "recording the online game (%s)", LeagueLinked() ? "it will be reported" : "the account is not linked, so it won't be reported");
+		g_teamNow = team;
+		LogI("league", "recording the online game%s (%s)", team ? ", a ranked 2v2" : "", LeagueLinked() ? "it will be reported" : "the account is not linked, so it won't be reported");
 		return;
 	}
 	Match &m = g_match;
@@ -497,6 +544,10 @@ void LeagueMatchPlaying(const LeagueMatchInfo &info)
 		m.ranked = true;
 		m.rankedId = matchId;
 		g_rankedNow = true;
+	}
+	if (team && !m.team) {
+		m.team = true;
+		g_teamNow = true;
 	}
 	for (const auto &member : info.members) {
 		const bool known = std::any_of(m.info.members.begin(), m.info.members.end(), [&](const std::pair<uint64_t, std::string> &k) { return k.first == member.first; });
@@ -514,6 +565,7 @@ void LeagueMatchEnded()
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
 		g_rankedNow = false;
+		g_teamNow = false;
 		if (!g_match.active) {
 			why = "it was not recorded";
 		}
@@ -571,6 +623,58 @@ void LeagueMatchDesync()
 bool LeagueMatchRanked()
 {
 	return g_rankedNow;
+}
+
+bool LeagueMatchRankedTeam()
+{
+	return g_teamNow;
+}
+
+
+void LeagueMatchPlayerQuit(int player)
+{
+	std::lock_guard<std::mutex> lock(g_mx);
+	if (g_match.active && g_match.team) g_match.quitters.insert(player);
+}
+
+bool LeagueTeamDropOpen(int player)
+{
+	std::lock_guard<std::mutex> lock(g_mx);
+	if (!g_match.active || !g_match.team) return true;
+	auto it = g_match.seats.find(player);
+	if (it == g_match.seats.end()) return true;
+	const Seat &s = it->second;
+	return !s.quit && !s.gone && !(s.left && LeagueTeamDropOver(s.leftAt, g_match.clockMs));
+}
+
+namespace leagueclient_impl {
+
+bool MatchTeamGame(TeamGame &out)
+{
+	std::lock_guard<std::mutex> lock(g_mx);
+	if (!g_match.active || !g_match.team) return false;
+	out = TeamGame();
+	out.matchId = g_match.rankedId;
+	out.clockMs = g_match.clockMs;
+	out.decided = g_match.decided || g_match.desync;
+	for (const auto &kv : g_match.seats) {
+		const Seat &s = kv.second;
+		if (!s.human) continue;
+		TeamSeat t;
+		t.index = s.index;
+		t.team = s.team;
+		t.name = s.name;
+		t.steamId = s.steamId;
+		t.local = s.local;
+		t.connected = s.local || !s.left;
+		t.gone = s.gone;
+		t.quit = s.quit;
+		t.leftAt = s.leftAt;
+		out.seats.push_back(t);
+	}
+	return true;
+}
+
 }
 
 bool LeagueSurrenderLocked()

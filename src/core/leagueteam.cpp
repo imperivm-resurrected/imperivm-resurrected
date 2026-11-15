@@ -215,6 +215,11 @@ bool LeagueVoteExpired(const LeagueVote &v, int64_t nowMs)
 	return v.open && nowMs - v.since >= kLeagueVoteMs;
 }
 
+bool LeagueVoteAnswerCounts(const LeagueVote &v, int64_t atMs)
+{
+	return v.open && atMs - v.since < kLeagueVoteMs;
+}
+
 std::string LeagueVoteMessage(LeagueVoteVerb verb)
 {
 	const char letter = verb == LeagueVoteVerb::Propose ? 'p' : verb == LeagueVoteVerb::Yes ? 'y' : verb == LeagueVoteVerb::No ? 'n' : 0;

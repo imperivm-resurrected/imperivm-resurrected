@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <functional>
 #include <string>
+#include <vector>
 
 #include "core/json.h"
 #include "core/league.h"
@@ -72,5 +73,28 @@ void RankedGameStarted(int64_t matchId);
 void RankedGameEnded(int64_t matchId);
 // The ticket of the ranked match being followed, when it is that one.
 bool RankedTicketOf(int64_t matchId, LeagueMatchTicket &out);
+
+// The duo, run from RankedTick: polled at its pace while the account is linked.
+void PartyTick(bool linked);
+
+// The humans of the ranked 2v2 being played, as the game shows them now: their alliance, whether the lockstep still gets them (a
+// player who dropped is played by the AI), whether they left for good (they quit, or their 5 minutes are over) and when they left.
+struct TeamSeat {
+	int index = 0, team = 0;
+	std::string name;
+	uint64_t steamId = 0;
+	bool local = false, connected = true, gone = false, quit = false;
+	uint32_t leftAt = 0;
+};
+struct TeamGame {
+	int64_t matchId = 0;
+	uint32_t clockMs = 0;
+	bool decided = false;
+	std::vector<TeamSeat> seats;
+};
+// False outside a ranked 2v2.
+bool MatchTeamGame(TeamGame &out);
+// The 2v2 module, run from MatchTick on the game thread: the vote and the notices of drops.
+void TeamTick();
 
 }

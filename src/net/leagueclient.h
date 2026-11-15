@@ -10,6 +10,7 @@
 #include "core/json.h"
 #include "core/league.h"
 #include "core/leagueranked.h"
+#include "core/leagueteam.h"
 
 // The client of the league server (imperivm-league): the account linked to this computer's Steam user, the player's standing and
 // the report of every online game. Every request runs on a background thread; the game thread only reads what came back.
@@ -71,6 +72,8 @@ struct LeagueMatchInfo {
 	int64_t startedAtMs = 0;
 	LeagueMapFacts map;
 	std::string contentKey, roomTag;
+	// The room says it is a ranked 2v2 (its "mode", kLeagueTeamRoomMode): the same on every computer before the game starts.
+	bool team = false;
 	// Steam id and name of the room's members, to tell who is who among the game's players.
 	std::vector<std::pair<uint64_t, std::string>> members;
 };
@@ -104,14 +107,47 @@ bool LeagueDropClaimWin();
 // The wait holds the game's pause; the rejoin of the one who left lets it go just before it brings them in.
 bool LeagueDropHoldsPause();
 void LeagueDropReleasePause();
+
+// A ranked 2v2 being played (its room's tag and mode), the same on every computer from the game's start: whoever drops is played by the
+// AI and may come back within 5 minutes of the game's clock (2-clasificatoria-sistema.md §8.3).
+bool LeagueMatchRankedTeam();
+// A player of it left on purpose: the AI keeps their army and they are gone for good.
+void LeagueMatchPlayerQuit(int player);
+// The player of that index dropped less than 5 minutes ago (or the game does not know): their return is let in.
+bool LeagueTeamDropOpen(int player);
+// The players of the 2v2 who dropped and still have time to come back, and the team's vote to surrender, for the notices over the game.
+struct LeagueTeamDrop {
+	std::string name;
+	bool partner = false;
+	uint32_t leftMs = 0;
+};
+enum class LeagueTeamVote { None, Proposed, Asked };
+struct LeagueTeamView {
+	bool active = false;
+	std::vector<LeagueTeamDrop> drops;
+	// Proposed: this player asked the partner, who has voteLeftMs to answer. Asked: the partner proposed it and waits for this one.
+	LeagueTeamVote vote = LeagueTeamVote::None;
+	int64_t voteLeftMs = 0;
+	std::string partner;
+};
+LeagueTeamView LeagueTeamState();
+// The game menu's Surrender in a ranked 2v2: NotTeam and Alone let the game surrender as always (no 2v2, or the partner is not in the
+// game); TooEarly refuses it before minute 5; Proposed sent the vote to the partner, Pending finds one already open.
+enum class LeagueSurrenderAsk { NotTeam, TooEarly, Alone, Proposed, Pending };
+LeagueSurrenderAsk LeagueSurrenderPress();
+// This player's answer to the partner's proposal: on yes, both surrender.
+void LeagueVoteAnswer(bool yes);
+// A message command of the game, run on every computer: true when it was the vote's (and then it is not shown).
+bool LeagueVoteCommand(void *cmd, const char *text, unsigned size);
 // From the lockstep, after every tick: keeps the state hash every client compared for the ticks that are multiples of 1000.
 void LeagueSyncAfterAdvance(void *transport);
 // Every frame on the game thread: follows the players of the game being recorded, polls a pending link, sends waiting reports and
 // follows the ranked queue.
 void LeagueGameThreadTick();
 
-// The ranked 1v1 queue. Searching goes on while the player looks at other screens; the server pairs players when they poll.
-//   Idle: not searching. Joining: asking to enter the queue. Searching: in the queue, polled every 5 s.
+// The ranked queues (1v1 and 2v2). Searching goes on while the player looks at other screens; the server pairs players when they poll.
+//   Idle: not searching. Joining: asking to enter the queue. Searching: in the queue, polled every 5 s (the partner of a duo follows the
+//   leader's search this way too).
 //   Found: a match waits for this player's answer (Accepted once they said yes and the other one has not yet).
 //   Ready: both accepted; the server's host makes the Steam room. Playing: the room is registered and the game may be running.
 enum class LeagueRankedPhase { Idle, Joining, Searching, Found, Accepted, Ready, Playing };
@@ -121,6 +157,10 @@ struct LeagueRankedGame {
 	int64_t matchId = 0, at = 0;
 	// `map` is the league's id of the map.
 	std::string opponent, opponentId, map;
+	// "1v1" or "2v2"; a 2v2's partner (whether they left it for good) and both opponents, as SteamID and name.
+	std::string queue = "1v1", partner, partnerId;
+	bool partnerLeft = false;
+	std::vector<std::pair<std::string, std::string>> opponents;
 	bool won = false;
 	// This player left the game before it was decided: the league locks the queue for them.
 	bool left = false;
@@ -146,6 +186,8 @@ struct LeagueBoardQuery {
 	std::string name;
 	bool friends = false;
 	std::vector<std::string> ids;
+	// The queue's leaderboard; LeagueBoardRequest puts the one picked (LeagueRankedSelectQueue).
+	std::string queue = "1v1";
 };
 
 // What the result screen shows after a ranked game.
@@ -159,6 +201,11 @@ struct LeagueRankedOutcome {
 
 struct LeagueRankedView {
 	bool linked = false;
+	// The queue the hub shows and searches ("1v1" or "2v2"): the leaderboard, the games and the figures below are the ones of it.
+	std::string queue = "1v1";
+	// The queue of the search or the match on now, and whether it is the leader of this player's duo who searches.
+	std::string searchQueue = "1v1";
+	bool partnerSearch = false;
 	bool seasonLoaded = false, seasonLoading = false, noSeason = false;
 	LeagueSeason season;
 	std::string lang;
@@ -221,6 +268,8 @@ struct LeagueRankedView {
 	std::string badgeError;
 };
 LeagueRankedView LeagueRankedState();
+// Picks the queue the hub shows and searches: its leaderboard and games are read again.
+void LeagueRankedSelectQueue(const std::string &queue);
 // GET /v1/league/season in the language of the game, at most every ten minutes unless forced.
 void LeagueSeasonRefresh(bool force = false);
 // The first ten and the player's place, at most once a minute unless forced.
@@ -238,7 +287,8 @@ void LeagueMatchDispute(int64_t matchId, const std::string &text);
 // The league server's clock now (ms since 1970), from this computer's corrected by the serverNow of its answers; and how far ahead it is.
 int64_t LeagueServerNowMs();
 int64_t LeagueServerClockOffsetMs();
-// Enters the queue with this computer's gameplay content. Refused (with a notice) when not linked, banned or already in a match.
+// Enters the queue picked with this computer's gameplay content (the 2v2 alone, or as the leader of a duo). Refused (with a notice) when
+// not linked, banned or already in a match, or when the duo is not ready or this player does not lead it.
 void LeagueQueueJoin();
 void LeagueQueueLeave();
 void LeagueMatchAnswer(bool accept);
@@ -257,3 +307,30 @@ void LeagueRankedResultSeen();
 void LeagueRankedClearNotice();
 // PUT /v1/league/me/badge: "rank", "season" or "trophy" (with its id) or "none".
 void LeagueBadgeChoose(const std::string &kind, const std::string &id);
+
+// The duo of the 2v2 queue (GET /v1/league/party): asked every 5 s while the 2v2 is on screen or an invitation waits, every 20 s in the
+// other menus (so an invitation is seen anywhere) and never during a game.
+struct LeagueDuoView {
+	// `missing`: the server has no duo (before the 2v2), asked again only now and then.
+	bool loaded = false, busy = false, missing = false;
+	LeagueParty party;
+	std::vector<LeaguePartyInvite> invites;
+	LeagueDuoRole role = LeagueDuoRole::Solo;
+	// The other member, when there is one.
+	LeaguePartyMember partner;
+};
+LeagueDuoView LeagueDuoState();
+// The 2v2 is on screen: the duo is asked closely for a few seconds.
+void LeagueDuoWatch();
+// POST /v1/league/party/invite: a Steam friend (their name for the notices).
+void LeagueDuoInvite(const std::string &steamId, const std::string &name);
+// POST /v1/league/party/:id/accept or /decline.
+void LeagueDuoAnswer(const std::string &inviteId, bool accept);
+// DELETE /v1/league/party: leaves the duo (or calls off the invitation sent).
+void LeagueDuoLeave();
+// What happened with the duo since the last call, already translated: invitations got and answered, the partner leaving, refusals.
+struct LeagueDuoNotice {
+	std::string text;
+	bool bad = false;
+};
+std::vector<LeagueDuoNotice> LeagueDuoTakeNotices();

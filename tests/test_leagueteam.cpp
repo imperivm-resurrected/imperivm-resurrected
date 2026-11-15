@@ -252,6 +252,10 @@ void Vote()
 	CHECK(!LeagueVoteExpired(v, 1000 + kLeagueVoteMs - 1));
 	CHECK(LeagueVoteExpired(v, 1000 + kLeagueVoteMs));
 	CHECK_EQ(static_cast<int>(LeagueVoteLeftMs(v, 1000 + kLeagueVoteMs + 50)), 0);
+	// The answers count by the game's time they ran at, the same on every computer.
+	CHECK(LeagueVoteAnswerCounts(v, 1000 + kLeagueVoteMs - 1));
+	CHECK(!LeagueVoteAnswerCounts(v, 1000 + kLeagueVoteMs));
+	CHECK(!LeagueVoteAnswerCounts(LeagueVote(), 1000));
 
 	// The messages every computer reads on the same tick.
 	const std::string propose = LeagueVoteMessage(LeagueVoteVerb::Propose), yes = LeagueVoteMessage(LeagueVoteVerb::Yes), no = LeagueVoteMessage(LeagueVoteVerb::No);

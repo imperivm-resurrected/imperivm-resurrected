@@ -5,21 +5,25 @@
 
 #include "core/league.h"
 #include "core/leagueplay.h"
+#include "core/leagueteam.h"
 #include "i18n/tr.h"
 #include "net/leagueclient.h"
 
 std::string LeagueRankedPresence()
 {
 	if (!LeagueLinked()) return std::string();
-	const LeagueRankedPhase phase = LeagueRankedState().phase;
+	const LeagueRankedView ranked = LeagueRankedState();
+	const LeagueRankedPhase phase = ranked.phase;
 	const bool searching = phase == LeagueRankedPhase::Joining || phase == LeagueRankedPhase::Searching || phase == LeagueRankedPhase::Found ||
 		phase == LeagueRankedPhase::Accepted;
-	const char *label = LeaguePresenceLabel(LeaguePresenceOf(searching, LeagueMatchRanked()));
+	const bool playing = LeagueMatchRanked();
+	const bool team = playing ? LeagueMatchRankedTeam() : LeagueQueueIsTeam(ranked.searchQueue);
+	const char *label = LeaguePresenceLabel(LeaguePresenceOf(searching, playing), team);
 	if (!label) return std::string();
 	std::string rank;
 	const LeagueMeView me = LeagueMeState();
-	if (me.loaded && me.me.ranked.present) {
-		const LeagueRanked &r = me.me.ranked;
+	const LeagueRanked &r = LeagueMeRanked(me.me, team ? kLeagueQueueTeam : kLeagueQueueDuel);
+	if (me.loaded && r.present) {
 		rank = r.placementLeft > 0 || r.tier == LeagueTier::None ? Tr("In placement") : LeagueRankText(Tr(LeagueTierName(r.tier)), r.division);
 	}
 	return LeaguePresenceText(Tr(label), rank);

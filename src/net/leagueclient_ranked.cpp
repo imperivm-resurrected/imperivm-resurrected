@@ -14,10 +14,12 @@
 #include <vector>
 
 #include "net/leagueclient.h"
+#include "addr/state.h"
 #include "core/guard.h"
 #include "core/json.h"
 #include "core/league.h"
 #include "core/leagueranked.h"
+#include "core/leagueteam.h"
 #include "core/log.h"
 #include "i18n/tr.h"
 #include "mods/mods.h"
@@ -40,6 +42,9 @@ std::atomic<int64_t> g_clockOffset{0};
 
 struct Queue {
 	LeagueRankedPhase phase = LeagueRankedPhase::Idle;
+	// The queue of the search or the match ("1v1", "2v2"), and whether it is the leader of this player's duo who searches.
+	std::string queue = "1v1";
+	bool partnerSearch = false;
 	// A request of the queue or of the match is on its way: one at a time.
 	bool busy = false;
 	bool recovered = false;
@@ -81,6 +86,8 @@ struct Queue {
 struct Board {
 	bool loading = false, loaded = false;
 	DWORD at = 0;
+	// The queue the first ten and the page around the player are of.
+	std::string queue;
 	LeagueBoard top, around;
 	bool pageLoading = false, pageLoaded = false;
 	unsigned pageGen = 0;
@@ -107,6 +114,8 @@ struct Result {
 struct History {
 	bool recentLoading = false, recentLoaded = false, recentFailed = false;
 	DWORD recentAt = 0;
+	// The queues the latest games and the page are of.
+	std::string recentQueue, pageQueue;
 	std::vector<LeagueHistoryGame> recent;
 	bool pageLoading = false, pageLoaded = false;
 	unsigned pageGen = 0;
@@ -143,6 +152,8 @@ History g_history;
 Stats g_stats;
 Dispute g_dispute;
 Badge g_badge;
+// The queue the hub shows and searches.
+std::string g_sel = "1v1";
 
 // A request and what came back.
 struct Answer {
@@ -225,6 +236,7 @@ void ToIdle(Queue &q)
 	q.presenceAt = 0;
 	q.inGame = false;
 	q.window = LeagueSearchWindow();
+	q.partnerSearch = false;
 	q.gen++;
 }
 
@@ -273,11 +285,12 @@ void FetchSeason(std::string lang)
 	}
 }
 
-void FetchBoard(bool linked)
+void FetchBoard(bool linked, std::string queue)
 {
-	const Answer top = Call("GET", "/v1/league/leaderboard?queue=1v1&offset=0&limit=" + std::to_string(kHubRows), "", false);
+	const std::string base = "/v1/league/leaderboard?queue=" + queue;
+	const Answer top = Call("GET", base + "&offset=0&limit=" + std::to_string(kHubRows), "", false);
 	Answer around;
-	if (linked) around = Call("GET", "/v1/league/leaderboard?queue=1v1&around=me&limit=" + std::to_string(kAroundRows), "", true);
+	if (linked) around = Call("GET", base + "&around=me&limit=" + std::to_string(kAroundRows), "", true);
 	LeagueBoard t, m;
 	const bool okTop = top.r.Ok() && top.parsed && LeagueParseBoard(top.j, t);
 	const bool okAround = linked && around.r.Ok() && around.parsed && LeagueParseBoard(around.j, m);
@@ -285,17 +298,23 @@ void FetchBoard(bool linked)
 	std::lock_guard<std::mutex> lock(g_mx);
 	g_board.loading = false;
 	g_board.at = GetTickCount();
+	// The player picked the other queue meanwhile: its own answer is on its way.
+	if (queue != g_sel) {
+		g_board.at = 0;
+		return;
+	}
 	if (okTop) {
 		g_board.loaded = true;
 		g_board.top = t;
+		g_board.queue = queue;
 	}
 	if (okAround) g_board.around = m;
-	else if (!linked) g_board.around = LeagueBoard();
+	else if (!linked || g_board.queue != queue) g_board.around = LeagueBoard();
 }
 
 void FetchPage(unsigned gen, LeagueBoardQuery q)
 {
-	std::string path = "/v1/league/leaderboard?queue=1v1&limit=" + std::to_string(q.limit);
+	std::string path = "/v1/league/leaderboard?queue=" + LeagueQueueId(q.queue) + "&limit=" + std::to_string(q.limit);
 	path += q.aroundMe ? "&around=me" : "&offset=" + std::to_string(q.offset);
 	if (q.season >= 0) path += "&season=" + std::to_string(q.season);
 	if (q.name.size() >= 2) path += "&q=" + UrlEncode(q.name);
@@ -320,31 +339,38 @@ void FetchPage(unsigned gen, LeagueBoardQuery q)
 	else g_board.pageError = !a.r.status ? "Couldn't reach the league server. Check your connection and try again." : "The league server refused the request. Try again later.";
 }
 
-std::string HistoryPath(int64_t before, int limit)
+std::string HistoryPath(int64_t before, int limit, const std::string &queue)
 {
 	std::string path = "/v1/league/matches?mine=1&limit=" + std::to_string(limit);
 	if (before > 0) path += "&before=" + std::to_string(static_cast<long long>(before));
+	// The duel's list is the one a server before the 2v2 gives without a queue.
+	if (LeagueQueueIsTeam(queue)) path += "&queue=2v2";
 	return path;
 }
 
-void FetchRecent()
+void FetchRecent(std::string queue)
 {
-	const Answer a = Call("GET", HistoryPath(0, kLeagueRecentGames), "", true);
+	const Answer a = Call("GET", HistoryPath(0, kLeagueRecentGames, queue), "", true);
 	LeagueHistoryPage page;
 	const bool ok = a.r.Ok() && a.parsed && LeagueParseHistory(a.j, page);
 	if (!ok && a.r.status != 401) LogW("league", "could not read the player's ranked games (%s)", a.r.Describe().c_str());
 	std::lock_guard<std::mutex> lock(g_mx);
 	g_history.recentLoading = false;
 	g_history.recentAt = GetTickCount();
+	if (queue != g_sel) {
+		g_history.recentAt = 0;
+		return;
+	}
 	g_history.recentFailed = !ok;
 	if (!ok) return;
 	g_history.recentLoaded = true;
 	g_history.recent = page.games;
+	g_history.recentQueue = queue;
 }
 
-void FetchHistory(unsigned gen, int64_t before)
+void FetchHistory(unsigned gen, int64_t before, std::string queue)
 {
-	const Answer a = Call("GET", HistoryPath(before, kLeagueHistoryPage), "", true);
+	const Answer a = Call("GET", HistoryPath(before, kLeagueHistoryPage, queue), "", true);
 	LeagueHistoryPage page;
 	const bool ok = a.r.Ok() && a.parsed && LeagueParseHistory(a.j, page);
 	if (!ok) LogW("league", "could not read a page of the ranked history (%s)", a.r.Describe().c_str());
@@ -355,6 +381,7 @@ void FetchHistory(unsigned gen, int64_t before)
 		g_history.pageLoaded = true;
 		g_history.page = page;
 		g_history.pageBefore = before;
+		g_history.pageQueue = queue;
 		g_history.pageError.clear();
 	}
 	else g_history.pageError = !a.r.status ? "Couldn't reach the league server. Check your connection and try again." : "The league server refused the request. Try again later.";
@@ -419,10 +446,10 @@ void ResumeMatch(int64_t matchId)
 	LogI("league", "ranked: match %lld is still on; following it", static_cast<long long>(matchId));
 }
 
-void JoinThread(unsigned gen, std::string contentKey)
+void JoinThread(unsigned gen, std::string contentKey, std::string queue)
 {
 	Json body = Json::MakeObject();
-	body.Set("queue", Json::MakeString("1v1"));
+	body.Set("queue", Json::MakeString(queue));
 	body.Set("contentKey", Json::MakeString(contentKey));
 	const Answer a = Call("POST", "/v1/league/queue", body.Dump(), true);
 	LeagueQueueAnswer q;
@@ -434,12 +461,13 @@ void JoinThread(unsigned gen, std::string contentKey)
 		if (gen != g_q.gen) leave = ok;
 		else if (ok) {
 			g_q.phase = LeagueRankedPhase::Searching;
+			g_q.queue = queue;
 			g_q.since = q.since ? q.since : NowMs() + g_clockOffset;
 			g_q.searching = q.searching;
 			g_q.estimate = q.estimateSec;
 			g_q.window = q.window;
 			g_q.nextPoll = GetTickCount() + kQueuePollMs;
-			LogI("league", "ranked: searching (%d in the queue, about %d s)", q.searching, q.estimateSec);
+			LogI("league", "ranked: searching %s (%d in the queue, about %d s)", queue.c_str(), q.searching, q.estimateSec);
 		}
 		else {
 			const std::string &code = a.error.code;
@@ -458,6 +486,13 @@ void JoinThread(unsigned gen, std::string contentKey)
 				g_q.wrongContent++;
 			}
 			else if (code == "no_season") SetNotice(g_q, "No ranked season is being played now.", true);
+			else if (code == "not_leader") SetNotice(g_q, "The leader of your duo searches for both of you.", true);
+			else if (code == "party_not_ready") SetNotice(g_q, "Your duo is not ready: your friend has to accept the invitation first.", true);
+			else if (code == "rank_gap" && a.error.max > 0) {
+				SetNotice(g_q, TrFmt("You are %s Glory apart in 2 vs 2: a duo can be at most %s apart.", {std::to_string(a.error.gap), std::to_string(a.error.max)}),
+					true);
+			}
+			else if (code == "rank_gap") SetNotice(g_q, "You are too far apart in 2 vs 2 to play as a duo.", true);
 			else if (a.r.status == 429) SetNotice(g_q, "You searched too often: wait a few seconds and search again.", false);
 			else SetNotice(g_q, FailureNotice(a), true);
 			LogW("league", "ranked: could not enter the queue (%s)", a.r.Describe().c_str());
@@ -466,13 +501,14 @@ void JoinThread(unsigned gen, std::string contentKey)
 	if (leave) LeaveThread();
 }
 
-void PollQueueThread(unsigned gen, bool recovering)
+// `watching`: this player is the partner of a duo and follows the leader's search, which is theirs too.
+void PollQueueThread(unsigned gen, bool recovering, bool watching)
 {
 	const Answer a = Call("GET", "/v1/league/queue", "", true);
 	LeagueQueueAnswer q;
 	const bool ok = a.r.Ok() && a.parsed && LeagueParseQueue(a.j, q);
 	bool rejoin = false;
-	std::string contentKey;
+	std::string contentKey, joinQueue;
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
 		g_q.busy = false;
@@ -489,7 +525,13 @@ void PollQueueThread(unsigned gen, bool recovering)
 		switch (q.status) {
 		case LeagueQueueStatus::Searching:
 			if (recovering) LogI("league", "ranked: still in the queue from before");
+			if (watching && g_q.phase == LeagueRankedPhase::Idle) {
+				g_q.partnerSearch = true;
+				g_q.notice.clear();
+				LogI("league", "ranked: the leader of the duo is searching 2v2");
+			}
 			g_q.phase = LeagueRankedPhase::Searching;
+			if (!q.queue.empty()) g_q.queue = LeagueQueueId(q.queue);
 			g_q.since = q.since ? q.since : g_q.since;
 			g_q.searching = q.searching;
 			g_q.estimate = q.estimateSec;
@@ -503,9 +545,12 @@ void PollQueueThread(unsigned gen, bool recovering)
 				g_q.ticketLoaded = false;
 				g_q.answering = false;
 				g_q.phase = q.accepted ? LeagueRankedPhase::Accepted : LeagueRankedPhase::Found;
+				if (!q.queue.empty()) g_q.queue = LeagueQueueId(q.queue);
+				else if (!q.teams.empty()) g_q.queue = kLeagueQueueTeam;
 				g_q.foundSerial++;
 				g_q.notice.clear();
-				LogI("league", "ranked: match %lld found against %s", static_cast<long long>(q.matchId), q.opponent.name.c_str());
+				if (q.teams.empty()) LogI("league", "ranked: match %lld found against %s", static_cast<long long>(q.matchId), q.opponent.name.c_str());
+				else LogI("league", "ranked: 2v2 match %lld found", static_cast<long long>(q.matchId));
 			}
 			g_q.nextPoll = GetTickCount();
 			break;
@@ -514,11 +559,21 @@ void PollQueueThread(unsigned gen, bool recovering)
 				ResumeMatch(q.matchId);
 				break;
 			}
+			// The leader stopped the search, or the duo is over: the partner follows quietly.
+			if (g_q.partnerSearch) {
+				if (g_q.phase == LeagueRankedPhase::Searching) {
+					ToIdle(g_q);
+					LogI("league", "ranked: the leader of the duo is no longer searching");
+				}
+				break;
+			}
+			if (watching) break;
 			if (g_q.phase == LeagueRankedPhase::Searching && !g_q.rejoined) {
 				// The server drops whoever stops polling for 30 s (a long load, a sleeping computer): enter again once, quietly.
 				g_q.rejoined = true;
 				rejoin = true;
 				contentKey = SteamOwnGameplayKey();
+				joinQueue = g_q.queue;
 				g_q.busy = true;
 				LogI("league", "ranked: the server dropped the search; entering the queue again");
 			}
@@ -530,7 +585,7 @@ void PollQueueThread(unsigned gen, bool recovering)
 		default: break;
 		}
 	}
-	if (rejoin) JoinThread(gen, contentKey);
+	if (rejoin) JoinThread(gen, contentKey, joinQueue);
 }
 
 // Under g_mx: the match was called off before its game (abandoned). Both are free to search again, unless this player was at fault.
@@ -558,10 +613,38 @@ void Cancelled(const LeagueMatchTicket &t)
 		CalledOff(t);
 		return;
 	}
-	const LeaguePlayerCard *mine = LeagueTicketPlayer(t, OwnId(), false);
+	const std::string me = OwnId();
+	const LeaguePlayerCard *mine = LeagueTicketPlayer(t, me, false);
 	const bool accepted = mine && mine->accepted;
 	const bool declinedByOther = t.outcome == "declined";
 	LogI("league", "ranked: match %lld called off (%s)", static_cast<long long>(t.id), t.outcome.c_str());
+	if (LeagueQueueIsTeam(t.queue) || !t.teams.empty()) {
+		// A duo whose partner did not accept leaves the queue with them; the others go back to its head (the partner of a duo follows
+		// its leader there).
+		const std::vector<LeagueMatchTeam> teams = LeagueTicketTeams(t);
+		const LeaguePlayerCard *partner = LeagueTeamPartner(teams, me);
+		const LeaguePlayerCard *partnerCard = partner ? LeagueTicketCard(t, partner->steamId) : nullptr;
+		const bool duo = partner && partner->duo;
+		const bool partnerLate = duo && partnerCard && !partnerCard->accepted;
+		const bool follow = g_q.partnerSearch;
+		ToIdle(g_q);
+		if (!accepted) {
+			SetNotice(g_q, "You did not accept the match in time: you can't search for a few minutes.", true);
+			return;
+		}
+		if (partnerLate) {
+			SetNotice(g_q, TrFmt("%s did not accept the match: your duo leaves the queue.", {partner->name.empty() ? Tr("Your partner") : partner->name}), false);
+			return;
+		}
+		g_q.phase = LeagueRankedPhase::Searching;
+		g_q.queue = kLeagueQueueTeam;
+		g_q.partnerSearch = follow;
+		g_q.nextPoll = 0;
+		SetNotice(g_q, declinedByOther ? "A player declined the match. You are back at the head of the queue."
+									   : "A player did not accept in time. You are back at the head of the queue.",
+			false);
+		return;
+	}
 	if (declinedByOther || accepted) {
 		ToIdle(g_q);
 		g_q.phase = LeagueRankedPhase::Searching;
@@ -796,6 +879,9 @@ void RankedTick()
 		lastLinkCheck = now;
 		linked = LeagueLinked();
 	}
+	PartyTick(linked);
+	const bool member = linked && LeagueDuoState().role == LeagueDuoRole::Member;
+	const bool inGame = *reinterpret_cast<void **>(addr::kGame) != nullptr;
 	std::lock_guard<std::mutex> lock(g_mx);
 	if (!g_q.startedAt) g_q.startedAt = now;
 	if (!linked) {
@@ -808,14 +894,22 @@ void RankedTick()
 		g_q.recovered = true;
 		if (g_q.phase == LeagueRankedPhase::Idle) {
 			g_q.busy = true;
-			SafeThread(PollQueueThread, g_q.gen, true).detach();
+			SafeThread(PollQueueThread, g_q.gen, true, false).detach();
 		}
 	}
 	if (!g_q.busy && static_cast<int>(now - g_q.nextPoll) >= 0) {
 		switch (g_q.phase) {
+		case LeagueRankedPhase::Idle:
+			// The partner of a duo follows the leader's search, which they did not start.
+			if (member && g_q.recovered && !inGame) {
+				g_q.busy = true;
+				g_q.nextPoll = now + kQueuePollMs;
+				SafeThread(PollQueueThread, g_q.gen, false, true).detach();
+			}
+			break;
 		case LeagueRankedPhase::Searching:
 			g_q.busy = true;
-			SafeThread(PollQueueThread, g_q.gen, false).detach();
+			SafeThread(PollQueueThread, g_q.gen, false, g_q.partnerSearch).detach();
 			break;
 		case LeagueRankedPhase::Found:
 		case LeagueRankedPhase::Accepted:
@@ -862,20 +956,43 @@ void RankedGameReported(const LeagueReport &report, const std::string &ownSteamI
 	g.gold = facts.gold;
 	g.bestLevel = facts.bestLevel;
 	g.bestUnit = facts.bestUnit;
+	int ownTeam = 0;
+	for (const LeagueReportPlayer &p : report.players) {
+		if (p.steamId == ownSteamId) ownTeam = p.team;
+	}
+	std::lock_guard<std::mutex> lock(g_mx);
+	const bool ticket = g_q.ticketLoaded && g_q.ticket.id == report.matchId;
+	const bool team = ticket ? LeagueQueueIsTeam(g_q.ticket.queue) || !g_q.ticket.teams.empty() : report.players.size() >= 4;
+	g.queue = team ? kLeagueQueueTeam : kLeagueQueueDuel;
+	// The names the league knows the players by, from the ticket.
+	auto nameOf = [&](const LeagueReportPlayer &p) {
+		const LeaguePlayerCard *c = ticket ? LeagueTicketCard(g_q.ticket, p.steamId) : nullptr;
+		return c && !c->name.empty() ? c->name : p.name;
+	};
 	for (const LeagueReportPlayer &p : report.players) {
 		if (p.steamId == ownSteamId) {
 			g.won = p.result == "win";
 			g.left = p.result == "left";
 		}
+		else if (team && p.team == ownTeam) {
+			g.partner = nameOf(p);
+			g.partnerId = p.steamId;
+			g.partnerLeft = p.result == "left";
+		}
 		else {
-			g.opponent = p.name;
-			g.opponentId = p.steamId;
+			if (g.opponentId.empty()) {
+				g.opponent = nameOf(p);
+				g.opponentId = p.steamId;
+			}
+			g.opponents.push_back({p.steamId, nameOf(p)});
 		}
 	}
-	std::lock_guard<std::mutex> lock(g_mx);
-	if (g_q.ticketLoaded && g_q.ticket.id == report.matchId) {
-		if (!g_q.ticket.map.name.empty()) g.map = g_q.ticket.map.name;
-		if (const LeaguePlayerCard *other = LeagueTicketPlayer(g_q.ticket, ownSteamId, true); other && !other->name.empty()) g.opponent = other->name;
+	if (ticket && !g_q.ticket.map.name.empty()) g.map = g_q.ticket.map.name;
+	// The result's place on the leaderboard is the queue's just played.
+	if (g_sel != g.queue) {
+		g_sel = g.queue;
+		g_board.at = 0;
+		g_history.recentAt = 0;
 	}
 	g_result.view.state = LeagueResultState::Sending;
 	g_result.view.game = g;
@@ -884,7 +1001,8 @@ void RankedGameReported(const LeagueReport &report, const std::string &ownSteamI
 	g_result.since = NowMs();
 	g_q.inGame = false;
 	if (g_q.matchId == report.matchId) ToIdle(g_q);
-	LogI("league", "ranked: match %lld played (%s); waiting for the server", static_cast<long long>(report.matchId), g.won ? "won" : g.left ? "left" : "lost");
+	LogI("league", "ranked: %s match %lld played (%s); waiting for the server", g.queue.c_str(), static_cast<long long>(report.matchId),
+		g.won ? "won" : g.left ? "left" : "lost");
 }
 
 void RankedGameEnded(int64_t matchId)
@@ -947,11 +1065,18 @@ LeagueRankedView LeagueRankedState()
 	v.noSeason = g_season.loaded && g_season.none;
 	v.season = g_season.season;
 	v.lang = g_season.lang.empty() ? LangCode() : g_season.lang;
-	v.boardLoaded = g_board.loaded;
-	v.top = g_board.top;
-	v.around = g_board.around;
+	v.queue = g_sel;
+	v.searchQueue = g_q.queue;
+	v.partnerSearch = g_q.partnerSearch;
+	// What was read of the other queue is not shown: the picked one's comes.
+	const bool board = g_board.queue == g_sel;
+	v.boardLoaded = g_board.loaded && board;
+	if (board) {
+		v.top = g_board.top;
+		v.around = g_board.around;
+	}
 	v.pageLoading = g_board.pageLoading;
-	v.pageLoaded = g_board.pageLoaded;
+	v.pageLoaded = g_board.pageLoaded && LeagueQueueId(g_board.pageQuery.queue) == g_sel;
 	v.page = g_board.page;
 	v.pageQuery = g_board.pageQuery;
 	v.pageError = g_board.pageError;
@@ -984,11 +1109,12 @@ LeagueRankedView LeagueRankedState()
 	v.wrongContentSerial = g_q.wrongContent;
 	v.foundSerial = g_q.foundSerial;
 	v.result = g_result.view;
-	v.recentLoaded = g_history.recentLoaded;
+	const bool recent = g_history.recentQueue == g_sel;
+	v.recentLoaded = g_history.recentLoaded && recent;
 	v.recentFailed = g_history.recentFailed;
-	v.recent = g_history.recent;
+	if (recent) v.recent = g_history.recent;
 	v.historyLoading = g_history.pageLoading;
-	v.historyLoaded = g_history.pageLoaded;
+	v.historyLoaded = g_history.pageLoaded && g_history.pageQueue == g_sel;
 	v.historyBefore = g_history.pageBefore;
 	v.history = g_history.page;
 	v.historyError = g_history.pageError;
@@ -1007,26 +1133,30 @@ LeagueRankedView LeagueRankedState()
 void LeagueRecentRefresh(bool force)
 {
 	if (!LeagueLinked()) return;
+	std::string queue;
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
 		if (g_history.recentLoading) return;
 		const DWORD keep = g_history.recentFailed ? kRecentRetryMs : kRecentKeepMs;
 		if (!force && g_history.recentAt && GetTickCount() - g_history.recentAt < keep) return;
 		g_history.recentLoading = true;
+		queue = g_sel;
 	}
-	SafeThread(FetchRecent).detach();
+	SafeThread(FetchRecent, queue).detach();
 }
 
 void LeagueHistoryRequest(int64_t before)
 {
 	if (!LeagueLinked()) return;
 	unsigned gen = 0;
+	std::string queue;
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
 		gen = ++g_history.pageGen;
 		g_history.pageLoading = true;
+		queue = g_sel;
 	}
-	SafeThread(FetchHistory, gen, std::max<int64_t>(0, before)).detach();
+	SafeThread(FetchHistory, gen, std::max<int64_t>(0, before), queue).detach();
 }
 
 void LeagueStatsRefresh()
@@ -1078,13 +1208,15 @@ void LeagueSeasonRefresh(bool force)
 void LeagueBoardRefresh(bool force)
 {
 	const bool linked = LeagueLinked();
+	std::string queue;
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
 		if (g_board.loading) return;
 		if (!force && g_board.at && GetTickCount() - g_board.at < kBoardKeepMs) return;
 		g_board.loading = true;
+		queue = g_sel;
 	}
-	SafeThread(FetchBoard, linked).detach();
+	SafeThread(FetchBoard, linked, queue).detach();
 }
 
 void LeagueBoardRequest(const LeagueBoardQuery &query)
@@ -1098,6 +1230,7 @@ void LeagueBoardRequest(const LeagueBoardQuery &query)
 		std::lock_guard<std::mutex> lock(g_mx);
 		gen = ++g_board.pageGen;
 		g_board.pageLoading = true;
+		q.queue = g_sel;
 	}
 	SafeThread(FetchPage, gen, q).detach();
 }
@@ -1107,8 +1240,19 @@ void LeagueQueueJoin()
 	const bool linked = LeagueLinked();
 	const LeagueMeView me = LeagueMeState();
 	const std::string contentKey = SteamOwnGameplayKey();
+	const LeagueDuoView duo = LeagueDuoState();
 	std::lock_guard<std::mutex> lock(g_mx);
 	if (g_q.phase != LeagueRankedPhase::Idle || g_q.busy) return;
+	const std::string queue = g_sel;
+	const bool team = LeagueQueueIsTeam(queue);
+	if (team && duo.role == LeagueDuoRole::Member) {
+		SetNotice(g_q, "The leader of your duo searches for both of you.", true);
+		return;
+	}
+	if (team && duo.role == LeagueDuoRole::Waiting) {
+		SetNotice(g_q, "Your duo is not ready: your friend has to accept the invitation first.", true);
+		return;
+	}
 	if (!linked) {
 		SetNotice(g_q, "Link your league account to play ranked.", true);
 		return;
@@ -1129,12 +1273,34 @@ void LeagueQueueJoin()
 	}
 	g_q.gen++;
 	g_q.phase = LeagueRankedPhase::Joining;
+	g_q.queue = queue;
+	g_q.partnerSearch = false;
 	g_q.busy = true;
 	g_q.rejoined = false;
 	g_q.since = NowMs() + g_clockOffset;
 	g_q.notice.clear();
-	LogI("league", "ranked: entering the 1v1 queue");
-	SafeThread(JoinThread, g_q.gen, contentKey).detach();
+	LogI("league", "ranked: entering the %s queue%s", queue.c_str(), team && duo.role == LeagueDuoRole::Leader ? " with the duo" : "");
+	SafeThread(JoinThread, g_q.gen, contentKey, queue).detach();
+}
+
+void LeagueRankedSelectQueue(const std::string &queue)
+{
+	const std::string q = LeagueQueueId(queue);
+	{
+		std::lock_guard<std::mutex> lock(g_mx);
+		if (g_sel == q) return;
+		g_sel = q;
+		g_board.at = 0;
+		g_history.recentAt = 0;
+		g_history.recentFailed = false;
+		g_board.pageGen++;
+		g_board.pageLoading = false;
+		g_history.pageGen++;
+		g_history.pageLoading = false;
+	}
+	LogI("league", "ranked: the hub shows the %s queue", q.c_str());
+	LeagueBoardRefresh(true);
+	LeagueRecentRefresh(true);
 }
 
 void LeagueQueueLeave()
@@ -1142,6 +1308,7 @@ void LeagueQueueLeave()
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
 		if (g_q.phase != LeagueRankedPhase::Searching && g_q.phase != LeagueRankedPhase::Joining) return;
+		if (g_q.partnerSearch) return;
 		ToIdle(g_q);
 		g_q.notice.clear();
 	}

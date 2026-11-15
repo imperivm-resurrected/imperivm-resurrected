@@ -4,6 +4,9 @@
 #define NOMINMAX
 #include <windows.h>
 #include <shellapi.h>
+
+#include <algorithm>
+#include <cstring>
 #pragma warning(push)
 #pragma warning(disable : 4996 4828)
 #pragma warning(pop)
@@ -327,6 +330,43 @@ std::vector<uint64_t> SteamFriendIds()
 			}
 			std::lock_guard<std::mutex> done(mx);
 			if (list.size() != friends.size()) LogI("steam", "%d friends read for the leaderboard", static_cast<int>(list.size()));
+			friends = std::move(list);
+			readAt = GetTickCount();
+			asked = false;
+		});
+	}
+	return friends;
+}
+
+std::vector<OnlineFriend> SteamFriendList()
+{
+	static std::mutex mx;
+	static std::vector<OnlineFriend> friends;
+	static DWORD readAt = 0;
+	static bool asked = false;
+	if (!SteamOnlineReady()) return {};
+	std::lock_guard<std::mutex> lock(mx);
+	if (!asked && (!readAt || GetTickCount() - readAt > 60000)) {
+		asked = true;
+		Post([] {
+			std::vector<OnlineFriend> list;
+			const uint32 app = S.SteamAPI_ISteamUtils_GetAppID(S.SteamAPI_SteamUtils_v011());
+			const int count = g_steam.friends ? S.SteamAPI_ISteamFriends_GetFriendCount(g_steam.friends, k_EFriendFlagImmediate) : 0;
+			for (int i = 0; i < count && i < 500; i++) {
+				const uint64 f = S.SteamAPI_ISteamFriends_GetFriendByIndex(g_steam.friends, i, k_EFriendFlagImmediate);
+				if (!f) continue;
+				OnlineFriend of;
+				of.id = f;
+				of.name = Name(f);
+				FriendGameInfo_t gi = {};
+				of.playing = S.SteamAPI_ISteamFriends_GetFriendGamePlayed(g_steam.friends, f, &gi) && gi.m_gameID.AppID() == app;
+				list.push_back(of);
+			}
+			std::sort(list.begin(), list.end(), [](const OnlineFriend &a, const OnlineFriend &b) {
+				if (a.playing != b.playing) return a.playing;
+				return _stricmp(a.name.c_str(), b.name.c_str()) < 0;
+			});
+			std::lock_guard<std::mutex> done(mx);
 			friends = std::move(list);
 			readAt = GetTickCount();
 			asked = false;

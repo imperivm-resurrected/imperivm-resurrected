@@ -185,6 +185,13 @@ void SteamOpenProfile(uint64_t id);
 void SteamOpenChat(uint64_t id);
 // The player's Steam friends (at most 500), as last read: the first call, and any a minute later, read them again in the background.
 std::vector<uint64_t> SteamFriendIds();
+// The same friends with their names and whether they play this game now: those first, then by name. Read again a minute later.
+struct OnlineFriend {
+	uint64_t id = 0;
+	std::string name;
+	bool playing = false;
+};
+std::vector<OnlineFriend> SteamFriendList();
 // A web page in the Steam overlay's browser, on its own over the game until the player closes it; in the default browser when
 // the overlay is off or Steam is not running. Only http and https addresses.
 void SteamOpenWebPage(const std::string &url);

@@ -15,6 +15,8 @@
 
 constexpr const char *kLeagueQueueDuel = "1v1";
 constexpr const char *kLeagueQueueTeam = "2v2";
+// The "mode" the host's Steam room of a ranked 2v2 publishes: every computer reads it before the game, so they all treat its drops alike.
+constexpr const char *kLeagueTeamRoomMode = "Ranked 2v2";
 // "2v2" for the team queue, "1v1" for anything else (the server's ids; empty is the duel).
 std::string LeagueQueueId(const std::string &queue);
 bool LeagueQueueIsTeam(const std::string &queue);
@@ -82,16 +84,19 @@ constexpr int64_t kLeagueVoteMs = 30000;
 enum class LeagueSurrenderStep { TooEarly, Alone, Propose, Pending };
 LeagueSurrenderStep LeagueSurrenderOnPress(uint32_t gameMs, bool partnerHere, bool voteOpen);
 
-// A vote seen on one computer: who proposed it (the game's player index), when (this computer's clock) and whether it is still open.
+// A vote as the game's messages left it: who proposed it (the game's player index), when (the game's clock, the same on every computer at
+// that tick) and whether it is still open.
 struct LeagueVote {
 	bool open = false;
 	int proposer = -1;
 	int64_t since = 0;
 };
 void LeagueVoteOpen(LeagueVote &v, int proposer, int64_t nowMs);
-// What is left of the 30 s; 0 once over.
+// What is left of the 30 s at the game's clock `nowMs`; 0 once over.
 int64_t LeagueVoteLeftMs(const LeagueVote &v, int64_t nowMs);
 bool LeagueVoteExpired(const LeagueVote &v, int64_t nowMs);
+// An answer the game ran at `atMs` of its clock counts: the vote is open and its 30 s had not passed then.
+bool LeagueVoteAnswerCounts(const LeagueVote &v, int64_t atMs);
 
 // The vote travels as a message command of the game, which every computer runs on the same tick: "#IRV:p" proposes, "#IRV:y" and
 // "#IRV:n" answer.
