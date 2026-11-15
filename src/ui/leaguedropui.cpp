@@ -37,6 +37,8 @@ enum Leave { kLeaveNone, kLeaveOpenMenu, kLeaveQuit, kLeaveConfirm, kLeaveClosin
 struct State {
 	LeagueDropView view;
 	LeagueTeamView team;
+	// The vote as the last tick saw it: one that opens closes the game's menu, which would hide it.
+	LeagueTeamVote vote = LeagueTeamVote::None;
 	std::vector<Hit> hits, teamHits;
 	int mouseX = -1, mouseY = -1;
 	bool mouseDown = false, swallowUp = false;
@@ -238,11 +240,14 @@ void LeagueDropUiGameTick()
 	const LeagueTeamView team = LeagueTeamState();
 	Leave leave = kLeaveNone;
 	DWORD since = 0;
+	bool voteOpened = false;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
 		g_s.view = v;
 		g_s.team = team;
 		if (!TeamShown(team)) g_s.teamHits.clear();
+		voteOpened = team.vote != LeagueTeamVote::None && g_s.vote == LeagueTeamVote::None;
+		g_s.vote = team.vote;
 		if (!InGame() || (v.phase != LeagueDropPhase::Claimed && g_s.leave != kLeaveNone)) g_s.leave = kLeaveNone;
 		if (v.phase == LeagueDropPhase::None) {
 			g_s.hits.clear();
@@ -251,6 +256,8 @@ void LeagueDropUiGameTick()
 		leave = g_s.leave;
 		since = g_s.leaveAt;
 	}
+	// A vote opens with the menu up (the proposer pressed Surrender in it, or the partner was in it): the menu goes, so its band shows.
+	if (voteOpened && InGame() && GameMenuVisible()) ToggleGameMenu();
 	if (leave == kLeaveNone || leave == kLeaveManual) return;
 	// The game's own dialogs may call back into the mod: no lock while they are pressed.
 	LeaveStep(leave, since);

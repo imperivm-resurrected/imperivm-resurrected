@@ -836,7 +836,7 @@ void PaintRoomHeader(Painter &p, const State &st, const RoomFacts &f, const Room
 	add(tourneyNote);
 	if (RankedRoomLocked(st)) {
 		ScreenLayout shifted = l;
-		const int mark = PaintRankedMark(p, l.margin, l.infoY, l.infoH);
+		const int mark = PaintRankedMark(p, st, l.margin, l.infoY, l.infoH);
 		shifted.margin += mark + 16;
 		add(Tr("the league sets the options"));
 		PaintScreenInfo(p, shifted, info);

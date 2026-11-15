@@ -1078,9 +1078,9 @@ void PaintSearch(Painter &p, const State &st)
 		DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }
 
-int PaintRankedMark(Painter &p, int x, int y, int h)
+int PaintRankedMark(Painter &p, const State &st, int x, int y, int h)
 {
-	const char *label = g_s.room.info.mode == kLeagueTeamRoomMode ? "Ranked 2 vs 2" : "Ranked 1 vs 1";
+	const char *label = st.room.info.mode == kLeagueTeamRoomMode ? "Ranked 2 vs 2" : "Ranked 1 vs 1";
 	p.Font(4);
 	const int w = p.CapsWidth(label, 2) + 24;
 	p.Fill(x, y, w, h, RGB(0x3a, 0x12, 0x14));
