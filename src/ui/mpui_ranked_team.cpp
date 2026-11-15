@@ -11,11 +11,13 @@
 #include <vector>
 
 #include "core/league.h"
+#include "core/leagueplay.h"
 #include "core/leagueranked.h"
 #include "core/leagueteam.h"
 #include "i18n/tr.h"
 #include "net/leagueclient.h"
 #include "net/steamnet.h"
+#include "ui/leaguemapthumb.h"
 #include "ui/leagueui.h"
 #include "ui/modui.h"
 
@@ -144,6 +146,84 @@ InviteLayout InviteFor(int viewW, int viewH)
 std::string LeftText(int64_t until)
 {
 	return LeagueClockText(std::max<int64_t>(0, until - LeagueServerNowMs()) + 999);
+}
+
+COLORREF Ink(LeagueTier t)
+{
+	return t == LeagueTier::None ? pal::caption : LeagueTierInk(t);
+}
+
+std::string RankLabel(LeagueTier t, int division)
+{
+	return t == LeagueTier::None ? Tr("In placement") : LeagueRankLabel(t, division);
+}
+
+// A player of a 2v2 match found: avatar, name and who they are to this player, their record, and their rank with the Glory, and whether
+// they accepted.
+void PaintTeamCard(Painter &p, int x, int y, int w, int h, const LeaguePlayerCard &c, bool you, bool partner, bool accepted)
+{
+	p.Fill(x, y, w, h, pal::raised);
+	p.Frame(x, y, w, h, you ? pal::edgeHot : pal::hairline);
+	const std::string name = !c.name.empty() ? c.name : Tr("Player");
+	const int av = 48;
+	Avatar(p, x + 16, y + 14, av, IdOf(c.steamId), name);
+	if (you) p.Frame(x + 16, y + 14, av, av, pal::red);
+	// The marks after the name: who it is to this player, and a duo.
+	std::vector<std::pair<std::string, COLORREF>> marks;
+	if (you) marks.push_back({Tr("You"), pal::textDim});
+	else if (partner) marks.push_back({Tr("Partner"), pal::textDim});
+	if (c.duo) marks.push_back({Tr("Duo"), pal::redText});
+	int marksW = 0;
+	for (const auto &m : marks) marksW += ChipWidth(p, m.first, 44) + 6;
+	const int nx = x + 16 + av + 14, nw = x + w - 16 - nx;
+	Body(p, 20);
+	p.raw = true;
+	const int nameW = std::max(40, std::min(nw - marksW, p.TextWidth(name) + 4));
+	p.Text(nx, y + 12, nameW, 28, name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	p.raw = false;
+	int mx = nx + nameW + 6;
+	for (const auto &m : marks) {
+		const int cw = ChipWidth(p, m.first, 44);
+		if (mx + cw > x + w - 16) break;
+		Chip(p, mx, y + 16, cw, 20, m.first, m.second, m.second == pal::redText ? RGB(0x3a, 0x12, 0x14) : pal::hairline);
+		mx += cw + 6;
+	}
+	p.Font(3);
+	const std::string record = c.standing ? std::to_string(c.wins) + "\xE2\x80\x93" + std::to_string(c.losses) + "  \xC2\xB7  " +
+			std::to_string(LeagueWinRate(c.wins, c.losses)) + "\xC2\xA0%"
+										  : Tr(c.tier == LeagueTier::None ? "Placement games" : "Ranked 2 vs 2");
+	RawText(p, nx, y + 40, nw, 22, record, pal::caption);
+	p.Fill(x + 16, y + 70, w - 32, 1, pal::hairline);
+	// The rank and its Glory on the left, the answer on the right.
+	const int chipW = accepted ? ChipWidth(p, "Accepted", 104) : ChipWidth(p, "Pending", 96), chipH = 26;
+	const int emblem = 40, ry = y + 78;
+	DrawLeagueEmblem(p, x + 14, ry + (h - 78 - emblem) / 2 - 2, emblem, c.tier);
+	const int rx = x + 14 + emblem + 10, rw = x + w - 16 - chipW - 12 - rx;
+	Display(p, 26);
+	p.raw = true;
+	p.TextCaps(rx, ry, rw, 28, RankLabel(c.tier, c.division), Ink(c.tier), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
+	p.raw = false;
+	if (c.standing && c.tier != LeagueTier::None) {
+		std::string glory = TrFmt("%s Glory", {std::to_string(c.glory)});
+		if (c.place > 0) glory += "  \xC2\xB7  " + TrFmt("place %s", {std::to_string(c.place)});
+		p.Font(3);
+		RawText(p, rx, ry + 28, rw, 20, glory, pal::body);
+	}
+	Chip(p, x + w - 16 - chipW, ry + (h - 78 - chipH) / 2, chipW, chipH, accepted ? "Accepted" : "Pending", accepted ? pal::ok : pal::textDim,
+		accepted ? RGB(0x2a, 0x36, 0x24) : pal::hairline);
+}
+
+// A label over a value, as the room's summary shows its options.
+void Fact(Painter &p, int x, int y, int w, const std::string &label, const std::string &value)
+{
+	FitCaps(p, x, y, w, 16, label, pal::caption);
+	p.Font(0);
+	RawText(p, x, y + 20, w, 26, value, pal::text);
+}
+
+std::string YesNo(int flag)
+{
+	return flag < 0 ? std::string("\xE2\x80\x94") : Tr(flag ? "Yes" : "No");
 }
 
 }
@@ -286,6 +366,139 @@ void PaintRankedInvite(Painter &p, const State &st)
 		RawText(p, ix + 120, fy, 200, kDialogBtnH, TrFmt("Page %s of %s", {std::to_string(page + 1), std::to_string(pages)}), pal::caption);
 	}
 	DialogButtons(p, d, {{"Close", kRankedAct, kRkDuoInviteClose}}, mx, my);
+}
+
+void PaintSearchTeam(Painter &p, const State &st)
+{
+	const int mx = st.mouseX, my = st.mouseY;
+	const LeagueRankedView &v = st.ranked.view;
+	const bool accepted = v.phase == LeagueRankedPhase::Accepted;
+	const int dw = std::min(1240, st.viewW - 40), dh = std::min(700, st.viewH - 40);
+	const int dx = (st.viewW - dw) / 2, dy = (st.viewH - dh) / 2;
+	p.hits->clear();
+	p.noHover = false;
+	PaintTint(p, 0, 0, st.viewW, st.viewH, pal::bg, 219);
+	p.Fill(dx + 6, dy + 6, dw, dh, RGB(8, 8, 7));
+	p.Fill(dx, dy, dw, dh, pal::panel);
+	p.Frame(dx, dy, dw, dh, pal::hairline);
+	UseScreenFonts(p);
+	Display(p, 54);
+	p.TextCaps(dx, dy + 18, dw, 56, "Match found", pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
+	std::string caption = Tr("Ranked 2 vs 2");
+	if (v.seasonLoaded) caption += "  \xC2\xB7  " + TrFmt("Season %s", {std::to_string(v.season.number)}) + "  \xC2\xB7  " + LeagueSeasonName(v.season, v.lang);
+	p.raw = true;
+	FitCaps(p, dx + 24, dy + 76, dw - 48, 20, caption, pal::caption, DT_CENTER);
+	p.raw = false;
+
+	// Both sides, this player's on the left, from the ticket once it is read (it says who accepted).
+	const std::string own = std::to_string(SteamOwnId());
+	const std::vector<LeagueMatchTeam> teams = v.ticketLoaded && !LeagueTicketTeams(v.ticket).empty() ? LeagueTicketTeams(v.ticket) : v.found.teams;
+	int mySide = v.ticketLoaded && v.ticket.mySide ? v.ticket.mySide : v.found.mySide;
+	if (!mySide) mySide = LeagueSideOf(teams, own);
+	const LeagueMatchTeam *mine = nullptr, *theirs = nullptr;
+	for (const LeagueMatchTeam &t : teams) {
+		if (t.side == mySide) mine = &t;
+		else theirs = &t;
+	}
+	const int colW = (dw - 64 - 264) / 2, cardH = 128, gap = 14, cy = dy + 132;
+	FitCaps(p, dx + 32, cy - 30, colW, 22, Tr("Your team"), pal::redText);
+	FitCaps(p, dx + dw - 32 - colW, cy - 30, colW, 22, Tr("The other team"), pal::caption, DT_RIGHT);
+	int acceptedCount = 0, players = 0;
+	auto column = [&](const LeagueMatchTeam *t, int x) {
+		for (int i = 0; i < 2; i++) {
+			const int y = cy + i * (cardH + gap);
+			if (!t || i >= static_cast<int>(t->players.size())) {
+				p.Fill(x, y, colW, cardH, pal::raised);
+				p.Frame(x, y, colW, cardH, pal::hairline);
+				continue;
+			}
+			LeaguePlayerCard c = t->players[i];
+			const bool you = c.steamId == own;
+			bool ok = you && accepted;
+			if (v.ticketLoaded) {
+				if (const LeaguePlayerCard *tc = LeagueTicketCard(v.ticket, c.steamId)) ok = ok || tc->accepted;
+			}
+			players++;
+			acceptedCount += ok ? 1 : 0;
+			PaintTeamCard(p, x, y, colW, cardH, c, you, t == mine && !you, ok);
+		}
+	};
+	column(mine, dx + 32);
+	column(theirs, dx + dw - 32 - colW);
+
+	// The countdown to answer, on the server's clock, and how many accepted.
+	const int64_t now = LeagueServerNowMs();
+	const int64_t acceptBy = v.found.acceptBy;
+	const int mid = dx + dw / 2;
+	Display(p, 34);
+	p.TextCaps(mid - 132, cy - 4, 264, 34, "VS", pal::disabled, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
+	const int ringY = cy + 112;
+	PaintArc(p, mid, ringY, 62, 8, pal::hairline, 1.0f);
+	PaintArc(p, mid, ringY, 62, 8, accepted ? pal::ok : pal::red, LeagueCountdownFraction(acceptBy, now));
+	Display(p, 62);
+	p.raw = true;
+	p.Text(mid - 70, ringY - 38, 140, 62, std::to_string(LeagueCountdownSeconds(acceptBy, now)), pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	p.raw = false;
+	FitCaps(p, mid - 70, ringY + 22, 140, 16, Tr("seconds"), pal::caption, DT_CENTER);
+	// How even the match is, from the chance the league gives this player's team to win it.
+	const double expected = v.ticketLoaded && v.ticket.expected >= 0 ? v.ticket.expected : v.found.expected;
+	if (const char *even = LeagueEvennessText(expected, true)) {
+		const COLORREF ink = std::string(even) == "Even match" ? pal::ok : expected > 0.5 ? pal::text : pal::warn;
+		p.Font(1);
+		if (p.TextWidth(even) > 256) p.Font(3);
+		p.Text(mid - 128, ringY + 82, 256, 24, even, ink, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	}
+	p.Font(3);
+	RawText(p, mid - 128, ringY + 108, 256, 22, TrFmt("%s of %s accepted", {std::to_string(acceptedCount), std::to_string(std::max(4, players))}),
+		acceptedCount >= 4 ? pal::ok : pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
+	// The map and the options of the season.
+	const int my2 = cy + 2 * cardH + gap + 20, mw = dw - 64, mh = 124;
+	p.Fill(dx + 32, my2, mw, mh, pal::raised);
+	p.Frame(dx + 32, my2, mw, mh, pal::hairline);
+	const LeagueMapFacts &map = v.ticketLoaded && !v.ticket.map.name.empty() ? v.ticket.map : v.found.map;
+	PaintLeagueMapThumb(p, dx + 48, my2 + 14, 96, map.name);
+	FitCaps(p, dx + 164, my2 + 16, 300, 16, Tr("Map"), pal::caption);
+	Display(p, 42);
+	p.raw = true;
+	p.TextCaps(dx + 164, my2 + 34, 330, 44, map.name.empty() ? Tr("Chosen by the league") : LeagueMapText(map.name), pal::text,
+		DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
+	p.raw = false;
+	std::string mapLine = Tr("4 players");
+	if (!map.size.empty()) mapLine += "  \xC2\xB7  " + LeagueMapText(map.size);
+	p.Font(0);
+	RawText(p, dx + 164, my2 + 80, 330, 22, mapLine, pal::caption);
+	p.Fill(dx + 532, my2 + 14, 1, 96, pal::hairline);
+	const LeagueRoomSettings &s = v.ticketLoaded ? v.ticket.settings : v.season.settings;
+	const int fx = dx + 562, fw = (dx + 32 + mw - 24 - fx) / 3;
+	Fact(p, fx, my2 + 14, fw - 16, Tr("Preset"), s.preset.empty() || s.preset == "competitive" ? Tr("Competitive") : s.preset);
+	Fact(p, fx + fw, my2 + 14, fw - 16, Tr("Fog of war"), YesNo(s.fog));
+	Fact(p, fx + 2 * fw, my2 + 14, fw - 16, Tr("Explored map"), YesNo(s.explored));
+	Fact(p, fx, my2 + 66, fw - 16, Tr("Civilizations"), s.hideCivs == 1 ? Tr("Hidden until the game") : Tr("Visible"));
+	Fact(p, fx + fw, my2 + 66, fw - 16, Tr("Diplomacy"), s.diplomacy == "locked" ? Tr("Locked") : s.diplomacy.empty() ? std::string("\xE2\x80\x94") : Tr("Free"));
+	Fact(p, fx + 2 * fw, my2 + 66, fw - 16, Tr("Spectators"),
+		s.specDelay == 0 ? Tr("No spectators") : TrFmt("With a %s s delay", {std::to_string(s.specDelay > 0 ? s.specDelay : 120)}));
+
+	const int by = my2 + mh + 22;
+	UseSharedFonts(p);
+	if (accepted) {
+		p.Spinner(mid - 170, by + 30, 11, 4, GetTickCount());
+		p.Font(1);
+		p.Text(mid - 148, by, 420, 60, "Accepted. Waiting for the other players...", pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	}
+	else {
+		p.fonts[5] = BrandFont(BrandFace::Display, 34, p.s);
+		p.Button(mid - 328, by, 400, 60, "Accept", kRankedAct, kRkAccept, mx, my, !v.answering, true, 5);
+		Ghost(p, mid + 88, by, 240, 60, Tr("Decline"), kRkDecline, !v.answering, mx, my);
+		UseSharedFonts(p);
+	}
+	p.Font(3);
+	const char *penalty = "If you decline or don't answer you can't search for 5 minutes; a duo that does not accept leaves the queue.";
+	p.raw = true;
+	const std::string text = Tr(penalty);
+	if (p.TextWidth(text) > dw - 48) p.Font(4);
+	p.Text(dx + 24, by + 68, dw - 48, 22, text, pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	p.raw = false;
 }
 
 void RankedTeamAction(int arg)

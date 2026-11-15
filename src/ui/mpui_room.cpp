@@ -78,6 +78,7 @@ OptionGetter HostOptionGetter(const GameRoomSnapshot &g)
 StartBlock StartBlocker(const State &st, const GameRoomSnapshot &g)
 {
 	if (!g.active || !g.host || !g.online) return {};
+	if (StartBlock ranked = RankedStartBlocker(st, g); !ranked.label.empty() || !ranked.toast.empty()) return ranked;
 	auto inRoom = [&](const std::string &name) {
 		const std::string want = LowerName(name);
 		for (const GameRoomSlot &s : g.slots) {
