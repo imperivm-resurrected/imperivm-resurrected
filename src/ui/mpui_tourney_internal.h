@@ -274,8 +274,6 @@ std::string FromText(int64_t ms);
 // "Thu 20:00", "Today 20:00".
 std::string ShortWhenText(int64_t ms);
 std::string StageText(TourneyStage stage, int round);
-// "Single elimination", "Swiss, 4 rounds".
-std::string FormatName(const TourneySummary &t);
 // "Single elimination · 1 vs 1".
 std::string FormatText(const TourneySummary &t);
 // "Live", "By rounds of 2 days".

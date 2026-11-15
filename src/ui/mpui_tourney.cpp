@@ -652,41 +652,9 @@ std::string StageText(TourneyStage stage, int round)
 	return *name ? Tr(name) : TrFmt("Round %s", {std::to_string(round)});
 }
 
-std::string FormatName(const TourneySummary &t)
-{
-	switch (TourneyFormatOf(t)) {
-	case TourneyFormat::Double: return Tr("Double elimination");
-	case TourneyFormat::Swiss: return TrFmt("Swiss, %s rounds", {std::to_string(TourneyRoundCount(t))});
-	default: return Tr("Single elimination");
-	}
-}
-
 std::string FormatText(const TourneySummary &t)
 {
-	return FormatName(t) + " \xC2\xB7 " + Tr("1 vs 1");
-}
-
-std::string PaceText(const TourneySummary &t)
-{
-	if (t.pace == TourneyPace::Live) return Tr("Live");
-	return TourneyRoundDaysValid(t.roundDays) ? RoundDaysText(t.roundDays) : Tr("By rounds, with deadlines");
-}
-
-std::string RoundText(const TourneySummary &t)
-{
-	if (t.pace != TourneyPace::Rounds || t.status != TourneyStatus::Running || t.currentRound <= 0) return std::string();
-	const int total = TourneyRoundCount(t);
-	std::string out = total >= t.currentRound ? TrFmt("Round %s of %s", {std::to_string(t.currentRound), std::to_string(total)})
-											  : TrFmt("Round %s", {std::to_string(t.currentRound)});
-	if (t.roundEndsAt > 0) out += " \xC2\xB7 " + UntilText(t.roundEndsAt);
-	return out;
-}
-
-std::string RoundDaysText(int days)
-{
-	if (days == 1) return Tr("By rounds of 1 day");
-	if (days == 7) return Tr("By rounds of a week");
-	return TrFmt("By rounds of %s days", {std::to_string(days)});
+	return Tr(t.format == "single" || t.format.empty() ? "Single elimination" : t.format) + " \xC2\xB7 " + Tr("1 vs 1");
 }
 
 std::string ContentText(const TourneySummary &t)
@@ -710,6 +678,29 @@ std::string MapText(const TourneyMap &m)
 	std::string out = LeagueMapText(m.name);
 	if (!m.size.empty()) out += " \xC2\xB7 " + LeagueMapText(m.size);
 	return out;
+}
+
+std::string PaceText(const TourneySummary &t)
+{
+	if (t.pace == TourneyPace::Live) return Tr("Live");
+	return TourneyRoundDaysValid(t.roundDays) ? RoundDaysText(t.roundDays) : Tr("By rounds, with deadlines");
+}
+
+std::string RoundText(const TourneySummary &t)
+{
+	if (t.pace != TourneyPace::Rounds || t.status != TourneyStatus::Running || t.currentRound <= 0) return std::string();
+	const int total = TourneyRoundCount(t);
+	std::string out = total >= t.currentRound ? TrFmt("Round %s of %s", {std::to_string(t.currentRound), std::to_string(total)})
+											  : TrFmt("Round %s", {std::to_string(t.currentRound)});
+	if (t.roundEndsAt > 0) out += " \xC2\xB7 " + UntilText(t.roundEndsAt);
+	return out;
+}
+
+std::string RoundDaysText(int days)
+{
+	if (days == 1) return Tr("By rounds of 1 day");
+	if (days == 7) return Tr("By rounds of a week");
+	return TrFmt("By rounds of %s days", {std::to_string(days)});
 }
 
 std::string ResultText(const TourneyOpResult &r)

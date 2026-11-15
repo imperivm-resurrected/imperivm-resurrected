@@ -321,7 +321,7 @@ void PaintTable(Painter &p, const State &st, const Ui &u, const TourneyListsView
 		// The format over its pace; a cup by rounds being played, its round over its deadline.
 		p.Font(0);
 		p.raw = true;
-		p.Text(cx[1], ry + 12, colW[1], 24, FormatName(t), pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(cx[1], ry + 12, colW[1], 24, FormatText(t), pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.Text(cx[2], ry + 14, colW[2], 22, TrFmt("%s of %s players", {std::to_string(t.entries), std::to_string(t.maxEntries)}), pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 		const int barW = std::min(110, colW[2]);
 		p.Fill(cx[2], ry + 42, barW, 4, pal::button);

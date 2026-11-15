@@ -398,7 +398,7 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 	// The middle: the stage, VS and the map of the game; in a series, its games.
 	const TourneyMap map = TourneyGameMap(n);
 	const int64_t now = NowMs();
-	const bool byRounds = n.pace == TourneyPace::Rounds || (page.loaded && page.detail.pace == TourneyPace::Rounds);
+	const bool byRounds = n.pace == TourneyPace::Rounds;
 	PaintMatchCenter(p, n, page, map, m + sideW, cy, centerW, cardH, l.roomy);
 
 	// The big button and what it will do.
