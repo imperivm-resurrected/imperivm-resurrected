@@ -657,6 +657,12 @@ void ModUiNotice(const std::string &title, const std::string &text)
 
 void ModUiAsk(const std::string &title, const std::string &text, const std::string &yes, std::function<void()> onYes)
 {
+	ModUiChoose(title, text, yes, std::move(onYes), std::string(), nullptr);
+}
+
+void ModUiChoose(const std::string &title, const std::string &text, const std::string &yes, std::function<void()> onYes, const std::string &alt,
+	std::function<void()> onAlt)
+{
 	std::lock_guard<std::mutex> lock(g_lock);
 	if (!g_s.open) {
 		g_s.open = true;
@@ -668,6 +674,8 @@ void ModUiAsk(const std::string &title, const std::string &text, const std::stri
 	g_s.noticeText = text;
 	g_s.actionYes = yes;
 	g_s.action = std::move(onYes);
+	g_s.actionAlt = alt;
+	g_s.alt = std::move(onAlt);
 	g_s.confirmItems.clear();
 }
 

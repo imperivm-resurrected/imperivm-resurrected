@@ -42,7 +42,7 @@ const char kNoProfileName[] = "No profile";
 
 enum Action {
 	kNone, kDelProfile, kToggle, kSelect,
-	kOpenMods, kOpenMod, kRescan, kApply, kClose, kConfirmYes, kConfirmNo,
+	kOpenMods, kOpenMod, kRescan, kApply, kClose, kConfirmYes, kConfirmNo, kConfirmAlt,
 	kTabInstalled, kPickArchive, kUpdateMod,
 	kDropOpen, kDropClose, kDropPick, kSaveAs, kFocusName, kNameOk, kNameCancel, kFocusSearch,
 	kUninstall,
@@ -154,6 +154,9 @@ struct State {
 	std::string noticeTitle, noticeText;
 	std::string actionYes;
 	std::function<void()> action;
+	// A second answer beside yes (ModUiChoose); Esc and the third button only close.
+	std::string actionAlt;
+	std::function<void()> alt;
 	// The size of the frame being painted, in its own design units: the whole screen while the content screen is open.
 	int viewW = kDesignW, viewH = kDesignH;
 };
