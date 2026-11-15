@@ -83,19 +83,121 @@ void PaintPlayerColumn(Painter &p, int cx, int y, int h, uint64_t id, const std:
 	}
 }
 
-// The map's frame: the mockup's sketch of a random map, with the two starts.
-void PaintMapBox(Painter &p, int x, int y, int w, int h)
+// The map of the game to play, as its name and the line under it: "Mountainous" over "Random map · small · 2 players".
+void MapLines(const TourneyNext &n, const TourneyMap &map, std::string &name, std::string &sub)
 {
-	p.Fill(x, y, w, h, RGB(0x0c, 0x0b, 0x0a));
-	p.Frame(x, y, w, h, pal::lineStrong);
-	p.Frame(x + 7, y + 7, w - 14, h - 14, RGB(0x5a, 0x4a, 0x2a));
-	const int pts[][2] = {{14, 104}, {56, 52}, {84, 82}, {118, 26}, {148, 70}, {174, 46}, {208, 86}, {230, 68}};
-	for (int i = 0; i + 1 < 8; i++) {
-		p.Line(x + pts[i][0] * w / 258, y + pts[i][1] * h / 130, x + pts[i + 1][0] * w / 258, y + pts[i + 1][1] * h / 130, pal::edgeHot);
-		p.Line(x + pts[i][0] * w / 258, y + (pts[i][1] + 12) * h / 130, x + pts[i + 1][0] * w / 258, y + (pts[i + 1][1] + 12) * h / 130, pal::lineStrong);
+	if (n.pick.present) {
+		name = n.MyPick() ? Tr("You choose it") : TrFmt("%s chooses it", {n.opponent.name.empty() ? Tr("Your opponent") : n.opponent.name});
+		sub = TrFmt("%s left to choose", {TourneyClock(std::max<int64_t>(0, n.pick.until - NowMs()))});
+		return;
 	}
-	p.Shape(x + 34 * w / 258, y + 92 * h / 130, 12, 12, InUnitEllipse, pal::red);
-	p.Shape(x + 210 * w / 258, y + 34 * h / 130, 12, 12, InUnitEllipse, RGB(0x2f, 0x6f, 0xd1));
+	TourneyMap mapOnly = map;
+	mapOnly.size.clear();
+	name = map.Known() ? MapText(mapOnly) : Tr("Chosen in the room");
+	// The size alone, as MapText writes it after the name.
+	const std::string full = MapText(map);
+	sub = Tr(map.Scenario() ? "Scenario" : "Random map");
+	if (map.Known() && full.size() > name.size()) sub += full.substr(name.size());
+	sub += " \xC2\xB7 " + Tr("2 players");
+}
+
+// The games of a series, one a row: its number, its map and how it went for this player.
+void PaintSeriesRows(Painter &p, const TourneyNext &n, const TourneyPageView &page, int x, int y, int w, int rowH)
+{
+	const bool pool = page.loaded && !page.detail.seriesPool.empty();
+	const bool over = TourneySeriesOver(n.games, n.bestOf);
+	for (int no = 1; no <= n.bestOf; no++) {
+		const int ry = y + (no - 1) * rowH;
+		const TourneyGame *g = TourneyGameOf(n.games, no);
+		const bool now = no == n.game && !over;
+		const bool won = g && !g->winner.empty() && g->winner == n.me.side, lost = g && !g->winner.empty() && !won;
+		if (now) p.Fill(x, ry, w, rowH - 2, pal::selected);
+		const int badge = rowH - 6;
+		p.Fill(x + 4, ry + 2, badge, badge - 2, now ? pal::red : pal::raised);
+		UseFace(p, BrandFace::UiStrong, 12);
+		p.Text(x + 4, ry + 2, badge, badge - 2, std::to_string(no), now ? pal::onRed : pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		std::string map, result;
+		COLORREF mapInk = pal::body, resultInk = pal::caption;
+		if (g && g->map.Known()) map = MapText(g->map);
+		else if (now && n.pick.present) {
+			map = Tr("To be chosen");
+			mapInk = pal::warn;
+		}
+		else if (now) map = MapText(TourneyGameMap(n));
+		else if (no > n.game && pool) {
+			map = Tr("The loser chooses it");
+			mapInk = pal::caption;
+		}
+		else {
+			map = MapText(n.map);
+			mapInk = pal::caption;
+		}
+		if (won) {
+			result = Tr("Game won");
+			resultInk = pal::ok;
+		}
+		else if (lost) {
+			result = Tr("Game lost");
+			resultInk = pal::bad;
+		}
+		else if (now) {
+			result = Tr(n.status == TourneyMatchStatus::Live ? "Being played" : "Up next");
+			resultInk = pal::redText;
+		}
+		else result = Tr("If needed");
+		p.Font(3);
+		const int resultW = std::min(w / 3, p.TextWidth(result) + 8), mx = x + 4 + badge + 10;
+		p.Text(x + w - resultW - 4, ry, resultW, rowH - 2, result, resultInk, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(mx, ry, x + w - resultW - 12 - mx, rowH - 2, map, mapInk, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	}
+}
+
+// The middle of the match's card: the stage, VS and the map of the game, with the scenario's preview or the drawing of a random map's land;
+// in a series, the map beside its name and the series' games under them.
+void PaintMatchCenter(Painter &p, const TourneyNext &n, const TourneyPageView &page, const TourneyMap &map, int x, int y, int w, int h, bool roomy)
+{
+	std::string name, sub;
+	MapLines(n, map, name, sub);
+	const std::string caption = StageText(n.stage, n.round) + " \xC2\xB7 " + TrFmt("Bo%s", {std::to_string(n.bestOf)});
+	p.raw = true;
+	if (n.bestOf <= 1) {
+		const int pic = std::max(72, std::min(roomy ? 150 : 118, h - 32 - 210));
+		int at = y + (h - (20 + 124 + 8 + pic + 10 + 46)) / 2;
+		PaintCaps(p, x, at, w, 20, caption, pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		UseDisplay(p, 120);
+		p.TextCaps(x, at + 20, w, 124, Tr("Vs"), pal::redText, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
+		at += 152;
+		PaintMapPicture(p, map, x + (w - pic) / 2, at, pic);
+		at += pic + 10;
+		UseFace(p, BrandFace::UiStrong, 17);
+		p.Text(x, at, w, 24, name, pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Font(3);
+		p.Text(x, at + 26, w, 20, sub, pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.raw = false;
+		return;
+	}
+	const int pad = 16, rowH = roomy ? 28 : 24, pic = roomy ? 104 : 80, vsH = roomy ? 96 : 70;
+	int at = y + (h - (20 + vsH + 8 + pic + 12 + n.bestOf * rowH)) / 2;
+	PaintCaps(p, x, at, w, 20, caption, pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	UseDisplay(p, vsH - 4);
+	p.TextCaps(x, at + 20, w, vsH, Tr("Vs"), pal::redText, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
+	at += 20 + vsH + 8;
+	PaintMapPicture(p, map, x + pad, at, pic);
+	const int tx = x + pad + pic + 14, tw = x + w - pad - tx;
+	PaintCaps(p, tx, at + pic / 2 - 38, tw, 18, TrFmt("Game %s of %s", {std::to_string(n.game), std::to_string(n.bestOf)}), n.pick.present ? pal::warn : pal::redText);
+	UseFace(p, BrandFace::UiStrong, 17);
+	p.Text(tx, at + pic / 2 - 18, tw, 24, name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	p.Font(3);
+	p.Text(tx, at + pic / 2 + 8, tw, 20, sub, n.pick.present ? pal::warn : pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	at += pic + 12;
+	PaintSeriesRows(p, n, page, x + pad, at, w - 2 * pad, rowH);
+	p.raw = false;
+}
+
+// The rival's Steam chat, beside the button to the room, with the by-rounds pace: the players agree on a time between them.
+int ChatButtonWidth(Painter &p)
+{
+	return SecondButtonWidth(p, Tr("Write on Steam"));
 }
 
 // The round's map on this computer, in a line of the checks before the room.
@@ -129,6 +231,82 @@ std::string PlaceText(int placement, int rounds)
 
 }
 
+void PaintPickPanel(Painter &p, const State &st, const TourneyNext &n, int x, int y, int w, int h)
+{
+	const int mx = st.mouseX, my = st.mouseY;
+	const bool mine = n.MyPick(), busy = LeagueTourneyBusy(TourneyOp::Pick, n.match);
+	const int64_t left = n.pick.until - NowMs();
+	const bool open = mine && !busy && left > 0;
+	const bool raw = p.raw;
+	p.raw = true;
+	PaintGlassCard(p, x, y, w, h);
+	p.Fill(x, y, 4, h, mine ? pal::red : pal::edgeHot);
+	// Below 170 the title and the clock go to the left of the options; otherwise above them.
+	const bool beside = h < 170;
+	const int pad = beside ? 18 : 24, headW = beside ? std::min(400, w * 30 / 100) : w - 2 * pad;
+	const std::string game = std::to_string(n.game);
+	const std::string title = mine ? TrFmt("Choose the map of game %s", {game}) : TrFmt("%s is choosing the map of game %s", {n.opponent.name.empty() ? Tr("Your opponent") : n.opponent.name, game});
+	std::string sub = mine ? Tr("You lost the last game: the next map is yours, among those not played yet.") : Tr("The loser of the last game chooses among the maps not played yet.");
+	if (busy) sub = Tr("Sending your choice...");
+	else if (left <= 0) sub = Tr("Time is up: the map is being drawn.");
+	else if (mine) sub += " " + Tr("If time runs out, it is drawn.");
+	const std::string clock = TourneyClock(std::max<int64_t>(0, left));
+	const COLORREF clockInk = left < 15000 ? pal::bad : mine ? pal::warn : pal::text;
+	const int clockH = beside ? 42 : 52;
+	UseDisplay(p, clockH);
+	const int clockW = p.CapsWidth(clock, 0) + 8;
+	int tilesX = x + pad, tilesY = y + pad, tilesW = w - 2 * pad, tilesH = h - 2 * pad;
+	if (beside) {
+		PaintCaps(p, x + pad, y + pad, headW, 20, title, mine ? pal::redText : pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(x + pad, y + pad + 22, headW, clockH, clock, clockInk, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+		p.Font(3);
+		const int subY = y + pad + 22 + clockH + 4;
+		p.TextWrapped(x + pad, subY, headW, std::max(0, y + h - pad - subY), sub, pal::caption);
+		tilesX = x + pad + headW + 16;
+		tilesW = x + w - pad - tilesX;
+	}
+	else {
+		PaintCaps(p, x + pad, y + pad, headW - clockW - 16, 20, title, mine ? pal::redText : pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(x + w - pad - clockW, y + pad - 8, clockW, clockH, clock, clockInk, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+		p.Font(3);
+		p.Text(x + pad, y + pad + 24, headW - clockW - 16, 20, sub, pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		tilesY = y + pad + 56;
+		tilesH = y + h - pad - tilesY;
+	}
+	const int count = static_cast<int>(n.pick.options.size()), gap = 12;
+	if (count <= 0 || tilesW <= 0 || tilesH <= 20) {
+		p.raw = raw;
+		return;
+	}
+	const int tileW = (tilesW - gap * (count - 1)) / count;
+	for (int i = 0; i < count; i++) {
+		const TourneyMap &m = n.pick.options[static_cast<size_t>(i)];
+		const int tx = tilesX + i * (tileW + gap);
+		const bool hot = open && p.Hover(tx, tilesY, tileW, tilesH, mx, my);
+		p.Fill(tx, tilesY, tileW, tilesH, hot ? pal::selected : pal::raised);
+		p.Frame(tx, tilesY, tileW, tilesH, hot ? pal::red : open ? pal::edgeHot : pal::edge);
+		const int pic = std::max(24, std::min(tilesH - 16, tileW * 45 / 100));
+		PaintMapPicture(p, m, tx + 8, tilesY + (tilesH - pic) / 2, pic);
+		const int textX = tx + 8 + pic + 12, textW = tx + tileW - 10 - textX;
+		std::string kind = Tr("Random map");
+		if (m.kind == TourneyMapKind::Game) kind = Tr("Scenario of the game");
+		else if (m.kind == TourneyMapKind::Upload) kind = Tr("Scenario of the cup");
+		const std::string warning = CupMapWarning(m);
+		TourneyMap mapOnly = m;
+		mapOnly.size.clear();
+		if (textW > 40) {
+			UseFace(p, BrandFace::UiStrong, 16);
+			p.Text(textX, tilesY + tilesH / 2 - 24, textW, 22, MapText(mapOnly), hot ? pal::text : pal::body, DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_END_ELLIPSIS);
+			p.Font(3);
+			const std::string size = !m.Scenario() && !m.size.empty() ? " \xC2\xB7 " + LeagueMapText(m.size) : std::string();
+			p.Text(textX, tilesY + tilesH / 2 + 2, textW, 20, warning.empty() ? kind + size : warning, warning.empty() ? pal::caption : pal::warn,
+				DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS);
+		}
+		if (open) p.AddHit(tx, tilesY, tileW, tilesH, kTourney, ArgOf(kSubPick, i));
+	}
+	p.raw = raw;
+}
+
 bool PaintMatchHeader(Painter &p, const State &st, const Ui &u)
 {
 	const int mx = st.mouseX, my = st.mouseY;
@@ -137,7 +315,23 @@ bool PaintMatchHeader(Painter &p, const State &st, const Ui &u)
 	const int right = PaintHeaderActions(p, l, {{Tr(u.slug.empty() ? "Tournaments" : "Back to the bracket"), kBack, true, true}}, mx, my);
 	const int64_t left = next.present && next.status == TourneyMatchStatus::Ready ? next.deadlineAt - NowMs() : 0;
 	int titleRight = right;
-	if (left > 0) {
+	if (left > 0 && next.pace == TourneyPace::Rounds) {
+		// A deadline days away: its day and hour, and the time left beside them.
+		const int bw = 400, bx = l.w - l.margin - bw, by = l.margin + kHeaderButtonH + 10;
+		const COLORREF ink = left < 24 * 3600000LL ? pal::warn : pal::text;
+		PaintCaps(p, bx, by, bw, 18, "Round deadline", left < 24 * 3600000LL ? pal::warn : pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+		const int clockH = l.roomy ? 56 : 46;
+		UseDisplay(p, clockH);
+		p.raw = true;
+		const std::string when = ShortWhenText(next.deadlineAt);
+		const int whenW = std::min(bw - 120, p.CapsWidth(when, 0));
+		p.TextCaps(bx, by + 18, bw, clockH, when, ink, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 0);
+		p.Font(3);
+		p.Text(bx, by + 18 + clockH - 26, bw - whenW - 14, 20, TrFmt("%s left", {LongWaitText(left)}), pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.raw = false;
+		titleRight = std::min(right, bx - 20);
+	}
+	else if (left > 0) {
 		const int bw = 300, bx = l.w - l.margin - bw, by = l.margin + kHeaderButtonH + 10;
 		PaintCaps(p, bx, by, bw, 18, "Time to enter", pal::warn, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 		const int clockH = l.roomy ? 56 : 46;
@@ -199,27 +393,11 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 		p.Font(0);
 		p.Text(m + sideW + centerW, cy, sideW, cardH, "Your opponent is still to be decided.", pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 	}
-	// The middle: the stage, VS and the map.
-	const int ccx = m + sideW, mapW = 260, mapH = 132;
-	int my0 = cy + (cardH - 360) / 2;
-	PaintCaps(p, ccx, my0, centerW, 20, StageText(n.stage, n.round) + " \xC2\xB7 " + TrFmt("Bo%s", {std::to_string(n.bestOf)}), pal::caption,
-		DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-	UseDisplay(p, 120);
-	p.TextCaps(ccx, my0 + 20, centerW, 124, "Vs", pal::redText, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
-	PaintMapBox(p, ccx + (centerW - mapW) / 2, my0 + 156, mapW, mapH);
-	UseFace(p, BrandFace::UiStrong, 17);
-	p.raw = true;
-	TourneyMap mapOnly = n.map;
-	mapOnly.size.clear();
-	p.Text(ccx, my0 + 300, centerW, 24, n.map.Known() ? MapText(mapOnly) : Tr("Chosen in the room"), pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-	// The size alone, as MapText writes it after the name.
-	const std::string full = MapText(n.map), name = MapText(mapOnly);
-	std::string sub = Tr(n.map.Scenario() ? "Scenario" : "Random map");
-	if (n.map.Known() && full.size() > name.size()) sub += full.substr(name.size());
-	sub += " \xC2\xB7 " + Tr("2 players");
-	p.Font(3);
-	p.Text(ccx, my0 + 326, centerW, 20, sub, pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-	p.raw = false;
+	// The middle: the stage, VS and the map of the game; in a series, its games.
+	const TourneyMap map = TourneyGameMap(n);
+	const int64_t now = NowMs();
+	const bool byRounds = n.pace == TourneyPace::Rounds || (page.loaded && page.detail.pace == TourneyPace::Rounds);
+	PaintMatchCenter(p, n, page, map, m + sideW, cy, centerW, cardH, l.roomy);
 
 	// The big button and what it will do.
 	const RoomFlow &f = u.room;
@@ -238,36 +416,51 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 	else if (live) label = "Game in progress";
 	else if (n.status == TourneyMatchStatus::Pending) label = "Waiting for your opponent";
 	else if (n.status == TourneyMatchStatus::Disputed) label = "Under review";
+	const std::string rival = n.opponent.name.empty() ? Tr("your opponent") : n.opponent.name;
 	if (line.empty()) {
 		if (n.status == TourneyMatchStatus::Pending) line = Tr("Your opponent comes from a match still being played. We tell you when it is over.");
 		else if (n.status == TourneyMatchStatus::Disputed) line = Tr("The organisers are looking at the reports of the game.");
 		else if (live) line = Tr("The result is reported by the mod when the game ends.");
+		else if (n.pick.present && n.MyPick()) line = TrFmt("You lost the last game: choose the map of game %s below. If time runs out, it is drawn.", {std::to_string(n.game)});
+		else if (n.pick.present) line = TrFmt("%s is choosing the map of game %s among the series' maps.", {n.opponent.name.empty() ? Tr("Your opponent") : n.opponent.name, std::to_string(n.game)});
 		else if (n.lobby && n.roomClaimBy == n.opponent.steamId && n.opponent.steamId)
 			line = TrFmt("%s opened the room. You enter as a player; the map and the rules are the tournament's.", {n.opponent.name});
 		else if (n.lobby) line = Tr("The room is open. You enter as a player; the map and the rules are the tournament's.");
+		else if (byRounds && n.noshowFrom > now)
+			line = TrFmt("Agree on a time with %s before the deadline. The no-show counts %s: whoever is not in the room then loses the match.", {rival, FromText(n.noshowFrom)});
+		else if (byRounds) line = TrFmt("Last day of the round: if %s does not come to the room, you can claim the win.", {rival});
 		else line = Tr("Nobody has opened the room yet: you will open it, with the map and the rules of the tournament.");
 	}
-	// Before the room: this computer's copy of the round's scenario, when it is not the cup's.
-	const std::string mapWarning = CupMapWarning(n.map);
+	// Before the room: this computer's copy of the game's scenario, when it is not the cup's.
+	const std::string mapWarning = CupMapWarning(map);
 	COLORREF lineInk = pal::textDim;
 	if (!mapWarning.empty() && !inRoom && !live && n.status != TourneyMatchStatus::Disputed) {
 		line = mapWarning;
 		lineInk = pal::warn;
 	}
+	// With the by-rounds pace the players agree on a time: the rival's Steam chat goes beside the button.
 	const int bw = 460, bh = l.roomy ? 72 : 60, by = cy + cardH + (l.roomy ? 24 : 16);
-	p.Button((l.w - bw) / 2, by, bw, bh, label, kTourney, ArgOf(kSubGo, n.match), mx, my, enabled, true, 2);
+	const bool chat = byRounds && n.hasOpponent && n.opponent.steamId;
+	const int chatW = chat ? ChatButtonWidth(p) : 0, groupW = bw + (chat ? 16 + chatW : 0), bx = (l.w - groupW) / 2;
+	p.Button(bx, by, bw, bh, label, kTourney, ArgOf(kSubGo, n.match), mx, my, enabled, true, 2);
+	if (chat) PaintSecondButton(p, bx + bw + 16, by, chatW, bh, Tr("Write on Steam"), ArgOf(kSubSteamChat, 0), true, mx, my);
 	p.Font(0);
 	p.raw = true;
-	p.Text(m, by + bh + 8, inner, 24, line, lineInk, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	p.Text(m, by + bh + 8, inner, 24, line, n.pick.present && n.MyPick() ? pal::warn : lineInk, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	p.raw = false;
 
-	// Three cards: what is checked, the rules and what to do if something fails.
+	// While the next game's map is being chosen, the choice takes the place of the three cards.
 	const int ry = by + bh + 44, rh = bottom - ry, cw = (inner - 2 * kCardGap) / 3, pad = 26;
 	if (rh < 120) return;
+	if (n.pick.present) {
+		PaintPickPanel(p, st, n, m, ry, inner, rh);
+		return;
+	}
+	// Three cards: what is checked, the rules and what to do if something fails.
 	PaintGlassCard(p, m, ry, cw, rh);
 	PaintCaps(p, m + pad, ry + 20, cw - 2 * pad, 20, "Ready to enter", pal::caption);
 	const bool sameContent = n.contentKey.empty() || n.contentKey == SteamOwnGameplayKey();
-	const CupMapState mapState = LeagueCupMap(n.map);
+	const CupMapState mapState = LeagueCupMap(map);
 	const TourneyMyEntry *entry = MyEntry(mine, n.tournamentId);
 	struct Check {
 		bool ok;
@@ -275,7 +468,7 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 	} checks[] = {
 		{sameContent, sameContent ? TrFmt("%s active, the same content as the room", {n.contentName.empty() ? Tr("The mod's rules") : n.contentName})
 								  : TrFmt("This tournament needs %s: switch your content profile", {n.contentName.empty() ? Tr("other content") : n.contentName})},
-		{mapState.status == CupMapStatus::Ready, MapCheckText(n.map, mapState)},
+		{mapState.status == CupMapStatus::Ready, MapCheckText(map, mapState)},
 		{st.ready, st.ready ? Tr("Steam is ready") : Tr("Steam is not available. Open Steam and try again.")},
 		{!entry || entry->checkedIn, Tr(!entry || entry->checkedIn ? "Check-in done" : "Check-in missing")},
 	};
@@ -305,9 +498,15 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 		after = other && other->Present() ? TrFmt("If you win, %s against %s", {StageText(following->stage, following->round), other->name})
 										  : TrFmt("If you win, the %s", {StageText(TourneyStageOf(n.round + 1, n.rounds), n.round + 1)});
 	}
-	const std::pair<std::string, std::string> rules[] = {{Tr("Settings"), PresetText(n.settings)}, {Tr("Map"), n.map.Known() ? MapText(n.map) : Tr("Chosen in the room")},
-		{Tr("Civilizations"), Tr(n.settings.hideCivs ? "Hidden until the game starts" : "Visible in the room")},
-		{Tr("Spectators"), TourneySpecDelay(n.settings) ? TrFmt("With a %s s delay", {std::to_string(TourneySpecDelay(n.settings))}) : Tr("No spectators")}, {Tr("After"), after}};
+	std::vector<std::pair<std::string, std::string>> rules;
+	// With the by-rounds pace the deadline and the no-show come first: the card may not have room for every row.
+	if (byRounds && n.deadlineAt) rules.push_back({Tr("Deadline"), UntilText(n.deadlineAt)});
+	if (byRounds && n.noshowFrom) rules.push_back({Tr("No-show"), FromText(n.noshowFrom)});
+	rules.push_back({Tr("Settings"), PresetText(n.settings)});
+	rules.push_back({Tr("Map"), map.Known() ? MapText(map) : Tr(n.pick.present ? "To be chosen" : "Chosen in the room")});
+	rules.push_back({Tr("Civilizations"), Tr(n.settings.hideCivs ? "Hidden until the game starts" : "Visible in the room")});
+	rules.push_back({Tr("Spectators"), TourneySpecDelay(n.settings) ? TrFmt("With a %s s delay", {std::to_string(TourneySpecDelay(n.settings))}) : Tr("No spectators")});
+	rules.push_back({Tr("After"), after});
 	ly = ry + 54;
 	for (const auto &r : rules) {
 		if (ly + 26 > ry + rh || r.second.empty()) continue;
@@ -611,6 +810,12 @@ int PaintTourneyRoomStatus(Painter &p, const State &st, int right, int y, std::s
 	if (!st.room.id || !LeagueParseRoomTag(st.room.info.leagueTag, kind, id) || kind != LeagueMatchKind::Tournament) return right;
 	const TourneyNext n = LeagueTourneyMine().mine.next;
 	if (!n.present || n.match != id) return right;
+	const std::string rival = n.opponent.name.empty() ? Tr("Your opponent") : n.opponent.name;
+	if (n.pick.present) {
+		const std::string clock = TourneyClock(std::max<int64_t>(0, n.pick.until - NowMs())), game = std::to_string(n.game);
+		note = n.MyPick() ? TrFmt("You choose the map of game %s · %s", {game, clock}) : TrFmt("%s is choosing the map of game %s · %s", {rival, game, clock});
+		return right;
+	}
 	if (n.canClaimNoShow) {
 		p.Font(1);
 		const int w = p.CapsWidth(Tr("Claim the win"), 1) + 48, x = right - 12 - w;
@@ -618,8 +823,23 @@ int PaintTourneyRoomStatus(Painter &p, const State &st, int right, int y, std::s
 		note = TrFmt("%s did not come to the room in time: you can claim the win.", {n.opponent.name});
 		return x;
 	}
-	const int64_t left = n.deadlineAt - NowMs();
-	if (n.status == TourneyMatchStatus::Ready && !n.opponent.inRoom && left > 0)
-		note = TrFmt("%s has %s to come to the room (until %s)", {n.opponent.name, TourneyClock(left), HourText(n.deadlineAt)});
+	const int64_t now = NowMs(), left = n.deadlineAt - now;
+	if (n.status != TourneyMatchStatus::Ready || n.opponent.inRoom || left <= 0) return right;
+	// With the by-rounds pace the deadline is days away and the no-show only counts on its last day.
+	if (n.pace == TourneyPace::Rounds && n.noshowFrom > now) note = TrFmt("%s is not in the room yet · the no-show counts %s", {rival, FromText(n.noshowFrom)});
+	else if (n.pace == TourneyPace::Rounds) note = TrFmt("%s is not in the room yet · round open %s", {rival, UntilText(n.deadlineAt)});
+	else note = TrFmt("%s has %s to come to the room (until %s)", {n.opponent.name, TourneyClock(left), HourText(n.deadlineAt)});
 	return right;
+}
+
+int PaintTourneyRoomPick(Painter &p, const State &st, int x, int y, int w)
+{
+	LeagueMatchKind kind = LeagueMatchKind::Normal;
+	int64_t id = 0;
+	if (!st.room.id || !LeagueParseRoomTag(st.room.info.leagueTag, kind, id) || kind != LeagueMatchKind::Tournament) return 0;
+	const TourneyNext n = LeagueTourneyMine().mine.next;
+	if (!n.present || n.match != id || !n.pick.present) return 0;
+	const int h = 140;
+	PaintPickPanel(p, st, n, x, y, w, h);
+	return h + 16;
 }

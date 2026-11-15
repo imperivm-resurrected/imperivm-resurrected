@@ -292,6 +292,12 @@ void TakeNotices()
 			Toast(TrFmt("The check-in of %s is open until %s.", {n.name, HourText(n.deadlineAt)}));
 			Flash();
 			break;
+		case TourneyNotice::PickOpen:
+			Toast(TrFmt("You choose the map of game %s against %s: you have a minute, or it is drawn.", {std::to_string(n.game), n.opponent.empty() ? Tr("your opponent") : n.opponent}));
+			Flash();
+			// In the tab, the choice is on the match's screen; in the room, over its table.
+			if (g_s.open && g_s.view == kViewTournaments && !g_s.room.id) g_tourney.screen = kScreenMatch;
+			break;
 		default:
 			Toast(TrFmt("%s is over: see the result in Multiplayer, Tournaments.", {n.name}));
 			g_tourney.pendingChampion = n.slug;
@@ -450,16 +456,24 @@ void StepInRoom(const TourneyNext &next)
 			SteamKick(m.id);
 		}
 	}
+	// The next game of a series may be on another map: once it is chosen, the room is set again for it.
+	const TourneyMap gameMap = TourneyGameMap(next);
+	if (mine && k.applied && !g_s.inOnlineGame && (next.pick.present || !TourneySameMap(k.appliedMap, gameMap))) {
+		LogI("league", "game %d of tournament match %lld is on another map; the room is set again", next.game, static_cast<long long>(match));
+		k.applied = k.mapAllowed = k.mapWarned = false;
+		k.tries = 0;
+		k.pick = -1;
+	}
 	// This computer's copy of a scenario that is not the cup's is told once, before the game starts.
-	if (mine && !k.mapWarned && next.map.Scenario()) {
-		const CupMapStatus map = LeagueCupMap(next.map).status;
+	if (mine && !k.mapWarned && gameMap.Scenario()) {
+		const CupMapStatus map = LeagueCupMap(gameMap).status;
 		if (map != CupMapStatus::Checking) {
 			k.mapWarned = true;
-			const std::string warning = map == CupMapStatus::Downloading ? std::string() : CupMapWarning(next.map);
+			const std::string warning = map == CupMapStatus::Downloading ? std::string() : CupMapWarning(gameMap);
 			if (!warning.empty()) Toast(warning, true);
 		}
 	}
-	if (!mine || !g_s.game.active || !g_s.game.host || g_s.game.busy || k.applied || k.tries >= 24 || now - k.at < 800) return;
+	if (!mine || next.pick.present || !g_s.game.active || !g_s.game.host || g_s.game.busy || k.applied || k.tries >= 24 || now - k.at < 800) return;
 	k.at = now;
 	k.tries++;
 	k.applying = true;
@@ -467,6 +481,7 @@ void StepInRoom(const TourneyNext &next)
 	k.applying = false;
 	if (done) {
 		k.applied = true;
+		k.appliedMap = gameMap;
 		LogI("league", "the tournament's options are set in the room%s", k.mapAllowed ? " (the map is the host's to pick)" : "");
 	}
 	else if (k.tries >= 24) LogW("league", "the tournament's options could not all be set in the room");
@@ -512,7 +527,21 @@ int DayNumber(const SYSTEMTIME &t)
 }
 
 const char *const kWeekdays[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+const char *const kWeekdaysLong[] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 const char *const kMonths[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+
+// A moment some days away in the words of `templates`: today, tomorrow, a weekday within the week, or a weekday and its day of the month.
+std::string DayWords(int64_t ms, const char *const (&templates)[4])
+{
+	SYSTEMTIME t, now;
+	if (!LocalTime(ms, t) || !LocalTime(NowMs(), now)) return std::string();
+	const int days = DayNumber(t) - DayNumber(now);
+	if (days == 0) return TrFmt(templates[0], {HourText(ms)});
+	if (days == 1) return TrFmt(templates[1], {HourText(ms)});
+	const std::string weekday = Tr(kWeekdaysLong[t.wDayOfWeek % 7]);
+	if (days > 1 && days < 7) return TrFmt(templates[2], {weekday, HourText(ms)});
+	return TrFmt(templates[3], {weekday, std::to_string(t.wDay), HourText(ms)});
+}
 
 }
 
@@ -589,6 +618,34 @@ std::string DurationText(int64_t ms)
 	return TrFmt("%s h %s min", {std::to_string(min / 60), std::to_string(min % 60)});
 }
 
+std::string LongWaitText(int64_t ms)
+{
+	const int64_t hours = std::max<int64_t>(0, ms / 3600000);
+	if (hours < 48) return DurationText(ms);
+	return TrFmt("%s d %s h", {std::to_string(hours / 24), std::to_string(hours % 24)});
+}
+
+std::string UntilText(int64_t ms)
+{
+	static const char *const kTemplates[4] = {"until today, %s", "until tomorrow, %s", "until %s %s", "until %s %s, %s"};
+	return DayWords(ms, kTemplates);
+}
+
+std::string FromText(int64_t ms)
+{
+	static const char *const kTemplates[4] = {"from today, %s", "from tomorrow, %s", "from %s %s", "from %s %s, %s"};
+	return DayWords(ms, kTemplates);
+}
+
+std::string ShortWhenText(int64_t ms)
+{
+	SYSTEMTIME t, now;
+	if (!LocalTime(ms, t) || !LocalTime(NowMs(), now)) return std::string();
+	const int days = DayNumber(t) - DayNumber(now);
+	const std::string day = days == 0 ? Tr("Today") : days == 1 ? Tr("Tomorrow") : Tr(kWeekdays[t.wDayOfWeek % 7]);
+	return day + " " + HourText(ms);
+}
+
 std::string StageText(TourneyStage stage, int round)
 {
 	const char *name = TourneyStageName(stage);
@@ -645,11 +702,14 @@ std::string ResultText(const TourneyOpResult &r)
 		case TourneyOp::RemoveEntry: return Tr("The player is out of the cup.");
 		case TourneyOp::Resolve: return Tr("Done: the match is settled.");
 		case TourneyOp::Edit: return Tr("Changes saved: the cup's page and the list show them now.");
+		case TourneyOp::Pick: return r.map.Known() ? TrFmt("Map of the next game: %s.", {MapText(r.map)}) : Tr("Map chosen.");
 		default: return std::string();
 		}
 	}
 	const std::string &e = r.error;
 	if (e == "not_linked") return Tr("Link your league account first.");
+	if (e == "not_your_pick") return Tr("It is not your turn to choose the map.");
+	if (e == "pick_closed") return Tr("The time to choose is over: the map was drawn.");
 	if (e == "closed") return Tr("Sign-up for this tournament is closed.");
 	if (e == "suspended") return TrFmt("Two no-shows in 30 days: you can sign up for official tournaments again from %s.", {WhenText(r.until)});
 	if (e == "already_signed") return Tr("You are already signed up.");
@@ -1073,6 +1133,22 @@ void TourneyAction(int arg)
 		break;
 	}
 	case kSubNoShow: LeagueTourneyClaimNoShow(value); break;
+	case kSubPick: {
+		const TourneyNext next = LeagueTourneyMine().mine.next;
+		if (!next.present || !next.MyPick() || value >= static_cast<int64_t>(next.pick.options.size())) {
+			Toast("It is not your turn to choose the map.");
+			break;
+		}
+		if (LeagueTourneyBusy(TourneyOp::Pick, next.match)) break;
+		LogI("league", "choosing option %d for game %d of tournament match %lld", static_cast<int>(value) + 1, next.game, static_cast<long long>(next.match));
+		LeagueTourneyPick(next.match, static_cast<int>(value));
+		break;
+	}
+	case kSubSteamChat: {
+		const TourneyNext next = LeagueTourneyMine().mine.next;
+		if (next.present && next.opponent.steamId) SteamOpenChat(next.opponent.steamId);
+		break;
+	}
 	case kSubDispute:
 		u.disputeMatch = value;
 		u.disputeText.clear();
@@ -1529,7 +1605,7 @@ bool TourneyBlocksAction(int action, int arg)
 	// The room's selector, while the tournament picks its scenario in it.
 	case kPickRow:
 	case kPickOk:
-	case kPickCancel: blocked = !g_tourney.lock.mapAllowed && LeagueTourneyMine().mine.next.map.Scenario(); break;
+	case kPickCancel: blocked = !g_tourney.lock.mapAllowed && TourneyGameMap(LeagueTourneyMine().mine.next).Scenario(); break;
 	case kGDropOpen: {
 		const int kind = arg & kDropKindMask, index = arg >> kDropKindBits;
 		if (kind == kDropOption) {

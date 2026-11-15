@@ -48,6 +48,9 @@ bool TourneyBlocksAction(int action, int arg);
 // rival let the time run out, a button that claims the win is painted left of `right` at `y`. Returns where the header's
 // buttons start now.
 int PaintTourneyRoomStatus(ui::Painter &p, const mpui_impl::State &st, int right, int y, std::string &note);
+// In the room of this player's series, while the map of its next game is being chosen: the choice as a band `w` wide at `y`. Returns the
+// height it took with the gap under it; 0 when there is nothing to choose.
+int PaintTourneyRoomPick(ui::Painter &p, const mpui_impl::State &st, int x, int y, int w);
 // A room of a tournament match, which the lobby lists first with its tag.
 bool TourneyLobby(const OnlineLobby &g);
 // A room of a tournament match that is not this player's: they can only watch it.

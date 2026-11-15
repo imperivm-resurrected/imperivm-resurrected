@@ -33,6 +33,8 @@ enum Sub {
 	kSubMapsRetry,
 	// The form's maps of the series: one chosen in the map chooser (its place, or the count to add one) and one taken out.
 	kSubPoolOpen, kSubPoolRemove,
+	// The map of the next game of the player's series, by its place among the options; the Steam chat with the rival.
+	kSubPick, kSubSteamChat,
 };
 
 // What kSubCupSet changes in the form: the high bits of its value; the low 16 are the choice.
@@ -105,6 +107,8 @@ struct RoomLock {
 	bool mapWarned = false;
 	// This room was the player's match: once the match is settled without a game (a no-show), the room has nothing left to do.
 	bool wasMine = false;
+	// The map the room was set for: the next game of a series may be on another one, and the room is set again.
+	TourneyMap appliedMap;
 };
 
 struct Ui {
@@ -226,8 +230,12 @@ std::vector<TourneyMap> CupAllMaps(const TourneySummary &t);
 std::string CupMapWarning(const TourneyMap &m);
 
 // The room of the player's match (mpui_tourney_room.cpp), on the game thread under g_lock: the host puts the tournament's preset, switches
-// and map in it, a scenario picked in the room's own selector, until they all hold; true once they do.
+// and map (the game's, TourneyGameMap) in it, a scenario picked in the room's own selector, until they all hold; true once they do.
 bool ApplyTourneyRoom(const TourneyNext &next, RoomLock &k);
+
+// The choice of the next game's map in the player's series (mpui_tourney_match.cpp): the options with their pictures and the time left,
+// which the player clicks when it is theirs. Below 170 high the title and the clock go beside the options.
+void PaintPickPanel(Painter &p, const State &st, const TourneyNext &n, int x, int y, int w, int h);
 
 // Shared drawing.
 const int kCardGap = 32;
@@ -258,6 +266,13 @@ std::string HourText(int64_t ms);
 std::string DayText(int64_t ms);
 // "41 min", "1 h 52 min".
 std::string DurationText(int64_t ms);
+// "2 d 4 h" from two days on, otherwise as DurationText.
+std::string LongWaitText(int64_t ms);
+// A moment some days away, after "until" or "from": "until today, 20:00", "until Thursday 20:00", "until Thursday 26, 20:00".
+std::string UntilText(int64_t ms);
+std::string FromText(int64_t ms);
+// "Thu 20:00", "Today 20:00".
+std::string ShortWhenText(int64_t ms);
 std::string StageText(TourneyStage stage, int round);
 // "Single elimination · 1 vs 1".
 std::string FormatText(const TourneySummary &t);
