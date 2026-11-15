@@ -85,6 +85,7 @@ struct Board {
 	bool pageLoading = false, pageLoaded = false;
 	unsigned pageGen = 0;
 	LeagueBoard page;
+	LeagueBoardQuery pageQuery;
 	std::string pageError;
 };
 
@@ -292,11 +293,18 @@ void FetchBoard(bool linked)
 	else if (!linked) g_board.around = LeagueBoard();
 }
 
-void FetchPage(unsigned gen, int offset, int limit, bool aroundMe)
+void FetchPage(unsigned gen, LeagueBoardQuery q)
 {
-	std::string path = "/v1/league/leaderboard?queue=1v1&limit=" + std::to_string(limit);
-	path += aroundMe ? "&around=me" : "&offset=" + std::to_string(offset);
-	const Answer a = Call("GET", path, "", aroundMe);
+	std::string path = "/v1/league/leaderboard?queue=1v1&limit=" + std::to_string(q.limit);
+	path += q.aroundMe ? "&around=me" : "&offset=" + std::to_string(q.offset);
+	if (q.season >= 0) path += "&season=" + std::to_string(q.season);
+	if (q.name.size() >= 2) path += "&q=" + UrlEncode(q.name);
+	if (q.friends) {
+		std::string ids;
+		for (size_t i = 0; i < q.ids.size() && i < 200; i++) ids += (i ? "," : "") + q.ids[i];
+		path += "&ids=" + ids;
+	}
+	const Answer a = Call("GET", path, "", q.aroundMe);
 	LeagueBoard b;
 	const bool ok = a.r.Ok() && a.parsed && LeagueParseBoard(a.j, b);
 	if (!ok) LogW("league", "could not read a page of the leaderboard (%s)", a.r.Describe().c_str());
@@ -306,6 +314,7 @@ void FetchPage(unsigned gen, int offset, int limit, bool aroundMe)
 	if (ok) {
 		g_board.pageLoaded = true;
 		g_board.page = b;
+		g_board.pageQuery = q;
 		g_board.pageError.clear();
 	}
 	else g_board.pageError = !a.r.status ? "Couldn't reach the league server. Check your connection and try again." : "The league server refused the request. Try again later.";
@@ -944,6 +953,7 @@ LeagueRankedView LeagueRankedState()
 	v.pageLoading = g_board.pageLoading;
 	v.pageLoaded = g_board.pageLoaded;
 	v.page = g_board.page;
+	v.pageQuery = g_board.pageQuery;
 	v.pageError = g_board.pageError;
 	v.phase = g_q.phase;
 	v.since = g_q.since;
@@ -1077,16 +1087,19 @@ void LeagueBoardRefresh(bool force)
 	SafeThread(FetchBoard, linked).detach();
 }
 
-void LeagueBoardRequest(int offset, int limit, bool aroundMe)
+void LeagueBoardRequest(const LeagueBoardQuery &query)
 {
-	if (aroundMe && !LeagueLinked()) aroundMe = false;
+	LeagueBoardQuery q = query;
+	if (q.aroundMe && !LeagueLinked()) q.aroundMe = false;
+	q.offset = std::max(0, q.offset);
+	q.limit = std::max(1, std::min(100, q.limit));
 	unsigned gen = 0;
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
 		gen = ++g_board.pageGen;
 		g_board.pageLoading = true;
 	}
-	SafeThread(FetchPage, gen, std::max(0, offset), std::max(1, std::min(100, limit)), aroundMe).detach();
+	SafeThread(FetchPage, gen, q).detach();
 }
 
 void LeagueQueueJoin()

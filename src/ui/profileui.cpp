@@ -16,6 +16,7 @@
 #include "game/playerini.h"
 #include "game/profiles.h"
 #include "net/leagueclient.h"
+#include "net/leagueclient_seasons.h"
 #include "net/patrons.h"
 #include "net/steamnet.h"
 #include "ui/fullscreen.h"
@@ -176,6 +177,9 @@ void Refresh()
 	const PatronInfo patron = me ? PatronOf(me) : PatronInfo();
 	if (me) PatronsWatch({me});
 	const LeagueBadge badge = me ? PlayerBadgeOf(me) : LeagueBadge();
+	const bool linked = me && LeagueLinked();
+	if (linked) LeagueMeRefresh();
+	const LeagueMeView league = linked ? LeagueMeState() : LeagueMeView();
 
 	std::lock_guard<std::mutex> lock(g_lock);
 	if (fresh) {
@@ -196,6 +200,9 @@ void Refresh()
 	v.avatar = avatar;
 	v.patron = patron;
 	v.badge = badge;
+	v.linked = linked;
+	v.meLoaded = league.loaded;
+	v.me = league.me;
 	v.rankCount = static_cast<int>(g_s.ranks.size());
 	SYSTEMTIME now;
 	GetLocalTime(&now);
@@ -260,6 +267,8 @@ void Act(View &v, int action, int arg, Command &cmd)
 		cmd.action = action;
 		break;
 	case kActLeagueBadge:
+	case kActLeagueFrame:
+	case kActLeagueTitle:
 		cmd.action = action;
 		cmd.arg = arg;
 		break;
@@ -318,6 +327,8 @@ void Execute(const Command &cmd)
 	case kActLeagueCancel: LeagueLinkCancel(); break;
 	case kActLeagueUnlink: LeagueUnlink(); break;
 	case kActLeagueBadge: LeagueChooseBadgeAt(cmd.arg); break;
+	case kActLeagueFrame: LeagueCosmeticsSet(true, cmd.arg, false, -1); break;
+	case kActLeagueTitle: LeagueCosmeticsSet(false, -1, true, cmd.arg); break;
 	default: break;
 	}
 }

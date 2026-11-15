@@ -366,6 +366,10 @@ bool LeagueParseBoard(const Json &j, LeagueBoard &out)
 		row.glory = Int(r, "glory");
 		row.wins = Int(r, "wins");
 		row.losses = Int(r, "losses");
+		const Json *delta7 = r.Get("delta7");
+		row.hasDelta7 = delta7 && delta7->type == Json::Number;
+		row.delta7 = row.hasDelta7 ? static_cast<int>(delta7->num) : 0;
+		row.streak = Int(r, "streak");
 		if (row.position > 0) out.rows.push_back(row);
 	}
 	return true;
@@ -430,8 +434,8 @@ const char *LeagueBanText(const std::string &kind)
 {
 	const std::string k = Lower(kind);
 	if (k == "abandoned") return "You left a ranked game: you can't search for a while.";
+	if (k == "staff") return "The league's team has suspended you from ranked for a while.";
 	if (k == "desync") return "Too many of your games went out of sync: you can't search for a while.";
-	if (k == "staff") return "The league's team has locked your search for a while.";
 	return "You declined or let a match go: you can't search for a while.";
 }
 
@@ -461,30 +465,36 @@ bool LeagueParseHistory(const Json &j, LeagueHistoryPage &out)
 	out = LeagueHistoryPage();
 	out.more = j.GetBool("more");
 	for (const Json &m : list->arr) {
-		if (m.type != Json::Object) continue;
 		LeagueHistoryGame g;
-		g.id = IdNumber(m.Get("id"));
-		g.playedAt = Int64(m, "playedAt");
-		g.durationMs = static_cast<uint32_t>(std::max(0.0, m.GetNumber("durationMs")));
-		g.map = MapOf(m.Get("map"));
-		if (const Json *o = m.Get("opponent"); o && o->type == Json::Object) g.opponent = CardOf(*o);
-		g.myCiv = m.GetString("myCiv");
-		g.opponentCiv = m.GetString("opponentCiv");
-		g.endedBy = Lower(m.GetString("endedBy"));
-		const std::string result = Lower(m.GetString("result"));
-		g.result = result == "win" ? LeagueGameResult::Win
-			: result == "loss"	   ? LeagueGameResult::Loss
-			: result == "void"	   ? LeagueGameResult::Void
-			: result == "disputed" ? LeagueGameResult::Disputed
-								   : LeagueGameResult::Pending;
-		const Json *delta = m.Get("gloryDelta");
-		g.hasDelta = delta && delta->type == Json::Number;
-		g.gloryDelta = g.hasDelta ? static_cast<int>(delta->num) : 0;
-		g.placed = m.GetBool("placed");
-		if (g.placed) g.hasDelta = false;
-		if (g.id > 0) out.games.push_back(g);
+		if (LeagueParseHistoryGame(m, g)) out.games.push_back(g);
 	}
 	return true;
+}
+
+bool LeagueParseHistoryGame(const Json &m, LeagueHistoryGame &g)
+{
+	if (m.type != Json::Object) return false;
+	g = LeagueHistoryGame();
+	g.id = IdNumber(m.Get("id"));
+	g.playedAt = Int64(m, "playedAt");
+	g.durationMs = static_cast<uint32_t>(std::max(0.0, m.GetNumber("durationMs")));
+	g.map = MapOf(m.Get("map"));
+	if (const Json *o = m.Get("opponent"); o && o->type == Json::Object) g.opponent = CardOf(*o);
+	g.myCiv = m.GetString("myCiv");
+	g.opponentCiv = m.GetString("opponentCiv");
+	g.endedBy = Lower(m.GetString("endedBy"));
+	const std::string result = Lower(m.GetString("result"));
+	g.result = result == "win" ? LeagueGameResult::Win
+		: result == "loss"	   ? LeagueGameResult::Loss
+		: result == "void"	   ? LeagueGameResult::Void
+		: result == "disputed" ? LeagueGameResult::Disputed
+							   : LeagueGameResult::Pending;
+	const Json *delta = m.Get("gloryDelta");
+	g.hasDelta = delta && delta->type == Json::Number;
+	g.gloryDelta = g.hasDelta ? static_cast<int>(delta->num) : 0;
+	g.placed = m.GetBool("placed");
+	if (g.placed) g.hasDelta = false;
+	return g.id > 0;
 }
 
 int64_t LeagueHistoryNextBefore(const LeagueHistoryPage &p)

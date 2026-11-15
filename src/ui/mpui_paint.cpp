@@ -132,8 +132,8 @@ int LobbyTableWidth(int viewW, int viewH)
 
 void PaintHeader(Painter &p, const State &st)
 {
-	// The result of a ranked game has a header of its own.
-	if (st.ranked.resultOpen) return;
+	// The result of a ranked game and the end of a season have a header of their own.
+	if (st.ranked.resultOpen || st.ranked.ceremonyOpen) return;
 	const int mx = st.mouseX, my = st.mouseY;
 	const LobbyLayout l = LobbyLayoutFor(st.viewW, st.viewH);
 	if (st.view == kViewTournaments && PaintTourneyHeader(p, st)) return;
@@ -165,7 +165,7 @@ void PaintHeader(Painter &p, const State &st)
 		PatronHotspot(p, m + avatar + 12, y + (h - laurel) / 2, laurel, own, mx, my, kPatronLink);
 	}
 	else p.Text(nameX, y, nameW, h, st.player, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-	DrawBadgeAfterName(p, nameX, y, nameW, h, st.player, ownBadge, mx, my);
+	DrawBadgeAfterName(p, nameX, y, nameW, h, st.player, ownBadge, mx, my, SteamOwnId());
 	std::string info = Tr("Content profile: ") + ModsProfileLabel(ModsMountedProfile().name);
 	COLORREF color = pal::caption;
 	if (!st.ready) {
@@ -281,12 +281,12 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis, 
 				const int nameW = w - 54 - 90 - LeagueBadgeRoom(badge);
 				DrawPatron(p, x + 30, y + 3, 20, x + 54, y, nameW, 26, s.name, patron.tier, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 				PatronHotspot(p, x + 30, y + 3, 20, patron, st.mouseX, st.mouseY, kPatronLink);
-				DrawBadgeAfterName(p, x + 54, y, nameW, 26, s.name, badge, st.mouseX, st.mouseY);
+				DrawBadgeAfterName(p, x + 54, y, nameW, 26, s.name, badge, st.mouseX, st.mouseY, pid);
 			}
 			else {
 				const int nameW = w - 30 - 90 - LeagueBadgeRoom(badge);
 				p.Text(x + 30, y, nameW, 26, human ? s.name : ai ? (s.name.empty() ? "AI" : s.name) : "Free", human ? pal::text : pal::textDim);
-				if (human) DrawBadgeAfterName(p, x + 30, y, nameW, 26, s.name, badge, st.mouseX, st.mouseY);
+				if (human) DrawBadgeAfterName(p, x + 30, y, nameW, 26, s.name, badge, st.mouseX, st.mouseY, pid);
 			}
 			if (human && LobbyPlayerId(g, s.name)) {
 				const int nameX = patron.tier != PatronTier::None ? x + 54 : x + 30;
@@ -314,12 +314,12 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis, 
 				const int nameW = w - 54 - 90 - LeagueBadgeRoom(badge);
 				DrawPatron(p, x + 30, y + 3, 20, x + 54, y, nameW, 26, g.playerNames[i], patron.tier, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 				PatronHotspot(p, x + 30, y + 3, 20, patron, st.mouseX, st.mouseY, kPatronLink);
-				DrawBadgeAfterName(p, x + 54, y, nameW, 26, g.playerNames[i], badge, st.mouseX, st.mouseY);
+				DrawBadgeAfterName(p, x + 54, y, nameW, 26, g.playerNames[i], badge, st.mouseX, st.mouseY, pid);
 			}
 			else {
 				const int nameW = w - 30 - (i == 0 ? 90 : 0) - LeagueBadgeRoom(badge);
 				p.Text(x + 30, y, nameW, 26, taken ? g.playerNames[i] : "Free", taken ? pal::text : pal::textDim);
-				if (taken) DrawBadgeAfterName(p, x + 30, y, nameW, 26, g.playerNames[i], badge, st.mouseX, st.mouseY);
+				if (taken) DrawBadgeAfterName(p, x + 30, y, nameW, 26, g.playerNames[i], badge, st.mouseX, st.mouseY, pid);
 			}
 			if (taken && LobbyPlayerId(g, g.playerNames[i])) {
 				const int nameX = patron.tier != PatronTier::None ? x + 54 : x + 30;
@@ -620,12 +620,12 @@ void PaintList(Painter &p, const State &st)
 			const int ly = y + (rowH - 20) / 2, nameW = hw - 24 - LeagueBadgeRoom(hostBadge);
 			DrawPatron(p, hx, ly, 20, hx + 24, y, nameW, rowH, hostText, hostPatron.tier, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 			PatronHotspot(p, hx, ly, 20, hostPatron, mx, my, kPatronLink);
-			DrawBadgeAfterName(p, hx + 24, y, nameW, rowH, hostText, hostBadge, mx, my);
+			DrawBadgeAfterName(p, hx + 24, y, nameW, rowH, hostText, hostBadge, mx, my, g.owner);
 		}
 		else {
 			const int nameW = hw - LeagueBadgeRoom(hostBadge);
 			p.Text(hx, y, nameW, rowH, hostText, g.friendHost ? pal::redText : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-			DrawBadgeAfterName(p, hx, y, nameW, rowH, hostText, hostBadge, mx, my);
+			DrawBadgeAfterName(p, hx, y, nameW, rowH, hostText, hostBadge, mx, my, g.owner);
 		}
 		char watching[48];
 		snprintf(watching, sizeof(watching), "In game  ·  %d watching", g.spectators);
@@ -963,6 +963,7 @@ std::vector<std::string> DropItems(const State &st, int &sel)
 		sel = st.tourneyDropSel;
 		return st.tourneyDropItems;
 	}
+	if (st.dropKind == kDropRankedSeason) return RankedSeasonItems(st, sel);
 	if (st.dropKind == kDropVisibility) {
 		sel = st.createVisibility;
 		return {"Public", "Password protected", "Friends only"};

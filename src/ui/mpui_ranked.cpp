@@ -551,12 +551,18 @@ void OpenDispute(int64_t matchId)
 
 std::string &RankedFieldText()
 {
-	return g_s.ranked.disputeText;
+	// The field is the report's while its dialog is open, and the leaderboard's search otherwise.
+	return g_s.ranked.disputeMatch ? g_s.ranked.disputeText : g_s.ranked.boardSearch;
 }
 
 void RankedFieldEnter()
 {
 	RankedScreen &r = g_s.ranked;
+	if (!r.disputeMatch) {
+		RankedBoardAsk(0, false);
+		g_s.focus = kNoField;
+		return;
+	}
 	std::string text = r.disputeText;
 	while (!text.empty() && text.back() == ' ') text.pop_back();
 	while (!text.empty() && text.front() == ' ') text.erase(text.begin());
@@ -612,6 +618,10 @@ void PaintRankedContent(Painter &p, const State &st)
 void RankedAction(int arg)
 {
 	RankedScreen &r = g_s.ranked;
+	if (arg >= kRkArgEnd) {
+		RankedSeasonAction(arg);
+		return;
+	}
 	if (arg >= kRkDisputeHistory && arg < kRkArgEnd) {
 		const size_t i = static_cast<size_t>(arg - kRkDisputeHistory);
 		if (i < r.view.history.games.size()) OpenDispute(r.view.history.games[i].id);
@@ -624,6 +634,7 @@ void RankedAction(int arg)
 	}
 	if (arg >= kRkRow && arg < kRkDisputeRecent) {
 		r.boardSel = arg - kRkRow;
+		if (r.boardSel < static_cast<int>(r.view.page.rows.size())) r.boardPick = r.view.page.rows[r.boardSel].steamId;
 		return;
 	}
 	switch (arg) {
@@ -665,27 +676,34 @@ void RankedAction(int arg)
 	case kRkBoard:
 		r.sub = kRankedBoard;
 		r.boardSel = -1;
-		r.boardOffset = 0;
-		LeagueBoardRequest(0, kRankedBoardRows, false);
+		r.boardPick.clear();
+		r.boardSeek.clear();
+		r.boardSeason = -1;
+		r.boardFriends = false;
+		r.boardSearch.clear();
+		RankedBoardAsk(0, false);
 		break;
 	case kRkHub: r.sub = kRankedHub; break;
 	case kRkBoardPrev:
 	case kRkBoardNext:
 	case kRkBoardTop: {
 		const int total = r.view.page.total;
-		int offset = arg == kRkBoardTop ? 0 : r.view.page.offset + (arg == kRkBoardNext ? kRankedBoardRows : -kRankedBoardRows);
-		offset = std::max(0, std::min(offset, std::max(0, total - 1) / kRankedBoardRows * kRankedBoardRows));
-		r.boardOffset = offset;
+		const int rows = RankedBoardRows();
+		int offset = arg == kRkBoardTop ? 0 : r.view.page.offset + (arg == kRkBoardNext ? rows : -rows);
+		offset = std::max(0, std::min(offset, std::max(0, total - 1) / rows * rows));
 		r.boardSel = -1;
-		LeagueBoardRequest(offset, kRankedBoardRows, false);
+		RankedBoardAsk(offset, false);
 		break;
 	}
 	case kRkBoardMe: {
 		const int me = r.view.around.me;
 		r.boardSel = -1;
 		if (me > 0) {
-			r.boardOffset = LeagueBoardPageOf(me, kRankedBoardRows);
-			LeagueBoardRequest(r.boardOffset, kRankedBoardRows, false);
+			r.boardSeason = -1;
+			r.boardFriends = false;
+			r.boardSearch.clear();
+			r.boardPick = std::to_string(SteamOwnId());
+			RankedBoardAsk(LeagueBoardPageOf(me, RankedBoardRows()), false);
 		}
 		break;
 	}
@@ -712,11 +730,10 @@ void RankedAction(int arg)
 		RankedAction(kRkBoardMe);
 		break;
 	case kRkSkip: r.resultAt = GetTickCount() - 100000; break;
-	case kRkSteam: {
-		const std::vector<LeagueBoardRow> &rows = r.view.page.rows;
-		if (r.boardSel >= 0 && r.boardSel < static_cast<int>(rows.size())) SteamOpenProfile(_strtoui64(rows[r.boardSel].steamId.c_str(), nullptr, 10));
+	case kRkSteam:
+		// In the Steam overlay's browser, as the account's link opens; in the browser when the overlay is off.
+		if (_strtoui64(r.boardPick.c_str(), nullptr, 10)) SteamOpenWebPage("https://steamcommunity.com/profiles/" + r.boardPick);
 		break;
-	}
 	case kRkNotice: LeagueRankedClearNotice(); break;
 	case kRkContentClose: r.contentOpen = false; break;
 	case kRkContentSwitch: {
@@ -774,6 +791,7 @@ void RankedFrame()
 	// The animation starts when the server's verdict arrives, not when the screen opened on "sending".
 	if (r.resultOpen && v.result.state == LeagueResultState::Ready && before != LeagueResultState::Ready) r.resultAt = GetTickCount();
 	if (r.resultOpen) g_s.view = kViewRanked;
+	RankedSeasonsFrame();
 }
 
 void RankedGameThreadTick()

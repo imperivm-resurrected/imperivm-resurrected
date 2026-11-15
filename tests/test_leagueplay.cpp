@@ -203,7 +203,7 @@ void ErrorsAndMe()
 	const LeagueError staff = LeagueParseError(Parse(R"({"error":"banned","until":5000,"kind":"staff","reason":"Abuse in the chat"})"));
 	CHECK_EQ(staff.kind, std::string("staff"));
 	CHECK_EQ(staff.reason, std::string("Abuse in the chat"));
-	CHECK_EQ(std::string(LeagueBanText("staff")), std::string("The league's team has locked your search for a while."));
+	CHECK_EQ(std::string(LeagueBanText("staff")), std::string("The league's team has suspended you from ranked for a while."));
 
 	LeagueMe me;
 	CHECK(LeagueParseMe(Parse(R"({"steamId":"1","ranked":{"tier":"centurion","division":2,"glory":1164,"wins":38,"losses":27,"streak":4}})"), me));

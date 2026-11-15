@@ -283,6 +283,33 @@ void SteamOpenProfile(uint64_t id)
 	});
 }
 
+std::vector<uint64_t> SteamFriendIds()
+{
+	static std::mutex mx;
+	static std::vector<uint64_t> friends;
+	static DWORD readAt = 0;
+	static bool asked = false;
+	if (!SteamOnlineReady()) return {};
+	std::lock_guard<std::mutex> lock(mx);
+	if (!asked && (!readAt || GetTickCount() - readAt > 60000)) {
+		asked = true;
+		Post([] {
+			std::vector<uint64_t> list;
+			const int count = g_steam.friends ? S.SteamAPI_ISteamFriends_GetFriendCount(g_steam.friends, k_EFriendFlagImmediate) : 0;
+			for (int i = 0; i < count && i < 500; i++) {
+				const uint64 f = S.SteamAPI_ISteamFriends_GetFriendByIndex(g_steam.friends, i, k_EFriendFlagImmediate);
+				if (f) list.push_back(f);
+			}
+			std::lock_guard<std::mutex> done(mx);
+			if (list.size() != friends.size()) LogI("steam", "%d friends read for the leaderboard", static_cast<int>(list.size()));
+			friends = std::move(list);
+			readAt = GetTickCount();
+			asked = false;
+		});
+	}
+	return friends;
+}
+
 void SteamOpenWebPage(const std::string &url)
 {
 	if (_strnicmp(url.c_str(), "https://", 8) != 0 && _strnicmp(url.c_str(), "http://", 7) != 0) return;

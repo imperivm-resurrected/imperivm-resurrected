@@ -2,6 +2,7 @@
 // Copyright (C) 2026 THIONG
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #pragma once
+#include <cstdint>
 #include <string>
 
 #include "core/league.h"
@@ -29,10 +30,19 @@ COLORREF LeagueMetalInk(LeagueMetal metal);
 // What a badge takes after a name, gap included; 0 without one. Take it off the name's box before drawing the name.
 int LeagueBadgeRoom(const LeagueBadge &badge);
 // The badge 6 px after a name drawn in the box (nameX, y, nameW, h) with the painter's current font, centred on the box's height,
-// with its tooltip under the mouse.
-void DrawBadgeAfterName(ui::Painter &p, int nameX, int y, int nameW, int h, const std::string &name, const LeagueBadge &badge, int mx, int my);
+// with its tooltip under the mouse. With the player's SteamID, and while a screen takes the clicks on badges, a click on it opens
+// their row in the leaderboard.
+void DrawBadgeAfterName(ui::Painter &p, int nameX, int y, int nameW, int h, const std::string &name, const LeagueBadge &badge, int mx, int my,
+	uint64_t id = 0);
+// The tooltip of a badge drawn anywhere else in a square of `size`, when the mouse is over it.
+void HoverLeagueBadge(ui::Painter &p, int x, int y, int size, const LeagueBadge &badge, int mx, int my);
 // The tooltip of the badge under the mouse, drawn after everything else.
 void PaintLeagueBadgeTip(ui::Painter &p, int screenW, int screenH);
+// The clicks on the badges of a frame: between Begin and End, every badge drawn with a SteamID takes a click with `action` and an
+// argument from `firstArg` (at most `count` of them); LeagueBadgeClickedId gives the player of an argument of the last frame.
+void LeagueBadgeClicksBegin(int action, int firstArg, int count);
+void LeagueBadgeClicksEnd();
+uint64_t LeagueBadgeClickedId(int arg);
 // "Centurion II", translated.
 std::string LeagueRankLabel(LeagueTier tier, int division);
 // A map type or size of the league by its id ("mountain_passes" -> "Montañoso"), translated; an id it doesn't know, as words.

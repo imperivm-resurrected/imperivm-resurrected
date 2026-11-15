@@ -263,6 +263,9 @@ void DoAction(int action, int arg)
 		else if (g_s.dropKind == kDropTourney) {
 			TourneyDropPick(idx, arg);
 		}
+		else if (g_s.dropKind == kDropRankedSeason) {
+			RankedSeasonPick(arg);
+		}
 		else if (g_s.dropKind == kDropPlayers) {
 			g_s.createPlayers = std::max(2, std::min(8, arg + 2));
 		}

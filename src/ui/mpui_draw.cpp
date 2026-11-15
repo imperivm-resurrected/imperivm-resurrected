@@ -335,7 +335,10 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 	// another view would catch them where it used to be.
 	g_detail.geomOut = ListGeom();
 	g_chat.geomOut = ListGeom();
+	// A player's badge opens their row in the leaderboard, outside a room.
+	if (!st.game.active && !st.room.id) LeagueBadgeClicksBegin(kRankedAct, kRkBadge, kRkBadgeEnd - kRkBadge);
 	PaintScreen(r.p, st);
+	LeagueBadgeClicksEnd();
 	PaintPatronTip(r.p, st.viewW, st.viewH);
 	PaintLeagueBadgeTip(r.p, st.viewW, st.viewH);
 	WakeGameThread();

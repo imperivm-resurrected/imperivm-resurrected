@@ -7,6 +7,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -16,6 +17,7 @@
 #include <vector>
 
 #include "core/leaguemaps.h"
+#include "core/leagueseasons.h"
 #include "i18n/tr.h"
 #include "net/leagueclient.h"
 #include "net/patrons.h"
@@ -116,11 +118,31 @@ template <class F> void PaintCoverage(Painter &p, int left, int top, int size, C
 }
 
 struct Tip {
-	bool show = false;
+	bool show = false, clickable = false;
 	int x = 0, y = 0;
 	LeagueBadge badge;
 };
 Tip g_tip;
+
+// The players whose badges take clicks: those of the frame being painted, and those of the last one, which the clicks are about.
+struct BadgeClicks {
+	std::mutex mx;
+	int action = -1, first = 0, count = 0;
+	std::vector<uint64_t> painting, shown;
+	int shownFirst = 0;
+};
+BadgeClicks g_clicks;
+
+// A click on the badge just drawn, when the frame takes them; true when it does.
+bool BadgeClick(Painter &p, int x, int y, int size, uint64_t id)
+{
+	if (!id) return false;
+	std::lock_guard<std::mutex> lock(g_clicks.mx);
+	if (g_clicks.action < 0 || static_cast<int>(g_clicks.painting.size()) >= g_clicks.count) return false;
+	p.AddHit(x - 3, y - 3, size + 6, size + 6, g_clicks.action, g_clicks.first + static_cast<int>(g_clicks.painting.size()));
+	g_clicks.painting.push_back(id);
+	return true;
+}
 
 int64_t EpochMs()
 {
@@ -178,7 +200,7 @@ std::string ChoiceLabel(const LeagueBadgeChoice &c)
 											   : Tr("Current rank (none yet)");
 	}
 	if (c.kind == "season") {
-		const std::string season = TrFmt("Season %s", {c.id});
+		const std::string season = TrFmt("Season %s", {LeagueRoman(atoi(c.id.c_str()))});
 		if (c.look.founder) return season + ": " + Tr("League Founder");
 		return c.look.tier != LeagueTier::None ? season + ": " + Tr(LeagueTierName(c.look.tier)) : season;
 	}
@@ -334,17 +356,54 @@ int LeagueBadgeRoom(const LeagueBadge &badge)
 	return badge.Shown() ? kLeagueBadgeSize + kLeagueBadgeGap : 0;
 }
 
-void DrawBadgeAfterName(Painter &p, int nameX, int y, int nameW, int h, const std::string &name, const LeagueBadge &badge, int mx, int my)
+void DrawBadgeAfterName(Painter &p, int nameX, int y, int nameW, int h, const std::string &name, const LeagueBadge &badge, int mx, int my, uint64_t id)
 {
 	if (!badge.Shown()) return;
 	const int textW = std::min(std::max(0, nameW), p.TextWidth(name));
 	const int bx = nameX + textW + kLeagueBadgeGap, by = y + (h - kLeagueBadgeSize) / 2;
 	DrawLeagueBadge(p, bx, by, kLeagueBadgeSize, badge);
+	const bool clickable = BadgeClick(p, bx, by, kLeagueBadgeSize, id);
 	if (!p.Hover(bx, by, kLeagueBadgeSize, kLeagueBadgeSize, mx, my)) return;
 	g_tip.show = true;
+	g_tip.clickable = clickable;
 	g_tip.x = bx;
 	g_tip.y = by + kLeagueBadgeSize + 6;
 	g_tip.badge = badge;
+}
+
+void HoverLeagueBadge(Painter &p, int x, int y, int size, const LeagueBadge &badge, int mx, int my)
+{
+	if (!badge.Shown() || !p.Hover(x, y, size, size, mx, my)) return;
+	g_tip.show = true;
+	g_tip.clickable = false;
+	g_tip.x = x;
+	g_tip.y = y + size + 6;
+	g_tip.badge = badge;
+}
+
+void LeagueBadgeClicksBegin(int action, int firstArg, int count)
+{
+	std::lock_guard<std::mutex> lock(g_clicks.mx);
+	g_clicks.action = action;
+	g_clicks.first = firstArg;
+	g_clicks.count = count;
+	g_clicks.painting.clear();
+}
+
+void LeagueBadgeClicksEnd()
+{
+	std::lock_guard<std::mutex> lock(g_clicks.mx);
+	if (g_clicks.action < 0) return;
+	g_clicks.shown = g_clicks.painting;
+	g_clicks.shownFirst = g_clicks.first;
+	g_clicks.action = -1;
+}
+
+uint64_t LeagueBadgeClickedId(int arg)
+{
+	std::lock_guard<std::mutex> lock(g_clicks.mx);
+	const int i = arg - g_clicks.shownFirst;
+	return i >= 0 && i < static_cast<int>(g_clicks.shown.size()) ? g_clicks.shown[i] : 0;
 }
 
 std::string LeagueRankLabel(LeagueTier tier, int division)
@@ -384,7 +443,7 @@ void PaintLeagueBadgeTip(Painter &p, int screenW, int screenH)
 			line = Tr("Played the league's test season");
 			break;
 		}
-		title = TrFmt("Season %s", {b.id});
+		title = TrFmt("Season %s", {LeagueRoman(b.season ? b.season : atoi(b.id.c_str()))});
 		line = b.tier != LeagueTier::None ? TrFmt("Reached %s", {LeagueRankLabel(b.tier, b.division)}) : Tr("Emblem of a past season");
 		break;
 	default:
@@ -395,12 +454,13 @@ void PaintLeagueBadgeTip(Painter &p, int screenW, int screenH)
 												 : "Champion of an official tournament");
 		break;
 	}
+	const std::string click = g_tip.clickable ? Tr("Click: see their row in the leaderboard") : std::string();
 	p.raw = true;
 	p.Font(1);
 	int w = p.TextWidth(title);
 	p.Font(3);
-	w = std::max(w, p.TextWidth(line)) + 24;
-	const int h = 58;
+	w = std::max({w, p.TextWidth(line), p.TextWidth(click)}) + 24;
+	const int h = click.empty() ? 58 : 80;
 	const int x = std::max(4, std::min(g_tip.x, screenW - w - 4));
 	const int y = g_tip.y + h > screenH - 4 ? std::max(4, g_tip.y - h - 40) : g_tip.y;
 	p.Fill(x, y, w, h, pal::panel);
@@ -410,6 +470,7 @@ void PaintLeagueBadgeTip(Painter &p, int screenW, int screenH)
 	p.Text(x + 12, y + 8, w - 20, 20, title, ink, DT_LEFT | DT_TOP | DT_SINGLELINE);
 	p.Font(3);
 	p.Text(x + 12, y + 31, w - 20, 18, line, pal::caption, DT_LEFT | DT_TOP | DT_SINGLELINE);
+	if (!click.empty()) p.Text(x + 12, y + 53, w - 20, 18, click, pal::textDim, DT_LEFT | DT_TOP | DT_SINGLELINE);
 	p.raw = false;
 }
 

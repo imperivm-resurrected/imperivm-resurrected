@@ -32,6 +32,7 @@ const DWORD kPlayersRouteRestMs = 15 * 60 * 1000;
 struct Entry {
 	PatronInfo info;
 	LeagueBadge badge;
+	LeagueFrame frame;
 	DWORD at = 0;
 	bool known = false;
 };
@@ -162,15 +163,20 @@ void Lookup(std::vector<uint64_t> ids)
 		for (uint64_t id : ids) {
 			Entry &e = g_cache[id];
 			const LeagueBadge badge = e.badge;
+			const LeagueFrame frame = e.frame;
 			e = Entry();
 			e.at = now;
 			e.known = true;
 			e.badge = badges ? LeagueBadge() : badge;
+			e.frame = badges ? LeagueFrame() : frame;
 			auto p = found.find(id);
 			if (p != found.end()) {
 				e.info.place = p->second.patronPlace;
 				e.info.tier = TierFromName(p->second.patronTier);
-				if (badges) e.badge = p->second.badge;
+				if (badges) {
+					e.badge = p->second.badge;
+					e.frame = p->second.frame;
+				}
 			}
 			auto a = g_announce.find(id);
 			if (a == g_announce.end()) continue;
@@ -197,6 +203,13 @@ LeagueBadge PlayerBadgeOf(uint64_t id)
 	std::lock_guard<std::mutex> lock(g_mx);
 	auto it = g_cache.find(id);
 	return it == g_cache.end() ? LeagueBadge() : it->second.badge;
+}
+
+LeagueFrame PlayerFrameOf(uint64_t id)
+{
+	std::lock_guard<std::mutex> lock(g_mx);
+	auto it = g_cache.find(id);
+	return it == g_cache.end() ? LeagueFrame() : it->second.frame;
 }
 
 void PatronsWatch(const std::vector<uint64_t> &ids)
