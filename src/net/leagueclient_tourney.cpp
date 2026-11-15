@@ -272,6 +272,7 @@ void Run(TourneyOp op, int64_t id, std::string method, std::string path, std::st
 		out.have = no.have;
 		out.need = no.need;
 		out.hash = no.hash;
+		out.noshowFrom = no.noshowFrom;
 		if (r.status == 0 || r.status >= 500) LogW("league", "tournament %s failed (%s)", OpName(op), r.Describe().c_str());
 		else LogI("league", "tournament %s refused (%s)", OpName(op), r.Describe().c_str());
 	}
@@ -323,6 +324,7 @@ void Run(TourneyOp op, int64_t id, std::string method, std::string path, std::st
 		TourneyNext &n = g_mine.mine.next;
 		n.pick = TourneyPick();
 		if (out.map.Known()) {
+			n.map = out.map;
 			bool listed = false;
 			for (TourneyGame &g : n.games) {
 				if (g.no != n.game) continue;
@@ -331,6 +333,10 @@ void Run(TourneyOp op, int64_t id, std::string method, std::string path, std::st
 			}
 			if (!listed) n.games.push_back({n.game, out.map, std::string()});
 		}
+	}
+	// A room claimed while the next game's map is being chosen waits for it: the pick shows before the matches are read again.
+	if (out.ok && op == TourneyOp::Claim && out.claim.kind == TourneyClaim::Wait && out.claim.pick.present && g_mine.mine.next.match == id) {
+		g_mine.mine.next.pick = out.claim.pick;
 	}
 	if (out.ok && op == TourneyOp::Create) RememberCode(created.slug, created.id, created.inviteCode);
 	if (out.ok && op == TourneyOp::Edit) {

@@ -74,6 +74,8 @@ struct TourneyOpResult {
 	std::string mapTitle, hash;
 	// The map a pick chose.
 	TourneyMap map;
+	// A win claimed too early by rounds: from when the no-show counts.
+	int64_t noshowFrom = 0;
 };
 // In a private cup the code the player found it with goes along.
 void LeagueTourneySignUp(int64_t tournament);
