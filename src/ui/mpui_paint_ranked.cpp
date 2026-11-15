@@ -961,7 +961,9 @@ void PaintPlayerCard(Painter &p, const State &st, int x, int y, int w, int h)
 	p.Font(0);
 	const int gloryY = ey + (tight ? 50 : 66);
 	RawText(p, rx, gloryY, rw, 24, (place > 0 ? "#" + std::to_string(place) + "  \xC2\xB7  " : std::string()) + TrFmt("%s Glory", {std::to_string(glory)}), pal::body);
-	if (ready && c.peak.present && (c.peak.tier != LeagueTier::None || c.peak.place > 0)) {
+	// An elite player's peak by Glory sits below the rank the place gives them now: then the line says nothing new.
+	const bool peakBelow = c.peak.tier != LeagueTier::None && static_cast<int>(c.peak.tier) < static_cast<int>(tier) && !LeagueTierHasDivisions(tier);
+	if (ready && !peakBelow && c.peak.present && (c.peak.tier != LeagueTier::None || c.peak.place > 0)) {
 		const bool byPlace = c.peak.place > 0 && (c.peak.tier == LeagueTier::None || !LeagueTierHasDivisions(c.peak.tier));
 		const std::string peak = byPlace ? TrFmt("Season peak: #%s", {std::to_string(c.peak.place)})
 										 : Tr("Season peak:") + " " + RankName(c.peak.tier, c.peak.division) + "  \xC2\xB7  " + TrFmt("%s Glory", {std::to_string(c.peak.glory)});
