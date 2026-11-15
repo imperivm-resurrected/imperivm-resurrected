@@ -181,6 +181,8 @@ void SteamInviteFriends();
 void SteamInviteToRoom(uint64_t user);
 // In the Steam overlay, or in the Steam client when the overlay is off.
 void SteamOpenProfile(uint64_t id);
+// The Steam chat with a player, in the overlay or in the Steam client when the overlay is off.
+void SteamOpenChat(uint64_t id);
 // The player's Steam friends (at most 500), as last read: the first call, and any a minute later, read them again in the background.
 std::vector<uint64_t> SteamFriendIds();
 // A web page in the Steam overlay's browser, on its own over the game until the player closes it; in the default browser when
