@@ -31,12 +31,14 @@ enum Sub {
 	// The full form: a section of it brought into view, the map chooser of a round, changing a cup, and its maps tried again.
 	kSubCupSection, kSubMapOpen, kSubChooserTab, kSubChooserRow, kSubChooserType, kSubChooserSize, kSubChooserOk, kSubChooserCancel, kSubEdit,
 	kSubMapsRetry,
+	// The form's maps of the series: one chosen in the map chooser (its place, or the count to add one) and one taken out.
+	kSubPoolOpen, kSubPoolRemove,
 };
 
 // What kSubCupSet changes in the form: the high bits of its value; the low 16 are the choice.
 enum CupSetting {
 	kCupPlaces = 1, kCupMinimum, kCupBestOf, kCupFinal, kCupSeeding, kCupCheckin, kCupPrivate, kCupPlay, kCupPreset, kCupHideCivs, kCupFog,
-	kCupExplored, kCupDiplomacy, kCupSpectators, kCupDay, kCupMinute, kCupNoshow,
+	kCupExplored, kCupDiplomacy, kCupSpectators, kCupDay, kCupMinute, kCupNoshow, kCupFormat, kCupSwissRounds, kCupPace, kCupRoundDays,
 };
 
 // The menus of the form (kDropTourney), by the index they open with.
@@ -133,8 +135,9 @@ struct Ui {
 	int sectionTop[3] = {};
 	ScrollArea formArea;
 	// The map chooser of a round (-1 closed): its tab (random, the game's, the player's), the random type and size chosen, the scenario
-	// chosen by its file, and its list's scroll.
+	// chosen by its file, and its list's scroll. With `chooserPool`, chooserRound is a place among the series' maps instead.
 	int chooserRound = -1, chooserTab = 0, chooserType = 0, chooserSize = 0, chooserScroll = 0;
+	bool chooserPool = false;
 	std::string chooserFile;
 	ScrollArea chooserArea;
 	// The dialog of the invitation code: open, what is typed and why it was not found.
@@ -180,6 +183,9 @@ void OwnCupContent(std::string &key, std::string &name);
 void ApplyCupSetting(TourneyCupForm &f, int setting, int choice, int64_t nowMs);
 // What the player is told about a problem of the form.
 std::string CupProblemText(TourneyCupProblem problem);
+// The round a map of the form is for: "Semifinal" in single elimination, "Round 2" otherwise, "Rounds 5 to 6" for the last of a Swiss
+// with more rounds than maps.
+std::string CupRoundName(const TourneyCupForm &f, int index);
 // The organizer plays this match of their cup: the league team settles its disputes, not them.
 bool OrganizerPlays(const TourneyDetail &d, const TourneyMatch &m);
 // The earliest and latest start the form offers, in this computer's local time (see LocalMs).
@@ -201,6 +207,10 @@ std::string PresetSummary(TourneyPreset p);
 // The map chooser of a round (mpui_tourney_chooser.cpp).
 // Opens it on the round's map.
 void OpenMapChooser(Ui &u, int round);
+// Opens it on a map of the series (`index`), or on a new one when `index` is past the last.
+void OpenPoolChooser(Ui &u, int index);
+// A map's picture in a square: the scenario's preview with its starts once this computer has it, or the drawing of a random map's kind of land.
+void PaintMapPicture(Painter &p, const TourneyMap &m, int x, int y, int size);
 // The map chosen in it, or one not Known() while there is none.
 TourneyMap ChooserMap(const Ui &u);
 void PaintMapChooser(Painter &p, const State &st, const Ui &u, PaintOut &out);
@@ -210,6 +220,8 @@ std::string CupMapLine(const TourneyMap &m);
 void PaintCupMapsState(Painter &p, const State &st, const TourneyDetail &d, int x, int y, int w, int &h);
 // The cup has scenarios this computer has to have.
 bool CupHasScenarios(const TourneySummary &t);
+// The rounds' maps and the series'.
+std::vector<TourneyMap> CupAllMaps(const TourneySummary &t);
 // What is wrong with this computer's copy of a round's scenario, for the warning before the room; empty when nothing is.
 std::string CupMapWarning(const TourneyMap &m);
 
@@ -249,6 +261,8 @@ std::string DurationText(int64_t ms);
 std::string StageText(TourneyStage stage, int round);
 // "Single elimination · 1 vs 1".
 std::string FormatText(const TourneySummary &t);
+// "By rounds of 2 days", "By rounds of a week".
+std::string RoundDaysText(int days);
 // "Caesar Mod" or "The mod's rules".
 std::string ContentText(const TourneySummary &t);
 // "Competitive settings".

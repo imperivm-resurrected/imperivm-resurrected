@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
+#include <initializer_list>
 #include <memory>
 #include <string>
 #include <vector>
@@ -16,6 +17,7 @@
 #include "i18n/tr.h"
 #include "net/leagueclient_tourney.h"
 #include "ui/fullscreen.h"
+#include "ui/leaguemapthumb.h"
 #include "ui/leagueui.h"
 #include "ui/mpui_tourney_internal.h"
 
@@ -90,13 +92,9 @@ void Preview(Painter &p, const std::string &path, int x, int y, int size)
 	p.Frame(x, y, size, size, pal::lineStrong);
 }
 
-}
-
-void OpenMapChooser(Ui &u, int round)
+// The chooser on a map: its tab, and the random map's type and size or the scenario's file.
+void OpenOn(Ui &u, const TourneyMap &m)
 {
-	if (round < 0 || round >= static_cast<int>(u.cup.maps.size())) return;
-	const TourneyMap &m = u.cup.maps[static_cast<size_t>(round)];
-	u.chooserRound = round;
 	u.chooserScroll = 0;
 	u.chooserFile.clear();
 	const std::vector<std::string> types = LeagueMapTypes();
@@ -112,6 +110,70 @@ void OpenMapChooser(Ui &u, int round)
 	u.chooserTab = !m.Scenario() ? 0 : m.kind == TourneyMapKind::Game ? 1 : 2;
 	if (m.Scenario()) u.chooserFile = Lower(m.file);
 	CupScenariosRescan();
+}
+
+}
+
+void OpenMapChooser(Ui &u, int round)
+{
+	if (round < 0 || round >= static_cast<int>(u.cup.maps.size())) return;
+	OpenOn(u, u.cup.maps[static_cast<size_t>(round)]);
+	u.chooserRound = round;
+	u.chooserPool = false;
+}
+
+void OpenPoolChooser(Ui &u, int index)
+{
+	const std::vector<TourneyMap> &pool = u.cup.seriesPool;
+	if (index < 0 || index > static_cast<int>(pool.size()) || index >= kTourneyPoolMax) return;
+	TourneyMap m;
+	if (index < static_cast<int>(pool.size())) m = pool[static_cast<size_t>(index)];
+	else {
+		// A new one starts on the first random map not among them yet.
+		for (const std::string &type : LeagueMapTypes()) {
+			const std::vector<std::string> sizes = LeagueMapSizesOf(type);
+			if (sizes.empty()) continue;
+			const std::string size = std::find(sizes.begin(), sizes.end(), "medium") != sizes.end() ? std::string("medium") : sizes.front();
+			const TourneyMap candidate = {type, "random", size};
+			bool taken = false;
+			for (const TourneyMap &x : pool) taken = taken || TourneySameMap(x, candidate);
+			if (!taken) {
+				m = candidate;
+				break;
+			}
+		}
+	}
+	OpenOn(u, m);
+	u.chooserRound = index;
+	u.chooserPool = true;
+}
+
+void PaintMapPicture(Painter &p, const TourneyMap &m, int x, int y, int size)
+{
+	if (!m.Known()) {
+		p.Fill(x, y, size, size, pal::bg);
+		UseDisplay(p, std::max(16, size / 2));
+		const bool raw = p.raw;
+		p.raw = true;
+		p.Text(x, y, size, size, "?", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.raw = raw;
+		p.Frame(x, y, size, size, pal::lineStrong);
+		return;
+	}
+	if (!m.Scenario()) {
+		PaintLeagueMapThumb(p, x, y, size, m.name);
+		return;
+	}
+	// Only a copy that is the cup's is shown: another one, or one coming down, would show a different map.
+	const CupMapState s = LeagueCupMap(m);
+	if (s.status == CupMapStatus::Ready) {
+		Preview(p, CupScenarioPath(m.file), x, y, size);
+		return;
+	}
+	p.Fill(x, y, size, size, pal::bg);
+	if (s.status == CupMapStatus::Checking || s.status == CupMapStatus::Downloading) p.Spinner(x + size / 2, y + size / 2, std::max(6, size / 8), 3, GetTickCount());
+	else p.Diamond(x + size / 2, y + size / 2, std::max(4, size / 12), pal::caption);
+	p.Frame(x, y, size, size, pal::lineStrong);
 }
 
 TourneyMap ChooserMap(const Ui &u)
@@ -151,10 +213,9 @@ void PaintMapChooser(Painter &p, const State &st, const Ui &u, PaintOut &out)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const int w = std::min(1120, st.viewW - 60), h = std::min(720, st.viewH - 60);
-	const int rounds = TourneyRoundsFor(u.cup.maxEntries);
 	p.raw = true;
-	const Dialog d = DialogBegin(p, st.viewW, st.viewH, w, h, Tr("Choose the map") + " \xC2\xB7 " + StageText(TourneyStageOf(u.chooserRound + 1, rounds), u.chooserRound + 1),
-		pal::text);
+	const std::string title = u.chooserPool ? Tr("Choose a map of the series") : Tr("Choose the map") + " \xC2\xB7 " + CupRoundName(u.cup, u.chooserRound);
+	const Dialog d = DialogBegin(p, st.viewW, st.viewH, w, h, title, pal::text);
 	const CupScenariosView v = CupScenarios();
 	const std::vector<int> game = TabRows(v, 1), mine = TabRows(v, 2);
 	const std::string counts[] = {std::string(), v.loaded ? " (" + std::to_string(game.size()) + ")" : std::string(), v.loaded ? " (" + std::to_string(mine.size()) + ")" : std::string()};
@@ -309,10 +370,19 @@ void PaintMapChooser(Painter &p, const State &st, const Ui &u, PaintOut &out)
 
 bool CupHasScenarios(const TourneySummary &t)
 {
-	for (const TourneyMap &m : t.maps) {
-		if (m.Scenario()) return true;
+	for (const std::vector<TourneyMap> *list : {&t.maps, &t.seriesPool}) {
+		for (const TourneyMap &m : *list) {
+			if (m.Scenario()) return true;
+		}
 	}
 	return false;
+}
+
+std::vector<TourneyMap> CupAllMaps(const TourneySummary &t)
+{
+	std::vector<TourneyMap> out = t.maps;
+	out.insert(out.end(), t.seriesPool.begin(), t.seriesPool.end());
+	return out;
 }
 
 std::string CupMapWarning(const TourneyMap &m)
@@ -334,7 +404,7 @@ void PaintCupMapsState(Painter &p, const State &st, const TourneyDetail &d, int 
 {
 	const int mx = st.mouseX, my = st.mouseY, pad = 22, rowH = 46;
 	std::vector<TourneyMap> maps;
-	for (const TourneyMap &m : d.maps) {
+	for (const TourneyMap &m : CupAllMaps(d)) {
 		if (!m.Scenario()) continue;
 		bool seen = false;
 		for (const TourneyMap &x2 : maps) seen = seen || TourneySameMap(x2, m);

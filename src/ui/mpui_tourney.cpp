@@ -122,9 +122,9 @@ void FetchCupMaps(int64_t tournament)
 {
 	std::vector<TourneyMap> maps;
 	const TourneyListsView lists = LeagueTourneyLists();
-	if (const TourneySummary *t = SummaryOf(lists, tournament)) maps = t->maps;
+	if (const TourneySummary *t = SummaryOf(lists, tournament)) maps = CupAllMaps(*t);
 	const TourneyPageView page = LeagueTourneyPage(g_tourney.slug, 60000);
-	if (maps.empty() && page.loaded && page.detail.id == tournament) maps = page.detail.maps;
+	if (maps.empty() && page.loaded && page.detail.id == tournament) maps = CupAllMaps(page.detail);
 	for (const TourneyMap &m : maps) {
 		if (m.Scenario()) LeagueCupMap(m);
 	}
@@ -598,6 +598,13 @@ std::string StageText(TourneyStage stage, int round)
 std::string FormatText(const TourneySummary &t)
 {
 	return Tr(t.format == "single" || t.format.empty() ? "Single elimination" : t.format) + " \xC2\xB7 " + Tr("1 vs 1");
+}
+
+std::string RoundDaysText(int days)
+{
+	if (days == 1) return Tr("By rounds of 1 day");
+	if (days == 7) return Tr("By rounds of a week");
+	return TrFmt("By rounds of %s days", {std::to_string(days)});
 }
 
 std::string ContentText(const TourneySummary &t)
@@ -1193,16 +1200,44 @@ void TourneyAction(int arg)
 	case kSubChooserSize: u.chooserSize = static_cast<int>(value); break;
 	case kSubChooserOk: {
 		const TourneyMap map = ChooserMap(u);
-		if (!map.Known() || u.chooserRound < 0 || u.chooserRound >= static_cast<int>(u.cup.maps.size())) break;
-		u.cup.maps[static_cast<size_t>(u.chooserRound)] = map;
+		if (!map.Known() || u.chooserRound < 0) break;
+		if (u.chooserPool) {
+			std::vector<TourneyMap> &pool = u.cup.seriesPool;
+			const int i = u.chooserRound;
+			if (i > static_cast<int>(pool.size()) || i >= kTourneyPoolMax) break;
+			bool repeated = false;
+			for (size_t k = 0; k < pool.size(); k++) repeated = repeated || (static_cast<int>(k) != i && TourneySameMap(pool[k], map));
+			if (repeated) {
+				Toast("That map is already among the series' maps.", true);
+				break;
+			}
+			if (i == static_cast<int>(pool.size())) pool.push_back(map);
+			else pool[static_cast<size_t>(i)] = map;
+		}
+		else if (u.chooserRound < static_cast<int>(u.cup.maps.size())) u.cup.maps[static_cast<size_t>(u.chooserRound)] = map;
+		else break;
 		u.chooserRound = -1;
+		u.chooserPool = false;
 		u.cupError.clear();
 		break;
 	}
-	case kSubChooserCancel: u.chooserRound = -1; break;
+	case kSubChooserCancel:
+		u.chooserRound = -1;
+		u.chooserPool = false;
+		break;
+	case kSubPoolOpen:
+		if (u.cupLocked) break;
+		if (g_s.focus == kCupNameField || g_s.focus == kCupDescriptionField) g_s.focus = kNoField;
+		OpenPoolChooser(u, static_cast<int>(value));
+		break;
+	case kSubPoolRemove:
+		if (u.cupLocked || value >= static_cast<int64_t>(u.cup.seriesPool.size())) break;
+		u.cup.seriesPool.erase(u.cup.seriesPool.begin() + static_cast<std::ptrdiff_t>(value));
+		u.cupError.clear();
+		break;
 	case kSubMapsRetry: {
 		const TourneyPageView page = LeagueTourneyPage(u.slug, 60000);
-		if (page.loaded && page.detail.id == value) LeagueCupMapsRetry(page.detail.maps);
+		if (page.loaded && page.detail.id == value) LeagueCupMapsRetry(CupAllMaps(page.detail));
 		break;
 	}
 	case kSubCupSubmit: {
@@ -1337,6 +1372,7 @@ bool TourneyBack()
 	}
 	if (u.screen == kScreenCreate && u.chooserRound >= 0) {
 		u.chooserRound = -1;
+		u.chooserPool = false;
 		return true;
 	}
 	if (u.screen == kScreenCreate && u.cupEditId) {
