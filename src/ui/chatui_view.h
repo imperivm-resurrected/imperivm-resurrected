@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "core/league.h"
 #include "game/chatlog.h"
 #include "game/controls.h"
 #include "ui/textedit.h"
@@ -32,6 +33,8 @@ struct Line {
 	bool click = false;
 	bool error = false;
 	int alpha = 255;
+	// The league badge after the sender's name; none when the options hide it.
+	LeagueBadge badge;
 };
 
 // The menu of ping types, centred on the point where the button went down; hover is the type under the mouse or -1.

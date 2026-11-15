@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "core/league.h"
+#include "core/leagueplay.h"
 #include "core/leagueranked.h"
 #include "game/civs.h"
 #include "i18n/tr.h"
@@ -335,6 +336,7 @@ LeagueBan BanOf(const LeagueRankedView &v)
 	if (v.banUntil > ban.until) {
 		ban.until = v.banUntil;
 		ban.kind = v.banKind;
+		ban.reason = v.banReason;
 	}
 	return ban;
 }
@@ -345,7 +347,8 @@ void PaintPopulation(Painter &p, const LeagueRankedView &v, int x, int y, int w)
 	const LeagueBan ban = BanOf(v);
 	p.Font(3);
 	if (ban.until > EpochNow()) {
-		p.Text(x, y, w, 22, LeagueBanText(ban.kind), pal::bad, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		const std::string why = ban.kind == "staff" && !ban.reason.empty() ? TrFmt("The league's team has locked your search: %s", {ban.reason}) : Tr(LeagueBanText(ban.kind));
+		RawText(p, x, y, w, 22, why, pal::bad, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		return;
 	}
 	if (!v.statsLoaded) return;
@@ -393,23 +396,36 @@ void PaintRankCard(Painter &p, const State &st, const HubLayout &h)
 
 	if (searching) {
 		Caps(p, ix, y + 20, iw, 20, "Searching for a match", pal::redText);
-		p.Spinner(cx, y + 158, 108, 6, GetTickCount());
-		DrawLeagueEmblem(p, cx - 80, y + 78, 160, tier);
-		Display(p, 84);
+		// The emblem inside its spinner, smaller on a short card (900 lines) so the lines under it keep their room.
+		const bool tall = cardH >= 600;
+		const int emblem = tall ? 160 : 120, ring = emblem * 108 / 160, ringY = y + 60 + ring;
+		p.Spinner(cx, ringY, ring, 6, GetTickCount());
+		DrawLeagueEmblem(p, cx - emblem / 2, ringY - emblem / 2, emblem, tier);
+		const int clockY = ringY + ring + 8, clockH = tall ? 84 : 70;
+		Display(p, clockH);
 		p.raw = true;
-		p.Text(x, y + 272, w, 84, LeagueClockText(now - v.since), pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.Text(x, clockY, w, clockH, LeagueClockText(now - v.since), pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		p.raw = false;
 		p.Font(0);
 		std::string wait = v.phase == LeagueRankedPhase::Joining ? Tr("Entering the queue...")
 															   : TrFmt("Estimated wait ~%s", {LeagueClockText(static_cast<int64_t>(v.estimateSec) * 1000)}) + "  \xC2\xB7  " +
 				(v.searching == 1 ? Tr("1 searching now") : TrFmt("%s searching now", {std::to_string(v.searching)}));
-		RawText(p, x, y + 356, w, 24, wait, pal::body, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		p.Fill(ix, y + 404, iw, 1, pal::hairline);
+		int ly = clockY + clockH;
+		RawText(p, x, ly, w, 24, wait, pal::body, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		ly += 28;
+		// The Glory of the opponents the league takes now, as the server widens it.
+		const LeagueText range = LeagueWindowText(v.window);
+		if (range.text) {
+			p.Font(1);
+			RawText(p, x + 16, ly, w - 32, 22, TrFmt(range.text, range.args), pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			ly += 26;
+		}
+		const int cancelY = y + cardH - 118;
 		p.Font(3);
-		p.TextWrapped(ix, y + 418, iw, 44, "The league widens the range of opponents the longer you wait.", pal::caption);
-		Ghost(p, ix, cardH + y - 140, iw, 48, "Cancel search", kRkCancel, v.phase == LeagueRankedPhase::Searching, mx, my);
+		if (ly + 10 + 44 <= cancelY - 8) p.TextWrapped(ix, ly + 10, iw, 44, "The league widens the range of opponents the longer you wait.", pal::caption);
+		Ghost(p, ix, cancelY, iw, 48, "Cancel search", kRkCancel, v.phase == LeagueRankedPhase::Searching, mx, my);
 		p.Font(3);
-		p.TextWrapped(ix, cardH + y - 82, iw, 44, "You can keep looking at rooms: a sound plays and the window flashes when a match is found.", pal::caption);
+		p.TextWrapped(ix, cardH + y - 62, iw, 44, "You can keep looking at rooms: a sound plays and the window flashes when a match is found.", pal::caption);
 		return;
 	}
 
@@ -999,7 +1015,7 @@ void PaintHistory(Painter &p, const State &st)
 
 bool PaintRankedTab(Painter &p, const State &st)
 {
-	const bool dialog = st.ranked.disputeMatch != 0;
+	const bool dialog = st.ranked.disputeMatch != 0 || st.ranked.contentOpen;
 	if (dialog) p.noHover = true;
 	if (st.ranked.resultOpen) PaintRankedResult(p, st);
 	else if (!st.ranked.view.linked) return false;
@@ -1016,7 +1032,8 @@ bool PaintRankedTab(Painter &p, const State &st)
 	}
 	if (dialog) {
 		UseSharedFonts(p);
-		PaintRankedDispute(p, st);
+		if (st.ranked.disputeMatch) PaintRankedDispute(p, st);
+		else PaintRankedContent(p, st);
 		UseScreenFonts(p);
 	}
 	return true;

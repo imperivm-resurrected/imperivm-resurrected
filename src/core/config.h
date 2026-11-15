@@ -76,6 +76,9 @@ struct Config {
 	std::string leagueToken, leagueSteamId, leagueName;
 	// [League] OfferLink: Ranked and Tournaments offer to link the account until the player says "Not now".
 	bool leagueOfferLink = true;
+	// [League] ChatBadges: the league badge after each name in the chat; MatchFoundSound: the sound when a ranked match is found.
+	bool chatBadges = true;
+	bool matchFoundSound = true;
 };
 
 const Config &GetConfig();

@@ -130,6 +130,11 @@ struct LeagueRankedGame {
 	std::string status;
 	LeagueTier tierAfter = LeagueTier::None;
 	int divisionAfter = 0;
+	// What this player did, from the game's own record: units killed and lost, the largest army, the gold gathered and the unit that
+	// reached the highest level (the game's name for it, for GameText). `stats` is false when the game could not be read.
+	bool stats = false;
+	uint32_t killed = 0, lost = 0, armyMax = 0, gold = 0, bestLevel = 0;
+	std::string bestUnit;
 };
 
 // What the result screen shows after a ranked game.
@@ -157,6 +162,8 @@ struct LeagueRankedView {
 	// While searching: since when (server time, ms since 1970), how many search and the wait the server expects.
 	int64_t since = 0;
 	int searching = 0, estimateSec = 0;
+	// The Glory of the opponents the server takes now (no window from a server without it).
+	LeagueSearchWindow window;
 	// The match found or being played.
 	int64_t matchId = 0;
 	LeagueQueueAnswer found;
@@ -170,10 +177,13 @@ struct LeagueRankedView {
 	int64_t calledOff = 0;
 	// The queue is locked until then (server time, ms since 1970), and why ("declined", "abandoned", "desync"; empty when not said).
 	int64_t banUntil = 0;
-	std::string banKind;
+	std::string banKind, banReason;
 	// The last thing that happened, as an English text to translate (with its values filled in by the server's), and whether it is bad.
 	std::string notice;
 	bool noticeBad = false;
+	// The season is played with other gameplay content (wrong_content): its key and name, and a count of the times the queue said so.
+	std::string seasonContentKey, seasonContentName;
+	unsigned wrongContentSerial = 0;
 	// Counts the matches found, so the interface can call the player once per match.
 	unsigned foundSerial = 0;
 	LeagueRankedOutcome result;

@@ -12,6 +12,7 @@
 
 #include "i18n/tr.h"
 #include "ui/keycaps.h"
+#include "ui/leagueui.h"
 #include "ui/ornaments.h"
 #include "ui/textedit.h"
 #include "ui/uikit.h"
@@ -27,6 +28,8 @@ constexpr COLORREF kCream = pal::text, kClock = pal::caption, kAllies = RGB(146,
 				   kNote = pal::body, kPanel = pal::shadow, kAttack = pal::redText, kDanger = pal::warn, kMuted = pal::textDim,
 				   kHelpKey = pal::redText, kGameLine = pal::body;
 constexpr int kHelpKeyColumn = 150;
+// The league badge after a name: its pixels are 20 wide, a hair over the row, so the box it takes is a little smaller.
+constexpr int kBadge = 18, kBadgeGap = 4;
 
 struct Fonts {
 	HFONT text = nullptr, name = nullptr, meta = nullptr, chip = nullptr;
@@ -107,7 +110,7 @@ const char *TagOf(int scope) { return scope == kChatAllies ? "Allies" : scope ==
 COLORREF TagColor(int scope) { return scope == kChatAllies ? kAllies : scope == kChatPrivate ? kPrivate : kAll; }
 
 struct Measured {
-	int clockX = 0, tagX = 0, nameX = 0, toX = 0, pinX = 0, textX = 0, indent = 0;
+	int clockX = 0, tagX = 0, nameX = 0, badgeX = 0, toX = 0, pinX = 0, textX = 0, indent = 0;
 	std::wstring clock, tag, name, to;
 	bool note = false;
 	bool local = false;
@@ -153,6 +156,10 @@ Measured Measure(Painter &p, const Line &l)
 	x += WidthOf(p.dc, g_f.meta, m.tag, p.s) + 6;
 	m.nameX = x;
 	x += WidthOf(p.dc, g_f.name, m.name, p.s);
+	if (l.badge.Shown()) {
+		m.badgeX = x + kBadgeGap;
+		x += kBadgeGap + kBadge;
+	}
 	m.toX = x;
 	if (!m.to.empty()) x += WidthOf(p.dc, g_f.name, m.to, p.s);
 	if (l.location) {
@@ -344,6 +351,7 @@ void PaintRow(Painter &p, const View &v, const Layout &L, int r, int y)
 	SelectObject(p.dc, g_f.name);
 	const COLORREF nameColor = Readable(l.color);
 	ShadowLine(p, m.nameX, y, m.name, nameColor);
+	if (l.badge.Shown()) DrawLeagueBadge(p, m.badgeX, y + (kRowH - kBadge) / 2, kBadge, l.badge);
 	if (!m.to.empty()) ShadowLine(p, m.toX, y, m.to, kPrivate);
 	if (l.location) {
 		const int type = std::max(0, PingOf(l));

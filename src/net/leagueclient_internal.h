@@ -10,6 +10,7 @@
 #include "core/json.h"
 #include "core/league.h"
 #include "core/leagueranked.h"
+#include "game/gamestats.h"
 
 namespace leagueclient_impl {
 
@@ -50,13 +51,18 @@ std::string UrlEncode(const std::string &s);
 
 // The matches module, run from LeagueGameThreadTick.
 void MatchTick();
+// The limit on each player's own pauses in a ranked game, every frame on the game thread: `ranked` while a ranked game is recorded,
+// with its match for the ticket's settings; `held` while the wait for an opponent who dropped holds the pause, which is nobody's;
+// `over` once the game is decided.
+void PauseTick(bool ranked, int64_t matchId, bool held, bool over);
 // The tournaments module, run from LeagueGameThreadTick: polls the player's tournaments at their pace.
 void TourneyTick();
 
 // The ranked module, run from LeagueGameThreadTick.
 void RankedTick();
-// A ranked game ended on this computer and its report is on its way: the result screen waits for the answer.
-void RankedGameReported(const LeagueReport &report, const std::string &ownSteamId);
+// A ranked game ended on this computer and its report is on its way: the result screen waits for the answer, and shows what the game
+// recorded of this player (`facts`, when `read`).
+void RankedGameReported(const LeagueReport &report, const std::string &ownSteamId, const GameRecordFacts &facts, bool read);
 // The server answered a report (from the sending thread); only ranked ones matter here.
 void RankedReportAnswered(const Json &report, const std::string &answer);
 // The game of a ranked match is being played on this computer: the server is told once, and the match can no longer be called off.

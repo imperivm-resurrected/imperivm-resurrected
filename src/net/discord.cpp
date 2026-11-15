@@ -9,6 +9,7 @@
 #include "net/discord.h"
 #include "core/json.h"
 #include "core/guard.h"
+#include "net/leaguepresence.h"
 #include "net/steamnet.h"
 #include "i18n/tr.h"
 #include "addr/state.h"
@@ -156,6 +157,15 @@ Presence Compose()
 	Presence p;
 	const OnlineRoom room = SteamCurrentRoom();
 	const bool inGame = *reinterpret_cast<void **>(addr::kGame) != nullptr;
+	// A ranked search or game: the queue and the rank on the first line, the game or the menus under it.
+	const std::string ranked = LeagueRankedPresence();
+	if (!ranked.empty()) {
+		const bool playing = room.id && room.info.playing;
+		p.category = playing ? "ranked-" + std::to_string(room.id) : "ranked-search";
+		p.details = ranked;
+		p.state = playing ? Tr("Online game") + (room.info.map.empty() ? std::string() : ": " + room.info.map) : Tr("In the menus");
+		return p;
+	}
 	if (room.id && room.info.playing) {
 		p.category = "online-" + std::to_string(room.id);
 		p.details = Tr("Online game") + (room.info.map.empty() ? std::string() : ": " + room.info.map);

@@ -154,6 +154,11 @@ bool ModsMountedHasExact(const std::string &id, const std::string &version);
 bool ModsRestartNeeded();
 bool ModsLoadsWithoutRestart(const std::string &folder);
 bool ModsApplyWithoutRestart();
+// The content profile whose gameplay content has this key (the start of its gameplay hash, as rooms and the league compare it): the
+// active one first, then the Original, My content and the rest by name. Empty when none has it.
+std::string ModsProfileWithGameplayKey(const std::string &key);
+// Whether making that profile the active one is applied at once by ModsApplyWithoutRestart, without restarting the game.
+bool ModsSwitchesWithoutRestart(const std::string &profile);
 bool ModsRenameProfile(const std::string &from, const std::string &to);
 std::string ModsProfileLabel(const std::string &name);
 bool ModsIsReservedProfileName(const std::string &name);

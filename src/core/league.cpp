@@ -308,11 +308,15 @@ bool LeagueParseMe(const Json &j, LeagueMe &out)
 		k.losses = Int(*r, "losses");
 		k.position = Int(*r, "position");
 		k.elite = r->GetBool("elite");
+		k.streak = Int(*r, "streak");
 	}
+	// The streak may come with the rank or next to it.
+	if (!out.ranked.streak) out.ranked.streak = Int(j, "streak");
 	out.queueBanUntil = Int64(j, "queueBanUntil");
 	if (const Json *ban = j.Get("ban"); ban && ban->type == Json::Object) {
 		out.ban.until = Int64(*ban, "until");
 		out.ban.kind = Lower(ban->GetString("kind"));
+		out.ban.reason = ban->GetString("reason");
 	}
 	if (!out.ban.until) out.ban.until = out.queueBanUntil;
 	if (!out.queueBanUntil) out.queueBanUntil = out.ban.until;

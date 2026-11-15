@@ -442,11 +442,21 @@ void LogPauseRequest(const char *what, char *game, bool only, void *ret)
 		only ? "the DLL applies it immediately" : "follows the game (sent over the network)");
 }
 
+std::atomic<bool (*)()> g_pauseGate{nullptr};
+
+// A request of this computer that would pause a game with other players, which the league keeps here.
+bool PauseRefused(char *game)
+{
+	bool (*gate)() = g_pauseGate;
+	return gate && !GamePaused(game) && !gate();
+}
+
 void __fastcall HookRequestPause(void *game, void *edx, int param)
 {
 	const bool only = OnlyHumanOnline(static_cast<char *>(game));
 	LogPauseRequest("Pause", static_cast<char *>(game), only, _ReturnAddress());
 	if (only) return SetPausedNow(static_cast<char *>(game), 1);
+	if (PauseRefused(static_cast<char *>(game))) return;
 	g_origRequestPause(game, edx, param);
 }
 
@@ -469,6 +479,7 @@ void __fastcall HookRequestToggle(void *game, void *edx, int param)
 		if (paused && g_pauseHeld) return;
 		return SetPausedNow(static_cast<char *>(game), paused ? 0 : 1, false);
 	}
+	if (PauseRefused(static_cast<char *>(game))) return;
 	g_origRequestToggle(game, edx, param);
 }
 
@@ -610,6 +621,17 @@ bool TweaksGamePaused(void *game)
 void TweaksHoldPause(bool held)
 {
 	g_pauseHeld = held;
+}
+
+void TweaksSetPauseGate(bool (*mayPause)())
+{
+	g_pauseGate = mayPause;
+}
+
+void TweaksRequestUnpause(void *game)
+{
+	// Slot 0x50 is RequestUnpause (CVXGameMultiplayer 0x550400, hooked above), what the game's menu calls when it closes.
+	if (game) reinterpret_cast<PauseRequest_t>((*reinterpret_cast<void ***>(game))[0x50 / 4])(game, nullptr, 0);
 }
 
 namespace {

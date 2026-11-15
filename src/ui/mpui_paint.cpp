@@ -3,6 +3,7 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include "ui/textedit.h"
 #include "MinHook.h"
+#include "core/config.h"
 #include "core/names.h"
 #include "mods/modoptions.h"
 #include "game/civs.h"
@@ -1119,6 +1120,23 @@ namespace mpui_impl {
 namespace {
 const int kChatLaurel = 15;
 
+// The badge after a sender's name in the room's chat, unless the options hide it.
+LeagueBadge ChatBadgeOf(uint64_t id)
+{
+	return id && GetConfig().chatBadges ? PlayerBadgeOf(id) : LeagueBadge();
+}
+
+// A sender's name, its badge and the colon: the badge goes between them, as in the game's chat.
+void ChatNameBadge(Painter &p, int nameX, int y, int w, int h, const std::string &name, const LeagueBadge &badge, COLORREF colon, int mx, int my)
+{
+	p.Font(1);
+	DrawBadgeAfterName(p, nameX, y, w, h, name, badge, mx, my);
+	const int x = nameX + std::min(std::max(0, w), p.TextWidth(name)) + LeagueBadgeRoom(badge) + 1;
+	p.raw = true;
+	p.Text(x, y, 12, h, ":", colon, DT_LEFT | DT_TOP | DT_SINGLELINE);
+	p.raw = false;
+}
+
 std::string ChatTime(int minute)
 {
 	char buf[8];
@@ -1172,7 +1190,7 @@ void PaintChatLog(Painter &p, const State &st, int x, int y, int w, int h)
 		}
 		else {
 			p.Font(1);
-			const float nameW = p.TextWidthExact(l.who + ":");
+			const float nameW = p.TextWidthExact(l.who + ":") + LeagueBadgeRoom(ChatBadgeOf(l.id));
 			p.Font(3);
 			const int laurelW = PatronOf(l.id).tier != PatronTier::None ? kChatLaurel + 3 : 0;
 			it.indent = static_cast<int>(std::ceil(timeW + 6 + laurelW + nameW + 6));
@@ -1236,13 +1254,21 @@ void PaintChatLog(Painter &p, const State &st, int x, int y, int w, int h)
 		const int boxH = it.lineH + 6;
 		p.Text(x + pad, py, it.timeW, boxH, ChatTime(l.minute), pal::textDim, DT_LEFT | DT_TOP | DT_SINGLELINE);
 		const int laurelX = x + pad + it.timeW + 6;
+		const LeagueBadge badge = ChatBadgeOf(l.id);
+		// With a badge the name goes alone, the badge after it and then the colon.
+		const std::string who = badge.Shown() ? l.who : l.who + ":";
 		p.Font(1);
 		if (tier != PatronTier::None) {
-			const int nameX = laurelX + kChatLaurel + 3;
-			DrawPatron(p, laurelX, py + 1, kChatLaurel, nameX, py, x + pad + textW - nameX, boxH, l.who + ":", tier, DT_LEFT | DT_TOP | DT_SINGLELINE);
+			const int nameX = laurelX + kChatLaurel + 3, nameW = x + pad + textW - nameX;
+			DrawPatron(p, laurelX, py + 1, kChatLaurel, nameX, py, nameW, boxH, who, tier, DT_LEFT | DT_TOP | DT_SINGLELINE);
 			if (py + 1 >= y && py + 1 + kChatLaurel <= y + h) PatronHotspot(p, laurelX, py + 1, kChatLaurel, PatronOf(l.id), st.mouseX, st.mouseY, kPatronLink);
+			if (badge.Shown()) ChatNameBadge(p, nameX, py, nameW - LeagueBadgeRoom(badge) - 12, boxH, l.who, badge, pal::text, st.mouseX, st.mouseY);
 		}
-		else p.Text(laurelX, py, textW - it.timeW - 6, boxH, l.who + ":", me ? pal::redText : pal::text, DT_LEFT | DT_TOP | DT_SINGLELINE);
+		else {
+			const int nameW = textW - it.timeW - 6;
+			p.Text(laurelX, py, nameW, boxH, who, me ? pal::redText : pal::text, DT_LEFT | DT_TOP | DT_SINGLELINE);
+			if (badge.Shown()) ChatNameBadge(p, laurelX, py, nameW - LeagueBadgeRoom(badge) - 12, boxH, l.who, badge, me ? pal::redText : pal::text, st.mouseX, st.mouseY);
+		}
 		p.Font(3);
 		for (size_t k = 0; k < it.lines.size(); k++) {
 			const int shift = k == 0 ? it.indent : 0;

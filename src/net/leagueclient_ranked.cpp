@@ -19,6 +19,7 @@
 #include "core/league.h"
 #include "core/leagueranked.h"
 #include "core/log.h"
+#include "i18n/tr.h"
 #include "mods/mods.h"
 #include "net/leagueclient_internal.h"
 #include "net/patrons.h"
@@ -47,6 +48,8 @@ struct Queue {
 	unsigned gen = 1;
 	int64_t since = 0;
 	int searching = 0, estimate = 0;
+	// The Glory of the opponents the server takes now.
+	LeagueSearchWindow window;
 	LeagueQueueAnswer found;
 	int64_t matchId = 0;
 	bool ticketLoaded = false;
@@ -57,9 +60,11 @@ struct Queue {
 	bool roomRegistered = false, registering = false;
 	DWORD registerAt = 0;
 	int64_t banUntil = 0;
-	std::string banKind;
+	std::string banKind, banReason;
 	std::string notice;
 	bool noticeBad = false;
+	std::string contentKey, contentName;
+	unsigned wrongContent = 0;
 	// When the notice was set: a good one (a match called off with no harm) fades after a minute; a bad one stays until it is resolved.
 	DWORD noticeAt = 0;
 	unsigned foundSerial = 0;
@@ -197,6 +202,13 @@ DWORD RetryIn(const Answer &a, DWORD normalMs)
 	return static_cast<DWORD>(LeagueRetryAfterMs(a.r.status, a.error, a.r.status == 429 ? normalMs : kRetryMs));
 }
 
+// Why the queue is locked, in the player's language: a lock of the league's team says the team's reason.
+std::string BanNotice(const std::string &kind, const std::string &reason)
+{
+	if (kind == "staff" && !reason.empty()) return TrFmt("The league's team has locked your search: %s", {reason});
+	return Tr(LeagueBanText(kind));
+}
+
 // Under g_mx: back to not searching, forgetting the match.
 void ToIdle(Queue &q)
 {
@@ -211,6 +223,7 @@ void ToIdle(Queue &q)
 	q.roomRegistered = q.registering = false;
 	q.presenceAt = 0;
 	q.inGame = false;
+	q.window = LeagueSearchWindow();
 	q.gen++;
 }
 
@@ -415,6 +428,7 @@ void JoinThread(unsigned gen, std::string contentKey)
 			g_q.since = q.since ? q.since : NowMs() + g_clockOffset;
 			g_q.searching = q.searching;
 			g_q.estimate = q.estimateSec;
+			g_q.window = q.window;
 			g_q.nextPoll = GetTickCount() + kQueuePollMs;
 			LogI("league", "ranked: searching (%d in the queue, about %d s)", q.searching, q.estimateSec);
 		}
@@ -425,9 +439,15 @@ void JoinThread(unsigned gen, std::string contentKey)
 			else if (code == "banned") {
 				g_q.banUntil = a.error.until;
 				g_q.banKind = a.error.kind;
-				SetNotice(g_q, LeagueBanText(a.error.kind), true);
+				g_q.banReason = a.error.reason;
+				SetNotice(g_q, BanNotice(a.error.kind, a.error.reason), true);
 			}
-			else if (code == "wrong_content") SetNotice(g_q, "This season is played with other gameplay content. Change your content profile to search.", true);
+			else if (code == "wrong_content") {
+				SetNotice(g_q, "This season is played with other gameplay content. Change your content profile to search.", true);
+				g_q.contentKey = a.error.contentKey;
+				g_q.contentName = a.error.contentName;
+				g_q.wrongContent++;
+			}
 			else if (code == "no_season") SetNotice(g_q, "No ranked season is being played now.", true);
 			else if (a.r.status == 429) SetNotice(g_q, "You searched too often: wait a few seconds and search again.", false);
 			else SetNotice(g_q, FailureNotice(a), true);
@@ -464,6 +484,7 @@ void PollQueueThread(unsigned gen, bool recovering)
 			g_q.since = q.since ? q.since : g_q.since;
 			g_q.searching = q.searching;
 			g_q.estimate = q.estimateSec;
+			if (q.window.present) g_q.window = q.window;
 			g_q.rejoined = false;
 			break;
 		case LeagueQueueStatus::Found:
@@ -818,13 +839,20 @@ void RankedTick()
 	}
 }
 
-void RankedGameReported(const LeagueReport &report, const std::string &ownSteamId)
+void RankedGameReported(const LeagueReport &report, const std::string &ownSteamId, const GameRecordFacts &facts, bool read)
 {
 	LeagueRankedGame g;
 	g.matchId = report.matchId;
 	g.at = NowMs();
 	g.durationMs = report.durationMs;
 	g.map = report.map.name;
+	g.stats = read;
+	g.killed = facts.killed;
+	g.lost = facts.lost;
+	g.armyMax = facts.armyMax;
+	g.gold = facts.gold;
+	g.bestLevel = facts.bestLevel;
+	g.bestUnit = facts.bestUnit;
 	for (const LeagueReportPlayer &p : report.players) {
 		if (p.steamId == ownSteamId) {
 			g.won = p.result == "win";
@@ -921,6 +949,7 @@ LeagueRankedView LeagueRankedState()
 	v.since = g_q.since;
 	v.searching = g_q.searching;
 	v.estimateSec = g_q.estimate;
+	v.window = g_q.window;
 	v.matchId = g_q.matchId;
 	v.found = g_q.found;
 	v.ticketLoaded = g_q.ticketLoaded;
@@ -937,8 +966,12 @@ LeagueRankedView LeagueRankedState()
 	v.calledOff = g_q.calledOff;
 	v.banUntil = g_q.banUntil;
 	v.banKind = g_q.banKind;
+	v.banReason = g_q.banReason;
 	v.notice = g_q.noticeBad || GetTickCount() - g_q.noticeAt < 60000 ? g_q.notice : std::string();
 	v.noticeBad = g_q.noticeBad;
+	v.seasonContentKey = g_q.contentKey;
+	v.seasonContentName = g_q.contentName;
+	v.wrongContentSerial = g_q.wrongContent;
 	v.foundSerial = g_q.foundSerial;
 	v.result = g_result.view;
 	v.recentLoaded = g_history.recentLoaded;
@@ -1073,9 +1106,12 @@ void LeagueQueueJoin()
 	}
 	const int64_t ban = std::max(g_q.banUntil, me.me.ban.until);
 	if (ban > NowMs() + g_clockOffset) {
-		if (me.me.ban.until >= g_q.banUntil) g_q.banKind = me.me.ban.kind;
+		if (me.me.ban.until >= g_q.banUntil) {
+			g_q.banKind = me.me.ban.kind;
+			g_q.banReason = me.me.ban.reason;
+		}
 		g_q.banUntil = ban;
-		SetNotice(g_q, LeagueBanText(g_q.banKind), true);
+		SetNotice(g_q, BanNotice(g_q.banKind, g_q.banReason), true);
 		return;
 	}
 	g_q.gen++;

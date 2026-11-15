@@ -110,7 +110,7 @@ enum RankedArg {
 	kRkSearch = 1, kRkCancel, kRkAccept, kRkDecline, kRkBoard, kRkHub, kRkBoardPrev, kRkBoardNext, kRkBoardTop, kRkBoardMe, kRkRoom,
 	kRkResultClose, kRkAgain, kRkResultBoard, kRkSkip, kRkSteam, kRkNotice, kRkAbandon, kRkHistory, kRkHistoryPrev, kRkHistoryNext,
 	kRkHistoryNewest, kRkDisputeResult, kRkDisputeSend, kRkDisputeCancel, kRkRow = 0x100, kRkDisputeRecent = 0x200, kRkDisputeHistory = 0x300,
-	kRkArgEnd = 0x400,
+	kRkArgEnd = 0x400, kRkContentSwitch, kRkContentClose,
 };
 enum RankedSub { kRankedHub, kRankedBoard, kRankedHistory };
 const int kRankedBoardRows = 13;
@@ -128,6 +128,11 @@ struct RankedScreen {
 	int64_t disputeMatch = 0;
 	std::string disputeText;
 	unsigned disputeSeen = 0;
+	// The season needs other gameplay content: its dialog, the content's name, the profile that has it (empty when none does) and
+	// whether switching to it needs no restart.
+	bool contentOpen = false, contentSwitchable = false;
+	std::string contentName, contentProfile;
+	unsigned contentSeen = 0;
 	LeagueRankedView view;
 };
 
@@ -553,6 +558,8 @@ bool PaintRankedTab(Painter &p, const State &st);
 void PaintRankedPill(Painter &p, const State &st, int right, int left);
 // "Report a problem" with a ranked game: the dialog over the tab, its text field, and sending it.
 void PaintRankedDispute(Painter &p, const State &st);
+// The season is played with other content: switching to the profile that has it, or which one to activate.
+void PaintRankedContent(Painter &p, const State &st);
 std::string &RankedFieldText();
 void RankedFieldEnter();
 // The result screen over the whole lobby, with its own header.

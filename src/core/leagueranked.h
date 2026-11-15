@@ -54,6 +54,16 @@ struct LeaguePlayerCard {
 	bool accepted = false, host = false;
 	// Said "I am in the room" in the last 90 s (only in the ticket).
 	bool inRoom = false;
+	// The record the found match and the ticket give of the opponent: wins, losses, Glory and place in the leaderboard (0 while
+	// unranked). `standing` is false when the server sent none of them.
+	bool standing = false;
+	int wins = 0, losses = 0, glory = 0, place = 0;
+};
+
+// The Glory of the opponents the queue takes now (2-clasificatoria-sistema.md §2.4): an end it does not hold is -1.
+struct LeagueSearchWindow {
+	bool present = false;
+	int from = -1, to = -1;
 };
 
 enum class LeagueQueueStatus { Unknown, Idle, Searching, Found };
@@ -71,6 +81,10 @@ struct LeagueQueueAnswer {
 	LeagueMapFacts map;
 	int64_t acceptBy = 0;
 	bool accepted = false;
+	// Searching: the Glory of the opponents the server takes now. Found: this player's chance to win, 0 to 1 (Glicko-2); -1 when not
+	// said.
+	LeagueSearchWindow window;
+	double expected = -1;
 };
 bool LeagueParseQueue(const Json &j, LeagueQueueAnswer &out);
 
@@ -105,6 +119,9 @@ struct LeagueMatchTicket {
 	std::vector<LeaguePlayerCard> players;
 	LeagueRankedResult ranked;
 	int64_t serverNow = 0;
+	// The other player as the one who asks sees them, with their record, and this player's chance to win (-1 when not said).
+	LeaguePlayerCard opponent;
+	double expected = -1;
 };
 bool LeagueParseMatch(const Json &j, LeagueMatchTicket &out);
 // The player of the ticket with that SteamID, or the other one; null when there is none.
@@ -151,8 +168,11 @@ bool LeagueParseReportAnswer(const Json &j, LeagueReportAnswer &out);
 // The body of an error: {error, message} and what some errors add.
 struct LeagueError {
 	std::string code, message, contentKey;
-	// Why a player is locked out of the queue (409 banned): "declined", "abandoned" or "desync".
-	std::string kind;
+	// wrong_content: the name of the content the season is played with.
+	std::string contentName;
+	// Why a player is locked out of the queue (409 banned): "declined", "abandoned", "desync" or "staff", and the team's reason for a
+	// staff lock.
+	std::string kind, reason;
 	int64_t until = 0, matchId = 0;
 	// Too many requests (429 rate_limited): whole seconds to wait before asking again; 0 when not said.
 	int retryAfter = 0;

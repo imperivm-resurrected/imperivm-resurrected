@@ -87,6 +87,8 @@ struct LeagueRanked {
 	int division = 0;
 	int season = 0, glory = 0, placementLeft = 0, shield = 0, wins = 0, losses = 0, position = 0;
 	bool elite = false;
+	// The run of the last games: +3 is three wins in a row, -2 two losses; 0 when the server does not say.
+	int streak = 0;
 };
 
 // A lock out of the ranked queue: until when (server time, ms since 1970) and why ("declined", "abandoned", "desync"; empty when the
@@ -94,6 +96,8 @@ struct LeagueRanked {
 struct LeagueBan {
 	int64_t until = 0;
 	std::string kind;
+	// A lock the league's team put ("staff"): why, as the team wrote it.
+	std::string reason;
 };
 
 // GET /v1/league/me.

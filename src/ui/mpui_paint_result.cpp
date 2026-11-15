@@ -5,15 +5,18 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <cstdio>
 #include <ctime>
 #include <string>
 
 #include "core/league.h"
 #include "core/leagueranked.h"
+#include "game/profiles.h"
 #include "i18n/tr.h"
 #include "net/leagueclient.h"
 #include "net/steamnet.h"
+#include "ui/leaguemapthumb.h"
 #include "ui/leagueui.h"
 
 #include "ui/mpui_internal.h"
@@ -121,12 +124,52 @@ std::string Explanation(const LeagueRankedResult &r, LeagueResultKind kind)
 	}
 }
 
+// Where the stage puts each thing. A card of the mockup's 800 lines gets its places; a shorter one (900 lines of the 1280 x 720 screen
+// leave it about 670) gets smaller emblems and type, and shares what is left over between three gaps.
+struct StageLayout {
+	int section, emblemY, emblem, rays, sideY, side, sideFont, sideLabelY, sideSubY, arrowY;
+	int titleY, titleH, titleFont, titleFontPlain, deltaY, deltaH, deltaFont;
+	int barY, shieldY, shieldH, buttonsY, buttonsH, buttonFont, footerY;
+};
+
+StageLayout StageFor(int h)
+{
+	if (h >= 790) return {28, 70, 220, 260, 135, 110, 22, 250, 276, 184, 312, 100, 100, 72, 414, 56, 56, 512, 584, 46, 666, 66, 36, 746};
+	StageLayout s = {22, 52, 160, 200, 87, 90, 20, 184, 208, 124, 228, 80, 80, 60, 306, 44, 44, 388, 446, 40, 500, 58, 32, 572};
+	const int extra = std::max(0, h - 640) / 3;
+	s.barY += extra;
+	s.shieldY += 2 * extra;
+	s.buttonsY += 3 * extra;
+	s.footerY += 3 * extra;
+	return s;
+}
+
+// The line under the buttons once the game is rated: the run of wins the player is on, when the league already counts this game.
+std::string StreakLine(const LeagueRankedResult &r)
+{
+	const LeagueMeView me = LeagueMeState();
+	if (!me.loaded || !me.me.ranked.present || me.me.ranked.glory != r.gloryAfter || me.me.ranked.streak < 2) return std::string();
+	return TrFmt("%s wins in a row", {std::to_string(me.me.ranked.streak)});
+}
+
+// Text wrapped in the box, each line centred, at most two lines of `lineH`. The text is already translated.
+void Centered(Painter &p, int x, int y, int w, int lineH, const std::string &text, COLORREF c)
+{
+	const std::vector<std::wstring> lines = p.WrapLines(text, 0, w);
+	SetTextColor(p.dc, c);
+	for (size_t i = 0; i < lines.size() && i < 2; i++) {
+		RECT r = p.R(x, y + static_cast<int>(i) * lineH, w, lineH);
+		DrawTextW(p.dc, lines[i].c_str(), static_cast<int>(lines[i].size()), &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+	}
+}
+
 void PaintStage(Painter &p, const State &st, int x, int y, int w, int h, Verdict verdict, uint32_t elapsed)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const LeagueRankedOutcome &o = st.ranked.view.result;
 	const LeagueRankedResult &r = o.answer.ranked;
 	const int cx = x + w / 2;
+	const StageLayout L = StageFor(h);
 	PaintGlassCard(p, x, y, w, h);
 	p.AddHit(x, y, w, h, kRankedAct, kRkSkip);
 	const bool rated = verdict == Verdict::Rated;
@@ -136,13 +179,13 @@ void PaintStage(Painter &p, const State &st, int x, int y, int w, int h, Verdict
 	const int nowDivision = rated ? f.division : me.loaded ? me.me.ranked.division : 0;
 
 	// The rays come only with a new rank.
-	if (rated && f.rays > 0) PaintRays(p, cx, y + 180, 260, Ink(f.tier), f.rays);
+	if (rated && f.rays > 0) PaintRays(p, cx, y + L.emblemY + L.emblem / 2, L.rays, Ink(f.tier), f.rays);
 	const char *section = !rated ? "Ranked result"
 		: f.kind == LeagueResultKind::Promotion ? (r.tierAfter != r.tierBefore ? "Rank promotion" : "Division promotion")
 		: f.kind == LeagueResultKind::Demotion	? "Rank demotion"
 		: f.kind == LeagueResultKind::Placement || f.kind == LeagueResultKind::PlacementDone ? "Placement"
 																							: "Ranked result";
-	Caps(p, x, y + 28, w, 20, section, pal::redText);
+	Caps(p, x, y + L.section, w, 20, section, pal::redText);
 
 	// Where the player comes from, where they are and where they go.
 	if (rated && f.kind != LeagueResultKind::Placement) {
@@ -150,40 +193,40 @@ void PaintStage(Painter &p, const State &st, int x, int y, int w, int h, Verdict
 		int nd = 0;
 		LeagueNextDivision(r.tierAfter, r.divisionAfter, nt, nd);
 		const int reach = std::min(300, w / 2 - 130), labelW = std::min(240, reach + 40);
-		DrawLeagueEmblem(p, cx - reach - 55, y + 135, 110, r.tierBefore, 110);
-		Display(p, 22);
+		DrawLeagueEmblem(p, cx - reach - L.side / 2, y + L.sideY, L.side, r.tierBefore, 110);
+		Display(p, L.sideFont);
 		p.raw = true;
-		p.TextCaps(cx - reach - labelW / 2, y + 250, labelW, 24, RankName(r.tierBefore, r.divisionBefore), Ink(r.tierBefore),
+		p.TextCaps(cx - reach - labelW / 2, y + L.sideLabelY, labelW, 24, RankName(r.tierBefore, r.divisionBefore), Ink(r.tierBefore),
 			DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
 		p.raw = false;
 		p.Font(3);
-		RawText(p, cx - reach - labelW / 2, y + 276, labelW, 20,
+		RawText(p, cx - reach - labelW / 2, y + L.sideSubY, labelW, 20,
 			r.tierBefore == LeagueTier::None ? Tr("placement") : TrFmt("%s Glory before", {std::to_string(r.gloryBefore)}), pal::caption);
 		if (nt != LeagueTier::None) {
-			DrawLeagueEmblem(p, cx + reach - 55, y + 135, 110, nt, 60);
-			Display(p, 22);
+			DrawLeagueEmblem(p, cx + reach - L.side / 2, y + L.sideY, L.side, nt, 60);
+			Display(p, L.sideFont);
 			p.raw = true;
-			p.TextCaps(cx + reach - labelW / 2, y + 250, labelW, 24, LeagueRankLabel(nt, nd), Ink(nt), DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
+			p.TextCaps(cx + reach - labelW / 2, y + L.sideLabelY, labelW, 24, LeagueRankLabel(nt, nd), Ink(nt), DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
 			p.raw = false;
 			p.Font(3);
-			p.Text(cx + reach - labelW / 2, y + 276, labelW, 20, "next division", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			p.Text(cx + reach - labelW / 2, y + L.sideSubY, labelW, 20, "next division", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		}
-		const int arrow = (reach - 55 + 110) / 2;
-		p.ArrowRight(cx - arrow - 6, y + 184, 12, 16, pal::edgeHot);
-		p.ArrowRight(cx + arrow - 6, y + 184, 12, 16, pal::edgeHot);
+		const int arrow = (reach - L.side / 2 + L.emblem / 2) / 2;
+		p.ArrowRight(cx - arrow - 6, y + L.arrowY, 12, 16, pal::edgeHot);
+		p.ArrowRight(cx + arrow - 6, y + L.arrowY, 12, 16, pal::edgeHot);
 	}
 	// The emblem of now: the old one fading, then the new one coming in a little smaller and growing to its size.
-	const int big = 220;
-	if (!rated || !f.switched) DrawLeagueEmblem(p, cx - big / 2, y + 70, big, rated ? r.tierBefore : nowTier, rated ? f.oldAlpha : 255);
+	const int big = L.emblem;
+	if (!rated || !f.switched) DrawLeagueEmblem(p, cx - big / 2, y + L.emblemY, big, rated ? r.tierBefore : nowTier, rated ? f.oldAlpha : 255);
 	else {
 		// A few sizes only, so the emblem's pictures stay a handful.
 		const int scale = f.newScale >= 100 ? 100 : 85 + (f.newScale - 85) / 4 * 4;
 		const int size = big * scale / 100;
-		DrawLeagueEmblem(p, cx - size / 2, y + 70 + (big - size) / 2, size, f.tier, f.newAlpha);
+		DrawLeagueEmblem(p, cx - size / 2, y + L.emblemY + (big - size) / 2, size, f.tier, f.newAlpha);
 	}
 
 	const LeagueGloryPlace place = LeagueGloryPlaceOf(rated ? f.glory : 0);
-	Display(p, 100);
+	Display(p, L.titleFont);
 	p.raw = true;
 	std::string title;
 	COLORREF titleInk = Ink(nowTier);
@@ -195,22 +238,23 @@ void PaintStage(Painter &p, const State &st, int x, int y, int w, int h, Verdict
 	default: title = f.kind == LeagueResultKind::Placement ? Tr("Placement") : RankName(nowTier, nowDivision); break;
 	}
 	if (verdict != Verdict::Rated) titleInk = pal::text;
-	if (verdict != Verdict::Rated) Display(p, 72);
-	p.TextCaps(x, y + 312, w, 100, title, titleInk, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
+	if (verdict != Verdict::Rated) Display(p, L.titleFontPlain);
+	p.TextCaps(x, y + L.titleY, w, L.titleH, title, titleInk, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
 	p.raw = false;
 	if (rated && f.deltaShown) {
-		Display(p, 56);
+		Display(p, L.deltaFont);
 		p.raw = true;
 		// The game that ends the placement gives a rank, not Glory won or lost.
 		if (f.kind == LeagueResultKind::PlacementDone) {
-			p.TextCaps(x, y + 414, w, 56, TrFmt("Placed in %s", {RankName(r.tierAfter, r.divisionAfter)}), Ink(r.tierAfter), DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
+			p.TextCaps(x, y + L.deltaY, w, L.deltaH, TrFmt("Placed in %s", {RankName(r.tierAfter, r.divisionAfter)}), Ink(r.tierAfter),
+				DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
 		}
-		else p.Text(x, y + 414, w, 56, Signed(r.delta) + " " + Tr("Glory"), r.delta >= 0 ? pal::ok : pal::bad, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		else p.Text(x, y + L.deltaY, w, L.deltaH, Signed(r.delta) + " " + Tr("Glory"), r.delta >= 0 ? pal::ok : pal::bad, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		p.raw = false;
 	}
 
 	// The bar of the division, with what is being won (or what was lost) faint.
-	const int barHalf = std::min(400, w / 2 - 50), bx = cx - barHalf, bw = 2 * barHalf, by = y + 512;
+	const int barHalf = std::min(400, w / 2 - 50), bx = cx - barHalf, bw = 2 * barHalf, by = y + L.barY;
 	if (rated && f.kind != LeagueResultKind::Placement) {
 		LeagueTier nt = LeagueTier::None;
 		int nd = 0;
@@ -238,7 +282,7 @@ void PaintStage(Painter &p, const State &st, int x, int y, int w, int h, Verdict
 			: verdict == Verdict::Awaiting			  ? "The league waits for your opponent's report. If it does not come, yours counts after 15 minutes."
 			: verdict == Verdict::Disputed			  ? "The two reports disagree: the game does not count until the league reviews it."
 													  : "The game ended too early or did not count: no Glory changes.";
-		p.Text(bx, by + 24, bw, 22, text, pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		Centered(p, bx, by + 24, bw, 22, Tr(text), pal::textDim);
 	}
 	else {
 		p.Font(0);
@@ -246,19 +290,19 @@ void PaintStage(Painter &p, const State &st, int x, int y, int w, int h, Verdict
 	}
 
 	if (rated && (f.shieldShown || (f.done && r.shield > 0))) {
-		const int sw = std::min(600, w - 60), sx = cx - sw / 2, sy = y + 584;
-		p.Fill(sx, sy, sw, 46, RGB(0x22, 0x2c, 0x1e));
+		const int sw = std::min(600, w - 60), sx = cx - sw / 2, sy = y + L.shieldY;
+		p.Fill(sx, sy, sw, L.shieldH, RGB(0x22, 0x2c, 0x1e));
 		p.Font(1);
-		RawText(p, sx, sy, sw, 46,
+		RawText(p, sx, sy, sw, L.shieldH,
 			(r.shield == 1 ? Tr("Rank shield: 1 more game") : TrFmt("Rank shield: %s more games", {std::to_string(r.shield)})) + "  \xC2\xB7  " +
 				Tr("a loss does not take you down"),
 			pal::ok);
 	}
 
 	if (!rated || f.done) {
-		p.fonts[5] = BrandFont(BrandFace::Display, 36, p.s);
-		p.Button(cx - 354, y + 666, 440, 66, "Search another match", kRankedAct, kRkAgain, mx, my, st.ranked.view.phase == LeagueRankedPhase::Idle, true, 5);
-		Ghost(p, cx + 102, y + 666, 252, 66, "See the leaderboard", kRkResultBoard, false, mx, my);
+		p.fonts[5] = BrandFont(BrandFace::Display, L.buttonFont, p.s);
+		p.Button(cx - 354, y + L.buttonsY, 440, L.buttonsH, "Search another match", kRankedAct, kRkAgain, mx, my, st.ranked.view.phase == LeagueRankedPhase::Idle, true, 5);
+		Ghost(p, cx + 102, y + L.buttonsY, 252, L.buttonsH, "See the leaderboard", kRkResultBoard, false, mx, my);
 	}
 	p.Font(3);
 	// Whoever left the game is locked out of the queue for a while: they read it here, with when they can search again.
@@ -267,14 +311,65 @@ void PaintStage(Painter &p, const State &st, int x, int y, int w, int h, Verdict
 		const int64_t now = LeagueServerNowMs();
 		std::string line = Tr("You left the game before it ended: the league locks your search for a while.");
 		if (ban.until > now) line += " " + TrFmt("You can search again at %s.", {ClockOf(ban.until - LeagueServerClockOffsetMs())});
-		RawText(p, x + 20, y + 746, w - 40, 22, line, pal::bad);
+		Centered(p, x + 20, y + L.footerY, w - 40, 22, line, pal::bad);
 		return;
 	}
-	const char *footer = verdict == Verdict::Rated && o.answer.status == "confirmed" ? "Result confirmed by both players."
-		: verdict == Verdict::Rated ? "The league settled the game with the reports it got."
-		: f.done || !rated			? "If your opponent leaves before minute 3 the game does not count, and whoever left gets the penalty."
-									: "";
-	p.Text(x, y + 746, w, 22, footer, verdict == Verdict::Rated && o.answer.status == "confirmed" ? pal::ok : pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	// A rated game is confirmed in the summary; here the run of wins, once the league counts the game.
+	if (rated) {
+		if (f.done) RawText(p, x + 20, y + L.footerY, w - 40, 22, StreakLine(r), pal::ok);
+		return;
+	}
+	Centered(p, x + 20, y + L.footerY, w - 40, 22, Tr("If your opponent leaves before minute 3 the game does not count, and whoever left gets the penalty."),
+		pal::caption);
+}
+
+std::string Grouped(uint32_t n)
+{
+	std::string s = std::to_string(n);
+	// A no-break space: neither a comma nor a dot reads as a decimal point in any of the three languages.
+	for (int i = static_cast<int>(s.size()) - 3; i > 0; i -= 3) s.insert(i, "\xC2\xA0");
+	return s;
+}
+
+// A caption in capitals that fits its box: the letters close up before anything is cut.
+void FitCaps(Painter &p, int x, int y, int w, int h, const std::string &text, COLORREF c)
+{
+	p.Font(4);
+	int spacing = 2;
+	while (spacing > 0 && p.CapsWidth(text, spacing) > w) spacing--;
+	p.TextCaps(x, y, w, h, text, c, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, spacing);
+}
+
+// What the game recorded of this player, as the profile keeps it: three to a row, the best unit taking two places.
+void PaintStatsGrid(Painter &p, const LeagueRankedGame &g, int x, int y, int w, int h)
+{
+	const int colW = w / 3, rowH = std::max(50, std::min(64, h / 2));
+	struct Cell {
+		const char *label;
+		std::string value;
+	};
+	const Cell cells[] = {{"Units killed", Grouped(g.killed)}, {"Units lost", Grouped(g.lost)}, {"Peak army", Grouped(g.armyMax)}, {"Gold gathered", Grouped(g.gold)}};
+	for (int i = 0; i < 4; i++) {
+		const int cx = x + (i % 3) * colW, cy = y + (i / 3) * rowH;
+		FitCaps(p, cx, cy, colW - 12, 16, cells[i].label, pal::caption);
+		Display(p, 32);
+		p.raw = true;
+		p.Text(cx, cy + 18, colW - 12, 34, cells[i].value, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+		p.raw = false;
+	}
+	const int bx = x + colW, by = y + rowH, bw = w - colW - 12;
+	FitCaps(p, bx, by, bw, 16, "Best unit", pal::caption);
+	// Its name and level, or the level alone when the game kept no name.
+	std::string best = "\xE2\x80\x94";
+	if (g.bestLevel > 0) {
+		const std::string name = g.bestUnit.empty() ? std::string() : ProfileUnitName(g.bestUnit);
+		best = name.empty() ? TrFmt("Level %s", {std::to_string(g.bestLevel)}) : TrFmt("%s \xC2\xB7 level %s", {name, std::to_string(g.bestLevel)});
+	}
+	p.Font(1);
+	p.raw = true;
+	if (p.TextWidth(best) > bw) p.Font(3);
+	p.raw = false;
+	RawText(p, bx, by + 18, bw, 34, best, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }
 
 void PaintSummary(Painter &p, const State &st, int x, int y, int w, int h)
@@ -284,7 +379,7 @@ void PaintSummary(Painter &p, const State &st, int x, int y, int w, int h)
 	PaintGlassCard(p, x, y, w, h);
 	const int ix = x + 24, iw = w - 48;
 	Caps(p, ix, y + 16, iw, 22, "Game summary", pal::redText, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-	PaintIsotype(p, ix + 44, y + 96, 80, 160);
+	PaintLeagueMapThumb(p, ix, y + 52, 88, g.map);
 	Display(p, 38);
 	p.raw = true;
 	p.TextCaps(ix + 108, y + 56, iw - 108, 40, g.map.empty() ? Tr("Ranked match") : LeagueMapText(g.map), pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
@@ -308,28 +403,60 @@ void PaintSummary(Painter &p, const State &st, int x, int y, int w, int h)
 	p.TextCaps(ix + half, py, 60, 52, "VS", pal::disabled, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
 	side(ix + half + 60, _strtoui64(g.opponentId.c_str(), nullptr, 10), g.opponent.empty() ? Tr("Opponent") : g.opponent, !g.won);
 	p.Fill(ix, y + 236, iw, 1, pal::hairline);
-	p.Font(0);
+
+	// The verdict and, under it, the game's number in the season and "Report a problem", all at the foot of the card.
+	const int footY = y + h - 66, lineY = footY + 30;
+	if (g.stats) PaintStatsGrid(p, g, ix, y + 250, iw, footY - 8 - (y + 250));
+	else {
+		p.Font(3);
+		p.TextWrapped(ix, y + 252, iw, std::max(20, footY - 8 - (y + 252)), "The league checks that both reports describe the same game before it gives any Glory.", pal::caption);
+	}
 	const Verdict verdict = VerdictOf(v.result);
+	const bool confirmed = verdict == Verdict::Rated && v.result.answer.status == "confirmed";
 	const char *line = verdict == Verdict::Sending ? "Sending your report to the league..."
 		: verdict == Verdict::Awaiting			   ? "Pending: waiting for your opponent's report."
 		: verdict == Verdict::Disputed			   ? "In dispute: the reports of the two players disagree."
 		: verdict == Verdict::Void				   ? "Void: the game does not count."
-		: v.result.answer.status == "confirmed"	   ? "Result confirmed by both players."
+		: confirmed								   ? "Result confirmed by both players."
 												   : "The league settled the game with the reports it got.";
-	p.Text(ix, y + 252, iw, 26, line, verdict == Verdict::Rated && v.result.answer.status == "confirmed" ? pal::ok : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-	p.Font(3);
-	p.TextWrapped(ix, y + 290, iw, 60, "The league checks that both reports describe the same game before it gives any Glory.", pal::caption);
-	// "Report a problem": the result stays, and the league's team reviews the game.
-	const int by = y + h - 68;
-	if (g.matchId <= 0 || by < y + 352) return;
-	const bool reported = std::find(v.disputed.begin(), v.disputed.end(), g.matchId) != v.disputed.end();
-	if (reported) {
+	// The number counts once the league's standing includes this game: the player's Glory is the one the game left.
+	std::string number;
+	const LeagueMeView me = LeagueMeState();
+	if (verdict == Verdict::Rated && me.loaded && me.me.ranked.present && me.me.ranked.glory == v.result.answer.ranked.gloryAfter &&
+		me.me.ranked.wins + me.me.ranked.losses > 0) {
+		number = TrFmt("Game no. %s of the season", {std::to_string(me.me.ranked.wins + me.me.ranked.losses)});
+	}
+	const bool reported = g.matchId > 0 && std::find(v.disputed.begin(), v.disputed.end(), g.matchId) != v.disputed.end();
+	const bool canReport = g.matchId > 0 && !reported && v.result.state != LeagueResultState::Sending && LeagueDisputeOpen(g.at, LeagueServerNowMs());
+	int rightW = 0;
+	if (canReport) {
+		p.Font(4);
+		rightW = p.CapsWidth("Report a problem", 2) + 40;
+	}
+	else if (reported) {
 		p.Font(3);
-		p.Text(ix, by, iw, 44, "Problem reported: the league will review the game.", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		rightW = p.TextWidth("Problem reported") + 4;
 	}
-	else if (v.result.state != LeagueResultState::Sending && LeagueDisputeOpen(g.at, LeagueServerNowMs())) {
-		Ghost(p, ix, by, iw, 44, "Report a problem", kRkDisputeResult, false, st.mouseX, st.mouseY);
-	}
+	p.Font(0);
+	p.raw = true;
+	const std::string verdictText = Tr(line);
+	const int verdictW = p.TextWidth(verdictText);
+	p.raw = false;
+	p.Font(3);
+	p.raw = true;
+	const int numberW = number.empty() ? 0 : p.TextWidth(number);
+	p.raw = false;
+	// The number goes under the verdict when it fits beside the button; otherwise after the verdict, or not at all.
+	const bool numberBelow = !number.empty() && numberW + 16 + rightW <= iw;
+	const bool numberAfter = !number.empty() && !numberBelow && verdictW + numberW + 40 <= iw;
+	p.Font(0);
+	RawText(p, ix, footY, iw, 26, verdictText, confirmed ? pal::ok : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	p.Font(3);
+	if (numberAfter) RawText(p, ix + verdictW, footY, iw - verdictW, 26, "  \xC2\xB7  " + number, pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+	if (numberBelow) RawText(p, ix, lineY, iw - rightW - 16, 30, number, pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+	// "Report a problem": the result stays, and the league's team reviews the game.
+	if (canReport) Ghost(p, ix + iw - rightW, lineY, rightW, 30, "Report a problem", kRkDisputeResult, false, st.mouseX, st.mouseY);
+	else if (reported) p.Text(ix + iw - rightW, lineY, rightW, 30, "Problem reported", pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 }
 
 void PaintPlace(Painter &p, const State &st, int x, int y, int w, int h)
@@ -344,22 +471,25 @@ void PaintPlace(Painter &p, const State &st, int x, int y, int w, int h)
 		p.TextWrapped(x + 24, y + 60, w - 48, 60, "You will be on the leaderboard once your placement games are over.", pal::caption);
 		return;
 	}
+	// Three rows: the one above, the player and the one below, as tall as the card lets them be.
+	const int rowH = std::max(40, std::min(56, (h - 64) / 3)), avatar = rowH >= 50 ? 32 : 28;
 	int ry = y + 56;
 	for (const LeagueBoardRow &r : v.around.rows) {
 		if (r.position < mine->position - 1 || r.position > mine->position + 1) continue;
 		const bool you = r.steamId == own;
 		if (you) {
-			p.Fill(x + 1, ry, w - 2, 56, pal::selected);
-			p.Fill(x + 1, ry, 3, 56, pal::red);
+			p.Fill(x + 1, ry, w - 2, rowH, pal::selected);
+			p.Fill(x + 1, ry, 3, rowH, pal::red);
 		}
 		p.Font(you ? 1 : 0);
-		RawText(p, x + 24, ry, 44, 56, std::to_string(r.position), you ? pal::text : pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-		if (!PaintAvatar(p, x + 72, ry + 12, 32, _strtoui64(r.steamId.c_str(), nullptr, 10))) p.Fill(x + 72, ry + 12, 32, 32, pal::hairline);
+		RawText(p, x + 24, ry, 44, rowH, std::to_string(r.position), you ? pal::text : pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+		const int ay = ry + (rowH - avatar) / 2;
+		if (!PaintAvatar(p, x + 72, ay, avatar, _strtoui64(r.steamId.c_str(), nullptr, 10))) p.Fill(x + 72, ay, avatar, avatar, pal::hairline);
 		p.Font(0);
-		RawText(p, x + 116, ry, w - 116 - 120, 56, r.name.empty() ? Tr("Player") : r.name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		RawText(p, x + 116, ry, w - 116 - 184, rowH, r.name.empty() ? Tr("Player") : r.name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.Font(1);
-		RawText(p, x + w - 120, ry, 96, 56, TrFmt("%s Glory", {std::to_string(r.glory)}), pal::text, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
-		ry += 56;
+		RawText(p, x + w - 174, ry, 150, rowH, TrFmt("%s Glory", {std::to_string(r.glory)}), pal::text, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+		ry += rowH;
 	}
 }
 

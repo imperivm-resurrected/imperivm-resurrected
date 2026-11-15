@@ -145,6 +145,8 @@ extern long long g_startedAt;
 extern std::atomic<long long> g_startedAtMs;
 bool InLobby(uint64 lobby, uint64 who);
 void SetPresence();
+// Every few seconds on the Steam thread: what friends see changes when a ranked search or game starts or ends.
+void RefreshRankedPresence();
 void AssignNumbers();
 void RefreshOwnKey();
 void TakeOverHostData();

@@ -21,6 +21,7 @@ enum ControlId {
 	kWindowSize = 0x9010, kExtendedView = 0x9011, kFpsLimit = 0x9012, kImageScaling = 0x9013,
 	kMasterVolume = 0x9020, kNatureVolume = 0x9021, kConversationVolume = 0x9022, kOutputDevice = 0x9023,
 	kModVersion = 0x9040, kLogLevel = 0x9042, kCheckUpdates = 0x9103, kResetChatPlace = 0x9104,
+	kChatBadges = 0x9050, kMatchFoundSound = 0x9051,
 };
 
 enum RowKind { kRowToggle, kRowSlider, kRowToggleSlider, kRowCombo, kRowSegment, kRowAction, kRowInfo };

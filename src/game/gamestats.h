@@ -31,5 +31,14 @@ struct StatsLivePlayer {
 };
 // The players as they are at this moment, without taking a sample, and the game's clock. False outside a game.
 bool GameStatsLive(std::vector<StatsLivePlayer> &players, uint32_t &clockMs);
+
+// The game's own record of a player so far (its CPlayerStats, what the profile keeps of each game): units killed and lost, the largest
+// army, the gold gathered (taxes, captured and the rest) and the unit that reached the highest level, by the name the game gives it
+// (for GameText). False outside a game.
+struct GameRecordFacts {
+	uint32_t killed = 0, lost = 0, armyMax = 0, gold = 0, bestLevel = 0;
+	std::string bestUnit;
+};
+bool GameStatsRecordOf(int player, GameRecordFacts &out);
 // Writes the history next to a save just made, as <save>.stats.
 void GameStatsWriteFile(const std::string &saveFile);
