@@ -448,8 +448,14 @@ void CupForm()
 	bad.minEntries = 1;
 	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::Minimum));
 	bad = f;
+	bad.bestOf = 2;
+	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::Series));
+	// A community cup's rounds stay of one game or best of three; only its final may be best of five.
 	bad.bestOf = 5;
 	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::Series));
+	bad.bestOf = 3;
+	bad.finalBestOf = 5;
+	CHECK(TourneyCheckCup(bad, now).empty());
 	bad = f;
 	bad.finalBestOf = 2;
 	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::Series));
@@ -794,6 +800,299 @@ void CupFull()
 	CHECK(!TourneyCupFormOf(d).play);
 }
 
+// More formats, the by-rounds pace and the series' maps (bloque B): what the views add and what the form sends.
+void Formats()
+{
+	CHECK(TourneyFormatFromId("swiss") == TourneyFormat::Swiss);
+	CHECK(TourneyFormatFromId("Double") == TourneyFormat::Double);
+	CHECK(TourneyFormatFromId("single") == TourneyFormat::Single);
+	CHECK(TourneyFormatFromId("league") == TourneyFormat::Single);
+	CHECK_EQ(std::string(TourneyFormatId(TourneyFormat::Swiss)), std::string("swiss"));
+	CHECK(TourneyPaceFromId("rounds") == TourneyPace::Rounds);
+	CHECK(TourneyPaceFromId("") == TourneyPace::Live);
+	CHECK_EQ(std::string(TourneyPaceId(TourneyPace::Rounds)), std::string("rounds"));
+	for (int days : {1, 2, 3, 7}) CHECK(TourneyRoundDaysValid(days));
+	for (int days : {0, 4, 5, 14}) CHECK(!TourneyRoundDaysValid(days));
+	// By default ceil(log2(players)): 3 with 5 to 8, 4 with 9 to 16, 5 with 17 to 32; a choice of 3 to 6 stays.
+	CHECK_EQ(TourneySwissRounds(0, 5), 3);
+	CHECK_EQ(TourneySwissRounds(0, 8), 3);
+	CHECK_EQ(TourneySwissRounds(0, 9), 4);
+	CHECK_EQ(TourneySwissRounds(0, 16), 4);
+	CHECK_EQ(TourneySwissRounds(0, 17), 5);
+	CHECK_EQ(TourneySwissRounds(0, 32), 5);
+	CHECK_EQ(TourneySwissRounds(6, 8), 6);
+	CHECK_EQ(TourneySwissRounds(2, 8), 3);
+	CHECK_EQ(TourneySwissRounds(7, 16), 4);
+
+	std::vector<TourneySummary> list;
+	CHECK(TourneyParseList(Parse(R"({"tournaments":[{"id":7,"slug":"suizo","name":"Suizo de otono","status":"running","format":"swiss","swissRounds":null,
+"pace":"rounds","roundDays":2,"maxEntries":16,"entries":12,"bestOf":3,"finalBestOf":3,"currentRound":2,"roundEndsAt":1794950000000,
+"seriesPool":[{"kind":"random","name":"mediterranean","type":"random","size":"medium"},{"kind":"random","name":"island","type":"random","size":"small"},
+{"kind":"random","name":"coastal","type":"random","size":"large"}]},
+{"id":8,"slug":"doble","name":"Doble","status":"signup","format":"double","pace":"live","maxEntries":8,"entries":3},
+{"id":9,"slug":"vieja","name":"Vieja","status":"finished","maxEntries":8,"entries":8}]})"), list));
+	CHECK_EQ(static_cast<int>(list.size()), 3);
+	if (list.size() == 3) {
+		const TourneySummary &s = list[0];
+		CHECK(TourneyFormatOf(s) == TourneyFormat::Swiss);
+		CHECK_EQ(s.swissRounds, 0);
+		CHECK(s.pace == TourneyPace::Rounds);
+		CHECK_EQ(s.roundDays, 2);
+		CHECK_EQ(s.currentRound, 2);
+		CHECK(Same(s.roundEndsAt, 1794950000000LL));
+		CHECK_EQ(static_cast<int>(s.seriesPool.size()), 3);
+		CHECK(s.seriesPool.size() == 3 && s.seriesPool[1].name == "island" && s.seriesPool[2].size == "large");
+		// Twelve players in a Swiss of the automatic count: four rounds.
+		CHECK_EQ(TourneyRoundCount(s), 4);
+		CHECK(TourneyFormatOf(list[1]) == TourneyFormat::Double);
+		CHECK(list[1].pace == TourneyPace::Live);
+		CHECK(list[1].seriesPool.empty());
+		CHECK_EQ(TourneyRoundCount(list[1]), 0);
+		// The league's first tournaments say nothing of all this: single elimination, live.
+		CHECK(TourneyFormatOf(list[2]) == TourneyFormat::Single);
+		CHECK(list[2].pace == TourneyPace::Live);
+		CHECK_EQ(list[2].currentRound, 0);
+		CHECK_EQ(TourneyRoundCount(list[2]), 3);
+	}
+
+	const int64_t now = 1794600000000LL;
+	TourneyCupForm f;
+	f.name = "Suizo de otono";
+	f.startsAt = now + 3600000;
+	f.maxEntries = 16;
+	f.format = TourneyFormat::Swiss;
+	f.bestOf = 3;
+	f.pace = TourneyPace::Rounds;
+	f.roundDays = 3;
+	CHECK_EQ(TourneyCupMapRounds(f), 4);
+	TourneyFitMaps(f.maps, TourneyCupMapRounds(f));
+	CHECK_EQ(static_cast<int>(f.maps.size()), 4);
+	CHECK(TourneyCupHasSeries(f));
+	CHECK(TourneyCheckCup(f, now).empty());
+	TourneyCupForm bad = f;
+	bad.swissRounds = 7;
+	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::Format));
+	bad.swissRounds = 6;
+	CHECK(TourneyCheckCup(bad, now).empty());
+	CHECK_EQ(TourneyCupMapRounds(bad), 6);
+	bad = f;
+	bad.roundDays = 5;
+	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::Pace));
+	bad.pace = TourneyPace::Live;
+	CHECK(TourneyCheckCup(bad, now).empty());
+
+	// The series' maps: none, or 3 to 5 different ones.
+	const TourneyMap med = {"mediterranean", "random", "medium"}, island = {"island", "random", "small"}, coast = {"coastal", "random", "large"};
+	bad = f;
+	bad.seriesPool = {med, island};
+	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::PoolCount));
+	bad.seriesPool = {med, island, med};
+	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::PoolMap));
+	bad.seriesPool = {med, island, {"mediterranean", "random", "small"}};
+	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::PoolMap));
+	bad.seriesPool = {med, island, coast, med, island, coast};
+	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::PoolCount));
+	bad.seriesPool = {med, island, coast};
+	CHECK(TourneyCheckCup(bad, now).empty());
+	TourneyMap large;
+	large.kind = TourneyMapKind::Upload;
+	large.title = "Grande";
+	large.file = "Grande.bfhp";
+	large.hash = kUploadMap;
+	large.bytes = kTourneyScenarioMaxBytes + 1;
+	large.players = 2;
+	bad.seriesPool = {med, island, large};
+	const std::vector<TourneyCupProblem> tooLarge = TourneyCheckCup(bad, now);
+	CHECK(HasProblem(tooLarge, TourneyCupProblem::MapTooLarge));
+	CHECK(!HasProblem(tooLarge, TourneyCupProblem::PoolMap));
+	// Without series the pool is not looked at, nor sent.
+	bad.bestOf = 1;
+	bad.seriesPool = {med};
+	CHECK(!TourneyCupHasSeries(bad));
+	CHECK(TourneyCheckCup(bad, now).empty());
+	Json back;
+	CHECK(Json::Parse(TourneyCupJson(bad).Dump(), back));
+	CHECK(back.Get("seriesPool") && back.Get("seriesPool")->type == Json::Array && back.Get("seriesPool")->arr.empty());
+	// A Swiss's final is not a series of its own; an elimination's is.
+	TourneyCupForm elim = f;
+	elim.format = TourneyFormat::Double;
+	elim.bestOf = 1;
+	elim.finalBestOf = 3;
+	CHECK(TourneyCupHasSeries(elim));
+	elim.format = TourneyFormat::Swiss;
+	CHECK(!TourneyCupHasSeries(elim));
+
+	f.seriesPool = {med, island, coast};
+	CHECK(Json::Parse(TourneyCupJson(f).Dump(), back));
+	CHECK_EQ(back.GetString("format"), std::string("swiss"));
+	CHECK(back.Get("swissRounds") && back.Get("swissRounds")->type == Json::Null);
+	CHECK_EQ(static_cast<int>(back.GetNumber("bestOf")), 3);
+	CHECK_EQ(static_cast<int>(back.GetNumber("finalBestOf")), 3);
+	CHECK_EQ(back.GetString("pace"), std::string("rounds"));
+	CHECK_EQ(static_cast<int>(back.GetNumber("roundDays")), 3);
+	const Json *pool = back.Get("seriesPool");
+	CHECK(pool && pool->arr.size() == 3 && pool->arr[0].GetString("kind") == "random" && pool->arr[2].GetString("name") == "coastal");
+	f.swissRounds = 5;
+	f.pace = TourneyPace::Live;
+	CHECK(Json::Parse(TourneyCupJson(f).Dump(), back));
+	CHECK_EQ(static_cast<int>(back.GetNumber("swissRounds")), 5);
+	CHECK_EQ(back.GetString("pace"), std::string("live"));
+	// The league wants the days of a round null when it is played live, and no Swiss rounds outside a Swiss.
+	CHECK(back.Get("roundDays") && back.Get("roundDays")->type == Json::Null);
+	f.format = TourneyFormat::Single;
+	CHECK(Json::Parse(TourneyCupJson(f).Dump(), back));
+	CHECK_EQ(back.GetString("format"), std::string("single"));
+	CHECK(back.Get("swissRounds") && back.Get("swissRounds")->type == Json::Null);
+
+	TourneyDetail d;
+	CHECK(TourneyParseDetail(Parse(R"({"id":7,"slug":"suizo","name":"Suizo","official":false,"organizer":{"steamId":"76561198000000994","name":"Furio"},
+"status":"signup","format":"swiss","swissRounds":5,"pace":"rounds","roundDays":7,"maxEntries":16,"minEntries":4,"bestOf":5,"finalBestOf":5,
+"seriesPool":[{"name":"mediterranean","type":"random","size":"medium"},{"name":"island","type":"random","size":"small"},
+{"name":"coastal","type":"random","size":"large"}],"maps":[{"name":"island","type":"random","size":"small"}],"entries":[],"matches":[]})"), d));
+	const TourneyCupForm edit = TourneyCupFormOf(d);
+	CHECK(edit.format == TourneyFormat::Swiss);
+	CHECK_EQ(edit.swissRounds, 5);
+	CHECK(edit.pace == TourneyPace::Rounds);
+	CHECK_EQ(edit.roundDays, 7);
+	CHECK_EQ(edit.bestOf, 5);
+	CHECK_EQ(static_cast<int>(edit.seriesPool.size()), 3);
+	// Five rounds, five maps: the one given, repeated.
+	CHECK_EQ(static_cast<int>(edit.maps.size()), 5);
+}
+
+void Series()
+{
+	// The player's semifinal, a best of three: game 1 lost on the round's map, the map of game 2 theirs to choose for 60 s.
+	TourneyNext n;
+	CHECK(TourneyParseNext(Parse(R"({"tournament":{"id":2,"slug":"copa","name":"Copa"},"match":5,"round":2,"rounds":3,"bestOf":3,"game":2,
+"score":[1,0],"status":"ready","deadlineAt":1794950000000,"noshowFrom":1794863600000,"me":{"side":"b","seed":4},
+"opponent":{"name":"Furio","steamId":"76561198000000994","seed":1},"map":{"name":"mountain_passes","type":"random","size":"small"},
+"games":[{"no":2,"map":null,"winner":null},{"no":1,"map":{"name":"mountain_passes","type":"random","size":"small"},"winner":"a"}],
+"pick":{"by":"b","options":[{"name":"mediterranean","type":"random","size":"medium"},{"name":"island","type":"random","size":"small"}],
+"until":1794600060000}})"), n));
+	CHECK_EQ(static_cast<int>(n.games.size()), 2);
+	CHECK(n.games.size() == 2 && n.games[0].no == 1 && n.games[0].winner == "a" && n.games[0].map.name == "mountain_passes");
+	CHECK(n.games.size() == 2 && n.games[1].no == 2 && n.games[1].winner.empty() && !n.games[1].map.Known());
+	CHECK(n.pick.present);
+	CHECK_EQ(n.pick.by, std::string("b"));
+	CHECK_EQ(static_cast<int>(n.pick.options.size()), 2);
+	CHECK(Same(n.pick.until, 1794600060000LL));
+	CHECK(n.MyPick());
+	// While it is being chosen the game has no map; the room waits for it.
+	CHECK(!TourneyGameMap(n).Known());
+	CHECK(n.pace == TourneyPace::Rounds);
+	CHECK(Same(n.noshowFrom, 1794863600000LL));
+	int a = 0, b = 0;
+	TourneySeriesScore(n.games, a, b);
+	CHECK(a == 1 && b == 0);
+	CHECK(!TourneySeriesOver(n.games, 3));
+	CHECK(TourneyGameOf(n.games, 1) != nullptr && TourneyGameOf(n.games, 3) == nullptr);
+
+	TourneyMine mine;
+	mine.next = n;
+	TourneyTold told;
+	std::vector<TourneyNotice> notices = TourneyNewNotices(mine, told);
+	bool picked = false;
+	for (const TourneyNotice &x : notices) picked = picked || (x.kind == TourneyNotice::PickOpen && x.game == 2 && Same(x.deadlineAt, 1794600060000LL));
+	CHECK(picked);
+	for (const TourneyNotice &x : TourneyNewNotices(mine, told)) CHECK(x.kind != TourneyNotice::PickOpen);
+	// The rival's choice is not told.
+	TourneyTold other;
+	mine.next.pick.by = "a";
+	CHECK(!mine.next.MyPick());
+	for (const TourneyNotice &x : TourneyNewNotices(mine, other)) CHECK(x.kind != TourneyNotice::PickOpen);
+
+	// Once chosen, game 2 is played on its map.
+	n.pick = TourneyPick();
+	n.games[1].map = {"island", "random", "small"};
+	CHECK_EQ(TourneyGameMap(n).name, std::string("island"));
+	n.games[1].map = TourneyMap();
+	CHECK_EQ(TourneyGameMap(n).name, std::string("mountain_passes"));
+	n.games[1].winner = "a";
+	CHECK(TourneySeriesOver(n.games, 3));
+	CHECK(!TourneySeriesOver(n.games, 5));
+
+	// A pick without options or without who chooses is no pick.
+	Json j = Parse(R"({"by":"b","options":[],"until":1})");
+	CHECK(!TourneyPickFromJson(&j).present);
+	j = Parse(R"({"by":"c","options":[{"name":"island","type":"random","size":"small"}],"until":1})");
+	CHECK(!TourneyPickFromJson(&j).present);
+	CHECK(!TourneyPickFromJson(nullptr).present);
+	j = Parse(R"([{"no":0,"winner":"a"},{"no":3,"winner":"B"},"x"])");
+	const std::vector<TourneyGame> games = TourneyGamesFromJson(&j);
+	CHECK(games.size() == 1 && games[0].no == 3 && games[0].winner == "b");
+
+	// A live match: no noshowFrom, no pick, the round's map.
+	TourneyNext live;
+	CHECK(TourneyParseNext(Parse(R"({"match":6,"round":1,"rounds":2,"bestOf":1,"status":"ready","me":{"side":"a"},
+"map":{"name":"island","type":"random","size":"small"},"pick":null,"games":[]})"), live));
+	CHECK(live.pace == TourneyPace::Live);
+	CHECK(!live.pick.present);
+	CHECK_EQ(TourneyGameMap(live).name, std::string("island"));
+	CHECK(live.bracket == TourneyBracket::Winners);
+	CHECK(live.stage == TourneyStage::Semifinal);
+	CHECK(live.format == TourneyFormat::Single);
+	TourneyNext named;
+	CHECK(TourneyParseNext(Parse(R"({"tournament":{"id":2,"pace":"rounds"},"match":6,"status":"ready"})"), named));
+	CHECK(named.pace == TourneyPace::Rounds);
+
+	// A double elimination's losers' bracket has no stage of its own: its round counts within it. The format and the pace come at the top.
+	TourneyNext losers;
+	CHECK(TourneyParseNext(Parse(R"({"match":8,"round":2,"rounds":3,"stage":null,"bracket":"losers","format":"double","pace":"live",
+"status":"ready","me":{"side":"a"},"map":null,"pick":null})"), losers));
+	CHECK(losers.bracket == TourneyBracket::Losers);
+	CHECK(losers.stage == TourneyStage::Unknown);
+	CHECK(losers.format == TourneyFormat::Double);
+	CHECK(losers.pace == TourneyPace::Live);
+	TourneyNext swiss;
+	CHECK(TourneyParseNext(Parse(R"({"match":9,"round":3,"rounds":4,"bracket":"swiss","format":"swiss","status":"ready","me":{"side":"b"}})"), swiss));
+	CHECK(swiss.bracket == TourneyBracket::Swiss);
+	CHECK(swiss.format == TourneyFormat::Swiss);
+	CHECK(swiss.stage == TourneyStage::Unknown);
+	TourneyMine inLosers;
+	inLosers.next = losers;
+	TourneyTold once;
+	const std::vector<TourneyNotice> ready = TourneyNewNotices(inLosers, once);
+	CHECK(ready.size() == 1 && ready[0].bracket == TourneyBracket::Losers && ready[0].round == 2);
+
+	// While a pick is open the room waits for it, and the claim brings the pick.
+	TourneyClaim claim;
+	CHECK(TourneyParseClaim(Parse(R"({"wait":true,"by":null,"pick":{"by":"a","options":[{"name":"island","type":"random","size":"small"},
+{"name":"coastal","type":"random","size":"large"}],"until":1794600060000}})"), claim));
+	CHECK(claim.kind == TourneyClaim::Wait);
+	CHECK(claim.by == 0);
+	CHECK(claim.pick.present && claim.pick.options.size() == 2 && Same(claim.pick.until, 1794600060000LL));
+	CHECK(TourneyParseClaim(Parse(R"({"wait":true,"by":"76561198000000994"})"), claim));
+	CHECK(!claim.pick.present);
+	// Claiming the win too early, by rounds, says from when it can be.
+	CHECK(Same(TourneyParseRefusal(Parse(R"({"error":"too_early","noshowFrom":1794863600000})")).noshowFrom, 1794863600000LL));
+
+	// The detail's matches carry the same.
+	TourneyDetail d;
+	CHECK(TourneyParseDetail(Parse(R"({"id":2,"slug":"copa","status":"running","matches":[{"id":5,"round":1,"position":0,"bestOf":3,"status":"ready",
+"noshowFrom":1794863600000,"games":[{"no":1,"map":{"name":"island","type":"random","size":"small"},"winner":"b"}],
+"pick":{"by":"a","options":[{"name":"coastal","type":"random","size":"large"}],"until":1794600060000}}]})"), d));
+	CHECK_EQ(static_cast<int>(d.matches.size()), 1);
+	CHECK(d.matches.size() == 1 && d.matches[0].games.size() == 1 && d.matches[0].games[0].winner == "b");
+	CHECK(d.matches.size() == 1 && d.matches[0].pick.present && d.matches[0].pick.by == "a");
+	CHECK(d.matches.size() == 1 && Same(d.matches[0].noshowFrom, 1794863600000LL));
+
+	// The answers to a pick out of turn or too late.
+	for (const char *code : {"not_your_pick", "pick_closed"}) CHECK_EQ(TourneyParseRefusal(Parse(std::string("{\"error\":\"") + code + "\"}")).code, std::string(code));
+
+	// The mod asks every 5 s while a pick is open and for two minutes after a game of a series.
+	TourneyNext poll = n;
+	poll.pick.present = true;
+	CHECK_EQ(TourneySeriesPollMs(poll, -1), 5000);
+	poll.pick.present = false;
+	CHECK_EQ(TourneySeriesPollMs(poll, 30000), 5000);
+	CHECK_EQ(TourneySeriesPollMs(poll, 130000), 0);
+	CHECK_EQ(TourneySeriesPollMs(poll, -1), 0);
+	poll.bestOf = 1;
+	CHECK_EQ(TourneySeriesPollMs(poll, 30000), 0);
+	CHECK_EQ(TourneySeriesPollMs(TourneyNext(), 1000), 0);
+}
+
 void Estimate()
 {
 	// The mockup's cup: eight players, rounds of one game and a final of three.
@@ -808,6 +1107,42 @@ void Estimate()
 	CHECK(e.rounds == 4 && e.series == 15 && e.maxGames == 47 && e.minutes == 40 * 14 + 30);
 	e = TourneyEstimateFor(1, 1, 1);
 	CHECK(e.rounds == 0 && e.minutes == 0);
+	CHECK(TourneyEstimateFor(TourneyFormat::Single, 8, 1, 3, 0).minutes == TourneyEstimateFor(8, 1, 3).minutes);
+
+	// A Swiss of eight: three rounds of four series.
+	e = TourneyEstimateFor(TourneyFormat::Swiss, 8, 1, 3, 0);
+	CHECK(e.rounds == 3 && e.series == 12 && e.maxGames == 12 && e.minutes == 40 * 3 + 10 * 2);
+	e = TourneyEstimateFor(TourneyFormat::Swiss, 16, 3, 5, 6);
+	CHECK(e.rounds == 6 && e.series == 48 && e.maxGames == 144 && e.minutes == 40 * 18 + 10 * 5);
+	// A double elimination of eight: the first round, four of the losers' bracket, the grand final and its reset.
+	e = TourneyEstimateFor(TourneyFormat::Double, 8, 1, 1, 0);
+	CHECK(e.rounds == 7 && e.series == 15 && e.maxGames == 15 && e.minutes == 40 * 7 + 10 * 6);
+	e = TourneyEstimateFor(TourneyFormat::Double, 4, 1, 3, 0);
+	CHECK(e.rounds == 5 && e.series == 7 && e.maxGames == 5 + 6 && e.minutes == 40 * (3 + 6) + 10 * 4);
+	CHECK_EQ(TourneyEstimateFor(TourneyFormat::Double, 1, 1, 1, 0).minutes, 0);
+
+	TourneyCupForm f;
+	f.maxEntries = 8;
+	f.bestOf = 1;
+	f.finalBestOf = 1;
+	f.format = TourneyFormat::Double;
+	CHECK(TourneyCupLongLive(f));
+	CHECK_EQ(TourneyEstimateOf(f).days, 0);
+	f.maxEntries = 4;
+	CHECK(!TourneyCupLongLive(f));
+	f.maxEntries = 8;
+	f.pace = TourneyPace::Rounds;
+	f.roundDays = 2;
+	CHECK(!TourneyCupLongLive(f));
+	CHECK_EQ(TourneyEstimateOf(f).days, 14);
+	f.format = TourneyFormat::Swiss;
+	f.pace = TourneyPace::Live;
+	f.maxEntries = 16;
+	f.bestOf = 5;
+	CHECK(!TourneyCupLongLive(f));
+	f.pace = TourneyPace::Rounds;
+	f.roundDays = 7;
+	CHECK_EQ(TourneyEstimateOf(f).days, 28);
 }
 
 void Calendar()
@@ -933,6 +1268,8 @@ int main()
 	Settings();
 	Requirements();
 	CupFull();
+	Formats();
+	Series();
 	Estimate();
 	Calendar();
 	BaseScenarios();

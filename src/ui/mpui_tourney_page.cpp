@@ -52,13 +52,25 @@ void VLine(Painter &p, int x, int y1, int y2, COLORREF c)
 
 std::string MetaText(const TourneyDetail &d)
 {
-	std::string out = OrganizerText(d);
-	if (!out.empty()) out += "   \xC2\xB7   ";
-	out += FormatText(d) + "   \xC2\xB7   " + (d.entries == 1 ? Tr("1 player") : TrFmt("%s players", {std::to_string(d.entries)})) + "   \xC2\xB7   " + ContentText(d) + "   \xC2\xB7   " +
-		PresetText(d.settings) + "   \xC2\xB7   ";
-	if (d.status == TourneyStatus::Running) out += TrFmt("Since %s", {HourText(d.startsAt)});
-	else if (d.status == TourneyStatus::Finished) out += DayText(d.startsAt);
-	else out += WhenText(d.startsAt);
+	std::vector<std::string> parts;
+	if (!OrganizerText(d).empty()) parts.push_back(OrganizerText(d));
+	parts.push_back(FormatText(d));
+	// By rounds: the round being played and its deadline, "Round 2 of 4 · until Thursday 20:00", or the pace before it starts. The pace is the
+	// one the list's view has too, read as the summary's.
+	const TourneySummary &summary = d;
+	const std::string round = RoundText(summary);
+	if (!round.empty()) parts.push_back(round);
+	else if (summary.pace == TourneyPace::Rounds && d.status != TourneyStatus::Finished && d.status != TourneyStatus::Cancelled) parts.push_back(PaceText(summary));
+	parts.push_back(d.entries == 1 ? Tr("1 player") : TrFmt("%s players", {std::to_string(d.entries)}));
+	parts.push_back(ContentText(d));
+	parts.push_back(PresetText(d.settings));
+	if (d.status == TourneyStatus::Running) {
+		if (round.empty()) parts.push_back(TrFmt("Since %s", {HourText(d.startsAt)}));
+	}
+	else if (d.status == TourneyStatus::Finished) parts.push_back(DayText(d.startsAt));
+	else parts.push_back(WhenText(d.startsAt));
+	std::string out;
+	for (const std::string &part : parts) out += (out.empty() ? "" : "   \xC2\xB7   ") + part;
 	return out;
 }
 

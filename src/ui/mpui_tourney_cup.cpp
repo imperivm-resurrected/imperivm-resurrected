@@ -53,15 +53,41 @@ int SectionOf(TourneyCupProblem p)
 	case TourneyCupProblem::NameLong:
 	case TourneyCupProblem::DescriptionLong:
 	case TourneyCupProblem::Places:
-	case TourneyCupProblem::Minimum: return 0;
+	case TourneyCupProblem::Minimum:
+	case TourneyCupProblem::Format: return 0;
 	case TourneyCupProblem::Series:
 	case TourneyCupProblem::Settings:
 	case TourneyCupProblem::NoMaps:
 	case TourneyCupProblem::TooManyMaps:
 	case TourneyCupProblem::BadMap:
-	case TourneyCupProblem::MapTooLarge: return 1;
+	case TourneyCupProblem::MapTooLarge:
+	case TourneyCupProblem::PoolCount:
+	case TourneyCupProblem::PoolMap: return 1;
 	default: return 2;
 	}
+}
+
+// The time a format takes, beside its name: "≈ 2 h 10 min" live, "up to 6 days" by rounds.
+std::string EstimateText(const TourneyEstimate &e)
+{
+	if (e.days > 0) return TrFmt("up to %s days", {std::to_string(e.days)});
+	return "\xE2\x89\x88 " + DurationText(e.minutes * kMinuteMs);
+}
+
+// "Double elimination · Bo1, final Bo3", "Swiss, 4 rounds · Bo3".
+std::string FormatLine(const TourneyCupForm &f)
+{
+	if (f.format == TourneyFormat::Swiss) {
+		return TrFmt("Swiss, %s rounds", {std::to_string(TourneySwissRounds(f.swissRounds, f.maxEntries))}) + " \xC2\xB7 " + TrFmt("Bo%s", {std::to_string(f.bestOf)});
+	}
+	return Tr(f.format == TourneyFormat::Double ? "Double elimination" : "Single elimination") + " \xC2\xB7 " +
+		TrFmt("Bo%s, final Bo%s", {std::to_string(f.bestOf), std::to_string(f.finalBestOf)});
+}
+
+std::string PaceLine(const TourneyCupForm &f)
+{
+	if (f.pace == TourneyPace::Live) return Tr("Live, in one evening");
+	return RoundDaysText(f.roundDays);
 }
 
 std::string Capitalized(std::string s)
@@ -163,6 +189,8 @@ struct Seg {
 	std::string label;
 	int arg = 0;
 	bool on = false, enabled = true, soon = false;
+	// Its share of the row against the others' (1 each by default).
+	int weight = 1;
 };
 
 // A row of choices, the one on filled; the ones that are coming carry "Coming soon" under their name.
@@ -171,10 +199,12 @@ void Segments(Form &c, int x, int y, int w, int h, const std::vector<Seg> &segs)
 	if (c.measure || segs.empty()) return;
 	Painter &p = c.p;
 	const int n = static_cast<int>(segs.size()), gap = 2;
+	int weights = 0;
+	for (const Seg &s : segs) weights += std::max(1, s.weight);
 	int cx = x;
 	for (int i = 0; i < n; i++) {
 		const Seg &s = segs[static_cast<size_t>(i)];
-		const int cw = i + 1 == n ? x + w - cx : (w - gap * (n - 1)) / n;
+		const int cw = i + 1 == n ? x + w - cx : (w - gap * (n - 1)) * std::max(1, s.weight) / weights;
 		const bool enabled = s.enabled && !c.locked, hot = enabled && !s.on && p.Hover(cx, y, cw, h, c.mx, c.my);
 		p.Fill(cx, y, cw, h, s.on ? (c.locked ? pal::button : pal::text) : hot ? pal::button : pal::field);
 		const COLORREF ink = s.on ? (c.locked ? pal::textDim : pal::onLight) : !enabled ? pal::disabled : hot ? pal::text : pal::textDim;
@@ -190,9 +220,9 @@ void Segments(Form &c, int x, int y, int w, int h, const std::vector<Seg> &segs)
 	}
 }
 
-// A choice of a list with a radio, its name and a line under it, and at the right an estimate or "Coming soon".
+// A choice of a list with a radio, its name and a line under it, and at the right an estimate (in `asideInk` when it warns) or "Coming soon".
 void Option(Form &c, int x, int y, int w, int h, bool on, bool enabled, const std::string &title, const std::string &text, const std::string &aside, bool soon,
-	int arg)
+	int arg, COLORREF asideInk = CLR_INVALID)
 {
 	if (c.measure) return;
 	Painter &p = c.p;
@@ -219,7 +249,7 @@ void Option(Form &c, int x, int y, int w, int h, bool on, bool enabled, const st
 		p.Font(3);
 		const int aw = p.TextWidth(aside) + 4;
 		right -= aw;
-		p.Text(right, y, aw, h, aside, on ? pal::text : pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+		p.Text(right, y, aw, h, aside, asideInk != CLR_INVALID ? asideInk : on ? pal::text : pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 		right -= 12;
 	}
 	const int tx = rx + r + 14, tw = right - tx;
@@ -310,15 +340,41 @@ int FormatRight(Form &c, int x, int y, int w)
 	const TourneyCupForm &f = c.f;
 	Painter &p = c.p;
 	int at = y;
-	const TourneyEstimate est = TourneyEstimateFor(f.maxEntries, f.bestOf, f.finalBestOf);
 	at += Label(c, x, at, w, TrFmt("Format \xC2\xB7 estimated time with %s players", {std::to_string(f.maxEntries)}));
-	Option(c, x, at, w, c.k.optionH, true, true, Tr("Single elimination"), Tr("Whoever loses is out. The shortest and the easiest to follow."),
-		"\xE2\x89\x88 " + DurationText(est.minutes * kMinuteMs), false, 0);
-	at += c.k.optionH + 8;
-	Option(c, x, at, w, c.k.optionH, false, false, Tr("Double elimination"), Tr("You are out after losing twice."), std::string(), true, 0);
-	at += c.k.optionH + 8;
-	Option(c, x, at, w, c.k.optionH, false, false, Tr("Swiss \xC2\xB7 3 rounds"), Tr("Everyone plays all three, against rivals of their level."), std::string(), true, 0);
-	at += c.k.optionH + c.k.rowGap;
+	struct Def {
+		TourneyFormat format;
+		const char *title, *text;
+	};
+	static const Def kDefs[] = {{TourneyFormat::Single, "Single elimination", "Whoever loses is out. The shortest and the easiest to follow."},
+		{TourneyFormat::Double, "Double elimination", "You are out after losing twice."},
+		{TourneyFormat::Swiss, "Swiss", "Nobody is out: rivals with your points."}};
+	for (const Def &d : kDefs) {
+		TourneyCupForm as = f;
+		as.format = d.format;
+		Option(c, x, at, w, c.k.optionH, f.format == d.format, true, Tr(d.title), Tr(d.text), EstimateText(TourneyEstimateOf(as)), false,
+			CupArg(kCupFormat, static_cast<int>(d.format)), TourneyCupLongLive(as) ? pal::warn : CLR_INVALID);
+		at += c.k.optionH + 8;
+		if (d.format != TourneyFormat::Swiss || f.format != TourneyFormat::Swiss) continue;
+		// The Swiss's rounds, under its choice.
+		const int ix = x + 32, iw = w - 32, automatic = TourneySwissRounds(0, f.maxEntries);
+		at += 6;
+		at += Label(c, ix, at, iw, Tr("Rounds of the Swiss"));
+		std::vector<Seg> segs = {{TrFmt("Automatic \xC2\xB7 %s", {std::to_string(automatic)}), CupArg(kCupSwissRounds, 0), f.swissRounds == 0, true, false, 2}};
+		for (int r = kTourneySwissRoundsMin; r <= kTourneySwissRoundsMax; r++) segs.push_back({std::to_string(r), CupArg(kCupSwissRounds, r), f.swissRounds == r});
+		Segments(c, ix, at, iw, c.k.fieldH, segs);
+		at += c.k.fieldH + 8;
+		at += Hint(c, ix, at, iw,
+			TrFmt("Automatic: %s rounds with %s players. More rounds make a fairer ranking and a longer cup.", {std::to_string(automatic), std::to_string(f.maxEntries)}));
+		at += Problem(c, ix, at, iw, {TourneyCupProblem::Format}) + 8;
+	}
+	if (TourneyCupLongLive(f)) {
+		at += Hint(c, x, at, w,
+			TrFmt("Live, this double elimination lasts about %s: more than one evening. Choose the by-rounds pace in section 3, or fewer places.",
+				{DurationText(TourneyEstimateOf(f).minutes * kMinuteMs)}),
+			pal::warn);
+		at += 8;
+	}
+	at += c.k.rowGap - 8;
 	at += Label(c, x, at, w, Tr("Minimum to start"));
 	if (!c.measure) {
 		const int bw = c.k.fieldH + 4, nw = 72;
@@ -394,11 +450,21 @@ int RulesRight(Form &c, int x, int y, int w)
 	at += Label(c, x, at, w, Tr("Rounds"));
 	Segments(c, x, at, w, c.k.fieldH, {{SeriesText(1), CupArg(kCupBestOf, 1), f.bestOf == 1}, {SeriesText(3), CupArg(kCupBestOf, 3), f.bestOf == 3}});
 	at += c.k.fieldH + c.k.rowGap;
-	at += Label(c, x, at, w, Tr("Final"));
-	Segments(c, x, at, w, c.k.fieldH,
-		{{SeriesText(1), CupArg(kCupFinal, 1), f.finalBestOf == 1}, {SeriesText(3), CupArg(kCupFinal, 3), f.finalBestOf == 3},
-			{SeriesText(5), CupArg(kCupFinal, 5), f.finalBestOf == 5}});
-	at += c.k.fieldH;
+	if (f.format == TourneyFormat::Swiss) {
+		at += Label(c, x, at, w, Tr("Final"));
+		at += Hint(c, x, at, w, Tr("A Swiss has no final: whoever has the most points after the last round is the champion."));
+	}
+	else {
+		at += Label(c, x, at, w, Tr(f.format == TourneyFormat::Double ? "Grand final" : "Final"));
+		Segments(c, x, at, w, c.k.fieldH,
+			{{SeriesText(1), CupArg(kCupFinal, 1), f.finalBestOf == 1}, {SeriesText(3), CupArg(kCupFinal, 3), f.finalBestOf == 3},
+				{SeriesText(5), CupArg(kCupFinal, 5), f.finalBestOf == 5}});
+		at += c.k.fieldH;
+		if (f.format == TourneyFormat::Double) {
+			at += 8;
+			at += Hint(c, x, at, w, Tr("If whoever comes from the losers' bracket wins it, a second final is played, with as many games."));
+		}
+	}
 	at += Problem(c, x, at, w, {TourneyCupProblem::Series}) + c.k.rowGap;
 	at += Label(c, x, at, w, Tr("Seeding"));
 	Option(c, x, at, w, c.k.optionH, !f.randomSeeding, true, Tr("By Glory"), Tr("The best of the ranked leaderboard don't meet early."), Tr("Recommended"), false,
@@ -409,20 +475,65 @@ int RulesRight(Form &c, int x, int y, int w)
 	return at - y;
 }
 
-// The small picture of a round's map: the scenario's preview, or a die for a random map.
-void MapThumb(Painter &p, const TourneyMap &m, int x, int y, int size)
+// The maps of the series: a tile each, which opens the chooser, with a cross that takes it out, and a tile to add one while there are
+// fewer than five.
+int PoolBlock(Form &c, int x, int y, int w)
 {
-	p.Fill(x, y, size, size, pal::panel);
-	const std::shared_ptr<const MapPreviewData> d = m.Scenario() ? MapPreviewGet(CupScenarioPath(m.file)) : nullptr;
-	if (d && !d->failed && d->image.w > 0 && d->image.h > 0) p.Image(x, y, size, size, d->image.bgra.data(), d->image.w, d->image.h);
-	else if (!m.Scenario()) {
-		const int dot = std::max(4, size / 7), a = x + size / 4, b = x + size * 3 / 4, t = y + size / 4, u = y + size * 3 / 4;
-		for (const int px : {a, b}) {
-			for (const int py : {t, u}) p.Ellipse(px - dot / 2, py - dot / 2, dot, dot, pal::caption);
-		}
-		p.Ellipse(x + size / 2 - dot / 2, y + size / 2 - dot / 2, dot, dot, pal::caption);
+	const TourneyCupForm &f = c.f;
+	Painter &p = c.p;
+	int at = y;
+	const int n = static_cast<int>(f.seriesPool.size());
+	if (!c.measure) {
+		PaintCaps(p, x, at, w - 80, c.k.labelH, Tr("Maps of the series (optional)"), pal::caption);
+		p.Font(3);
+		p.Text(x + w - 80, at, 80, c.k.labelH, std::to_string(n) + "/" + std::to_string(kTourneyPoolMax), pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 	}
-	p.Frame(x, y, size, size, pal::lineStrong);
+	at += c.k.labelH + 8;
+	const int cols = w >= 900 ? 3 : 2, gap = 12, tileW = (w - gap * (cols - 1)) / cols, tileH = c.k.roomy ? 64 : 58;
+	const int tiles = std::min(kTourneyPoolMax, n + (c.locked ? 0 : 1));
+	for (int i = 0; i < tiles && !c.measure; i++) {
+		const int tx = x + (i % cols) * (tileW + gap), ty = at + (i / cols) * (tileH + gap);
+		if (i == n) {
+			const bool hot = p.Hover(tx, ty, tileW, tileH, c.mx, c.my);
+			if (hot) p.Fill(tx, ty, tileW, tileH, pal::raised);
+			PaintDashedFrame(p, tx, ty, tileW, tileH, hot ? pal::text : pal::edgeHot);
+			UseFace(p, BrandFace::UiStrong, 15);
+			p.Text(tx + 8, ty, tileW - 16, tileH, "+ " + Tr("Add a map"), hot ? pal::text : pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			p.AddHit(tx, ty, tileW, tileH, kTourney, ArgOf(kSubPoolOpen, i));
+			continue;
+		}
+		const TourneyMap &m = f.seriesPool[static_cast<size_t>(i)];
+		const bool enabled = !c.locked;
+		const int crossW = enabled ? 40 : 0;
+		const bool hot = enabled && p.Hover(tx, ty, tileW - crossW, tileH, c.mx, c.my), hotCross = enabled && p.Hover(tx + tileW - crossW, ty, crossW, tileH, c.mx, c.my);
+		p.Fill(tx, ty, tileW, tileH, hot ? pal::selected : pal::field);
+		p.Frame(tx, ty, tileW, tileH, hot || hotCross ? pal::edgeHot : pal::edge);
+		const int thumb = tileH - 16;
+		PaintMapPicture(p, m, tx + 8, ty + 8, thumb);
+		const int textX = tx + 8 + thumb + 12, textW = tx + tileW - crossW - 8 - textX;
+		std::string sub = Tr("Random map");
+		if (m.kind == TourneyMapKind::Game) sub = Tr("Scenario of the game");
+		else if (m.kind == TourneyMapKind::Upload) sub = TrFmt("Your scenario \xC2\xB7 %s", {HumanBytes(static_cast<uint64_t>(std::max<int64_t>(0, m.bytes)))});
+		UseFace(p, BrandFace::UiStrong, 15);
+		p.Text(textX, ty + tileH / 2 - 22, textW, 21, MapText(m), pal::text, DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Font(3);
+		p.Text(textX, ty + tileH / 2 + 1, textW, 20, sub, pal::caption, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS);
+		if (!enabled) continue;
+		const int cx = tx + tileW - crossW / 2, cy = ty + tileH / 2;
+		const COLORREF ink = hotCross ? pal::redText : pal::caption;
+		p.Line(cx - 6, cy - 6, cx + 6, cy + 6, ink, 2);
+		p.Line(cx + 6, cy - 6, cx - 6, cy + 6, ink, 2);
+		p.AddHit(tx, ty, tileW - crossW, tileH, kTourney, ArgOf(kSubPoolOpen, i));
+		p.AddHit(tx + tileW - crossW, ty, crossW, tileH, kTourney, ArgOf(kSubPoolRemove, i));
+	}
+	const int rows = (tiles + cols - 1) / cols;
+	at += rows ? rows * (tileH + gap) - gap : 0;
+	at += Problem(c, x, at, w, {TourneyCupProblem::PoolCount, TourneyCupProblem::PoolMap});
+	at += 10;
+	at += Hint(c, x, at, w,
+		Tr("Without them, each game of a series is played on the round's map. With 3 to 5, whoever loses a game chooses the next one among those not "
+		   "played yet in the series: they have 60 s, or it is drawn."));
+	return at - y;
 }
 
 int MapsBlock(Form &c, int x, int y, int w)
@@ -431,21 +542,30 @@ int MapsBlock(Form &c, int x, int y, int w)
 	Painter &p = c.p;
 	int at = y;
 	at += Label(c, x, at, w, Tr("Maps: one for each round"));
-	const int rounds = TourneyRoundsFor(f.maxEntries), rowH = c.k.roomy ? 64 : 58, stageW = std::min(200, w / 4);
+	const int rowH = c.k.roomy ? 64 : 58, stageW = std::min(200, w / 4);
 	uint64_t upload = 0;
-	for (int i = 0; i < static_cast<int>(f.maps.size()) && i < rounds; i++) {
+	std::vector<std::string> counted;
+	const auto count = [&upload, &counted](const TourneyMap &m) {
+		if (m.kind != TourneyMapKind::Upload || std::find(counted.begin(), counted.end(), m.hash) != counted.end()) return;
+		counted.push_back(m.hash);
+		upload += static_cast<uint64_t>(std::max<int64_t>(0, m.bytes));
+	};
+	if (TourneyCupHasSeries(f)) {
+		for (const TourneyMap &m : f.seriesPool) count(m);
+	}
+	for (int i = 0; i < static_cast<int>(f.maps.size()); i++) {
 		const TourneyMap &m = f.maps[static_cast<size_t>(i)];
-		if (m.kind == TourneyMapKind::Upload) upload += static_cast<uint64_t>(std::max<int64_t>(0, m.bytes));
+		count(m);
 		if (!c.measure) {
 			UseFace(p, BrandFace::UiStrong, 15);
-			p.Text(x, at, stageW - 12, rowH, StageText(TourneyStageOf(i + 1, rounds), i + 1), pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			p.Text(x, at, stageW - 12, rowH, CupRoundName(f, i), pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 			const int bx = x + stageW, bw = w - stageW;
 			const bool enabled = !c.locked;
 			const bool hot = enabled && p.Hover(bx, at, bw, rowH, c.mx, c.my);
 			p.Fill(bx, at, bw, rowH, hot ? pal::selected : pal::field);
 			p.Frame(bx, at, bw, rowH, hot ? pal::edgeHot : pal::edge);
 			const int thumb = rowH - 16;
-			MapThumb(p, m, bx + 8, at + 8, thumb);
+			PaintMapPicture(p, m, bx + 8, at + 8, thumb);
 			const std::string change = Tr("Change");
 			UseFace(p, BrandFace::UiStrong, 12);
 			const int cw = enabled ? p.CapsWidth(change, 2) + 20 : 0;
@@ -478,6 +598,12 @@ int MapsBlock(Form &c, int x, int y, int w)
 	at += Hint(c, x, at, w,
 		upload ? TrFmt("Your scenarios (%s) go up to the league when you publish, and each player downloads them on their own when signing up.", {HumanBytes(upload)})
 			   : Tr("A random map, one of the game's scenarios or one of yours: yours go up to the league and each player downloads them on their own."));
+	if (TourneyCupHasSeries(f)) {
+		at += c.k.rowGap;
+		if (!c.measure) p.Fill(x, at, w, 1, pal::hairline);
+		at += c.k.rowGap;
+		at += PoolBlock(c, x, at, w);
+	}
 	return at - y;
 }
 
@@ -568,9 +694,25 @@ int CalendarRight(Form &c, int x, int y, int w)
 	const TourneyCupForm &f = c.f;
 	Painter &p = c.p;
 	int at = y;
+	const bool byRounds = f.pace == TourneyPace::Rounds;
 	at += Label(c, x, at, w, Tr("Pace"));
-	Segments(c, x, at, w, c.k.fieldH, {{Tr("Live, in one evening"), 0, true}, {Tr("By rounds, with deadlines"), 0, false, false, true}});
-	at += c.k.fieldH + c.k.rowGap;
+	Segments(c, x, at, w, c.k.fieldH,
+		{{Tr("Live, in one evening"), CupArg(kCupPace, 0), !byRounds}, {Tr("By rounds, with deadlines"), CupArg(kCupPace, 1), byRounds}});
+	at += c.k.fieldH + 8;
+	if (byRounds) {
+		at += 6;
+		at += Label(c, x, at, w, Tr("Days for each round"));
+		Segments(c, x, at, w, c.k.fieldH,
+			{{Tr("1 day"), CupArg(kCupRoundDays, 1), f.roundDays == 1}, {TrFmt("%s days", {"2"}), CupArg(kCupRoundDays, 2), f.roundDays == 2},
+				{TrFmt("%s days", {"3"}), CupArg(kCupRoundDays, 3), f.roundDays == 3}, {Tr("1 week"), CupArg(kCupRoundDays, 7), f.roundDays == 7}});
+		at += c.k.fieldH + 8;
+		at += Hint(c, x, at, w,
+			Tr("A round's matches are ready as soon as it opens, and each pair agrees on a time. The next round opens when they are all over, or when the "
+			   "deadline ends."));
+		at += Problem(c, x, at, w, {TourneyCupProblem::Pace});
+	}
+	else at += Hint(c, x, at, w, Tr("Each match is ready as soon as its players are known, from the start to the final."));
+	at += c.k.rowGap;
 	at += Label(c, x, at, w, Tr("Check-in"));
 	Segments(c, x, at, w, c.k.fieldH,
 		{{Tr("15 min before"), CupArg(kCupCheckin, 15), f.checkinMinutes == 15}, {Tr("30 min before"), CupArg(kCupCheckin, 30), f.checkinMinutes == 30}});
@@ -583,7 +725,10 @@ int CalendarRight(Form &c, int x, int y, int w)
 		{{TrFmt("After %s min", {"10"}), CupArg(kCupNoshow, 10), f.noshowMinutes == 10}, {TrFmt("After %s min", {"15"}), CupArg(kCupNoshow, 15), f.noshowMinutes == 15},
 			{TrFmt("After %s min", {"20"}), CupArg(kCupNoshow, 20), f.noshowMinutes == 20}});
 	at += c.k.fieldH + 8;
-	at += Hint(c, x, at, w, Tr("Whoever is not in the room by then loses the match, and the other goes through."));
+	at += Hint(c, x, at, w,
+		byRounds ? Tr("Only in the last 24 hours of a round: whoever is not in the room by then loses the match. At the deadline, whoever waits alone in "
+					  "the room wins; a match nobody played comes to you to settle, and if you don't within 24 hours, both are out.")
+				 : Tr("Whoever is not in the room by then loses the match, and the other goes through."));
 	at += Problem(c, x, at, w, {TourneyCupProblem::Noshow}) + c.k.rowGap;
 	const int half = (w - 16) / 2;
 	if (!c.measure) {
@@ -739,25 +884,37 @@ void PaintSummary(Painter &p, const State &st, const Ui &u, const std::vector<To
 	p.Fill(x + pad, at, iw, 1, pal::hairline);
 	at += 16;
 
-	const TourneyEstimate est = TourneyEstimateFor(f.maxEntries, f.bestOf, f.finalBestOf);
-	// League Gothic has no "≈": it goes in Archivo before the figure.
+	const TourneyEstimate est = TourneyEstimateOf(f);
+	const bool byRounds = f.pace == TourneyPace::Rounds;
+	// League Gothic has no "≈" nor "≤": they go in Archivo before the figure. By rounds, the days at most and the last one.
+	const char *mark = byRounds ? "\xE2\x89\xA4" : "\xE2\x89\x88";
 	UseFace(p, BrandFace::Ui, 30);
-	const int aw = p.TextWidth("\xE2\x89\x88") + 6;
-	p.Text(x + pad, at, aw, 46, "\xE2\x89\x88", pal::textDim, DT_LEFT | DT_BOTTOM | DT_SINGLELINE);
-	const std::string duration = DurationText(est.minutes * kMinuteMs);
+	const int aw = p.TextWidth(mark) + 6;
+	p.Text(x + pad, at, aw, 46, mark, pal::textDim, DT_LEFT | DT_BOTTOM | DT_SINGLELINE);
+	const std::string duration = byRounds ? TrFmt("%s days", {std::to_string(est.days)}) : DurationText(est.minutes * kMinuteMs);
 	UseDisplay(p, 46);
 	const int dw = std::min(iw - aw, p.TextWidth(duration) + 6);
 	p.Text(x + pad + aw, at, dw, 50, duration, pal::text, DT_LEFT | DT_BOTTOM | DT_SINGLELINE);
 	p.Font(0);
-	p.Text(x + pad + aw + dw + 12, at, iw - aw - dw - 12, 44, TrFmt("from %s to %s", {HourText(f.startsAt), HourText(f.startsAt + est.minutes * kMinuteMs)}),
-		pal::textDim, DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_END_ELLIPSIS);
+	const std::string span = byRounds ? TrFmt("until %s at the latest", {DayText(f.startsAt + est.days * kDayMs)})
+									  : TrFmt("from %s to %s", {HourText(f.startsAt), HourText(f.startsAt + est.minutes * kMinuteMs)});
+	p.Text(x + pad + aw + dw + 12, at, iw - aw - dw - 12, 44, span, pal::textDim, DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_END_ELLIPSIS);
 	at += 56;
+	const std::string players = std::to_string(f.maxEntries);
+	const std::string figures = f.format == TourneyFormat::Double
+		? TrFmt("%s players \xC2\xB7 two brackets \xC2\xB7 up to %s series and %s games", {players, std::to_string(est.series), std::to_string(est.maxGames)})
+		: TrFmt("%s players \xC2\xB7 %s rounds \xC2\xB7 %s series \xC2\xB7 up to %s games",
+			  {players, std::to_string(est.rounds), std::to_string(est.series), std::to_string(est.maxGames)});
 	p.Font(3);
-	p.Text(x + pad, at, iw, 22,
-		TrFmt("%s players \xC2\xB7 %s rounds \xC2\xB7 %s series \xC2\xB7 up to %s games", {std::to_string(f.maxEntries), std::to_string(est.rounds), std::to_string(est.series),
-																							   std::to_string(est.maxGames)}),
-		pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	p.Text(x + pad, at, iw, 22, figures, pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	at += 30;
+	if (TourneyCupLongLive(f)) {
+		const std::string warning = Tr("More than 5 hours live: think of the by-rounds pace, or fewer places.");
+		const int wh = std::min(p.Measure(iw - 14, warning), 44);
+		p.Fill(x + pad, at - 4, 3, wh + 8, pal::warn);
+		p.TextWrapped(x + pad + 14, at, iw - 14, wh + 2, warning, pal::warn);
+		at += wh + 14;
+	}
 
 	// The foot first, from the bottom: the button, what is going on or wrong, and what happens without enough players.
 	const bool linked = LeagueLinked(), busy = LeagueTourneyBusy(editing ? TourneyOp::Edit : TourneyOp::Create, editing ? u.cupEditId : 0);
@@ -819,27 +976,42 @@ void PaintSummary(Painter &p, const State &st, const Ui &u, const std::vector<To
 	p.TextWrapped(x + pad + 14, foot + 10, iw - 28, nh - 16, note, pal::body);
 	foot -= 16;
 
-	// The rows in between, as many as fit; the bracket's shape first when there is room for all.
-	std::vector<std::pair<std::string, std::string>> rows;
-	rows.push_back({Tr("Starts"), LongDayText(f.startsAt) + ", " + HourText(f.startsAt) +
-									  (f.startsAt > now ? " \xC2\xB7 " + TrFmt("in %s", {DurationText(f.startsAt - now)}) : std::string())});
-	rows.push_back({Tr("Rules"), RulesText(f.settings)});
-	std::string maps;
-	const int rounds = TourneyRoundsFor(f.maxEntries);
-	for (int i = 0; i < rounds && i < static_cast<int>(f.maps.size()); i++) {
-		maps += (i ? "\n" : "") + StageText(TourneyStageOf(i + 1, rounds), i + 1) + ": " + CupMapLine(f.maps[static_cast<size_t>(i)]);
+	// The rows in between, as many as fit; the bracket's shape first when there is room for all. Each row has its full value, for a name over
+	// it, and a short one, for a name beside it on a short screen.
+	struct Row {
+		std::string name, full, brief;
+		int lines;
+	};
+	std::vector<Row> rows;
+	const std::string starts = LongDayText(f.startsAt) + ", " + HourText(f.startsAt);
+	rows.push_back({Tr("Starts"), starts + (f.startsAt > now ? " \xC2\xB7 " + TrFmt("in %s", {DurationText(f.startsAt - now)}) : std::string()),
+		DayText(f.startsAt) + ", " + HourText(f.startsAt), 2});
+	const std::string format = FormatLine(f) + "\n" + PaceLine(f);
+	rows.push_back({Tr("Format"), format, format, 2});
+	rows.push_back({Tr("Rules"), RulesText(f.settings), RulesText(f.settings), 3});
+	std::string maps, mapsBrief;
+	for (int i = 0; i < static_cast<int>(f.maps.size()); i++) {
+		const TourneyMap &m = f.maps[static_cast<size_t>(i)];
+		maps += (i ? "\n" : "") + CupRoundName(f, i) + ": " + CupMapLine(m);
+		mapsBrief += (i ? "\n" : "") + CupRoundName(f, i) + ": " + MapText(m);
 	}
-	rows.push_back({Tr("Maps"), maps});
-	rows.push_back({Tr("Requirements"), RequirementsText(f.requirements)});
-	rows.push_back({Tr("Access"), Tr(f.isPrivate ? "Private: only with its code" : "Open: it shows in the list") + " \xC2\xB7 " +
-									  Tr(f.play ? "you play too" : "you only organise it")});
-	const int lineLimits[] = {2, 3, 5, 2, 2};
+	if (TourneyCupHasSeries(f)) {
+		std::string pool;
+		for (const TourneyMap &m : f.seriesPool) pool += (pool.empty() ? "" : ", ") + MapText(m);
+		const std::string series = pool.empty() ? Tr("Series: the round's map in every game") : TrFmt("Series: %s", {pool});
+		maps += "\n" + series;
+		mapsBrief += "\n" + series;
+	}
+	rows.push_back({Tr("Maps"), maps, mapsBrief, 6});
+	rows.push_back({Tr("Requirements"), RequirementsText(f.requirements), RequirementsText(f.requirements), 2});
+	const std::string access = Tr(f.isPrivate ? "Private: only with its code" : "Open: it shows in the list") + " \xC2\xB7 " + Tr(f.play ? "you play too" : "you only organise it");
+	rows.push_back({Tr("Access"), access, access, 2});
 	int need = 0;
-	for (size_t i = 0; i < rows.size(); i++) need += SummaryRow(p, x + pad, 0, iw, rows[i].first, rows[i].second, lineLimits[i], false);
+	for (const Row &r : rows) need += SummaryRow(p, x + pad, 0, iw, r.name, r.full, r.lines, false);
 	// Each name over its value when there is room; on a short screen each name beside a line of its value.
 	const bool full = foot - at - 14 >= need;
 	const int bracketH = 112;
-	if (full && foot - at - 14 >= need + bracketH + 8 && est.rounds > 0) {
+	if (full && foot - at - 14 >= need + bracketH + 8 && est.rounds > 0 && f.format == TourneyFormat::Single) {
 		PaintMiniBracket(p, x + pad, at + 4, iw, bracketH - 12, f.maxEntries);
 		at += bracketH + 8;
 	}
@@ -847,35 +1019,29 @@ void PaintSummary(Painter &p, const State &st, const Ui &u, const std::vector<To
 	at += 14;
 	p.Clip(x + pad, at, iw, std::max(0, foot - at));
 	if (full) {
-		for (size_t i = 0; i < rows.size(); i++) {
-			const int rh = SummaryRow(p, x + pad, at, iw, rows[i].first, rows[i].second, lineLimits[i], false);
+		for (const Row &r : rows) {
+			const int rh = SummaryRow(p, x + pad, at, iw, r.name, r.full, r.lines, false);
 			if (at + rh - 12 > foot) break;
-			SummaryRow(p, x + pad, at, iw, rows[i].first, rows[i].second, lineLimits[i], true);
+			SummaryRow(p, x + pad, at, iw, r.name, r.full, r.lines, true);
 			at += rh;
 		}
 	}
 	else {
-		rows[0].second = DayText(f.startsAt) + ", " + HourText(f.startsAt);
-		rows[2].second.clear();
-		for (int i = 0; i < rounds && i < static_cast<int>(f.maps.size()); i++) {
-			const TourneyMap &m = f.maps[static_cast<size_t>(i)];
-			rows[2].second += (i ? "\n" : "") + StageText(TourneyStageOf(i + 1, rounds), i + 1) + ": " + (m.Scenario() ? m.title : MapText(m));
-		}
 		UseFace(p, BrandFace::UiStrong, 11);
 		int labelW = 0;
-		for (const auto &r : rows) labelW = std::max(labelW, p.CapsWidth(r.first, 1) + 12);
+		for (const Row &r : rows) labelW = std::max(labelW, p.CapsWidth(r.name, 1) + 12);
 		labelW = std::min(labelW, iw / 3);
-		for (const auto &r : rows) {
+		for (const Row &r : rows) {
 			std::vector<std::string> lines;
 			for (size_t a = 0;;) {
-				const size_t b = r.second.find('\n', a);
-				lines.push_back(r.second.substr(a, b == std::string::npos ? std::string::npos : b - a));
+				const size_t b = r.brief.find('\n', a);
+				lines.push_back(r.brief.substr(a, b == std::string::npos ? std::string::npos : b - a));
 				if (b == std::string::npos) break;
 				a = b + 1;
 			}
 			if (at + static_cast<int>(lines.size()) * 20 > foot) break;
 			UseFace(p, BrandFace::UiStrong, 11);
-			p.TextCaps(x + pad, at, labelW, 20, r.first, pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1);
+			p.TextCaps(x + pad, at, labelW - 8, 20, r.name, pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
 			p.Font(3);
 			for (size_t l = 0; l < lines.size(); l++) {
 				p.Text(x + pad + labelW, at + static_cast<int>(l) * 20, iw - labelW, 20, lines[l], pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
@@ -894,7 +1060,7 @@ TourneyCupForm NewCupForm(const std::string &player, int64_t nowMs)
 	f.name = TrFmt("%s's cup", {player});
 	while (TourneyTextLength(f.name) > kTourneyCupNameMax) f.name.erase(static_cast<size_t>(PrevCp(f.name, static_cast<int>(f.name.size()))));
 	f.minEntries = TourneyCupDefaultMinimum(f.maxEntries);
-	TourneyFitMaps(f.maps, TourneyRoundsFor(f.maxEntries));
+	TourneyFitMaps(f.maps, TourneyCupMapRounds(f));
 	// The first full hour at least two hours away, so the players see it and sign up; at night or in the morning, the evening
 	// instead (19:00), when people play.
 	int64_t lo = 0, hi = 0;
@@ -927,6 +1093,14 @@ void OwnCupContent(std::string &key, std::string &name)
 	while (TourneyTextLength(name) > 60) name.erase(static_cast<size_t>(PrevCp(name, static_cast<int>(name.size()))));
 }
 
+std::string CupRoundName(const TourneyCupForm &f, int index)
+{
+	const int rounds = TourneyCupMapRounds(f), maps = static_cast<int>(f.maps.size());
+	if (f.format == TourneyFormat::Single) return StageText(TourneyStageOf(index + 1, rounds), index + 1);
+	if (index + 1 == maps && rounds > maps) return TrFmt("Rounds %s to %s", {std::to_string(index + 1), std::to_string(rounds)});
+	return StageText(TourneyStage::Unknown, index + 1);
+}
+
 void CupStartBounds(int64_t nowMs, int64_t &localMin, int64_t &localMax)
 {
 	localMin = LocalMs(nowMs + kLeadMs);
@@ -943,9 +1117,23 @@ void ApplyCupSetting(TourneyCupForm &f, int setting, int choice, int64_t nowMs)
 		if (choice != 4 && choice != 8 && choice != 16) break;
 		if (f.minEntries == TourneyCupDefaultMinimum(f.maxEntries) || f.minEntries > choice) f.minEntries = TourneyCupDefaultMinimum(choice);
 		f.maxEntries = choice;
-		TourneyFitMaps(f.maps, TourneyRoundsFor(choice));
+		TourneyFitMaps(f.maps, TourneyCupMapRounds(f));
 		break;
 	case kCupMinimum: f.minEntries = std::max(2, std::min(f.maxEntries, f.minEntries + (choice ? 1 : -1))); break;
+	case kCupFormat:
+		if (choice < static_cast<int>(TourneyFormat::Single) || choice > static_cast<int>(TourneyFormat::Swiss)) break;
+		f.format = static_cast<TourneyFormat>(choice);
+		TourneyFitMaps(f.maps, TourneyCupMapRounds(f));
+		break;
+	case kCupSwissRounds:
+		if (choice != 0 && (choice < kTourneySwissRoundsMin || choice > kTourneySwissRoundsMax)) break;
+		f.swissRounds = choice;
+		TourneyFitMaps(f.maps, TourneyCupMapRounds(f));
+		break;
+	case kCupPace: f.pace = choice ? TourneyPace::Rounds : TourneyPace::Live; break;
+	case kCupRoundDays:
+		if (TourneyRoundDaysValid(choice)) f.roundDays = choice;
+		break;
 	case kCupBestOf:
 		if (choice == 1 || choice == 3) f.bestOf = choice;
 		break;
@@ -1064,14 +1252,18 @@ std::string CupProblemText(TourneyCupProblem problem)
 	case TourneyCupProblem::DescriptionLong: return Tr("The description can have up to 200 characters.");
 	case TourneyCupProblem::Places: return Tr("Choose 4, 8 or 16 places.");
 	case TourneyCupProblem::Minimum: return Tr("The minimum goes from 2 to the number of places.");
+	case TourneyCupProblem::Format: return Tr("A Swiss plays 3 to 6 rounds, or the automatic count.");
 	case TourneyCupProblem::Series: return Tr("Choose the games of the rounds and of the final.");
 	case TourneyCupProblem::Settings: return Tr("Choose the game settings and the spectators again.");
 	case TourneyCupProblem::NoMaps: return Tr("Choose at least one map.");
 	case TourneyCupProblem::TooManyMaps: return Tr("Up to 5 maps.");
 	case TourneyCupProblem::BadMap: return Tr("One of the maps can't be used: choose it again.");
 	case TourneyCupProblem::MapTooLarge: return Tr("One of your scenarios is larger than 16 MB: the league does not keep it.");
+	case TourneyCupProblem::PoolCount: return Tr("The series need 3 to 5 maps, or none.");
+	case TourneyCupProblem::PoolMap: return Tr("One of the series' maps can't be used or is repeated: choose it again.");
 	case TourneyCupProblem::StartSoon: return Tr("It has to start at least 20 minutes from now.");
 	case TourneyCupProblem::StartLate: return Tr("It has to start within the next 14 days.");
+	case TourneyCupProblem::Pace: return Tr("Choose rounds of 1, 2, 3 or 7 days.");
 	case TourneyCupProblem::Noshow: return Tr("Choose a no-show time of 10, 15 or 20 minutes.");
 	case TourneyCupProblem::Requirements: return Tr("Choose up to 100 online games and a rank up to Legate.");
 	default: return Tr("Choose a check-in of 15 or 30 minutes.");

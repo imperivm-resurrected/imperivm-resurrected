@@ -201,10 +201,11 @@ bool ApplyTourneyRoom(const TourneyNext &next, RoomLock &k)
 	}
 	done = SetCheck(g, kOptNoFog, !r.fog) && done;
 	done = SetCheck(g, kOptExplored, r.explored) && done;
-	if (next.map.Scenario()) done = (k.mapAllowed || PickScenario(g, next.map, k)) && done;
-	else if (next.map.Known() && !k.mapAllowed) {
-		const bool type = SetMapItem(g, kOptMapType, next.map.name, done, k);
-		done = SetMapItem(g, kOptMapSize, next.map.size, type, k) && type && done;
+	const TourneyMap map = TourneyGameMap(next);
+	if (map.Scenario()) done = (k.mapAllowed || PickScenario(g, map, k)) && done;
+	else if (map.Known() && !k.mapAllowed) {
+		const bool type = SetMapItem(g, kOptMapType, map.name, done, k);
+		done = SetMapItem(g, kOptMapSize, map.size, type, k) && type && done;
 	}
 	return done;
 }

@@ -267,6 +267,31 @@ void OpenProfileInClient(uint64_t id)
 	const std::string url = "steam://url/SteamIDPage/" + std::to_string(id);
 	ShellExecuteA(nullptr, "open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 }
+
+void OpenChatInClient(uint64_t id)
+{
+	const std::string url = "steam://friends/message/" + std::to_string(id);
+	ShellExecuteA(nullptr, "open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+	LogI("steam", "chat with a player opened in the Steam client");
+}
+}
+
+void SteamOpenChat(uint64_t id)
+{
+	if (!id) return;
+	if (!SteamOnlineReady()) {
+		OpenChatInClient(id);
+		return;
+	}
+	Post([id] {
+		ISteamUtils *utils = S.SteamAPI_SteamUtils_v011();
+		if (!g_steam.friends || !utils || !S.SteamAPI_ISteamUtils_IsOverlayEnabled(utils)) {
+			OpenChatInClient(id);
+			return;
+		}
+		S.SteamAPI_ISteamFriends_ActivateGameOverlayToUser(g_steam.friends, "chat", id);
+		LogI("steam", "chat with a player opened in the overlay");
+	});
 }
 
 void SteamOpenProfile(uint64_t id)

@@ -111,7 +111,7 @@ std::string WindowText(const TourneySummary &t)
 	switch (t.status) {
 	case TourneyStatus::Signup: return TrFmt("Check-in %s, from %s to %s", {DayText(t.checkinOpensAt), HourText(t.checkinOpensAt), HourText(t.startsAt)});
 	case TourneyStatus::Checkin: return TrFmt("Check-in open until %s", {HourText(t.startsAt)});
-	case TourneyStatus::Running: return TrFmt("Started at %s", {HourText(t.startsAt)});
+	case TourneyStatus::Running: return !RoundText(t).empty() ? RoundText(t) : TrFmt("Started at %s", {HourText(t.startsAt)});
 	default: return TrFmt("Played on %s", {DayText(t.startsAt)});
 	}
 }
@@ -143,7 +143,8 @@ void PaintFeatured(Painter &p, const State &st, const TourneySummary *t, const T
 	int ly = y + (h >= 220 ? 120 : 106);
 	p.Font(0);
 	p.raw = true;
-	p.Text(tx, ly, tw, 24, WhenText(t->startsAt) + "   \xC2\xB7   " + FormatText(*t) + "   \xC2\xB7   " + ContentText(*t) + ", " + PresetText(t->settings), pal::body,
+	const std::string pace = t->pace == TourneyPace::Rounds ? "   \xC2\xB7   " + PaceText(*t) : std::string();
+	p.Text(tx, ly, tw, 24, WhenText(t->startsAt) + "   \xC2\xB7   " + FormatText(*t) + pace + "   \xC2\xB7   " + ContentText(*t) + ", " + PresetText(t->settings), pal::body,
 		DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	p.raw = false;
 	ly += 36;
@@ -260,14 +261,15 @@ void PaintTable(Painter &p, const State &st, const Ui &u, const TourneyListsView
 	const std::vector<TourneySummary> &rows = u.filter == 1 ? lists.live : u.filter == 2 ? lists.finished : lists.open;
 	// The mockup's grid: the name takes what the other columns leave.
 	const int pad = 16, gap = 16;
-	int colW[6] = {0, 210, 130, 180, 160, 150};
-	const float fit = std::min(1.0f, (w - 2 * pad - 5 * gap - 260) / 830.0f);
+	// "When" has room for a round's deadline, "until Thursday 20:00".
+	int colW[6] = {0, 210, 130, 160, 190, 150};
+	const float fit = std::min(1.0f, (w - 2 * pad - 5 * gap - 260) / 840.0f);
 	for (int c = 1; c < 6; c++) colW[c] = static_cast<int>(colW[c] * std::max(0.6f, fit));
 	colW[0] = w - 2 * pad - 5 * gap - colW[1] - colW[2] - colW[3] - colW[4] - colW[5];
 	int cx[6];
 	cx[0] = x + pad;
 	for (int c = 1; c < 6; c++) cx[c] = cx[c - 1] + colW[c - 1] + gap;
-	static const char *const kHeads[] = {"Tournament", "Format", "Places", "Content", "Starts"};
+	static const char *const kHeads[] = {"Tournament", "Format", "Places", "Content", "When"};
 	for (int c = 0; c < 5; c++) PaintCaps(p, cx[c], y + 14, colW[c], 18, kHeads[c], pal::caption);
 	const int top = y + 44, rowH = 68, viewH = y + h - top;
 	const int total = static_cast<int>(rows.size()) * rowH;
@@ -316,16 +318,31 @@ void PaintTable(Painter &p, const State &st, const Ui &u, const TourneyListsView
 		p.raw = true;
 		p.Text(cx[0], ry + 36, colW[0], 20, sub, subInk, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.raw = false;
+		// The format over its pace; a cup by rounds being played, its round over its deadline.
 		p.Font(0);
 		p.raw = true;
-		p.Text(cx[1], ry, colW[1], rowH, FormatText(t), pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(cx[1], ry + 12, colW[1], 24, FormatText(t), pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.Text(cx[2], ry + 14, colW[2], 22, TrFmt("%s of %s players", {std::to_string(t.entries), std::to_string(t.maxEntries)}), pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 		const int barW = std::min(110, colW[2]);
 		p.Fill(cx[2], ry + 42, barW, 4, pal::button);
 		if (t.maxEntries > 0) p.Fill(cx[2], ry + 42, barW * std::min(t.entries, t.maxEntries) / t.maxEntries, 4, pal::textDim);
 		p.Text(cx[3], ry, colW[3], rowH, ContentText(t), pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		p.Text(cx[4], ry, colW[4], rowH, t.status == TourneyStatus::Finished ? DayText(t.startsAt) : WhenText(t.startsAt), pal::body,
-			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		const int total = TourneyRoundCount(t);
+		const bool round = !RoundText(t).empty();
+		if (round) {
+			p.Text(cx[4], ry + 12, colW[4], 24,
+				total >= t.currentRound ? TrFmt("Round %s of %s", {std::to_string(t.currentRound), std::to_string(total)}) : TrFmt("Round %s", {std::to_string(t.currentRound)}),
+				pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		}
+		else {
+			p.Text(cx[4], ry, colW[4], rowH, t.status == TourneyStatus::Finished ? DayText(t.startsAt) : WhenText(t.startsAt), pal::body,
+				DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		}
+		p.Font(3);
+		p.Text(cx[1], ry + 36, colW[1], 20, PaceText(t), t.pace == TourneyPace::Rounds ? pal::textDim : pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		if (round && t.roundEndsAt > 0) {
+			p.Text(cx[4], ry + 36, colW[4], 20, UntilText(t.roundEndsAt), pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		}
 		p.raw = false;
 		PaintAct(p, ActionFor(t, mine), cx[5], ry + (rowH - 38) / 2, colW[5], 38, mx, my);
 	}
@@ -447,7 +464,7 @@ int PaintMineCard(Painter &p, const State &st, const TourneyMineView &mine, int 
 		else if (e.tournamentStatus == TourneyStatus::Running) {
 			const TourneyNext &n = mine.mine.next;
 			line = n.present && n.tournamentId == e.tournamentId
-				? TrFmt("Playing \xC2\xB7 %s, %s", {StageText(n.stage, n.round),
+				? TrFmt("Playing \xC2\xB7 %s, %s", {BracketStageText(n.bracket, n.stage, n.round),
 					Tr(n.status == TourneyMatchStatus::Ready ? "ready" : n.status == TourneyMatchStatus::Live ? "live" : "waiting for your opponent")})
 				: Tr("Playing");
 		}

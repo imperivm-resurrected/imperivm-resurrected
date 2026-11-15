@@ -42,6 +42,8 @@ enum class TourneyOp {
 	SignUp, Withdraw, CheckIn, Claim, Register, Presence, NoShow, Dispute,
 	// A community cup: made, found by its code, and its organizer's actions.
 	Create, FindCode, Cancel, CheckinNow, StartNow, RemoveEntry, Resolve, Edit,
+	// The map of a series' next game chosen.
+	Pick,
 };
 
 // The answer to something the player did.
@@ -70,6 +72,10 @@ struct TourneyOpResult {
 	std::string requirement, have, need;
 	// A scenario of the cup that could not go up (its title), or the uploaded one the league does not have (map_missing: its SHA-256).
 	std::string mapTitle, hash;
+	// The map a pick chose.
+	TourneyMap map;
+	// A win claimed too early by rounds: from when the no-show counts.
+	int64_t noshowFrom = 0;
 };
 // In a private cup the code the player found it with goes along.
 void LeagueTourneySignUp(int64_t tournament);
@@ -83,7 +89,11 @@ void LeagueTourneyRegisterRoom(int64_t match, uint64_t lobby, uint64_t specLobby
 void LeagueTourneyPresence(int64_t match, bool started);
 void LeagueTourneyClaimNoShow(int64_t match);
 void LeagueTourneyDispute(int64_t match, const std::string &text);
-// The organizer's own scenarios of the form go up first (PUT /v1/maps/:sha256), each once, then the cup is made (POST /v1/tournaments).
+// The map of the next game of the player's series, by its place among the pick's options; once the league takes it, the player's next
+// match has no pick any more and that game has its map.
+void LeagueTourneyPick(int64_t match, int index);
+// The organizer's own scenarios of the form, the rounds' and the series', go up first (PUT /v1/maps/:sha256), each once, then the cup is
+// made (POST /v1/tournaments).
 // A scenario that changed since it was chosen fails with "map_changed".
 void LeagueTourneyCreate(const TourneyCupForm &form);
 // The same for a change of the organizer's cup (PATCH /v1/tournaments/:id); `descriptionOnly` once someone else signed up.

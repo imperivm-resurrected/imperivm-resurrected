@@ -1102,7 +1102,9 @@ void PaintRoomTab(Painter &p, const State &st, const RoomFacts &f, const RoomLay
 {
 	const GameRoomSnapshot &g = st.game;
 	const int m = l.margin, inner = l.w - 2 * m, by = l.bottomY, bh = l.bottomH, gap = kBlockGap;
-	PaintPlayerTable(p, st, f, m, l.top, inner, by - 32 - l.top);
+	// In a tournament series, the choice of the next game's map goes over the table while it lasts.
+	const int pick = PaintTourneyRoomPick(p, st, m, l.top, inner);
+	PaintPlayerTable(p, st, f, m, l.top + pick, inner, by - 32 - l.top - pick);
 	if (g.online) {
 		const int centerW = std::max(280, std::min(380, inner / 5)), sideW = (inner - centerW - 2 * gap) / 2;
 		PaintSummary(p, st, m, by, sideW, bh);

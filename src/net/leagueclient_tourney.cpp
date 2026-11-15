@@ -48,7 +48,8 @@ struct Page {
 
 struct Mine {
 	bool loaded = false, loading = false, tried = false;
-	DWORD at = 0, watched = 0;
+	// `gameAt`: the last tick seen during a game, after which a series' pick opens.
+	DWORD at = 0, watched = 0, gameAt = 0;
 	std::string steamId;
 	TourneyMine mine;
 };
@@ -94,6 +95,7 @@ const char *OpName(TourneyOp op)
 	case TourneyOp::StartNow: return "early start";
 	case TourneyOp::RemoveEntry: return "entry removal";
 	case TourneyOp::Edit: return "cup change";
+	case TourneyOp::Pick: return "map pick";
 	default: return "resolution";
 	}
 }
@@ -178,8 +180,11 @@ void FetchPage(std::string slug, std::string code)
 void Notify(const TourneyMine &mine)
 {
 	for (const TourneyNotice &n : TourneyNewNotices(mine, g_told)) {
-		LogI("league", "tournament notice: %s, %s", n.kind == TourneyNotice::MatchReady ? "match ready" : n.kind == TourneyNotice::CheckinOpen ? "check-in open" : "over",
-			n.name.c_str());
+		const char *kind = "over";
+		if (n.kind == TourneyNotice::MatchReady) kind = "match ready";
+		else if (n.kind == TourneyNotice::CheckinOpen) kind = "check-in open";
+		else if (n.kind == TourneyNotice::PickOpen) kind = "map to pick";
+		LogI("league", "tournament notice: %s, %s", kind, n.name.c_str());
 		g_notices.push_back(n);
 	}
 }
@@ -267,6 +272,7 @@ void Run(TourneyOp op, int64_t id, std::string method, std::string path, std::st
 		out.have = no.have;
 		out.need = no.need;
 		out.hash = no.hash;
+		out.noshowFrom = no.noshowFrom;
 		if (r.status == 0 || r.status >= 500) LogW("league", "tournament %s failed (%s)", OpName(op), r.Describe().c_str());
 		else LogI("league", "tournament %s refused (%s)", OpName(op), r.Describe().c_str());
 	}
@@ -289,6 +295,10 @@ void Run(TourneyOp op, int64_t id, std::string method, std::string path, std::st
 		const Json *entry = j.Get("entry");
 		out.waitlist = entry && entry->GetString("status") == "waitlist";
 	}
+	else if (op == TourneyOp::Pick && parsed) {
+		out.map = TourneyMapFromJson(j.Get("map"));
+		LogI("league", "map of the next game of match %lld chosen: %s", static_cast<long long>(id), out.map.Scenario() ? out.map.file.c_str() : out.map.name.c_str());
+	}
 	if (out.ok && (op == TourneyOp::Create || op == TourneyOp::Edit)) {
 		out.tournament = created.id;
 		out.slug = created.slug;
@@ -309,6 +319,25 @@ void Run(TourneyOp op, int64_t id, std::string method, std::string path, std::st
 	std::lock_guard<std::mutex> lock(g_mx);
 	g_busy.erase({static_cast<int>(op), id});
 	if (fresh && g_mine.mine.next.match == next.match) g_mine.mine.next = next;
+	// The pick is over for this player as soon as the league takes it, before their matches are read again.
+	if (out.ok && op == TourneyOp::Pick && g_mine.mine.next.match == id) {
+		TourneyNext &n = g_mine.mine.next;
+		n.pick = TourneyPick();
+		if (out.map.Known()) {
+			n.map = out.map;
+			bool listed = false;
+			for (TourneyGame &g : n.games) {
+				if (g.no != n.game) continue;
+				g.map = out.map;
+				listed = true;
+			}
+			if (!listed) n.games.push_back({n.game, out.map, std::string()});
+		}
+	}
+	// A room claimed while the next game's map is being chosen waits for it: the pick shows before the matches are read again.
+	if (out.ok && op == TourneyOp::Claim && out.claim.kind == TourneyClaim::Wait && out.claim.pick.present && g_mine.mine.next.match == id) {
+		g_mine.mine.next.pick = out.claim.pick;
+	}
 	if (out.ok && op == TourneyOp::Create) RememberCode(created.slug, created.id, created.inviteCode);
 	if (out.ok && op == TourneyOp::Edit) {
 		// A cup made open has no code any more, and its page is read by its slug again.
@@ -381,8 +410,9 @@ void UploadFailed(TourneyOp op, int64_t id, const TourneyMap &m, const HttpReply
 // The organizer's scenarios go up one by one, each once, and then the cup.
 void Publish(TourneyOp op, int64_t id, TourneyCupForm form, bool descriptionOnly)
 {
-	std::vector<TourneyMap> uploads;
-	for (const TourneyMap &m : form.maps) {
+	std::vector<TourneyMap> uploads, all = form.maps;
+	if (TourneyCupHasSeries(form)) all.insert(all.end(), form.seriesPool.begin(), form.seriesPool.end());
+	for (const TourneyMap &m : all) {
 		if (descriptionOnly || m.kind != TourneyMapKind::Upload) continue;
 		bool seen = false;
 		for (const TourneyMap &u : uploads) seen = seen || u.hash == m.hash;
@@ -452,11 +482,14 @@ void TourneyTick()
 {
 	std::string token, steamId;
 	if (!AccountFor(token, steamId)) return;
-	// Never during a game: the poll waits for the menus.
-	if (*reinterpret_cast<void *const *>(addr::kGame) != nullptr) return;
-	std::lock_guard<std::mutex> lock(g_mx);
-	if (g_mine.loading || Quiet()) return;
 	const DWORD now = GetTickCount();
+	std::lock_guard<std::mutex> lock(g_mx);
+	// Never during a game: the poll waits for the menus.
+	if (*reinterpret_cast<void *const *>(addr::kGame) != nullptr) {
+		g_mine.gameAt = now;
+		return;
+	}
+	if (g_mine.loading || Quiet()) return;
 	const bool tab = g_mine.watched && now - g_mine.watched < kWatchMs;
 	if (!g_mine.tried) {
 		StartMine();
@@ -465,6 +498,9 @@ void TourneyTick()
 	const bool active = g_mine.loaded && TourneyHasActiveEntry(g_mine.mine);
 	DWORD every = static_cast<DWORD>(TourneyPollEveryMs(active, tab));
 	if (!g_mine.loaded && !every) every = kMineRetryMs;
+	const int64_t sinceGame = g_mine.gameAt ? static_cast<int64_t>(now - g_mine.gameAt) : -1;
+	const DWORD series = g_mine.loaded ? static_cast<DWORD>(TourneySeriesPollMs(g_mine.mine.next, sinceGame)) : 0;
+	if (series && (!every || series < every)) every = series;
 	if (every && now - g_mine.at >= every) StartMine();
 }
 
@@ -600,6 +636,13 @@ void LeagueTourneyDispute(int64_t match, const std::string &text)
 	Json body = Json::MakeObject();
 	body.Set("text", Json::MakeString(text.substr(0, 500)));
 	Start(TourneyOp::Dispute, match, "POST", MatchPath(match, "/dispute"), body.Dump());
+}
+
+void LeagueTourneyPick(int64_t match, int index)
+{
+	Json body = Json::MakeObject();
+	body.Set("index", Json::MakeNumber(index));
+	Start(TourneyOp::Pick, match, "POST", MatchPath(match, "/pick"), body.Dump());
 }
 
 void LeagueTourneyCreate(const TourneyCupForm &form)

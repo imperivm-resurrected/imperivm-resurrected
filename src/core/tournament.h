@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "core/json.h"
@@ -125,6 +126,23 @@ enum class TourneyUnmet { None, Games, Tier };
 // What keeps a player out of a cup, from their online games and their rank this season (None when not ranked).
 TourneyUnmet TourneyCheckRequirements(const TourneyRequirements &r, int gamesPlayed, LeagueTier tier);
 
+// How a tournament is played: single or double elimination, or Swiss rounds against rivals with the same points.
+enum class TourneyFormat { Single, Double, Swiss };
+// "single", "double" or "swiss"; unknown ids are single elimination, as the league's first tournaments.
+TourneyFormat TourneyFormatFromId(const std::string &id);
+const char *TourneyFormatId(TourneyFormat f);
+// Live, in one evening; or by rounds, each with a deadline some days away.
+enum class TourneyPace { Live, Rounds };
+// "live" or "rounds"; unknown ids are live.
+TourneyPace TourneyPaceFromId(const std::string &id);
+const char *TourneyPaceId(TourneyPace p);
+// The days a round can last with the by-rounds pace: 1, 2, 3 or 7.
+bool TourneyRoundDaysValid(int days);
+// The Swiss rounds a cup can choose instead of the automatic count.
+constexpr int kTourneySwissRoundsMin = 3, kTourneySwissRoundsMax = 6;
+// The rounds of a Swiss: the ones chosen (3 to 6), otherwise ceil(log2(players)).
+int TourneySwissRounds(int chosen, int players);
+
 // The player who made a community cup; nobody for the official ones.
 struct TourneyOrganizer {
 	uint64_t steamId = 0;
@@ -148,9 +166,24 @@ struct TourneySummary {
 	TourneyRequirements requirements;
 	std::vector<TourneyMap> maps;
 	int64_t signupOpensAt = 0, checkinOpensAt = 0, startsAt = 0;
+	// The Swiss rounds chosen; 0 for the automatic count.
+	int swissRounds = 0;
+	TourneyPace pace = TourneyPace::Live;
+	// The days each round lasts with the by-rounds pace.
+	int roundDays = 0;
+	// The maps the loser of a game of a series chooses the next one from (3 to 5); none when every game repeats the round's map.
+	std::vector<TourneyMap> seriesPool;
+	// With the by-rounds pace: the round being played (0 before the first) and when its deadline ends.
+	int currentRound = 0;
+	int64_t roundEndsAt = 0;
 };
 bool TourneyParseSummary(const Json &j, TourneySummary &out);
 bool TourneyParseList(const Json &j, std::vector<TourneySummary> &out);
+// The format of `format`'s id.
+TourneyFormat TourneyFormatOf(const TourneySummary &t);
+// The rounds the tournament plays one after the other, for "Round 2 of 4": a Swiss its rounds, single elimination its bracket's; 0 for
+// a double elimination, whose two brackets count their rounds apart.
+int TourneyRoundCount(const TourneySummary &t);
 // The map of a round (1 is the first); the last one repeats. Empty when the tournament gives none.
 // The rounds of a full bracket for this many places: 4 -> 2, 8 -> 3, 16 -> 4, 32 -> 5.
 int TourneyFullRounds(int maxEntries);
@@ -176,6 +209,30 @@ struct TourneyEntrant {
 	bool checkedIn = false;
 };
 
+// A game of a series: its number from 1, its map (not Known() while it is being chosen) and its winner, "a", "b" or empty.
+struct TourneyGame {
+	int no = 0;
+	TourneyMap map;
+	std::string winner;
+};
+// The map of a series' next game, which the loser of the last one chooses: who ("a" or "b"), among which maps and until when. Not
+// present while there is nothing to choose.
+struct TourneyPick {
+	bool present = false;
+	std::string by;
+	std::vector<TourneyMap> options;
+	int64_t until = 0;
+};
+// [{no, map, winner: "a"|"b"|null}], by number.
+std::vector<TourneyGame> TourneyGamesFromJson(const Json *v);
+// {by: "a"|"b", options: [map...], until} or null.
+TourneyPick TourneyPickFromJson(const Json *v);
+// The game `no` of a series; null when the league lists none.
+const TourneyGame *TourneyGameOf(const std::vector<TourneyGame> &games, int no);
+// The games of a series of `bestOf` won by each side, and whether one of them has won it.
+void TourneySeriesScore(const std::vector<TourneyGame> &games, int &a, int &b);
+bool TourneySeriesOver(const std::vector<TourneyGame> &games, int bestOf);
+
 struct TourneyMatch {
 	int64_t id = 0;
 	int round = 0, position = 0, bestOf = 1, scoreA = 0, scoreB = 0;
@@ -187,6 +244,10 @@ struct TourneyMatch {
 	TourneyMatchStatus status = TourneyMatchStatus::Unknown;
 	uint64_t lobby = 0, specLobby = 0;
 	int64_t readyAt = 0, deadlineAt = 0, startedAt = 0, finishedAt = 0;
+	std::vector<TourneyGame> games;
+	TourneyPick pick;
+	// With the by-rounds pace: from when not coming to the room counts as a no-show (the last day of the round); 0 otherwise.
+	int64_t noshowFrom = 0;
 	bool Has(int64_t entryId) const { return entryId && (a.entryId == entryId || b.entryId == entryId); }
 };
 
@@ -280,15 +341,28 @@ struct TourneyNext {
 	TourneyOrganizer organizer;
 	int round = 0, rounds = 0, bestOf = 1, game = 1, scoreMe = 0, scoreThem = 0;
 	TourneyStage stage = TourneyStage::Unknown;
+	// The part of the tournament the match is in; `round` counts within it.
+	TourneyBracket bracket = TourneyBracket::Winners;
 	TourneyMatchStatus status = TourneyMatchStatus::Unknown;
 	int64_t readyAt = 0, deadlineAt = 0;
 	TourneyNextSide me, opponent;
 	bool hasOpponent = false, canClaimNoShow = false;
+	// The map of the game to play; none while it is being chosen (TourneyGameMap).
 	TourneyMap map;
 	TourneySettings settings;
 	uint64_t lobby = 0, specLobby = 0, roomClaimBy = 0;
+	std::vector<TourneyGame> games;
+	TourneyPick pick;
+	TourneyFormat format = TourneyFormat::Single;
+	// With the by-rounds pace the deadline is the end of the round, and the no-show only counts from `noshowFrom`.
+	TourneyPace pace = TourneyPace::Live;
+	int64_t noshowFrom = 0;
+	// The map of the next game is this player's to choose.
+	bool MyPick() const { return pick.present && !me.side.empty() && pick.by == me.side; }
 };
 bool TourneyParseNext(const Json &j, TourneyNext &out);
+// The map of the game to play now: the one chosen or drawn for it, otherwise the round's. Not Known() while it is being chosen.
+TourneyMap TourneyGameMap(const TourneyNext &n);
 
 // The check-in the player has to make.
 struct TourneyCheckin {
@@ -341,6 +415,9 @@ const TourneyOrganized *TourneyOrganizedOf(const TourneyMine &m, int64_t tournam
 bool TourneyHasActiveEntry(const TourneyMine &m);
 // How often to ask for the player's tournaments: 30 s with one of their own on, 60 s while the Tournaments tab is open, otherwise never.
 int TourneyPollEveryMs(bool activeEntry, bool tabOpen);
+// Sooner while a series waits for its next map, which has a minute to be chosen: every 5 s while the choice is open, and in the two
+// minutes after a game of a series (`msSinceGame`, negative when no game ended), when it opens; 0 otherwise.
+int TourneySeriesPollMs(const TourneyNext &n, int64_t msSinceGame);
 
 // POST /v1/tournaments/matches/:id/room/claim.
 struct TourneyClaim {
@@ -349,6 +426,8 @@ struct TourneyClaim {
 	std::string lobbyKey, contentKey;
 	TourneyMap map;
 	TourneySettings settings;
+	// Wait while the map of a series' next game is being chosen: the room opens once it is.
+	TourneyPick pick;
 };
 bool TourneyParseClaim(const Json &j, TourneyClaim &out);
 
@@ -358,16 +437,20 @@ int64_t TourneyMatchOfTag(const std::string &tag);
 
 // What the player is told in any menu once.
 struct TourneyNotice {
-	enum Kind { MatchReady, CheckinOpen, Finished } kind = MatchReady;
+	// PickOpen: the map of the next game of the player's series is theirs to choose (`game`, until `deadlineAt`).
+	enum Kind { MatchReady, CheckinOpen, Finished, PickOpen } kind = MatchReady;
 	int64_t tournamentId = 0, match = 0;
 	std::string slug, name, opponent;
 	TourneyStage stage = TourneyStage::Unknown;
-	int round = 0;
+	TourneyBracket bracket = TourneyBracket::Winners;
+	int round = 0, game = 0;
 	int64_t deadlineAt = 0;
 };
 // What was told already, so each thing is told once.
 struct TourneyTold {
 	std::set<int64_t> ready, checkin, finished;
+	// The picks by match and game.
+	std::set<std::pair<int64_t, int>> picks;
 	bool primed = false;
 };
 // The notices `mine` brings that were not told yet. The first answer of a session only primes what is over, so a tournament that
@@ -401,6 +484,8 @@ struct TourneyRefusal {
 	std::string requirement, have, need;
 	// map_missing: the SHA-256 of the uploaded scenario the league does not have.
 	std::string hash;
+	// too_early with the by-rounds pace: from when the no-show counts.
+	int64_t noshowFrom = 0;
 };
 TourneyRefusal TourneyParseRefusal(const Json &j);
 
@@ -431,13 +516,25 @@ struct TourneyCupForm {
 	std::string contentKey, contentName;
 	TourneySettings settings = TourneyCupDefaultSettings();
 	TourneyRequirements requirements;
+	TourneyFormat format = TourneyFormat::Single;
+	// The Swiss rounds, 3 to 6; 0 for the automatic count.
+	int swissRounds = 0;
+	TourneyPace pace = TourneyPace::Live;
+	int roundDays = 2;
+	// The maps the loser of a game chooses the next one from, 3 to 5, or none; only sent when the cup has series.
+	std::vector<TourneyMap> seriesPool;
 };
 constexpr int kTourneyCupNameMin = 3, kTourneyCupNameMax = 40, kTourneyCupDescriptionMax = 200, kTourneyCupMapsMax = 5;
+constexpr int kTourneyPoolMin = 3, kTourneyPoolMax = 5;
 constexpr int64_t kTourneyCupLeadMinMs = 20 * 60000LL, kTourneyCupLeadMaxMs = 14 * 86400000LL;
 enum class TourneyCupProblem {
-	NameShort, NameLong, DescriptionLong, Places, Minimum, Series, Settings, NoMaps, TooManyMaps, BadMap, MapTooLarge, StartSoon, StartLate, Checkin,
-	Noshow, Requirements,
+	NameShort, NameLong, DescriptionLong, Places, Minimum, Format, Series, Settings, NoMaps, TooManyMaps, BadMap, MapTooLarge, PoolCount, PoolMap,
+	StartSoon, StartLate, Pace, Checkin, Noshow, Requirements,
 };
+// Some game of the cup is a series (best of 3, or 5 in a final): the rounds', or the final's outside a Swiss, which has no final.
+bool TourneyCupHasSeries(const TourneyCupForm &f);
+// The rounds a cup's form gives a map to: a Swiss's rounds, the rounds of an elimination's bracket (its winners' in a double one).
+int TourneyCupMapRounds(const TourneyCupForm &f);
 // What the server would refuse in the form, in the order of the form; none when it can be sent.
 std::vector<TourneyCupProblem> TourneyCheckCup(const TourneyCupForm &f, int64_t nowMs);
 // The request's body: the name and description trimmed, the description and the content left out when empty. For a change (`edit`) the
@@ -452,12 +549,21 @@ TourneyCupForm TourneyCupFormOf(const TourneyDetail &d);
 // Someone other than the organizer signed up: from then on only the description can change.
 bool TourneyCupLocked(const TourneyDetail &d);
 
-// The Summary's figures: the rounds, the series (one per pair of players) and the games at most, and the minutes it lasts: 40 a game and
-// 10 between rounds, each round as long as its longest series.
+// The Summary's figures: the rounds played one after the other, the series (one per pair of players) and the games at most, and the
+// minutes it lasts: 40 a game and 10 between rounds, each round as long as its longest series. With the by-rounds pace, the days at most:
+// each round its days.
 struct TourneyEstimate {
-	int rounds = 0, series = 0, maxGames = 0, minutes = 0;
+	int rounds = 0, series = 0, maxGames = 0, minutes = 0, days = 0;
 };
+// Single elimination.
 TourneyEstimate TourneyEstimateFor(int places, int bestOf, int finalBestOf);
+// A Swiss is its rounds, each a series; a double elimination waits for its losers' bracket, which starts after the first round and
+// plays twice as many, then the grand final and its reset.
+TourneyEstimate TourneyEstimateFor(TourneyFormat format, int places, int bestOf, int finalBestOf, int swissRounds);
+TourneyEstimate TourneyEstimateOf(const TourneyCupForm &f);
+// Past this a live cup is long for one evening: the form says so for a double elimination.
+constexpr int kTourneyLiveWarnMinutes = 300;
+bool TourneyCupLongLive(const TourneyCupForm &f);
 
 // The cup's calendar, in this computer's time: a day is the number of days since 1 January 1970 and a time is milliseconds from then,
 // both counted in local time.
