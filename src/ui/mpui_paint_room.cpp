@@ -715,7 +715,7 @@ void PaintSlotRow(Painter &p, const State &st, const TableCtx &t, int i, const A
 	{
 		const int team = s.team > 0 && s.team <= kRoomTeams ? s.team : 0;
 		const std::string text = team ? TrFmt("Team %d", {std::to_string(team)}) : Tr("No team");
-		SlotCombo(p, st, c.team, ctlY, c.teamW, text, team ? pal::text : pal::textDim, kDropTeam, i, !load && own && !frozen && !RankedRoomLocked(st));
+		SlotCombo(p, st, c.team, ctlY, c.teamW, text, team ? pal::text : pal::textDim, kDropTeam, i, !load && own && !frozen && !RankedRoomLocked(st) && !TourneyTeamsLocked(st));
 		if (team) p.Fill(c.team + 1, ctlY + kFieldH - 3, c.teamW - 2, 2, TeamColor(team));
 	}
 	{

@@ -42,8 +42,11 @@ void TourneyFieldEdited(int field);
 void TourneyFieldEnter(int field);
 // Locked. An item of a menu the tab opened (kDropTourney) picked.
 void TourneyDropPick(int index, int item);
-// Locked. What the tournament fixes in its room (map, options, open seats) cannot be changed: true, with a notice, for such an action.
+// Locked. What the tournament fixes in its room (map, options, open seats, the teams of a match of teams) cannot be changed: true, with a
+// notice, for such an action.
 bool TourneyBlocksAction(int action, int arg);
+// The room is a tournament match of teams whose teams the league set: nobody changes them.
+bool TourneyTeamsLocked(const mpui_impl::State &st);
 // The room of this player's tournament match: `note` gets the line under its title (how long the rival has to come) and, once the
 // rival let the time run out, a button that claims the win is painted left of `right` at `y`. Returns where the header's
 // buttons start now.

@@ -61,7 +61,7 @@ std::string MetaText(const TourneyDetail &d)
 	const std::string round = RoundText(summary);
 	if (!round.empty()) parts.push_back(round);
 	else if (summary.pace == TourneyPace::Rounds && d.status != TourneyStatus::Finished && d.status != TourneyStatus::Cancelled) parts.push_back(PaceText(summary));
-	parts.push_back(d.entries == 1 ? Tr("1 player") : TrFmt("%s players", {std::to_string(d.entries)}));
+	parts.push_back(SideCountText(d, d.entries));
 	parts.push_back(ContentText(d));
 	parts.push_back(PresetText(d.settings));
 	if (d.status == TourneyStatus::Running) {
@@ -86,9 +86,10 @@ std::string ComingName(const TourneyDetail &d, const TourneyMatch &m, bool sideB
 	return Tr("To be decided");
 }
 
-void PaintSide(Painter &p, Ctx &c, const TourneyMatch &m, const TourneyCard &card, bool sideB, int x, int y, int w)
+// A side of a box, `h` high: its seed, its name (a team's with its players under it when there is room) and its score.
+void PaintSide(Painter &p, Ctx &c, const TourneyMatch &m, const TourneyCard &card, bool sideB, int x, int y, int w, int h)
 {
-	const int h = 28, seedW = 26, scoreW = 32;
+	const int seedW = 26, scoreW = 32;
 	const bool over = TourneyMatchOver(m.status);
 	const bool won = card.Present() && m.winner == card.entryId;
 	const bool lost = over && card.Present() && !won;
@@ -111,18 +112,35 @@ void PaintSide(Painter &p, Ctx &c, const TourneyMatch &m, const TourneyCard &car
 		const int youW = mine ? 30 : 0;
 		std::string extra;
 		if (c.next && c.next->match == m.id && !mine && c.next->opponent.inRoom && !over) extra = Tr("in the room");
+		// A team: its name over its players, when the box is tall enough and the name is not theirs already.
+		const std::string players = c.d.Teams() ? TeamPlayersLine(card.name, card.members) : std::string();
+		const bool two = !players.empty() && h >= 36;
+		const int nameH = two ? 22 : h, nameY = two ? y + 2 : y;
 		p.raw = true;
 		const int textW = std::min(nw - youW, p.TextWidth(card.name) + 2);
 		p.raw = false;
-		PaintName(p, nx, y, nw - youW - (extra.empty() ? 0 : 70), h, card.name, card.steamId, ink, c.mx, c.my);
-		if (mine) PaintTag(p, nx + std::min(textW, nw - youW) + 6, y + 3, "You", pal::red, pal::onRed);
+		if (c.d.Teams()) {
+			p.raw = true;
+			p.Text(nx, nameY, nw - youW - (extra.empty() ? 0 : 70), nameH, card.name, ink, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			p.raw = false;
+		}
+		else PaintName(p, nx, y, nw - youW - (extra.empty() ? 0 : 70), h, card.name, card.steamId, ink, c.mx, c.my);
+		if (mine) PaintTag(p, nx + std::min(textW, nw - youW) + 6, nameY + (nameH - 22) / 2, "You", pal::red, pal::onRed);
+		if (two) {
+			UseFace(p, BrandFace::Ui, 12);
+			p.raw = true;
+			p.Text(nx, y + 22, nw, h - 24, players, lost ? pal::caption : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			p.raw = false;
+		}
 		if (!extra.empty()) {
 			UseFace(p, BrandFace::Ui, 12);
 			p.raw = true;
-			p.Text(nx + nw - 70, y, 70, h, "\xC2\xB7 " + extra, pal::ok, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			p.Text(nx + nw - 70, nameY, 70, nameH, "\xC2\xB7 " + extra, pal::ok, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		}
 		p.raw = false;
-		if (card.steamId) c.ids.push_back(card.steamId);
+		for (const TourneyMember &pl : TourneyPlayersOf(card)) {
+			if (pl.steamId) c.ids.push_back(pl.steamId);
+		}
 	}
 	const int sx = x + w - scoreW;
 	p.Fill(sx, y, scoreW, h, won ? pal::button : pal::field);
@@ -151,9 +169,10 @@ void PaintBox(Painter &p, Ctx &c, const TourneyMatch &m, int x, int y, const Tou
 	p.Fill(x, y, bm.boxW, bm.boxH, live || mine ? pal::selected : pal::raised);
 	if (bye) PaintDashedFrame(p, x, y, bm.boxW, bm.boxH, pal::edgeHot);
 	else p.Frame(x, y, bm.boxW, bm.boxH, live ? pal::red : mine ? pal::warn : pal::edge);
-	PaintSide(p, c, m, m.a, false, x + 1, y + 1, bm.boxW - 2);
-	p.Fill(x + 1, y + 29, bm.boxW - 2, 1, pal::hairline);
-	PaintSide(p, c, m, m.b, true, x + 1, y + 30, bm.boxW - 2);
+	const int sideH = (bm.boxH - 2) / 2;
+	PaintSide(p, c, m, m.a, false, x + 1, y + 1, bm.boxW - 2, sideH);
+	p.Fill(x + 1, y + 1 + sideH, bm.boxW - 2, 1, pal::hairline);
+	PaintSide(p, c, m, m.b, true, x + 1, y + 2 + sideH, bm.boxW - 2, bm.boxH - 3 - sideH);
 	// The label over the box: what is happening in it.
 	std::string label;
 	COLORREF ink = pal::caption;
@@ -305,16 +324,32 @@ void PaintChampionEnd(Painter &p, Ctx &c, int fx, int fy, bool over)
 	UseFace(p, champ ? BrandFace::UiStrong : BrandFace::Ui, 15);
 	p.raw = true;
 	p.Text(fx + 40, fy + 38, kChampW, 22, champ ? champ->name : Tr("To be decided"), champ ? pal::text : pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	const std::string players = champ && d.Teams() ? TeamPlayersLine(champ->name, champ->members) : std::string();
+	if (!players.empty()) {
+		UseFace(p, BrandFace::Ui, 12);
+		p.Text(fx + 40, fy + 60, kChampW, 18, players, pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	}
 	p.raw = false;
+}
+
+// The boxes of a cup of teams are taller, for each team's name over its two players.
+TourneyBracketMetrics BoxMetrics(const TourneyDetail &d)
+{
+	TourneyBracketMetrics bm;
+	bm.top = 46;
+	if (d.Teams()) {
+		bm.boxH = 82;
+		bm.rowPitch = 100;
+	}
+	return bm;
 }
 
 void PaintBracket(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out)
 {
 	const TourneyDetail &d = c.d;
-	TourneyBracketMetrics bm;
-	bm.top = 46;
+	const TourneyBracketMetrics bm = BoxMetrics(d);
 	const int contentW = TourneyBracketWidth(bm, d.rounds) + 40 + kChampW;
-	const int contentH = std::max(TourneyBracketHeight(bm, d.rounds) + 10, d.rounds ? TourneyBoxMidY(bm, d.rounds, 0) + 70 : 0);
+	const int contentH = std::max(TourneyBracketHeight(bm, d.rounds) + 10, d.rounds ? TourneyBoxMidY(bm, d.rounds, 0) + 84 : 0);
 	const Pan v = BeginPan(p, c, x, y, w, h, contentW, contentH, out);
 	const int ox = v.ox(), oy = v.oy();
 	for (int r = 1; r <= d.rounds; r++) {
@@ -367,8 +402,7 @@ const TourneyMatch *FirstOf(const TourneyDetail &d, TourneyBracket bracket)
 void PaintDoubleBracket(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out)
 {
 	const TourneyDetail &d = c.d;
-	TourneyBracketMetrics bm;
-	bm.top = 46;
+	TourneyBracketMetrics bm = BoxMetrics(d);
 	bm.colPitch = bm.boxW + 44;
 	const int titleH = 36, gap = 40;
 	const TourneyMatch *grand = FirstOf(d, TourneyBracket::Final), *reset = FirstOf(d, TourneyBracket::Reset);
@@ -498,13 +532,15 @@ void PaintStandings(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &ou
 	p.raw = true;
 	PaintCaps(p, x + 14, y, 40, 20, "#", pal::caption);
 	p.raw = false;
-	PaintCaps(p, nameX, y, nameW, 20, "Player", pal::caption);
+	const bool teams = d.Teams();
+	PaintCaps(p, nameX, y, nameW, 20, teams ? "Team" : "Player", pal::caption);
 	if (form) PaintCaps(p, formX, y, formW, 20, "Rounds", pal::caption, center);
 	PaintCaps(p, ptsX, y, numW, 20, "Points", pal::caption, center);
 	PaintCaps(p, wlX, y, numW, 20, "W\xE2\x80\x93L", pal::caption, center);
 	PaintCaps(p, buchX, y, col.buchholzW, 20, "Buchholz", pal::caption, center);
 	PaintCaps(p, byesX, y, numW, 20, "Byes", pal::caption, center);
-	const int foot = over ? 30 : 54, top = y + 30, rowH = 46, viewH = h - 30 - foot;
+	// A team's row holds its name over its players.
+	const int foot = over ? 30 : 54, top = y + 30, rowH = teams ? 56 : 46, viewH = h - 30 - foot;
 	if (d.standings.empty()) {
 		p.Font(0);
 		p.Text(x, top + 10, w, 30, "The standings show once the first round is paired.", pal::textDim);
@@ -530,20 +566,33 @@ void PaintStandings(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &ou
 		p.Text(x + 14, ry, 44, rowH, s.place ? std::to_string(s.place) : std::string("-"), !podium ? pal::textDim : s.place == 1 ? kGold : s.place == 2 ? kSilver : kBronze,
 			DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 		p.raw = false;
-		PaintPlayerDisc(p, nameX, ry + 9, 28, s.steamId, s.name);
-		int nx = nameX + 40;
+		const std::vector<TourneyMember> players = !s.members.empty() ? s.members : std::vector<TourneyMember>{{s.steamId, s.name, -1}};
+		int nx = nameX + (teams ? PaintSideDiscs(p, nameX, ry + (rowH - 26) / 2, 26, players) : 28) + 12;
+		if (!teams) PaintPlayerDisc(p, nameX, ry + 9, 28, s.steamId, s.name);
 		if (podium && d.official) {
-			DrawLeaguePhalera(p, nx, ry + 12, 22, s.place == 1 ? LeagueMetal::Gold : s.place == 2 ? LeagueMetal::Silver : LeagueMetal::Bronze);
+			DrawLeaguePhalera(p, nx, ry + (rowH - 22) / 2, 22, s.place == 1 ? LeagueMetal::Gold : s.place == 2 ? LeagueMetal::Silver : LeagueMetal::Bronze);
 			nx += 30;
 		}
 		const int youW = mine ? TagWidth(p, "You") + 10 : 0, room = nameW - (nx - nameX) - youW;
 		UseFace(p, mine ? BrandFace::UiStrong : BrandFace::Body, 17);
 		p.raw = true;
-		const int textW = std::min(room, p.TextWidth(s.name) + 2 + LeagueBadgeRoom(s.steamId ? PlayerBadgeOf(s.steamId) : LeagueBadge()));
+		const int textW = std::min(room, p.TextWidth(s.name) + 2 + (teams ? 0 : LeagueBadgeRoom(s.steamId ? PlayerBadgeOf(s.steamId) : LeagueBadge())));
 		p.raw = false;
-		PaintName(p, nx, ry, room, rowH, s.name, s.steamId, mine ? pal::redText : pal::text, c.mx, c.my);
-		if (mine) PaintTag(p, nx + textW + 10, ry + 12, "You", pal::red, pal::onRed);
-		if (s.steamId) c.ids.push_back(s.steamId);
+		const std::string under = teams ? TeamPlayersLine(s.name, players) : std::string();
+		if (teams) {
+			p.raw = true;
+			p.Text(nx, under.empty() ? ry : ry + 6, room, under.empty() ? rowH : 24, s.name, mine ? pal::redText : pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			if (!under.empty()) {
+				p.Font(3);
+				p.Text(nx, ry + 30, nameW - (nx - nameX), 20, under, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			}
+			p.raw = false;
+		}
+		else PaintName(p, nx, ry, room, rowH, s.name, s.steamId, mine ? pal::redText : pal::text, c.mx, c.my);
+		if (mine) PaintTag(p, nx + textW + 10, (under.empty() ? ry + (rowH - 22) / 2 : ry + 7), "You", pal::red, pal::onRed);
+		for (const TourneyMember &pl : players) {
+			if (pl.steamId) c.ids.push_back(pl.steamId);
+		}
 		for (int r = 1; form && r <= total; r++) {
 			const int fx = x + TourneyRoundSquareX(col, r), fy = ry + rowH / 2 - 8;
 			switch (RoundResult(d, s.entryId, r)) {
@@ -589,21 +638,31 @@ void PaintStandings(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &ou
 void PaintPairingSide(Painter &p, Ctx &c, const TourneyMatch &m, const TourneyCard &card, bool right, int x1, int x2, int y, int h)
 {
 	const TourneyDetail &d = c.d;
-	const int disc = 32, discX = right ? x1 : x2 - disc, textX1 = right ? x1 + disc + 12 : x1, textX2 = right ? x2 : x2 - disc - 12, avail = std::max(40, textX2 - textX1);
-	PaintPlayerDisc(p, discX, y + (h - disc) / 2, disc, card.steamId, card.name);
+	// A team: its players' discs next to the score, and its players before its points under its name.
+	const std::vector<TourneyMember> players = TourneyPlayersOf(card);
+	const int disc = d.Teams() ? 28 : 32, discsW = d.Teams() ? SideDiscsWidth(disc, players.size()) : disc;
+	const int discX = right ? x1 : x2 - discsW, textX1 = right ? x1 + discsW + 12 : x1, textX2 = right ? x2 : x2 - discsW - 12, avail = std::max(40, textX2 - textX1);
+	if (d.Teams()) PaintSideDiscs(p, discX, y + (h - disc) / 2, disc, players);
+	else PaintPlayerDisc(p, discX, y + (h - disc) / 2, disc, card.steamId, card.name);
 	const bool won = TourneyMatchOver(m.status) && m.winner == card.entryId, lost = TourneyMatchOver(m.status) && !won, mine = card.entryId == c.me;
+	const COLORREF ink = mine ? pal::redText : won ? pal::text : lost ? pal::caption : pal::textDim;
 	UseFace(p, won || mine ? BrandFace::UiStrong : BrandFace::Body, 17);
 	p.raw = true;
-	const int nameW = std::min(avail, p.TextWidth(card.name) + 2 + LeagueBadgeRoom(card.steamId ? PlayerBadgeOf(card.steamId) : LeagueBadge()));
+	const int nameW = std::min(avail, p.TextWidth(card.name) + 2 + (d.Teams() ? 0 : LeagueBadgeRoom(card.steamId ? PlayerBadgeOf(card.steamId) : LeagueBadge())));
+	if (d.Teams()) p.Text(right ? textX1 : textX2 - nameW, y + 4, nameW, 26, card.name, ink, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	p.raw = false;
-	PaintName(p, right ? textX1 : textX2 - nameW, y + 4, nameW, 26, card.name, card.steamId, mine ? pal::redText : won ? pal::text : lost ? pal::caption : pal::textDim, c.mx, c.my);
+	if (!d.Teams()) PaintName(p, right ? textX1 : textX2 - nameW, y + 4, nameW, 26, card.name, card.steamId, ink, c.mx, c.my);
 	UseFace(p, BrandFace::Ui, 13);
 	p.raw = true;
 	std::string under = PointsText(TourneySwissPointsBefore(d, card.entryId, m.round));
 	if (card.seed) under += " \xC2\xB7 " + TrFmt("Seed %s", {std::to_string(card.seed)});
+	const std::string team = d.Teams() ? TeamPlayersLine(card.name, players) : std::string();
+	if (!team.empty()) under = team + " \xC2\xB7 " + under;
 	p.Text(textX1, y + h - 24, avail, 18, under, pal::caption, (right ? DT_LEFT : DT_RIGHT) | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	p.raw = false;
-	if (card.steamId) c.ids.push_back(card.steamId);
+	for (const TourneyMember &pl : players) {
+		if (pl.steamId) c.ids.push_back(pl.steamId);
+	}
 }
 
 // A pairing of a Swiss round in a row: its table, the two players either side of the score and, on the right, what is happening in it.
@@ -624,13 +683,17 @@ void PaintPairing(Painter &p, Ctx &c, const TourneyMatch &m, int table, int x, i
 	if (bye) {
 		const TourneyCard &who = m.a.Present() ? m.a : m.b;
 		if (!who.Present()) return;
-		PaintPlayerDisc(p, x + row.left, y + (h - 32) / 2, 32, who.steamId, who.name);
+		const std::vector<TourneyMember> players = TourneyPlayersOf(who);
+		const int discsW = c.d.Teams() ? PaintSideDiscs(p, x + row.left, y + (h - 32) / 2, 32, players) : 32;
+		if (!c.d.Teams()) PaintPlayerDisc(p, x + row.left, y + (h - 32) / 2, 32, who.steamId, who.name);
 		UseFace(p, BrandFace::Body, 16);
 		p.raw = true;
-		p.Text(x + row.left + 44, y, w - row.left - 60, h, TrFmt("%s rests this round: a bye, worth a win", {who.name}), who.entryId == c.me ? pal::redText : pal::textDim,
-			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(x + row.left + discsW + 12, y, w - row.left - discsW - 28, h, TrFmt(c.d.Teams() ? "%s rest this round: a bye, worth a win" : "%s rests this round: a bye, worth a win", {who.name}),
+			who.entryId == c.me ? pal::redText : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.raw = false;
-		if (who.steamId) c.ids.push_back(who.steamId);
+		for (const TourneyMember &pl : players) {
+			if (pl.steamId) c.ids.push_back(pl.steamId);
+		}
 		return;
 	}
 	// What is happening in it, on the right.
@@ -734,11 +797,12 @@ void PaintSwiss(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out)
 void PaintEntrants(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out)
 {
 	const TourneyDetail &d = c.d;
+	const bool teams = d.Teams();
 	PaintCaps(p, x, y, 60, 20, "Seed", pal::caption);
-	PaintCaps(p, x + 70, y, w / 2, 20, "Player", pal::caption);
+	PaintCaps(p, x + 70, y, w / 2, 20, teams ? "Team" : "Player", pal::caption);
 	PaintCaps(p, x + w / 2 + 40, y, w / 4, 20, "Status", pal::caption);
 	PaintCaps(p, x + w - 120, y, 120, 20, "Place", pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
-	const int top = y + 30, rowH = 42, viewH = h - 30;
+	const int top = y + 30, rowH = teams ? 54 : 42, viewH = h - 30;
 	const int total = static_cast<int>(d.entrants.size()) * rowH, maxY = std::max(0, total - viewH), sy = std::min(c.u.bracketY, maxY);
 	out.bracketArea.valid = true;
 	out.bracketArea.r = p.R(x, top, w, viewH);
@@ -752,13 +816,34 @@ void PaintEntrants(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out
 		p.raw = true;
 		p.Text(x, ry, 60, rowH, e.seed ? std::to_string(e.seed) : std::string("-"), pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 		p.raw = false;
-		PaintPlayerDisc(p, x + 70, ry + 7, 28, e.steamId, e.name);
+		const std::vector<TourneyMember> players = TourneyPlayersOf(e);
 		UseFace(p, e.entryId == c.me ? BrandFace::UiStrong : BrandFace::Body, 17);
-		PaintName(p, x + 108, ry, w / 2 - 70, rowH, e.name, e.steamId, e.entryId == c.me ? pal::redText : pal::text, c.mx, c.my);
-		if (e.steamId) c.ids.push_back(e.steamId);
+		if (teams) {
+			const int nx = x + 70 + PaintSideDiscs(p, x + 70, ry + (rowH - 28) / 2, 28, players) + 12, nw = x + w / 2 + 30 - nx;
+			const std::string under = TeamPlayersLine(e.name, players);
+			p.raw = true;
+			p.Text(nx, under.empty() ? ry : ry + 6, nw, under.empty() ? rowH : 24, e.name, e.entryId == c.me ? pal::redText : pal::text,
+				DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			if (!under.empty()) {
+				p.Font(3);
+				p.Text(nx, ry + 29, nw, 20, under, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			}
+			p.raw = false;
+		}
+		else {
+			PaintPlayerDisc(p, x + 70, ry + 7, 28, e.steamId, e.name);
+			PaintName(p, x + 108, ry, w / 2 - 70, rowH, e.name, e.steamId, e.entryId == c.me ? pal::redText : pal::text, c.mx, c.my);
+		}
+		for (const TourneyMember &pl : players) {
+			if (pl.steamId) c.ids.push_back(pl.steamId);
+		}
 		const char *status = "Signed up";
 		COLORREF ink = pal::textDim;
 		switch (e.status) {
+		case TourneyEntryStatus::PendingPartner:
+			status = "Waiting for the partner";
+			ink = pal::warn;
+			break;
 		case TourneyEntryStatus::Waitlist: status = "Waiting list"; break;
 		case TourneyEntryStatus::Playing:
 			status = "Still in";
@@ -800,7 +885,7 @@ void PaintEntrants(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out
 	}
 	if (d.entrants.empty()) {
 		p.Font(0);
-		p.Text(x, top + 10, w, 30, "Nobody has signed up yet.", pal::textDim);
+		p.Text(x, top + 10, w, 30, teams ? "No team has signed up yet." : "Nobody has signed up yet.", pal::textDim);
 	}
 	p.Unclip();
 	if (maxY > 0) PaintScrollbar(p, kBarBracketY, x + w + 8, top, viewH, {sy, maxY, viewH}, c.st.dropBar, c.mx, c.my);
@@ -824,7 +909,12 @@ void PaintRules(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out)
 	};
 	PaintSectionLabel(p, x, ry, w, 22, "Format");
 	ry += 32;
-	row(Tr(swiss ? "Format" : "Bracket"), FormatText(d) + ", " + TrFmt("%s to %s players", {std::to_string(d.minEntries), std::to_string(d.maxEntries)}));
+	row(Tr(swiss ? "Format" : "Bracket"),
+		FormatText(d) + ", " + TrFmt(d.Teams() ? "%s to %s teams" : "%s to %s players", {std::to_string(d.minEntries), std::to_string(d.maxEntries)}));
+	if (d.Teams()) {
+		row(Tr("Teams"), Tr("A captain and the partner they invite; if either withdraws, the team withdraws"));
+		row(Tr("Check-in and room"), Tr("Either player checks the team in; side A's captain opens the room"));
+	}
 	if (swiss) {
 		row(Tr("Rounds"), TrFmt("%s, each between players on the same points, without repeating an opponent", {std::to_string(TourneySwissTotalRounds(d))}));
 		row(Tr("Points"), Tr("A win or a bye, 1 point; a loss or a no-show, 0"));
@@ -837,7 +927,10 @@ void PaintRules(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out)
 		row(Tr("Series"), TrFmt("Best of %s; the grand final and its reset, best of %s", {std::to_string(d.bestOf), std::to_string(d.finalBestOf)}));
 	}
 	else row(Tr("Series"), TrFmt("Best of %s; the final, best of %s", {std::to_string(d.bestOf), std::to_string(d.finalBestOf)}));
-	row(Tr("Seeding"), Tr(d.seeding == "random" ? "Drawn at random" : d.seeding == "manual" ? "Set by the organisers" : "By the ranked leaderboard, frozen when the check-in closes"));
+	row(Tr("Seeding"), Tr(d.seeding == "random" ? "Drawn at random"
+			: d.seeding == "manual"					 ? "Set by the organisers"
+			: d.Teams()								 ? "By both players' average 2v2 Glory (1v1 without it), frozen when the check-in closes"
+													 : "By the ranked leaderboard, frozen when the check-in closes"));
 	if (byRounds) {
 		row(Tr("Pace"), d.roundDays > 1 ? TrFmt("%s days per round; the next opens when all its matches are played or the time is up", {std::to_string(d.roundDays)})
 										: Tr("One round a day; the next opens when all its matches are played or the day is up"));
@@ -876,15 +969,18 @@ void PaintRules(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out)
 		Tr(rules.lockedDiplomacy ? "diplomacy locked" : "free diplomacy"));
 	const int delay = TourneySpecDelay(d.settings);
 	row(Tr("Spectators"), delay ? TrFmt("With a %s s delay", {std::to_string(delay)}) : Tr("No spectators"));
-	if (!d.official) row(Tr("Requirements"), RequirementsText(d.requirements));
+	if (!d.official) row(Tr("Requirements"), RequirementsText(d.requirements) + (d.Teams() && d.requirements.Any() ? " \xC2\xB7 " + Tr("both players") : std::string()));
+	if (d.official && d.Teams()) row(Tr("Prizes"), Tr("Phalerae for both players of the podium's teams"));
 	ry += 10;
 	PaintSectionLabel(p, x, ry, w, 22, "If something fails");
 	ry += 32;
 	p.Font(0);
-	const char *fails = swiss ? "The mod reports the result of every game; if the two reports differ, the organisers decide. If your opponent does not come to the room in "
-								"time, you can claim the win from your match's screen; if neither comes, neither gets the point."
-							  : "The mod reports the result of every game; if the two reports differ, the organisers decide. If your opponent does not come to the room in "
-								"time, you can claim the win from your match's screen; if neither comes, both are out.";
+	const char *fails = d.Teams() ? "The mod reports the result of every game; if the reports differ, the organisers decide. A whole team can claim the win when a player "
+									"of the other team does not come to the room in time; a player who drops is played by the AI and can come back."
+		: swiss ? "The mod reports the result of every game; if the two reports differ, the organisers decide. If your opponent does not come to the room in "
+				  "time, you can claim the win from your match's screen; if neither comes, neither gets the point."
+				: "The mod reports the result of every game; if the two reports differ, the organisers decide. If your opponent does not come to the room in "
+				  "time, you can claim the win from your match's screen; if neither comes, both are out.";
 	ry += p.TextWrapped(x, ry, w, 80, fails, pal::body);
 	p.Unclip();
 	const int maxY = std::max(0, ry + sy - y + 10 - h);
@@ -951,12 +1047,17 @@ bool PaintBanner(Painter &p, Ctx &c, int x, int y, int w)
 		}
 		title = TrFmt("Your %s match is ready.", {match ? MatchStageText(d, *match) : StageText(n.stage, n.round)});
 		if (n.canClaimNoShow) {
-			text = TrFmt("%s did not come to the room in time: you can claim the win.", {n.opponent.name});
+			text = TrFmt(n.Teams() ? "A player of %s did not come to the room in time: your team can claim the win." : "%s did not come to the room in time: you can claim the win.",
+				{n.opponent.name});
 			buttons.push_back({Tr("Claim the win"), ArgOf(kSubNoShow, n.match)});
 		}
 		// Paced by rounds, the match waits until the round's deadline, days away: its day and hour, not a countdown.
 		else if (TourneyByRounds(d) && left > 0) text = TrFmt("Deadline: %s", {WhenText(n.deadlineAt)});
+		else if (n.opponent.inRoom && left > 0 && n.Teams()) {
+			text = TrFmt("%s are already in the room. If your team is not complete within %s, they can claim the win by no-show.", {n.opponent.name, TourneyClock(left)});
+		}
 		else if (n.opponent.inRoom && left > 0) text = TrFmt("%s is already in the room. If you don't enter within %s, they can claim the win by no-show.", {n.opponent.name, TourneyClock(left)});
+		else if (left > 0 && n.Teams()) text = TrFmt("Your team has to be complete in the room within %s, or the match counts as a no-show.", {TourneyClock(left)});
 		else if (left > 0) text = TrFmt("Enter the room within %s, or the match counts as a no-show.", {TourneyClock(left)});
 		else text = Tr("The waiting time is over: enter the room now.");
 		buttons.push_back({Tr("Your match"), ArgOf(kSubMatch, n.match)});
@@ -973,9 +1074,23 @@ bool PaintBanner(Painter &p, Ctx &c, int x, int y, int w)
 	}
 	else if (d.status == TourneyStatus::Checkin && e && TourneyEntryActive(e->status) && !e->checkedIn) {
 		title = Tr("The check-in is open.");
-		text = TrFmt("Confirm before %s that you are playing, or you lose your place.", {HourText(d.startsAt)});
+		text = TrFmt(d.Teams() ? "Confirm before %s that your team is playing, or it loses its place: either of you can do it."
+							   : "Confirm before %s that you are playing, or you lose your place.",
+			{HourText(d.startsAt)});
 		buttons.push_back({Tr("Check in"), ArgOf(kSubCheckIn, d.id)});
 		strong = 0;
+	}
+	else if (const TourneyInvite *invite = (d.status == TourneyStatus::Signup || d.status == TourneyStatus::Checkin) && !(e && TourneyEntryActive(e->status))
+				 ? TourneyInviteOf(c.mine.mine, d.id)
+				 : nullptr) {
+		title = Tr("Invitation to a team.");
+		text = InviteText(*invite);
+		const bool busy = LeagueTourneyBusy(TourneyOp::Accept, d.id) || LeagueTourneyBusy(TourneyOp::Decline, d.id);
+		if (!busy) {
+			buttons.push_back({Tr("Decline"), ArgOf(kSubInviteDecline, d.id)});
+			buttons.push_back({Tr("Accept"), ArgOf(kSubInviteAccept, d.id)});
+			strong = 1;
+		}
 	}
 	else return false;
 	const int h = 64;
@@ -1009,14 +1124,46 @@ int PaintStatusCard(Painter &p, Ctx &c, int x, int y, int w)
 	const TourneyMyEntry *e = MyEntry(c.mine, d.id);
 	const bool in = e && TourneyEntryActive(e->status);
 	if (d.status == TourneyStatus::Signup || d.status == TourneyStatus::Checkin) {
-		const bool reqs = d.requirements.Any();
-		const TourneyUnmet unmet = in || IsOrganizer(d) ? TourneyUnmet::None : CupUnmet(d.requirements, c.mine);
-		const int h = reqs ? 262 : 236;
+		const bool reqs = d.requirements.Any(), teams = d.Teams();
+		const TourneyInvite *invite = !in && teams ? TourneyInviteOf(c.mine.mine, d.id) : nullptr;
+		const bool pending = !in && !invite && e && e->Pending();
+		const TourneyUnmet unmet = in || invite || pending || (IsOrganizer(d) && !teams) ? TourneyUnmet::None : CupUnmet(d.requirements, c.mine);
+		// What the player's state is in the cup, which can take a few lines: the card grows with it.
+		std::string status;
+		COLORREF ink = pal::ok;
+		if (in && teams) {
+			status = e->status == TourneyEntryStatus::Waitlist ? Tr("Your team is on the waiting list.") : e->checkedIn ? Tr("Your team is checked in.") : Tr("Your team is signed up.");
+			const TourneyEntrant *team = TourneyEntrantBySteamId(d, SteamOwnId());
+			for (const TourneyMember &m : team ? team->members : std::vector<TourneyMember>()) {
+				if (m.steamId != SteamOwnId() && !m.name.empty()) status += " " + TrFmt("You play with %s.", {m.name});
+			}
+		}
+		else if (in) status = e->status == TourneyEntryStatus::Waitlist ? Tr("You are on the waiting list.") : e->checkedIn ? Tr("You are checked in.") : Tr("You are signed up.");
+		else if (invite) {
+			status = InviteText(*invite);
+			ink = pal::redText;
+		}
+		else if (pending) {
+			// The page names the partner the team waits for; the player's own tournaments don't.
+			std::string partner;
+			for (const TourneyEntrant &x2 : d.entrants) {
+				if (x2.status == TourneyEntryStatus::PendingPartner && x2.steamId == SteamOwnId()) partner = x2.partner.name;
+			}
+			status = PendingText(partner) + ". " + Tr("Until they accept, your team takes no place.");
+			ink = pal::warn;
+		}
+		else if (unmet != TourneyUnmet::None) {
+			status = UnmetText(d.requirements, unmet, c.mine);
+			ink = pal::bad;
+		}
+		p.Font(3);
+		const int sh = std::min(88, p.Measure(w - 2 * pad, status));
+		const int h = (reqs ? 262 : 236) + std::max(0, sh - 44);
 		PaintGlassCard(p, x, y, w, h);
 		PaintCaps(p, x + pad, y + 20, w - 2 * pad, 20, d.status == TourneyStatus::Checkin ? "Check-in" : "Sign-up", pal::caption);
 		UseFace(p, BrandFace::UiStrong, 18);
 		p.raw = true;
-		p.Text(x + pad, y + 48, w - 2 * pad, 26, TrFmt("%s of %s signed up", {std::to_string(d.entries), std::to_string(d.maxEntries)}), pal::text);
+		p.Text(x + pad, y + 48, w - 2 * pad, 26, SignedUpText(d, d.entries, d.maxEntries), pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.raw = false;
 		p.Fill(x + pad, y + 82, w - 2 * pad, 6, pal::button);
 		if (d.maxEntries) p.Fill(x + pad, y + 82, (w - 2 * pad) * std::min(d.entries, d.maxEntries) / d.maxEntries, 6, pal::red);
@@ -1027,25 +1174,30 @@ int PaintStatusCard(Painter &p, Ctx &c, int x, int y, int w)
 		p.Text(x + pad, y + 98, w - 2 * pad, 22, window, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		int ly = y + 122;
 		if (reqs) {
-			p.Text(x + pad, ly, w - 2 * pad, 22, Tr("Requirements") + ": " + RequirementsText(d.requirements), pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			const std::string both = teams ? " \xC2\xB7 " + Tr("both players") : std::string();
+			p.Text(x + pad, ly, w - 2 * pad, 22, Tr("Requirements") + ": " + RequirementsText(d.requirements) + both, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 			ly += 26;
 		}
-		std::string status;
-		COLORREF ink = pal::ok;
-		if (in) status = e->status == TourneyEntryStatus::Waitlist ? Tr("You are on the waiting list.") : e->checkedIn ? Tr("You are checked in.") : Tr("You are signed up.");
-		else if (unmet != TourneyUnmet::None) {
-			status = UnmetText(d.requirements, unmet, c.mine);
-			ink = pal::bad;
-		}
 		p.Font(3);
-		const int sh = std::min(44, p.Measure(w - 2 * pad, status));
+		p.raw = true;
 		p.TextWrapped(x + pad, ly, w - 2 * pad, sh + 2, status, ink);
 		p.raw = false;
 		const int by = y + h - 22 - 44, bw = w - 2 * pad;
 		if (!LeagueLinked()) p.Button(x + pad, by, bw, 44, "Link to sign up", kLeagueLink, 0, mx, my, true, true);
+		else if (invite) {
+			const int half = (bw - 10) / 2;
+			const bool busy = LeagueTourneyBusy(TourneyOp::Accept, d.id) || LeagueTourneyBusy(TourneyOp::Decline, d.id);
+			p.Button(x + pad, by, half, 44, "Accept", kTourney, ArgOf(kSubInviteAccept, d.id), mx, my, !busy, true);
+			p.Button(x + pad + half + 10, by, bw - half - 10, 44, "Decline", kTourney, ArgOf(kSubInviteDecline, d.id), mx, my, !busy);
+		}
+		else if (pending) {
+			const bool busy = LeagueTourneyBusy(TourneyOp::CancelTeam, d.id);
+			p.Button(x + pad, by, bw, 44, busy ? "Cancelling..." : "Cancel", kTourney, ArgOf(kSubTeamWithdraw, d.id), mx, my, !busy);
+		}
 		else if (!in) {
 			const bool busy = LeagueTourneyBusy(TourneyOp::SignUp, d.id);
-			p.Button(x + pad, by, bw, 44, busy ? "Signing up..." : "Sign up", kTourney, ArgOf(kSubSignUp, d.id), mx, my, !busy && unmet == TourneyUnmet::None, true);
+			p.Button(x + pad, by, bw, 44, busy ? "Signing up..." : teams ? "Sign up my team" : "Sign up", kTourney, ArgOf(teams ? kSubTeamOpen : kSubSignUp, d.id), mx, my,
+				!busy && unmet == TourneyUnmet::None, true);
 		}
 		else if (d.status == TourneyStatus::Checkin && !e->checkedIn) {
 			const int half = (bw - 10) / 2;
@@ -1085,9 +1237,17 @@ int PaintStatusCard(Painter &p, Ctx &c, int x, int y, int w)
 	}
 	int cy = y + 54;
 	for (const TourneyCard *card : {&live->a, &live->b}) {
-		PaintPlayerDisc(p, x + pad, cy, 32, card->steamId, card->name);
 		UseFace(p, BrandFace::UiStrong, 18);
-		PaintName(p, x + pad + 44, cy, w - 2 * pad - 44 - 90, 32, card->name, card->steamId, pal::text, mx, my);
+		if (d.Teams()) {
+			const int dw = PaintSideDiscs(p, x + pad, cy, 32, TourneyPlayersOf(*card)) + 12;
+			p.raw = true;
+			p.Text(x + pad + dw, cy, w - 2 * pad - dw - 90, 32, card->name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			p.raw = false;
+		}
+		else {
+			PaintPlayerDisc(p, x + pad, cy, 32, card->steamId, card->name);
+			PaintName(p, x + pad + 44, cy, w - 2 * pad - 44 - 90, 32, card->name, card->steamId, pal::text, mx, my);
+		}
 		UseFace(p, BrandFace::UiStrong, 11);
 		p.raw = true;
 		p.TextCaps(x + w - pad - 90, cy, 90, 32, TrFmt("Seed %s", {std::to_string(card->seed)}), pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE, 2);
@@ -1123,11 +1283,12 @@ void PaintOrganizer(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &ou
 		checkedIn += in && e.checkedIn ? 1 : 0;
 		if (in || e.status == TourneyEntryStatus::Waitlist) rows.push_back(&e);
 	}
-	PaintSectionLabel(p, x, y, lw, 22, "Players");
+	const bool teams = d.Teams();
+	PaintSectionLabel(p, x, y, lw, 22, teams ? "Teams" : "Players");
 	p.Font(3);
 	p.raw = true;
 	p.Text(x, y, lw, 22, d.status == TourneyStatus::Checkin ? TrFmt("%s of %s checked in", {std::to_string(checkedIn), std::to_string(signedUp)})
-															 : TrFmt("%s of %s signed up", {std::to_string(signedUp), std::to_string(d.maxEntries)}),
+															 : SignedUpText(d, signedUp, d.maxEntries),
 		pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 	p.raw = false;
 	int top = y + 32;
@@ -1136,7 +1297,8 @@ void PaintOrganizer(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &ou
 		p.Text(x, top, lw, 20, "The bracket is drawn: nobody can be taken off now.", pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		top += 28;
 	}
-	const int rowH = 48, viewH = y + h - top, total = static_cast<int>(rows.size()) * rowH;
+	// A team's row: its players' discs, its name over its players, its state and the button that takes the whole team off.
+	const int rowH = teams ? 54 : 48, viewH = y + h - top, total = static_cast<int>(rows.size()) * rowH;
 	const int maxY = std::max(0, total - viewH), sy = std::min(c.u.bracketY, maxY);
 	out.bracketArea.valid = true;
 	out.bracketArea.r = p.R(x, top, lw, viewH);
@@ -1146,18 +1308,35 @@ void PaintOrganizer(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &ou
 	int ry = top - sy;
 	for (const TourneyEntrant *e : rows) {
 		p.Fill(x, ry, lw, 1, pal::hairline);
-		PaintPlayerDisc(p, x, ry + 9, 30, e->steamId, e->name);
 		UseFace(p, BrandFace::Body, 16);
 		const int removeW = 110;
-		PaintName(p, x + 42, ry, lw - 42 - 150 - removeW, rowH, e->name, e->steamId, e->steamId == SteamOwnId() ? pal::redText : pal::text, mx, my);
-		if (e->steamId) c.ids.push_back(e->steamId);
+		const std::vector<TourneyMember> players = TourneyPlayersOf(*e);
+		const bool own = e->steamId == SteamOwnId() || TourneyMemberOf(e->members, SteamOwnId());
+		if (teams) {
+			const int nx = x + PaintSideDiscs(p, x, ry + (rowH - 28) / 2, 28, players) + 12, nw = lw - (nx - x) - 150 - removeW;
+			const std::string under = TeamPlayersLine(e->name, players);
+			p.raw = true;
+			p.Text(nx, under.empty() ? ry : ry + 6, nw, under.empty() ? rowH : 24, e->name, own ? pal::redText : pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			if (!under.empty()) {
+				p.Font(3);
+				p.Text(nx, ry + 29, nw, 20, under, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			}
+			p.raw = false;
+		}
+		else {
+			PaintPlayerDisc(p, x, ry + 9, 30, e->steamId, e->name);
+			PaintName(p, x + 42, ry, lw - 42 - 150 - removeW, rowH, e->name, e->steamId, own ? pal::redText : pal::text, mx, my);
+		}
+		for (const TourneyMember &pl : players) {
+			if (pl.steamId) c.ids.push_back(pl.steamId);
+		}
 		const char *status = *FinishedEntrantText(d, *e) ? FinishedEntrantText(d, *e)
 			: e->status == TourneyEntryStatus::Waitlist ? "Waiting list" : e->status == TourneyEntryStatus::Out ? "Knocked out"
 			: e->status == TourneyEntryStatus::Playing ? "Still in" : e->checkedIn ? "Checked in" : "Signed up";
 		p.Font(3);
 		p.Text(x + lw - 150 - removeW, ry, 140, rowH, status, e->checkedIn && e->status == TourneyEntryStatus::Signed ? pal::ok : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		const bool shown = ry + 8 >= top && ry + rowH - 8 <= top + viewH;
-		const bool removable = shown && before && e->steamId != SteamOwnId() && (e->status == TourneyEntryStatus::Signed || e->status == TourneyEntryStatus::Waitlist);
+		const bool removable = shown && before && !own && (e->status == TourneyEntryStatus::Signed || e->status == TourneyEntryStatus::Waitlist);
 		if (removable) {
 			const bool busy = LeagueTourneyBusy(TourneyOp::RemoveEntry, e->entryId);
 			p.Button(x + lw - removeW, ry + 8, removeW, rowH - 16, busy ? "Taking off..." : "Take off", kTourney, ArgOf(kSubRemove, e->entryId), mx, my, !busy, false, 3);
@@ -1166,7 +1345,7 @@ void PaintOrganizer(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &ou
 	}
 	if (rows.empty()) {
 		p.Font(0);
-		p.Text(x, top + 10, lw, 30, "Nobody has signed up yet.", pal::textDim);
+		p.Text(x, top + 10, lw, 30, teams ? "No team has signed up yet." : "Nobody has signed up yet.", pal::textDim);
 	}
 	p.Unclip();
 	if (maxY > 0) PaintScrollbar(p, kBarBracketY, x + lw + 10, top, viewH, {sy, maxY, viewH}, c.st.dropBar, mx, my);
@@ -1205,7 +1384,9 @@ void PaintOrganizer(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &ou
 		std::string who = q.openedByName;
 		if (who.empty() && q.openedBy) {
 			const TourneyEntrant *e = TourneyEntrantBySteamId(d, q.openedBy);
-			if (e) who = e->name;
+			const TourneyMember *m2 = e ? TourneyMemberOf(e->members, q.openedBy) : nullptr;
+			if (m2 && !m2->name.empty()) who = d.Teams() ? m2->name + " (" + e->name + ")" : m2->name;
+			else if (e) who = e->name;
 		}
 		p.Font(3);
 		p.Text(px, cy + 34, pw, 20, TrFmt("Disputed by %s \xC2\xB7 %s", {who.empty() ? Tr("a player") : who, WhenText(q.createdAt)}), pal::caption,
@@ -1270,8 +1451,8 @@ int PaintOrganizerCard(Painter &p, Ctx &c, int x, int y, int w)
 	std::string state, detail;
 	switch (d.status) {
 	case TourneyStatus::Signup:
-		state = TrFmt("%s of %s signed up", {std::to_string(signedUp), std::to_string(d.maxEntries)});
-		detail = TrFmt("Check-in from %s; at least %s players", {WhenText(d.checkinOpensAt), std::to_string(d.minEntries)});
+		state = SignedUpText(d, signedUp, d.maxEntries);
+		detail = TrFmt(d.Teams() ? "Check-in from %s; at least %s teams" : "Check-in from %s; at least %s players", {WhenText(d.checkinOpensAt), std::to_string(d.minEntries)});
 		break;
 	case TourneyStatus::Checkin:
 		state = TrFmt("%s of %s checked in", {std::to_string(checkedIn), std::to_string(signedUp)});

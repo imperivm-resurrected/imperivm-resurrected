@@ -30,12 +30,13 @@ std::string Lower(std::string s)
 	return s;
 }
 
-// The scenarios of a tab of the chooser: the game's (1) or the player's (2), as indexes into the whole list.
-std::vector<int> TabRows(const CupScenariosView &v, int tab)
+// The scenarios of a tab of the chooser: the game's (1) or the player's (2), as indexes into the whole list; in a cup of teams, only those
+// with a human seat for each of the four players.
+std::vector<int> TabRows(const CupScenariosView &v, int tab, TourneyMode mode)
 {
 	std::vector<int> out;
 	for (size_t i = 0; i < v.list.size(); i++) {
-		if (v.list[i].game == (tab == 1)) out.push_back(static_cast<int>(i));
+		if (v.list[i].game == (tab == 1) && v.list[i].humans >= 2 * TourneySidePlayers(mode)) out.push_back(static_cast<int>(i));
 	}
 	return out;
 }
@@ -102,7 +103,7 @@ void OpenOn(Ui &u, const TourneyMap &m)
 	for (size_t i = 0; i < types.size(); i++) {
 		if (types[i] == (m.Scenario() ? std::string("mediterranean") : m.name)) u.chooserType = static_cast<int>(i);
 	}
-	const std::vector<std::string> sizes = types.empty() ? std::vector<std::string>() : LeagueMapSizesOf(types[static_cast<size_t>(u.chooserType)]);
+	const std::vector<std::string> sizes = types.empty() ? std::vector<std::string>() : CupSizesOf(u.cup, types[static_cast<size_t>(u.chooserType)]);
 	u.chooserSize = 0;
 	for (size_t i = 0; i < sizes.size(); i++) {
 		if (sizes[i] == (m.Scenario() ? std::string("medium") : m.size)) u.chooserSize = static_cast<int>(i);
@@ -112,6 +113,11 @@ void OpenOn(Ui &u, const TourneyMap &m)
 	CupScenariosRescan();
 }
 
+}
+
+std::vector<std::string> CupSizesOf(const TourneyCupForm &f, const std::string &type)
+{
+	return TourneySizesFor(LeagueTourneyMapTypes(), type, f.mode);
 }
 
 void OpenMapChooser(Ui &u, int round)
@@ -131,7 +137,7 @@ void OpenPoolChooser(Ui &u, int index)
 	else {
 		// A new one starts on the first random map not among them yet.
 		for (const std::string &type : LeagueMapTypes()) {
-			const std::vector<std::string> sizes = LeagueMapSizesOf(type);
+			const std::vector<std::string> sizes = CupSizesOf(u.cup, type);
 			if (sizes.empty()) continue;
 			const std::string size = std::find(sizes.begin(), sizes.end(), "medium") != sizes.end() ? std::string("medium") : sizes.front();
 			const TourneyMap candidate = {type, "random", size};
@@ -182,7 +188,7 @@ TourneyMap ChooserMap(const Ui &u)
 	if (u.chooserTab == 0) {
 		const std::vector<std::string> types = LeagueMapTypes();
 		if (u.chooserType < 0 || u.chooserType >= static_cast<int>(types.size())) return m;
-		const std::vector<std::string> sizes = LeagueMapSizesOf(types[static_cast<size_t>(u.chooserType)]);
+		const std::vector<std::string> sizes = CupSizesOf(u.cup, types[static_cast<size_t>(u.chooserType)]);
 		if (sizes.empty()) return m;
 		m.name = types[static_cast<size_t>(u.chooserType)];
 		m.type = "random";
@@ -217,7 +223,7 @@ void PaintMapChooser(Painter &p, const State &st, const Ui &u, PaintOut &out)
 	const std::string title = u.chooserPool ? Tr("Choose a map of the series") : Tr("Choose the map") + " \xC2\xB7 " + CupRoundName(u.cup, u.chooserRound);
 	const Dialog d = DialogBegin(p, st.viewW, st.viewH, w, h, title, pal::text);
 	const CupScenariosView v = CupScenarios();
-	const std::vector<int> game = TabRows(v, 1), mine = TabRows(v, 2);
+	const std::vector<int> game = TabRows(v, 1, u.cup.mode), mine = TabRows(v, 2, u.cup.mode);
 	const std::string counts[] = {std::string(), v.loaded ? " (" + std::to_string(game.size()) + ")" : std::string(), v.loaded ? " (" + std::to_string(mine.size()) + ")" : std::string()};
 	const std::vector<TabSpec> tabs = {{Tr("Random map"), kTourney, ArgOf(kSubChooserTab, 0), u.chooserTab == 0},
 		{Tr("Scenarios of the game") + counts[1], kTourney, ArgOf(kSubChooserTab, 1), u.chooserTab == 1}, {Tr("My maps") + counts[2], kTourney, ArgOf(kSubChooserTab, 2), u.chooserTab == 2}};
@@ -247,7 +253,7 @@ void PaintMapChooser(Painter &p, const State &st, const Ui &u, PaintOut &out)
 			p.Font(0);
 			p.Text(listX + 16, ry + 3, listW - 40, 22, LeagueMapText(types[static_cast<size_t>(i)]), pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 			std::string sizes;
-			for (const std::string &s : LeagueMapSizesOf(types[static_cast<size_t>(i)])) sizes += (sizes.empty() ? "" : ", ") + LeagueMapText(s);
+			for (const std::string &s : CupSizesOf(u.cup, types[static_cast<size_t>(i)])) sizes += (sizes.empty() ? "" : ", ") + LeagueMapText(s);
 			p.Font(3);
 			p.Text(listX + 16, ry + 24, listW - 40, 18, sizes, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 			if (!on) p.AddHit(listX + 2, ry, listW - 16, rowH, kTourney, ArgOf(kSubChooserRow, i));
@@ -268,7 +274,7 @@ void PaintMapChooser(Painter &p, const State &st, const Ui &u, PaintOut &out)
 			p.Font(0);
 			p.TextWrapped(tx, listY + pad + 36, tw, size - 36,
 				Tr("The game makes a new map from this template for every game, with the size you choose. Nobody has to download anything."), pal::body);
-			const std::vector<std::string> sizes = LeagueMapSizesOf(chosen.name);
+			const std::vector<std::string> sizes = CupSizesOf(u.cup, chosen.name);
 			const int sy = listY + pad + size + 22;
 			PaintCaps(p, dx + pad, sy, dw - 2 * pad, 20, Tr("Size"), pal::caption);
 			std::vector<std::string> labels;
@@ -281,7 +287,9 @@ void PaintMapChooser(Painter &p, const State &st, const Ui &u, PaintOut &out)
 			}
 			PaintSegments(p, dx + pad, sy + 28, std::min(dw - 2 * pad, 420), 42, labels, sel, args, mx, my);
 			p.Font(3);
-			p.TextWrapped(dx + pad, sy + 82, dw - 2 * pad, 44, Tr("Only the sizes the template has room for two players in."), pal::caption);
+			p.TextWrapped(dx + pad, sy + 82, dw - 2 * pad, 44,
+				Tr(u.cup.mode == TourneyMode::Teams ? "Only the sizes the template has room for four players in." : "Only the sizes the template has room for two players in."),
+				pal::caption);
 		}
 	}
 	else {
@@ -308,9 +316,16 @@ void PaintMapChooser(Painter &p, const State &st, const Ui &u, PaintOut &out)
 		}
 		if (rows.empty()) {
 			p.Font(0);
-			const std::string empty = !v.loaded ? Tr("Looking for the scenarios...")
-				: u.chooserTab == 1	? Tr("No scenario of the game for two players or more was found. Check the game's files in Steam.")
-									: Tr("You have no scenarios of your own for two players or more. Put them in the game's Scenarios folder, or install a content pack of maps.");
+			const bool teams = u.cup.mode == TourneyMode::Teams;
+			std::string empty = Tr("Looking for the scenarios...");
+			if (v.loaded && u.chooserTab == 1) {
+				empty = Tr(teams ? "No scenario of the game for four players or more was found. Check the game's files in Steam."
+								 : "No scenario of the game for two players or more was found. Check the game's files in Steam.");
+			}
+			else if (v.loaded) {
+				empty = Tr(teams ? "You have no scenarios of your own for four players or more. Put them in the game's Scenarios folder, or install a content pack of maps."
+								 : "You have no scenarios of your own for two players or more. Put them in the game's Scenarios folder, or install a content pack of maps.");
+			}
 			p.TextWrapped(listX + 16, listY + 16, listW - 32, listH - 32, empty, pal::textDim);
 		}
 		p.Unclip();
