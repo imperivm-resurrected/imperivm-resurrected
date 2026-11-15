@@ -184,6 +184,29 @@ void Me()
 	LeagueMe empty;
 	CHECK(LeagueParseMe(Parse("{\"steamId\": \"1\", \"ranked\": null}"), empty));
 	CHECK(!empty.ranked.present);
+	CHECK(!empty.ranked2v2.present);
+	CHECK(empty.queues.empty());
+
+	// The 2v2 standing has the same shape, with its best, streak and placement inside; the duel's may also come beside it.
+	LeagueMe both;
+	CHECK(LeagueParseMe(Parse(R"({"steamId":"1","queues":["1v1","2v2"],"peak":{"glory":700,"tier":"centurion","division":3},
+		"placementResults":["win"],"ranked":{"tier":"signifer","division":2,"glory":480,"wins":3,"losses":2},
+		"ranked2v2":{"queue":"2v2","tier":null,"glory":0,"placementLeft":3,"wins":1,"losses":1,"streak":-1,"placementResults":["loss","win"],
+		"peak":null}})"),
+		both));
+	CHECK_EQ(both.queues, std::vector<std::string>({"1v1", "2v2"}));
+	CHECK(both.ranked.present);
+	CHECK_EQ(both.ranked.queue, std::string("1v1"));
+	CHECK_EQ(both.ranked.peak.glory, 700);
+	CHECK_EQ(static_cast<unsigned>(both.ranked.placement.size()), 1u);
+	CHECK(both.ranked2v2.present);
+	CHECK_EQ(both.ranked2v2.queue, std::string("2v2"));
+	CHECK(both.ranked2v2.tier == LeagueTier::None);
+	CHECK_EQ(both.ranked2v2.placementLeft, 3);
+	CHECK_EQ(both.ranked2v2.streak, -1);
+	CHECK(!both.ranked2v2.peak.present);
+	CHECK_EQ(static_cast<unsigned>(both.ranked2v2.placement.size()), 2u);
+	CHECK(both.ranked2v2.placement[0] == LeaguePlacementMark::Loss);
 
 	// The lock out of the queue and why; an older server says only until when.
 	LeagueMe banned;
@@ -421,6 +444,72 @@ void ResolveRankedDrop()
 	CHECK_EQ(LeagueResolve(seats, false, rules).endedBy, std::string("surrender"));
 }
 
+LeagueSeat Human(int index, uint64_t id, int team, int state, bool local = false)
+{
+	LeagueSeat s = Seat(index, id, team, state, local);
+	s.human = true;
+	return s;
+}
+
+void ResolveTeam()
+{
+	LeagueDropRules rules;
+	rules.ranked = true;
+	rules.team = true;
+	// The game declared the winners; a player of the losing side who left for good is "left", whatever the AI did with their army.
+	std::vector<LeagueSeat> seats = {Human(0, 11, 0, 3, true), Human(1, 22, 0, 3), Human(2, 33, 2, 2), Human(3, 44, 2, 1)};
+	seats[3].left = true;
+	seats[3].leftAtMs = 300000;
+	LeagueOutcome o = LeagueResolve(seats, false, rules);
+	CHECK(!o.localLeft);
+	CHECK_EQ(o.results, std::vector<std::string>({"win", "win", "loss", "left"}));
+	CHECK_EQ(o.endedBy, std::string("victory"));
+	std::vector<LeagueReportPlayer> players = LeagueReportPlayers(seats, o);
+	CHECK_EQ(static_cast<unsigned>(players.size()), 4u);
+	CHECK_EQ(static_cast<int>(players[3].leftAtMs), 300000);
+	CHECK_EQ(static_cast<int>(players[2].leftAtMs), -1);
+
+	// Nobody has won (a player who dropped is still within their 5 minutes, so not left) and this player closes the game: they leave it,
+	// at the game's time they were given.
+	seats = {Human(0, 11, 0, 1, true), Human(1, 22, 0, 1), Human(2, 33, 2, 1), Human(3, 44, 2, 1)};
+	seats[0].leftAtMs = 420000;
+	o = LeagueResolve(seats, false, rules);
+	CHECK(o.localLeft);
+	CHECK_EQ(o.results, std::vector<std::string>({"left", "loss", "loss", "loss"}));
+	CHECK_EQ(o.endedBy, std::string("disconnect"));
+	players = LeagueReportPlayers(seats, o);
+	CHECK_EQ(static_cast<int>(players[0].leftAtMs), 420000);
+
+	// Both of the other side left for good: closing the game is this team's win, "opponent_left".
+	seats[2].left = seats[3].left = true;
+	o = LeagueResolve(seats, false, rules);
+	CHECK(!o.localLeft);
+	CHECK_EQ(o.results, std::vector<std::string>({"win", "win", "left", "left"}));
+	CHECK_EQ(o.endedBy, std::string("opponent_left"));
+
+	// The partner left for good and this player stays against two: closing the game is leaving it.
+	seats = {Human(0, 11, 0, 1, true), Human(1, 22, 0, 1), Human(2, 33, 2, 1), Human(3, 44, 2, 1)};
+	seats[1].left = true;
+	o = LeagueResolve(seats, false, rules);
+	CHECK(o.localLeft);
+	CHECK_EQ(o.results, std::vector<std::string>({"left", "left", "win", "win"}));
+	CHECK_EQ(o.endedBy, std::string("disconnect"));
+
+	// The team that surrendered lost by surrender; a desync is a desync.
+	seats = {Human(0, 11, 0, 2, true), Human(1, 22, 0, 2), Human(2, 33, 2, 3), Human(3, 44, 2, 3)};
+	seats[0].surrendered = seats[1].surrendered = true;
+	o = LeagueResolve(seats, false, rules);
+	CHECK_EQ(o.results, std::vector<std::string>({"loss", "loss", "win", "win"}));
+	CHECK_EQ(o.endedBy, std::string("surrender"));
+	CHECK_EQ(LeagueResolve(seats, true, rules).endedBy, std::string("desync"));
+
+	// The other side is beaten but the game has not said so yet: the only side standing won.
+	seats = {Human(0, 11, 0, 1, true), Human(1, 22, 0, 1), Human(2, 33, 2, 2), Human(3, 44, 2, 2)};
+	o = LeagueResolve(seats, false, rules);
+	CHECK_EQ(o.results, std::vector<std::string>({"win", "win", "loss", "loss"}));
+	CHECK_EQ(o.endedBy, std::string("victory"));
+}
+
 void ReportPlayers()
 {
 	std::vector<LeagueSeat> seats = {Seat(3, 33, 3, 2), Seat(0, 11, 0, 3, true), Seat(2, 0, 3, 2), Seat(1, 22, 0, 3)};
@@ -457,7 +546,7 @@ void ReportJson()
 	const std::string text = LeagueReportJson(r).Dump();
 	CHECK_EQ(text, std::string("{\"key\":\"42:1763112345678\",\"kind\":\"normal\",\"map\":{\"name\":\"Crossroads\",\"type\":\"Crossroads\",\"size\":\"Large\"},"
 							   "\"contentKey\":\"c7d1e0aa\",\"startedAt\":1763112345678,\"durationMs\":1874000,\"endedBy\":\"victory\",\"dropAtMs\":null,\"players\":"
-							   "[{\"steamId\":\"76561198000000001\",\"name\":\"Marcus \\\"Rex\\\"\",\"team\":1,\"civ\":\"Carthage\",\"result\":\"win\"}],"
+							   "[{\"steamId\":\"76561198000000001\",\"name\":\"Marcus \\\"Rex\\\"\",\"team\":1,\"civ\":\"Carthage\",\"result\":\"win\",\"leftAtMs\":null}],"
 							   "\"hashes\":[123456, 4294967295]}"));
 	// A normal game never carries a match id; a ranked one does.
 	r.matchId = 9;
@@ -475,6 +564,13 @@ void ReportJson()
 	CHECK_EQ(static_cast<int>(dropped.GetNumber("dropAtMs")), 412000);
 	r.dropAtMs = 0;
 	CHECK_EQ(static_cast<int>(LeagueReportJson(r).Get("dropAtMs")->type), static_cast<int>(Json::Number));
+	// A player of a 2v2 who left for good carries the game's time they left.
+	r.players[0].result = "left";
+	r.players[0].leftAtMs = 1234567;
+	const Json left = LeagueReportJson(r);
+	const Json *players = left.Get("players");
+	CHECK(players && players->type == Json::Array && players->arr.size() == 1);
+	if (players && players->arr.size() == 1) CHECK_EQ(static_cast<int>(players->arr[0].GetNumber("leftAtMs")), 1234567);
 }
 
 void Checkpoints()
@@ -570,6 +666,7 @@ int main()
 	Map();
 	Resolve();
 	ResolveRankedDrop();
+	ResolveTeam();
 	ReportPlayers();
 	ReportJson();
 	Checkpoints();

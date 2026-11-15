@@ -152,7 +152,9 @@ struct LeagueBan {
 // GET /v1/league/me.
 struct LeagueMe {
 	std::string steamId, name;
-	LeagueRanked ranked;
+	// The standing in the duel and in the 2v2 queue (`ranked2v2`, absent from a server without it), and the queues the season plays.
+	LeagueRanked ranked, ranked2v2;
+	std::vector<std::string> queues;
 	int64_t queueBanUntil = 0;
 	// `ban` of the server, or what queueBanUntil says when it sends none.
 	LeagueBan ban;
@@ -214,6 +216,8 @@ LeagueMapFacts LeagueMapFromOptions(const std::string &optionsText, const std::s
 struct LeagueReportPlayer {
 	std::string steamId, name, civ, result;
 	int team = 0;
+	// The game's time when a player of a 2v2 left it for good; -1 (null) otherwise.
+	int64_t leftAtMs = -1;
 };
 
 // POST /v1/league/matches/report.
@@ -269,6 +273,8 @@ struct LeagueSeat {
 	// Lost the connection while still playing and never came back.
 	bool left = false;
 	bool surrendered = false;
+	// The game's time when they left, for a 2v2's report; -1 when not known.
+	int64_t leftAtMs = -1;
 };
 
 struct LeagueOutcome {
@@ -285,11 +291,15 @@ struct LeagueDropRules {
 	bool ranked = false;
 	// The wait for the one who left is over (or the win was claimed).
 	bool claimable = false;
+	// A ranked 2v2 (§8.3): the AI plays for whoever drops, and only those gone for good (`left`: they quit, or 5 minutes passed) are
+	// out. A team whose humans all left loses: closing the game then is the other team's win ("opponent_left").
+	bool team = false;
 };
 // Who won: the victorious team, or the only team still standing. A game that closed undecided on this computer, without a desync,
 // is this player leaving it. A desync ends it as "desync", whoever stands.
 LeagueOutcome LeagueResolve(const std::vector<LeagueSeat> &seats, bool desync, const LeagueDropRules &rules = LeagueDropRules());
-// The players of the report: the seats with a SteamID, by player index, with teams numbered from 1 in the order of the game's.
+// The players of the report: the seats with a SteamID, by player index, with teams numbered from 1 in the order of the game's; a seat
+// that left takes its leftAtMs.
 std::vector<LeagueReportPlayer> LeagueReportPlayers(const std::vector<LeagueSeat> &seats, const LeagueOutcome &outcome);
 
 // Reports kept on disk until the server takes them.

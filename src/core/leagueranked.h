@@ -10,8 +10,8 @@
 #include "core/json.h"
 #include "core/league.h"
 
-// The ranked 1v1 queue of the league server, as the mod reads it: the season, the queue, the match ticket, the ladder and what a
-// report gave, plus the maths of the screens (the Glory bar, the countdown and the result's animation). Nothing here talks to the
+// The ranked queues of the league server (1v1 and 2v2), as the mod reads them: the season, the queue, the match ticket, the ladder and
+// what a report gave, plus the maths of the screens (the Glory bar, the countdown and the result's animation). Nothing here talks to the
 // network or draws.
 
 // The room options the server fixes for every ranked match; -1 (or empty) where the season says nothing.
@@ -35,8 +35,12 @@ struct LeagueSeason {
 	bool beta = false, active = false;
 	std::vector<LeagueMapFacts> maps;
 	LeagueRoomSettings settings;
+	// The queues the season plays ("1v1", "2v2"; only the duel from a server that does not say) and the 2v2 queue's maps for 4 players.
+	std::vector<std::string> queues;
+	std::vector<LeagueMapFacts> maps2v2;
 };
 bool LeagueParseSeason(const Json &j, LeagueSeason &out);
+bool LeagueSeasonHasQueue(const LeagueSeason &s, const std::string &queue);
 // The name in `lang` ("es", "en" or "it"), the one the server chose otherwise.
 std::string LeagueSeasonName(const LeagueSeason &s, const std::string &lang);
 // Whole days left until the end, rounded up; 0 once it is over.
@@ -58,6 +62,15 @@ struct LeaguePlayerCard {
 	// unranked). `standing` is false when the server sent none of them.
 	bool standing = false;
 	int wins = 0, losses = 0, glory = 0, place = 0;
+	// 2v2: the player came with a duo partner, and their side in the ticket (1 or 2; 0 in a 1v1).
+	bool duo = false;
+	int team = 0;
+};
+
+// A side of a 2v2 match: 1 or 2, and its two players.
+struct LeagueMatchTeam {
+	int side = 0;
+	std::vector<LeaguePlayerCard> players;
 };
 
 // The Glory of the opponents the queue takes now (2-clasificatoria-sistema.md §2.4): an end it does not hold is -1.
@@ -71,6 +84,8 @@ enum class LeagueQueueStatus { Unknown, Idle, Searching, Found };
 // POST and GET /v1/league/queue.
 struct LeagueQueueAnswer {
 	LeagueQueueStatus status = LeagueQueueStatus::Unknown;
+	// "1v1" or "2v2"; empty from a server that does not say.
+	std::string queue;
 	int64_t since = 0;
 	int searching = 0, estimateSec = 0;
 	// The server's clock when it answered (ms since 1970); 0 when it does not say.
@@ -85,6 +100,9 @@ struct LeagueQueueAnswer {
 	// said.
 	LeagueSearchWindow window;
 	double expected = -1;
+	// Found in 2v2 (`opponent` is empty): both sides with their players, and this player's side; `expected` is their team's chance.
+	std::vector<LeagueMatchTeam> teams;
+	int mySide = 0;
 };
 bool LeagueParseQueue(const Json &j, LeagueQueueAnswer &out);
 
@@ -107,6 +125,8 @@ LeagueRankedResult LeagueParseRankedResult(const Json *v);
 struct LeagueMatchTicket {
 	int64_t id = 0;
 	LeagueMatchStatus status = LeagueMatchStatus::Unknown;
+	// "1v1" or "2v2"; empty from a server that does not say.
+	std::string queue;
 	std::string host, lobby, lobbyKey, contentKey, outcome;
 	LeagueMapFacts map;
 	LeagueRoomSettings settings;
@@ -122,6 +142,9 @@ struct LeagueMatchTicket {
 	// The other player as the one who asks sees them, with their record, and this player's chance to win (-1 when not said).
 	LeaguePlayerCard opponent;
 	double expected = -1;
+	// 2v2: both sides and this player's side; `players` carry their `team` too.
+	std::vector<LeagueMatchTeam> teams;
+	int mySide = 0;
 };
 bool LeagueParseMatch(const Json &j, LeagueMatchTicket &out);
 // The player of the ticket with that SteamID, or the other one; null when there is none.
@@ -133,7 +156,7 @@ std::string LeagueRankedRoomTag(int64_t matchId);
 // The match may still be called off: both accepted and its game has not started.
 bool LeagueTicketAbandonable(const LeagueMatchTicket &t);
 // Whether calling it off now would lock that player out of the queue, as the server decides it: without a room, whoever walks away
-// before roomDueAt and the host after it; with a room both players are in, whoever leaves it; with one never reached, nobody.
+// before roomDueAt and the host after it; with a room every player is in, whoever leaves it; with one never reached, nobody.
 bool LeagueAbandonCosts(const LeagueMatchTicket &t, const std::string &steamId, int64_t nowMs);
 
 struct LeagueBoardRow {
@@ -181,6 +204,8 @@ struct LeagueError {
 	int64_t until = 0, matchId = 0;
 	// Too many requests (429 rate_limited): whole seconds to wait before asking again; 0 when not said.
 	int retryAfter = 0;
+	// The two of a duo are too far apart (409 rank_gap): their gap of Glory and the most the queue takes.
+	int gap = 0, max = 0;
 };
 LeagueError LeagueParseError(const Json &j);
 // How long to wait before the next poll: after a 429, what the server asks (at least 1 s, 5 s when it does not say), and never
@@ -190,12 +215,18 @@ int64_t LeagueRetryAfterMs(int httpStatus, const LeagueError &e, int64_t normalM
 // left, or too many games out of sync.
 const char *LeagueBanText(const std::string &kind);
 
-// GET /v1/league/stats: who uses the queue now, for the hub before searching.
+// GET /v1/league/stats: who uses the queue now, for the hub before searching; in all, and by queue ("1v1", "2v2") when the server says.
+struct LeagueQueueStats {
+	int searching = 0, playing = 0, gamesToday = 0;
+};
 struct LeagueStats {
 	int searching = 0, playing = 0, gamesToday = 0;
 	int64_t serverNow = 0;
+	std::map<std::string, LeagueQueueStats> byQueue;
 };
 bool LeagueParseStats(const Json &j, LeagueStats &out);
+// The figures of one queue: the server's for it; without them, the totals for the duel and nothing for the 2v2.
+LeagueQueueStats LeagueStatsOf(const LeagueStats &s, const std::string &queue);
 
 // How far ahead of this computer's clock the server's is, from an answer's serverNow and this computer's clock when the request left
 // and when the answer came (it was written about halfway). 0 without serverNow.
@@ -208,6 +239,9 @@ struct LeagueHistoryGame {
 	uint32_t durationMs = 0;
 	LeagueMapFacts map;
 	LeaguePlayerCard opponent;
+	// 2v2: the partner and both opponents with their rank; `opponent` is then the first of them.
+	LeaguePlayerCard partner;
+	std::vector<LeaguePlayerCard> opponents;
 	std::string myCiv, opponentCiv, endedBy;
 	LeagueGameResult result = LeagueGameResult::Pending;
 	// The Glory it gave: none until it counts, nor for the game that ended the placement (`placed`).

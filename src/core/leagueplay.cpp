@@ -44,12 +44,13 @@ bool LeaguePauseRunOut(const LeaguePauseBudget &b, int64_t nowMs)
 	return b.active && LeaguePauseLeftMs(b, nowMs) == 0;
 }
 
-const char *LeagueEvennessText(double expected)
+const char *LeagueEvennessText(double expected, bool team)
 {
 	if (!(expected >= 0 && expected <= 1)) return nullptr;
 	// The server's chance is a double: 0.4 and 0.6 themselves are even.
 	const double margin = 1e-9;
 	if (expected >= 0.4 - margin && expected <= 0.6 + margin) return "Even match";
+	if (team) return expected > 0.6 ? "Your team is the favourite" : "The other team is the favourite";
 	return expected > 0.6 ? "You are the favourite" : "Your opponent is the favourite";
 }
 
@@ -80,11 +81,11 @@ LeaguePresence LeaguePresenceOf(bool searching, bool rankedGame)
 	return searching ? LeaguePresence::Searching : LeaguePresence::None;
 }
 
-const char *LeaguePresenceLabel(LeaguePresence p)
+const char *LeaguePresenceLabel(LeaguePresence p, bool team)
 {
 	switch (p) {
-	case LeaguePresence::Searching: return "Searching ranked 1 vs 1";
-	case LeaguePresence::Playing: return "Ranked 1 vs 1";
+	case LeaguePresence::Searching: return team ? "Searching ranked 2 vs 2" : "Searching ranked 1 vs 1";
+	case LeaguePresence::Playing: return team ? "Ranked 2 vs 2" : "Ranked 1 vs 1";
 	default: return nullptr;
 	}
 }

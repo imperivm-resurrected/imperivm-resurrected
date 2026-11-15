@@ -1,0 +1,233 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 THIONG
+// Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
+#include "core/leagueteam.h"
+
+#include <algorithm>
+#include <cctype>
+#include <cstring>
+
+namespace {
+
+const char kVotePrefix[] = "#IRV:";
+const size_t kVotePrefixLen = sizeof(kVotePrefix) - 1;
+
+std::string Lower(std::string s)
+{
+	for (char &c : s) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+	return s;
+}
+
+// An id the server may send as text or as a number.
+std::string IdText(const Json *v)
+{
+	if (!v) return std::string();
+	if (v->type == Json::String) return v->str;
+	if (v->type == Json::Number) return std::to_string(static_cast<long long>(v->num));
+	return std::string();
+}
+
+}
+
+std::string LeagueQueueId(const std::string &queue)
+{
+	return Lower(queue) == kLeagueQueueTeam ? kLeagueQueueTeam : kLeagueQueueDuel;
+}
+
+bool LeagueQueueIsTeam(const std::string &queue)
+{
+	return Lower(queue) == kLeagueQueueTeam;
+}
+
+const LeagueRanked &LeagueMeRanked(const LeagueMe &me, const std::string &queue)
+{
+	return LeagueQueueIsTeam(queue) ? me.ranked2v2 : me.ranked;
+}
+
+LeagueParty LeaguePartyOf(const Json *v)
+{
+	LeagueParty p;
+	if (!v || v->type != Json::Object) return p;
+	p.id = IdText(v->Get("id"));
+	p.leader = IdText(v->Get("leader"));
+	p.expiresAt = static_cast<int64_t>(v->GetNumber("expiresAt"));
+	if (const Json *list = v->Get("members"); list && list->type == Json::Array) {
+		for (const Json &m : list->arr) {
+			if (m.type != Json::Object) continue;
+			LeaguePartyMember member;
+			member.steamId = IdText(m.Get("steamId"));
+			member.name = m.GetString("name");
+			member.accepted = m.GetBool("accepted");
+			if (!member.steamId.empty()) p.members.push_back(member);
+		}
+	}
+	p.present = !p.id.empty();
+	return p;
+}
+
+bool LeagueParseParty(const Json &j, LeaguePartyState &out)
+{
+	if (j.type != Json::Object) return false;
+	out = LeaguePartyState();
+	out.party = LeaguePartyOf(j.Get("party"));
+	if (const Json *list = j.Get("invites"); list && list->type == Json::Array) {
+		for (const Json &i : list->arr) {
+			if (i.type != Json::Object) continue;
+			LeaguePartyInvite invite;
+			invite.id = IdText(i.Get("id"));
+			if (const Json *from = i.Get("from"); from && from->type == Json::Object) {
+				invite.fromId = IdText(from->Get("steamId"));
+				invite.fromName = from->GetString("name");
+			}
+			invite.expiresAt = static_cast<int64_t>(i.GetNumber("expiresAt"));
+			if (!invite.id.empty()) out.invites.push_back(invite);
+		}
+	}
+	return true;
+}
+
+const LeaguePartyMember *LeaguePartyPartner(const LeagueParty &p, const std::string &me)
+{
+	if (!p.present) return nullptr;
+	for (const LeaguePartyMember &m : p.members) {
+		if (m.steamId != me) return &m;
+	}
+	return nullptr;
+}
+
+bool LeaguePartyReady(const LeagueParty &p)
+{
+	if (!p.present || p.members.size() < 2) return false;
+	return std::all_of(p.members.begin(), p.members.end(), [](const LeaguePartyMember &m) { return m.accepted; });
+}
+
+LeagueDuoRole LeagueDuoRoleOf(const LeagueParty &p, const std::string &me)
+{
+	if (!p.present || !LeaguePartyPartner(p, me)) return LeagueDuoRole::Solo;
+	if (!LeaguePartyReady(p)) return LeagueDuoRole::Waiting;
+	return p.leader == me ? LeagueDuoRole::Leader : LeagueDuoRole::Member;
+}
+
+std::vector<LeaguePartyInvite> LeagueNewInvites(const std::vector<LeaguePartyInvite> &now, const std::vector<std::string> &seen)
+{
+	std::vector<LeaguePartyInvite> out;
+	for (const LeaguePartyInvite &i : now) {
+		if (std::find(seen.begin(), seen.end(), i.id) == seen.end()) out.push_back(i);
+	}
+	return out;
+}
+
+std::vector<LeagueMatchTeam> LeagueTicketTeams(const LeagueMatchTicket &t)
+{
+	if (!t.teams.empty()) return t.teams;
+	std::vector<LeagueMatchTeam> out;
+	for (int side = 1; side <= 2; side++) {
+		LeagueMatchTeam team;
+		team.side = side;
+		for (const LeaguePlayerCard &p : t.players) {
+			if (p.team == side) team.players.push_back(p);
+		}
+		if (!team.players.empty()) out.push_back(team);
+	}
+	return out;
+}
+
+int LeagueSideOf(const std::vector<LeagueMatchTeam> &teams, const std::string &steamId)
+{
+	for (const LeagueMatchTeam &t : teams) {
+		for (const LeaguePlayerCard &p : t.players) {
+			if (!steamId.empty() && p.steamId == steamId) return t.side;
+		}
+	}
+	return 0;
+}
+
+const LeaguePlayerCard *LeagueTicketCard(const LeagueMatchTicket &t, const std::string &steamId)
+{
+	if (steamId.empty()) return nullptr;
+	for (const LeaguePlayerCard &p : t.players) {
+		if (p.steamId == steamId) return &p;
+	}
+	return nullptr;
+}
+
+int LeagueAcceptedCount(const LeagueMatchTicket &t)
+{
+	return static_cast<int>(std::count_if(t.players.begin(), t.players.end(), [](const LeaguePlayerCard &p) { return p.accepted; }));
+}
+
+const LeaguePlayerCard *LeagueTeamPartner(const std::vector<LeagueMatchTeam> &teams, const std::string &steamId)
+{
+	const int side = LeagueSideOf(teams, steamId);
+	for (const LeagueMatchTeam &t : teams) {
+		if (t.side != side) continue;
+		for (const LeaguePlayerCard &p : t.players) {
+			if (p.steamId != steamId) return &p;
+		}
+	}
+	return nullptr;
+}
+
+std::vector<LeaguePlayerCard> LeagueTeamOpponents(const std::vector<LeagueMatchTeam> &teams, const std::string &steamId)
+{
+	std::vector<LeaguePlayerCard> out;
+	const int side = LeagueSideOf(teams, steamId);
+	for (const LeagueMatchTeam &t : teams) {
+		if (t.side != side) out.insert(out.end(), t.players.begin(), t.players.end());
+	}
+	return out;
+}
+
+bool LeagueTeamDropOver(uint32_t leftAtMs, uint32_t clockMs)
+{
+	return clockMs >= leftAtMs && clockMs - leftAtMs >= kLeagueTeamDropWaitMs;
+}
+
+uint32_t LeagueTeamDropLeftMs(uint32_t leftAtMs, uint32_t clockMs)
+{
+	if (clockMs < leftAtMs) return kLeagueTeamDropWaitMs;
+	const uint32_t gone = clockMs - leftAtMs;
+	return gone >= kLeagueTeamDropWaitMs ? 0 : kLeagueTeamDropWaitMs - gone;
+}
+
+LeagueSurrenderStep LeagueSurrenderOnPress(uint32_t gameMs, bool partnerHere, bool voteOpen)
+{
+	if (!LeagueSurrenderAllowed(true, gameMs)) return LeagueSurrenderStep::TooEarly;
+	if (!partnerHere) return LeagueSurrenderStep::Alone;
+	return voteOpen ? LeagueSurrenderStep::Pending : LeagueSurrenderStep::Propose;
+}
+
+void LeagueVoteOpen(LeagueVote &v, int proposer, int64_t nowMs)
+{
+	v.open = true;
+	v.proposer = proposer;
+	v.since = nowMs;
+}
+
+int64_t LeagueVoteLeftMs(const LeagueVote &v, int64_t nowMs)
+{
+	if (!v.open) return 0;
+	return std::max<int64_t>(0, kLeagueVoteMs - (nowMs - v.since));
+}
+
+bool LeagueVoteExpired(const LeagueVote &v, int64_t nowMs)
+{
+	return v.open && nowMs - v.since >= kLeagueVoteMs;
+}
+
+std::string LeagueVoteMessage(LeagueVoteVerb verb)
+{
+	const char letter = verb == LeagueVoteVerb::Propose ? 'p' : verb == LeagueVoteVerb::Yes ? 'y' : verb == LeagueVoteVerb::No ? 'n' : 0;
+	return letter ? std::string(kVotePrefix) + letter : std::string();
+}
+
+LeagueVoteVerb LeagueVoteParse(const char *text, unsigned size)
+{
+	if (!text || size != kVotePrefixLen + 1 || memcmp(text, kVotePrefix, kVotePrefixLen) != 0) return LeagueVoteVerb::None;
+	switch (text[kVotePrefixLen]) {
+	case 'p': return LeagueVoteVerb::Propose;
+	case 'y': return LeagueVoteVerb::Yes;
+	case 'n': return LeagueVoteVerb::No;
+	default: return LeagueVoteVerb::None;
+	}
+}

@@ -37,9 +37,9 @@ int64_t LeaguePauseLeftMs(const LeaguePauseBudget &b, int64_t nowMs);
 // Their pause is on and their time is over: it has to be lifted.
 bool LeaguePauseRunOut(const LeaguePauseBudget &b, int64_t nowMs);
 
-// How even a found match is, from this player's chance to win: "Even match" from 40 to 60 %, otherwise who is the favourite. The
-// English text, the key of its translation; null when the server did not say (a chance outside 0 to 1).
-const char *LeagueEvennessText(double expected);
+// How even a found match is, from this player's chance to win (their team's in a 2v2, `team`): "Even match" from 40 to 60 %, otherwise
+// who is the favourite. The English text, the key of its translation; null when the server did not say (a chance outside 0 to 1).
+const char *LeagueEvennessText(double expected, bool team = false);
 
 // A text to translate and the values that fill its %s.
 struct LeagueText {
@@ -53,7 +53,7 @@ LeagueText LeagueWindowText(const LeagueSearchWindow &w);
 // What friends see on Steam and Discord: a ranked game first, then a search (a match found that waits for answers is still one).
 enum class LeaguePresence { None, Searching, Playing };
 LeaguePresence LeaguePresenceOf(bool searching, bool rankedGame);
-// "Searching ranked 1 vs 1" or "Ranked 1 vs 1", to translate; null for None.
-const char *LeaguePresenceLabel(LeaguePresence p);
+// "Searching ranked 1 vs 1" or "Ranked 1 vs 1" (2 vs 2 with `team`), to translate; null for None.
+const char *LeaguePresenceLabel(LeaguePresence p, bool team = false);
 // The label and the rank, both already translated ("Clasificatoria 1 contra 1 · Centurión II"); the label alone without a rank.
 std::string LeaguePresenceText(const std::string &label, const std::string &rank);
