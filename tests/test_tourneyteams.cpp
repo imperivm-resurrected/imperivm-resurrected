@@ -237,6 +237,19 @@ void Mine()
 	CHECK(!league.entries.empty() && TourneyPartnerOf(league.entries[0], kTulia).steamId == kVaro);
 	CHECK(!league.entries.empty() && TourneyNameIsMembers(league.entries[0].teamName, league.entries[0].members));
 
+	// A team the player withdrew, listed before the one they joined after in the same cup: the one they are in counts.
+	TourneyMine twice;
+	CHECK(TourneyParseMine(Parse(R"({"entries":[
+{"tournamentId":9,"slug":"x","name":"X","tournamentStatus":"signup","status":"withdrawn","mode":"2v2","entryId":61},
+{"tournamentId":9,"slug":"x","name":"X","tournamentStatus":"signup","status":"signed","mode":"2v2","entryId":62},
+{"tournamentId":10,"slug":"y","name":"Y","tournamentStatus":"signup","status":"withdrawn","mode":"2v2","entryId":63},
+{"tournamentId":10,"slug":"y","name":"Y","tournamentStatus":"signup","status":"pending_partner","mode":"2v2","entryId":64},
+{"tournamentId":11,"slug":"z","name":"Z","tournamentStatus":"signup","status":"withdrawn","mode":"2v2","entryId":65}]})"), twice));
+	CHECK(TourneyMyEntryOf(twice, 9) && Same(TourneyMyEntryOf(twice, 9)->entryId, 62));
+	CHECK(TourneyMyEntryOf(twice, 10) && Same(TourneyMyEntryOf(twice, 10)->entryId, 64));
+	CHECK(TourneyMyEntryOf(twice, 11) && Same(TourneyMyEntryOf(twice, 11)->entryId, 65));
+	CHECK(!TourneyMyEntryOf(twice, 12));
+
 	// The partner from the team's members when the league names no partner.
 	TourneyMyEntry team;
 	team.members = {{kVaro, "Varo", -1}, {kTulia, "Tulia", -1}};

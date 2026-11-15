@@ -474,6 +474,7 @@ struct TourneyMine {
 	std::vector<TourneyInvite> invites;
 };
 bool TourneyParseMine(const Json &j, TourneyMine &out);
+// The player's entry in a cup: the one still in it or over with a place first, then a team waiting for its partner, then any.
 const TourneyMyEntry *TourneyMyEntryOf(const TourneyMine &m, int64_t tournamentId);
 const TourneyOrganized *TourneyOrganizedOf(const TourneyMine &m, int64_t tournamentId);
 // The invitation to a team of this cup; null when there is none.

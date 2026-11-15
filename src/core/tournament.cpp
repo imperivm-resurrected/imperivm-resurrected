@@ -1192,10 +1192,15 @@ bool TourneyParseMine(const Json &j, TourneyMine &out)
 
 const TourneyMyEntry *TourneyMyEntryOf(const TourneyMine &m, int64_t tournamentId)
 {
+	// A cup of teams can list the player twice: a team of theirs that was withdrawn, and the one they joined after.
+	const TourneyMyEntry *pending = nullptr, *any = nullptr;
 	for (const TourneyMyEntry &e : m.entries) {
-		if (tournamentId && e.tournamentId == tournamentId) return &e;
+		if (!tournamentId || e.tournamentId != tournamentId) continue;
+		if (TourneyEntryActive(e.status) || e.status == TourneyEntryStatus::Out || e.placement > 0) return &e;
+		if (e.Pending() && !pending) pending = &e;
+		if (!any) any = &e;
 	}
-	return nullptr;
+	return pending ? pending : any;
 }
 
 const TourneyOrganized *TourneyOrganizedOf(const TourneyMine &m, int64_t tournamentId)
