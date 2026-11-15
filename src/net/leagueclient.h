@@ -162,6 +162,8 @@ struct LeagueRankedView {
 	// While searching: since when (server time, ms since 1970), how many search and the wait the server expects.
 	int64_t since = 0;
 	int searching = 0, estimateSec = 0;
+	// The Glory of the opponents the server takes now (no window from a server without it).
+	LeagueSearchWindow window;
 	// The match found or being played.
 	int64_t matchId = 0;
 	LeagueQueueAnswer found;

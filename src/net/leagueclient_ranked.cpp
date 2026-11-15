@@ -47,6 +47,8 @@ struct Queue {
 	unsigned gen = 1;
 	int64_t since = 0;
 	int searching = 0, estimate = 0;
+	// The Glory of the opponents the server takes now.
+	LeagueSearchWindow window;
 	LeagueQueueAnswer found;
 	int64_t matchId = 0;
 	bool ticketLoaded = false;
@@ -211,6 +213,7 @@ void ToIdle(Queue &q)
 	q.roomRegistered = q.registering = false;
 	q.presenceAt = 0;
 	q.inGame = false;
+	q.window = LeagueSearchWindow();
 	q.gen++;
 }
 
@@ -415,6 +418,7 @@ void JoinThread(unsigned gen, std::string contentKey)
 			g_q.since = q.since ? q.since : NowMs() + g_clockOffset;
 			g_q.searching = q.searching;
 			g_q.estimate = q.estimateSec;
+			g_q.window = q.window;
 			g_q.nextPoll = GetTickCount() + kQueuePollMs;
 			LogI("league", "ranked: searching (%d in the queue, about %d s)", q.searching, q.estimateSec);
 		}
@@ -464,6 +468,7 @@ void PollQueueThread(unsigned gen, bool recovering)
 			g_q.since = q.since ? q.since : g_q.since;
 			g_q.searching = q.searching;
 			g_q.estimate = q.estimateSec;
+			if (q.window.present) g_q.window = q.window;
 			g_q.rejoined = false;
 			break;
 		case LeagueQueueStatus::Found:
@@ -928,6 +933,7 @@ LeagueRankedView LeagueRankedState()
 	v.since = g_q.since;
 	v.searching = g_q.searching;
 	v.estimateSec = g_q.estimate;
+	v.window = g_q.window;
 	v.matchId = g_q.matchId;
 	v.found = g_q.found;
 	v.ticketLoaded = g_q.ticketLoaded;

@@ -70,7 +70,7 @@ LeagueText LeagueWindowText(const LeagueSearchWindow &w)
 		t.text = "Opponents up to %s Glory";
 		t.args = {std::to_string(w.to)};
 	}
-	else t.text = "Opponents of any Glory";
+	else t.text = "Any opponent";
 	return t;
 }
 

@@ -135,7 +135,7 @@ void Window()
 	t = LeagueWindowText(w);
 	CHECK_EQ(Text(t.text), std::string("Opponents from %s Glory"));
 	w.from = w.to = -1;
-	CHECK_EQ(Text(LeagueWindowText(w).text), std::string("Opponents of any Glory"));
+	CHECK_EQ(Text(LeagueWindowText(w).text), std::string("Any opponent"));
 }
 
 void Presence()

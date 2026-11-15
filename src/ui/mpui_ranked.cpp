@@ -14,6 +14,7 @@
 #include "addr/state.h"
 #include "core/league.h"
 #include "core/leaguemaps.h"
+#include "core/leagueplay.h"
 #include "core/leagueranked.h"
 #include "core/log.h"
 #include "hooks/dmshim.h"
@@ -21,6 +22,7 @@
 #include "mods/modoptions.h"
 #include "net/leagueclient.h"
 #include "net/steamnet.h"
+#include "ui/leaguemapthumb.h"
 #include "ui/leagueui.h"
 #include "ui/modui.h"
 
@@ -410,9 +412,27 @@ void Chip(Painter &p, int x, int y, int w, int h, const std::string &text, COLOR
 	p.TextCaps(x, y, w, h, text, ink, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
 }
 
-// One side of the match found: avatar, name, emblem, rank and whether they accepted.
-void PaintSide(Painter &p, int x, int y, int w, int h, uint64_t id, const std::string &name, LeagueTier tier, int division, bool you, bool accepted)
+// The record of a player as the found match gives it: wins and losses, then the share won.
+std::string RecordText(const LeaguePlayerCard &c)
 {
+	return std::to_string(c.wins) + "\xE2\x80\x93" + std::to_string(c.losses) + "  \xC2\xB7  " + std::to_string(LeagueWinRate(c.wins, c.losses)) + "\xC2\xA0%";
+}
+
+// The record the server sent of the same player elsewhere (the ticket's opponent, the found match), when this card has none.
+void TakeStanding(LeaguePlayerCard &into, const LeaguePlayerCard &from)
+{
+	if (into.standing || !from.standing || (!into.steamId.empty() && !from.steamId.empty() && into.steamId != from.steamId)) return;
+	into.standing = true;
+	into.wins = from.wins;
+	into.losses = from.losses;
+	into.glory = from.glory;
+	into.place = from.place;
+}
+
+// One side of the match found: avatar, name, record, emblem, rank, Glory and place, and whether they accepted.
+void PaintSide(Painter &p, int x, int y, int w, int h, uint64_t id, const std::string &name, const LeaguePlayerCard &card, bool you, bool accepted)
+{
+	const LeagueTier tier = card.tier;
 	p.Fill(x, y, w, h, pal::raised);
 	p.Frame(x, y, w, h, pal::hairline);
 	const int av = 72;
@@ -431,12 +451,26 @@ void PaintSide(Painter &p, int x, int y, int w, int h, uint64_t id, const std::s
 	p.raw = false;
 	if (you) Chip(p, x + 112 + nameW + 10, y + 35, 40, 20, "You", pal::textDim, pal::hairline);
 	p.Font(3);
-	p.Text(x + 112, y + 64, w - 136, 22, tier == LeagueTier::None ? "Placement games" : "Ranked 1 vs 1", pal::caption);
+	if (card.standing) {
+		p.raw = true;
+		p.Text(x + 112, y + 64, w - 136, 22, RecordText(card), pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.raw = false;
+	}
+	else p.Text(x + 112, y + 64, w - 136, 22, tier == LeagueTier::None ? "Placement games" : "Ranked 1 vs 1", pal::caption);
 	DrawLeagueEmblem(p, x + 20, y + 108, 80, tier);
 	SelectObject(p.dc, BrandFont(BrandFace::Display, 36, p.s));
 	p.raw = true;
-	p.TextCaps(x + 112, y + 120, w - 136, 38, RankLabel(tier, division), Ink(tier), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
+	p.TextCaps(x + 112, y + 114, w - 136, 38, RankLabel(tier, card.division), Ink(tier), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
 	p.raw = false;
+	// Glory and place, once the player has a rank: a player in placement has neither yet.
+	if (card.standing && tier != LeagueTier::None) {
+		std::string standing = TrFmt("%s Glory", {std::to_string(card.glory)});
+		if (card.place > 0) standing += "  \xC2\xB7  " + TrFmt("place %s", {std::to_string(card.place)});
+		p.Font(0);
+		p.raw = true;
+		p.Text(x + 112, y + 154, w - 136, 24, standing, pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.raw = false;
+	}
 	p.Fill(x + 24, y + h - 80, w - 48, 1, pal::hairline);
 	const int cw = accepted ? 150 : 110;
 	Chip(p, x + w - 24 - cw, y + h - 58, cw, 28, accepted ? "Accepted" : "Pending", accepted ? pal::ok : pal::textDim,
@@ -799,12 +833,27 @@ void PaintSearch(Painter &p, const State &st)
 	const LeagueMeView me = LeagueMeState();
 	const int cardW = (dw - 64 - 296) / 2, cardH = 284, cy = dy + 132;
 	const bool otherAccepted = v.ticketLoaded && v.opponent.accepted;
-	const LeagueTier myTier = v.ticketLoaded ? v.me.tier : me.me.ranked.tier;
-	const int myDivision = v.ticketLoaded ? v.me.division : me.me.ranked.division;
-	PaintSide(p, dx + 32, cy, cardW, cardH, SteamOwnId(), st.player, myTier, myDivision, true, accepted);
-	const LeaguePlayerCard &o = v.ticketLoaded ? v.opponent : v.found.opponent;
+	// This player's record is their own standing; the opponent's comes with the match found and the ticket.
+	LeaguePlayerCard mine = v.ticketLoaded ? v.me : LeaguePlayerCard();
+	if (!v.ticketLoaded) {
+		mine.tier = me.me.ranked.tier;
+		mine.division = me.me.ranked.division;
+	}
+	if (me.loaded && me.me.ranked.present) {
+		LeaguePlayerCard own;
+		own.standing = true;
+		own.wins = me.me.ranked.wins;
+		own.losses = me.me.ranked.losses;
+		own.glory = me.me.ranked.glory;
+		own.place = me.me.ranked.position;
+		TakeStanding(mine, own);
+	}
+	PaintSide(p, dx + 32, cy, cardW, cardH, SteamOwnId(), st.player, mine, true, accepted);
+	LeaguePlayerCard o = v.ticketLoaded ? v.opponent : v.found.opponent;
+	if (v.ticketLoaded) TakeStanding(o, v.ticket.opponent);
+	TakeStanding(o, v.found.opponent);
 	const std::string otherName = !o.name.empty() ? o.name : Tr("Opponent");
-	PaintSide(p, dx + dw - 32 - cardW, cy, cardW, cardH, _strtoui64(o.steamId.c_str(), nullptr, 10), otherName, o.tier, o.division, false, otherAccepted);
+	PaintSide(p, dx + dw - 32 - cardW, cy, cardW, cardH, _strtoui64(o.steamId.c_str(), nullptr, 10), otherName, o, false, otherAccepted);
 
 	// The countdown to answer, in the middle, on the server's clock.
 	const int64_t now = LeagueServerNowMs();
@@ -821,15 +870,23 @@ void PaintSearch(Painter &p, const State &st)
 	p.raw = false;
 	p.Font(4);
 	p.TextCaps(mid - 74, ringY + 22, 148, 16, "seconds", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 2);
+	// How even the match is, from the chance the league gives this player to win it.
+	const double expected = v.ticketLoaded && v.ticket.expected >= 0 ? v.ticket.expected : v.found.expected;
+	if (const char *even = LeagueEvennessText(expected)) {
+		const COLORREF ink = std::string(even) == "Even match" ? pal::ok : expected > 0.5 ? pal::text : pal::warn;
+		p.Font(1);
+		if (p.TextWidth(even) > 280) p.Font(3);
+		p.Text(mid - 140, cy + 200, 280, 24, even, ink, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	}
 	p.Font(3);
-	p.TextWrapped(mid - 140, cy + 224, 280, 44, accepted ? TrFmt("Waiting for %s to accept", {otherName}) : Tr("Accept before the countdown ends"), pal::caption);
+	p.TextWrapped(mid - 140, cy + 230, 280, 44, accepted ? TrFmt("Waiting for %s to accept", {otherName}) : Tr("Accept before the countdown ends"), pal::caption);
 
 	// The map and the options of the season.
 	const int my2 = cy + cardH + 20, mw = dw - 64, mh = 128;
 	p.Fill(dx + 32, my2, mw, mh, pal::raised);
 	p.Frame(dx + 32, my2, mw, mh, pal::hairline);
 	const LeagueMapFacts &map = v.ticketLoaded && !v.ticket.map.name.empty() ? v.ticket.map : v.found.map;
-	PaintIsotype(p, dx + 32 + 64, my2 + 64, 72, 90);
+	PaintLeagueMapThumb(p, dx + 48, my2 + 16, 96, map.name);
 	p.Font(4);
 	p.TextCaps(dx + 164, my2 + 18, 300, 16, "Map", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
 	SelectObject(p.dc, BrandFont(BrandFace::Display, 44, p.s));

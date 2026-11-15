@@ -46,8 +46,8 @@ struct LeagueText {
 	const char *text = nullptr;
 	std::vector<std::string> args;
 };
-// The line under the search: "Opponents between %s and %s Glory", the one end the window has, or any Glory once it holds none. No text
-// without a window.
+// The line under the search: "Opponents between %s and %s Glory", the one end the window has, or any opponent once it holds none (after
+// 5 minutes of waiting). No text without a window.
 LeagueText LeagueWindowText(const LeagueSearchWindow &w);
 
 // What friends see on Steam and Discord: a ranked game first, then a search (a match found that waits for answers is still one).
