@@ -51,6 +51,9 @@ struct View {
 	std::shared_ptr<const OnlineAvatar> avatar;
 	PatronInfo patron;
 	LeagueBadge badge;
+	// The league account of the player in use: its standing, its rewards and the frame and title it wears.
+	bool linked = false, meLoaded = false;
+	LeagueMe me;
 	// The league account's dialog is open over the screen.
 	bool leagueOpen = false;
 	// The ranks of the game's constants, which spread the colours of the ranks.
@@ -67,6 +70,7 @@ struct View {
 enum Action {
 	kActNone = 0, kActPick, kActUse, kActBack, kActPatron, kActMetric, kActChartMode, kActChartRange, kActOutcome, kActBar, kActGame,
 	kActHistory, kActLeague, kActLeagueClose, kActLeagueLink, kActLeagueOpen, kActLeagueCancel, kActLeagueUnlink, kActLeagueBadge,
+	kActLeagueFrame, kActLeagueTitle,
 };
 
 constexpr int kBarList = 0, kBarHistory = 1;

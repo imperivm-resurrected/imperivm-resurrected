@@ -14,6 +14,7 @@
 #include "i18n/tr.h"
 #include "net/leagueclient.h"
 #include "ui/fullscreen.h"
+#include "ui/leaguerewards.h"
 #include "ui/leagueui.h"
 #include "ui/patronui.h"
 #include "ui/widgets.h"
@@ -247,21 +248,65 @@ void PaintList(Painter &p, const View &v, const Frame &f)
 	p.TextWrapped(x + 2, f.bottom - kListHint + 4, w - 4, kListHint - 12, "Double-click a player to use it.", kMuted);
 }
 
+// The league's showcase at the right of the identity card: the vexilla and phalerae won, one click to wear one next to the name.
+void PaintShowcase(Painter &p, const View &v, int x, int y, int w)
+{
+	p.Fill(x - 20, y + 16, 1, kIdentityH - 32, pal::hairline);
+	PaintSectionLabel(p, x, y + 14, w / 2, 22, "Season showcase");
+	// The frame and the title are chosen with the account.
+	p.Font(4);
+	const int lw = std::min(w / 2, p.CapsWidth("Frame and title", 1) + 22), lx = x + w - lw;
+	const bool hot = p.Hover(lx, y + 8, lw, 32, v.mouseX, v.mouseY);
+	p.TextCaps(lx, y + 14, lw - 18, 22, "Frame and title", hot ? pal::text : pal::redText, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
+	p.ArrowRight(lx + lw - 10, y + 19, 7, 12, hot ? pal::text : pal::redText);
+	p.AddHit(lx, y + 8, lw, 32, kActLeague, 0);
+	if (!v.meLoaded) {
+		p.Font(3);
+		p.Text(x, y + 48, w, 22, "Reading your season rewards...", kMuted);
+		return;
+	}
+	const int shown = PaintLeagueShowcase(p, x, y + 44, w, 56, v.me, kActLeagueBadge, v.mouseX, v.mouseY);
+	p.Font(3);
+	if (!shown) {
+		const char *text = "What you win in each season stays here. Play 10 ranked games in a season to win its vexillum.";
+		p.TextWrapped(x, y + 46, w, 58, text, kMuted);
+		return;
+	}
+	p.Text(x, y + 104, w, 18, "Click one to wear it next to your name.", kMuted, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+}
+
 void PaintIdentity(Painter &p, const View &v, const Card &c, const Area &a, const Frame &f)
 {
 	const int x = a.x, y = f.top, w = a.w;
 	PaintGlassCard(p, x, y, w, kIdentityH);
-	const int ax = x + 16, ay = y + (kIdentityH - kAvatar) / 2;
+	const int ax = x + 16, ay = y + 14;
 	const bool steam = c.active && v.avatar && !v.avatar->bgra.empty();
+	// The season's frame and title go with the league account, which is the Steam user's: only on the player in use.
+	const bool league = c.active && v.linked && v.meLoaded;
+	const LeagueFrame frame = league ? LeagueOwnCosmetic(v.me, v.me.equippedFrame) : LeagueFrame();
+	const LeagueFrame title = league ? LeagueOwnCosmetic(v.me, v.me.equippedTitle) : LeagueFrame();
 	if (steam) {
-		p.Image(ax, ay, kAvatar, kAvatar, v.avatar->bgra.data(), v.avatar->width, v.avatar->height);
-		p.Frame(ax, ay, kAvatar, kAvatar, pal::redText);
+		const int in = frame.Shown() ? kLeagueFrameInset : 0;
+		p.Image(ax + in, ay + in, kAvatar - 2 * in, kAvatar - 2 * in, v.avatar->bgra.data(), v.avatar->width, v.avatar->height);
+		if (frame.Shown()) PaintLeagueFrame(p, ax, ay, kAvatar, frame);
+		else p.Frame(ax, ay, kAvatar, kAvatar, pal::redText);
 	}
 	else {
 		PaintMonogram(p, ax, ay, kAvatar, c.name, true);
+		if (frame.Shown()) PaintLeagueFrame(p, ax, ay, kAvatar, frame);
 	}
 	const int tx = ax + kAvatar + 22;
 	int right = x + w - 18;
+	// The showcase takes the right of the card where the screen is wide enough for it.
+	const int showcaseW = a.wide && c.active && v.linked ? std::min(600, w * 36 / 100) : 0;
+	if (showcaseW >= 300) {
+		PaintShowcase(p, v, x + w - 18 - showcaseW, y, showcaseW);
+		right -= showcaseW + 40;
+	}
+	// With a title the name moves up and the title goes under it; the military rank follows a little lower.
+	const bool titled = !LeagueTitleLabel(title).empty();
+	const int nameY = titled ? y + 4 : y + 12, nameH = titled ? 40 : 42;
+	const int rankY = titled ? y + 64 : y + 58, barY = titled ? y + 92 : y + 88, labelY = titled ? y + 103 : y + 100;
 	if (c.active && ShowsList(v)) {
 		p.Font(3);
 		const int bw = p.TextWidth("In use") + 16;
@@ -276,28 +321,34 @@ void PaintIdentity(Painter &p, const View &v, const Card &c, const Area &a, cons
 	if (tier != PatronTier::None) {
 		const int laurel = PatronLaurelSize(tier);
 		p.raw = true;
-		DrawPatron(p, tx, y + 14 + (40 - laurel) / 2, laurel, tx + laurelW, y + 12, nameW, 42, c.name, tier, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		DrawPatron(p, tx, nameY + 2 + (40 - laurel) / 2, laurel, tx + laurelW, nameY, nameW, nameH, c.name, tier, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.raw = false;
-		PatronHotspot(p, tx, y + 14 + (40 - laurel) / 2, laurel, v.patron, v.mouseX, v.mouseY, kActPatron);
+		PatronHotspot(p, tx, nameY + 2 + (40 - laurel) / 2, laurel, v.patron, v.mouseX, v.mouseY, kActPatron);
 	}
 	else {
-		Raw(p, tx, y + 12, nameW, 42, c.name, pal::text);
+		Raw(p, tx, nameY, nameW, nameH, c.name, pal::text);
 	}
 	p.raw = true;
-	DrawBadgeAfterName(p, tx + laurelW, y + 12, nameW, 42, c.name, badge, v.mouseX, v.mouseY);
+	DrawBadgeAfterName(p, tx + laurelW, nameY, nameW, nameH, c.name, badge, v.mouseX, v.mouseY);
 	p.raw = false;
+	if (titled) {
+		p.Font(4);
+		p.raw = true;
+		p.TextCaps(tx, y + 44, right - tx, 20, LeagueTitleLabel(title), LeagueFrameInk(title), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 2);
+		p.raw = false;
+	}
 	if (!c.readable) {
 		p.Font(3);
-		p.Text(tx, y + 60, x + w - 18 - tx, 24, "Couldn't read this player's statistics.", pal::bad);
+		p.Text(tx, rankY + 2, right - tx, 24, "Couldn't read this player's statistics.", pal::bad);
 		return;
 	}
 	const ProfileSummary &s = c.summary;
 	if (c.rankName.empty()) {
 		p.Font(1);
-		Raw(p, tx, y + 58, x + w - 18 - tx, 26, kDash, pal::redText);
+		Raw(p, tx, rankY, right - tx, 26, kDash, pal::redText);
 		return;
 	}
-	const int barW = a.wide ? x + w - 18 - tx : std::min(520, x + w - 18 - tx);
+	const int barW = a.wide ? right - tx : std::min(520, right - tx);
 	const std::string rating = Grouped(static_cast<uint64_t>(std::max<int64_t>(0, s.rating)));
 	float fraction = 1.0f;
 	std::string label;
@@ -315,18 +366,18 @@ void PaintIdentity(Painter &p, const View &v, const Card &c, const Area &a, cons
 	p.Font(4);
 	const int nextW = s.nextRank >= 0 ? std::min(barW / 2, RawWidth(p, c.nextRankName)) : 0;
 	if (nextW) {
-		Raw(p, barRight - nextW, y + 58, nextW, 26, c.nextRankName, RankColor(s.nextRank, v.rankCount), DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		Raw(p, barRight - nextW, rankY, nextW, 26, c.nextRankName, RankColor(s.nextRank, v.rankCount), DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
 	p.Font(3);
 	const int aheadW = RawWidth(p, ahead);
 	const int aheadX = barRight - nextW - (nextW ? 6 : 0) - aheadW;
-	Raw(p, aheadX, y + 58, aheadW + 2, 26, ahead, pal::textDim);
+	Raw(p, aheadX, rankY, aheadW + 2, 26, ahead, pal::textDim);
 	p.Font(1);
-	Raw(p, tx, y + 58, std::max(0, aheadX - 16 - tx), 26, c.rankName, RankColor(s.rank, v.rankCount));
-	PaintRankBar(p, tx, y + 88, barW, 8, fraction, RankColor(s.rank, v.rankCount));
-	p.Frame(tx - 1, y + 87, barW + 2, 10, pal::hairline);
+	Raw(p, tx, rankY, std::max(0, aheadX - 16 - tx), 26, c.rankName, RankColor(s.rank, v.rankCount));
+	PaintRankBar(p, tx, barY, barW, 8, fraction, RankColor(s.rank, v.rankCount));
+	p.Frame(tx - 1, barY - 1, barW + 2, 10, pal::hairline);
 	p.Font(3);
-	Raw(p, tx, y + 100, x + w - 18 - tx, 22, label, pal::textDim);
+	Raw(p, tx, labelY, right - tx, 22, label, pal::textDim);
 }
 
 void PaintTiles(Painter &p, const Card &c, const Area &a, const Frame &f)
@@ -971,9 +1022,21 @@ void PaintProfileScreen(Painter &p, const View &v)
 	PaintPatronTip(p, v.screenW, v.screenH);
 	PaintLeagueBadgeTip(p, v.screenW, v.screenH);
 	if (!v.leagueOpen) return;
-	const Dialog d = DialogBegin(p, v.screenW, v.screenH, 640, std::min(v.screenH - 40, LeagueLinked() ? 760 : 520), "League");
-	PaintLeagueAccount(p, d.BodyX(), d.BodyTop() + 6, d.BodyW(), {kActLeagueLink, kActLeagueOpen, kActLeagueCancel, kActLeagueUnlink, kActLeagueBadge},
+	// Linked, the account and the badge on the left and the season's frame and title on the right.
+	const bool linked = LeagueLinked();
+	const Dialog d = DialogBegin(p, v.screenW, v.screenH, linked ? std::min(v.screenW - 40, 1080) : 640, std::min(v.screenH - 40, linked ? 840 : 520), "League");
+	const int colGap = 40, leftW = linked ? (d.BodyW() - colGap) / 2 : d.BodyW();
+	PaintLeagueAccount(p, d.BodyX(), d.BodyTop() + 6, leftW, {kActLeagueLink, kActLeagueOpen, kActLeagueCancel, kActLeagueUnlink, kActLeagueBadge},
 		v.mouseX, v.mouseY);
+	if (linked) {
+		const int rx = d.BodyX() + leftW + colGap;
+		p.Fill(rx - colGap / 2, d.BodyTop() + 6, 1, d.FooterTop() - d.BodyTop() - 22, pal::hairline);
+		if (v.meLoaded) PaintLeagueCosmeticChoices(p, rx, d.BodyTop() + 6, d.BodyW() - leftW - colGap, v.me, kActLeagueFrame, kActLeagueTitle, v.mouseX, v.mouseY);
+		else {
+			p.Font(3);
+			p.Text(rx, d.BodyTop() + 6, d.BodyW() - leftW - colGap, 24, "Reading your season rewards...", pal::caption);
+		}
+	}
 	DialogButtons(p, d, {{"Close", kActLeagueClose}}, v.mouseX, v.mouseY);
 	PaintLeagueBadgeTip(p, v.screenW, v.screenH);
 }
