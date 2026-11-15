@@ -246,9 +246,11 @@ void PaintPickPanel(Painter &p, const State &st, const TourneyNext &n, int x, in
 	const int pad = beside ? 18 : 24, headW = beside ? std::min(400, w * 30 / 100) : w - 2 * pad;
 	const std::string game = std::to_string(n.game);
 	const std::string title = mine ? TrFmt("Choose the map of game %s", {game}) : TrFmt("%s is choosing the map of game %s", {n.opponent.name.empty() ? Tr("Your opponent") : n.opponent.name, game});
+	// Beside the options there is room for the short line only.
 	std::string sub = mine ? Tr("You lost the last game: the next map is yours, among those not played yet.") : Tr("The loser of the last game chooses among the maps not played yet.");
 	if (busy) sub = Tr("Sending your choice...");
 	else if (left <= 0) sub = Tr("Time is up: the map is being drawn.");
+	else if (beside) sub = Tr("If time runs out, it is drawn.");
 	else if (mine) sub += " " + Tr("If time runs out, it is drawn.");
 	const std::string clock = TourneyClock(std::max<int64_t>(0, left));
 	const COLORREF clockInk = left < 15000 ? pal::bad : mine ? pal::warn : pal::text;

@@ -347,7 +347,7 @@ int FormatRight(Form &c, int x, int y, int w)
 	};
 	static const Def kDefs[] = {{TourneyFormat::Single, "Single elimination", "Whoever loses is out. The shortest and the easiest to follow."},
 		{TourneyFormat::Double, "Double elimination", "You are out after losing twice."},
-		{TourneyFormat::Swiss, "Swiss", "Nobody is out: every round against a rival with your points."}};
+		{TourneyFormat::Swiss, "Swiss", "Nobody is out: rivals with your points."}};
 	for (const Def &d : kDefs) {
 		TourneyCupForm as = f;
 		as.format = d.format;

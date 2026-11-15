@@ -2741,7 +2741,7 @@ extern const TrRow kTrRows[] = {
 	{"Double elimination", "Doble eliminación", "Doppia eliminazione"},
 	{"You are out after losing twice.", "Hay que perder dos veces para quedar fuera.", "Si è fuori solo dopo due sconfitte."},
 	{"Swiss", "Suizo", "Svizzero"},
-	{"Nobody is out: every round against a rival with your points.", "Nadie queda fuera: cada ronda, contra un rival con tus puntos.", "Nessuno è eliminato: ogni turno contro un avversario con i tuoi punti."},
+	{"Nobody is out: rivals with your points.", "Nadie queda fuera: rivales con tus puntos.", "Nessuno è eliminato: rivali con i tuoi punti."},
 	{"Rounds of the Swiss", "Rondas del suizo", "Turni dello svizzero"},
 	{"Automatic · %s", "Automático · %s", "Automatico · %s"},
 	{"Automatic: %s rounds with %s players. More rounds make a fairer ranking and a longer cup.", "Automático: %s rondas con %s jugadores. Con más rondas, la clasificación es más justa y la copa, más larga.", "Automatico: %s turni con %s giocatori. Con più turni la classifica è più giusta e la coppa più lunga."},

@@ -2734,7 +2734,7 @@
 {"en":"Double elimination","es":"Doble eliminación","it":"Doppia eliminazione"},
 {"en":"You are out after losing twice.","es":"Hay que perder dos veces para quedar fuera.","it":"Si è fuori solo dopo due sconfitte."},
 {"en":"Swiss","es":"Suizo","it":"Svizzero"},
-{"en":"Nobody is out: every round against a rival with your points.","es":"Nadie queda fuera: cada ronda, contra un rival con tus puntos.","it":"Nessuno è eliminato: ogni turno contro un avversario con i tuoi punti."},
+{"en":"Nobody is out: rivals with your points.","es":"Nadie queda fuera: rivales con tus puntos.","it":"Nessuno è eliminato: rivali con i tuoi punti."},
 {"en":"Rounds of the Swiss","es":"Rondas del suizo","it":"Turni dello svizzero"},
 {"en":"Automatic · %s","es":"Automático · %s","it":"Automatico · %s"},
 {"en":"Automatic: %s rounds with %s players. More rounds make a fairer ranking and a longer cup.","es":"Automático: %s rondas con %s jugadores. Con más rondas, la clasificación es más justa y la copa, más larga.","it":"Automatico: %s turni con %s giocatori. Con più turni la classifica è più giusta e la coppa più lunga."},
