@@ -200,6 +200,10 @@ void ErrorsAndMe()
 	CHECK_EQ(e.code, std::string("wrong_content"));
 	CHECK_EQ(e.contentKey, std::string("abcd1234abcd1234"));
 	CHECK_EQ(e.contentName, std::string("Caesar Mod 1.1.1"));
+	const LeagueError staff = LeagueParseError(Parse(R"({"error":"banned","until":5000,"kind":"staff","reason":"Abuse in the chat"})"));
+	CHECK_EQ(staff.kind, std::string("staff"));
+	CHECK_EQ(staff.reason, std::string("Abuse in the chat"));
+	CHECK_EQ(std::string(LeagueBanText("staff")), std::string("The league's team has locked your search for a while."));
 
 	LeagueMe me;
 	CHECK(LeagueParseMe(Parse(R"({"steamId":"1","ranked":{"tier":"centurion","division":2,"glory":1164,"wins":38,"losses":27,"streak":4}})"), me));
@@ -208,6 +212,9 @@ void ErrorsAndMe()
 	CHECK_EQ(me.ranked.streak, -2);
 	CHECK(LeagueParseMe(Parse(R"({"steamId":"1"})"), me));
 	CHECK_EQ(me.ranked.streak, 0);
+	CHECK(LeagueParseMe(Parse(R"({"steamId":"1","ban":{"until":9000,"kind":"staff","reason":"Smurf account"}})"), me));
+	CHECK_EQ(me.ban.kind, std::string("staff"));
+	CHECK_EQ(me.ban.reason, std::string("Smurf account"));
 }
 
 }

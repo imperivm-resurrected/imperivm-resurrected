@@ -2769,6 +2769,8 @@
 {"en":"The round's scenario could not be downloaded","es":"No se ha podido descargar el escenario de la ronda","it":"Non è stato possibile scaricare lo scenario del turno"},
 {"en":"You left a ranked game: you can't search for a while.","es":"Abandonaste una partida clasificatoria: no puedes buscar durante un rato.","it":"Hai abbandonato una partita classificata: non puoi cercare per un po'."},
 {"en":"Too many of your games went out of sync: you can't search for a while.","es":"Demasiadas partidas tuyas se desincronizaron: no puedes buscar durante un rato.","it":"Troppe tue partite sono andate fuori sincronia: non puoi cercare per un po'."},
+{"en":"The league's team has locked your search for a while.","es":"El equipo de la liga ha bloqueado tu búsqueda durante un tiempo.","it":"Il team della lega ha bloccato la tua ricerca per un po'."},
+{"en":"The league's team has locked your search: %s","es":"El equipo de la liga ha bloqueado tu búsqueda: %s","it":"Il team della lega ha bloccato la tua ricerca: %s"},
 {"en":"Thanks: the league will review the game. The result stays as it is until then.","es":"Gracias: la liga revisará la partida. Hasta entonces, el resultado no cambia.","it":"Grazie: la lega esaminerà la partita. Fino ad allora il risultato non cambia."},
 {"en":"A problem with this game was already reported.","es":"Ya se informó de un problema con esta partida.","it":"È già stato segnalato un problema con questa partita."},
 {"en":"Problems can only be reported up to 24 hours after the game.","es":"Solo se puede informar de un problema hasta 24 horas después de la partida.","it":"I problemi si possono segnalare solo fino a 24 ore dopo la partita."},

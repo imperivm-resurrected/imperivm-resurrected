@@ -411,6 +411,7 @@ LeagueError LeagueParseError(const Json &j)
 	e.contentKey = j.GetString("contentKey");
 	e.contentName = j.GetString("contentName");
 	e.kind = Lower(j.GetString("kind"));
+	e.reason = j.GetString("reason");
 	e.until = Int64(j, "until");
 	if (!e.until) e.until = Int64(j, "queueBanUntil");
 	e.matchId = IdNumber(j.Get("matchId"));
@@ -430,6 +431,7 @@ const char *LeagueBanText(const std::string &kind)
 	const std::string k = Lower(kind);
 	if (k == "abandoned") return "You left a ranked game: you can't search for a while.";
 	if (k == "desync") return "Too many of your games went out of sync: you can't search for a while.";
+	if (k == "staff") return "The league's team has locked your search for a while.";
 	return "You declined or let a match go: you can't search for a while.";
 }
 

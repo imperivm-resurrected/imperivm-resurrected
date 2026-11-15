@@ -177,7 +177,7 @@ struct LeagueRankedView {
 	int64_t calledOff = 0;
 	// The queue is locked until then (server time, ms since 1970), and why ("declined", "abandoned", "desync"; empty when not said).
 	int64_t banUntil = 0;
-	std::string banKind;
+	std::string banKind, banReason;
 	// The last thing that happened, as an English text to translate (with its values filled in by the server's), and whether it is bad.
 	std::string notice;
 	bool noticeBad = false;

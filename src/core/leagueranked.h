@@ -170,8 +170,9 @@ struct LeagueError {
 	std::string code, message, contentKey;
 	// wrong_content: the name of the content the season is played with.
 	std::string contentName;
-	// Why a player is locked out of the queue (409 banned): "declined", "abandoned" or "desync".
-	std::string kind;
+	// Why a player is locked out of the queue (409 banned): "declined", "abandoned", "desync" or "staff", and the team's reason for a
+	// staff lock.
+	std::string kind, reason;
 	int64_t until = 0, matchId = 0;
 	// Too many requests (429 rate_limited): whole seconds to wait before asking again; 0 when not said.
 	int retryAfter = 0;

@@ -336,6 +336,7 @@ LeagueBan BanOf(const LeagueRankedView &v)
 	if (v.banUntil > ban.until) {
 		ban.until = v.banUntil;
 		ban.kind = v.banKind;
+		ban.reason = v.banReason;
 	}
 	return ban;
 }
@@ -346,7 +347,8 @@ void PaintPopulation(Painter &p, const LeagueRankedView &v, int x, int y, int w)
 	const LeagueBan ban = BanOf(v);
 	p.Font(3);
 	if (ban.until > EpochNow()) {
-		p.Text(x, y, w, 22, LeagueBanText(ban.kind), pal::bad, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		const std::string why = ban.kind == "staff" && !ban.reason.empty() ? TrFmt("The league's team has locked your search: %s", {ban.reason}) : Tr(LeagueBanText(ban.kind));
+		RawText(p, x, y, w, 22, why, pal::bad, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		return;
 	}
 	if (!v.statsLoaded) return;

@@ -96,6 +96,8 @@ struct LeagueRanked {
 struct LeagueBan {
 	int64_t until = 0;
 	std::string kind;
+	// A lock the league's team put ("staff"): why, as the team wrote it.
+	std::string reason;
 };
 
 // GET /v1/league/me.

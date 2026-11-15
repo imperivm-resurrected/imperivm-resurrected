@@ -2776,6 +2776,8 @@ extern const TrRow kTrRows[] = {
 	{"The round's scenario could not be downloaded", "No se ha podido descargar el escenario de la ronda", "Non è stato possibile scaricare lo scenario del turno"},
 	{"You left a ranked game: you can't search for a while.", "Abandonaste una partida clasificatoria: no puedes buscar durante un rato.", "Hai abbandonato una partita classificata: non puoi cercare per un po'."},
 	{"Too many of your games went out of sync: you can't search for a while.", "Demasiadas partidas tuyas se desincronizaron: no puedes buscar durante un rato.", "Troppe tue partite sono andate fuori sincronia: non puoi cercare per un po'."},
+	{"The league's team has locked your search for a while.", "El equipo de la liga ha bloqueado tu búsqueda durante un tiempo.", "Il team della lega ha bloccato la tua ricerca per un po'."},
+	{"The league's team has locked your search: %s", "El equipo de la liga ha bloqueado tu búsqueda: %s", "Il team della lega ha bloccato la tua ricerca: %s"},
 	{"Thanks: the league will review the game. The result stays as it is until then.", "Gracias: la liga revisará la partida. Hasta entonces, el resultado no cambia.", "Grazie: la lega esaminerà la partita. Fino ad allora il risultato non cambia."},
 	{"A problem with this game was already reported.", "Ya se informó de un problema con esta partida.", "È già stato segnalato un problema con questa partita."},
 	{"Problems can only be reported up to 24 hours after the game.", "Solo se puede informar de un problema hasta 24 horas después de la partida.", "I problemi si possono segnalare solo fino a 24 ore dopo la partita."},

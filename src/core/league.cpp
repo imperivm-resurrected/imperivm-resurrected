@@ -316,6 +316,7 @@ bool LeagueParseMe(const Json &j, LeagueMe &out)
 	if (const Json *ban = j.Get("ban"); ban && ban->type == Json::Object) {
 		out.ban.until = Int64(*ban, "until");
 		out.ban.kind = Lower(ban->GetString("kind"));
+		out.ban.reason = ban->GetString("reason");
 	}
 	if (!out.ban.until) out.ban.until = out.queueBanUntil;
 	if (!out.queueBanUntil) out.queueBanUntil = out.ban.until;

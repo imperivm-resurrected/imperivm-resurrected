@@ -19,6 +19,7 @@
 #include "core/league.h"
 #include "core/leagueranked.h"
 #include "core/log.h"
+#include "i18n/tr.h"
 #include "mods/mods.h"
 #include "net/leagueclient_internal.h"
 #include "net/patrons.h"
@@ -59,7 +60,7 @@ struct Queue {
 	bool roomRegistered = false, registering = false;
 	DWORD registerAt = 0;
 	int64_t banUntil = 0;
-	std::string banKind;
+	std::string banKind, banReason;
 	std::string notice;
 	bool noticeBad = false;
 	std::string contentKey, contentName;
@@ -199,6 +200,13 @@ std::string FailureNotice(const Answer &a)
 DWORD RetryIn(const Answer &a, DWORD normalMs)
 {
 	return static_cast<DWORD>(LeagueRetryAfterMs(a.r.status, a.error, a.r.status == 429 ? normalMs : kRetryMs));
+}
+
+// Why the queue is locked, in the player's language: a lock of the league's team says the team's reason.
+std::string BanNotice(const std::string &kind, const std::string &reason)
+{
+	if (kind == "staff" && !reason.empty()) return TrFmt("The league's team has locked your search: %s", {reason});
+	return Tr(LeagueBanText(kind));
 }
 
 // Under g_mx: back to not searching, forgetting the match.
@@ -431,7 +439,8 @@ void JoinThread(unsigned gen, std::string contentKey)
 			else if (code == "banned") {
 				g_q.banUntil = a.error.until;
 				g_q.banKind = a.error.kind;
-				SetNotice(g_q, LeagueBanText(a.error.kind), true);
+				g_q.banReason = a.error.reason;
+				SetNotice(g_q, BanNotice(a.error.kind, a.error.reason), true);
 			}
 			else if (code == "wrong_content") {
 				SetNotice(g_q, "This season is played with other gameplay content. Change your content profile to search.", true);
@@ -957,6 +966,7 @@ LeagueRankedView LeagueRankedState()
 	v.calledOff = g_q.calledOff;
 	v.banUntil = g_q.banUntil;
 	v.banKind = g_q.banKind;
+	v.banReason = g_q.banReason;
 	v.notice = g_q.noticeBad || GetTickCount() - g_q.noticeAt < 60000 ? g_q.notice : std::string();
 	v.noticeBad = g_q.noticeBad;
 	v.seasonContentKey = g_q.contentKey;
@@ -1096,9 +1106,12 @@ void LeagueQueueJoin()
 	}
 	const int64_t ban = std::max(g_q.banUntil, me.me.ban.until);
 	if (ban > NowMs() + g_clockOffset) {
-		if (me.me.ban.until >= g_q.banUntil) g_q.banKind = me.me.ban.kind;
+		if (me.me.ban.until >= g_q.banUntil) {
+			g_q.banKind = me.me.ban.kind;
+			g_q.banReason = me.me.ban.reason;
+		}
 		g_q.banUntil = ban;
-		SetNotice(g_q, LeagueBanText(g_q.banKind), true);
+		SetNotice(g_q, BanNotice(g_q.banKind, g_q.banReason), true);
 		return;
 	}
 	g_q.gen++;
