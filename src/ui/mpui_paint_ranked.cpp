@@ -15,6 +15,7 @@
 #include "core/leagueplay.h"
 #include "core/leagueranked.h"
 #include "core/leagueseasons.h"
+#include "core/leagueteam.h"
 #include "game/civs.h"
 #include "i18n/tr.h"
 #include "net/leagueclient.h"
@@ -224,6 +225,14 @@ std::string DeltaText(const LeagueHistoryGame &g, COLORREF &ink)
 	return SignedText(g.gloryDelta);
 }
 
+// "Livia and Brennus": both opponents of a 2v2 game.
+std::string OpponentsText(const LeagueHistoryGame &g)
+{
+	auto name = [](const LeaguePlayerCard &c) { return c.name.empty() ? Tr("Opponent") : c.name; };
+	if (g.opponents.size() < 2) return name(g.opponent);
+	return TrFmt("%s and %s", {name(g.opponents[0]), name(g.opponents[1])});
+}
+
 // "Mountain passes · Rome vs Carthage · 24 min".
 std::string GameFacts(const LeagueHistoryGame &g)
 {
@@ -310,7 +319,8 @@ void PaintSeasonBand(Painter &p, const State &st, const HubLayout &h)
 	if (!v.seasonLoaded) {
 		Caps(p, x + 120, y + 14, 700, 18, "Ranked season", pal::redText);
 		Display(p, 52);
-		p.TextCaps(x + 120, y + 34, w - 160, 52, v.noSeason ? "No season yet" : "Ranked 1 vs 1", pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1);
+		p.TextCaps(x + 120, y + 34, w - 160, 52, v.noSeason ? "No season yet" : LeagueQueueIsTeam(v.queue) ? "Ranked 2 vs 2" : "Ranked 1 vs 1", pal::text,
+			DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1);
 		p.Font(0);
 		p.Text(x + 120, y + 84, w - 160, 22,
 			v.seasonLoading ? "Reading the season..." : v.noSeason ? "The first season starts soon." : "Couldn't reach the league server. Check your connection and try again.",
@@ -342,8 +352,10 @@ void PaintSeasonBand(Painter &p, const State &st, const HubLayout &h)
 		p.Font(0);
 		RawText(p, nx, y + 44, std::max(0, x + w - 360 - nx), 30, s.theme, pal::textDim);
 	}
-	std::string facts = DateText(s.startsAt) + " \xE2\x80\x93 " + DateText(s.endsAt) + "  \xC2\xB7  " + Tr("Ranked 1 vs 1");
-	if (!s.maps.empty()) facts += "  \xC2\xB7  " + TrFmt("%s maps", {std::to_string(s.maps.size())});
+	const bool team = LeagueQueueIsTeam(v.queue);
+	const size_t maps = team ? s.maps2v2.size() : s.maps.size();
+	std::string facts = DateText(s.startsAt) + " \xE2\x80\x93 " + DateText(s.endsAt) + "  \xC2\xB7  " + Tr(team ? "Ranked 2 vs 2" : "Ranked 1 vs 1");
+	if (maps) facts += "  \xC2\xB7  " + TrFmt("%s maps", {std::to_string(maps)});
 	p.Font(0);
 	RawText(p, x + 120, y + 84, w - 520, 22, facts, pal::caption);
 	// The days left, with how much of the season has gone.
@@ -386,7 +398,7 @@ void PaintPopulation(Painter &p, const LeagueRankedView &v, int x, int y, int w)
 		return;
 	}
 	if (!v.statsLoaded) return;
-	const LeagueStats &s = v.stats;
+	const LeagueQueueStats s = LeagueStatsOf(v.stats, v.queue);
 	if (s.searching == 0) {
 		p.Text(x, y, w, 22, "Nobody is searching now: search and we will call you.", pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		return;
@@ -411,7 +423,69 @@ void PaintQueueLine(Painter &p, const LeagueRankedView &v, int x, int y, int w)
 		p.Text(x, y, w, 22, v.notice, v.noticeBad ? pal::bad : pal::ok, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		return;
 	}
+	if (LeagueQueueIsTeam(v.queue)) {
+		const LeagueDuoView duo = LeagueDuoState();
+		const std::string name = !duo.partner.name.empty() ? duo.partner.name : Tr("your friend");
+		std::string line = Tr("Alone, the league finds you a partner of your level.");
+		COLORREF ink = pal::caption;
+		if (duo.role == LeagueDuoRole::Waiting) {
+			line = TrFmt("Waiting for %s to accept your invitation.", {name});
+			ink = pal::warn;
+		}
+		else if (duo.role == LeagueDuoRole::Leader) line = TrFmt("You search for your duo with %s.", {name});
+		else if (duo.role == LeagueDuoRole::Member) line = TrFmt("%s leads your duo and searches for both of you.", {name});
+		RawText(p, x, y, w, 22, line, ink, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		return;
+	}
 	p.Text(x, y, w, 22, "The league picks the map and the options of every match.", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+}
+
+// Whether the season plays the 2v2 too: then the queues are two segments, otherwise the duel's chip alone.
+bool BothQueues(const LeagueRankedView &v)
+{
+	return (v.seasonLoaded && LeagueSeasonHasQueue(v.season, kLeagueQueueTeam)) || LeagueQueueIsTeam(v.queue);
+}
+
+int QueueSegmentsWidth(Painter &p, const State &st)
+{
+	const int w = std::max(ChipWidth(p, RankedQueueLabel(kLeagueQueueDuel), 96), ChipWidth(p, RankedQueueLabel(kLeagueQueueTeam), 96));
+	return BothQueues(st.ranked.view) ? 2 * w - 1 : w;
+}
+
+// The two queues, side by side, the one picked lit, ending at `right`.
+void QueueSegments(Painter &p, const State &st, int right, int y, int h)
+{
+	const LeagueRankedView &v = st.ranked.view;
+	const bool both = BothQueues(v);
+	const bool team = LeagueQueueIsTeam(v.queue);
+	const std::string duel = RankedQueueLabel(kLeagueQueueDuel), pair = RankedQueueLabel(kLeagueQueueTeam);
+	const int w = std::max(ChipWidth(p, duel, 96), ChipWidth(p, pair, 96));
+	if (!both) {
+		p.raw = true;
+		Chip(p, right - w, y, w, h, duel, pal::text, pal::selected);
+		p.raw = false;
+		p.Frame(right - w, y, w, h, pal::edgeHot);
+		return;
+	}
+	const int x = right - 2 * w + 1;
+	auto segment = [&](int sx, const std::string &label, bool on, int arg) {
+		const bool hot = !on && p.Hover(sx, y, w, h, st.mouseX, st.mouseY);
+		if (on) p.Fill(sx, y, w, h, pal::selected);
+		p.Frame(sx, y, w, h, on || hot ? pal::edgeHot : pal::edge);
+		p.raw = true;
+		Caps(p, sx, y, w, h, label, on || hot ? pal::text : pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
+		p.raw = false;
+		if (!on) p.AddHit(sx, y, w, h, kRankedAct, arg);
+	};
+	segment(x, duel, !team, kRkQueueDuel);
+	segment(x + w - 1, pair, team, kRkQueueTeam);
+}
+
+// The players of the 2v2 being played or found, from the ticket once it is read.
+std::vector<LeagueMatchTeam> MatchTeams(const LeagueRankedView &v)
+{
+	const std::vector<LeagueMatchTeam> teams = v.ticketLoaded ? LeagueTicketTeams(v.ticket) : std::vector<LeagueMatchTeam>();
+	return teams.empty() ? v.found.teams : teams;
 }
 
 void PaintRankCard(Painter &p, const State &st, const HubLayout &h)
@@ -419,7 +493,8 @@ void PaintRankCard(Painter &p, const State &st, const HubLayout &h)
 	const int mx = st.mouseX, my = st.mouseY;
 	const LeagueRankedView &v = st.ranked.view;
 	const LeagueMeView me = LeagueMeState();
-	const LeagueRanked &rk = me.me.ranked;
+	const LeagueRanked &rk = LeagueMeRanked(me.me, v.queue);
+	const bool team = LeagueQueueIsTeam(v.queue);
 	const int x = h.m, y = h.cardY, w = h.leftW, cardH = h.cardH, ix = x + 24, iw = w - 48, cx = x + w / 2;
 	PaintGlassCard(p, x, y, w, cardH);
 	const bool searching = v.phase == LeagueRankedPhase::Joining || v.phase == LeagueRankedPhase::Searching;
@@ -429,7 +504,8 @@ void PaintRankCard(Painter &p, const State &st, const HubLayout &h)
 	const int64_t now = EpochNow();
 
 	if (searching) {
-		Caps(p, ix, y + 20, iw, 20, "Searching for a match", pal::redText);
+		Caps(p, ix, y + 20, iw, 20, v.partnerSearch ? "Your partner is searching" : LeagueQueueIsTeam(v.searchQueue) ? "Searching for a match  2 vs 2" : "Searching for a match",
+			pal::redText);
 		// The emblem inside its spinner, smaller on a short card (900 lines) so the lines under it keep their room.
 		const bool tall = cardH >= 600;
 		const int emblem = tall ? 160 : 120, ring = emblem * 108 / 160, ringY = y + 60 + ring;
@@ -457,7 +533,12 @@ void PaintRankCard(Painter &p, const State &st, const HubLayout &h)
 		const int cancelY = y + cardH - 118;
 		p.Font(3);
 		if (ly + 10 + 44 <= cancelY - 8) p.TextWrapped(ix, ly + 10, iw, 44, "The league widens the range of opponents the longer you wait.", pal::caption);
-		Ghost(p, ix, cancelY, iw, 48, "Cancel search", kRkCancel, v.phase == LeagueRankedPhase::Searching, mx, my);
+		// The partner of a duo follows the leader's search: only the leader cancels it.
+		if (v.partnerSearch) {
+			p.Font(0);
+			p.TextWrapped(ix, cancelY, iw, 48, "Only the leader of your duo can cancel the search.", pal::body);
+		}
+		else Ghost(p, ix, cancelY, iw, 48, "Cancel search", kRkCancel, v.phase == LeagueRankedPhase::Searching, mx, my);
 		p.Font(3);
 		p.TextWrapped(ix, cardH + y - 62, iw, 44, "You can keep looking at rooms: a sound plays and the window flashes when a match is found.", pal::caption);
 		return;
@@ -465,22 +546,46 @@ void PaintRankCard(Painter &p, const State &st, const HubLayout &h)
 
 	if (matched) {
 		Caps(p, ix, y + 20, iw, 20, "Your ranked match", pal::redText);
-		DrawLeagueEmblem(p, cx - 80, y + 54, 160, v.opponent.tier);
-		Display(p, 44);
-		p.raw = true;
-		const std::string other = v.opponent.name.empty() ? Tr("Opponent") : v.opponent.name;
-		p.Text(x + 16, y + 226, w - 32, 50, TrFmt("Against %s", {other}), pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		p.raw = false;
+		const std::vector<LeagueMatchTeam> teams = MatchTeams(v);
+		const std::string own = std::to_string(SteamOwnId());
+		const bool teamMatch = LeagueQueueIsTeam(v.searchQueue) || !teams.empty();
+		if (teamMatch) {
+			// A 2v2: the player's own rank, with whom and against whom.
+			const LeagueRanked &mine = LeagueMeRanked(me.me, kLeagueQueueTeam);
+			DrawLeagueEmblem(p, cx - 80, y + 54, 160, mine.present ? mine.tier : LeagueTier::None);
+			const LeaguePlayerCard *partner = LeagueTeamPartner(teams, own);
+			const std::vector<LeaguePlayerCard> others = LeagueTeamOpponents(teams, own);
+			auto nameOf = [](const LeaguePlayerCard &c, const char *fallback) { return c.name.empty() ? Tr(fallback) : c.name; };
+			Display(p, 40);
+			p.raw = true;
+			p.Text(x + 16, y + 222, w - 32, 46, TrFmt("With %s", {partner ? nameOf(*partner, "your partner") : Tr("your partner")}), pal::text,
+				DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			p.raw = false;
+			p.Font(0);
+			const std::string against = others.size() >= 2 ? TrFmt("Against %s and %s", {nameOf(others[0], "Opponent"), nameOf(others[1], "Opponent")}) : Tr("Against the other team");
+			RawText(p, x + 16, y + 268, w - 32, 22, against, pal::body, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		}
+		else {
+			DrawLeagueEmblem(p, cx - 80, y + 54, 160, v.opponent.tier);
+			Display(p, 44);
+			p.raw = true;
+			const std::string other = v.opponent.name.empty() ? Tr("Opponent") : v.opponent.name;
+			p.Text(x + 16, y + 226, w - 32, 50, TrFmt("Against %s", {other}), pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			p.raw = false;
+		}
 		p.Font(0);
 		const bool inRoom = st.room.id != 0;
-		std::string line = v.phase == LeagueRankedPhase::Found || v.phase == LeagueRankedPhase::Accepted ? Tr("Waiting for both players to accept...")
+		std::string line = v.phase == LeagueRankedPhase::Found || v.phase == LeagueRankedPhase::Accepted
+			? Tr(LeagueQueueIsTeam(v.searchQueue) ? "Waiting for the four players to accept..." : "Waiting for both players to accept...")
 			: inRoom																			   ? Tr("You are in the room: get ready and start.")
 			: v.host																			   ? Tr("Creating the room...")
 																										   : Tr("Waiting for the host's room...");
-		p.Text(x + 16, y + 280, w - 32, 24, line, pal::body, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Font(0);
+		const int lineY = teamMatch ? y + 294 : y + 280;
+		p.Text(x + 16, lineY, w - 32, 24, line, pal::body, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		if (!v.ticket.map.name.empty()) {
 			p.Font(3);
-			RawText(p, x + 16, y + 308, w - 32, 22, TrFmt("Map: %s", {LeagueMapText(v.ticket.map.name)}), pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			RawText(p, x + 16, lineY + 28, w - 32, 22, TrFmt("Map: %s", {LeagueMapText(v.ticket.map.name)}), pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		}
 		if ((v.phase == LeagueRankedPhase::Ready || v.phase == LeagueRankedPhase::Playing) && !inRoom) {
 			p.Button(ix, y + cardH - 196, iw, 56, "Go to the room", kRankedAct, kRkRoom, mx, my, !st.connecting, true);
@@ -497,10 +602,8 @@ void PaintRankCard(Painter &p, const State &st, const HubLayout &h)
 		return;
 	}
 
-	Caps(p, ix, y + 20, iw, 20, "Your rank", pal::redText);
-	const int chipW = ChipWidth(p, "1 vs 1", 98);
-	Chip(p, x + w - 24 - chipW, y + 14, chipW, 32, "1 vs 1", pal::text, pal::selected);
-	p.Frame(x + w - 24 - chipW, y + 14, chipW, 32, pal::edgeHot);
+	Caps(p, ix, y + 20, iw / 3, 20, "Your rank", pal::redText);
+	QueueSegments(p, st, x + w - 24, y + 14, 32);
 	const bool placing = !rk.present || rk.placementLeft > 0;
 	// Where the parts go: the mockup's places on a 1080 screen, closer together on a shorter one, so the button keeps its room.
 	const bool tight = cardH < 640;
@@ -587,12 +690,16 @@ void PaintRankCard(Painter &p, const State &st, const HubLayout &h)
 	}
 	PaintPeakLine(p, rk, ix, peakY, iw);
 	const int64_t ban = BanOf(v).until;
-	const bool canSearch = v.linked && v.seasonLoaded && v.season.active && ban <= now && v.phase == LeagueRankedPhase::Idle;
+	// In 2v2, alone or as the leader of a ready duo; the season has to play the queue.
+	const LeagueDuoRole role = team ? LeagueDuoState().role : LeagueDuoRole::Solo;
+	const bool queueOpen = !team || (v.seasonLoaded && LeagueSeasonHasQueue(v.season, kLeagueQueueTeam));
+	const bool canSearch = v.linked && v.seasonLoaded && v.season.active && ban <= now && v.phase == LeagueRankedPhase::Idle && queueOpen &&
+		(role == LeagueDuoRole::Solo || role == LeagueDuoRole::Leader);
 	// Who is around, before searching: with nobody searching the player still knows a search will call them.
 	const int popY = std::max(peakY + 30, y + cardH - 138);
 	if (v.seasonLoaded && v.season.active && popY + 22 <= y + cardH - 112) PaintPopulation(p, v, ix, popY, iw);
 	p.fonts[5] = BrandFont(BrandFace::Display, 34, p.s);
-	p.Button(ix, y + cardH - 108, iw, 64, "Search for a match  1 vs 1", kRankedAct, kRkSearch, mx, my, canSearch, true, 5);
+	p.Button(ix, y + cardH - 108, iw, 64, team ? "Search for a match  2 vs 2" : "Search for a match  1 vs 1", kRankedAct, kRkSearch, mx, my, canSearch, true, 5);
 	if (v.seasonLoaded && !v.season.active) {
 		p.Font(3);
 		p.Text(ix, y + cardH - 38, iw, 22, "The season is not being played now.", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
@@ -618,11 +725,22 @@ void PaintGameRow(Painter &p, const LeagueHistoryGame &g, int x, int ry, int w, 
 		RawText(p, deltaX, ry, deltaW, rowH, delta, deltaInk, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 	}
 	const int tx = deltaX + deltaW + 8, tw = std::max(40, x + w - rightW - tx);
-	const uint64_t id = _strtoui64(g.opponent.steamId.c_str(), nullptr, 10);
-	PaintName(p, tx, ry + 3, tw, 26, g.opponent.name.empty() ? Tr("Opponent") : g.opponent.name, id, RankBadge(g.opponent.tier, g.opponent.division), false,
-		mx, my);
-	p.Font(3);
-	RawText(p, tx, ry + 27, tw, 20, GameFacts(g), pal::caption);
+	if (g.opponents.size() >= 2) {
+		p.Font(0);
+		RawText(p, tx, ry + 3, tw, 26, OpponentsText(g), pal::text);
+		std::string facts = TrFmt("with %s", {g.partner.name.empty() ? Tr("your partner") : g.partner.name});
+		const std::string rest = GameFacts(g);
+		if (!rest.empty()) facts += "  \xC2\xB7  " + rest;
+		p.Font(3);
+		RawText(p, tx, ry + 27, tw, 20, facts, pal::caption);
+	}
+	else {
+		const uint64_t id = _strtoui64(g.opponent.steamId.c_str(), nullptr, 10);
+		PaintName(p, tx, ry + 3, tw, 26, g.opponent.name.empty() ? Tr("Opponent") : g.opponent.name, id, RankBadge(g.opponent.tier, g.opponent.division), false,
+			mx, my);
+		p.Font(3);
+		RawText(p, tx, ry + 27, tw, 20, GameFacts(g), pal::caption);
+	}
 	RawText(p, x + w - rightW, ry, rightW, rowH, AgoText(g.playedAt, now), pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 }
 
@@ -685,7 +803,7 @@ void PaintSeasonRewards(Painter &p, const State &st, const HubLayout &h, int y, 
 {
 	const LeagueRankedView &v = st.ranked.view;
 	const LeagueMeView me = LeagueMeState();
-	const LeagueRanked &rk = me.me.ranked;
+	const LeagueRanked &rk = LeagueMeRanked(me.me, v.queue);
 	const LeagueRewardPreview today = LeagueRewardsToday(rk, v.seasonLoaded && v.season.beta);
 	const int season = v.seasonLoaded ? v.season.number : rk.season;
 	const int x = h.midX, w = h.midW, ix = x + 24, iw = w - 48;
@@ -777,13 +895,15 @@ void PaintSeasonRewards(Painter &p, const State &st, const HubLayout &h, int y, 
 	RawText(p, ix, boxY + boxH + 6, iw, 22, next, ink);
 }
 
-void PaintMiniBoard(Painter &p, const State &st, const HubLayout &h)
+const int kMiniBoardMinH = 330;
+
+void PaintMiniBoard(Painter &p, const State &st, const HubLayout &h, int y, int cardH)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const LeagueRankedView &v = st.ranked.view;
-	const int x = h.rightX, y = h.cardY, w = h.rightW, cardH = h.cardH, ix = x + 24, iw = w - 48;
+	const int x = h.rightX, w = h.rightW, ix = x + 24, iw = w - 48;
 	PaintGlassCard(p, x, y, w, cardH);
-	Caps(p, ix, y + 16, iw - 160, 22, "Leaderboard  \xC2\xB7  1 vs 1", pal::redText);
+	Caps(p, ix, y + 16, iw - 160, 22, LeagueQueueIsTeam(v.queue) ? "Leaderboard  \xC2\xB7  2 vs 2" : "Leaderboard  \xC2\xB7  1 vs 1", pal::redText);
 	p.Font(3);
 	if (v.boardLoaded) {
 		RawText(p, ix + iw - 200, y + 16, 200, 22, v.top.total == 1 ? Tr("1 player") : TrFmt("%s players", {std::to_string(v.top.total)}), pal::caption,
@@ -825,7 +945,8 @@ void PaintMiniBoard(Painter &p, const State &st, const HubLayout &h)
 	const int room = cardH - 82 - 64;
 	int shown = std::min(10, room / rowH);
 	if (mine && mine->position > shown) shown = std::min(10, (room - 78) / rowH);
-	shown = std::max(3, shown);
+	// Under the duo's panel of a short screen the card is short: fewer rows before the player's own.
+	shown = std::max(mine && mine->position > 3 ? 1 : 3, shown);
 	for (size_t i = 0; i < v.top.rows.size() && i < static_cast<size_t>(shown); i++) {
 		const LeagueBoardRow &r = v.top.rows[i];
 		const bool you = r.steamId == own;
@@ -861,7 +982,15 @@ void PaintHub(Painter &p, const State &st)
 	const int recentH = h.cardH - kGap - rewardsH;
 	PaintRecent(p, st, h, h.cardY, recentH);
 	PaintSeasonRewards(p, st, h, h.cardY + recentH + kGap, rewardsH);
-	PaintMiniBoard(p, st, h);
+	if (!LeagueQueueIsTeam(st.ranked.view.queue)) {
+		PaintMiniBoard(p, st, h, h.cardY, h.cardH);
+		return;
+	}
+	// The duo over the leaderboard, which keeps room for a few rows and the player's own.
+	LeagueDuoWatch();
+	const int duoH = RankedDuoHeight(h.cardH - kGap - kMiniBoardMinH);
+	PaintRankedDuo(p, st, h.rightX, h.cardY, h.rightW, duoH);
+	PaintMiniBoard(p, st, h, h.cardY + duoH + kGap, h.cardH - duoH - kGap);
 }
 
 // A button of the tool bar that picks one of two, lit while it is the one on.
@@ -909,8 +1038,8 @@ void PaintPlayerCard(Painter &p, const State &st, int x, int y, int w, int h)
 		return;
 	}
 	const int season = st.ranked.boardSeason;
-	LeaguePlayerRequest(pick, season);
-	const LeaguePlayerView pv = LeaguePlayerState(pick, season);
+	LeaguePlayerRequest(pick, season, false, v.queue);
+	const LeaguePlayerView pv = LeaguePlayerState(pick, season, v.queue);
 	const bool ready = pv.state == LeagueCardState::Ready;
 	const LeaguePlayerProfile &c = pv.card;
 	const LeagueBoardRow *row = LeagueBoardFind(v.page, pick);
@@ -943,7 +1072,7 @@ void PaintPlayerCard(Painter &p, const State &st, int x, int y, int w, int h)
 	}
 	p.Font(0);
 	const bool you = pick == own;
-	std::string facts = place > 0 ? TrFmt("Place %s  \xC2\xB7  1 vs 1", {std::to_string(place)}) : Tr("1 vs 1");
+	std::string facts = place > 0 ? TrFmt("Place %s", {std::to_string(place)}) + "  \xC2\xB7  " + RankedQueueLabel(v.queue) : RankedQueueLabel(v.queue);
 	p.raw = true;
 	if (p.TextWidth(facts + "  \xC2\xB7  " + BoardSeasonText(st)) <= tw - (you ? 52 : 0)) facts += "  \xC2\xB7  " + BoardSeasonText(st);
 	p.raw = false;
@@ -1065,9 +1194,8 @@ void PaintBoard(Painter &p, const State &st)
 		p.AddHit(tx, top, w, 44, kRankedAct, kRkHub);
 		tx += w + 16;
 	}
-	const int queueW = ChipWidth(p, "1 vs 1", 100);
-	Chip(p, tx, top, queueW, 44, "1 vs 1", pal::text, pal::selected);
-	p.Frame(tx, top, queueW, 44, pal::edgeHot);
+	const int queueW = QueueSegmentsWidth(p, st);
+	QueueSegments(p, st, tx + queueW, top, 44);
 	tx += queueW + 16;
 	const int seasonW = std::max(220, std::min(300, tableW * 22 / 100));
 	UseSharedFonts(p);
@@ -1245,9 +1373,8 @@ void PaintHistory(Painter &p, const State &st)
 		p.AddHit(tx, top, w, 44, kRankedAct, kRkHub);
 		tx += w + 16;
 	}
-	const int chipW = ChipWidth(p, "1 vs 1", 110);
-	Chip(p, tx, top, chipW, 44, "1 vs 1", pal::text, pal::selected);
-	p.Frame(tx, top, chipW, 44, pal::edgeHot);
+	const int chipW = QueueSegmentsWidth(p, st);
+	QueueSegments(p, st, tx + chipW, top, 44);
 	tx += chipW + 16;
 	Ghost(p, tx, top, 150, 44, "Newest", kRkHistoryNewest, v.historyLoaded && page > 1, mx, my);
 	tx += 166;
@@ -1275,8 +1402,8 @@ void PaintHistory(Painter &p, const State &st)
 		cx += w + 16;
 		return c;
 	};
-	const Col cols[] = {col("Result", resultW), col("Opponent", opponentW), col("Map", mapW), col("Civilizations", civsW), col("Length", durationW),
-		col("Played", playedW), col("", reportW)};
+	const Col cols[] = {col("Result", resultW), col(LeagueQueueIsTeam(v.queue) ? "Opponents" : "Opponent", opponentW), col("Map", mapW), col("Civilizations", civsW),
+		col("Length", durationW), col("Played", playedW), col("", reportW)};
 	for (const Col &c : cols) {
 		if (*c.label) Caps(p, m + c.x, y0, c.w, 44, c.label, pal::caption);
 	}
@@ -1315,8 +1442,17 @@ void PaintHistory(Painter &p, const State &st)
 		const uint64_t id = _strtoui64(g.opponent.steamId.c_str(), nullptr, 10);
 		const int av = 32;
 		if (!PaintAvatar(p, m + cols[1].x, ry + (rowH - av) / 2, av, id)) p.Fill(m + cols[1].x, ry + (rowH - av) / 2, av, av, pal::hairline);
-		PaintName(p, m + cols[1].x + av + 12, ry, cols[1].w - av - 12, rowH, g.opponent.name.empty() ? Tr("Opponent") : g.opponent.name, id,
-			RankBadge(g.opponent.tier, g.opponent.division), false, mx, my);
+		if (g.opponents.size() >= 2) {
+			p.Font(0);
+			RawText(p, m + cols[1].x + av + 12, ry + 6, cols[1].w - av - 12, 24, OpponentsText(g), pal::text);
+			p.Font(3);
+			RawText(p, m + cols[1].x + av + 12, ry + 30, cols[1].w - av - 12, 20, TrFmt("with %s", {g.partner.name.empty() ? Tr("your partner") : g.partner.name}),
+				pal::caption);
+		}
+		else {
+			PaintName(p, m + cols[1].x + av + 12, ry, cols[1].w - av - 12, rowH, g.opponent.name.empty() ? Tr("Opponent") : g.opponent.name, id,
+				RankBadge(g.opponent.tier, g.opponent.division), false, mx, my);
+		}
 		p.Font(0);
 		std::string map = g.map.name.empty() ? std::string("\xE2\x80\x94") : LeagueMapText(g.map.name);
 		if (!g.map.size.empty()) map += "  \xC2\xB7  " + LeagueMapText(g.map.size);
@@ -1346,7 +1482,7 @@ void PaintHistory(Painter &p, const State &st)
 
 bool PaintRankedTab(Painter &p, const State &st)
 {
-	const bool dialog = st.ranked.disputeMatch != 0 || st.ranked.contentOpen;
+	const bool dialog = st.ranked.disputeMatch != 0 || st.ranked.contentOpen || st.ranked.inviteOpen;
 	if (dialog) p.noHover = true;
 	if (st.ranked.resultOpen) PaintRankedResult(p, st);
 	else if (!st.ranked.view.linked) return false;
@@ -1365,7 +1501,8 @@ bool PaintRankedTab(Painter &p, const State &st)
 	if (dialog) {
 		UseSharedFonts(p);
 		if (st.ranked.disputeMatch) PaintRankedDispute(p, st);
-		else PaintRankedContent(p, st);
+		else if (st.ranked.contentOpen) PaintRankedContent(p, st);
+		else PaintRankedInvite(p, st);
 		UseScreenFonts(p);
 	}
 	return true;

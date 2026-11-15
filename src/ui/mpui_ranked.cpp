@@ -17,6 +17,7 @@
 #include "core/leaguemaps.h"
 #include "core/leagueplay.h"
 #include "core/leagueranked.h"
+#include "core/leagueteam.h"
 #include "core/log.h"
 #include "hooks/dmshim.h"
 #include "i18n/tr.h"
@@ -551,13 +552,19 @@ void OpenDispute(int64_t matchId)
 
 std::string &RankedFieldText()
 {
-	// The field is the report's while its dialog is open, and the leaderboard's search otherwise.
+	// The field is the report's or the friend's to invite while their dialog is open, and the leaderboard's search otherwise.
+	if (g_s.ranked.inviteOpen) return g_s.ranked.inviteSearch;
 	return g_s.ranked.disputeMatch ? g_s.ranked.disputeText : g_s.ranked.boardSearch;
 }
 
 void RankedFieldEnter()
 {
 	RankedScreen &r = g_s.ranked;
+	if (r.inviteOpen) {
+		r.invitePage = 0;
+		g_s.focus = kNoField;
+		return;
+	}
 	if (!r.disputeMatch) {
 		RankedBoardAsk(0, false);
 		g_s.focus = kNoField;
@@ -618,6 +625,10 @@ void PaintRankedContent(Painter &p, const State &st)
 void RankedAction(int arg)
 {
 	RankedScreen &r = g_s.ranked;
+	if (arg >= kRkBadgeEnd && arg < kRkTeamArgEnd) {
+		RankedTeamAction(arg);
+		return;
+	}
 	if (arg >= kRkArgEnd) {
 		RankedSeasonAction(arg);
 		return;
@@ -780,6 +791,10 @@ void RankedFrame()
 		}
 	}
 	if (r.contentOpen && g_s.view != kViewRanked) r.contentOpen = false;
+	if (r.inviteOpen && (g_s.view != kViewRanked || LeagueDuoState().role != LeagueDuoRole::Solo)) {
+		r.inviteOpen = false;
+		if (g_s.focus == kRankedField) g_s.focus = kNoField;
+	}
 	if (r.disputeMatch && g_s.view != kViewRanked) {
 		r.disputeMatch = 0;
 		if (g_s.focus == kRankedField) g_s.focus = kNoField;
@@ -811,8 +826,9 @@ void RankedGameThreadTick()
 		g_auto.foundSerial = v.foundSerial;
 		if (v.phase == LeagueRankedPhase::Found) CallPlayer();
 	}
-	// A game or a room ends the search: nobody can answer a match from inside one.
-	if ((InGame() || GameRoomActive()) && (v.phase == LeagueRankedPhase::Searching || v.phase == LeagueRankedPhase::Joining)) {
+	RankedTeamGameThreadTick();
+	// A game or a room ends the search: nobody can answer a match from inside one. The partner of a duo cannot end the leader's.
+	if ((InGame() || GameRoomActive()) && !v.partnerSearch && (v.phase == LeagueRankedPhase::Searching || v.phase == LeagueRankedPhase::Joining)) {
 		LogI("league", "ranked: a game or a room started; the search stops");
 		LeagueQueueLeave();
 		ModUiToast("The ranked search stopped because you entered a game or a room.");
@@ -849,13 +865,15 @@ void PaintRankedPill(Painter &p, const State &st, int right, int left)
 		p.raw = true;
 		const int clockW = std::max(p.TextWidth("00:00"), p.TextWidth(clock)) + 8;
 		p.raw = false;
-		// The spinner, the label, the time and the cross: the label shortens, and goes, before anything overlaps.
+		// The spinner, the label, the time and the cross: the label shortens, and goes, before anything overlaps. The partner of a duo has
+		// no cross: only the leader stops the search.
 		p.Font(4);
-		const int fixed = 46 + clockW + 44;
-		const char *label = "Searching 1 vs 1";
+		const bool team = LeagueQueueIsTeam(v.searchQueue), cross = !v.partnerSearch;
+		const int fixed = 46 + clockW + (cross ? 44 : 16);
+		const char *label = team ? "Searching 2 vs 2" : "Searching 1 vs 1";
 		int labelW = p.CapsWidth(label, 2) + 14;
 		if (fixed + labelW > room) {
-			label = "1 vs 1";
+			label = team ? "2 vs 2" : "1 vs 1";
 			labelW = p.CapsWidth(label, 2) + 14;
 		}
 		if (fixed + labelW > room) labelW = 0;
@@ -868,6 +886,10 @@ void PaintRankedPill(Painter &p, const State &st, int right, int left)
 		p.raw = true;
 		p.Text(x + 46 + labelW, y, clockW, h, clock, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 		p.raw = false;
+		if (!cross) {
+			p.AddHit(x, y, w, h, kRanked, 0);
+			return;
+		}
 		const bool hot = p.Hover(x + w - 44, y, 44, h, mx, my);
 		p.Line(x + w - 28, y + 15, x + w - 16, y + 27, hot ? pal::text : pal::textDim, 2);
 		p.Line(x + w - 28, y + 27, x + w - 16, y + 15, hot ? pal::text : pal::textDim, 2);

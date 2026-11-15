@@ -122,7 +122,7 @@ void OpenPlayerRow(uint64_t id)
 	RankedAction(kRkBoard);
 	r.boardPick = sid;
 	r.boardSeek = sid;
-	LeaguePlayerRequest(sid, -1, true);
+	LeaguePlayerRequest(sid, -1, true, r.view.queue);
 	LogI("league", "a badge was clicked: looking for the player's row");
 }
 
@@ -263,7 +263,7 @@ void RankedSeasonsFrame()
 		// Steam gives the friends a moment after they are first asked for.
 		if (r.boardFriends && FriendIds().size() != g_watch.friendsAsked) RankedBoardAsk(0, false);
 		if (!r.boardSeek.empty()) {
-			const LeaguePlayerView card = LeaguePlayerState(r.boardSeek, -1);
+			const LeaguePlayerView card = LeaguePlayerState(r.boardSeek, -1, r.view.queue);
 			if (card.state == LeagueCardState::Ready) {
 				if (card.card.place > 0) RankedBoardAsk(LeagueBoardPageOf(card.card.place, RankedBoardRows()), false);
 				r.boardSeek.clear();
@@ -280,7 +280,8 @@ void RankedSeasonsFrame()
 	LeagueMeRefresh();
 	if (r.ceremonyOpen) {
 		g_s.view = kViewRanked;
-		LeagueHallRequest(r.ceremonySeason);
+		// The hall of the queue whose season closed.
+		LeagueHallRequest(r.ceremonySeason, LeagueMeState().me.ceremony.reward.queue);
 		LeagueSeasonsRefresh();
 		return;
 	}
@@ -296,7 +297,7 @@ void RankedSeasonsFrame()
 	g_s.view = kViewRanked;
 	g_s.dropOpen = false;
 	if (g_s.focus == kRankedField) g_s.focus = kNoField;
-	LeagueHallRequest(season);
+	LeagueHallRequest(season, me.me.ceremony.reward.queue);
 	LeagueSeasonsRefresh(true);
 	LogI("league", "showing the end of season %d", season);
 }

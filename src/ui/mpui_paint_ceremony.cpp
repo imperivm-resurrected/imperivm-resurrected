@@ -286,8 +286,8 @@ void PaintHall(Painter &p, const State &st, const LeagueSeasonsView &sv, const L
 	PaintGlassCard(p, x, y, w, h);
 	p.Font(4);
 	p.raw = true;
-	p.TextCaps(ix, y + 16, iw, 22, Tr("Hall of fame") + "  \xC2\xB7  " + TrFmt("Season %s", {LeagueRoman(season)}) + "  \xC2\xB7  " + Tr("1 vs 1"), pal::redText,
-		DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 2);
+	p.TextCaps(ix, y + 16, iw, 22, Tr("Hall of fame") + "  \xC2\xB7  " + TrFmt("Season %s", {LeagueRoman(season)}) + "  \xC2\xB7  " + RankedQueueLabel(sv.hallQueue),
+		pal::redText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 2);
 	p.raw = false;
 	const bool ready = sv.hallSeason == season && sv.hallLoaded;
 	const std::vector<LeagueHallRow> &top = sv.hall.top;
