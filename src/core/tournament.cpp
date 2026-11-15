@@ -13,6 +13,7 @@
 #include <utility>
 
 #include "core/leaguemaps.h"
+#include "i18n/tr.h"
 
 namespace {
 
@@ -49,6 +50,19 @@ std::string Text(const Json &j, const char *key)
 	return v && v->type == Json::String ? v->str : std::string();
 }
 
+// A team without a name of its own: the league names it after its captain and its partner, "Varo & Tulia", which is said in the
+// player's language, "Varo y Tulia". Any other name is the team's own.
+std::string TeamNameOf(const std::string &name, const std::string &captain, const std::string &partner)
+{
+	const std::string a = captain.empty() ? "?" : captain, b = partner.empty() ? "?" : partner;
+	return name == a + " & " + b ? TrFmt("%s and %s", {a, b}) : name;
+}
+
+std::string TeamNameOf(const std::string &name, const std::vector<TourneyMember> &members)
+{
+	return members.size() == 2 ? TeamNameOf(name, members[0].name, members[1].name) : name;
+}
+
 TourneyCard CardFromJson(const Json *v)
 {
 	TourneyCard c;
@@ -58,6 +72,7 @@ TourneyCard CardFromJson(const Json *v)
 	c.name = Text(*v, "name");
 	c.seed = Int(*v, "seed");
 	c.members = TourneyMembersFromJson(v->Get("members"));
+	c.name = TeamNameOf(c.name, c.members);
 	return c;
 }
 
@@ -111,6 +126,7 @@ TourneyNextSide SideFromJson(const Json *v)
 	s.seed = Int(*v, "seed");
 	s.inRoom = v->GetBool("inRoom");
 	s.members = TourneyMembersFromJson(v->Get("members"));
+	s.name = TeamNameOf(s.name, s.members);
 	return s;
 }
 
@@ -715,6 +731,12 @@ bool TourneyParseDetail(const Json &j, TourneyDetail &out)
 			x.members = TourneyMembersFromJson(e.Get("members"));
 			x.teamName = Text(e, "teamName");
 			x.partner = MemberFromJson(e.Get("partner"));
+			// A team waiting for its partner lists only its captain: the partner is apart.
+			if (x.teamName.empty() && x.members.size() == 2) x.name = TeamNameOf(x.name, x.members);
+			else if (x.teamName.empty() && x.partner.steamId) {
+				const TourneyMember *captain = TourneyMemberOf(x.members, x.steamId);
+				x.name = TeamNameOf(x.name, captain ? captain->name : std::string(), x.partner.name);
+			}
 			if (x.status == TourneyEntryStatus::Signed || x.status == TourneyEntryStatus::Playing || x.status == TourneyEntryStatus::Out) counted++;
 			out.entrants.push_back(x);
 		}
@@ -776,12 +798,12 @@ bool TourneyParseDetail(const Json &j, TourneyDetail &out)
 			TourneyStanding x;
 			x.entryId = Int64(s, "entryId");
 			x.steamId = Id64(s.Get("steamId"));
-			x.name = Text(s, "name");
 			x.members = TourneyMembersFromJson(s.Get("members"));
+			x.name = TeamNameOf(Text(s, "name"), x.members);
 			if (const TourneyEntrant *e = TourneyEntrantOf(out, x.entryId)) {
-				if (x.name.empty()) x.name = e->name;
-				if (!x.steamId) x.steamId = e->steamId;
 				if (x.members.empty()) x.members = e->members;
+				x.name = x.name.empty() ? e->name : TeamNameOf(x.name, x.members);
+				if (!x.steamId) x.steamId = e->steamId;
 			}
 			x.points = whole(s, "points");
 			x.wins = whole(s, "wins");
@@ -1132,8 +1154,8 @@ bool TourneyParseMine(const Json &j, TourneyMine &out)
 			x.members = TourneyMembersFromJson(e.Get("members"));
 			// The league's form: {team: {name, captain, members}}.
 			if (const Json *team = e.Get("team"); team && team->type == Json::Object) {
-				if (x.teamName.empty()) x.teamName = Text(*team, "name");
 				if (x.members.empty()) x.members = TourneyMembersFromJson(team->Get("members"));
+				if (x.teamName.empty()) x.teamName = TeamNameOf(Text(*team, "name"), x.members);
 			}
 			if (x.tournamentId) out.entries.push_back(x);
 		}

@@ -219,7 +219,9 @@ int TourneyFullRounds(int maxEntries);
 // than places the final keeps its map); a shorter one runs from the first round and its last map repeats.
 TourneyMap TourneyMapOfRound(const TourneySummary &t, int round, int rounds);
 
-// A side of a match in the bracket. In a cup of teams `name` is the team's, `steamId` its captain's and `members` its two players.
+// A side of a match in the bracket. In a cup of teams `name` is the team's, `steamId` its captain's and `members` its two players. A
+// team without a name of its own is named after its players in the player's language ("Varo y Tulia"; the league sends "Varo & Tulia"),
+// in every view of a cup.
 struct TourneyCard {
 	int64_t entryId = 0;
 	uint64_t steamId = 0;

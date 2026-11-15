@@ -10,6 +10,7 @@
 
 #include "core/json.h"
 #include "core/tournament.h"
+#include "i18n/tr.h"
 
 namespace {
 
@@ -30,7 +31,7 @@ const char *kDetail = R"({"id":7,"slug":"copa-parejas","name":"Copa de parejas",
 "maxEntries":4,"minEntries":2,"entries":[
 {"entryId":11,"steamId":"76561198000000001","name":"Los lobos","status":"playing","seed":1,"checkedIn":true,"placement":null,
 "members":[{"steamId":"76561198000000001","name":"Varo"},{"steamId":"76561198000000002","name":"Tulia"}]},
-{"entryId":12,"steamId":"76561198000000003","name":"Furio y Brenno","status":"playing","seed":2,"checkedIn":true,"placement":null,
+{"entryId":12,"steamId":"76561198000000003","name":"Furio & Brenno","status":"playing","seed":2,"checkedIn":true,"placement":null,
 "members":[{"steamId":"76561198000000003","name":"Furio"},{"steamId":"76561198000000004","name":"Brenno"}]},
 {"entryId":13,"steamId":"76561198000000005","name":"Equipo viejo","status":"withdrawn","seed":null,"checkedIn":false,"placement":null,
 "members":[{"steamId":"76561198000000005","name":"Escipion"},{"steamId":"76561198000000002","name":"Tulia"}]},
@@ -39,7 +40,7 @@ const char *kDetail = R"({"id":7,"slug":"copa-parejas","name":"Copa de parejas",
 "bestOf":1,"finalBestOf":1,"seeding":"rating","maps":[{"name":"mediterranean","type":"random","size":"medium"}],"rounds":1,"matches":[
 {"id":21,"round":1,"position":0,"stage":"final","bestOf":1,"a":{"entryId":11,"steamId":"76561198000000001","name":"Los lobos","seed":1,
 "members":[{"steamId":"76561198000000001","name":"Varo"},{"steamId":"76561198000000002","name":"Tulia"}]},
-"b":{"entryId":12,"steamId":"76561198000000003","name":"Furio y Brenno","seed":2,
+"b":{"entryId":12,"steamId":"76561198000000003","name":"Furio & Brenno","seed":2,
 "members":[{"steamId":"76561198000000003","name":"Furio"},{"steamId":"76561198000000004","name":"Brenno"},{"name":"no id"}]},
 "score":[0,0],"winner":null,"status":"ready"}],
 "standings":[]})";
@@ -48,7 +49,7 @@ const char *kNext = R"({"tournament":{"id":7,"slug":"copa-parejas","name":"Copa 
 "stage":"final","bestOf":1,"game":1,"score":[0,0],"status":"ready","deadlineAt":1794662271671,
 "me":{"side":"a","seed":1,"inRoom":false},
 "team":{"entryId":11,"name":"Los lobos","captain":"76561198000000001","members":[{"steamId":"76561198000000001","name":"Varo","inRoom":true},{"steamId":"76561198000000002","name":"Tulia","inRoom":false}]},
-"opponent":{"name":"Furio y Brenno","steamId":"76561198000000003","seed":2,"inRoom":false,
+"opponent":{"name":"Furio & Brenno","steamId":"76561198000000003","seed":2,"inRoom":false,
 "members":[{"steamId":"76561198000000003","name":"Furio","inRoom":true},{"steamId":"76561198000000004","name":"Brenno"}]}})";
 
 const char *kMine = R"({"next":null,"entries":[
@@ -97,6 +98,9 @@ void Detail()
 	CHECK_EQ(static_cast<int>(d.entrants[3].members.size()), 1);
 	CHECK(d.entrants[3].partner.steamId == kFurio && d.entrants[3].partner.name == "Furio");
 	CHECK(d.entrants[3].teamName.empty());
+	// The league's name of a team without one, "Craso & Furio", in the player's language; a name of its own as it is.
+	CHECK_EQ(d.entrants[3].name, TrFmt("%s and %s", {"Craso", "Furio"}));
+	CHECK_EQ(d.entrants[0].name, std::string("Los lobos"));
 	// Furio is only invited there: his team is the one he plays in.
 	CHECK(TourneyEntrantBySteamId(d, kFurio) && TourneyEntrantBySteamId(d, kFurio)->entryId == 12);
 	CHECK_EQ(static_cast<int>(d.entrants[0].members.size()), 2);
@@ -118,6 +122,7 @@ void Detail()
 	CHECK(TourneyMemberOf(m.b.members, kBrenno) && TourneyMemberOf(m.b.members, kBrenno)->name == "Brenno");
 	CHECK(!TourneyMemberOf(m.b.members, kVaro));
 	CHECK(TourneyNameIsMembers(m.b.name, m.b.members));
+	CHECK_EQ(m.b.name, TrFmt("%s and %s", {"Furio", "Brenno"}));
 	CHECK(!TourneyNameIsMembers(m.a.name, m.a.members));
 	// A 1 vs 1 card lists its player as its one member.
 	TourneyCard solo;
@@ -153,7 +158,7 @@ void Next()
 		CHECK_EQ(n.team.members[0].inRoom, 1);
 		CHECK_EQ(n.team.members[1].inRoom, 0);
 	}
-	CHECK_EQ(n.opponent.name, std::string("Furio y Brenno"));
+	CHECK_EQ(n.opponent.name, TrFmt("%s and %s", {"Furio", "Brenno"}));
 	CHECK_EQ(static_cast<int>(n.opponent.members.size()), 2);
 	if (n.opponent.members.size() == 2) CHECK_EQ(n.opponent.members[1].inRoom, -1);
 	std::vector<uint64_t> players = TourneyMatchPlayers(n, kVaro);
@@ -232,7 +237,7 @@ void Mine()
 	CHECK(TourneyParseMine(Parse(R"({"entries":[{"tournamentId":5,"slug":"x","name":"X","tournamentStatus":"signup","status":"signed","mode":"2v2",
 "entryId":51,"team":{"name":"Varo & Tulia","captain":"76561198000000001","members":[{"steamId":"76561198000000001","name":"Varo"},
 {"steamId":"76561198000000002","name":"Tulia"}]}}],"invites":[]})"), league));
-	CHECK(!league.entries.empty() && Same(league.entries[0].entryId, 51) && league.entries[0].teamName == "Varo & Tulia");
+	CHECK(!league.entries.empty() && Same(league.entries[0].entryId, 51) && league.entries[0].teamName == TrFmt("%s and %s", {"Varo", "Tulia"}));
 	CHECK(!league.entries.empty() && league.entries[0].members.size() == 2);
 	CHECK(!league.entries.empty() && TourneyPartnerOf(league.entries[0], kTulia).steamId == kVaro);
 	CHECK(!league.entries.empty() && TourneyNameIsMembers(league.entries[0].teamName, league.entries[0].members));
