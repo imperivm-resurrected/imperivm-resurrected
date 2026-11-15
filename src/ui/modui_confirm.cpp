@@ -30,6 +30,10 @@ void ConfirmSize(const State &st, int &cw, int &ch)
 {
 	cw = kConfirmW;
 	ch = kConfirmH;
+	if (st.confirmKind == kConfirmAction && !st.actionAlt.empty()) {
+		cw = 600;
+		ch = kConfirmH + 24;
+	}
 	if (st.confirmItems.empty()) return;
 	const int rows = std::min<int>(kConfirmListRows, static_cast<int>(ConfirmLines(st).size()));
 	cw = 600;
@@ -84,7 +88,7 @@ void PaintConfirm(Painter &p, const State &st)
 	}
 	const Dialog d = DialogBegin(p, st.confirmOnly ? cw : st.viewW, st.confirmOnly ? ch : st.viewH, cw, ch, title);
 	p.Font(0);
-	const int textH = st.confirmItems.empty() ? 70 : 62;
+	const int textH = !st.confirmItems.empty() ? 62 : st.confirmKind == kConfirmAction && !st.actionAlt.empty() ? 94 : 70;
 	p.TextWrapped(d.BodyX(), d.BodyTop(), d.BodyW(), textH, text, pal::text);
 	if (!st.confirmItems.empty()) {
 		const std::vector<ListLine> lines = ConfirmLines(st);
@@ -93,6 +97,7 @@ void PaintConfirm(Painter &p, const State &st)
 		ListPaint(p, d.BodyX(), d.BodyTop() + textH + 4, d.BodyW(), rows * kConfirmRowH + 8, lines, ls, g_confirmGeomOut, 0, kConfirmRowH, mx, my);
 	}
 	if (st.confirmKind == kConfirmNotice) DialogButtons(p, d, {{"OK", kConfirmNo, 0, true}}, mx, my);
+	else if (st.confirmKind == kConfirmAction && !st.actionAlt.empty()) DialogButtons(p, d, {{yes, kConfirmYes, 0, true}, {st.actionAlt, kConfirmAlt}, {"Later", kConfirmNo}}, mx, my);
 	else DialogButtons(p, d, {{yes, kConfirmYes, 0, true}, {st.confirmKind == kConfirmRestart ? "Later" : "Cancel", kConfirmNo}}, mx, my);
 }
 }

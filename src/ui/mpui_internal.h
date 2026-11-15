@@ -51,6 +51,7 @@ enum Action {
 	kLeagueLink, kLeagueOpen, kLeagueCancel, kLeagueUnlink,
 	kRankedAct,
 	kTourney, kFieldTourney, kFieldCupName, kFieldCupDescription, kFieldCupCode,
+	kFieldTeamName, kFieldTeamSearch,
 	kLinkOfferYes, kLinkOfferNo,
 	kFieldRanked,
 };
@@ -90,7 +91,8 @@ struct JoinFlowState {
 extern JoinFlowState g_flow;
 enum View { kViewList, kViewRanked, kViewCreate, kViewTournaments };
 
-enum Field { kNoField, kChatField, kNameField, kPassField, kJoinPassField, kSearchField, kPickSearchField, kRoomNameField, kTourneyField, kCupNameField, kCupDescriptionField, kCupCodeField, kRankedField };
+enum Field { kNoField, kChatField, kNameField, kPassField, kJoinPassField, kSearchField, kPickSearchField, kRoomNameField, kTourneyField, kCupNameField, kCupDescriptionField, kCupCodeField, kRankedField,
+	kTeamNameField, kTeamSearchField };
 
 enum { kPredTeam, kPredRace, kPredAi, kPredReady, kPredOptSel, kPredOptVal, kPredColor };
 

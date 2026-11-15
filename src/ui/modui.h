@@ -22,6 +22,9 @@ void ModUiResetUpdates();
 void ModUiToast(const std::string &text, bool error = false);
 void ModUiNotice(const std::string &title, const std::string &text);
 void ModUiAsk(const std::string &title, const std::string &text, const std::string &yes, std::function<void()> onYes);
+// As ModUiAsk with two answers: `yes` and `alt` each run theirs, and a third button, "Later", and Esc only close it.
+void ModUiChoose(const std::string &title, const std::string &text, const std::string &yes, std::function<void()> onYes, const std::string &alt,
+	std::function<void()> onAlt);
 
 bool ModUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp);
 bool ModUiHandleCornerMessage(UINT msg, WPARAM wp, LPARAM lp);

@@ -60,11 +60,20 @@ struct Disputes {
 	std::vector<TourneyDispute> list;
 };
 
+// The league's map types, which change with its releases only: read again after an hour, or a minute after a read that failed.
+struct MapTypes {
+	bool loaded = false, loading = false;
+	DWORD at = 0;
+	std::vector<TourneyMapType> types;
+};
+const DWORD kMapTypesKeepMs = 3600000, kMapTypesRetryMs = 60000;
+
 std::mutex g_mx;
 Lists g_lists;
 std::map<std::string, Page> g_pages;
 Mine g_mine;
 std::map<int64_t, Disputes> g_disputes;
+MapTypes g_mapTypes;
 // The invitation codes the player found or made cups with, by slug and by id: their pages are read by the code and their sign-up
 // sends it.
 std::map<std::string, std::string> g_codes;
@@ -96,6 +105,9 @@ const char *OpName(TourneyOp op)
 	case TourneyOp::RemoveEntry: return "entry removal";
 	case TourneyOp::Edit: return "cup change";
 	case TourneyOp::Pick: return "map pick";
+	case TourneyOp::Accept: return "team invitation acceptance";
+	case TourneyOp::Decline: return "team invitation refusal";
+	case TourneyOp::CancelTeam: return "team cancellation";
 	default: return "resolution";
 	}
 }
@@ -184,6 +196,7 @@ void Notify(const TourneyMine &mine)
 		if (n.kind == TourneyNotice::MatchReady) kind = "match ready";
 		else if (n.kind == TourneyNotice::CheckinOpen) kind = "check-in open";
 		else if (n.kind == TourneyNotice::PickOpen) kind = "map to pick";
+		else if (n.kind == TourneyNotice::Invite) kind = "invitation to a team";
 		LogI("league", "tournament notice: %s, %s", kind, n.name.c_str());
 		g_notices.push_back(n);
 	}
@@ -214,6 +227,26 @@ void FetchMine()
 	g_mine.mine = mine;
 	for (const TourneyOrganized &c : mine.organized) RememberCode(c.slug, c.id, c.inviteCode);
 	Notify(mine);
+}
+
+void FetchMapTypes()
+{
+	const HttpReply r = Http("GET", "/v1/league/maps", "", false);
+	Json j;
+	std::vector<TourneyMapType> types;
+	const bool ok = r.Ok() && Json::Parse(r.body, j) && TourneyParseMapTypes(j, types);
+	if (!ok && r.status != 429) LogW("league", "could not read the league's map types (%s)", r.Describe().c_str());
+	std::lock_guard<std::mutex> lock(g_mx);
+	g_mapTypes.loading = false;
+	g_mapTypes.at = GetTickCount();
+	if (!ok) return;
+	if (!g_mapTypes.loaded) {
+		int four = 0;
+		for (const TourneyMapType &t : types) four += t.hasSizes4 ? 1 : 0;
+		LogI("league", "%d map types read, %d with their sizes for four players", static_cast<int>(types.size()), four);
+	}
+	g_mapTypes.loaded = true;
+	g_mapTypes.types = std::move(types);
 }
 
 void FetchDisputes(int64_t tournament)
@@ -258,6 +291,8 @@ void Run(TourneyOp op, int64_t id, std::string method, std::string path, std::st
 	if (!out.ok) {
 		const TourneyRefusal no = parsed ? TourneyParseRefusal(j) : TourneyRefusal();
 		out.error = r.failure == "not linked" ? "not_linked" : no.code;
+		// The player's own account is checked before asking; the league's not_linked on a sign-up is about the partner of a team.
+		if (op == TourneyOp::SignUp && r.status == 404 && no.code == "not_linked") out.error = "partner_not_linked";
 		if (out.error.empty() && r.status == 429) out.error = "rate_limited";
 		out.message = parsed ? no.message : r.failure;
 		out.until = no.until;
@@ -271,6 +306,7 @@ void Run(TourneyOp op, int64_t id, std::string method, std::string path, std::st
 		out.requirement = no.requirement;
 		out.have = no.have;
 		out.need = no.need;
+		out.who = no.who;
 		out.hash = no.hash;
 		out.noshowFrom = no.noshowFrom;
 		if (r.status == 0 || r.status >= 500) LogW("league", "tournament %s failed (%s)", OpName(op), r.Describe().c_str());
@@ -293,7 +329,9 @@ void Run(TourneyOp op, int64_t id, std::string method, std::string path, std::st
 	}
 	else if (op == TourneyOp::SignUp && parsed) {
 		const Json *entry = j.Get("entry");
-		out.waitlist = entry && entry->GetString("status") == "waitlist";
+		const TourneyEntryStatus status = entry ? TourneyEntryStatusFromId(entry->GetString("status")) : TourneyEntryStatus::Unknown;
+		out.waitlist = status == TourneyEntryStatus::Waitlist;
+		out.pendingPartner = status == TourneyEntryStatus::PendingPartner;
 	}
 	else if (op == TourneyOp::Pick && parsed) {
 		out.map = TourneyMapFromJson(j.Get("map"));
@@ -337,6 +375,11 @@ void Run(TourneyOp op, int64_t id, std::string method, std::string path, std::st
 	// A room claimed while the next game's map is being chosen waits for it: the pick shows before the matches are read again.
 	if (out.ok && op == TourneyOp::Claim && out.claim.kind == TourneyClaim::Wait && out.claim.pick.present && g_mine.mine.next.match == id) {
 		g_mine.mine.next.pick = out.claim.pick;
+	}
+	// An invitation answered, or one the league no longer has, leaves the player's list before it is read again.
+	if ((op == TourneyOp::Accept || op == TourneyOp::Decline) && (out.ok || r.status == 404 || r.status == 410)) {
+		std::vector<TourneyInvite> &invites = g_mine.mine.invites;
+		invites.erase(std::remove_if(invites.begin(), invites.end(), [id](const TourneyInvite &i) { return i.tournamentId == id; }), invites.end());
 	}
 	if (out.ok && op == TourneyOp::Create) RememberCode(created.slug, created.id, created.inviteCode);
 	if (out.ok && op == TourneyOp::Edit) {
@@ -590,6 +633,40 @@ void LeagueTourneySignUp(int64_t tournament)
 		if (code != g_codeIds.end()) body.Set("code", Json::MakeString(code->second));
 	}
 	Start(TourneyOp::SignUp, tournament, "POST", TourneyPath(tournament, "/entries"), body.Dump());
+}
+
+void LeagueTourneySignUpTeam(int64_t tournament, uint64_t partner, const std::string &teamName)
+{
+	std::string code;
+	{
+		std::lock_guard<std::mutex> lock(g_mx);
+		const auto found = g_codeIds.find(tournament);
+		if (found != g_codeIds.end()) code = found->second;
+	}
+	Start(TourneyOp::SignUp, tournament, "POST", TourneyPath(tournament, "/entries"), TourneyTeamEntryJson(partner, teamName, code).Dump());
+}
+
+void LeagueTourneyAnswerInvite(int64_t tournament, int64_t entry, bool accept)
+{
+	Start(accept ? TourneyOp::Accept : TourneyOp::Decline, tournament, "POST", TourneyPath(tournament, "/entries/") + std::to_string(entry) + (accept ? "/accept" : "/decline"),
+		"{}");
+}
+
+void LeagueTourneyCancelTeam(int64_t tournament)
+{
+	Start(TourneyOp::CancelTeam, tournament, "DELETE", TourneyPath(tournament, "/entries/me"));
+}
+
+std::vector<TourneyMapType> LeagueTourneyMapTypes()
+{
+	std::lock_guard<std::mutex> lock(g_mx);
+	const DWORD now = GetTickCount();
+	const DWORD keep = g_mapTypes.loaded ? kMapTypesKeepMs : kMapTypesRetryMs;
+	if (!g_mapTypes.loading && !Quiet() && (!g_mapTypes.at || now - g_mapTypes.at >= keep)) {
+		g_mapTypes.loading = true;
+		SafeThread(FetchMapTypes).detach();
+	}
+	return g_mapTypes.types;
 }
 
 void LeagueTourneyWithdraw(int64_t tournament)

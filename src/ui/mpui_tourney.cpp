@@ -40,6 +40,8 @@ Ui g_tourney;
 namespace {
 
 const DWORD kClaimRetryMs = 5000, kFlowTimeoutMs = 45000, kPresenceEveryMs = 30000, kJoinWaitMs = 6000;
+// The tries to put this player's slot in their team, 0.8 s apart.
+const int kTeamTries = 24;
 // Not in the room the server gave after this long: it is taken as gone (Steam enters a room in a few seconds).
 const DWORD kStaleAfterMs = 20000;
 
@@ -73,6 +75,17 @@ const TourneySummary *SummaryOf(const TourneyListsView &lists, int64_t tournamen
 		}
 	}
 	return nullptr;
+}
+
+// Under g_lock: a cup of teams, by what the lists, the page on screen or the player's next match say of it.
+bool TeamsCup(int64_t tournament)
+{
+	const TourneyListsView lists = LeagueTourneyLists();
+	if (const TourneySummary *t = SummaryOf(lists, tournament)) return t->Teams();
+	const TourneyPageView page = LeagueTourneyPage(g_tourney.slug, 60000);
+	if (page.loaded && page.detail.id == tournament) return page.detail.Teams();
+	const TourneyNext next = LeagueTourneyMine().mine.next;
+	return next.present && next.tournamentId == tournament && next.Teams();
 }
 
 // The room and the spectators' room of a match, from the pages read for the tab.
@@ -205,10 +218,13 @@ void CreateRoom(const TourneyClaim &claim)
 	}
 	OnlineCreateSettings s;
 	const std::string stage = n.match == f.match ? BracketStageText(n.bracket, n.stage, n.round) : std::string();
-	s.name = n.match == f.match && !n.name.empty() ? n.name + " \xC2\xB7 " + stage + " \xC2\xB7 " + TrFmt("%s vs %s", {g_s.player, n.opponent.name}) : Tr("Tournament match");
+	// A match of teams is named after the two teams, and the room holds its four players. Every claim has the sides, 1 vs 1 too.
+	const bool teams = n.match == f.match && n.Teams();
+	const std::string own = teams && !n.team.name.empty() ? n.team.name : g_s.player;
+	s.name = n.match == f.match && !n.name.empty() ? n.name + " \xC2\xB7 " + stage + " \xC2\xB7 " + TrFmt("%s vs %s", {own, n.opponent.name}) : Tr("Tournament match");
 	s.map = claim.map.Known() ? MapText(claim.map) : std::string("Chosen in the room");
 	s.mode = "Tournament";
-	s.maxPlayers = 2;
+	s.maxPlayers = teams ? 4 : 2;
 	s.visibility = 0;
 	s.specDelay = TourneySpecDelay(claim.settings);
 	s.spectators = s.specDelay != 0;
@@ -220,13 +236,24 @@ void CreateRoom(const TourneyClaim &claim)
 	g_s.savePlayers.clear();
 	g_s.savePlaced.clear();
 	SteamCreateLobby(s);
-	g_s.roomLimit = 2;
+	g_s.roomLimit = s.maxPlayers;
 	g_s.autoHost = true;
 	f.phase = RoomFlow::kCreating;
 	f.at = GetTickCount();
 	f.map = claim.map;
 	f.settings = claim.settings;
-	LogI("league", "creating the room of tournament match %lld", static_cast<long long>(f.match));
+	LogI("league", "creating the room of tournament match %lld for %d players", static_cast<long long>(f.match), s.maxPlayers);
+}
+
+// Under g_lock: who a claim waits for, by name: the opponent, a player of either team, or nobody known.
+std::string WaiterName(const TourneyNext &n, uint64_t by)
+{
+	if (!by) return std::string();
+	if (by == n.opponent.steamId && !n.Teams()) return n.opponent.name;
+	for (const std::vector<TourneyMember> *side : {&n.team.members, &n.opponent.members}) {
+		if (const TourneyMember *m = TourneyMemberOf(*side, by)) return m->name;
+	}
+	return by == n.opponent.steamId ? n.opponent.name : std::string();
 }
 
 // Under g_lock.
@@ -243,6 +270,10 @@ void TakeResults()
 				f = RoomFlow();
 				break;
 			}
+			if (!r.claim.teams.empty()) {
+				g_tourney.claimTeams = r.claim.teams;
+				g_tourney.claimTeamsMatch = r.id;
+			}
 			if (r.claim.kind == TourneyClaim::Create) CreateRoom(r.claim);
 			else if (r.claim.kind == TourneyClaim::Join) {
 				LogI("league", "joining the room of tournament match %lld", static_cast<long long>(f.match));
@@ -257,7 +288,7 @@ void TakeResults()
 			else {
 				f.phase = RoomFlow::kWaiting;
 				f.at = GetTickCount();
-				f.waitingFor = r.claim.by && r.claim.by == f.opponent ? LeagueTourneyMine().mine.next.opponent.name : std::string();
+				f.waitingFor = WaiterName(LeagueTourneyMine().mine.next, r.claim.by);
 			}
 			break;
 		case TourneyOp::Register:
@@ -268,9 +299,30 @@ void TakeResults()
 		case TourneyOp::Edit: CupEdited(r); break;
 		case TourneyOp::FindCode: CodeFound(r); break;
 		case TourneyOp::SignUp:
-			Toast(ResultText(r), !r.ok);
+			// A team's sign-up answers in its dialog while it is open: what is wrong stays in it, and it closes once the invitation is sent.
+			if (g_tourney.teamCup == r.id && !r.ok) {
+				g_tourney.teamError = ResultText(r);
+				break;
+			}
+			if (r.pendingPartner) {
+				Toast(TrFmt("Invitation sent to %s: your team takes its place in the cup when they accept it.",
+					{g_tourney.teamCup == r.id && !g_tourney.teamPartnerName.empty() ? g_tourney.teamPartnerName : Tr("your partner")}));
+			}
+			else Toast(ResultText(r), !r.ok);
+			if (g_tourney.teamCup == r.id) {
+				g_tourney.teamCup = 0;
+				if (g_s.focus == kTeamNameField || g_s.focus == kTeamSearchField) g_s.focus = kNoField;
+			}
 			// The cup's scenarios start coming down as soon as the player is in, page open or not.
 			if (r.ok) FetchCupMaps(r.id);
+			break;
+		case TourneyOp::Accept:
+			Toast(ResultText(r), !r.ok);
+			if (r.ok) FetchCupMaps(r.id);
+			break;
+		case TourneyOp::RemoveEntry:
+			if (r.ok && LeagueTourneyPage(g_tourney.slug, 60000).detail.Teams()) Toast("The team is out of the cup.");
+			else Toast(ResultText(r), !r.ok);
 			break;
 		default: Toast(ResultText(r), !r.ok); break;
 		}
@@ -281,6 +333,8 @@ void TakeResults()
 void TakeNotices()
 {
 	TourneyNotice n;
+	// One invitation is asked at a time: the dialog of a second would take the first one's place.
+	bool asked = false;
 	while (LeagueTourneyTakeNotice(n)) {
 		switch (n.kind) {
 		case TourneyNotice::MatchReady:
@@ -297,6 +351,11 @@ void TakeNotices()
 			Flash();
 			// In the tab, the choice is on the match's screen; in the room, over its table.
 			if (g_s.open && g_s.view == kViewTournaments && !g_s.room.id) g_tourney.screen = kScreenMatch;
+			break;
+		case TourneyNotice::Invite:
+			AskInvite(n, !asked);
+			asked = true;
+			Flash();
 			break;
 		default:
 			Toast(TrFmt("%s is over: see the result in Multiplayer, Tournaments.", {n.name}));
@@ -448,12 +507,46 @@ void StepInRoom(const TourneyNext &next)
 		LeagueTourneyPresence(match, true);
 	}
 	if (!g_s.inOnlineGame) k.startedSent = false;
-	// Only the two players: anyone else who came in before the room filled up is sent out by the host.
-	if (mine && g_s.room.owner && next.opponent.steamId) {
+	// A match of teams: the sides of this player's claim set the room's teams, side A team 1 and side B team 2.
+	if (mine && k.teams.empty() && g_tourney.claimTeamsMatch == match) k.teams = g_tourney.claimTeams;
+	const bool teams = mine && next.Teams();
+	if (teams && !k.team) {
+		k.team = TourneyTeamOf(k.teams, SteamOwnId());
+		if (!k.team && (next.team.side == "a" || next.team.side == "b")) k.team = next.team.side == "a" ? 1 : 2;
+		if (k.team) LogI("league", "tournament match %lld: this player is in team %d", static_cast<long long>(match), k.team);
+	}
+	// Only the match's players: anyone else who came in before the room filled up is sent out by the host. With teams, the four must be
+	// known first, or a partner the league did not list would be sent out.
+	std::vector<uint64_t> players = mine ? TourneyMatchPlayers(next, SteamOwnId()) : std::vector<uint64_t>();
+	for (const std::vector<uint64_t> &side : k.teams) {
+		for (uint64_t id : side) {
+			if (std::find(players.begin(), players.end(), id) == players.end()) players.push_back(id);
+		}
+	}
+	const size_t needed = teams ? 4 : 2;
+	if (mine && g_s.room.owner && next.opponent.steamId && players.size() >= needed) {
 		for (const OnlineMember &m : g_s.room.members) {
-			if (m.me || m.id == next.opponent.steamId || m.id == SteamOwnId() || !k.kicked.insert(m.id).second) continue;
+			if (m.me || m.id == SteamOwnId() || std::find(players.begin(), players.end(), m.id) != players.end() || !k.kicked.insert(m.id).second) continue;
 			LogI("league", "%s is not a player of the tournament match; out of the room", m.name.c_str());
 			SteamKick(m.id);
+		}
+	}
+	// Each player puts their own slot in their team, which nobody can change after; the game lets only a slot's player do it.
+	if (teams && k.team && !k.teamSet && k.teamTries < kTeamTries && !g_s.inOnlineGame && g_s.game.active && !g_s.game.busy && now - k.teamAt >= 800) {
+		k.teamAt = now;
+		k.teamTries++;
+		k.applying = true;
+		k.teamSet = ApplyTourneyTeam(k);
+		k.applying = false;
+		if (k.teamSet) LogI("league", "the room's slot of this player is in team %d", k.team);
+		else if (k.teamTries >= kTeamTries) LogW("league", "the room's slot of this player could not be put in team %d; the room is left as it is", k.team);
+	}
+	// Something put the slot in another team (a seat moved): it is set again.
+	if (k.teamSet && g_s.game.active && !g_s.game.busy) {
+		const int slot = g_s.game.localSlot;
+		if (slot >= 0 && slot < 8 && g_s.game.slots[static_cast<size_t>(slot)].team != k.team) {
+			k.teamSet = false;
+			k.teamTries = 0;
 		}
 	}
 	// The next game of a series may be on another map: once it is chosen, the room is set again for it.
@@ -654,7 +747,7 @@ std::string StageText(TourneyStage stage, int round)
 
 std::string FormatText(const TourneySummary &t)
 {
-	return Tr(TourneyIsSwiss(t) ? "Swiss" : TourneyIsDouble(t) ? "Double elimination" : "Single elimination") + " \xC2\xB7 " + Tr("1 vs 1");
+	return Tr(TourneyIsSwiss(t) ? "Swiss" : TourneyIsDouble(t) ? "Double elimination" : "Single elimination") + " \xC2\xB7 " + Tr(t.Teams() ? "2 vs 2" : "1 vs 1");
 }
 
 std::string ContentText(const TourneySummary &t)
@@ -731,14 +824,26 @@ std::string ResultText(const TourneyOpResult &r)
 		case TourneyOp::Resolve: return Tr("Done: the match is settled.");
 		case TourneyOp::Edit: return Tr("Changes saved: the cup's page and the list show them now.");
 		case TourneyOp::Pick: return r.map.Known() ? TrFmt("Map of the next game: %s.", {MapText(r.map)}) : Tr("Map chosen.");
+		case TourneyOp::Accept: return Tr("You are in the team. We'll tell you when the check-in opens: either of you can do it.");
+		case TourneyOp::Decline: return Tr("Invitation declined.");
+		case TourneyOp::CancelTeam: return Tr("Invitation cancelled: your team is not signed up.");
 		default: return std::string();
 		}
 	}
 	const std::string &e = r.error;
+	if (e == "partner_not_linked") return Tr("Your partner has not linked the game to the league yet: they link it from Multiplayer, in the game, and then you invite them again.");
+	if (e == "partner_taken") return Tr("Your partner is already in another team of this cup.");
+	if ((r.op == TourneyOp::Accept || r.op == TourneyOp::Decline) && (r.status == 404 || r.status == 410 || e == "expired" || e == "not_found")) {
+		return Tr("That invitation is no longer waiting for an answer: it expired or was cancelled.");
+	}
+	if (e == "already_signed" && (r.op == TourneyOp::Accept || r.op == TourneyOp::SignUp) && r.status == 409) {
+		return Tr(r.op == TourneyOp::Accept ? "You are already in a team of this cup." : "You are already signed up.");
+	}
 	if (e == "not_linked") return Tr("Link your league account first.");
 	if (e == "not_your_pick") return Tr("It is not your turn to choose the map.");
 	if (e == "pick_closed") return Tr("The time to choose is over: the map was drawn.");
 	if (e == "closed") return Tr("Sign-up for this tournament is closed.");
+	if (e == "suspended" && r.who == "partner") return TrFmt("Two no-shows in 30 days: your partner can sign up for official tournaments again from %s.", {WhenText(r.until)});
 	if (e == "suspended") return TrFmt("Two no-shows in 30 days: you can sign up for official tournaments again from %s.", {WhenText(r.until)});
 	if (e == "already_signed") return Tr("You are already signed up.");
 	if (e == "checkin_closed") return Tr("The check-in is not open.");
@@ -762,11 +867,22 @@ std::string ResultText(const TourneyOpResult &r)
 	if (e == "removed") return Tr("The organiser took you off this cup: you cannot sign up again.");
 	if (e == "requirement") {
 		std::string why;
+		// The other player of a team: the partner a captain invites, or the captain whose invitation is accepted.
+		const bool partner = r.who == "partner", captain = r.who == "captain";
 		if (r.requirement == "tier") {
 			const LeagueTier need = LeagueTierFromId(r.need), have = LeagueTierFromId(r.have);
-			why = TrFmt("This cup is for players up to %s, and you are %s.", {Tr(LeagueTierName(need)), Tr(LeagueTierName(have))});
+			why = TrFmt(partner ? "This cup is for players up to %s, and your partner is %s."
+						: captain ? "This cup is for players up to %s, and the team's captain is %s."
+								  : "This cup is for players up to %s, and you are %s.",
+				{Tr(LeagueTierName(need)), Tr(LeagueTierName(have))});
 		}
-		else why = TrFmt("This cup asks for %s online games registered by the league, and you have %s.", {r.need.empty() ? "?" : r.need, r.have.empty() ? "0" : r.have});
+		else {
+			why = TrFmt(partner ? "This cup asks for %s online games registered by the league, and your partner has %s."
+						: captain ? "This cup asks for %s online games registered by the league, and the team's captain has %s."
+								  : "This cup asks for %s online games registered by the league, and you have %s.",
+				{r.need.empty() ? "?" : r.need, r.have.empty() ? "0" : r.have});
+		}
+		if (partner || captain) return why + " " + Tr("Both players of a team have to meet the requirements.");
 		if (r.op == TourneyOp::Create || r.op == TourneyOp::Edit) return why + " " + Tr("To play your own cup you must meet its requirements: change them, or untick \"I play too\".");
 		return why;
 	}
@@ -1023,7 +1139,7 @@ void PaintTournaments(Painter &p, const State &st)
 	LeagueTourneyWatching();
 	PaintOut out;
 	const bool chooser = u.screen == kScreenCreate && u.chooserRound >= 0;
-	const bool dialog = u.disputeMatch || u.joinOpen || !u.shownCode.empty() || u.walkoverMatch || chooser;
+	const bool dialog = u.disputeMatch || u.joinOpen || !u.shownCode.empty() || u.walkoverMatch || chooser || u.teamCup;
 	if (dialog) p.noHover = true;
 	switch (u.screen) {
 	case kScreenPage: PaintPageScreen(p, st, u, out); break;
@@ -1035,6 +1151,7 @@ void PaintTournaments(Painter &p, const State &st)
 	if (dialog) {
 		UseSharedFonts(p);
 		if (u.disputeMatch) PaintDisputeDialog(p, st, u);
+		else if (u.teamCup) PaintTeamDialog(p, st, u, out);
 		else if (u.walkoverMatch) PaintWalkoverDialog(p, st, u);
 		else if (!u.shownCode.empty()) PaintCodeDialog(p, st, u);
 		else if (chooser) PaintMapChooser(p, st, u, out);
@@ -1047,6 +1164,8 @@ void PaintTournaments(Painter &p, const State &st)
 	g_tourney.sideArea = out.sideArea;
 	g_tourney.formArea = out.formArea;
 	g_tourney.chooserArea = out.chooserArea;
+	g_tourney.teamArea = out.teamArea;
+	if (u.teamCup) g_tourney.teamRows = out.teamRows;
 	if (out.form) std::copy(std::begin(out.sectionTop), std::end(out.sectionTop), std::begin(g_tourney.sectionTop));
 }
 
@@ -1094,11 +1213,50 @@ void TourneyAction(int arg)
 		u.bracketX = u.bracketY = u.sideScroll = 0;
 		break;
 	case kSubSignUp:
+	case kSubTeamOpen:
 		if (!LeagueLinked()) Toast("Link your league account first.");
+		else if (sub == kSubTeamOpen || TeamsCup(value)) OpenTeamDialog(u, value);
 		else LeagueTourneySignUp(value);
 		break;
+	case kSubTeamPick: {
+		const std::vector<SteamFriendInfo> &friends = u.teamRows;
+		if (value < 0 || value >= static_cast<int64_t>(friends.size())) break;
+		u.teamPartner = friends[static_cast<size_t>(value)].id;
+		u.teamPartnerName = friends[static_cast<size_t>(value)].name;
+		u.teamError.clear();
+		break;
+	}
+	case kSubTeamSend: TourneyFieldEnter(kTeamNameField); break;
+	case kSubTeamCancel:
+		u.teamCup = 0;
+		if (g_s.focus == kTeamNameField || g_s.focus == kTeamSearchField) g_s.focus = kNoField;
+		break;
+	case kSubInviteAccept:
+	case kSubInviteDecline: {
+		const TourneyMineView mine = LeagueTourneyMine();
+		const TourneyInvite *invite = TourneyInviteOf(mine.mine, value);
+		if (!invite) {
+			Toast("That invitation is no longer waiting for an answer.");
+			break;
+		}
+		if (LeagueTourneyBusy(TourneyOp::Accept, value) || LeagueTourneyBusy(TourneyOp::Decline, value)) break;
+		LogI("league", "%s the invitation to a team of the cup %lld", sub == kSubInviteAccept ? "accepting" : "declining", static_cast<long long>(value));
+		LeagueTourneyAnswerInvite(value, invite->entryId, sub == kSubInviteAccept);
+		break;
+	}
+	case kSubTeamWithdraw: {
+		const int64_t tournament = value;
+		Confirm(Tr("Cancel the invitation"), Tr("Your team is taken off the cup before your partner answers. You can sign it up again, with them or with someone else."),
+			Tr("Cancel the invitation"), [tournament] { LeagueTourneyCancelTeam(tournament); });
+		break;
+	}
 	case kSubWithdraw: {
 		const int64_t tournament = value;
+		if (TeamsCup(tournament)) {
+			ModUiAsk("Withdraw from the tournament", "Your whole team withdraws, your partner too. Once your match is ready, withdrawing counts as a no-show. Withdraw anyway?",
+				"Withdraw", [tournament] { LeagueTourneyWithdraw(tournament); });
+			break;
+		}
 		ModUiAsk("Withdraw from the tournament", "Once your match is ready, withdrawing counts as a no-show. Withdraw anyway?", "Withdraw",
 			[tournament] { LeagueTourneyWithdraw(tournament); });
 		break;
@@ -1286,7 +1444,7 @@ void TourneyAction(int arg)
 			if (value < 0 || value >= static_cast<int64_t>(types.size())) break;
 			// The size goes with the new type when it has it; medium otherwise, which every type has.
 			const TourneyMap before = ChooserMap(u);
-			const std::vector<std::string> sizes = LeagueMapSizesOf(types[static_cast<size_t>(value)]);
+			const std::vector<std::string> sizes = CupSizesOf(u.cup, types[static_cast<size_t>(value)]);
 			u.chooserType = static_cast<int>(value);
 			u.chooserSize = 0;
 			for (size_t i = 0; i < sizes.size(); i++) {
@@ -1351,7 +1509,7 @@ void TourneyAction(int arg)
 		const bool editing = u.cupEditId != 0;
 		if (LeagueTourneyBusy(editing ? TourneyOp::Edit : TourneyOp::Create, editing ? u.cupEditId : 0)) break;
 		if (!editing) OwnCupContent(u.cup.contentKey, u.cup.contentName);
-		std::vector<TourneyCupProblem> problems = TourneyCheckCup(u.cup, NowMs());
+		std::vector<TourneyCupProblem> problems = TourneyCheckCup(u.cup, NowMs(), LeagueTourneyMapTypes());
 		if (u.cupLocked) {
 			problems.erase(std::remove_if(problems.begin(), problems.end(), [](TourneyCupProblem q) { return q != TourneyCupProblem::DescriptionLong; }), problems.end());
 		}
@@ -1368,7 +1526,7 @@ void TourneyAction(int arg)
 			LeagueTourneyEdit(u.cupEditId, u.cup, u.cupLocked);
 		}
 		else {
-			LogI("league", "making a cup of %d places, %s, with %d scenarios to upload", u.cup.maxEntries, u.cup.isPrivate ? "private" : "open", uploads);
+			LogI("league", "making a %s cup of %d places, %s, with %d scenarios to upload", TourneyModeId(u.cup.mode), u.cup.maxEntries, u.cup.isPrivate ? "private" : "open", uploads);
 			LeagueTourneyCreate(u.cup);
 		}
 		break;
@@ -1417,7 +1575,8 @@ void TourneyAction(int arg)
 		const TourneyEntrant *e = page.loaded ? TourneyEntrantOf(page.detail, value) : nullptr;
 		if (!e) break;
 		const int64_t tournament = page.detail.id, entry = value;
-		Confirm(Tr("Take a player off"), TrFmt("%s will be out of your cup. Take them off?", {e->name}), Tr("Take off"),
+		Confirm(Tr(page.detail.Teams() ? "Take a team off" : "Take a player off"),
+			TrFmt(page.detail.Teams() ? "The team %s will be out of your cup, both its players. Take it off?" : "%s will be out of your cup. Take them off?", {e->name}), Tr("Take off"),
 			[tournament, entry] { LeagueTourneyRemoveEntry(tournament, entry); });
 		break;
 	}
@@ -1468,6 +1627,11 @@ bool TourneyBack()
 		u.walkoverMatch = 0;
 		return true;
 	}
+	if (u.teamCup) {
+		u.teamCup = 0;
+		g_s.focus = kNoField;
+		return true;
+	}
 	if (u.joinOpen) {
 		u.joinOpen = false;
 		g_s.focus = kNoField;
@@ -1497,6 +1661,10 @@ bool TourneyWheel(int delta, bool shift)
 	Ui &u = g_tourney;
 	const POINT at = {g_s.mouseX, g_s.mouseY};
 	const int step = -delta / WHEEL_DELTA * 60;
+	if (u.teamCup) {
+		if (u.teamArea.valid && PtInRect(&u.teamArea.r, at)) u.teamScroll = std::max(0, std::min(u.teamArea.max, u.teamScroll + (delta > 0 ? -1 : 1)));
+		return true;
+	}
 	if (u.screen == kScreenCreate) {
 		if (u.chooserRound >= 0) {
 			if (u.chooserArea.valid && PtInRect(&u.chooserArea.r, at)) u.chooserScroll = std::max(0, std::min(u.chooserArea.max, u.chooserScroll + (delta > 0 ? -1 : 1)));
@@ -1534,13 +1702,15 @@ bool TourneyScrollTo(int bar, int pos)
 	case kBarSide: u.sideScroll = std::max(0, std::min(u.sideArea.max, pos)); return true;
 	case kBarForm: u.formScroll = std::max(0, std::min(u.formArea.max, pos)); return true;
 	case kBarChooser: u.chooserScroll = std::max(0, std::min(u.chooserArea.max, pos)); return true;
+	case kBarFriends: u.teamScroll = std::max(0, std::min(u.teamArea.max, pos)); return true;
 	default: return false;
 	}
 }
 
 bool TourneyOwnsField(int field)
 {
-	return field == kTourneyField || field == kCupNameField || field == kCupDescriptionField || field == kCupCodeField;
+	return field == kTourneyField || field == kCupNameField || field == kCupDescriptionField || field == kCupCodeField || field == kTeamNameField ||
+		field == kTeamSearchField;
 }
 
 std::string &TourneyFieldText(int field)
@@ -1550,6 +1720,8 @@ std::string &TourneyFieldText(int field)
 	case kCupNameField: return u.cup.name;
 	case kCupDescriptionField: return u.cup.description;
 	case kCupCodeField: return u.joinCode;
+	case kTeamNameField: return u.teamName;
+	case kTeamSearchField: return u.teamSearch;
 	default: return u.disputeText;
 	}
 }
@@ -1560,6 +1732,8 @@ size_t TourneyFieldBytes(int field)
 	case kCupNameField: return 4 * kTourneyCupNameMax;
 	case kCupDescriptionField: return 4 * kTourneyCupDescriptionMax;
 	case kCupCodeField: return 24;
+	case kTeamNameField: return 4 * kTourneyTeamNameMax;
+	case kTeamSearchField: return 128;
 	default: return 200;
 	}
 }
@@ -1576,11 +1750,16 @@ void TourneyFieldEdited(int field)
 		g_tourney.joinError.clear();
 		return;
 	}
-	const int most = field == kCupNameField ? kTourneyCupNameMax : field == kCupDescriptionField ? kTourneyCupDescriptionMax : 0;
+	if (field == kTeamSearchField) {
+		g_tourney.teamScroll = 0;
+		return;
+	}
+	const int most = field == kCupNameField ? kTourneyCupNameMax : field == kCupDescriptionField ? kTourneyCupDescriptionMax : field == kTeamNameField ? kTourneyTeamNameMax : 0;
 	if (!most) return;
 	while (TourneyTextLength(text) > most) text.erase(static_cast<size_t>(PrevCp(text, static_cast<int>(text.size()))));
 	EditFix(text, g_s.edit);
-	g_tourney.cupError.clear();
+	if (field == kTeamNameField) g_tourney.teamError.clear();
+	else g_tourney.cupError.clear();
 }
 
 void TourneyFieldEnter(int field)
@@ -1592,6 +1771,31 @@ void TourneyFieldEnter(int field)
 	}
 	if (field == kCupDescriptionField) {
 		g_s.focus = kNoField;
+		return;
+	}
+	if (field == kTeamSearchField) {
+		// Return picks the only friend left, or moves on to the team's name.
+		const std::vector<SteamFriendInfo> friends = TeamFriends(u.teamSearch);
+		if (friends.size() == 1) {
+			u.teamPartner = friends[0].id;
+			u.teamPartnerName = friends[0].name;
+		}
+		FocusField(kTeamNameField);
+		return;
+	}
+	if (field == kTeamNameField) {
+		if (!u.teamCup || LeagueTourneyBusy(TourneyOp::SignUp, u.teamCup)) return;
+		if (!u.teamPartner) {
+			u.teamError = Tr("Choose your partner among your friends first.");
+			return;
+		}
+		if (u.teamPartner == SteamOwnId()) {
+			u.teamError = Tr("Your partner has to be another player.");
+			return;
+		}
+		u.teamError.clear();
+		LogI("league", "signing a team up for the cup %lld", static_cast<long long>(u.teamCup));
+		LeagueTourneySignUpTeam(u.teamCup, u.teamPartner, u.teamName);
 		return;
 	}
 	if (field == kCupCodeField) {
@@ -1625,9 +1829,37 @@ void TourneyDropPick(int index, int item)
 	g_tourney.cupError.clear();
 }
 
+namespace {
+
+// Under g_lock.
+bool TeamsLocked(const State &st)
+{
+	return st.game.active && st.room.id && TourneyMatchOfTag(st.room.info.leagueTag) && g_tourney.lock.room == st.room.id && g_tourney.lock.team > 0;
+}
+
+}
+
+bool TourneyTeamsLocked(const mpui_impl::State &st)
+{
+	std::lock_guard<std::mutex> lock(g_lock);
+	return TeamsLocked(st);
+}
+
 bool TourneyBlocksAction(int action, int arg)
 {
 	if (!g_s.game.active || !g_s.room.id || !TourneyMatchOfTag(g_s.room.info.leagueTag) || g_tourney.lock.applying) return false;
+	// A match of teams: the teams are the league's, and a player gets ready once theirs is set.
+	if (TeamsLocked(g_s)) {
+		const int kind = arg & kDropKindMask;
+		if (action == kGTeam || (action == kGDropOpen && kind == kDropTeam)) {
+			Toast("The tournament sets the teams of this room.");
+			return true;
+		}
+		if (action == kGReady && !g_tourney.lock.teamSet && g_tourney.lock.teamTries < kTeamTries && !LocalReady(g_s.game)) {
+			Toast("Your team is being set in the room: get ready in a moment.");
+			return true;
+		}
+	}
 	bool blocked = false;
 	switch (action) {
 	case kGRuleToggle:

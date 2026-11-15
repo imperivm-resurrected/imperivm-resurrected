@@ -247,6 +247,7 @@ void DoAction(int action, int arg)
 		if (g_s.confirmKind == kConfirmAction) {
 			std::function<void()> action = std::move(g_s.action);
 			g_s.action = nullptr;
+			g_s.alt = nullptr;
 			DoAction(kConfirmNo, 0);
 			if (action) action();
 			break;
@@ -279,6 +280,14 @@ void DoAction(int action, int arg)
 		LogI("content", "mod manager: restart to apply profile \"%s\"", g_s.profile.name.c_str());
 		ModsRestartGame(g_s.restartLargeAddress);
 		break;
+	case kConfirmAlt: {
+		std::function<void()> alt = std::move(g_s.alt);
+		g_s.alt = nullptr;
+		g_s.action = nullptr;
+		DoAction(kConfirmNo, 0);
+		if (alt) alt();
+		break;
+	}
 	case kConfirmNo:
 		g_s.confirm = false, g_s.confirmItems.clear();
 		if ((g_s.confirmKind == kConfirmRestart || g_s.confirmKind == kConfirmNotice || g_s.confirmKind == kConfirmAction) && g_s.confirmOnly) {

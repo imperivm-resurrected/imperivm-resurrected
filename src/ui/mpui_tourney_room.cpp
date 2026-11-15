@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 THIONG
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
+#define NOMINMAX
+#include <windows.h>
+
 #include <cctype>
 #include <string>
 #include <utility>
@@ -11,6 +14,7 @@
 #include "core/tournament.h"
 #include "game/cupmaps.h"
 #include "game/gameroom.h"
+#include "ui/modui.h"
 #include "ui/mpui_tourney_internal.h"
 
 namespace mpui_tourney_impl {
@@ -162,6 +166,29 @@ bool PickScenario(GameRoomSnapshot &g, const TourneyMap &m, RoomLock &k)
 	return false;
 }
 
+}
+
+bool ApplyTourneyTeam(RoomLock &k)
+{
+	GameRoomSnapshot &g = g_s.game;
+	const int slot = g.localSlot;
+	if (k.team < 1 || k.team >= g.teamChoices || slot < 0 || slot > 7 || !g.slots[slot].used) return false;
+	GameRoomSlot &s = g.slots[slot];
+	if (s.team == k.team) return true;
+	// The game keeps a ready player's row as it is: the player is made not ready, put in the team, and gets ready again.
+	if (LocalReady(g)) {
+		if (k.teamUnready) return false;
+		k.teamUnready = true;
+		s.ready = false;
+		Predict(kPredReady, slot, 0);
+		GameRoomToggleReady();
+		ModUiToast("The tournament puts you in your team: get ready again.");
+		return false;
+	}
+	s.team = k.team;
+	Predict(kPredTeam, slot, k.team);
+	GameRoomSetTeam(slot, k.team);
+	return false;
 }
 
 bool ApplyTourneyRoom(const TourneyNext &next, RoomLock &k)

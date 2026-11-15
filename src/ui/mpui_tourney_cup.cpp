@@ -61,6 +61,7 @@ int SectionOf(TourneyCupProblem p)
 	case TourneyCupProblem::TooManyMaps:
 	case TourneyCupProblem::BadMap:
 	case TourneyCupProblem::MapTooLarge:
+	case TourneyCupProblem::MapSeats:
 	case TourneyCupProblem::PoolCount:
 	case TourneyCupProblem::PoolMap: return 1;
 	default: return 2;
@@ -84,10 +85,12 @@ std::string FormatLine(const TourneyCupForm &f)
 		TrFmt("Bo%s, final Bo%s", {std::to_string(f.bestOf), std::to_string(f.finalBestOf)});
 }
 
+// "2 vs 2 · Live, in one evening".
 std::string PaceLine(const TourneyCupForm &f)
 {
-	if (f.pace == TourneyPace::Live) return Tr("Live, in one evening");
-	return RoundDaysText(f.roundDays);
+	const std::string mode = Tr(f.mode == TourneyMode::Teams ? "2 vs 2" : "1 vs 1") + " \xC2\xB7 ";
+	if (f.pace == TourneyPace::Live) return mode + Tr("Live, in one evening");
+	return mode + RoundDaysText(f.roundDays);
 }
 
 std::string Capitalized(std::string s)
@@ -324,10 +327,16 @@ int FormatLeft(Form &c, int x, int y, int w)
 	Field(c, x, at, w, f.description, Tr("Rules, a date to remember, who it is for..."), kCupDescriptionField, kFieldCupDescription, true);
 	at += c.k.fieldH;
 	at += Problem(c, x, at, w, {TourneyCupProblem::DescriptionLong}) + c.k.rowGap;
+	const bool teams = f.mode == TourneyMode::Teams;
 	at += Label(c, x, at, w, Tr("Mode"));
-	Segments(c, x, at, w, c.k.fieldH, {{Tr("1 vs 1"), 0, true}, {Tr("2 vs 2"), 0, false, false, true}});
-	at += c.k.fieldH + c.k.rowGap;
-	at += Label(c, x, at, w, Tr("Places"));
+	Segments(c, x, at, w, c.k.fieldH, {{Tr("1 vs 1"), CupArg(kCupMode, 0), !teams}, {Tr("2 vs 2"), CupArg(kCupMode, 1), teams}});
+	at += c.k.fieldH;
+	if (teams) {
+		at += 8;
+		at += Hint(c, x, at, w, Tr("Each team is a captain and the partner they invite, a Steam friend. The maps need room for four players."));
+	}
+	at += c.k.rowGap;
+	at += Label(c, x, at, w, Tr(teams ? "Places (teams)" : "Places"));
 	Segments(c, x, at, w, c.k.fieldH,
 		{{"4", CupArg(kCupPlaces, 4), f.maxEntries == 4}, {"8", CupArg(kCupPlaces, 8), f.maxEntries == 8}, {"16", CupArg(kCupPlaces, 16), f.maxEntries == 16}});
 	at += c.k.fieldH;
@@ -340,7 +349,8 @@ int FormatRight(Form &c, int x, int y, int w)
 	const TourneyCupForm &f = c.f;
 	Painter &p = c.p;
 	int at = y;
-	at += Label(c, x, at, w, TrFmt("Format \xC2\xB7 estimated time with %s players", {std::to_string(f.maxEntries)}));
+	at += Label(c, x, at, w, TrFmt(f.mode == TourneyMode::Teams ? "Format \xC2\xB7 estimated time with %s teams" : "Format \xC2\xB7 estimated time with %s players",
+		{std::to_string(f.maxEntries)}));
 	struct Def {
 		TourneyFormat format;
 		const char *title, *text;
@@ -364,7 +374,9 @@ int FormatRight(Form &c, int x, int y, int w)
 		Segments(c, ix, at, iw, c.k.fieldH, segs);
 		at += c.k.fieldH + 8;
 		at += Hint(c, ix, at, iw,
-			TrFmt("Automatic: %s rounds with %s players. More rounds make a fairer ranking and a longer cup.", {std::to_string(automatic), std::to_string(f.maxEntries)}));
+			TrFmt(f.mode == TourneyMode::Teams ? "Automatic: %s rounds with %s teams. More rounds make a fairer ranking and a longer cup."
+											   : "Automatic: %s rounds with %s players. More rounds make a fairer ranking and a longer cup.",
+				{std::to_string(automatic), std::to_string(f.maxEntries)}));
 		at += Problem(c, ix, at, iw, {TourneyCupProblem::Format}) + 8;
 	}
 	if (TourneyCupLongLive(f)) {
@@ -389,7 +401,9 @@ int FormatRight(Form &c, int x, int y, int w)
 		p.Text(hx, at, x + w - hx, c.k.fieldH, TrFmt("of %s places", {std::to_string(f.maxEntries)}), pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
 	at += c.k.fieldH + 8;
-	at += Hint(c, x, at, w, Tr("If fewer players have checked in when it starts, the cup is cancelled on its own."));
+	at += Hint(c, x, at, w,
+		Tr(f.mode == TourneyMode::Teams ? "If fewer teams have checked in when it starts, the cup is cancelled on its own."
+										: "If fewer players have checked in when it starts, the cup is cancelled on its own."));
 	at += Problem(c, x, at, w, {TourneyCupProblem::Minimum});
 	return at - y;
 }
@@ -467,8 +481,14 @@ int RulesRight(Form &c, int x, int y, int w)
 	}
 	at += Problem(c, x, at, w, {TourneyCupProblem::Series}) + c.k.rowGap;
 	at += Label(c, x, at, w, Tr("Seeding"));
-	Option(c, x, at, w, c.k.optionH, !f.randomSeeding, true, Tr("By Glory"), Tr("The best of the ranked leaderboard don't meet early."), Tr("Recommended"), false,
-		CupArg(kCupSeeding, 0));
+	if (f.mode == TourneyMode::Teams) {
+		Option(c, x, at, w, c.k.optionH, !f.randomSeeding, true, Tr("By 2v2 Glory"), Tr("The average of both players' 2v2 Glory, or 1v1 without it."), Tr("Recommended"),
+			false, CupArg(kCupSeeding, 0));
+	}
+	else {
+		Option(c, x, at, w, c.k.optionH, !f.randomSeeding, true, Tr("By Glory"), Tr("The best of the ranked leaderboard don't meet early."), Tr("Recommended"), false,
+			CupArg(kCupSeeding, 0));
+	}
 	at += c.k.optionH + 8;
 	Option(c, x, at, w, c.k.optionH, f.randomSeeding, true, Tr("At random"), Tr("The bracket is drawn by lot."), std::string(), false, CupArg(kCupSeeding, 1));
 	at += c.k.optionH;
@@ -739,9 +759,11 @@ int CalendarRight(Form &c, int x, int y, int w)
 	Combo(c, x, at, half, GamesText(f.requirements.minGames), kCupMenuGames);
 	Combo(c, x + half + 16, at, w - half - 16, TierCapText(f.requirements.maxTier), kCupMenuTier);
 	at += c.k.fieldH + 8;
-	at += Hint(c, x, at, w, Tr("The games count as for organising a cup. Players without a rank this season can always sign up."));
+	at += Hint(c, x, at, w,
+		Tr(f.mode == TourneyMode::Teams ? "The games count as for organising a cup, and both players of a team have to meet them. Players without a rank this season can always sign up."
+										: "The games count as for organising a cup. Players without a rank this season can always sign up."));
 	at += Problem(c, x, at, w, {TourneyCupProblem::Requirements});
-	if (f.play && f.requirements.Any() && CupUnmet(f.requirements, LeagueTourneyMine()) != TourneyUnmet::None) {
+	if (f.play && f.mode != TourneyMode::Teams && f.requirements.Any() && CupUnmet(f.requirements, LeagueTourneyMine()) != TourneyUnmet::None) {
 		at += 6;
 		at += Hint(c, x, at, w, Tr("You don't meet these requirements yourself: change them, or untick \"I play too\"."), pal::warn);
 	}
@@ -759,6 +781,11 @@ int AccessBlock(Form &c, int x, int y, int w)
 	Option(c, x + half + 16, at, w - half - 16, c.k.optionH, f.isPrivate, true, Tr("Private cup"), Tr("Only with its 6-character code, which you share."), std::string(),
 		false, CupArg(kCupPrivate, 1));
 	at += c.k.optionH + c.k.rowGap;
+	if (f.mode == TourneyMode::Teams) {
+		// The organizer's team needs a partner: it signs up from the cup's page, as any other.
+		at += Hint(c, x, at, w, Tr("To play your own cup, sign your team up from its page once it is published, with your partner."));
+		return at - y;
+	}
 	if (!c.measure) {
 		const bool enabled = !c.locked, hot = enabled && p.Hover(x, at, w, 30, c.mx, c.my);
 		PaintBigToggle(p, x, at + 4, f.play, enabled, hot);
@@ -901,9 +928,11 @@ void PaintSummary(Painter &p, const State &st, const Ui &u, const std::vector<To
 	p.Text(x + pad + aw + dw + 12, at, iw - aw - dw - 12, 44, span, pal::textDim, DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_END_ELLIPSIS);
 	at += 56;
 	const std::string players = std::to_string(f.maxEntries);
+	const bool teams = f.mode == TourneyMode::Teams;
 	const std::string figures = f.format == TourneyFormat::Double
-		? TrFmt("%s players \xC2\xB7 two brackets \xC2\xB7 up to %s series and %s games", {players, std::to_string(est.series), std::to_string(est.maxGames)})
-		: TrFmt("%s players \xC2\xB7 %s rounds \xC2\xB7 %s series \xC2\xB7 up to %s games",
+		? TrFmt(teams ? "%s teams \xC2\xB7 two brackets \xC2\xB7 up to %s series and %s games" : "%s players \xC2\xB7 two brackets \xC2\xB7 up to %s series and %s games",
+			  {players, std::to_string(est.series), std::to_string(est.maxGames)})
+		: TrFmt(teams ? "%s teams \xC2\xB7 %s rounds \xC2\xB7 %s series \xC2\xB7 up to %s games" : "%s players \xC2\xB7 %s rounds \xC2\xB7 %s series \xC2\xB7 up to %s games",
 			  {players, std::to_string(est.rounds), std::to_string(est.series), std::to_string(est.maxGames)});
 	p.Font(3);
 	p.Text(x + pad, at, iw, 22, figures, pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
@@ -966,7 +995,8 @@ void PaintSummary(Painter &p, const State &st, const Ui &u, const std::vector<To
 		PaintSecondButton(p, x + pad, foot, iw, 40, open, ArgOf(kSubCupOpenActive, 0), true, mx, my);
 		foot -= 12;
 	}
-	const std::string note = TrFmt("If fewer than %s players have checked in at %s, the cup is cancelled on its own and its players are told.",
+	const std::string note = TrFmt(teams ? "If fewer than %s teams have checked in at %s, the cup is cancelled on its own and its players are told."
+										 : "If fewer than %s players have checked in at %s, the cup is cancelled on its own and its players are told.",
 		{std::to_string(f.minEntries), HourText(f.startsAt)});
 	p.Font(3);
 	const int nh = p.Measure(iw - 28, note) + 20;
@@ -1004,7 +1034,8 @@ void PaintSummary(Painter &p, const State &st, const Ui &u, const std::vector<To
 	}
 	rows.push_back({Tr("Maps"), maps, mapsBrief, 6});
 	rows.push_back({Tr("Requirements"), RequirementsText(f.requirements), RequirementsText(f.requirements), 2});
-	const std::string access = Tr(f.isPrivate ? "Private: only with its code" : "Open: it shows in the list") + " \xC2\xB7 " + Tr(f.play ? "you play too" : "you only organise it");
+	const std::string access = Tr(f.isPrivate ? "Private: only with its code" : "Open: it shows in the list") + " \xC2\xB7 " +
+		Tr(teams ? "your team signs up from its page" : f.play ? "you play too" : "you only organise it");
 	rows.push_back({Tr("Access"), access, access, 2});
 	int need = 0;
 	for (const Row &r : rows) need += SummaryRow(p, x + pad, 0, iw, r.name, r.full, r.lines, false);
@@ -1131,6 +1162,11 @@ void ApplyCupSetting(TourneyCupForm &f, int setting, int choice, int64_t nowMs)
 		TourneyFitMaps(f.maps, TourneyCupMapRounds(f));
 		break;
 	case kCupPace: f.pace = choice ? TourneyPace::Rounds : TourneyPace::Live; break;
+	case kCupMode:
+		// The maps follow: a small map grows to the next size with room for four, and a scenario for two gives way to a random map.
+		f.mode = choice ? TourneyMode::Teams : TourneyMode::Solo;
+		TourneyFitCupToMode(f, LeagueTourneyMapTypes());
+		break;
 	case kCupRoundDays:
 		if (TourneyRoundDaysValid(choice)) f.roundDays = choice;
 		break;
@@ -1259,6 +1295,7 @@ std::string CupProblemText(TourneyCupProblem problem)
 	case TourneyCupProblem::TooManyMaps: return Tr("Up to 5 maps.");
 	case TourneyCupProblem::BadMap: return Tr("One of the maps can't be used: choose it again.");
 	case TourneyCupProblem::MapTooLarge: return Tr("One of your scenarios is larger than 16 MB: the league does not keep it.");
+	case TourneyCupProblem::MapSeats: return Tr("In 2 vs 2 every map needs room for four players: choose it again.");
 	case TourneyCupProblem::PoolCount: return Tr("The series need 3 to 5 maps, or none.");
 	case TourneyCupProblem::PoolMap: return Tr("One of the series' maps can't be used or is repeated: choose it again.");
 	case TourneyCupProblem::StartSoon: return Tr("It has to start at least 20 minutes from now.");
@@ -1351,12 +1388,12 @@ void PaintCreateScreen(Painter &p, const State &st, const Ui &u, PaintOut &out)
 	const ScreenLayout l = ScreenLayoutFor(st.viewW, st.viewH);
 	const int64_t now = NowMs();
 	const bool editing = u.cupEditId != 0;
-	std::vector<TourneyCupProblem> problems = TourneyCheckCup(u.cup, now);
+	std::vector<TourneyCupProblem> problems = TourneyCheckCup(u.cup, now, LeagueTourneyMapTypes());
 	if (editing && u.cupLocked) {
 		problems.erase(std::remove_if(problems.begin(), problems.end(), [](TourneyCupProblem q) { return q != TourneyCupProblem::DescriptionLong; }), problems.end());
 	}
 	const TourneyMineView mine = LeagueTourneyMine();
-	const bool selfUnmet = !(editing && u.cupLocked) && u.cup.play && CupUnmet(u.cup.requirements, mine) != TourneyUnmet::None;
+	const bool selfUnmet = !(editing && u.cupLocked) && u.cup.play && u.cup.mode != TourneyMode::Teams && CupUnmet(u.cup.requirements, mine) != TourneyUnmet::None;
 	const int m = l.margin, inner = l.w - 2 * m, top = l.top, bottom = l.h - m;
 	const int sideW = std::max(360, std::min(440, inner * 26 / 100)), gap = l.roomy ? kCardGap : 24, paneW = inner - sideW - gap, barW = 16;
 	p.raw = true;

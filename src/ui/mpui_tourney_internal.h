@@ -35,12 +35,15 @@ enum Sub {
 	kSubPoolOpen, kSubPoolRemove,
 	// The map of the next game of the player's series, by its place among the options; the Steam chat with the rival.
 	kSubPick, kSubSteamChat,
+	// A cup of teams: the dialog of the team's sign-up (its cup, a friend picked by their place in its list, sent, closed), the invitation to
+	// a team answered and the captain's team taken back while it waits for the partner (both by their cup).
+	kSubTeamOpen, kSubTeamPick, kSubTeamSend, kSubTeamCancel, kSubInviteAccept, kSubInviteDecline, kSubTeamWithdraw,
 };
 
 // What kSubCupSet changes in the form: the high bits of its value; the low 16 are the choice.
 enum CupSetting {
 	kCupPlaces = 1, kCupMinimum, kCupBestOf, kCupFinal, kCupSeeding, kCupCheckin, kCupPrivate, kCupPlay, kCupPreset, kCupHideCivs, kCupFog,
-	kCupExplored, kCupDiplomacy, kCupSpectators, kCupDay, kCupMinute, kCupNoshow, kCupFormat, kCupSwissRounds, kCupPace, kCupRoundDays,
+	kCupExplored, kCupDiplomacy, kCupSpectators, kCupDay, kCupMinute, kCupNoshow, kCupFormat, kCupSwissRounds, kCupPace, kCupRoundDays, kCupMode,
 };
 
 // The menus of the form (kDropTourney), by the index they open with.
@@ -60,7 +63,7 @@ inline int ArgOf(int sub, int64_t value)
 }
 
 // The tab's scroll bars, as their hits name them.
-enum Bar { kBarList = 0x7100, kBarBracketY, kBarBracketX, kBarSide, kBarForm, kBarChooser };
+enum Bar { kBarList = 0x7100, kBarBracketY, kBarBracketX, kBarSide, kBarForm, kBarChooser, kBarFriends };
 
 // Where something scrolls, in the canvas' pixels, and how far it can go.
 struct ScrollArea {
@@ -109,6 +112,18 @@ struct RoomLock {
 	bool wasMine = false;
 	// The map the room was set for: the next game of a series may be on another one, and the room is set again.
 	TourneyMap appliedMap;
+	// A match of teams: the room's team of this player (1 for side A, 2 for side B; 0 not known yet), once their slot has it, and when it
+	// was last asked for.
+	int team = 0;
+	bool teamSet = false;
+	DWORD teamAt = 0;
+	// The tries made; after kTeamTries the room is left as it is: a slot whose team the game won't change must not keep its player
+	// from getting ready.
+	int teamTries = 0;
+	// The player was made not ready once to be put in the team.
+	bool teamUnready = false;
+	// The sides of the claim this player made, which the room's teams follow.
+	std::vector<std::vector<uint64_t>> teams;
 };
 
 struct Ui {
@@ -151,6 +166,18 @@ struct Ui {
 	std::string shownCode;
 	// The match the organizer is giving without playing.
 	int64_t walkoverMatch = 0;
+	// The dialog of a team's sign-up (0 closed): its cup, the partner chosen among the Steam friends, the team's name, the filter of the
+	// friends, their list's scroll and what the league answered against it.
+	int64_t teamCup = 0;
+	uint64_t teamPartner = 0;
+	std::string teamPartnerName, teamName, teamSearch, teamError;
+	int teamScroll = 0;
+	ScrollArea teamArea;
+	// The friends of the list as it was painted, so a click picks the one it was on while the list is read again.
+	std::vector<SteamFriendInfo> teamRows;
+	// The sides the last claim gave, and its match: the room keeps its teams by them.
+	std::vector<std::vector<uint64_t>> claimTeams;
+	int64_t claimTeamsMatch = 0;
 };
 
 // Under g_lock.
@@ -158,7 +185,8 @@ extern Ui g_tourney;
 
 // What a frame painted that the input needs: the scrolling areas.
 struct PaintOut {
-	ScrollArea listArea, bracketArea, sideArea, formArea, chooserArea;
+	ScrollArea listArea, bracketArea, sideArea, formArea, chooserArea, teamArea;
+	std::vector<SteamFriendInfo> teamRows;
 	int sectionTop[3] = {};
 	bool form = false;
 };
@@ -233,6 +261,8 @@ void OpenPoolChooser(Ui &u, int index);
 void PaintMapPicture(Painter &p, const TourneyMap &m, int x, int y, int size);
 // The map chosen in it, or one not Known() while there is none.
 TourneyMap ChooserMap(const Ui &u);
+// The sizes a random map type is offered in for the form's mode: those with room for four players in a cup of teams.
+std::vector<std::string> CupSizesOf(const TourneyCupForm &f, const std::string &type);
 void PaintMapChooser(Painter &p, const State &st, const Ui &u, PaintOut &out);
 // A round's map in the form and the Summary: "Random · Mediterranean · medium", "Island War · the game's", "My map · yours".
 std::string CupMapLine(const TourneyMap &m);
@@ -248,6 +278,37 @@ std::string CupMapWarning(const TourneyMap &m);
 // The room of the player's match (mpui_tourney_room.cpp), on the game thread under g_lock: the host puts the tournament's preset, switches
 // and map (the game's, TourneyGameMap) in it, a scenario picked in the room's own selector, until they all hold; true once they do.
 bool ApplyTourneyRoom(const TourneyNext &next, RoomLock &k);
+// A match of teams: this player's slot to their team (k.team), as the team button would; true once the slot has it. Only a player's own slot
+// can change, so each of the four sets theirs.
+bool ApplyTourneyTeam(RoomLock &k);
+
+// The cups of teams (mpui_tourney_teams.cpp).
+// "Varo and Tulia": a side's players by name.
+std::string MembersText(const std::vector<TourneyMember> &members);
+// The line under a team's name: its players, or nothing when the name is already theirs.
+std::string TeamPlayersLine(const std::string &name, const std::vector<TourneyMember> &members);
+// The players' discs side by side, each overlapping the one before by a third: one disc for one player. Returns their width.
+int PaintSideDiscs(Painter &p, int x, int y, int size, const std::vector<TourneyMember> &members, COLORREF ring = CLR_INVALID);
+int SideDiscsWidth(int size, size_t count);
+// "1 player", "8 players"; "1 team", "8 teams" in a cup of teams.
+std::string SideCountText(const TourneySummary &t, int n);
+// "3 of 8 signed up", with teams in a cup of teams: "3 of 8 teams signed up".
+std::string SignedUpText(const TourneySummary &t, int entries, int places);
+// A player of the match is in its room: this computer's room when the player is in it, otherwise the league's word for them, otherwise their
+// side's.
+bool MemberInRoom(const State &st, int64_t match, const TourneyMember &m, bool sideIn);
+// The Steam friends the team's dialog lists, by name with those playing the game first; only the ones whose name has `filter`.
+std::vector<SteamFriendInfo> TeamFriends(const std::string &filter);
+// Opens the dialog of a team's sign-up for a cup.
+void OpenTeamDialog(Ui &u, int64_t tournament);
+void PaintTeamDialog(Painter &p, const State &st, const Ui &u, PaintOut &out);
+// The invitation to a team, over any menu outside a room, with Accept, Decline and Later; a notice instead in a room, where a dialog would be
+// in the way, or without `ask`.
+void AskInvite(const TourneyNotice &n, bool ask);
+// "Varo invites you to their team for Copa X": the invitation's line, with the team's name when it has one.
+std::string InviteText(const TourneyInvite &i);
+// A team waiting for its partner: "Waiting for your partner", with their name when it is known.
+std::string PendingText(const std::string &partner);
 
 // The choice of the next game's map in the player's series (mpui_tourney_match.cpp): the options with their pictures and the time left,
 // which the player clicks when it is theirs. Below 170 high the title and the clock go beside the options.
@@ -292,7 +353,7 @@ std::string ShortWhenText(int64_t ms);
 std::string StageText(TourneyStage stage, int round);
 // The player's match by its part of the tournament: "Losers' round 2", "Grand final", "Reset match", "Round 3 (Swiss)", or its stage.
 std::string BracketStageText(TourneyBracket bracket, TourneyStage stage, int round);
-// "Single elimination · 1 vs 1".
+// "Single elimination · 1 vs 1", "Swiss · 2 vs 2".
 std::string FormatText(const TourneySummary &t);
 // "Live", "By rounds of 2 days".
 std::string PaceText(const TourneySummary &t);

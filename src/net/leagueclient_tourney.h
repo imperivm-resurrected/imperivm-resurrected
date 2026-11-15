@@ -44,6 +44,8 @@ enum class TourneyOp {
 	Create, FindCode, Cancel, CheckinNow, StartNow, RemoveEntry, Resolve, Edit,
 	// The map of a series' next game chosen.
 	Pick,
+	// A cup of teams: the invitation to a team answered, and the captain's team withdrawn while it waits for the partner; both by the cup.
+	Accept, Decline, CancelTeam,
 };
 
 // The answer to something the player did.
@@ -56,8 +58,8 @@ struct TourneyOpResult {
 	int status = 0;
 	// The server's code ("closed", "wrong_content"...) and its English text; "not_linked" without an account.
 	std::string error, message;
-	// The waiting list instead of a place.
-	bool waitlist = false;
+	// The waiting list instead of a place; a team that waits for its partner to accept.
+	bool waitlist = false, pendingPartner = false;
 	// Until when a suspended player cannot sign up, and the content a tournament asks for.
 	int64_t until = 0;
 	std::string contentName;
@@ -68,8 +70,9 @@ struct TourneyOpResult {
 	// The cup made (and its code when private), the one a code found, or the one the player already organises.
 	int64_t tournament = 0;
 	std::string slug, inviteCode;
-	// requirement: "games" or "tier", what the player has and what the cup asks.
-	std::string requirement, have, need;
+	// requirement: "games" or "tier", what the player has and what the cup asks, and "partner" in `who` when the partner misses it.
+	// "partner_not_linked" in `error`: the partner of a team's sign-up has no league account (the league's not_linked).
+	std::string requirement, have, need, who;
 	// A scenario of the cup that could not go up (its title), or the uploaded one the league does not have (map_missing: its SHA-256).
 	std::string mapTitle, hash;
 	// The map a pick chose.
@@ -79,6 +82,13 @@ struct TourneyOpResult {
 };
 // In a private cup the code the player found it with goes along.
 void LeagueTourneySignUp(int64_t tournament);
+// A cup of teams: the player signs up as the captain with a partner, who has to accept it from the game, and an optional team name. It is
+// the SignUp op, with `pendingPartner` once the league takes it.
+void LeagueTourneySignUpTeam(int64_t tournament, uint64_t partner, const std::string &teamName);
+// The invitation to a team answered: the Accept or Decline op, by the cup (a player has one invitation a cup at most).
+void LeagueTourneyAnswerInvite(int64_t tournament, int64_t entry, bool accept);
+// The captain's team taken back before the partner accepted: the CancelTeam op.
+void LeagueTourneyCancelTeam(int64_t tournament);
 void LeagueTourneyWithdraw(int64_t tournament);
 // With the content key of this computer's rooms, which must be the tournament's.
 void LeagueTourneyCheckIn(int64_t tournament);
@@ -124,6 +134,10 @@ struct TourneyDisputesView {
 };
 // The open disputes of the player's cup as last read; read again in the background when older than `maxAgeMs`.
 TourneyDisputesView LeagueTourneyDisputes(int64_t tournament, int maxAgeMs = 15000);
+
+// The league's random map types with the sizes they let four players in on (GET /v1/league/maps), read once and every hour; empty until
+// they come, when TourneySizesFor falls back on the templates' own.
+std::vector<TourneyMapType> LeagueTourneyMapTypes();
 
 // The scenario of a cup's round on this computer.
 enum class CupMapStatus { Checking, Ready, Downloading, Failed, Missing, Different };
