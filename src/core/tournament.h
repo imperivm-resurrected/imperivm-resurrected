@@ -237,6 +237,10 @@ struct TourneyEntrant {
 	int seed = 0, placement = 0;
 	bool checkedIn = false;
 	std::vector<TourneyMember> members;
+	// A team: the name its captain gave (empty: the league names it after its players), and the partner, invited or in the team; a
+	// team waiting for its partner lists only its captain among its members.
+	std::string teamName;
+	TourneyMember partner;
 };
 // The entry's players: its members, or the entry's own player when the league lists none.
 std::vector<TourneyMember> TourneyPlayersOf(const TourneyEntrant &e);
@@ -395,7 +399,7 @@ struct TourneyNext {
 	// With the by-rounds pace the deadline is the end of the round, and the no-show only counts from `noshowFrom`.
 	TourneyPace pace = TourneyPace::Live;
 	int64_t noshowFrom = 0;
-	// A cup of teams: the player's own team (its name and its two players); `opponent` is the other team.
+	// A cup of teams: the player's own team (its name, its captain in `steamId` and its two players); `opponent` is the other team.
 	TourneyMode mode = TourneyMode::Solo;
 	TourneyNextSide team;
 	// The map of the next game is this player's to choose.
@@ -423,7 +427,7 @@ struct TourneyMyEntry {
 	TourneyEntryStatus status = TourneyEntryStatus::Unknown;
 	bool checkedIn = false;
 	int seed = 0, placement = 0;
-	// A team: its entry, its name, the partner and its players, when the league says them.
+	// A team: its entry, its name ({team: {name}}, its players' when it has none), the partner and its players, when the league says them.
 	int64_t entryId = 0;
 	std::string teamName;
 	TourneyMember partner;

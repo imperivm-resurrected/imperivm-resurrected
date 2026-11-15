@@ -114,12 +114,16 @@ TourneyNextSide SideFromJson(const Json *v)
 	return s;
 }
 
-// The player's team in the next match: {name, members, ...} as a side, its members alone, or its name alone.
+// The player's team in the next match: {entryId, name, captain, members} as a side, its members alone, or its name alone.
 TourneyNextSide TeamFromJson(const Json *v)
 {
 	TourneyNextSide s;
 	if (!v) return s;
-	if (v->type == Json::Object) return SideFromJson(v);
+	if (v->type == Json::Object) {
+		s = SideFromJson(v);
+		if (!s.steamId) s.steamId = Id64(v->Get("captain"));
+		return s;
+	}
 	if (v->type == Json::Array) s.members = TourneyMembersFromJson(v);
 	else if (v->type == Json::String) s.name = v->str;
 	return s;
@@ -709,6 +713,8 @@ bool TourneyParseDetail(const Json &j, TourneyDetail &out)
 			x.placement = Int(e, "placement");
 			x.checkedIn = e.GetBool("checkedIn");
 			x.members = TourneyMembersFromJson(e.Get("members"));
+			x.teamName = Text(e, "teamName");
+			x.partner = MemberFromJson(e.Get("partner"));
 			if (x.status == TourneyEntryStatus::Signed || x.status == TourneyEntryStatus::Playing || x.status == TourneyEntryStatus::Out) counted++;
 			out.entrants.push_back(x);
 		}
@@ -1124,6 +1130,11 @@ bool TourneyParseMine(const Json &j, TourneyMine &out)
 			x.teamName = Text(e, "teamName");
 			x.partner = MemberFromJson(e.Get("partner"));
 			x.members = TourneyMembersFromJson(e.Get("members"));
+			// The league's form: {team: {name, captain, members}}.
+			if (const Json *team = e.Get("team"); team && team->type == Json::Object) {
+				if (x.teamName.empty()) x.teamName = Text(*team, "name");
+				if (x.members.empty()) x.members = TourneyMembersFromJson(team->Get("members"));
+			}
 			if (x.tournamentId) out.entries.push_back(x);
 		}
 	}
@@ -1656,8 +1667,10 @@ Json TourneyCupJson(const TourneyCupForm &f, bool edit)
 	body.Set("settings", TourneySettingsJson(f.settings));
 	body.Set("requirements", TourneyRequirementsJson(f.requirements));
 	body.Set("private", Json::MakeBool(f.isPrivate));
-	// In a cup of teams the organizer's entry needs a partner: they sign their team up from the cup's page.
-	body.Set("play", Json::MakeBool(f.play && f.mode != TourneyMode::Teams));
+	// In a cup of teams the organizer's entry needs a partner: they sign their team up from the cup's page, so a new cup is made without
+	// them, and a change leaves out "play", which would otherwise withdraw the team they signed up.
+	if (f.mode != TourneyMode::Teams) body.Set("play", Json::MakeBool(f.play));
+	else if (!edit) body.Set("play", Json::MakeBool(false));
 	if (!f.contentKey.empty()) {
 		body.Set("contentKey", Json::MakeString(f.contentKey));
 		if (!f.contentName.empty() || edit) body.Set("contentName", f.contentName.empty() ? Json() : Json::MakeString(f.contentName));

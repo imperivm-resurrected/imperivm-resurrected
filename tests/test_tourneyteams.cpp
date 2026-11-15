@@ -33,7 +33,9 @@ const char *kDetail = R"({"id":7,"slug":"copa-parejas","name":"Copa de parejas",
 {"entryId":12,"steamId":"76561198000000003","name":"Furio y Brenno","status":"playing","seed":2,"checkedIn":true,"placement":null,
 "members":[{"steamId":"76561198000000003","name":"Furio"},{"steamId":"76561198000000004","name":"Brenno"}]},
 {"entryId":13,"steamId":"76561198000000005","name":"Equipo viejo","status":"withdrawn","seed":null,"checkedIn":false,"placement":null,
-"members":[{"steamId":"76561198000000005","name":"Escipion"},{"steamId":"76561198000000002","name":"Tulia"}]}],
+"members":[{"steamId":"76561198000000005","name":"Escipion"},{"steamId":"76561198000000002","name":"Tulia"}]},
+{"entryId":14,"steamId":"76561198000000006","name":"Craso & Furio","status":"pending_partner","seed":null,"checkedIn":false,"placement":null,
+"members":[{"steamId":"76561198000000006","name":"Craso"}],"teamName":null,"partner":{"steamId":"76561198000000003","name":"Furio","accepted":false}}],
 "bestOf":1,"finalBestOf":1,"seeding":"rating","maps":[{"name":"mediterranean","type":"random","size":"medium"}],"rounds":1,"matches":[
 {"id":21,"round":1,"position":0,"stage":"final","bestOf":1,"a":{"entryId":11,"steamId":"76561198000000001","name":"Los lobos","seed":1,
 "members":[{"steamId":"76561198000000001","name":"Varo"},{"steamId":"76561198000000002","name":"Tulia"}]},
@@ -45,7 +47,7 @@ const char *kDetail = R"({"id":7,"slug":"copa-parejas","name":"Copa de parejas",
 const char *kNext = R"({"tournament":{"id":7,"slug":"copa-parejas","name":"Copa de parejas","mode":"2v2"},"match":21,"round":1,"rounds":1,
 "stage":"final","bestOf":1,"game":1,"score":[0,0],"status":"ready","deadlineAt":1794662271671,
 "me":{"side":"a","seed":1,"inRoom":false},
-"team":{"name":"Los lobos","members":[{"steamId":"76561198000000001","name":"Varo","inRoom":true},{"steamId":"76561198000000002","name":"Tulia","inRoom":false}]},
+"team":{"entryId":11,"name":"Los lobos","captain":"76561198000000001","members":[{"steamId":"76561198000000001","name":"Varo","inRoom":true},{"steamId":"76561198000000002","name":"Tulia","inRoom":false}]},
 "opponent":{"name":"Furio y Brenno","steamId":"76561198000000003","seed":2,"inRoom":false,
 "members":[{"steamId":"76561198000000003","name":"Furio","inRoom":true},{"steamId":"76561198000000004","name":"Brenno"}]}})";
 
@@ -88,8 +90,15 @@ void Detail()
 	CHECK(TourneyParseDetail(Parse(kDetail), d));
 	CHECK(d.Teams());
 	CHECK_EQ(d.entries, 2);
-	CHECK_EQ(static_cast<int>(d.entrants.size()), 3);
-	if (d.entrants.size() < 3 || d.matches.empty()) return;
+	CHECK_EQ(static_cast<int>(d.entrants.size()), 4);
+	if (d.entrants.size() < 4 || d.matches.empty()) return;
+	// A team waiting for its partner: only its captain among its members, the partner apart.
+	CHECK(d.entrants[3].status == TourneyEntryStatus::PendingPartner);
+	CHECK_EQ(static_cast<int>(d.entrants[3].members.size()), 1);
+	CHECK(d.entrants[3].partner.steamId == kFurio && d.entrants[3].partner.name == "Furio");
+	CHECK(d.entrants[3].teamName.empty());
+	// Furio is only invited there: his team is the one he plays in.
+	CHECK(TourneyEntrantBySteamId(d, kFurio) && TourneyEntrantBySteamId(d, kFurio)->entryId == 12);
 	CHECK_EQ(static_cast<int>(d.entrants[0].members.size()), 2);
 	CHECK_EQ(d.entrants[0].members[1].name, std::string("Tulia"));
 	CHECK(d.entrants[0].members[1].steamId == kTulia);
@@ -137,6 +146,7 @@ void Next()
 	CHECK(TourneyParseNext(Parse(kNext), n));
 	CHECK(n.Teams());
 	CHECK_EQ(n.team.name, std::string("Los lobos"));
+	CHECK(n.team.steamId == kVaro);
 	CHECK_EQ(n.team.side, std::string("a"));
 	CHECK_EQ(static_cast<int>(n.team.members.size()), 2);
 	if (n.team.members.size() == 2) {
@@ -216,6 +226,16 @@ void Mine()
 	CHECK(TourneyHasActiveEntry(invitesOnly));
 	CHECK(!TourneyHasActiveEntry(TourneyMine()));
 	CHECK_EQ(TourneyPollEveryMs(false, false), kTourneyIdlePollMs);
+
+	// The league's own form of an entry of a cup of teams: {mode, entryId, team: {name, captain, members}}.
+	TourneyMine league;
+	CHECK(TourneyParseMine(Parse(R"({"entries":[{"tournamentId":5,"slug":"x","name":"X","tournamentStatus":"signup","status":"signed","mode":"2v2",
+"entryId":51,"team":{"name":"Varo & Tulia","captain":"76561198000000001","members":[{"steamId":"76561198000000001","name":"Varo"},
+{"steamId":"76561198000000002","name":"Tulia"}]}}],"invites":[]})"), league));
+	CHECK(!league.entries.empty() && Same(league.entries[0].entryId, 51) && league.entries[0].teamName == "Varo & Tulia");
+	CHECK(!league.entries.empty() && league.entries[0].members.size() == 2);
+	CHECK(!league.entries.empty() && TourneyPartnerOf(league.entries[0], kTulia).steamId == kVaro);
+	CHECK(!league.entries.empty() && TourneyNameIsMembers(league.entries[0].teamName, league.entries[0].members));
 
 	// The partner from the team's members when the league names no partner.
 	TourneyMyEntry team;
@@ -353,7 +373,9 @@ void CupForm()
 	Json body = TourneyCupJson(f);
 	CHECK_EQ(body.GetString("mode"), std::string("2v2"));
 	CHECK(body.Get("play") && body.Get("play")->type == Json::Bool && !body.Get("play")->b);
+	CHECK(!TourneyCupJson(f, true).Get("play"));
 	f.mode = TourneyMode::Solo;
+	CHECK(TourneyCupJson(f, true).GetBool("play"));
 	body = TourneyCupJson(f);
 	CHECK_EQ(body.GetString("mode"), std::string("1v1"));
 	CHECK(body.GetBool("play"));
