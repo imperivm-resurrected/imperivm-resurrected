@@ -47,13 +47,23 @@ void VLine(Painter &p, int x, int y1, int y2, COLORREF c)
 
 std::string MetaText(const TourneyDetail &d)
 {
-	std::string out = OrganizerText(d);
-	if (!out.empty()) out += "   \xC2\xB7   ";
-	out += FormatText(d) + "   \xC2\xB7   " + (d.entries == 1 ? Tr("1 player") : TrFmt("%s players", {std::to_string(d.entries)})) + "   \xC2\xB7   " + ContentText(d) + "   \xC2\xB7   " +
-		PresetText(d.settings) + "   \xC2\xB7   ";
-	if (d.status == TourneyStatus::Running) out += TrFmt("Since %s", {HourText(d.startsAt)});
-	else if (d.status == TourneyStatus::Finished) out += DayText(d.startsAt);
-	else out += WhenText(d.startsAt);
+	std::vector<std::string> parts;
+	if (!OrganizerText(d).empty()) parts.push_back(OrganizerText(d));
+	parts.push_back(FormatText(d));
+	// By rounds: the round being played and its deadline, "Round 2 of 4 · until Thursday 20:00", or the pace before it starts.
+	const std::string round = RoundText(d);
+	if (!round.empty()) parts.push_back(round);
+	else if (d.pace == TourneyPace::Rounds && d.status != TourneyStatus::Finished && d.status != TourneyStatus::Cancelled) parts.push_back(PaceText(d));
+	parts.push_back(d.entries == 1 ? Tr("1 player") : TrFmt("%s players", {std::to_string(d.entries)}));
+	parts.push_back(ContentText(d));
+	parts.push_back(PresetText(d.settings));
+	if (d.status == TourneyStatus::Running) {
+		if (round.empty()) parts.push_back(TrFmt("Since %s", {HourText(d.startsAt)}));
+	}
+	else if (d.status == TourneyStatus::Finished) parts.push_back(DayText(d.startsAt));
+	else parts.push_back(WhenText(d.startsAt));
+	std::string out;
+	for (const std::string &part : parts) out += (out.empty() ? "" : "   \xC2\xB7   ") + part;
 	return out;
 }
 
@@ -336,18 +346,32 @@ void PaintRules(Painter &p, Ctx &c, int x, int y, int w, int h)
 	};
 	PaintSectionLabel(p, x, ry, w, 22, "Format");
 	ry += 32;
+	const TourneyFormat format = TourneyFormatOf(d);
+	const bool byRounds = d.pace == TourneyPace::Rounds;
 	row(Tr("Bracket"), FormatText(d) + ", " + TrFmt("%s to %s players", {std::to_string(d.minEntries), std::to_string(d.maxEntries)}));
-	row(Tr("Series"), TrFmt("Best of %s; the final, best of %s", {std::to_string(d.bestOf), std::to_string(d.finalBestOf)}));
+	row(Tr("Pace"), byRounds ? PaceText(d) : Tr("Live, in one evening"));
+	row(Tr("Series"), format == TourneyFormat::Swiss ? TrFmt("Best of %s", {std::to_string(d.bestOf)})
+													  : TrFmt("Best of %s; the final, best of %s", {std::to_string(d.bestOf), std::to_string(d.finalBestOf)}));
+	if (!d.seriesPool.empty()) {
+		std::string pool;
+		for (const TourneyMap &m : d.seriesPool) pool += (pool.empty() ? "" : ", ") + MapText(m);
+		row(Tr("Maps of the series"), pool);
+	}
 	row(Tr("Seeding"), Tr(d.seeding == "random" ? "Drawn at random" : d.seeding == "manual" ? "Set by the organisers" : "By the ranked leaderboard, frozen when the check-in closes"));
 	row(Tr("Check-in"), TrFmt("From %s to %s; whoever does not check in loses the place", {HourText(d.checkinOpensAt), HourText(d.startsAt)}));
-	row(Tr("No-show"), TrFmt("%s min from when the match is ready", {std::to_string(d.noshowMinutes)}));
+	row(Tr("No-show"), byRounds ? TrFmt("%s min, only in the last 24 hours of each round", {std::to_string(d.noshowMinutes)})
+								: TrFmt("%s min from when the match is ready", {std::to_string(d.noshowMinutes)}));
 	ry += 10;
 	PaintSectionLabel(p, x, ry, w, 22, "Maps and options");
 	ry += 32;
 	// Before the bracket is drawn, a list of maps by stage is shown for the full bracket of the cup's places.
-	const int planned = d.rounds ? d.rounds : d.maps.size() > 1 ? TourneyFullRounds(d.maxEntries) : 0;
+	// A Swiss's rounds are paired one at a time: its count is the cup's, not the rounds drawn so far. Only an elimination's rounds have stages.
+	const int planned = format == TourneyFormat::Swiss ? TourneyRoundCount(d) : d.rounds ? d.rounds : d.maps.size() > 1 ? TourneyFullRounds(d.maxEntries) : 0;
 	const int rounds = std::max(planned, 1);
-	for (int r = 1; r <= rounds && !d.maps.empty(); r++) row(planned ? StageText(TourneyStageOf(r, planned), r) : Tr("Every round"), MapText(TourneyMapOfRound(d, r, planned)));
+	for (int r = 1; r <= rounds && !d.maps.empty(); r++) {
+		const std::string stage = format == TourneyFormat::Single ? StageText(TourneyStageOf(r, planned), r) : StageText(TourneyStage::Unknown, r);
+		row(planned ? stage : Tr("Every round"), MapText(TourneyMapOfRound(d, r, planned)));
+	}
 	if (d.maps.empty()) row(Tr("Maps"), Tr("Chosen in the room"));
 	row(Tr("Content"), ContentText(d));
 	const TourneyRoomRules rules = TourneyRulesOf(d.settings);

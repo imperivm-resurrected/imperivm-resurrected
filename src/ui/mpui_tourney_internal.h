@@ -274,8 +274,14 @@ std::string FromText(int64_t ms);
 // "Thu 20:00", "Today 20:00".
 std::string ShortWhenText(int64_t ms);
 std::string StageText(TourneyStage stage, int round);
+// "Single elimination", "Swiss, 4 rounds".
+std::string FormatName(const TourneySummary &t);
 // "Single elimination · 1 vs 1".
 std::string FormatText(const TourneySummary &t);
+// "Live", "By rounds of 2 days".
+std::string PaceText(const TourneySummary &t);
+// While a cup by rounds is played: "Round 2 of 4 · until Thursday 20:00"; empty otherwise.
+std::string RoundText(const TourneySummary &t);
 // "By rounds of 2 days", "By rounds of a week".
 std::string RoundDaysText(int days);
 // "Caesar Mod" or "The mod's rules".
