@@ -34,6 +34,12 @@ TourneyStage TourneyStageOf(int round, int rounds);
 // "Final", "Semifinal"...: the English name, the key of its translation. Empty for Unknown.
 const char *TourneyStageName(TourneyStage s);
 
+// The part of a tournament a match is played in: a single elimination only has the winners' bracket; a double elimination adds the
+// losers' bracket, the grand final and its reset; a Swiss tournament has rounds instead. A match's round counts within its part.
+enum class TourneyBracket { Winners, Losers, Final, Reset, Swiss };
+// "winners", "losers", "final", "reset" or "swiss"; anything else is the winners' bracket.
+TourneyBracket TourneyBracketFromId(const std::string &id);
+
 // What a round is played on: a random map of the league's list, a scenario of the game's own, which every player has, or one of the
 // organizer's, which the league keeps and each player downloads.
 enum class TourneyMapKind { Random, Game, Upload };
@@ -286,16 +292,19 @@ struct TourneyNext {
 	TourneyOrganizer organizer;
 	int round = 0, rounds = 0, bestOf = 1, game = 1, scoreMe = 0, scoreThem = 0;
 	TourneyStage stage = TourneyStage::Unknown;
+	// The part of the tournament the match is in; `round` counts within it.
+	TourneyBracket bracket = TourneyBracket::Winners;
 	TourneyMatchStatus status = TourneyMatchStatus::Unknown;
 	int64_t readyAt = 0, deadlineAt = 0;
 	TourneyNextSide me, opponent;
 	bool hasOpponent = false, canClaimNoShow = false;
-	// The round's map; a game of a series may be played on another (TourneyGameMap).
+	// The map of the game to play; none while it is being chosen (TourneyGameMap).
 	TourneyMap map;
 	TourneySettings settings;
 	uint64_t lobby = 0, specLobby = 0, roomClaimBy = 0;
 	std::vector<TourneyGame> games;
 	TourneyPick pick;
+	TourneyFormat format = TourneyFormat::Single;
 	// With the by-rounds pace the deadline is the end of the round, and the no-show only counts from `noshowFrom`.
 	TourneyPace pace = TourneyPace::Live;
 	int64_t noshowFrom = 0;
@@ -368,6 +377,8 @@ struct TourneyClaim {
 	std::string lobbyKey, contentKey;
 	TourneyMap map;
 	TourneySettings settings;
+	// Wait while the map of a series' next game is being chosen: the room opens once it is.
+	TourneyPick pick;
 };
 bool TourneyParseClaim(const Json &j, TourneyClaim &out);
 
@@ -382,6 +393,7 @@ struct TourneyNotice {
 	int64_t tournamentId = 0, match = 0;
 	std::string slug, name, opponent;
 	TourneyStage stage = TourneyStage::Unknown;
+	TourneyBracket bracket = TourneyBracket::Winners;
 	int round = 0, game = 0;
 	int64_t deadlineAt = 0;
 };
@@ -423,6 +435,8 @@ struct TourneyRefusal {
 	std::string requirement, have, need;
 	// map_missing: the SHA-256 of the uploaded scenario the league does not have.
 	std::string hash;
+	// too_early with the by-rounds pace: from when the no-show counts.
+	int64_t noshowFrom = 0;
 };
 TourneyRefusal TourneyParseRefusal(const Json &j);
 
@@ -468,7 +482,7 @@ enum class TourneyCupProblem {
 	NameShort, NameLong, DescriptionLong, Places, Minimum, Format, Series, Settings, NoMaps, TooManyMaps, BadMap, MapTooLarge, PoolCount, PoolMap,
 	StartSoon, StartLate, Pace, Checkin, Noshow, Requirements,
 };
-// Some game of the cup is a series (best of 3 or 5): the rounds', or the final's outside a Swiss, which has no final.
+// Some game of the cup is a series (best of 3, or 5 in a final): the rounds', or the final's outside a Swiss, which has no final.
 bool TourneyCupHasSeries(const TourneyCupForm &f);
 // The rounds a cup's form gives a map to: a Swiss's rounds, the rounds of an elimination's bracket (its winners' in a double one).
 int TourneyCupMapRounds(const TourneyCupForm &f);

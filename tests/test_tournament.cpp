@@ -450,7 +450,11 @@ void CupForm()
 	bad = f;
 	bad.bestOf = 2;
 	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::Series));
+	// A community cup's rounds stay of one game or best of three; only its final may be best of five.
 	bad.bestOf = 5;
+	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::Series));
+	bad.bestOf = 3;
+	bad.finalBestOf = 5;
 	CHECK(TourneyCheckCup(bad, now).empty());
 	bad = f;
 	bad.finalBestOf = 2;
@@ -933,11 +937,12 @@ void Formats()
 	CHECK(Json::Parse(TourneyCupJson(f).Dump(), back));
 	CHECK_EQ(static_cast<int>(back.GetNumber("swissRounds")), 5);
 	CHECK_EQ(back.GetString("pace"), std::string("live"));
-	CHECK(back.Get("roundDays") == nullptr);
+	// The league wants the days of a round null when it is played live, and no Swiss rounds outside a Swiss.
+	CHECK(back.Get("roundDays") && back.Get("roundDays")->type == Json::Null);
 	f.format = TourneyFormat::Single;
 	CHECK(Json::Parse(TourneyCupJson(f).Dump(), back));
 	CHECK_EQ(back.GetString("format"), std::string("single"));
-	CHECK(back.Get("swissRounds") == nullptr);
+	CHECK(back.Get("swissRounds") && back.Get("swissRounds")->type == Json::Null);
 
 	TourneyDetail d;
 	CHECK(TourneyParseDetail(Parse(R"({"id":7,"slug":"suizo","name":"Suizo","official":false,"organizer":{"steamId":"76561198000000994","name":"Furio"},
@@ -1024,9 +1029,43 @@ void Series()
 	CHECK(live.pace == TourneyPace::Live);
 	CHECK(!live.pick.present);
 	CHECK_EQ(TourneyGameMap(live).name, std::string("island"));
+	CHECK(live.bracket == TourneyBracket::Winners);
+	CHECK(live.stage == TourneyStage::Semifinal);
+	CHECK(live.format == TourneyFormat::Single);
 	TourneyNext named;
 	CHECK(TourneyParseNext(Parse(R"({"tournament":{"id":2,"pace":"rounds"},"match":6,"status":"ready"})"), named));
 	CHECK(named.pace == TourneyPace::Rounds);
+
+	// A double elimination's losers' bracket has no stage of its own: its round counts within it. The format and the pace come at the top.
+	TourneyNext losers;
+	CHECK(TourneyParseNext(Parse(R"({"match":8,"round":2,"rounds":3,"stage":null,"bracket":"losers","format":"double","pace":"live",
+"status":"ready","me":{"side":"a"},"map":null,"pick":null})"), losers));
+	CHECK(losers.bracket == TourneyBracket::Losers);
+	CHECK(losers.stage == TourneyStage::Unknown);
+	CHECK(losers.format == TourneyFormat::Double);
+	CHECK(losers.pace == TourneyPace::Live);
+	TourneyNext swiss;
+	CHECK(TourneyParseNext(Parse(R"({"match":9,"round":3,"rounds":4,"bracket":"swiss","format":"swiss","status":"ready","me":{"side":"b"}})"), swiss));
+	CHECK(swiss.bracket == TourneyBracket::Swiss);
+	CHECK(swiss.format == TourneyFormat::Swiss);
+	CHECK(swiss.stage == TourneyStage::Unknown);
+	TourneyMine inLosers;
+	inLosers.next = losers;
+	TourneyTold once;
+	const std::vector<TourneyNotice> ready = TourneyNewNotices(inLosers, once);
+	CHECK(ready.size() == 1 && ready[0].bracket == TourneyBracket::Losers && ready[0].round == 2);
+
+	// While a pick is open the room waits for it, and the claim brings the pick.
+	TourneyClaim claim;
+	CHECK(TourneyParseClaim(Parse(R"({"wait":true,"by":null,"pick":{"by":"a","options":[{"name":"island","type":"random","size":"small"},
+{"name":"coastal","type":"random","size":"large"}],"until":1794600060000}})"), claim));
+	CHECK(claim.kind == TourneyClaim::Wait);
+	CHECK(claim.by == 0);
+	CHECK(claim.pick.present && claim.pick.options.size() == 2 && Same(claim.pick.until, 1794600060000LL));
+	CHECK(TourneyParseClaim(Parse(R"({"wait":true,"by":"76561198000000994"})"), claim));
+	CHECK(!claim.pick.present);
+	// Claiming the win too early, by rounds, says from when it can be.
+	CHECK(Same(TourneyParseRefusal(Parse(R"({"error":"too_early","noshowFrom":1794863600000})")).noshowFrom, 1794863600000LL));
 
 	// The detail's matches carry the same.
 	TourneyDetail d;

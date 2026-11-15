@@ -175,6 +175,16 @@ const char *TourneyStageName(TourneyStage s)
 	}
 }
 
+TourneyBracket TourneyBracketFromId(const std::string &id)
+{
+	const std::string s = Lower(id);
+	if (s == "losers") return TourneyBracket::Losers;
+	if (s == "final") return TourneyBracket::Final;
+	if (s == "reset") return TourneyBracket::Reset;
+	if (s == "swiss") return TourneyBracket::Swiss;
+	return TourneyBracket::Winners;
+}
+
 TourneyMap TourneyMapFromJson(const Json *v)
 {
 	TourneyMap m;
@@ -715,7 +725,9 @@ bool TourneyParseNext(const Json &j, TourneyNext &out)
 	out.round = Int(j, "round");
 	out.rounds = Int(j, "rounds");
 	out.stage = TourneyStageFromId(Text(j, "stage"));
-	if (out.stage == TourneyStage::Unknown && out.rounds) out.stage = TourneyStageOf(out.round, out.rounds);
+	out.bracket = TourneyBracketFromId(Text(j, "bracket"));
+	// Only the winners' bracket has stages counted from its final.
+	if (out.stage == TourneyStage::Unknown && out.rounds && out.bracket == TourneyBracket::Winners) out.stage = TourneyStageOf(out.round, out.rounds);
 	out.bestOf = std::max(1, Int(j, "bestOf", 1));
 	out.game = std::max(1, Int(j, "game", 1));
 	out.status = TourneyMatchStatusFromId(Text(j, "status"));
@@ -745,9 +757,13 @@ bool TourneyParseNext(const Json &j, TourneyNext &out)
 	out.games = TourneyGamesFromJson(j.Get("games"));
 	out.pick = TourneyPickFromJson(j.Get("pick"));
 	out.noshowFrom = Int64(j, "noshowFrom");
-	std::string pace = Text(j, "pace");
-	if (const Json *t = j.Get("tournament"); pace.empty() && t && t->type == Json::Object) pace = Text(*t, "pace");
+	std::string pace = Text(j, "pace"), format = Text(j, "format");
+	if (const Json *t = j.Get("tournament"); t && t->type == Json::Object) {
+		if (pace.empty()) pace = Text(*t, "pace");
+		if (format.empty()) format = Text(*t, "format");
+	}
 	out.pace = TourneyPaceFromId(pace);
+	out.format = TourneyFormatFromId(format);
 	// The view may name the pace only through noshowFrom, which only the by-rounds pace has.
 	if (out.noshowFrom) out.pace = TourneyPace::Rounds;
 	out.present = true;
@@ -886,6 +902,7 @@ bool TourneyParseClaim(const Json &j, TourneyClaim &out)
 	else if (j.GetBool("wait")) {
 		out.kind = TourneyClaim::Wait;
 		out.by = Id64(j.Get("by"));
+		out.pick = TourneyPickFromJson(j.Get("pick"));
 	}
 	return out.kind != TourneyClaim::None;
 }
@@ -917,6 +934,7 @@ std::vector<TourneyNotice> TourneyNewNotices(const TourneyMine &mine, TourneyTol
 		x.name = n.name;
 		x.opponent = n.opponent.name;
 		x.stage = n.stage;
+		x.bracket = n.bracket;
 		x.round = n.round;
 		x.deadlineAt = n.deadlineAt;
 		out.push_back(x);
@@ -930,6 +948,7 @@ std::vector<TourneyNotice> TourneyNewNotices(const TourneyMine &mine, TourneyTol
 		x.name = n.name;
 		x.opponent = n.opponent.name;
 		x.stage = n.stage;
+		x.bracket = n.bracket;
 		x.round = n.round;
 		x.game = n.game;
 		x.deadlineAt = n.pick.until;
@@ -1011,6 +1030,7 @@ TourneyRefusal TourneyParseRefusal(const Json &j)
 		else if (v && v->type == Json::String) *field.second = v->str;
 	}
 	r.hash = Lower(Text(j, "hash"));
+	r.noshowFrom = Int64(j, "noshowFrom");
 	return r;
 }
 
@@ -1086,8 +1106,8 @@ std::vector<TourneyCupProblem> TourneyCheckCup(const TourneyCupForm &f, int64_t 
 	if (f.format == TourneyFormat::Swiss && f.swissRounds != 0 && (f.swissRounds < kTourneySwissRoundsMin || f.swissRounds > kTourneySwissRoundsMax)) {
 		out.push_back(TourneyCupProblem::Format);
 	}
-	const auto series = [](int bestOf) { return bestOf == 1 || bestOf == 3 || bestOf == 5; };
-	if (!series(f.bestOf) || !series(f.finalBestOf)) out.push_back(TourneyCupProblem::Series);
+	// A community cup's rounds are of one game or best of three; its final may also be best of five.
+	if ((f.bestOf != 1 && f.bestOf != 3) || (f.finalBestOf != 1 && f.finalBestOf != 3 && f.finalBestOf != 5)) out.push_back(TourneyCupProblem::Series);
 	if (!TourneyPresetValid(f.settings.preset) || !TourneySpecDelayValid(f.settings.specDelay)) out.push_back(TourneyCupProblem::Settings);
 	bool large = false;
 	const auto usable = [&large](const TourneyMap &m) {
@@ -1135,15 +1155,14 @@ Json TourneyCupJson(const TourneyCupForm &f, bool edit)
 	body.Set("maxEntries", Json::MakeNumber(f.maxEntries));
 	body.Set("minEntries", Json::MakeNumber(f.minEntries));
 	body.Set("format", Json::MakeString(TourneyFormatId(f.format)));
-	// A Swiss has no final: its series are all the rounds'.
-	if (f.format == TourneyFormat::Swiss) {
-		const bool chosen = f.swissRounds >= kTourneySwissRoundsMin && f.swissRounds <= kTourneySwissRoundsMax;
-		body.Set("swissRounds", chosen ? Json::MakeNumber(f.swissRounds) : Json());
-	}
+	// The Swiss's rounds, null for the automatic count and outside a Swiss; the days of a round, null when it is played live.
+	const bool chosen = f.format == TourneyFormat::Swiss && f.swissRounds >= kTourneySwissRoundsMin && f.swissRounds <= kTourneySwissRoundsMax;
+	body.Set("swissRounds", chosen ? Json::MakeNumber(f.swissRounds) : Json());
 	body.Set("bestOf", Json::MakeNumber(f.bestOf));
+	// A Swiss has no final: its series are all the rounds'.
 	body.Set("finalBestOf", Json::MakeNumber(f.format == TourneyFormat::Swiss ? f.bestOf : f.finalBestOf));
 	body.Set("pace", Json::MakeString(TourneyPaceId(f.pace)));
-	if (f.pace == TourneyPace::Rounds) body.Set("roundDays", Json::MakeNumber(f.roundDays));
+	body.Set("roundDays", f.pace == TourneyPace::Rounds ? Json::MakeNumber(f.roundDays) : Json());
 	body.Set("seeding", Json::MakeString(f.randomSeeding ? "random" : "rating"));
 	Json maps = Json::MakeArray();
 	for (const TourneyMap &m : f.maps) maps.arr.push_back(TourneyMapJson(m));
@@ -1196,11 +1215,13 @@ TourneyCupForm TourneyCupFormOf(const TourneyDetail &d)
 	f.bestOf = d.bestOf;
 	f.finalBestOf = d.finalBestOf;
 	f.randomSeeding = Lower(d.seeding) == "random";
-	f.format = TourneyFormatOf(d);
-	f.swissRounds = d.swissRounds >= kTourneySwissRoundsMin && d.swissRounds <= kTourneySwissRoundsMax ? d.swissRounds : 0;
-	f.pace = d.pace;
-	f.roundDays = TourneyRoundDaysValid(d.roundDays) ? d.roundDays : 2;
-	f.seriesPool = d.seriesPool;
+	// What the list's view has too, read as the summary's.
+	const TourneySummary &summary = d;
+	f.format = TourneyFormatOf(summary);
+	f.swissRounds = summary.swissRounds >= kTourneySwissRoundsMin && summary.swissRounds <= kTourneySwissRoundsMax ? summary.swissRounds : 0;
+	f.pace = summary.pace;
+	f.roundDays = TourneyRoundDaysValid(summary.roundDays) ? summary.roundDays : 2;
+	f.seriesPool = summary.seriesPool;
 	if (f.seriesPool.size() > static_cast<size_t>(kTourneyPoolMax)) f.seriesPool.resize(static_cast<size_t>(kTourneyPoolMax));
 	f.maps = d.maps;
 	TourneyFitMaps(f.maps, TourneyCupMapRounds(f));
