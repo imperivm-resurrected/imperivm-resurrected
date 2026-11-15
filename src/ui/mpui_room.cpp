@@ -428,6 +428,15 @@ unsigned __fastcall HookGameMenuMsg(void *dlg, void *edx, int *msg)
 			ModUiToast("You can surrender from minute 5.", true);
 			return 0;
 		}
+		// In a ranked 2v2 it is the team's: the partner is asked first, unless they are no longer in the game.
+		if (id == 0x1005) {
+			switch (LeagueSurrenderPress()) {
+			case LeagueSurrenderAsk::TooEarly: ModUiToast("You can surrender from minute 5.", true); return 0;
+			case LeagueSurrenderAsk::Proposed: ModUiToast("Your partner has 30 seconds to agree to surrender."); return 0;
+			case LeagueSurrenderAsk::Pending: ModUiToast("The vote to surrender is already open."); return 0;
+			default: break;
+			}
+		}
 		if (id == 0x1005 || id == 0x1006) {
 			g_userQuit.tick = GetTickCount();
 			g_userQuit.id = id;
