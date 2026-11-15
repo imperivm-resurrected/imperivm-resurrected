@@ -94,7 +94,7 @@ enum Field { kNoField, kChatField, kNameField, kPassField, kJoinPassField, kSear
 
 enum { kPredTeam, kPredRace, kPredAi, kPredReady, kPredOptSel, kPredOptVal, kPredColor };
 
-enum { kDropRace, kDropAi, kDropOption, kDropColor, kDropSlot, kDropSites, kDropModOption, kDropPreset, kDropFilter, kDropPlayers, kDropProfile, kDropVisibility, kDropSaveGame, kDropSpectators, kDropPickSort, kDropBonus, kDropTeam, kDropTourney };
+enum { kDropRace, kDropAi, kDropOption, kDropColor, kDropSlot, kDropSites, kDropModOption, kDropPreset, kDropFilter, kDropPlayers, kDropProfile, kDropVisibility, kDropSaveGame, kDropSpectators, kDropPickSort, kDropBonus, kDropTeam, kDropTourney, kDropRankedSeason };
 
 // The argument of kGDropOpen: the kind in the low bits and the slot or option index above them.
 const int kDropKindBits = 5, kDropKindMask = (1 << kDropKindBits) - 1;
@@ -112,12 +112,19 @@ enum RankedArg {
 	kRkHistoryNewest, kRkDisputeResult, kRkDisputeSend, kRkDisputeCancel, kRkRow = 0x100, kRkDisputeRecent = 0x200, kRkDisputeHistory = 0x300,
 	kRkArgEnd = 0x400,
 };
+// The full leaderboard's filters and the player's card, and the end of season ceremony (mpui_ranked_seasons.cpp), after kRkArgEnd. The
+// clicks on the players' badges of the multiplayer screens come from kRkBadge (LeagueBadgeClicksBegin).
+enum RankedSeasonArg {
+	kRkCeremonyEquip = kRkArgEnd, kRkCeremonyLater, kRkCeremonyBoard, kRkBoardAll, kRkBoardFriends, kRkBoardSearch, kRkBoardClear,
+	kRkBadge = kRkArgEnd + 0x100, kRkBadgeEnd = kRkBadge + 0x100,
+};
 enum RankedSub { kRankedHub, kRankedBoard, kRankedHistory };
+// The rows of a page of the full leaderboard at most; RankedBoardRows says how many fit the screen.
 const int kRankedBoardRows = 13;
 
 struct RankedScreen {
 	int sub = kRankedHub;
-	int boardOffset = 0, boardSel = -1;
+	int boardSel = -1;
 	// The result screen is open while resultOpen; resultAt is when it opened, for the animation.
 	bool resultOpen = false;
 	int64_t resultMatch = 0;
@@ -128,6 +135,17 @@ struct RankedScreen {
 	int64_t disputeMatch = 0;
 	std::string disputeText;
 	unsigned disputeSeen = 0;
+	// The full leaderboard's filters: the season (-1: the one being played), everyone or the Steam friends, and the name looked for, typed
+	// in the ranked field while no report is being written (asked once it rests); the player whose card is open, and one whose row a
+	// click on their badge asked for, until their card says where it is.
+	int boardSeason = -1;
+	bool boardFriends = false;
+	std::string boardSearch, boardAsked, boardPick, boardSeek;
+	DWORD boardTypedAt = 0;
+	// The end of season ceremony: open, its season, the tab it opened over, and the seasons already shown in this session.
+	bool ceremonyOpen = false;
+	int ceremonySeason = -1, ceremonyBack = 0;
+	std::vector<int> ceremonyShown;
 	LeagueRankedView view;
 };
 
@@ -557,6 +575,16 @@ std::string &RankedFieldText();
 void RankedFieldEnter();
 // The result screen over the whole lobby, with its own header.
 void PaintRankedResult(Painter &p, const State &st);
+// The full leaderboard's filters, the card of the player picked and the season's ceremony (mpui_ranked_seasons.cpp): the arguments from
+// kRkArgEnd, the page with the filters, the season's menu, and the ceremony, which opens once over Multiplayer after a season closes.
+void RankedSeasonAction(int arg);
+void RankedBoardAsk(int offset, bool aroundMe);
+int RankedBoardRowsFor(int viewW, int viewH);
+int RankedBoardRows();
+std::vector<std::string> RankedSeasonItems(const State &st, int &sel);
+void RankedSeasonPick(int index);
+void RankedSeasonsFrame();
+void PaintCeremony(Painter &p, const State &st);
 // A small mark for the header of a ranked room; returns how wide it came out.
 int PaintRankedMark(Painter &p, int x, int y, int h);
 extern std::atomic<bool> g_menuRefresh;

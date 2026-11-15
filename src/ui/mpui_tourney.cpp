@@ -909,7 +909,7 @@ void PaintName(Painter &p, int x, int y, int w, int h, const std::string &name, 
 	const int nameW = std::max(20, w - LeagueBadgeRoom(badge));
 	p.raw = true;
 	p.Text(x, y, nameW, h, name, ink, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-	DrawBadgeAfterName(p, x, y, nameW, h, name, badge, mx, my);
+	DrawBadgeAfterName(p, x, y, nameW, h, name, badge, mx, my, id);
 	p.raw = false;
 }
 

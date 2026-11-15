@@ -13,11 +13,14 @@
 
 #include "core/league.h"
 #include "core/leagueranked.h"
+#include "core/leagueseasons.h"
 #include "game/civs.h"
 #include "i18n/tr.h"
 #include "net/leagueclient.h"
+#include "net/leagueclient_seasons.h"
 #include "net/patrons.h"
 #include "net/steamnet.h"
+#include "ui/leaguerewards.h"
 #include "ui/leagueui.h"
 #include "ui/patronui.h"
 
@@ -106,6 +109,11 @@ void Display(Painter &p, int size)
 	SelectObject(p.dc, BrandFont(BrandFace::Display, size, p.s));
 }
 
+void Body(Painter &p, int size, bool bold = false)
+{
+	SelectObject(p.dc, BrandFont(bold ? BrandFace::BodyBold : BrandFace::Body, size, p.s));
+}
+
 void Caps(Painter &p, int x, int y, int w, int h, const std::string &text, COLORREF c, UINT fmt = DT_LEFT | DT_VCENTER | DT_SINGLELINE, int spacing = 2)
 {
 	p.Font(4);
@@ -139,9 +147,10 @@ void Tile(Painter &p, int x, int y, int w, int h, const std::string &value, cons
 {
 	p.Fill(x, y, w, h, pal::raised);
 	p.Frame(x, y, w, h, pal::hairline);
-	Display(p, 34);
+	// A short tile, on a short screen, takes a smaller figure so the label keeps its line.
+	Display(p, h < 70 ? 28 : 34);
 	p.raw = true;
-	p.Text(x, y + 6, w, 42, value, ink, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	p.Text(x, y + 4, w, h - 30, value, ink, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 	p.raw = false;
 	// A long label ("% de victorias") closes its letters, then takes the smaller type, so it keeps a margin inside the tile.
 	const int room = w - 20;
@@ -150,6 +159,7 @@ void Tile(Painter &p, int x, int y, int w, int h, const std::string &value, cons
 	if (p.CapsWidth(label, spacing) > room) spacing = 1;
 	if (p.CapsWidth(label, spacing) > room) {
 		p.Font(3);
+		if (p.CapsWidth(label, 1) > room) SelectObject(p.dc, BrandFont(BrandFace::Ui, 11, p.s));
 		p.TextCaps(x + 10, y + h - 26, room, 18, label, pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
 		return;
 	}
@@ -239,9 +249,33 @@ void PaintName(Painter &p, int x, int y, int w, int h, const std::string &name, 
 	const int textW = std::min(nameW, p.TextWidth(name));
 	if (laurel) DrawPatron(p, x, y + (h - laurel) / 2, laurel, nameX, y, nameW, h, name, patron.tier, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	else p.Text(nameX, y, nameW, h, name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-	DrawBadgeAfterName(p, nameX, y, nameW, h, name, badge, mx, my);
+	DrawBadgeAfterName(p, nameX, y, nameW, h, name, badge, mx, my, id);
 	p.raw = false;
 	if (you) Chip(p, nameX + textW + LeagueBadgeRoom(badge) + 8, y + (h - 20) / 2, youW, 20, "You", pal::textDim, pal::hairline);
+}
+
+// "Season peak: Centurion I · 1012 Glory · 42 games", the rank in its colour; before there is a peak, the season and its games.
+void PaintPeakLine(Painter &p, const LeagueRanked &rk, int x, int y, int w)
+{
+	const int games = rk.wins + rk.losses;
+	const std::string count = games == 1 ? Tr("1 game") : TrFmt("%s games", {std::to_string(games)});
+	p.Font(3);
+	if (!rk.peak.present || rk.peak.tier == LeagueTier::None) {
+		RawText(p, x, y, w, 22, TrFmt("Season %s", {LeagueRoman(rk.season)}) + "  \xC2\xB7  " + count, pal::caption);
+		return;
+	}
+	const std::string lead = Tr("Season peak:") + " ", rank = RankName(rk.peak.tier, rk.peak.division);
+	const std::string best = rk.peak.place > 0 && !LeagueTierHasDivisions(rk.peak.tier) ? "#" + std::to_string(rk.peak.place) : TrFmt("%s Glory", {std::to_string(rk.peak.glory)});
+	p.raw = true;
+	const int leadW = std::min(w, p.TextWidth(lead)), rankW = std::min(w - leadW, p.TextWidth(rank));
+	// The games go first, then the Glory, where the line is short.
+	std::string rest = "  \xC2\xB7  " + best + "  \xC2\xB7  " + count;
+	if (leadW + rankW + p.TextWidth(rest) > w) rest = "  \xC2\xB7  " + best;
+	if (leadW + rankW + p.TextWidth(rest) > w) rest.clear();
+	p.raw = false;
+	RawText(p, x, y, leadW, 22, lead, pal::caption);
+	RawText(p, x + leadW, y, rankW, 22, rank, Ink(rk.peak.tier));
+	RawText(p, x + leadW + rankW, y, std::max(0, w - leadW - rankW), 22, rest, pal::caption);
 }
 
 struct HubLayout {
@@ -285,7 +319,7 @@ void PaintSeasonBand(Painter &p, const State &st, const HubLayout &h)
 	const LeagueSeason &s = v.season;
 	const int64_t now = EpochNow();
 	const bool started = s.startsAt <= now, over = s.endsAt <= now;
-	std::string state = TrFmt("Season %s", {std::to_string(s.number)}) + "  \xC2\xB7  " +
+	std::string state = TrFmt("Season %s", {LeagueRoman(s.number)}) + "  \xC2\xB7  " +
 		(over ? Tr("finished") : started ? Tr("in progress") : TrFmt("starts on %s", {DateText(s.startsAt)}));
 	p.raw = true;
 	Caps(p, x + 120, y + 14, 700, 18, state, pal::redText);
@@ -452,78 +486,94 @@ void PaintRankCard(Painter &p, const State &st, const HubLayout &h)
 	Chip(p, x + w - 24 - chipW, y + 14, chipW, 32, "1 vs 1", pal::text, pal::selected);
 	p.Frame(x + w - 24 - chipW, y + 14, chipW, 32, pal::edgeHot);
 	const bool placing = !rk.present || rk.placementLeft > 0;
-	DrawLeagueEmblem(p, cx - 80, y + 54, 160, tier);
-	Display(p, 60);
+	// Where the parts go: the mockup's places on a 1080 screen, closer together on a shorter one, so the button keeps its room.
+	const bool tight = cardH < 640;
+	const int emblem = tight ? 104 : 160, emblemY = y + (tight ? 50 : 54), nameY = emblemY + emblem + 2, nameH = tight ? 52 : 62;
+	const int lineY = nameY + nameH, barY = lineY + 40, labelsY = barY + 16, tileH = tight ? 60 : 72;
+	int tilesY = labelsY + (tight ? 32 : 40);
+	DrawLeagueEmblem(p, cx - emblem / 2, emblemY, emblem, tier);
+	Display(p, tight ? 50 : 60);
 	p.raw = true;
-	p.TextCaps(x, y + 216, w, 62, placing ? Tr("Placement") : RankName(tier, rk.division), Ink(placing ? LeagueTier::None : tier),
+	p.TextCaps(x, nameY, w, nameH, placing ? Tr("Placement") : RankName(tier, rk.division), Ink(placing ? LeagueTier::None : tier),
 		DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
 	p.raw = false;
 	p.Font(0);
 	if (!me.loaded) {
-		p.Text(x, y + 278, w, 24, me.loading ? "Reading your rank..." : "Your rank will show here.", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.Text(x, lineY, w, 24, me.loading ? "Reading your rank..." : "Your rank will show here.", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 	}
 	else if (placing) {
 		const int left = rk.present ? rk.placementLeft : 5, played = std::max(0, 5 - left);
-		RawText(p, x, y + 278, w, 24, left == 1 ? Tr("1 placement game left") : TrFmt("%s placement games left", {std::to_string(left)}), pal::body,
+		RawText(p, x, lineY, w, 24, left == 1 ? Tr("1 placement game left") : TrFmt("%s placement games left", {std::to_string(left)}), pal::body,
 			DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		// One box a game, green for a win and red for a loss, in the order they were played.
 		const int box = 56, gap = 12, bx = cx - (5 * box + 4 * gap) / 2;
 		for (int i = 0; i < 5; i++) {
-			p.Fill(bx + i * (box + gap), y + 318, box, 12, i < played ? pal::textDim : pal::bg);
-			p.Frame(bx + i * (box + gap), y + 318, box, 12, pal::hairline);
+			COLORREF fill = i < played ? pal::textDim : pal::bg;
+			if (i < static_cast<int>(rk.placement.size())) {
+				const LeaguePlacementMark mark = rk.placement[i];
+				fill = mark == LeaguePlacementMark::Win ? pal::ok : mark == LeaguePlacementMark::Loss ? pal::bad : pal::disabled;
+			}
+			p.Fill(bx + i * (box + gap), barY, box, 12, fill);
+			p.Frame(bx + i * (box + gap), barY, box, 12, pal::hairline);
 		}
 		p.Font(3);
-		p.TextWrapped(ix, y + 340, iw, 40, "Your first five games place you, at most in Centurion I.", pal::caption);
+		const char *about = "Your first five games place you, at most in Centurion I.";
+		const int aboutH = p.Measure(iw, about);
+		p.TextWrapped(ix, barY + 22, iw, aboutH + 2, about, pal::caption);
+		tilesY = std::max(tilesY, barY + 22 + aboutH + 10);
 	}
 	else {
 		const int total = st.ranked.view.top.total;
 		std::string line = TrFmt("%s Glory", {std::to_string(rk.glory)});
 		// The place only motivates in the top half; below it the bar says more.
 		if (LeaguePlaceShown(rk.position, total)) line += "  \xC2\xB7  " + TrFmt("place %s of %s", {std::to_string(rk.position), std::to_string(total)});
-		RawText(p, x, y + 278, w, 24, line, pal::body, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		RawText(p, x, lineY, w, 24, line, pal::body, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		const LeagueGloryPlace gp = LeagueGloryPlaceOf(rk.glory);
 		const bool elite = !LeagueTierHasDivisions(tier);
-		p.Fill(ix, y + 318, iw, 10, pal::bg);
+		p.Fill(ix, barY, iw, 10, pal::bg);
 		const float frac = gp.capped && !elite ? gp.into / 100.0f : 1.0f;
-		p.Fill(ix, y + 318, static_cast<int>(iw * frac), 10, Ink(tier));
+		p.Fill(ix, barY, static_cast<int>(iw * frac), 10, Ink(tier));
 		p.Font(0);
 		if (elite || !gp.capped) {
-			RawText(p, ix, y + 334, iw, 22, elite ? Tr("Elite rank: it goes by your place in the leaderboard.") : Tr("Top division: climb the leaderboard to the elite."),
+			RawText(p, ix, labelsY, iw, 22, elite ? Tr("Elite rank: it goes by your place in the leaderboard.") : Tr("Top division: climb the leaderboard to the elite."),
 				pal::caption);
 		}
 		else {
-			RawText(p, ix, y + 334, iw / 2, 22, std::to_string(gp.into) + " / 100 " + Tr("Glory"), pal::caption);
+			// The Glory into the division on the left, and the wins to the next one with the rest of the line.
+			const std::string into = std::to_string(gp.into) + " / 100 " + Tr("Glory");
+			p.raw = true;
+			const int intoW = std::min(iw / 2, p.TextWidth(into) + 4);
+			p.raw = false;
+			RawText(p, ix, labelsY, intoW, 22, into, pal::caption);
 			LeagueTier nt = LeagueTier::None;
 			int nd = 0;
 			LeagueNextDivision(gp.tier, gp.division, nt, nd);
 			if (nt != LeagueTier::None) {
 				const int wins = LeagueWinsToNext(rk.glory);
-				RawText(p, ix + iw / 2, y + 334, iw / 2, 22,
+				RawText(p, ix + intoW + 12, labelsY, iw - intoW - 12, 22,
 					wins == 1 ? TrFmt("~1 win to %s", {LeagueRankLabel(nt, nd)}) : TrFmt("~%s wins to %s", {std::to_string(wins), LeagueRankLabel(nt, nd)}), Ink(nt),
 					DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 			}
 		}
 	}
-	// Record, win rate and the place (in the top half of the leaderboard; the games played below it).
-	const int tw = (iw - 2 * 20) / 3, ty = y + 374;
-	Tile(p, ix, ty, tw, 72, std::to_string(rk.wins) + "\xE2\x80\x93" + std::to_string(rk.losses), "Record");
-	Tile(p, ix + tw + 20, ty, tw, 72, std::to_string(LeagueWinRate(rk.wins, rk.losses)) + " %", "Win rate");
-	if (LeaguePlaceShown(rk.position, st.ranked.view.top.total)) Tile(p, ix + 2 * (tw + 20), ty, tw, 72, "#" + std::to_string(rk.position), "Place");
-	else Tile(p, ix + 2 * (tw + 20), ty, tw, 72, std::to_string(rk.wins + rk.losses), "Games");
-	p.Font(0);
+	// Record, win rate and the streak (W3, L2).
+	const int tw = (iw - 2 * 20) / 3;
+	Tile(p, ix, tilesY, tw, tileH, std::to_string(rk.wins) + "\xE2\x80\x93" + std::to_string(rk.losses), "Record");
+	Tile(p, ix + tw + 20, tilesY, tw, tileH, std::to_string(LeagueWinRate(rk.wins, rk.losses)) + " %", "Win rate");
+	Tile(p, ix + 2 * (tw + 20), tilesY, tw, tileH, LeagueStreakText(rk.streak), "Streak", rk.streak > 0 ? pal::ok : rk.streak < 0 ? pal::bad : pal::text);
+	int peakY = tilesY + tileH + 16;
 	if (rk.shield > 0) {
-		p.Fill(ix, y + 458, iw, 30, RGB(0x22, 0x2c, 0x1e));
-		RawText(p, ix + 12, y + 458, iw - 24, 30, rk.shield == 1 ? Tr("Rank shield: 1 more game") : TrFmt("Rank shield: %s more games", {std::to_string(rk.shield)}),
+		p.Font(0);
+		p.Fill(ix, tilesY + tileH + 10, iw, 28, RGB(0x22, 0x2c, 0x1e));
+		RawText(p, ix + 12, tilesY + tileH + 10, iw - 24, 28, rk.shield == 1 ? Tr("Rank shield: 1 more game") : TrFmt("Rank shield: %s more games", {std::to_string(rk.shield)}),
 			pal::ok);
+		peakY += 28;
 	}
-	else {
-		p.Font(3);
-		RawText(p, ix, y + 462, iw, 22, (rk.wins + rk.losses == 1 ? TrFmt("Season %s  \xC2\xB7  1 game", {std::to_string(rk.season)})
-																		  : TrFmt("Season %s  \xC2\xB7  %s games", {std::to_string(rk.season), std::to_string(rk.wins + rk.losses)})), pal::caption);
-	}
+	PaintPeakLine(p, rk, ix, peakY, iw);
 	const int64_t ban = BanOf(v).until;
 	const bool canSearch = v.linked && v.seasonLoaded && v.season.active && ban <= now && v.phase == LeagueRankedPhase::Idle;
 	// Who is around, before searching: with nobody searching the player still knows a search will call them.
-	const int popY = std::max(y + 492, y + cardH - 138);
+	const int popY = std::max(peakY + 30, y + cardH - 138);
 	if (v.seasonLoaded && v.season.active && popY + 22 <= y + cardH - 112) PaintPopulation(p, v, ix, popY, iw);
 	p.fonts[5] = BrandFont(BrandFace::Display, 34, p.s);
 	p.Button(ix, y + cardH - 108, iw, 64, "Search for a match  1 vs 1", kRankedAct, kRkSearch, mx, my, canSearch, true, 5);
@@ -597,57 +647,118 @@ void PaintRecent(Painter &p, const State &st, const HubLayout &h, int y, int car
 	}
 }
 
-const int kRulesTop = 132, kRuleGap = 6;
+const int kRewardsMinH = 312;
 
-// The rules in four lines; the last one says what the season leaves, and the test season leaves the Founder's emblem.
-std::vector<const char *> RulesOf(const LeagueRankedView &v)
+// One of the three rewards of today, in a slot `w` wide: the picture on top, its name and what it is; dim while it is not won yet.
+void PaintRewardSlot(Painter &p, int x, int y, int w, const std::string &name, const std::string &what, bool won)
 {
-	return {"Each division is 100 Glory; reach the next hundred and you go up, with no promotion series.",
-		"After going up, a rank shield keeps you there for 3 games.", "Praetorian and Imperator go to the best 50 and 10 of the leaderboard.",
-		v.seasonLoaded && v.season.beta ? "This test season gives the Founder emblem to everyone who plays 10 games in it."
-										: "When the season closes you keep the emblem of the highest rank you reached (10 games)."};
-}
-
-// How tall the card of the ranks must be for its four rules, `w` wide.
-int RulesHeight(Painter &p, const LeagueRankedView &v, int w)
-{
+	if (!won) PaintTint(p, x, y, w, 64, pal::raised, 170);
+	// A narrow slot takes the smaller type before its name would be cut.
+	Body(p, 15, true);
+	p.raw = true;
+	if (p.TextWidth(name) > w - 8) Body(p, 13, true);
+	p.raw = false;
+	RawText(p, x + 4, y + 66, w - 8, 20, name, won ? pal::text : pal::disabled, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	p.Font(3);
-	int h = kRulesTop;
-	for (const char *rule : RulesOf(v)) h += p.Measure(w - 48 - 16, rule) + kRuleGap;
-	return h + 12;
+	RawText(p, x + 4, y + 86, w - 8, 18, what, won ? pal::caption : pal::disabled, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }
 
-// The ranks of the league, lit up to the player's, and the rules in four lines.
-void PaintRules(Painter &p, const State &st, const HubLayout &h, int y, int cardH)
+// What the season would leave if it closed today: the games, the ranks lit up to the one of the rewards, the vexillum, the frame and the
+// title, and the Glory to the next rank.
+void PaintSeasonRewards(Painter &p, const State &st, const HubLayout &h, int y, int cardH)
 {
+	const LeagueRankedView &v = st.ranked.view;
 	const LeagueMeView me = LeagueMeState();
-	const LeagueTier mine = me.loaded && me.me.ranked.present ? me.me.ranked.tier : LeagueTier::None;
+	const LeagueRanked &rk = me.me.ranked;
+	const LeagueRewardPreview today = LeagueRewardsToday(rk, v.seasonLoaded && v.season.beta);
+	const int season = v.seasonLoaded ? v.season.number : rk.season;
 	const int x = h.midX, w = h.midW, ix = x + 24, iw = w - 48;
 	PaintGlassCard(p, x, y, w, cardH);
-	Caps(p, ix, y + 16, iw, 22, "Ranks of the season", pal::redText);
-	const int n = kLeagueTierCount, step = iw / n, track = y + 94;
+	const std::string count = today.goal ? TrFmt("%s of %s games", {std::to_string(today.games), std::to_string(today.goal)})
+										 : TrFmt("%s games: everything won", {std::to_string(today.games)});
+	p.Font(3);
+	p.raw = true;
+	const int countW = std::min(iw / 2, p.TextWidth(count) + 4);
+	p.raw = false;
+	Caps(p, ix, y + 16, iw - countW - 12, 22, "Season rewards", pal::redText);
+	RawText(p, ix + iw - countW, y + 16, countW, 22, count, today.goal ? pal::caption : pal::ok, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+	const char *about = today.founder ? "This test season gives the Founder emblem to everyone who plays 10 games in it."
+									   : "At the close you keep the rewards of the highest rank you reach.";
+	// The line takes the smaller type before it would be cut.
+	p.Font(0);
+	if (p.TextWidth(about) > iw) p.Font(3);
+	p.Text(ix, y + 42, iw, 24, about, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+
+	// The ranks, lit up to the one of the rewards.
+	const LeagueTier mine = today.tier;
+	const int n = kLeagueTierCount, step = iw / n, track = y + 120;
 	p.Fill(ix + step / 2, track, step * (n - 1), 2, pal::lineStrong);
 	if (mine != LeagueTier::None) p.Fill(ix + step / 2, track, step * (static_cast<int>(mine) - 1), 2, Ink(mine));
 	for (int i = 0; i < n; i++) {
 		const LeagueTier t = static_cast<LeagueTier>(i + 1);
 		const int cx = ix + step * i + step / 2;
 		const bool lit = mine != LeagueTier::None && static_cast<int>(t) <= static_cast<int>(mine);
-		DrawLeagueEmblem(p, cx - 18, y + 46, 36, t, lit ? 255 : 110);
+		DrawLeagueEmblem(p, cx - 18, y + 74, 36, t, lit ? 255 : 110);
 		p.Fill(cx - 6, track - 5, 12, 12, t == mine ? pal::bg : lit ? Ink(t) : pal::hairline);
 		if (t == mine) p.Frame(cx - 6, track - 5, 12, 12, Ink(t));
-		Display(p, 16);
-		p.TextCaps(cx - step / 2, y + 104, step, 18, LeagueTierName(t), lit || t == mine ? Ink(t) : pal::disabled, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS,
+		Display(p, step >= 70 ? 16 : 14);
+		p.TextCaps(cx - step / 2, y + 130, step, 18, LeagueTierName(t), lit || t == mine ? Ink(t) : pal::disabled, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS,
 			0);
 	}
+
+	// What today's standing gives: from 10 games the vexillum, from 25 the frame and the title too.
+	const int boxY = y + 156, boxH = 122, slotW = (iw - 16) / 3;
+	p.Fill(ix, boxY, iw, boxH, pal::raised);
+	p.Frame(ix, boxY, iw, boxH, pal::hairline);
+	LeagueFrame frame;
+	frame.season = season;
+	frame.tier = today.tier;
+	frame.seasonName = v.seasonLoaded ? LeagueSeasonName(v.season, v.lang) : std::string();
+	// The test season's frame and title keep the rank: only its vexillum is the Founder's.
+	frame.founder = false;
+	const int sy = boxY + 8;
+	DrawLeagueBadge(p, ix + (slotW - 60) / 2, sy, 60, LeagueVexillumBadge(today.tier, today.founder, season));
+	const bool vexillum = today.vexillum && !today.placing;
+	PaintRewardSlot(p, ix, sy, slotW, today.founder ? Tr("The Founder's vexillum") : Tr("Vexillum"),
+		vexillum ? Tr("next to your name") : TrFmt("from %s games", {std::to_string(kLeagueVexillumGames)}), vexillum);
+	const int fx = ix + slotW + 8;
+	PaintFramedAvatar(p, fx + (slotW - 56) / 2, sy, 56, SteamOwnId(), st.player, frame);
+	const bool framed = today.frame && !today.placing;
+	PaintRewardSlot(p, fx, sy, slotW, Tr("Avatar frame"), framed ? Tr("around your avatar") : TrFmt("from %s games", {std::to_string(kLeagueFrameGames)}),
+		framed);
+	const int tx = fx + slotW + 8;
+	// The name over its title; a title too long for one line takes the name's place, on two lines.
 	p.Font(3);
-	int ry = y + kRulesTop;
-	for (const char *rule : RulesOf(st.ranked.view)) {
-		const int th = p.Measure(iw - 16, rule);
-		if (ry + th > y + cardH - 8) break;
-		p.Fill(ix, ry + 7, 4, 4, pal::redText);
-		p.TextWrapped(ix + 16, ry, iw - 16, th + 2, rule, pal::textDim);
-		ry += th + kRuleGap;
+	const std::string title = today.placing ? TrFmt("Title of Season %s", {LeagueRoman(season)}) : LeagueTitleLabel(frame);
+	p.raw = true;
+	const bool twoLines = p.TextWidth(title) > slotW - 12;
+	p.raw = false;
+	if (twoLines) RawText(p, tx + 6, sy + 12, slotW - 12, 40, title, LeagueFrameInk(frame), DT_CENTER | DT_TOP | DT_WORDBREAK | DT_END_ELLIPSIS);
+	else {
+		Body(p, 15);
+		RawText(p, tx + 6, sy + 6, slotW - 12, 24, st.player, pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Font(3);
+		RawText(p, tx + 6, sy + 32, slotW - 12, 20, title, LeagueFrameInk(frame), DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
+	PaintRewardSlot(p, tx, sy, slotW, Tr("Season title"), framed ? Tr("under your name") : TrFmt("from %s games", {std::to_string(kLeagueFrameGames)}), framed);
+	p.Fill(ix + slotW + 4, boxY + 12, 1, boxH - 24, pal::hairline);
+	p.Fill(tx - 4, boxY + 12, 1, boxH - 24, pal::hairline);
+
+	// How far the next rank is: the rewards go up with it.
+	std::string next;
+	COLORREF ink = pal::caption;
+	if (today.placing) next = Tr("Your rewards follow your rank: finish your placement first.");
+	else if (today.nextTier == LeagueTier::None) next = Tr("You are at the top: hold your place until the season closes.");
+	else if (!LeagueTierHasDivisions(today.nextTier)) {
+		next = Tr(today.nextTier == LeagueTier::Imperator ? "Imperator goes to the best 10 when the season closes."
+														   : "Praetorian goes to the best 50 when the season closes.");
+	}
+	else {
+		next = TrFmt("%s Glory to %s: your rewards go up with it.", {std::to_string(today.gloryToNext), Tr(LeagueTierName(today.nextTier))});
+		ink = pal::textDim;
+	}
+	p.Font(3);
+	RawText(p, ix, boxY + boxH + 6, iw, 22, next, ink);
 }
 
 void PaintMiniBoard(Painter &p, const State &st, const HubLayout &h)
@@ -693,7 +804,13 @@ void PaintMiniBoard(Painter &p, const State &st, const HubLayout &h)
 		p.TextWrapped(ix, y + 96, iw, 60, "Nobody has finished their placement games yet. Be the first on the leaderboard.", pal::caption);
 	}
 	bool listed = false;
-	for (size_t i = 0; i < v.top.rows.size() && i < 10; i++) {
+	// The first ten, fewer on a short screen: the player's own row and the button keep their room under them.
+	const LeagueBoardRow *mine = LeagueBoardFind(v.around, own);
+	const int room = cardH - 82 - 64;
+	int shown = std::min(10, room / rowH);
+	if (mine && mine->position > shown) shown = std::min(10, (room - 78) / rowH);
+	shown = std::max(3, shown);
+	for (size_t i = 0; i < v.top.rows.size() && i < static_cast<size_t>(shown); i++) {
 		const LeagueBoardRow &r = v.top.rows[i];
 		const bool you = r.steamId == own;
 		listed = listed || you;
@@ -705,8 +822,7 @@ void PaintMiniBoard(Painter &p, const State &st, const HubLayout &h)
 		row(r, ry, you);
 	}
 	// The player's own row stays pinned under the first ten.
-	const LeagueBoardRow *mine = LeagueBoardFind(v.around, own);
-	const int pinY = y + 82 + 10 * rowH + 28;
+	const int pinY = y + 82 + shown * rowH + 28;
 	if (mine && !listed) {
 		p.Font(0);
 		p.Text(ix, pinY - 28, iw, 26, "\xC2\xB7 \xC2\xB7 \xC2\xB7", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
@@ -723,16 +839,191 @@ void PaintHub(Painter &p, const State &st)
 	const HubLayout h = HubFor(st);
 	PaintSeasonBand(p, st, h);
 	PaintRankCard(p, st, h);
-	// The rules keep their four lines whole; the recent games take the rest, five at most.
+	// The rewards keep their room; the recent games take the rest, five at most.
 	const int recentMax = kRecentTop + kLeagueRecentGames * (kRecentRowH + 1) + 8;
-	const int rulesH = std::min(h.cardH - kGap - 120, std::max(h.cardH - kGap - recentMax, RulesHeight(p, st.ranked.view, h.midW)));
-	const int recentH = h.cardH - kGap - rulesH;
+	const int rewardsH = std::min(h.cardH - kGap - 120, std::max(h.cardH - kGap - recentMax, kRewardsMinH));
+	const int recentH = h.cardH - kGap - rewardsH;
 	PaintRecent(p, st, h, h.cardY, recentH);
-	PaintRules(p, st, h, h.cardY + recentH + kGap, rulesH);
+	PaintSeasonRewards(p, st, h, h.cardY + recentH + kGap, rewardsH);
 	PaintMiniBoard(p, st, h);
 }
 
-// The full leaderboard: a page of the table, the player's row pinned under it and the card of the one picked.
+// A button of the tool bar that picks one of two, lit while it is the one on.
+void Segment(Painter &p, int x, int y, int w, int h, const std::string &label, bool on, int arg, int mx, int my)
+{
+	const bool hot = !on && p.Hover(x, y, w, h, mx, my);
+	if (on) p.Fill(x, y, w, h, pal::selected);
+	p.Frame(x, y, w, h, on || hot ? pal::edgeHot : pal::edge);
+	Caps(p, x, y, w, h, label, on || hot ? pal::text : pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	if (!on) p.AddHit(x, y, w, h, kRankedAct, arg);
+}
+
+// Everyone of the season being played, with no name looked for: the view the player's own row is pinned to.
+bool DefaultBoard(const State &st)
+{
+	return st.ranked.boardSeason < 0 && !st.ranked.boardFriends && st.ranked.boardAsked.empty();
+}
+
+// "Season I · in progress", as the season's menu shows it, short.
+std::string BoardSeasonText(const State &st)
+{
+	const LeagueSeasonsView sv = LeagueSeasonsState();
+	const LeagueRankedView &v = st.ranked.view;
+	const int season = st.ranked.boardSeason >= 0 ? st.ranked.boardSeason : v.seasonLoaded ? v.season.number : -1;
+	if (season < 0) return Tr("Season being played");
+	const LeagueSeasonInfo *s = LeagueSeasonById(sv.seasons, season);
+	const bool closed = s ? s->closed : st.ranked.boardSeason >= 0;
+	return TrFmt("Season %s", {LeagueRoman(season)}) + "  \xC2\xB7  " + Tr(closed ? "closed" : "in progress");
+}
+
+// The card of the player picked in the table: their frame, title and rank, their figures, the civilizations they play most and their last
+// ten games, from their card on the league; their row says what it can while the card is read.
+void PaintPlayerCard(Painter &p, const State &st, int x, int y, int w, int h)
+{
+	const int mx = st.mouseX, my = st.mouseY;
+	const LeagueRankedView &v = st.ranked.view;
+	const std::string own = std::to_string(SteamOwnId());
+	PaintGlassCard(p, x, y, w, h);
+	const int ix = x + 24, iw = w - 48;
+	std::string pick = st.ranked.boardPick;
+	if (pick.empty() && DefaultBoard(st) && LeagueBoardFind(v.around, own)) pick = own;
+	if (pick.empty()) {
+		p.Font(0);
+		p.TextWrapped(ix, y + 24, iw, 80, "Pick a player of the table to see their card.", pal::caption);
+		return;
+	}
+	const int season = st.ranked.boardSeason;
+	LeaguePlayerRequest(pick, season);
+	const LeaguePlayerView pv = LeaguePlayerState(pick, season);
+	const bool ready = pv.state == LeagueCardState::Ready;
+	const LeaguePlayerProfile &c = pv.card;
+	const LeagueBoardRow *row = LeagueBoardFind(v.page, pick);
+	if (!row) row = LeagueBoardFind(v.around, pick);
+	const uint64_t id = _strtoui64(pick.c_str(), nullptr, 10);
+	const std::string name = ready && !c.name.empty() ? c.name : row && !row->name.empty() ? row->name : Tr("Player");
+	const LeagueTier tier = ready ? c.tier : row ? row->tier : LeagueTier::None;
+	const int division = ready ? c.division : row ? row->division : 0;
+	const int glory = ready ? c.glory : row ? row->glory : 0;
+	const int place = ready && c.place > 0 ? c.place : row ? row->position : 0;
+
+	// The card's parts at the mockup's places on a 1080 screen, closer together on a shorter one.
+	const bool tight = h < 700;
+	const int av = tight ? 72 : 88, emblem = tight ? 88 : 120, rule = tight ? 104 : 128, tileH = tight ? 62 : 74;
+	PaintFramedAvatar(p, ix, y + (tight ? 18 : 24), av, id, name, ready ? c.frame : LeagueFrame());
+	const int tx = ix + av + 20, tw = iw - av - 20;
+	const LeagueBadge badge = PlayerBadgeOf(id);
+	Body(p, tight ? 22 : 24);
+	const int nameW = tw - LeagueBadgeRoom(badge), nameY = y + (tight ? 14 : 20);
+	RawText(p, tx, nameY, nameW, 34, name, pal::text);
+	p.raw = true;
+	DrawBadgeAfterName(p, tx, nameY, nameW, 34, name, badge, mx, my);
+	p.raw = false;
+	const std::string title = ready ? LeagueTitleLabel(c.title) : std::string();
+	if (!title.empty()) {
+		p.Font(4);
+		p.raw = true;
+		p.TextCaps(tx, y + (tight ? 46 : 56), tw, 20, title, LeagueFrameInk(c.title), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 2);
+		p.raw = false;
+	}
+	p.Font(0);
+	const bool you = pick == own;
+	std::string facts = place > 0 ? TrFmt("Place %s  \xC2\xB7  1 vs 1", {std::to_string(place)}) : Tr("1 vs 1");
+	p.raw = true;
+	if (p.TextWidth(facts + "  \xC2\xB7  " + BoardSeasonText(st)) <= tw - (you ? 52 : 0)) facts += "  \xC2\xB7  " + BoardSeasonText(st);
+	p.raw = false;
+	const int factsY = y + (tight ? 66 : 80);
+	RawText(p, tx, factsY, tw - (you ? 52 : 0), 24, facts, pal::caption);
+	if (you) Chip(p, tx + tw - 44, factsY + 2, 44, 20, "You", pal::textDim, pal::hairline);
+	p.Fill(ix, y + rule, iw, 1, pal::hairline);
+
+	const int ey = y + rule + 12, rx = ix + emblem + 12, rw = iw - emblem - 12;
+	DrawLeagueEmblem(p, ix - 4, ey, emblem, tier);
+	Display(p, tight ? 42 : 50);
+	p.raw = true;
+	p.TextCaps(rx, ey + (tight ? 2 : 10), rw, tight ? 46 : 54, RankName(tier, division), Ink(tier), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
+	p.raw = false;
+	p.Font(0);
+	const int gloryY = ey + (tight ? 50 : 66);
+	RawText(p, rx, gloryY, rw, 24, (place > 0 ? "#" + std::to_string(place) + "  \xC2\xB7  " : std::string()) + TrFmt("%s Glory", {std::to_string(glory)}), pal::body);
+	if (ready && c.peak.present && (c.peak.tier != LeagueTier::None || c.peak.place > 0)) {
+		const bool byPlace = c.peak.place > 0 && (c.peak.tier == LeagueTier::None || !LeagueTierHasDivisions(c.peak.tier));
+		const std::string peak = byPlace ? TrFmt("Season peak: #%s", {std::to_string(c.peak.place)})
+										 : Tr("Season peak:") + " " + RankName(c.peak.tier, c.peak.division) + "  \xC2\xB7  " + TrFmt("%s Glory", {std::to_string(c.peak.glory)});
+		p.Font(3);
+		RawText(p, rx, gloryY + 26, rw, 22, peak, pal::caption);
+	}
+	const int bottom = y + h - (tight ? 76 : 92), buttonH = tight ? 48 : 52;
+	p.Fill(ix, bottom, iw, 1, pal::hairline);
+	PaintSteamButton(p, ix, bottom + (tight ? 12 : 16), iw, buttonH, "Steam profile", kRankedAct, kRkSteam, mx, my, id != 0, false);
+	const int ty = ey + emblem + (tight ? 18 : 16);
+	if (!ready) {
+		p.Font(0);
+		if (pv.state == LeagueCardState::Loading || pv.state == LeagueCardState::None) {
+			p.Spinner(ix + 11, ty + 24, 9, 4, GetTickCount());
+			p.Text(ix + 32, ty + 12, iw - 32, 24, "Reading the player's card...", pal::caption);
+		}
+		else {
+			p.raw = true;
+			p.TextWrapped(ix, ty + 12, iw, 60,
+				pv.state == LeagueCardState::Missing ? TrFmt("%s has no ranked games in this season.", {name})
+													 : Tr("Couldn't reach the league server. Check your connection and try again."),
+				pal::caption);
+			p.raw = false;
+		}
+		return;
+	}
+
+	// Games, win rate, streak and how long a game lasts.
+	const int tileGap = tight ? 8 : 14, tileW = (iw - 3 * tileGap) / 4;
+	Tile(p, ix, ty, tileW, tileH, std::to_string(c.games), "Games");
+	Tile(p, ix + tileW + tileGap, ty, tileW, tileH, std::to_string(LeagueWinRate(c.wins, c.losses)) + " %", "Win rate");
+	Tile(p, ix + 2 * (tileW + tileGap), ty, tileW, tileH, LeagueStreakText(c.streak), "Streak", c.streak > 0 ? pal::ok : c.streak < 0 ? pal::bad : pal::text);
+	Tile(p, ix + 3 * (tileW + tileGap), ty, tileW, tileH, c.avgDurationMs >= 60000 ? TrFmt("%s min", {std::to_string(c.avgDurationMs / 60000)}) : std::string("\xE2\x80\x94"),
+		"Average");
+
+	// The three civilizations played most, as a share of the games.
+	const int civY = ty + tileH + (tight ? 12 : 18), civStep = tight ? 28 : 32;
+	Caps(p, ix, civY, iw, 20, "Civilizations", pal::caption);
+	if (c.civs.empty()) {
+		p.Font(3);
+		p.Text(ix, civY + 26, iw, 24, "No games in this season yet.", pal::caption);
+	}
+	for (size_t i = 0; i < c.civs.size(); i++) {
+		const LeagueCivShare &civ = c.civs[i];
+		const int ry = civY + 24 + static_cast<int>(i) * civStep, share = c.games > 0 ? civ.games * 100 / c.games : 0;
+		p.Font(0);
+		RawText(p, ix, ry, 130, civStep - 4, CivText(civ.civ), pal::body);
+		const int barX = ix + 140, barW = iw - 140 - 60;
+		p.Fill(barX, ry + (civStep - 4) / 2 - 4, barW, 8, pal::bg);
+		p.Fill(barX, ry + (civStep - 4) / 2 - 4, barW * std::min(100, share) / 100, 8, pal::textDim);
+		RawText(p, ix + iw - 52, ry, 52, civStep - 4, std::to_string(share) + " %", pal::text, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+	}
+
+	// The last ten games, the newest first: a win, a loss, or a dash for one that did not count.
+	const int lastY = civY + 24 + 3 * civStep + (tight ? 6 : 10), chipH = tight ? 26 : 28;
+	Caps(p, ix, lastY, iw, 20, "Last 10 games", pal::caption);
+	const int chipGap = 6, chipW = (iw - 9 * chipGap) / 10;
+	for (int i = 0; i < 10; i++) {
+		const int cx = ix + i * (chipW + chipGap), cy = lastY + 26;
+		if (i >= static_cast<int>(c.recent.size())) {
+			p.Frame(cx, cy, chipW, chipH, pal::hairline);
+			continue;
+		}
+		const LeagueGameResult r = c.recent[i].result;
+		const bool won = r == LeagueGameResult::Win, lost = r == LeagueGameResult::Loss;
+		p.Fill(cx, cy, chipW, chipH, won ? kWinBack : lost ? kLossBack : pal::hairline);
+		p.Font(4);
+		if (won || lost) p.TextCaps(cx, cy, chipW, chipH, won ? "W" : "L", won ? pal::ok : pal::bad, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
+		else RawText(p, cx, cy, chipW, chipH, "\xE2\x80\x93", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	}
+	if (c.recent.empty()) {
+		p.Font(3);
+		p.Text(ix, lastY + 26 + chipH + 6, iw, 22, "No games in this season yet.", pal::caption);
+	}
+}
+
+// The full leaderboard: the season, everyone or the Steam friends and a name to look for; a page of the table, the player's row pinned
+// under it, and the card of the player picked.
 void PaintBoard(Painter &p, const State &st)
 {
 	const int mx = st.mouseX, my = st.mouseY;
@@ -741,8 +1032,11 @@ void PaintBoard(Painter &p, const State &st)
 	const int m = l.margin, top = l.top, inner = l.w - 2 * m;
 	const int detailW = std::min(537, std::max(400, inner * 537 / 1792)), tableW = inner - detailW - 32;
 	const LeagueBoard &b = v.page;
-	const int pages = std::max(1, (b.total + kRankedBoardRows - 1) / kRankedBoardRows), page = b.offset / kRankedBoardRows + 1;
+	const int rows = RankedBoardRowsFor(st.viewW, st.viewH);
+	const int pages = std::max(1, (b.total + rows - 1) / rows), page = b.offset / rows + 1;
+	const bool defaultView = DefaultBoard(st);
 
+	// The tool bar: back to the summary, the queue, the season, everyone or the friends, the own place and the pages.
 	int tx = m;
 	{
 		const int w = 150;
@@ -753,31 +1047,82 @@ void PaintBoard(Painter &p, const State &st)
 		p.AddHit(tx, top, w, 44, kRankedAct, kRkHub);
 		tx += w + 16;
 	}
-	Chip(p, tx, top, 110, 44, "1 vs 1", pal::text, pal::selected);
-	p.Frame(tx, top, 110, 44, pal::edgeHot);
-	tx += 126;
-	Ghost(p, tx, top, 130, 44, "Top", kRkBoardTop, v.pageLoaded && b.offset > 0, mx, my);
-	tx += 146;
-	Ghost(p, tx, top, 170, 44, "My place", kRkBoardMe, v.around.me > 0, mx, my);
-	tx += 186;
-	Ghost(p, tx, top, 52, 44, "\xE2\x80\xB9", kRkBoardPrev, v.pageLoaded && b.offset > 0, mx, my);
-	Ghost(p, tx + 60, top, 52, 44, "\xE2\x80\xBA", kRkBoardNext, v.pageLoaded && page < pages, mx, my);
-	p.Font(0);
-	if (v.pageLoaded) {
-		RawText(p, tx + 128, top, m + tableW - tx - 128, 44, TrFmt("Page %s of %s", {std::to_string(page), std::to_string(pages)}) + "  \xC2\xB7  " +
-			(b.total == 1 ? Tr("1 player") : TrFmt("%s players", {std::to_string(b.total)})), pal::caption);
+	const int queueW = ChipWidth(p, "1 vs 1", 100);
+	Chip(p, tx, top, queueW, 44, "1 vs 1", pal::text, pal::selected);
+	p.Frame(tx, top, queueW, 44, pal::edgeHot);
+	tx += queueW + 16;
+	const int seasonW = std::max(220, std::min(300, tableW * 22 / 100));
+	UseSharedFonts(p);
+	p.raw = true;
+	Combo(p, st, tx, top, seasonW, 44, BoardSeasonText(st), kDropRankedSeason, 0, true);
+	p.raw = false;
+	UseScreenFonts(p);
+	tx += seasonW + 16;
+	const int segW = std::max(ChipWidth(p, "All", 96), ChipWidth(p, "Friends", 96));
+	Segment(p, tx, top, segW, 44, "All", !st.ranked.boardFriends, kRkBoardAll, mx, my);
+	Segment(p, tx + segW - 1, top, segW, 44, "Friends", st.ranked.boardFriends, kRkBoardFriends, mx, my);
+	tx += 2 * segW + 16;
+	const int right = m + tableW, meW = ChipWidth(p, "My place", 130), pagerW = 2 * 48 + 8;
+	if (tx + meW + 12 + pagerW <= right) {
+		Ghost(p, tx, top, meW, 44, "My place", kRkBoardMe, v.around.me > 0, mx, my);
+		tx += meW + 12;
+	}
+	if (tx + pagerW <= right) {
+		Ghost(p, tx, top, 48, 44, "\xE2\x80\xB9", kRkBoardPrev, v.pageLoaded && b.offset > 0, mx, my);
+		Ghost(p, tx + 56, top, 48, 44, "\xE2\x80\xBA", kRkBoardNext, v.pageLoaded && page < pages, mx, my);
+		tx += pagerW + 12;
+	}
+	if (v.pageLoaded && right - tx >= 90) {
+		p.Font(3);
+		RawText(p, tx, top, right - tx, 44, TrFmt("Page %s of %s", {std::to_string(page), std::to_string(pages)}), pal::caption);
+	}
+	// The name to look for, over the player's card.
+	const int dx = m + tableW + 32;
+	{
+		const bool focused = st.focus == kRankedField && !st.ranked.disputeMatch;
+		UseSharedFonts(p);
+		PaintField(p, st, dx, top, detailW, 44, st.ranked.boardSearch, Tr("Search a player by name..."), focused, kFieldRanked);
+		UseScreenFonts(p);
+		if (!st.ranked.boardSearch.empty()) {
+			const int cx = dx + detailW - 36;
+			const bool hot = p.Hover(cx, top, 36, 44, mx, my);
+			p.Line(cx + 12, top + 16, cx + 24, top + 28, hot ? pal::text : pal::textDim, 2);
+			p.Line(cx + 12, top + 28, cx + 24, top + 16, hot ? pal::text : pal::textDim, 2);
+			p.AddHit(cx, top, 36, 44, kRankedAct, kRkBoardClear);
+		}
 	}
 
 	const int y0 = top + 72, h = l.h - m - y0;
 	PaintGlassCard(p, m, y0, tableW, h);
+	// #, the Glory of the last 7 days, the player, the rank, the Glory, the games, the record, the share won and the streak; on a narrow
+	// table the games and the share give their room to the name first.
 	struct Col {
 		const char *label;
-		int x, w;
+		int x = 0, w = 0;
+		bool shown = true;
 	};
-	const int nameW = std::max(160, tableW - 720);
-	const Col cols[] = {{"#", 20, 56}, {"Player", 80, nameW}, {"Rank", 80 + nameW + 12, 208}, {"Glory", 80 + nameW + 232, 96},
-		{"Games", 80 + nameW + 336, 96}, {"W\xE2\x80\x93L", 80 + nameW + 440, 104}, {"%", 80 + nameW + 552, 64}};
-	for (size_t i = 0; i < sizeof(cols) / sizeof(cols[0]); i++) Caps(p, m + cols[i].x, y0, cols[i].w, 44, cols[i].label, i == 3 ? pal::redText : pal::caption);
+	Col cols[] = {{"#", 0, 48}, {"\xC2\xB1" "7 days", 0, 72}, {"Player", 0, 0}, {"Rank", 0, 196}, {"Glory", 0, 84}, {"Games", 0, 92}, {"W\xE2\x80\x93L", 0, 96},
+		{"%", 0, 60}, {"Streak", 0, 76}};
+	constexpr int kCols = sizeof(cols) / sizeof(cols[0]), kName = 2, kGames = 5, kRate = 7, colGap = 12;
+	auto layout = [&]() {
+		int fixed = 40;
+		for (int i = 0; i < kCols; i++) {
+			if (i != kName && cols[i].shown) fixed += cols[i].w + colGap;
+		}
+		return tableW - fixed;
+	};
+	if (layout() < 240) cols[kGames].shown = false;
+	if (layout() < 240) cols[kRate].shown = false;
+	cols[kName].w = std::max(140, layout());
+	int cx = 20;
+	for (Col &c : cols) {
+		if (!c.shown) continue;
+		c.x = cx;
+		cx += c.w + colGap;
+	}
+	for (int i = 0; i < kCols; i++) {
+		if (cols[i].shown) Caps(p, m + cols[i].x, y0, cols[i].w, 44, cols[i].label, i == 4 ? pal::redText : pal::caption);
+	}
 	p.Fill(m + 1, y0 + 43, tableW - 2, 1, pal::lineStrong);
 	const std::string own = std::to_string(SteamOwnId());
 	const int rowH = 46;
@@ -786,24 +1131,31 @@ void PaintBoard(Painter &p, const State &st)
 		if (you) p.Fill(m + 1, ry, 3, rh, pal::red);
 		const bool hot = index >= 0 && p.Hover(m, ry, tableW, rh, mx, my);
 		if (hot && !selected && !you) p.Fill(m + 1, ry, tableW - 2, rh, pal::raised);
+		if (index >= 0) p.AddHit(m, ry, tableW, rh, kRankedAct, kRkRow + index);
 		p.Font(r.position <= 10 || you ? 1 : 0);
 		RawText(p, m + cols[0].x, ry, cols[0].w, rh, std::to_string(r.position), r.position <= 10 || you ? pal::text : pal::caption);
+		p.Font(4);
+		if (r.hasDelta7) {
+			RawText(p, m + cols[1].x, ry, cols[1].w, rh, SignedText(r.delta7), r.delta7 > 0 ? pal::ok : r.delta7 < 0 ? pal::bad : pal::caption);
+		}
+		else RawText(p, m + cols[1].x, ry, cols[1].w, rh, "\xE2\x80\x93", pal::disabled);
 		const uint64_t id = _strtoui64(r.steamId.c_str(), nullptr, 10);
 		const int av = 32;
-		if (!PaintAvatar(p, m + cols[1].x, ry + (rh - av) / 2, av, id)) p.Fill(m + cols[1].x, ry + (rh - av) / 2, av, av, pal::hairline);
-		PaintName(p, m + cols[1].x + av + 12, ry, cols[1].w - av - 12, rh, r.name.empty() ? Tr("Player") : r.name, id, LeagueBadge(), you, mx, my);
-		DrawLeagueBadge(p, m + cols[2].x, ry + (rh - kLeagueBadgeSize) / 2, kLeagueBadgeSize, RankBadge(r.tier, r.division));
+		if (!PaintAvatar(p, m + cols[kName].x, ry + (rh - av) / 2, av, id)) p.Fill(m + cols[kName].x, ry + (rh - av) / 2, av, av, pal::hairline);
+		PaintName(p, m + cols[kName].x + av + 12, ry, cols[kName].w - av - 12, rh, r.name.empty() ? Tr("Player") : r.name, id, LeagueBadge(), you, mx, my);
+		DrawLeagueBadge(p, m + cols[3].x, ry + (rh - kLeagueBadgeSize) / 2, kLeagueBadgeSize, RankBadge(r.tier, r.division));
 		Display(p, 22);
 		p.raw = true;
-		p.TextCaps(m + cols[2].x + 28, ry, cols[2].w - 28, rh, RankName(r.tier, r.division), Ink(r.tier), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
+		p.TextCaps(m + cols[3].x + 28, ry, cols[3].w - 28, rh, RankName(r.tier, r.division), Ink(r.tier), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
 		p.raw = false;
 		p.Font(1);
-		RawText(p, m + cols[3].x, ry, cols[3].w, rh, std::to_string(r.glory), pal::text);
+		RawText(p, m + cols[4].x, ry, cols[4].w, rh, std::to_string(r.glory), pal::text);
 		p.Font(0);
-		RawText(p, m + cols[4].x, ry, cols[4].w, rh, std::to_string(r.wins + r.losses), pal::body);
-		RawText(p, m + cols[5].x, ry, cols[5].w, rh, std::to_string(r.wins) + "\xE2\x80\x93" + std::to_string(r.losses), pal::body);
-		RawText(p, m + cols[6].x, ry, cols[6].w, rh, std::to_string(LeagueWinRate(r.wins, r.losses)) + " %", pal::body);
-		if (index >= 0) p.AddHit(m, ry, tableW, rh, kRankedAct, kRkRow + index);
+		if (cols[kGames].shown) RawText(p, m + cols[kGames].x, ry, cols[kGames].w, rh, std::to_string(r.wins + r.losses), pal::body);
+		RawText(p, m + cols[6].x, ry, cols[6].w, rh, std::to_string(r.wins) + "\xE2\x80\x93" + std::to_string(r.losses), pal::body);
+		if (cols[kRate].shown) RawText(p, m + cols[kRate].x, ry, cols[kRate].w, rh, std::to_string(LeagueWinRate(r.wins, r.losses)) + " %", pal::body);
+		p.Font(4);
+		RawText(p, m + cols[8].x, ry, cols[8].w, rh, LeagueStreakText(r.streak), r.streak > 0 ? pal::ok : r.streak < 0 ? pal::bad : pal::caption);
 	};
 	std::vector<uint64_t> ids;
 	for (const LeagueBoardRow &r : b.rows) ids.push_back(_strtoui64(r.steamId.c_str(), nullptr, 10));
@@ -816,66 +1168,43 @@ void PaintBoard(Painter &p, const State &st)
 		p.Text(m + 56, ry + 18, tableW - 80, 28, v.pageError.empty() ? Tr("Reading the leaderboard...") : v.pageError, v.pageError.empty() ? pal::caption : pal::bad);
 	}
 	else if (b.rows.empty()) {
+		const LeagueBoardQuery &q = v.pageQuery;
+		const std::string text = !q.name.empty() ? TrFmt("Nobody called \"%s\" is on this leaderboard.", {q.name})
+			: q.friends								 ? Tr("None of your Steam friends is ranked in this season yet.")
+			: q.season >= 0							 ? Tr("Nobody was ranked in this season.")
+													 : Tr("Nobody has finished their placement games yet. Be the first on the leaderboard.");
 		p.Font(0);
-		p.TextWrapped(m + 24, ry + 18, tableW - 48, 60, "Nobody has finished their placement games yet. Be the first on the leaderboard.", pal::caption);
+		p.raw = true;
+		p.TextWrapped(m + 24, ry + 18, tableW - 48, 60, text, pal::caption);
+		p.raw = false;
 	}
-	for (size_t i = 0; i < b.rows.size() && i < static_cast<size_t>(kRankedBoardRows); i++) {
+	if (v.pageLoading && v.pageLoaded) p.Spinner(m + tableW - 24, y0 + 22, 7, 3, GetTickCount());
+	for (size_t i = 0; i < b.rows.size() && i < static_cast<size_t>(rows); i++) {
 		const LeagueBoardRow &r = b.rows[i];
 		const bool you = r.steamId == own;
 		listed = listed || you;
-		paintRow(r, ry, rowH, you, st.ranked.boardSel == static_cast<int>(i), static_cast<int>(i));
+		paintRow(r, ry, rowH, you, !st.ranked.boardPick.empty() && st.ranked.boardPick == r.steamId, static_cast<int>(i));
 		ry += rowH;
-		// The line under the last Imperator, before the first one who is not: what the best ones play for.
+		// The line under the last Imperator, before the first one who is not, with the Glory it takes: what the best ones play for.
 		if (LeagueImperatorLineAfter(r, i + 1 < b.rows.size() ? &b.rows[i + 1] : nullptr)) {
 			p.Fill(m + 1, ry, tableW - 2, 28, RGB(0x26, 0x12, 0x13));
 			p.Fill(m + 24, ry + 14, 120, 1, RGB(0x5a, 0x2a, 0x2c));
 			p.Fill(m + tableW - 144, ry + 14, 120, 1, RGB(0x5a, 0x2a, 0x2c));
-			Caps(p, m + 150, ry, tableW - 300, 28, "Imperator line  \xC2\xB7  the best ten", pal::redText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			p.raw = true;
+			Caps(p, m + 150, ry, tableW - 300, 28, TrFmt("Imperator line  \xC2\xB7  %s Glory  \xC2\xB7  the best ten", {std::to_string(r.glory)}), pal::redText,
+				DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			p.raw = false;
 			ry += 28;
 		}
 	}
 	const LeagueBoardRow *mine = LeagueBoardFind(v.around, own);
-	if (mine && !listed && v.pageLoaded) {
+	if (mine && !listed && v.pageLoaded && defaultView) {
 		const int py = y0 + h - 52;
 		p.Fill(m + 1, py - 2, tableW - 2, 2, pal::lineStrong);
-		paintRow(*mine, py, 51, true, false, -1);
+		paintRow(*mine, py, 51, true, st.ranked.boardPick == own, -1);
+		p.AddHit(m, py, tableW, 51, kRankedAct, kRkBoardMe);
 	}
-
-	// The card of the player picked, the player's own when nobody is.
-	const int dx = m + tableW + 32;
-	PaintGlassCard(p, dx, y0, detailW, h);
-	const LeagueBoardRow *pick = st.ranked.boardSel >= 0 && st.ranked.boardSel < static_cast<int>(b.rows.size()) ? &b.rows[st.ranked.boardSel] : mine;
-	const int ix = dx + 24, iw = detailW - 48;
-	if (!pick) {
-		p.Font(0);
-		p.TextWrapped(ix, y0 + 24, iw, 80, "Pick a player of the table to see their rank.", pal::caption);
-		return;
-	}
-	const uint64_t id = _strtoui64(pick->steamId.c_str(), nullptr, 10);
-	if (!PaintAvatar(p, ix, y0 + 24, 88, id)) p.Fill(ix, y0 + 24, 88, 88, pal::hairline);
-	p.Frame(ix, y0 + 24, 88, 88, pal::edge);
-	SelectObject(p.dc, BrandFont(BrandFace::Body, 24, p.s));
-	RawText(p, ix + 104, y0 + 26, iw - 104, 32, pick->name.empty() ? Tr("Player") : pick->name, pal::text);
-	p.Font(0);
-	RawText(p, ix + 104, y0 + 62, iw - 104, 24, TrFmt("Place %s  \xC2\xB7  1 vs 1", {std::to_string(pick->position)}), pal::caption);
-	if (pick->steamId == own) Chip(p, ix + 104, y0 + 90, 40, 20, "You", pal::textDim, pal::hairline);
-	p.Fill(ix, y0 + 132, iw, 1, pal::hairline);
-	DrawLeagueEmblem(p, ix - 4, y0 + 146, 132, pick->tier);
-	Display(p, 54);
-	p.raw = true;
-	p.TextCaps(ix + 142, y0 + 162, iw - 142, 54, RankName(pick->tier, pick->division), Ink(pick->tier), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
-	p.raw = false;
-	p.Font(0);
-	RawText(p, ix + 142, y0 + 218, iw - 142, 24, "#" + std::to_string(pick->position) + "  \xC2\xB7  " + TrFmt("%s Glory", {std::to_string(pick->glory)}), pal::body);
-	const int tw = (iw - 3 * 14) / 4, ty = y0 + 300;
-	Tile(p, ix, ty, tw, 74, std::to_string(pick->wins + pick->losses), "Games");
-	Tile(p, ix + tw + 14, ty, tw, 74, std::to_string(LeagueWinRate(pick->wins, pick->losses)) + " %", "Win rate");
-	Tile(p, ix + 2 * (tw + 14), ty, tw, 74, std::to_string(pick->wins), "Victories", pal::ok);
-	Tile(p, ix + 3 * (tw + 14), ty, tw, 74, std::to_string(pick->losses), "Defeats");
-	if (id && id != SteamOwnId()) {
-		p.Font(1);
-		p.Button(ix, y0 + h - 76, iw, 52, "Steam profile", kRankedAct, kRkSteam, mx, my, st.ranked.boardSel >= 0, false);
-	}
+	PaintPlayerCard(p, st, dx, y0, detailW, h);
 }
 
 // The player's ranked games, ten a page, newest first: what each gave, against whom, where and with which civilizations, and
@@ -1003,6 +1332,7 @@ bool PaintRankedTab(Painter &p, const State &st)
 	if (dialog) p.noHover = true;
 	if (st.ranked.resultOpen) PaintRankedResult(p, st);
 	else if (!st.ranked.view.linked) return false;
+	else if (st.ranked.ceremonyOpen) PaintCeremony(p, st);
 	else {
 		LeagueSeasonRefresh();
 		LeagueBoardRefresh();
