@@ -2249,6 +2249,7 @@
 {"en":"Ranked match ready  ·  go to the room","es":"Partida clasificatoria lista  ·  ve a la sala","it":"Partita classificata pronta  ·  vai alla stanza"},
 {"en":"Match found","es":"Partida encontrada","it":"Partita trovata"},
 {"en":"Ranked 1 vs 1","es":"Clasificatoria 1 contra 1","it":"Classificata 1 contro 1"},
+{"en":"Searching ranked 1 vs 1","es":"Buscando clasificatoria 1 contra 1","it":"Ricerca classificata 1 contro 1"},
 {"en":"Placement games","es":"Partidas de colocación","it":"Partite di piazzamento"},
 {"en":"In placement","es":"En colocación","it":"In piazzamento"},
 {"en":"Accepted","es":"Ha aceptado","it":"Ha accettato"},

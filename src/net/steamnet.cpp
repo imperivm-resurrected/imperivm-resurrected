@@ -297,6 +297,11 @@ void SteamTick()
 		beatLobby = g_lobby;
 		S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, "alive", std::to_string(static_cast<long long>(time(nullptr))).c_str());
 	}
+	static DWORD lastPresence = 0;
+	if (now - lastPresence > 2000) {
+		lastPresence = now;
+		RefreshRankedPresence();
+	}
 	static DWORD lastStats = 0;
 	if (now - lastStats > 60000) {
 		lastStats = now;

@@ -10,6 +10,7 @@
 #include "hooks/dmshim.h"
 #include "game/gameroom.h"
 #include "net/vnet.h"
+#include "net/leaguepresence.h"
 #include "net/patrons.h"
 #include "i18n/tr.h"
 #include "addr/state.h"
@@ -30,16 +31,31 @@ bool InLobby(uint64 lobby, uint64 who)
 	return false;
 }
 
+namespace {
+// What the league says friends should see, as last read on this thread: a ranked search or game; empty for anything else.
+std::string g_rankedPresence;
+}
+
 void SetPresence()
 {
 	if (g_lobby) {
 		const std::string connect = "+connect_lobby " + std::to_string(g_lobby);
 		S.SteamAPI_ISteamFriends_SetRichPresence(g_steam.friends, "connect", connect.c_str());
-		S.SteamAPI_ISteamFriends_SetRichPresence(g_steam.friends, "status", TrFmt("In room %s", {Data(g_lobby, "name")}).c_str());
+		const std::string status = g_rankedPresence.empty() ? TrFmt("In room %s", {Data(g_lobby, "name")}) : g_rankedPresence;
+		S.SteamAPI_ISteamFriends_SetRichPresence(g_steam.friends, "status", status.c_str());
 	}
 	else {
 		S.SteamAPI_ISteamFriends_ClearRichPresence(g_steam.friends);
+		if (!g_rankedPresence.empty()) S.SteamAPI_ISteamFriends_SetRichPresence(g_steam.friends, "status", g_rankedPresence.c_str());
 	}
+}
+
+void RefreshRankedPresence()
+{
+	const std::string text = LeagueRankedPresence();
+	if (text == g_rankedPresence) return;
+	g_rankedPresence = text;
+	SetPresence();
 }
 
 void AssignNumbers()
