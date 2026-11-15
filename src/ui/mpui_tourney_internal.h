@@ -171,6 +171,22 @@ bool PaintMatchHeader(Painter &p, const State &st, const Ui &u);
 bool PaintChampionHeader(Painter &p, const State &st, const Ui &u);
 bool PaintCreateHeader(Painter &p, const State &st, const Ui &u);
 
+// The double elimination and Swiss cups (mpui_tourney_formats.cpp).
+// A match's stage with its part of the tournament: "Quarterfinal", "Winners' final", "Losers' round 3", "Grand final", a Swiss "Round 2".
+std::string MatchStageText(const TourneyDetail &d, const TourneyMatch &m);
+// "1 point", "3 points".
+std::string PointsText(int points);
+// Where a player finished: their placement, or in a Swiss tournament that is over their place in the standings; 0 while it is not known.
+int EntrantPlace(const TourneyDetail &d, const TourneyEntrant &e);
+// A place of a double elimination or of a Swiss tournament, as the player's result: "Finalist", "Losers' round 2 · places 5 to 6",
+// "Place 4 of 12".
+std::string PlacementText(const TourneyDetail &d, int placement);
+// The champion's line under their name: "Final: 2–1 against Escipión", "Grand final: 1–2, and 2–0 in the reset, against Varo",
+// "4 points · 4–0 · Buchholz 9".
+std::string ChampionLine(const TourneyDetail &d, const TourneyEntrant &champ);
+// How long a cup lasted: "3 h 31 min", or "6 d 4 h" over days.
+std::string SpanText(int64_t ms);
+
 // The community cups (mpui_tourney_cup.cpp).
 // A new form: the player's name for the cup, a map for each round, and the start at the first full hour two hours from now.
 TourneyCupForm NewCupForm(const std::string &player, int64_t nowMs);

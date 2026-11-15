@@ -33,6 +33,12 @@ TourneyStage TourneyStageOf(int round, int rounds);
 // "Final", "Semifinal"...: the English name, the key of its translation. Empty for Unknown.
 const char *TourneyStageName(TourneyStage s);
 
+// The part of a tournament a match is played in: a single elimination only has the winners' bracket; a double elimination adds the
+// losers' bracket, the grand final and its reset; a Swiss tournament has rounds instead. A match's round counts within its part.
+enum class TourneyBracket { Winners, Losers, Final, Reset, Swiss };
+// "winners", "losers", "final", "reset" or "swiss"; anything else is the winners' bracket.
+TourneyBracket TourneyBracketFromId(const std::string &id);
+
 // What a round is played on: a random map of the league's list, a scenario of the game's own, which every player has, or one of the
 // organizer's, which the league keeps and each player downloads.
 enum class TourneyMapKind { Random, Game, Upload };
@@ -174,6 +180,7 @@ struct TourneyMatch {
 	int64_t id = 0;
 	int round = 0, position = 0, bestOf = 1, scoreA = 0, scoreB = 0;
 	TourneyStage stage = TourneyStage::Unknown;
+	TourneyBracket bracket = TourneyBracket::Winners;
 	TourneyCard a, b;
 	// The entry of the winner, 0 while nobody won.
 	int64_t winner = 0;
@@ -188,25 +195,73 @@ struct TourneyLogLine {
 	std::string actor, action, detail;
 };
 
+// A line of a Swiss tournament's standings: a point for each win and each bye, and the Buchholz, the sum of the points of the opponents
+// met. `place` is final once the tournament is over.
+struct TourneyStanding {
+	int64_t entryId = 0;
+	uint64_t steamId = 0;
+	std::string name;
+	int points = 0, wins = 0, losses = 0, buchholz = 0, byes = 0, place = 0;
+};
+
 // GET /v1/tournaments/:slug.
 struct TourneyDetail : TourneySummary {
+	// The rounds of the bracket: of the winners' bracket in a double elimination, every round planned in a Swiss tournament.
 	int rounds = 0;
+	// A double elimination's losers' bracket: twice the winners' rounds less two.
+	int losersRounds = 0;
+	// A Swiss tournament's rounds as it was made; 0 lets the server choose them from the players.
+	int swissRounds = 0;
+	// "live" (in one evening) or "rounds": each round open for `roundDays` days; then the round open now and when its deadline ends.
+	std::string pace;
+	int roundDays = 0, currentRound = 0;
+	int64_t roundEndsAt = 0;
 	std::vector<TourneyEntrant> entrants;
 	std::vector<TourneyMatch> matches;
 	std::vector<TourneyLogLine> log;
+	// A Swiss tournament's standings, by place.
+	std::vector<TourneyStanding> standings;
 };
 bool TourneyParseDetail(const Json &j, TourneyDetail &out);
-const TourneyMatch *TourneyMatchAt(const TourneyDetail &d, int round, int position);
+// The match at a round and a position (both counted within its part of the tournament).
+const TourneyMatch *TourneyMatchAt(const TourneyDetail &d, int round, int position, TourneyBracket bracket = TourneyBracket::Winners);
 const TourneyEntrant *TourneyEntrantOf(const TourneyDetail &d, int64_t entryId);
 const TourneyEntrant *TourneyEntrantBySteamId(const TourneyDetail &d, uint64_t steamId);
-// The matches a player played or plays, by round.
+// The matches a player played or plays, in the order they come: by round, the winners' bracket before the losers' and the grand final
+// before its reset.
 std::vector<const TourneyMatch *> TourneyPathOf(const TourneyDetail &d, int64_t entryId);
-// The series to play (byes left out) and how many of them are over.
+// The series to play (byes left out) and how many of them are over. A Swiss tournament counts the rounds not paired yet too.
 void TourneyProgress(const TourneyDetail &d, int &done, int &total);
-// The final's winner; 0 while it is not decided.
+// The champion: the entry placed first, else the winner of the match that decides it; 0 while it is not decided.
 int64_t TourneyChampion(const TourneyDetail &d);
-// The entrants that finished in `place` (1, 2, 3...), by seed.
+// The entrants that finished in `place` (1, 2, 3...), by seed; in a Swiss tournament, from its standings when the entries have no place.
 std::vector<const TourneyEntrant *> TourneyPlaced(const TourneyDetail &d, int place);
+
+// The formats of the tournament's `format`: anything that is not one of these is single elimination.
+bool TourneyIsDouble(const TourneySummary &t);
+bool TourneyIsSwiss(const TourneySummary &t);
+// The rounds have a deadline of some days each instead of being played in one evening.
+bool TourneyByRounds(const TourneyDetail &d);
+// The rounds a Swiss tournament plays by default: one for each doubling of its players (3 with 5 to 8, 4 with 9 to 16).
+int TourneySwissRoundsFor(int players);
+// The rounds a Swiss tournament plays: as it was made, or as many as its players need, and never fewer than the ones paired.
+int TourneySwissTotalRounds(const TourneyDetail &d);
+// The round being played: the server's with the pace by rounds; otherwise, in a Swiss tournament, the latest one paired. 0 before any.
+int TourneyCurrentRound(const TourneyDetail &d);
+// The matches of a round of one part of the tournament, by position.
+std::vector<const TourneyMatch *> TourneyRoundMatches(const TourneyDetail &d, int round, TourneyBracket bracket);
+// A player's points in a Swiss tournament before a round: one for each win and each bye in the rounds before it.
+int TourneySwissPointsBefore(const TourneyDetail &d, int64_t entryId, int round);
+const TourneyStanding *TourneyStandingOf(const TourneyDetail &d, int64_t entryId);
+// The match whose winner is the champion: the final of a single elimination; the grand final of a double elimination, or its reset once
+// there is one. None in a Swiss tournament.
+const TourneyMatch *TourneyDecider(const TourneyDetail &d);
+// The player from the losers' bracket won the grand final and the reset that decides the champion is still to come.
+bool TourneyResetDue(const TourneyDetail &d);
+// When the last match finished; 0 before any.
+int64_t TourneyFinishedAt(const TourneyDetail &d);
+// The last place a double elimination's placement shares: 1, 2, 3 and 4 alone, then 5-6, 7-8, 9-12, 13-16, 17-24 and 25-32.
+int TourneyDoublePlaceEnd(int placement);
 
 // A side of the player's next match.
 struct TourneyNextSide {
@@ -447,5 +502,52 @@ int TourneyBoxMidY(const TourneyBracketMetrics &m, int round, int position);
 // The line from a match to the one its winner goes to: out of its right side, along to the junction and into the next box. None from
 // the final.
 std::vector<TourneySegment> TourneyConnector(const TourneyBracketMetrics &m, int round, int position, int rounds);
+
+// A double elimination on screen: the winners' bracket on top and the losers' under it, each under its title and laid out as the single
+// bracket, and to the right of both the grand final, halfway between the two finals, its reset and the champion.
+// The losers' rounds of a winners' bracket of `winnersRounds`: 2 with 4 places, 4 with 8, 6 with 16, 8 with 32.
+int TourneyLosersRounds(int winnersRounds);
+// The matches of a losers' round: its odd rounds pair the players of the round before, its even ones meet those dropping from the
+// winners' bracket, so two rounds in a row have the same matches (8 places: 2, 2, 1, 1).
+int TourneyLosersMatches(int winnersRounds, int round);
+struct TourneyDoubleLayout {
+	int winnersRounds = 0, losersRounds = 0;
+	// What each bracket's TourneyBoxY is added to; its title goes in the `titleH` above.
+	int winnersY = 0, losersY = 0;
+	// The grand final's box, its reset's (with `reset`) and where the champion starts.
+	int finalX = 0, finalY = 0, resetX = 0, champX = 0;
+	bool reset = false;
+	// The size of all the boxes, without the champion.
+	int width = 0, height = 0;
+};
+// `losersRounds` 0 takes the ones of a full bracket; `reset` keeps a column for the reset; `gap` goes between the two brackets.
+TourneyDoubleLayout TourneyDoubleLayoutOf(const TourneyBracketMetrics &m, int winnersRounds, int losersRounds, bool reset, int titleH, int gap);
+int TourneyWinnersBoxY(const TourneyBracketMetrics &m, const TourneyDoubleLayout &l, int round, int position);
+int TourneyLosersBoxY(const TourneyBracketMetrics &m, const TourneyDoubleLayout &l, int round, int position);
+// The line from a losers' match to the next one: straight along into an even round, where it meets a player from the winners' bracket;
+// joined with its neighbour's into an odd one. None from the losers' final, which goes to the grand final.
+std::vector<TourneySegment> TourneyLosersConnector(const TourneyBracketMetrics &m, const TourneyDoubleLayout &l, int round, int position);
+// The lines into the grand final, in this order: out of the winners' final, out of the losers' final, the upright that joins them, into the
+// grand final; and with `reset`, a fifth from the grand final into the reset.
+std::vector<TourneySegment> TourneyGrandFinalConnector(const TourneyBracketMetrics &m, const TourneyDoubleLayout &l);
+
+// A Swiss tournament on screen, measured from the left of its tab. The strip over it: the standings and each round, as wide as `width`
+// lets each of `cells`, up to `maxW`.
+int TourneyStripCellWidth(int width, int cells, int gap, int maxW);
+// The standings' columns: the place and the player from the left; from the right the byes, the Buchholz (a little wider), the wins and
+// losses and the points; and between them each round's result, when the player's name keeps room enough.
+struct TourneyStandingsColumns {
+	int name = 0, nameW = 0, rounds = 0, roundsW = 0, points = 0, record = 0, buchholz = 0, buchholzW = 0, byes = 0, figureW = 0;
+	bool showRounds = false;
+};
+TourneyStandingsColumns TourneyStandingsColumnsFor(int width, int rounds);
+// Where the square of each round's result goes in its column.
+int TourneyRoundSquareX(const TourneyStandingsColumns &c, int round);
+// A pairing's row: the table's number, the two players either side of the score in the middle, and what is happening in it on the right.
+struct TourneyPairingRow {
+	int tableW = 44, left = 0, scoreX = 0, scoreW = 96, right = 0, stateX = 0, stateW = 0;
+};
+TourneyPairingRow TourneyPairingRowFor(int width);
+
 int TourneyBracketWidth(const TourneyBracketMetrics &m, int rounds);
 int TourneyBracketHeight(const TourneyBracketMetrics &m, int rounds);

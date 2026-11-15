@@ -160,6 +160,16 @@ const char *TourneyStageName(TourneyStage s)
 	}
 }
 
+TourneyBracket TourneyBracketFromId(const std::string &id)
+{
+	const std::string s = Lower(id);
+	if (s == "losers") return TourneyBracket::Losers;
+	if (s == "final") return TourneyBracket::Final;
+	if (s == "reset") return TourneyBracket::Reset;
+	if (s == "swiss") return TourneyBracket::Swiss;
+	return TourneyBracket::Winners;
+}
+
 TourneyMap TourneyMapFromJson(const Json *v)
 {
 	TourneyMap m;
@@ -448,6 +458,12 @@ bool TourneyParseDetail(const Json &j, TourneyDetail &out)
 	out = TourneyDetail();
 	if (!TourneyParseSummary(j, out)) return false;
 	out.rounds = Int(j, "rounds");
+	const int sentRounds = out.rounds;
+	out.swissRounds = std::max(0, Int(j, "swissRounds"));
+	out.pace = Lower(Text(j, "pace"));
+	out.roundDays = std::max(0, Int(j, "roundDays"));
+	out.currentRound = std::max(0, Int(j, "currentRound"));
+	out.roundEndsAt = Int64(j, "roundEndsAt");
 	int counted = 0;
 	if (const Json *list = j.Get("entries"); list && list->type == Json::Array) {
 		for (const Json &e : list->arr) {
@@ -473,6 +489,7 @@ bool TourneyParseDetail(const Json &j, TourneyDetail &out)
 			x.round = Int(m, "round");
 			x.position = Int(m, "position");
 			x.stage = TourneyStageFromId(Text(m, "stage"));
+			x.bracket = TourneyBracketFromId(Text(m, "bracket"));
 			x.bestOf = std::max(1, Int(m, "bestOf", 1));
 			x.a = CardFromJson(m.Get("a"));
 			x.b = CardFromJson(m.Get("b"));
@@ -492,8 +509,49 @@ bool TourneyParseDetail(const Json &j, TourneyDetail &out)
 			out.matches.push_back(x);
 		}
 	}
+	const bool swiss = TourneyIsSwiss(out), twice = TourneyIsDouble(out);
+	int winners = 0;
 	for (TourneyMatch &m : out.matches) {
-		if (m.stage == TourneyStage::Unknown) m.stage = TourneyStageOf(m.round, out.rounds);
+		// A Swiss tournament has nothing but rounds, whatever its matches say.
+		if (swiss) m.bracket = TourneyBracket::Swiss;
+		if (m.bracket == TourneyBracket::Winners) winners = std::max(winners, m.round);
+		if (m.bracket == TourneyBracket::Losers) out.losersRounds = std::max(out.losersRounds, m.round);
+	}
+	// A double elimination's rounds are its winners' bracket's; the other parts count their own.
+	if (twice && winners) out.rounds = winners;
+	if (twice) out.losersRounds = std::max(out.losersRounds, TourneyLosersRounds(out.rounds));
+	if (swiss && !sentRounds) out.rounds = std::max(out.rounds, out.swissRounds ? out.swissRounds : TourneySwissRoundsFor(out.entries));
+	for (TourneyMatch &m : out.matches) {
+		if (m.stage == TourneyStage::Unknown && m.bracket == TourneyBracket::Winners) m.stage = TourneyStageOf(m.round, out.rounds);
+	}
+	if (const Json *list = j.Get("standings"); list && list->type == Json::Array) {
+		const auto whole = [](const Json &v, const char *key) {
+			const Json *n = v.Get(key);
+			return n && n->type == Json::Number ? static_cast<int>(std::llround(n->num)) : 0;
+		};
+		for (const Json &s : list->arr) {
+			if (s.type != Json::Object) continue;
+			TourneyStanding x;
+			x.entryId = Int64(s, "entryId");
+			x.steamId = Id64(s.Get("steamId"));
+			x.name = Text(s, "name");
+			if (const TourneyEntrant *e = TourneyEntrantOf(out, x.entryId)) {
+				if (x.name.empty()) x.name = e->name;
+				if (!x.steamId) x.steamId = e->steamId;
+			}
+			x.points = whole(s, "points");
+			x.wins = whole(s, "wins");
+			x.losses = whole(s, "losses");
+			x.buchholz = whole(s, "buchholz");
+			x.byes = whole(s, "byes");
+			x.place = std::max(0, whole(s, "place"));
+			if (x.entryId || !x.name.empty()) out.standings.push_back(x);
+		}
+		std::stable_sort(out.standings.begin(), out.standings.end(), [](const TourneyStanding &a, const TourneyStanding &b) {
+			if ((a.place > 0) != (b.place > 0)) return a.place > 0;
+			if (a.place != b.place) return a.place < b.place;
+			return a.points > b.points;
+		});
 	}
 	if (const Json *list = j.Get("log"); list && list->type == Json::Array) {
 		for (const Json &l : list->arr) {
@@ -504,10 +562,10 @@ bool TourneyParseDetail(const Json &j, TourneyDetail &out)
 	return true;
 }
 
-const TourneyMatch *TourneyMatchAt(const TourneyDetail &d, int round, int position)
+const TourneyMatch *TourneyMatchAt(const TourneyDetail &d, int round, int position, TourneyBracket bracket)
 {
 	for (const TourneyMatch &m : d.matches) {
-		if (m.round == round && m.position == position) return &m;
+		if (m.round == round && m.position == position && m.bracket == bracket) return &m;
 	}
 	return nullptr;
 }
@@ -534,18 +592,26 @@ std::vector<const TourneyMatch *> TourneyPathOf(const TourneyDetail &d, int64_t 
 	for (const TourneyMatch &m : d.matches) {
 		if (m.Has(entryId)) out.push_back(&m);
 	}
-	std::sort(out.begin(), out.end(), [](const TourneyMatch *a, const TourneyMatch *b) { return a->round < b->round; });
+	// A player only drops to the losers' bracket after their last match in the winners', and the finals come after both.
+	const auto part = [](TourneyBracket b) { return b == TourneyBracket::Losers ? 1 : b == TourneyBracket::Final ? 2 : b == TourneyBracket::Reset ? 3 : 0; };
+	std::sort(out.begin(), out.end(), [&part](const TourneyMatch *a, const TourneyMatch *b) {
+		if (part(a->bracket) != part(b->bracket)) return part(a->bracket) < part(b->bracket);
+		return a->round < b->round;
+	});
 	return out;
 }
 
 void TourneyProgress(const TourneyDetail &d, int &done, int &total)
 {
 	done = total = 0;
+	int paired = 0;
 	for (const TourneyMatch &m : d.matches) {
+		paired = std::max(paired, m.round);
 		if (m.status == TourneyMatchStatus::Bye) continue;
 		total++;
 		if (TourneyMatchOver(m.status)) done++;
 	}
+	if (TourneyIsSwiss(d) && !d.matches.empty()) total += std::max(0, TourneySwissTotalRounds(d) - paired) * (d.entries / 2);
 }
 
 int64_t TourneyChampion(const TourneyDetail &d)
@@ -553,8 +619,16 @@ int64_t TourneyChampion(const TourneyDetail &d)
 	for (const TourneyEntrant &e : d.entrants) {
 		if (e.placement == 1) return e.entryId;
 	}
-	const TourneyMatch *final = d.rounds > 0 ? TourneyMatchAt(d, d.rounds, 0) : nullptr;
-	return final && TourneyMatchOver(final->status) ? final->winner : 0;
+	if (TourneyIsSwiss(d)) {
+		if (d.status != TourneyStatus::Finished) return 0;
+		for (const TourneyStanding &s : d.standings) {
+			if (s.place == 1) return s.entryId;
+		}
+		return 0;
+	}
+	const TourneyMatch *decider = TourneyDecider(d);
+	if (!decider || !TourneyMatchOver(decider->status) || TourneyResetDue(d)) return 0;
+	return decider->winner;
 }
 
 std::vector<const TourneyEntrant *> TourneyPlaced(const TourneyDetail &d, int place)
@@ -563,8 +637,122 @@ std::vector<const TourneyEntrant *> TourneyPlaced(const TourneyDetail &d, int pl
 	for (const TourneyEntrant &e : d.entrants) {
 		if (e.placement == place) out.push_back(&e);
 	}
+	if (out.empty() && TourneyIsSwiss(d) && d.status == TourneyStatus::Finished) {
+		for (const TourneyStanding &s : d.standings) {
+			const TourneyEntrant *e = TourneyEntrantOf(d, s.entryId);
+			if (s.place == place && e && !e->placement) out.push_back(e);
+		}
+	}
 	std::sort(out.begin(), out.end(), [](const TourneyEntrant *a, const TourneyEntrant *b) { return (a->seed ? a->seed : 999) < (b->seed ? b->seed : 999); });
 	return out;
+}
+
+bool TourneyIsDouble(const TourneySummary &t)
+{
+	return Lower(t.format) == "double";
+}
+
+bool TourneyIsSwiss(const TourneySummary &t)
+{
+	return Lower(t.format) == "swiss";
+}
+
+bool TourneyByRounds(const TourneyDetail &d)
+{
+	return d.pace == "rounds";
+}
+
+int TourneySwissRoundsFor(int players)
+{
+	int rounds = 1;
+	while ((1 << rounds) < players && rounds < 16) rounds++;
+	return rounds;
+}
+
+int TourneySwissTotalRounds(const TourneyDetail &d)
+{
+	if (d.rounds > 0) return d.rounds;
+	return d.swissRounds > 0 ? d.swissRounds : TourneySwissRoundsFor(d.entries);
+}
+
+int TourneyCurrentRound(const TourneyDetail &d)
+{
+	if (d.currentRound > 0) return d.currentRound;
+	int round = 0;
+	for (const TourneyMatch &m : d.matches) {
+		if (m.bracket == TourneyBracket::Swiss) round = std::max(round, m.round);
+	}
+	return round;
+}
+
+std::vector<const TourneyMatch *> TourneyRoundMatches(const TourneyDetail &d, int round, TourneyBracket bracket)
+{
+	std::vector<const TourneyMatch *> out;
+	for (const TourneyMatch &m : d.matches) {
+		if (m.round == round && m.bracket == bracket) out.push_back(&m);
+	}
+	std::sort(out.begin(), out.end(), [](const TourneyMatch *a, const TourneyMatch *b) { return a->position < b->position; });
+	return out;
+}
+
+int TourneySwissPointsBefore(const TourneyDetail &d, int64_t entryId, int round)
+{
+	int points = 0;
+	for (const TourneyMatch &m : d.matches) {
+		if (m.bracket == TourneyBracket::Swiss && m.round < round && m.Has(entryId) && TourneyMatchOver(m.status) && m.winner == entryId) points++;
+	}
+	return points;
+}
+
+const TourneyStanding *TourneyStandingOf(const TourneyDetail &d, int64_t entryId)
+{
+	for (const TourneyStanding &s : d.standings) {
+		if (entryId && s.entryId == entryId) return &s;
+	}
+	return nullptr;
+}
+
+const TourneyMatch *TourneyDecider(const TourneyDetail &d)
+{
+	if (TourneyIsSwiss(d)) return nullptr;
+	if (!TourneyIsDouble(d)) return d.rounds > 0 ? TourneyMatchAt(d, d.rounds, 0) : nullptr;
+	const TourneyMatch *final = nullptr;
+	for (const TourneyMatch &m : d.matches) {
+		if (m.bracket == TourneyBracket::Reset) return &m;
+		if (m.bracket == TourneyBracket::Final && !final) final = &m;
+	}
+	return final;
+}
+
+bool TourneyResetDue(const TourneyDetail &d)
+{
+	if (!TourneyIsDouble(d) || d.status == TourneyStatus::Finished) return false;
+	const TourneyMatch *final = TourneyDecider(d);
+	if (!final || final->bracket != TourneyBracket::Final || !TourneyMatchOver(final->status) || !final->winner) return false;
+	const TourneyMatch *winners = d.rounds > 0 ? TourneyMatchAt(d, d.rounds, 0) : nullptr;
+	return winners && TourneyMatchOver(winners->status) && winners->winner && winners->winner != final->winner;
+}
+
+int64_t TourneyFinishedAt(const TourneyDetail &d)
+{
+	int64_t at = 0;
+	for (const TourneyMatch &m : d.matches) {
+		if (m.status != TourneyMatchStatus::Bye) at = std::max(at, m.finishedAt);
+	}
+	return at;
+}
+
+int TourneyDoublePlaceEnd(int placement)
+{
+	if (placement <= 4) return placement;
+	// Two losers' rounds in a row knock out as many players, and each pair of rounds half as many as the one before it.
+	int start = 5, size = 2;
+	for (int i = 0; start <= 1024; i++) {
+		if (placement < start + size) return start + size - 1;
+		start += size;
+		if (i % 2) size *= 2;
+	}
+	return placement;
 }
 
 bool TourneyParseNext(const Json &j, TourneyNext &out)
@@ -1129,6 +1317,129 @@ std::vector<TourneySegment> TourneyConnector(const TourneyBracketMetrics &m, int
 	out.push_back({joint, y, joint, nextY});
 	out.push_back({joint, nextY, nextX, nextY});
 	return out;
+}
+
+int TourneyLosersRounds(int winnersRounds)
+{
+	return winnersRounds > 1 ? 2 * (winnersRounds - 1) : 0;
+}
+
+int TourneyLosersMatches(int winnersRounds, int round)
+{
+	if (round < 1 || round > TourneyLosersRounds(winnersRounds)) return 0;
+	return 1 << std::max(0, std::min(16, winnersRounds - (round + 1) / 2 - 1));
+}
+
+namespace {
+
+// Two losers' rounds in a row stand in one column of the single bracket's height: the second only meets the players dropping in.
+int LosersLevel(int round)
+{
+	return (std::max(1, round) + 1) / 2;
+}
+
+}
+
+TourneyDoubleLayout TourneyDoubleLayoutOf(const TourneyBracketMetrics &m, int winnersRounds, int losersRounds, bool reset, int titleH, int gap)
+{
+	TourneyDoubleLayout l;
+	l.winnersRounds = std::max(1, winnersRounds);
+	l.losersRounds = std::max(losersRounds, TourneyLosersRounds(l.winnersRounds));
+	l.reset = reset;
+	l.winnersY = titleH;
+	l.losersY = l.winnersY + TourneyBracketHeight(m, l.winnersRounds) + gap + titleH;
+	const int columns = std::max(l.winnersRounds, l.losersRounds);
+	l.finalX = TourneyBoxX(m, columns + 1);
+	const int winnersMid = l.winnersY + TourneyBoxMidY(m, l.winnersRounds, 0);
+	const int losersMid = l.losersRounds ? TourneyLosersBoxY(m, l, l.losersRounds, 0) + m.boxH / 2 : winnersMid;
+	l.finalY = (winnersMid + losersMid) / 2 - m.boxH / 2;
+	l.resetX = reset ? l.finalX + m.colPitch : 0;
+	const int last = reset ? l.resetX : l.finalX;
+	l.width = last + m.boxW;
+	l.champX = l.width + 40;
+	l.height = l.losersRounds ? l.losersY + TourneyBracketHeight(m, LosersLevel(l.losersRounds)) : l.winnersY + TourneyBracketHeight(m, l.winnersRounds);
+	return l;
+}
+
+int TourneyWinnersBoxY(const TourneyBracketMetrics &m, const TourneyDoubleLayout &l, int round, int position)
+{
+	return l.winnersY + TourneyBoxY(m, round, position);
+}
+
+int TourneyLosersBoxY(const TourneyBracketMetrics &m, const TourneyDoubleLayout &l, int round, int position)
+{
+	return l.losersY + TourneyBoxY(m, LosersLevel(round), position);
+}
+
+std::vector<TourneySegment> TourneyLosersConnector(const TourneyBracketMetrics &m, const TourneyDoubleLayout &l, int round, int position)
+{
+	std::vector<TourneySegment> out;
+	if (round < 1 || round >= l.losersRounds) return out;
+	const int x = TourneyBoxX(m, round) + m.boxW, nextX = TourneyBoxX(m, round + 1);
+	const int y = TourneyLosersBoxY(m, l, round, position) + m.boxH / 2;
+	if (round % 2) {
+		out.push_back({x, y, nextX, y});
+		return out;
+	}
+	const int joint = x + (nextX - x) / 2, nextY = TourneyLosersBoxY(m, l, round + 1, position / 2) + m.boxH / 2;
+	out.push_back({x, y, joint, y});
+	out.push_back({joint, y, joint, nextY});
+	out.push_back({joint, nextY, nextX, nextY});
+	return out;
+}
+
+std::vector<TourneySegment> TourneyGrandFinalConnector(const TourneyBracketMetrics &m, const TourneyDoubleLayout &l)
+{
+	std::vector<TourneySegment> out;
+	const int joint = l.finalX - (m.colPitch - m.boxW) / 2, mid = l.finalY + m.boxH / 2;
+	const int wx = TourneyBoxX(m, l.winnersRounds) + m.boxW, wy = TourneyWinnersBoxY(m, l, l.winnersRounds, 0) + m.boxH / 2;
+	const int lx = TourneyBoxX(m, std::max(1, l.losersRounds)) + m.boxW, ly = l.losersRounds ? TourneyLosersBoxY(m, l, l.losersRounds, 0) + m.boxH / 2 : wy;
+	out.push_back({wx, wy, joint, wy});
+	out.push_back({lx, ly, joint, ly});
+	out.push_back({joint, wy, joint, ly});
+	out.push_back({joint, mid, l.finalX, mid});
+	if (l.reset) out.push_back({l.finalX + m.boxW, mid, l.resetX, mid});
+	return out;
+}
+
+int TourneyStripCellWidth(int width, int cells, int gap, int maxW)
+{
+	cells = std::max(1, cells);
+	return std::max(0, std::min(maxW, (width - gap * (cells - 1)) / cells));
+}
+
+TourneyStandingsColumns TourneyStandingsColumnsFor(int width, int rounds)
+{
+	TourneyStandingsColumns c;
+	c.figureW = 96;
+	c.buchholzW = c.figureW + 16;
+	c.byes = width - c.figureW;
+	c.buchholz = c.byes - c.buchholzW;
+	c.record = c.buchholz - c.figureW;
+	c.points = c.record - c.figureW;
+	c.name = 64;
+	c.roundsW = std::max(0, rounds) * 22 + 24;
+	c.rounds = c.points - c.roundsW;
+	// A name narrower than this is cut more than the rounds are worth.
+	c.showRounds = rounds > 0 && c.rounds - c.name >= 280;
+	c.nameW = std::max(0, (c.showRounds ? c.rounds : c.points) - c.name - 16);
+	return c;
+}
+
+int TourneyRoundSquareX(const TourneyStandingsColumns &c, int round)
+{
+	return c.rounds + 12 + (std::max(1, round) - 1) * 22;
+}
+
+TourneyPairingRow TourneyPairingRowFor(int width)
+{
+	TourneyPairingRow r;
+	r.stateW = std::min(240, width / 5);
+	r.stateX = width - r.stateW - 16;
+	r.left = r.tableW + 16;
+	r.right = r.stateX - 24;
+	r.scoreX = r.left + (r.right - r.left - r.scoreW) / 2;
+	return r;
 }
 
 int TourneyBracketWidth(const TourneyBracketMetrics &m, int rounds)

@@ -597,7 +597,7 @@ std::string StageText(TourneyStage stage, int round)
 
 std::string FormatText(const TourneySummary &t)
 {
-	return Tr(t.format == "single" || t.format.empty() ? "Single elimination" : t.format) + " \xC2\xB7 " + Tr("1 vs 1");
+	return Tr(TourneyIsSwiss(t) ? "Swiss" : TourneyIsDouble(t) ? "Double elimination" : "Single elimination") + " \xC2\xB7 " + Tr("1 vs 1");
 }
 
 std::string ContentText(const TourneySummary &t)
@@ -755,9 +755,12 @@ void DrawCupCrown(Painter &p, int x, int y, int size, bool official)
 const char *FinishedEntrantText(const TourneyDetail &d, const TourneyEntrant &e)
 {
 	if (d.status != TourneyStatus::Finished || (e.status != TourneyEntryStatus::Playing && e.status != TourneyEntryStatus::Out)) return "";
-	if (e.placement == 1) return "Champion";
-	if (e.placement == 2) return "Finalist";
-	if (e.placement == 3) return "Semifinals";
+	const int place = EntrantPlace(d, e);
+	if (place == 1) return "Champion";
+	// Nobody is knocked out of a Swiss tournament: everyone plays every round.
+	if (TourneyIsSwiss(d)) return place == 2 ? "2nd place" : place == 3 ? "3rd place" : "Finished the cup";
+	if (place == 2) return "Finalist";
+	if (place == 3) return TourneyIsDouble(d) ? "3rd place" : "Semifinals";
 	return "Knocked out";
 }
 
@@ -993,7 +996,7 @@ void TourneyAction(int arg)
 	case kSubBack: TourneyBack(); break;
 	case kSubPageTab:
 		u.pageTab = static_cast<int>(value);
-		u.sideScroll = 0;
+		u.bracketX = u.bracketY = u.sideScroll = 0;
 		break;
 	case kSubSignUp:
 		if (!LeagueLinked()) Toast("Link your league account first.");
