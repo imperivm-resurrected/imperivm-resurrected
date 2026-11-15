@@ -206,8 +206,8 @@ void PaintTeamDialog(Painter &p, const State &st, const Ui &u, PaintOut &out)
 	p.Font(3);
 	p.Text(bx + bw - 80, labelY, 80, 20, std::to_string(n) + "/" + std::to_string(kTourneyTeamNameMax), n > kTourneyTeamNameMax ? pal::bad : pal::caption,
 		DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
-	// The league names a team without one after its players, "Varo & Tulia".
-	const std::string placeholder = u.teamPartner ? st.player + " & " + u.teamPartnerName : Tr("Without one, your two names");
+	// A team without a name is named after its players, as the cup's views show it.
+	const std::string placeholder = u.teamPartner ? TrFmt("%s and %s", {st.player, u.teamPartnerName}) : Tr("Without one, your two names");
 	PaintEditField(p, bx, fieldY, bw, 44, u.teamName, placeholder, st.focus == kTeamNameField, false, st.edit, kFieldTeamName);
 	const bool busy = LeagueTourneyBusy(TourneyOp::SignUp, u.teamCup);
 	DialogButtons(p, d,
