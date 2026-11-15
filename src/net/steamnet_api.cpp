@@ -335,6 +335,39 @@ std::vector<uint64_t> SteamFriendIds()
 	return friends;
 }
 
+std::vector<SteamFriendInfo> SteamFriendsInfo()
+{
+	static std::mutex mx;
+	static std::vector<SteamFriendInfo> friends;
+	static DWORD readAt = 0;
+	static bool asked = false;
+	if (!SteamOnlineReady()) return {};
+	std::lock_guard<std::mutex> lock(mx);
+	if (!asked && (!readAt || GetTickCount() - readAt > 10000)) {
+		asked = true;
+		Post([] {
+			std::vector<SteamFriendInfo> list;
+			const uint32 app = S.SteamAPI_ISteamUtils_GetAppID(S.SteamAPI_SteamUtils_v011());
+			const int count = g_steam.friends ? S.SteamAPI_ISteamFriends_GetFriendCount(g_steam.friends, k_EFriendFlagImmediate) : 0;
+			for (int i = 0; i < count && i < 500; i++) {
+				const uint64 f = S.SteamAPI_ISteamFriends_GetFriendByIndex(g_steam.friends, i, k_EFriendFlagImmediate);
+				if (!f) continue;
+				SteamFriendInfo x;
+				x.id = f;
+				x.name = Name(f);
+				FriendGameInfo_t gi = {};
+				x.inGame = S.SteamAPI_ISteamFriends_GetFriendGamePlayed(g_steam.friends, f, &gi) && gi.m_gameID.AppID() == app;
+				list.push_back(x);
+			}
+			std::lock_guard<std::mutex> done(mx);
+			friends = std::move(list);
+			readAt = GetTickCount();
+			asked = false;
+		});
+	}
+	return friends;
+}
+
 void SteamOpenWebPage(const std::string &url)
 {
 	if (_strnicmp(url.c_str(), "https://", 8) != 0 && _strnicmp(url.c_str(), "http://", 7) != 0) return;
