@@ -682,7 +682,8 @@ std::string MapText(const TourneyMap &m)
 
 std::string PaceText(const TourneySummary &t)
 {
-	if (t.pace == TourneyPace::Live) return Tr("Live");
+	// Not "Live": next to a finished cup it read as its state.
+	if (t.pace == TourneyPace::Live) return Tr("In one evening");
 	return TourneyRoundDaysValid(t.roundDays) ? RoundDaysText(t.roundDays) : Tr("By rounds, with deadlines");
 }
 

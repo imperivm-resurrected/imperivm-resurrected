@@ -863,6 +863,11 @@ void PaintRules(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out)
 		for (int r = 1; r <= rounds && !d.maps.empty(); r++) row(planned ? StageText(TourneyStageOf(r, planned), r) : Tr("Every round"), MapText(TourneyMapOfRound(d, r, planned)));
 	}
 	if (d.maps.empty()) row(Tr("Maps"), Tr("Chosen in the room"));
+	if (!d.seriesPool.empty()) {
+		std::string pool;
+		for (const TourneyMap &m : d.seriesPool) pool += (pool.empty() ? "" : ", ") + MapText(m);
+		row(Tr("Next games of a series"), TrFmt("the loser of the last game picks: %s", {pool}));
+	}
 	row(Tr("Content"), ContentText(d));
 	const TourneyRoomRules rules = TourneyRulesOf(d.settings);
 	row(Tr("Settings"), PresetText(d.settings) + " (" + PresetSummary(rules.preset) + ")");

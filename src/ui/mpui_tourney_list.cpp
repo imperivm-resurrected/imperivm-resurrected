@@ -516,7 +516,7 @@ void PaintChampionsCard(Painter &p, const State &st, const TourneyListsView &lis
 		const TourneyPageView page = LeagueTourneyPage(t.slug, 300000);
 		const TourneyEntrant *champ = page.loaded ? TourneyEntrantOf(page.detail, TourneyChampion(page.detail)) : nullptr;
 		if (t.official) DrawLeaguePhalera(p, x + pad, cy + 4, 30, LeagueMetal::Gold);
-		else PaintRing(p, x + pad + 15, cy + 19, 15, pal::edgeHot);
+		else DrawCupCrown(p, x + pad, cy + 4, 30, false);
 		const int tx = x + pad + 44, tagW = t.official ? 80 : 0;
 		p.Font(1);
 		if (champ) {
