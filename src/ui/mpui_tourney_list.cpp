@@ -464,7 +464,7 @@ int PaintMineCard(Painter &p, const State &st, const TourneyMineView &mine, int 
 		else if (e.tournamentStatus == TourneyStatus::Running) {
 			const TourneyNext &n = mine.mine.next;
 			line = n.present && n.tournamentId == e.tournamentId
-				? TrFmt("Playing \xC2\xB7 %s, %s", {StageText(n.stage, n.round),
+				? TrFmt("Playing \xC2\xB7 %s, %s", {BracketStageText(n.bracket, n.stage, n.round),
 					Tr(n.status == TourneyMatchStatus::Ready ? "ready" : n.status == TourneyMatchStatus::Live ? "live" : "waiting for your opponent")})
 				: Tr("Playing");
 		}

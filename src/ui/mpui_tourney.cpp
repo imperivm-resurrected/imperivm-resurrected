@@ -189,7 +189,7 @@ void Confirm(const std::string &title, const std::string &text, const std::strin
 
 std::string StageOf(const TourneyNotice &n)
 {
-	return StageText(n.stage, n.round);
+	return BracketStageText(n.bracket, n.stage, n.round);
 }
 
 // Under g_lock: the room for this match is made here, with the tournament's options.
@@ -204,7 +204,7 @@ void CreateRoom(const TourneyClaim &claim)
 		return;
 	}
 	OnlineCreateSettings s;
-	const std::string stage = n.match == f.match ? StageText(n.stage, n.round) : std::string();
+	const std::string stage = n.match == f.match ? BracketStageText(n.bracket, n.stage, n.round) : std::string();
 	s.name = n.match == f.match && !n.name.empty() ? n.name + " \xC2\xB7 " + stage + " \xC2\xB7 " + TrFmt("%s vs %s", {g_s.player, n.opponent.name}) : Tr("Tournament match");
 	s.map = claim.map.Known() ? MapText(claim.map) : std::string("Chosen in the room");
 	s.mode = "Tournament";
@@ -703,6 +703,17 @@ std::string RoundDaysText(int days)
 	return TrFmt("By rounds of %s days", {std::to_string(days)});
 }
 
+std::string BracketStageText(TourneyBracket bracket, TourneyStage stage, int round)
+{
+	switch (bracket) {
+	case TourneyBracket::Losers: return TrFmt("Losers' round %s", {std::to_string(round)});
+	case TourneyBracket::Final: return Tr("Grand final");
+	case TourneyBracket::Reset: return Tr("Reset match");
+	case TourneyBracket::Swiss: return TrFmt("Round %s (Swiss)", {std::to_string(round)});
+	default: return StageText(stage, round);
+	}
+}
+
 std::string ResultText(const TourneyOpResult &r)
 {
 	if (r.ok) {
@@ -734,7 +745,7 @@ std::string ResultText(const TourneyOpResult &r)
 		return TrFmt("This tournament is played with %s: switch to that content profile first.", {r.contentName.empty() ? Tr("other content") : r.contentName});
 	}
 	if (e == "not_ready") return Tr("The match is not waiting for players.");
-	if (e == "too_early") return Tr("The waiting time is not over yet.");
+	if (e == "too_early") return r.noshowFrom > 0 ? TrFmt("It is too early to claim the win: the no-show counts %s.", {FromText(r.noshowFrom)}) : Tr("The waiting time is not over yet.");
 	if (e == "not_in_room") return Tr("You have to be in the room to claim the win.");
 	if (e == "opponent_present") return Tr("Your opponent is in the room.");
 	if (e == "not_claimed") return Tr("Someone else is opening the room.");

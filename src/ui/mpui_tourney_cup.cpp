@@ -448,9 +448,7 @@ int RulesRight(Form &c, int x, int y, int w)
 								 : Tr("Nobody can watch the games."));
 	at += c.k.rowGap;
 	at += Label(c, x, at, w, Tr("Rounds"));
-	Segments(c, x, at, w, c.k.fieldH,
-		{{SeriesText(1), CupArg(kCupBestOf, 1), f.bestOf == 1}, {SeriesText(3), CupArg(kCupBestOf, 3), f.bestOf == 3},
-			{SeriesText(5), CupArg(kCupBestOf, 5), f.bestOf == 5}});
+	Segments(c, x, at, w, c.k.fieldH, {{SeriesText(1), CupArg(kCupBestOf, 1), f.bestOf == 1}, {SeriesText(3), CupArg(kCupBestOf, 3), f.bestOf == 3}});
 	at += c.k.fieldH + c.k.rowGap;
 	if (f.format == TourneyFormat::Swiss) {
 		at += Label(c, x, at, w, Tr("Final"));
@@ -728,8 +726,8 @@ int CalendarRight(Form &c, int x, int y, int w)
 			{TrFmt("After %s min", {"20"}), CupArg(kCupNoshow, 20), f.noshowMinutes == 20}});
 	at += c.k.fieldH + 8;
 	at += Hint(c, x, at, w,
-		byRounds ? Tr("Only in the last 24 hours of a round: whoever is not in the room by then loses the match. A match not played by the deadline comes "
-					  "to you to settle; if you don't within 24 hours, both are out.")
+		byRounds ? Tr("Only in the last 24 hours of a round: whoever is not in the room by then loses the match. At the deadline, whoever waits alone in "
+					  "the room wins; a match nobody played comes to you to settle, and if you don't within 24 hours, both are out.")
 				 : Tr("Whoever is not in the room by then loses the match, and the other goes through."));
 	at += Problem(c, x, at, w, {TourneyCupProblem::Noshow}) + c.k.rowGap;
 	const int half = (w - 16) / 2;
@@ -1137,7 +1135,7 @@ void ApplyCupSetting(TourneyCupForm &f, int setting, int choice, int64_t nowMs)
 		if (TourneyRoundDaysValid(choice)) f.roundDays = choice;
 		break;
 	case kCupBestOf:
-		if (choice == 1 || choice == 3 || choice == 5) f.bestOf = choice;
+		if (choice == 1 || choice == 3) f.bestOf = choice;
 		break;
 	case kCupFinal:
 		if (choice == 1 || choice == 3 || choice == 5) f.finalBestOf = choice;

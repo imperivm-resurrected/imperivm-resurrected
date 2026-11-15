@@ -274,6 +274,8 @@ std::string FromText(int64_t ms);
 // "Thu 20:00", "Today 20:00".
 std::string ShortWhenText(int64_t ms);
 std::string StageText(TourneyStage stage, int round);
+// The player's match by its part of the tournament: "Losers' round 2", "Grand final", "Reset match", "Round 3 (Swiss)", or its stage.
+std::string BracketStageText(TourneyBracket bracket, TourneyStage stage, int round);
 // "Single elimination · 1 vs 1".
 std::string FormatText(const TourneySummary &t);
 // "Live", "By rounds of 2 days".

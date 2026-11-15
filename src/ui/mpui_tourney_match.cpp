@@ -158,7 +158,7 @@ void PaintMatchCenter(Painter &p, const TourneyNext &n, const TourneyPageView &p
 {
 	std::string name, sub;
 	MapLines(n, map, name, sub);
-	const std::string caption = StageText(n.stage, n.round) + " \xC2\xB7 " + TrFmt("Bo%s", {std::to_string(n.bestOf)});
+	const std::string caption = BracketStageText(n.bracket, n.stage, n.round) + " \xC2\xB7 " + TrFmt("Bo%s", {std::to_string(n.bestOf)});
 	p.raw = true;
 	if (n.bestOf <= 1) {
 		const int pic = std::max(72, std::min(roomy ? 150 : 118, h - 32 - 210));
@@ -260,6 +260,7 @@ void PaintPickPanel(Painter &p, const State &st, const TourneyNext &n, int x, in
 	int tilesX = x + pad, tilesY = y + pad, tilesW = w - 2 * pad, tilesH = h - 2 * pad;
 	if (beside) {
 		PaintCaps(p, x + pad, y + pad, headW, 20, title, mine ? pal::redText : pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		UseDisplay(p, clockH);
 		p.Text(x + pad, y + pad + 22, headW, clockH, clock, clockInk, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 		p.Font(3);
 		const int subY = y + pad + 22 + clockH + 4;
@@ -269,6 +270,7 @@ void PaintPickPanel(Painter &p, const State &st, const TourneyNext &n, int x, in
 	}
 	else {
 		PaintCaps(p, x + pad, y + pad, headW - clockW - 16, 20, title, mine ? pal::redText : pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		UseDisplay(p, clockH);
 		p.Text(x + w - pad - clockW, y + pad - 8, clockW, clockH, clock, clockInk, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 		p.Font(3);
 		p.Text(x + pad, y + pad + 24, headW - clockW - 16, 20, sub, pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
@@ -350,7 +352,7 @@ bool PaintMatchHeader(Painter &p, const State &st, const Ui &u)
 	}
 	PaintScreenTitle(p, l, "Your next match", {}, titleRight, mx, my);
 	if (!next.present) return true;
-	std::string info = next.name + "   \xC2\xB7   " + StageText(next.stage, next.round) + "   \xC2\xB7   " + TrFmt("Best of %s", {std::to_string(next.bestOf)});
+	std::string info = next.name + "   \xC2\xB7   " + BracketStageText(next.bracket, next.stage, next.round) + "   \xC2\xB7   " + TrFmt("Best of %s", {std::to_string(next.bestOf)});
 	if (next.bestOf > 1) info += "   \xC2\xB7   " + TrFmt("Game %s, you %s", {std::to_string(next.game), std::to_string(next.scoreMe) + "\xE2\x80\x93" + std::to_string(next.scoreThem)});
 	p.Font(0);
 	p.raw = true;
@@ -408,6 +410,11 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 	std::string label = "Go to the room", line;
 	bool enabled = n.status == TourneyMatchStatus::Ready && !inRoom && !flowing;
 	if (inRoom) label = "In the room";
+	else if (n.pick.present) {
+		// The room opens once the next game's map is chosen: until then the league has the claim wait.
+		label = "Waiting for the map...";
+		enabled = false;
+	}
 	else if (flowing) {
 		label = f.phase == RoomFlow::kClaiming ? "Asking the league..." : f.phase == RoomFlow::kCreating ? "Opening the room..." : "Entering the room...";
 		if (f.phase == RoomFlow::kWaiting) {
@@ -488,9 +495,11 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 	const int x2 = m + cw + kCardGap;
 	PaintGlassCard(p, x2, ry, cw, rh);
 	PaintCaps(p, x2 + pad, ry + 20, cw - 2 * pad, 20, "Rules of this match", pal::caption);
+	// Where the winner goes is told for a single elimination; the other formats' paths are on the cup's page.
 	std::string after;
-	if (n.round >= n.rounds) after = Tr("The winner is the champion");
-	else if (page.loaded) {
+	const bool single = n.format == TourneyFormat::Single && n.bracket == TourneyBracket::Winners;
+	if (single && n.round >= n.rounds) after = Tr("The winner is the champion");
+	else if (single && page.loaded) {
 		const TourneyMatch *following = nullptr, *mineM = nullptr;
 		for (const TourneyMatch &mm : page.detail.matches) {
 			if (mm.id == n.match) mineM = &mm;
