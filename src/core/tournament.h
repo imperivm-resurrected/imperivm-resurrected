@@ -22,10 +22,35 @@ TourneyMatchStatus TourneyMatchStatusFromId(const std::string &id);
 // Over: played, a bye or given without playing.
 bool TourneyMatchOver(TourneyMatchStatus s);
 
-enum class TourneyEntryStatus { Unknown, Signed, Waitlist, Playing, Out, Withdrawn, Disqualified, MissedCheckin };
+// PendingPartner: a team whose partner has not accepted the invitation yet; it takes no place.
+enum class TourneyEntryStatus { Unknown, Signed, Waitlist, Playing, Out, Withdrawn, Disqualified, MissedCheckin, PendingPartner };
 TourneyEntryStatus TourneyEntryStatusFromId(const std::string &id);
 // Still in the tournament: signed up, on the waiting list or playing.
 bool TourneyEntryActive(TourneyEntryStatus s);
+
+// How many play on each side of a match: one against one, or teams of two, a captain and the partner they invited.
+enum class TourneyMode { Solo, Teams };
+// "1v1" or "2v2"; anything else is one against one, as the league's first tournaments.
+TourneyMode TourneyModeFromId(const std::string &id);
+const char *TourneyModeId(TourneyMode m);
+// The players of a side: 1, or 2 in a cup of teams.
+int TourneySidePlayers(TourneyMode m);
+// The minutes a game takes in the estimates: 40 one against one and 45 two against two, whose games are longer (4-torneos.md §2).
+int TourneyGameMinutes(TourneyMode m);
+
+// A player of a side of a cup: the one of a 1 vs 1 entry, or one of a team's two. In 2 vs 2 the entry's `name` is the team's and its
+// `steamId` the captain's, and the players are its members.
+struct TourneyMember {
+	uint64_t steamId = 0;
+	std::string name;
+	// Whether the league saw them in the match's room lately: 1 or 0, -1 when it does not say.
+	int inRoom = -1;
+};
+// [{steamId, name, inRoom?}]; a member without a SteamID is left out.
+std::vector<TourneyMember> TourneyMembersFromJson(const Json *v);
+const TourneyMember *TourneyMemberOf(const std::vector<TourneyMember> &members, uint64_t steamId);
+// The team's name was not chosen: it is the league's own, its players' names joined ("Varo y Tulia"), so they need not be repeated under it.
+bool TourneyNameIsMembers(const std::string &name, const std::vector<TourneyMember> &members);
 
 enum class TourneyStage { Unknown, Final, Semifinal, Quarterfinal, RoundOf16, RoundOf32 };
 TourneyStage TourneyStageFromId(const std::string &id);
@@ -176,6 +201,9 @@ struct TourneySummary {
 	// With the by-rounds pace: the round being played (0 before the first) and when its deadline ends.
 	int currentRound = 0;
 	int64_t roundEndsAt = 0;
+	// One against one or teams of two: in a cup of teams its places, entries and sides are teams.
+	TourneyMode mode = TourneyMode::Solo;
+	bool Teams() const { return mode == TourneyMode::Teams; }
 };
 bool TourneyParseSummary(const Json &j, TourneySummary &out);
 bool TourneyParseList(const Json &j, std::vector<TourneySummary> &out);
@@ -191,12 +219,13 @@ int TourneyFullRounds(int maxEntries);
 // than places the final keeps its map); a shorter one runs from the first round and its last map repeats.
 TourneyMap TourneyMapOfRound(const TourneySummary &t, int round, int rounds);
 
-// A side of a match in the bracket.
+// A side of a match in the bracket. In a cup of teams `name` is the team's, `steamId` its captain's and `members` its two players.
 struct TourneyCard {
 	int64_t entryId = 0;
 	uint64_t steamId = 0;
 	std::string name;
 	int seed = 0;
+	std::vector<TourneyMember> members;
 	bool Present() const { return entryId != 0; }
 };
 
@@ -207,7 +236,11 @@ struct TourneyEntrant {
 	TourneyEntryStatus status = TourneyEntryStatus::Unknown;
 	int seed = 0, placement = 0;
 	bool checkedIn = false;
+	std::vector<TourneyMember> members;
 };
+// The entry's players: its members, or the entry's own player when the league lists none.
+std::vector<TourneyMember> TourneyPlayersOf(const TourneyEntrant &e);
+std::vector<TourneyMember> TourneyPlayersOf(const TourneyCard &c);
 
 // A game of a series: its number from 1, its map (not Known() while it is being chosen) and its winner, "a", "b" or empty.
 struct TourneyGame {
@@ -263,6 +296,8 @@ struct TourneyStanding {
 	uint64_t steamId = 0;
 	std::string name;
 	int points = 0, wins = 0, losses = 0, buchholz = 0, byes = 0, place = 0;
+	// A team's players, from the standing or else from its entry.
+	std::vector<TourneyMember> members;
 };
 
 // GET /v1/tournaments/:slug.
@@ -287,6 +322,7 @@ bool TourneyParseDetail(const Json &j, TourneyDetail &out);
 // The match at a round and a position (both counted within its part of the tournament).
 const TourneyMatch *TourneyMatchAt(const TourneyDetail &d, int round, int position, TourneyBracket bracket = TourneyBracket::Winners);
 const TourneyEntrant *TourneyEntrantOf(const TourneyDetail &d, int64_t entryId);
+// The entry of a player: theirs, or the team they are a member of.
 const TourneyEntrant *TourneyEntrantBySteamId(const TourneyDetail &d, uint64_t steamId);
 // The matches a player played or plays, in the order they come: by round, the winners' bracket before the losers' and the grand final
 // before its reset.
@@ -324,12 +360,14 @@ int64_t TourneyFinishedAt(const TourneyDetail &d);
 // The last place a double elimination's placement shares: 1, 2, 3 and 4 alone, then 5-6, 7-8, 9-12, 13-16, 17-24 and 25-32.
 int TourneyDoublePlaceEnd(int placement);
 
-// A side of the player's next match.
+// A side of the player's next match. In a cup of teams the opponent is a team (its name, its captain's SteamID and its `members`), and a side
+// is in the room once both its players are.
 struct TourneyNextSide {
 	uint64_t steamId = 0;
 	std::string name, side;
 	int seed = 0;
 	bool inRoom = false;
+	std::vector<TourneyMember> members;
 };
 
 // The player's next match, from GET /v1/me/tournaments and from the presence answer.
@@ -357,10 +395,16 @@ struct TourneyNext {
 	// With the by-rounds pace the deadline is the end of the round, and the no-show only counts from `noshowFrom`.
 	TourneyPace pace = TourneyPace::Live;
 	int64_t noshowFrom = 0;
+	// A cup of teams: the player's own team (its name and its two players); `opponent` is the other team.
+	TourneyMode mode = TourneyMode::Solo;
+	TourneyNextSide team;
 	// The map of the next game is this player's to choose.
 	bool MyPick() const { return pick.present && !me.side.empty() && pick.by == me.side; }
+	bool Teams() const { return mode == TourneyMode::Teams; }
 };
 bool TourneyParseNext(const Json &j, TourneyNext &out);
+// The players of the match the room lets in: the player, their team's and the opponent's.
+std::vector<uint64_t> TourneyMatchPlayers(const TourneyNext &n, uint64_t me);
 // The map of the game to play now: the one chosen or drawn for it, otherwise the round's. Not Known() while it is being chosen.
 TourneyMap TourneyGameMap(const TourneyNext &n);
 
@@ -379,6 +423,21 @@ struct TourneyMyEntry {
 	TourneyEntryStatus status = TourneyEntryStatus::Unknown;
 	bool checkedIn = false;
 	int seed = 0, placement = 0;
+	// A team: its entry, its name, the partner and its players, when the league says them.
+	int64_t entryId = 0;
+	std::string teamName;
+	TourneyMember partner;
+	std::vector<TourneyMember> members;
+	bool Pending() const { return status == TourneyEntryStatus::PendingPartner; }
+};
+// The partner of the player's team in a cup: the one the league names, else the member who is not the player.
+TourneyMember TourneyPartnerOf(const TourneyMyEntry &e, uint64_t me);
+
+// An invitation to play a cup of teams in someone's team, which the player accepts or declines from the game.
+struct TourneyInvite {
+	int64_t tournamentId = 0, entryId = 0, expiresAt = 0;
+	std::string slug, name, teamName;
+	TourneyMember from;
 };
 
 // Whether the player may make a community cup, and the one they organise now (sign-up, check-in or being played).
@@ -407,13 +466,20 @@ struct TourneyMine {
 	std::vector<TourneyMyEntry> entries;
 	TourneyOrganize organize;
 	std::vector<TourneyOrganized> organized;
+	// The invitations to other players' teams waiting for an answer, soonest to expire first.
+	std::vector<TourneyInvite> invites;
 };
 bool TourneyParseMine(const Json &j, TourneyMine &out);
 const TourneyMyEntry *TourneyMyEntryOf(const TourneyMine &m, int64_t tournamentId);
 const TourneyOrganized *TourneyOrganizedOf(const TourneyMine &m, int64_t tournamentId);
-// A tournament not over yet that the player is still in, or a cup of theirs not over yet: it is what makes the mod ask every 30 s.
+// The invitation to a team of this cup; null when there is none.
+const TourneyInvite *TourneyInviteOf(const TourneyMine &m, int64_t tournamentId);
+// A tournament not over yet that the player is still in or waits for a partner in, an invitation to answer, or a cup of theirs not over
+// yet: it is what makes the mod ask every 30 s.
 bool TourneyHasActiveEntry(const TourneyMine &m);
-// How often to ask for the player's tournaments: 30 s with one of their own on, 60 s while the Tournaments tab is open, otherwise never.
+// How often to ask for the player's tournaments: 30 s with one of their own on, 60 s while the Tournaments tab is open, otherwise every
+// 2 minutes, which is how long an invitation to a team can take to show in another menu.
+constexpr int kTourneyIdlePollMs = 120000;
 int TourneyPollEveryMs(bool activeEntry, bool tabOpen);
 // Sooner while a series waits for its next map, which has a minute to be chosen: every 5 s while the choice is open, and in the two
 // minutes after a game of a series (`msSinceGame`, negative when no game ended), when it opens; 0 otherwise.
@@ -428,8 +494,12 @@ struct TourneyClaim {
 	TourneySettings settings;
 	// Wait while the map of a series' next game is being chosen: the room opens once it is.
 	TourneyPick pick;
+	// A cup of teams: the SteamIDs of each side, side A's first, which the room's teams 1 and 2 are set from.
+	std::vector<std::vector<uint64_t>> teams;
 };
 bool TourneyParseClaim(const Json &j, TourneyClaim &out);
+// The room's team of a player, from a claim's sides: 1 for side A, 2 for side B, 0 when not in them.
+int TourneyTeamOf(const std::vector<std::vector<uint64_t>> &teams, uint64_t steamId);
 
 // The tag of a tournament room in its lobby data ("tournament:<match>") and the match of a tag; 0 for any other room.
 std::string TourneyRoomTag(int64_t match);
@@ -437,10 +507,12 @@ int64_t TourneyMatchOfTag(const std::string &tag);
 
 // What the player is told in any menu once.
 struct TourneyNotice {
-	// PickOpen: the map of the next game of the player's series is theirs to choose (`game`, until `deadlineAt`).
-	enum Kind { MatchReady, CheckinOpen, Finished, PickOpen } kind = MatchReady;
-	int64_t tournamentId = 0, match = 0;
-	std::string slug, name, opponent;
+	// PickOpen: the map of the next game of the player's series is theirs to choose (`game`, until `deadlineAt`). Invite: `from` invites the
+	// player to their team `teamName` (the entry `entry`), until `deadlineAt`.
+	enum Kind { MatchReady, CheckinOpen, Finished, PickOpen, Invite } kind = MatchReady;
+	int64_t tournamentId = 0, match = 0, entry = 0;
+	std::string slug, name, opponent, teamName;
+	TourneyMember from;
 	TourneyStage stage = TourneyStage::Unknown;
 	TourneyBracket bracket = TourneyBracket::Winners;
 	int round = 0, game = 0;
@@ -448,7 +520,8 @@ struct TourneyNotice {
 };
 // What was told already, so each thing is told once.
 struct TourneyTold {
-	std::set<int64_t> ready, checkin, finished;
+	// The invitations by entry.
+	std::set<int64_t> ready, checkin, finished, invites;
 	// The picks by match and game.
 	std::set<std::pair<int64_t, int>> picks;
 	bool primed = false;
@@ -480,8 +553,9 @@ struct TourneyRefusal {
 	int gamesPlayed = 0, gamesNeeded = 0, checkedIn = 0, needed = 0;
 	// rate_limited: whole seconds to wait.
 	int retryAfter = 0;
-	// requirement: "games" or "tier", and what the player has and the cup asks (a number of games, or a rank's id).
-	std::string requirement, have, need;
+	// requirement: "games" or "tier", and what the player has and the cup asks (a number of games, or a rank's id); `who` is "partner" when
+	// it is the partner of a team's sign-up who misses it.
+	std::string requirement, have, need, who;
 	// map_missing: the SHA-256 of the uploaded scenario the league does not have.
 	std::string hash;
 	// too_early with the by-rounds pace: from when the no-show counts.
@@ -495,6 +569,26 @@ struct TourneyCreated {
 	std::string slug, inviteCode;
 };
 bool TourneyParseCreated(const Json &j, TourneyCreated &out);
+
+// A team's name, which is optional: the league names a team after its players when it has none.
+constexpr int kTourneyTeamNameMax = 24;
+// POST /v1/tournaments/:id/entries of a cup of teams: {partner, teamName?, code?}, the name trimmed and left out when empty, as the code.
+Json TourneyTeamEntryJson(uint64_t partner, const std::string &teamName, const std::string &code);
+
+// GET /v1/league/maps: a random map type with the sizes that let two players in, and `sizes4`, the ones that let four in.
+struct TourneyMapType {
+	std::string id;
+	std::vector<std::string> sizes, sizes4;
+	bool hasSizes4 = false;
+};
+bool TourneyParseMapTypes(const Json &j, std::vector<TourneyMapType> &out);
+// The sizes a random map type is played on: one against one, the league's list (core/leaguemaps.h); two against two, the league's sizes4
+// when it sent them, otherwise every size of that list but the small one, which no template opens to more than two players.
+std::vector<std::string> TourneySizesFor(const std::vector<TourneyMapType> &types, const std::string &type, TourneyMode mode);
+// A round's map is playable in the mode: a random map in one of those sizes, a scenario with a human seat for each player of a match.
+bool TourneyMapFits(const TourneyMap &m, TourneyMode mode, const std::vector<TourneyMapType> &types);
+// A map turned into one that fits the mode: a random map to the nearest size it has for it, anything else to a normal Mediterranean.
+TourneyMap TourneyMapForMode(const TourneyMap &m, TourneyMode mode, const std::vector<TourneyMapType> &types);
 
 // The invitation code of a private cup: six letters and digits without 0, O, 1 or I.
 constexpr int kTourneyCodeLength = 6;
@@ -523,20 +617,26 @@ struct TourneyCupForm {
 	int roundDays = 2;
 	// The maps the loser of a game chooses the next one from, 3 to 5, or none; only sent when the cup has series.
 	std::vector<TourneyMap> seriesPool;
+	// Teams of two: the places count teams, and every map needs room for four. The organizer signs their own team up from the cup's page,
+	// with their partner, so "I play too" is not sent.
+	TourneyMode mode = TourneyMode::Solo;
 };
 constexpr int kTourneyCupNameMin = 3, kTourneyCupNameMax = 40, kTourneyCupDescriptionMax = 200, kTourneyCupMapsMax = 5;
 constexpr int kTourneyPoolMin = 3, kTourneyPoolMax = 5;
 constexpr int64_t kTourneyCupLeadMinMs = 20 * 60000LL, kTourneyCupLeadMaxMs = 14 * 86400000LL;
+// MapSeats: a map without room for the four players of a match of teams.
 enum class TourneyCupProblem {
-	NameShort, NameLong, DescriptionLong, Places, Minimum, Format, Series, Settings, NoMaps, TooManyMaps, BadMap, MapTooLarge, PoolCount, PoolMap,
+	NameShort, NameLong, DescriptionLong, Places, Minimum, Format, Series, Settings, NoMaps, TooManyMaps, BadMap, MapTooLarge, MapSeats, PoolCount, PoolMap,
 	StartSoon, StartLate, Pace, Checkin, Noshow, Requirements,
 };
 // Some game of the cup is a series (best of 3, or 5 in a final): the rounds', or the final's outside a Swiss, which has no final.
 bool TourneyCupHasSeries(const TourneyCupForm &f);
 // The rounds a cup's form gives a map to: a Swiss's rounds, the rounds of an elimination's bracket (its winners' in a double one).
 int TourneyCupMapRounds(const TourneyCupForm &f);
-// What the server would refuse in the form, in the order of the form; none when it can be sent.
-std::vector<TourneyCupProblem> TourneyCheckCup(const TourneyCupForm &f, int64_t nowMs);
+// What the server would refuse in the form, in the order of the form; none when it can be sent. `types` gives the sizes of a cup of teams.
+std::vector<TourneyCupProblem> TourneyCheckCup(const TourneyCupForm &f, int64_t nowMs, const std::vector<TourneyMapType> &types = {});
+// The form turned to its mode: its rounds' maps to ones that fit (TourneyMapForMode), and the series' maps that don't fit taken out.
+void TourneyFitCupToMode(TourneyCupForm &f, const std::vector<TourneyMapType> &types);
 // The request's body: the name and description trimmed, the description and the content left out when empty. For a change (`edit`) the
 // description and the content are always written, empty or null, so that they can be taken away.
 Json TourneyCupJson(const TourneyCupForm &f, bool edit = false);
@@ -549,17 +649,17 @@ TourneyCupForm TourneyCupFormOf(const TourneyDetail &d);
 // Someone other than the organizer signed up: from then on only the description can change.
 bool TourneyCupLocked(const TourneyDetail &d);
 
-// The Summary's figures: the rounds played one after the other, the series (one per pair of players) and the games at most, and the
-// minutes it lasts: 40 a game and 10 between rounds, each round as long as its longest series. With the by-rounds pace, the days at most:
-// each round its days.
+// The Summary's figures: the rounds played one after the other, the series (one per pair of players or teams) and the games at most, and
+// the minutes it lasts: `gameMinutes` a game (TourneyGameMinutes) and 10 between rounds, each round as long as its longest series. With the
+// by-rounds pace, the days at most: each round its days.
 struct TourneyEstimate {
 	int rounds = 0, series = 0, maxGames = 0, minutes = 0, days = 0;
 };
 // Single elimination.
-TourneyEstimate TourneyEstimateFor(int places, int bestOf, int finalBestOf);
+TourneyEstimate TourneyEstimateFor(int places, int bestOf, int finalBestOf, int gameMinutes = 40);
 // A Swiss is its rounds, each a series; a double elimination waits for its losers' bracket, which starts after the first round and
 // plays twice as many, then the grand final and its reset.
-TourneyEstimate TourneyEstimateFor(TourneyFormat format, int places, int bestOf, int finalBestOf, int swissRounds);
+TourneyEstimate TourneyEstimateFor(TourneyFormat format, int places, int bestOf, int finalBestOf, int swissRounds, int gameMinutes = 40);
 TourneyEstimate TourneyEstimateOf(const TourneyCupForm &f);
 // Past this a live cup is long for one evening: the form says so for a double elimination.
 constexpr int kTourneyLiveWarnMinutes = 300;

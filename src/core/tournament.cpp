@@ -57,7 +57,27 @@ TourneyCard CardFromJson(const Json *v)
 	c.steamId = Id64(v->Get("steamId"));
 	c.name = Text(*v, "name");
 	c.seed = Int(*v, "seed");
+	c.members = TourneyMembersFromJson(v->Get("members"));
 	return c;
+}
+
+TourneyMember MemberFromJson(const Json *v)
+{
+	TourneyMember m;
+	if (!v || v->type != Json::Object) return m;
+	m.steamId = Id64(v->Get("steamId"));
+	if (!m.steamId) m.steamId = Id64(v->Get("steamid"));
+	m.name = Text(*v, "name");
+	if (const Json *in = v->Get("inRoom"); in && in->type == Json::Bool) m.inRoom = in->b ? 1 : 0;
+	return m;
+}
+
+std::vector<TourneyMember> PlayersOf(uint64_t steamId, const std::string &name, const std::vector<TourneyMember> &members)
+{
+	if (!members.empty()) return members;
+	std::vector<TourneyMember> out;
+	if (steamId || !name.empty()) out.push_back({steamId, name, -1});
+	return out;
 }
 
 bool Active(TourneyStatus s)
@@ -90,9 +110,94 @@ TourneyNextSide SideFromJson(const Json *v)
 	s.side = Text(*v, "side");
 	s.seed = Int(*v, "seed");
 	s.inRoom = v->GetBool("inRoom");
+	s.members = TourneyMembersFromJson(v->Get("members"));
 	return s;
 }
 
+// The player's team in the next match: {name, members, ...} as a side, its members alone, or its name alone.
+TourneyNextSide TeamFromJson(const Json *v)
+{
+	TourneyNextSide s;
+	if (!v) return s;
+	if (v->type == Json::Object) return SideFromJson(v);
+	if (v->type == Json::Array) s.members = TourneyMembersFromJson(v);
+	else if (v->type == Json::String) s.name = v->str;
+	return s;
+}
+
+std::vector<std::string> Strings(const Json *v)
+{
+	std::vector<std::string> out;
+	if (!v || v->type != Json::Array) return out;
+	for (const Json &s : v->arr) {
+		if (s.type == Json::String && !s.str.empty()) out.push_back(Lower(s.str));
+	}
+	return out;
+}
+
+bool Contains(const std::vector<std::string> &list, const std::string &s)
+{
+	return std::find(list.begin(), list.end(), s) != list.end();
+}
+
+}
+
+TourneyMode TourneyModeFromId(const std::string &id)
+{
+	return Lower(id) == "2v2" ? TourneyMode::Teams : TourneyMode::Solo;
+}
+
+const char *TourneyModeId(TourneyMode m)
+{
+	return m == TourneyMode::Teams ? "2v2" : "1v1";
+}
+
+int TourneySidePlayers(TourneyMode m)
+{
+	return m == TourneyMode::Teams ? 2 : 1;
+}
+
+int TourneyGameMinutes(TourneyMode m)
+{
+	return m == TourneyMode::Teams ? 45 : 40;
+}
+
+std::vector<TourneyMember> TourneyMembersFromJson(const Json *v)
+{
+	std::vector<TourneyMember> out;
+	if (!v || v->type != Json::Array) return out;
+	for (const Json &m : v->arr) {
+		const TourneyMember x = MemberFromJson(&m);
+		if (x.steamId && !TourneyMemberOf(out, x.steamId)) out.push_back(x);
+	}
+	return out;
+}
+
+const TourneyMember *TourneyMemberOf(const std::vector<TourneyMember> &members, uint64_t steamId)
+{
+	for (const TourneyMember &m : members) {
+		if (steamId && m.steamId == steamId) return &m;
+	}
+	return nullptr;
+}
+
+bool TourneyNameIsMembers(const std::string &name, const std::vector<TourneyMember> &members)
+{
+	if (members.size() < 2 || name.empty()) return false;
+	for (const TourneyMember &m : members) {
+		if (m.name.empty() || name.find(m.name) == std::string::npos) return false;
+	}
+	return true;
+}
+
+std::vector<TourneyMember> TourneyPlayersOf(const TourneyEntrant &e)
+{
+	return PlayersOf(e.steamId, e.name, e.members);
+}
+
+std::vector<TourneyMember> TourneyPlayersOf(const TourneyCard &c)
+{
+	return PlayersOf(c.steamId, c.name, c.members);
 }
 
 TourneyStatus TourneyStatusFromId(const std::string &id)
@@ -127,7 +232,7 @@ TourneyEntryStatus TourneyEntryStatusFromId(const std::string &id)
 {
 	static const std::pair<const char *, TourneyEntryStatus> kNames[] = {{"signed", TourneyEntryStatus::Signed}, {"waitlist", TourneyEntryStatus::Waitlist},
 		{"playing", TourneyEntryStatus::Playing}, {"out", TourneyEntryStatus::Out}, {"withdrawn", TourneyEntryStatus::Withdrawn},
-		{"disqualified", TourneyEntryStatus::Disqualified}, {"missed_checkin", TourneyEntryStatus::MissedCheckin}};
+		{"disqualified", TourneyEntryStatus::Disqualified}, {"missed_checkin", TourneyEntryStatus::MissedCheckin}, {"pending_partner", TourneyEntryStatus::PendingPartner}};
 	const std::string s = Lower(id);
 	for (const auto &n : kNames) {
 		if (s == n.first) return n.second;
@@ -480,6 +585,7 @@ bool TourneyParseSummary(const Json &j, TourneySummary &out)
 	out.seriesPool = MapsFromJson(j.Get("seriesPool"));
 	out.currentRound = std::max(0, Int(j, "currentRound"));
 	out.roundEndsAt = Int64(j, "roundEndsAt");
+	out.mode = TourneyModeFromId(Text(j, "mode"));
 	return true;
 }
 
@@ -602,6 +708,7 @@ bool TourneyParseDetail(const Json &j, TourneyDetail &out)
 			x.seed = Int(e, "seed");
 			x.placement = Int(e, "placement");
 			x.checkedIn = e.GetBool("checkedIn");
+			x.members = TourneyMembersFromJson(e.Get("members"));
 			if (x.status == TourneyEntryStatus::Signed || x.status == TourneyEntryStatus::Playing || x.status == TourneyEntryStatus::Out) counted++;
 			out.entrants.push_back(x);
 		}
@@ -664,9 +771,11 @@ bool TourneyParseDetail(const Json &j, TourneyDetail &out)
 			x.entryId = Int64(s, "entryId");
 			x.steamId = Id64(s.Get("steamId"));
 			x.name = Text(s, "name");
+			x.members = TourneyMembersFromJson(s.Get("members"));
 			if (const TourneyEntrant *e = TourneyEntrantOf(out, x.entryId)) {
 				if (x.name.empty()) x.name = e->name;
 				if (!x.steamId) x.steamId = e->steamId;
+				if (x.members.empty()) x.members = e->members;
 			}
 			x.points = whole(s, "points");
 			x.wins = whole(s, "wins");
@@ -709,10 +818,15 @@ const TourneyEntrant *TourneyEntrantOf(const TourneyDetail &d, int64_t entryId)
 
 const TourneyEntrant *TourneyEntrantBySteamId(const TourneyDetail &d, uint64_t steamId)
 {
+	if (!steamId) return nullptr;
+	// An entry still in the cup first: one that withdrew, or a team that was taken off, may name the player too.
+	const TourneyEntrant *any = nullptr;
 	for (const TourneyEntrant &e : d.entrants) {
-		if (steamId && e.steamId == steamId) return &e;
+		if (e.steamId != steamId && !TourneyMemberOf(e.members, steamId)) continue;
+		if (TourneyEntryActive(e.status) || e.status == TourneyEntryStatus::Out) return &e;
+		if (!any) any = &e;
 	}
-	return nullptr;
+	return any;
 }
 
 std::vector<const TourneyMatch *> TourneyPathOf(const TourneyDetail &d, int64_t entryId)
@@ -935,17 +1049,37 @@ bool TourneyParseNext(const Json &j, TourneyNext &out)
 	out.games = TourneyGamesFromJson(j.Get("games"));
 	out.pick = TourneyPickFromJson(j.Get("pick"));
 	out.noshowFrom = Int64(j, "noshowFrom");
-	std::string pace = Text(j, "pace"), format = Text(j, "format");
+	std::string pace = Text(j, "pace"), format = Text(j, "format"), mode = Text(j, "mode");
 	if (const Json *t = j.Get("tournament"); t && t->type == Json::Object) {
 		if (pace.empty()) pace = Text(*t, "pace");
 		if (format.empty()) format = Text(*t, "format");
+		if (mode.empty()) mode = Text(*t, "mode");
 	}
 	out.pace = TourneyPaceFromId(pace);
 	out.format = TourneyFormatFromId(format);
+	out.team = TeamFromJson(j.Get("team"));
+	if (out.team.members.empty()) out.team.members = out.me.members;
+	if (out.team.side.empty()) out.team.side = out.me.side;
+	// A match of teams says so by its mode, or by the players it lists.
+	out.mode = TourneyModeFromId(mode);
+	if (out.team.members.size() > 1 || out.opponent.members.size() > 1) out.mode = TourneyMode::Teams;
 	// The view may name the pace only through noshowFrom, which only the by-rounds pace has.
 	if (out.noshowFrom) out.pace = TourneyPace::Rounds;
 	out.present = true;
 	return true;
+}
+
+std::vector<uint64_t> TourneyMatchPlayers(const TourneyNext &n, uint64_t me)
+{
+	std::vector<uint64_t> out;
+	const auto add = [&out](uint64_t id) {
+		if (id && std::find(out.begin(), out.end(), id) == out.end()) out.push_back(id);
+	};
+	add(me);
+	for (const TourneyMember &m : n.team.members) add(m.steamId);
+	add(n.opponent.steamId);
+	for (const TourneyMember &m : n.opponent.members) add(m.steamId);
+	return out;
 }
 
 TourneyMap TourneyGameMap(const TourneyNext &n)
@@ -985,8 +1119,31 @@ bool TourneyParseMine(const Json &j, TourneyMine &out)
 			x.checkedIn = e.GetBool("checkedIn");
 			x.seed = Int(e, "seed");
 			x.placement = Int(e, "placement");
+			x.entryId = Int64(e, "entryId");
+			if (!x.entryId) x.entryId = Int64(e, "id");
+			x.teamName = Text(e, "teamName");
+			x.partner = MemberFromJson(e.Get("partner"));
+			x.members = TourneyMembersFromJson(e.Get("members"));
 			if (x.tournamentId) out.entries.push_back(x);
 		}
+	}
+	if (const Json *list = j.Get("invites"); list && list->type == Json::Array) {
+		for (const Json &v : list->arr) {
+			if (v.type != Json::Object) continue;
+			TourneyInvite x;
+			x.tournamentId = Int64(v, "tournamentId");
+			x.entryId = Int64(v, "entryId");
+			x.slug = Text(v, "slug");
+			x.name = Text(v, "name");
+			x.teamName = Text(v, "teamName");
+			x.from = MemberFromJson(v.Get("from"));
+			x.expiresAt = Int64(v, "expiresAt");
+			if (x.tournamentId && x.entryId) out.invites.push_back(x);
+		}
+		std::stable_sort(out.invites.begin(), out.invites.end(), [](const TourneyInvite &a, const TourneyInvite &b) {
+			if ((a.expiresAt > 0) != (b.expiresAt > 0)) return a.expiresAt > 0;
+			return a.expiresAt < b.expiresAt;
+		});
 	}
 	if (const Json *o = j.Get("organize"); o && o->type == Json::Object) {
 		TourneyOrganize &g = out.organize;
@@ -1038,21 +1195,38 @@ const TourneyOrganized *TourneyOrganizedOf(const TourneyMine &m, int64_t tournam
 	return nullptr;
 }
 
+const TourneyInvite *TourneyInviteOf(const TourneyMine &m, int64_t tournamentId)
+{
+	for (const TourneyInvite &i : m.invites) {
+		if (tournamentId && i.tournamentId == tournamentId) return &i;
+	}
+	return nullptr;
+}
+
+TourneyMember TourneyPartnerOf(const TourneyMyEntry &e, uint64_t me)
+{
+	if (e.partner.steamId || !e.partner.name.empty()) return e.partner;
+	for (const TourneyMember &m : e.members) {
+		if (m.steamId != me) return m;
+	}
+	return TourneyMember();
+}
+
 bool TourneyHasActiveEntry(const TourneyMine &m)
 {
 	for (const TourneyMyEntry &e : m.entries) {
-		if (Active(e.tournamentStatus) && TourneyEntryActive(e.status)) return true;
+		if (Active(e.tournamentStatus) && (TourneyEntryActive(e.status) || e.Pending())) return true;
 	}
 	for (const TourneyOrganized &c : m.organized) {
 		if (Active(c.status)) return true;
 	}
-	return m.next.present;
+	return m.next.present || !m.invites.empty();
 }
 
 int TourneyPollEveryMs(bool activeEntry, bool tabOpen)
 {
 	if (activeEntry) return 30000;
-	return tabOpen ? 60000 : 0;
+	return tabOpen ? 60000 : kTourneyIdlePollMs;
 }
 
 int TourneySeriesPollMs(const TourneyNext &n, int64_t msSinceGame)
@@ -1082,7 +1256,26 @@ bool TourneyParseClaim(const Json &j, TourneyClaim &out)
 		out.by = Id64(j.Get("by"));
 		out.pick = TourneyPickFromJson(j.Get("pick"));
 	}
+	if (const Json *teams = j.Get("teams"); teams && teams->type == Json::Array && teams->arr.size() == 2) {
+		for (const Json &side : teams->arr) {
+			std::vector<uint64_t> ids;
+			if (side.type == Json::Array) {
+				for (const Json &id : side.arr) {
+					if (const uint64_t steamId = Id64(&id)) ids.push_back(steamId);
+				}
+			}
+			out.teams.push_back(ids);
+		}
+	}
 	return out.kind != TourneyClaim::None;
+}
+
+int TourneyTeamOf(const std::vector<std::vector<uint64_t>> &teams, uint64_t steamId)
+{
+	for (size_t i = 0; i < teams.size() && i < 2; i++) {
+		if (steamId && std::find(teams[i].begin(), teams[i].end(), steamId) != teams[i].end()) return static_cast<int>(i) + 1;
+	}
+	return 0;
 }
 
 std::string TourneyRoomTag(int64_t match)
@@ -1151,6 +1344,20 @@ std::vector<TourneyNotice> TourneyNewNotices(const TourneyMine &mine, TourneyTol
 		x.name = e.name;
 		out.push_back(x);
 	}
+	// An invitation waits for an answer: those that came before the game started are told too.
+	for (const TourneyInvite &i : mine.invites) {
+		if (!told.invites.insert(i.entryId).second) continue;
+		TourneyNotice x;
+		x.kind = TourneyNotice::Invite;
+		x.tournamentId = i.tournamentId;
+		x.entry = i.entryId;
+		x.slug = i.slug;
+		x.name = i.name;
+		x.teamName = i.teamName;
+		x.from = i.from;
+		x.deadlineAt = i.expiresAt;
+		out.push_back(x);
+	}
 	told.primed = true;
 	return out;
 }
@@ -1202,6 +1409,7 @@ TourneyRefusal TourneyParseRefusal(const Json &j)
 	r.needed = Int(j, "needed");
 	r.retryAfter = std::max(0, Int(j, "retryAfter"));
 	r.requirement = Text(j, "kind");
+	r.who = Lower(Text(j, "who"));
 	for (const auto &field : {std::make_pair("have", &r.have), std::make_pair("need", &r.need)}) {
 		const Json *v = j.Get(field.first);
 		if (v && v->type == Json::Number) *field.second = std::to_string(static_cast<long long>(std::llround(v->num)));
@@ -1220,6 +1428,85 @@ bool TourneyParseCreated(const Json &j, TourneyCreated &out)
 	out.slug = Text(j, "slug");
 	out.inviteCode = Text(j, "inviteCode");
 	return out.id != 0 && !out.slug.empty();
+}
+
+Json TourneyTeamEntryJson(uint64_t partner, const std::string &teamName, const std::string &code)
+{
+	Json body = Json::MakeObject();
+	body.Set("partner", Json::MakeString(std::to_string(partner)));
+	const std::string name = TourneyTrim(teamName);
+	if (!name.empty()) body.Set("teamName", Json::MakeString(name));
+	if (!code.empty()) body.Set("code", Json::MakeString(code));
+	return body;
+}
+
+bool TourneyParseMapTypes(const Json &j, std::vector<TourneyMapType> &out)
+{
+	const Json *list = j.Get("types");
+	if (!list || list->type != Json::Array) return false;
+	out.clear();
+	for (const Json &t : list->arr) {
+		if (t.type != Json::Object) continue;
+		TourneyMapType x;
+		x.id = Lower(Text(t, "id"));
+		x.sizes = Strings(t.Get("sizes"));
+		const Json *four = t.Get("sizes4");
+		x.hasSizes4 = four && four->type == Json::Array;
+		x.sizes4 = Strings(four);
+		if (!x.id.empty()) out.push_back(x);
+	}
+	return true;
+}
+
+std::vector<std::string> TourneySizesFor(const std::vector<TourneyMapType> &types, const std::string &type, TourneyMode mode)
+{
+	const std::vector<std::string> sizes = LeagueMapSizesOf(type);
+	if (mode != TourneyMode::Teams) return sizes;
+	std::vector<std::string> out;
+	for (const TourneyMapType &t : types) {
+		if (t.id != type || !t.hasSizes4) continue;
+		// In the order of the room's list, as the 1 vs 1 sizes.
+		for (const char *s : {"small", "medium", "large"}) {
+			if (Contains(t.sizes4, s)) out.push_back(s);
+		}
+		return out;
+	}
+	for (const std::string &s : sizes) {
+		if (s != "small") out.push_back(s);
+	}
+	return out;
+}
+
+bool TourneyMapFits(const TourneyMap &m, TourneyMode mode, const std::vector<TourneyMapType> &types)
+{
+	if (m.Scenario()) return m.players >= 2 * TourneySidePlayers(mode);
+	return Contains(TourneySizesFor(types, m.name, mode), m.size);
+}
+
+TourneyMap TourneyMapForMode(const TourneyMap &m, TourneyMode mode, const std::vector<TourneyMapType> &types)
+{
+	if (TourneyMapFits(m, mode, types)) return m;
+	if (!m.Scenario()) {
+		const std::vector<std::string> sizes = TourneySizesFor(types, m.name, mode);
+		if (!sizes.empty()) {
+			// The size next up, as a small map grows to a normal one; the largest when there is none above it.
+			static const char *const kOrder[] = {"small", "medium", "large"};
+			int at = 0;
+			for (int i = 0; i < 3; i++) {
+				if (m.size == kOrder[i]) at = i;
+			}
+			for (int i = at; i < 3; i++) {
+				if (Contains(sizes, kOrder[i])) return {m.name, m.type.empty() ? "random" : m.type, kOrder[i]};
+			}
+			return {m.name, m.type.empty() ? "random" : m.type, sizes.back()};
+		}
+	}
+	TourneyMap fallback = {"mediterranean", "random", "medium"};
+	if (!TourneyMapFits(fallback, mode, types)) {
+		const std::vector<std::string> sizes = TourneySizesFor(types, fallback.name, mode);
+		if (!sizes.empty()) fallback.size = sizes.front();
+	}
+	return fallback;
 }
 
 std::string TourneyTidyCode(const std::string &typed)
@@ -1271,7 +1558,7 @@ int TourneyRoundsFor(int places)
 	return rounds;
 }
 
-std::vector<TourneyCupProblem> TourneyCheckCup(const TourneyCupForm &f, int64_t nowMs)
+std::vector<TourneyCupProblem> TourneyCheckCup(const TourneyCupForm &f, int64_t nowMs, const std::vector<TourneyMapType> &types)
 {
 	std::vector<TourneyCupProblem> out;
 	const int name = TourneyTextLength(TourneyTrim(f.name));
@@ -1314,6 +1601,18 @@ std::vector<TourneyCupProblem> TourneyCheckCup(const TourneyCupForm &f, int64_t 
 		out.insert(std::find_if(out.begin(), out.end(), [](TourneyCupProblem q) { return q == TourneyCupProblem::PoolCount || q == TourneyCupProblem::PoolMap; }),
 			TourneyCupProblem::MapTooLarge);
 	}
+	// A cup of teams needs room for four in every map it can play, the series' too; a map that can't be used at all is told as such.
+	bool seats = false;
+	std::vector<TourneyMap> played = f.maps;
+	if (TourneyCupHasSeries(f)) played.insert(played.end(), f.seriesPool.begin(), f.seriesPool.end());
+	for (const TourneyMap &m : played) {
+		const bool valid = m.Scenario() ? m.players >= 2 : LeagueMapValid(m.name, m.size);
+		if (f.mode == TourneyMode::Teams && valid && !TourneyMapFits(m, f.mode, types)) seats = true;
+	}
+	if (seats) {
+		out.insert(std::find_if(out.begin(), out.end(), [](TourneyCupProblem q) { return q == TourneyCupProblem::PoolCount || q == TourneyCupProblem::PoolMap; }),
+			TourneyCupProblem::MapSeats);
+	}
 	if (f.startsAt < nowMs + kTourneyCupLeadMinMs) out.push_back(TourneyCupProblem::StartSoon);
 	else if (f.startsAt > nowMs + kTourneyCupLeadMaxMs) out.push_back(TourneyCupProblem::StartLate);
 	if (f.pace == TourneyPace::Rounds && !TourneyRoundDaysValid(f.roundDays)) out.push_back(TourneyCupProblem::Pace);
@@ -1332,6 +1631,7 @@ Json TourneyCupJson(const TourneyCupForm &f, bool edit)
 	if (!description.empty() || edit) body.Set("description", Json::MakeString(description));
 	body.Set("maxEntries", Json::MakeNumber(f.maxEntries));
 	body.Set("minEntries", Json::MakeNumber(f.minEntries));
+	body.Set("mode", Json::MakeString(TourneyModeId(f.mode)));
 	body.Set("format", Json::MakeString(TourneyFormatId(f.format)));
 	// The Swiss's rounds, null for the automatic count and outside a Swiss; the days of a round, null when it is played live.
 	const bool chosen = f.format == TourneyFormat::Swiss && f.swissRounds >= kTourneySwissRoundsMin && f.swissRounds <= kTourneySwissRoundsMax;
@@ -1356,7 +1656,8 @@ Json TourneyCupJson(const TourneyCupForm &f, bool edit)
 	body.Set("settings", TourneySettingsJson(f.settings));
 	body.Set("requirements", TourneyRequirementsJson(f.requirements));
 	body.Set("private", Json::MakeBool(f.isPrivate));
-	body.Set("play", Json::MakeBool(f.play));
+	// In a cup of teams the organizer's entry needs a partner: they sign their team up from the cup's page.
+	body.Set("play", Json::MakeBool(f.play && f.mode != TourneyMode::Teams));
 	if (!f.contentKey.empty()) {
 		body.Set("contentKey", Json::MakeString(f.contentKey));
 		if (!f.contentName.empty() || edit) body.Set("contentName", f.contentName.empty() ? Json() : Json::MakeString(f.contentName));
@@ -1383,6 +1684,13 @@ void TourneyFitMaps(std::vector<TourneyMap> &maps, int rounds)
 	maps.resize(static_cast<size_t>(rounds));
 }
 
+void TourneyFitCupToMode(TourneyCupForm &f, const std::vector<TourneyMapType> &types)
+{
+	for (TourneyMap &m : f.maps) m = TourneyMapForMode(m, f.mode, types);
+	f.seriesPool.erase(std::remove_if(f.seriesPool.begin(), f.seriesPool.end(), [&f, &types](const TourneyMap &m) { return !TourneyMapFits(m, f.mode, types); }),
+		f.seriesPool.end());
+}
+
 TourneyCupForm TourneyCupFormOf(const TourneyDetail &d)
 {
 	TourneyCupForm f;
@@ -1390,6 +1698,7 @@ TourneyCupForm TourneyCupFormOf(const TourneyDetail &d)
 	f.description = d.description;
 	f.maxEntries = d.maxEntries;
 	f.minEntries = d.minEntries;
+	f.mode = d.mode;
 	f.bestOf = d.bestOf;
 	f.finalBestOf = d.finalBestOf;
 	f.randomSeeding = Lower(d.seeding) == "random";
@@ -1429,7 +1738,7 @@ bool TourneyCupLocked(const TourneyDetail &d)
 	return false;
 }
 
-TourneyEstimate TourneyEstimateFor(int places, int bestOf, int finalBestOf)
+TourneyEstimate TourneyEstimateFor(int places, int bestOf, int finalBestOf, int gameMinutes)
 {
 	TourneyEstimate e;
 	if (places < 2) return e;
@@ -1438,13 +1747,13 @@ TourneyEstimate TourneyEstimateFor(int places, int bestOf, int finalBestOf)
 	e.rounds = TourneyRoundsFor(places);
 	e.series = places - 1;
 	e.maxGames = (places - 2) * bestOf + finalBestOf;
-	e.minutes = 40 * ((e.rounds - 1) * bestOf + finalBestOf) + 10 * (e.rounds - 1);
+	e.minutes = gameMinutes * ((e.rounds - 1) * bestOf + finalBestOf) + 10 * (e.rounds - 1);
 	return e;
 }
 
-TourneyEstimate TourneyEstimateFor(TourneyFormat format, int places, int bestOf, int finalBestOf, int swissRounds)
+TourneyEstimate TourneyEstimateFor(TourneyFormat format, int places, int bestOf, int finalBestOf, int swissRounds, int gameMinutes)
 {
-	if (format == TourneyFormat::Single) return TourneyEstimateFor(places, bestOf, finalBestOf);
+	if (format == TourneyFormat::Single) return TourneyEstimateFor(places, bestOf, finalBestOf, gameMinutes);
 	TourneyEstimate e;
 	if (places < 2) return e;
 	bestOf = std::max(1, bestOf);
@@ -1453,7 +1762,7 @@ TourneyEstimate TourneyEstimateFor(TourneyFormat format, int places, int bestOf,
 		e.rounds = TourneySwissRounds(swissRounds, places);
 		e.series = e.rounds * (places / 2);
 		e.maxGames = e.series * bestOf;
-		e.minutes = 40 * bestOf * e.rounds + 10 * (e.rounds - 1);
+		e.minutes = gameMinutes * bestOf * e.rounds + 10 * (e.rounds - 1);
 		return e;
 	}
 	// The losers' bracket of a bracket of k rounds plays 2(k-1) rounds, its first after the winners' first; each of the winners' later rounds
@@ -1462,13 +1771,13 @@ TourneyEstimate TourneyEstimateFor(TourneyFormat format, int places, int bestOf,
 	e.rounds = 2 * k + 1;
 	e.series = 2 * places - 1;
 	e.maxGames = (2 * places - 3) * bestOf + 2 * finalBestOf;
-	e.minutes = 40 * ((2 * k - 1) * bestOf + 2 * finalBestOf) + 10 * (e.rounds - 1);
+	e.minutes = gameMinutes * ((2 * k - 1) * bestOf + 2 * finalBestOf) + 10 * (e.rounds - 1);
 	return e;
 }
 
 TourneyEstimate TourneyEstimateOf(const TourneyCupForm &f)
 {
-	TourneyEstimate e = TourneyEstimateFor(f.format, f.maxEntries, f.bestOf, f.finalBestOf, f.swissRounds);
+	TourneyEstimate e = TourneyEstimateFor(f.format, f.maxEntries, f.bestOf, f.finalBestOf, f.swissRounds, TourneyGameMinutes(f.mode));
 	if (f.pace == TourneyPace::Rounds) e.days = e.rounds * std::max(1, f.roundDays);
 	return e;
 }
