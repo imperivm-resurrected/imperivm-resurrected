@@ -68,11 +68,6 @@ std::string CardKey(const std::string &steamId, int season, const std::string &q
 	return steamId + ":" + std::to_string(season) + ":" + LeagueQueueId(queue);
 }
 
-// The duel's pages are the ones a server before the 2v2 gives without a queue.
-std::string QueueParam(const std::string &queue)
-{
-	return LeagueQueueIsTeam(queue) ? "queue=2v2" : std::string();
-}
 
 std::string Failure(const HttpReply &r)
 {
@@ -102,9 +97,7 @@ void FetchSeasons(std::string lang)
 
 void FetchHall(unsigned gen, int season, std::string queue)
 {
-	std::string path = "/v1/league/seasons/" + std::to_string(season) + "/hall?lang=" + LangCode();
-	if (!QueueParam(queue).empty()) path += "&" + QueueParam(queue);
-	const HttpReply r = Http("GET", path, "", false);
+	const HttpReply r = Http("GET", LeagueHallPath(season, LangCode(), queue), "", false);
 	Json j;
 	LeagueHall hall;
 	const bool ok = r.Ok() && Json::Parse(r.body, j) && LeagueParseHall(j, hall);
@@ -121,12 +114,7 @@ void FetchHall(unsigned gen, int season, std::string queue)
 
 void FetchCard(std::string steamId, int season, std::string queue)
 {
-	std::string path = "/v1/league/players/" + UrlEncode(steamId);
-	std::string query;
-	if (season >= 0) query = "season=" + std::to_string(season);
-	if (!QueueParam(queue).empty()) query += (query.empty() ? "" : "&") + QueueParam(queue);
-	if (!query.empty()) path += "?" + query;
-	const HttpReply r = Http("GET", path, "", false);
+	const HttpReply r = Http("GET", LeaguePlayerPath(UrlEncode(steamId), season, queue), "", false);
 	Json j;
 	LeaguePlayerProfile card;
 	const bool ok = r.Ok() && Json::Parse(r.body, j) && LeagueParsePlayerProfile(j, card);
@@ -178,9 +166,7 @@ void CeremonyThread(int season, bool equip, bool frameAndTitle, std::string queu
 	std::string error;
 	bool changed = false;
 	if (equip && frameAndTitle) changed = PutCosmetics(true, season, true, season, error);
-	std::string path = "/v1/league/me/ceremony/" + std::to_string(season) + "/seen";
-	if (!QueueParam(queue).empty()) path += "?" + QueueParam(queue);
-	const HttpReply r = Http("POST", path, "", true);
+	const HttpReply r = Http("POST", LeagueCeremonySeenPath(season, queue), "", true);
 	if (r.Ok()) LogI("league", "the ceremony of season %d was seen%s", season, equip ? " and its rewards equipped" : "");
 	else LogW("league", "could not mark the ceremony of season %d seen (%s)", season, r.Describe().c_str());
 	{

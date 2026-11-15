@@ -228,6 +228,30 @@ void Party()
 	CHECK_EQ(fresh[0].id, std::string("b"));
 }
 
+void Paths()
+{
+	// The duel's requests stay the ones a server before the 2v2 knows.
+	CHECK_EQ(LeagueBoardPath("1v1"), std::string("/v1/league/leaderboard?queue=1v1"));
+	CHECK_EQ(LeagueBoardPath(""), std::string("/v1/league/leaderboard?queue=1v1"));
+	CHECK_EQ(LeagueHistoryPath(0, 5, "1v1"), std::string("/v1/league/matches?mine=1&limit=5"));
+	CHECK_EQ(LeagueHistoryPath(1700000000000LL, 10, "1v1"), std::string("/v1/league/matches?mine=1&limit=10&before=1700000000000"));
+	CHECK_EQ(LeaguePlayerPath("76561198000000001", -1, "1v1"), std::string("/v1/league/players/76561198000000001"));
+	CHECK_EQ(LeaguePlayerPath("76561198000000001", 2, "1v1"), std::string("/v1/league/players/76561198000000001?season=2"));
+	CHECK_EQ(LeagueHallPath(1, "es", "1v1"), std::string("/v1/league/seasons/1/hall?lang=es"));
+	CHECK_EQ(LeagueCeremonySeenPath(1, "1v1"), std::string("/v1/league/me/ceremony/1/seen"));
+	// The 2v2's say so.
+	CHECK_EQ(LeagueBoardPath("2v2"), std::string("/v1/league/leaderboard?queue=2v2"));
+	CHECK_EQ(LeagueHistoryPath(0, 5, "2v2"), std::string("/v1/league/matches?mine=1&limit=5&queue=2v2"));
+	CHECK_EQ(LeagueHistoryPath(99, 10, "2v2"), std::string("/v1/league/matches?mine=1&limit=10&before=99&queue=2v2"));
+	CHECK_EQ(LeaguePlayerPath("5", -1, "2v2"), std::string("/v1/league/players/5?queue=2v2"));
+	CHECK_EQ(LeaguePlayerPath("5", 3, "2v2"), std::string("/v1/league/players/5?season=3&queue=2v2"));
+	CHECK_EQ(LeagueHallPath(1, "it", "2v2"), std::string("/v1/league/seasons/1/hall?lang=it&queue=2v2"));
+	CHECK_EQ(LeagueCeremonySeenPath(4, "2v2"), std::string("/v1/league/me/ceremony/4/seen?queue=2v2"));
+	// The duo's invitations are answered by their id.
+	CHECK_EQ(LeaguePartyAnswerPath("12", true), std::string("/v1/league/party/12/accept"));
+	CHECK_EQ(LeaguePartyAnswerPath("12", false), std::string("/v1/league/party/12/decline"));
+}
+
 void DropWait()
 {
 	CHECK(!LeagueTeamDropOver(60000, 60000));
@@ -288,6 +312,7 @@ int main()
 	Ticket();
 	StatsHistoryErrors();
 	Party();
+	Paths();
 	DropWait();
 	Vote();
 	return test::Summary("leagueteam");

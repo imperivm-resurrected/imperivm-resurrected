@@ -173,7 +173,7 @@ void InviteThread(std::string steamId, std::string name)
 
 void AnswerThread(std::string inviteId, std::string from, bool accept)
 {
-	const HttpReply r = Http("POST", "/v1/league/party/" + UrlEncode(inviteId) + (accept ? "/accept" : "/decline"), "", true);
+	const HttpReply r = Http("POST", LeaguePartyAnswerPath(UrlEncode(inviteId), accept), "", true);
 	Json j;
 	const bool parsed = !r.body.empty() && Json::Parse(r.body, j);
 	std::lock_guard<std::mutex> lock(g_mx);

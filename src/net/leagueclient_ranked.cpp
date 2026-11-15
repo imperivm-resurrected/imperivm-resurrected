@@ -287,7 +287,7 @@ void FetchSeason(std::string lang)
 
 void FetchBoard(bool linked, std::string queue)
 {
-	const std::string base = "/v1/league/leaderboard?queue=" + queue;
+	const std::string base = LeagueBoardPath(queue);
 	const Answer top = Call("GET", base + "&offset=0&limit=" + std::to_string(kHubRows), "", false);
 	Answer around;
 	if (linked) around = Call("GET", base + "&around=me&limit=" + std::to_string(kAroundRows), "", true);
@@ -314,7 +314,7 @@ void FetchBoard(bool linked, std::string queue)
 
 void FetchPage(unsigned gen, LeagueBoardQuery q)
 {
-	std::string path = "/v1/league/leaderboard?queue=" + LeagueQueueId(q.queue) + "&limit=" + std::to_string(q.limit);
+	std::string path = LeagueBoardPath(q.queue) + "&limit=" + std::to_string(q.limit);
 	path += q.aroundMe ? "&around=me" : "&offset=" + std::to_string(q.offset);
 	if (q.season >= 0) path += "&season=" + std::to_string(q.season);
 	if (q.name.size() >= 2) path += "&q=" + UrlEncode(q.name);
@@ -339,18 +339,9 @@ void FetchPage(unsigned gen, LeagueBoardQuery q)
 	else g_board.pageError = !a.r.status ? "Couldn't reach the league server. Check your connection and try again." : "The league server refused the request. Try again later.";
 }
 
-std::string HistoryPath(int64_t before, int limit, const std::string &queue)
-{
-	std::string path = "/v1/league/matches?mine=1&limit=" + std::to_string(limit);
-	if (before > 0) path += "&before=" + std::to_string(static_cast<long long>(before));
-	// The duel's list is the one a server before the 2v2 gives without a queue.
-	if (LeagueQueueIsTeam(queue)) path += "&queue=2v2";
-	return path;
-}
-
 void FetchRecent(std::string queue)
 {
-	const Answer a = Call("GET", HistoryPath(0, kLeagueRecentGames, queue), "", true);
+	const Answer a = Call("GET", LeagueHistoryPath(0, kLeagueRecentGames, queue), "", true);
 	LeagueHistoryPage page;
 	const bool ok = a.r.Ok() && a.parsed && LeagueParseHistory(a.j, page);
 	if (!ok && a.r.status != 401) LogW("league", "could not read the player's ranked games (%s)", a.r.Describe().c_str());
@@ -370,7 +361,7 @@ void FetchRecent(std::string queue)
 
 void FetchHistory(unsigned gen, int64_t before, std::string queue)
 {
-	const Answer a = Call("GET", HistoryPath(before, kLeagueHistoryPage, queue), "", true);
+	const Answer a = Call("GET", LeagueHistoryPath(before, kLeagueHistoryPage, queue), "", true);
 	LeagueHistoryPage page;
 	const bool ok = a.r.Ok() && a.parsed && LeagueParseHistory(a.j, page);
 	if (!ok) LogW("league", "could not read a page of the ranked history (%s)", a.r.Describe().c_str());

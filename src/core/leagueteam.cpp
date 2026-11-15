@@ -117,6 +117,42 @@ std::vector<LeaguePartyInvite> LeagueNewInvites(const std::vector<LeaguePartyInv
 	return out;
 }
 
+std::string LeagueBoardPath(const std::string &queue)
+{
+	return "/v1/league/leaderboard?queue=" + LeagueQueueId(queue);
+}
+
+std::string LeagueHistoryPath(int64_t before, int limit, const std::string &queue)
+{
+	std::string path = "/v1/league/matches?mine=1&limit=" + std::to_string(limit);
+	if (before > 0) path += "&before=" + std::to_string(static_cast<long long>(before));
+	if (LeagueQueueIsTeam(queue)) path += "&queue=2v2";
+	return path;
+}
+
+std::string LeaguePlayerPath(const std::string &steamId, int season, const std::string &queue)
+{
+	std::string query;
+	if (season >= 0) query = "season=" + std::to_string(season);
+	if (LeagueQueueIsTeam(queue)) query += (query.empty() ? "" : "&") + std::string("queue=2v2");
+	return "/v1/league/players/" + steamId + (query.empty() ? "" : "?" + query);
+}
+
+std::string LeagueHallPath(int season, const std::string &lang, const std::string &queue)
+{
+	return "/v1/league/seasons/" + std::to_string(season) + "/hall?lang=" + lang + (LeagueQueueIsTeam(queue) ? "&queue=2v2" : "");
+}
+
+std::string LeagueCeremonySeenPath(int season, const std::string &queue)
+{
+	return "/v1/league/me/ceremony/" + std::to_string(season) + "/seen" + (LeagueQueueIsTeam(queue) ? "?queue=2v2" : "");
+}
+
+std::string LeaguePartyAnswerPath(const std::string &inviteId, bool accept)
+{
+	return "/v1/league/party/" + inviteId + (accept ? "/accept" : "/decline");
+}
+
 std::vector<LeagueMatchTeam> LeagueTicketTeams(const LeagueMatchTicket &t)
 {
 	if (!t.teams.empty()) return t.teams;

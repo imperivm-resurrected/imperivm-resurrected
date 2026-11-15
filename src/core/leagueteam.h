@@ -57,6 +57,16 @@ LeagueDuoRole LeagueDuoRoleOf(const LeagueParty &p, const std::string &me);
 // The invitations not in `seen` (their ids), for the notice of a new one.
 std::vector<LeaguePartyInvite> LeagueNewInvites(const std::vector<LeaguePartyInvite> &now, const std::vector<std::string> &seen);
 
+// The requests whose path says the queue. The duel's are the ones a server before the 2v2 knows (only the leaderboard names its queue);
+// the 2v2's add queue=2v2. Values that need it come URL-encoded.
+std::string LeagueBoardPath(const std::string &queue);
+std::string LeagueHistoryPath(int64_t before, int limit, const std::string &queue);
+std::string LeaguePlayerPath(const std::string &steamId, int season, const std::string &queue);
+std::string LeagueHallPath(int season, const std::string &lang, const std::string &queue);
+std::string LeagueCeremonySeenPath(int season, const std::string &queue);
+// POST /v1/league/party/:id/accept or /decline.
+std::string LeaguePartyAnswerPath(const std::string &inviteId, bool accept);
+
 // The sides of a 2v2 ticket: its `teams`, or its players grouped by their `team` when it sends none.
 std::vector<LeagueMatchTeam> LeagueTicketTeams(const LeagueMatchTicket &t);
 // The side of a SteamID among the teams; 0 when it is in none.
