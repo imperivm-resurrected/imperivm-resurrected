@@ -261,6 +261,15 @@ bool OwnsRoom()
 	return false;
 }
 
+// A page of the full leaderboard, from the row at offset.
+void AskBoardPage(int offset)
+{
+	LeagueBoardQuery q;
+	q.offset = offset;
+	q.limit = kRankedBoardRows;
+	LeagueBoardRequest(q);
+}
+
 void OpenRankedTab()
 {
 	if (!g_s.open) OpenMpMenu(false);
@@ -603,7 +612,7 @@ void RankedAction(int arg)
 		r.sub = kRankedBoard;
 		r.boardSel = -1;
 		r.boardOffset = 0;
-		LeagueBoardRequest(0, kRankedBoardRows, false);
+		AskBoardPage(0);
 		break;
 	case kRkHub: r.sub = kRankedHub; break;
 	case kRkBoardPrev:
@@ -614,7 +623,7 @@ void RankedAction(int arg)
 		offset = std::max(0, std::min(offset, std::max(0, total - 1) / kRankedBoardRows * kRankedBoardRows));
 		r.boardOffset = offset;
 		r.boardSel = -1;
-		LeagueBoardRequest(offset, kRankedBoardRows, false);
+		AskBoardPage(offset);
 		break;
 	}
 	case kRkBoardMe: {
@@ -622,7 +631,7 @@ void RankedAction(int arg)
 		r.boardSel = -1;
 		if (me > 0) {
 			r.boardOffset = LeagueBoardPageOf(me, kRankedBoardRows);
-			LeagueBoardRequest(r.boardOffset, kRankedBoardRows, false);
+			AskBoardPage(r.boardOffset);
 		}
 		break;
 	}

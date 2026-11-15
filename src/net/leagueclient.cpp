@@ -230,7 +230,8 @@ void Unlink(unsigned serial)
 
 void FetchMe()
 {
-	const HttpReply r = Http("GET", "/v1/league/me", "", true);
+	// In the game's language: the seasons' names of the rewards come translated.
+	const HttpReply r = Http("GET", "/v1/league/me?lang=" + LeagueLangCode(ModsLanguage()), "", true);
 	Json j;
 	LeagueMe me;
 	const bool ok = r.Ok() && Json::Parse(r.body, j) && LeagueParseMe(j, me);

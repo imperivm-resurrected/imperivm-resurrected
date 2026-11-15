@@ -132,6 +132,17 @@ struct LeagueRankedGame {
 	int divisionAfter = 0;
 };
 
+// A page of the full leaderboard: `limit` rows from `offset`, or the page around the player; of a season (-1: the one being played);
+// only the names with `name` in them (two letters at least) and, with `friends`, only the players of `ids` (at most 200).
+struct LeagueBoardQuery {
+	int offset = 0, limit = 13;
+	bool aroundMe = false;
+	int season = -1;
+	std::string name;
+	bool friends = false;
+	std::vector<std::string> ids;
+};
+
 // What the result screen shows after a ranked game.
 enum class LeagueResultState { None, Sending, Awaiting, Ready };
 struct LeagueRankedOutcome {
@@ -149,9 +160,10 @@ struct LeagueRankedView {
 	// The first ten and the page around the player, for the hub.
 	bool boardLoaded = false;
 	LeagueBoard top, around;
-	// The page the full leaderboard asked for.
+	// The page the full leaderboard asked for, and what it asked.
 	bool pageLoading = false, pageLoaded = false;
 	LeagueBoard page;
+	LeagueBoardQuery pageQuery;
 	std::string pageError;
 	LeagueRankedPhase phase = LeagueRankedPhase::Idle;
 	// While searching: since when (server time, ms since 1970), how many search and the wait the server expects.
@@ -203,8 +215,7 @@ LeagueRankedView LeagueRankedState();
 void LeagueSeasonRefresh(bool force = false);
 // The first ten and the player's place, at most once a minute unless forced.
 void LeagueBoardRefresh(bool force = false);
-// A page of the full leaderboard: `limit` rows from `offset`, or the page around the player.
-void LeagueBoardRequest(int offset, int limit, bool aroundMe);
+void LeagueBoardRequest(const LeagueBoardQuery &query);
 // The hub's latest ranked games (GET /v1/league/matches?mine=1), at most once a minute unless forced.
 constexpr int kLeagueRecentGames = 5, kLeagueHistoryPage = 10;
 void LeagueRecentRefresh(bool force = false);
