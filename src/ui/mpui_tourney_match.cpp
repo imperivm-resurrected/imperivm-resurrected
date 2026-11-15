@@ -349,10 +349,11 @@ bool PaintChampionHeader(Painter &p, const State &st, const Ui &u)
 	const int y = l.margin + kHeaderButtonH + (l.roomy ? 22 : 12);
 	p.raw = true;
 	PaintCaps(p, l.margin, y, right - l.margin - 420, 22, d.name + " \xC2\xB7 " + Tr("Final result"), pal::redText);
-	const TourneyMatch *final = d.rounds ? TourneyMatchAt(d, d.rounds, 0) : nullptr;
+	const int64_t end = TourneyFinishedAt(d);
 	p.Font(0);
-	const std::string when = DayText(d.startsAt) + " \xC2\xB7 " +
-		(final && final->finishedAt ? TrFmt("from %s to %s", {HourText(d.startsAt), HourText(final->finishedAt)}) : TrFmt("from %s", {HourText(d.startsAt)}));
+	// A cup paced by rounds lasts days: its first and last day say more than the hours.
+	const std::string when = end - d.startsAt >= 86400000LL ? TrFmt("from %s to %s", {DayText(d.startsAt), DayText(end)})
+		: DayText(d.startsAt) + " \xC2\xB7 " + (end ? TrFmt("from %s to %s", {HourText(d.startsAt), HourText(end)}) : TrFmt("from %s", {HourText(d.startsAt)}));
 	p.Text(l.w - l.margin - 420, y, 420, 22, when, pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 	p.raw = false;
 	return true;
@@ -391,7 +392,7 @@ void PaintChampionScreen(Painter &p, const State &st, const Ui &u)
 	const int pathW = std::min(540, inner * 28 / 100), pathX = m + inner - pathW;
 	const int tx = px + size + 56, tw = pathX - 40 - tx;
 	PaintCaps(p, tx, top + 30, tw, 20, champ ? (d.official ? Tr("Gold phalera") + " \xC2\xB7 " + Tr("1st place") : Tr("Champion of the cup")) : Tr("No champion"), kGold);
-	const TourneyMatch *final = d.rounds ? TourneyMatchAt(d, d.rounds, 0) : nullptr;
+	const int64_t end = TourneyFinishedAt(d);
 	if (champ) {
 		int nameSize = std::min(210, blockH * 45 / 100);
 		UseDisplay(p, nameSize);
@@ -408,13 +409,11 @@ void PaintChampionScreen(Painter &p, const State &st, const Ui &u)
 		p.raw = true;
 		p.Text(tx, ty, tw, 34, TrFmt("wins %s", {d.name}), pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		ty += 42;
-		if (final && final->a.Present() && final->b.Present()) {
-			const bool champA = final->a.entryId == champ->entryId;
-			const TourneyCard &other = champA ? final->b : final->a;
-			const std::string score = std::to_string(champA ? final->scoreA : final->scoreB) + "\xE2\x80\x93" + std::to_string(champA ? final->scoreB : final->scoreA);
+		// The final that crowned them (the grand final and its reset in a double elimination), or their points in a Swiss tournament.
+		const std::string line = ChampionLine(d, *champ);
+		if (!line.empty()) {
 			UseFace(p, BrandFace::Body, 18);
-			p.Text(tx, ty, tw, 26, final->status == TourneyMatchStatus::Walkover ? TrFmt("Final: %s did not come", {other.name}) : TrFmt("Final: %s against %s", {score, other.name}),
-				pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			p.Text(tx, ty, tw, 26, line, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 			ty += 40;
 		}
 		p.raw = false;
@@ -435,27 +434,41 @@ void PaintChampionScreen(Painter &p, const State &st, const Ui &u)
 	PaintGlassCard(p, pathX, top, pathW, blockH);
 	PaintCaps(p, pathX + 28, top + 24, pathW - 56, 20, "Path to the title", pal::caption);
 	if (champ) {
-		const std::vector<const TourneyMatch *> path = TourneyPathOf(d, champ->entryId);
-		const int stepH = std::max(54, std::min(84, (blockH - 80) / std::max<int>(1, static_cast<int>(path.size()))));
+		std::vector<const TourneyMatch *> path = TourneyPathOf(d, champ->entryId);
+		// A champion of a double elimination who came back through the losers' bracket has many matches: the earliest give way, counted.
+		const int room = blockH - 92, fit = std::max(1, room / 52);
+		const int earlier = std::max(0, static_cast<int>(path.size()) - fit);
+		if (earlier) path.erase(path.begin(), path.begin() + earlier);
+		const int stepH = std::max(52, std::min(84, room / std::max<int>(1, static_cast<int>(path.size()))));
 		int sy = top + 66;
+		if (earlier) {
+			p.Font(3);
+			p.raw = true;
+			p.Text(pathX + 62, top + 22, pathW - 62 - 28, 24, earlier == 1 ? Tr("+ 1 match before") : TrFmt("+ %s matches before", {std::to_string(earlier)}), pal::caption,
+				DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+			p.raw = false;
+		}
 		p.Fill(pathX + 35, sy + 12, 2, std::max(0, stepH * (static_cast<int>(path.size()) - 1)), pal::lineStrong);
 		for (const TourneyMatch *mm : path) {
 			const bool last = mm == path.back();
-			p.Shape(pathX + 28, sy + 4, 16, 16, InUnitEllipse, last ? kGold : RGB(0x7a, 0x75, 0x6e));
+			const bool bye = mm->status == TourneyMatchStatus::Bye || !(mm->a.Present() && mm->b.Present());
+			// A champion can lose on the way: a round of a Swiss tournament, or the match that sent them to the losers' bracket.
+			const bool lost = !bye && TourneyMatchOver(mm->status) && mm->winner != champ->entryId;
+			p.Shape(pathX + 28, sy + 4, 16, 16, InUnitEllipse, last ? kGold : lost ? pal::red : RGB(0x7a, 0x75, 0x6e));
 			if (!last) p.Shape(pathX + 30, sy + 6, 12, 12, InUnitEllipse, pal::panel);
 			const int sx = pathX + 62, sw = pathW - 62 - 28;
-			std::string stage = StageText(mm->stage, mm->round);
+			std::string stage = MatchStageText(d, *mm);
 			if (mm->bestOf > 1) stage += " \xC2\xB7 " + TrFmt("Best of %s", {std::to_string(mm->bestOf)});
-			PaintCaps(p, sx, sy, sw, 20, stage, last ? kGold : pal::caption);
+			PaintCaps(p, sx, sy, sw, 20, stage, last ? kGold : lost ? pal::redText : pal::caption);
 			const bool sideB = mm->b.entryId == champ->entryId;
 			const TourneyCard &other = sideB ? mm->a : mm->b;
 			UseDisplay(p, 30);
 			p.raw = true;
-			std::string score = mm->status == TourneyMatchStatus::Bye ? std::string("-") : std::to_string(sideB ? mm->scoreB : mm->scoreA) + "\xE2\x80\x93" + std::to_string(sideB ? mm->scoreA : mm->scoreB);
-			if (mm->status == TourneyMatchStatus::Walkover) score = "W";
-			p.Text(sx, sy + 20, 70, 34, score, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+			std::string score = bye ? std::string("-") : std::to_string(sideB ? mm->scoreB : mm->scoreA) + "\xE2\x80\x93" + std::to_string(sideB ? mm->scoreA : mm->scoreB);
+			if (mm->status == TourneyMatchStatus::Walkover && !bye) score = lost ? "0" : "W";
+			p.Text(sx, sy + 20, 70, 34, score, lost ? pal::redText : pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 			UseFace(p, BrandFace::Body, 17);
-			const std::string against = mm->status == TourneyMatchStatus::Bye ? Tr("Bye: straight to the next round")
+			const std::string against = bye ? Tr(TourneyIsSwiss(d) ? "Bye: a point without playing" : "Bye: straight to the next round")
 				: other.seed ? TrFmt("against %s (%s)", {other.name, std::to_string(other.seed)})
 							 : TrFmt("against %s", {other.name});
 			p.Text(sx + 74, sy + 20, sw - 74, 34, against, pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
@@ -493,9 +506,12 @@ void PaintChampionScreen(Painter &p, const State &st, const Ui &u)
 		p.raw = true;
 		p.Text(m + pad + 110, py, cw - 2 * pad - 110, rowH / 2 + 8, names.empty() ? std::string("-") : names, pal::text, DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.Font(3);
-		p.Text(m + pad + 110, py + rowH / 2 + 8, cw - 2 * pad - 110, 20,
-			who.size() == 1 && who[0]->seed ? TrFmt("Seed %s", {std::to_string(who[0]->seed)}) : s.place == 3 ? Tr("Semifinals") : std::string(), pal::caption,
-			DT_LEFT | DT_TOP | DT_SINGLELINE);
+		// Under the name: the Swiss points that placed them, else their seed; a shared third place says where it was lost.
+		std::string under = who.size() == 1 && who[0]->seed ? TrFmt("Seed %s", {std::to_string(who[0]->seed)}) : s.place == 3 && !TourneyIsDouble(d) ? Tr("Semifinals") : std::string();
+		if (const TourneyStanding *standing = who.size() == 1 && TourneyIsSwiss(d) ? TourneyStandingOf(d, who[0]->entryId) : nullptr) {
+			under = PointsText(standing->points) + " \xC2\xB7 " + Tr("Buchholz") + " " + std::to_string(standing->buchholz);
+		}
+		p.Text(m + pad + 110, py + rowH / 2 + 8, cw - 2 * pad - 110, 20, under, pal::caption, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.raw = false;
 		if (s.place < 3) p.Fill(m + pad, py + rowH - 1, cw - 2 * pad, 1, pal::hairline);
 		py += rowH;
@@ -510,8 +526,8 @@ void PaintChampionScreen(Painter &p, const State &st, const Ui &u)
 	for (const TourneyLogLine &line : d.log) disputes += line.action == "disputed";
 	const std::pair<std::string, std::string> stats[] = {{std::to_string(d.entries), TrFmt("players, of %s places", {std::to_string(d.maxEntries)})},
 		{std::to_string(done), Tr("series played")},
-		{final && final->finishedAt ? DurationText(final->finishedAt - d.startsAt) : std::string("-"),
-			final && final->finishedAt ? TrFmt("from %s to %s", {HourText(d.startsAt), HourText(final->finishedAt)}) : std::string()},
+		{end ? SpanText(end - d.startsAt) : std::string("-"),
+			!end ? std::string() : end - d.startsAt >= 86400000LL ? TrFmt("from %s to %s", {DayText(d.startsAt), DayText(end)}) : TrFmt("from %s to %s", {HourText(d.startsAt), HourText(end)})},
 		{std::to_string(walkovers + disputes), Tr("no-shows and disputes")}};
 	const int gw = (cw - 2 * pad - 24) / 2;
 	for (int i = 0; i < 4; i++) {
@@ -540,8 +556,10 @@ void PaintChampionScreen(Painter &p, const State &st, const Ui &u)
 		p.Fill(x2 + pad, ry + 62 + 2 * 92 - 6, cw - 2 * pad, 1, pal::hairline);
 		p.Font(0);
 		p.raw = true;
+		// Only a single elimination knocks a player out with one loss.
+		const char *beat = TourneyIsSwiss(d) || TourneyIsDouble(d) ? "%s beat %s" : "%s knocked out %s";
 		p.Text(x2 + pad, ry + 62 + 2 * 92 + 4, cw - 2 * pad, 24,
-			Tr("The surprise") + " \xC2\xB7 " + TrFmt("%s knocked out %s", {w.name + " (" + std::to_string(w.seed) + ")", lo.name + " (" + std::to_string(lo.seed) + ")"}), pal::body,
+			Tr("The surprise") + " \xC2\xB7 " + TrFmt(beat, {w.name + " (" + std::to_string(w.seed) + ")", lo.name + " (" + std::to_string(lo.seed) + ")"}), pal::body,
 			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.raw = false;
 	}
@@ -555,10 +573,20 @@ void PaintChampionScreen(Painter &p, const State &st, const Ui &u)
 	p.raw = true;
 	p.Text(x3 + pad + 68, ry + 58, cw - 2 * pad - 68, 28, st.player, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	p.Font(0);
-	p.Text(x3 + pad + 68, ry + 86, cw - 2 * pad - 68, 24, me && me->placement ? PlaceText(me->placement, d.rounds) : Tr(me ? "Your result is not final yet" : "You did not play this cup"),
-		pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	const int place = me ? EntrantPlace(d, *me) : 0;
+	const std::string result = !place ? Tr(me ? "Your result is not final yet" : "You did not play this cup")
+		: TourneyIsSwiss(d) || TourneyIsDouble(d) ? PlacementText(d, place)
+												   : PlaceText(place, d.rounds);
+	p.Text(x3 + pad + 68, ry + 86, cw - 2 * pad - 68, 24, result, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	p.raw = false;
-	if (me) {
+	if (const TourneyStanding *standing = me && TourneyIsSwiss(d) && d.status == TourneyStatus::Finished ? TourneyStandingOf(d, me->entryId) : nullptr) {
+		p.Font(0);
+		p.raw = true;
+		p.Text(x3 + pad, ry + 130, cw - 2 * pad, 24, TrFmt("You finished with %s and a Buchholz of %s.", {PointsText(standing->points), std::to_string(standing->buchholz)}), pal::body,
+			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.raw = false;
+	}
+	else if (me) {
 		const std::vector<const TourneyMatch *> path = TourneyPathOf(d, me->entryId);
 		const TourneyMatch *lastLost = nullptr;
 		for (const TourneyMatch *mm : path) {
@@ -568,7 +596,7 @@ void PaintChampionScreen(Painter &p, const State &st, const Ui &u)
 			const TourneyCard &other = lastLost->a.entryId == me->entryId ? lastLost->b : lastLost->a;
 			p.Font(0);
 			p.raw = true;
-			p.Text(x3 + pad, ry + 130, cw - 2 * pad, 24, TrFmt("You fell in the %s against %s.", {StageText(lastLost->stage, lastLost->round), other.name}), pal::body,
+			p.Text(x3 + pad, ry + 130, cw - 2 * pad, 24, TrFmt("You fell in the %s against %s.", {MatchStageText(d, *lastLost), other.name}), pal::body,
 				DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 			p.raw = false;
 		}

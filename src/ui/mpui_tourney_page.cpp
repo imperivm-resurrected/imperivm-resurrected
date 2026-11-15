@@ -765,18 +765,22 @@ void PaintEntrants(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out
 			}
 			break;
 		}
+		const int place = EntrantPlace(d, e);
 		if (*FinishedEntrantText(d, e)) {
 			status = FinishedEntrantText(d, e);
-			ink = e.placement == 1 ? kGold : pal::textDim;
+			ink = place == 1 ? kGold : pal::textDim;
 		}
 		p.Font(3);
 		p.Text(x + w / 2 + 40, ry, w / 4, rowH, status, ink, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		if (e.placement) {
-			const LeagueMetal metal = e.placement == 1 ? LeagueMetal::Gold : e.placement == 2 ? LeagueMetal::Silver : e.placement == 3 ? LeagueMetal::Bronze : LeagueMetal::None;
+		if (place) {
+			const LeagueMetal metal = place == 1 ? LeagueMetal::Gold : place == 2 ? LeagueMetal::Silver : place == 3 ? LeagueMetal::Bronze : LeagueMetal::None;
 			if (metal != LeagueMetal::None && d.official) DrawLeaguePhalera(p, x + w - 120, ry + 11, 20, metal);
+			// A double elimination shares the places below the fourth: 5-6, 7-8, 9-12...
+			const int last = TourneyIsDouble(d) ? TourneyDoublePlaceEnd(place) : place;
 			UseDisplay(p, 22);
 			p.raw = true;
-			p.Text(x + w - 90, ry, 90, rowH, std::to_string(e.placement), pal::text, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+			p.Text(x + w - 90, ry, 90, rowH, last > place ? std::to_string(place) + "\xE2\x80\x93" + std::to_string(last) : std::to_string(place), pal::text,
+				DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 			p.raw = false;
 		}
 		ry += rowH;
@@ -1332,15 +1336,17 @@ int PaintProgressCard(Painter &p, Ctx &c, int x, int y, int w)
 	return h;
 }
 
-int PaintPrizesCard(Painter &p, int x, int y, int w)
+int PaintPrizesCard(Painter &p, const TourneyDetail &d, int x, int y, int w)
 {
 	const int pad = 22, h = 120;
 	PaintGlassCard(p, x, y, w, h);
 	PaintCaps(p, x + pad, y + 20, w - 2 * pad, 20, "Prizes", pal::caption);
+	const bool swiss = TourneyIsSwiss(d), twice = TourneyIsDouble(d);
 	const struct {
 		LeagueMetal metal;
 		const char *name, *who;
-	} kPrizes[] = {{LeagueMetal::Gold, "Gold", "Champion"}, {LeagueMetal::Silver, "Silver", "Finalist"}, {LeagueMetal::Bronze, "Bronze", "Semifinals"}};
+	} kPrizes[] = {{LeagueMetal::Gold, "Gold", "Champion"}, {LeagueMetal::Silver, "Silver", swiss ? "2nd place" : "Finalist"},
+		{LeagueMetal::Bronze, "Bronze", swiss || twice ? "3rd place" : "Semifinals"}};
 	const int cw = (w - 2 * pad) / 3;
 	for (int i = 0; i < 3; i++) {
 		const int cx = x + pad + i * cw;
@@ -1445,7 +1451,7 @@ void PaintPageScreen(Painter &p, const State &st, const Ui &u, PaintOut &out)
 		sy += mapsH + 12;
 	}
 	if (bottom - sy > 150) sy += PaintProgressCard(p, c, sx, sy, sideW) + 12;
-	if (page.detail.official && bottom - sy > 120) PaintPrizesCard(p, sx, sy, sideW);
+	if (page.detail.official && bottom - sy > 120) PaintPrizesCard(p, page.detail, sx, sy, sideW);
 	p.Unclip();
 	PatronsWatch(c.ids);
 }

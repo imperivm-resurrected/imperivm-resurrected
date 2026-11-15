@@ -755,9 +755,12 @@ void DrawCupCrown(Painter &p, int x, int y, int size, bool official)
 const char *FinishedEntrantText(const TourneyDetail &d, const TourneyEntrant &e)
 {
 	if (d.status != TourneyStatus::Finished || (e.status != TourneyEntryStatus::Playing && e.status != TourneyEntryStatus::Out)) return "";
-	if (e.placement == 1) return "Champion";
-	if (e.placement == 2) return "Finalist";
-	if (e.placement == 3) return "Semifinals";
+	const int place = EntrantPlace(d, e);
+	if (place == 1) return "Champion";
+	// Nobody is knocked out of a Swiss tournament: everyone plays every round.
+	if (TourneyIsSwiss(d)) return place == 2 ? "2nd place" : place == 3 ? "3rd place" : "Finished the cup";
+	if (place == 2) return "Finalist";
+	if (place == 3) return TourneyIsDouble(d) ? "3rd place" : "Semifinals";
 	return "Knocked out";
 }
 
