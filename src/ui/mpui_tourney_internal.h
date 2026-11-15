@@ -171,6 +171,12 @@ bool PaintMatchHeader(Painter &p, const State &st, const Ui &u);
 bool PaintChampionHeader(Painter &p, const State &st, const Ui &u);
 bool PaintCreateHeader(Painter &p, const State &st, const Ui &u);
 
+// The double elimination and Swiss cups (mpui_tourney_formats.cpp).
+// A match's stage with its part of the tournament: "Quarterfinal", "Winners' final", "Losers' round 3", "Grand final", a Swiss "Round 2".
+std::string MatchStageText(const TourneyDetail &d, const TourneyMatch &m);
+// "1 point", "3 points".
+std::string PointsText(int points);
+
 // The community cups (mpui_tourney_cup.cpp).
 // A new form: the player's name for the cup, a map for each round, and the start at the first full hour two hours from now.
 TourneyCupForm NewCupForm(const std::string &player, int64_t nowMs);

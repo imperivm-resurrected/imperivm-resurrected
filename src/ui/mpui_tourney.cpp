@@ -597,7 +597,7 @@ std::string StageText(TourneyStage stage, int round)
 
 std::string FormatText(const TourneySummary &t)
 {
-	return Tr(t.format == "single" || t.format.empty() ? "Single elimination" : t.format) + " \xC2\xB7 " + Tr("1 vs 1");
+	return Tr(TourneyIsSwiss(t) ? "Swiss" : TourneyIsDouble(t) ? "Double elimination" : "Single elimination") + " \xC2\xB7 " + Tr("1 vs 1");
 }
 
 std::string ContentText(const TourneySummary &t)
@@ -993,7 +993,7 @@ void TourneyAction(int arg)
 	case kSubBack: TourneyBack(); break;
 	case kSubPageTab:
 		u.pageTab = static_cast<int>(value);
-		u.sideScroll = 0;
+		u.bracketX = u.bracketY = u.sideScroll = 0;
 		break;
 	case kSubSignUp:
 		if (!LeagueLinked()) Toast("Link your league account first.");
