@@ -548,7 +548,7 @@ void PaintRankCard(Painter &p, const State &st, const HubLayout &h)
 		Caps(p, ix, y + 20, iw, 20, "Your ranked match", pal::redText);
 		const std::vector<LeagueMatchTeam> teams = MatchTeams(v);
 		const std::string own = std::to_string(SteamOwnId());
-		const bool teamMatch = LeagueQueueIsTeam(v.searchQueue) || !teams.empty();
+		const bool teamMatch = LeagueQueueIsTeam(v.searchQueue) || (v.ticketLoaded && LeagueQueueIsTeam(v.ticket.queue)) || !v.found.teams.empty();
 		if (teamMatch) {
 			// A 2v2: the player's own rank, with whom and against whom.
 			const LeagueRanked &mine = LeagueMeRanked(me.me, kLeagueQueueTeam);

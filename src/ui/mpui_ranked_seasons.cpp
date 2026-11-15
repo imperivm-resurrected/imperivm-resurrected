@@ -102,6 +102,7 @@ void CloseCeremony(bool toBoard)
 	r.ceremonyOpen = false;
 	g_s.view = toBoard ? kViewRanked : r.ceremonyBack;
 	if (!toBoard) return;
+	LeagueRankedSelectQueue(r.ceremonyQueue);
 	RankedAction(kRkBoard);
 	r.boardSeason = r.ceremonySeason;
 	RankedBoardAsk(0, false);
@@ -197,7 +198,7 @@ void RankedSeasonAction(int arg)
 		const uint64_t id = LeagueBadgeClickedId(arg);
 		// From the ceremony's hall of fame: the ceremony was seen.
 		if (id && r.ceremonyOpen) {
-			LeagueCeremonySeen(r.ceremonySeason);
+			LeagueCeremonySeen(r.ceremonySeason, r.ceremonyQueue);
 			r.ceremonyOpen = false;
 		}
 		OpenPlayerRow(id);
@@ -214,19 +215,19 @@ void RankedSeasonAction(int arg)
 			if (b.kind == LeagueBadgeKind::Season && (b.season == r.ceremonySeason || b.id == badge)) badge = b.id;
 		}
 		const bool frame = c.present && c.reward.season == r.ceremonySeason && c.reward.frame;
-		LeagueCeremonyEquip(r.ceremonySeason, frame, badge);
+		LeagueCeremonyEquip(r.ceremonySeason, frame, badge, r.ceremonyQueue);
 		ModUiToast(frame ? "Your vexillum, your frame and your title are on." : "Your vexillum is on, next to your name.");
 		CloseCeremony(false);
 		break;
 	}
 	case kRkCeremonyLater:
 		if (!r.ceremonyOpen) break;
-		LeagueCeremonySeen(r.ceremonySeason);
+		LeagueCeremonySeen(r.ceremonySeason, r.ceremonyQueue);
 		CloseCeremony(false);
 		break;
 	case kRkCeremonyBoard:
 		if (!r.ceremonyOpen) break;
-		LeagueCeremonySeen(r.ceremonySeason);
+		LeagueCeremonySeen(r.ceremonySeason, r.ceremonyQueue);
 		CloseCeremony(true);
 		break;
 	case kRkBoardAll:
@@ -281,7 +282,7 @@ void RankedSeasonsFrame()
 	if (r.ceremonyOpen) {
 		g_s.view = kViewRanked;
 		// The hall of the queue whose season closed.
-		LeagueHallRequest(r.ceremonySeason, LeagueMeState().me.ceremony.reward.queue);
+		LeagueHallRequest(r.ceremonySeason, r.ceremonyQueue);
 		LeagueSeasonsRefresh();
 		return;
 	}
@@ -289,15 +290,17 @@ void RankedSeasonsFrame()
 	const LeagueMeView me = LeagueMeState();
 	if (!me.loaded || !me.me.ceremony.present) return;
 	const int season = me.me.ceremony.reward.season;
-	if (std::find(r.ceremonyShown.begin(), r.ceremonyShown.end(), season) != r.ceremonyShown.end()) return;
-	r.ceremonyShown.push_back(season);
+	const std::string queue = LeagueQueueId(me.me.ceremony.reward.queue), shown = std::to_string(season) + ":" + queue;
+	if (std::find(r.ceremonyShown.begin(), r.ceremonyShown.end(), shown) != r.ceremonyShown.end()) return;
+	r.ceremonyShown.push_back(shown);
+	r.ceremonyQueue = queue;
 	r.ceremonyOpen = true;
 	r.ceremonySeason = season;
 	r.ceremonyBack = g_s.view;
 	g_s.view = kViewRanked;
 	g_s.dropOpen = false;
 	if (g_s.focus == kRankedField) g_s.focus = kNoField;
-	LeagueHallRequest(season, me.me.ceremony.reward.queue);
+	LeagueHallRequest(season, queue);
 	LeagueSeasonsRefresh(true);
 	LogI("league", "showing the end of season %d", season);
 }

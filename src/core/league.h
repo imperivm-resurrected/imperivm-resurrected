@@ -216,7 +216,8 @@ LeagueMapFacts LeagueMapFromOptions(const std::string &optionsText, const std::s
 struct LeagueReportPlayer {
 	std::string steamId, name, civ, result;
 	int team = 0;
-	// The game's time when a player of a 2v2 left it for good; -1 (null) otherwise.
+	// The game's time when a player of a 2v2 left it and had not come back when it ended; -1 (null) otherwise. The league decides from it
+	// whether they abandoned (out 5 minutes or more) or voided it (out before minute 3).
 	int64_t leftAtMs = -1;
 };
 
@@ -298,8 +299,8 @@ struct LeagueDropRules {
 // Who won: the victorious team, or the only team still standing. A game that closed undecided on this computer, without a desync,
 // is this player leaving it. A desync ends it as "desync", whoever stands.
 LeagueOutcome LeagueResolve(const std::vector<LeagueSeat> &seats, bool desync, const LeagueDropRules &rules = LeagueDropRules());
-// The players of the report: the seats with a SteamID, by player index, with teams numbered from 1 in the order of the game's; a seat
-// that left takes its leftAtMs.
+// The players of the report: the seats with a SteamID, by player index, with teams numbered from 1 in the order of the game's. The other
+// players take their leftAtMs (a 2v2's who were out when it ended), this computer's only when it left.
 std::vector<LeagueReportPlayer> LeagueReportPlayers(const std::vector<LeagueSeat> &seats, const LeagueOutcome &outcome);
 
 // Reports kept on disk until the server takes them.

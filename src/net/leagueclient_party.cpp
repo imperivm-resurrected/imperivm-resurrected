@@ -81,6 +81,8 @@ std::string RefusalText(const HttpReply &r, const LeagueError &e, const std::str
 	if (!r.status) return Tr("Couldn't reach the league server. Check your connection and try again.");
 	const std::string name = NameOr(friendName, "your friend");
 	if (e.code == "not_linked") return TrFmt("%s has not linked their league account yet: they link it in Multiplayer, Ranked.", {name});
+	if (e.code == "already_in_party" && !e.steamId.empty() && e.steamId == OwnId()) return Tr("You already have a duo: leave it first.");
+	if (e.code == "already_in_party" && !friendName.empty()) return TrFmt("%s already has a duo.", {friendName});
 	if (e.code == "already_in_party") return Tr("One of you is already in a duo: leave it first.");
 	if (e.code == "rank_gap" && e.max > 0) {
 		return TrFmt("You are %s Glory apart in 2 vs 2: a duo can be at most %s apart.", {std::to_string(e.gap), std::to_string(e.max)});

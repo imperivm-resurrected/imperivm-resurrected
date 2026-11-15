@@ -752,7 +752,7 @@ std::vector<LeagueReportPlayer> LeagueReportPlayers(const std::vector<LeagueSeat
 		p.civ = s.civ;
 		p.team = static_cast<int>(std::distance(teams.begin(), teams.find(s.team))) + 1;
 		p.result = i < outcome.results.size() ? outcome.results[i] : "loss";
-		if (p.result == "left") p.leftAtMs = s.leftAtMs;
+		if (p.result == "left" || !s.local) p.leftAtMs = s.leftAtMs;
 		out.push_back(p);
 	}
 	return out;

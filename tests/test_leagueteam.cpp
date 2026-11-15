@@ -169,6 +169,14 @@ void StatsHistoryErrors()
 	CHECK_EQ(e.code, std::string("rank_gap"));
 	CHECK_EQ(e.gap, 720);
 	CHECK_EQ(e.max, 600);
+	CHECK(e.who.empty());
+	// The partner's lock is not this player's.
+	const LeagueError partner = LeagueParseError(Parse(R"({"error":"banned","who":"partner","steamId":"2","until":5000,"kind":"declined"})"));
+	CHECK_EQ(partner.who, std::string("partner"));
+	CHECK_EQ(static_cast<int>(partner.until), 5000);
+	CHECK_EQ(partner.steamId, std::string("2"));
+	const LeagueError duo = LeagueParseError(Parse(R"({"error":"already_in_party","steamId":"76561198000000002"})"));
+	CHECK_EQ(duo.steamId, std::string("76561198000000002"));
 }
 
 void Party()

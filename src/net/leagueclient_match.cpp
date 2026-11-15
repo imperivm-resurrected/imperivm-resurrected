@@ -424,10 +424,11 @@ bool BuildReport(const Match &m, LeagueReport &r, std::string &why)
 		seat.local = s.local;
 		seat.left = s.left;
 		seat.surrendered = s.surrendered;
-		// A 2v2's player who dropped is still in it while their five minutes last; the one closing the game leaves it now.
+		// A 2v2's player who dropped is still in it while their five minutes last, but out when it ended: when they left goes with them, and
+		// the league tells an abandon from it. The one closing the game leaves it now.
 		if (m.team) {
 			seat.left = s.gone;
-			seat.leftAtMs = s.gone ? s.leftAt : s.local ? m.clockMs : -1;
+			seat.leftAtMs = s.gone || s.left || s.quit ? s.leftAt : s.local ? m.clockMs : -1;
 		}
 		seats.push_back(seat);
 	}

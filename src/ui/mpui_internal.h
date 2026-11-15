@@ -153,10 +153,12 @@ struct RankedScreen {
 	bool boardFriends = false;
 	std::string boardSearch, boardAsked, boardPick, boardSeek;
 	DWORD boardTypedAt = 0;
-	// The end of season ceremony: open, its season, the tab it opened over, and the seasons already shown in this session.
+	// The end of season ceremony: open, its season and queue (each queue has its own), the tab it opened over, and the ceremonies already
+	// shown in this session (season and queue).
 	bool ceremonyOpen = false;
 	int ceremonySeason = -1, ceremonyBack = 0;
-	std::vector<int> ceremonyShown;
+	std::string ceremonyQueue = "1v1";
+	std::vector<std::string> ceremonyShown;
 	// The 2v2's dialog to invite a Steam friend to the duo: open, its page, and the name looked for (typed in the ranked field while it is
 	// open).
 	bool inviteOpen = false;

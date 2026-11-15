@@ -472,7 +472,11 @@ void JoinThread(unsigned gen, std::string contentKey, std::string queue)
 		else {
 			const std::string &code = a.error.code;
 			g_q.phase = LeagueRankedPhase::Idle;
-			if (code == "in_match" && a.error.matchId) ResumeMatch(a.error.matchId);
+			// The duo partner's lock or match is theirs: this player is told, and neither locked nor sent to it.
+			if (a.error.who == "partner" && code == "banned") SetNotice(g_q, "Your partner can't search for a while: the duo can't search until then.", true);
+			else if (a.error.who == "partner" && code == "in_match") SetNotice(g_q, "Your partner already has a match: search when it is over.", true);
+			else if (code == "party_not_ready" && a.error.reason == "partner_busy") SetNotice(g_q, "Your partner is searching on their own: they have to stop first.", true);
+			else if (code == "in_match" && a.error.matchId) ResumeMatch(a.error.matchId);
 			else if (code == "banned") {
 				g_q.banUntil = a.error.until;
 				g_q.banKind = a.error.kind;
@@ -486,6 +490,7 @@ void JoinThread(unsigned gen, std::string contentKey, std::string queue)
 				g_q.wrongContent++;
 			}
 			else if (code == "no_season") SetNotice(g_q, "No ranked season is being played now.", true);
+			else if (code == "queue_closed") SetNotice(g_q, "This season does not play that queue.", true);
 			else if (code == "not_leader") SetNotice(g_q, "The leader of your duo searches for both of you.", true);
 			else if (code == "party_not_ready") SetNotice(g_q, "Your duo is not ready: your friend has to accept the invitation first.", true);
 			else if (code == "rank_gap" && a.error.max > 0) {

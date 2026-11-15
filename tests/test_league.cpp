@@ -468,6 +468,16 @@ void ResolveTeam()
 	CHECK_EQ(static_cast<unsigned>(players.size()), 4u);
 	CHECK_EQ(static_cast<int>(players[3].leftAtMs), 300000);
 	CHECK_EQ(static_cast<int>(players[2].leftAtMs), -1);
+	// A player out when the game ended, within their five minutes: still on their side's result, with when they left.
+	seats[2].leftAtMs = 1500000;
+	o = LeagueResolve(seats, false, rules);
+	players = LeagueReportPlayers(seats, o);
+	CHECK_EQ(players[2].result, std::string("loss"));
+	CHECK_EQ(static_cast<int>(players[2].leftAtMs), 1500000);
+	// This computer's own time goes only when it left.
+	seats[0].leftAtMs = 1600000;
+	players = LeagueReportPlayers(seats, LeagueResolve(seats, false, rules));
+	CHECK_EQ(static_cast<int>(players[0].leftAtMs), -1);
 
 	// Nobody has won (a player who dropped is still within their 5 minutes, so not left) and this player closes the game: they leave it,
 	// at the game's time they were given.

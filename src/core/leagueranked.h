@@ -206,6 +206,9 @@ struct LeagueError {
 	int retryAfter = 0;
 	// The two of a duo are too far apart (409 rank_gap): their gap of Glory and the most the queue takes.
 	int gap = 0, max = 0;
+	// "partner" when the error is the duo partner's (their lock, their match), not this player's; the player an error is about
+	// (already_in_party: whose duo).
+	std::string who, steamId;
 };
 LeagueError LeagueParseError(const Json &j);
 // How long to wait before the next poll: after a 429, what the server asks (at least 1 s, 5 s when it does not say), and never

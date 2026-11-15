@@ -173,12 +173,14 @@ void CosmeticsThread(bool setFrame, int frame, bool setTitle, int title)
 	if (ok) Changed();
 }
 
-void CeremonyThread(int season, bool equip, bool frameAndTitle)
+void CeremonyThread(int season, bool equip, bool frameAndTitle, std::string queue)
 {
 	std::string error;
 	bool changed = false;
 	if (equip && frameAndTitle) changed = PutCosmetics(true, season, true, season, error);
-	const HttpReply r = Http("POST", "/v1/league/me/ceremony/" + std::to_string(season) + "/seen", "", true);
+	std::string path = "/v1/league/me/ceremony/" + std::to_string(season) + "/seen";
+	if (!QueueParam(queue).empty()) path += "?" + QueueParam(queue);
+	const HttpReply r = Http("POST", path, "", true);
 	if (r.Ok()) LogI("league", "the ceremony of season %d was seen%s", season, equip ? " and its rewards equipped" : "");
 	else LogW("league", "could not mark the ceremony of season %d seen (%s)", season, r.Describe().c_str());
 	{
@@ -297,7 +299,7 @@ void LeagueCosmeticsSet(bool setFrame, int frame, bool setTitle, int title)
 	SafeThread(CosmeticsThread, setFrame, frame, setTitle, title).detach();
 }
 
-void LeagueCeremonyEquip(int season, bool frameAndTitle, const std::string &badgeId)
+void LeagueCeremonyEquip(int season, bool frameAndTitle, const std::string &badgeId, const std::string &queue)
 {
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
@@ -306,15 +308,15 @@ void LeagueCeremonyEquip(int season, bool frameAndTitle, const std::string &badg
 		g_cosmetics.error.clear();
 	}
 	if (!badgeId.empty()) LeagueBadgeChoose("season", badgeId);
-	SafeThread(CeremonyThread, season, true, frameAndTitle).detach();
+	SafeThread(CeremonyThread, season, true, frameAndTitle, LeagueQueueId(queue)).detach();
 }
 
-void LeagueCeremonySeen(int season)
+void LeagueCeremonySeen(int season, const std::string &queue)
 {
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
 		if (g_cosmetics.ceremony) return;
 		g_cosmetics.ceremony = true;
 	}
-	SafeThread(CeremonyThread, season, false, false).detach();
+	SafeThread(CeremonyThread, season, false, false, LeagueQueueId(queue)).detach();
 }

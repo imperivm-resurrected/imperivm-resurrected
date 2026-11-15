@@ -44,7 +44,7 @@ void LeaguePlayerRequest(const std::string &steamId, int season, bool force = fa
 // PUT /v1/league/me/cosmetics: the season whose frame, or title, the player wears (-1: none); only what `setFrame` and `setTitle` say.
 void LeagueCosmeticsSet(bool setFrame, int frame, bool setTitle, int title);
 // The ceremony's "Equip and continue": the season's vexillum next to the name (`badgeId`, its id among the player's badges) and, when
-// the season gave them, its frame and title; then the ceremony is seen.
-void LeagueCeremonyEquip(int season, bool frameAndTitle, const std::string &badgeId);
+// the season gave them, its frame and title; then the ceremony is seen. Each queue has its own ceremony.
+void LeagueCeremonyEquip(int season, bool frameAndTitle, const std::string &badgeId, const std::string &queue = "1v1");
 // "Choose later": the ceremony is only marked seen.
-void LeagueCeremonySeen(int season);
+void LeagueCeremonySeen(int season, const std::string &queue = "1v1");

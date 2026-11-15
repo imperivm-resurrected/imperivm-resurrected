@@ -491,6 +491,8 @@ LeagueError LeagueParseError(const Json &j)
 	e.retryAfter = std::max(0, Int(j, "retryAfter"));
 	e.gap = std::max(0, Int(j, "gap"));
 	e.max = std::max(0, Int(j, "max"));
+	e.who = Lower(j.GetString("who"));
+	e.steamId = IdText(j.Get("steamId"));
 	return e;
 }
 
