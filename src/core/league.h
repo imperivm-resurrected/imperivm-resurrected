@@ -71,14 +71,40 @@ struct LeagueBadge {
 // {kind, id, tier?, division?}, or null. A rank badge without a known tier is not shown.
 LeagueBadge LeagueBadgeFromJson(const Json *v);
 
+// The avatar frame (or the title) a closed season gave: the season and, when the server says it, the rank it was won with. A player
+// without one has season -1.
+struct LeagueFrame {
+	int season = -1;
+	LeagueTier tier = LeagueTier::None;
+	// Won in the test season with no rank given: the Founder's colours.
+	bool founder = false;
+	std::string seasonName;
+	bool Shown() const { return season >= 0; }
+};
+// A season number, {season, tier?, seasonName?} or null.
+LeagueFrame LeagueFrameFromJson(const Json *v);
+
 // One player of GET /v1/players/lookup.
 struct LeagueLookupEntry {
 	std::string patronTier;
 	int patronPlace = 0;
 	LeagueBadge badge;
+	LeagueFrame frame;
 };
 // {"<steamId>": {patron: {tier, place}|null, badge: {...}|null}}. False when it is not an object.
 bool LeagueParsePlayersLookup(const Json &j, std::map<uint64_t, LeagueLookupEntry> &out);
+
+// The best of a player's season: the most Glory, the rank it gave and, for the elite, the best place.
+struct LeaguePeak {
+	bool present = false;
+	int glory = 0, place = 0;
+	LeagueTier tier = LeagueTier::None;
+	int division = 0;
+};
+// {glory, tier, division, place?}, or a place alone.
+LeaguePeak LeaguePeakFromJson(const Json *v);
+
+enum class LeaguePlacementMark { Win, Loss, Void };
 
 struct LeagueRanked {
 	bool present = false;
@@ -87,6 +113,31 @@ struct LeagueRanked {
 	int division = 0;
 	int season = 0, glory = 0, placementLeft = 0, shield = 0, wins = 0, losses = 0, position = 0;
 	bool elite = false;
+	LeaguePeak peak;
+	// +3: three wins in a row, -2: two losses.
+	int streak = 0;
+	// The placement games played, in order.
+	std::vector<LeaguePlacementMark> placement;
+};
+
+// What a closed season left the player: the vexillum of the highest rank reached (the Founder's in the test season) from 10 games,
+// and with 25 the avatar frame and the title too (`frame`).
+struct LeagueReward {
+	int season = 0;
+	std::string seasonName, queue;
+	LeagueTier tier = LeagueTier::None;
+	bool founder = false;
+	int place = 0, games = 0;
+	bool frame = false;
+};
+
+// The last reward the player has not seen: the end of season ceremony.
+struct LeagueCeremony {
+	bool present = false;
+	LeagueReward reward;
+	int wins = 0, losses = 0;
+	LeagueTier finalTier = LeagueTier::None;
+	int finalDivision = 0;
 };
 
 // A lock out of the ranked queue: until when (server time, ms since 1970) and why ("declined", "abandoned", "desync"; empty when the
@@ -107,6 +158,11 @@ struct LeagueMe {
 	// The choice as the server keeps it: "rank" (the live rank, the default), "season", "trophy" or "none", and its id.
 	std::string badgeKind, badgeId;
 	std::vector<LeagueBadge> badges;
+	// Every season's reward, newest first, and the one still to be shown.
+	std::vector<LeagueReward> rewards;
+	LeagueCeremony ceremony;
+	// The seasons whose frame and title the player wears; -1 for none.
+	int equippedFrame = -1, equippedTitle = -1;
 };
 bool LeagueParseMe(const Json &j, LeagueMe &out);
 

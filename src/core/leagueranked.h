@@ -124,6 +124,11 @@ struct LeagueBoardRow {
 	std::string steamId, name;
 	LeagueTier tier = LeagueTier::None;
 	int division = 0, glory = 0, wins = 0, losses = 0;
+	// The Glory won over the last 7 days; none during the placement.
+	bool hasDelta7 = false;
+	int delta7 = 0;
+	// +3: three wins in a row, -2: two losses.
+	int streak = 0;
 };
 
 // GET /v1/league/leaderboard.
@@ -195,6 +200,8 @@ struct LeagueHistoryPage {
 	bool more = false;
 };
 bool LeagueParseHistory(const Json &j, LeagueHistoryPage &out);
+// One game of such a list; false when it is not one.
+bool LeagueParseHistoryGame(const Json &m, LeagueHistoryGame &out);
 // The `before` of the next, older page: when the last game of this one was played; 0 when there is none.
 int64_t LeagueHistoryNextBefore(const LeagueHistoryPage &p);
 // "Report a problem" stays open for a day after the game.

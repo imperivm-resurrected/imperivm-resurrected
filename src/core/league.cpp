@@ -112,6 +112,41 @@ std::string IdText(const Json *v)
 	return std::string();
 }
 
+// A season's number, as a number or as text; -1 for null or anything else.
+int SeasonNumber(const Json *v)
+{
+	if (!v) return -1;
+	if (v->type == Json::Number) return v->num >= 0 ? static_cast<int>(v->num) : -1;
+	if (v->type == Json::String) {
+		const std::string s = Trim(v->str);
+		if (s.empty() || s.find_first_not_of("0123456789") != std::string::npos || s.size() > 6) return -1;
+		return atoi(s.c_str());
+	}
+	return -1;
+}
+
+bool FounderTier(const Json *v)
+{
+	return v && v->type == Json::String && Folded(v->str) == "founder";
+}
+
+LeagueReward RewardOf(const Json &j)
+{
+	LeagueReward r;
+	r.season = std::max(0, SeasonNumber(j.Get("season")));
+	r.seasonName = j.GetString("seasonName");
+	r.queue = j.GetString("queue", "1v1");
+	// The test season gives the Founder's vexillum in place of the rank's (its tier is "founder"); its frame and title keep the highest
+	// rank reached, peakTier.
+	r.founder = FounderTier(j.Get("tier"));
+	r.tier = LeagueTierFromJson(j.Get("tier"));
+	if (r.tier == LeagueTier::None) r.tier = LeagueTierFromJson(j.Get("peakTier"));
+	r.place = std::max(0, Int(j, "place"));
+	r.games = std::max(0, Int(j, "games"));
+	r.frame = j.GetBool("frame");
+	return r;
+}
+
 std::string OptionValue(const std::string &text, const char *label)
 {
 	const std::string prefix = std::string(label) + ": ";
@@ -269,6 +304,41 @@ LeagueBadge LeagueBadgeFromJson(const Json *v)
 	return b;
 }
 
+LeagueFrame LeagueFrameFromJson(const Json *v)
+{
+	LeagueFrame f;
+	if (!v) return f;
+	if (v->type != Json::Object) {
+		f.season = SeasonNumber(v);
+		return f;
+	}
+	f.season = SeasonNumber(v->Get("season"));
+	if (f.season < 0) return LeagueFrame();
+	f.tier = LeagueTierFromJson(v->Get("tier"));
+	if (f.tier == LeagueTier::None) f.tier = LeagueTierFromJson(v->Get("peakTier"));
+	f.founder = f.tier == LeagueTier::None && FounderTier(v->Get("tier"));
+	f.seasonName = v->GetString("seasonName", v->GetString("name"));
+	return f;
+}
+
+LeaguePeak LeaguePeakFromJson(const Json *v)
+{
+	LeaguePeak p;
+	if (!v) return p;
+	if (v->type == Json::Number) {
+		p.place = std::max(0, static_cast<int>(v->num));
+		p.present = p.place > 0;
+		return p;
+	}
+	if (v->type != Json::Object) return p;
+	p.present = true;
+	p.glory = std::max(0, Int(*v, "glory"));
+	p.place = std::max(0, Int(*v, "place"));
+	p.tier = LeagueTierFromJson(v->Get("tier"));
+	p.division = LeagueTierHasDivisions(p.tier) ? LeagueDivisionFromJson(v->Get("division")) : 0;
+	return p;
+}
+
 bool LeagueParsePlayersLookup(const Json &j, std::map<uint64_t, LeagueLookupEntry> &out)
 {
 	const Json *list = &j;
@@ -283,6 +353,7 @@ bool LeagueParsePlayersLookup(const Json &j, std::map<uint64_t, LeagueLookupEntr
 			e.patronPlace = Int(*p, "place");
 		}
 		e.badge = LeagueBadgeFromJson(kv.second.Get("badge"));
+		e.frame = LeagueFrameFromJson(kv.second.Get("frame"));
 		out[id] = e;
 	}
 	return true;
@@ -308,6 +379,40 @@ bool LeagueParseMe(const Json &j, LeagueMe &out)
 		k.losses = Int(*r, "losses");
 		k.position = Int(*r, "position");
 		k.elite = r->GetBool("elite");
+	}
+	// The season's best, the streak and the placement are the queue's: inside `ranked`, or beside it.
+	auto standing = [&](const char *key) {
+		const Json *r = j.Get("ranked");
+		const Json *v = r && r->type == Json::Object ? r->Get(key) : nullptr;
+		return v ? v : j.Get(key);
+	};
+	out.ranked.peak = LeaguePeakFromJson(standing("peak"));
+	if (const Json *s = standing("streak"); s && s->type == Json::Number) out.ranked.streak = static_cast<int>(s->num);
+	if (const Json *list = standing("placementResults"); list && list->type == Json::Array) {
+		for (const Json &m : list->arr) {
+			const std::string mark = m.type == Json::String ? Lower(Trim(m.str)) : std::string();
+			if (mark == "win") out.ranked.placement.push_back(LeaguePlacementMark::Win);
+			else if (mark == "loss") out.ranked.placement.push_back(LeaguePlacementMark::Loss);
+			else if (mark == "void") out.ranked.placement.push_back(LeaguePlacementMark::Void);
+		}
+	}
+	if (const Json *list = j.Get("rewards"); list && list->type == Json::Array) {
+		for (const Json &r : list->arr) {
+			if (r.type == Json::Object && SeasonNumber(r.Get("season")) >= 0) out.rewards.push_back(RewardOf(r));
+		}
+	}
+	if (const Json *c = j.Get("ceremony"); c && c->type == Json::Object && SeasonNumber(c->Get("season")) >= 0) {
+		LeagueCeremony &cer = out.ceremony;
+		cer.present = true;
+		cer.reward = RewardOf(*c);
+		cer.wins = std::max(0, Int(*c, "wins"));
+		cer.losses = std::max(0, Int(*c, "losses"));
+		cer.finalTier = LeagueTierFromJson(c->Get("finalTier"));
+		cer.finalDivision = LeagueTierHasDivisions(cer.finalTier) ? LeagueDivisionFromJson(c->Get("finalDivision")) : 0;
+	}
+	if (const Json *e = j.Get("equipped"); e && e->type == Json::Object) {
+		out.equippedFrame = SeasonNumber(e->Get("frame"));
+		out.equippedTitle = SeasonNumber(e->Get("title"));
 	}
 	out.queueBanUntil = Int64(j, "queueBanUntil");
 	if (const Json *ban = j.Get("ban"); ban && ban->type == Json::Object) {
