@@ -454,7 +454,7 @@ void PaintSwissStrip(Painter &p, Ctx &c, int x, int y, int w, int selected)
 {
 	const TourneyDetail &d = c.d;
 	const int total = TourneySwissTotalRounds(d), paired = SwissPaired(d), live = d.status == TourneyStatus::Running ? TourneyCurrentRound(d) : 0;
-	const int n = total + 1, gap = 2, h = 40, cw = std::min(190, (w - gap * (n - 1)) / std::max(1, n));
+	const int n = total + 1, gap = 2, h = 40, cw = TourneyStripCellWidth(w, n, gap, 190);
 	for (int i = 0; i < n; i++) {
 		const int cx = x + i * (cw + gap);
 		const bool on = i == selected, open = i == 0 || i <= paired, hot = open && !on && p.Hover(cx, y, cw, h, c.mx, c.my), current = i && i == live;
@@ -478,10 +478,10 @@ void PaintStandings(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &ou
 	const TourneyDetail &d = c.d;
 	const bool over = d.status == TourneyStatus::Finished;
 	const int total = TourneySwissTotalRounds(d);
-	const int numW = 96, byesX = x + w - numW, buchX = byesX - numW - 16, wlX = buchX - numW, ptsX = wlX - numW;
-	const int nameX = x + 64, formW = total * 22 + 24, formX = ptsX - formW;
-	const bool form = formX - nameX >= 280;
-	const int nameW = (form ? formX : ptsX) - nameX - 16;
+	const TourneyStandingsColumns col = TourneyStandingsColumnsFor(w, total);
+	const int numW = col.figureW, byesX = x + col.byes, buchX = x + col.buchholz, wlX = x + col.record, ptsX = x + col.points;
+	const int nameX = x + col.name, formW = col.roundsW, formX = x + col.rounds, nameW = col.nameW;
+	const bool form = col.showRounds;
 	const UINT center = DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS;
 	p.raw = true;
 	PaintCaps(p, x + 14, y, 40, 20, "#", pal::caption);
@@ -490,7 +490,7 @@ void PaintStandings(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &ou
 	if (form) PaintCaps(p, formX, y, formW, 20, "Rounds", pal::caption, center);
 	PaintCaps(p, ptsX, y, numW, 20, "Points", pal::caption, center);
 	PaintCaps(p, wlX, y, numW, 20, "W\xE2\x80\x93L", pal::caption, center);
-	PaintCaps(p, buchX, y, numW + 16, 20, "Buchholz", pal::caption, center);
+	PaintCaps(p, buchX, y, col.buchholzW, 20, "Buchholz", pal::caption, center);
 	PaintCaps(p, byesX, y, numW, 20, "Byes", pal::caption, center);
 	const int foot = over ? 30 : 54, top = y + 30, rowH = 46, viewH = h - 30 - foot;
 	if (d.standings.empty()) {
@@ -533,7 +533,7 @@ void PaintStandings(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &ou
 		if (mine) PaintTag(p, nx + textW + 10, ry + 12, "You", pal::red, pal::onRed);
 		if (s.steamId) c.ids.push_back(s.steamId);
 		for (int r = 1; form && r <= total; r++) {
-			const int fx = formX + 12 + (r - 1) * 22, fy = ry + rowH / 2 - 8;
+			const int fx = x + TourneyRoundSquareX(col, r), fy = ry + rowH / 2 - 8;
 			switch (RoundResult(d, s.entryId, r)) {
 			case 'w': p.Fill(fx, fy, 16, 16, pal::ok); break;
 			case 'l': p.Fill(fx, fy, 16, 16, pal::red); break;
@@ -554,7 +554,7 @@ void PaintStandings(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &ou
 		p.Text(ptsX, ry, numW, rowH, std::to_string(s.points), pal::text, center);
 		UseFace(p, BrandFace::Body, 16);
 		p.Text(wlX, ry, numW, rowH, std::to_string(s.wins) + "\xE2\x80\x93" + std::to_string(s.losses), pal::body, center);
-		p.Text(buchX, ry, numW + 16, rowH, std::to_string(s.buchholz), pal::body, center);
+		p.Text(buchX, ry, col.buchholzW, rowH, std::to_string(s.buchholz), pal::body, center);
 		p.Text(byesX, ry, numW, rowH, std::to_string(s.byes), s.byes ? pal::body : pal::caption, center);
 		p.raw = false;
 		ry += rowH;
@@ -605,16 +605,17 @@ void PaintPairing(Painter &p, Ctx &c, const TourneyMatch &m, int table, int x, i
 	else p.Frame(x, y, w, h, live ? pal::red : ready ? pal::warn : pal::edge);
 	UseFace(p, BrandFace::UiStrong, 13);
 	p.raw = true;
-	p.Text(x, y, 44, h, std::to_string(table), pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	const TourneyPairingRow row = TourneyPairingRowFor(w);
+	p.Text(x, y, row.tableW, h, std::to_string(table), pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 	p.raw = false;
-	p.Fill(x + 44, y + 10, 1, h - 20, pal::hairline);
+	p.Fill(x + row.tableW, y + 10, 1, h - 20, pal::hairline);
 	if (bye) {
 		const TourneyCard &who = m.a.Present() ? m.a : m.b;
 		if (!who.Present()) return;
-		PaintPlayerDisc(p, x + 60, y + (h - 32) / 2, 32, who.steamId, who.name);
+		PaintPlayerDisc(p, x + row.left, y + (h - 32) / 2, 32, who.steamId, who.name);
 		UseFace(p, BrandFace::Body, 16);
 		p.raw = true;
-		p.Text(x + 104, y, w - 120, h, TrFmt("%s rests this round: a bye, worth a win", {who.name}), who.entryId == c.me ? pal::redText : pal::textDim,
+		p.Text(x + row.left + 44, y, w - row.left - 60, h, TrFmt("%s rests this round: a bye, worth a win", {who.name}), who.entryId == c.me ? pal::redText : pal::textDim,
 			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.raw = false;
 		if (who.steamId) c.ids.push_back(who.steamId);
@@ -637,7 +638,7 @@ void PaintPairing(Painter &p, Ctx &c, const TourneyMatch &m, int table, int x, i
 	}
 	else if (m.status == TourneyMatchStatus::Walkover) state = Tr("No-show");
 	else if (!over) state = Tr("To be played");
-	const int stateW = std::min(240, w / 5), stateX = x + w - stateW - 16;
+	const int stateW = row.stateW, stateX = x + row.stateX;
 	if (!state.empty()) {
 		int tx = stateX;
 		if (live) {
@@ -649,7 +650,7 @@ void PaintPairing(Painter &p, Ctx &c, const TourneyMatch &m, int table, int x, i
 		p.TextCaps(tx, y, stateX + stateW - tx, h, state, ink, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 2);
 		p.raw = false;
 	}
-	const int scoreW = 96, left = x + 60, right = stateX - 24, scoreX = left + (right - left - scoreW) / 2;
+	const int scoreW = row.scoreW, left = x + row.left, right = x + row.right, scoreX = x + row.scoreX;
 	PaintPairingSide(p, c, m, m.a, false, left, scoreX - 14, y, h);
 	PaintPairingSide(p, c, m, m.b, true, scoreX + scoreW + 14, right, y, h);
 	p.Fill(scoreX, y + 8, scoreW, h - 16, over ? pal::button : pal::field);

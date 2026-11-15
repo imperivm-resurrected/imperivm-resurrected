@@ -1402,6 +1402,46 @@ std::vector<TourneySegment> TourneyGrandFinalConnector(const TourneyBracketMetri
 	return out;
 }
 
+int TourneyStripCellWidth(int width, int cells, int gap, int maxW)
+{
+	cells = std::max(1, cells);
+	return std::max(0, std::min(maxW, (width - gap * (cells - 1)) / cells));
+}
+
+TourneyStandingsColumns TourneyStandingsColumnsFor(int width, int rounds)
+{
+	TourneyStandingsColumns c;
+	c.figureW = 96;
+	c.buchholzW = c.figureW + 16;
+	c.byes = width - c.figureW;
+	c.buchholz = c.byes - c.buchholzW;
+	c.record = c.buchholz - c.figureW;
+	c.points = c.record - c.figureW;
+	c.name = 64;
+	c.roundsW = std::max(0, rounds) * 22 + 24;
+	c.rounds = c.points - c.roundsW;
+	// A name narrower than this is cut more than the rounds are worth.
+	c.showRounds = rounds > 0 && c.rounds - c.name >= 280;
+	c.nameW = std::max(0, (c.showRounds ? c.rounds : c.points) - c.name - 16);
+	return c;
+}
+
+int TourneyRoundSquareX(const TourneyStandingsColumns &c, int round)
+{
+	return c.rounds + 12 + (std::max(1, round) - 1) * 22;
+}
+
+TourneyPairingRow TourneyPairingRowFor(int width)
+{
+	TourneyPairingRow r;
+	r.stateW = std::min(240, width / 5);
+	r.stateX = width - r.stateW - 16;
+	r.left = r.tableW + 16;
+	r.right = r.stateX - 24;
+	r.scoreX = r.left + (r.right - r.left - r.scoreW) / 2;
+	return r;
+}
+
 int TourneyBracketWidth(const TourneyBracketMetrics &m, int rounds)
 {
 	return rounds > 0 ? TourneyBoxX(m, rounds) + m.boxW : 0;

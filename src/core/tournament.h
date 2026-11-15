@@ -531,5 +531,23 @@ std::vector<TourneySegment> TourneyLosersConnector(const TourneyBracketMetrics &
 // grand final; and with `reset`, a fifth from the grand final into the reset.
 std::vector<TourneySegment> TourneyGrandFinalConnector(const TourneyBracketMetrics &m, const TourneyDoubleLayout &l);
 
+// A Swiss tournament on screen, measured from the left of its tab. The strip over it: the standings and each round, as wide as `width`
+// lets each of `cells`, up to `maxW`.
+int TourneyStripCellWidth(int width, int cells, int gap, int maxW);
+// The standings' columns: the place and the player from the left; from the right the byes, the Buchholz (a little wider), the wins and
+// losses and the points; and between them each round's result, when the player's name keeps room enough.
+struct TourneyStandingsColumns {
+	int name = 0, nameW = 0, rounds = 0, roundsW = 0, points = 0, record = 0, buchholz = 0, buchholzW = 0, byes = 0, figureW = 0;
+	bool showRounds = false;
+};
+TourneyStandingsColumns TourneyStandingsColumnsFor(int width, int rounds);
+// Where the square of each round's result goes in its column.
+int TourneyRoundSquareX(const TourneyStandingsColumns &c, int round);
+// A pairing's row: the table's number, the two players either side of the score in the middle, and what is happening in it on the right.
+struct TourneyPairingRow {
+	int tableW = 44, left = 0, scoreX = 0, scoreW = 96, right = 0, stateX = 0, stateW = 0;
+};
+TourneyPairingRow TourneyPairingRowFor(int width);
+
 int TourneyBracketWidth(const TourneyBracketMetrics &m, int rounds);
 int TourneyBracketHeight(const TourneyBracketMetrics &m, int rounds);

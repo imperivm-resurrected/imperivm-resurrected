@@ -391,6 +391,42 @@ void DoubleLayout()
 	CHECK_EQ(static_cast<int>(TourneyGrandFinalConnector(m, plain).size()), 4);
 }
 
+void SwissLayout()
+{
+	// The strip: the standings and four rounds share 1086 up to 190 each; six rounds in 1086 make them narrower.
+	CHECK_EQ(TourneyStripCellWidth(1086, 5, 2, 190), 190);
+	CHECK_EQ(TourneyStripCellWidth(1086, 7, 2, 190), 153);
+	CHECK_EQ(TourneyStripCellWidth(100, 0, 2, 190), 100);
+	CHECK_EQ(TourneyStripCellWidth(10, 7, 2, 190), 0);
+	// The standings in the tab of a 720p screen (1066 wide) over three rounds: the figures from the right, the rounds before them.
+	const TourneyStandingsColumns c = TourneyStandingsColumnsFor(1066, 3);
+	CHECK_EQ(c.byes, 970);
+	CHECK_EQ(c.buchholz, 858);
+	CHECK_EQ(c.buchholzW, 112);
+	CHECK_EQ(c.record, 762);
+	CHECK_EQ(c.points, 666);
+	CHECK_EQ(c.roundsW, 90);
+	CHECK_EQ(c.rounds, 576);
+	CHECK(c.showRounds);
+	CHECK_EQ(c.nameW, 576 - 64 - 16);
+	CHECK_EQ(TourneyRoundSquareX(c, 1), 588);
+	CHECK_EQ(TourneyRoundSquareX(c, 3), 632);
+	CHECK(TourneyRoundSquareX(c, 3) + 16 <= c.points);
+	// Too narrow for the rounds: the name keeps their room.
+	const TourneyStandingsColumns narrow = TourneyStandingsColumnsFor(800, 6);
+	CHECK(!narrow.showRounds);
+	CHECK_EQ(narrow.nameW, narrow.points - narrow.name - 16);
+	// A pairing's row: the score halfway between the table and the state, the two sides either side of it.
+	const TourneyPairingRow r = TourneyPairingRowFor(1066);
+	CHECK_EQ(r.stateW, 213);
+	CHECK_EQ(r.stateX, 1066 - 213 - 16);
+	CHECK_EQ(r.left, 60);
+	CHECK_EQ(r.right, r.stateX - 24);
+	const int lean = (r.scoreX - r.left) - (r.right - (r.scoreX + r.scoreW));
+	CHECK(lean >= -1 && lean <= 1);
+	CHECK_EQ(TourneyPairingRowFor(1600).stateW, 240);
+}
+
 }
 
 int main()
@@ -401,5 +437,6 @@ int main()
 	Swiss();
 	LosersRounds();
 	DoubleLayout();
+	SwissLayout();
 	return test::Summary("tourneyformats");
 }
