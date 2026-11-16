@@ -55,6 +55,13 @@ bool CleanUrl(const std::string &url)
 	return true;
 }
 
+// An address the mod may open or ask: https, or plain http only to this computer. `lower` is `url` in lower case.
+bool AllowedUrl(const std::string &url, const std::string &lower)
+{
+	if (!CleanUrl(url) || HostOf(lower).empty()) return false;
+	return StartsWith(lower, "https://") || (StartsWith(lower, "http://") && LocalHost(HostOf(lower)));
+}
+
 // Plain ASCII lower case, with the accents of the Spanish names taken off.
 std::string Folded(const std::string &s)
 {
@@ -185,11 +192,7 @@ std::string LeagueBaseUrl(const std::string &configured)
 {
 	std::string s = Trim(configured);
 	while (!s.empty() && s.back() == '/') s.pop_back();
-	const std::string lower = Lower(s);
-	if (!CleanUrl(s) || HostOf(lower).empty()) return kLeagueDefaultUrl;
-	if (StartsWith(lower, "https://")) return s;
-	if (StartsWith(lower, "http://") && LocalHost(HostOf(lower))) return s;
-	return kLeagueDefaultUrl;
+	return AllowedUrl(s, Lower(s)) ? s : kLeagueDefaultUrl;
 }
 
 bool LeagueUrlIsDefault(const std::string &base)
@@ -541,11 +544,8 @@ std::string LeagueUrlDisplay(const std::string &url)
 
 std::string LeagueBrowserUrl(const std::string &url)
 {
-	const std::string s = Trim(url), lower = Lower(s);
-	if (!CleanUrl(s) || HostOf(lower).empty()) return kLeagueLinkPage;
-	if (StartsWith(lower, "https://")) return s;
-	if (StartsWith(lower, "http://") && LocalHost(HostOf(lower))) return s;
-	return kLeagueLinkPage;
+	const std::string s = Trim(url);
+	return AllowedUrl(s, Lower(s)) ? s : kLeagueLinkPage;
 }
 
 std::string LeagueMatchKey(uint64_t lobby, int64_t startedAtMs)
