@@ -1733,9 +1733,9 @@ void GameRoomToggleOption(int id)
 	});
 }
 
-static void ApplyColor(int slot, int start, int dir, bool relative)
+static void ApplyColor(int slot, int start)
 {
-	Queue([slot, start, dir, relative] {
+	Queue([slot, start] {
 		typedef unsigned(__fastcall * FindFreeColor_t)(void *, void *, unsigned, int);
 		typedef void(__fastcall * SendPlayerInfo_t)(void *, void *, int, unsigned, int);
 		typedef void(__fastcall * UpdateSlotRow_t)(void *, void *, unsigned);
@@ -1751,9 +1751,9 @@ static void ApplyColor(int slot, int start, int dir, bool relative)
 			if (!*reinterpret_cast<int *>(rec + 4)) return;
 			color = *reinterpret_cast<unsigned *>(*reinterpret_cast<char **>(rec) + 0x60);
 		}
-		const unsigned from = relative ? (color + 12 + dir) % 12 : static_cast<unsigned>(start) % 12;
-		if (!relative && from == color) return;
-		color = reinterpret_cast<FindFreeColor_t>(addr::kFindFreeColor)(g_dlg, nullptr, from, dir);
+		const unsigned from = static_cast<unsigned>(start) % 12;
+		if (from == color) return;
+		color = reinterpret_cast<FindFreeColor_t>(addr::kFindFreeColor)(g_dlg, nullptr, from, 1);
 		if (!shell) {
 			*reinterpret_cast<unsigned *>(player * 0x34 + *reinterpret_cast<char **>(d + 0x174) + 0x20) = color;
 		}
@@ -1783,7 +1783,7 @@ void GameRoomSwapSlots(int a, int b)
 
 void GameRoomSetColor(int slot, int color)
 {
-	ApplyColor(slot, color, 1, false);
+	ApplyColor(slot, color);
 }
 
 namespace {

@@ -323,8 +323,7 @@ std::string WithRef(const std::string &text, int x, int y) { return text + ":" +
 std::string WithReference(const std::string &text)
 {
 	int x = 0, y = 0;
-	if (!ReferencePoint(x, y)) return text;
-	return text + ":" + std::to_string(x) + "," + std::to_string(y);
+	return ReferencePoint(x, y) ? WithRef(text, x, y) : text;
 }
 
 const char kAlpha[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz+-";
