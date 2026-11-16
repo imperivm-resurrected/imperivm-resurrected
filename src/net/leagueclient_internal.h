@@ -53,7 +53,8 @@ int64_t TickMs();
 std::string UrlEncode(const std::string &s);
 // The Steam user playing now, as text; empty while Steam is not running.
 std::string OwnId();
-// The game's language as the league names it: "es", "en" or "it".
+// The game's language as the league names it: "es", "en" or "it". On the game thread only, as ModsLanguage: a request's thread is
+// given it.
 std::string LangCode();
 // A game is on, played or watched.
 bool InGame();
