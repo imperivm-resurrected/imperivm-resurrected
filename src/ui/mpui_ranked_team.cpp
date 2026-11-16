@@ -469,7 +469,6 @@ void RankedTeamAction(int arg)
 		if (arg == kRkQueueTeam) LeagueDuoWatch();
 		// The page on screen is read again for the queue picked.
 		if (r.sub == kRankedBoard) {
-			r.boardSel = -1;
 			RankedBoardAsk(0, false);
 		}
 		else if (r.sub == kRankedHistory) {

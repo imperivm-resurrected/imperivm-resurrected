@@ -166,7 +166,6 @@ void RankedBoardAsk(int offset, bool aroundMe)
 		g_watch.friendsAsked = q.ids.size();
 	}
 	r.boardAsked = q.name;
-	r.boardSel = -1;
 	LeagueBoardRequest(q);
 }
 
@@ -246,7 +245,6 @@ void RankedSeasonAction(int arg)
 		r.boardPick.clear();
 		RankedBoardAsk(0, false);
 		break;
-	case kRkBoardSearch: FocusField(kRankedField); break;
 	case kRkBoardClear:
 		r.boardSearch.clear();
 		g_watch.typed.clear();

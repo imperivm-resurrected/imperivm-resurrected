@@ -110,18 +110,18 @@ inline int DropArg(int kind, int index)
 	return kind | (index << kDropKindBits);
 }
 
-// The ranked tab: what the player asked of its screens, as the argument of kRankedAct (rows of the leaderboard from kRkRow, "Report a
-// problem" of the hub's games from kRkDisputeRecent and of the history's from kRkDisputeHistory).
+// The ranked tab: what the player asked of its screens, as the argument of kRankedAct (rows of the leaderboard from kRkRow, and "Report a
+// problem" of the history's games from kRkDisputeHistory).
 enum RankedArg {
-	kRkSearch = 1, kRkCancel, kRkAccept, kRkDecline, kRkBoard, kRkHub, kRkBoardPrev, kRkBoardNext, kRkBoardTop, kRkBoardMe, kRkRoom,
-	kRkResultClose, kRkAgain, kRkResultBoard, kRkSkip, kRkSteam, kRkNotice, kRkAbandon, kRkHistory, kRkHistoryPrev, kRkHistoryNext,
-	kRkHistoryNewest, kRkDisputeResult, kRkDisputeSend, kRkDisputeCancel, kRkGuide, kRkGuideRanks, kRkGuideRules, kRkRow = 0x100, kRkDisputeRecent = 0x200, kRkDisputeHistory = 0x300,
+	kRkSearch = 1, kRkCancel, kRkAccept, kRkDecline, kRkBoard, kRkHub, kRkBoardPrev, kRkBoardNext, kRkBoardMe, kRkRoom,
+	kRkResultClose, kRkAgain, kRkResultBoard, kRkSkip, kRkSteam, kRkAbandon, kRkHistory, kRkHistoryPrev, kRkHistoryNext,
+	kRkHistoryNewest, kRkDisputeResult, kRkDisputeSend, kRkDisputeCancel, kRkGuide, kRkGuideRanks, kRkGuideRules, kRkRow = 0x100, kRkDisputeHistory = 0x300,
 	kRkArgEnd = 0x400, kRkContentSwitch, kRkContentClose,
 };
 // The full leaderboard's filters and the player's card, and the end of season ceremony (mpui_ranked_seasons.cpp), after kRkArgEnd. The
 // clicks on the players' badges of the multiplayer screens come from kRkBadge (LeagueBadgeClicksBegin).
 enum RankedSeasonArg {
-	kRkCeremonyEquip = kRkArgEnd, kRkCeremonyLater, kRkCeremonyBoard, kRkBoardAll, kRkBoardFriends, kRkBoardSearch, kRkBoardClear,
+	kRkCeremonyEquip = kRkArgEnd, kRkCeremonyLater, kRkCeremonyBoard, kRkBoardAll, kRkBoardFriends, kRkBoardClear,
 	kRkBadge = kRkArgEnd + 0x100, kRkBadgeEnd = kRkBadge + 0x100,
 };
 // The 2v2 (mpui_ranked_team.cpp), after the badges: the queue picked, the duo, the invitations got (kRkDuoAccept and kRkDuoDecline plus
@@ -138,7 +138,6 @@ struct RankedScreen {
 	int sub = kRankedHub;
 	// "How it works": its tab, the ranks (0) or the rules (1).
 	int guideTab = 0;
-	int boardSel = -1;
 	// The result screen is open while resultOpen; resultAt is when it opened, for the animation.
 	bool resultOpen = false;
 	int64_t resultMatch = 0;
