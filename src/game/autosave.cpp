@@ -112,24 +112,20 @@ bool QuickSaveDir(std::string &dir, std::string &suffix)
 	return true;
 }
 
+void RequestSave(const std::string &path)
+{
+	reinterpret_cast<Assign_t>(addr::kStringAssign)(reinterpret_cast<void *>(addr::kSaveName), nullptr, path.c_str(),
+		static_cast<unsigned>(path.size()));
+	*reinterpret_cast<int *>(addr::kSaveRequest) = 1;
+}
+
 void RequestAutosave()
 {
-	alignas(4) char s[0x1c] = {};
-	reinterpret_cast<BuildPath_t>(addr::kBuildQuickSavePath)(s);
-	const std::string quick = ReadGameString(s);
-	if (*reinterpret_cast<unsigned *>(s + 0x18) >= 0x10) {
-		reinterpret_cast<Free_t>(addr::kGameFree)(*reinterpret_cast<void **>(s + 4));
-	}
-	const size_t slash = quick.find_last_of("/\\");
-	if (quick.empty() || slash == std::string::npos) {
+	std::string dir, suffix;
+	if (!QuickSaveDir(dir, suffix)) {
 		LogW("autosave", "could not tell where to save");
 		return;
 	}
-	const std::string dir = quick.substr(0, slash + 1), file = quick.substr(slash + 1);
-	std::string suffix;
-	const size_t dash = file.find('-');
-	if (file.size() > 4 && file.compare(file.size() - 4, 4, ".snr") == 0) suffix = ".snr";
-	else if (dash != std::string::npos) suffix = file.substr(dash);
 
 	const std::string profile = ProfileOfDir(dir);
 	SaveLibPruneAutosaves(profile, SaveSessionCurrent(), std::max(1, GetConfig().autosaveSlots) - 1);
@@ -147,9 +143,7 @@ void RequestAutosave()
 		}
 	}
 	const std::string path = dir + name + suffix;
-	reinterpret_cast<Assign_t>(addr::kStringAssign)(reinterpret_cast<void *>(addr::kSaveName), nullptr, path.c_str(),
-		static_cast<unsigned>(path.size()));
-	*reinterpret_cast<int *>(addr::kSaveRequest) = 1;
+	RequestSave(path);
 	LogI("autosave", "saving to %s", path.c_str());
 }
 
@@ -160,9 +154,7 @@ std::string AutosaveRequestNamed(const std::string &name)
 	std::string dir, suffix;
 	if (!QuickSaveDir(dir, suffix)) return "";
 	const std::string path = dir + name + suffix;
-	reinterpret_cast<Assign_t>(addr::kStringAssign)(reinterpret_cast<void *>(addr::kSaveName), nullptr, path.c_str(),
-		static_cast<unsigned>(path.size()));
-	*reinterpret_cast<int *>(addr::kSaveRequest) = 1;
+	RequestSave(path);
 	LogI("saves", "quick save requested: %s", path.c_str());
 	return path;
 }
