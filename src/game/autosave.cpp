@@ -14,6 +14,7 @@
 #include "mods/savelib.h"
 #include "game/netlink.h"
 #include "game/gamehook.h"
+#include "hooks/tweaks.h"
 #include "i18n/tr.h"
 #include "addr/engine.h"
 #include "addr/state.h"
@@ -22,13 +23,10 @@
 #include "core/uiport.h"
 
 namespace {
-const unsigned kIsPausedSlot = 22;
-
 typedef void *(__cdecl *ProcessRequests_t)();
 typedef void *(__cdecl *BuildPath_t)(void *out);
 typedef void *(__fastcall *Assign_t)(void *self, void *edx, const char *text, unsigned len);
 typedef void(__cdecl *Free_t)(void *);
-typedef int(__fastcall *IsPaused_t)(void *game);
 typedef int(__cdecl *IsDemo_t)();
 
 ProcessRequests_t g_origProcess = nullptr;
@@ -248,8 +246,7 @@ void AutosaveTick()
 		g_playedMs = 0;
 		return;
 	}
-	auto isPaused = reinterpret_cast<IsPaused_t>((*reinterpret_cast<void ***>(game))[kIsPausedSlot]);
-	if (isPaused(game)) return;
+	if (TweaksGamePaused(game)) return;
 	g_playedMs += dt;
 	if (g_playedMs >= static_cast<DWORD>(GetConfig().autosaveMinutes) * 60000u) {
 		g_playedMs = 0;

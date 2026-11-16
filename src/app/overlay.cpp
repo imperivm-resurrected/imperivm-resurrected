@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "hooks/hookcount.h"
+#include "hooks/tweaks.h"
 #include "core/config.h"
 #include "game/controls.h"
 #include "core/log.h"
@@ -746,10 +747,7 @@ void OverlayNoteFrame()
 		lastGame = game;
 		gameSince = GetTickCount();
 	}
-	if (game && GetTickCount() - gameSince > 8000) {
-		typedef int(__fastcall * IsPaused_t)(void *);
-		running = reinterpret_cast<IsPaused_t>((*reinterpret_cast<void ***>(game))[22])(game) == 0;
-	}
+	if (game && GetTickCount() - gameSince > 8000) running = !TweaksGamePaused(game);
 	std::lock_guard<std::mutex> lock(g_frameMx);
 	if (g_lastFrame.QuadPart && running) {
 		const int ms = static_cast<int>((now.QuadPart - g_lastFrame.QuadPart) * 1000 / g_qpf.QuadPart);
