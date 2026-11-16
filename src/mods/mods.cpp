@@ -22,29 +22,9 @@ std::vector<ModInfo> g_mods;
 }
 
 namespace mods_impl {
-namespace {
-std::string g_gameDir;
-}
-}
-
-namespace mods_impl {
 std::string g_language;
 MountedState g_mount;
 std::atomic<bool> g_hashing{false};
-
-std::string GameDir()
-{
-	if (g_gameDir.empty()) {
-		char path[MAX_PATH];
-		GetModuleFileNameA(nullptr, path, MAX_PATH);
-		char *slash = strrchr(path, '\\');
-		if (slash) {
-			*slash = 0;
-		}
-		g_gameDir = path;
-	}
-	return g_gameDir;
-}
 
 std::string ModsDir() { return GameDir() + "\\mods"; }
 std::string ProfilesDir() { return ModsDir() + "\\_profiles"; }

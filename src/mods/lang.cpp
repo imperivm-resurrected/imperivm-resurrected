@@ -16,6 +16,8 @@
 #include <mutex>
 #include <cstdint>
 #include "addr/engine.h"
+#include "mods/modpaths.h"
+#include "mods/modtext.h"
 
 namespace {
 typedef unsigned(__fastcall *HasLocalNotes_t)(void *self, void *edx, void *outPath);
@@ -39,41 +41,19 @@ const struct {
 	{"greek", "Ελληνικά"}, {"dutch", "Nederlands"}, {"catalan", "Català"}, {"ukrainian", "Українська"},
 };
 
-std::string Lower(std::string s)
-{
-	for (char &c : s) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
-	return s;
-}
-
-std::string GameDirPath()
-{
-	char path[MAX_PATH];
-	GetModuleFileNameA(nullptr, path, MAX_PATH);
-	char *slash = strrchr(path, '\\');
-	if (slash) *slash = 0;
-	return path;
-}
+using modpaths::GameDir;
+using modpaths::IsDir;
+using modpaths::IsFile;
+using modtext::Lower;
 
 std::string SettingsPath()
 {
-	return GameDirPath() + "\\Settings.ini";
+	return GameDir() + "\\Settings.ini";
 }
 
 std::string ModIniPath()
 {
-	return GameDirPath() + "\\imperivm-mod.ini";
-}
-
-bool IsDir(const std::string &p)
-{
-	const DWORD a = GetFileAttributesA(p.c_str());
-	return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY);
-}
-
-bool IsFile(const std::string &p)
-{
-	const DWORD a = GetFileAttributesA(p.c_str());
-	return a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY);
+	return GameDir() + "\\imperivm-mod.ini";
 }
 
 std::string SettingsName(const std::string &code)
@@ -123,7 +103,7 @@ std::string PakLanguage(const std::string &file)
 
 bool GameHasLanguage(const std::string &code)
 {
-	for (const std::string &f : PakNames(GameDirPath() + "\\local")) {
+	for (const std::string &f : PakNames(GameDir() + "\\local")) {
 		if (PakLanguage(f) == code) return true;
 	}
 	return false;
@@ -413,7 +393,7 @@ std::vector<GameLanguage> LangAvailable()
 		}
 		out.push_back({code, LangDisplayName(code), from});
 	};
-	for (const std::string &f : PakNames(GameDirPath() + "\\local")) add(PakLanguage(f), "");
+	for (const std::string &f : PakNames(GameDir() + "\\local")) add(PakLanguage(f), "");
 	const ModProfile p = ModsLoadProfile(ModsActiveProfileName());
 	for (const std::string &folder : p.mods) {
 		ModInfo m;
@@ -478,7 +458,7 @@ std::string LangLooseFile(const std::string &rel)
 	auto cached = g_looseCache.find(rel);
 	if (cached != g_looseCache.end()) return cached->second;
 	std::string found;
-	const std::string game = GameDirPath() + "\\";
+	const std::string game = GameDir() + "\\";
 	for (const std::string &base : g_looseBases) {
 		std::string disk = game + base + rel.substr(prefix.size());
 		std::replace(disk.begin(), disk.end(), '/', '\\');
@@ -498,7 +478,7 @@ std::vector<std::string> LangPatchFiles()
 	std::vector<std::string> out;
 	std::vector<std::string> dirs = ModsMountedDirs();
 	for (auto it = dirs.rbegin(); it != dirs.rend(); ++it) AddPatchFiles(*it + "\\loc", lang, out);
-	AddPatchFiles(GameDirPath() + "\\imperivm-resurrected\\loc", lang, out);
+	AddPatchFiles(GameDir() + "\\imperivm-resurrected\\loc", lang, out);
 	return out;
 }
 
@@ -565,7 +545,7 @@ bool LangMergeLoc(const std::string &base, const std::vector<std::string> &patch
 		LogW("language", "game.loc.xml does not end with </translationtable>; the mods' texts are not added to it");
 		return false;
 	}
-	const std::string game = GameDirPath() + "\\";
+	const std::string game = GameDir() + "\\";
 	std::string added;
 	unsigned total = 0;
 	if (ModsLanguage() != "english") {

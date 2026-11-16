@@ -12,12 +12,6 @@
 
 namespace mods_impl {
 
-std::string Lower(std::string s)
-{
-	std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return static_cast<char>(tolower(c)); });
-	return s;
-}
-
 std::string NormPath(std::string s)
 {
 	std::replace(s.begin(), s.end(), '\\', '/');

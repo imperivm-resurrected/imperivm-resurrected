@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "mods/modtext.h"
+
 namespace mods_impl {
 
 const char kGameId[] = "gbr-hd-1.0";
@@ -13,7 +15,7 @@ const int kSimLevel = 3;
 
 const int kRulesSchema = 2;
 
-std::string Lower(std::string s);
+using modtext::Lower;
 
 std::string NormPath(std::string s);
 

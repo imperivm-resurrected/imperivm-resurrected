@@ -13,6 +13,7 @@
 #include "core/log.h"
 #include "i18n/tr.h"
 #include "mods/mods.h"
+#include "mods/modtext.h"
 
 namespace {
 
@@ -21,11 +22,7 @@ std::atomic<unsigned> g_activeRules{0};
 std::vector<ModOption> g_options;
 bool g_loaded = false;
 
-std::string Lower(std::string s)
-{
-	for (char &c : s) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
-	return s;
-}
+using modtext::Lower;
 
 bool ValidId(const std::string &id)
 {

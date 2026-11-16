@@ -9,6 +9,7 @@
 #include "hooks/gameload.h"
 #include "core/log.h"
 #include "mods/modvars.h"
+#include "mods/modpaths.h"
 
 namespace {
 const size_t kMaxKeyLength = 64;
@@ -22,14 +23,7 @@ bool g_savedRulesValid = false;
 unsigned g_savedRules = 0;
 unsigned long g_savedRulesTick = 0;
 
-std::string GameDir()
-{
-	char path[MAX_PATH];
-	GetModuleFileNameA(nullptr, path, MAX_PATH);
-	char *slash = strrchr(path, '\\');
-	if (slash) *slash = 0;
-	return path;
-}
+using modpaths::GameDir;
 
 void AfterGameLoad(int)
 {

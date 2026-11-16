@@ -12,6 +12,7 @@
 
 #include "core/legacy.h"
 #include "i18n/tr.h"
+#include "mods/modtext.h"
 
 namespace {
 
@@ -34,11 +35,7 @@ struct Node {
 
 typedef std::unique_ptr<Node> NodePtr;
 
-std::string Lower(std::string s)
-{
-	for (char &c : s) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
-	return s;
-}
+using modtext::Lower;
 
 bool IEq(const std::string &a, const std::string &b)
 {

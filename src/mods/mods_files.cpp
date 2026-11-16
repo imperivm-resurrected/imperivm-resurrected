@@ -11,12 +11,6 @@
 using namespace mods_impl;
 
 namespace mods_impl {
-bool IsDir(const std::string &p)
-{
-	DWORD a = GetFileAttributesA(p.c_str());
-	return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY);
-}
-
 std::map<std::string, std::vector<ScanFile>> g_scanFiles;
 
 void Walk(const std::string &base, const std::string &rel, std::vector<ScanFile> &out, int depth)
