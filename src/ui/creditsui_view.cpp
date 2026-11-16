@@ -372,19 +372,6 @@ void DrawLine(Painter &p, const Row &r, int centerX, int top)
 	SetTextCharacterExtra(p.dc, 0);
 }
 
-// The few names too long for their column get a smaller letter before they are cut.
-HFONT SmallFont(float s)
-{
-	static HFONT font = nullptr;
-	static float scale = 0;
-	if (font && scale == s) return font;
-	if (font) DeleteObject(font);
-	font = CreateFontW(-static_cast<int>(13 * s + 0.5f), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-		CLEARTYPE_QUALITY, DEFAULT_PITCH, BodyFace());
-	scale = s;
-	return font;
-}
-
 void DrawCells(Painter &p, const Row &r, int left, int width, int top)
 {
 	const int cell = width / kColumns;
@@ -394,7 +381,8 @@ void DrawCells(Painter &p, const Row &r, int left, int width, int top)
 		p.Font(r.font);
 		SIZE sz = {};
 		GetTextExtentPoint32W(p.dc, text.c_str(), static_cast<int>(text.size()), &sz);
-		if (sz.cx > rc.right - rc.left) SelectObject(p.dc, SmallFont(p.s));
+		// The few names too long for their column get a smaller letter before they are cut.
+		if (sz.cx > rc.right - rc.left) SelectObject(p.dc, BrandFont(BrandFace::Body, 13, p.s));
 		SetTextColor(p.dc, i < r.tiers.size() ? PatronColorsOf(r.tiers[i]).name : r.color);
 		DrawTextW(p.dc, text.c_str(), static_cast<int>(text.size()), &rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
 	}
