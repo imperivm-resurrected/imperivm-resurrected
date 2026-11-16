@@ -27,7 +27,7 @@ namespace {
 
 // Closely while the 2v2 is on screen or an invitation waits for an answer, now and then in the other menus (so an invitation is seen
 // anywhere), never during a game.
-const DWORD kCloseMs = 5000, kIdleMs = 20000, kRetryMs = 15000, kMissingMs = 10 * 60 * 1000, kWatchMs = 3000;
+const DWORD kCloseMs = 5000, kIdleMs = 20000, kAloneMs = 120000, kRetryMs = 15000, kMissingMs = 10 * 60 * 1000, kWatchMs = 3000;
 
 struct Duo {
 	bool loaded = false, polling = false, busy = false, missing = false;
@@ -66,7 +66,9 @@ DWORD PollDelay()
 	if (g_duo.missing) return kMissingMs;
 	const DWORD now = GetTickCount();
 	const bool waiting = !g_duo.state.invites.empty() || LeagueDuoRoleOf(g_duo.state.party, OwnId()) == LeagueDuoRole::Waiting;
-	return waiting || static_cast<int>(g_duo.watchUntil - now) > 0 ? kCloseMs : kIdleMs;
+	if (waiting || static_cast<int>(g_duo.watchUntil - now) > 0) return kCloseMs;
+	// Someone in no duo is only asked now and then, for an invitation: every linked player polls this, in every menu.
+	return g_duo.state.party.present ? kIdleMs : kAloneMs;
 }
 
 std::string NameOr(const std::string &name, const char *fallback)
