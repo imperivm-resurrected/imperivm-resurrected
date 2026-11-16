@@ -154,25 +154,34 @@ void DrawDiscordCorner(uint32_t *buf, int w, int h)
 
 namespace modui_impl {
 namespace {
-Canvas g_versionCanvas;
-}
-}
+// The version text is drawn on its own canvas and only blended into each frame: drawing it and finding where its ink ends is done again
+// only when the text, the scale or the font changes.
+struct VersionLabel {
+	Canvas canvas;
+	bool drawn = false;
+	std::wstring text;
+	float scale = 0;
+	HFONT font = nullptr;
+	int inkRight = 0, ascent = 0;
+};
+VersionLabel g_version;
 
-namespace modui_impl {
-void DrawVersionCorner(uint32_t *buf, int w, int h)
+const int kVersionPad = 2;
+
+bool DrawVersionLabel(const std::wstring &ws, float s)
 {
-	const float s = std::max(0.6f, std::min(1.6f, h / 1080.0f * 1.2f));
-	EnsureFonts(s);
-	const std::wstring ws = W(std::string("Imperivm Resurrected  ") + ModVersionText());
+	VersionLabel &v = g_version;
+	if (v.drawn && v.text == ws && v.scale == s && v.font == g_fonts[3]) return true;
+	v.drawn = false;
 	HDC measure = CreateCompatibleDC(nullptr);
 	HGDIOBJ old = SelectObject(measure, g_fonts[3]);
 	SIZE sz = {};
 	GetTextExtentPoint32W(measure, ws.c_str(), static_cast<int>(ws.size()), &sz);
 	SelectObject(measure, old);
 	DeleteDC(measure);
-	const int pad = 2, cw = sz.cx + pad * 2, ch = sz.cy + pad * 2;
-	if (!g_versionCanvas.Ensure(cw, ch)) return;
-	HDC dc = g_versionCanvas.dc;
+	const int pad = kVersionPad, cw = sz.cx + pad * 2, ch = sz.cy + pad * 2;
+	if (!v.canvas.Ensure(cw, ch)) return false;
+	HDC dc = v.canvas.dc;
 	RECT all = {0, 0, cw, ch};
 	HBRUSH black = CreateSolidBrush(RGB(0, 0, 0));
 	FillRect(dc, &all, black);
@@ -188,20 +197,39 @@ void DrawVersionCorner(uint32_t *buf, int w, int h)
 	int inkRight = 0;
 	for (int y = 0; y < ch; y++) {
 		for (int x = cw - 1; x > inkRight; x--) {
-			if ((g_versionCanvas.bits[static_cast<size_t>(y) * cw + x] >> 8) & 0xff) {
+			if ((v.canvas.bits[static_cast<size_t>(y) * cw + x] >> 8) & 0xff) {
 				inkRight = x;
 				break;
 			}
 		}
 	}
+	v.inkRight = inkRight;
+	v.ascent = tm.tmAscent;
+	v.text = ws;
+	v.scale = s;
+	v.font = g_fonts[3];
+	v.drawn = true;
+	return true;
+}
+}
+}
+
+namespace modui_impl {
+void DrawVersionCorner(uint32_t *buf, int w, int h)
+{
+	const float s = std::max(0.6f, std::min(1.6f, h / 1080.0f * 1.2f));
+	EnsureFonts(s);
+	if (!DrawVersionLabel(W(std::string("Imperivm Resurrected  ") + ModVersionText()), s)) return;
+	const VersionLabel &v = g_version;
+	const int cw = v.canvas.w, ch = v.canvas.h;
 	const int size = std::max(36, std::min(72, h / 20));
 	const int margin = std::max(8, size / 5);
-	const int left = w - margin - (inkRight + 1), top = h - margin - (pad + tm.tmAscent);
+	const int left = w - margin - (v.inkRight + 1), top = h - margin - (kVersionPad + v.ascent);
 	const int shadow = std::max(1, static_cast<int>(s + 0.5f));
 	for (int pass = 0; pass < 2; pass++) {
 		for (int y = 0; y < ch; y++) {
 			for (int x = 0; x < cw; x++) {
-				const unsigned a = (g_versionCanvas.bits[static_cast<size_t>(y) * cw + x] >> 8) & 0xff;
+				const unsigned a = (v.canvas.bits[static_cast<size_t>(y) * cw + x] >> 8) & 0xff;
 				if (!a) continue;
 				if (pass == 0) BlendPixel(buf, w, h, left + x + shadow, top + y + shadow, 0x000000u, a * 190 / 255);
 				else BlendPixel(buf, w, h, left + x, top + y, PixelOf(pal::textDim), a);
