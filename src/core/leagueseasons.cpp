@@ -69,7 +69,7 @@ bool LeagueParseHall(const Json &j, LeagueHall &out)
 		row.steamId = r.GetIdText("steamId");
 		row.name = r.GetString("name");
 		row.tier = LeagueTierFromJson(r.Get("tier"));
-		row.division = LeagueTierHasDivisions(row.tier) ? LeagueDivisionFromJson(r.Get("division")) : 0;
+		row.division = LeagueDivisionOf(row.tier, r.Get("division"));
 		row.glory = r.GetInt("glory");
 		row.games = std::max(0, r.GetInt("games"));
 		if (row.place > 0) out.top.push_back(row);
@@ -88,7 +88,7 @@ bool LeagueParsePlayerProfile(const Json &j, LeaguePlayerProfile &out)
 	out.name = j.GetString("name");
 	out.season = std::max(0, SeasonId(j, "season"));
 	out.tier = LeagueTierFromJson(j.Get("tier"));
-	out.division = LeagueTierHasDivisions(out.tier) ? LeagueDivisionFromJson(j.Get("division")) : 0;
+	out.division = LeagueDivisionOf(out.tier, j.Get("division"));
 	out.glory = j.GetInt("glory");
 	out.place = std::max(0, j.GetInt("place"));
 	out.elite = j.GetBool("elite");
