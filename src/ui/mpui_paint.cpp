@@ -240,18 +240,16 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis, 
 		int n = 0;
 		bool hostShown = false;
 		for (const OnlineSlot &s : g.slots) {
-			if (s.type == 2) continue;
-			if (s.type != 1 && s.type != 3) {
-				freePlaces++;
-				continue;
-			}
+			// The host publishes 0 open, 1 AI, 2 closed, 3 a player, 4 no position on the map, 5 a player in a slot the map no longer has.
+			if (s.type == 0) freePlaces++;
+			if (s.type != 1 && s.type != 3 && s.type != 5) continue;
 			n++;
-			const bool human = s.type == 3, ai = s.type == 1;
+			const bool human = s.type != 1;
 			p.Text(x, y, 28, 26, std::to_string(n), pal::textDim);
 			const uint64_t pid = human ? LobbyPlayerId(g, s.name) : 0;
 			const PatronInfo patron = human ? PatronOf(pid) : PatronInfo();
 			const LeagueBadge badge = pid ? PlayerBadgeOf(pid) : LeagueBadge();
-			const std::string shown = human ? s.name : ai ? (s.name.empty() ? "AI" : s.name) : "Free";
+			const std::string shown = human || !s.name.empty() ? s.name : "AI";
 			const int nameX = PaintLaurelName(p, st, x + 30, y, w - 30 - 90, 26, shown, pid, patron, badge, human ? pal::text : pal::textDim,
 				DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 			if (pid) ProfileHotspot(p, st, nameX, y, w - (nameX - x) - 90, 26, s.name, kProfileLobbySlot + static_cast<int>(&s - g.slots.data()));
