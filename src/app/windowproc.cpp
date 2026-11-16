@@ -43,26 +43,23 @@ namespace {
 bool g_closing = false;
 bool g_uiCapture = false;
 
-LRESULT GameWindowHandler(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
+// The multiplayer screens can stand while the game sends no frames; the league's polls (queue, match, cups, link)
+// would stop with them and the server would drop the player from the queue.
+void RunGameQueue()
 {
-	if (msg == kMsgMpUiWake) {
-		MpUiWakeHandled();
-		// The multiplayer screens can stand while the game sends no frames; the league's polls (queue, match, cups, link)
-		// would stop with them and the server would drop the player from the queue.
-		Guard("game queue", [] {
-			AutosaveQuitIfReady();
-			MpUiGameThreadTick();
-			MainMenuUiGameTick();
-			RejoinMenuTick();
-			SpectatorGameThreadTick();
-			LeagueGameThreadTick();
-		});
-		return 0;
-	}
-	MpUiSetGameWindow(hwnd);
-	// A screen that waits for the player is not a loading one.
-	if ((msg == WM_LBUTTONDOWN || msg == WM_RBUTTONDOWN || msg == WM_KEYDOWN) && LoadCurtainUp()) LoadCurtainLift("the player acts");
-	if (OverlayHandleMouse(hwnd, msg, wp, lp)) return 0;
+	MpUiWakeHandled();
+	Guard("game queue", [] {
+		AutosaveQuitIfReady();
+		MpUiGameThreadTick();
+		MainMenuUiGameTick();
+		RejoinMenuTick();
+		SpectatorGameThreadTick();
+		LeagueGameThreadTick();
+	});
+}
+
+bool InterfaceTakes(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
+{
 	bool uiHandled = false;
 	Guard("interface message", [&] {
 		uiHandled = ChatUiHandleMessage(msg, wp, lp) || UpdateUiHandleMessage(msg, wp, lp) || ControlsUiHandleMessage(msg, wp, lp) || SupportHandleMessage(msg, wp, lp) || HelpUiHandleMessage(msg, wp, lp) || ObjectivesUiHandleMessage(msg, wp, lp) ||
@@ -77,25 +74,33 @@ LRESULT GameWindowHandler(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 		SetCapture(hwnd);
 		g_uiCapture = true;
 	}
-	if (uiHandled) return 0;
+	return uiHandled;
+}
+
+bool GameInputTakes(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, LRESULT &result)
+{
+	result = 0;
 	if (msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST) {
 		bool zoomHandled = false;
 		Guard("zoom map", [&] { zoomHandled = ZoomViewHandleMouse(hwnd, msg, wp, lp); });
-		if (zoomHandled) return 0;
+		if (zoomHandled) return true;
 	}
-	if (SpectatorHandleKey(msg, static_cast<unsigned>(wp), static_cast<long>(lp))) return 0;
-	if (CheatsHandleKey(msg, static_cast<unsigned>(wp), static_cast<long>(lp))) return 0;
-	if (AllyColorsHandleKey(msg, static_cast<unsigned>(wp), static_cast<long>(lp))) return 0;
-	if (OverlayHandleKey(msg, wp, lp)) return 0;
-	{
-		unsigned vk;
-		bool down;
-		if (ControlsMouseButton(msg, static_cast<unsigned>(wp), vk, down)) {
-			DisplayForwardMessage(hwnd, down ? WM_KEYDOWN : WM_KEYUP, vk, down ? 1 : 0xC0000001);
-			return msg == WM_XBUTTONDOWN || msg == WM_XBUTTONUP || msg == WM_XBUTTONDBLCLK ? TRUE : 0;
-		}
+	if (SpectatorHandleKey(msg, static_cast<unsigned>(wp), static_cast<long>(lp))) return true;
+	if (CheatsHandleKey(msg, static_cast<unsigned>(wp), static_cast<long>(lp))) return true;
+	if (AllyColorsHandleKey(msg, static_cast<unsigned>(wp), static_cast<long>(lp))) return true;
+	if (OverlayHandleKey(msg, wp, lp)) return true;
+	unsigned vk;
+	bool down;
+	if (ControlsMouseButton(msg, static_cast<unsigned>(wp), vk, down)) {
+		DisplayForwardMessage(hwnd, down ? WM_KEYDOWN : WM_KEYUP, vk, down ? 1 : 0xC0000001);
+		result = msg == WM_XBUTTONDOWN || msg == WM_XBUTTONUP || msg == WM_XBUTTONDBLCLK ? TRUE : 0;
+		return true;
 	}
-	if (ControlsEatChar(msg, static_cast<unsigned>(wp))) return 0;
+	return ControlsEatChar(msg, static_cast<unsigned>(wp));
+}
+
+bool DisplayMessageTakes(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
+{
 	if (msg == WM_SIZE && DisplayIsWindowed()) {
 		InvalidateRect(hwnd, nullptr, FALSE);
 	}
@@ -105,11 +110,13 @@ LRESULT GameWindowHandler(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 		SaveConfig();
 		LogI("display", "Alt+Enter: %s", c.windowed ? "windowed mode" : "full screen");
 		DisplayApplySettings(true);
-		return 0;
+		return true;
 	}
-	if (msg == WM_SYSCHAR && wp == VK_RETURN) {
-		return 0;
-	}
+	return msg == WM_SYSCHAR && wp == VK_RETURN;
+}
+
+void NoteWindowState(UINT msg, WPARAM wp)
+{
 	if (msg == WM_ACTIVATEAPP) LogI("display", "window %s", wp ? "returns to the foreground" : "goes to the background");
 	if (msg == WM_ACTIVATEAPP && GetConfig().muteInBackground && !g_closing) {
 		AudioSetBackgroundMute(wp == FALSE);
@@ -120,6 +127,23 @@ LRESULT GameWindowHandler(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 		g_closing = true;
 		AudioSetBackgroundMute(false);
 	}
+}
+
+LRESULT GameWindowHandler(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
+{
+	if (msg == kMsgMpUiWake) {
+		RunGameQueue();
+		return 0;
+	}
+	MpUiSetGameWindow(hwnd);
+	// A screen that waits for the player is not a loading one.
+	if ((msg == WM_LBUTTONDOWN || msg == WM_RBUTTONDOWN || msg == WM_KEYDOWN) && LoadCurtainUp()) LoadCurtainLift("the player acts");
+	if (OverlayHandleMouse(hwnd, msg, wp, lp)) return 0;
+	if (InterfaceTakes(hwnd, msg, wp, lp)) return 0;
+	LRESULT result = 0;
+	if (GameInputTakes(hwnd, msg, wp, lp, result)) return result;
+	if (DisplayMessageTakes(hwnd, msg, wp, lp)) return 0;
+	NoteWindowState(msg, wp);
 	return DisplayForwardMessage(hwnd, msg, wp, lp);
 }
 
