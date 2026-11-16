@@ -11,6 +11,7 @@
 #include <string>
 
 #include "core/league.h"
+#include "core/leagueseasons.h"
 #include "core/leagueranked.h"
 #include "core/leagueteam.h"
 #include "game/profiles.h"
@@ -407,7 +408,7 @@ void PaintSummary(Painter &p, const State &st, int x, int y, int w, int h)
 	const bool team = LeagueQueueIsTeam(g.queue);
 	std::string facts = RankedQueueLabel(g.queue);
 	if (g.durationMs) facts += "  \xC2\xB7  " + TrFmt("%s min", {std::to_string(g.durationMs / 60000)});
-	if (v.seasonLoaded) facts += "  \xC2\xB7  " + TrFmt("Season %s", {std::to_string(v.season.number)});
+	if (v.seasonLoaded) facts += "  \xC2\xB7  " + TrFmt("Season %s", {LeagueRoman(v.season.number)});
 	RawText(p, ix + 108, y + 98, iw - 108, 22, facts, pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	p.Fill(ix, y + 160, iw, 1, pal::hairline);
 	const int half = (iw - 60) / 2, py = y + 172;
@@ -576,7 +577,7 @@ void PaintRankedResult(Painter &p, const State &st)
 		p.TextCaps(l.margin, l.titleY, l.w - 2 * l.margin - bw - 32, l.titleH, title, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
 		const bool team = LeagueQueueIsTeam(o.game.queue);
 		std::string info = Tr(team ? "Ranked 2 vs 2" : "Ranked 1 vs 1");
-		if (v.seasonLoaded) info += "  \xC2\xB7  " + TrFmt("Season %s", {std::to_string(v.season.number)});
+		if (v.seasonLoaded) info += "  \xC2\xB7  " + TrFmt("Season %s", {LeagueRoman(v.season.number)});
 		if (!o.game.map.empty()) info += "  \xC2\xB7  " + LeagueMapText(o.game.map);
 		if (o.game.durationMs) info += "  \xC2\xB7  " + TrFmt("%s min", {std::to_string(o.game.durationMs / 60000)});
 		if (team && !o.game.partner.empty()) info += "  \xC2\xB7  " + TrFmt("with %s", {o.game.partner});

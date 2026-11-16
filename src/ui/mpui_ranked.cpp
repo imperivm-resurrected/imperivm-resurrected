@@ -15,6 +15,7 @@
 #include "core/config.h"
 #include "core/guard.h"
 #include "core/league.h"
+#include "core/leagueseasons.h"
 #include "core/leaguemaps.h"
 #include "core/leagueplay.h"
 #include "core/leagueranked.h"
@@ -978,7 +979,7 @@ void PaintSearch(Painter &p, const State &st)
 	SelectObject(p.dc, BrandFont(BrandFace::Display, 58, p.s));
 	p.TextCaps(dx, dy + 24, dw, 60, "Match found", pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
 	std::string caption = Tr("Ranked 1 vs 1");
-	if (v.seasonLoaded) caption += "  \xC2\xB7  " + TrFmt("Season %s", {std::to_string(v.season.number)}) + "  \xC2\xB7  " + LeagueSeasonName(v.season, v.lang);
+	if (v.seasonLoaded) caption += "  \xC2\xB7  " + TrFmt("Season %s", {LeagueRoman(v.season.number)}) + "  \xC2\xB7  " + LeagueSeasonName(v.season, v.lang);
 	p.Font(4);
 	p.raw = true;
 	p.TextCaps(dx, dy + 88, dw, 20, caption, pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 2);

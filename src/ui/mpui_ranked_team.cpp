@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "core/league.h"
+#include "core/leagueseasons.h"
 #include "core/leagueplay.h"
 #include "core/leagueranked.h"
 #include "core/leagueteam.h"
@@ -385,7 +386,7 @@ void PaintSearchTeam(Painter &p, const State &st)
 	Display(p, 54);
 	p.TextCaps(dx, dy + 18, dw, 56, "Match found", pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
 	std::string caption = Tr("Ranked 2 vs 2");
-	if (v.seasonLoaded) caption += "  \xC2\xB7  " + TrFmt("Season %s", {std::to_string(v.season.number)}) + "  \xC2\xB7  " + LeagueSeasonName(v.season, v.lang);
+	if (v.seasonLoaded) caption += "  \xC2\xB7  " + TrFmt("Season %s", {LeagueRoman(v.season.number)}) + "  \xC2\xB7  " + LeagueSeasonName(v.season, v.lang);
 	p.raw = true;
 	FitCaps(p, dx + 24, dy + 76, dw - 48, 20, caption, pal::caption, DT_CENTER);
 	p.raw = false;
