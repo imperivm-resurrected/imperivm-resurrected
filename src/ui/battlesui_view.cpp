@@ -29,14 +29,6 @@ struct Line {
 	int Height(bool first) const { return header ? kHeaderH + (first ? 0 : kHeaderGap) : kListRowH; }
 };
 
-// The game's own texts (titles, the names of saved games) are shown as they are: Tr() would look each one up as a key.
-void Raw(Painter &p, int x, int y, int w, int h, const std::string &t, COLORREF c, UINT fmt = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS)
-{
-	p.raw = true;
-	p.Text(x, y, w, h, t, c, fmt);
-	p.raw = false;
-}
-
 int RawWrapped(Painter &p, int x, int y, int w, int h, const std::string &t, COLORREF c)
 {
 	p.raw = true;
@@ -134,7 +126,7 @@ void PaintRow(Painter &p, const Line &l, bool selected, int x, int y, int w, int
 		char num[16];
 		sprintf_s(num, "%02d", l.number);
 		p.Font(4);
-		Raw(p, x + 14, y, 30, kListRowH, num, selected ? pal::redText : pal::disabled);
+		TextAsIs(p, x + 14, y, 30, kListRowH, num, selected ? pal::redText : pal::disabled);
 		textX = x + 52;
 	}
 	p.Font(selected ? 1 : 0);
@@ -143,7 +135,7 @@ void PaintRow(Painter &p, const Line &l, bool selected, int x, int y, int w, int
 		DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	if (selected) {
 		p.Font(1);
-		Raw(p, x + w - 26, y, 14, kListRowH, "\xE2\x80\xBA", pal::redText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		TextAsIs(p, x + w - 26, y, 14, kListRowH, "\xE2\x80\xBA", pal::redText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 	}
 	if (hitBottom > hitTop) p.AddHit(x, hitTop, w, hitBottom - hitTop, kActRow, RowArg(l.list, l.index));
 }
@@ -252,7 +244,7 @@ int PaintTitle(Painter &p, int x, int y, int w, const BattleTitle &t, int tab, c
 	if (!t.year.empty()) caption += "  \xC2\xB7  " + t.year;
 	p.Font(4);
 	SetTextCharacterExtra(p.dc, p.S(1));
-	Raw(p, x, y, w, 18, caption, pal::redText);
+	TextAsIs(p, x, y, w, 18, caption, pal::redText);
 	SetTextCharacterExtra(p.dc, 0);
 	y += 24;
 	p.Font(2);
@@ -398,7 +390,7 @@ void PaintPages(Painter &p, int x, int y, int w, const View &v, const SaveInfo *
 		const int lw = std::min(x + w - lx, p.TextWidth(labels[i]) + 8);
 		if (lw <= 0) break;
 		const bool hot = enabled && !on && p.Hover(lx - 4, y, lw + 8, kPagesH, v.mouseX, v.mouseY);
-		Raw(p, lx, y, lw, kPagesH - 4, labels[i], on || hot ? pal::text : pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		TextAsIs(p, lx, y, lw, kPagesH - 4, labels[i], on || hot ? pal::text : pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		if (on) p.Fill(lx, y + kPagesH - 3, lw - 8, 3, pal::red);
 		if (enabled && !on) p.AddHit(lx - 4, y, lw + 8, kPagesH, kActPage, static_cast<int>(i));
 		lx += lw + 22;
@@ -424,7 +416,7 @@ void PaintDetail(Painter &p, int x, int y, int w, int h, const View &v, PaintOut
 		// The campaign is in the mods folder, but the content profile in use leaves it out.
 		const int cy = y + h / 2;
 		p.Font(2);
-		Raw(p, x + kPad, cy - 70, w - kPad * 2, 32, Upper("Not active"), pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		TextAsIs(p, x + kPad, cy - 70, w - kPad * 2, 32, Upper("Not active"), pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.Font(0);
 		p.Text(x + kPad, cy - 34, w - kPad * 2, 24, "Activate it in Additional content", pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.Font(1);
@@ -443,7 +435,7 @@ void PaintDetail(Painter &p, int x, int y, int w, int h, const View &v, PaintOut
 		if (!saved) return;
 		p.Font(3);
 		p.Ellipse(sx, buttonsY - savedH + 7, 6, 6, pal::red);
-		Raw(p, sx + 14, buttonsY - savedH, sw - 14, 20, TrFmt("Last saved: %s", {saved->name + "  \xC2\xB7  " + saved->when}), pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		TextAsIs(p, sx + 14, buttonsY - savedH, sw - 14, 20, TrFmt("Last saved: %s", {saved->name + "  \xC2\xB7  " + saved->when}), pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	};
 	if (w >= kWideCard) {
 		// The picture at its own size on the left; the text and the buttons in a column beside it.
@@ -494,7 +486,6 @@ void PaintFitted(Painter &p, int x, int y, int w, int h, const BattleImage *img)
 	p.Frame(x, y, w, h, pal::hairline);
 }
 
-
 constexpr int kBannerH = 226, kCampaignsGap = 16, kCampaignsH = 38, kHeaderTabH = 52;
 const int kOverviewTabs[] = {kBattlesTabImperivm1, kBattlesTabImperivm2, kBattlesTabGreat, kBattlesTabCustom};
 
@@ -529,17 +520,17 @@ void PaintContinue(Painter &p, int x, int y, int w, int h, const View &v)
 	p.Font(3);
 	p.Text(tx, y + 44, tw, 18, TabName(g.tab), pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	p.Font(2);
-	Raw(p, tx, y + 62, tw, 32, Caps(SplitBattleTitle(BattleTitleWithoutGame(g.title)).name), pal::text);
+	TextAsIs(p, tx, y + 62, tw, 32, Caps(SplitBattleTitle(BattleTitleWithoutGame(g.title)).name), pal::text);
 	p.Font(0);
-	Raw(p, tx, y + 100, tw, 22, g.name, pal::text);
+	TextAsIs(p, tx, y + 100, tw, 22, g.name, pal::text);
 	std::string when = TrFmt("Saved %s", {g.when});
 	if (!g.played.empty()) when += "   \xC2\xB7   " + TrFmt("Played %s", {g.played});
 	p.Font(3);
-	Raw(p, tx, y + 124, tw, 20, when, pal::textDim);
+	TextAsIs(p, tx, y + 124, tw, 20, when, pal::textDim);
 	// Where the player was: the objective the game completed last.
 	if (g.diary && !g.diary->empty()) {
 		const ObjectiveNote &n = g.diary->front();
-		Raw(p, tx, y + 144, tw, 20, TrFmt("Last objective: %s", {n.title.empty() ? n.id : n.title}), pal::textDim);
+		TextAsIs(p, tx, y + 144, tw, 20, TrFmt("Last objective: %s", {n.title.empty() ? n.id : n.title}), pal::textDim);
 	}
 	p.Font(1);
 	const char *label = v.loading ? "Loading..." : "Continue";
@@ -593,20 +584,20 @@ void PaintCampaignCard(Painter &p, int x, int y, int w, int h, int tab, const Vi
 	const int tx = x + 16, tw = w - 32, ty = y + 22 + picH;
 	p.Font(4);
 	SetTextCharacterExtra(p.dc, p.S(1));
-	Raw(p, tx, ty, tw, 18, Upper(TabName(tab)), pal::redText);
+	TextAsIs(p, tx, ty, tw, 18, Upper(TabName(tab)), pal::redText);
 	SetTextCharacterExtra(p.dc, 0);
 	p.Font(2);
 	RawWrapped(p, tx, ty + 22, tw, 58, Caps(CardTitle(v, tab, n)), n == 0 ? pal::textDim : pal::text);
 	p.Fill(tx, y + h - 42, tw, 1, pal::hairline);
 	p.Font(3);
-	if (n > 0) Raw(p, tx, y + h - 36, tw, 24, CountText(tab, n), pal::textDim);
+	if (n > 0) TextAsIs(p, tx, y + h - 36, tw, 24, CountText(tab, n), pal::textDim);
 	else if (v.packs[tab].installed) p.Text(tx, y + h - 36, tw, 24, "Activate it in Additional content", pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	if (v.savedInTab[tab] > 0) {
 		p.Font(4);
 		const std::string badge = Tr("In progress");
 		const int bw = std::min(tw / 2, p.TextWidth(badge) + 20);
 		p.RoundRect(x + w - 16 - bw, y + h - 34, bw, 20, 10, RGB(52, 70, 34));
-		Raw(p, x + w - 16 - bw, y + h - 34, bw, 20, badge, RGB(196, 230, 160), DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		TextAsIs(p, x + w - 16 - bw, y + h - 34, bw, 20, badge, RGB(196, 230, 160), DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
 	if (enabled) p.AddHit(x, y, w, h, kActOpenTab, tab);
 }

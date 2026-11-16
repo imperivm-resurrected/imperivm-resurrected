@@ -53,13 +53,6 @@ std::string Initials(const std::string &name)
 	return name.substr(0, end);
 }
 
-void Raw(Painter &p, int x, int y, int w, int h, const std::string &text, COLORREF c, UINT fmt = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS)
-{
-	p.raw = true;
-	p.Text(x, y, w, h, text, c, fmt);
-	p.raw = false;
-}
-
 // A row of a list to pick from, as the badge's: lit while chosen, a click elsewhere.
 bool ChoiceRow(Painter &p, int x, int y, int w, int h, bool chosen, bool enabled, int action, int arg, int mx, int my)
 {
@@ -206,7 +199,7 @@ int PaintLeagueCosmeticChoices(Painter &p, int x, int y, int w, const LeagueMe &
 		ChoiceRow(p, x, cy, w, rowH, chosen, enabled, frameAction, r.season, mx, my);
 		PaintFramedAvatar(p, x + 10, cy + 6, 32, own, SteamOnlinePlayerName(), f);
 		p.Font(chosen ? 1 : 0);
-		Raw(p, x + 52, cy, w - 60, rowH, LeagueFrameLabel(f) + "  \xC2\xB7  " + TrFmt("Season %s", {LeagueRoman(r.season)}), chosen ? pal::text : pal::body);
+		TextAsIs(p, x + 52, cy, w - 60, rowH, LeagueFrameLabel(f) + "  \xC2\xB7  " + TrFmt("Season %s", {LeagueRoman(r.season)}), chosen ? pal::text : pal::body);
 		cy += rowH + 2;
 	}
 	cy += 14;
