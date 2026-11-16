@@ -135,6 +135,24 @@ void DrawLock(Painter &p, int x, int y, COLORREF c)
 	p.Fill(x + 5, y + 10, 2, 4, pal::panel);
 }
 
+// A player's name in the box (x, y, w, h): the patron's laurel before it, and the league badge after it, which takes its room from the
+// name. `color` and `fmt` are the name's without a laurel. Returns where the name starts.
+int PaintLaurelName(Painter &p, const State &st, int x, int y, int w, int h, const std::string &name, uint64_t id, const PatronInfo &patron,
+	const LeagueBadge &badge, COLORREF color, UINT fmt)
+{
+	if (patron.tier == PatronTier::None) {
+		const int nameW = w - LeagueBadgeRoom(badge);
+		p.Text(x, y, nameW, h, name, color, fmt);
+		DrawBadgeAfterName(p, x, y, nameW, h, name, badge, st.mouseX, st.mouseY, id);
+		return x;
+	}
+	const int laurelY = y + (h - 20) / 2, nameX = x + 24, nameW = w - 24 - LeagueBadgeRoom(badge);
+	DrawPatron(p, x, laurelY, 20, nameX, y, nameW, h, name, patron.tier, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	PatronHotspot(p, x, laurelY, 20, patron, st.mouseX, st.mouseY, kPatronLink);
+	DrawBadgeAfterName(p, nameX, y, nameW, h, name, badge, st.mouseX, st.mouseY, id);
+	return nameX;
+}
+
 void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis, const LobbyLayout &l)
 {
 	const int mx = st.mouseX, my = st.mouseY;
@@ -233,21 +251,10 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis, 
 			const uint64_t pid = human ? LobbyPlayerId(g, s.name) : 0;
 			const PatronInfo patron = human ? PatronOf(pid) : PatronInfo();
 			const LeagueBadge badge = pid ? PlayerBadgeOf(pid) : LeagueBadge();
-			if (patron.tier != PatronTier::None) {
-				const int nameW = w - 54 - 90 - LeagueBadgeRoom(badge);
-				DrawPatron(p, x + 30, y + 3, 20, x + 54, y, nameW, 26, s.name, patron.tier, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-				PatronHotspot(p, x + 30, y + 3, 20, patron, st.mouseX, st.mouseY, kPatronLink);
-				DrawBadgeAfterName(p, x + 54, y, nameW, 26, s.name, badge, st.mouseX, st.mouseY, pid);
-			}
-			else {
-				const int nameW = w - 30 - 90 - LeagueBadgeRoom(badge);
-				p.Text(x + 30, y, nameW, 26, human ? s.name : ai ? (s.name.empty() ? "AI" : s.name) : "Free", human ? pal::text : pal::textDim);
-				if (human) DrawBadgeAfterName(p, x + 30, y, nameW, 26, s.name, badge, st.mouseX, st.mouseY, pid);
-			}
-			if (human && LobbyPlayerId(g, s.name)) {
-				const int nameX = patron.tier != PatronTier::None ? x + 54 : x + 30;
-				ProfileHotspot(p, st, nameX, y, w - (nameX - x) - 90, 26, s.name, kProfileLobbySlot + static_cast<int>(&s - g.slots.data()));
-			}
+			const std::string shown = human ? s.name : ai ? (s.name.empty() ? "AI" : s.name) : "Free";
+			const int nameX = PaintLaurelName(p, st, x + 30, y, w - 30 - 90, 26, shown, pid, patron, badge, human ? pal::text : pal::textDim,
+				DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+			if (pid) ProfileHotspot(p, st, nameX, y, w - (nameX - x) - 90, 26, s.name, kProfileLobbySlot + static_cast<int>(&s - g.slots.data()));
 			if (human && !hostShown && PlayerNameMatches(s.name, g.host)) {
 				hostShown = true;
 				p.Text(x + w - 100, y, 100, 26, "host", pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
@@ -266,21 +273,9 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis, 
 			const uint64_t pid = LobbyPlayerId(g, g.playerNames[i]);
 			const PatronInfo patron = PatronOf(pid);
 			const LeagueBadge badge = pid ? PlayerBadgeOf(pid) : LeagueBadge();
-			if (patron.tier != PatronTier::None) {
-				const int nameW = w - 54 - 90 - LeagueBadgeRoom(badge);
-				DrawPatron(p, x + 30, y + 3, 20, x + 54, y, nameW, 26, g.playerNames[i], patron.tier, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-				PatronHotspot(p, x + 30, y + 3, 20, patron, st.mouseX, st.mouseY, kPatronLink);
-				DrawBadgeAfterName(p, x + 54, y, nameW, 26, g.playerNames[i], badge, st.mouseX, st.mouseY, pid);
-			}
-			else {
-				const int nameW = w - 30 - (i == 0 ? 90 : 0) - LeagueBadgeRoom(badge);
-				p.Text(x + 30, y, nameW, 26, g.playerNames[i], pal::text);
-				DrawBadgeAfterName(p, x + 30, y, nameW, 26, g.playerNames[i], badge, st.mouseX, st.mouseY, pid);
-			}
-			if (pid) {
-				const int nameX = patron.tier != PatronTier::None ? x + 54 : x + 30;
-				ProfileHotspot(p, st, nameX, y, w - (nameX - x) - 90, 26, g.playerNames[i], kProfileLobbyName + i);
-			}
+			const int nameW = w - 30 - (patron.tier != PatronTier::None || i == 0 ? 90 : 0);
+			const int nameX = PaintLaurelName(p, st, x + 30, y, nameW, 26, g.playerNames[i], pid, patron, badge, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+			if (pid) ProfileHotspot(p, st, nameX, y, w - (nameX - x) - 90, 26, g.playerNames[i], kProfileLobbyName + i);
 			if (i == 0) p.Text(x + w - 100, y, 100, 26, "host", pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 			y += 28;
 		}
@@ -677,18 +672,8 @@ void PaintList(Painter &p, const State &st)
 		const PatronInfo hostPatron = PatronOf(g.owner);
 		const LeagueBadge hostBadge = PlayerBadgeOf(g.owner);
 		const std::string hostText = g.friendHost ? g.host + Tr("  (friend)") : g.host;
-		const int hx = textX(1), hw = cx[2] - textX(1) - 12;
-		if (hostPatron.tier != PatronTier::None) {
-			const int ly = y + (rowH - 20) / 2, nameW = hw - 24 - LeagueBadgeRoom(hostBadge);
-			DrawPatron(p, hx, ly, 20, hx + 24, y, nameW, rowH, hostText, hostPatron.tier, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-			PatronHotspot(p, hx, ly, 20, hostPatron, mx, my, kPatronLink);
-			DrawBadgeAfterName(p, hx + 24, y, nameW, rowH, hostText, hostBadge, mx, my, g.owner);
-		}
-		else {
-			const int nameW = hw - LeagueBadgeRoom(hostBadge);
-			p.Text(hx, y, nameW, rowH, hostText, g.friendHost ? pal::redText : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-			DrawBadgeAfterName(p, hx, y, nameW, rowH, hostText, hostBadge, mx, my, g.owner);
-		}
+		PaintLaurelName(p, st, textX(1), y, cx[2] - textX(1) - 12, rowH, hostText, g.owner, hostPatron, hostBadge,
+			g.friendHost ? pal::redText : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		cell(2, g.playing ? std::string("In game") : std::to_string(g.players) + " / " + std::to_string(g.maxPlayers),
 			g.players < g.maxPlayers && !g.playing ? pal::text : pal::textDim);
 		cell(3, LobbyMapLabel(g), pal::textDim);
