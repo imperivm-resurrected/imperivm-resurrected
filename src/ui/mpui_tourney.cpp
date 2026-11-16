@@ -114,6 +114,12 @@ void Toast(const std::string &text, bool error = false)
 	ModUiToast(text, error);
 }
 
+// A tournament played with other gameplay content than this computer's.
+std::string OtherContentText(const std::string &contentName)
+{
+	return TrFmt("This tournament is played with %s: switch to that content profile first.", {contentName.empty() ? Tr("other content") : contentName});
+}
+
 void Flash()
 {
 	const HWND hwnd = g_wakeWnd;
@@ -219,7 +225,7 @@ void CreateRoom(const TourneyClaim &claim)
 	const auto mine = LeagueTourneyMine();
 	const TourneyNext &n = mine->mine.next;
 	if (!claim.contentKey.empty() && claim.contentKey != SteamOwnGameplayKey()) {
-		Toast(TrFmt("This tournament is played with %s: switch to that content profile first.", {n.contentName.empty() ? Tr("other content") : n.contentName}), true);
+		Toast(OtherContentText(n.contentName), true);
 		f = RoomFlow();
 		return;
 	}
@@ -852,9 +858,7 @@ std::string ResultText(const TourneyOpResult &r)
 	if (e == "suspended") return TrFmt("Two no-shows in 30 days: you can sign up for official tournaments again from %s.", {WhenText(r.until)});
 	if (e == "already_signed") return Tr("You are already signed up.");
 	if (e == "checkin_closed") return Tr("The check-in is not open.");
-	if (e == "wrong_content") {
-		return TrFmt("This tournament is played with %s: switch to that content profile first.", {r.contentName.empty() ? Tr("other content") : r.contentName});
-	}
+	if (e == "wrong_content") return OtherContentText(r.contentName);
 	if (e == "not_ready") return Tr("The match is not waiting for players.");
 	if (e == "too_early") return r.noshowFrom > 0 ? TrFmt("It is too early to claim the win: the no-show counts %s.", {FromText(r.noshowFrom)}) : Tr("The waiting time is not over yet.");
 	if (e == "not_in_room") return Tr("You have to be in the room to claim the win.");
@@ -1334,7 +1338,7 @@ void TourneyAction(int arg)
 			break;
 		}
 		if (!next.contentKey.empty() && next.contentKey != SteamOwnGameplayKey()) {
-			Toast(TrFmt("This tournament is played with %s: switch to that content profile first.", {next.contentName.empty() ? Tr("other content") : next.contentName}), true);
+			Toast(OtherContentText(next.contentName), true);
 			break;
 		}
 		if (u.room.phase != RoomFlow::kIdle && u.room.match == value) break;
