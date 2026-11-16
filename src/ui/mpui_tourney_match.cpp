@@ -671,40 +671,12 @@ bool PaintChampionHeader(Painter &p, const State &st, const HeaderUi &u)
 	return true;
 }
 
-void PaintChampionScreen(Painter &p, const State &st, const Ui &u)
+namespace {
+
+// The champion beside the crown: their name, a team's players, the final that crowned them; or why the cup has none.
+void PaintChampionName(Painter &p, const ScreenLayout &l, const TourneyDetail &d, const TourneyEntrant *champ, int tx, int top, int tw, int blockH,
+	std::vector<uint64_t> &ids)
 {
-	const int mx = st.mouseX, my = st.mouseY;
-	const ScreenLayout l = ScreenLayoutFor(st.viewW, st.viewH);
-	const int m = l.margin, inner = l.w - 2 * m, bottom = l.h - m;
-	const auto page = LeagueTourneyPage(u.championSlug, 60000);
-	const int top = l.margin + kHeaderButtonH + (l.roomy ? 64 : 44);
-	if (!page->loaded) {
-		PaintGlassCard(p, m, top, inner, 160);
-		p.Font(0);
-		p.Text(m + 32, top + 40, inner - 64, 30, page->failed ? "Couldn't reach the league server. Check your connection and try again." : "Reading the tournament...", pal::textDim);
-		return;
-	}
-	const TourneyDetail &d = page->detail;
-	const TourneyEntrant *champ = TourneyEntrantOf(d, TourneyChampion(d));
-	std::vector<uint64_t> ids;
-	const int blockH = std::min(l.roomy ? 450 : 360, (bottom - top) * 55 / 100);
-	const int size = std::min(400, blockH - 20), px = m + 40, pcy = top + blockH / 2;
-	PaintRing(p, px + size / 2, pcy, size * 8 / 10, pal::hairline);
-	PaintRing(p, px + size / 2, pcy, size * 11 / 10, RGB(0x22, 0x1f, 0x1d));
-	// Only official cups award phalerae; a community cup crowns its champion with a laurel and no prize.
-	if (d.official) DrawLeaguePhalera(p, px, pcy - size / 2, size, LeagueMetal::Gold);
-	else {
-		PaintOrnament(p, kOrnamentLaurel, px, pcy - size / 2, size / 2, size, kGold);
-		PaintOrnament(p, kOrnamentLaurel, px + size / 2, pcy - size / 2, size / 2, size, kGold, true);
-		UseDisplay(p, size * 45 / 100);
-		p.raw = true;
-		p.Text(px, pcy - size / 2, size, size, "1", kGold, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-		p.raw = false;
-	}
-	const int pathW = std::min(540, inner * 28 / 100), pathX = m + inner - pathW;
-	const int tx = px + size + 56, tw = pathX - 40 - tx;
-	PaintCaps(p, tx, top + 30, tw, 20, champ ? (d.official ? Tr("Gold phalera") + " \xC2\xB7 " + Tr("1st place") : Tr("Champion of the cup")) : Tr("No champion"), kGold);
-	const int64_t end = TourneyFinishedAt(d);
 	if (champ) {
 		const bool teams = d.Teams();
 		int nameSize = std::min(teams ? 150 : 210, blockH * (teams ? 30 : 45) / 100);
@@ -760,8 +732,11 @@ void PaintChampionScreen(Painter &p, const State &st, const Ui &u)
 		p.Font(0);
 		p.Text(tx, top + 70, tw, 30, d.status == TourneyStatus::Running ? "The tournament is still being played." : "This tournament ended without a champion.", pal::textDim);
 	}
+}
 
-	// The path to the title, match by match.
+// The path to the title, match by match.
+void PaintTitlePath(Painter &p, const TourneyDetail &d, const TourneyEntrant *champ, int pathX, int top, int pathW, int blockH)
+{
 	PaintGlassCard(p, pathX, top, pathW, blockH);
 	PaintCaps(p, pathX + 28, top + 24, pathW - 56, 20, "Path to the title", pal::caption);
 	if (champ) {
@@ -810,10 +785,10 @@ void PaintChampionScreen(Painter &p, const State &st, const Ui &u)
 			sy += stepH;
 		}
 	}
+}
 
-	// The podium, the cup in numbers and the player's own result.
-	const int ry = top + blockH + (l.roomy ? 32 : 20), rh = bottom - ry, cw = (inner - 2 * kCardGap) / 3, pad = 28;
-	if (rh < 140) return;
+void PaintPodium(Painter &p, const TourneyDetail &d, int m, int ry, int cw, int rh, int pad, std::vector<uint64_t> &ids)
+{
 	PaintGlassCard(p, m, ry, cw, rh);
 	PaintCaps(p, m + pad, ry + 24, cw - 2 * pad, 20, "Podium", pal::caption);
 	const int rowH = std::min(82, (rh - 70) / 3);
@@ -855,8 +830,10 @@ void PaintChampionScreen(Painter &p, const State &st, const Ui &u)
 		if (s.place < 3) p.Fill(m + pad, py + rowH - 1, cw - 2 * pad, 1, pal::hairline);
 		py += rowH;
 	}
+}
 
-	const int x2 = m + cw + kCardGap;
+void PaintCupNumbers(Painter &p, const TourneyDetail &d, int64_t end, int x2, int ry, int cw, int rh, int pad)
+{
 	PaintGlassCard(p, x2, ry, cw, rh);
 	PaintCaps(p, x2 + pad, ry + 24, cw - 2 * pad, 20, "The cup in numbers", pal::caption);
 	int done = 0, total = 0, walkovers = 0, disputes = 0;
@@ -918,8 +895,12 @@ void PaintChampionScreen(Painter &p, const State &st, const Ui &u)
 			pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.raw = false;
 	}
+}
 
-	const int x3 = x2 + cw + kCardGap;
+// The player's own result, and the next official cup.
+void PaintOwnCup(Painter &p, const State &st, const TourneyDetail &d, int x3, int ry, int cw, int rh, int pad)
+{
+	const int mx = st.mouseX, my = st.mouseY;
 	PaintGlassCard(p, x3, ry, cw, rh);
 	PaintCaps(p, x3 + pad, ry + 24, cw - 2 * pad, 20, "Your cup", pal::caption);
 	const TourneyEntrant *me = TourneyEntrantBySteamId(d, SteamOwnId());
@@ -978,6 +959,54 @@ void PaintChampionScreen(Painter &p, const State &st, const Ui &u)
 		p.raw = false;
 		p.Button(bx + bw - 16 - 120, by + 36, 120, 36, "View", kTourney, ArgOf(kSubOpen, nextCup->id), mx, my, true, true);
 	}
+}
+
+}
+
+void PaintChampionScreen(Painter &p, const State &st, const Ui &u)
+{
+	const ScreenLayout l = ScreenLayoutFor(st.viewW, st.viewH);
+	const int m = l.margin, inner = l.w - 2 * m, bottom = l.h - m;
+	const auto page = LeagueTourneyPage(u.championSlug, 60000);
+	const int top = l.margin + kHeaderButtonH + (l.roomy ? 64 : 44);
+	if (!page->loaded) {
+		PaintGlassCard(p, m, top, inner, 160);
+		p.Font(0);
+		p.Text(m + 32, top + 40, inner - 64, 30, page->failed ? "Couldn't reach the league server. Check your connection and try again." : "Reading the tournament...", pal::textDim);
+		return;
+	}
+	const TourneyDetail &d = page->detail;
+	const TourneyEntrant *champ = TourneyEntrantOf(d, TourneyChampion(d));
+	std::vector<uint64_t> ids;
+	const int blockH = std::min(l.roomy ? 450 : 360, (bottom - top) * 55 / 100);
+	const int size = std::min(400, blockH - 20), px = m + 40, pcy = top + blockH / 2;
+	PaintRing(p, px + size / 2, pcy, size * 8 / 10, pal::hairline);
+	PaintRing(p, px + size / 2, pcy, size * 11 / 10, RGB(0x22, 0x1f, 0x1d));
+	// Only official cups award phalerae; a community cup crowns its champion with a laurel and no prize.
+	if (d.official) DrawLeaguePhalera(p, px, pcy - size / 2, size, LeagueMetal::Gold);
+	else {
+		PaintOrnament(p, kOrnamentLaurel, px, pcy - size / 2, size / 2, size, kGold);
+		PaintOrnament(p, kOrnamentLaurel, px + size / 2, pcy - size / 2, size / 2, size, kGold, true);
+		UseDisplay(p, size * 45 / 100);
+		p.raw = true;
+		p.Text(px, pcy - size / 2, size, size, "1", kGold, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.raw = false;
+	}
+	const int pathW = std::min(540, inner * 28 / 100), pathX = m + inner - pathW;
+	const int tx = px + size + 56, tw = pathX - 40 - tx;
+	PaintCaps(p, tx, top + 30, tw, 20, champ ? (d.official ? Tr("Gold phalera") + " \xC2\xB7 " + Tr("1st place") : Tr("Champion of the cup")) : Tr("No champion"), kGold);
+	const int64_t end = TourneyFinishedAt(d);
+	PaintChampionName(p, l, d, champ, tx, top, tw, blockH, ids);
+	PaintTitlePath(p, d, champ, pathX, top, pathW, blockH);
+
+	// The podium, the cup in numbers and the player's own result.
+	const int ry = top + blockH + (l.roomy ? 32 : 20), rh = bottom - ry, cw = (inner - 2 * kCardGap) / 3, pad = 28;
+	if (rh < 140) return;
+	PaintPodium(p, d, m, ry, cw, rh, pad, ids);
+	const int x2 = m + cw + kCardGap;
+	PaintCupNumbers(p, d, end, x2, ry, cw, rh, pad);
+	const int x3 = x2 + cw + kCardGap;
+	PaintOwnCup(p, st, d, x3, ry, cw, rh, pad);
 	PatronsWatch(ids);
 }
 
