@@ -12,15 +12,26 @@ namespace winpath {
 
 inline constexpr unsigned long long kUnixEpochAsFileTime = 116444736000000000ULL;
 
-inline std::wstring Widen(const std::string &s, UINT codepage)
+inline std::wstring WidenWith(const std::string &s, UINT codepage, DWORD flags)
 {
 	if (s.empty()) return std::wstring();
-	const DWORD flags = codepage == CP_UTF8 ? MB_ERR_INVALID_CHARS : 0;
 	const int n = MultiByteToWideChar(codepage, flags, s.data(), static_cast<int>(s.size()), nullptr, 0);
 	if (n <= 0) return std::wstring();
 	std::wstring w(static_cast<size_t>(n), L'\0');
 	MultiByteToWideChar(codepage, flags, s.data(), static_cast<int>(s.size()), &w[0], n);
 	return w;
+}
+
+// Text that is not valid UTF-8 comes back empty.
+inline std::wstring Widen(const std::string &s, UINT codepage)
+{
+	return WidenWith(s, codepage, codepage == CP_UTF8 ? MB_ERR_INVALID_CHARS : 0);
+}
+
+// Bytes that are not valid UTF-8 become U+FFFD instead.
+inline std::wstring WidenLenient(const std::string &s, UINT codepage)
+{
+	return WidenWith(s, codepage, 0);
 }
 
 inline std::string Utf8(const std::wstring &w)

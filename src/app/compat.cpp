@@ -14,19 +14,11 @@
 #include "core/log.h"
 #include "i18n/tr.h"
 #include "ui/modui.h"
+#include "core/winpath.h"
 
 namespace {
 const wchar_t kLayersKey[] = L"Software\\Microsoft\\Windows NT\\CurrentVersion\\AppCompatFlags\\Layers";
 const wchar_t kLayersKeyMachine[] = L"HKLM\\Software\\Microsoft\\Windows NT\\CurrentVersion\\AppCompatFlags\\Layers";
-
-std::string Narrow(const std::wstring &w)
-{
-	if (w.empty()) return "";
-	const int n = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), -1, nullptr, 0, nullptr, nullptr);
-	std::string s(n > 0 ? n - 1 : 0, '\0');
-	if (n > 1) WideCharToMultiByte(CP_UTF8, 0, w.c_str(), -1, &s[0], n, nullptr, nullptr);
-	return s;
-}
 
 bool Harmful(const std::wstring &token)
 {
@@ -89,7 +81,7 @@ Layers Read(HKEY hive, const std::wstring &exe)
 std::string Joined(const std::vector<std::wstring> &tokens)
 {
 	std::string s;
-	for (const std::wstring &t : tokens) s += (s.empty() ? "" : ", ") + Narrow(t);
+	for (const std::wstring &t : tokens) s += (s.empty() ? "" : ", ") + winpath::Utf8(t);
 	return s;
 }
 
