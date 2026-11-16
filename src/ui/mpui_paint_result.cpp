@@ -230,8 +230,10 @@ void PaintStage(Painter &p, const State &st, const LeagueMeView &me, int x, int 
 		int nd = 0;
 		LeagueNextDivision(f.tier, f.division, nt, nd);
 		const COLORREF ink = Ink(f.tier);
+		p.raw = true;
 		Caps(p, bx, by - 26, barHalf, 22, RankName(f.tier, f.division), ink, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 		if (nt != LeagueTier::None) Caps(p, bx + barHalf, by - 26, barHalf, 22, LeagueRankLabel(nt, nd) + "  \xC2\xB7  100 " + Tr("Glory"), pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+		p.raw = false;
 		p.Fill(bx, by, bw, 14, pal::bg);
 		if (f.ghostTo > f.ghostFrom) {
 			PaintTint(p, bx + static_cast<int>(bw * f.ghostFrom), by, static_cast<int>(bw * (f.ghostTo - f.ghostFrom)), 14, f.ghostLoss ? pal::red : ink, 90);
@@ -402,7 +404,9 @@ void PaintSummary(Painter &p, const State &st, const LeagueMeView &me, int x, in
 			}
 		};
 		auto heading = [&](int sx, const char *label, bool won) {
+			p.raw = true;
 			FitCaps(p, sx, py, half, 18, Tr(label) + "  \xC2\xB7  " + Tr(won ? "Winner" : "Defeated"), won ? pal::ok : pal::caption);
+			p.raw = false;
 		};
 		heading(ix, "Your team", g.won);
 		member(ix, py + 20, SteamOwnId(), st.player, g.left ? "left the game" : nullptr);

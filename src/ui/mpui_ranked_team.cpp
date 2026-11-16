@@ -42,20 +42,28 @@ int InvitesShown(int count, int h)
 	return n;
 }
 
-// A caption in capitals that keeps to its box: the letters close up, then the type gets smaller, before anything is cut.
+// A caption in capitals that keeps to its box: the letters close up, then the type gets smaller, before anything is cut. The text is
+// drawn as given, already translated, as CapsWidth measures it.
 void FitCaps(Painter &p, int x, int y, int w, int h, const std::string &text, COLORREF c, UINT align = DT_LEFT)
 {
+	const bool raw = p.raw;
+	p.raw = true;
 	p.Font(4);
 	int spacing = 2;
 	while (spacing > 0 && p.CapsWidth(text, spacing) > w) spacing--;
 	if (p.CapsWidth(text, spacing) > w) p.Font(3);
 	p.TextCaps(x, y, w, h, text, c, align | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, spacing);
+	p.raw = raw;
 }
 
 int CapsWidth(Painter &p, const std::string &text, int spacing = 1)
 {
+	const bool raw = p.raw;
+	p.raw = true;
 	p.Font(4);
-	return p.CapsWidth(text, spacing);
+	const int w = p.CapsWidth(text, spacing);
+	p.raw = raw;
+	return w;
 }
 
 // The ranked tab's outlined button and chip, their labels fitted to the box.
@@ -75,10 +83,10 @@ void FitChip(Painter &p, int x, int y, int w, int h, const std::string &text, CO
 	FitCaps(p, x + 4, y, w - 8, h, text, ink, DT_CENTER);
 }
 
-// A chip as wide as its text and its margins.
+// A chip as wide as its text, already translated, and its margins.
 int ChipWidth(Painter &p, const std::string &text, int minW = 0)
 {
-	return std::max(minW, CapsWidth(p, Tr(text), 1) + 24);
+	return std::max(minW, CapsWidth(p, text, 1) + 24);
 }
 
 uint64_t IdOf(const std::string &steamId)
@@ -161,7 +169,8 @@ void PaintTeamCard(Painter &p, int x, int y, int w, int h, const LeaguePlayerCar
 	RawText(p, nx, y + 40, nw, 22, record, pal::caption);
 	p.Fill(x + 16, y + 70, w - 32, 1, pal::hairline);
 	// The rank and its Glory on the left, the answer on the right.
-	const int chipW = accepted ? ChipWidth(p, "Accepted", 104) : ChipWidth(p, "Pending", 96), chipH = 26;
+	const std::string answer = Tr(accepted ? "Accepted" : "Pending");
+	const int chipW = ChipWidth(p, answer, accepted ? 104 : 96), chipH = 26;
 	const int emblem = 40, ry = y + 78;
 	DrawLeagueEmblem(p, x + 14, ry + (h - 78 - emblem) / 2 - 2, emblem, c.tier);
 	const int rx = x + 14 + emblem + 10, rw = x + w - 16 - chipW - 12 - rx;
@@ -173,7 +182,7 @@ void PaintTeamCard(Painter &p, int x, int y, int w, int h, const LeaguePlayerCar
 		p.Font(3);
 		RawText(p, rx, ry + 28, rw, 20, StandingText(c), pal::body);
 	}
-	FitChip(p, x + w - 16 - chipW, ry + (h - 78 - chipH) / 2, chipW, chipH, accepted ? "Accepted" : "Pending", accepted ? pal::ok : pal::textDim,
+	FitChip(p, x + w - 16 - chipW, ry + (h - 78 - chipH) / 2, chipW, chipH, answer, accepted ? pal::ok : pal::textDim,
 		accepted ? RGB(0x2a, 0x36, 0x24) : pal::hairline);
 }
 
@@ -306,8 +315,9 @@ void PaintRankedInvite(Painter &p, const State &st)
 		Avatar(p, ix + 8, ry + 8, 36, f.id, f.name);
 		int chipW = 0;
 		if (f.inGame) {
-			chipW = ChipWidth(p, "Playing now", 90);
-			FitChip(p, ix + iw - bw - 12 - chipW, ry + 15, chipW, 22, "Playing now", pal::ok, RGB(0x2a, 0x36, 0x24));
+			const std::string playing = Tr("Playing now");
+			chipW = ChipWidth(p, playing, 90);
+			FitChip(p, ix + iw - bw - 12 - chipW, ry + 15, chipW, 22, playing, pal::ok, RGB(0x2a, 0x36, 0x24));
 		}
 		p.Font(0);
 		RawText(p, ix + 56, ry, iw - 56 - bw - 24 - chipW, kInviteRowH, f.name, pal::text);
@@ -335,9 +345,7 @@ void PaintSearchTeam(Painter &p, const State &st)
 	Display(p, 54);
 	p.TextCaps(dx, dy + 18, dw, 56, "Match found", pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
 	const std::string caption = RankedFoundCaption(v, "Ranked 2 vs 2");
-	p.raw = true;
 	FitCaps(p, dx + 24, dy + 76, dw - 48, 20, caption, pal::caption, DT_CENTER);
-	p.raw = false;
 
 	// Both sides, this player's on the left, from the ticket once it is read (it says who accepted).
 	const std::string own = std::to_string(SteamOwnId());
