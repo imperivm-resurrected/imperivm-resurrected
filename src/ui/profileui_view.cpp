@@ -111,14 +111,6 @@ Area DetailArea(const View &v)
 	return {m, v.screenW - 2 * m, true};
 }
 
-// Names, numbers and texts already in the player's language skip the painter's translation.
-void Raw(Painter &p, int x, int y, int w, int h, const std::string &t, COLORREF c, UINT fmt = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS)
-{
-	p.raw = true;
-	p.Text(x, y, w, h, t, c, fmt);
-	p.raw = false;
-}
-
 int RawWidth(Painter &p, const std::string &t)
 {
 	p.raw = true;
@@ -186,7 +178,7 @@ void PaintMonogram(Painter &p, int x, int y, int size, const std::string &name, 
 	p.Fill(x, y, size, size, strong ? pal::selected : pal::raised);
 	p.Frame(x, y, size, size, strong ? pal::redText : pal::caption);
 	p.Font(size >= 60 ? 5 : 1);
-	Raw(p, x, y, size, size, Initials(name), strong ? pal::text : pal::redText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	TextAsIs(p, x, y, size, size, Initials(name), strong ? pal::text : pal::redText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 }
 
 void PaintListRow(Painter &p, const Card &c, int rankCount, int index, bool selected, int x, int y, int w, int mx, int my)
@@ -210,17 +202,17 @@ void PaintListRow(Painter &p, const Card &c, int rankCount, int index, bool sele
 		nameW -= bw + 8;
 	}
 	p.Font(1);
-	Raw(p, tx, y + 9, nameW, 25, c.name, selected ? pal::text : pal::text);
+	TextAsIs(p, tx, y + 9, nameW, 25, c.name, selected ? pal::text : pal::text);
 	p.Font(3);
 	const std::string games = GamesText(c.summary.games);
 	const COLORREF dim = selected ? pal::textDim : pal::textDim;
 	if (c.rankName.empty() || !c.readable) {
-		Raw(p, tx, y + 35, w - 80, 21, games, dim);
+		TextAsIs(p, tx, y + 35, w - 80, 21, games, dim);
 	}
 	else {
 		const int rankW = std::min(w - 80, RawWidth(p, c.rankName));
-		Raw(p, tx, y + 35, rankW, 21, c.rankName, RankColor(c.summary.rank, rankCount));
-		Raw(p, tx + rankW, y + 35, w - 80 - rankW, 21, "  \xC2\xB7  " + games, dim);
+		TextAsIs(p, tx, y + 35, rankW, 21, c.rankName, RankColor(c.summary.rank, rankCount));
+		TextAsIs(p, tx + rankW, y + 35, w - 80 - rankW, 21, "  \xC2\xB7  " + games, dim);
 	}
 	p.AddHit(x, y, w, kRowH, kActPick, index);
 }
@@ -232,7 +224,7 @@ void PaintList(Painter &p, const View &v, const Frame &f)
 	p.Font(4);
 	p.Text(x, f.top + 18, w, 22, "Players", pal::redText);
 	p.Font(3);
-	Raw(p, x, f.top + 18, w, 22, std::to_string(v.cards.size()), pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+	TextAsIs(p, x, f.top + 18, w, 22, std::to_string(v.cards.size()), pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 	const int count = static_cast<int>(v.cards.size());
 	const int maxScroll = std::max(0, count - rows);
 	const int scroll = std::max(0, std::min(v.scroll, maxScroll));
@@ -333,7 +325,7 @@ void PaintIdentity(Painter &p, const View &v, const Card &c, const Area &a, cons
 		PatronHotspot(p, tx, nameY + 2 + (40 - laurel) / 2, laurel, v.patron, v.mouseX, v.mouseY, kActPatron);
 	}
 	else {
-		Raw(p, tx, nameY, nameW, nameH, c.name, pal::text);
+		TextAsIs(p, tx, nameY, nameW, nameH, c.name, pal::text);
 	}
 	p.raw = true;
 	DrawBadgeAfterName(p, tx + laurelW, nameY, nameW, nameH, c.name, badge, v.mouseX, v.mouseY);
@@ -352,7 +344,7 @@ void PaintIdentity(Painter &p, const View &v, const Card &c, const Area &a, cons
 	const ProfileSummary &s = c.summary;
 	if (c.rankName.empty()) {
 		p.Font(1);
-		Raw(p, tx, rankY, right - tx, 26, kDash, pal::redText);
+		TextAsIs(p, tx, rankY, right - tx, 26, kDash, pal::redText);
 		return;
 	}
 	const int barW = a.wide ? right - tx : std::min(520, right - tx);
@@ -373,18 +365,18 @@ void PaintIdentity(Painter &p, const View &v, const Card &c, const Area &a, cons
 	p.Font(4);
 	const int nextW = s.nextRank >= 0 ? std::min(barW / 2, RawWidth(p, c.nextRankName)) : 0;
 	if (nextW) {
-		Raw(p, barRight - nextW, rankY, nextW, 26, c.nextRankName, RankColor(s.nextRank, v.rankCount), DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		TextAsIs(p, barRight - nextW, rankY, nextW, 26, c.nextRankName, RankColor(s.nextRank, v.rankCount), DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
 	p.Font(3);
 	const int aheadW = RawWidth(p, ahead);
 	const int aheadX = barRight - nextW - (nextW ? 6 : 0) - aheadW;
-	Raw(p, aheadX, rankY, aheadW + 2, 26, ahead, pal::textDim);
+	TextAsIs(p, aheadX, rankY, aheadW + 2, 26, ahead, pal::textDim);
 	p.Font(1);
-	Raw(p, tx, rankY, std::max(0, aheadX - 16 - tx), 26, c.rankName, RankColor(s.rank, v.rankCount));
+	TextAsIs(p, tx, rankY, std::max(0, aheadX - 16 - tx), 26, c.rankName, RankColor(s.rank, v.rankCount));
 	PaintRankBar(p, tx, barY, barW, 8, fraction, RankColor(s.rank, v.rankCount));
 	p.Frame(tx - 1, barY - 1, barW + 2, 10, pal::hairline);
 	p.Font(3);
-	Raw(p, tx, labelY, right - tx, 22, label, pal::textDim);
+	TextAsIs(p, tx, labelY, right - tx, 22, label, pal::textDim);
 }
 
 void PaintTiles(Painter &p, const Card &c, const Area &a, const Frame &f)
@@ -404,7 +396,7 @@ void PaintTiles(Painter &p, const Card &c, const Area &a, const Frame &f)
 		const int x = a.x + i * (tileW + kTileGap), w = i == 3 ? a.x + a.w - x : tileW;
 		PaintGlassCard(p, x, f.tilesY, w, f.tileH);
 		p.Font(5);
-		Raw(p, x, f.tilesY + 6, w, f.tileH - 38, values[i], pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		TextAsIs(p, x, f.tilesY + 6, w, f.tileH - 38, values[i], pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		p.Font(3);
 		p.Text(x + 6, f.tilesY + f.tileH - 32, w - 12, 22, labels[i], pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
@@ -428,7 +420,7 @@ std::string QueueText(const std::string &queue)
 void PaintStatCell(Painter &p, int x, int y, int w, int h, const std::string &value, const char *label, COLORREF ink)
 {
 	p.Font(1);
-	Raw(p, x + 4, y, w - 8, h - 22, value, ink, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	TextAsIs(p, x + 4, y, w - 8, h - 22, value, ink, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	p.Font(3);
 	p.Text(x + 4, y + h - 22, w - 8, 20, label, pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }
@@ -443,7 +435,7 @@ void PaintLeagueRank(Painter &p, const View &v, const char *title, const LeagueR
 	const bool loaded = v.meLoaded;
 	if (loaded && played && rk.present) {
 		p.Font(3);
-		Raw(p, ix + iw / 3, y + 16, iw - iw / 3, 22, SeasonText(rk.season), pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		TextAsIs(p, ix + iw / 3, y + 16, iw - iw / 3, 22, SeasonText(rk.season), pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
 	const bool strip = loaded && played;
 	const int stripH = 62, stripY = y + h - stripH - 12;
@@ -474,9 +466,9 @@ void PaintLeagueRank(Painter &p, const View &v, const char *title, const LeagueR
 	else headline = Tr(rk.present ? "Placement" : "Not played");
 	if (!loaded) {
 		p.Font(0);
-		Raw(p, tx, by, tw, 44, headline, pal::caption);
+		TextAsIs(p, tx, by, tw, 44, headline, pal::caption);
 	}
-	else Raw(p, tx, by, tw, 44, headline, loaded && played ? ink : pal::textDim);
+	else TextAsIs(p, tx, by, tw, 44, headline, loaded && played ? ink : pal::textDim);
 	if (!loaded) return;
 	if (!played) {
 		p.Font(3);
@@ -486,7 +478,7 @@ void PaintLeagueRank(Painter &p, const View &v, const char *title, const LeagueR
 	p.Font(0);
 	if (placing) {
 		const int left = rk.present ? std::max(1, rk.placementLeft) : 5, played5 = std::max(0, 5 - left);
-		Raw(p, tx, by + 48, tw, 24, left == 1 ? Tr("1 placement game left") : TrFmt("%s placement games left", {std::to_string(left)}), pal::textDim);
+		TextAsIs(p, tx, by + 48, tw, 24, left == 1 ? Tr("1 placement game left") : TrFmt("%s placement games left", {std::to_string(left)}), pal::textDim);
 		if (bar) {
 			// One box a game, green for a win and red for a loss, in the order they were played.
 			const int gap = 10, box = std::min(56, (tw - 4 * gap) / 5);
@@ -508,7 +500,7 @@ void PaintLeagueRank(Painter &p, const View &v, const char *title, const LeagueR
 	else {
 		std::string line = TrFmt("%s Glory", {Grouped(static_cast<uint64_t>(std::max(0, rk.glory)))});
 		if (rk.position > 0) line += "  \xC2\xB7  #" + std::to_string(rk.position);
-		Raw(p, tx, by + 48, tw, 24, line, pal::textDim);
+		TextAsIs(p, tx, by + 48, tw, 24, line, pal::textDim);
 		const LeagueGloryPlace gp = LeagueGloryPlaceOf(rk.glory);
 		const bool elite = !LeagueTierHasDivisions(rk.tier);
 		if (bar) {
@@ -524,13 +516,13 @@ void PaintLeagueRank(Painter &p, const View &v, const char *title, const LeagueR
 			else {
 				const std::string into = std::to_string(gp.into) + " / 100 " + Tr("Glory");
 				const int intoW = std::min(tw / 2, RawWidth(p, into) + 4);
-				Raw(p, tx, by + 102, intoW, 22, into, pal::caption);
+				TextAsIs(p, tx, by + 102, intoW, 22, into, pal::caption);
 				LeagueTier nt = LeagueTier::None;
 				int nd = 0;
 				LeagueNextDivision(gp.tier, gp.division, nt, nd);
 				if (nt != LeagueTier::None) {
 					const int wins = LeagueWinsToNext(rk.glory);
-					Raw(p, tx + intoW + 12, by + 102, tw - intoW - 12, 22,
+					TextAsIs(p, tx + intoW + 12, by + 102, tw - intoW - 12, 22,
 						wins == 1 ? TrFmt("~1 win to %s", {LeagueRankLabel(nt, nd)}) : TrFmt("~%s wins to %s", {std::to_string(wins), LeagueRankLabel(nt, nd)}),
 						LeagueTierInk(nt), DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 				}
@@ -566,7 +558,7 @@ void PaintMoreRow(Painter &p, int x, int y, int w, int hidden)
 {
 	p.Fill(x, y, w, 1, pal::hairline);
 	p.Font(3);
-	Raw(p, x, y, w, kLeagueRowH, TrFmt("+%s more", {std::to_string(hidden)}), pal::caption);
+	TextAsIs(p, x, y, w, kLeagueRowH, TrFmt("+%s more", {std::to_string(hidden)}), pal::caption);
 }
 
 const char *MetalText(LeagueMetal m)
@@ -608,7 +600,7 @@ void PaintLeagueTrophies(Painter &p, const View &v, int x, int y, int w, int h)
 	for (int i = 2; i >= 0; i--) {
 		const std::string n = std::to_string(counts[i]);
 		const int nw = RawWidth(p, n) + 2;
-		Raw(p, right - nw, y + 14, nw, 26, n, counts[i] ? pal::text : pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+		TextAsIs(p, right - nw, y + 14, nw, 26, n, counts[i] ? pal::text : pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 		DrawLeaguePhalera(p, right - nw - 30, y + 14, 26, order[i]);
 		right -= nw + 30 + 18;
 	}
@@ -631,9 +623,9 @@ void PaintLeagueTrophies(Painter &p, const View &v, int x, int y, int w, int h)
 			const LeagueBadge &b = *trophies[i];
 			DrawLeaguePhalera(p, ix, ry + 10, 32, b.metal == LeagueMetal::None ? LeagueMetal::Gold : b.metal);
 			p.Font(4);
-			Raw(p, ix + 46, ry + 5, iw - 46, 22, b.title.empty() ? Tr("Tournament") : b.title, pal::text);
+			TextAsIs(p, ix + 46, ry + 5, iw - 46, 22, b.title.empty() ? Tr("Tournament") : b.title, pal::text);
 			p.Font(3);
-			Raw(p, ix + 46, ry + 27, iw - 46, 20, Tr(MetalText(b.metal)) + "  \xC2\xB7  " + SeasonText(b.season), pal::caption);
+			TextAsIs(p, ix + 46, ry + 27, iw - 46, 20, Tr(MetalText(b.metal)) + "  \xC2\xB7  " + SeasonText(b.season), pal::caption);
 			continue;
 		}
 		const LeagueCup &cup = v.me.cups[i];
@@ -644,19 +636,19 @@ void PaintLeagueTrophies(Painter &p, const View &v, int x, int y, int w, int h)
 		else {
 			p.Frame(ix, ry + 10, 32, 32, pal::edge);
 			p.Font(4);
-			Raw(p, ix, ry + 10, 32, 32, cup.placement > 0 ? std::to_string(cup.placement) : std::string(kDash), metal != LeagueMetal::None ? LeagueMetalInk(metal) : pal::textDim,
+			TextAsIs(p, ix, ry + 10, 32, 32, cup.placement > 0 ? std::to_string(cup.placement) : std::string(kDash), metal != LeagueMetal::None ? LeagueMetalInk(metal) : pal::textDim,
 				DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		}
 		const std::string place = cup.placement > 0 ? TrFmt("place %s of %s", {std::to_string(cup.placement), std::to_string(std::max(cup.placement, cup.entries))})
 													: std::string(kDash);
 		p.Font(4);
 		const int placeW = std::min(iw / 3, RawWidth(p, place) + 4);
-		Raw(p, ix + iw - placeW, ry + 5, placeW, 22, place, metal != LeagueMetal::None ? LeagueMetalInk(metal) : pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		Raw(p, ix + 46, ry + 5, iw - 46 - placeW - 12, 22, cup.name, pal::text);
+		TextAsIs(p, ix + iw - placeW, ry + 5, placeW, 22, place, metal != LeagueMetal::None ? LeagueMetalInk(metal) : pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		TextAsIs(p, ix + 46, ry + 5, iw - 46 - placeW - 12, 22, cup.name, pal::text);
 		std::string line = Tr(cup.official ? "Official cup" : "Community cup") + "  \xC2\xB7  " + QueueText(cup.mode);
 		if (cup.season >= 0) line += "  \xC2\xB7  " + SeasonText(cup.season);
 		p.Font(3);
-		Raw(p, ix + 46, ry + 27, iw - 46, 20, line, pal::caption);
+		TextAsIs(p, ix + 46, ry + 27, iw - 46, 20, line, pal::caption);
 	}
 	if (more) PaintMoreRow(p, ix, listY + rows * kLeagueRowH, iw, count - rows);
 }
@@ -689,13 +681,13 @@ void PaintLeagueSeasons(Painter &p, const View &v, int x, int y, int w, int h)
 		const std::string rank = r.founder ? Tr("Founder") : Tr(LeagueTierName(r.tier));
 		p.Font(4);
 		const int rankW = std::min(iw / 3, RawWidth(p, rank) + 4);
-		Raw(p, ix + iw - rankW, ry + 5, rankW, 22, rank, r.founder ? pal::redText : LeagueTierInk(r.tier), DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		Raw(p, ix + 46, ry + 5, iw - 46 - rankW - 12, 22, (r.seasonName.empty() ? SeasonText(r.season) : r.seasonName) + "  \xC2\xB7  " + QueueText(r.queue), pal::text);
+		TextAsIs(p, ix + iw - rankW, ry + 5, rankW, 22, rank, r.founder ? pal::redText : LeagueTierInk(r.tier), DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		TextAsIs(p, ix + 46, ry + 5, iw - 46 - rankW - 12, 22, (r.seasonName.empty() ? SeasonText(r.season) : r.seasonName) + "  \xC2\xB7  " + QueueText(r.queue), pal::text);
 		std::string line = GamesText(r.games);
 		if (r.place > 0) line += "  \xC2\xB7  #" + std::to_string(r.place);
 		if (r.frame) line += "  \xC2\xB7  " + Tr("Frame and title");
 		p.Font(3);
-		Raw(p, ix + 46, ry + 27, iw - 46, 20, line, pal::caption);
+		TextAsIs(p, ix + 46, ry + 27, iw - 46, 20, line, pal::caption);
 	}
 	if (more) PaintMoreRow(p, ix, listY + rows * kLeagueRowH, iw, count - rows);
 }
@@ -760,7 +752,7 @@ void PaintSummary(Painter &p, const Card &c, int x, int y, int w, int h, int col
 		p.Font(3);
 		p.Text(cx, ry + 3, colW, 21, rows[i].first, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.Font(4);
-		Raw(p, cx, ry + 24, colW, 20, rows[i].second, pal::text);
+		TextAsIs(p, cx, ry + 24, colW, 20, rows[i].second, pal::text);
 	}
 }
 
@@ -901,7 +893,7 @@ void PaintTip(Painter &p, const View &v, const Tip &tip)
 	p.Frame(x, y, w, h, pal::edge);
 	for (size_t i = 0; i < tip.lines.size(); i++) {
 		p.Font(i == 0 ? 4 : 3);
-		Raw(p, x + 11, y + 6 + static_cast<int>(i) * lineH, w - 22, lineH, tip.lines[i].first, tip.lines[i].second);
+		TextAsIs(p, x + 11, y + 6 + static_cast<int>(i) * lineH, w - 22, lineH, tip.lines[i].first, tip.lines[i].second);
 	}
 }
 
@@ -952,7 +944,7 @@ void PaintEvolution(Painter &p, const View &v, const Card &c, const Box &b, Tip 
 	p.Fill(x0, bottom, inner, 1, pal::lineStrong);
 	DashedH(p, x0, plotTop, inner, kRule);
 	p.Font(3);
-	Raw(p, x0, plotTop - 22, 90, 20, MetricText(metric, top), pal::edgeHot);
+	TextAsIs(p, x0, plotTop - 22, 90, 20, MetricText(metric, top), pal::edgeHot);
 	int hovered = -1;
 	for (int k = 0; k < n; k++) {
 		const size_t game = shown[n - 1 - k];
@@ -976,9 +968,9 @@ void PaintEvolution(Painter &p, const View &v, const Card &c, const Box &b, Tip 
 	const int avgW = RawWidth(p, avgText) + 10;
 	const int avgLabelY = avgY - 21 < plotTop - 2 ? avgY + 3 : avgY - 21;
 	p.Fill(right - avgW, avgLabelY, avgW, 20, kCardBody);
-	Raw(p, right - avgW + 5, avgLabelY, avgW - 5, 20, avgText, pal::text);
+	TextAsIs(p, right - avgW + 5, avgLabelY, avgW - 5, 20, avgText, pal::text);
 
-	Raw(p, x0 + rangeW + 10, footY, inner - rangeW - 10, kSegH, n == 1 ? Tr("1 game") : TrFmt("%s games", {Grouped(n)}), kMuted,
+	TextAsIs(p, x0 + rangeW + 10, footY, inner - rangeW - 10, kSegH, n == 1 ? Tr("1 game") : TrFmt("%s games", {Grouped(n)}), kMuted,
 		DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	int lx = right;
 	for (MatchResult r : {kMatchAbandoned, kMatchLost, kMatchWon}) {
@@ -1067,10 +1059,10 @@ void PaintDetailCells(Painter &p, const std::vector<DetailCell> &cells, int x, i
 		// The last cell has the rest of its row.
 		const int cw = i + 1 == cells.size() ? x + w - cx : colW;
 		p.Font(3);
-		Raw(p, cx, cy, cw - 8, 20, cell.label, pal::textDim);
+		TextAsIs(p, cx, cy, cw - 8, 20, cell.label, pal::textDim);
 		p.Font(4);
 		const int vw = std::min(cw - (cell.trend ? 24 : 8), RawWidth(p, cell.value));
-		Raw(p, cx, cy + 20, vw, 20, cell.value, pal::text);
+		TextAsIs(p, cx, cy + 20, vw, 20, cell.value, pal::text);
 		if (cell.trend) {
 			const COLORREF c = cell.good ? pal::ok : pal::bad;
 			if (cell.trend > 0) p.ArrowUp(cx + vw + 5, cy + 26, 9, 7, c);
@@ -1117,7 +1109,7 @@ void PaintHistory(Painter &p, const View &v, const Card &c, const Box &b, Tip &t
 	p.Font(4);
 	const int titleW = p.TextWidth(Tr("Match history"));
 	p.Font(3);
-	Raw(p, x0 + titleW + 10, b.y + 11, std::max(0, (gm.wide ? right - segW : right) - x0 - titleW - 20), 22, Grouped(rows.size()), pal::textDim);
+	TextAsIs(p, x0 + titleW + 10, b.y + 11, std::max(0, (gm.wide ? right - segW : right) - x0 - titleW - 20), 22, Grouped(rows.size()), pal::textDim);
 	const std::vector<MatchFacts> facts = FactsOfCard(c);
 	const int maxScroll = HistoryMaxScroll(v);
 	const int scroll = std::max(0, std::min(v.historyScroll, maxScroll));
@@ -1168,32 +1160,32 @@ void PaintHistory(Painter &p, const View &v, const Card &c, const Box &b, Tip &t
 		if (gm.wide) {
 			PaintChip(p, x0 + 6, y + 6, chipW - 6, rh - 12, result);
 			p.Font(known ? 4 : 3);
-			Raw(p, civX, y, modeX - civX - 8, rh, CivText(g), known ? pal::text : kMuted);
+			TextAsIs(p, civX, y, modeX - civX - 8, rh, CivText(g), known ? pal::text : kMuted);
 			p.Font(3);
-			Raw(p, modeX, y, modeW, rh, ModeText(g), pal::textDim);
-			Raw(p, dateX, y, dateW, rh, AgeText(v, g), pal::textDim);
+			TextAsIs(p, modeX, y, modeW, rh, ModeText(g), pal::textDim);
+			TextAsIs(p, dateX, y, dateW, rh, AgeText(v, g), pal::textDim);
 			if (mx >= dateX && mx < dateX + dateW && my >= y && my < y + rh && my < gm.listBottom) {
 				tip.lines = {{DateText(g), pal::text}};
 				tip.x = dateX;
 				tip.y = y + rh + 2;
 			}
-			Raw(p, timeX, y, timeW, rh, Duration(g.durationMs), pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
-			Raw(p, listRight - lossesW, y, lossesW, rh, losses, pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+			TextAsIs(p, timeX, y, timeW, rh, Duration(g.durationMs), pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+			TextAsIs(p, listRight - lossesW, y, lossesW, rh, losses, pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 			p.Font(4);
-			Raw(p, klX, y, klW - lossesW, rh, kl, pal::text, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+			TextAsIs(p, klX, y, klW - lossesW, rh, kl, pal::text, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 		}
 		else {
 			PaintChip(p, x0 + 6, y + 6, chipW - 6, 20, result);
-			Raw(p, listRight - lossesW, y + 4, lossesW, 22, losses, pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+			TextAsIs(p, listRight - lossesW, y + 4, lossesW, 22, losses, pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 			p.Font(4);
 			const int killsW = RawWidth(p, kl);
-			Raw(p, listRight - lossesW - killsW, y + 4, killsW, 22, kl, pal::text, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+			TextAsIs(p, listRight - lossesW - killsW, y + 4, killsW, 22, kl, pal::text, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 			p.Font(known ? 4 : 3);
-			Raw(p, civX, y + 4, listRight - lossesW - killsW - civX - 8, 22, CivText(g), known ? pal::text : kMuted);
+			TextAsIs(p, civX, y + 4, listRight - lossesW - killsW - civX - 8, 22, CivText(g), known ? pal::text : kMuted);
 			p.Font(3);
 			const std::string age = AgeText(v, g);
 			const std::string line = ModeText(g) + "  \xC2\xB7  " + age + "  \xC2\xB7  " + Duration(g.durationMs);
-			Raw(p, civX, y + 27, listRight - civX, 20, line, pal::textDim);
+			TextAsIs(p, civX, y + 27, listRight - civX, 20, line, pal::textDim);
 			if (mx >= civX && mx < listRight && my >= y + 26 && my < y + rh && my < gm.listBottom) {
 				tip.lines = {{DateText(g), pal::text}};
 				tip.x = civX;

@@ -787,4 +787,13 @@ inline int HitActionAt(const std::vector<Hit> &hits, POINT at, int &arg, int non
 	return hit->action;
 }
 
+// Names, numbers and texts already in the player's language, drawn as they are: Text would look each one up as a key. The painter is
+// left translating, whatever it was doing before.
+inline void TextAsIs(Painter &p, int x, int y, int w, int h, const std::string &t, COLORREF c, UINT fmt = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS)
+{
+	p.raw = true;
+	p.Text(x, y, w, h, t, c, fmt);
+	p.raw = false;
+}
+
 }

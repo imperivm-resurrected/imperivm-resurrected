@@ -171,13 +171,6 @@ struct BigFont {
 	BigFont &operator=(const BigFont &) = delete;
 };
 
-void Raw(Painter &p, int x, int y, int w, int h, const std::string &text, COLORREF c, UINT fmt = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS)
-{
-	p.raw = true;
-	p.Text(x, y, w, h, text, c, fmt);
-	p.raw = false;
-}
-
 int Wrapped(Painter &p, int x, int y, int w, const std::string &text, COLORREF c)
 {
 	const int h = p.Measure(w, text);
@@ -226,7 +219,7 @@ int PaintBadgeChoice(Painter &p, int x, int y, int w, const LeagueMe &me, int ac
 		if (c.look.Shown()) DrawLeagueBadge(p, x + 12, cy + (rowH - kLeagueBadgeSize) / 2, kLeagueBadgeSize, c.look);
 		else p.Frame(x + 14, cy + (rowH - 16) / 2, 16, 16, pal::edge);
 		p.Font(c.chosen ? 1 : 0);
-		Raw(p, x + 44, cy, w - 52, rowH, ChoiceLabel(c), c.chosen ? pal::text : pal::body);
+		TextAsIs(p, x + 44, cy, w - 52, rowH, ChoiceLabel(c), c.chosen ? pal::text : pal::body);
 		if (!c.chosen && !ranked.badgeBusy) p.AddHit(x, cy, w, rowH, action, static_cast<int>(i));
 		cy += rowH + 2;
 	}
@@ -539,7 +532,7 @@ int PaintLeagueAccount(Painter &p, int x, int y, int w, const LeagueLinkActions 
 		p.Font(0);
 		cy += Wrapped(p, x, cy, w, "Open this page, sign in with Steam and enter the code:", pal::body) + 8;
 		p.Font(1);
-		Raw(p, x, cy, w, 26, LeagueUrlDisplay(link.url), pal::text);
+		TextAsIs(p, x, cy, w, 26, LeagueUrlDisplay(link.url), pal::text);
 		cy += 34;
 		{
 			BigFont font(p, 72);
