@@ -141,15 +141,6 @@ LeagueMatchStatus MatchStatusOf(const std::string &s)
 	return LeagueMatchStatus::Unknown;
 }
 
-const LeagueTier kDivisionTiers[] = {LeagueTier::Recruit, LeagueTier::Legionary, LeagueTier::Signifer, LeagueTier::Centurion, LeagueTier::Tribune,
-	LeagueTier::Legate};
-const int kTopIndex = 17;
-
-int DivisionIndex(int glory)
-{
-	return std::min(kTopIndex, std::max(0, glory) / 100);
-}
-
 float Clamp01(float v)
 {
 	return v < 0 ? 0 : v > 1 ? 1 : v;
@@ -648,11 +639,11 @@ void LeagueSeatsFromTicket(std::vector<LeagueSeat> &seats, const LeagueMatchTick
 LeagueGloryPlace LeagueGloryPlaceOf(int glory)
 {
 	LeagueGloryPlace p;
-	const int index = DivisionIndex(glory);
-	p.tier = kDivisionTiers[index / 3];
-	p.division = 3 - index % 3;
+	const int index = LeagueDivisionIndex(glory);
+	p.tier = LeagueIndexTier(index);
+	p.division = LeagueIndexDivision(index);
 	p.into = std::max(0, glory) - index * 100;
-	p.capped = index < kTopIndex;
+	p.capped = index < kLeagueDivisionCount - 1;
 	return p;
 }
 
@@ -801,7 +792,7 @@ LeagueResultFrame LeagueResultAt(const LeagueRankedResult &r, uint32_t ms)
 	}
 	case LeagueResultKind::Promotion: {
 		f.deltaShown = true;
-		const int top = (DivisionIndex(r.gloryBefore) + 1) * 100;
+		const int top = (LeagueDivisionIndex(r.gloryBefore) + 1) * 100;
 		const bool newTier = r.tierAfter != r.tierBefore;
 		if (ms < 800) {
 			const float e = EaseInOut(Phase(ms, 0, 600));
@@ -842,7 +833,7 @@ LeagueResultFrame LeagueResultAt(const LeagueRankedResult &r, uint32_t ms)
 		f.division = r.divisionAfter;
 		f.oldAlpha = 0;
 		f.newAlpha = static_cast<int>(255 * Phase(ms, 800, 1200));
-		const int top = (DivisionIndex(r.gloryAfter) + 1) * 100;
+		const int top = (LeagueDivisionIndex(r.gloryAfter) + 1) * 100;
 		const float e = EaseInOut(Phase(ms, 1200, 1600));
 		f.bar = 1.0f + (after - 1.0f) * e;
 		f.glory = Lerp(top, r.gloryAfter, e);
