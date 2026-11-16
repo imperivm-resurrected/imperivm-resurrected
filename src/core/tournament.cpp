@@ -632,9 +632,7 @@ bool TourneyParseList(const Json &j, std::vector<TourneySummary> &out)
 
 int TourneyFullRounds(int maxEntries)
 {
-	int rounds = 0;
-	for (int n = 1; n < maxEntries; n *= 2) rounds++;
-	return rounds;
+	return TourneyRoundsFor(maxEntries);
 }
 
 TourneyMap TourneyMapOfRound(const TourneySummary &t, int round, int rounds)

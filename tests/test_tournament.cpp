@@ -124,6 +124,9 @@ void List()
 	CHECK_EQ(TourneyFullRounds(4), 2);
 	CHECK_EQ(TourneyFullRounds(8), 3);
 	CHECK_EQ(TourneyFullRounds(32), 5);
+	// A server's maxEntries past 2^30 made the count overflow and never end.
+	CHECK_EQ(TourneyFullRounds(2000000000), 16);
+	CHECK_EQ(TourneyFullRounds(0), 0);
 	CHECK(Same(t.startsAt, 1794662871362LL));
 	CHECK_EQ(t.noshowMinutes, 10);
 	CHECK(!TourneyParseList(Parse("{\"error\":\"x\"}"), list));
