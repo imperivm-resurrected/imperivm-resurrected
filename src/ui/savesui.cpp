@@ -154,6 +154,8 @@ struct State {
 	bool renaming = false;
 	bool renameGroup = false;
 	std::map<std::string, std::string> gameNames;
+	// Bumped wherever recs or gameNames are read again, so the painted list knows to group them again.
+	unsigned savesGen = 0;
 	int confirm = 0;
 	std::string pendingOnlineRoom;
 	int mode = 0;
@@ -425,6 +427,59 @@ View BuildView(const State &st)
 	}
 	v.total = y;
 	return v;
+}
+
+// Everything BuildView reads: what it starts to read must be added here, or the painted list stays stale.
+struct ViewKey {
+	unsigned session = 0, savesGen = 0;
+	size_t saves = 0;
+	int tab = 0, sort = 0;
+	bool showAuto = false;
+	std::string search;
+	std::set<std::string> collapsed;
+	int rowSingle = 0, rowHeader = 0, rowChild = 0;
+	bool operator==(const ViewKey &o) const
+	{
+		return session == o.session && savesGen == o.savesGen && saves == o.saves && tab == o.tab && sort == o.sort && showAuto == o.showAuto &&
+			search == o.search && collapsed == o.collapsed && rowSingle == o.rowSingle && rowHeader == o.rowHeader && rowChild == o.rowChild;
+	}
+};
+
+ViewKey ViewKeyOf(const State &st)
+{
+	ViewKey k;
+	k.session = st.session;
+	k.savesGen = st.savesGen;
+	k.saves = st.recs.size();
+	k.tab = st.tab;
+	k.sort = st.sort;
+	k.showAuto = st.showAuto;
+	k.search = st.search;
+	k.collapsed = st.collapsed;
+	k.rowSingle = st.lay.rowSingle;
+	k.rowHeader = st.lay.rowHeader;
+	k.rowChild = st.lay.rowChild;
+	return k;
+}
+
+// The list as last painted, kept while nothing it is built from changes: grouping the saves looks up each game's title through all of
+// them, too slow for every frame. Only the drawing uses it, on its own thread.
+struct PaintedView {
+	bool built = false;
+	ViewKey key;
+	View view;
+};
+PaintedView g_painted;
+
+const View &PaintedViewOf(const State &st)
+{
+	const ViewKey key = ViewKeyOf(st);
+	if (!g_painted.built || !(g_painted.key == key)) {
+		g_painted.view = BuildView(st);
+		g_painted.key = key;
+		g_painted.built = true;
+	}
+	return g_painted.view;
 }
 
 std::string RowId(const State &st, const Row &r)
@@ -729,14 +784,14 @@ struct DelPlan {
 	std::string title;
 };
 
-DelPlan PlanDelete(const State &st)
+DelPlan PlanDelete(const State &st, const View &v)
 {
 	DelPlan plan;
 	std::set<std::string> seen;
 	auto add = [&](const SaveRec &r) {
 		if (seen.insert(Lower(r.vfsPath)).second) plan.list.push_back(r);
 	};
-	for (const Row &r : BuildView(st).rows) {
+	for (const Row &r : v.rows) {
 		if (!RowSelected(st, r)) continue;
 		plan.rows++;
 		const SaveRec &rec = st.recs[r.rec];
@@ -943,6 +998,7 @@ void DoAction(State &st, int action, int arg)
 			if (name != PartidaTitle(st, SaveLibGroupKey(*sel), sel->kind)) {
 				SaveLibSetGameName(sel->profile, SaveLibGroupKey(*sel), name);
 				st.gameNames = SaveLibLoadGameNames(sel->profile);
+				st.savesGen++;
 			}
 			st.renaming = false;
 			st.renameGroup = false;
@@ -963,6 +1019,7 @@ void DoAction(State &st, int action, int arg)
 			st.renaming = false;
 			if (st.focus == kFocusRename) st.focus = kFocusNone;
 			st.recs = SaveLibScan();
+			st.savesGen++;
 			st.selPath = Lower(newPath);
 			FixSelection(st);
 			if (st.mode == 1) st.nameText = name + (rec.campaign.empty() ? "" : "-" + rec.campaign);
@@ -971,7 +1028,7 @@ void DoAction(State &st, int action, int arg)
 		break;
 	case kDelete:
 		if (sel) {
-			const DelPlan plan = PlanDelete(st);
+			const DelPlan plan = PlanDelete(st, BuildView(st));
 			if (plan.list.empty()) break;
 			st.delList = plan.list;
 			st.delRows = plan.rows;
@@ -1235,13 +1292,13 @@ int PaintPlayers(Painter &p, const MpSaveInfo &info, const std::vector<int> &sta
 	return any ? cy + rowH - y : 0;
 }
 
-void PaintDetailBody(Painter &p, State &st)
+void PaintDetailBody(Painter &p, State &st, const View &v)
 {
 	const Layout &l = st.lay;
 	const int dx = l.dx, dy = l.dy, dw = l.dw, dh = l.dh, titleH = l.full ? 28 : 24;
 	PaintGlassCard(p, dx, dy, dw, dh);
 	if (st.sel.size() > 1) {
-		const DelPlan plan = PlanDelete(st);
+		const DelPlan plan = PlanDelete(st, v);
 		uint64_t bytes = 0;
 		for (const SaveRec &r : plan.list) bytes += r.size;
 		const int x = dx + 12, w = dw - 24;
@@ -1334,10 +1391,10 @@ void PaintDetailBody(Painter &p, State &st)
 	}
 }
 
-void PaintDetail(Painter &p, State &st)
+void PaintDetail(Painter &p, State &st, const View &v)
 {
 	p.Clip(st.lay.dx, st.lay.dy, st.lay.dw, st.lay.dh);
-	PaintDetailBody(p, st);
+	PaintDetailBody(p, st, v);
 	p.Unclip();
 }
 
@@ -1409,7 +1466,7 @@ void PaintPanel(Painter &p, State &st)
 	const int mx = st.mouseX, my = st.mouseY;
 	const Layout &l = st.lay;
 	p.noHover = st.confirm != 0;
-	const View v = BuildView(st);
+	const View &v = PaintedViewOf(st);
 	const bool save = st.mode == 1;
 	if (l.full) {
 		UseScreenFonts(p);
@@ -1420,7 +1477,7 @@ void PaintPanel(Painter &p, State &st)
 		p.Button(sortX, ty, sortW, th, st.sort == 0 ? "Sort: date" : "Sort: name", kSort, 0, mx, my);
 		PaintSwitch(p, sortX + sortW + 24, ty + (th - 24) / 2, st.showAuto, "Show autosaves", true, kShowAuto, 0, mx, my);
 		PaintList(p, st, v);
-		PaintDetail(p, st);
+		PaintDetail(p, st, v);
 		const SaveRec *rec = FindRec(st, st.selPath);
 		const bool room = rec && rec->online && rec->kind == kSaveStrategy && !InGame();
 		const ModCheck loadCheck = rec ? CheckFor(st, *rec) : ModCheck();
@@ -1470,7 +1527,7 @@ void PaintPanel(Painter &p, State &st)
 	}
 
 	PaintList(p, st, v);
-	PaintDetail(p, st);
+	PaintDetail(p, st, v);
 
 	const SaveRec *rec = FindRec(st, st.selPath);
 	if (save) {
@@ -1878,6 +1935,7 @@ bool HandleImpl(UINT msg, WPARAM wp, LPARAM lp)
 		lock.lock();
 		st.busy = false;
 		st.recs = SaveLibScan();
+		st.savesGen++;
 		FixSelection(st);
 		UpdatePlayers(st);
 		ScrollToSelection(st);
