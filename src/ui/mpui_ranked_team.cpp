@@ -192,17 +192,15 @@ std::string RankedQueueLabel(const std::string &queue)
 	return Tr(LeagueQueueIsTeam(queue) ? "2 vs 2" : "1 vs 1");
 }
 
-int RankedDuoHeight(int maxH)
+int RankedDuoHeight(const LeagueDuoView &duo, int maxH)
 {
-	const LeagueDuoView duo = LeagueDuoState();
 	const int count = static_cast<int>(duo.invites.size()), shown = InvitesShown(count, maxH);
 	return kDuoHeadH + kDuoRowH + shown * kDuoInviteH + (count > shown ? kDuoMoreH : 0) + 14;
 }
 
-void PaintRankedDuo(Painter &p, const State &st, int x, int y, int w, int h)
+void PaintRankedDuo(Painter &p, const State &st, const LeagueDuoView &duo, int x, int y, int w, int h)
 {
 	const int mx = st.mouseX, my = st.mouseY;
-	const LeagueDuoView duo = LeagueDuoState();
 	const LeagueRankedView &v = st.ranked.view;
 	const int ix = x + 24, iw = w - 48;
 	PaintGlassCard(p, x, y, w, h);

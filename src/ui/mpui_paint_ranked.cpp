@@ -310,10 +310,9 @@ void PaintSeasonBand(Painter &p, const State &st, const HubLayout &h)
 }
 
 // The lock out of the queue: until when (server time) and why.
-LeagueBan BanOf(const LeagueRankedView &v)
+LeagueBan BanOf(const LeagueRankedView &v, const LeagueMe &me)
 {
-	const LeagueMeView me = LeagueMeState();
-	LeagueBan ban = me.me.ban;
+	LeagueBan ban = me.ban;
 	if (v.banUntil > ban.until) {
 		ban.until = v.banUntil;
 		ban.kind = v.banKind;
@@ -323,9 +322,8 @@ LeagueBan BanOf(const LeagueRankedView &v)
 }
 
 // The line over the big button before searching: who searches and plays now, or why the queue is locked.
-void PaintPopulation(Painter &p, const LeagueRankedView &v, int x, int y, int w)
+void PaintPopulation(Painter &p, const LeagueRankedView &v, const LeagueBan &ban, int x, int y, int w)
 {
-	const LeagueBan ban = BanOf(v);
 	p.Font(3);
 	if (ban.until > EpochNow()) {
 		const std::string why = ban.kind == "staff" && !ban.reason.empty() ? TrFmt("The league's team has locked your search: %s", {ban.reason}) : Tr(LeagueBanText(ban.kind));
@@ -345,10 +343,9 @@ void PaintPopulation(Painter &p, const LeagueRankedView &v, int x, int y, int w)
 }
 
 // What the hub says under the big button: the lock after declining, the last thing that happened, or what the queue is.
-void PaintQueueLine(Painter &p, const LeagueRankedView &v, int x, int y, int w)
+void PaintQueueLine(Painter &p, const LeagueRankedView &v, const LeagueDuoView &duo, int64_t ban, int x, int y, int w)
 {
 	const int64_t now = EpochNow();
-	const int64_t ban = BanOf(v).until;
 	p.Font(3);
 	if (ban > now) {
 		RawText(p, x, y, w, 22, TrFmt("You can search again at %s.", {TimeText(LocalTime(ban))}), pal::bad, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
@@ -359,7 +356,6 @@ void PaintQueueLine(Painter &p, const LeagueRankedView &v, int x, int y, int w)
 		return;
 	}
 	if (LeagueQueueIsTeam(v.queue)) {
-		const LeagueDuoView duo = LeagueDuoState();
 		const std::string name = !duo.partner.name.empty() ? duo.partner.name : Tr("your friend");
 		std::string line = Tr("Alone, the league finds you a partner of your level.");
 		COLORREF ink = pal::caption;
@@ -491,11 +487,10 @@ int PaintSearchContent(Painter &p, int x, int y, int w)
 	return ry + rh;
 }
 
-void PaintRankCard(Painter &p, const State &st, const HubLayout &h)
+void PaintRankCard(Painter &p, const State &st, const HubLayout &h, const LeagueMeView &me, const LeagueDuoView &duo)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const LeagueRankedView &v = st.ranked.view;
-	const LeagueMeView me = LeagueMeState();
 	const LeagueRanked &rk = LeagueMeRanked(me.me, v.queue);
 	const bool team = LeagueQueueIsTeam(v.queue);
 	const int x = h.m, y = h.cardY, w = h.leftW, cardH = h.cardH, ix = x + 24, iw = w - 48, cx = x + w / 2;
@@ -690,22 +685,22 @@ void PaintRankCard(Painter &p, const State &st, const HubLayout &h)
 		peakY += 28;
 	}
 	PaintPeakLine(p, rk, ix, peakY, iw);
-	const int64_t ban = BanOf(v).until;
+	const LeagueBan ban = BanOf(v, me.me);
 	// In 2v2, alone or as the leader of a ready duo; the season has to play the queue.
-	const LeagueDuoRole role = team ? LeagueDuoState().role : LeagueDuoRole::Solo;
+	const LeagueDuoRole role = team ? duo.role : LeagueDuoRole::Solo;
 	const bool queueOpen = !team || (v.seasonLoaded && LeagueSeasonHasQueue(v.season, kLeagueQueueTeam));
-	const bool canSearch = v.linked && v.seasonLoaded && v.season.active && ban <= now && v.phase == LeagueRankedPhase::Idle && queueOpen &&
+	const bool canSearch = v.linked && v.seasonLoaded && v.season.active && ban.until <= now && v.phase == LeagueRankedPhase::Idle && queueOpen &&
 		(role == LeagueDuoRole::Solo || role == LeagueDuoRole::Leader);
 	// Who is around, before searching: with nobody searching the player still knows a search will call them.
 	const int popY = std::max(peakY + 30, y + cardH - 138);
-	if (v.seasonLoaded && v.season.active && popY + 22 <= y + cardH - 112) PaintPopulation(p, v, ix, popY, iw);
+	if (v.seasonLoaded && v.season.active && popY + 22 <= y + cardH - 112) PaintPopulation(p, v, ban, ix, popY, iw);
 	p.fonts[5] = BrandFont(BrandFace::Display, 34, p.s);
 	p.Button(ix, y + cardH - 108, iw, 64, team ? "Search for a match  2 vs 2" : "Search for a match  1 vs 1", kRankedAct, kRkSearch, mx, my, canSearch, true, 5);
 	if (v.seasonLoaded && !v.season.active) {
 		p.Font(3);
 		p.Text(ix, y + cardH - 38, iw, 22, "The season is not being played now.", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 	}
-	else PaintQueueLine(p, v, ix, y + cardH - 38, iw);
+	else PaintQueueLine(p, v, duo, ban.until, ix, y + cardH - 38, iw);
 }
 
 const int kRecentRowH = 50, kRecentTop = 51;
@@ -791,10 +786,9 @@ void PaintRewardSlot(Painter &p, int x, int y, int w, const std::string &name, c
 
 // What the season would leave if it closed today: the games, the ranks lit up to the one of the rewards, the vexillum, the frame and the
 // title, and the Glory to the next rank.
-void PaintSeasonRewards(Painter &p, const State &st, const HubLayout &h, int y, int cardH)
+void PaintSeasonRewards(Painter &p, const State &st, const HubLayout &h, const LeagueMeView &me, int y, int cardH)
 {
 	const LeagueRankedView &v = st.ranked.view;
-	const LeagueMeView me = LeagueMeState();
 	const LeagueRanked &rk = LeagueMeRanked(me.me, v.queue);
 	const LeagueRewardPreview today = LeagueRewardsToday(rk, v.seasonLoaded && v.season.beta);
 	const int season = v.seasonLoaded ? v.season.number : rk.season;
@@ -957,8 +951,7 @@ void PaintMiniBoard(Painter &p, const State &st, const HubLayout &h, int y, int 
 		p.Text(ix, pinY - 28, iw, 26, "\xC2\xB7 \xC2\xB7 \xC2\xB7", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 		p.Fill(x + 1, pinY, w - 2, 50, pal::selected);
 		p.Fill(x + 1, pinY, 3, 50, pal::red);
-		LeagueBoardRow pinned = *mine;
-		row(pinned, pinY + 3, true);
+		row(*mine, pinY + 3, true);
 	}
 	Ghost(p, ix, y + cardH - 52, iw, 36, "Full leaderboard", kRkBoard, true, mx, my);
 }
@@ -966,22 +959,26 @@ void PaintMiniBoard(Painter &p, const State &st, const HubLayout &h, int y, int 
 void PaintHub(Painter &p, const State &st)
 {
 	const HubLayout h = HubFor(st);
+	// One copy of the player's standing and of the duo for the whole frame.
+	const LeagueMeView me = LeagueMeState();
+	const bool team = LeagueQueueIsTeam(st.ranked.view.queue);
+	const LeagueDuoView duo = team ? LeagueDuoState() : LeagueDuoView();
 	PaintSeasonBand(p, st, h);
-	PaintRankCard(p, st, h);
+	PaintRankCard(p, st, h, me, duo);
 	// The rewards keep their room; the recent games take the rest, five at most.
 	const int recentMax = kRecentTop + kLeagueRecentGames * (kRecentRowH + 1) + 8;
 	const int rewardsH = std::min(h.cardH - kGap - 120, std::max(h.cardH - kGap - recentMax, kRewardsMinH));
 	const int recentH = h.cardH - kGap - rewardsH;
 	PaintRecent(p, st, h, h.cardY, recentH);
-	PaintSeasonRewards(p, st, h, h.cardY + recentH + kGap, rewardsH);
-	if (!LeagueQueueIsTeam(st.ranked.view.queue)) {
+	PaintSeasonRewards(p, st, h, me, h.cardY + recentH + kGap, rewardsH);
+	if (!team) {
 		PaintMiniBoard(p, st, h, h.cardY, h.cardH);
 		return;
 	}
 	// The duo over the leaderboard, which keeps room for a few rows and the player's own.
 	LeagueDuoWatch();
-	const int duoH = RankedDuoHeight(h.cardH - kGap - kMiniBoardMinH);
-	PaintRankedDuo(p, st, h.rightX, h.cardY, h.rightW, duoH);
+	const int duoH = RankedDuoHeight(duo, h.cardH - kGap - kMiniBoardMinH);
+	PaintRankedDuo(p, st, duo, h.rightX, h.cardY, h.rightW, duoH);
 	PaintMiniBoard(p, st, h, h.cardY + duoH + kGap, h.cardH - duoH - kGap);
 }
 
@@ -1005,7 +1002,7 @@ std::string BoardSeasonText(const State &st)
 
 // The card of the player picked in the table: their frame, title and rank, their figures, the civilizations they play most and their last
 // ten games, from their card on the league; their row says what it can while the card is read.
-void PaintPlayerCard(Painter &p, const State &st, int x, int y, int w, int h)
+void PaintPlayerCard(Painter &p, const State &st, const std::string &seasonText, int x, int y, int w, int h)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const LeagueRankedView &v = st.ranked.view;
@@ -1062,7 +1059,7 @@ void PaintPlayerCard(Painter &p, const State &st, int x, int y, int w, int h)
 	const bool you = pick == own;
 	std::string facts = place > 0 ? TrFmt("Place %s", {std::to_string(place)}) + "  \xC2\xB7  " + RankedQueueLabel(v.queue) : RankedQueueLabel(v.queue);
 	p.raw = true;
-	if (p.TextWidth(facts + "  \xC2\xB7  " + BoardSeasonText(st)) <= tw - (you ? 52 : 0)) facts += "  \xC2\xB7  " + BoardSeasonText(st);
+	if (p.TextWidth(facts + "  \xC2\xB7  " + seasonText) <= tw - (you ? 52 : 0)) facts += "  \xC2\xB7  " + seasonText;
 	p.raw = false;
 	const int factsY = y + (tight ? 66 : 80);
 	RawText(p, tx, factsY, tw - (you ? 52 : 0), 24, facts, pal::caption);
@@ -1184,9 +1181,10 @@ void PaintBoard(Painter &p, const State &st)
 	int tx = m + summaryW + 16;
 	QueueSegments(p, st, tx + queueW, top, 44);
 	tx += queueW + 16;
+	const std::string seasonText = BoardSeasonText(st);
 	UseSharedFonts(p);
 	p.raw = true;
-	Combo(p, st, tx, top, seasonW, 44, BoardSeasonText(st), kDropRankedSeason, 0, true);
+	Combo(p, st, tx, top, seasonW, 44, seasonText, kDropRankedSeason, 0, true);
 	p.raw = false;
 	UseScreenFonts(p);
 	tx += seasonW + 16;
@@ -1335,7 +1333,7 @@ void PaintBoard(Painter &p, const State &st)
 		paintRow(*mine, py, 51, true, st.ranked.boardPick == own, -1);
 		p.AddHit(m, py, tableW, 51, kRankedAct, kRkBoardMe);
 	}
-	PaintPlayerCard(p, st, dx, y0, detailW, h);
+	PaintPlayerCard(p, st, seasonText, dx, y0, detailW, h);
 }
 
 // The player's ranked games, ten a page, newest first: what each gave, against whom, where and with which civilizations, and

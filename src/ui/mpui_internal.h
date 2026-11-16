@@ -641,8 +641,8 @@ int PaintRankedMark(Painter &p, const State &st, int x, int y, int h);
 // The 2v2 (mpui_ranked_team.cpp): the queue's name ("1 vs 1", "2 vs 2", translated), the duo's panel of the hub (as tall as
 // RankedDuoHeight says, no more than `maxH`), its dialog to invite a friend, what their buttons do, and the duo's notices in any menu.
 std::string RankedQueueLabel(const std::string &queue);
-int RankedDuoHeight(int maxH);
-void PaintRankedDuo(Painter &p, const State &st, int x, int y, int w, int h);
+int RankedDuoHeight(const LeagueDuoView &duo, int maxH);
+void PaintRankedDuo(Painter &p, const State &st, const LeagueDuoView &duo, int x, int y, int w, int h);
 void PaintRankedInvite(Painter &p, const State &st);
 void RankedTeamAction(int arg);
 void RankedTeamGameThreadTick();
