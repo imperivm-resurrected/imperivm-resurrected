@@ -10,6 +10,7 @@
 #endif
 #include <windows.h>
 
+#include <atomic>
 #include <map>
 #include <mutex>
 #include <string>
@@ -33,6 +34,7 @@ WSASendTo_t g_origWSASendTo = nullptr;
 std::mutex g_lock;
 int g_myK = 0;
 std::map<uint64_t, int> g_peers;
+std::atomic<unsigned> g_peersVersion{0};
 VnetSendFn g_send = nullptr;
 }
 void VnetCountOut(uint64_t peer, int bytes);
@@ -99,10 +101,15 @@ Endpoint *GetEndpoint(uint64_t peer, int k, uint16_t port)
 
 void SyncEndpoints()
 {
+	// It runs on every pump: the peers are copied only when they changed, or while a socket that could not be bound is still missing.
+	static unsigned synced = 0;
+	static bool complete = false;
+	if (complete && synced == g_peersVersion) return;
 	std::map<uint64_t, int> peers;
 	int myK;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
+		synced = g_peersVersion;
 		peers = g_peers;
 		myK = g_myK;
 	}
@@ -116,10 +123,11 @@ void SyncEndpoints()
 			i++;
 		}
 	}
+	complete = true;
 	if (myK == 0) return;
 	for (auto &p : peers) {
 		for (uint16_t port : kGamePorts) {
-			GetEndpoint(p.first, p.second, port);
+			if (!GetEndpoint(p.first, p.second, port)) complete = false;
 		}
 	}
 }
@@ -245,6 +253,7 @@ void VnetSetPeers(int myK, const std::vector<std::pair<uint64_t, int>> &peers)
 		for (auto &p : next) {
 			LogD("net", "virtual network:   %llu -> 127.77.%d.%d", p.first, (p.second >> 8) & 255, p.second & 255);
 		}
+		g_peersVersion++;
 	}
 	g_myK = myK;
 	g_peers = next;
