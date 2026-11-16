@@ -293,7 +293,7 @@ void BeginPackMapFetch(const ScenValue &sv, const std::string &value, uint64 hos
 namespace steamnet_impl {
 void CheckRoomScenario()
 {
-	if (!g_lobby || S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) == g_steam.me) return;
+	if (!g_lobby || OwnLobby()) return;
 	const std::string value = Data(g_lobby, "scen");
 	if (value == g_mapIn.handled) return;
 	g_mapIn.handled = value;
@@ -335,7 +335,7 @@ void CheckRoomScenario()
 
 void CheckRoomSave()
 {
-	if (!g_lobby || S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) == g_steam.me) return;
+	if (!g_lobby || OwnLobby()) return;
 	const std::string value = Data(g_lobby, "save");
 	if (value == g_mapIn.handledSave) return;
 	g_mapIn.handledSave = value;
@@ -486,12 +486,12 @@ void ReceiveShare()
 		const uint8_t *data = static_cast<const uint8_t *>(in[i]->m_pData);
 		const size_t len = static_cast<size_t>(in[i]->m_cbSize);
 		if (len && data[0] == kShReq) {
-			if (g_lobby && S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) == g_steam.me) {
+			if (OwnLobby()) {
 				HostOnRequest(peer, std::string(reinterpret_cast<const char *>(data + 1), len - 1));
 			}
 		}
 		else if (len && data[0] == kShSeat) {
-			if (g_lobby && S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) == g_steam.me) {
+			if (OwnLobby()) {
 				const int slot = atoi(std::string(reinterpret_cast<const char *>(data + 1), len - 1).c_str());
 				std::lock_guard<std::mutex> lock(g_seats.mx);
 				if (g_seats.requests.size() < 32) g_seats.requests.push_back({peer, slot});
@@ -509,13 +509,13 @@ void ReceiveShare()
 			}
 		}
 		else if (len && data[0] == kShMapHave) {
-			if (g_lobby && S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) == g_steam.me && len < 1024) {
+			if (OwnLobby() && len < 1024) {
 				std::lock_guard<std::mutex> lock(g_lock);
 				g_share.mapHave[peer] = std::string(reinterpret_cast<const char *>(data + 1), len - 1);
 			}
 		}
 		else if (len && data[0] == kShProgress) {
-			if (g_lobby && S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) == g_steam.me && len < 64) {
+			if (OwnLobby() && len < 64) {
 				unsigned long long got = 0, total = 0;
 				const std::string t(reinterpret_cast<const char *>(data + 1), len - 1);
 				if (sscanf_s(t.c_str(), "%llu %llu", &got, &total) == 2 && total) {
@@ -543,7 +543,7 @@ void ReceiveShare()
 			}
 		}
 		else if (len && data[0] == kShMapReq) {
-			if (g_lobby && S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) == g_steam.me) {
+			if (OwnLobby()) {
 				HostOnMapRequest(peer, std::string(reinterpret_cast<const char *>(data + 1), len - 1));
 			}
 		}

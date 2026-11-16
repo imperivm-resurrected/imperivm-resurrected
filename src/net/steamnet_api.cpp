@@ -459,7 +459,7 @@ namespace {
 void PublishOwned(const char *key, const std::string &value)
 {
 	static std::map<std::string, std::pair<uint64, std::string>> sent;
-	if (!g_lobby || S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) != g_steam.me) return;
+	if (!OwnLobby()) return;
 	std::pair<uint64, std::string> &last = sent[key];
 	if (last.first == g_lobby && last.second == value) return;
 	last = {g_lobby, value};
@@ -471,7 +471,7 @@ void SteamSetHosting(bool hosting)
 {
 	if (!SteamOnlineReady()) return;
 	Post([hosting] {
-		if (g_lobby && S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) == g_steam.me) {
+		if (OwnLobby()) {
 			S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, "hosting", hosting ? "1" : "");
 			LogI("steam", "game %s", hosting ? "created in the game: the others can join now" : "closed");
 		}
@@ -524,7 +524,7 @@ void SteamPublishSaveColors(const std::string &text)
 	pending = text;
 	pendingMembership = SteamMembership();
 	Post([text] {
-		if (!g_lobby || S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) != g_steam.me) return;
+		if (!OwnLobby()) return;
 		S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, "savecolors", text.c_str());
 	});
 }
@@ -624,7 +624,7 @@ void SteamSetPlaying(bool playing)
 {
 	if (!SteamOnlineReady()) return;
 	Post([playing] {
-		if (g_lobby && S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) == g_steam.me) {
+		if (OwnLobby()) {
 			S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, "playing", playing ? "1" : "");
 			S.SteamAPI_ISteamMatchmaking_SetLobbyJoinable(g_steam.mm, g_lobby, !playing);
 			g_startedAt = playing ? static_cast<long long>(time(nullptr)) : 0;
@@ -701,7 +701,7 @@ void SteamKick(uint64_t member)
 {
 	if (!SteamOnlineReady() || !member) return;
 	Post([member] {
-		if (!g_lobby || S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) != g_steam.me || member == g_steam.me) return;
+		if (!OwnLobby() || member == g_steam.me) return;
 		std::string list = Data(g_lobby, "kick");
 		if (list.empty()) list = ";";
 		const std::string id = std::to_string(member);
@@ -735,7 +735,7 @@ void SteamSetMemberLimit(int n)
 	pending = n;
 	pendingMembership = SteamMembership();
 	Post([n] {
-		if (!g_lobby || S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) != g_steam.me) return;
+		if (!OwnLobby()) return;
 		if (S.SteamAPI_ISteamMatchmaking_GetLobbyMemberLimit(g_steam.mm, g_lobby) == n) return;
 		S.SteamAPI_ISteamMatchmaking_SetLobbyMemberLimit(g_steam.mm, g_lobby, n);
 		LogI("steam", "the room now admits %d players", n);
@@ -869,7 +869,7 @@ void SteamRejoinAllow(uint64_t peer)
 	if (!SteamOnlineReady() || !peer) return;
 	Post([peer] {
 		g_rejoinAllowed.insert(peer);
-		if (g_lobby && S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) == g_steam.me) {
+		if (OwnLobby()) {
 			S.SteamAPI_ISteamMatchmaking_SetLobbyJoinable(g_steam.mm, g_lobby, true);
 			LogI("rejoin", "room open for %s", Name(peer).c_str());
 		}

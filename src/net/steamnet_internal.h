@@ -143,6 +143,10 @@ void LogSilence(uint64 peer, const std::string &name, bool playing);
 extern uint64 g_lobby;
 extern std::atomic<long long> g_startedAt;
 extern std::atomic<long long> g_startedAtMs;
+inline bool OwnLobby()
+{
+	return g_lobby && S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) == g_steam.me;
+}
 bool InLobby(uint64 lobby, uint64 who);
 void SetPresence();
 // Every few seconds on the Steam thread: what friends see changes when a ranked search or game starts or ends.
