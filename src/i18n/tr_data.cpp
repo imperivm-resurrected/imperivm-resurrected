@@ -2458,7 +2458,7 @@ extern const TrRow kTrRows[] = {
 	{"This queue is not part of the season being played.", "Esta cola no forma parte de la temporada en juego.", "Questa coda non fa parte della stagione in corso."},
 	{"+%s more", "+%s más", "+%s altri"},
 	{"Season peak", "Máximo de la temporada", "Massimo della stagione"},
-	{"No phalerae yet. The podium of every cup in Multiplayer, Tournaments wins gold, silver and bronze phalerae.", "Aún no tienes fáleras. El podio de cada copa de Multijugador, Torneos gana fáleras de oro, plata y bronce.", "Ancora nessuna falera. Il podio di ogni coppa in Multigiocatore, Tornei vince falere d'oro, d'argento e di bronzo."},
+	{"No phalerae yet. The podium of every official cup wins gold, silver and bronze phalerae, which you can wear next to your name.", "Aún no tienes fáleras. El podio de cada copa oficial gana fáleras de oro, plata y bronce, que puedes llevar junto a tu nombre.", "Ancora nessuna falera. Il podio di ogni coppa ufficiale vince falere d'oro, d'argento e di bronzo, da mostrare accanto al tuo nome."},
 	{"Accepted", "Ha aceptado", "Ha accettato"},
 	{"Pending", "Pendiente", "In attesa"},
 	{"VS", "=", "="},

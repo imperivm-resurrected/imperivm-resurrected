@@ -614,7 +614,7 @@ void PaintLeagueTrophies(Painter &p, const View &v, int x, int y, int w, int h)
 	const int listY = y + 52;
 	if (trophies.empty()) {
 		p.Font(3);
-		p.TextWrapped(ix, listY + 6, iw, 64, "No phalerae yet. The podium of every cup in Multiplayer, Tournaments wins gold, silver and bronze phalerae.", kMuted);
+		p.TextWrapped(ix, listY + 6, iw, 64, "No phalerae yet. The podium of every official cup wins gold, silver and bronze phalerae, which you can wear next to your name.", kMuted);
 		return;
 	}
 	bool more = false;
