@@ -4,6 +4,7 @@
 #pragma once
 #include <windows.h>
 
+#include <cstdio>
 #include <cstring>
 #include <string>
 
@@ -38,6 +39,16 @@ inline void MakeDirs(const std::string &path)
 	for (size_t i = 3; i <= path.size(); i++) {
 		if (i == path.size() || path[i] == '\\') CreateDirectoryA(path.substr(0, i).c_str(), nullptr);
 	}
+}
+
+// The local time as yyyymmdd-hhmmss, which leftovers.cpp recognizes in the names of interrupted downloads.
+inline std::string Timestamp()
+{
+	SYSTEMTIME t;
+	GetLocalTime(&t);
+	char buf[32];
+	sprintf_s(buf, "%04d%02d%02d-%02d%02d%02d", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
+	return buf;
 }
 
 }

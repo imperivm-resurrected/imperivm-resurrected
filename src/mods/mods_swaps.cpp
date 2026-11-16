@@ -141,10 +141,7 @@ void ModsApplyPendingSwaps()
 		if (GetFileAttributesA(nwPath.c_str()) == INVALID_FILE_ATTRIBUTES) continue;
 		std::string backup;
 		if (GetFileAttributesA(oldPath.c_str()) != INVALID_FILE_ATTRIBUTES) {
-			SYSTEMTIME t;
-			GetLocalTime(&t);
-			char stamp[32];
-			sprintf_s(stamp, "%04d%02d%02d-%02d%02d%02d", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
+			const std::string stamp = modpaths::Timestamp();
 			CreateDirectoryA((ModsDir() + "\\_downloads").c_str(), nullptr);
 			CreateDirectoryA((ModsDir() + "\\_downloads\\backup").c_str(), nullptr);
 			backup = ModsDir() + "\\_downloads\\backup\\" + old + "-" + stamp;

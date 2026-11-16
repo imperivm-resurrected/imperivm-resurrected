@@ -71,6 +71,7 @@ std::string IniGet(const char *section, const char *key)
 using modpaths::IsDir;
 using modpaths::IsFile;
 using modpaths::MakeDirs;
+using modpaths::Timestamp;
 using modtext::Lower;
 
 std::wstring Wide(const std::string &s)
@@ -121,15 +122,6 @@ void DeleteTree(const std::string &dir)
 		FindClose(h);
 	}
 	RemoveDirectoryA(dir.c_str());
-}
-
-std::string Timestamp()
-{
-	SYSTEMTIME t;
-	GetLocalTime(&t);
-	char buf[32];
-	sprintf_s(buf, "%04d%02d%02d-%02d%02d%02d", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
-	return buf;
 }
 
 std::string HashFile(const std::string &path, LPCWSTR alg)
