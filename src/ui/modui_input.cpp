@@ -16,7 +16,7 @@ using namespace modui_impl;
 
 bool TabSkip(int a)
 {
-	return a == kNone || a == kDropClose || a == kSelect || a == kToggle || a == kRichLink || a == kRowClick || a == kMark ||
+	return a == kNone || a == kDropClose || a == kToggle || a == kRichLink || a == kRowClick || a == kMark ||
 		a == kIoFilterClose;
 }
 

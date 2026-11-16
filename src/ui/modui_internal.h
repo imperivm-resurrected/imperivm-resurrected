@@ -41,11 +41,10 @@ const char kOriginalName[] = "Original";
 const char kNoProfileName[] = "No profile";
 
 enum Action {
-	kNone, kDelProfile, kToggle, kSelect,
-	kOpenMods, kOpenMod, kRescan, kApply, kClose, kConfirmYes, kConfirmNo, kConfirmAlt,
+	kNone, kDelProfile, kToggle,
+	kOpenMod, kApply, kClose, kConfirmYes, kConfirmNo, kConfirmAlt,
 	kTabInstalled, kPickArchive, kUpdateMod,
 	kDropOpen, kDropClose, kDropPick, kSaveAs, kFocusName, kNameOk, kNameCancel, kFocusSearch,
-	kUninstall,
 	kTabExplore, kIoFocusSearch, kIoPrev, kIoNext, kIoOpen, kIoBack, kIoInstall, kIoPage, kIoRetry, kIoRefresh, kOpenSource,
 	kIoShotOpen, kIoShotClose, kIoShotStep,
 	kRichLink, kShowProblems, kUpdateAll,

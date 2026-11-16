@@ -590,11 +590,6 @@ Canvas g_toastCanvas;
 }
 
 namespace modui_impl {
-namespace {
-}
-}
-
-namespace modui_impl {
 HoverState g_hover;
 
 SpectatorBarState g_spec;
