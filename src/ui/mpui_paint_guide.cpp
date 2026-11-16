@@ -255,7 +255,8 @@ void PaintRankedGuide(Painter &p, const State &st)
 	Segment(p, tx + tabW - 1, top, tabW, 44, "How it works", st.ranked.guideTab == 1, kRkGuideRules, mx, my);
 
 	const int y0 = top + 72, h = l.h - m - y0;
-	const LeagueMeView me = LeagueMeState();
+	const auto meView = LeagueMeShared();
+	const LeagueMeView &me = *meView;
 	const LeagueRanked &rk = LeagueMeRanked(me.me, st.ranked.view.queue);
 	if (st.ranked.guideTab == 0) {
 		const int leftW = (inner - kGap) * 56 / 100;

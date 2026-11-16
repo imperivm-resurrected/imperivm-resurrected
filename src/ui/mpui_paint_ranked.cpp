@@ -959,8 +959,9 @@ void PaintMiniBoard(Painter &p, const State &st, const HubLayout &h, int y, int 
 void PaintHub(Painter &p, const State &st)
 {
 	const HubLayout h = HubFor(st);
-	// One copy of the player's standing and of the duo for the whole frame.
-	const LeagueMeView me = LeagueMeState();
+	// The player's standing and one copy of the duo for the whole frame.
+	const auto meView = LeagueMeShared();
+	const LeagueMeView &me = *meView;
 	const bool team = LeagueQueueIsTeam(st.ranked.view.queue);
 	const LeagueDuoView duo = team ? LeagueDuoState() : LeagueDuoView();
 	PaintSeasonBand(p, st, h);

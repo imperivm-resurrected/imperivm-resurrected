@@ -1322,7 +1322,8 @@ TourneyUnmet CupUnmet(const TourneyRequirements &r, const TourneyMineView &mine)
 	if (!r.Any()) return TourneyUnmet::None;
 	// Without the games known yet the league decides; a player still in placement has no rank to cap.
 	const int games = mine.loaded && mine.mine.organize.known ? mine.mine.organize.gamesPlayed : 1 << 20;
-	const LeagueMeView me = LeagueMeState();
+	const auto meView = LeagueMeShared();
+	const LeagueMeView &me = *meView;
 	const LeagueTier tier = me.loaded && me.me.ranked.present && me.me.ranked.placementLeft <= 0 ? me.me.ranked.tier : LeagueTier::None;
 	return TourneyCheckRequirements(r, games, tier);
 }
@@ -1342,7 +1343,8 @@ std::string UnmetText(const TourneyRequirements &r, TourneyUnmet unmet, const To
 		return TrFmt("You need %s online games registered by the league; you have %s.", {std::to_string(r.minGames), std::to_string(mine.mine.organize.gamesPlayed)});
 	}
 	if (unmet == TourneyUnmet::Tier) {
-		const LeagueMeView me = LeagueMeState();
+		const auto meView = LeagueMeShared();
+		const LeagueMeView &me = *meView;
 		return TrFmt("This cup is for players up to %s, and you are %s.", {Tr(LeagueTierName(r.maxTier)), Tr(LeagueTierName(me.me.ranked.tier))});
 	}
 	return std::string();

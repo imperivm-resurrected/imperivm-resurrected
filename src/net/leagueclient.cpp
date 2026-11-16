@@ -8,9 +8,11 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
+#include <utility>
 
 #include "net/leagueclient.h"
 #include "addr/state.h"
@@ -51,9 +53,9 @@ struct Link {
 };
 
 struct Me {
-	bool loaded = false, loading = false;
 	DWORD at = 0;
-	LeagueMe me;
+	// What LeagueMeShared gives: never changed once given, only replaced (ChangeView).
+	std::shared_ptr<const LeagueMeView> view = std::make_shared<const LeagueMeView>();
 };
 
 std::mutex g_mx;
@@ -240,11 +242,15 @@ void FetchMe(std::string lang)
 	const bool ok = r.Ok() && Json::Parse(r.body, j) && LeagueParseMe(j, me);
 	if (!ok && r.status != 401) LogW("league", "could not read the player's standing (%s)", r.Describe().c_str());
 	std::lock_guard<std::mutex> lock(g_mx);
-	g_me.loading = false;
 	g_me.at = GetTickCount();
-	if (!ok) return;
-	g_me.loaded = true;
-	g_me.me = me;
+	if (!ok) {
+		ChangeView(g_me.view, [](LeagueMeView &v) { v.loading = false; });
+		return;
+	}
+	auto v = std::make_shared<LeagueMeView>();
+	v->loaded = true;
+	v->me = std::move(me);
+	g_me.view = std::move(v);
 }
 
 }
@@ -542,13 +548,14 @@ void LeagueDeclineLinkOffer()
 
 LeagueMeView LeagueMeState()
 {
+	return *LeagueMeShared();
+}
+
+std::shared_ptr<const LeagueMeView> LeagueMeShared()
+{
+	static const std::shared_ptr<const LeagueMeView> none = std::make_shared<const LeagueMeView>();
 	std::lock_guard<std::mutex> lock(g_mx);
-	LeagueMeView v;
-	if (!AccountValid()) return v;
-	v.loaded = g_me.loaded;
-	v.loading = g_me.loading;
-	v.me = g_me.me;
-	return v;
+	return AccountValid() ? g_me.view : none;
 }
 
 void LeagueMeRefresh(bool force)
@@ -556,9 +563,9 @@ void LeagueMeRefresh(bool force)
 	std::string lang;
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
-		if (!AccountValid() || g_me.loading) return;
+		if (!AccountValid() || g_me.view->loading) return;
 		if (!force && g_me.at && GetTickCount() - g_me.at < kMeKeepMs) return;
-		g_me.loading = true;
+		ChangeView(g_me.view, [](LeagueMeView &v) { v.loading = true; });
 		lang = g_lang;
 	}
 	// Before the first tick only the game thread calls this.

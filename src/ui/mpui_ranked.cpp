@@ -950,7 +950,8 @@ void PaintSearch(Painter &p, const State &st)
 	p.TextCaps(dx, dy + 88, dw, 20, caption, pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 2);
 	p.raw = false;
 
-	const LeagueMeView me = LeagueMeState();
+	const auto meView = LeagueMeShared();
+	const LeagueMeView &me = *meView;
 	const int cardW = (dw - 64 - 296) / 2, cardH = 284, cy = dy + 132;
 	const bool otherAccepted = v.ticketLoaded && v.opponent.accepted;
 	// This player's record is their own standing; the opponent's comes with the match found and the ticket.
