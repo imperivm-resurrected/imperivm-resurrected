@@ -209,6 +209,8 @@ struct State {
 	int view = kViewList;
 	int filter = 0;
 	int selected = 0;
+	// The room selected in the list: `selected` is its row, which follows it when rooms fill, start or go away.
+	uint64_t selectedId = 0;
 	int focus = kNoField;
 	std::string chatInput, nameInput, passInput, joinPassInput, searchInput;
 	bool passShow = false;
@@ -413,6 +415,10 @@ bool RoomHasNoSeat(const State &st);
 // typed.
 bool RoomShown(const State &st, const OnlineLobby &g, int filter);
 std::vector<int> Visible(const State &st);
+// Selects the room on `row` of Visible (kept in the list), and puts its card back at the top when it is another room.
+void SelectRoom(int row);
+// Finds the selected room's row again after the list changed, or selects another one when it is gone.
+void FollowSelectedRoom();
 // The list's group of a room, in the order they show: one that can be joined (0), a game being played that can be watched (1), and one
 // nobody can come into now (2), full, playing or that kicked this player.
 int RoomGroup(const OnlineLobby &g);
