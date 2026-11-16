@@ -70,15 +70,17 @@ std::string RestLines(const std::string &s)
 	return nl == std::string::npos ? std::string() : s.substr(nl + 1);
 }
 
+// Underlined, which BrandFont has no face for. Made once per size in pixels and never deleted, as BrandFont's: a frame's DC may still
+// hold the last one.
 HFONT LinkFont(float s)
 {
-	static HFONT font = nullptr;
-	static float scale = 0;
-	if (font && scale == s) return font;
-	if (font) DeleteObject(font);
-	font = CreateFontW(-static_cast<int>(15 * s + 0.5f), 0, 0, 0, FW_NORMAL, FALSE, TRUE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-		CLEARTYPE_QUALITY, DEFAULT_PITCH, BodyFace());
-	scale = s;
+	static std::map<int, HFONT> cache;
+	const int px = static_cast<int>(15 * s + 0.5f);
+	HFONT &font = cache[px];
+	if (!font) {
+		font = CreateFontW(-px, 0, 0, 0, FW_NORMAL, FALSE, TRUE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+			DEFAULT_PITCH, BodyFace());
+	}
 	return font;
 }
 
