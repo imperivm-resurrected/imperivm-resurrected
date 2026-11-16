@@ -49,7 +49,7 @@ std::string AgoText(int64_t at, int64_t now)
 	if (minutes < 60) return TrFmt("%s min ago", {std::to_string(minutes)});
 	if (minutes < 24 * 60) return TrFmt("%s h ago", {std::to_string(minutes / 60)});
 	if (minutes < 48 * 60) return Tr("yesterday");
-	return DateText(at);
+	return DateText(LocalTime(at));
 }
 
 void Tile(Painter &p, int x, int y, int w, int h, const std::string &value, const std::string &label, COLORREF ink = pal::text)
@@ -262,7 +262,7 @@ void PaintSeasonBand(Painter &p, const State &st, const HubLayout &h)
 	const int64_t now = EpochNow();
 	const bool started = s.startsAt <= now, over = s.endsAt <= now;
 	std::string state = TrFmt("Season %s", {LeagueRoman(s.number)}) + "  \xC2\xB7  " +
-		(over ? Tr("finished") : started ? Tr("in progress") : TrFmt("starts on %s", {DateText(s.startsAt)}));
+		(over ? Tr("finished") : started ? Tr("in progress") : TrFmt("starts on %s", {DateText(LocalTime(s.startsAt))}));
 	p.raw = true;
 	Caps(p, x + 120, y + 14, 700, 18, state, pal::redText);
 	p.raw = false;
@@ -290,7 +290,7 @@ void PaintSeasonBand(Painter &p, const State &st, const HubLayout &h)
 	}
 	const bool team = LeagueQueueIsTeam(v.queue);
 	const size_t maps = team ? s.maps2v2.size() : s.maps.size();
-	std::string facts = DateText(s.startsAt) + " \xE2\x80\x93 " + DateText(s.endsAt) + "  \xC2\xB7  " + Tr(team ? "Ranked 2 vs 2" : "Ranked 1 vs 1");
+	std::string facts = DateText(LocalTime(s.startsAt)) + " \xE2\x80\x93 " + DateText(LocalTime(s.endsAt)) + "  \xC2\xB7  " + Tr(team ? "Ranked 2 vs 2" : "Ranked 1 vs 1");
 	if (maps) facts += "  \xC2\xB7  " + TrFmt("%s maps", {std::to_string(maps)});
 	p.Font(0);
 	RawText(p, x + 120, y + 84, w - 520, 22, facts, pal::caption);
@@ -306,7 +306,7 @@ void PaintSeasonBand(Painter &p, const State &st, const HubLayout &h)
 	p.Fill(rx, y + 82, 318, 4, pal::bg);
 	p.Fill(rx, y + 82, static_cast<int>(318 * LeagueSeasonElapsed(s, now)), 4, pal::red);
 	p.Font(3);
-	RawText(p, rx, y + 88, 318, 20, TrFmt("Ends: %s", {DateText(s.endsAt, true)}), pal::caption);
+	RawText(p, rx, y + 88, 318, 20, TrFmt("Ends: %s", {DateText(LocalTime(s.endsAt), true)}), pal::caption);
 }
 
 // The lock out of the queue: until when (server time) and why.
