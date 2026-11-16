@@ -27,7 +27,6 @@ void StartSteamOnline()
 
 bool SteamOnlineReady()
 {
-	std::lock_guard<std::mutex> lock(g_lock);
 	return g_ready;
 }
 

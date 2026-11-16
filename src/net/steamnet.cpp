@@ -34,7 +34,7 @@ SteamFns S;
 SteamHandles g_steam;
 
 std::mutex g_lock;
-bool g_ready = false;
+std::atomic<bool> g_ready{false};
 std::string g_status = "Starting Steam...";
 std::string g_myName;
 PendingJoinState g_pendingJoin;
