@@ -191,7 +191,7 @@ void PaintTeamCard(Painter &p, int x, int y, int w, int h, const LeaguePlayerCar
 	}
 	p.Font(3);
 	const std::string record = c.standing ? std::to_string(c.wins) + "\xE2\x80\x93" + std::to_string(c.losses) + "  \xC2\xB7  " +
-			std::to_string(LeagueWinRate(c.wins, c.losses)) + "\xC2\xA0%"
+			std::to_string(LeagueWinRate(c.wins, c.losses)) + "\xC2\xA0%" + (c.streakKnown && c.streak ? "  \xC2\xB7  " + LeagueStreakText(c.streak) : std::string())
 										  : Tr(c.tier == LeagueTier::None ? "Placement games" : "Ranked 2 vs 2");
 	RawText(p, nx, y + 40, nw, 22, record, pal::caption);
 	p.Fill(x + 16, y + 70, w - 32, 1, pal::hairline);
@@ -385,8 +385,7 @@ void PaintSearchTeam(Painter &p, const State &st)
 	UseScreenFonts(p);
 	Display(p, 54);
 	p.TextCaps(dx, dy + 18, dw, 56, "Match found", pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
-	std::string caption = Tr("Ranked 2 vs 2");
-	if (v.seasonLoaded) caption += "  \xC2\xB7  " + TrFmt("Season %s", {LeagueRoman(v.season.number)}) + "  \xC2\xB7  " + LeagueSeasonName(v.season, v.lang);
+	const std::string caption = RankedFoundCaption(v, "Ranked 2 vs 2");
 	p.raw = true;
 	FitCaps(p, dx + 24, dy + 76, dw - 48, 20, caption, pal::caption, DT_CENTER);
 	p.raw = false;

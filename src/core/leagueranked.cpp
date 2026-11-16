@@ -80,6 +80,9 @@ LeaguePlayerCard CardOf(const Json &j)
 	c.losses = std::max(0, Int(j, "losses"));
 	c.glory = std::max(0, Int(j, "glory"));
 	c.place = std::max(0, Int(j, "place"));
+	const Json *streak = j.Get("streak");
+	c.streakKnown = streak && streak->type == Json::Number;
+	c.streak = c.streakKnown ? static_cast<int>(streak->num) : 0;
 	c.duo = j.GetBool("duo");
 	const int team = Int(j, "team");
 	c.team = team == 1 || team == 2 ? team : 0;

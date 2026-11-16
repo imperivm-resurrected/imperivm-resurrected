@@ -146,15 +146,18 @@ void QueueAnswers()
 	CHECK(!q.window.present);
 
 	CHECK(LeagueParseQueue(Parse(R"({"status":"found","match":{"id":7,"opponent":{"steamId":"765","name":"Ambiorix","tier":"legionary","division":1,
-		"wins":41,"losses":33,"glory":988,"place":203},"map":{"name":"coastal","type":"random","size":"medium"},"acceptBy":9,"expected":0.42}})"), q));
+		"wins":41,"losses":33,"glory":988,"place":203,"streak":-2},"map":{"name":"coastal","type":"random","size":"medium"},"acceptBy":9,"expected":0.42}})"), q));
 	CHECK(q.opponent.standing);
 	CHECK_EQ(q.opponent.wins, 41);
 	CHECK_EQ(q.opponent.losses, 33);
 	CHECK_EQ(q.opponent.glory, 988);
 	CHECK_EQ(q.opponent.place, 203);
+	CHECK(q.opponent.streakKnown);
+	CHECK_EQ(q.opponent.streak, -2);
 	CHECK(q.expected > 0.419 && q.expected < 0.421);
 	CHECK(LeagueParseQueue(Parse(R"({"status":"found","match":{"id":7,"opponent":{"steamId":"765","name":"A"}}})"), q));
 	CHECK(!q.opponent.standing);
+	CHECK(!q.opponent.streakKnown);
 	CHECK(q.expected < 0);
 }
 

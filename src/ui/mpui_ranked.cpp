@@ -466,10 +466,12 @@ void Chip(Painter &p, int x, int y, int w, int h, const std::string &text, COLOR
 	p.TextCaps(x, y, w, h, text, ink, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
 }
 
-// The record of a player as the found match gives it: wins and losses, then the share won.
+// The record of a player as the found match gives it: wins and losses, the share won, then the streak.
 std::string RecordText(const LeaguePlayerCard &c)
 {
-	return std::to_string(c.wins) + "\xE2\x80\x93" + std::to_string(c.losses) + "  \xC2\xB7  " + std::to_string(LeagueWinRate(c.wins, c.losses)) + "\xC2\xA0%";
+	std::string text = std::to_string(c.wins) + "\xE2\x80\x93" + std::to_string(c.losses) + "  \xC2\xB7  " + std::to_string(LeagueWinRate(c.wins, c.losses)) + "\xC2\xA0%";
+	if (c.streakKnown && c.streak) text += "  \xC2\xB7  " + LeagueStreakText(c.streak);
+	return text;
 }
 
 // The record the server sent of the same player elsewhere (the ticket's opponent, the found match), when this card has none.
@@ -481,6 +483,10 @@ void TakeStanding(LeaguePlayerCard &into, const LeaguePlayerCard &from)
 	into.losses = from.losses;
 	into.glory = from.glory;
 	into.place = from.place;
+	if (!into.streakKnown && from.streakKnown) {
+		into.streakKnown = true;
+		into.streak = from.streak;
+	}
 }
 
 // One side of the match found: avatar, name, record, emblem, rank, Glory and place, and whether they accepted.
@@ -545,6 +551,16 @@ std::string YesNo(int flag, const char *unknown = "—")
 	return flag < 0 ? std::string(unknown) : Tr(flag ? "Yes" : "No");
 }
 
+}
+
+std::string RankedFoundCaption(const LeagueRankedView &v, const char *queue)
+{
+	std::string caption = Tr(queue);
+	if (!v.seasonLoaded) return caption;
+	caption += "  \xC2\xB7  " + TrFmt("Season %s", {LeagueRoman(v.season.number)}) + "  \xC2\xB7  " + LeagueSeasonName(v.season, v.lang);
+	// A season with its own content was searched with it mounted: the queue checks the key.
+	if (!v.season.contentKey.empty()) caption += "  \xC2\xB7  " + ModsProfileLabel(ModsMountedProfile().name);
+	return caption;
 }
 
 void RankedRoomLeftByUser()
@@ -978,8 +994,7 @@ void PaintSearch(Painter &p, const State &st)
 	UseScreenFonts(p);
 	SelectObject(p.dc, BrandFont(BrandFace::Display, 58, p.s));
 	p.TextCaps(dx, dy + 24, dw, 60, "Match found", pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
-	std::string caption = Tr("Ranked 1 vs 1");
-	if (v.seasonLoaded) caption += "  \xC2\xB7  " + TrFmt("Season %s", {LeagueRoman(v.season.number)}) + "  \xC2\xB7  " + LeagueSeasonName(v.season, v.lang);
+	const std::string caption = RankedFoundCaption(v, "Ranked 1 vs 1");
 	p.Font(4);
 	p.raw = true;
 	p.TextCaps(dx, dy + 88, dw, 20, caption, pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 2);
@@ -1002,6 +1017,10 @@ void PaintSearch(Painter &p, const State &st)
 		own.glory = me.me.ranked.glory;
 		own.place = me.me.ranked.position;
 		TakeStanding(mine, own);
+		if (!mine.streakKnown) {
+			mine.streakKnown = true;
+			mine.streak = me.me.ranked.streak;
+		}
 	}
 	PaintSide(p, dx + 32, cy, cardW, cardH, SteamOwnId(), st.player, mine, true, accepted);
 	LeaguePlayerCard o = v.ticketLoaded ? v.opponent : v.found.opponent;

@@ -621,6 +621,8 @@ void RankedTeamAction(int arg);
 void RankedTeamGameThreadTick();
 // The match found of a 2v2: both teams with their four players, who accepted, and how even it is.
 void PaintSearchTeam(Painter &p, const State &st);
+// The line under "Match found": the queue, the season and the content it is played with, translated.
+std::string RankedFoundCaption(const LeagueRankedView &v, const char *queue);
 // A ranked 2v2's room starts only with its four players, each in the side of the ticket.
 StartBlock RankedStartBlocker(const State &st, const GameRoomSnapshot &g);
 extern std::atomic<bool> g_menuRefresh;

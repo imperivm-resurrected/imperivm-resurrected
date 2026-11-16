@@ -62,6 +62,9 @@ struct LeaguePlayerCard {
 	// unranked). `standing` is false when the server sent none of them.
 	bool standing = false;
 	int wins = 0, losses = 0, glory = 0, place = 0;
+	// Games won (positive) or lost (negative) in a row, when the server said.
+	bool streakKnown = false;
+	int streak = 0;
 	// 2v2: the player came with a duo partner, and their side in the ticket (1 or 2; 0 in a 1v1).
 	bool duo = false;
 	int team = 0;
