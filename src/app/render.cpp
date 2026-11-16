@@ -636,7 +636,6 @@ void GameThreadTicks()
 	RejoinGameThreadTick();
 	SpectatorGameThreadTick();
 	ZoomFogNoteImage();
-	NetDropTick();
 	LeagueGameThreadTick();
 }
 
