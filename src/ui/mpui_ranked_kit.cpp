@@ -4,12 +4,19 @@
 #define NOMINMAX
 #include <windows.h>
 
+#include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cstdio>
 #include <ctime>
 #include <string>
+#include <vector>
 
 #include "core/league.h"
+#include "core/leagueplay.h"
+#include "core/leagueranked.h"
+#include "core/leagueseasons.h"
+#include "core/leagueteam.h"
 #include "i18n/tr.h"
 #include "net/leagueclient.h"
 #include "ui/leagueui.h"
@@ -67,6 +74,27 @@ void Segment(Painter &p, int x, int y, int w, int h, const std::string &label, b
 	if (!on) p.AddHit(x, y, w, h, kRankedAct, arg);
 }
 
+void SummaryButton(Painter &p, int x, int y, int w, int mx, int my, UINT align)
+{
+	const bool hot = p.Hover(x, y, w, 44, mx, my);
+	const COLORREF ink = hot ? pal::text : pal::textDim;
+	p.Frame(x, y, w, 44, hot ? pal::edgeHot : pal::edge);
+	if (w < 100) PaintBackArrow(p, x + (w - 14) / 2, y + 22, ink);
+	else {
+		PaintBackArrow(p, x + 18, y + 22, ink);
+		Caps(p, x + 18 + kBackArrowW, y, w - 26 - kBackArrowW, 44, "Summary", ink, align | DT_VCENTER | DT_SINGLELINE);
+	}
+	p.AddHit(x, y, w, 44, kRankedAct, kRkHub);
+}
+
+void Avatar(Painter &p, int x, int y, int size, uint64_t id, const std::string &name)
+{
+	if (PaintAvatar(p, x, y, size, id)) return;
+	p.Fill(x, y, size, size, pal::hairline);
+	p.Font(size >= 48 ? 2 : 1);
+	RawText(p, x, y, size, size, name.substr(0, std::min<size_t>(2, name.size())), pal::body, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+}
+
 COLORREF Ink(LeagueTier t)
 {
 	return t == LeagueTier::None ? pal::caption : LeagueTierInk(t);
@@ -97,9 +125,74 @@ std::string SignedText(int v)
 	return v > 0 ? "+" + std::to_string(v) : v < 0 ? "\xE2\x88\x92" + std::to_string(-v) : "0";
 }
 
+namespace {
+
+// "Yes" or "No", translated; a dash for -1, what the season does not say.
 std::string YesNo(int flag)
 {
 	return flag < 0 ? std::string("\xE2\x80\x94") : Tr(flag ? "Yes" : "No");
+}
+
+}
+
+std::string RecordText(const LeaguePlayerCard &c)
+{
+	std::string text = std::to_string(c.wins) + "\xE2\x80\x93" + std::to_string(c.losses) + "  \xC2\xB7  " + std::to_string(LeagueWinRate(c.wins, c.losses)) + "\xC2\xA0%";
+	if (c.streakKnown && c.streak) text += "  \xC2\xB7  " + LeagueStreakText(c.streak);
+	return text;
+}
+
+std::string StandingText(const LeaguePlayerCard &c)
+{
+	std::string text = TrFmt("%s Glory", {std::to_string(c.glory)});
+	if (c.place > 0) text += "  \xC2\xB7  " + TrFmt("place %s", {std::to_string(c.place)});
+	return text;
+}
+
+std::vector<LeagueMatchTeam> MatchTeams(const LeagueRankedView &v)
+{
+	const std::vector<LeagueMatchTeam> teams = v.ticketLoaded ? LeagueTicketTeams(v.ticket) : std::vector<LeagueMatchTeam>();
+	return teams.empty() ? v.found.teams : teams;
+}
+
+FoundBox PaintFoundBox(Painter &p, const State &st, int maxW, int maxH)
+{
+	FoundBox b;
+	b.w = std::min(maxW, st.viewW - 40);
+	b.h = std::min(maxH, st.viewH - 40);
+	b.x = (st.viewW - b.w) / 2;
+	b.y = (st.viewH - b.h) / 2;
+	p.hits->clear();
+	p.noHover = false;
+	PaintTint(p, 0, 0, st.viewW, st.viewH, pal::bg, 219);
+	p.Fill(b.x + 6, b.y + 6, b.w, b.h, RGB(8, 8, 7));
+	p.Fill(b.x, b.y, b.w, b.h, pal::panel);
+	p.Frame(b.x, b.y, b.w, b.h, pal::hairline);
+	UseScreenFonts(p);
+	return b;
+}
+
+std::array<MatchFact, 6> MatchFacts(const LeagueRoomSettings &s)
+{
+	return {{
+		{"Preset", s.preset.empty() || s.preset == "competitive" ? Tr("Competitive") : s.preset},
+		{"Fog of war", YesNo(s.fog)},
+		{"Explored map", YesNo(s.explored)},
+		{"Civilizations", s.hideCivs == 1 ? Tr("Hidden until the game") : Tr("Visible")},
+		{"Diplomacy", s.diplomacy == "locked" ? Tr("Locked") : s.diplomacy.empty() ? std::string("\xE2\x80\x94") : Tr("Free")},
+		{"Spectators", s.specDelay == 0 ? Tr("No spectators") : TrFmt("With a %s s delay", {std::to_string(s.specDelay > 0 ? s.specDelay : 120)})},
+	}};
+}
+
+void PaintEvenness(Painter &p, const LeagueRankedView &v, bool team, int x, int y, int w)
+{
+	const double expected = v.ticketLoaded && v.ticket.expected >= 0 ? v.ticket.expected : v.found.expected;
+	const char *even = LeagueEvennessText(expected, team);
+	if (!even) return;
+	const COLORREF ink = std::string(even) == "Even match" ? pal::ok : expected > 0.5 ? pal::text : pal::warn;
+	p.Font(1);
+	if (p.TextWidth(even) > w) p.Font(3);
+	p.Text(x, y, w, 24, even, ink, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 }
 
 int64_t LocalTime(int64_t serverMs)
