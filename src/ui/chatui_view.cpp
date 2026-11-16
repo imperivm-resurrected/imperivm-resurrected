@@ -86,6 +86,10 @@ HFONT MakeFont(float s, int size, int weight, const wchar_t *face)
 void EnsureChatFonts(float s)
 {
 	if (g_f.text && g_f.s == s) return;
+	// DeleteObject refuses a font still selected into a DC, and each canvas keeps the last one it drew with.
+	for (const Canvas *c : {&g_black, &g_white, &g_menuBlack, &g_menuWhite}) {
+		if (c->dc) SelectObject(c->dc, GetStockObject(SYSTEM_FONT));
+	}
 	for (HFONT f : {g_f.text, g_f.name, g_f.meta, g_f.chip}) {
 		if (f) DeleteObject(f);
 	}
