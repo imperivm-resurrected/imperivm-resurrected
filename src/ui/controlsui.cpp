@@ -16,6 +16,7 @@
 #include "ui/controlsui.h"
 #include "ui/fullscreen.h"
 #include "ui/keycaps.h"
+#include "ui/screenkit.h"
 #include "core/log.h"
 #include "ui/widgets.h"
 #include "i18n/tr.h"
@@ -235,6 +236,13 @@ void SetRowKey(const ControlInfo &r, int slot, ControlKey k)
 	}
 }
 
+// A command's alternative key uses Ctrl just like its main key, so a new main key with other modifiers drops it.
+void AssignKey(const ControlInfo &r, int slot, ControlKey k)
+{
+	SetRowKey(r, slot, k);
+	if (r.order && slot == 0 && r.key2.vk && k.vk && r.key2.mods != k.mods) SetRowKey(r, 1, ControlKey());
+}
+
 void ResetRow(const ControlInfo &r)
 {
 	if (r.order && !r.ids.empty()) {
@@ -251,12 +259,27 @@ void BeginChange(State &st)
 	st.undoAt = GetTickCount();
 }
 
+// The row comes as a copy: Refresh replaces the rows before its name is shown.
+void ResetToGame(State &st, const ControlInfo r)
+{
+	BeginChange(st);
+	ResetRow(r);
+	Refresh(st);
+	SetStatus(st, r.name + ": " + KeyText(r.def) + Tr(", as in the game."), false);
+}
+
+void ClearSearch(State &st)
+{
+	st.search.clear();
+	st.edit = EditState();
+	st.list.scroll = 0;
+}
+
 void Commit(State &st, Ref at, ControlKey k)
 {
 	const ControlInfo r = st.rows[at.row];
 	BeginChange(st);
-	SetRowKey(r, at.slot, k);
-	if (r.order && at.slot == 0 && r.key2.vk && k.vk && r.key2.mods != k.mods) SetRowKey(r, 1, ControlKey());
+	AssignKey(r, at.slot, k);
 	Refresh(st);
 	SetStatus(st, r.name + (at.slot ? Tr(" (alternative): ") : ": ") + KeyText(k), false);
 }
@@ -628,8 +651,7 @@ void DrawRow(Painter &p, const State &st, const Layout &l, int row, int y, int l
 		}
 		else {
 			const bool custom = slot == 1 || k != r.def;
-			DrawKey(p, cx, cy, cellW, ch, k, clash ? pal::bad : custom ? pal::edgeHot : pal::edgeHot,
-				clash ? pal::bad : custom ? kSpecial : pal::text);
+			DrawKey(p, cx, cy, cellW, ch, k, clash ? pal::bad : pal::edgeHot, clash ? pal::bad : custom ? kSpecial : pal::text);
 		}
 		hit(cx, cy, cellW, ch, kCell, row * 2 + slot);
 	}
@@ -1016,33 +1038,11 @@ bool ControlsUiNeedsDraw()
 	return g_s.open;
 }
 
-void ControlsUiDraw(uint32_t *buf, int w, int h)
-{
-	State st;
-	{
-		std::lock_guard<std::mutex> lock(g_lock);
-		if (!g_s.open) return;
-		st = g_s;
-	}
-	PanelRender r(g_canvas, buf, w, h);
-	// Over a running game the screen stays a window, so the map shows around it.
-	Layout l;
-	if (*reinterpret_cast<void **>(addr::kGame) == nullptr) {
-		const ScreenView view = ScreenViewFor(w, h);
-		if (!BeginFullScreen(r, view)) return;
-		l = LayoutFor(true, view.w, view.h);
-	}
-	else if (!BeginWindow(r, kW, kH)) return;
-	st.full = l.full;
-	const Metrics &m = MetricsFor(l.full);
-	r.Focus(st.tabAction, st.tabArg);
-	Painter &p = r.p;
-	std::vector<Hit> &hits = r.hits;
-	const int ox = r.ox, oy = r.oy, pw = r.pw, ph = r.ph;
-	const float s = r.s;
-	const int mx = st.mx, my = st.my;
-	const bool keyboard = st.view == 1;
+namespace {
 
+void PaintHeader(Painter &p, const State &st, const Layout &l, int mx, int my)
+{
+	const bool keyboard = st.view == 1;
 	const std::vector<TabSpec> views = {{"List", kViewList, 0, !keyboard, true}, {"Keyboard", kViewKeys, 0, keyboard, true}};
 	int searchX = 0, searchY = 0, searchW = 0, searchH = 0;
 	if (l.full) {
@@ -1071,15 +1071,152 @@ void ControlsUiDraw(uint32_t *buf, int w, int h)
 		p.Text(searchX + searchW - 28, searchY, 28, searchH, "×", hov ? pal::text : pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		p.AddHit(searchX + searchW - 28, searchY, 28, searchH, kClearSearch);
 	}
+}
 
-	g_captureCell = {};
+// Where the banners over the list go: over the backdrop each one is a card as wide as the list's; in the window, a card inside its column.
+struct Banner {
+	int x, w, h, gap, segY, textY, textH;
+};
+
+Banner BannerFor(const Layout &l, const Metrics &m)
+{
+	Banner b;
+	b.x = l.full ? l.listX - l.pad : l.listX + 8;
+	b.w = l.full ? l.listW + 2 * l.pad : l.listW - 16;
+	b.gap = l.full ? 16 : 8;
+	b.h = m.bannerH - (l.full ? b.gap : 10);
+	b.segY = 46;
+	b.textY = b.segY + m.controlH + 8;
+	b.textH = b.h - b.textY - 6;
+	return b;
+}
+
+void PaintBoxBanners(Painter &p, const State &st, const Layout &l, const Banner &b, int mx, int my)
+{
+	const Metrics &m = MetricsFor(l.full);
+	const int bx = b.x, bw = b.w, by = l.top, bh = b.h;
+	PaintGlassCard(p, bx, by, bw, bh);
+	p.Font(1);
+	p.Text(bx + 14, by + 8, bw - 28, 28, "Box selection on the big map (M)", pal::text);
+	static const char *const kBoxLabels[kZoomBoxModes] = {"Ctrl + drag", "Alt + drag", "Shift + drag", "Off"};
+	const int segW = l.full ? 150 : 120, segX = bx + 14;
+	for (int i = 0; i < kZoomBoxModes; i++) {
+		p.Button(segX + i * segW, by + b.segY, segW, m.controlH, kBoxLabels[i], kBoxMode, i, mx, my, true, st.boxMode == i, 4);
+	}
+	p.Font(3);
+	p.TextWrapped(bx + 14, by + b.textY, bw - 28, b.textH,
+		"Hold the key and drag over the big map to select the troops and heroes inside the box; hold the other one of Shift and Ctrl to add to your "
+		"selection. Without the key, a click takes you to that place, as in the original game.",
+		pal::textDim);
+	const int py = by + bh + b.gap;
+	PaintGlassCard(p, bx, py, bw, bh);
+	p.Font(1);
+	p.Text(bx + 14, py + 8, bw - 28, 28, "Mark position with the mouse", pal::text);
+	static const char *const kPingLabels[kPingClickModes] = {"Alt + click", "Ctrl + click", "Shift + click", "Off"};
+	for (int i = 0; i < kPingClickModes; i++) {
+		p.Button(segX + i * segW, py + b.segY, segW, m.controlH, kPingLabels[i], kPingMode, i, mx, my, true, st.pingMode == i, 4);
+	}
+	p.Font(3);
+	p.TextWrapped(bx + 14, py + b.textY, bw - 28, b.textH,
+		"Hold the key and click the map to mark that point for your allies. Ctrl and Shift only mark on the big map; with the box key, a "
+		"click marks and a drag selects.",
+		pal::textDim);
+}
+
+void PaintOrdersBanner(Painter &p, const State &st, const Layout &l, const Banner &b, int mx, int my)
+{
+	const Metrics &m = MetricsFor(l.full);
+	const int bx = b.x, bw = b.w, by = l.top, bh = b.h;
+	PaintGlassCard(p, bx, by, bw, bh);
+	p.Font(1);
+	p.Text(bx + 14, by + 8, 220, 28, "Command keys", pal::text);
+	const int seg1 = l.full ? 150 : 110, seg2 = l.full ? 260 : 190, segX = bx + bw - 14 - seg1 - seg2;
+	p.Button(segX, by + 8, seg1, m.controlH, "By letter", kModeLetter, 0, mx, my, true, !st.grid, 4);
+	p.Button(segX + seg1, by + 8, seg2, m.controlH, "By position on the bar", kModePosition, 0, mx, my, true, st.grid, 4);
+	const int bs = 36, gap = 8, exW = 5 * bs + 4 * gap, exX = bx + bw - 18 - exW, exY = by + 50;
+	const char *letters = st.grid ? "QWERT" : "SMAPD";
+	for (int i = 0; i < 5; i++) {
+		const int x = exX + i * (bs + gap);
+		p.RoundRect(x, exY, bs, bs, 6, pal::lineStrong);
+		p.RoundRect(x + 1, exY + 1, bs - 2, bs - 2, 5, pal::hairline);
+		p.Fill(x + 10, exY + 14, bs - 18, bs - 20, pal::lineStrong);
+		p.Fill(x + 2, exY + 2, 15, 15, pal::edgeHot);
+		p.Fill(x + 3, exY + 3, 13, 13, pal::panel);
+		SelectObject(p.dc, KeyFont(p.s));
+		p.Text(x + 3, exY + 3, 13, 13, std::string(1, letters[i]), pal::body, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	}
+	p.Font(3);
+	if (st.grid) {
+		for (int i = 0; i < 5; i++) {
+			p.Text(exX + i * (bs + gap), exY + bs + 4, bs, 18, std::to_string(i + 1) + ".º", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		}
+	}
+	const int tx = bx + 14, tw = exX - 20 - tx;
+	p.TextWrapped(tx, by + 46, tw, 42,
+		st.grid ? "The key follows the button's position: Q for the first, W for the second… The same for any unit or building."
+				: "Each command has its own letter (M move, A attack…): the game's or the one you set here. They change depending on the unit or building.",
+		pal::textDim);
+	const int tgY = by + bh - 32, tgW = 240;
+	const bool tgHov = p.Hover(tx, tgY, tgW, 22, mx, my);
+	const int sw = Painter::kToggleW, swY = tgY + (22 - Painter::kToggleH) / 2;
+	p.Toggle(tx, swY, st.barLetters, true, tgHov);
+	p.Text(tx + sw + 8, tgY, tgW - sw - 8, 22, "Show the letter on each button", tgHov ? pal::text : st.barLetters ? pal::text : pal::textDim,
+		DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+	p.AddHit(tx, tgY, tgW, 22, kBarLetters);
+}
+
+const int kAskCardH = 78;
+
+struct AskButton {
+	const char *label;
+	int action;
+	bool strong;
+};
+
+// A question over the screen, with Cancel at the right and the other answers to its left.
+void PaintAskCard(Painter &p, int x, int y, int w, const std::string &text, const std::string &sub, const std::vector<AskButton> &answers, int mx, int my)
+{
+	const int h = kAskCardH;
+	p.Fill(x + 4, y + 4, w, h, pal::bg);
+	p.Fill(x, y, w, h, pal::selected);
+	p.Frame(x, y, w, h, pal::lineStrong);
+	p.Font(0);
+	p.Text(x + 14, y + 8, w - 28, 24, text, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	p.Font(3);
+	p.Text(x + 14, y + 30, w - 28, 18, sub, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	int bx = x + w - 14;
+	const int by = y + h - 36, bh = 28;
+	bx -= 100;
+	p.Button(bx, by, 100, bh, "Cancel", kCancelPending, 0, mx, my, true, false, 4);
+	for (const AskButton &a : answers) {
+		bx -= 158;
+		p.Button(bx, by, 150, bh, a.label, a.action, 0, mx, my, true, a.strong, 4);
+	}
+}
+
+void PaintPendingCard(Painter &p, const State &st, const Layout &l, int mx, int my)
+{
+	if (st.pend.row < 0 || st.pend.row >= static_cast<int>(st.rows.size()) || st.pendWith.empty()) return;
+	const ControlInfo &r = st.rows[st.pend.row];
+	const ControlInfo &o = st.rows[st.pendWith[0].row];
+	std::string text = ControlsKeyLabel(st.pendKey) + Tr(" already belongs to «") + o.name + "» (" + Where(o) + ")";
+	if (st.pendWith.size() > 1) text += Tr(" and ") + std::to_string(st.pendWith.size() - 1) + Tr(" more");
+	text += ".";
+	std::vector<AskButton> answers = {{"Use on both", kAssignAnyway, false}};
+	if (CanSwap(st)) answers.push_back({"Swap keys", kSwap, true});
+	PaintAskCard(p, l.listX + 8, l.listBottom - kAskCardH - 8, l.listW - 24, text,
+		std::string("For «") + r.name + "»" + (st.pend.slot ? Tr(" as an alternative.") : "."), answers, mx, my);
+}
+
+struct ListOut {
 	int maxScroll = 0;
-	ListGeom listGeom;
+	ListGeom geom;
+};
+
+ListOut PaintListView(Painter &p, const State &st, const Layout &l, int mx, int my)
+{
+	const Metrics &m = MetricsFor(l.full);
 	const int listBottom = l.listBottom;
-	int listTop = l.top;
-	KbOut kb;
-	if (keyboard) DrawKeyboardView(p, st, l, mx, my, listBottom + l.pad, kb);
-	if (!keyboard) {
 	if (l.full) PaintGlassCard(p, l.navX - l.pad, l.top, l.navW + 2 * l.pad, listBottom + l.pad - l.top);
 	else p.Fill(l.listX - 8, l.top, 1, listBottom - l.top, pal::hairline);
 	DrawNav(p, st, l, mx, my);
@@ -1087,78 +1224,9 @@ void ControlsUiDraw(uint32_t *buf, int w, int h)
 	const bool ordersBanner = st.search.empty() && ControlsPageIsOrders(st.page);
 	const bool boxBanner = st.search.empty() && st.page == kPageMod;
 	const bool banner = ordersBanner || boxBanner;
-	// Over the backdrop each banner is a card as wide as the list's; in the window, a card inside its column.
-	const int bannerX = l.full ? l.listX - l.pad : l.listX + 8, bannerW = l.full ? l.listW + 2 * l.pad : l.listW - 16;
-	const int bannerGap = l.full ? 16 : 8, bannerH = m.bannerH - (l.full ? bannerGap : 10);
-	const int segY = 46, textY = segY + m.controlH + 8, textH = bannerH - textY - 6;
-	if (boxBanner) {
-		const int bx = bannerX, bw = bannerW, by = l.top, bh = bannerH;
-		PaintGlassCard(p, bx, by, bw, bh);
-		p.Font(1);
-		p.Text(bx + 14, by + 8, bw - 28, 28, "Box selection on the big map (M)", pal::text);
-		static const char *const kBoxLabels[kZoomBoxModes] = {"Ctrl + drag", "Alt + drag", "Shift + drag", "Off"};
-		const int segW = l.full ? 150 : 120, segX = bx + 14;
-		for (int i = 0; i < kZoomBoxModes; i++) {
-			p.Button(segX + i * segW, by + segY, segW, m.controlH, kBoxLabels[i], kBoxMode, i, mx, my, true, st.boxMode == i, 4);
-		}
-		p.Font(3);
-		p.TextWrapped(bx + 14, by + textY, bw - 28, textH,
-			"Hold the key and drag over the big map to select the troops and heroes inside the box; hold the other one of Shift and Ctrl to add to your "
-			"selection. Without the key, a click takes you to that place, as in the original game.",
-			pal::textDim);
-		const int py = by + bh + bannerGap;
-		PaintGlassCard(p, bx, py, bw, bh);
-		p.Font(1);
-		p.Text(bx + 14, py + 8, bw - 28, 28, "Mark position with the mouse", pal::text);
-		static const char *const kPingLabels[kPingClickModes] = {"Alt + click", "Ctrl + click", "Shift + click", "Off"};
-		for (int i = 0; i < kPingClickModes; i++) {
-			p.Button(segX + i * segW, py + segY, segW, m.controlH, kPingLabels[i], kPingMode, i, mx, my, true, st.pingMode == i, 4);
-		}
-		p.Font(3);
-		p.TextWrapped(bx + 14, py + textY, bw - 28, textH,
-			"Hold the key and click the map to mark that point for your allies. Ctrl and Shift only mark on the big map; with the box key, a "
-			"click marks and a drag selects.",
-			pal::textDim);
-	}
-	if (ordersBanner) {
-		const int bx = bannerX, bw = bannerW, by = l.top, bh = bannerH;
-		PaintGlassCard(p, bx, by, bw, bh);
-		p.Font(1);
-		p.Text(bx + 14, by + 8, 220, 28, "Command keys", pal::text);
-		const int seg1 = l.full ? 150 : 110, seg2 = l.full ? 260 : 190, segX = bx + bw - 14 - seg1 - seg2;
-		p.Button(segX, by + 8, seg1, m.controlH, "By letter", kModeLetter, 0, mx, my, true, !st.grid, 4);
-		p.Button(segX + seg1, by + 8, seg2, m.controlH, "By position on the bar", kModePosition, 0, mx, my, true, st.grid, 4);
-		const int bs = 36, gap = 8, exW = 5 * bs + 4 * gap, exX = bx + bw - 18 - exW, exY = by + 50;
-		const char *letters = st.grid ? "QWERT" : "SMAPD";
-		for (int i = 0; i < 5; i++) {
-			const int x = exX + i * (bs + gap);
-			p.RoundRect(x, exY, bs, bs, 6, pal::lineStrong);
-			p.RoundRect(x + 1, exY + 1, bs - 2, bs - 2, 5, pal::hairline);
-			p.Fill(x + 10, exY + 14, bs - 18, bs - 20, pal::lineStrong);
-			p.Fill(x + 2, exY + 2, 15, 15, pal::edgeHot);
-			p.Fill(x + 3, exY + 3, 13, 13, pal::panel);
-			SelectObject(p.dc, KeyFont(p.s));
-			p.Text(x + 3, exY + 3, 13, 13, std::string(1, letters[i]), pal::body, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-		}
-		p.Font(3);
-		if (st.grid) {
-			for (int i = 0; i < 5; i++) {
-				p.Text(exX + i * (bs + gap), exY + bs + 4, bs, 18, std::to_string(i + 1) + ".º", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-			}
-		}
-		const int tx = bx + 14, tw = exX - 20 - tx;
-		p.TextWrapped(tx, by + 46, tw, 42,
-			st.grid ? "The key follows the button's position: Q for the first, W for the second… The same for any unit or building."
-					: "Each command has its own letter (M move, A attack…): the game's or the one you set here. They change depending on the unit or building.",
-			pal::textDim);
-		const int tgY = by + bh - 32, tgW = 240;
-		const bool tgHov = p.Hover(tx, tgY, tgW, 22, mx, my);
-		const int sw = Painter::kToggleW, swY = tgY + (22 - Painter::kToggleH) / 2;
-		p.Toggle(tx, swY, st.barLetters, true, tgHov);
-		p.Text(tx + sw + 8, tgY, tgW - sw - 8, 22, "Show the letter on each button", tgHov ? pal::text : st.barLetters ? pal::text : pal::textDim,
-			DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-		p.AddHit(tx, tgY, tgW, 22, kBarLetters);
-	}
+	const Banner b = BannerFor(l, m);
+	if (boxBanner) PaintBoxBanners(p, st, l, b, mx, my);
+	if (ordersBanner) PaintOrdersBanner(p, st, l, b, mx, my);
 
 	const Columns cols = Cols(l);
 	int colsY = l.top + (boxBanner ? 2 * m.bannerH - 2 : banner ? m.bannerH : 0);
@@ -1173,11 +1241,12 @@ void ControlsUiDraw(uint32_t *buf, int w, int h)
 	p.Text(cols.cell1, colsY, m.cellW, m.colsH, "Alternative", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
 	const std::vector<Item> view = BuildView(st);
-	listTop = colsY + m.colsH;
+	const int listTop = colsY + m.colsH;
 	const int listH = listBottom - listTop;
 	const int contentH = ViewHeight(st, view);
-	maxScroll = std::max(0, contentH - listH);
-	const int scroll = std::max(0, std::min(st.list.scroll, maxScroll));
+	ListOut out;
+	out.maxScroll = std::max(0, contentH - listH);
+	const int scroll = std::max(0, std::min(st.list.scroll, out.maxScroll));
 	p.Clip(l.listX, listTop, l.listW, listH);
 	int y = listTop - scroll;
 	for (const Item &it : view) {
@@ -1199,41 +1268,16 @@ void ControlsUiDraw(uint32_t *buf, int w, int h)
 			st.search.empty() ? std::string("The game's commands could not be read (see the log in Logs\\imperivm).") : Tr("Nothing matches «") + st.search + "».", pal::textDim);
 	}
 	p.Unclip();
-	{
-		ListState bar = st.list;
-		bar.scroll = scroll;
-		ScrollbarPaint(p, l.listX + l.listW - 8, listTop, listH, contentH, listH, bar, listGeom, mx, my);
-	}
+	ListState bar = st.list;
+	bar.scroll = scroll;
+	ScrollbarPaint(p, l.listX + l.listW - 8, listTop, listH, contentH, listH, bar, out.geom, mx, my);
 
-	if (st.pend.row >= 0 && st.pend.row < static_cast<int>(st.rows.size()) && !st.pendWith.empty()) {
-		const ControlInfo &r = st.rows[st.pend.row];
-		const ControlInfo &o = st.rows[st.pendWith[0].row];
-		const int cx = l.listX + 8, cw = l.listW - 24, chh = 78, cyy = listBottom - chh - 8;
-		p.Fill(cx + 4, cyy + 4, cw, chh, pal::bg);
-		p.Fill(cx, cyy, cw, chh, pal::selected);
-		p.Frame(cx, cyy, cw, chh, pal::lineStrong);
-		std::string text = ControlsKeyLabel(st.pendKey) + Tr(" already belongs to «") + o.name + "» (" + Where(o) + ")";
-		if (st.pendWith.size() > 1) text += Tr(" and ") + std::to_string(st.pendWith.size() - 1) + Tr(" more");
-		text += ".";
-		p.Font(0);
-		p.Text(cx + 14, cyy + 8, cw - 28, 24, text, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		p.Font(3);
-		p.Text(cx + 14, cyy + 30, cw - 28, 18, std::string("For «") + r.name + "»" + (st.pend.slot ? Tr(" as an alternative.") : "."), pal::textDim,
-			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		int bx = cx + cw - 14;
-		const int by = cyy + chh - 36, bh = 28;
-		bx -= 100;
-		p.Button(bx, by, 100, bh, "Cancel", kCancelPending, 0, mx, my, true, false, 4);
-		bx -= 158;
-		p.Button(bx, by, 150, bh, "Use on both", kAssignAnyway, 0, mx, my, true, false, 4);
-		if (CanSwap(st)) {
-			bx -= 158;
-			p.Button(bx, by, 150, bh, "Swap keys", kSwap, 0, mx, my, true, true, 4);
-		}
-	}
+	PaintPendingCard(p, st, l, mx, my);
+	return out;
+}
 
-	}
-
+void PaintFooter(Painter &p, const State &st, const Layout &l, int mx, int my)
+{
 	const int fy = l.footerY, by = l.buttonY, bh = l.buttonH;
 	const bool canUndo = !st.undo.empty() && GetTickCount() - st.undoAt < kUndoMs;
 	if (l.full) {
@@ -1252,113 +1296,146 @@ void ControlsUiDraw(uint32_t *buf, int w, int h)
 		p.Button(kW - 24 - 130, by, 130, bh, "Close", kClose, 0, mx, my, true, true);
 		if (canUndo) p.Button(kW - 24 - 130 - 12 - 110, by, 110, bh, "Undo", kUndo, 0, mx, my, true, false, 4);
 	}
-	std::string status;
-	COLORREF statusColor = pal::text;
-	if (st.capture.row < 0 && !Asking(st)) {
-		const POINT pt = {mx, my};
-		for (const Hit &hh : hits) {
-			if (!PtInRect(&hh.r, pt)) continue;
-			if (hh.action == kCell && hh.arg >= 0 && hh.arg < static_cast<int>(st.clash.size()) && st.clash[hh.arg].row >= 0) {
-				const ControlInfo &o = st.rows[st.clash[hh.arg].row];
-				status = Tr("Clashes with «") + o.name + "» (" + Where(o) + Tr("): only one of the two will work.");
-				statusColor = pal::bad;
-			}
-			else if (hh.action == kCell && hh.arg >= 0 && hh.arg / 2 < static_cast<int>(st.rows.size()) && KeyOf(st.rows[hh.arg / 2], hh.arg % 2).vk) {
-				status = "Click: change  ·  Right-click: remove";
-			}
-			else if (hh.action == kCopyConfig) {
-				status = "Copies your controls as text so you can pass them to another player.";
-			}
-			else if (hh.action == kPasteConfig) {
-				status = "Loads the controls you copied from another player.";
-			}
-			else if (hh.action == kResetAll) {
-				status = "Puts every key back as in the original game.";
-			}
-			else if (hh.action == kRowReset && hh.arg >= 0 && hh.arg < static_cast<int>(st.rows.size())) {
-				status = Tr("Back to the game's key: ") + KeyText(st.rows[hh.arg].def) + ".";
-			}
-		}
-	}
-	if (st.confirmResetAll) {
-		const int cw = 560, chh = 78, cx = (l.w - cw) / 2, cyy = fy - chh - 8;
-		p.Fill(cx + 4, cyy + 4, cw, chh, pal::bg);
-		p.Fill(cx, cyy, cw, chh, pal::selected);
-		p.Frame(cx, cyy, cw, chh, pal::lineStrong);
-		p.Font(0);
-		p.Text(cx + 14, cyy + 8, cw - 28, 24, "Put every key back as in the original game?", pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		p.Font(3);
-		p.Text(cx + 14, cyy + 30, cw - 28, 18, "Your keys and command modes go back to the game's. You can undo it for a few seconds.", pal::textDim,
-			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		int bx = cx + cw - 14;
-		const int by = cyy + chh - 36, bh = 28;
-		bx -= 100;
-		p.Button(bx, by, 100, bh, "Cancel", kCancelPending, 0, mx, my, true, false, 4);
-		bx -= 158;
-		p.Button(bx, by, 150, bh, "Reset all", kResetAllYes, 0, mx, my, true, true, 4);
-	}
+}
 
-	if (!st.status.empty() && GetTickCount() - st.statusAt < 5000) {
-		p.Font(3);
-		const int maxW = 600;
-		const int tw = std::min(maxW - 40, p.TextWidth(st.status));
-		const int th = p.Measure(tw, st.status);
-		const int bw = tw + 40, bh = th + 20, bx = (l.w - bw) / 2, by = fy - 8 - 12 - bh;
-		p.Fill(bx, by, bw, bh, pal::panel);
-		p.Frame(bx, by, bw, bh, st.statusBad ? pal::bad : pal::edge);
-		p.TextWrapped(bx + 20, by + 10, tw + 4, th + 2, st.status, st.statusBad ? pal::body : pal::text);
+std::string HoverStatus(const State &st, const std::vector<Hit> &hits, int mx, int my, COLORREF &color)
+{
+	std::string status;
+	if (st.capture.row >= 0 || Asking(st)) return status;
+	const POINT pt = {mx, my};
+	for (const Hit &hh : hits) {
+		if (!PtInRect(&hh.r, pt)) continue;
+		if (hh.action == kCell && hh.arg >= 0 && hh.arg < static_cast<int>(st.clash.size()) && st.clash[hh.arg].row >= 0) {
+			const ControlInfo &o = st.rows[st.clash[hh.arg].row];
+			status = Tr("Clashes with «") + o.name + "» (" + Where(o) + Tr("): only one of the two will work.");
+			color = pal::bad;
+		}
+		else if (hh.action == kCell && hh.arg >= 0 && hh.arg / 2 < static_cast<int>(st.rows.size()) && KeyOf(st.rows[hh.arg / 2], hh.arg % 2).vk) {
+			status = "Click: change  ·  Right-click: remove";
+		}
+		else if (hh.action == kCopyConfig) {
+			status = "Copies your controls as text so you can pass them to another player.";
+		}
+		else if (hh.action == kPasteConfig) {
+			status = "Loads the controls you copied from another player.";
+		}
+		else if (hh.action == kResetAll) {
+			status = "Puts every key back as in the original game.";
+		}
+		else if (hh.action == kRowReset && hh.arg >= 0 && hh.arg < static_cast<int>(st.rows.size())) {
+			status = Tr("Back to the game's key: ") + KeyText(st.rows[hh.arg].def) + ".";
+		}
 	}
+	return status;
+}
+
+// The tip waits until the mouse has rested half a second on the same control.
+bool HoverSettled(const std::vector<Hit> &hits, int mx, int my)
+{
+	static int lastAction = -1, lastArg = 0;
+	static DWORD since = 0;
+	const Hit *top = TopHit(hits, {mx, my});
+	const int action = top ? top->action : -1, arg = top ? top->arg : 0;
+	if (action != lastAction || arg != lastArg) {
+		lastAction = action;
+		lastArg = arg;
+		since = GetTickCount();
+	}
+	return GetTickCount() - since >= 500;
+}
+
+void PaintStatus(Painter &p, const State &st, const Layout &l)
+{
+	if (st.status.empty() || GetTickCount() - st.statusAt >= 5000) return;
+	p.Font(3);
+	const int maxW = 600;
+	const int tw = std::min(maxW - 40, p.TextWidth(st.status));
+	const int th = p.Measure(tw, st.status);
+	const int bw = tw + 40, bh = th + 20, bx = (l.w - bw) / 2, by = l.footerY - 8 - 12 - bh;
+	p.Fill(bx, by, bw, bh, pal::panel);
+	p.Frame(bx, by, bw, bh, st.statusBad ? pal::bad : pal::edge);
+	p.TextWrapped(bx + 20, by + 10, tw + 4, th + 2, st.status, st.statusBad ? pal::body : pal::text);
+}
+
+void PaintHoverTip(Painter &p, const Layout &l, const std::string &status, COLORREF color, int mx, int my, int ox, int oy, float s)
+{
+	p.Font(3);
+	const int tw = std::min(300, p.TextWidth(status));
+	const int th = p.Measure(tw, status);
+	const int bw = tw + 20, bh = th + 12;
+	int bx = static_cast<int>((mx - ox) / s) + 14, by = static_cast<int>((my - oy) / s) + 20;
+	bx = std::min(bx, l.w - bw - 8);
+	if (by + bh > l.h - 8) by = static_cast<int>((my - oy) / s) - bh - 8;
+	p.Fill(bx, by, bw, bh, pal::panel);
+	p.Frame(bx, by, bw, bh, color == pal::bad ? pal::bad : pal::edge);
+	p.TextWrapped(bx + 10, by + 6, tw + 4, th + 2, status, color == pal::bad ? pal::body : pal::text);
+}
+
+void PaintCaptureTip(Painter &p, const Layout &l)
+{
+	const std::string tip = "Key or mouse button  ·  Esc cancels";
+	p.Font(3);
+	const int bw = p.TextWidth(tip) + 24, bh = 26;
+	const int right = g_captureCell.right;
+	const int bx = std::min(right, l.w - 12) - bw;
+	const bool below = g_captureCell.bottom + 8 + bh < l.listBottom;
+	const int by = below ? g_captureCell.bottom + 8 : g_captureCell.top - 8 - bh;
+	p.Fill(bx, by, bw, bh, pal::panel);
+	p.Frame(bx, by, bw, bh, pal::edge);
+	p.Text(bx, by, bw, bh, tip, pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+}
+
+}
+
+void ControlsUiDraw(uint32_t *buf, int w, int h)
+{
+	State st;
 	{
-		static int lastAction = -1, lastArg = 0;
-		static DWORD since = 0;
-		int action = -1, arg = 0;
-		const POINT pt = {mx, my};
-		for (auto it = hits.rbegin(); it != hits.rend(); ++it) {
-			if (PtInRect(&it->r, pt)) {
-				action = it->action;
-				arg = it->arg;
-				break;
-			}
-		}
-		if (action != lastAction || arg != lastArg) {
-			lastAction = action;
-			lastArg = arg;
-			since = GetTickCount();
-		}
-		if (GetTickCount() - since < 500) status.clear();
+		std::lock_guard<std::mutex> lock(g_lock);
+		if (!g_s.open) return;
+		st = g_s;
 	}
-	if (!status.empty()) {
-		p.Font(3);
-		const int tw = std::min(300, p.TextWidth(status));
-		const int th = p.Measure(tw, status);
-		const int bw = tw + 20, bh = th + 12;
-		int bx = static_cast<int>((mx - ox) / s) + 14, by = static_cast<int>((my - oy) / s) + 20;
-		bx = std::min(bx, l.w - bw - 8);
-		if (by + bh > l.h - 8) by = static_cast<int>((my - oy) / s) - bh - 8;
-		p.Fill(bx, by, bw, bh, pal::panel);
-		p.Frame(bx, by, bw, bh, statusColor == pal::bad ? pal::bad : pal::edge);
-		p.TextWrapped(bx + 10, by + 6, tw + 4, th + 2, status, statusColor == pal::bad ? pal::body : pal::text);
+	PanelRender r(g_canvas, buf, w, h);
+	// Over a running game the screen stays a window, so the map shows around it.
+	Layout l;
+	if (*reinterpret_cast<void **>(addr::kGame) == nullptr) {
+		const ScreenView view = ScreenViewFor(w, h);
+		if (!BeginFullScreen(r, view)) return;
+		l = LayoutFor(true, view.w, view.h);
 	}
-	if (st.capture.row >= 0 && g_captureCell.right > g_captureCell.left) {
-		const std::string tip = "Key or mouse button  ·  Esc cancels";
-		p.Font(3);
-		const int bw = p.TextWidth(tip) + 24, bh = 26;
-		const int right = g_captureCell.right;
-		const int bx = std::min(right, l.w - 12) - bw;
-		const bool below = g_captureCell.bottom + 8 + bh < l.listBottom;
-		const int by = below ? g_captureCell.bottom + 8 : g_captureCell.top - 8 - bh;
-		p.Fill(bx, by, bw, bh, pal::panel);
-		p.Frame(bx, by, bw, bh, pal::edge);
-		p.Text(bx, by, bw, bh, tip, pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	else if (!BeginWindow(r, kW, kH)) return;
+	st.full = l.full;
+	r.Focus(st.tabAction, st.tabArg);
+	Painter &p = r.p;
+	std::vector<Hit> &hits = r.hits;
+	const int mx = st.mx, my = st.my;
+
+	PaintHeader(p, st, l, mx, my);
+	g_captureCell = {};
+	ListOut list;
+	KbOut kb;
+	if (st.view == 1) DrawKeyboardView(p, st, l, mx, my, l.listBottom + l.pad, kb);
+	else list = PaintListView(p, st, l, mx, my);
+	PaintFooter(p, st, l, mx, my);
+	COLORREF statusColor = pal::text;
+	std::string status = HoverStatus(st, hits, mx, my, statusColor);
+	if (st.confirmResetAll) {
+		const int cw = 560;
+		PaintAskCard(p, (l.w - cw) / 2, l.footerY - kAskCardH - 8, cw, "Put every key back as in the original game?",
+			"Your keys and command modes go back to the game's. You can undo it for a few seconds.", {{"Reset all", kResetAllYes, true}}, mx, my);
 	}
+	PaintStatus(p, st, l);
+	if (!HoverSettled(hits, mx, my)) status.clear();
+	if (!status.empty()) PaintHoverTip(p, l, status, statusColor, mx, my, r.ox, r.oy, r.s);
+	if (st.capture.row >= 0 && g_captureCell.right > g_captureCell.left) PaintCaptureTip(p, l);
 
 	r.End();
 	std::lock_guard<std::mutex> lock(g_lock);
 	g_s.hits = std::move(hits);
-	g_s.panel = {ox, oy, ox + pw, oy + ph};
+	g_s.panel = {r.ox, r.oy, r.ox + r.pw, r.oy + r.ph};
 	g_s.full = l.full;
-	g_s.listGeom = listGeom;
-	if (g_s.list.scroll > maxScroll) g_s.list.scroll = maxScroll;
+	g_s.listGeom = list.geom;
+	if (g_s.list.scroll > list.maxScroll) g_s.list.scroll = list.maxScroll;
 	g_s.kbBox = kb.box;
 	g_s.kbGeom = kb.geom;
 	if (g_s.kbScrollKey != kb.key) {
@@ -1371,22 +1448,17 @@ namespace {
 
 int HitAt(const State &st, POINT pt, int &arg)
 {
-	for (auto it = st.hits.rbegin(); it != st.hits.rend(); ++it) {
-		if (PtInRect(&it->r, pt)) {
-			arg = it->arg;
-			return it->action;
-		}
-	}
-	arg = 0;
-	return kNone;
+	const Hit *hit = TopHit(st.hits, pt);
+	arg = hit ? hit->arg : 0;
+	return hit ? hit->action : kNone;
 }
 
 unsigned char Mods()
 {
 	unsigned char m = 0;
-	if (GetKeyState(VK_CONTROL) & 0x8000) m |= kKeyCtrl;
-	if (GetKeyState(VK_SHIFT) & 0x8000) m |= kKeyShift;
-	if (GetKeyState(VK_MENU) & 0x8000) m |= kKeyAlt;
+	if (KeyHeld(VK_CONTROL)) m |= kKeyCtrl;
+	if (KeyHeld(VK_SHIFT)) m |= kKeyShift;
+	if (KeyHeld(VK_MENU)) m |= kKeyAlt;
 	return m;
 }
 
@@ -1493,10 +1565,7 @@ void Activate(State &st, int action, int arg, POINT pt)
 				st.pendReset = true;
 				break;
 			}
-			BeginChange(st);
-			ResetRow(r);
-			Refresh(st);
-			SetStatus(st, r.name + ": " + KeyText(r.def) + Tr(", as in the game."), false);
+			ResetToGame(st, r);
 		}
 		break;
 	case kSearchField: {
@@ -1508,9 +1577,7 @@ void Activate(State &st, int action, int arg, POINT pt)
 		break;
 	}
 	case kClearSearch:
-		st.search.clear();
-		st.edit = EditState();
-		st.list.scroll = 0;
+		ClearSearch(st);
 		break;
 	case kSwap: {
 		const Ref at = st.pend, other = st.pendWith[0];
@@ -1520,13 +1587,9 @@ void Activate(State &st, int action, int arg, POINT pt)
 		st.pend = Ref();
 		st.pendReset = false;
 		BeginChange(st);
-		SetRowKey(o, other.slot, old);
-		if (o.order && other.slot == 0 && o.key2.vk && old.vk && o.key2.mods != old.mods) SetRowKey(o, 1, ControlKey());
+		AssignKey(o, other.slot, old);
 		if (reset) ResetRow(r);
-		else {
-			SetRowKey(r, at.slot, k);
-			if (r.order && at.slot == 0 && r.key2.vk && k.vk && r.key2.mods != k.mods) SetRowKey(r, 1, ControlKey());
-		}
+		else AssignKey(r, at.slot, k);
 		Refresh(st);
 		SetStatus(st, r.name + ": " + KeyText(k) + "  ·  " + o.name + ": " + KeyText(old), false);
 		break;
@@ -1536,11 +1599,7 @@ void Activate(State &st, int action, int arg, POINT pt)
 		st.pend = Ref();
 		if (st.pendReset) {
 			st.pendReset = false;
-			const ControlInfo r = st.rows[at.row];
-			BeginChange(st);
-			ResetRow(r);
-			Refresh(st);
-			SetStatus(st, r.name + ": " + KeyText(r.def) + Tr(", as in the game."), false);
+			ResetToGame(st, st.rows[at.row]);
 			break;
 		}
 		Commit(st, at, st.pendKey);
@@ -1689,23 +1748,22 @@ bool ControlsUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 	State &st = g_s;
 	if (!st.open) return false;
 	switch (msg) {
-	case WM_MOUSEMOVE:
-		st.mx = static_cast<short>(LOWORD(lp));
-		st.my = static_cast<short>(HIWORD(lp));
-		{
-			const POINT at = {st.mx, st.my};
-			ListMove(st.list, st.listGeom, at);
-			ListMove(st.kbList, st.kbGeom, at);
-		}
+	case WM_MOUSEMOVE: {
+		const POINT at = PointOf(lp);
+		st.mx = at.x;
+		st.my = at.y;
+		ListMove(st.list, st.listGeom, at);
+		ListMove(st.kbList, st.kbGeom, at);
 		if (st.edit.dragging && st.searchFocus) {
 			FieldGeom geom;
 			if (FieldGet(kSearchAction, geom)) st.edit.caret = EditIndexAt(geom, st.search, st.mx);
 		}
 		return false;
+	}
 	case WM_LBUTTONDOWN:
 	case WM_LBUTTONDBLCLK:
 		{
-			const POINT at = {static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))};
+			const POINT at = PointOf(lp);
 			st.tabAction = -1;
 			if (!Asking(st) && st.capture.row < 0 &&
 				(st.view == 1 ? ListDown(st.kbList, st.kbGeom, at) : ListDown(st.list, st.listGeom, at))) {
@@ -1727,8 +1785,7 @@ bool ControlsUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		return true;
 	case WM_RBUTTONDOWN: {
 		int arg = 0;
-		const POINT pt = {static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))};
-		if (!Asking(st) && HitAt(st, pt, arg) == kCell) TryAssign(st, CellRef(arg), ControlKey());
+		if (!Asking(st) && HitAt(st, PointOf(lp), arg) == kCell) TryAssign(st, CellRef(arg), ControlKey());
 		return true;
 	}
 	case WM_MOUSEWHEEL:
@@ -1758,8 +1815,8 @@ bool ControlsUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 			st.escArmed = true;
 			return true;
 		}
-		if (wp == VK_TAB && !(GetKeyState(VK_CONTROL) & 0x8000)) {
-			TabStep(st, (GetKeyState(VK_SHIFT) & 0x8000) != 0);
+		if (wp == VK_TAB && !KeyHeld(VK_CONTROL)) {
+			TabStep(st, KeyHeld(VK_SHIFT));
 			return true;
 		}
 		if (Asking(st)) {
@@ -1793,11 +1850,7 @@ bool ControlsUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 				st.pendReset = false;
 			}
 			else if (st.confirmResetAll) st.confirmResetAll = false;
-			else if (!st.search.empty()) {
-				st.search.clear();
-				st.edit = EditState();
-				st.list.scroll = 0;
-			}
+			else if (!st.search.empty()) ClearSearch(st);
 			else st.open = false;
 		}
 		return true;
