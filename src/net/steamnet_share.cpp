@@ -249,12 +249,19 @@ void DropTransfers(uint64 peer)
 }
 
 
-void FailDownload(const std::string &why)
+namespace {
+void ResetDownload()
 {
 	if (g_share.in.file != INVALID_HANDLE_VALUE) CloseHandle(g_share.in.file);
 	const std::string root = g_share.in.tempRoot;
 	g_share.in = InTransfer();
 	if (!root.empty()) DeleteTree(root);
+}
+}
+
+void FailDownload(const std::string &why)
+{
+	ResetDownload();
 	std::lock_guard<std::mutex> lock(g_lock);
 	g_share.download.active = false;
 	g_share.download.failed = true;
@@ -265,10 +272,7 @@ void FailDownload(const std::string &why)
 void AbortDownload()
 {
 	if (!g_share.in.host && g_share.in.file == INVALID_HANDLE_VALUE) return;
-	if (g_share.in.file != INVALID_HANDLE_VALUE) CloseHandle(g_share.in.file);
-	const std::string root = g_share.in.tempRoot;
-	g_share.in = InTransfer();
-	if (!root.empty()) DeleteTree(root);
+	ResetDownload();
 	std::lock_guard<std::mutex> lock(g_lock);
 	g_share.download.active = false;
 }
