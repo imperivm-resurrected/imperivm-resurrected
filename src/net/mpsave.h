@@ -16,7 +16,6 @@ struct MpSavePlayer {
 	bool ai() const { return name.size() > 4 && (name.find("(IA)") != std::string::npos || name.find("(AI)") != std::string::npos); }
 	std::string name;
 };
-std::vector<MpSavePlayer> MpSaveReadPlayers(const std::string &path);
 struct MpSaveInfo {
 	bool valid = false;
 	std::vector<MpSavePlayer> players;

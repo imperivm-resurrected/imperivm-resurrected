@@ -21,9 +21,6 @@ typedef void *(__fastcall *GetScriptData_t)(void *owner, void *edx, int slot);
 }
 
 namespace rejoin_impl {
-}
-
-namespace rejoin_impl {
 namespace {
 uint32_t AiPlayer(char *exec)
 {

@@ -158,7 +158,7 @@ int ReadSavePlayersRaw(const char *path, RawSavePlayer *out, int max, RawSaveMap
 		stream = reinterpret_cast<OperatorNew_t>(addr::kOperatorNew)(0x40);
 		reinterpret_cast<Ctor1_t>(addr::kStreamLoadCtor)(stream, nullptr, 1);
 		reinterpret_cast<StreamOpen_t>(Vt(stream)[0x8 / 4])(stream, nullptr, path);
-		unsigned magic = 0, build = 0, version = 0, type = 0;
+		unsigned magic = 0, build = 0, type = 0;
 		reinterpret_cast<ReadInt_t>(Vt(stream)[0x44 / 4])(stream, nullptr, &magic, "magic");
 		if (magic == kSaveMagic) {
 			reinterpret_cast<ReadInt_t>(Vt(stream)[0x44 / 4])(stream, nullptr, &build, "build");
@@ -198,7 +198,6 @@ int ReadSavePlayersRaw(const char *path, RawSavePlayer *out, int max, RawSaveMap
 				reinterpret_cast<ThisInt_t>(Vt(settings)[0])(settings, nullptr, 1);
 			}
 		}
-		(void)version;
 	}
 	__except (EXCEPTION_EXECUTE_HANDLER) {
 		count = -1;
@@ -489,11 +488,6 @@ MpSaveInfo MpSaveReadInfo(const std::string &path)
 		}
 	}
 	return info;
-}
-
-std::vector<MpSavePlayer> MpSaveReadPlayers(const std::string &path)
-{
-	return MpSaveReadInfo(path).players;
 }
 
 void MpSaveSetPlayerCamera(int player, int x, int y)
