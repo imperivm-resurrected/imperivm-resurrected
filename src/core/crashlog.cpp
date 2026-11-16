@@ -6,6 +6,7 @@
 #include <atomic>
 #include <cstdio>
 #include <cstdint>
+#include <cstring>
 
 #include "core/crashlog.h"
 #include "core/log.h"
@@ -38,17 +39,26 @@ bool IsCodeAddress(uintptr_t addr)
 	return (mbi.Protect & (PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY)) != 0;
 }
 
-void LogContext(const char *tag, const CONTEXT *c, LogLevel level)
+const int kStackWords = 2048;
+
+// How many words from esp, up to kStackWords, lie in the memory region that holds them.
+int StackWords(const CONTEXT *c)
+{
+	MEMORY_BASIC_INFORMATION mbi;
+	if (!VirtualQuery(reinterpret_cast<const void *>(c->Esp), &mbi, sizeof(mbi))) return 0;
+	const uintptr_t stackEnd = reinterpret_cast<uintptr_t>(mbi.BaseAddress) + mbi.RegionSize;
+	if (stackEnd <= c->Esp) return 0;
+	const uintptr_t words = (stackEnd - c->Esp) / sizeof(uintptr_t);
+	return words < static_cast<uintptr_t>(kStackWords) ? static_cast<int>(words) : kStackWords;
+}
+
+void LogContext(const char *tag, const CONTEXT *c, LogLevel level, const uintptr_t *sp, int words)
 {
 	LogAt(level, "crash", "%s registers: eax=%08lx ebx=%08lx ecx=%08lx edx=%08lx esi=%08lx edi=%08lx ebp=%08lx esp=%08lx", tag, c->Eax, c->Ebx, c->Ecx, c->Edx,
 		c->Esi, c->Edi, c->Ebp, c->Esp);
-	const uintptr_t *sp = reinterpret_cast<const uintptr_t *>(c->Esp);
-	MEMORY_BASIC_INFORMATION mbi;
-	uintptr_t stackEnd = 0;
-	if (VirtualQuery(sp, &mbi, sizeof(mbi))) stackEnd = reinterpret_cast<uintptr_t>(mbi.BaseAddress) + mbi.RegionSize;
 	int shown = 0;
 	char line[1024] = "";
-	for (int k = 0; k < 2048 && reinterpret_cast<uintptr_t>(sp + k + 1) <= stackEnd && shown < 48; k++) {
+	for (int k = 0; k < words && shown < 48; k++) {
 		const uintptr_t v = sp[k];
 		if (v < 0x10000 || !IsCodeAddress(v)) continue;
 		char d[160];
@@ -92,7 +102,7 @@ LONG CALLBACK Handler(EXCEPTION_POINTERS *ep)
 	LogF("crash", "CRASH %08lx at %08lx (%s)%s%08lx; thread %lu", code, static_cast<unsigned long>(c->Eip), where,
 		code == EXCEPTION_ACCESS_VIOLATION ? (info[0] == 1 ? ", writing to " : info[0] == 8 ? ", executing " : ", reading ") : ", data",
 		static_cast<unsigned long>(code == EXCEPTION_ACCESS_VIOLATION ? info[1] : 0), GetCurrentThreadId());
-	LogContext("CRASH", c, kLogFatal);
+	LogContext("CRASH", c, kLogFatal, reinterpret_cast<const uintptr_t *>(c->Esp), StackWords(c));
 	return EXCEPTION_CONTINUE_SEARCH;
 }
 
@@ -105,6 +115,7 @@ std::atomic<DWORD> g_loadingSince{0};
 const int kHangChecks = 3, kHangChecksLoading = 24;
 const DWORD kBootGraceMs = 90000;
 DWORD g_bootTick = 0;
+uintptr_t g_hangStack[kStackWords];
 
 BOOL CALLBACK FindGameWindow(HWND hwnd, LPARAM param)
 {
@@ -138,16 +149,19 @@ DWORD WINAPI Watchdog(void *)
 		CONTEXT c = {};
 		c.ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER;
 		if (SuspendThread(g_mainThread) == static_cast<DWORD>(-1)) continue;
+		// Only lock-free calls while the main thread is stopped: it may hold the log's lock, the heap's or the loader's.
 		const bool ok = GetThreadContext(g_mainThread, &c) != 0;
+		const int words = ok ? StackWords(&c) : 0;
+		if (words) memcpy(g_hangStack, reinterpret_cast<const void *>(c.Esp), words * sizeof(uintptr_t));
+		ResumeThread(g_mainThread);
 		if (ok) {
 			char where[160] = "?";
 			DescribeAddress(c.Eip, where, sizeof(where));
 			g_crashLogQuiet++;
 			LogE("crash", "HANG: the main thread has not responded for a few seconds; it is at %08lx (%s)", static_cast<unsigned long>(c.Eip), where);
-			LogContext("HANG", &c, kLogError);
+			LogContext("HANG", &c, kLogError, g_hangStack, words);
 			g_crashLogQuiet--;
 		}
-		ResumeThread(g_mainThread);
 	}
 }
 
