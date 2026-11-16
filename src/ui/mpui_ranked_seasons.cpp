@@ -88,7 +88,7 @@ size_t FriendIdCount()
 // The seasons the menu offers, newest first: the server's list, or the season being played while it has not come.
 std::vector<LeagueSeasonInfo> SeasonChoices(const State &st)
 {
-	std::vector<LeagueSeasonInfo> list = LeagueSeasonsState().seasons;
+	std::vector<LeagueSeasonInfo> list = LeagueSeasonsShared()->seasons;
 	if (list.empty() && st.ranked.view.seasonLoaded) {
 		LeagueSeasonInfo s;
 		s.id = st.ranked.view.season.number;

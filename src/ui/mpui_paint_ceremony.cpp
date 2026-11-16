@@ -336,7 +336,8 @@ void PaintCeremony(Painter &p, const State &st)
 	const int mx = st.mouseX, my = st.mouseY;
 	const auto meView = LeagueMeShared();
 	const LeagueMeView &me = *meView;
-	const LeagueSeasonsView sv = LeagueSeasonsState();
+	const auto seasonsView = LeagueSeasonsShared();
+	const LeagueSeasonsView &sv = *seasonsView;
 	const int season = st.ranked.ceremonySeason;
 	LeagueCeremony c = me.me.ceremony;
 	// Once seen, /me no longer has it: the screen keeps what it opened with from the season's reward.
