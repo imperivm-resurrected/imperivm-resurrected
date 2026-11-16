@@ -53,6 +53,7 @@ struct State {
 	// The game window may not send double clicks, so they are told apart here.
 	DWORD lastClick = 0;
 	int lastClickRow = -1;
+	int wheelRest = 0;
 };
 
 std::mutex g_lock;
@@ -359,7 +360,7 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, Command &cmd)
 	case WM_MOUSEWHEEL: {
 		if (v.leagueOpen) return true;
 		// The wheel's position comes in screen coordinates; the last move tells where the mouse is over the screen.
-		const int steps = GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA;
+		const int steps = WheelSteps(g_s.wheelRest, GET_WHEEL_DELTA_WPARAM(wp));
 		if (OverHistory(g_s, {v.mouseX, v.mouseY})) {
 			v.historyScroll = std::max(0, std::min(v.historyScroll - steps * 3, HistoryMaxScroll(v)));
 		}

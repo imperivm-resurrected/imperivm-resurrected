@@ -77,6 +77,7 @@ struct State {
 	POINT menuCenter = {};
 	// The help just shown starts at the top of the panel until the player scrolls.
 	uint32_t helpSerial = 0;
+	int wheelRest = 0;
 	ScrollDrag bar;
 	// The league badges of the room's players by name, for the lines they write.
 	std::vector<std::pair<std::string, LeagueBadge>> badges;
@@ -443,8 +444,8 @@ bool HandleMouse(UINT msg, WPARAM wp, POINT at)
 		return inside;
 	case WM_MOUSEWHEEL: {
 		if (!inside) return false;
-		const int steps = GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA;
 		std::lock_guard<std::mutex> lock(g_lock);
+		const int steps = WheelSteps(g_s.wheelRest, GET_WHEEL_DELTA_WPARAM(wp));
 		if (g_s.helpSerial) g_s.scroll = g_s.painted.scroll;
 		g_s.helpSerial = 0;
 		g_s.scroll = std::max(0, std::min(g_s.painted.maxScroll, g_s.scroll + steps * 3));
