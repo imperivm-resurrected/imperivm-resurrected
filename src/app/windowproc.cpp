@@ -85,7 +85,7 @@ LRESULT GameWindowHandler(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 	}
 	if (SpectatorHandleKey(msg, static_cast<unsigned>(wp), static_cast<long>(lp))) return 0;
 	if (CheatsHandleKey(msg, static_cast<unsigned>(wp), static_cast<long>(lp))) return 0;
-	if (AllyColorsHandleKey(msg, static_cast<unsigned>(wp))) return 0;
+	if (AllyColorsHandleKey(msg, static_cast<unsigned>(wp), static_cast<long>(lp))) return 0;
 	if (OverlayHandleKey(msg, wp, lp)) return 0;
 	{
 		unsigned vk;

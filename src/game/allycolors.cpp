@@ -87,8 +87,10 @@ bool Step()
 		}
 		if (!game || !*reinterpret_cast<void **>(addr::kMap)) return false;
 		const char *local = layout::LocalPlayer(game);
-		// Never in the editor, whose colours are the map's own.
-		const bool on = GetConfig().allyColors && local && IndexOf(game, local) >= 0 && !*reinterpret_cast<int *>(addr::kEditorMode);
+		// Only for one of the match's eight seats: never in the editor, whose colours are the map's own, nor for the observer (player 9)
+		// a replay or a broadcast puts the watcher in, who is at peace with nobody and would see everyone red.
+		const int seat = IndexOf(game, local);
+		const bool on = GetConfig().allyColors && local && seat >= 0 && seat < layout::kSettingsEntryCount && !*reinterpret_cast<int *>(addr::kEditorMode);
 		bool changed = false;
 		for (int i = 0; i < layout::kPlayerCount; i++) {
 			const char *player = layout::PlayerAt(game, i);
@@ -110,8 +112,8 @@ bool Step()
 		if (changed) Redraw();
 		return changed;
 	}
+	// The real colours stay known: forgetting them would take the shown ones for real on the next frame.
 	__except (EXCEPTION_EXECUTE_HANDLER) {
-		g_shown = Shown();
 		return false;
 	}
 }
@@ -159,10 +161,12 @@ void AllyColorsGameTick()
 	wasOn = on;
 }
 
-bool AllyColorsHandleKey(unsigned msg, unsigned wp)
+bool AllyColorsHandleKey(unsigned msg, unsigned wp, long lp)
 {
 	if ((msg != WM_KEYDOWN && msg != WM_SYSKEYDOWN) || !g_origSerialize || !*reinterpret_cast<void **>(addr::kGame)) return false;
 	if (!ControlsModKeyPressed(kModKeyAllyColors, wp)) return false;
+	// Held down, the key repeats (bit 30 set): it switches once per press.
+	if (lp & (1L << 30)) return true;
 	Config &c = MutableConfig();
 	c.allyColors = !c.allyColors;
 	SaveConfig();

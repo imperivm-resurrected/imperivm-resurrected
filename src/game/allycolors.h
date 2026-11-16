@@ -11,6 +11,6 @@ void InstallAllyColors(bool knownExe);
 // On the game thread, every frame: applies the colours when the option or an alliance changed, and puts the real ones back without it.
 void AllyColorsGameTick();
 // The key that turns it on or off (Alt+G by default); true when it took the key.
-bool AllyColorsHandleKey(unsigned msg, unsigned wp);
+bool AllyColorsHandleKey(unsigned msg, unsigned wp, long lp);
 // A player's real colour (RGB555) while this one shows another; `shown` otherwise.
 unsigned AllyColorsRealColor(int index, unsigned shown);
