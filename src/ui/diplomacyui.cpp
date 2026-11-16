@@ -30,6 +30,7 @@ struct State {
 	std::vector<Hit> hits;
 	bool mouseDown = false;
 	DWORD lastRead = 0;
+	int wheelRest = 0;
 };
 
 std::mutex g_lock;
@@ -226,7 +227,7 @@ bool DiplomacyUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 	}
 	case WM_MOUSEWHEEL: {
 		std::lock_guard<std::mutex> lock(g_lock);
-		g_s.view.scroll = std::max(0, std::min(MaxScroll(g_s.view), g_s.view.scroll - GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA));
+		g_s.view.scroll = std::max(0, std::min(MaxScroll(g_s.view), g_s.view.scroll - WheelSteps(g_s.wheelRest, GET_WHEEL_DELTA_WPARAM(wp))));
 		break;
 	}
 	case WM_KEYDOWN:

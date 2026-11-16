@@ -55,6 +55,17 @@ inline int ScrollAtThumb(int max, int trackLen, int thumbLen, int thumbTop)
 // One page up (dir < 0) or down from where the scroll is.
 inline int ScrollPaged(const ScrollSpan &s, int dir) { return ScrollClamp(s.pos + (dir < 0 ? -1 : 1) * std::max(1, s.page), s.max); }
 
+// The notches of a WM_MOUSEWHEEL delta. Touchpads and free-spinning wheels send steps smaller than WHEEL_DELTA, which a plain division
+// drops: they add up in `rest` until they make a notch, and a turn the other way starts again from nothing.
+inline int WheelSteps(int &rest, int delta)
+{
+	if ((rest > 0 && delta < 0) || (rest < 0 && delta > 0)) rest = 0;
+	rest += delta;
+	const int steps = rest / WHEEL_DELTA;
+	rest -= steps * WHEEL_DELTA;
+	return steps;
+}
+
 // A hit with this action is a scroll bar: `arg` is the id its screen gave it, `r` its track and the rest where its thumb was painted.
 constexpr int kHitScrollbar = -0x5c0;
 

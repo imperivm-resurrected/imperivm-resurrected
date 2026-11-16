@@ -26,6 +26,7 @@ struct State {
 	Painted painted;
 	bool mouseDown = false;
 	DWORD lastRead = 0;
+	int wheelRest = 0;
 };
 
 std::mutex g_lock;
@@ -144,7 +145,7 @@ bool ConquestUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 			break;
 		case WM_MOUSEWHEEL:
 			// The wheel carries screen coordinates: the last position of the mouse is the one inside the game.
-			if (Inside(pt.panel, mouse)) ScrollBy(-GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA * kWheelLines);
+			if (Inside(pt.panel, mouse)) ScrollBy(-ui::WheelSteps(g_s.wheelRest, GET_WHEEL_DELTA_WPARAM(wp)) * kWheelLines);
 			return Inside(pt.panel, mouse) || Inside(pt.path, mouse) || Inside(pt.legend, mouse);
 		case WM_LBUTTONUP:
 			g_s.view.bar = ui::ScrollDrag();

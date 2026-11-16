@@ -56,7 +56,7 @@ std::vector<Hit> g_hits;
 int g_tabAction = -1;
 // 0 the ways to support, 1 the honour roll.
 int g_tab = 0;
-int g_rollScroll = 0, g_rollScrollMax = 0;
+int g_rollScroll = 0, g_rollScrollMax = 0, g_rollWheel = 0;
 ScrollDrag g_rollBar;
 const int kRollBar = 0;
 
@@ -569,8 +569,8 @@ bool SupportHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 	case WM_MBUTTONDOWN:
 	case WM_MBUTTONUP:
 	case WM_MOUSEWHEEL:
-		if (g_tab == 1) {
-			g_rollScroll -= GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA * kRollRowH * 2;
+		if (msg == WM_MOUSEWHEEL && g_tab == 1) {
+			g_rollScroll -= WheelSteps(g_rollWheel, GET_WHEEL_DELTA_WPARAM(wp)) * kRollRowH * 2;
 			g_rollScroll = std::max(0, std::min(g_rollScroll, g_rollScrollMax));
 		}
 		return true;
