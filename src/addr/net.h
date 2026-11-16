@@ -46,6 +46,8 @@ inline constexpr uintptr_t kShellRemovePlayer = 0x0064d780;
 inline constexpr uintptr_t kCTCPAddrGetIP = 0x0064fdd0;
 inline constexpr uintptr_t kNetComputeGameVersionHash = 0x006d98d0;
 inline constexpr uintptr_t kNetUiCallback = 0x006e1b90;
+// GameSpy SDK: peerLeaveRoomA(peer, roomType, reason), which reads the peer without checking it.
+inline constexpr uintptr_t kPeerLeaveRoomA = 0x0072baf0;
 inline constexpr uintptr_t kWantsToQuitVtable = 0x007bbcd0;
 inline constexpr uintptr_t kCmdMessageExecSlot = 0x007bbe98;
 inline constexpr uintptr_t kMultiplayerVtable = 0x007c2858;

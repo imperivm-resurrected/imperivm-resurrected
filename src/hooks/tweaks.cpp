@@ -73,6 +73,21 @@ void InstallCrashFix()
 	LogI("boot", "crash protection: %d of %d sites protected", done, static_cast<int>(sizeof(addr::kCrashFixSites) / sizeof(addr::kCrashFixSites[0])));
 }
 
+// The room's Leave (button 0x9007 of CVXUIMultiplayerGame::OnMessage) leaves the GameSpy staging room whenever the online service
+// exists, and the service only gets its peer once GameSpy's availability check has answered (COnlineService::Think). A room made
+// straight from the menu and left before that, or with GameSpy unreachable, closed the game reading peer+0x60.
+typedef void(__cdecl *PeerLeaveRoom_t)(void *peer, int roomType, const char *reason);
+PeerLeaveRoom_t g_origPeerLeaveRoom = nullptr;
+
+void __cdecl HookPeerLeaveRoom(void *peer, int roomType, const char *reason)
+{
+	if (!peer) {
+		LogI("net", "GameSpy: no peer to leave the room with, skipped");
+		return;
+	}
+	g_origPeerLeaveRoom(peer, roomType, reason);
+}
+
 void RepaintClosedMenusWhole()
 {
 	const uint8_t original[] = {0x6a, 0x01, 0x6a, 0x00, 0xff, 0x50, 0x30};
@@ -670,6 +685,7 @@ void InstallTweaks(bool knownExe)
 		return;
 	}
 	if (GetConfig().crashFix) InstallCrashFix();
+	HookAt(addr::kPeerLeaveRoomA, reinterpret_cast<void *>(&HookPeerLeaveRoom), reinterpret_cast<void **>(&g_origPeerLeaveRoom), "peerLeaveRoomA");
 	RepaintClosedMenusWhole();
 	HookAt(addr::kShowPausedMenu, reinterpret_cast<void *>(&HookShowPausedMenu), reinterpret_cast<void **>(&g_origShowPausedMenu), "ShowPausedMenu");
 	HookAt(addr::kRequestPause, reinterpret_cast<void *>(&HookRequestPause), reinterpret_cast<void **>(&g_origRequestPause), "CVXGameMultiplayer::RequestPause");
