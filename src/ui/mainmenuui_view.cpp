@@ -124,6 +124,10 @@ void EnsureMenuFonts(float s)
 {
 	EnsureFonts(s);
 	if (g_f.list && g_f.s == s) return;
+	// DeleteObject refuses a font still selected into a DC: the measuring DC always holds the list's, the canvas the last one it drew with.
+	for (HDC dc : {g_canvas.dc, g_measure}) {
+		if (dc) SelectObject(dc, GetStockObject(SYSTEM_FONT));
+	}
 	for (HFONT f : {g_f.list, g_f.sub}) {
 		if (f) DeleteObject(f);
 	}
