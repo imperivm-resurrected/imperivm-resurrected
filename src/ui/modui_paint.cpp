@@ -951,11 +951,9 @@ void PaintInstalled(Painter &p, const State &st)
 			problems ? pal::bad : pal::textDim);
 		return;
 	}
-	const ModInfo *m = nullptr;
-	if (st.selected >= 0 && st.selected < static_cast<int>(st.rows.size())) {
-		m = FindModIn(st.mods, st.rows[st.selected].folder);
-	}
-	if (!m && st.selected >= 0 && st.selected < static_cast<int>(st.rows.size())) {
+	const Row *sel = SelectedRow(st);
+	const ModInfo *m = sel ? FindModIn(st.mods, sel->folder) : nullptr;
+	if (!m && sel) {
 		p.Font(0);
 		p.TextWrapped(dx, top, dw, 100, "This content pack is in the profile, but its folder is no longer in the content folder (it was probably deleted by hand).", pal::bad);
 		p.Button(dx, btnY, 260, btnH, "Remove from the profile", kForget, st.selected, mx, my, true, false, 0);

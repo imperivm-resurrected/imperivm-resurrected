@@ -84,8 +84,8 @@ void DoAction(int action, int arg)
 					g_s.verHas = true;
 				}
 			}
-			else if (g_s.selected >= 0 && g_s.selected < static_cast<int>(g_s.rows.size())) {
-				const ModInfo *m = FindMod(g_s.rows[g_s.selected].folder);
+			else if (const Row *sel = SelectedRow(g_s)) {
+				const ModInfo *m = FindMod(sel->folder);
 				const std::shared_ptr<const GbMod> io = m && m->gbId ? GbInfo(m->gbId) : nullptr;
 				if (io) {
 					g_s.verMod = *io;
@@ -135,9 +135,8 @@ void DoAction(int action, int arg)
 			}
 		}
 		else if (ctrl) {
-			if (g_s.marked.empty() && g_s.selected >= 0 && g_s.selected < static_cast<int>(g_s.rows.size()) && g_s.selected != arg) {
-				g_s.marked.push_back(g_s.rows[g_s.selected].folder);
-			}
+			const Row *sel = SelectedRow(g_s);
+			if (g_s.marked.empty() && sel && g_s.selected != arg) g_s.marked.push_back(sel->folder);
 			const auto it = std::find(g_s.marked.begin(), g_s.marked.end(), folder);
 			if (it == g_s.marked.end()) g_s.marked.push_back(folder);
 			else g_s.marked.erase(it);
@@ -183,8 +182,8 @@ void DoAction(int action, int arg)
 	case kBulkOff: SetActive(g_s.marked, false); break;
 	case kBulkUninstall: AskUninstall(g_s.marked); break;
 	case kSetActive:
-		if (g_s.selected >= 0 && g_s.selected < static_cast<int>(g_s.rows.size())) {
-			const Row r = g_s.rows[g_s.selected];
+		if (const Row *sel = SelectedRow(g_s)) {
+			const Row r = *sel;
 			SetActive({r.folder}, !r.active);
 		}
 		break;
@@ -219,9 +218,11 @@ void DoAction(int action, int arg)
 		SetStatus(ModsRestartNeeded() ? TrFmt("The files of %s will be used after restarting", {name}) : TrFmt("The files of %s are used", {name}));
 		break;
 	}
-	case kOpenMod:
-		OpenFolderAsync(g_s.selected >= 0 && g_s.selected < static_cast<int>(g_s.rows.size()) ? g_s.rows[g_s.selected].folder : "");
+	case kOpenMod: {
+		const Row *sel = SelectedRow(g_s);
+		OpenFolderAsync(sel ? sel->folder : "");
 		break;
+	}
 	case kApply:
 		if (ModsRestartNeeded()) {
 			g_s.confirm = true;
@@ -366,8 +367,8 @@ void DoAction(int action, int arg)
 		}
 		break;
 	case kOpenSource:
-		if (g_s.selected >= 0 && g_s.selected < static_cast<int>(g_s.rows.size())) {
-			const ModInfo *m = FindMod(g_s.rows[g_s.selected].folder);
+		if (const Row *sel = SelectedRow(g_s)) {
+			const ModInfo *m = FindMod(sel->folder);
 			const std::shared_ptr<const GbMod> io = m && m->gbId ? GbInfo(m->gbId) : nullptr;
 			if (io) OpenWeb(io->page);
 		}
@@ -419,8 +420,9 @@ void DoAction(int action, int arg)
 		break;
 	}
 	case kReinstall: {
-		if (g_s.selected < 0 || g_s.selected >= static_cast<int>(g_s.rows.size())) break;
-		const ModInfo *m = FindMod(g_s.rows[g_s.selected].folder);
+		const Row *sel = SelectedRow(g_s);
+		if (!sel) break;
+		const ModInfo *m = FindMod(sel->folder);
 		if (!m || !m->gbId) break;
 		CatalogEntry e;
 		e.id = m->id;
@@ -432,8 +434,9 @@ void DoAction(int action, int arg)
 		break;
 	}
 	case kUpdateMod: {
-		if (g_s.selected < 0 || g_s.selected >= static_cast<int>(g_s.rows.size())) break;
-		const ModInfo *m = FindMod(g_s.rows[g_s.selected].folder);
+		const Row *sel = SelectedRow(g_s);
+		if (!sel) break;
+		const ModInfo *m = FindMod(sel->folder);
 		CatalogEntry e;
 		if (m && FindUpdateFor(g_s, *m, e)) DlUpdateMod(m->folder, e);
 		break;

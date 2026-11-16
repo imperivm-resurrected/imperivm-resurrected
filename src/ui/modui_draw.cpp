@@ -38,7 +38,8 @@ void ModUiDraw(uint32_t *buf, int w, int h)
 		std::lock_guard<std::mutex> lock(g_lock);
 		if (!g_s.open) ModsWatchStop();
 		if (g_s.open && ModsListSerial() != g_s.listSerial) {
-			const std::string keep = g_s.selected >= 0 && g_s.selected < static_cast<int>(g_s.rows.size()) ? g_s.rows[g_s.selected].folder : "";
+			const Row *sel = SelectedRow(g_s);
+			const std::string keep = sel ? sel->folder : "";
 			Reload();
 			if (!keep.empty()) SelectFolder(keep);
 			g_s.marked.erase(std::remove_if(g_s.marked.begin(), g_s.marked.end(), [](const std::string &f) { return !FindMod(f); }), g_s.marked.end());

@@ -83,10 +83,16 @@ std::string OverlapText(const ModOverlap &ov)
 	return TrFmt("Same files as %s (%s): %s from this pack and %s from the other are used", {ov.name, files, std::to_string(ov.mine), std::to_string(ov.theirs)}) + choice;
 }
 
+const Row *SelectedRow(const State &st)
+{
+	return st.selected >= 0 && st.selected < static_cast<int>(st.rows.size()) ? &st.rows[st.selected] : nullptr;
+}
+
 const ModIssues *SelectedIssues(const State &st)
 {
-	if (st.selected < 0 || st.selected >= static_cast<int>(st.rows.size())) return nullptr;
-	const auto it = st.issues->find(st.rows[st.selected].folder);
+	const Row *sel = SelectedRow(st);
+	if (!sel) return nullptr;
+	const auto it = st.issues->find(sel->folder);
 	return it == st.issues->end() ? nullptr : &it->second;
 }
 
@@ -143,7 +149,7 @@ bool IsMarked(const State &st, const std::string &folder)
 std::vector<std::string> Targets(const State &st)
 {
 	if (!st.marked.empty()) return st.marked;
-	if (st.selected >= 0 && st.selected < static_cast<int>(st.rows.size())) return {st.rows[st.selected].folder};
+	if (const Row *sel = SelectedRow(st)) return {sel->folder};
 	return {};
 }
 
@@ -752,8 +758,9 @@ std::vector<std::pair<std::string, int>> RowMenu(const State &st)
 std::vector<std::pair<std::string, int>> ModMenu(const State &st)
 {
 	std::vector<std::pair<std::string, int>> out;
-	if (st.selected < 0 || st.selected >= static_cast<int>(st.rows.size())) return out;
-	const ModInfo *m = FindModIn(st.mods, st.rows[st.selected].folder);
+	const Row *sel = SelectedRow(st);
+	if (!sel) return out;
+	const ModInfo *m = FindModIn(st.mods, sel->folder);
 	if (m && m->gbId) out.push_back({"Other versions...", kMenuVersions});
 	out.push_back({"Uninstall...", kMenuUninstall});
 	return out;
@@ -796,7 +803,7 @@ void RunRowMenu(int index)
 	std::vector<std::string> targets = MenuTargets(g_s);
 	if (modMenu) {
 		targets.clear();
-		if (g_s.selected >= 0 && g_s.selected < static_cast<int>(g_s.rows.size())) targets.push_back(g_s.rows[g_s.selected].folder);
+		if (const Row *sel = SelectedRow(g_s)) targets.push_back(sel->folder);
 	}
 	g_s.drop = kDropNone;
 	if (index < 0 || index >= static_cast<int>(items.size())) return;
