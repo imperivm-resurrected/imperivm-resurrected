@@ -416,6 +416,9 @@ bool RoomHasNoSeat(const State &st);
 // Whether the list shows a room with `filter` (State::filter: 0 all, 1 friends', 6 with open slots, 7 being played) and the search
 // typed.
 bool RoomShown(const State &st, const OnlineLobby &g, int filter);
+// The two halves of RoomShown: the filter, and the search typed.
+bool RoomInFilter(const OnlineLobby &g, int filter);
+bool RoomMatchesSearch(const State &st, const OnlineLobby &g);
 std::vector<int> Visible(const State &st);
 // Selects the room on `row` of Visible (kept in the list), and puts its card back at the top when it is another room.
 void SelectRoom(int row);

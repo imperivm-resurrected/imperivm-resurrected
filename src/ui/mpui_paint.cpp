@@ -481,8 +481,8 @@ void PaintPassPrompt(Painter &p, const State &st)
 	DialogButtons(p, d, {{"OK", kPassOk, 0, true}, {"Cancel", kPassCancel}}, mx, my);
 }
 
-// The line under a room's name: the saved game it continues or the game being played, a Steam friend in it, its password, and its
-// spectators.
+// The line under a room's name: the saved game it continues or the game being played, a Steam friend in it (`friends` sorted), its
+// password, and its spectators.
 std::string RoomSubline(const OnlineLobby &g, const std::vector<uint64_t> &friends, long long nowMs)
 {
 	std::vector<std::string> parts;
@@ -493,7 +493,7 @@ std::string RoomSubline(const OnlineLobby &g, const std::vector<uint64_t> &frien
 	}
 	else if (!g.saveName.empty()) parts.push_back(TrFmt("Continues the saved game \"%s\"", {g.saveName}));
 	for (size_t i = 0; i < g.playerIds.size() && i < g.playerNames.size(); i++) {
-		if (g.playerIds[i] == g.owner || std::find(friends.begin(), friends.end(), g.playerIds[i]) == friends.end()) continue;
+		if (g.playerIds[i] == g.owner || !std::binary_search(friends.begin(), friends.end(), g.playerIds[i])) continue;
 		parts.push_back(TrFmt("with your friend %s", {g.playerNames[i]}));
 		break;
 	}
@@ -519,9 +519,14 @@ void PaintList(Painter &p, const State &st)
 			int filter;
 			const char *label;
 		} kTabs[] = {{0, "Every room"}, {6, "Open to join"}, {7, "Live"}, {1, "Friends'"}};
+		const int kTabCount = static_cast<int>(sizeof(kTabs) / sizeof(kTabs[0]));
+		int counts[kTabCount] = {};
+		for (const OnlineLobby &g : st.lobbies) {
+			if (!RoomMatchesSearch(st, g)) continue;
+			for (int t = 0; t < kTabCount; t++) counts[t] += RoomInFilter(g, kTabs[t].filter) ? 1 : 0;
+		}
 		for (const auto &tab : kTabs) {
-			int count = 0;
-			for (const OnlineLobby &g : st.lobbies) count += RoomShown(st, g, tab.filter) ? 1 : 0;
+			const int count = counts[&tab - kTabs];
 			const bool on = st.filter == tab.filter;
 			SelectObject(p.dc, BrandFont(BrandFace::UiStrong, 13, p.s));
 			const int textW = p.CapsWidth(tab.label, 2);
@@ -623,7 +628,8 @@ void PaintList(Painter &p, const State &st)
 	}
 	fit = std::max(1, fit);
 	// Whose rooms have a Steam friend in them.
-	const std::vector<uint64_t> friends = SteamFriendIds();
+	std::vector<uint64_t> friends = SteamFriendIds();
+	std::sort(friends.begin(), friends.end());
 	const long long nowMs = static_cast<long long>(std::time(nullptr)) * 1000;
 	int cursor = rowsTop;
 	for (int r = first; r < count && r < first + fit; r++) {
