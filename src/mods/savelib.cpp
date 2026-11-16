@@ -90,7 +90,7 @@ bool MoveToOnlineFolder(SaveRec &r)
 		LogW("saves", "could not move \"%s\" to the folder %s (error %lu)", r.vfsPath.c_str(), kSaveOnlineFolder, GetLastError());
 		return false;
 	}
-	MoveSaveSideFiles(r.diskPath, target);
+	if (!MoveSaveSideFiles(r.diskPath, target)) LogW("saves", "some files beside \"%s\" could not follow it to the folder %s", r.vfsPath.c_str(), kSaveOnlineFolder);
 	const std::string oldVfs = r.vfsPath;
 	r.vfsPath = "Profiles/" + r.profile + "/" + kSaveOnlineFolder + "/" + base + ext;
 	r.diskPath = target;
@@ -313,7 +313,7 @@ std::string SaveLibRename(const SaveRec &rec, const std::string &newName)
 	if (SaveLibIsAutosaveName(newName)) return "That name is reserved for autosaves";
 	if (SaveLibExists(rec, newName)) return "A game with that name already exists";
 	if (!MoveFileA(rec.diskPath.c_str(), target.c_str())) return "Couldn't change the name";
-	MoveSaveSideFiles(rec.diskPath, target);
+	if (!MoveSaveSideFiles(rec.diskPath, target)) LogW("saves", "some files beside \"%s\" could not follow it to its new name", rec.vfsPath.c_str());
 	if (rec.autosave) {
 		Json j;
 		if (ReadJsonFile(target + ".mods.json", j)) {

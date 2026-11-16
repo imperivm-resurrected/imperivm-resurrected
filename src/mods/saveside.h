@@ -7,5 +7,6 @@
 // The files kept beside a save, named after it: "<save>.bmp" and so on.
 inline constexpr const char *kSaveSideSuffixes[] = {".bmp", ".cameras", ".mods.json", ".stats", ".objectives"};
 
-// Moves the side files of the save `from` to the save `to`. A side file that `from` lacks is deleted at `to`.
-void MoveSaveSideFiles(const std::string &from, const std::string &to);
+// Moves the side files of the save `from` to the save `to`, copying the ones that cannot be moved. A side file that `from` lacks is
+// deleted at `to`. False when one could be neither moved nor copied: it is still beside `from`.
+bool MoveSaveSideFiles(const std::string &from, const std::string &to);
