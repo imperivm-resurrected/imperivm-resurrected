@@ -51,6 +51,8 @@ struct Config {
 	bool smoothScroll = true;
 	int healthBarOwners = 0;
 	bool healthBarHeroesOnly = false;
+	// [Game] AllyColors: on this PC, the player blue, allies yellow and enemies red in the game (game/allycolors.h).
+	bool allyColors = false;
 	bool pauseInBackground = false;
 	bool zoomExtras = true;
 	bool zoomFog = true;

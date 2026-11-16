@@ -36,6 +36,7 @@ inline constexpr uintptr_t kProductionFoodBase = 0x009bf7c0;
 inline constexpr uintptr_t kExpThresholds = 0x009bf880;
 inline constexpr uintptr_t kHealthInHolderFactor = 0x009c08fc;
 inline constexpr uintptr_t kSelectionManager = 0x009c0938;
+inline constexpr uintptr_t kPaletteShaderCache = 0x009dcce4;
 inline constexpr uintptr_t kVisibleMgr = 0x009edd18;
 inline constexpr uintptr_t kHealthBarMode = 0x009edd20;
 inline constexpr uintptr_t kLanguageSettings = 0x00a6a618;

@@ -7,6 +7,7 @@
 #include "core/config.h"
 #include "core/guard.h"
 #include "core/log.h"
+#include "game/allycolors.h"
 #include "game/autosave.h"
 #include "game/cheats.h"
 #include "game/controls.h"
@@ -84,6 +85,7 @@ LRESULT GameWindowHandler(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 	}
 	if (SpectatorHandleKey(msg, static_cast<unsigned>(wp), static_cast<long>(lp))) return 0;
 	if (CheatsHandleKey(msg, static_cast<unsigned>(wp), static_cast<long>(lp))) return 0;
+	if (AllyColorsHandleKey(msg, static_cast<unsigned>(wp))) return 0;
 	if (OverlayHandleKey(msg, wp, lp)) return 0;
 	{
 		unsigned vk;

@@ -11,6 +11,7 @@
 #include "addr/state.h"
 #include "addr/world.h"
 #include "core/log.h"
+#include "game/allycolors.h"
 #include "hooks/gameload.h"
 
 namespace {
@@ -102,7 +103,8 @@ bool ReadPlayer(const char *game, int index, RawPlayer &out)
 		}
 		const char *name = Field<unsigned>(player, kPlayerNameCapacity) < 0x10 ? player + kPlayerName : Field<const char *>(player, kPlayerName);
 		for (size_t i = 0; name && i + 1 < sizeof(out.name) && name[i]; i++) out.name[i] = name[i];
-		const unsigned color = Field<unsigned>(player, kPlayerColor);
+		// The player's own colour, not the ally or enemy one this PC may draw them in.
+		const unsigned color = AllyColorsRealColor(index, Field<unsigned>(player, kPlayerColor));
 		out.rgb = ((color >> 10 & 0x1f) * 255 / 31) << 16 | ((color >> 5 & 0x1f) * 255 / 31) << 8 | ((color & 0x1f) * 255 / 31);
 		return true;
 	}

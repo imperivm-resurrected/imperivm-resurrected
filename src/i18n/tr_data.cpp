@@ -3308,6 +3308,9 @@ extern const TrRow kTrRows[] = {
 	{"A loss (or a void game before minute 3), and 10 minutes, 30 minutes, 2 hours and then a day out of the queue, by your abandons of the last 30 days.", "Una derrota (o una partida nula antes del minuto 3), y 10 minutos, 30 minutos, 2 horas y luego un día fuera de la cola, según tus abandonos de los últimos 30 días.", "Una sconfitta (o una partita nulla prima del minuto 3), e 10 minuti, 30 minuti, 2 ore e poi un giorno fuori dalla coda, secondo i tuoi abbandoni degli ultimi 30 giorni."},
 	{"Team colors", "Colores por equipo", "Colori per squadra"},
 	{"Each team gets a family of colors: team 1 reds, team 2 blues, team 3 greens and team 4 yellows. While it is on, the colors follow the teams.", "Cada equipo recibe una familia de colores: el 1 rojos, el 2 azules, el 3 verdes y el 4 amarillos. Mientras esté activo, los colores siguen a los equipos.", "Ogni squadra riceve una famiglia di colori: la 1 rossi, la 2 blu, la 3 verdi e la 4 gialli. Finché è attivo, i colori seguono le squadre."},
+	{"Ally and enemy colors", "Colores de aliados y enemigos", "Colori di alleati e nemici"},
+	{"you blue, allies yellow, enemies red; only on your screen", "tú en azul, aliados en amarillo y enemigos en rojo; solo en tu pantalla", "tu in blu, alleati in giallo e nemici in rosso; solo sul tuo schermo"},
+	{"You blue, allies yellow, enemies red, only on your screen; a key in Controls switches it during the game", "Tú en azul, aliados en amarillo y enemigos en rojo, solo en tu pantalla; una tecla de Controles lo cambia durante la partida", "Tu in blu, alleati in giallo e nemici in rosso, solo sul tuo schermo; un tasto dei Comandi lo cambia durante la partita"},
 	{"Problem reported: the league will review the game.", "Problema informado: la liga revisará la partida.", "Problema segnalato: la lega esaminerà la partita."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

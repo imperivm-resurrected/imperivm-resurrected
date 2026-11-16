@@ -1,0 +1,193 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 THIONG
+// Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
+#define NOMINMAX
+#include <windows.h>
+
+#include "MinHook.h"
+#include "core/config.h"
+#include "core/log.h"
+#include "game/allycolors.h"
+#include "game/controls.h"
+#include "game/diplomacyrules.h"
+#include "hooks/hookcount.h"
+
+#include <cstdint>
+
+#include "addr/state.h"
+#include "addr/world.h"
+
+namespace {
+
+// CVXGame: the local player and the 16 players of 800 bytes. CVXPlayer: its id, its diplomacy towards each id, whether it plays, its
+// state, its 64 shades and its colour (RGB555).
+const size_t kLocalPlayer = 0x12c8, kPlayersStart = 0x12cc, kPlayerSize = 800;
+const size_t kPlayerId = 8, kPlayerFlags = 0x24, kPlayerActive = 0x64, kPlayerState = 0x290, kPlayerShades = 0x294, kPlayerColor = 0x314;
+const int kPlayers = 16;
+// The screen's rectangle in CVXVisibleMgr, which InvalidateRect takes to redraw it all.
+const size_t kVisibleScreenRect = 0x618;
+// CVXPersistArchive: its mode, in ints.
+const int kArchiveMode = 4, kArchiveLoading = 1;
+
+constexpr unsigned Rgb555(unsigned r, unsigned g, unsigned b)
+{
+	return (r >> 3) << 10 | (g >> 3) << 5 | (b >> 3);
+}
+// Blue, yellow and red of the game's own palette: red and yellow tell apart for most colour-blind players, as blue does from both.
+const unsigned kSelfColor = Rgb555(0, 0, 255), kAllyColor = Rgb555(255, 255, 0), kEnemyColor = Rgb555(255, 0, 0);
+
+typedef void(__cdecl *BuildShades_t)(unsigned color, unsigned short *out);
+typedef void(__fastcall *ClearCache_t)(void *cache);
+typedef void(__cdecl *RefreshVisuals_t)();
+typedef void(__fastcall *Invalidate_t)(void *mgr, void *edx, int *rect);
+typedef void(__fastcall *Serialize_t)(void *player, void *edx, int *archive);
+Serialize_t g_origSerialize = nullptr;
+
+// What this PC shows of each player of the game being played: their real colour, and the one drawn now. Only the game thread uses it.
+struct Shown {
+	const char *game = nullptr;
+	bool known[kPlayers] = {};
+	unsigned real[kPlayers] = {}, drawn[kPlayers] = {};
+};
+Shown g_shown;
+
+template <typename T> T &At(const char *base, size_t offset)
+{
+	return *reinterpret_cast<T *>(const_cast<char *>(base) + offset);
+}
+
+const char *PlayerAt(const char *game, int index)
+{
+	return game + kPlayersStart + static_cast<size_t>(index) * kPlayerSize;
+}
+
+int IndexOf(const char *game, const void *player)
+{
+	if (!game || !player) return -1;
+	const ptrdiff_t at = static_cast<const char *>(player) - (game + kPlayersStart);
+	if (at < 0 || at % kPlayerSize || at / static_cast<ptrdiff_t>(kPlayerSize) >= kPlayers) return -1;
+	return static_cast<int>(at / kPlayerSize);
+}
+
+// The colour a player takes on this PC: theirs without the option, else by their diplomacy with the local player. Allies are those in
+// mutual ceasefire (at peace or allied); anyone who can attack, or be attacked, is an enemy.
+unsigned Wanted(const char *game, int index, const char *local, bool on)
+{
+	if (!on || !local) return g_shown.real[index];
+	const char *player = PlayerAt(game, index);
+	if (player == local) return kSelfColor;
+	const int ours = At<int>(local, kPlayerId), theirs = At<int>(player, kPlayerId);
+	if (ours < 0 || ours >= kPlayers || theirs < 0 || theirs >= kPlayers) return g_shown.real[index];
+	const bool peace = (At<unsigned>(local, kPlayerFlags + theirs * 4) & diplomacy::kCeasefire) != 0 &&
+		(At<unsigned>(player, kPlayerFlags + ours * 4) & diplomacy::kCeasefire) != 0;
+	return peace ? kAllyColor : kEnemyColor;
+}
+
+// Redraws the players with their new shades, as the editor does when it changes a colour.
+void Redraw()
+{
+	reinterpret_cast<ClearCache_t>(addr::kPaletteShaderCacheClear)(*reinterpret_cast<void **>(addr::kPaletteShaderCache));
+	reinterpret_cast<RefreshVisuals_t>(addr::kRefreshMapVisuals)();
+	char *mgr = *reinterpret_cast<char **>(addr::kVisibleMgr);
+	if (mgr) reinterpret_cast<Invalidate_t>(addr::kVisibleMgrInvalidateRect)(mgr, nullptr, reinterpret_cast<int *>(mgr + kVisibleScreenRect));
+}
+
+bool Step()
+{
+	__try {
+		const char *game = *reinterpret_cast<const char *const *>(addr::kGame);
+		if (game != g_shown.game) {
+			g_shown = Shown();
+			g_shown.game = game;
+		}
+		if (!game || !*reinterpret_cast<void **>(addr::kMap)) return false;
+		const char *local = *reinterpret_cast<const char *const *>(game + kLocalPlayer);
+		// Never in the editor, whose colours are the map's own.
+		const bool on = GetConfig().allyColors && local && IndexOf(game, local) >= 0 && !*reinterpret_cast<int *>(addr::kEditorMode);
+		bool changed = false;
+		for (int i = 0; i < kPlayers; i++) {
+			const char *player = PlayerAt(game, i);
+			const unsigned now = At<unsigned>(player, kPlayerColor) & 0x7fff;
+			if (!g_shown.known[i]) {
+				g_shown.known[i] = true;
+				g_shown.real[i] = g_shown.drawn[i] = now;
+			}
+			// Something else gave the player another colour (the editor, a game loaded): that one is theirs now.
+			else if (now != g_shown.drawn[i]) g_shown.real[i] = now;
+			const bool plays = At<int>(player, kPlayerActive) != 0 || At<int>(player, kPlayerState) != 0;
+			const unsigned want = plays ? Wanted(game, i, local, on) : g_shown.real[i];
+			g_shown.drawn[i] = want;
+			if (want == now) continue;
+			At<unsigned>(player, kPlayerColor) = want;
+			reinterpret_cast<BuildShades_t>(addr::kBuildColorShadeTable)(want, &At<unsigned short>(player, kPlayerShades));
+			changed = true;
+		}
+		if (changed) Redraw();
+		return changed;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		g_shown = Shown();
+		return false;
+	}
+}
+
+// A save keeps the real colours: the player's goes back for its section and the shown one returns after it. Loading writes the colour
+// read, which is the real one from then on.
+void __fastcall HookPlayerSerialize(void *player, void *edx, int *archive)
+{
+	const char *game = *reinterpret_cast<const char *const *>(addr::kGame);
+	const int i = game == g_shown.game ? IndexOf(game, player) : -1;
+	unsigned &color = At<unsigned>(static_cast<const char *>(player), kPlayerColor);
+	// The archive's mode (+0x10) is 1 while loading: the game then rebuilds the shades from the colour read.
+	if (i >= 0 && archive && archive[kArchiveMode] == kArchiveLoading) {
+		g_origSerialize(player, edx, archive);
+		g_shown.known[i] = true;
+		g_shown.real[i] = g_shown.drawn[i] = color & 0x7fff;
+		return;
+	}
+	if (i < 0 || !g_shown.known[i] || g_shown.drawn[i] == g_shown.real[i]) {
+		g_origSerialize(player, edx, archive);
+		return;
+	}
+	const unsigned drawn = color;
+	color = g_shown.real[i];
+	g_origSerialize(player, edx, archive);
+	color = drawn;
+}
+
+}
+
+void InstallAllyColors(bool knownExe)
+{
+	if (!knownExe) return;
+	void *target = reinterpret_cast<void *>(addr::kPlayerSerialize);
+	const bool ok = HookCreate(target, reinterpret_cast<void *>(&HookPlayerSerialize), reinterpret_cast<void **>(&g_origSerialize)) == MH_OK &&
+		HookEnable(target) == MH_OK;
+	if (ok) LogI("game", "ally and enemy colours: hooked");
+	else LogE("game", "ally and enemy colours: could not hook CVXPlayer::Serialize; the option stays off");
+}
+
+void AllyColorsGameTick()
+{
+	if (!g_origSerialize) return;
+	static bool wasOn = false;
+	const bool on = GetConfig().allyColors;
+	if (Step() && on != wasOn) LogI("game", "ally and enemy colours %s", on ? "shown" : "taken back");
+	wasOn = on;
+}
+
+bool AllyColorsHandleKey(unsigned msg, unsigned wp)
+{
+	if ((msg != WM_KEYDOWN && msg != WM_SYSKEYDOWN) || !g_origSerialize || !*reinterpret_cast<void **>(addr::kGame)) return false;
+	if (!ControlsModKeyPressed(kModKeyAllyColors, wp)) return false;
+	Config &c = MutableConfig();
+	c.allyColors = !c.allyColors;
+	SaveConfig();
+	return true;
+}
+
+unsigned AllyColorsRealColor(int index, unsigned shown)
+{
+	if (index < 0 || index >= kPlayers || !g_shown.known[index] || g_shown.game != *reinterpret_cast<const char *const *>(addr::kGame)) return shown;
+	return g_shown.drawn[index] == (shown & 0x7fff) ? g_shown.real[index] : shown;
+}

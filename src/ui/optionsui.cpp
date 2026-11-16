@@ -160,6 +160,7 @@ void SetExtras(Values &v, const Config &c)
 	v.checks[kPauseInBackground] = c.pauseInBackground;
 	v.checks[kChatBadges] = c.chatBadges;
 	v.checks[kMatchFoundSound] = c.matchFoundSound;
+	v.checks[kAllyColors] = c.allyColors;
 	v.scrolls[kMasterVolume] = c.masterVolume;
 	v.scrolls[kNatureVolume] = c.natureVolume;
 	v.scrolls[kConversationVolume] = c.conversationVolume;
@@ -209,7 +210,7 @@ void SetUpdateStatus(Values &v)
 void CopyExtras(Values &to, const Values &from)
 {
 	CopySystemExtras(to, from);
-	for (int id : {kSmoothCamera, kPauseInBackground, kHealthBarHeroes, kChatBadges, kMatchFoundSound}) {
+	for (int id : {kSmoothCamera, kPauseInBackground, kHealthBarHeroes, kChatBadges, kMatchFoundSound, kAllyColors}) {
 		const auto it = from.checks.find(id);
 		if (it != from.checks.end()) to.checks[id] = it->second;
 	}
@@ -341,6 +342,7 @@ void CommitExtras(const Values &v)
 	c.pauseInBackground = check(kPauseInBackground, c.pauseInBackground);
 	c.chatBadges = check(kChatBadges, c.chatBadges);
 	c.matchFoundSound = check(kMatchFoundSound, c.matchFoundSound);
+	c.allyColors = check(kAllyColors, c.allyColors);
 	CommitDisplayExtras(c, v);
 	ApplySoundLive(v);
 	CommitDevice(v);

@@ -21,6 +21,7 @@
 #include "core/guard.h"
 #include "core/log.h"
 #include "hooks/displaymode.h"
+#include "game/allycolors.h"
 #include "game/autosave.h"
 #include "ui/modui.h"
 #include "ui/conquestui.h"
@@ -578,6 +579,7 @@ int WINAPI HookSetDIBitsToDevice(HDC hdc, int xDest, int yDest, DWORD w, DWORD h
 	GameMenuUiGameTick();
 	LeagueDropUiGameTick();
 	MainMenuUiGameTick();
+	AllyColorsGameTick();
 	DiplomacyUiGameTick();
 	ConquestUiGameTick();
 	ProfileUiGameTick();

@@ -56,6 +56,8 @@ inline constexpr uintptr_t kSetPosition = 0x0053f000;
 inline constexpr uintptr_t kHasProjectileClass = 0x0053f5b0;
 inline constexpr uintptr_t kStartVictoryScripts = 0x00541020;
 inline constexpr uintptr_t kLoadDecorsIni = 0x005441d0;
+// RefreshMapVisualsAfterTerrainEdit: the visuals of the objects and decor on the map made again (after the palette cache is cleared).
+inline constexpr uintptr_t kRefreshMapVisuals = 0x00548930;
 inline constexpr uintptr_t kMapSettlementSite = 0x0054ed96;
 inline constexpr uintptr_t kMapSettlementSkip = 0x0054ee6d;
 inline constexpr uintptr_t kRequestPause = 0x005503b0;
@@ -66,6 +68,8 @@ inline constexpr uintptr_t kNoteManagerCtor = 0x005583a0;
 inline constexpr uintptr_t kRestoreNoteIcons = 0x005586f0;
 inline constexpr uintptr_t kRestoreNoteIconsLoadImage = 0x005587a7;
 constexpr uintptr_t kCrashFixSites[] = {0x0055f500, 0x0057177c, 0x005717f6, 0x005aae23, 0x005aae73};
+// CVXPlayer::Serialize (__thiscall, the archive): the "Player" section of a save, its colour among it.
+inline constexpr uintptr_t kPlayerSerialize = 0x00564780;
 inline constexpr uintptr_t kComputePlayerTotals = 0x0056a6e0;
 inline constexpr uintptr_t kGenerateRandomMap = 0x00587e60;
 inline constexpr uintptr_t kRandomMapRacePrefixes = 0x0058988d;
@@ -126,12 +130,16 @@ inline constexpr uintptr_t kApplySelection = 0x005e7910;
 inline constexpr uintptr_t kClearSelection = 0x005e7e50;
 inline constexpr uintptr_t kInitForPlayer = 0x005e80c0;
 inline constexpr uintptr_t kScrollRowsCountJump = 0x00607e71;
+// BuildColorShadeTable64 (__cdecl, RGB555 colour, ushort[64] out): the 64 shades a player's units are drawn with.
+inline constexpr uintptr_t kBuildColorShadeTable = 0x00607ea0;
 inline constexpr uintptr_t kLoadRleFile = 0x0060ca20;
 inline constexpr uintptr_t kCreateEntityImage = 0x0060cb20;
 inline constexpr uintptr_t kZoomMapHide = 0x0060e5a0;
 inline constexpr uintptr_t kZoomMapOnDraw = 0x00612fc0;
 inline constexpr uintptr_t kZoomFogOverlay = 0x006154a0;
 inline constexpr uintptr_t kRebuild = 0x00616c40;
+// CPaletteShaderCache::Clear (__fastcall, the cache in kPaletteShaderCache): forgets the palettes made from the players' shades.
+inline constexpr uintptr_t kPaletteShaderCacheClear = 0x0061ae00;
 inline constexpr uintptr_t kScreenToMap = 0x006243b0;
 inline constexpr uintptr_t kVisibleMgrInvalidateRect = 0x00625d80;
 inline constexpr uintptr_t kDirtyGridRowsJump = 0x00625dcf;

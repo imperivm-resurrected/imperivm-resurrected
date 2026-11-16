@@ -10,6 +10,7 @@
 #include "core/config.h"
 #include "game/chat.h"
 #include "game/controls.h"
+#include "game/allycolors.h"
 #include "game/diplomacy.h"
 #include "core/crashlog.h"
 #include "hooks/displaymode.h"
@@ -257,6 +258,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 		InstallCreditsHooks(knownExe);
 		InstallControls(knownExe);
 		InstallDiplomacy(knownExe);
+		InstallAllyColors(knownExe);
 		InstallModernAudio(knownExe);
 		InstallSoundLevels(knownExe);
 		HookBatchEnd();
