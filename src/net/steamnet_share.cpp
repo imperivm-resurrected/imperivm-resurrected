@@ -86,10 +86,6 @@ void ListModFiles(const std::string &root, const std::string &rel, std::vector<s
 }
 
 namespace steamnet_impl {
-
-}
-
-namespace steamnet_impl {
 namespace {
 uint64_t TransferBytes(const OutTransfer &t)
 {

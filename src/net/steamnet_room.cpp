@@ -285,7 +285,6 @@ void UpdateRoom()
 	}
 	if (room.owner && room.info.playing) {
 		static std::set<uint64> known;
-		bool reopen = false;
 		for (const OnlineMember &m : room.members) {
 			if (m.me || known.count(m.id)) continue;
 			known.insert(m.id);
@@ -294,7 +293,6 @@ void UpdateRoom()
 				S.SteamAPI_ISteamMatchmaking_SetLobbyJoinable(g_steam.mm, g_lobby, false);
 			}
 			else if (Data(g_lobby, ("k:" + std::to_string(m.id)).c_str()).empty()) {
-				reopen = true;
 				LogW("rejoin", "%s entered the in-game room without permission; out", m.name.c_str());
 				std::string list = Data(g_lobby, "kick");
 				if (list.empty()) list = ";";
@@ -302,7 +300,6 @@ void UpdateRoom()
 				S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, "kick", list.c_str());
 			}
 		}
-		(void)reopen;
 	}
 	if (heldPlaying) {
 		const DWORD tick = GetTickCount();
@@ -480,7 +477,7 @@ std::map<std::string, std::string> g_mainSent;
 void SpecSet(const char *k, const std::string &v)
 {
 	std::string &old = g_spectate.sent[k];
-	if (old == v && g_spectate.sent.count(k)) return;
+	if (old == v) return;
 	old = v;
 	S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_spectate.lobby, k, v.c_str());
 }

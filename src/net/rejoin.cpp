@@ -39,9 +39,6 @@ bool g_quitRaised = false;
 }
 
 namespace rejoin_impl {
-}
-
-namespace rejoin_impl {
 namespace {
 bool g_failed = false;
 }
@@ -106,17 +103,6 @@ bool WriteFileAll(const std::string &path, const std::string &data)
 	const bool ok = fwrite(data.data(), 1, data.size(), f) == data.size();
 	fclose(f);
 	return ok;
-}
-}
-
-namespace rejoin_impl {
-namespace {
-uint64_t FileWriteTime(const std::string &path)
-{
-	WIN32_FILE_ATTRIBUTE_DATA d;
-	if (!GetFileAttributesExA(path.c_str(), GetFileExInfoStandard, &d)) return 0;
-	return (static_cast<uint64_t>(d.ftLastWriteTime.dwHighDateTime) << 32) | d.ftLastWriteTime.dwLowDateTime;
-}
 }
 }
 

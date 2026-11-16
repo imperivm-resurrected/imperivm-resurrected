@@ -170,9 +170,6 @@ MapIn g_mapIn;
 }
 
 namespace steamnet_impl {
-}
-
-namespace steamnet_impl {
 namespace {
 OnlineMapStatus &InStatus()
 {

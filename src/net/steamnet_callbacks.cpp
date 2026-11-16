@@ -124,10 +124,8 @@ void OnCallback(int id, const void *data)
 		PublishMods("");
 		set("irver", ModVersionText());
 		set("irlvl", ModsRulesLevel());
-		if (!g_creating.leagueTag.empty()) set("irm", g_creating.leagueTag);
 		set(("k:" + std::to_string(g_steam.me)).c_str(), "1");
 		LogI("steam", "room \"%s\" created (%llu)", g_creating.name.c_str(), g_lobby);
-		LogI("steam", "room created");
 		SetPresence();
 		UpdateRoom();
 		g_spectate.visibility = g_creating.specVisibility >= 0 ? g_creating.specVisibility : g_creating.visibility;
