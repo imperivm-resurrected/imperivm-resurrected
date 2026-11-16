@@ -29,7 +29,8 @@ const DWORD kSegfSecondary = 0x80;
 const DWORD kSegEnd = 1;
 
 ma_engine g_engine;
-bool g_engineReady = false;
+// Set once, under g_deviceMx, when the engine is up; the playback calls and the interface tones read it without that lock.
+std::atomic<bool> g_engineReady{false};
 // The engine plays through a device of the mod's own, so the output can change without rebuilding the sounds.
 ma_context g_context;
 ma_device g_device;
