@@ -24,6 +24,7 @@
 #include "mods/mods.h"
 #include "mods/mappack.h"
 #include "mods/catalogfilter.h"
+#include "mods/folderswap.h"
 #include "mods/gbdownload.h"
 #include "mods/gbcache.h"
 #include "mods/gbref.h"
@@ -1126,29 +1127,31 @@ bool InstallArchiveNow(const std::string &archive, const CatalogEntry &info, con
 		}
 	}
 	const std::string target = ModsDir() + "\\" + folder;
+	const bool replacing = IsDir(target);
+	const std::string backup = WorkDir() + "\\backup\\" + folder + "-" + Timestamp();
+	if (replacing) MakeDirs(WorkDir() + "\\backup");
+	unsigned long error = 0;
+	const FolderSwap swap = SwapInFolder(root, target, backup, error);
 	bool pending = false;
-	if (IsDir(target)) {
-		const std::string backup = WorkDir() + "\\backup\\" + folder + "-" + Timestamp();
-		MakeDirs(WorkDir() + "\\backup");
-		if (!MoveFileExA(target.c_str(), backup.c_str(), 0)) {
-			const std::string pend = WorkDir() + "\\pending\\" + folder;
-			MakeDirs(WorkDir() + "\\pending");
-			DeleteTree(pend);
-			if (!MoveFileExA(root.c_str(), pend.c_str(), 0)) {
-				DeleteTree(tmp);
-				msg = Tr("could not prepare the update for ") + name;
-				return false;
-			}
-			pending = true;
+	if (swap == FolderSwap::kTargetBusy) {
+		const std::string pend = WorkDir() + "\\pending\\" + folder;
+		MakeDirs(WorkDir() + "\\pending");
+		DeleteTree(pend);
+		if (!MoveFileExA(root.c_str(), pend.c_str(), 0)) {
+			DeleteTree(tmp);
+			msg = Tr("could not prepare the update for ") + name;
+			return false;
 		}
-		else {
-			LogI("download", "previous version of %s saved in %s", folder.c_str(), backup.c_str());
-		}
+		pending = true;
 	}
-	if (!pending && !MoveFileExA(root.c_str(), target.c_str(), MOVEFILE_COPY_ALLOWED)) {
+	else if (swap != FolderSwap::kMoved) {
+		if (swap == FolderSwap::kStranded) LogW("download", "could not put back the previous version of %s: it is in %s", folder.c_str(), backup.c_str());
 		DeleteTree(tmp);
-		msg = Tr("could not copy to the content folder (error ") + std::to_string(GetLastError()) + ")";
+		msg = Tr("could not copy to the content folder (error ") + std::to_string(error) + ")";
 		return false;
+	}
+	else if (replacing) {
+		LogI("download", "previous version of %s saved in %s", folder.c_str(), backup.c_str());
 	}
 	DeleteTree(tmp);
 	ModsCancelUninstall(folder);

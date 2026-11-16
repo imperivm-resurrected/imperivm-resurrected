@@ -9,6 +9,7 @@
 #include "i18n/tr.h"
 #include "core/guard.h"
 #include "core/log.h"
+#include "mods/folderswap.h"
 
 #include "mods/mods_internal.h"
 
@@ -146,6 +147,7 @@ void ModsApplyPendingSwaps()
 		}
 		const std::string nwPath = ModsDir() + "\\" + nw, oldPath = ModsDir() + "\\" + old;
 		if (GetFileAttributesA(nwPath.c_str()) == INVALID_FILE_ATTRIBUTES) continue;
+		std::string backup;
 		if (GetFileAttributesA(oldPath.c_str()) != INVALID_FILE_ATTRIBUTES) {
 			SYSTEMTIME t;
 			GetLocalTime(&t);
@@ -153,14 +155,17 @@ void ModsApplyPendingSwaps()
 			sprintf_s(stamp, "%04d%02d%02d-%02d%02d%02d", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
 			CreateDirectoryA((ModsDir() + "\\_downloads").c_str(), nullptr);
 			CreateDirectoryA((ModsDir() + "\\_downloads\\backup").c_str(), nullptr);
-			const std::string backup = ModsDir() + "\\_downloads\\backup\\" + old + "-" + stamp;
-			if (!MoveFileExA(oldPath.c_str(), backup.c_str(), MOVEFILE_COPY_ALLOWED)) {
-				LogW("content", "could not save the previous version of %s (error %lu); the room's copy is kept", old.c_str(), GetLastError());
-				continue;
-			}
+			backup = ModsDir() + "\\_downloads\\backup\\" + old + "-" + stamp;
 		}
-		if (!MoveFileExA(nwPath.c_str(), oldPath.c_str(), MOVEFILE_COPY_ALLOWED)) {
-			LogW("content", "could not put %s in place of %s (error %lu)", nw.c_str(), old.c_str(), GetLastError());
+		unsigned long error = 0;
+		const FolderSwap swap = SwapInFolder(nwPath, oldPath, backup, error);
+		if (swap == FolderSwap::kTargetBusy) {
+			LogW("content", "could not save the previous version of %s (error %lu); the room's copy is kept", old.c_str(), error);
+			continue;
+		}
+		if (swap != FolderSwap::kMoved) {
+			LogW("content", "could not put %s in place of %s (error %lu)", nw.c_str(), old.c_str(), error);
+			if (swap == FolderSwap::kStranded) LogW("content", "could not put back the previous version of %s: it is in %s", old.c_str(), backup.c_str());
 			continue;
 		}
 		for (const std::string &pn : ModsProfileNames()) {
