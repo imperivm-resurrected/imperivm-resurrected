@@ -1185,15 +1185,19 @@ void RunInstall(const CatalogEntry &e, const Json &sources)
 	std::string file;
 	bool usedOtherServers = false;
 	std::string err = DownloadToTemp(e.url, e.bytes, e.name.empty() ? "mod" : e.name, true, file, usedOtherServers);
-	if (err.empty() && usedOtherServers && !e.md5.empty() && HashFile(file, BCRYPT_MD5_ALGORITHM) != e.md5) {
-		LogW("download", "gamebanana: the MD5 hash does not match after changing server; downloading again from the assigned server only");
-		DeleteFileA(file.c_str());
-		err = DownloadToTemp(e.url, e.bytes, e.name.empty() ? "mod" : e.name, false, file, usedOtherServers);
+	bool md5Matched = false;
+	if (err.empty() && usedOtherServers && !e.md5.empty()) {
+		md5Matched = HashFile(file, BCRYPT_MD5_ALGORITHM) == e.md5;
+		if (!md5Matched) {
+			LogW("download", "gamebanana: the MD5 hash does not match after changing server; downloading again from the assigned server only");
+			DeleteFileA(file.c_str());
+			err = DownloadToTemp(e.url, e.bytes, e.name.empty() ? "mod" : e.name, false, file, usedOtherServers);
+		}
 	}
 	if (err.empty() && !e.sha256.empty() && HashFile(file, BCRYPT_SHA256_ALGORITHM) != e.sha256) {
 		err = "the SHA-256 hash does not match the catalog's (file tampered with or damaged)";
 	}
-	if (err.empty() && !e.md5.empty() && HashFile(file, BCRYPT_MD5_ALGORITHM) != e.md5) {
+	if (err.empty() && !md5Matched && !e.md5.empty() && HashFile(file, BCRYPT_MD5_ALGORITHM) != e.md5) {
 		err = "the MD5 hash does not match (damaged file)";
 	}
 	if (!err.empty()) {
