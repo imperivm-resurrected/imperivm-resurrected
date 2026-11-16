@@ -88,8 +88,10 @@ bool ReadPlayer(const char *game, int index, RawPlayer &out)
 		out.local = local == player;
 		if (local && !out.local) {
 			const int ours = Field<int>(local, layout::kPlayerId), theirs = Field<int>(player, layout::kPlayerId);
-			const bool weAlly = (Field<unsigned char>(local, layout::kPlayerDiplomacy + theirs * 4) & 1) != 0;
-			const bool theyAlly = (Field<unsigned char>(player, layout::kPlayerDiplomacy + ours * 4) & 1) != 0;
+			// An id outside the 16 would read past the diplomacy table: that player counts as no ally.
+			const bool known = ours >= 0 && ours < layout::kPlayerCount && theirs >= 0 && theirs < layout::kPlayerCount;
+			const bool weAlly = known && (Field<unsigned char>(local, layout::kPlayerDiplomacy + theirs * 4) & 1) != 0;
+			const bool theyAlly = known && (Field<unsigned char>(player, layout::kPlayerDiplomacy + ours * 4) & 1) != 0;
 			out.ally = weAlly && theyAlly;
 		}
 		const char *name = layout::PlayerName(player);
@@ -108,6 +110,7 @@ bool ReadAllied(const char *game, int a, int b)
 	__try {
 		const char *first = layout::PlayerAt(game, a), *second = layout::PlayerAt(game, b);
 		const int firstId = Field<int>(first, layout::kPlayerId), secondId = Field<int>(second, layout::kPlayerId);
+		if (firstId < 0 || firstId >= layout::kPlayerCount || secondId < 0 || secondId >= layout::kPlayerCount) return false;
 		return (Field<unsigned char>(first, layout::kPlayerDiplomacy + secondId * 4) & 1) != 0 &&
 			(Field<unsigned char>(second, layout::kPlayerDiplomacy + firstId * 4) & 1) != 0;
 	}
