@@ -164,6 +164,7 @@ struct MapIn {
 	bool isSave = false;
 	std::string path, part;
 	HANDLE file = INVALID_HANDLE_VALUE;
+	uint64_t written = 0;
 };
 MapIn g_mapIn;
 }
@@ -403,12 +404,19 @@ bool ClientOnMapMessage(uint64 peer, const uint8_t *data, size_t len)
 		g_mapIn.isSave = f[0] == kSaveTransferPath;
 		g_mapIn.path = file;
 		g_mapIn.part = file + ".partial";
+		g_mapIn.written = 0;
 		MakeDirs(file.substr(0, file.rfind('\\')));
 		g_mapIn.file = CreateFileA(g_mapIn.part.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, 0, nullptr);
 		if (g_mapIn.file == INVALID_HANDLE_VALUE) MapFailed("could not create the file");
 		return true;
 	}
 	if (type == kShData && g_mapIn.file != INVALID_HANDLE_VALUE) {
+		// The host never sends a map or save over kMaxMapBytes (HostOnMapRequest), so more is not one.
+		if (g_mapIn.written + (len - 1) > kMaxMapBytes) {
+			MapFailed("the host sent more data than announced");
+			return true;
+		}
+		g_mapIn.written += len - 1;
 		DWORD wrote = 0;
 		if (!WriteFile(g_mapIn.file, data + 1, static_cast<DWORD>(len - 1), &wrote, nullptr)) {
 			MapFailed("could not write");
