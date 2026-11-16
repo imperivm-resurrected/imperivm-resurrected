@@ -321,13 +321,24 @@ void FitBackBuffer(Gpu &g)
 	if (cw <= 0 || ch <= 0 || (cw == g.bbW && ch == g.bbH && g.rtv)) return;
 	SafeRelease(g.rtv);
 	if (cw != g.bbW || ch != g.bbH) {
-		g.swap->ResizeBuffers(1, cw, ch, DXGI_FORMAT_B8G8R8A8_UNORM, 0);
-		g.bbW = cw;
-		g.bbH = ch;
+		// DXGI refuses the resize while a view of the back buffer is still bound to the context.
+		g.ctx->OMSetRenderTargets(0, nullptr, nullptr);
+		const HRESULT hr = g.swap->ResizeBuffers(1, cw, ch, DXGI_FORMAT_B8G8R8A8_UNORM, 0);
+		if (SUCCEEDED(hr)) {
+			g.bbW = cw;
+			g.bbH = ch;
+		}
+		else {
+			// The old buffer stays and Windows stretches it to the window; the next pass tries again.
+			static bool logged = false;
+			if (!logged) LogW("render", "the back buffer could not be resized to %dx%d (0x%08x)", cw, ch, static_cast<unsigned>(hr));
+			logged = true;
+		}
 	}
 	ID3D11Texture2D *back = nullptr;
-	g.swap->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&back));
-	g.dev->CreateRenderTargetView(back, nullptr, &g.rtv);
+	if (SUCCEEDED(g.swap->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&back))) && back) {
+		g.dev->CreateRenderTargetView(back, nullptr, &g.rtv);
+	}
 	SafeRelease(back);
 }
 
@@ -385,6 +396,7 @@ void PlaceImage(Gpu &g, int fw, int fh)
 
 void DrawImage(Gpu &g)
 {
+	if (!g.rtv) return;
 	const float black[4] = {0, 0, 0, 1};
 	g.ctx->ClearRenderTargetView(g.rtv, black);
 	D3D11_VIEWPORT vp = {0, 0, static_cast<float>(g.bbW), static_cast<float>(g.bbH), 0, 1};
@@ -536,9 +548,13 @@ DWORD WINAPI RenderThread(LPVOID)
 		wasVideo = video;
 		if (MediaMovieShowing()) {
 			if (!movieBlack) {
-				const float black[4] = {0, 0, 0, 1};
-				gpu.ctx->ClearRenderTargetView(gpu.rtv, black);
-				gpu.swap->Present(0, 0);
+				// A movie can already be on screen on the first pass, before the target exists.
+				FitBackBuffer(gpu);
+				if (gpu.rtv) {
+					const float black[4] = {0, 0, 0, 1};
+					gpu.ctx->ClearRenderTargetView(gpu.rtv, black);
+					gpu.swap->Present(0, 0);
+				}
 				movieBlack = true;
 			}
 			Sleep(15);
