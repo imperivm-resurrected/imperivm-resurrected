@@ -245,8 +245,6 @@ void CreateRoom(const TourneyClaim &claim)
 	g_s.autoHost = true;
 	f.phase = RoomFlow::kCreating;
 	f.at = GetTickCount();
-	f.map = claim.map;
-	f.settings = claim.settings;
 	LogI("league", "creating the room of tournament match %lld for %d players", static_cast<long long>(f.match), s.maxPlayers);
 }
 
@@ -1224,7 +1222,6 @@ void TourneyAction(int arg)
 		break;
 	case kSubOpen: OpenPage(SlugOf(value), 0); break;
 	case kSubManage: OpenPage(SlugOf(value), kOrganizerTab); break;
-	case kSubBack: TourneyBack(); break;
 	case kSubPageTab:
 		u.pageTab = static_cast<int>(value);
 		u.bracketX = u.bracketY = u.sideScroll = 0;
@@ -1316,7 +1313,6 @@ void TourneyAction(int arg)
 		u.room.phase = RoomFlow::kClaiming;
 		u.room.match = value;
 		u.room.at = GetTickCount();
-		u.room.opponent = next.opponent.steamId;
 		LogI("league", "going to the room of tournament match %lld", static_cast<long long>(value));
 		LeagueTourneyClaimRoom(value);
 		break;
@@ -1373,7 +1369,6 @@ void TourneyAction(int arg)
 		u.screen = kScreenChampion;
 		break;
 	}
-	case kSubField: FocusField(kTourneyField); break;
 	case kSubPan: {
 		const int page = std::max(200, static_cast<int>((u.bracketArea.r.right - u.bracketArea.r.left) / std::max(0.1f, g_s.uiScale)) * 3 / 4);
 		u.bracketX = std::max(0, std::min(u.bracketArea.maxX, u.bracketX + (value ? page : -page)));
@@ -1715,7 +1710,6 @@ bool TourneyScrollTo(int bar, int pos)
 	switch (bar) {
 	case kBarList: u.listScroll = std::max(0, std::min(u.listArea.max, pos)); return true;
 	case kBarBracketY: u.bracketY = std::max(0, std::min(u.bracketArea.max, pos)); return true;
-	case kBarBracketX: u.bracketX = std::max(0, std::min(u.bracketArea.maxX, pos)); return true;
 	case kBarSide: u.sideScroll = std::max(0, std::min(u.sideArea.max, pos)); return true;
 	case kBarForm: u.formScroll = std::max(0, std::min(u.formArea.max, pos)); return true;
 	case kBarChooser: u.chooserScroll = std::max(0, std::min(u.chooserArea.max, pos)); return true;
