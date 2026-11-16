@@ -199,6 +199,7 @@ void MountProfileLayers(void *list)
 		}
 		if (IsDir(diskBase + "Local")) {
 			g_origMountPakFilesInDir((vfsBase + "Local/").c_str(), list, lang.c_str());
+			std::lock_guard<std::mutex> lock(g_lock);
 			g_mount.localDirs.push_back(diskBase + "Local");
 		}
 		if (IsDir(diskBase + "Patches")) {
