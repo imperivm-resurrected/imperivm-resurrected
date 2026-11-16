@@ -488,7 +488,8 @@ bool MediaTakeVideoFrame(std::vector<uint32_t> &out, int &w, int &h)
 	std::lock_guard<std::mutex> lock(g_videoLock);
 	if (!g_videoNew) return false;
 	g_videoNew = false;
-	out = g_videoFrame;
+	// The next sample rewrites every row of whatever buffer comes back.
+	out.swap(g_videoFrame);
 	w = g_videoW;
 	h = g_videoH;
 	return true;
