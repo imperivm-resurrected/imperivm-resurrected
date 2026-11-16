@@ -85,9 +85,9 @@ void FetchSeasons(std::string lang)
 	g_seasons.lang = lang;
 }
 
-void FetchHall(unsigned gen, int season, std::string queue)
+void FetchHall(unsigned gen, int season, std::string queue, std::string lang)
 {
-	const HttpReply r = Http("GET", LeagueHallPath(season, LangCode(), queue), "", false);
+	const HttpReply r = Http("GET", LeagueHallPath(season, lang, queue), "", false);
 	Json j;
 	LeagueHall hall;
 	const bool ok = r.Ok() && Json::Parse(r.body, j) && LeagueParseHall(j, hall);
@@ -221,7 +221,7 @@ void LeagueHallRequest(int season, const std::string &queue)
 		g_hall.loading = true;
 		gen = ++g_hall.gen;
 	}
-	SafeThread(FetchHall, gen, season, q).detach();
+	SafeThread(FetchHall, gen, season, q, LangCode()).detach();
 }
 
 LeaguePlayerView LeaguePlayerState(const std::string &steamId, int season, const std::string &queue)

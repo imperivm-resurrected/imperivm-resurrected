@@ -60,6 +60,9 @@ std::mutex g_mx;
 Account g_account;
 Link g_link;
 Me g_me;
+// The game's language as the game thread last read it: LeagueMeRefresh is also called from the threads of other requests, which must not
+// read ModsLanguage.
+std::string g_lang;
 
 // Under g_mx.
 void LoadAccount()
@@ -126,12 +129,12 @@ void Open(const std::string &url)
 	ShellExecuteA(nullptr, "open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 }
 
-void StartLink(unsigned serial)
+void StartLink(unsigned serial, std::string lang)
 {
 	Json body = Json::MakeObject();
 	body.Set("steamId", Json::MakeString(std::to_string(SteamOwnId())));
 	body.Set("name", Json::MakeString(SteamOnlinePlayerName()));
-	body.Set("lang", Json::MakeString(LangCode()));
+	body.Set("lang", Json::MakeString(lang));
 	const HttpReply r = Http("POST", "/v1/link/start", body.Dump(), false);
 	Json j;
 	LeagueLinkCode start;
@@ -228,10 +231,10 @@ void Unlink(unsigned serial)
 	PatronsForget(SteamOwnId());
 }
 
-void FetchMe()
+// In the game's language: the seasons' names of the rewards come translated.
+void FetchMe(std::string lang)
 {
-	// In the game's language: the seasons' names of the rewards come translated.
-	const HttpReply r = Http("GET", "/v1/league/me?lang=" + LangCode(), "", true);
+	const HttpReply r = Http("GET", "/v1/league/me?lang=" + lang, "", true);
 	Json j;
 	LeagueMe me;
 	const bool ok = r.Ok() && Json::Parse(r.body, j) && LeagueParseMe(j, me);
@@ -481,7 +484,7 @@ void LeagueLinkStart()
 		g_link.error.clear();
 	}
 	LogI("league", "link: asking for a code");
-	SafeThread(StartLink, serial).detach();
+	SafeThread(StartLink, serial, LangCode()).detach();
 }
 
 void LeagueLinkCancel()
@@ -550,21 +553,27 @@ LeagueMeView LeagueMeState()
 
 void LeagueMeRefresh(bool force)
 {
+	std::string lang;
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
 		if (!AccountValid() || g_me.loading) return;
 		if (!force && g_me.at && GetTickCount() - g_me.at < kMeKeepMs) return;
 		g_me.loading = true;
+		lang = g_lang;
 	}
-	SafeThread(FetchMe).detach();
+	// Before the first tick only the game thread calls this.
+	if (lang.empty()) lang = LangCode();
+	SafeThread(FetchMe, lang).detach();
 }
 
 void LeagueGameThreadTick()
 {
 	unsigned serial = 0;
 	std::string pollToken;
+	const std::string lang = LangCode();
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
+		g_lang = lang;
 		if (g_link.phase == LeagueLinkPhase::Waiting && !g_link.polling && static_cast<int>(GetTickCount() - g_link.nextPoll) >= 0) {
 			if (g_link.expiresAt && NowMs() > g_link.expiresAt + 5000) {
 				const unsigned next = g_link.serial + 1;
