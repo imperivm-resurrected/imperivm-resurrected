@@ -10,15 +10,13 @@
 #include <string>
 #include <vector>
 
+#include "core/strutil.h"
+
 namespace {
 
 typedef std::map<std::string, std::string> Section;
 
-std::string Lower(std::string s)
-{
-	for (char &c : s) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
-	return s;
-}
+using strutil::Lower;
 
 std::string Trim(const std::string &s)
 {

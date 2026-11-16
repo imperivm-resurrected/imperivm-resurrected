@@ -25,6 +25,8 @@
 #include "addr/script.h"
 #include "addr/ui.h"
 #include "addr/world.h"
+#include "core/winpath.h"
+#include "core/strutil.h"
 
 namespace {
 const int kClassRaceOffset = 0xb48;
@@ -72,11 +74,7 @@ uint32_t g_neutralPrefixOriginal[8] = {};
 bool g_neutralPrefixRead = false;
 bool g_hooked = false;
 
-std::string Lower(std::string s)
-{
-	for (char &c : s) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
-	return s;
-}
+using strutil::Lower;
 
 bool ValidId(const std::string &s)
 {
@@ -87,14 +85,7 @@ bool ValidId(const std::string &s)
 	return true;
 }
 
-std::string GameDir()
-{
-	char path[MAX_PATH];
-	GetModuleFileNameA(nullptr, path, MAX_PATH);
-	char *slash = strrchr(path, '\\');
-	if (slash) *slash = 0;
-	return path;
-}
+using winpath::GameDir;
 
 void AddError(const std::string &folder, const std::string &message)
 {

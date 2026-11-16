@@ -34,6 +34,7 @@
 #include "addr/ui.h"
 #include "addr/world.h"
 #include "core/uiport.h"
+#include "core/winpath.h"
 
 namespace {
 const unsigned kMsgClick = 0x12345604;
@@ -63,10 +64,7 @@ unsigned g_ruleFlags = 0;
 
 std::string RoomIniPath()
 {
-	char path[MAX_PATH] = {};
-	GetModuleFileNameA(nullptr, path, MAX_PATH);
-	if (char *slash = strrchr(path, '\\')) strcpy_s(slash + 1, MAX_PATH - (slash + 1 - path), "imperivm-mod.ini");
-	return path;
+	return winpath::GameDir() + "\\imperivm-mod.ini";
 }
 
 unsigned LoadRoomFlags(const char *key, unsigned def)

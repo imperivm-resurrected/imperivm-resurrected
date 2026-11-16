@@ -16,6 +16,7 @@
 #include "i18n/tr.h"
 #include "mods/features.h"
 #include "mods/mods.h"
+#include "core/winpath.h"
 
 namespace {
 const unsigned kOptsNoBonuses = 0x04;
@@ -32,14 +33,7 @@ std::mutex g_lock;
 std::vector<std::unique_ptr<GameMode>> g_modes, g_retired;
 std::map<std::string, std::vector<std::string>> g_errors;
 
-std::string GameDir()
-{
-	char path[MAX_PATH];
-	GetModuleFileNameA(nullptr, path, MAX_PATH);
-	char *slash = strrchr(path, '\\');
-	if (slash) *slash = 0;
-	return path;
-}
+using winpath::GameDir;
 
 void AddError(const std::string &folder, const std::string &message)
 {

@@ -19,6 +19,8 @@
 #include "addr/engine.h"
 #include "addr/script.h"
 #include "addr/world.h"
+#include "core/winpath.h"
+#include "core/strutil.h"
 
 namespace {
 const int kClassMaskLow = 0x2bc, kClassMaskHigh = 0x2c0;
@@ -32,20 +34,9 @@ std::mutex g_lock;
 std::vector<const ModSpecial *> g_specials;
 std::map<std::string, std::vector<std::string>> g_errors;
 
-std::string GameDir()
-{
-	char path[MAX_PATH];
-	GetModuleFileNameA(nullptr, path, MAX_PATH);
-	char *slash = strrchr(path, '\\');
-	if (slash) *slash = 0;
-	return path;
-}
+using winpath::GameDir;
 
-std::string Lower(std::string s)
-{
-	for (char &c : s) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
-	return s;
-}
+using strutil::Lower;
 
 void AddError(const std::string &folder, const std::string &message)
 {

@@ -9,6 +9,8 @@
 #include <cstdio>
 #include <cstring>
 
+#include "core/strutil.h"
+
 namespace {
 
 const size_t kLineBuffer = kLogMaxLine + 192;
@@ -17,11 +19,7 @@ const size_t kFloodSlots = 32;
 const int kMaxDumps = 8;
 const char kLetters[] = "TDIWEF";
 
-std::string Lower(std::string s)
-{
-	for (char &c : s) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
-	return s;
-}
+using strutil::Lower;
 
 std::string Trim(const std::string &s)
 {

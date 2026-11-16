@@ -10,6 +10,7 @@
 #include "hooks/builtinfixes.h"
 #include "hooks/builtin_data.h"
 #include "core/log.h"
+#include "core/winpath.h"
 
 namespace {
 
@@ -48,14 +49,7 @@ const char kHeroClassPatch[] =
 bool g_enabled = false;
 bool g_texts = false;
 
-std::string GameDir()
-{
-	char path[MAX_PATH];
-	GetModuleFileNameA(nullptr, path, MAX_PATH);
-	char *slash = strrchr(path, '\\');
-	if (slash) *slash = 0;
-	return path;
-}
+using winpath::GameDir;
 
 void MakeDirs(std::string path)
 {

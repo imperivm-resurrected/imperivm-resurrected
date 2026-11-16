@@ -15,6 +15,8 @@
 #include <set>
 #include <cstdint>
 #include "addr/script.h"
+#include "core/winpath.h"
+#include "core/strutil.h"
 
 namespace {
 const unsigned kMessageOffset = 0x290;
@@ -30,20 +32,9 @@ DWORD g_reportReturn = 0;
 std::mutex g_lock;
 std::vector<std::string> g_errors;
 
-std::string GameDir()
-{
-	char path[MAX_PATH];
-	GetModuleFileNameA(nullptr, path, MAX_PATH);
-	char *slash = strrchr(path, '\\');
-	if (slash) *slash = 0;
-	return path;
-}
+using winpath::GameDir;
 
-std::string Lower(std::string s)
-{
-	for (char &c : s) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
-	return s;
-}
+using strutil::Lower;
 
 bool ParseMessage(const std::string &line, std::string &path, std::string &rest)
 {

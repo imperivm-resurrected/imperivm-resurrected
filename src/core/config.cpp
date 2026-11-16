@@ -14,6 +14,7 @@
 #include "core/log.h"
 #include "core/logcore.h"
 #include "core/version.h"
+#include "core/winpath.h"
 
 static Config g_config;
 
@@ -21,11 +22,7 @@ namespace {
 
 std::string IniPath()
 {
-	char path[MAX_PATH];
-	GetModuleFileNameA(nullptr, path, MAX_PATH);
-	char *slash = strrchr(path, '\\');
-	if (slash) strcpy_s(slash + 1, MAX_PATH - (slash + 1 - path), "imperivm-mod.ini");
-	return path;
+	return winpath::GameDir() + "\\imperivm-mod.ini";
 }
 
 // The buffers the texts are read into: a longer value is cut to one character less.

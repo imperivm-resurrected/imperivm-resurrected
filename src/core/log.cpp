@@ -14,6 +14,7 @@
 #include "core/logfiles.h"
 #include "core/sysinfo.h"
 #include "core/version.h"
+#include "core/winpath.h"
 
 namespace {
 
@@ -65,15 +66,6 @@ DWORD g_started = 0;
 volatile LONG g_shut = 0;
 LogSettings g_settings;
 
-std::string GameDirectory()
-{
-	char path[MAX_PATH] = {};
-	GetModuleFileNameA(nullptr, path, MAX_PATH);
-	char *slash = strrchr(path, '\\');
-	if (slash) *slash = 0;
-	return path;
-}
-
 std::string UtcOffsetText()
 {
 	TIME_ZONE_INFORMATION tz;
@@ -124,7 +116,7 @@ void WriteHeader(const LogFilesState &state, const LogSettings &settings)
 void LogInit()
 {
 	g_started = GetTickCount();
-	g_paths = MakeLogPaths(GameDirectory());
+	g_paths = MakeLogPaths(winpath::GameDir());
 	const LogFilesState state = PrepareLogFiles(g_paths);
 	g_current = state.otherInstance ? g_paths.ForProcess(GetCurrentProcessId()) : g_paths.current;
 	g_previous = state.previousLog;

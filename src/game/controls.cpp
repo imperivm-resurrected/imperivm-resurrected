@@ -22,6 +22,7 @@
 #include "addr/state.h"
 #include "addr/ui.h"
 #include "addr/world.h"
+#include "core/winpath.h"
 
 void ComputeBarKeys();
 
@@ -330,11 +331,7 @@ std::string KeyLabel(unsigned short vk)
 
 std::string ControlsPath()
 {
-	char path[MAX_PATH];
-	GetModuleFileNameA(nullptr, path, MAX_PATH);
-	char *slash = strrchr(path, '\\');
-	if (slash) strcpy_s(slash + 1, MAX_PATH - (slash + 1 - path), "controls.ini");
-	return path;
+	return winpath::GameDir() + "\\controls.ini";
 }
 
 bool RawString(uintptr_t obj, char *buf, unsigned bufSize, unsigned &len)

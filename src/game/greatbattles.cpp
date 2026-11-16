@@ -20,6 +20,7 @@
 #include "game/gamehook.h"
 #include "hooks/gamefiles.h"
 #include "hooks/media.h"
+#include "core/winpath.h"
 
 namespace {
 
@@ -187,14 +188,6 @@ void Reselect(void *dlg)
 	if (list >= 0) Select(dlg, list, index);
 }
 
-std::string GameDir()
-{
-	char path[MAX_PATH] = {};
-	GetModuleFileNameA(nullptr, path, MAX_PATH);
-	if (char *slash = strrchr(path, '\\')) slash[1] = 0;
-	return path;
-}
-
 std::string IntroFile(const std::string &adventurePath)
 {
 	const auto it = g_intros.find(adventurePath);
@@ -203,7 +196,7 @@ std::string IntroFile(const std::string &adventurePath)
 	const std::string pattern = BattleIntroPattern(adventurePath);
 	if (!pattern.empty()) {
 		WIN32_FIND_DATAA fd = {};
-		HANDLE h = FindFirstFileA((GameDir() + "Movies\\" + pattern).c_str(), &fd);
+		HANDLE h = FindFirstFileA((winpath::GameDir() + "\\Movies\\" + pattern).c_str(), &fd);
 		if (h != INVALID_HANDLE_VALUE) {
 			found = fd.cFileName;
 			FindClose(h);

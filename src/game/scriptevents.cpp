@@ -17,6 +17,7 @@
 #include "addr/state.h"
 #include "addr/script.h"
 #include "addr/world.h"
+#include "core/winpath.h"
 
 namespace {
 typedef void(__fastcall *StartVictory_t)(void *map);
@@ -47,14 +48,7 @@ bool FileExists(const std::string &p)
 	return a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY);
 }
 
-std::string GameDir()
-{
-	char path[MAX_PATH];
-	GetModuleFileNameA(nullptr, path, MAX_PATH);
-	char *slash = strrchr(path, '\\');
-	if (slash) *slash = 0;
-	return path;
-}
+using winpath::GameDir;
 
 void RunEvent(void *host, const Event &e)
 {

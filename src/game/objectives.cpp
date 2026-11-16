@@ -21,6 +21,7 @@
 #include "game/gamemenu.h"
 #include "game/gamehook.h"
 #include "hooks/gameload.h"
+#include "core/winpath.h"
 
 namespace {
 
@@ -206,10 +207,7 @@ std::string ReadWholeFile(const std::string &path)
 
 std::string DiskPath(const std::string &gamePath)
 {
-	char exe[MAX_PATH] = {};
-	GetModuleFileNameA(nullptr, exe, MAX_PATH);
-	std::string file = exe;
-	file = file.substr(0, file.find_last_of('\\') + 1) + gamePath;
+	std::string file = winpath::GameDir() + "\\" + gamePath;
 	for (char &c : file) {
 		if (c == '/') c = '\\';
 	}
