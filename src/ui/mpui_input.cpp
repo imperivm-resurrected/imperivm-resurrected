@@ -273,11 +273,8 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 			else if (g_s.view == kViewRanked && (g_s.ranked.sub == kRankedBoard || g_s.ranked.sub == kRankedHistory || g_s.ranked.sub == kRankedGuide)) RankedAction(kRkHub);
 			else DoAction(kBack, 0);
 		}
-		else if (wp == VK_UP) {
-			g_s.selected = std::max(0, g_s.selected - 1);
-		}
-		else if (wp == VK_DOWN) {
-			g_s.selected = std::min(static_cast<int>(Visible(g_s).size()) - 1, g_s.selected + 1);
+		else if (wp == VK_UP || wp == VK_DOWN) {
+			SelectRoom(g_s.selected + (wp == VK_UP ? -1 : 1));
 		}
 		return true;
 	}

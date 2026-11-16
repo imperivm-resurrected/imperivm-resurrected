@@ -132,7 +132,7 @@ void DoAction(int action, int arg)
 			g_s.sortCol = arg;
 			g_s.sortDesc = arg == 2;
 		}
-		g_s.selected = 0;
+		SelectRoom(0);
 		break;
 	case kColResize:
 		g_s.resizeCol = arg;
@@ -140,7 +140,7 @@ void DoAction(int action, int arg)
 		g_s.resizeStartW = g_s.colW[arg & 3];
 		break;
 	case kSelect:
-		g_s.selected = arg;
+		SelectRoom(arg);
 		g_s.detail.scroll = 0;
 		g_s.joinPassInput.clear();
 		break;
@@ -438,7 +438,8 @@ void DoAction(int action, int arg)
 		break;
 	case kRoomFilter:
 		g_s.filter = arg;
-		g_s.selected = 0;
+		SelectRoom(0);
+		g_s.detail.scroll = 0;
 		break;
 	case kGTeamColors:
 		g_s.teamColors = !g_s.teamColors;
@@ -744,6 +745,26 @@ void DoAction(int action, int arg)
 	}
 }
 
+void SelectRoom(int row)
+{
+	const std::vector<int> vis = Visible(g_s);
+	g_s.selected = std::max(0, std::min(row, static_cast<int>(vis.size()) - 1));
+	const uint64_t id = vis.empty() ? 0 : g_s.lobbies[vis[g_s.selected]].id;
+	if (id != g_s.selectedId) g_s.detail.scroll = 0;
+	g_s.selectedId = id;
+}
+
+void FollowSelectedRoom()
+{
+	const std::vector<int> vis = Visible(g_s);
+	for (size_t r = 0; r < vis.size(); r++) {
+		if (g_s.lobbies[vis[r]].id != g_s.selectedId) continue;
+		g_s.selected = static_cast<int>(r);
+		return;
+	}
+	SelectRoom(g_s.selected);
+}
+
 void OfferLink()
 {
 	const LeagueLinkPhase phase = LeagueLinkState().phase;
@@ -804,7 +825,7 @@ namespace {
 // Another search shows other rooms: the selection goes back to the first one.
 void SearchChanged()
 {
-	g_s.selected = 0;
+	SelectRoom(0);
 	g_s.detail.scroll = 0;
 }
 

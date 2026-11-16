@@ -167,6 +167,7 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 		g_s.status = SteamOnlineStatus();
 		g_s.loading = SteamLobbiesLoading();
 		g_s.lobbies = SteamLobbies();
+		if (g_s.view == kViewList && !g_s.game.active) FollowSelectedRoom();
 		g_s.room = SteamCurrentRoom();
 		SyncTick();
 		g_s.map = SteamMapStatus();
