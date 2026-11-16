@@ -5,8 +5,9 @@
 #include <string>
 #include <vector>
 
-// Folder names stored in one ini value, separated by '|'.
+// Folder names stored in one ini value, separated by '|'. Windows folder names ignore case, and so do the lookups.
 std::vector<std::string> ParseFolderList(const std::string &text);
 std::string JoinFolderList(const std::vector<std::string> &list);
-// Removes every entry naming `folder`, in any case. False when there was none.
+bool HasFolder(const std::vector<std::string> &list, const std::string &folder);
+// Removes every entry naming `folder`. False when there was none.
 bool RemoveFolderFrom(std::vector<std::string> &list, const std::string &folder);
