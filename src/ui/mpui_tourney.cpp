@@ -55,16 +55,17 @@ std::string SlugOf(int64_t tournament)
 			if (t.id == tournament) return t.slug;
 		}
 	}
-	const TourneyMineView mine = LeagueTourneyMine();
-	if (mine.mine.next.tournamentId == tournament) return mine.mine.next.slug;
-	if (mine.mine.checkin.tournamentId == tournament) return mine.mine.checkin.slug;
-	for (const TourneyMyEntry &e : mine.mine.entries) {
+	const auto view = LeagueTourneyMine();
+	const TourneyMine &mine = view->mine;
+	if (mine.next.tournamentId == tournament) return mine.next.slug;
+	if (mine.checkin.tournamentId == tournament) return mine.checkin.slug;
+	for (const TourneyMyEntry &e : mine.entries) {
 		if (e.tournamentId == tournament) return e.slug;
 	}
-	if (mine.mine.organize.activeId == tournament) return mine.mine.organize.activeSlug;
-	if (const TourneyOrganized *c = TourneyOrganizedOf(mine.mine, tournament)) return c->slug;
-	const TourneyPageView page = LeagueTourneyPage(g_tourney.slug, 60000);
-	if (page.loaded && page.detail.id == tournament) return page.detail.slug;
+	if (mine.organize.activeId == tournament) return mine.organize.activeSlug;
+	if (const TourneyOrganized *c = TourneyOrganizedOf(mine, tournament)) return c->slug;
+	const auto page = LeagueTourneyPage(g_tourney.slug, 60000);
+	if (page->loaded && page->detail.id == tournament) return page->detail.slug;
 	return std::string();
 }
 
@@ -83,9 +84,10 @@ bool TeamsCup(int64_t tournament)
 {
 	const TourneyListsView lists = LeagueTourneyLists();
 	if (const TourneySummary *t = SummaryOf(lists, tournament)) return t->Teams();
-	const TourneyPageView page = LeagueTourneyPage(g_tourney.slug, 60000);
-	if (page.loaded && page.detail.id == tournament) return page.detail.Teams();
-	const TourneyNext next = LeagueTourneyMine().mine.next;
+	const auto page = LeagueTourneyPage(g_tourney.slug, 60000);
+	if (page->loaded && page->detail.id == tournament) return page->detail.Teams();
+	const auto mine = LeagueTourneyMine();
+	const TourneyNext &next = mine->mine.next;
 	return next.present && next.tournamentId == tournament && next.Teams();
 }
 
@@ -96,8 +98,8 @@ bool FindMatchRooms(int64_t match, uint64_t &lobby, uint64_t &spec)
 	if (!g_tourney.slug.empty()) slugs.push_back(g_tourney.slug);
 	for (const TourneySummary &t : LeagueTourneyLists().live) slugs.push_back(t.slug);
 	for (const std::string &slug : slugs) {
-		const TourneyPageView page = LeagueTourneyPage(slug, 60000);
-		for (const TourneyMatch &m : page.detail.matches) {
+		const auto page = LeagueTourneyPage(slug, 60000);
+		for (const TourneyMatch &m : page->detail.matches) {
 			if (m.id != match) continue;
 			lobby = m.lobby;
 			spec = m.specLobby;
@@ -141,8 +143,8 @@ void FetchCupMaps(int64_t tournament)
 	std::vector<TourneyMap> maps;
 	const TourneyListsView lists = LeagueTourneyLists();
 	if (const TourneySummary *t = SummaryOf(lists, tournament)) maps = CupAllMaps(*t);
-	const TourneyPageView page = LeagueTourneyPage(g_tourney.slug, 60000);
-	if (maps.empty() && page.loaded && page.detail.id == tournament) maps = CupAllMaps(page.detail);
+	const auto page = LeagueTourneyPage(g_tourney.slug, 60000);
+	if (maps.empty() && page->loaded && page->detail.id == tournament) maps = CupAllMaps(page->detail);
 	for (const TourneyMap &m : maps) {
 		if (m.Scenario()) LeagueCupMap(m);
 	}
@@ -214,8 +216,8 @@ std::string StageOf(const TourneyNotice &n)
 void CreateRoom(const TourneyClaim &claim)
 {
 	RoomFlow &f = g_tourney.room;
-	const TourneyMineView mine = LeagueTourneyMine();
-	const TourneyNext &n = mine.mine.next;
+	const auto mine = LeagueTourneyMine();
+	const TourneyNext &n = mine->mine.next;
 	if (!claim.contentKey.empty() && claim.contentKey != SteamOwnGameplayKey()) {
 		Toast(TrFmt("This tournament is played with %s: switch to that content profile first.", {n.contentName.empty() ? Tr("other content") : n.contentName}), true);
 		f = RoomFlow();
@@ -291,7 +293,7 @@ void TakeResults()
 			else {
 				f.phase = RoomFlow::kWaiting;
 				f.at = GetTickCount();
-				f.waitingFor = WaiterName(LeagueTourneyMine().mine.next, r.claim.by);
+				f.waitingFor = WaiterName(LeagueTourneyMine()->mine.next, r.claim.by);
 			}
 			break;
 		case TourneyOp::Register:
@@ -324,7 +326,7 @@ void TakeResults()
 			if (r.ok) FetchCupMaps(r.id);
 			break;
 		case TourneyOp::RemoveEntry:
-			if (r.ok && LeagueTourneyPage(g_tourney.slug, 60000).detail.Teams()) Toast("The team is out of the cup.");
+			if (r.ok && LeagueTourneyPage(g_tourney.slug, 60000)->detail.Teams()) Toast("The team is out of the cup.");
 			else Toast(ResultText(r), !r.ok);
 			break;
 		default: Toast(ResultText(r), !r.ok); break;
@@ -492,7 +494,7 @@ void StepInRoom(const TourneyNext &next)
 	const DWORD now = GetTickCount();
 	const bool mine = next.present && next.match == match;
 	if (mine) k.wasMine = true;
-	else if (k.wasMine && !g_s.inOnlineGame && !g_s.game.busy && LeagueTourneyMine().loaded) {
+	else if (k.wasMine && !g_s.inOnlineGame && !g_s.game.busy && LeagueTourneyMine()->loaded) {
 		// Settled while the player waited here (a no-show claimed or given): out of the room and back to the tournaments.
 		LogI("league", "tournament match %lld is settled; out of its room", static_cast<long long>(match));
 		k = RoomLock();
@@ -1268,8 +1270,8 @@ void TourneyAction(int arg)
 		break;
 	case kSubInviteAccept:
 	case kSubInviteDecline: {
-		const TourneyMineView mine = LeagueTourneyMine();
-		const TourneyInvite *invite = TourneyInviteOf(mine.mine, value);
+		const auto mine = LeagueTourneyMine();
+		const TourneyInvite *invite = TourneyInviteOf(mine->mine, value);
 		if (!invite) {
 			Toast("That invitation is no longer waiting for an answer.");
 			break;
@@ -1311,7 +1313,8 @@ void TourneyAction(int arg)
 		LeagueTourneyMineRefresh();
 		break;
 	case kSubGo: {
-		const TourneyNext next = LeagueTourneyMine().mine.next;
+		const auto mine = LeagueTourneyMine();
+		const TourneyNext &next = mine->mine.next;
 		if (!next.present || next.match != value) {
 			Toast("This match is no longer waiting for you.");
 			break;
@@ -1357,7 +1360,8 @@ void TourneyAction(int arg)
 	}
 	case kSubNoShow: LeagueTourneyClaimNoShow(value); break;
 	case kSubPick: {
-		const TourneyNext next = LeagueTourneyMine().mine.next;
+		const auto mine = LeagueTourneyMine();
+		const TourneyNext &next = mine->mine.next;
 		if (!next.present || !next.MyPick() || value >= static_cast<int64_t>(next.pick.options.size())) {
 			Toast("It is not your turn to choose the map.");
 			break;
@@ -1368,7 +1372,8 @@ void TourneyAction(int arg)
 		break;
 	}
 	case kSubSteamChat: {
-		const TourneyNext next = LeagueTourneyMine().mine.next;
+		const auto mine = LeagueTourneyMine();
+		const TourneyNext &next = mine->mine.next;
 		if (next.present && next.opponent.steamId) SteamOpenChat(next.opponent.steamId);
 		break;
 	}
@@ -1400,7 +1405,8 @@ void TourneyAction(int arg)
 			Toast("Link your league account first.");
 			break;
 		}
-		const TourneyOrganize o = LeagueTourneyMine().mine.organize;
+		const auto mine = LeagueTourneyMine();
+		const TourneyOrganize &o = mine->mine.organize;
 		if (o.activeId) {
 			OpenPage(o.activeSlug.empty() ? SlugOf(o.activeId) : o.activeSlug, kOrganizerTab);
 			break;
@@ -1424,16 +1430,17 @@ void TourneyAction(int arg)
 		break;
 	}
 	case kSubEdit: {
-		const TourneyPageView page = LeagueTourneyPage(u.slug, 60000);
-		if (!page.loaded || page.detail.id != value || !IsOrganizer(page.detail)) break;
-		if (page.detail.status != TourneyStatus::Signup && page.detail.status != TourneyStatus::Checkin) {
+		const auto page = LeagueTourneyPage(u.slug, 60000);
+		const TourneyDetail &d = page->detail;
+		if (!page->loaded || d.id != value || !IsOrganizer(d)) break;
+		if (d.status != TourneyStatus::Signup && d.status != TourneyStatus::Checkin) {
 			Toast("The cup is being played or is over: it can't change any more.");
 			break;
 		}
-		u.cup = TourneyCupFormOf(page.detail);
-		u.cupEditId = page.detail.id;
-		u.cupEditSlug = page.detail.slug;
-		u.cupLocked = TourneyCupLocked(page.detail);
+		u.cup = TourneyCupFormOf(d);
+		u.cupEditId = d.id;
+		u.cupEditSlug = d.slug;
+		u.cupLocked = TourneyCupLocked(d);
 		u.cupError.clear();
 		u.cupErrorSlug.clear();
 		u.formScroll = 0;
@@ -1534,8 +1541,8 @@ void TourneyAction(int arg)
 		u.cupError.clear();
 		break;
 	case kSubMapsRetry: {
-		const TourneyPageView page = LeagueTourneyPage(u.slug, 60000);
-		if (page.loaded && page.detail.id == value) LeagueCupMapsRetry(CupAllMaps(page.detail));
+		const auto page = LeagueTourneyPage(u.slug, 60000);
+		if (page->loaded && page->detail.id == value) LeagueCupMapsRetry(CupAllMaps(page->detail));
 		break;
 	}
 	case kSubCupSubmit: {
@@ -1604,20 +1611,20 @@ void TourneyAction(int arg)
 		break;
 	}
 	case kSubRemove: {
-		const TourneyPageView page = LeagueTourneyPage(u.slug, 60000);
-		const TourneyEntrant *e = page.loaded ? TourneyEntrantOf(page.detail, value) : nullptr;
+		const auto page = LeagueTourneyPage(u.slug, 60000);
+		const TourneyEntrant *e = page->loaded ? TourneyEntrantOf(page->detail, value) : nullptr;
 		if (!e) break;
-		const int64_t tournament = page.detail.id, entry = value;
-		Confirm(Tr(page.detail.Teams() ? "Take a team off" : "Take a player off"),
-			TrFmt(page.detail.Teams() ? "The team %s will be out of your cup, both its players. Take it off?" : "%s will be out of your cup. Take them off?", {e->name}), Tr("Take off"),
+		const int64_t tournament = page->detail.id, entry = value;
+		Confirm(Tr(page->detail.Teams() ? "Take a team off" : "Take a player off"),
+			TrFmt(page->detail.Teams() ?"The team %s will be out of your cup, both its players. Take it off?" : "%s will be out of your cup. Take them off?", {e->name}), Tr("Take off"),
 			[tournament, entry] { LeagueTourneyRemoveEntry(tournament, entry); });
 		break;
 	}
 	case kSubGameA:
 	case kSubGameB:
 	case kSubReplay: {
-		const TourneyPageView page = LeagueTourneyPage(u.slug, 60000);
-		const TourneyMatch *m = MatchById(page.detail, value);
+		const auto page = LeagueTourneyPage(u.slug, 60000);
+		const TourneyMatch *m = MatchById(page->detail, value);
 		if (!m) break;
 		const int64_t match = value;
 		if (sub == kSubReplay) {
@@ -1897,7 +1904,7 @@ bool TourneyBlocksAction(int action, int arg)
 	// The room's selector, while the tournament picks its scenario in it.
 	case kPickRow:
 	case kPickOk:
-	case kPickCancel: blocked = !g_tourney.lock.mapAllowed && TourneyGameMap(LeagueTourneyMine().mine.next).Scenario(); break;
+	case kPickCancel: blocked = !g_tourney.lock.mapAllowed && TourneyGameMap(LeagueTourneyMine()->mine.next).Scenario(); break;
 	case kGDropOpen: {
 		const int kind = arg & kDropKindMask, index = arg >> kDropKindBits;
 		if (kind == kDropOption) {
@@ -1922,18 +1929,18 @@ bool TourneyLobbyWatchOnly(const OnlineLobby &g)
 {
 	const int64_t match = TourneyMatchOfTag(g.leagueTag);
 	if (!match) return false;
-	const TourneyMineView mine = LeagueTourneyMine();
-	return !(mine.mine.next.present && mine.mine.next.match == match);
+	const auto mine = LeagueTourneyMine();
+	return !(mine->mine.next.present && mine->mine.next.match == match);
 }
 
 void TourneyGameThreadTick()
 {
-	const TourneyNext next = LeagueTourneyMine().mine.next;
+	const auto mine = LeagueTourneyMine();
 	std::lock_guard<std::mutex> lock(g_lock);
 	TakeNotices();
 	TakeResults();
 	if (!g_s.ready) return;
 	StepJoin();
 	StepRoom();
-	StepInRoom(next);
+	StepInRoom(mine->mine.next);
 }

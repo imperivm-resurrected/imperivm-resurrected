@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <deque>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <set>
 #include <string>
@@ -40,17 +41,18 @@ struct Lists {
 };
 
 struct Page {
-	bool loaded = false, loading = false, failed = false, missing = false;
 	DWORD at = 0, used = 0;
-	TourneyDetail detail;
+	// What the screens are given: never changed once given, only replaced (ChangeView).
+	std::shared_ptr<const TourneyPageView> view = std::make_shared<const TourneyPageView>();
 };
 
 struct Mine {
-	bool loaded = false, loading = false, tried = false;
+	bool tried = false;
 	// `gameAt`: the last tick seen during a game, after which a series' pick opens.
 	DWORD at = 0, watched = 0, gameAt = 0;
 	std::string steamId;
-	TourneyMine mine;
+	// As a page's view.
+	std::shared_ptr<const TourneyMineView> view = std::make_shared<const TourneyMineView>();
 };
 
 struct Disputes {
@@ -109,6 +111,14 @@ const char *OpName(TourneyOp op)
 	case TourneyOp::CancelTeam: return "team cancellation";
 	default: return "resolution";
 	}
+}
+
+// Under g_mx: a copy of the view with `change` made, in its place; whoever holds the old one keeps it as it was.
+template <class T, class F> void ChangeView(std::shared_ptr<const T> &view, F change)
+{
+	auto copy = std::make_shared<T>(*view);
+	change(*copy);
+	view = std::move(copy);
 }
 
 // Under g_mx.
@@ -178,13 +188,19 @@ void FetchPage(std::string slug, std::string code)
 	WaitAfter(r);
 	std::lock_guard<std::mutex> lock(g_mx);
 	Page &p = g_pages[slug];
-	p.loading = false;
 	p.at = GetTickCount();
-	p.failed = !ok;
-	p.missing = r.status == 404;
-	if (!ok) return;
-	p.loaded = true;
-	p.detail = std::move(d);
+	if (!ok) {
+		ChangeView(p.view, [&r](TourneyPageView &v) {
+			v.loading = false;
+			v.failed = true;
+			v.missing = r.status == 404;
+		});
+		return;
+	}
+	auto v = std::make_shared<TourneyPageView>();
+	v->loaded = true;
+	v->detail = std::move(d);
+	p.view = std::move(v);
 }
 
 // Under g_mx.
@@ -211,21 +227,26 @@ void FetchMine()
 	if (!ok && r.failure != "not linked" && r.status != 401 && r.status != 429) LogW("league", "could not read the player's tournaments (%s)", r.Describe().c_str());
 	WaitAfter(r);
 	std::lock_guard<std::mutex> lock(g_mx);
-	g_mine.loading = false;
 	g_mine.at = GetTickCount();
-	if (!ok) return;
+	if (!ok) {
+		ChangeView(g_mine.view, [](TourneyMineView &v) { v.loading = false; });
+		return;
+	}
 	if (g_mine.steamId != steamId) {
 		g_told = TourneyTold();
 		g_mine.steamId = steamId;
 	}
-	if (g_mine.loaded && g_mine.mine.next.match != mine.next.match && mine.next.present) LogI("league", "next tournament match: %lld", static_cast<long long>(mine.next.match));
-	if (g_mine.mine.organize.activeId != mine.organize.activeId && mine.organize.activeId) {
+	const TourneyMineView &was = *g_mine.view;
+	if (was.loaded && was.mine.next.match != mine.next.match && mine.next.present) LogI("league", "next tournament match: %lld", static_cast<long long>(mine.next.match));
+	if (was.mine.organize.activeId != mine.organize.activeId && mine.organize.activeId) {
 		LogI("league", "the player organises the cup %lld", static_cast<long long>(mine.organize.activeId));
 	}
-	g_mine.loaded = true;
-	g_mine.mine = mine;
 	for (const TourneyOrganized &c : mine.organized) RememberCode(c.slug, c.id, c.inviteCode);
 	Notify(mine);
+	auto v = std::make_shared<TourneyMineView>();
+	v->loaded = true;
+	v->mine = std::move(mine);
+	g_mine.view = std::move(v);
 }
 
 void FetchMapTypes()
@@ -269,8 +290,8 @@ void FetchDisputes(int64_t tournament)
 // Under g_mx.
 void StartMine()
 {
-	if (g_mine.loading) return;
-	g_mine.loading = true;
+	if (g_mine.view->loading) return;
+	ChangeView(g_mine.view, [](TourneyMineView &v) { v.loading = true; });
 	g_mine.tried = true;
 	SafeThread(FetchMine).detach();
 }
@@ -355,12 +376,13 @@ void Run(TourneyOp op, int64_t id, std::string method, std::string path, std::st
 	const bool fresh = out.ok && op == TourneyOp::Presence && parsed && TourneyParseNext(j, next);
 	std::lock_guard<std::mutex> lock(g_mx);
 	g_busy.erase({static_cast<int>(op), id});
-	if (fresh && g_mine.mine.next.match == next.match) g_mine.mine.next = next;
+	if (fresh && g_mine.view->mine.next.match == next.match) ChangeView(g_mine.view, [&next](TourneyMineView &v) { v.mine.next = next; });
 	// The pick is over for this player as soon as the league takes it, before their matches are read again.
-	if (out.ok && op == TourneyOp::Pick && g_mine.mine.next.match == id) {
-		TourneyNext &n = g_mine.mine.next;
-		n.pick = TourneyPick();
-		if (out.map.Known()) {
+	if (out.ok && op == TourneyOp::Pick && g_mine.view->mine.next.match == id) {
+		ChangeView(g_mine.view, [&out](TourneyMineView &v) {
+			TourneyNext &n = v.mine.next;
+			n.pick = TourneyPick();
+			if (!out.map.Known()) return;
 			n.map = out.map;
 			bool listed = false;
 			for (TourneyGame &g : n.games) {
@@ -369,16 +391,18 @@ void Run(TourneyOp op, int64_t id, std::string method, std::string path, std::st
 				listed = true;
 			}
 			if (!listed) n.games.push_back({n.game, out.map, std::string()});
-		}
+		});
 	}
 	// A room claimed while the next game's map is being chosen waits for it: the pick shows before the matches are read again.
-	if (out.ok && op == TourneyOp::Claim && out.claim.kind == TourneyClaim::Wait && out.claim.pick.present && g_mine.mine.next.match == id) {
-		g_mine.mine.next.pick = out.claim.pick;
+	if (out.ok && op == TourneyOp::Claim && out.claim.kind == TourneyClaim::Wait && out.claim.pick.present && g_mine.view->mine.next.match == id) {
+		ChangeView(g_mine.view, [&out](TourneyMineView &v) { v.mine.next.pick = out.claim.pick; });
 	}
 	// An invitation answered, or one the league no longer has, leaves the player's list before it is read again.
 	if ((op == TourneyOp::Accept || op == TourneyOp::Decline) && (out.ok || r.status == 404 || r.status == 410)) {
-		std::vector<TourneyInvite> &invites = g_mine.mine.invites;
-		invites.erase(std::remove_if(invites.begin(), invites.end(), [id](const TourneyInvite &i) { return i.tournamentId == id; }), invites.end());
+		ChangeView(g_mine.view, [id](TourneyMineView &v) {
+			std::vector<TourneyInvite> &invites = v.mine.invites;
+			invites.erase(std::remove_if(invites.begin(), invites.end(), [id](const TourneyInvite &i) { return i.tournamentId == id; }), invites.end());
+		});
 	}
 	if (out.ok && op == TourneyOp::Create) RememberCode(created.slug, created.id, created.inviteCode);
 	if (out.ok && op == TourneyOp::Edit) {
@@ -392,10 +416,12 @@ void Run(TourneyOp op, int64_t id, std::string method, std::string path, std::st
 	if (out.ok && op == TourneyOp::FindCode) {
 		RememberCode(found.slug, found.id, code);
 		Page &p = g_pages[found.slug];
-		p.loaded = true;
-		p.failed = p.missing = false;
 		p.at = p.used = GetTickCount();
-		p.detail = found;
+		auto v = std::make_shared<TourneyPageView>();
+		v->loaded = true;
+		v->loading = p.view->loading;
+		v->detail = found;
+		p.view = std::move(v);
 	}
 	if (op != TourneyOp::Presence) g_results.push_back(out);
 	// What the player did changes their tournaments and the pages: they are read again.
@@ -531,17 +557,18 @@ void TourneyTick()
 		g_mine.gameAt = now;
 		return;
 	}
-	if (g_mine.loading || Quiet()) return;
+	const std::shared_ptr<const TourneyMineView> v = g_mine.view;
+	if (v->loading || Quiet()) return;
 	const bool tab = g_mine.watched && now - g_mine.watched < kWatchMs;
 	if (!g_mine.tried) {
 		StartMine();
 		return;
 	}
-	const bool active = g_mine.loaded && TourneyHasActiveEntry(g_mine.mine);
+	const bool active = v->loaded && TourneyHasActiveEntry(v->mine);
 	DWORD every = static_cast<DWORD>(TourneyPollEveryMs(active, tab));
-	if (!g_mine.loaded && !every) every = kMineRetryMs;
+	if (!v->loaded && !every) every = kMineRetryMs;
 	const int64_t sinceGame = g_mine.gameAt ? static_cast<int64_t>(now - g_mine.gameAt) : -1;
-	const DWORD series = g_mine.loaded ? static_cast<DWORD>(TourneySeriesPollMs(g_mine.mine.next, sinceGame)) : 0;
+	const DWORD series = v->loaded ? static_cast<DWORD>(TourneySeriesPollMs(v->mine.next, sinceGame)) : 0;
 	if (series && (!every || series < every)) every = series;
 	if (every && now - g_mine.at >= every) StartMine();
 }
@@ -570,45 +597,37 @@ void LeagueTourneyListsRefresh(bool force)
 	SafeThread(FetchLists).detach();
 }
 
-TourneyPageView LeagueTourneyPage(const std::string &slug, int maxAgeMs)
+std::shared_ptr<const TourneyPageView> LeagueTourneyPage(const std::string &slug, int maxAgeMs)
 {
-	TourneyPageView v;
-	if (slug.empty()) return v;
+	static const std::shared_ptr<const TourneyPageView> none = std::make_shared<const TourneyPageView>();
+	if (slug.empty()) return none;
 	std::lock_guard<std::mutex> lock(g_mx);
 	const DWORD now = GetTickCount();
 	if (!g_pages.count(slug) && g_pages.size() >= kPagesKept) {
 		auto oldest = g_pages.end();
 		for (auto it = g_pages.begin(); it != g_pages.end(); ++it) {
-			if (!it->second.loading && (oldest == g_pages.end() || it->second.used < oldest->second.used)) oldest = it;
+			if (!it->second.view->loading && (oldest == g_pages.end() || it->second.used < oldest->second.used)) oldest = it;
 		}
 		if (oldest != g_pages.end()) g_pages.erase(oldest);
 	}
 	Page &p = g_pages[slug];
 	p.used = now;
-	if (!p.loading && !Quiet() && (!p.at || now - p.at >= static_cast<DWORD>(maxAgeMs))) {
-		p.loading = true;
+	if (!p.view->loading && !Quiet() && (!p.at || now - p.at >= static_cast<DWORD>(maxAgeMs))) {
+		ChangeView(p.view, [](TourneyPageView &v) { v.loading = true; });
 		const auto code = g_codes.find(slug);
 		SafeThread(FetchPage, slug, code == g_codes.end() ? std::string() : code->second).detach();
 	}
-	v.loaded = p.loaded;
-	v.loading = p.loading;
-	v.failed = p.failed;
-	v.missing = p.missing;
-	v.detail = p.detail;
-	return v;
+	return p.view;
 }
 
-TourneyMineView LeagueTourneyMine()
+std::shared_ptr<const TourneyMineView> LeagueTourneyMine()
 {
-	TourneyMineView v;
+	static const std::shared_ptr<const TourneyMineView> none = std::make_shared<const TourneyMineView>();
 	std::string token, steamId;
-	if (!AccountFor(token, steamId)) return v;
+	if (!AccountFor(token, steamId)) return none;
 	std::lock_guard<std::mutex> lock(g_mx);
-	if (g_mine.steamId != steamId) return v;
-	v.loaded = g_mine.loaded;
-	v.loading = g_mine.loading;
-	v.mine = g_mine.mine;
-	return v;
+	if (g_mine.steamId != steamId) return none;
+	return g_mine.view;
 }
 
 void LeagueTourneyMineRefresh()
