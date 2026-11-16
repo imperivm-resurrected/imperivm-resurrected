@@ -13,6 +13,7 @@
 #include "addr/world.h"
 #include "core/config.h"
 #include "core/log.h"
+#include "game/gamelayout.h"
 #include "game/healthbars.h"
 #include "game/loadcurtain.h"
 #include "game/viewprefs.h"
@@ -35,9 +36,8 @@ bool g_installed = false, g_pending = false, g_filterFailed = false;
 HealthBarsChoice g_choice;
 bool g_filtering = false;
 
-const unsigned kOffVisibleScript = 0x60c, kOffFlags = 0x2c, kOffOwner = 0x70, kOffLocalPlayer = 0x12c8, kOffPlayerIndex = 8, kOffRelations = 0x24;
+const unsigned kOffVisibleScript = 0x60c, kOffFlags = 0x2c, kOffOwner = 0x70;
 const unsigned kRelationAllied = 1;
-const int kPlayers = 16;
 const unsigned kHeroFlag = 0x1000000;
 
 // The cast the game does itself before reading the object: the virtual base, then IsKindOf (slot 1) with the class name.
@@ -50,11 +50,11 @@ char *CastTo(char *object, uintptr_t className)
 UnitSide SideOf(char *script)
 {
 	char *game = *reinterpret_cast<char **>(addr::kGame);
-	char *local = game ? *reinterpret_cast<char **>(game + kOffLocalPlayer) : nullptr;
+	char *local = game ? layout::LocalPlayer(game) : nullptr;
 	char *owner = *reinterpret_cast<char **>(script + kOffOwner);
-	const int index = owner ? *reinterpret_cast<int *>(owner + kOffPlayerIndex) : -1;
-	const bool known = local && owner && index >= 0 && index < kPlayers;
-	const bool allied = known && (*reinterpret_cast<unsigned *>(local + kOffRelations + index * 4) & kRelationAllied) != 0;
+	const int index = owner ? Field<int>(owner, layout::kPlayerId) : -1;
+	const bool known = local && owner && index >= 0 && index < layout::kPlayerCount;
+	const bool allied = known && (Field<unsigned>(local, layout::kPlayerDiplomacy + index * 4) & kRelationAllied) != 0;
 	return HealthBarsSide(local && owner == local, known, allied);
 }
 

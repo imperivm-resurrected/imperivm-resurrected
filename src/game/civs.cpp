@@ -7,6 +7,7 @@
 #include "hooks/hookcount.h"
 #include "game/civs.h"
 #include "game/civroom.h"
+#include "game/gamelayout.h"
 #include "game/gamemodes.h"
 #include "game/specials.h"
 #include "core/json.h"
@@ -738,12 +739,12 @@ int CivsPlayerCiv(int player)
 void *CivsLocalPlayer()
 {
 	char *game = *reinterpret_cast<char **>(addr::kGame);
-	return game ? *reinterpret_cast<void **>(game + 0x12c8) : nullptr;
+	return game ? layout::LocalPlayer(game) : nullptr;
 }
 
 CivRaceAsBase::CivRaceAsBase(void *player)
 {
-	int *race = player ? reinterpret_cast<int *>(static_cast<char *>(player) + 0x7c) : nullptr;
+	int *race = player ? &At<int>(player, layout::kPlayerRace) : nullptr;
 	if (!race || *race < 10) return;
 	const int base = BaseOf(*race);
 	if (base == *race) return;

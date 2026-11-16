@@ -18,6 +18,7 @@
 #include "hooks/gameload.h"
 #include "core/log.h"
 #include "game/cmdcheck.h"
+#include "game/gamelayout.h"
 #include "game/i1engine.h"
 #include "addr/state.h"
 #include "addr/script.h"
@@ -36,8 +37,6 @@ const int kObjClass = 0x3c, kObjFlags = 0x2c, kLife = 0xc0, kMaxLife = 0xc8, kAr
 const int kExperience = 0x180, kLevel = 0x184, kCurse = 0x194, kParry = 0x1a0, kLastAttack = 0x1a4, kHitsInRow = 0x1ac;
 // Flags: hidden 0x200000, unit 0x400000, training target 0x10000000. Curse bits: cursed 0x8000000, under a cover of mercy 0x10000000.
 const unsigned kFlagHidden = 0x200000, kFlagUnit = 0x400000, kFlagTraining = 0x10000000, kFlagCursed = 0x8000000, kFlagMercy = 0x10000000;
-// The game's clock in ms (g_pGame+0x1258).
-const int kGameTime = 0x1258;
 
 // Imperivm I's specialities (Imperivm.exe table 007376a4): "speciality" is split on commas, without trimming, and each
 // part must match exactly.
@@ -141,11 +140,6 @@ std::unordered_map<const void *, const Stats *> g_byClass;
 // CVXUnit: the handle of its hero (+0x170).
 const int kLeaderHandle = 0x170;
 const unsigned kFlagHero = 0x1000000;
-
-template <typename T> T &At(const void *obj, int offset)
-{
-	return *reinterpret_cast<T *>(static_cast<char *>(const_cast<void *>(obj)) + offset);
-}
 
 // The game a class of a campaign comes from: "I1" or "I2" and a capital letter; 0 for the game's own classes.
 int GameOfId(const std::string &id)
@@ -334,7 +328,7 @@ void UseTable(int g)
 void WatchGame(const void *unit)
 {
 	const char *game = *reinterpret_cast<char *const *>(addr::kGame);
-	const int now = game ? *reinterpret_cast<const int *>(game + kGameTime) : 0;
+	const int now = game ? Field<int>(game, layout::kGameClock) : 0;
 	if (now + 1000 < g_lastGameTime) UseTable(0);
 	g_lastGameTime = now;
 	const int g = GameOf(unit);
@@ -650,7 +644,7 @@ int Hit(const Stats &a, const void *attacker, const void *defender, bool withSki
 int GameNow()
 {
 	const char *game = *reinterpret_cast<char *const *>(addr::kGame);
-	return game ? *reinterpret_cast<const int *>(game + kGameTime) : 0;
+	return game ? Field<int>(game, layout::kGameClock) : 0;
 }
 
 long long Percent(long long value, int percent)

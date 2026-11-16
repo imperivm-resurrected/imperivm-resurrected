@@ -9,6 +9,7 @@
 #include "hooks/hookcount.h"
 #include "game/diplomacy.h"
 #include "game/diplomacyrules.h"
+#include "game/gamelayout.h"
 #include "game/gamemenu.h"
 #include "game/gameroom.h"
 #include "mods/modoptions.h"
@@ -98,8 +99,6 @@ namespace {
 const size_t kDlgPlayers = 0x60, kDlgCount = 0x7c, kToggleState = 0x7e;
 const int kMaxRows = 7, kAlliedVictoryId = 0x100a, kOkId = 0x1000, kCancelId = 0x1001;
 const unsigned kRowBits[4] = {diplomacy::kCeasefire, diplomacy::kVision, diplomacy::kSupport, diplomacy::kControl};
-const size_t kLocalPlayer = 0x12c8, kPlayersStart = 0x12cc, kPlayerSize = 800;
-const size_t kPlayerId = 8, kPlayerFlags = 0x24, kPlayerName = 0x94, kPlayerNameCapacity = 0xa8, kPlayerColor = 0x314;
 const size_t kSettingsTeams = 0x54, kSettingsSlots = 0xac, kSettingsSlotSize = 0xc0;
 const int kSlotAi = 1, kSettingsSlotCount = 8;
 
@@ -142,26 +141,25 @@ bool ReadRaw(void *dlg, RawDialog &out)
 	__try {
 		const char *game = *reinterpret_cast<const char *const *>(addr::kGame);
 		if (!game) return false;
-		const char *local = *reinterpret_cast<const char *const *>(game + kLocalPlayer);
+		const char *local = layout::LocalPlayer(game);
 		if (!local) return false;
-		const int ours = *reinterpret_cast<const int *>(local + kPlayerId);
+		const int ours = Field<int>(local, layout::kPlayerId);
 		const char *settings = *reinterpret_cast<const char *const *>(addr::kGameSettings);
 		const int count = *reinterpret_cast<const int *>(static_cast<char *>(dlg) + kDlgCount);
 		for (int i = 0; i < count && i < kMaxRows; i++) {
 			const int index = *reinterpret_cast<const int *>(static_cast<char *>(dlg) + kDlgPlayers + i * 4);
-			if (index < 0 || index >= 16 || ours < 0 || ours >= 16) continue;
+			if (index < 0 || index >= layout::kPlayerCount || ours < 0 || ours >= layout::kPlayerCount) continue;
 			RawRow &row = out.rows[out.count++];
 			row.player = index;
-			const char *player = game + kPlayersStart + index * kPlayerSize;
-			row.theirs = *reinterpret_cast<const unsigned *>(player + kPlayerFlags + ours * 4) & diplomacy::kAllFlags;
+			const char *player = layout::PlayerAt(game, index);
+			row.theirs = Field<unsigned>(player, layout::kPlayerDiplomacy + ours * 4) & diplomacy::kAllFlags;
 			for (int b = 0; b < 4; b++) {
 				void *button = Toggle(dlg, (i + 1) * 0x10 + 2 + b);
 				if (button && ToggleState(button) == 0) row.mine |= kRowBits[b];
 			}
-			const char *name = *reinterpret_cast<const unsigned *>(player + kPlayerNameCapacity) < 0x10 ? player + kPlayerName
-																										  : *reinterpret_cast<const char *const *>(player + kPlayerName);
+			const char *name = layout::PlayerName(player);
 			for (int c = 0; name && c < 64 && name[c]; c++) row.name[c] = name[c];
-			row.color = *reinterpret_cast<const unsigned *>(player + kPlayerColor);
+			row.color = Field<unsigned>(player, layout::kPlayerColor);
 			if (settings && index < kSettingsSlotCount) {
 				row.ai = *reinterpret_cast<const int *>(settings + kSettingsSlots + index * kSettingsSlotSize) == kSlotAi;
 				const unsigned char team = *reinterpret_cast<const unsigned char *>(settings + kSettingsTeams + index);
@@ -194,7 +192,7 @@ bool DiplomacyDialogRead(DiplomacyDialogState &out)
 		DiplomacyRow row;
 		row.player = r.player;
 		row.name = r.name;
-		row.rgb = ((r.color >> 10 & 0x1f) * 255 / 31) << 16 | ((r.color >> 5 & 0x1f) * 255 / 31) << 8 | ((r.color & 0x1f) * 255 / 31);
+		row.rgb = Rgb555ToRgb(r.color);
 		row.ai = r.ai;
 		row.team = r.team;
 		row.mine = r.mine;

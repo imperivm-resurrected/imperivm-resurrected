@@ -14,6 +14,7 @@
 
 #include "core/config.h"
 #include "core/log.h"
+#include "game/gamelayout.h"
 #include "game/mapfog.h"
 #include "addr/engine.h"
 #include "addr/state.h"
@@ -51,8 +52,11 @@ struct FogCache {
 FogCache g_cache;
 bool g_overlayFromCache = false;
 
-template <typename T>
-T At(const void *p, size_t off) { return *reinterpret_cast<const T *>(static_cast<const char *>(p) + off); }
+// The index of the player among the game's 16, as the exploration reads it.
+unsigned IndexOfPlayer(const char *game, const char *player)
+{
+	return static_cast<unsigned>((player - layout::PlayerAt(game, 0)) / static_cast<ptrdiff_t>(layout::kPlayerSize));
+}
 
 void PixelToWorld(void *zoom, int px, int py, int *out)
 {
@@ -70,11 +74,11 @@ int Darken(void *zoom)
 	char *game = *reinterpret_cast<char **>(addr::kGame);
 	char *map = *reinterpret_cast<char **>(addr::kMap);
 	if (!game || !map) return -1;
-	char *player = At<char *>(game, 0x12c8);
+	char *player = layout::LocalPlayer(game);
 	char *vis = At<char *>(game, 0x44d4);
 	if (!player || !vis || At<int>(vis, 0xd4) == 0) return -1;
 	void *exploration = At<void *>(map, 0xb0);
-	const unsigned playerIndex = static_cast<unsigned>((player - game - 0x12cc) / 800);
+	const unsigned playerIndex = IndexOfPlayer(game, player);
 	if (!exploration || playerIndex > 7) return -1;
 	char *dst = At<char *>(zoom, 0x14), *src = At<char *>(zoom, 0x18);
 	if (!dst || !src) return -1;
@@ -303,10 +307,10 @@ int FogWideColumns(void *zoom, int x0, int y0, int x1, int y1)
 	if (x0 > x1 || y0 > y1) return 0;
 	char *game = *reinterpret_cast<char **>(addr::kGame);
 	char *map = *reinterpret_cast<char **>(addr::kMap);
-	char *player = game ? At<char *>(game, 0x12c8) : nullptr;
+	char *player = game ? layout::LocalPlayer(game) : nullptr;
 	char *vis = game ? At<char *>(game, 0x44d4) : nullptr;
 	void *exploration = map ? At<void *>(map, 0xb0) : nullptr;
-	const unsigned playerIndex = player ? static_cast<unsigned>((player - game - 0x12cc) / 800) : 8;
+	const unsigned playerIndex = player ? IndexOfPlayer(game, player) : 8;
 	const bool fogOn = vis && At<int>(vis, 0xd4) != 0 && exploration && playerIndex <= 7;
 	const unsigned short fogColor = At<unsigned short>(zoom, 0x30);
 	const int step = 8, gw = (x1 - x0) / step + 1;

@@ -9,6 +9,7 @@
 #include "mods/mods.h"
 #include "mods/modvars.h"
 #include "game/scriptevents.h"
+#include "game/gamelayout.h"
 #include "game/i1engine.h"
 
 #include <atomic>
@@ -184,7 +185,7 @@ void __cdecl HookCalcAttackOutcome(void *attacker, void *defender, int *dLifeAtt
 bool GameRunning()
 {
 	char *game = *reinterpret_cast<char **>(addr::kGame);
-	return game && *reinterpret_cast<int *>(game + 0x1258) > 0;
+	return game && Field<int>(game, layout::kGameClock) > 0;
 }
 
 void __fastcall HookSettlementSetPlayer(void *self, void *edx, int newPlayer)
@@ -207,13 +208,12 @@ void __cdecl HookDeclareDefeated(void *vec)
 	char *end = vec ? *reinterpret_cast<char **>(static_cast<char *>(vec) + 8) : nullptr;
 	for (char *p = begin; p && end && p < end && alive.size() < 16; p += 4) {
 		char *player = *reinterpret_cast<char **>(p);
-		if (player && *reinterpret_cast<int *>(player + 0x290) == 1 && *reinterpret_cast<int *>(player + 8) < 8) alive.push_back(player);
+		if (player && Field<int>(player, layout::kPlayerState) == layout::kStatePlaying && Field<int>(player, layout::kPlayerId) < 8) alive.push_back(player);
 	}
 	g_origDeclareDefeated(vec);
 	for (void *player : alive) {
-		char *p = static_cast<char *>(player);
-		if (*reinterpret_cast<int *>(p + 0x290) != 2) continue;
-		const unsigned w[1] = {static_cast<unsigned>(*reinterpret_cast<int *>(p + 8) + 1)};
+		if (Field<int>(player, layout::kPlayerState) != 2) continue;
+		const unsigned w[1] = {static_cast<unsigned>(Field<int>(player, layout::kPlayerId) + 1)};
 		FireWords(g_onDefeat, w, 1);
 	}
 }

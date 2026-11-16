@@ -18,6 +18,7 @@
 #include "addr/world.h"
 #include "core/config.h"
 #include "core/log.h"
+#include "game/gamelayout.h"
 #include "game/quickicons.h"
 
 namespace {
@@ -57,15 +58,12 @@ const unsigned kOffHealthA = 0xb8, kOffHealthB = 0xbc, kOffCount = 0xc0, kOffRac
 const unsigned kOffLeft = 0x84, kOffTop = 0x88, kOffRight = 0x8c, kOffBottom = 0x90;
 const unsigned kOffCornerLeft = 0x94, kOffCornerTop = 0x98, kOffCornerRight = 0x9c, kOffCornerBottom = 0xa0;
 const unsigned kOffPosX = 0x34, kOffPosY = 0x38;
-const unsigned kOffPlayer = 0x12c8, kSelectionBase = 0xd8, kSelectionStride = 0x2c, kSelectionCount = 0x1c;
+const unsigned kSelectionBase = 0xd8, kSelectionStride = 0x2c, kSelectionCount = 0x1c;
 
 void *g_extra[kExtraCount] = {};
 void *g_barFor = nullptr;
 bool g_failed = false;
 DWORD g_lastTick = 0;
-
-template <typename T>
-T &At(void *p, unsigned off) { return *reinterpret_cast<T *>(static_cast<char *>(p) + off); }
 
 void *Bar() { return *reinterpret_cast<void **>(addr::kQuickIconBarGlobal); }
 
@@ -83,7 +81,7 @@ const unsigned char kGlyphs[11][5] = {
 char *HeroOf(void *icon)
 {
 	char *game = *reinterpret_cast<char **>(addr::kGame);
-	char *player = game ? At<char *>(game, kOffPlayer) : nullptr;
+	char *player = game ? layout::LocalPlayer(game) : nullptr;
 	if (!player) return nullptr;
 	char *selection = player + kSelectionBase + At<int>(icon, kOffIndex) * kSelectionStride;
 	if (At<int>(selection, kSelectionCount) != 1) return nullptr;
@@ -246,7 +244,7 @@ void __fastcall HookRefresh(void *self, void *edx, int mode)
 	}
 	if (mode != 0 && At<int>(self, kOffDirty) == 0) return;
 	char *game = *reinterpret_cast<char **>(addr::kGame);
-	char *player = game ? At<char *>(game, kOffPlayer) : nullptr;
+	char *player = game ? layout::LocalPlayer(game) : nullptr;
 	if (!player) return;
 	char *selection = player + kSelectionBase + index * kSelectionStride;
 	if (At<int>(selection, kSelectionCount) != 0) {
