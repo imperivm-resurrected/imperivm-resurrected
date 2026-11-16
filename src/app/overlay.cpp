@@ -108,6 +108,8 @@ bool g_empty = true;
 void EnsureFonts(float s)
 {
 	if (g_font && g_fontScale == s) return;
+	// DeleteObject refuses a font still selected into a DC, and the canvas keeps the last one it drew with.
+	if (g_canvas.dc) SelectObject(g_canvas.dc, GetStockObject(SYSTEM_FONT));
 	for (HFONT f : {g_font, g_bold, g_small}) {
 		if (f) DeleteObject(f);
 	}
