@@ -276,7 +276,7 @@ void PaintRankLadder(Painter &p, int x, int y, int w, int h, LeagueTier mine)
 void PaintRankedGuide(Painter &p, const State &st)
 {
 	const int mx = st.mouseX, my = st.mouseY;
-	const ScreenLayout l = ScreenLayoutFor(st.viewW, st.viewH);
+	const ScreenLayout l = ScreenLayoutFor(st.viewW, st.viewH, false);
 	const int m = l.margin, top = l.top, inner = l.w - 2 * m;
 	int tx = m;
 	{

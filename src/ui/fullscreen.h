@@ -42,7 +42,8 @@ struct ScreenLayout {
 	// Where the content starts under the header.
 	int top = 0;
 };
-ScreenLayout ScreenLayoutFor(int w, int h);
+// Without `info` the screen has no line under its title, and its content starts right under the title and its tabs.
+ScreenLayout ScreenLayoutFor(int w, int h, bool info = true);
 
 constexpr int kHeaderButtonH = 44;
 

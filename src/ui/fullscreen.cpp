@@ -257,7 +257,7 @@ void UseSharedFonts(Painter &p)
 	std::copy(std::begin(g_fonts), std::end(g_fonts), std::begin(p.fonts));
 }
 
-ScreenLayout ScreenLayoutFor(int w, int h)
+ScreenLayout ScreenLayoutFor(int w, int h, bool info)
 {
 	ScreenLayout l;
 	l.w = w;
@@ -268,7 +268,8 @@ ScreenLayout ScreenLayoutFor(int w, int h)
 	l.titleH = l.titleSize + 20;
 	l.titleY = l.margin - 14;
 	l.infoY = l.titleY + l.titleH;
-	l.top = l.infoY + l.infoH + (l.roomy ? 36 : 24);
+	if (!info) l.infoH = 0;
+	l.top = l.infoY + l.infoH + (info ? (l.roomy ? 36 : 24) : (l.roomy ? 28 : 20));
 	return l;
 }
 

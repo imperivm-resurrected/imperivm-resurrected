@@ -69,7 +69,7 @@ struct Frame {
 Frame FrameOf(const View &v)
 {
 	Frame f;
-	f.head = ScreenLayoutFor(v.screenW, v.screenH);
+	f.head = ScreenLayoutFor(v.screenW, v.screenH, false);
 	f.top = f.head.top;
 	f.bottom = v.screenH - f.head.margin;
 	f.rows = std::max(1, (f.bottom - kListHint - f.top - kListHead + kRowGap) / (kRowH + kRowGap));
@@ -1251,12 +1251,6 @@ void PaintHeader(Painter &p, const View &v, const Frame &f)
 	const int tab = ShownTab(v);
 	PaintScreenTitle(p, f.head, "STATISTICS", {{"General", kActTab, kTabGeneral, tab == kTabGeneral, true}, {"League", kActTab, kTabLeague, tab == kTabLeague, SelectedIsActive(v)}},
 		right, v.mouseX, v.mouseY);
-	for (const Card &c : v.cards) {
-		if (!c.active) continue;
-		p.raw = true;
-		PaintScreenInfo(p, f.head, TrFmt("You are playing as %s.", {c.name}));
-		p.raw = false;
-	}
 }
 
 }

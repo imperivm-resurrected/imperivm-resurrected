@@ -294,7 +294,7 @@ struct HubLayout {
 
 HubLayout HubFor(const State &st)
 {
-	const ScreenLayout l = ScreenLayoutFor(st.viewW, st.viewH);
+	const ScreenLayout l = ScreenLayoutFor(st.viewW, st.viewH, false);
 	HubLayout h;
 	h.m = l.margin;
 	h.top = l.top;
@@ -1265,7 +1265,7 @@ void PaintBoard(Painter &p, const State &st)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const LeagueRankedView &v = st.ranked.view;
-	const ScreenLayout l = ScreenLayoutFor(st.viewW, st.viewH);
+	const ScreenLayout l = ScreenLayoutFor(st.viewW, st.viewH, false);
 	const int m = l.margin, top = l.top, inner = l.w - 2 * m;
 	const int detailW = std::min(537, std::max(400, inner * 537 / 1792)), tableW = inner - detailW - 32;
 	const LeagueBoard &b = v.page;
@@ -1457,7 +1457,7 @@ void PaintHistory(Painter &p, const State &st)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const LeagueRankedView &v = st.ranked.view;
-	const ScreenLayout l = ScreenLayoutFor(st.viewW, st.viewH);
+	const ScreenLayout l = ScreenLayoutFor(st.viewW, st.viewH, false);
 	const int m = l.margin, top = l.top, inner = l.w - 2 * m;
 	const int page = static_cast<int>(st.ranked.historyBack.size()) + 1;
 

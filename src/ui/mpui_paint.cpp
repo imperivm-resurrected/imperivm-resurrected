@@ -116,7 +116,7 @@ struct LobbyLayout : ScreenLayout {
 LobbyLayout LobbyLayoutFor(int w, int h)
 {
 	LobbyLayout l;
-	static_cast<ScreenLayout &>(l) = ScreenLayoutFor(w, h);
+	static_cast<ScreenLayout &>(l) = ScreenLayoutFor(w, h, false);
 	l.toolY = l.top;
 	l.bodyY = l.toolY + kToolH + (l.roomy ? 28 : 20);
 	l.bodyH = l.h - l.margin - l.bodyY;
@@ -146,41 +146,6 @@ void PaintHeader(Painter &p, const State &st)
 			{"Tournaments", kTourney, kTourneyShowArg, st.view == kViewTournaments, true}},
 		right, mx, my);
 	PaintRankedPill(p, st, right, tabsEnd + 16);
-
-	// The caption line is the player's: avatar, name (with the laurel of a patron), the content profile and the open rooms.
-	const int m = l.margin, y = l.infoY, h = l.infoH, avatar = h + 4, ay = y - 2;
-	const PatronInfo own = PatronOf(SteamOwnId());
-	const LeagueBadge ownBadge = PlayerBadgeOf(SteamOwnId());
-	p.Font(1);
-	const int laurel = own.tier != PatronTier::None ? 22 : 0, nameX = m + avatar + 12 + (laurel ? laurel + 4 : 0);
-	const int nameW = std::min(320, p.TextWidth(st.player) + 4);
-	DrawPatronRowGlow(p, m - 12, y - 8, nameX + nameW + 12 - (m - 12), h + 16, own.tier);
-	if (!PaintAvatar(p, m, ay, avatar, SteamOwnId())) {
-		p.Fill(m, ay, avatar, avatar, pal::hairline);
-		p.Font(3);
-		p.Text(m, ay, avatar, avatar, st.player.substr(0, 2), pal::redText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-		p.Font(1);
-	}
-	p.Frame(m, ay, avatar, avatar, pal::redText);
-	if (laurel) {
-		DrawPatron(p, m + avatar + 12, y + (h - laurel) / 2, laurel, nameX, y, nameW, h, st.player, own.tier, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-		PatronHotspot(p, m + avatar + 12, y + (h - laurel) / 2, laurel, own, mx, my, kPatronLink);
-	}
-	else p.Text(nameX, y, nameW, h, st.player, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-	DrawBadgeAfterName(p, nameX, y, nameW, h, st.player, ownBadge, mx, my, SteamOwnId());
-	std::string info = Tr("Content profile: ") + ModsProfileLabel(ModsMountedProfile().name);
-	COLORREF color = pal::caption;
-	if (!st.ready) {
-		info += "  \xC2\xB7  " + Tr(st.status.empty() ? std::string("Connecting to Steam...") : st.status);
-		color = pal::bad;
-	}
-	else if (!st.room.id) {
-		const size_t n = st.lobbies.size();
-		info += "  \xC2\xB7  " + (n == 1 ? Tr("1 open room") : std::to_string(n) + Tr(" open rooms"));
-	}
-	p.Font(0);
-	const int infoX = nameX + nameW + LeagueBadgeRoom(ownBadge) + 20;
-	p.Text(infoX, y, l.w - m - infoX, h, "\xC2\xB7  " + info, color, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }
 }
 

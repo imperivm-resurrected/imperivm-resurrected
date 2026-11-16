@@ -132,7 +132,7 @@ void OpenPlayerRow(uint64_t id)
 int RankedBoardRowsFor(int viewW, int viewH)
 {
 	// Under the tool bar: the heading, the rows, the Imperator line and the player's own row pinned at the bottom.
-	const ScreenLayout l = ScreenLayoutFor(viewW, viewH);
+	const ScreenLayout l = ScreenLayoutFor(viewW, viewH, false);
 	const int h = l.h - l.margin - (l.top + 72);
 	return std::max(5, std::min(kRankedBoardRows, (h - 44 - 28 - 53) / 46));
 }

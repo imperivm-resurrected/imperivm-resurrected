@@ -657,7 +657,7 @@ void PaintListScreen(Painter &p, const State &st, const Ui &u, PaintOut &out)
 	LeagueTourneyListsRefresh();
 	const TourneyListsView lists = LeagueTourneyLists();
 	const TourneyMineView mine = LeagueTourneyMine();
-	const ScreenLayout l = ScreenLayoutFor(st.viewW, st.viewH);
+	const ScreenLayout l = ScreenLayoutFor(st.viewW, st.viewH, false);
 	const int m = l.margin, top = l.top, bottom = l.h - m, inner = l.w - 2 * m;
 	const int sideW = std::max(360, std::min(480, inner * 27 / 100)), mainW = inner - sideW - kCardGap, sx = m + mainW + kCardGap;
 	const int featH = l.roomy ? 232 : 200;
