@@ -283,8 +283,20 @@ void UpdateRoom()
 		}
 		before = now;
 	}
+	static uint64 knownLobby = 0;
+	static std::set<uint64> known;
+	if (knownLobby != room.id) {
+		knownLobby = room.id;
+		known.clear();
+	}
+	// Whoever leaves is forgotten: one let back in mid-game is seen arriving again, and the room closes behind them.
+	for (auto it = known.begin(); it != known.end();) {
+		bool present = false;
+		for (const OnlineMember &m : room.members) present = present || m.id == *it;
+		if (present) ++it;
+		else it = known.erase(it);
+	}
 	if (room.owner && room.info.playing) {
-		static std::set<uint64> known;
 		for (const OnlineMember &m : room.members) {
 			if (m.me || known.count(m.id)) continue;
 			known.insert(m.id);
