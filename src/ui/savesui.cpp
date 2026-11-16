@@ -1387,6 +1387,14 @@ void PaintScreenHeader(Painter &p, const State &st, const View &v)
 	}
 }
 
+void PaintSearch(Painter &p, const State &st, int x, int y, int w, int h, int clearW, int clearH, int inset)
+{
+	PaintEditField(p, x, y, w, h, st.search, "Search...", st.focus == kFocusSearch, false, st.edit, kSearchField);
+	if (st.search.empty()) return;
+	p.Font(1);
+	p.Button(x + w - clearW - inset, y + (h - clearH) / 2, clearW, clearH, "\xC3\x97", kClearSearch, 0, st.mouseX, st.mouseY, true, false, 1);
+}
+
 void PaintPanel(Painter &p, State &st)
 {
 	const int mx = st.mouseX, my = st.mouseY;
@@ -1398,11 +1406,7 @@ void PaintPanel(Painter &p, State &st)
 		UseScreenFonts(p);
 		PaintScreenHeader(p, st, v);
 		const int ty = l.toolY, th = l.toolH, searchW = 340, sortW = 200, clearW = 26, clearH = 24;
-		PaintEditField(p, l.lx, ty, searchW, th, st.search, "Search...", st.focus == kFocusSearch, false, st.edit, kSearchField);
-		if (!st.search.empty()) {
-			p.Font(1);
-			p.Button(l.lx + searchW - clearW - 6, ty + (th - clearH) / 2, clearW, clearH, "\xC3\x97", kClearSearch, 0, mx, my, true, false, 1);
-		}
+		PaintSearch(p, st, l.lx, ty, searchW, th, clearW, clearH, 6);
 		const int sortX = l.lx + searchW + 16;
 		p.Button(sortX, ty, sortW, th, st.sort == 0 ? "Sort: date" : "Sort: name", kSort, 0, mx, my);
 		PaintSwitch(p, sortX + sortW + 24, ty + (th - 24) / 2, st.showAuto, "Show autosaves", true, kShowAuto, 0, mx, my);
@@ -1446,20 +1450,12 @@ void PaintPanel(Painter &p, State &st)
 
 	if (save) {
 		PaintEditField(p, 16, 100, 300, 28, st.nameText, "E.g.: Before the siege", st.focus == kFocusName, false, st.edit, kNameField);
-		PaintEditField(p, 328, 100, 200, 28, st.search, "Search...", st.focus == kFocusSearch, false, st.edit, kSearchField);
-		if (!st.search.empty()) {
-			p.Font(1);
-			p.Button(502, 104, 22, 20, "\xC3\x97", kClearSearch, 0, mx, my, true, false, 1);
-		}
+		PaintSearch(p, st, 328, 100, 200, 28, 22, 20, 4);
 		p.Button(540, 100, 150, 28, st.sort == 0 ? "Sort: date" : "Sort: name", kSort, 0, mx, my);
 		PaintSwitch(p, 706, 102, st.showAuto, "Show autosaves", true, kShowAuto, 0, mx, my);
 	}
 	else {
-		PaintEditField(p, 16, 100, 250, 28, st.search, "Search...", st.focus == kFocusSearch, false, st.edit, kSearchField);
-		if (!st.search.empty()) {
-			p.Font(1);
-			p.Button(240, 104, 22, 20, "\xC3\x97", kClearSearch, 0, mx, my, true, false, 1);
-		}
+		PaintSearch(p, st, 16, 100, 250, 28, 22, 20, 4);
 		p.Button(278, 100, 150, 28, st.sort == 0 ? "Sort: date" : "Sort: name", kSort, 0, mx, my);
 		PaintSwitch(p, 446, 102, st.showAuto, "Show autosaves", true, kShowAuto, 0, mx, my);
 	}
