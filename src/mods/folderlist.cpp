@@ -26,6 +26,11 @@ std::string JoinFolderList(const std::vector<std::string> &list)
 	return s;
 }
 
+bool HasFolder(const std::vector<std::string> &list, const std::string &folder)
+{
+	return std::any_of(list.begin(), list.end(), [&](const std::string &f) { return _stricmp(f.c_str(), folder.c_str()) == 0; });
+}
+
 bool RemoveFolderFrom(std::vector<std::string> &list, const std::string &folder)
 {
 	const size_t before = list.size();

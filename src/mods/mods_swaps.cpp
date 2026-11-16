@@ -435,7 +435,7 @@ std::string ModsUninstall(const std::string &folder)
 		return name + Tr(" uninstalled");
 	}
 	std::vector<std::string> pending = PendingUninstalls();
-	if (std::find(pending.begin(), pending.end(), folder) == pending.end()) pending.push_back(folder);
+	if (!HasFolder(pending, folder)) pending.push_back(folder);
 	SetPendingUninstalls(pending);
 	LogI("content", "%s will be uninstalled on restart%s", folder.c_str(), mounted ? " (it is loaded)" : " (could not delete now)");
 	return name + Tr(" will be uninstalled when the game restarts");
@@ -443,8 +443,7 @@ std::string ModsUninstall(const std::string &folder)
 
 bool ModsUninstallPending(const std::string &folder)
 {
-	const std::vector<std::string> pending = PendingUninstalls();
-	return std::find(pending.begin(), pending.end(), folder) != pending.end();
+	return HasFolder(PendingUninstalls(), folder);
 }
 
 void ModsCancelUninstall(const std::string &folder)

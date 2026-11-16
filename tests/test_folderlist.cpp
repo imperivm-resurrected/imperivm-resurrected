@@ -17,6 +17,16 @@ void ParsesAndJoins()
 	CHECK_EQ(ParseFolderList(JoinFolderList({"x", "y z"})), (std::vector<std::string>{"x", "y z"}));
 }
 
+void FindsInAnyCase()
+{
+	const std::vector<std::string> list{"Caesar Mod", "Other"};
+	CHECK(HasFolder(list, "Caesar Mod"));
+	CHECK(HasFolder(list, "caesar mod"));
+	CHECK(HasFolder(list, "OTHER"));
+	CHECK(!HasFolder(list, "Caesar"));
+	CHECK(!HasFolder({}, "Other"));
+}
+
 void RemovesInAnyCase()
 {
 	std::vector<std::string> list{"Caesar Mod", "Other", "caesar mod"};
@@ -31,6 +41,7 @@ void RemovesInAnyCase()
 int main()
 {
 	ParsesAndJoins();
+	FindsInAnyCase();
 	RemovesInAnyCase();
 	return test::Summary("folderlist");
 }
