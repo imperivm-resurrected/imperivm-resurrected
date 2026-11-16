@@ -41,7 +41,7 @@ LeaguePlayerCard CardOf(const Json &j)
 	c.steamId = j.GetIdText("steamId");
 	c.name = j.GetString("name");
 	c.tier = LeagueTierFromJson(j.Get("tier"));
-	c.division = LeagueTierHasDivisions(c.tier) ? LeagueDivisionFromJson(j.Get("division")) : 0;
+	c.division = LeagueDivisionOf(c.tier, j.Get("division"));
 	c.accepted = j.GetBool("accepted");
 	c.host = j.GetBool("host");
 	c.inRoom = j.GetBool("inRoom");
@@ -304,8 +304,8 @@ LeagueRankedResult LeagueParseRankedResult(const Json *v)
 	r.delta = v->GetInt("delta");
 	r.tierBefore = LeagueTierFromJson(v->Get("tierBefore"));
 	r.tierAfter = LeagueTierFromJson(v->Get("tierAfter"));
-	r.divisionBefore = LeagueTierHasDivisions(r.tierBefore) ? LeagueDivisionFromJson(v->Get("divisionBefore")) : 0;
-	r.divisionAfter = LeagueTierHasDivisions(r.tierAfter) ? LeagueDivisionFromJson(v->Get("divisionAfter")) : 0;
+	r.divisionBefore = LeagueDivisionOf(r.tierBefore, v->Get("divisionBefore"));
+	r.divisionAfter = LeagueDivisionOf(r.tierAfter, v->Get("divisionAfter"));
 	r.promoted = v->GetBool("promoted");
 	r.demoted = v->GetBool("demoted");
 	r.shield = v->GetInt("shield");
@@ -398,7 +398,7 @@ bool LeagueParseBoard(const Json &j, LeagueBoard &out)
 		row.steamId = r.GetIdText("steamId");
 		row.name = r.GetString("name");
 		row.tier = LeagueTierFromJson(r.Get("tier"));
-		row.division = LeagueTierHasDivisions(row.tier) ? LeagueDivisionFromJson(r.Get("division")) : 0;
+		row.division = LeagueDivisionOf(row.tier, r.Get("division"));
 		row.glory = r.GetInt("glory");
 		row.wins = r.GetInt("wins");
 		row.losses = r.GetInt("losses");

@@ -139,7 +139,7 @@ LeagueRanked RankedOf(const Json &j, const char *key, const char *queue, bool be
 		k.queue = r->GetString("queue", queue);
 		k.season = r->GetInt("season");
 		k.tier = LeagueTierFromJson(r->Get("tier"));
-		k.division = LeagueTierHasDivisions(k.tier) ? LeagueDivisionFromJson(r->Get("division")) : 0;
+		k.division = LeagueDivisionOf(k.tier, r->Get("division"));
 		k.glory = r->GetInt("glory");
 		k.placementLeft = r->GetInt("placementLeft");
 		k.shield = r->GetInt("shield");
@@ -267,6 +267,11 @@ int LeagueDivisionFromJson(const Json *v)
 	return n >= 1 && n <= 3 ? n : 0;
 }
 
+int LeagueDivisionOf(LeagueTier tier, const Json *v)
+{
+	return LeagueTierHasDivisions(tier) ? LeagueDivisionFromJson(v) : 0;
+}
+
 std::string LeagueDivisionText(int division)
 {
 	switch (division) {
@@ -372,7 +377,7 @@ LeaguePeak LeaguePeakFromJson(const Json *v)
 	p.glory = std::max(0, v->GetInt("glory"));
 	p.place = std::max(0, v->GetInt("place"));
 	p.tier = LeagueTierFromJson(v->Get("tier"));
-	p.division = LeagueTierHasDivisions(p.tier) ? LeagueDivisionFromJson(v->Get("division")) : 0;
+	p.division = LeagueDivisionOf(p.tier, v->Get("division"));
 	return p;
 }
 
@@ -422,7 +427,7 @@ bool LeagueParseMe(const Json &j, LeagueMe &out)
 		cer.wins = std::max(0, c->GetInt("wins"));
 		cer.losses = std::max(0, c->GetInt("losses"));
 		cer.finalTier = LeagueTierFromJson(c->Get("finalTier"));
-		cer.finalDivision = LeagueTierHasDivisions(cer.finalTier) ? LeagueDivisionFromJson(c->Get("finalDivision")) : 0;
+		cer.finalDivision = LeagueDivisionOf(cer.finalTier, c->Get("finalDivision"));
 	}
 	if (const Json *e = j.Get("equipped"); e && e->type == Json::Object) {
 		out.equippedFrame = SeasonNumber(e->Get("frame"));

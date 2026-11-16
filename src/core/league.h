@@ -36,6 +36,8 @@ bool LeagueTierHasDivisions(LeagueTier t);
 int LeagueTierGloryFrom(LeagueTier t);
 // 3, 2 or 1 (III is the lowest); 0 when there is none. Numbers or Roman numerals.
 int LeagueDivisionFromJson(const Json *v);
+// The same for a rank of `tier`: 0 when the tier has no divisions, whatever `v` says.
+int LeagueDivisionOf(LeagueTier tier, const Json *v);
 // "III", "II", "I", or empty.
 std::string LeagueDivisionText(int division);
 // "Centurion II" with the tier's name as given (already translated or not).
