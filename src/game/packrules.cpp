@@ -20,6 +20,7 @@
 #include "mods/mods.h"
 #include "addr/script.h"
 #include "addr/world.h"
+#include "core/winpath.h"
 
 namespace {
 typedef int(__fastcall *IsKindOfName_t)(void *self, void *edx, const char *name);
@@ -56,14 +57,7 @@ void AddError(const std::string &folder, const std::string &message)
 	LogW("game", "rules (%s): %s", folder.empty() ? "imperivm-resurrected\\rules" : folder.c_str(), message.c_str());
 }
 
-std::string GameDir()
-{
-	char path[MAX_PATH];
-	GetModuleFileNameA(nullptr, path, MAX_PATH);
-	char *slash = strrchr(path, '\\');
-	if (slash) *slash = 0;
-	return path;
-}
+using winpath::GameDir;
 
 bool ValidClassName(const std::string &s)
 {

@@ -24,6 +24,8 @@
 #include "game/mapinfo.h"
 #include "game/mappreview.h"
 #include "hooks/gamefiles.h"
+#include "core/strutil.h"
+#include "core/winpath.h"
 
 namespace {
 
@@ -38,18 +40,11 @@ CupScenariosView g_view;
 bool g_started = false;
 unsigned g_serial = 0;
 
-std::string Lower(std::string s)
-{
-	for (char &c : s) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
-	return s;
-}
+using strutil::Lower;
 
 std::string ScenariosFolder()
 {
-	char path[MAX_PATH] = {};
-	GetModuleFileNameA(nullptr, path, MAX_PATH);
-	if (char *slash = strrchr(path, '\\')) *slash = 0;
-	return std::string(path) + "\\Scenarios";
+	return winpath::GameDir() + "\\Scenarios";
 }
 
 std::string ShortTitle(std::string title)

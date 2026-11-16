@@ -21,6 +21,7 @@
 #include "addr/net.h"
 #include "addr/world.h"
 #include "core/uiport.h"
+#include "core/winpath.h"
 
 namespace {
 typedef void *(__cdecl *ProcessRequests_t)();
@@ -54,14 +55,7 @@ std::string ReadGameString(const char *s)
 	return layout::StringValue(s, 4096);
 }
 
-std::string GameDir()
-{
-	char path[MAX_PATH];
-	GetModuleFileNameA(nullptr, path, MAX_PATH);
-	char *slash = strrchr(path, '\\');
-	if (slash) *slash = 0;
-	return path;
-}
+using winpath::GameDir;
 
 void *__cdecl HookBuildQuickSavePath(void *out)
 {

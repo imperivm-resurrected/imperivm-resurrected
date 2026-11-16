@@ -12,16 +12,11 @@
 #include <utility>
 #include <vector>
 
+#include "core/winpath.h"
+
 namespace {
 
-std::string GameDir()
-{
-	char path[MAX_PATH];
-	GetModuleFileNameA(nullptr, path, MAX_PATH);
-	char *slash = strrchr(path, '\\');
-	if (slash) *slash = 0;
-	return path;
-}
+using winpath::GameDir;
 
 bool Exists(const std::string &path)
 {

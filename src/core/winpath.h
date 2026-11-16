@@ -4,6 +4,7 @@
 #pragma once
 #include <windows.h>
 
+#include <cstring>
 #include <ctime>
 #include <string>
 
@@ -57,6 +58,15 @@ inline FILETIME FileTimeOf(time_t t)
 	ft.dwLowDateTime = static_cast<DWORD>(value);
 	ft.dwHighDateTime = static_cast<DWORD>(value >> 32);
 	return ft;
+}
+
+// The folder of gbr.exe, without a backslash at the end.
+inline std::string GameDir()
+{
+	char path[MAX_PATH] = {};
+	GetModuleFileNameA(nullptr, path, MAX_PATH);
+	if (char *slash = strrchr(path, '\\')) *slash = 0;
+	return path;
 }
 
 }

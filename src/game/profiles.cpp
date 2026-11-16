@@ -20,6 +20,7 @@
 #include "game/cmdcheck.h"
 #include "game/gametext.h"
 #include "game/gamehook.h"
+#include "core/winpath.h"
 
 namespace {
 
@@ -123,14 +124,7 @@ bool IniString(void *ini, const char *key, char *out, size_t size)
 	}
 }
 
-std::string GameDir()
-{
-	char path[MAX_PATH];
-	GetModuleFileNameA(nullptr, path, MAX_PATH);
-	char *slash = strrchr(path, '\\');
-	if (slash) *slash = 0;
-	return path;
-}
+using winpath::GameDir;
 
 bool HookAt(uintptr_t at, void *detour, void **orig, const char *what)
 {

@@ -7,6 +7,8 @@
 #include <cstdlib>
 #include <map>
 
+#include "core/strutil.h"
+
 namespace {
 std::string Trim(const std::string &s)
 {
@@ -16,11 +18,7 @@ std::string Trim(const std::string &s)
 	return s.substr(a, b - a);
 }
 
-std::string Lower(std::string s)
-{
-	for (char &c : s) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
-	return s;
-}
+using strutil::Lower;
 
 const char *SuffixOf(int season)
 {

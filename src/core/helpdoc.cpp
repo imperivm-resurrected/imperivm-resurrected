@@ -16,16 +16,14 @@
 #include <string>
 #include <vector>
 
+#include "core/strutil.h"
+
 namespace {
 
 const size_t kMaxHistory = 100;
 const int kMaxDepth = 24;
 
-std::string Lower(std::string s)
-{
-	for (char &c : s) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
-	return s;
-}
+using strutil::Lower;
 
 bool IsSpace(char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; }
 

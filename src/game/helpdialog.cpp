@@ -21,6 +21,7 @@
 #include "game/gamelayout.h"
 #include "game/gamemenu.h"
 #include "hooks/gamefiles.h"
+#include "core/strutil.h"
 
 namespace {
 
@@ -48,11 +49,7 @@ const size_t kMaxClasses = 20000, kMaxCommands = 20000, kMaxListNodes = 4000;
 typedef bool(__fastcall *HasFlags_t)(void *window, void *edx, unsigned flags);
 typedef void(__fastcall *OnKey_t)(void *dlg, void *edx, int msg, short key);
 
-std::string Lower(std::string s)
-{
-	for (char &c : s) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
-	return s;
-}
+using strutil::Lower;
 
 int Field(const char *cls, int offset)
 {
