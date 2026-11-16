@@ -169,6 +169,29 @@ void PaintSide(Painter &p, Ctx &c, const TourneyMatch &m, const TourneyCard &car
 	}
 }
 
+// What is happening in a match, over its box or beside its pairing: live, its room open for this player, under review or a no-show; empty
+// otherwise. `ink` is the colour to write it in.
+std::string MatchStateText(const Ctx &c, const TourneyMatch &m, COLORREF &ink)
+{
+	ink = pal::caption;
+	if (m.status == TourneyMatchStatus::Live) {
+		ink = pal::redText;
+		return m.startedAt ? TrFmt("Live \xC2\xB7 %s", {DurationText(NowMs() - m.startedAt)}) : Tr("Live");
+	}
+	if (c.me && m.Has(c.me) && m.status == TourneyMatchStatus::Ready) {
+		ink = pal::warn;
+		// Paced by rounds, the match is open until the round's deadline, days away, which the progress card gives: no countdown here.
+		if (TourneyByRounds(c.d) || m.deadlineAt <= NowMs()) return Tr("Room open");
+		return TrFmt("Room open \xC2\xB7 %s to enter", {TourneyClock(m.deadlineAt - NowMs())});
+	}
+	if (m.status == TourneyMatchStatus::Disputed) {
+		ink = pal::warn;
+		return Tr("Under review");
+	}
+	if (m.status == TourneyMatchStatus::Walkover && m.a.Present() && m.b.Present()) return Tr("No-show");
+	return std::string();
+}
+
 void PaintBox(Painter &p, Ctx &c, const TourneyMatch &m, int x, int y, const TourneyBracketMetrics &bm)
 {
 	const bool live = m.status == TourneyMatchStatus::Live;
@@ -182,23 +205,8 @@ void PaintBox(Painter &p, Ctx &c, const TourneyMatch &m, int x, int y, const Tou
 	p.Fill(x + 1, y + 1 + sideH, bm.boxW - 2, 1, pal::hairline);
 	PaintSide(p, c, m, m.b, true, x + 1, y + 2 + sideH, bm.boxW - 2, bm.boxH - 3 - sideH);
 	// The label over the box: what is happening in it.
-	std::string label;
 	COLORREF ink = pal::caption;
-	if (live) {
-		label = m.startedAt ? TrFmt("Live \xC2\xB7 %s", {DurationText(NowMs() - m.startedAt)}) : Tr("Live");
-		ink = pal::redText;
-	}
-	else if (mine && m.status == TourneyMatchStatus::Ready) {
-		// Paced by rounds, the match is open until the round's deadline, days away, which the progress card gives: no countdown here.
-		if (TourneyByRounds(c.d) || m.deadlineAt <= NowMs()) label = Tr("Room open");
-		else label = TrFmt("Room open \xC2\xB7 %s to enter", {TourneyClock(m.deadlineAt - NowMs())});
-		ink = pal::warn;
-	}
-	else if (m.status == TourneyMatchStatus::Disputed) {
-		label = Tr("Under review");
-		ink = pal::warn;
-	}
-	else if (m.status == TourneyMatchStatus::Walkover && m.a.Present() && m.b.Present()) label = Tr("No-show");
+	const std::string label = MatchStateText(c, m, ink);
 	if (!label.empty()) {
 		int lx = x;
 		if (live) {
@@ -693,22 +701,9 @@ void PaintPairing(Painter &p, Ctx &c, const TourneyMatch &m, int table, int x, i
 		return;
 	}
 	// What is happening in it, on the right.
-	std::string state;
 	COLORREF ink = pal::caption;
-	if (live) {
-		state = m.startedAt ? TrFmt("Live \xC2\xB7 %s", {DurationText(NowMs() - m.startedAt)}) : Tr("Live");
-		ink = pal::redText;
-	}
-	else if (ready) {
-		state = m.deadlineAt > NowMs() && !TourneyByRounds(c.d) ? TrFmt("Room open \xC2\xB7 %s to enter", {TourneyClock(m.deadlineAt - NowMs())}) : Tr("Room open");
-		ink = pal::warn;
-	}
-	else if (m.status == TourneyMatchStatus::Disputed) {
-		state = Tr("Under review");
-		ink = pal::warn;
-	}
-	else if (m.status == TourneyMatchStatus::Walkover) state = Tr("No-show");
-	else if (!over) state = Tr("To be played");
+	std::string state = MatchStateText(c, m, ink);
+	if (state.empty() && !over) state = Tr("To be played");
 	const int stateW = row.stateW, stateX = x + row.stateX;
 	if (!state.empty()) {
 		int tx = stateX;
