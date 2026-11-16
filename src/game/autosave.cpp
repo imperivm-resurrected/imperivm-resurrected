@@ -9,6 +9,7 @@
 #include "MinHook.h"
 #include "hooks/hookcount.h"
 #include "game/autosave.h"
+#include "game/gamelayout.h"
 #include "core/config.h"
 #include "game/gameroom.h"
 #include "core/log.h"
@@ -53,10 +54,7 @@ void *__cdecl HookProcessRequests()
 
 std::string ReadGameString(const char *s)
 {
-	const unsigned size = *reinterpret_cast<const unsigned *>(s + 0x14);
-	const unsigned cap = *reinterpret_cast<const unsigned *>(s + 0x18);
-	const char *text = cap < 0x10 ? s + 4 : *reinterpret_cast<const char *const *>(s + 4);
-	return text && size < 4096 ? std::string(text, size) : std::string();
+	return layout::StringValue(s, 4096);
 }
 
 std::string GameDir()

@@ -10,6 +10,7 @@
 
 #include "game/gamemodes.h"
 #include "game/civs.h"
+#include "game/gamelayout.h"
 #include "core/json.h"
 #include "core/log.h"
 #include "i18n/tr.h"
@@ -25,12 +26,6 @@ const unsigned kOptsPopulation = 0x44;
 const unsigned kOptsMode = 0x60;
 const unsigned kOptsModeSize = 0x20;
 const unsigned kSettingsMode = 0xd34;
-const unsigned kSettingsRaces = 0x5c;
-const unsigned kPlayerEntries = 0xa4;
-const unsigned kPlayerEntrySize = 0xc0;
-const unsigned kEntryType = 0x08;
-const unsigned kEntryBonus = 0x38;
-const unsigned kEntrySlot = 0xa0;
 const int kRandomRace = 8;
 
 std::mutex g_lock;
@@ -180,14 +175,6 @@ std::vector<std::string> GameModeProblemsFor(const std::string &folder)
 
 const bool g_featureRegistered = (ModsRegisterFeature({45, &GameModesRebuild, &GameModeProblemsFor}), true);
 
-std::string GameStringText(const char *s)
-{
-	const unsigned size = *reinterpret_cast<const unsigned *>(s + 0x14);
-	const unsigned capacity = *reinterpret_cast<const unsigned *>(s + 0x18);
-	const char *text = capacity < 0x10 ? s + 4 : *reinterpret_cast<const char *const *>(s + 4);
-	return text && size < 256 ? std::string(text, size) : std::string();
-}
-
 int FirstAllowedRace(const GameMode &mode, bool ai)
 {
 	for (int race : mode.civs) {
@@ -218,7 +205,7 @@ const GameMode *GameModeFor(const char *key)
 const GameMode *GameModeOfSettings(const char *settings)
 {
 	if (!settings) return nullptr;
-	return GameModeFor(GameStringText(settings + kSettingsMode).c_str());
+	return GameModeFor(layout::StringValue(settings + kSettingsMode, 256).c_str());
 }
 
 bool GameModeAllows(const GameMode &mode, int race)
@@ -303,18 +290,18 @@ void GameModeApplySettings(char *settings)
 	char *gs = settings ? *reinterpret_cast<char **>(settings) : nullptr;
 	const GameMode *m = GameModeOfSettings(gs);
 	if (!m) return;
-	for (int i = 0; i < 8; i++) {
-		char *entry = gs + kPlayerEntries + i * kPlayerEntrySize;
-		if (*reinterpret_cast<int *>(entry + kEntrySlot) != i) continue;
-		const int type = *reinterpret_cast<int *>(entry + kEntryType);
+	for (int i = 0; i < layout::kSettingsEntryCount; i++) {
+		char *entry = layout::SettingsEntry(gs, i);
+		if (Field<int>(entry, layout::kEntrySlot) != i) continue;
+		const int type = Field<int>(entry, layout::kEntryType);
 		if (type != 0 && type != 1) continue;
-		if (m->bonus >= 0) *reinterpret_cast<int *>(entry + kEntryBonus) = m->bonus;
-		int &race = *reinterpret_cast<int *>(entry);
+		if (m->bonus >= 0) At<int>(entry, layout::kEntryBonus) = m->bonus;
+		int &race = At<int>(entry, layout::kEntryRace);
 		if (GameModeAllows(*m, race)) continue;
 		const int want = FirstAllowedRace(*m, type == 1);
 		if (want < 0) continue;
 		LogI("room", "mode \"%s\": player %d cannot play civilization %d; plays %d", m->key.c_str(), i, race, want);
 		race = want;
-		*reinterpret_cast<signed char *>(gs + kSettingsRaces + i) = static_cast<signed char>(want);
+		At<signed char>(gs, layout::kSettingsRaces + i) = static_cast<signed char>(want);
 	}
 }

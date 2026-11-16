@@ -18,6 +18,7 @@
 #include "addr/ui.h"
 #include "core/log.h"
 #include "game/cmdcheck.h"
+#include "game/gamelayout.h"
 #include "game/gamemenu.h"
 #include "hooks/gamefiles.h"
 
@@ -63,8 +64,8 @@ std::string PoolString(const char *doc, int offset)
 {
 	if (offset <= 0) return std::string();
 	const char *pool = doc + kDocPool;
-	const unsigned size = *reinterpret_cast<const unsigned *>(pool + 0x14), cap = *reinterpret_cast<const unsigned *>(pool + 0x18);
-	const char *base = cap < 0x10 ? pool + 4 : *reinterpret_cast<const char *const *>(pool + 4);
+	const unsigned size = layout::StringSize(pool);
+	const char *base = layout::StringChars(pool);
 	if (!base || static_cast<unsigned>(offset - 1) >= size) return std::string();
 	const char *s = base + offset - 1;
 	return std::string(s, strnlen(s, size - (offset - 1)));

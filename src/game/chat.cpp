@@ -225,16 +225,7 @@ void RunAsScript(const std::string &text)
 	}
 }
 
-// The game's std::string (MSVC 2008): allocator, 16-byte buffer or pointer, size, capacity.
-struct GameString {
-	uint32_t allocator;
-	union {
-		char buf[16];
-		const char *ptr;
-	};
-	uint32_t size, capacity;
-};
-static_assert(sizeof(GameString) == 0x1c, "the game's std::string is 28 bytes");
+using layout::GameString;
 typedef void(__cdecl *PostNotification_t)(const GameString *type, GameString text, int mapX, int mapY);
 typedef void(__stdcall *ScreenToMap_t)(unsigned *out, const unsigned *in);
 // "location message" is the game's (VXNOTIFICATIONS.XML); the other two are added to that file by the built-in patch

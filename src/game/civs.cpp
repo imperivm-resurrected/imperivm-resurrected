@@ -73,14 +73,6 @@ uint32_t g_neutralPrefixOriginal[8] = {};
 bool g_neutralPrefixRead = false;
 bool g_hooked = false;
 
-struct GameString {
-	int allocator;
-	const char *text;
-	char unused[12];
-	unsigned size;
-	unsigned capacity;
-};
-
 std::string Lower(std::string s)
 {
 	for (char &c : s) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
@@ -239,7 +231,7 @@ int __cdecl PickRandomRace(char *game, char *frame)
 {
 	const char *gs = *reinterpret_cast<char **>(frame + 8);
 	const int slot = *reinterpret_cast<int *>(frame - 0x18);
-	const bool isAi = gs && slot >= 0 && slot < 8 && *reinterpret_cast<const int *>(gs + 0xa4 + slot * 0xc0 + 8) == 1;
+	const bool isAi = gs && slot >= 0 && slot < layout::kSettingsEntryCount && Field<int>(layout::SettingsEntry(gs, slot), layout::kEntryType) == layout::kEntryTypeAi;
 	const std::vector<const Civ *> civs = SortedCivs();
 	std::vector<const Civ *> pool;
 	for (const Civ *c : civs) {
@@ -413,8 +405,7 @@ std::string TemplateName(void *lib, unsigned idx)
 	const char *end = *reinterpret_cast<const char **>(static_cast<char *>(lib) + 0x14);
 	if (!begin || begin + (static_cast<size_t>(idx) + 1) * 0xb0 > end) return "";
 	const char *entry = begin + static_cast<size_t>(idx) * 0xb0;
-	const unsigned capacity = *reinterpret_cast<const unsigned *>(entry + 0x18);
-	const char *text = capacity < 0x10 ? entry + 4 : *reinterpret_cast<const char *const *>(entry + 4);
+	const char *text = layout::StringChars(entry);
 	return text ? std::string(text, strnlen(text, 64)) : "";
 }
 
@@ -462,7 +453,7 @@ void *__fastcall HookPlaceTown(void *self, void *edx, void *grid, float scale, u
 	int race = -1;
 	if (player >= 1 && player <= 8) {
 		if (g_genActive) race = g_genRaces[player - 1];
-		else if (const char *gs = *reinterpret_cast<char **>(addr::kGameSettings)) race = *reinterpret_cast<const signed char *>(gs + 0x5c + (player - 1));
+		else if (const char *gs = *reinterpret_cast<char **>(addr::kGameSettings)) race = Field<signed char>(gs, layout::kSettingsRaces + (player - 1));
 		if (race >= 10) civ = FindByIndex(race);
 	}
 	static int logged = 0;
@@ -514,11 +505,11 @@ int FindByOverride(void *lib, int base, const char *kind)
 {
 	if (base < 0 || base >= 8 || !g_baseOverride[base].prefix[0]) return -1;
 	const std::string name = std::string(g_baseOverride[base].prefix) + kind;
-	GameString s = {};
-	s.text = name.c_str();
-	s.size = static_cast<unsigned>(name.size());
+	layout::GameString s = {};
+	s.ptr = name.c_str();
+	s.size = static_cast<uint32_t>(name.size());
 	s.capacity = 0x1f;
-	const int r = reinterpret_cast<int(__fastcall *)(void *, void *, GameString *, int)>(addr::kFindTemplateByPrefix)(lib, nullptr, &s, -1);
+	const int r = reinterpret_cast<int(__fastcall *)(void *, void *, layout::GameString *, int)>(addr::kFindTemplateByPrefix)(lib, nullptr, &s, -1);
 	static int logged = 0;
 	if (logged++ < 8) LogD("civilizations", "settlement template of %s -> \"%s\" (%d)", kGameNames[base], name.c_str(), r);
 	return r;
@@ -732,8 +723,8 @@ const char *GameCivName(int index)
 int CivsPlayerCiv(int player)
 {
 	const char *gs = *reinterpret_cast<char **>(addr::kGameSettings);
-	if (!gs || player < 1 || player > 8) return -1;
-	return *reinterpret_cast<const int *>(gs + 0xa4 + (player - 1) * 0xc0);
+	if (!gs || player < 1 || player > layout::kSettingsEntryCount) return -1;
+	return Field<int>(layout::SettingsEntry(gs, player - 1), layout::kEntryRace);
 }
 
 void *CivsLocalPlayer()
@@ -987,9 +978,8 @@ void CivsBuildEnd(void *settings)
 		return;
 	}
 	std::vector<int> entries;
-	for (int i = 0; i < 8; i++) {
-		const char *entry = gs + 0xa4 + i * 0xc0;
-		if (*reinterpret_cast<const int *>(entry + 0xa0) == i) entries.push_back(i);
+	for (int i = 0; i < layout::kSettingsEntryCount; i++) {
+		if (Field<int>(layout::SettingsEntry(gs, i), layout::kEntrySlot) == i) entries.push_back(i);
 	}
 	for (const SlotCiv &s : g_slotCivs) {
 		if (s.slot < 0 || s.slot >= static_cast<int>(entries.size())) {
@@ -997,8 +987,8 @@ void CivsBuildEnd(void *settings)
 			continue;
 		}
 		const int i = entries[s.slot];
-		char *entry = gs + 0xa4 + i * 0xc0;
-		const int entryType = *reinterpret_cast<int *>(entry + 8);
+		char *entry = layout::SettingsEntry(gs, i);
+		const int entryType = Field<int>(entry, layout::kEntryType);
 		if ((s.type == 3 && entryType != 0) || (s.type == 1 && entryType != 1)) {
 			LogW("civilizations", "slot %d (type %d) does not match player %d (type %d); its civilization is not changed", s.slot,
 				s.type, i, entryType);
@@ -1006,8 +996,8 @@ void CivsBuildEnd(void *settings)
 		}
 		const bool useBase = s.type == 1 && !s.ai;
 		const int race = useBase ? s.base : s.civ;
-		*reinterpret_cast<int *>(entry) = race;
-		*reinterpret_cast<signed char *>(gs + 0x5c + i) = static_cast<signed char>(race);
+		At<int>(entry, layout::kEntryRace) = race;
+		At<signed char>(gs, layout::kSettingsRaces + i) = static_cast<signed char>(race);
 		LogD("civilizations", "game player %d (slot %d) plays civilization %d%s", i, s.slot, race,
 			useBase ? " (AI: the base of the chosen civilization)" : "");
 	}

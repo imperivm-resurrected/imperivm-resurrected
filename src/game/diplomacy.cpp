@@ -99,8 +99,6 @@ namespace {
 const size_t kDlgPlayers = 0x60, kDlgCount = 0x7c, kToggleState = 0x7e;
 const int kMaxRows = 7, kAlliedVictoryId = 0x100a, kOkId = 0x1000, kCancelId = 0x1001;
 const unsigned kRowBits[4] = {diplomacy::kCeasefire, diplomacy::kVision, diplomacy::kSupport, diplomacy::kControl};
-const size_t kSettingsTeams = 0x54, kSettingsSlots = 0xac, kSettingsSlotSize = 0xc0;
-const int kSlotAi = 1, kSettingsSlotCount = 8;
 
 typedef void *(__fastcall *GetChild_t)(void *dlg, void *edx, int id, const char *cls);
 typedef void(__fastcall *SetState_t)(void *button, void *edx, int state, int redraw);
@@ -160,9 +158,9 @@ bool ReadRaw(void *dlg, RawDialog &out)
 			const char *name = layout::PlayerName(player);
 			for (int c = 0; name && c < 64 && name[c]; c++) row.name[c] = name[c];
 			row.color = Field<unsigned>(player, layout::kPlayerColor);
-			if (settings && index < kSettingsSlotCount) {
-				row.ai = *reinterpret_cast<const int *>(settings + kSettingsSlots + index * kSettingsSlotSize) == kSlotAi;
-				const unsigned char team = *reinterpret_cast<const unsigned char *>(settings + kSettingsTeams + index);
+			if (settings && index < layout::kSettingsEntryCount) {
+				row.ai = Field<int>(layout::SettingsEntry(settings, index), layout::kEntryType) == layout::kEntryTypeAi;
+				const unsigned char team = Field<unsigned char>(settings, layout::kSettingsTeams + index);
 				row.team = team >= 1 && team <= 8 ? team : 0;
 			}
 		}

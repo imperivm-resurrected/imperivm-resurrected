@@ -39,11 +39,11 @@ std::map<std::string, std::vector<std::string>, std::less<>> g_baseToClones;
 volatile bool g_haveClasses = false;
 volatile bool g_active = false;
 
+// CVXScriptClass: its id, a std::string at +4.
 std::string ClassId(const char *cls)
 {
-	const unsigned size = *reinterpret_cast<const unsigned *>(cls + 0x18);
-	const unsigned cap = *reinterpret_cast<const unsigned *>(cls + 0x1c);
-	const char *text = cap < 0x10 ? cls + 8 : *reinterpret_cast<const char *const *>(cls + 8);
+	const unsigned size = layout::StringSize(cls + 4);
+	const char *text = layout::StringChars(cls + 4);
 	return size && size < 256 ? std::string(text, size) : std::string();
 }
 
