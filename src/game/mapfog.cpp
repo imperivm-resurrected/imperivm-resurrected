@@ -9,13 +9,11 @@
 #include <cstring>
 #include <vector>
 
-#include "MinHook.h"
-#include "hooks/hookcount.h"
-
 #include "core/config.h"
 #include "core/log.h"
 #include "game/gamelayout.h"
 #include "game/mapfog.h"
+#include "game/gamehook.h"
 #include "addr/engine.h"
 #include "addr/state.h"
 #include "addr/ui.h"
@@ -522,12 +520,9 @@ long long ZoomFogGameThreadTick()
 void InstallZoomFog(bool knownExe)
 {
 	if (!knownExe) return;
-	const bool ok = HookCreate(reinterpret_cast<void *>(addr::kRebuild), reinterpret_cast<void *>(&HookRebuild), reinterpret_cast<void **>(&g_origRebuild)) == MH_OK &&
-		HookEnable(reinterpret_cast<void *>(addr::kRebuild)) == MH_OK;
-	const bool okCenter = HookCreate(reinterpret_cast<void *>(addr::kCenterOn), reinterpret_cast<void *>(&HookCenterOn), reinterpret_cast<void **>(&g_origCenterOn)) == MH_OK &&
-		HookEnable(reinterpret_cast<void *>(addr::kCenterOn)) == MH_OK;
-	const bool okWide = HookCreate(reinterpret_cast<void *>(addr::kZoomFogOverlay), reinterpret_cast<void *>(&HookFogOverlay), reinterpret_cast<void **>(&g_origFogOverlay)) == MH_OK &&
-		HookEnable(reinterpret_cast<void *>(addr::kZoomFogOverlay)) == MH_OK;
+	const bool ok = HookFunction(addr::kRebuild, &HookRebuild, &g_origRebuild);
+	const bool okCenter = HookFunction(addr::kCenterOn, &HookCenterOn, &g_origCenterOn);
+	const bool okWide = HookFunction(addr::kZoomFogOverlay, &HookFogOverlay, &g_origFogOverlay);
 	LogAt(okCenter ? kLogInfo : kLogError, "game", "camera: CenterOn protection without zoom map %s", okCenter ? "ready" : "NOT available");
 	LogAt(okWide ? kLogInfo : kLogError, "game", "zoom map: screens wider than 2048 px %s", okWide ? "protected" : "NOT protected");
 	LogAt(ok ? kLogInfo : kLogError, "game", "zoom map fog: %s", ok ? (GetConfig().zoomFog ? "ready" : "ready, turned off in the options") : "NOT available");

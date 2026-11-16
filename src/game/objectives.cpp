@@ -12,7 +12,6 @@
 #include <string>
 #include <vector>
 
-#include "MinHook.h"
 #include "addr/script.h"
 #include "addr/state.h"
 #include "addr/ui.h"
@@ -20,8 +19,8 @@
 #include "core/log.h"
 #include "game/cmdcheck.h"
 #include "game/gamemenu.h"
+#include "game/gamehook.h"
 #include "hooks/gameload.h"
-#include "hooks/hookcount.h"
 
 namespace {
 
@@ -233,7 +232,7 @@ void AfterGameLoad(const char *path, int result)
 
 bool HookAt(uintptr_t at, void *detour, void **orig, const char *what)
 {
-	if (HookCreate(reinterpret_cast<void *>(at), detour, orig) == MH_OK && HookEnable(reinterpret_cast<void *>(at)) == MH_OK) return true;
+	if (HookFunction(at, detour, orig)) return true;
 	LogE("game", "objectives: could not hook %s", what);
 	return false;
 }

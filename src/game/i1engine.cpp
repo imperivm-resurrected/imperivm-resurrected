@@ -20,6 +20,7 @@
 #include "game/cmdcheck.h"
 #include "game/gamelayout.h"
 #include "game/i1engine.h"
+#include "game/gamehook.h"
 #include "addr/state.h"
 #include "addr/script.h"
 #include "addr/world.h"
@@ -743,43 +744,35 @@ void NoteKill(void *attacker, void *defender, int dd, const Rules &rules)
 void InstallI1Engine(bool knownExe)
 {
 	if (!knownExe) return;
-	void *target = reinterpret_cast<void *>(addr::kResolveMethods);
-	if (HookCreate(target, reinterpret_cast<void *>(&HookResolveMethods), reinterpret_cast<void **>(&g_origResolveMethods)) != MH_OK || HookEnable(target) != MH_OK) {
+	if (!HookFunction(addr::kResolveMethods, &HookResolveMethods, &g_origResolveMethods)) {
 		LogE("game", "could not hook the classes' behaviours: the classes of an Imperivm I campaign also run their Great Battles of Rome parent's");
 		return;
 	}
 	LogD("game", "the classes of an Imperivm I campaign run only their own behaviours");
-	target = reinterpret_cast<void *>(addr::kRecalcStats);
-	if (HookCreate(target, reinterpret_cast<void *>(&HookRecalcStats), reinterpret_cast<void **>(&g_origRecalcStats)) != MH_OK || HookEnable(target) != MH_OK)
+	if (!HookFunction(addr::kRecalcStats, &HookRecalcStats, &g_origRecalcStats))
 		LogE("game", "could not hook the units' stats: the classes of an Imperivm I campaign keep Great Battles of Rome's levels");
 
 	const unsigned char jumpIfVisible[] = {0x75, 0x09}, jumpAlways[] = {0xeb, 0x09};
 	g_revealOnAttack.Prepare(addr::kRevealOnAttackJump, jumpIfVisible, jumpAlways, sizeof(jumpIfVisible));
-	target = reinterpret_cast<void *>(addr::kPerformAttack);
-	if (!g_revealOnAttack.ready || HookCreate(target, reinterpret_cast<void *>(&HookPerformAttack), reinterpret_cast<void **>(&g_origPerformAttack)) != MH_OK ||
-		HookEnable(target) != MH_OK)
+	if (!g_revealOnAttack.ready || !HookFunction(addr::kPerformAttack, &HookPerformAttack, &g_origPerformAttack))
 		LogE("game", "could not hook the attacks: a hidden unit of an Imperivm I campaign shows itself when it attacks");
 
 	const unsigned char lock1600[] = {0x40, 0x06, 0x00, 0x00}, lock500[] = {0xf4, 0x01, 0x00, 0x00};
 	g_drainLock.Prepare(addr::kDrainLockTime, lock1600, lock500, sizeof(lock1600));
 	if (!g_drainLock.ready) LogW("game", "the ghosts of an Imperivm I campaign keep their victims as long as Great Battles of Rome's");
-	target = reinterpret_cast<void *>(addr::kGhostDamageCallback);
-	if (HookCreate(target, reinterpret_cast<void *>(&HookGhostDamage), reinterpret_cast<void **>(&g_origGhostDamage)) != MH_OK || HookEnable(target) != MH_OK)
+	if (!HookFunction(addr::kGhostDamageCallback, &HookGhostDamage, &g_origGhostDamage))
 		LogE("game", "could not hook the ghosts: the ghosts of an Imperivm I campaign leave their victims at Great Battles of Rome's health");
-	target = reinterpret_cast<void *>(addr::kDamageRandomGarrisonUnit);
-	if (HookCreate(target, reinterpret_cast<void *>(&HookDamageGarrison), reinterpret_cast<void **>(&g_origDamageGarrison)) != MH_OK || HookEnable(target) != MH_OK)
+	if (!HookFunction(addr::kDamageRandomGarrisonUnit, &HookDamageGarrison, &g_origDamageGarrison))
 		LogE("game", "could not hook the garrisons: an Imperivm I settlement's garrison takes double damage");
-	target = reinterpret_cast<void *>(addr::kUpdateArmyExperience);
+	void *target = reinterpret_cast<void *>(addr::kUpdateArmyExperience);
 	void *bonus = reinterpret_cast<void *>(addr::kCalcArmyExpBonus);
 	if (HookCreate(target, reinterpret_cast<void *>(&HookUpdateArmyExperience), reinterpret_cast<void **>(&g_origUpdateArmyExperience)) != MH_OK ||
 		HookCreate(bonus, reinterpret_cast<void *>(&HookCalcArmyExpBonus), reinterpret_cast<void **>(&g_origCalcArmyExpBonus)) != MH_OK || HookEnable(target) != MH_OK ||
 		HookEnable(bonus) != MH_OK)
 		LogE("game", "could not hook the heroes' experience: Imperivm I heroes level up as Great Battles of Rome's");
-	target = reinterpret_cast<void *>(addr::kResolveAttack);
-	if (HookCreate(target, reinterpret_cast<void *>(&HookResolveAttack), reinterpret_cast<void **>(&g_origResolveAttack)) != MH_OK || HookEnable(target) != MH_OK)
+	if (!HookFunction(addr::kResolveAttack, &HookResolveAttack, &g_origResolveAttack))
 		LogE("game", "could not hook the kills: Imperivm I units gain Great Battles of Rome's experience");
-	target = reinterpret_cast<void *>(addr::kGetBonus);
-	if (HookCreate(target, reinterpret_cast<void *>(&HookGetBonus), reinterpret_cast<void **>(&g_origGetBonus)) != MH_OK || HookEnable(target) != MH_OK)
+	if (!HookFunction(addr::kGetBonus, &HookGetBonus, &g_origGetBonus))
 		LogE("game", "could not hook the attack bonuses: the Imperivm I catapult does Great Battles of Rome's damage to buildings");
 	if (InstallGameLoadHook(true)) OnGameLoading(&OnLoading);
 
@@ -796,8 +789,7 @@ void InstallI1Engine(bool knownExe)
 		{addr::kScriptDruidFindUnitToHeal, reinterpret_cast<void *>(&HookFindUnitToHeal), reinterpret_cast<void **>(&g_origFindUnitToHeal), "druids stop healing near a ritual"},
 	};
 	for (const auto &h : settlementHooks) {
-		target = reinterpret_cast<void *>(h.at);
-		if (HookCreate(target, h.hook, h.orig) != MH_OK || HookEnable(target) != MH_OK) LogE("game", "could not hook the settlements: in an Imperivm I campaign %s", h.lost);
+		if (!HookFunction(h.at, h.hook, h.orig)) LogE("game", "could not hook the settlements: in an Imperivm I campaign %s", h.lost);
 	}
 }
 

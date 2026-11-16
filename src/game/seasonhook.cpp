@@ -5,13 +5,12 @@
 #include <string>
 #include <vector>
 
-#include "MinHook.h"
 #include "addr/state.h"
 #include "addr/world.h"
 #include "core/log.h"
 #include "game/seasondecors.h"
+#include "game/gamehook.h"
 #include "hooks/gamefiles.h"
-#include "hooks/hookcount.h"
 
 namespace {
 const unsigned kReadMode = 1;
@@ -45,9 +44,7 @@ void *__cdecl HookLoadDecorsIni(const char *path)
 void InstallSeasonDecors(bool knownExe)
 {
 	if (!knownExe) return;
-	void *target = reinterpret_cast<void *>(addr::kLoadDecorsIni);
-	if (HookCreate(target, reinterpret_cast<void *>(&HookLoadDecorsIni), reinterpret_cast<void **>(&g_origLoadDecorsIni)) != MH_OK ||
-		HookEnable(target) != MH_OK) {
+	if (!HookFunction(addr::kLoadDecorsIni, &HookLoadDecorsIni, &g_origLoadDecorsIni)) {
 		g_origLoadDecorsIni = nullptr;
 		LogE("room", "could not hook the loading of the decorations");
 	}

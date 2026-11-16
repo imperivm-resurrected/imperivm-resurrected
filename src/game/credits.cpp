@@ -9,10 +9,9 @@
 #include <cstdint>
 #include <string>
 
-#include "MinHook.h"
 #include "addr/ui.h"
 #include "core/log.h"
-#include "hooks/hookcount.h"
+#include "game/gamehook.h"
 #include "mods/vfs.h"
 
 namespace {
@@ -57,7 +56,7 @@ void *__fastcall HookDeletingDtor(void *self, void *edx, unsigned flags)
 
 bool HookAt(uintptr_t at, void *detour, void **orig, const char *what)
 {
-	if (HookCreate(reinterpret_cast<void *>(at), detour, orig) == MH_OK && HookEnable(reinterpret_cast<void *>(at)) == MH_OK) return true;
+	if (HookFunction(at, detour, orig)) return true;
 	LogE("ui", "could not hook %s", what);
 	return false;
 }

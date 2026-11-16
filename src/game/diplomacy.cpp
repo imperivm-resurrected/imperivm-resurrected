@@ -3,15 +3,14 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include <windows.h>
 
-#include "MinHook.h"
 #include "core/log.h"
 #include "hooks/gamestate.h"
-#include "hooks/hookcount.h"
 #include "game/diplomacy.h"
 #include "game/diplomacyrules.h"
 #include "game/gamelayout.h"
 #include "game/gamemenu.h"
 #include "game/gameroom.h"
+#include "game/gamehook.h"
 #include "mods/modoptions.h"
 
 #include <cstdint>
@@ -85,9 +84,7 @@ void DiplomacyKeyDown()
 void InstallDiplomacy(bool knownExe)
 {
 	if (!knownExe) return;
-	void *target = reinterpret_cast<void *>(addr::kEmptyMenuOnShow);
-	const bool ok = HookCreate(target, reinterpret_cast<void *>(&HookEmptyMenuOnShow), reinterpret_cast<void **>(&g_origEmptyMenuOnShow)) == MH_OK &&
-		HookEnable(target) == MH_OK;
+	const bool ok = HookFunction(addr::kEmptyMenuOnShow, &HookEmptyMenuOnShow, &g_origEmptyMenuOnShow);
 	if (ok) LogI("game", "diplomacy against the AI: hooked");
 	else LogE("game", "diplomacy against the AI: could not hook CVXUIEmptySelectionMenu::OnShow");
 }

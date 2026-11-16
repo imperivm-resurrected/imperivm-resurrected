@@ -3,13 +3,12 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include <windows.h>
 
-#include "MinHook.h"
-#include "hooks/hookcount.h"
 #include "game/civs.h"
 #include "game/civroom.h"
 #include "game/gamelayout.h"
 #include "game/gamemodes.h"
 #include "game/specials.h"
+#include "game/gamehook.h"
 #include "core/json.h"
 #include "core/log.h"
 #include "mods/mods.h"
@@ -1034,7 +1033,7 @@ void InstallCivs(bool knownExe)
 		{addr::kComputeNeeds, reinterpret_cast<void *>(&HookComputeNeeds), reinterpret_cast<void **>(&g_origComputeNeeds), "CCounterUnits::ComputeNeeds"},
 	};
 	for (const Site &s : sites) {
-		if (HookCreate(reinterpret_cast<void *>(s.addr), s.detour, s.orig) != MH_OK || HookEnable(reinterpret_cast<void *>(s.addr)) != MH_OK) {
+		if (!HookFunction(s.addr, s.detour, s.orig)) {
 			LogE("civilizations", "could not hook %s", s.what);
 		}
 	}

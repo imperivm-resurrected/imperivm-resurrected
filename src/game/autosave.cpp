@@ -6,8 +6,6 @@
 #include <cstdint>
 #include <cstring>
 
-#include "MinHook.h"
-#include "hooks/hookcount.h"
 #include "game/autosave.h"
 #include "game/gamelayout.h"
 #include "core/config.h"
@@ -15,6 +13,7 @@
 #include "core/log.h"
 #include "mods/savelib.h"
 #include "game/netlink.h"
+#include "game/gamehook.h"
 #include "i18n/tr.h"
 #include "addr/engine.h"
 #include "addr/state.h"
@@ -261,27 +260,20 @@ void AutosaveTick()
 void InstallAutosave(bool knownExe)
 {
 	if (!knownExe) return;
-	void *target = reinterpret_cast<void *>(addr::kProcessPendingGameRequests);
-	if (HookCreate(target, reinterpret_cast<void *>(&HookProcessRequests), reinterpret_cast<void **>(&g_origProcess)) ==
-			MH_OK &&
-		HookEnable(target) == MH_OK) {
+	if (HookFunction(addr::kProcessPendingGameRequests, &HookProcessRequests, &g_origProcess)) {
 		LogI("autosave", "ready");
 	}
 	else {
 		g_origProcess = nullptr;
 		LogE("autosave", "could not hook the game loop");
 	}
-	void *quit = reinterpret_cast<void *>(addr::kRequestQuitToMenu);
-	if (HookCreate(quit, reinterpret_cast<void *>(&HookRequestQuit), reinterpret_cast<void **>(&g_origRequestQuit)) == MH_OK &&
-		HookEnable(quit) == MH_OK) {
+	if (HookFunction(addr::kRequestQuitToMenu, &HookRequestQuit, &g_origRequestQuit)) {
 		LogI("autosave", "on exit, saves after confirmation");
 	}
 	else {
 		g_origRequestQuit = nullptr;
 	}
-	void *build = reinterpret_cast<void *>(addr::kBuildQuickSavePath);
-	if (HookCreate(build, reinterpret_cast<void *>(&HookBuildQuickSavePath), reinterpret_cast<void **>(&g_origBuildPath)) == MH_OK &&
-		HookEnable(build) == MH_OK) {
+	if (HookFunction(addr::kBuildQuickSavePath, &HookBuildQuickSavePath, &g_origBuildPath)) {
 		LogI("autosave", "online games are saved in the %s folder of the profile", kSaveOnlineFolder);
 	}
 }

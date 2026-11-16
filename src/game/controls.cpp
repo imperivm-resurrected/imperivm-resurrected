@@ -4,10 +4,9 @@
 #define NOMINMAX
 #include <windows.h>
 
-#include "MinHook.h"
-#include "hooks/hookcount.h"
 #include "game/controls.h"
 #include "game/diplomacy.h"
+#include "game/gamehook.h"
 #include "core/legacy.h"
 #include "i18n/tr.h"
 #include "core/log.h"
@@ -909,8 +908,7 @@ void *__fastcall HookParseFile(void *self, void *edx, const char *path, int n)
 
 bool Hook(uintptr_t addr, void *detour, void **orig, const char *what)
 {
-	if (HookCreate(reinterpret_cast<void *>(addr), detour, orig) == MH_OK &&
-		HookEnable(reinterpret_cast<void *>(addr)) == MH_OK) {
+	if (HookFunction(addr, detour, orig)) {
 		return true;
 	}
 	LogE("controls", "could not hook %s (%08x)", what, static_cast<unsigned>(addr));

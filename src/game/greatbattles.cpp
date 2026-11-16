@@ -12,14 +12,13 @@
 #include <string>
 #include <vector>
 
-#include "MinHook.h"
 #include "addr/engine.h"
 #include "addr/state.h"
 #include "addr/ui.h"
 #include "core/log.h"
 #include "game/greatbattles.h"
+#include "game/gamehook.h"
 #include "hooks/gamefiles.h"
-#include "hooks/hookcount.h"
 #include "hooks/media.h"
 
 namespace {
@@ -323,7 +322,7 @@ void __fastcall HookDtor(void *dlg)
 
 bool HookAt(uintptr_t at, void *detour, void **orig, const char *what)
 {
-	if (HookCreate(reinterpret_cast<void *>(at), detour, orig) == MH_OK && HookEnable(reinterpret_cast<void *>(at)) == MH_OK) return true;
+	if (HookFunction(at, detour, orig)) return true;
 	LogE("ui", "could not hook %s", what);
 	return false;
 }

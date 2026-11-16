@@ -8,8 +8,7 @@
 #include <cstdint>
 
 #include "game/options.h"
-#include "MinHook.h"
-#include "hooks/hookcount.h"
+#include "game/gamehook.h"
 #include "core/config.h"
 #include "hooks/displaymode.h"
 #include "mods/lang.h"
@@ -357,8 +356,7 @@ unsigned __fastcall HookOnMessage(void *dlg, void *edx, int *msg)
 
 bool HookAt(uintptr_t addr, void *detour, void **orig, const char *what)
 {
-	if (HookCreate(reinterpret_cast<void *>(addr), detour, orig) == MH_OK &&
-		HookEnable(reinterpret_cast<void *>(addr)) == MH_OK) {
+	if (HookFunction(addr, detour, orig)) {
 		return true;
 	}
 	LogE("options", "could not hook %s", what);
