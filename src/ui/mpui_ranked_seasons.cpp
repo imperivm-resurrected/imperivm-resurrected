@@ -212,7 +212,8 @@ void RankedSeasonAction(int arg)
 		OpenPlayerRow(id);
 		return;
 	}
-	const LeagueMeView me = LeagueMeState();
+	const auto meView = LeagueMeShared();
+	const LeagueMeView &me = *meView;
 	switch (arg) {
 	case kRkCeremonyEquip: {
 		const LeagueCeremony &c = me.me.ceremony;
@@ -294,7 +295,8 @@ void RankedSeasonsFrame()
 		return;
 	}
 	if (g_s.game.active || g_s.room.id || g_s.connecting || r.resultOpen || g_s.searching || r.disputeMatch) return;
-	const LeagueMeView me = LeagueMeState();
+	const auto meView = LeagueMeShared();
+	const LeagueMeView &me = *meView;
 	if (!me.loaded || !me.me.ceremony.present) return;
 	const int season = me.me.ceremony.reward.season;
 	const std::string queue = LeagueQueueId(me.me.ceremony.reward.queue), shown = std::to_string(season) + ":" + queue;

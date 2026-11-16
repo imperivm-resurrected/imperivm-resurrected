@@ -334,7 +334,8 @@ void PaintNextSeason(Painter &p, const LeagueSeasonInfo &s, const Look &k, int x
 void PaintCeremony(Painter &p, const State &st)
 {
 	const int mx = st.mouseX, my = st.mouseY;
-	const LeagueMeView me = LeagueMeState();
+	const auto meView = LeagueMeShared();
+	const LeagueMeView &me = *meView;
 	const LeagueSeasonsView sv = LeagueSeasonsState();
 	const int season = st.ranked.ceremonySeason;
 	LeagueCeremony c = me.me.ceremony;

@@ -545,7 +545,8 @@ void PaintRankedResult(Painter &p, const State &st)
 	const ScreenLayout l = ScreenLayoutFor(st.viewW, st.viewH);
 	const Verdict verdict = VerdictOf(o);
 	const uint32_t elapsed = static_cast<uint32_t>(GetTickCount() - st.ranked.resultAt);
-	const LeagueMeView me = LeagueMeState();
+	const auto meView = LeagueMeShared();
+	const LeagueMeView &me = *meView;
 
 	// The header of the screen: what happened in big and where it happened under it.
 	{

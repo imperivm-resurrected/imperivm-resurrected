@@ -3,6 +3,7 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #pragma once
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -61,6 +62,8 @@ struct LeagueMeView {
 	LeagueMe me;
 };
 LeagueMeView LeagueMeState();
+// The same view shared, never changed once given (an answer makes a new one): for what reads it every frame, without a copy.
+std::shared_ptr<const LeagueMeView> LeagueMeShared();
 // GET /v1/league/me in the background, at most once a minute unless forced.
 void LeagueMeRefresh(bool force = false);
 
