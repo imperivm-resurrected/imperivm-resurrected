@@ -37,5 +37,14 @@ int main()
 	Check(fresh.GetString("name") == "N", "new key wins");
 	Json bad;
 	Check(!Json::Parse("{\"a\": }", bad, &err) && err.find("position") != std::string::npos, "error has position: " + err);
+	Json n;
+	Check(Json::Parse("{\"cut\":7.9,\"neg\":-3.5,\"at\":1794662871362,\"text\":\"76561198000000999\",\"id\":12,\"yes\":true,\"no\":false,\"one\":\"1\"}", n, &err), "parse numbers");
+	Check(n.GetInt("cut") == 7 && n.GetInt("neg") == -3, "GetInt cuts towards zero");
+	Check(n.GetInt("missing", 5) == 5 && n.GetInt("one", 4) == 4, "GetInt default for missing and text");
+	Check(n.GetInt64("at") == 1794662871362LL && n.GetInt64("missing", -1) == -1, "GetInt64");
+	Check(n.GetIdText("text") == "76561198000000999" && n.GetIdText("id") == "12", "GetIdText of text and number");
+	Check(n.GetIdText("yes").empty() && n.GetIdText("missing").empty(), "GetIdText of anything else");
+	Check(n.GetFlag("yes") == 1 && n.GetFlag("no") == 0, "GetFlag of a yes or no");
+	Check(n.GetFlag("one") == -1 && n.GetFlag("missing") == -1, "GetFlag of anything else");
 	return test::Summary("json");
 }

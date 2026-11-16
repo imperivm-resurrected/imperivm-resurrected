@@ -13,24 +13,6 @@
 
 namespace {
 
-int Int(const Json &j, const char *key)
-{
-	return static_cast<int>(j.GetNumber(key));
-}
-
-int64_t Int64(const Json &j, const char *key)
-{
-	return static_cast<int64_t>(j.GetNumber(key));
-}
-
-std::string IdText(const Json *v)
-{
-	if (!v) return std::string();
-	if (v->type == Json::String) return v->str;
-	if (v->type == Json::Number) return std::to_string(static_cast<long long>(v->num));
-	return std::string();
-}
-
 // A season's number from "id" or "season", as a number or as text; -1 when there is none.
 int SeasonId(const Json &j, const char *key)
 {
@@ -55,8 +37,8 @@ bool LeagueParseSeasons(const Json &j, std::vector<LeagueSeasonInfo> &out)
 		if (info.id < 0) info.id = SeasonId(s, "number");
 		if (info.id < 0) continue;
 		info.name = s.GetString("name");
-		info.startsAt = Int64(s, "startsAt");
-		info.endsAt = Int64(s, "endsAt");
+		info.startsAt = s.GetInt64("startsAt");
+		info.endsAt = s.GetInt64("endsAt");
 		info.closed = s.GetBool("closed");
 		info.beta = s.GetBool("beta");
 		out.push_back(info);
@@ -83,13 +65,13 @@ bool LeagueParseHall(const Json &j, LeagueHall &out)
 	for (const Json &r : top->arr) {
 		if (r.type != Json::Object) continue;
 		LeagueHallRow row;
-		row.place = Int(r, "place");
-		row.steamId = IdText(r.Get("steamId"));
+		row.place = r.GetInt("place");
+		row.steamId = r.GetIdText("steamId");
 		row.name = r.GetString("name");
 		row.tier = LeagueTierFromJson(r.Get("tier"));
 		row.division = LeagueTierHasDivisions(row.tier) ? LeagueDivisionFromJson(r.Get("division")) : 0;
-		row.glory = Int(r, "glory");
-		row.games = std::max(0, Int(r, "games"));
+		row.glory = r.GetInt("glory");
+		row.games = std::max(0, r.GetInt("games"));
 		if (row.place > 0) out.top.push_back(row);
 	}
 	std::sort(out.top.begin(), out.top.end(), [](const LeagueHallRow &a, const LeagueHallRow &b) { return a.place < b.place; });
@@ -101,26 +83,26 @@ bool LeagueParsePlayerProfile(const Json &j, LeaguePlayerProfile &out)
 {
 	if (j.type != Json::Object) return false;
 	out = LeaguePlayerProfile();
-	out.steamId = IdText(j.Get("steamId"));
+	out.steamId = j.GetIdText("steamId");
 	if (out.steamId.empty()) return false;
 	out.name = j.GetString("name");
 	out.season = std::max(0, SeasonId(j, "season"));
 	out.tier = LeagueTierFromJson(j.Get("tier"));
 	out.division = LeagueTierHasDivisions(out.tier) ? LeagueDivisionFromJson(j.Get("division")) : 0;
-	out.glory = Int(j, "glory");
-	out.place = std::max(0, Int(j, "place"));
+	out.glory = j.GetInt("glory");
+	out.place = std::max(0, j.GetInt("place"));
 	out.elite = j.GetBool("elite");
 	out.peak = LeaguePeakFromJson(j.Get("peak"));
-	out.games = std::max(0, Int(j, "games"));
-	out.wins = std::max(0, Int(j, "wins"));
-	out.losses = std::max(0, Int(j, "losses"));
+	out.games = std::max(0, j.GetInt("games"));
+	out.wins = std::max(0, j.GetInt("wins"));
+	out.losses = std::max(0, j.GetInt("losses"));
 	if (!out.games) out.games = out.wins + out.losses;
-	out.streak = Int(j, "streak");
+	out.streak = j.GetInt("streak");
 	out.avgDurationMs = static_cast<uint32_t>(std::max(0.0, j.GetNumber("avgDurationMs")));
 	if (const Json *civs = j.Get("civs"); civs && civs->type == Json::Array) {
 		for (const Json &c : civs->arr) {
 			if (c.type != Json::Object || c.GetString("civ").empty()) continue;
-			out.civs.push_back({c.GetString("civ"), std::max(0, Int(c, "games")), std::max(0, Int(c, "wins"))});
+			out.civs.push_back({c.GetString("civ"), std::max(0, c.GetInt("games")), std::max(0, c.GetInt("wins"))});
 		}
 		std::stable_sort(out.civs.begin(), out.civs.end(), [](const LeagueCivShare &a, const LeagueCivShare &b) { return a.games > b.games; });
 		if (out.civs.size() > 3) out.civs.resize(3);

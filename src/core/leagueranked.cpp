@@ -17,36 +17,9 @@ std::string Lower(std::string s)
 	return s;
 }
 
-int Int(const Json &j, const char *key, int def = 0)
+int64_t IdNumber(const Json &j, const char *key)
 {
-	return static_cast<int>(j.GetNumber(key, def));
-}
-
-int64_t Int64(const Json &j, const char *key)
-{
-	return static_cast<int64_t>(j.GetNumber(key));
-}
-
-// An id the server may send as text or as a number.
-std::string IdText(const Json *v)
-{
-	if (!v) return std::string();
-	if (v->type == Json::String) return v->str;
-	if (v->type == Json::Number) return std::to_string(static_cast<long long>(v->num));
-	return std::string();
-}
-
-int64_t IdNumber(const Json *v)
-{
-	return _strtoi64(IdText(v).c_str(), nullptr, 10);
-}
-
-// -1 when the key is missing or not a yes/no.
-int Flag(const Json &j, const char *key)
-{
-	const Json *v = j.Get(key);
-	if (!v || v->type != Json::Bool) return -1;
-	return v->b ? 1 : 0;
+	return _strtoi64(j.GetIdText(key).c_str(), nullptr, 10);
 }
 
 LeagueMapFacts MapOf(const Json *v)
@@ -65,7 +38,7 @@ LeagueMapFacts MapOf(const Json *v)
 LeaguePlayerCard CardOf(const Json &j)
 {
 	LeaguePlayerCard c;
-	c.steamId = IdText(j.Get("steamId"));
+	c.steamId = j.GetIdText("steamId");
 	c.name = j.GetString("name");
 	c.tier = LeagueTierFromJson(j.Get("tier"));
 	c.division = LeagueTierHasDivisions(c.tier) ? LeagueDivisionFromJson(j.Get("division")) : 0;
@@ -76,15 +49,15 @@ LeaguePlayerCard CardOf(const Json &j)
 		const Json *v = j.Get(key);
 		c.standing = c.standing || (v && v->type == Json::Number);
 	}
-	c.wins = std::max(0, Int(j, "wins"));
-	c.losses = std::max(0, Int(j, "losses"));
-	c.glory = std::max(0, Int(j, "glory"));
-	c.place = std::max(0, Int(j, "place"));
+	c.wins = std::max(0, j.GetInt("wins"));
+	c.losses = std::max(0, j.GetInt("losses"));
+	c.glory = std::max(0, j.GetInt("glory"));
+	c.place = std::max(0, j.GetInt("place"));
 	const Json *streak = j.Get("streak");
 	c.streakKnown = streak && streak->type == Json::Number;
 	c.streak = c.streakKnown ? static_cast<int>(streak->num) : 0;
 	c.duo = j.GetBool("duo");
-	const int team = Int(j, "team");
+	const int team = j.GetInt("team");
 	c.team = team == 1 || team == 2 ? team : 0;
 	return c;
 }
@@ -97,7 +70,7 @@ std::vector<LeagueMatchTeam> TeamsOf(const Json *v)
 	for (const Json &t : v->arr) {
 		if (t.type != Json::Object) continue;
 		LeagueMatchTeam team;
-		team.side = Int(t, "side");
+		team.side = t.GetInt("side");
 		if (team.side != 1 && team.side != 2) continue;
 		if (const Json *players = t.Get("players"); players && players->type == Json::Array) {
 			for (const Json &p : players->arr) {
@@ -133,9 +106,9 @@ std::vector<LeagueMapFacts> MapsOf(const Json *v)
 LeagueQueueStats QueueStatsOf(const Json &j)
 {
 	LeagueQueueStats s;
-	s.searching = std::max(0, Int(j, "searching"));
-	s.playing = std::max(0, Int(j, "playing"));
-	s.gamesToday = std::max(0, Int(j, "gamesToday"));
+	s.searching = std::max(0, j.GetInt("searching"));
+	s.playing = std::max(0, j.GetInt("playing"));
+	s.gamesToday = std::max(0, j.GetInt("gamesToday"));
 	return s;
 }
 
@@ -221,16 +194,16 @@ LeagueRoomSettings LeagueParseRoomSettings(const Json *v)
 	LeagueRoomSettings s;
 	if (!v || v->type != Json::Object) return s;
 	s.preset = Lower(v->GetString("preset"));
-	s.hideCivs = Flag(*v, "hideCivs");
-	s.fog = Flag(*v, "fog");
-	s.explored = Flag(*v, "explored");
-	s.cheats = Flag(*v, "cheats");
+	s.hideCivs = v->GetFlag("hideCivs");
+	s.fog = v->GetFlag("fog");
+	s.explored = v->GetFlag("explored");
+	s.cheats = v->GetFlag("cheats");
 	s.diplomacy = Lower(v->GetString("diplomacy"));
 	if (const Json *d = v->Get("specDelay"); d && d->type == Json::Number) s.specDelay = std::max(0, static_cast<int>(d->num));
 	else if (const Json *off = v->Get("spectators"); off && off->type == Json::Bool && !off->b) s.specDelay = 0;
 	if (const Json *p = v->Get("pauses"); p && p->type == Json::Object) {
-		s.pauseCount = Int(*p, "count", -1);
-		s.pauseSeconds = Int(*p, "totalSec", -1);
+		s.pauseCount = p->GetInt("count", -1);
+		s.pauseSeconds = p->GetInt("totalSec", -1);
 	}
 	else if (p && p->type == Json::Number) s.pauseCount = std::max(0, static_cast<int>(p->num));
 	return s;
@@ -240,7 +213,7 @@ bool LeagueParseSeason(const Json &j, LeagueSeason &out)
 {
 	if (j.type != Json::Object || !j.Get("endsAt")) return false;
 	out = LeagueSeason();
-	out.number = Int(j, "number");
+	out.number = j.GetInt("number");
 	out.name = j.GetString("name");
 	out.theme = j.GetString("theme");
 	out.contentKey = j.GetString("contentKey");
@@ -249,8 +222,8 @@ bool LeagueParseSeason(const Json &j, LeagueSeason &out)
 			if (kv.second.type == Json::String && !kv.second.str.empty()) out.names[Lower(kv.first)] = kv.second.str;
 		}
 	}
-	out.startsAt = Int64(j, "startsAt");
-	out.endsAt = Int64(j, "endsAt");
+	out.startsAt = j.GetInt64("startsAt");
+	out.endsAt = j.GetInt64("endsAt");
 	out.beta = j.GetBool("beta");
 	out.active = j.GetBool("active", true);
 	out.maps = MapsOf(j.Get("maps"));
@@ -307,17 +280,17 @@ bool LeagueParseQueue(const Json &j, LeagueQueueAnswer &out)
 	else if (status == "found") out.status = LeagueQueueStatus::Found;
 	else return false;
 	out.queue = Lower(j.GetString("queue"));
-	out.since = Int64(j, "since");
-	out.searching = Int(j, "searching");
-	out.estimateSec = Int(j, "estimateSec");
-	out.serverNow = Int64(j, "serverNow");
-	out.matchId = IdNumber(j.Get("matchId"));
+	out.since = j.GetInt64("since");
+	out.searching = j.GetInt("searching");
+	out.estimateSec = j.GetInt("estimateSec");
+	out.serverNow = j.GetInt64("serverNow");
+	out.matchId = IdNumber(j, "matchId");
 	out.window = WindowOf(j.Get("window"));
 	if (const Json *m = j.Get("match"); m && m->type == Json::Object) {
-		out.matchId = IdNumber(m->Get("id"));
+		out.matchId = IdNumber(*m, "id");
 		if (const Json *o = m->Get("opponent"); o && o->type == Json::Object) out.opponent = CardOf(*o);
 		out.map = MapOf(m->Get("map"));
-		out.acceptBy = Int64(*m, "acceptBy");
+		out.acceptBy = m->GetInt64("acceptBy");
 		out.accepted = m->GetBool("accepted");
 		out.expected = ExpectedOf(m->Get("expected"));
 		out.teams = TeamsOf(m->Get("teams"));
@@ -335,17 +308,17 @@ LeagueRankedResult LeagueParseRankedResult(const Json *v)
 	LeagueRankedResult r;
 	if (!v || v->type != Json::Object) return r;
 	r.present = true;
-	r.gloryBefore = Int(*v, "gloryBefore");
-	r.gloryAfter = Int(*v, "gloryAfter");
-	r.delta = Int(*v, "delta");
+	r.gloryBefore = v->GetInt("gloryBefore");
+	r.gloryAfter = v->GetInt("gloryAfter");
+	r.delta = v->GetInt("delta");
 	r.tierBefore = LeagueTierFromJson(v->Get("tierBefore"));
 	r.tierAfter = LeagueTierFromJson(v->Get("tierAfter"));
 	r.divisionBefore = LeagueTierHasDivisions(r.tierBefore) ? LeagueDivisionFromJson(v->Get("divisionBefore")) : 0;
 	r.divisionAfter = LeagueTierHasDivisions(r.tierAfter) ? LeagueDivisionFromJson(v->Get("divisionAfter")) : 0;
 	r.promoted = v->GetBool("promoted");
 	r.demoted = v->GetBool("demoted");
-	r.shield = Int(*v, "shield");
-	r.placementLeft = Int(*v, "placementLeft");
+	r.shield = v->GetInt("shield");
+	r.placementLeft = v->GetInt("placementLeft");
 	r.placed = v->GetBool("placed");
 	return r;
 }
@@ -354,22 +327,22 @@ bool LeagueParseMatch(const Json &j, LeagueMatchTicket &out)
 {
 	if (j.type != Json::Object) return false;
 	out = LeagueMatchTicket();
-	out.id = IdNumber(j.Get("id"));
+	out.id = IdNumber(j, "id");
 	out.status = MatchStatusOf(j.GetString("status"));
 	out.queue = Lower(j.GetString("queue"));
-	out.host = IdText(j.Get("host"));
-	out.lobby = IdText(j.Get("lobby"));
+	out.host = j.GetIdText("host");
+	out.lobby = j.GetIdText("lobby");
 	out.lobbyKey = j.GetString("lobbyKey");
 	out.contentKey = j.GetString("contentKey");
 	out.outcome = j.GetString("outcome");
 	out.map = MapOf(j.Get("map"));
 	out.settings = LeagueParseRoomSettings(j.Get("settings"));
-	out.acceptBy = Int64(j, "acceptBy");
-	out.readyAt = Int64(j, "readyAt");
-	out.roomDueAt = Int64(j, "roomDueAt");
-	out.startedAt = Int64(j, "startedAt");
-	out.abandonedBy = IdText(j.Get("abandonedBy"));
-	out.fault = IdText(j.Get("fault"));
+	out.acceptBy = j.GetInt64("acceptBy");
+	out.readyAt = j.GetInt64("readyAt");
+	out.roomDueAt = j.GetInt64("roomDueAt");
+	out.startedAt = j.GetInt64("startedAt");
+	out.abandonedBy = j.GetIdText("abandonedBy");
+	out.fault = j.GetIdText("fault");
 	if (const Json *players = j.Get("players"); players && players->type == Json::Array) {
 		for (const Json &p : players->arr) {
 			if (p.type == Json::Object) out.players.push_back(CardOf(p));
@@ -380,7 +353,7 @@ bool LeagueParseMatch(const Json &j, LeagueMatchTicket &out)
 	out.teams = TeamsOf(j.Get("teams"));
 	out.mySide = SideOf(j.Get("mySide"));
 	out.ranked = LeagueParseRankedResult(j.Get("ranked"));
-	out.serverNow = Int64(j, "serverNow");
+	out.serverNow = j.GetInt64("serverNow");
 	return out.id > 0 && out.status != LeagueMatchStatus::Unknown;
 }
 
@@ -423,25 +396,25 @@ bool LeagueParseBoard(const Json &j, LeagueBoard &out)
 	const Json *rows = j.Get("rows");
 	if (!rows || rows->type != Json::Array) return false;
 	out = LeagueBoard();
-	out.season = Int(j, "season");
-	out.total = Int(j, "total");
-	out.offset = Int(j, "offset");
-	out.me = Int(j, "me");
+	out.season = j.GetInt("season");
+	out.total = j.GetInt("total");
+	out.offset = j.GetInt("offset");
+	out.me = j.GetInt("me");
 	for (const Json &r : rows->arr) {
 		if (r.type != Json::Object) continue;
 		LeagueBoardRow row;
-		row.position = Int(r, "position");
-		row.steamId = IdText(r.Get("steamId"));
+		row.position = r.GetInt("position");
+		row.steamId = r.GetIdText("steamId");
 		row.name = r.GetString("name");
 		row.tier = LeagueTierFromJson(r.Get("tier"));
 		row.division = LeagueTierHasDivisions(row.tier) ? LeagueDivisionFromJson(r.Get("division")) : 0;
-		row.glory = Int(r, "glory");
-		row.wins = Int(r, "wins");
-		row.losses = Int(r, "losses");
+		row.glory = r.GetInt("glory");
+		row.wins = r.GetInt("wins");
+		row.losses = r.GetInt("losses");
 		const Json *delta7 = r.Get("delta7");
 		row.hasDelta7 = delta7 && delta7->type == Json::Number;
 		row.delta7 = row.hasDelta7 ? static_cast<int>(delta7->num) : 0;
-		row.streak = Int(r, "streak");
+		row.streak = r.GetInt("streak");
 		if (row.position > 0) out.rows.push_back(row);
 	}
 	return true;
@@ -488,14 +461,14 @@ LeagueError LeagueParseError(const Json &j)
 	e.contentName = j.GetString("contentName");
 	e.kind = Lower(j.GetString("kind"));
 	e.reason = j.GetString("reason");
-	e.until = Int64(j, "until");
-	if (!e.until) e.until = Int64(j, "queueBanUntil");
-	e.matchId = IdNumber(j.Get("matchId"));
-	e.retryAfter = std::max(0, Int(j, "retryAfter"));
-	e.gap = std::max(0, Int(j, "gap"));
-	e.max = std::max(0, Int(j, "max"));
+	e.until = j.GetInt64("until");
+	if (!e.until) e.until = j.GetInt64("queueBanUntil");
+	e.matchId = IdNumber(j, "matchId");
+	e.retryAfter = std::max(0, j.GetInt("retryAfter"));
+	e.gap = std::max(0, j.GetInt("gap"));
+	e.max = std::max(0, j.GetInt("max"));
 	e.who = Lower(j.GetString("who"));
-	e.steamId = IdText(j.Get("steamId"));
+	e.steamId = j.GetIdText("steamId");
 	return e;
 }
 
@@ -523,7 +496,7 @@ bool LeagueParseStats(const Json &j, LeagueStats &out)
 	out.searching = all.searching;
 	out.playing = all.playing;
 	out.gamesToday = all.gamesToday;
-	out.serverNow = Int64(j, "serverNow");
+	out.serverNow = j.GetInt64("serverNow");
 	if (const Json *by = j.Get("byQueue"); by && by->type == Json::Object) {
 		for (const auto &kv : by->obj) {
 			if (kv.second.type == Json::Object) out.byQueue[Lower(kv.first)] = QueueStatsOf(kv.second);
@@ -570,8 +543,8 @@ bool LeagueParseHistoryGame(const Json &m, LeagueHistoryGame &g)
 {
 	if (m.type != Json::Object) return false;
 	g = LeagueHistoryGame();
-	g.id = IdNumber(m.Get("id"));
-	g.playedAt = Int64(m, "playedAt");
+	g.id = IdNumber(m, "id");
+	g.playedAt = m.GetInt64("playedAt");
 	g.durationMs = static_cast<uint32_t>(std::max(0.0, m.GetNumber("durationMs")));
 	g.map = MapOf(m.Get("map"));
 	if (const Json *o = m.Get("opponent"); o && o->type == Json::Object) g.opponent = CardOf(*o);

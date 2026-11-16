@@ -59,6 +59,32 @@ bool Json::GetBool(const std::string &key, bool def) const
 	return v && v->type == Bool ? v->b : def;
 }
 
+int Json::GetInt(const std::string &key, int def) const
+{
+	return static_cast<int>(GetNumber(key, def));
+}
+
+int64_t Json::GetInt64(const std::string &key, int64_t def) const
+{
+	return static_cast<int64_t>(GetNumber(key, static_cast<double>(def)));
+}
+
+std::string Json::GetIdText(const std::string &key) const
+{
+	const Json *v = Get(key);
+	if (!v) return std::string();
+	if (v->type == String) return v->str;
+	if (v->type == Number) return std::to_string(static_cast<long long>(v->num));
+	return std::string();
+}
+
+int Json::GetFlag(const std::string &key) const
+{
+	const Json *v = Get(key);
+	if (!v || v->type != Bool) return -1;
+	return v->b ? 1 : 0;
+}
+
 Json &Json::Set(const std::string &key, const Json &value)
 {
 	type = Object;

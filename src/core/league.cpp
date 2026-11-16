@@ -93,25 +93,6 @@ const TierRow kTiers[] = {
 	{LeagueTier::Imperator, "imperator", "imperator", "Imperator"},
 };
 
-int Int(const Json &j, const char *key)
-{
-	return static_cast<int>(j.GetNumber(key));
-}
-
-int64_t Int64(const Json &j, const char *key)
-{
-	return static_cast<int64_t>(j.GetNumber(key));
-}
-
-// An id the server may send as text or as a number.
-std::string IdText(const Json *v)
-{
-	if (!v) return std::string();
-	if (v->type == Json::String) return v->str;
-	if (v->type == Json::Number) return std::to_string(static_cast<long long>(v->num));
-	return std::string();
-}
-
 // A season's number, as a number or as text; -1 for null or anything else.
 int SeasonNumber(const Json *v)
 {
@@ -141,8 +122,8 @@ LeagueReward RewardOf(const Json &j)
 	r.founder = FounderTier(j.Get("tier"));
 	r.tier = LeagueTierFromJson(j.Get("tier"));
 	if (r.tier == LeagueTier::None) r.tier = LeagueTierFromJson(j.Get("peakTier"));
-	r.place = std::max(0, Int(j, "place"));
-	r.games = std::max(0, Int(j, "games"));
+	r.place = std::max(0, j.GetInt("place"));
+	r.games = std::max(0, j.GetInt("games"));
 	r.frame = j.GetBool("frame");
 	return r;
 }
@@ -156,17 +137,17 @@ LeagueRanked RankedOf(const Json &j, const char *key, const char *queue, bool be
 	if (inside) {
 		k.present = true;
 		k.queue = r->GetString("queue", queue);
-		k.season = Int(*r, "season");
+		k.season = r->GetInt("season");
 		k.tier = LeagueTierFromJson(r->Get("tier"));
 		k.division = LeagueTierHasDivisions(k.tier) ? LeagueDivisionFromJson(r->Get("division")) : 0;
-		k.glory = Int(*r, "glory");
-		k.placementLeft = Int(*r, "placementLeft");
-		k.shield = Int(*r, "shield");
-		k.wins = Int(*r, "wins");
-		k.losses = Int(*r, "losses");
-		k.position = Int(*r, "position");
+		k.glory = r->GetInt("glory");
+		k.placementLeft = r->GetInt("placementLeft");
+		k.shield = r->GetInt("shield");
+		k.wins = r->GetInt("wins");
+		k.losses = r->GetInt("losses");
+		k.position = r->GetInt("position");
 		k.elite = r->GetBool("elite");
-		k.streak = Int(*r, "streak");
+		k.streak = r->GetInt("streak");
 	}
 	else k.queue = queue;
 	auto standing = [&](const char *name) {
@@ -334,7 +315,7 @@ LeagueBadge LeagueBadgeFromJson(const Json *v)
 	LeagueBadge b;
 	if (!v || v->type != Json::Object) return b;
 	const std::string kind = Lower(v->GetString("kind"));
-	b.id = IdText(v->Get("id"));
+	b.id = v->GetIdText("id");
 	b.tier = LeagueTierFromJson(v->Get("tier"));
 	b.division = LeagueDivisionFromJson(v->Get("division"));
 	if (kind == "rank") {
@@ -353,7 +334,7 @@ LeagueBadge LeagueBadgeFromJson(const Json *v)
 		if (b.metal == LeagueMetal::None) b.metal = LeagueMetal::Gold;
 		b.tier = LeagueTier::None;
 	}
-	b.season = Int(*v, "season");
+	b.season = v->GetInt("season");
 	b.title = v->GetString("title");
 	if (!LeagueTierHasDivisions(b.tier)) b.division = 0;
 	if (b.kind == LeagueBadgeKind::None) b = LeagueBadge();
@@ -388,8 +369,8 @@ LeaguePeak LeaguePeakFromJson(const Json *v)
 	}
 	if (v->type != Json::Object) return p;
 	p.present = true;
-	p.glory = std::max(0, Int(*v, "glory"));
-	p.place = std::max(0, Int(*v, "place"));
+	p.glory = std::max(0, v->GetInt("glory"));
+	p.place = std::max(0, v->GetInt("place"));
 	p.tier = LeagueTierFromJson(v->Get("tier"));
 	p.division = LeagueTierHasDivisions(p.tier) ? LeagueDivisionFromJson(v->Get("division")) : 0;
 	return p;
@@ -406,7 +387,7 @@ bool LeagueParsePlayersLookup(const Json &j, std::map<uint64_t, LeagueLookupEntr
 		LeagueLookupEntry e;
 		if (const Json *p = kv.second.Get("patron"); p && p->type == Json::Object) {
 			e.patronTier = p->GetString("tier");
-			e.patronPlace = Int(*p, "place");
+			e.patronPlace = p->GetInt("place");
 		}
 		e.badge = LeagueBadgeFromJson(kv.second.Get("badge"));
 		e.frame = LeagueFrameFromJson(kv.second.Get("frame"));
@@ -419,7 +400,7 @@ bool LeagueParseMe(const Json &j, LeagueMe &out)
 {
 	if (j.type != Json::Object) return false;
 	out = LeagueMe();
-	out.steamId = IdText(j.Get("steamId"));
+	out.steamId = j.GetIdText("steamId");
 	out.name = j.GetString("name");
 	// The duel's best, streak and placement may also come beside `ranked`, from a server before the 2v2; the 2v2's only inside.
 	out.ranked = RankedOf(j, "ranked", "1v1", true);
@@ -438,8 +419,8 @@ bool LeagueParseMe(const Json &j, LeagueMe &out)
 		LeagueCeremony &cer = out.ceremony;
 		cer.present = true;
 		cer.reward = RewardOf(*c);
-		cer.wins = std::max(0, Int(*c, "wins"));
-		cer.losses = std::max(0, Int(*c, "losses"));
+		cer.wins = std::max(0, c->GetInt("wins"));
+		cer.losses = std::max(0, c->GetInt("losses"));
 		cer.finalTier = LeagueTierFromJson(c->Get("finalTier"));
 		cer.finalDivision = LeagueTierHasDivisions(cer.finalTier) ? LeagueDivisionFromJson(c->Get("finalDivision")) : 0;
 	}
@@ -447,9 +428,9 @@ bool LeagueParseMe(const Json &j, LeagueMe &out)
 		out.equippedFrame = SeasonNumber(e->Get("frame"));
 		out.equippedTitle = SeasonNumber(e->Get("title"));
 	}
-	out.queueBanUntil = Int64(j, "queueBanUntil");
+	out.queueBanUntil = j.GetInt64("queueBanUntil");
 	if (const Json *ban = j.Get("ban"); ban && ban->type == Json::Object) {
-		out.ban.until = Int64(*ban, "until");
+		out.ban.until = ban->GetInt64("until");
 		out.ban.kind = Lower(ban->GetString("kind"));
 		out.ban.reason = ban->GetString("reason");
 	}
@@ -458,7 +439,7 @@ bool LeagueParseMe(const Json &j, LeagueMe &out)
 	out.badge = LeagueBadgeFromJson(j.Get("badge"));
 	if (const Json *b = j.Get("badge"); b && b->type == Json::Object) {
 		out.badgeKind = Lower(b->GetString("kind"));
-		out.badgeId = IdText(b->Get("id"));
+		out.badgeId = b->GetIdText("id");
 	}
 	if (const Json *list = j.Get("badges"); list && list->type == Json::Array) {
 		for (const Json &b : list->arr) {
@@ -471,7 +452,7 @@ bool LeagueParseMe(const Json &j, LeagueMe &out)
 		for (const Json &c : list->arr) {
 			if (c.type != Json::Object) continue;
 			LeagueCup cup;
-			cup.id = Int64(c, "id");
+			cup.id = c.GetInt64("id");
 			cup.name = Trim(c.GetString("name"));
 			if (!cup.id || cup.name.empty()) continue;
 			const Json *official = c.Get("official");
@@ -479,9 +460,9 @@ bool LeagueParseMe(const Json &j, LeagueMe &out)
 			cup.mode = Lower(c.GetString("mode")) == "2v2" ? "2v2" : "1v1";
 			cup.format = Lower(c.GetString("format"));
 			cup.season = SeasonNumber(c.Get("season"));
-			cup.finishedAt = Int64(c, "finishedAt");
-			cup.placement = std::max(0, Int(c, "placement"));
-			cup.entries = std::max(0, Int(c, "entries"));
+			cup.finishedAt = c.GetInt64("finishedAt");
+			cup.placement = std::max(0, c.GetInt("placement"));
+			cup.entries = std::max(0, c.GetInt("entries"));
 			out.cups.push_back(cup);
 		}
 	}
@@ -495,7 +476,7 @@ bool LeagueParseLinkStart(const Json &j, LeagueLinkCode &out)
 	out.pollToken = j.GetString("pollToken");
 	out.url = j.GetString("url");
 	out.steamUrl = j.GetString("steamUrl");
-	out.expiresAt = Int64(j, "expiresAt");
+	out.expiresAt = j.GetInt64("expiresAt");
 	return !out.code.empty() && !out.pollToken.empty();
 }
 
@@ -527,7 +508,7 @@ LeagueLinkPoll LeagueParseLinkPoll(int httpStatus, const Json &j)
 	else if (status == "expired") p.status = LeaguePollStatus::Expired;
 	else if (status == "linked") {
 		p.gameToken = j.GetString("gameToken");
-		p.steamId = IdText(j.Get("steamId"));
+		p.steamId = j.GetIdText("steamId");
 		p.name = j.GetString("name");
 		p.status = p.gameToken.empty() ? LeaguePollStatus::Unknown : LeaguePollStatus::Linked;
 	}
@@ -819,9 +800,9 @@ std::vector<LeagueQueuedReport> LeagueQueueDecode(const std::string &text)
 		if (e.type != Json::Object || !body || body->type != Json::Object || body->GetString("key").empty()) continue;
 		LeagueQueuedReport q;
 		q.steamId = e.GetString("steamId");
-		q.tries = static_cast<int>(e.GetNumber("tries"));
-		q.createdAt = static_cast<int64_t>(e.GetNumber("createdAt"));
-		q.nextAt = static_cast<int64_t>(e.GetNumber("nextAt"));
+		q.tries = e.GetInt("tries");
+		q.createdAt = e.GetInt64("createdAt");
+		q.nextAt = e.GetInt64("nextAt");
 		q.body = *body;
 		if (!q.steamId.empty()) out.push_back(q);
 	}

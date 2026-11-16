@@ -18,15 +18,6 @@ std::string Lower(std::string s)
 	return s;
 }
 
-// An id the server may send as text or as a number.
-std::string IdText(const Json *v)
-{
-	if (!v) return std::string();
-	if (v->type == Json::String) return v->str;
-	if (v->type == Json::Number) return std::to_string(static_cast<long long>(v->num));
-	return std::string();
-}
-
 }
 
 std::string LeagueQueueId(const std::string &queue)
@@ -48,14 +39,14 @@ LeagueParty LeaguePartyOf(const Json *v)
 {
 	LeagueParty p;
 	if (!v || v->type != Json::Object) return p;
-	p.id = IdText(v->Get("id"));
-	p.leader = IdText(v->Get("leader"));
-	p.expiresAt = static_cast<int64_t>(v->GetNumber("expiresAt"));
+	p.id = v->GetIdText("id");
+	p.leader = v->GetIdText("leader");
+	p.expiresAt = v->GetInt64("expiresAt");
 	if (const Json *list = v->Get("members"); list && list->type == Json::Array) {
 		for (const Json &m : list->arr) {
 			if (m.type != Json::Object) continue;
 			LeaguePartyMember member;
-			member.steamId = IdText(m.Get("steamId"));
+			member.steamId = m.GetIdText("steamId");
 			member.name = m.GetString("name");
 			member.accepted = m.GetBool("accepted");
 			if (!member.steamId.empty()) p.members.push_back(member);
@@ -74,12 +65,12 @@ bool LeagueParseParty(const Json &j, LeaguePartyState &out)
 		for (const Json &i : list->arr) {
 			if (i.type != Json::Object) continue;
 			LeaguePartyInvite invite;
-			invite.id = IdText(i.Get("id"));
+			invite.id = i.GetIdText("id");
 			if (const Json *from = i.Get("from"); from && from->type == Json::Object) {
-				invite.fromId = IdText(from->Get("steamId"));
+				invite.fromId = from->GetIdText("steamId");
 				invite.fromName = from->GetString("name");
 			}
-			invite.expiresAt = static_cast<int64_t>(i.GetNumber("expiresAt"));
+			invite.expiresAt = i.GetInt64("expiresAt");
 			if (!invite.id.empty()) out.invites.push_back(invite);
 		}
 	}
