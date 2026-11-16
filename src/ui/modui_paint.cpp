@@ -647,6 +647,40 @@ void PaintProfileBar(Painter &p, const State &st, const PanelLayout &l, int righ
 		if (st.drop == kDropMenu) g_drop.anchor = {x, y, x + extraW, y + h};
 	}
 }
+
+// The packs with an update, counted again when the list or a download changes and at least once a second: each check reads the
+// GameBanana sources from disk, too slow for every frame, and the catalog it compares with can arrive at any time.
+struct UpdateCount {
+	bool counted = false;
+	uint64_t listSerial = 0, dlFinished = 0;
+	DWORD refreshed = 0, at = 0;
+	size_t mods = 0;
+	int count = 0;
+};
+UpdateCount g_updateCount;
+
+int CountUpdates(const State &st)
+{
+	UpdateCount &c = g_updateCount;
+	const DWORD now = GetTickCount();
+	if (c.counted && c.listSerial == st.listSerial && c.dlFinished == st.dlFinished && c.refreshed == st.lastRefresh && c.mods == st.mods.size() &&
+		now - c.at < 1000) {
+		return c.count;
+	}
+	int n = 0;
+	for (const ModInfo &m : st.mods) {
+		CatalogEntry e;
+		if (FindUpdateFor(st, m, e)) n++;
+	}
+	c.counted = true;
+	c.listSerial = st.listSerial;
+	c.dlFinished = st.dlFinished;
+	c.refreshed = st.lastRefresh;
+	c.at = now;
+	c.mods = st.mods.size();
+	c.count = n;
+	return n;
+}
 }
 }
 
@@ -1072,11 +1106,7 @@ void PaintFooter(Painter &p, const State &st)
 	const int installW = 220;
 	p.Button(l.x, by, installW, bh, "Install file...", kPickArchive, 0, mx, my);
 	int left = l.x + installW + gap;
-	int updates = 0;
-	for (const ModInfo &m : st.mods) {
-		CatalogEntry e;
-		if (FindUpdateFor(st, m, e)) updates++;
-	}
+	const int updates = CountUpdates(st);
 	if (updates) {
 		const int w = 260;
 		p.Button(left, by, w, bh, Tr("Update all (") + std::to_string(updates) + ")", kUpdateAll, 0, mx, my, !st.dl.active, true);
