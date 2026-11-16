@@ -111,7 +111,7 @@ inline int DropArg(int kind, int index)
 enum RankedArg {
 	kRkSearch = 1, kRkCancel, kRkAccept, kRkDecline, kRkBoard, kRkHub, kRkBoardPrev, kRkBoardNext, kRkBoardTop, kRkBoardMe, kRkRoom,
 	kRkResultClose, kRkAgain, kRkResultBoard, kRkSkip, kRkSteam, kRkNotice, kRkAbandon, kRkHistory, kRkHistoryPrev, kRkHistoryNext,
-	kRkHistoryNewest, kRkDisputeResult, kRkDisputeSend, kRkDisputeCancel, kRkRow = 0x100, kRkDisputeRecent = 0x200, kRkDisputeHistory = 0x300,
+	kRkHistoryNewest, kRkDisputeResult, kRkDisputeSend, kRkDisputeCancel, kRkGuide, kRkGuideRanks, kRkGuideRules, kRkRow = 0x100, kRkDisputeRecent = 0x200, kRkDisputeHistory = 0x300,
 	kRkArgEnd = 0x400, kRkContentSwitch, kRkContentClose,
 };
 // The full leaderboard's filters and the player's card, and the end of season ceremony (mpui_ranked_seasons.cpp), after kRkArgEnd. The
@@ -126,12 +126,14 @@ enum RankedTeamArg {
 	kRkQueueDuel = kRkBadgeEnd, kRkQueueTeam, kRkDuoInviteOpen, kRkDuoInviteClose, kRkDuoLeave, kRkDuoFriendsPrev, kRkDuoFriendsNext,
 	kRkDuoAccept = kRkBadgeEnd + 0x40, kRkDuoDecline = kRkBadgeEnd + 0x80, kRkDuoFriend = kRkBadgeEnd + 0x100, kRkTeamArgEnd = kRkBadgeEnd + 0x200,
 };
-enum RankedSub { kRankedHub, kRankedBoard, kRankedHistory };
+enum RankedSub { kRankedHub, kRankedBoard, kRankedHistory, kRankedGuide };
 // The rows of a page of the full leaderboard at most; RankedBoardRows says how many fit the screen.
 const int kRankedBoardRows = 13;
 
 struct RankedScreen {
 	int sub = kRankedHub;
+	// "How it works": its tab, the ranks (0) or the rules (1).
+	int guideTab = 0;
 	int boardSel = -1;
 	// The result screen is open while resultOpen; resultAt is when it opened, for the animation.
 	bool resultOpen = false;
@@ -601,6 +603,9 @@ std::string &RankedFieldText();
 void RankedFieldEnter();
 // The result screen over the whole lobby, with its own header.
 void PaintRankedResult(Painter &p, const State &st);
+// "How it works" (mpui_paint_guide.cpp), and its ladder of the ranks, `mine` lit, which the tab also shows before the account is linked.
+void PaintRankedGuide(Painter &p, const State &st);
+void PaintRankLadder(Painter &p, int x, int y, int w, int h, LeagueTier mine);
 // The full leaderboard's filters, the card of the player picked and the season's ceremony (mpui_ranked_seasons.cpp): the arguments from
 // kRkArgEnd, the page with the filters, the season's menu, and the ceremony, which opens once over Multiplayer after a season closes.
 void RankedSeasonAction(int arg);

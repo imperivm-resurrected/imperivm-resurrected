@@ -341,16 +341,21 @@ void PaintSeasonBand(Painter &p, const State &st, const HubLayout &h)
 		const int cw = p.CapsWidth("Test season", 1) + 20;
 		Chip(p, x + 120 + std::min(560, p.CapsWidth(state, 2)) + 16, y + 12, cw, 22, "Test season", pal::warn, RGB(0x3a, 0x31, 0x18));
 	}
+	// "How it works", left of the days.
+	const int rx = x + w - 342;
+	p.Font(4);
+	const int guideW = p.CapsWidth("How it works", 2) + 40, guideX = rx - 32 - guideW;
+	Ghost(p, guideX, y + (kBandH - 44) / 2 - 8, guideW, 44, "How it works", kRkGuide, true, st.mouseX, st.mouseY);
 	Display(p, 52);
 	p.raw = true;
 	const std::string name = LeagueSeasonName(s, v.lang);
-	const int nameW = std::min(w - 560, p.CapsWidth(name, 1) + 6);
+	const int nameW = std::max(0, std::min(guideX - 16 - nx, p.CapsWidth(name, 1) + 6));
 	p.TextCaps(nx, y + 32, nameW, 52, name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
 	p.raw = false;
 	nx += nameW + 16;
 	if (!s.theme.empty() && s.theme != "beta") {
 		p.Font(0);
-		RawText(p, nx, y + 44, std::max(0, x + w - 360 - nx), 30, s.theme, pal::textDim);
+		RawText(p, nx, y + 44, std::max(0, guideX - 16 - nx), 30, s.theme, pal::textDim);
 	}
 	const bool team = LeagueQueueIsTeam(v.queue);
 	const size_t maps = team ? s.maps2v2.size() : s.maps.size();
@@ -359,7 +364,6 @@ void PaintSeasonBand(Painter &p, const State &st, const HubLayout &h)
 	p.Font(0);
 	RawText(p, x + 120, y + 84, w - 520, 22, facts, pal::caption);
 	// The days left, with how much of the season has gone.
-	const int rx = x + w - 342;
 	Display(p, 64);
 	p.raw = true;
 	const std::string days = std::to_string(over ? 0 : started ? LeagueDaysLeft(s.endsAt, now) : LeagueDaysLeft(s.startsAt, now));
@@ -1584,6 +1588,7 @@ bool PaintRankedTab(Painter &p, const State &st)
 		PatronsWatch({SteamOwnId()});
 		if (st.ranked.sub == kRankedBoard) PaintBoard(p, st);
 		else if (st.ranked.sub == kRankedHistory) PaintHistory(p, st);
+		else if (st.ranked.sub == kRankedGuide) PaintRankedGuide(p, st);
 		else PaintHub(p, st);
 	}
 	if (dialog) {

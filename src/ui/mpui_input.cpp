@@ -270,7 +270,7 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 			else if (g_s.view == kViewRanked && g_s.ranked.inviteOpen) RankedAction(kRkDuoInviteClose);
 			else if (g_s.ranked.resultOpen) RankedAction(kRkResultClose);
 			else if (g_s.ranked.ceremonyOpen) RankedAction(kRkCeremonyLater);
-			else if (g_s.view == kViewRanked && (g_s.ranked.sub == kRankedBoard || g_s.ranked.sub == kRankedHistory)) RankedAction(kRkHub);
+			else if (g_s.view == kViewRanked && (g_s.ranked.sub == kRankedBoard || g_s.ranked.sub == kRankedHistory || g_s.ranked.sub == kRankedGuide)) RankedAction(kRkHub);
 			else DoAction(kBack, 0);
 		}
 		else if (wp == VK_UP) {

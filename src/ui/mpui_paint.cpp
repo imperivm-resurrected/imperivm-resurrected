@@ -655,43 +655,10 @@ void PaintRanked(Painter &p, const State &st)
 	PaintLeagueAccount(p, m + pad, top + pad, cw - 2 * pad, {kLeagueLink, kLeagueOpen, kLeagueCancel, kLeagueUnlink}, mx, my);
 
 	// The ranks of the league, with the emblems players will wear next to their names.
-	const int lx = m + cw + kCardGap, lw = l.w - m - lx, ix = lx + pad, iw = lw - 2 * pad;
-	PaintGlassCard(p, lx, top, lw, h);
-	PaintSectionLabel(p, ix, top + pad, iw, 22, "Ranks");
-	int y = top + pad + 34;
-	p.Font(0);
-	const std::string intro = "Ranked 1 vs 1 is on its way. Six ranks of three divisions, 100 Glory each; above them, Praetorian and Imperator go to the best "
-							  "of the leaderboard.";
-	const int introH = p.Measure(iw, intro);
-	p.TextWrapped(ix, y, iw, introH + 2, intro, pal::textDim);
-	y += introH + 24;
 	const LeagueMeView me = LeagueMeState();
-	const LeagueTier mine = me.loaded && me.me.ranked.present ? me.me.ranked.tier : LeagueTier::None;
-	const int cols = 4, gap = 16;
-	const int cellW = (iw - gap * (cols - 1)) / cols, rowRoom = (top + h - pad - y - gap) / 2;
-	const int emblem = std::max(40, std::min({cellW - 32, rowRoom - 84, 136}));
-	const int cellH = emblem + 84;
-	for (int i = 0; i < kLeagueTierCount; i++) {
-		const LeagueTier tier = static_cast<LeagueTier>(i + 1);
-		const int cx = ix + (i % cols) * (cellW + gap), cy = y + (i / cols) * (cellH + gap);
-		const bool own = tier == mine;
-		p.Fill(cx, cy, cellW, cellH, own ? pal::selected : pal::raised);
-		p.Frame(cx, cy, cellW, cellH, own ? LeagueTierInk(tier) : pal::hairline);
-		DrawLeagueEmblem(p, cx + (cellW - emblem) / 2, cy + 12, emblem, tier);
-		p.Font(2);
-		p.TextCaps(cx + 8, cy + 16 + emblem, cellW - 16, 34, LeagueTierName(tier), LeagueTierInk(tier), DT_CENTER | DT_VCENTER | DT_SINGLELINE, 2);
-		const int from = LeagueTierGloryFrom(tier);
-		p.Font(3);
-		p.raw = true;
-		p.Text(cx + 8, cy + 52 + emblem, cellW - 16, 22,
-			from >= 0 ? TrFmt("From %s Glory", {std::to_string(from)}) : Tr(tier == LeagueTier::Imperator ? "Places 1 to 10" : "Places 11 to 50"),
-			own ? pal::text : pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		p.raw = false;
-		if (own) {
-			p.Font(4);
-			p.TextCaps(cx + 10, cy + 8, cellW - 20, 18, "You", LeagueTierInk(tier), DT_RIGHT | DT_VCENTER | DT_SINGLELINE, 2);
-		}
-	}
+	const LeagueTier mine = me.loaded && me.me.ranked.present && me.me.ranked.placementLeft <= 0 ? me.me.ranked.tier : LeagueTier::None;
+	const int lx = m + cw + kCardGap;
+	PaintRankLadder(p, lx, top, l.w - m - lx, h, mine);
 }
 
 bool LinkOfferShown(const State &st)

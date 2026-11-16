@@ -762,6 +762,9 @@ void RankedAction(int arg)
 		RankedBoardAsk(0, false);
 		break;
 	case kRkHub: r.sub = kRankedHub; break;
+	case kRkGuide: r.sub = kRankedGuide; break;
+	case kRkGuideRanks: r.guideTab = 0; break;
+	case kRkGuideRules: r.guideTab = 1; break;
 	case kRkBoardPrev:
 	case kRkBoardNext:
 	case kRkBoardTop: {
