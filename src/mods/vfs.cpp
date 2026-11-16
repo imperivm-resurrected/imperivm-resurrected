@@ -78,6 +78,18 @@ void MakeDirsFor(const std::string &file)
 	}
 }
 
+// For a cache file that is trusted later just because it exists: one cut short would be served for good.
+bool WriteWholeFile(const std::string &path, const void *data, size_t size)
+{
+	const std::string tmp = path + ".tmp";
+	FILE *file = nullptr;
+	if (fopen_s(&file, tmp.c_str(), "wb") != 0 || !file) return false;
+	const bool written = fwrite(data, 1, size, file) == size;
+	if (fclose(file) == 0 && written && MoveFileExA(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING)) return true;
+	DeleteFileA(tmp.c_str());
+	return false;
+}
+
 bool ShouldDump(const std::string &rel)
 {
 	const std::string &list = GetConfig().dumpFiles;
@@ -411,11 +423,7 @@ std::string FitMenuArtNow(const std::string &image, int w, int h)
 	std::vector<unsigned char> fitted;
 	if (!ScaleBmpToCover(src, w, h, fitted)) return "";
 	MakeDirsFor(out);
-	FILE *file = nullptr;
-	if (fopen_s(&file, out.c_str(), "wb") != 0 || !file) return "";
-	const bool ok = fwrite(fitted.data(), 1, fitted.size(), file) == fitted.size();
-	fclose(file);
-	if (!ok) return "";
+	if (!WriteWholeFile(out, fitted.data(), fitted.size())) return "";
 	LogI("display", "menu background: %s fitted to the %dx%d screen", image.c_str(), w, h);
 	return "imperivm-resurrected/" + cache;
 }
@@ -489,11 +497,7 @@ void *OpenBarArt(void *original, const std::string &rel, const char *path, unsig
 		bool ready = DiskFileExists(out);
 		if (!ready && ExtendBarBmp(src, kWideBars, wide)) {
 			MakeDirsFor(out);
-			FILE *file = nullptr;
-			if (fopen_s(&file, out.c_str(), "wb") == 0 && file) {
-				ready = fwrite(wide.data(), 1, wide.size(), file) == wide.size();
-				fclose(file);
-			}
+			ready = WriteWholeFile(out, wide.data(), wide.size());
 			if (ready) LogI("display", "interface bar: %s extended to %d px", rel.c_str(), kWideBars);
 		}
 		it = done.emplace(path, ready ? "imperivm-resurrected/" + cache : std::string()).first;
