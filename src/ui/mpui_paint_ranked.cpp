@@ -431,7 +431,7 @@ int PaintSearchWindow(Painter &p, const LeagueSearchWindow &win, const LeagueRan
 		};
 		end(last);
 		if (last != first) {
-			const std::string dash = " â ";
+			const std::string dash = " \xE2\x80\x93 ";
 			const int dw = p.TextWidth(dash);
 			p.Text(right - dw, y, dw, 22, dash, pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 			right -= dw;
