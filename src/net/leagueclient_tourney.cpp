@@ -710,7 +710,7 @@ void LeagueTourneyClaimNoShow(int64_t match)
 void LeagueTourneyDispute(int64_t match, const std::string &text)
 {
 	Json body = Json::MakeObject();
-	body.Set("text", Json::MakeString(text.substr(0, 500)));
+	body.Set("text", Json::MakeString(TourneyCutText(text, 500)));
 	Start(TourneyOp::Dispute, match, "POST", MatchPath(match, "/dispute"), body.Dump());
 }
 

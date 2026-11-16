@@ -2,6 +2,7 @@
 // Copyright (C) 2026 THIONG
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #pragma once
+#include <cstddef>
 #include <cstdint>
 #include <set>
 #include <string>
@@ -696,6 +697,8 @@ int TourneyRoundsFor(int places);
 // The characters of a UTF-8 text, as the server counts them.
 int TourneyTextLength(const std::string &text);
 std::string TourneyTrim(const std::string &text);
+// The text in `maxBytes` at most, without the end of a character cut off.
+std::string TourneyCutText(const std::string &text, size_t maxBytes);
 
 // The bracket on screen: each round a column, each match a box centred between the two that feed it.
 struct TourneyBracketMetrics {
