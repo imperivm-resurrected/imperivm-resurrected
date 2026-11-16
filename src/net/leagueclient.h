@@ -322,6 +322,8 @@ struct LeagueDuoView {
 	LeaguePartyMember partner;
 };
 LeagueDuoView LeagueDuoState();
+// Only this player's role in it, for the checks made every frame.
+LeagueDuoRole LeagueDuoOwnRole();
 // The 2v2 is on screen: the duo is asked closely for a few seconds.
 void LeagueDuoWatch();
 // POST /v1/league/party/invite: a Steam friend (their name for the notices).
