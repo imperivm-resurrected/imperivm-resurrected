@@ -652,7 +652,7 @@ void *OpenPatched(void *original, const std::string &rel, const char *path, unsi
 	if (done != g_patchedPath.end()) {
 		if (done->second.empty() || !original) return original;
 		if (void *m = g_origOpen(done->second.c_str(), mode, err)) {
-			ReadAllAndClose(original);
+			CloseGameFile(original);
 			return m;
 		}
 		return original;
