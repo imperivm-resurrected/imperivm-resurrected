@@ -149,7 +149,7 @@ bool OverlayActive(const State &st)
 {
 	if (st.game.active) return st.dropOpen || (st.game.picker && !SaveMapPicking(st));
 	return st.dropOpen || st.searching || st.connecting || st.passPrompt || st.syncConfirm || st.syncPhase || st.recoverAsk ||
-		(st.recoverWaitHost && !st.room.id) || RejoinClientActive() || RejoinClientFailed() || (st.room.id && st.room.info.spectate) ||
+		RejoinClientActive() || RejoinClientFailed() || (st.room.id && st.room.info.spectate) ||
 		(st.room.id && !st.gameClosedAt);
 }
 
@@ -188,22 +188,6 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 		bool roomOwner = false;
 		for (const OnlineMember &m : g_s.room.members) {
 			if (m.me && m.owner) roomOwner = true;
-		}
-		if (g_s.recoverWaitHost && !g_s.room.id) {
-			bool joined = false;
-			for (const OnlineLobby &l : g_s.lobbies) {
-				if (l.owner == g_s.recoverWaitHost && !l.saveName.empty() && !l.playing) {
-					g_s.recoverWaitHost = 0;
-					LogI("lobby", "the game of %s is ready to continue; joining", l.host.c_str());
-					TryJoin(l, "");
-					joined = true;
-					break;
-				}
-			}
-			if (!joined && GetTickCount() - g_s.recoverRefresh > 4000) {
-				g_s.recoverRefresh = GetTickCount();
-				SteamRefreshLobbies();
-			}
 		}
 		if (g_s.joinCheck.id) {
 			const State::JoinCheck check = g_s.joinCheck;

@@ -1239,7 +1239,7 @@ void PaintScreen(Painter &p, const State &st)
 {
 	const bool linkOffer = LinkOfferShown(st);
 	p.noHover = st.dropOpen || st.passPrompt || st.syncConfirm || st.syncPhase || st.searching || st.connecting || st.recoverAsk ||
-		(st.recoverWaitHost && !st.room.id) || RejoinClientActive() || RejoinClientFailed() || (st.game.active && st.game.picker) || linkOffer;
+		RejoinClientActive() || RejoinClientFailed() || (st.game.active && st.game.picker) || linkOffer;
 	if (st.game.active) {
 		PaintGameRoom(p, st);
 		if (st.game.picker && !SaveMapPicking(st)) {
@@ -1264,7 +1264,7 @@ void PaintScreen(Painter &p, const State &st)
 		PaintRejoin(p, st);
 		return;
 	}
-	if (st.recoverAsk || (st.recoverWaitHost && !st.room.id)) {
+	if (st.recoverAsk) {
 		PaintRecover(p, st);
 		return;
 	}

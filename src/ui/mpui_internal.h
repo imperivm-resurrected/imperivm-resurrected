@@ -39,14 +39,13 @@ typedef int(__fastcall *GetId_t)(void *ctrl);
 
 extern OnMessage_t g_origMainMenu;
 enum Action {
-	kNone, kRanked, kCreate, kClassic, kBack, kFilter, kSelect, kJoin, kChatFocus, kChatSend, kCancelSearch,
-	kAccept, kDecline, kQueue1v1, kQueue2v2, kFieldName, kFieldPass, kPlayersPrev, kPlayersNext, kMapPrev, kMapNext,
+	kNone, kRanked, kCreate, kBack, kSelect, kJoin, kChatFocus, kChatSend, kFieldName, kFieldPass,
 	kCreateOk, kListView, kRefresh, kFieldJoinPass, kInvite, kChatBottom, kLeave, kHostGame, kEnterGame,
 	kGDropOpen, kGDropPick, kGDropClose, kGTeam, kGReady, kGStart, kGCancel,
 	kGOptToggle, kGColor, kGSlotType, kSort, kColResize, kFieldSearch, kSyncAccept, kSyncUpdate, kSyncCancel,
 	kPickRow, kPickOk, kPickCancel,
 	kRecoverYes, kRecoverNo, kRejoinCancel, kRejoinClose,
-	kGKick, kGKickJoining, kDiscord, kPassOk, kPassCancel, kGSeat, kGMove, kGMoveTo, kGSwapAsk, kSwapAccept, kSwapDecline, kDropYes, kDropNo, kPassShow, kGSiteToggle, kGRuleToggle, kSpectate, kReturnGame,
+	kGKick, kGKickJoining, kPassOk, kPassCancel, kGSeat, kGMove, kGMoveTo, kGSwapAsk, kSwapAccept, kSwapDecline, kDropYes, kDropNo, kPassShow, kGSiteToggle, kGRuleToggle, kSpectate, kReturnGame,
 	kFieldPickSearch, kPickDelete, kPickDeleteYes, kPickDeleteNo, kGResync, kPatronLink, kProfile, kGTab, kFieldRoomName,
 	kLeagueLink, kLeagueOpen, kLeagueCancel, kLeagueUnlink,
 	kRankedAct,
@@ -100,7 +99,7 @@ enum Field { kNoField, kChatField, kNameField, kPassField, kJoinPassField, kSear
 
 enum { kPredTeam, kPredRace, kPredAi, kPredReady, kPredOptSel, kPredOptVal, kPredColor };
 
-enum { kDropRace, kDropAi, kDropOption, kDropColor, kDropSlot, kDropSites, kDropModOption, kDropPreset, kDropFilter, kDropPlayers, kDropProfile, kDropVisibility, kDropSaveGame, kDropSpectators, kDropPickSort, kDropBonus, kDropTeam, kDropTourney, kDropRankedSeason };
+enum { kDropRace, kDropAi, kDropOption, kDropColor, kDropSlot, kDropSites, kDropModOption, kDropPreset, kDropPlayers, kDropProfile, kDropVisibility, kDropSaveGame, kDropSpectators, kDropPickSort, kDropBonus, kDropTeam, kDropTourney, kDropRankedSeason };
 
 // The argument of kGDropOpen: the kind in the low bits and the slot or option index above them.
 const int kDropKindBits = 5, kDropKindMask = (1 << kDropKindBits) - 1;
@@ -189,8 +188,6 @@ struct RecoverInfo {
 	uint64_t hostId = 0;
 	std::string hostName, others;
 	std::string otherIds;
-	int saveIndex = -1;
-	uint64_t saveAge = 0;
 };
 
 struct ModRow {
@@ -217,7 +214,7 @@ struct State {
 	bool passShow = false;
 	ListState opt;
 	ListGeom optGeom;
-	int createPlayers = 4, createMap = 0;
+	int createPlayers = 4;
 	std::vector<OnlineLobby> lobbies;
 	ListState detail;
 	ListGeom detailGeom;
@@ -231,10 +228,7 @@ struct State {
 	std::vector<ModInfo> mods;
 	std::string ownKey;
 	bool searching = false;
-	std::string searchMode;
-	DWORD searchStart = 0;
 	bool found = false;
-	DWORD foundAt = 0;
 	int mouseX = -1, mouseY = -1;
 	std::vector<Hit> hits;
 	std::string player;
@@ -334,8 +328,6 @@ struct State {
 	bool startingCover = false;
 	RecoverInfo recover;
 	bool recoverAsk = false;
-	uint64_t recoverWaitHost = 0;
-	DWORD recoverRefresh = 0;
 	std::vector<MpSavePlayer> savePlayers;
 	bool savePlayersRead = false;
 	std::string saveMap;
@@ -417,8 +409,8 @@ extern void *g_mainMenu;
 extern Canvas g_canvas;
 std::string SpectatorText(bool enabled, int delay);
 bool RoomHasNoSeat(const State &st);
-// Whether the list shows a room with `filter` (State::filter: 0 all, 1 friends', 6 with open slots, 7 being played, and the older
-// ones) and the search typed.
+// Whether the list shows a room with `filter` (State::filter: 0 all, 1 friends', 6 with open slots, 7 being played) and the search
+// typed.
 bool RoomShown(const State &st, const OnlineLobby &g, int filter);
 std::vector<int> Visible(const State &st);
 // The list's group of a room, in the order they show: one that can be joined (0), a game being played that can be watched (1), and one
@@ -444,7 +436,6 @@ void TryJoinNow(const OnlineLobby &g, const std::string &password, bool watch = 
 void TryJoin(const OnlineLobby &g, const std::string &password, bool watch = false);
 void TrySpectate(const OnlineLobby &g, const std::string &password);
 extern ListGeom g_pickGeomOut;
-const int kPickRows = 13;
 
 bool ChatBarDown(POINT pt);
 void ChatBarMove(POINT pt);

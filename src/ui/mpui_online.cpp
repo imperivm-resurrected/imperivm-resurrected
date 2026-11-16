@@ -33,15 +33,6 @@ uint64_t UnixNow()
 }
 
 namespace mpui_impl {
-namespace {
-uint64_t FileTimeToUnix(uint64_t ft)
-{
-	return ft > 116444736000000000ULL ? (ft - 116444736000000000ULL) / 10000000ULL : 0;
-}
-}
-}
-
-namespace mpui_impl {
 void RecordOnlineGame(const OnlineRoom &room)
 {
 	bool host = false;
@@ -120,11 +111,7 @@ void CheckRecover()
 {
 	RecoverInfo r;
 	if (!ReadOnlineGame(r)) return;
-	if (!r.host) {
-		g_s.recover = r;
-		g_s.recoverAsk = true;
-		return;
-	}
+	// The host of the game that was cut off returns to it as a guest of one of the others.
 	if (r.host) {
 		if (r.otherIds.empty()) return;
 		const size_t comma = r.otherIds.find(',');
@@ -133,22 +120,6 @@ void CheckRecover()
 		const size_t sep = r.others.find(", ");
 		r.hostName = sep == std::string::npos ? r.others : r.others.substr(0, sep);
 		if (!r.hostId) return;
-		g_s.recover = r;
-		g_s.recoverAsk = true;
-		return;
-	}
-	if (r.host) {
-		for (size_t i = 0; i < g_s.saves.size(); i++) {
-			if (FileTimeToUnix(g_s.saves[i].time) >= r.start) {
-				r.saveIndex = static_cast<int>(i);
-				r.saveAge = UnixNow() - FileTimeToUnix(g_s.saves[i].time);
-				break;
-			}
-		}
-		if (r.saveIndex < 0) {
-			ClearOnlineGame();
-			return;
-		}
 	}
 	g_s.recover = r;
 	g_s.recoverAsk = true;
