@@ -149,6 +149,17 @@ struct LeagueBan {
 	std::string reason;
 };
 
+// A finished cup the player was drawn into: official ones give the podium its phalerae, community ones nothing but the place.
+struct LeagueCup {
+	int64_t id = 0, finishedAt = 0;
+	std::string name, mode = "1v1", format;
+	bool official = false;
+	// -1 when the cup belongs to no season.
+	int season = -1;
+	// 1 for the champion; 0 for a player knocked out without playing.
+	int placement = 0, entries = 0;
+};
+
 // GET /v1/league/me.
 struct LeagueMe {
 	std::string steamId, name;
@@ -167,6 +178,9 @@ struct LeagueMe {
 	LeagueCeremony ceremony;
 	// The seasons whose frame and title the player wears; -1 for none.
 	int equippedFrame = -1, equippedTitle = -1;
+	// The last finished cups, newest first; `cupsKnown` is false for a server before the list.
+	bool cupsKnown = false;
+	std::vector<LeagueCup> cups;
 };
 bool LeagueParseMe(const Json &j, LeagueMe &out);
 

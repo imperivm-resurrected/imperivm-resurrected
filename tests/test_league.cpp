@@ -186,6 +186,24 @@ void Me()
 	CHECK(!empty.ranked.present);
 	CHECK(!empty.ranked2v2.present);
 	CHECK(empty.queues.empty());
+	CHECK(!empty.cupsKnown);
+
+	// The finished cups: an official one with the place, a community one without a season, and rows without an id or a name left out.
+	LeagueMe cups;
+	CHECK(LeagueParseMe(Parse(R"({"steamId":"1","cups":[{"id":7,"name":"Copa de los Idus","official":true,"mode":"1v1","format":"single","season":0,
+		"finishedAt":1700000000000,"placement":1,"entries":8},{"id":9,"name":"Copa del Foro","official":false,"mode":"2v2","format":"swiss","season":null,
+		"placement":null,"entries":6},{"id":0,"name":"x"},{"id":3,"name":"  "}]})"),
+		cups));
+	CHECK(cups.cupsKnown);
+	CHECK_EQ(static_cast<unsigned>(cups.cups.size()), 2u);
+	CHECK(cups.cups[0].official);
+	CHECK_EQ(cups.cups[0].season, 0);
+	CHECK_EQ(cups.cups[0].placement, 1);
+	CHECK_EQ(cups.cups[0].entries, 8);
+	CHECK(!cups.cups[1].official);
+	CHECK_EQ(cups.cups[1].mode, std::string("2v2"));
+	CHECK_EQ(cups.cups[1].season, -1);
+	CHECK_EQ(cups.cups[1].placement, 0);
 
 	// The 2v2 standing has the same shape, with its best, streak and placement inside; the duel's may also come beside it.
 	LeagueMe both;

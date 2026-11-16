@@ -449,6 +449,25 @@ bool LeagueParseMe(const Json &j, LeagueMe &out)
 			if (badge.Shown()) out.badges.push_back(badge);
 		}
 	}
+	if (const Json *list = j.Get("cups"); list && list->type == Json::Array) {
+		out.cupsKnown = true;
+		for (const Json &c : list->arr) {
+			if (c.type != Json::Object) continue;
+			LeagueCup cup;
+			cup.id = Int64(c, "id");
+			cup.name = Trim(c.GetString("name"));
+			if (!cup.id || cup.name.empty()) continue;
+			const Json *official = c.Get("official");
+			cup.official = official && official->type == Json::Bool && official->b;
+			cup.mode = Lower(c.GetString("mode")) == "2v2" ? "2v2" : "1v1";
+			cup.format = Lower(c.GetString("format"));
+			cup.season = SeasonNumber(c.Get("season"));
+			cup.finishedAt = Int64(c, "finishedAt");
+			cup.placement = std::max(0, Int(c, "placement"));
+			cup.entries = std::max(0, Int(c, "entries"));
+			out.cups.push_back(cup);
+		}
+	}
 	return true;
 }
 
