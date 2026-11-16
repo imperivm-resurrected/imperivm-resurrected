@@ -146,15 +146,6 @@ std::string ScenarioName(const std::string &path)
 	return slash == std::string::npos ? path : path.substr(slash + 1);
 }
 
-std::string AnsiToUtf8(const char *text)
-{
-	wchar_t w[2048];
-	const int n = MultiByteToWideChar(CP_ACP, 0, text, -1, w, 2048);
-	if (n <= 0) return text;
-	char out[4096];
-	return WideCharToMultiByte(CP_UTF8, 0, w, -1, out, sizeof(out), nullptr, nullptr) > 0 ? out : text;
-}
-
 std::vector<std::string> ComboItems(void *combo)
 {
 	std::vector<std::string> out;
@@ -689,7 +680,7 @@ void TakeSnapshot()
 			if (desc) {
 				char buf[2048] = {};
 				reinterpret_cast<GetTextA_t>(addr::kTextGetTextA)(desc, nullptr, buf, sizeof(buf) - 1);
-				s.pickerDescription = AnsiToUtf8(buf);
+				s.pickerDescription = winpath::Utf8(winpath::Widen(buf, CP_ACP));
 			}
 			s.pickerPaths = PickerPaths(g_picker);
 		}
