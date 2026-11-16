@@ -4,6 +4,7 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
+#include <string>
 
 // Reads and writes of the game's memory. They only compute addresses and copy plain values, so they can be used inside __try.
 template <class T> T &At(const void *base, ptrdiff_t offset)
@@ -29,12 +30,18 @@ constexpr int kPlayerCount = 16;
 // CVXPlayer: its id (its index among the 16), the mask of its enemies, the permissions it grants each id (4 bytes each,
 // game/diplomacyrules.h), whether it plays, its race, who controls it, its AI (null for a human), its name (a std::string), its state,
 // its 64 shades and its colour (RGB555).
-constexpr size_t kPlayerId = 8, kPlayerEnemies = 0x10, kPlayerDiplomacy = 0x24, kPlayerActive = 0x64, kPlayerRace = 0x7c, kPlayerControl = 0x80,
-				 kPlayerAi = 0x88, kPlayerName = 0x90, kPlayerState = 0x290, kPlayerShades = 0x294, kPlayerColor = 0x314;
+constexpr size_t kPlayerId = 8, kPlayerEnemies = 0x10, kPlayerDiplomacy = 0x24, kPlayerActive = 0x64, kPlayerRace = 0x7c, kPlayerControl = 0x80;
+constexpr size_t kPlayerAi = 0x88, kPlayerName = 0x90, kPlayerState = 0x290, kPlayerShades = 0x294, kPlayerColor = 0x314;
 static_assert(kPlayerName + kStringBuffer == 0x94 && kPlayerName + kStringSize == 0xa4 && kPlayerName + kStringCapacity == 0xa8,
 	"the player's name is the std::string at +0x90");
 // The state is 1 while the player is in the match; a defeat or a surrender changes it.
 constexpr int kStatePlaying = 1;
+
+// The game settings (addr::kGameSettings): a team and a race byte for each of the 8 players, then their entries, each with the race,
+// the type (0 human, 1 AI), the bonus and the slot of the room.
+constexpr size_t kSettingsTeams = 0x54, kSettingsRaces = 0x5c, kSettingsEntries = 0xa4, kSettingsEntrySize = 0xc0;
+constexpr size_t kEntryRace = 0, kEntryType = 8, kEntryBonus = 0x38, kEntrySlot = 0xa0;
+constexpr int kSettingsEntryCount = 8, kEntryTypeAi = 1;
 
 inline const char *PlayerAt(const char *game, int index)
 {
@@ -51,6 +58,16 @@ inline char *LocalPlayer(const char *game)
 	return Field<char *>(game, kGameLocalPlayer);
 }
 
+inline const char *SettingsEntry(const char *settings, int index)
+{
+	return settings + kSettingsEntries + static_cast<size_t>(index) * kSettingsEntrySize;
+}
+
+inline char *SettingsEntry(char *settings, int index)
+{
+	return settings + kSettingsEntries + static_cast<size_t>(index) * kSettingsEntrySize;
+}
+
 // The text of the game's std::string at `s`: in its buffer while the capacity is below 16, else behind its pointer.
 inline const char *StringChars(const char *s)
 {
@@ -61,6 +78,25 @@ inline unsigned StringSize(const char *s)
 {
 	return Field<unsigned>(s, kStringSize);
 }
+
+// A copy of the game's std::string at `s`; empty when its size is not below `limit`.
+inline std::string StringValue(const char *s, unsigned limit)
+{
+	const char *text = StringChars(s);
+	const unsigned size = StringSize(s);
+	return text && size < limit ? std::string(text, size) : std::string();
+}
+
+// The game's std::string as a value, for the functions of the game that read one.
+struct GameString {
+	uint32_t allocator;
+	union {
+		char buf[16];
+		const char *ptr;
+	};
+	uint32_t size, capacity;
+};
+static_assert(sizeof(GameString) == 0x1c, "the game's std::string is 28 bytes");
 
 inline const char *PlayerName(const char *player)
 {

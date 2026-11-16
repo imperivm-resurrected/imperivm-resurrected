@@ -16,6 +16,7 @@
 #include "game/civs.h"
 #include "core/crashlog.h"
 #include "game/gameroom.h"
+#include "game/gamelayout.h"
 #include "game/gamemodes.h"
 #include "hooks/gamefiles.h"
 #include "mods/mods.h"
@@ -216,12 +217,11 @@ const int kMapSizeCombo = 0x01000008;
 const int kMapSizes = 3;
 const size_t kTemplateEntrySize = 0x44;
 const size_t kTemplateSizeField = 0x38;
-const size_t kTemplatePathText = 0x04, kTemplatePathCapacity = 0x18;
+const size_t kTemplateName = 0x1c;
 
 const char *TemplateName(const char *entry)
 {
-	const unsigned capacity = *reinterpret_cast<const unsigned *>(entry + 0x34);
-	return capacity < 0x10 ? entry + 0x20 : *reinterpret_cast<const char *const *>(entry + 0x20);
+	return layout::StringChars(entry + kTemplateName);
 }
 
 // The template behind item `index` of the map type list: the item's data is its entry in the options' template list, whose
@@ -238,9 +238,7 @@ bool TemplatePathOf(void *options, void *typeCombo, unsigned index, char *out, s
 		const char *begin = *reinterpret_cast<char *const *>(static_cast<char *>(options) + 0x6c);
 		const char *end = *reinterpret_cast<char *const *>(static_cast<char *>(options) + 0x70);
 		if (!begin || end <= begin || entry >= static_cast<unsigned>((end - begin) / kTemplateEntrySize)) return false;
-		const char *e = begin + entry * kTemplateEntrySize;
-		const unsigned capacity = *reinterpret_cast<const unsigned *>(e + kTemplatePathCapacity);
-		const char *path = capacity < 0x10 ? e + kTemplatePathText : *reinterpret_cast<const char *const *>(e + kTemplatePathText);
+		const char *path = layout::StringChars(begin + entry * kTemplateEntrySize);
 		return path && strncpy_s(out, size, path, _TRUNCATE) == 0;
 	}
 	__except (EXCEPTION_EXECUTE_HANDLER) {
@@ -375,9 +373,8 @@ bool PickerPath(void *picker, int i, char *buf, unsigned bufSize)
 {
 	__try {
 		const char *e = *reinterpret_cast<char *const *>(static_cast<char *>(picker) + 0x64) + i * 0x1a0;
-		const unsigned size = *reinterpret_cast<const unsigned *>(e + 0x14);
-		const unsigned cap = *reinterpret_cast<const unsigned *>(e + 0x18);
-		const char *text = cap < 0x10 ? e + 4 : *reinterpret_cast<const char *const *>(e + 4);
+		const unsigned size = layout::StringSize(e);
+		const char *text = layout::StringChars(e);
 		unsigned k = 0;
 		for (; text && k < size && k + 1 < bufSize; k++) buf[k] = text[k];
 		buf[k] = 0;
@@ -1286,7 +1283,7 @@ void *__cdecl HookCreateSettings(int *path, int *out, int type, void *xml)
 		char *settings = reinterpret_cast<char *>(*out);
 		char line[128] = "";
 		for (int i = 0; i < 8; i++) {
-			int *race = reinterpret_cast<int *>(settings + 0xa4 + i * 0xc0);
+			int *race = &At<int>(layout::SettingsEntry(settings, i), layout::kEntryRace);
 			const int id = *race;
 			*race = RaceIdToSlotChoice(id);
 			g_scenarioRace[i] = *race >= 0 && *race < 8 ? *race : -1;
@@ -1837,11 +1834,7 @@ static void SetProfileName(const std::string &name)
 static std::string ProfileName()
 {
 	const char *p = *reinterpret_cast<const char **>(addr::kPlayerProfile);
-	if (!p) return "";
-	const unsigned size = *reinterpret_cast<const unsigned *>(p + 0x14);
-	const unsigned cap = *reinterpret_cast<const unsigned *>(p + 0x18);
-	const char *text = cap < 0x10 ? p + 4 : *reinterpret_cast<const char *const *>(p + 4);
-	return text && size < 256 ? std::string(text, size) : std::string();
+	return p ? layout::StringValue(p, 256) : "";
 }
 
 void GameRoomUseOnlineName(const std::string &name)

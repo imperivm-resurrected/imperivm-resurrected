@@ -8,6 +8,7 @@
 #include "addr/engine.h"
 #include "addr/script.h"
 #include "addr/state.h"
+#include "game/gamelayout.h"
 
 namespace {
 
@@ -114,12 +115,7 @@ bool Verified(char *obj, uint16_t handle, char *desc)
 
 std::string GameStringAt(const void *at)
 {
-	const char *s = static_cast<const char *>(at);
-	if (!s) return std::string();
-	const unsigned size = *reinterpret_cast<const unsigned *>(s + 0x14);
-	const unsigned cap = *reinterpret_cast<const unsigned *>(s + 0x18);
-	const char *text = cap < 0x10 ? s + 4 : *reinterpret_cast<const char *const *>(s + 4);
-	return text && size < 0x10000 ? std::string(text, size) : std::string();
+	return at ? layout::StringValue(static_cast<const char *>(at), 0x10000) : std::string();
 }
 
 std::vector<GameCommand> GameCommands()

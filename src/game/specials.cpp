@@ -13,6 +13,7 @@
 #include "core/json.h"
 #include "core/log.h"
 #include "mods/mods.h"
+#include "game/gamelayout.h"
 #include "game/specials.h"
 #include "i18n/tr.h"
 #include "mods/features.h"
@@ -250,7 +251,7 @@ void SpecialsOnClassElement(void *cls, const unsigned *element)
 			static int logged = 0;
 			if (logged++ < 30) {
 				char *c = static_cast<char *>(cls);
-				const char *className = *reinterpret_cast<unsigned *>(c + 0x1c) < 0x10 ? c + 8 : *reinterpret_cast<const char **>(c + 8);
+				const char *className = layout::StringChars(c + 4);
 				std::string names;
 				for (const std::string &n : own) names += (names.empty() ? "" : ", ") + n;
 				LogD("specials", "class %s carries [%s]; high part of the mask %08x -> %08x", className, names.c_str(), before, *high);

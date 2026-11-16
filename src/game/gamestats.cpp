@@ -17,8 +17,6 @@
 
 namespace {
 const size_t kGameStats = 0x258, kStatsRecordSize = 0xd0;
-const size_t kSettingsSlots = 0xac, kSettingsSlotSize = 0xc0;
-const int kSlotAi = 1, kSettingsSlotCount = 8;
 const char kFileSuffix[] = ".stats";
 
 // The totals function adds up into this: mask at 0, gold 1, food 2, units on the map 3, units in buildings 4, city points 5, mask again at 6.
@@ -84,7 +82,7 @@ bool ReadPlayer(const char *game, int index, RawPlayer &out)
 		out.playing = state == layout::kStatePlaying;
 		// A player that lost has no AI object any more, so the game's settings say it better.
 		const char *settings = *reinterpret_cast<const char *const *>(addr::kGameSettings);
-		if (settings && index < kSettingsSlotCount) out.human = Field<int>(settings, kSettingsSlots + index * kSettingsSlotSize) != kSlotAi;
+		if (settings && index < layout::kSettingsEntryCount) out.human = Field<int>(layout::SettingsEntry(settings, index), layout::kEntryType) != layout::kEntryTypeAi;
 		else out.human = Field<void *>(player, layout::kPlayerAi) == nullptr;
 		const char *local = layout::LocalPlayer(game);
 		out.local = local == player;
@@ -164,8 +162,8 @@ bool ReadFacts(const char *game, int index, GameRecordFacts &out, char *unit, si
 		out.produced = Field<uint32_t>(record, 0x40);
 		out.gold = Field<uint32_t>(record, 0xac) + Field<uint32_t>(record, 0xb0) + Field<uint32_t>(record, 0xb4);
 		const char *s = record + kRecordBestUnit;
-		const unsigned size = Field<unsigned>(s, 0x14), cap = Field<unsigned>(s, 0x18);
-		const char *text = cap < 0x10 ? s + 4 : Field<const char *>(s, 4);
+		const unsigned size = layout::StringSize(s);
+		const char *text = layout::StringChars(s);
 		size_t n = 0;
 		for (; text && n + 1 < unitSize && n < size && text[n]; n++) unit[n] = text[n];
 		unit[n] = 0;
