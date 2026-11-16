@@ -111,7 +111,7 @@ void DrawSpectatorBar(uint32_t *buf, int W, int H, float s, int topY)
 	const unsigned shownCur = pinned ? st.total : st.cur;
 	const float barH = collapsed ? 40 * s : 58 * s;
 	const float barW = collapsed ? 150 * s : std::min(static_cast<float>(W) - 24, (st.broadcast ? 900.0f : 790.0f) * s);
-	float bx = posX * W - barW / 2, by = posTop >= 0 ? static_cast<float>(posTop * H) : static_cast<float>(topY);
+	float bx = static_cast<float>(posX * W - barW / 2), by =posTop >= 0 ? static_cast<float>(posTop * H) : static_cast<float>(topY);
 	bx = std::max(4.0f, std::min(static_cast<float>(W) - barW - 4, std::floor(bx)));
 	by = std::max(2.0f, std::min(static_cast<float>(H) - barH - 4, by));
 	const float cy = by + barH / 2;
