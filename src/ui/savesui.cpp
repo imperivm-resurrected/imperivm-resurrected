@@ -169,6 +169,8 @@ struct State {
 	int mouseX = 0, mouseY = 0;
 	MpSaveInfo info;
 	std::string activeHash, activeProfile;
+	// Each opening of the screen: the checks of a frame are kept only for the one that computed them.
+	unsigned session = 0;
 	mutable std::map<std::string, ModCheck> modChecks;
 	mutable DWORD modChecksTick = 0;
 	int tabAction = -1, tabArg = 0;
@@ -186,6 +188,7 @@ struct State {
 std::mutex g_lock;
 State g_s;
 Canvas g_canvas;
+unsigned g_sessions = 0;
 
 std::string Lower(std::string s)
 {
@@ -205,7 +208,7 @@ ModCheck ComputeModCheck(const State &st, const SaveRec &r)
 	ModCheck c;
 	const bool sameSchema = r.modSchema == ModsRulesSchema();
 	c.differs = sameSchema && !r.modHash.empty() && !st.activeHash.empty() && r.modHash != st.activeHash;
-	const std::vector<ModInfo> installed = ModsList();
+	const std::vector<ModInfo> installed = ModsSummaries();
 	const ModProfile &mounted = ModsMountedProfile();
 	if (c.differs) {
 		for (const std::string &f : mounted.mods) {
@@ -1633,6 +1636,7 @@ void OpenSaveImpl(void *dlg)
 	}
 	std::lock_guard<std::mutex> lock(g_lock);
 	g_s = State();
+	g_s.session = ++g_sessions;
 	g_s.open = true;
 	g_s.mode = 1;
 	g_s.dlg = dlg;
@@ -1715,6 +1719,7 @@ void OpenImpl(void *dlg)
 {
 	std::lock_guard<std::mutex> lock(g_lock);
 	g_s = State();
+	g_s.session = ++g_sessions;
 	g_s.open = true;
 	g_s.dlg = dlg;
 	g_s.dlgGlobal = addr::kLoadDlg;
@@ -1947,6 +1952,7 @@ void DrawImpl(uint32_t *buf, int w, int h)
 		if (!g_s.open) return;
 		st = g_s;
 	}
+	const DWORD checksTick = st.modChecksTick;
 	PanelRender r(g_canvas, buf, w, h);
 	// Over the menus the screen fills the screen; over a running game, and to save, it stays a window so the game shows around it.
 	const bool full = !InGame() && st.mode == 0;
@@ -1973,6 +1979,11 @@ void DrawImpl(uint32_t *buf, int w, int h)
 	g_s.listGeom = st.listGeom;
 	g_s.modGeom = st.modGeom;
 	g_s.lay = st.lay;
+	// The frame painted on a copy: its content checks go back unless the screen reopened or dropped them meanwhile.
+	if (g_s.session == st.session && g_s.modChecksTick == checksTick) {
+		g_s.modChecks = std::move(st.modChecks);
+		g_s.modChecksTick = st.modChecksTick;
+	}
 	if (g_s.modListKey != st.modListKey) {
 		g_s.modListKey = st.modListKey;
 		g_s.modList = ListState();
