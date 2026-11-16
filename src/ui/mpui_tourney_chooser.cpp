@@ -241,6 +241,8 @@ void PaintMapChooser(Painter &p, const State &st, const Ui &u, PaintOut &out)
 
 	if (u.chooserTab == 0) {
 		const std::vector<std::string> types = LeagueMapTypes();
+		// The league's types once a frame, not once a row.
+		const std::vector<TourneyMapType> leagueTypes = LeagueTourneyMapTypes();
 		const int rowH = 46, viewRows = std::max(1, (listH - 4) / rowH), maxScroll = std::max(0, static_cast<int>(types.size()) - viewRows);
 		const int scroll = std::max(0, std::min(u.chooserScroll, maxScroll));
 		p.Clip(listX + 1, listY + 1, listW - 2, listH - 2);
@@ -253,7 +255,7 @@ void PaintMapChooser(Painter &p, const State &st, const Ui &u, PaintOut &out)
 			p.Font(0);
 			p.Text(listX + 16, ry + 3, listW - 40, 22, LeagueMapText(types[static_cast<size_t>(i)]), pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 			std::string sizes;
-			for (const std::string &s : CupSizesOf(u.cup, types[static_cast<size_t>(i)])) sizes += (sizes.empty() ? "" : ", ") + LeagueMapText(s);
+			for (const std::string &s : TourneySizesFor(leagueTypes, types[static_cast<size_t>(i)], u.cup.mode)) sizes += (sizes.empty() ? "" : ", ") + LeagueMapText(s);
 			p.Font(3);
 			p.Text(listX + 16, ry + 24, listW - 40, 18, sizes, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 			if (!on) p.AddHit(listX + 2, ry, listW - 16, rowH, kTourney, ArgOf(kSubChooserRow, i));
@@ -271,7 +273,7 @@ void PaintMapChooser(Painter &p, const State &st, const Ui &u, PaintOut &out)
 			p.Font(0);
 			p.TextWrapped(tx, listY + pad + 36, tw, size - 36,
 				Tr("The game makes a new map from this template for every game, with the size you choose. Nobody has to download anything."), pal::body);
-			const std::vector<std::string> sizes = CupSizesOf(u.cup, chosen.name);
+			const std::vector<std::string> sizes = TourneySizesFor(leagueTypes, chosen.name, u.cup.mode);
 			const int sy = listY + pad + size + 22;
 			PaintCaps(p, dx + pad, sy, dw - 2 * pad, 20, Tr("Size"), pal::caption);
 			std::vector<std::string> labels;

@@ -143,6 +143,7 @@ struct Form {
 	const Ui &u;
 	const TourneyCupForm &f;
 	const std::vector<TourneyCupProblem> &problems;
+	const TourneyMineView &mine;
 	Look k;
 	int mx = 0, my = 0;
 	bool locked = false, measure = false, editing = false;
@@ -763,7 +764,7 @@ int CalendarRight(Form &c, int x, int y, int w)
 		Tr(f.mode == TourneyMode::Teams ? "The games count as for organising a cup, and both players of a team have to meet them. Players without a rank this season can always sign up."
 										: "The games count as for organising a cup. Players without a rank this season can always sign up."));
 	at += Problem(c, x, at, w, {TourneyCupProblem::Requirements});
-	if (f.play && f.mode != TourneyMode::Teams && f.requirements.Any() && CupUnmet(f.requirements, LeagueTourneyMine()) != TourneyUnmet::None) {
+	if (f.play && f.mode != TourneyMode::Teams && f.requirements.Any() && CupUnmet(f.requirements, c.mine) != TourneyUnmet::None) {
 		at += 6;
 		at += Hint(c, x, at, w, Tr("You don't meet these requirements yourself: change them, or untick \"I play too\"."), pal::warn);
 	}
@@ -1397,7 +1398,7 @@ void PaintCreateScreen(Painter &p, const State &st, const Ui &u, PaintOut &out)
 	const int m = l.margin, inner = l.w - 2 * m, top = l.top, bottom = l.h - m;
 	const int sideW = std::max(360, std::min(440, inner * 26 / 100)), gap = l.roomy ? kCardGap : 24, paneW = inner - sideW - gap, barW = 16;
 	p.raw = true;
-	Form c{p, st, u, u.cup, problems, LookFor(l.roomy)};
+	Form c{p, st, u, u.cup, problems, mine, LookFor(l.roomy)};
 	c.mx = st.mouseX;
 	c.my = st.mouseY;
 	c.locked = editing && u.cupLocked;

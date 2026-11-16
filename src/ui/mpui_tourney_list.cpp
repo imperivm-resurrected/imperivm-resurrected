@@ -303,9 +303,9 @@ void PaintTable(Painter &p, const State &st, const Ui &u, const TourneyListsView
 	const int mx = st.mouseX, my = st.mouseY;
 	PaintGlassCard(p, x, y, w, h);
 	const std::vector<TourneySummary> &all = u.filter == 1 ? lists.live : u.filter == 2 ? lists.finished : lists.open;
-	std::vector<TourneySummary> rows;
+	std::vector<const TourneySummary *> rows;
 	for (const TourneySummary &t : all) {
-		if (Shown(t, u, mine)) rows.push_back(t);
+		if (Shown(t, u, mine)) rows.push_back(&t);
 	}
 	{
 		static const char *const kKinds[] = {"Official and community", "Official only", "Community only"};
@@ -345,7 +345,7 @@ void PaintTable(Painter &p, const State &st, const Ui &u, const TourneyListsView
 	}
 	p.Clip(x + 1, top, w - 2, viewH);
 	for (size_t i = 0; i < rows.size(); i++) {
-		const TourneySummary &t = rows[i];
+		const TourneySummary &t = *rows[i];
 		const int ry = top + static_cast<int>(i) * rowH - scroll;
 		if (ry + rowH < top || ry > top + viewH) continue;
 		p.Fill(x + 1, ry, w - 2, 1, pal::hairline);
