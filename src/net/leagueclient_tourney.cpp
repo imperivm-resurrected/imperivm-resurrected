@@ -113,14 +113,6 @@ const char *OpName(TourneyOp op)
 	}
 }
 
-// Under g_mx: a copy of the view with `change` made, in its place; whoever holds the old one keeps it as it was.
-template <class T, class F> void ChangeView(std::shared_ptr<const T> &view, F change)
-{
-	auto copy = std::make_shared<T>(*view);
-	change(*copy);
-	view = std::move(copy);
-}
-
 // Under g_mx.
 bool Quiet()
 {
