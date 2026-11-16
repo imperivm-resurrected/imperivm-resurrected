@@ -14,6 +14,7 @@
 #include "game/gamemenu.h"
 #include "game/gametext.h"
 #include "i18n/tr.h"
+#include "net/leagueclient.h"
 #include "ui/battlesui.h"
 #include "ui/conquestui.h"
 #include "ui/controlsui.h"
@@ -437,6 +438,8 @@ void MainMenuUiShown(void *dlg)
 {
 	// Before the dialog's first frame, so the game's buttons never show.
 	if (dlg) Sync(dlg, true);
+	// The league account's standing, frame and title read ahead, so Statistics opens with them in place (at most once a minute).
+	LeagueMeRefresh();
 }
 
 void MainMenuUiDestroyed(void *dlg)
