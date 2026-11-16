@@ -380,10 +380,37 @@ void PaintIdentity(Painter &p, const View &v, const Card &c, const Area &a, cons
 	Raw(p, tx, labelY, right - tx, 22, label, pal::textDim);
 }
 
-void PaintTiles(Painter &p, const Card &c, const Area &a, const Frame &f)
+// A rank of the league in a tile: its emblem, the rank and the Glory and place under it.
+void PaintRankTile(Painter &p, int x, int y, int w, int h, const char *queue, const LeagueRanked &r)
+{
+	PaintGlassCard(p, x, y, w, h);
+	const int size = std::min(h - 20, 56), ex = x + 14, tx = ex + size + 12, tw = x + w - 10 - tx;
+	const bool placed = r.present && r.tier != LeagueTier::None;
+	if (placed) DrawLeagueEmblem(p, ex, y + (h - size) / 2, size, r.tier);
+	else {
+		p.Frame(ex, y + (h - size) / 2, size, size, pal::edge);
+		p.Font(1);
+		p.Text(ex, y + (h - size) / 2, size, size, "?", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	}
+	p.Font(3);
+	p.Text(tx, y + h / 2 - 34, tw, 20, queue, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	p.Font(1);
+	Raw(p, tx, y + h / 2 - 13, tw, 24, placed ? LeagueRankLabel(r.tier, r.division) : !r.present ? Tr("Not played") : Tr("In placement"),
+		placed ? LeagueTierInk(r.tier) : pal::text);
+	p.Font(3);
+	std::string line = placed ? TrFmt("%s Glory", {Grouped(r.glory)}) : r.present ? TrFmt("%s placement games left", {std::to_string(r.placementLeft)}) : std::string();
+	if (placed && r.position > 0) line += "  Â·  #" + std::to_string(r.position);
+	Raw(p, tx, y + h / 2 + 12, tw, 20, line, pal::caption);
+}
+
+void PaintTiles(Painter &p, const View &v, const Card &c, const Area &a, const Frame &f)
 {
 	const ProfileSummary &s = c.summary;
-	const int tileW = (a.w - 3 * kTileGap) / 4;
+	// The league is the Steam account's: its ranks and its tournament phalerae only on the player in use.
+	const bool league = c.active && v.linked && v.meLoaded;
+	const bool team = league && (v.me.ranked2v2.present || std::find(v.me.queues.begin(), v.me.queues.end(), "2v2") != v.me.queues.end());
+	const int extra = league ? (team ? 3 : 2) : 0, count = 4 + extra;
+	const int tileW = (a.w - (count - 1) * kTileGap) / count;
 	const bool any = c.readable && s.games > 0;
 	std::string hours = kDash;
 	if (any) {
@@ -401,6 +428,36 @@ void PaintTiles(Painter &p, const Card &c, const Area &a, const Frame &f)
 		p.Font(3);
 		p.Text(x + 6, f.tilesY + f.tileH - 32, w - 12, 22, labels[i], pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
+	if (!league) return;
+	int x = a.x + 4 * (tileW + kTileGap);
+	PaintRankTile(p, x, f.tilesY, tileW, f.tileH, "Ranked 1 vs 1", v.me.ranked);
+	x += tileW + kTileGap;
+	if (team) {
+		PaintRankTile(p, x, f.tilesY, tileW, f.tileH, "Ranked 2 vs 2", v.me.ranked2v2);
+		x += tileW + kTileGap;
+	}
+	int gold = 0, silver = 0, bronze = 0;
+	for (const LeagueBadge &b : v.me.badges) {
+		if (b.kind != LeagueBadgeKind::Trophy) continue;
+		gold += b.metal == LeagueMetal::Gold;
+		silver += b.metal == LeagueMetal::Silver;
+		bronze += b.metal == LeagueMetal::Bronze;
+	}
+	const int w = a.x + a.w - x;
+	PaintGlassCard(p, x, f.tilesY, w, f.tileH);
+	const struct {
+		LeagueMetal metal;
+		int n;
+	} metals[] = {{LeagueMetal::Gold, gold}, {LeagueMetal::Silver, silver}, {LeagueMetal::Bronze, bronze}};
+	const int cell = (w - 20) / 3, size = std::min(32, f.tileH - 52);
+	for (int i = 0; i < 3; i++) {
+		const int cx = x + 10 + i * cell;
+		DrawLeaguePhalera(p, cx + (cell - size) / 2, f.tilesY + 10, size, metals[i].metal);
+		p.Font(1);
+		Raw(p, cx, f.tilesY + 12 + size, cell, 22, std::to_string(metals[i].n), metals[i].n ? pal::text : pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	}
+	p.Font(3);
+	p.Text(x + 6, f.tilesY + f.tileH - 26, w - 12, 20, "Tournament phalerae", pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }
 
 void PaintCardTitle(Painter &p, int x, int y, int w, const std::string &title)
@@ -901,7 +958,7 @@ void PaintDetail(Painter &p, const View &v, const Card &c, const Frame &f, Tip &
 {
 	const Area a = DetailArea(v);
 	PaintIdentity(p, v, c, a, f);
-	PaintTiles(p, c, a, f);
+	PaintTiles(p, v, c, a, f);
 	const Lower l = LowerLayout(a, f);
 	PaintSummary(p, c, l.summary.x, l.summary.y, l.summary.w, l.summary.h, l.summaryColumns);
 	PaintEvolution(p, v, c, l.chart, tip);

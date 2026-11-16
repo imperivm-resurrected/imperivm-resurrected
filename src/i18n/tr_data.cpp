@@ -2452,6 +2452,8 @@ extern const TrRow kTrRows[] = {
 	{"Searching ranked 2 vs 2", "Buscando clasificatoria 2 contra 2", "Ricerca classificata 2 contro 2"},
 	{"Placement games", "Partidas de colocación", "Partite di piazzamento"},
 	{"In placement", "En colocación", "In piazzamento"},
+	{"Not played", "Sin jugar", "Non giocata"},
+	{"Tournament phalerae", "Fáleras de torneo", "Falere dei tornei"},
 	{"Accepted", "Ha aceptado", "Ha accettato"},
 	{"Pending", "Pendiente", "In attesa"},
 	{"VS", "=", "="},
