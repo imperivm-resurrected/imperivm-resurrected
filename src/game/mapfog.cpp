@@ -67,6 +67,25 @@ void PixelToWorld(void *zoom, int px, int py, int *out)
 	reinterpret_cast<ToMap_t>(vt[0x5c / 4])(base, nullptr, out, in);
 }
 
+unsigned short *RowPtr(char *bmp, int y)
+{
+	return reinterpret_cast<unsigned short *>(reinterpret_cast<PixelPtr_t>((*reinterpret_cast<void ***>(bmp))[0x10 / 4])(bmp, nullptr, 0, y));
+}
+
+// What a pass of the fog over the zoom map reads before it locks the two bitmaps.
+struct FogPass {
+	void *zoom;
+	char *dst, *src;
+	int w, h;
+	void *exploration;
+	unsigned playerIndex;
+	unsigned char *viewer;
+	bool hasAllies;
+	unsigned short fogColor;
+};
+
+int DarkenLocked(const FogPass &pass);
+
 int Darken(void *zoom)
 {
 	char *game = *reinterpret_cast<char **>(addr::kGame);
@@ -93,9 +112,24 @@ int Darken(void *zoom)
 	const unsigned hd = At<unsigned>(dst, 4), hs = At<unsigned>(src, 4);
 	reinterpret_cast<MemLock_t>(addr::kMemLock)(hd);
 	reinterpret_cast<MemLock_t>(addr::kMemLock)(hs);
+	const int asked = DarkenLocked({zoom, dst, src, w, h, exploration, playerIndex, viewer, hasAllies, fogColor});
+	reinterpret_cast<MemUnlock_t>(addr::kMemUnlock)(hs);
+	reinterpret_cast<MemUnlock_t>(addr::kMemUnlock)(hd);
+	return asked;
+}
+
+int DarkenLocked(const FogPass &pass)
+{
+	void *const zoom = pass.zoom;
+	char *const dst = pass.dst, *const src = pass.src;
+	const int w = pass.w, h = pass.h;
+	void *const exploration = pass.exploration;
+	const unsigned playerIndex = pass.playerIndex;
+	unsigned char *const viewer = pass.viewer;
+	const bool hasAllies = pass.hasAllies;
+	const unsigned short fogColor = pass.fogColor;
 	int asked = 0;
 	const int step = 8, gw = (w + step - 1) / step + 1, gh = (h + step - 1) / step + 1;
-	auto rowPtr = [](char *bmp, int y) { return reinterpret_cast<unsigned short *>(reinterpret_cast<PixelPtr_t>((*reinterpret_cast<void ***>(bmp))[0x10 / 4])(bmp, nullptr, 0, y)); };
 
 	static std::vector<unsigned char> explored, seen, nextExplored, nextSeen;
 	static DWORD gridTick = 0;
@@ -210,7 +244,7 @@ int Darken(void *zoom)
 		const size_t total = static_cast<size_t>(w) * h;
 		g_cache.next.resize(total);
 		for (int y = 0; y < h; y++) {
-			const unsigned short *srow = rowPtr(src, y);
+			const unsigned short *srow = RowPtr(src, y);
 			unsigned short *out = &g_cache.next[static_cast<size_t>(y) * w];
 			if (!srow) {
 				std::fill(out, out + w, fogColor);
@@ -250,8 +284,8 @@ int Darken(void *zoom)
 		}
 		const bool fromCache = g_overlayFromCache && sameBitmaps && g_cache.pixels.size() == total;
 		for (int y = 0; y < h; y++) {
-			unsigned short *drow = rowPtr(dst, y);
-			const unsigned short *srow = rowPtr(src, y);
+			unsigned short *drow = RowPtr(dst, y);
+			const unsigned short *srow = RowPtr(src, y);
 			if (!drow || !srow) continue;
 			const unsigned short *was = fromCache ? &g_cache.pixels[static_cast<size_t>(y) * w] : nullptr;
 			const unsigned short *fresh = &g_cache.next[static_cast<size_t>(y) * w];
@@ -268,8 +302,6 @@ int Darken(void *zoom)
 		g_cache.fogColor = fogColor;
 		g_cache.valid = true;
 	}
-	reinterpret_cast<MemUnlock_t>(addr::kMemUnlock)(hs);
-	reinterpret_cast<MemUnlock_t>(addr::kMemUnlock)(hd);
 	return asked;
 }
 
@@ -287,11 +319,6 @@ int SafeDarken(void *zoom)
 typedef void(__fastcall *FogOverlay_t)(void *self, void *edx, int x0, int y0, int x1, int y1);
 FogOverlay_t g_origFogOverlay = nullptr;
 const int kFogOverlayColumns = 0x800;
-
-unsigned short *RowPtr(char *bmp, int y)
-{
-	return reinterpret_cast<unsigned short *>(reinterpret_cast<PixelPtr_t>((*reinterpret_cast<void ***>(bmp))[0x10 / 4])(bmp, nullptr, 0, y));
-}
 
 int FogWideColumns(void *zoom, int x0, int y0, int x1, int y1)
 {
@@ -453,17 +480,17 @@ void *ForceRebuild(void *self)
 	}
 }
 
-}
-
 std::atomic<int> g_images{0};
 
-void InvalidateZoomWindow(void *zoom)
+void InvalidateZoomWindow()
 {
 	char *dlg = *reinterpret_cast<char **>(addr::kZoomDialog);
 	if (!dlg) return;
 	const int *vb = *reinterpret_cast<const int **>(dlg);
 	char *win = dlg + vb[2];
 	reinterpret_cast<void(__fastcall *)(void *, void *, int, int)>(addr::kInvalidateRect)(win, nullptr, 0, 1);
+}
+
 }
 
 void ZoomFogNoteImage() { g_images++; }
@@ -504,7 +531,7 @@ long long ZoomFogGameThreadTick()
 	ForceRebuild(g_zoomThis);
 	if (g_zoomThis) {
 		__try {
-			InvalidateZoomWindow(g_zoomThis);
+			InvalidateZoomWindow();
 		}
 		__except (EXCEPTION_EXECUTE_HANDLER) {
 		}
