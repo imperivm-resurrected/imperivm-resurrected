@@ -606,6 +606,11 @@ OnlineMapStatus SteamSaveStatus()
 void SteamPublishWatchers(int count)
 {
 	if (!SteamOnlineReady()) return;
+	static int pending = -1;
+	static DWORD pendingTick = 0;
+	if (count == pending && GetTickCount() - pendingTick < 2000) return;
+	pending = count;
+	pendingTick = GetTickCount();
 	Post([count] { PublishOwned("watching", count > 0 ? std::to_string(count) : std::string()); });
 }
 
