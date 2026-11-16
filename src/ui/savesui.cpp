@@ -1338,8 +1338,7 @@ void PaintConfirm(Painter &p, State &st)
 	const int mx = st.mouseX, my = st.mouseY;
 	UseSharedFonts(p);
 	if (st.confirm == 2) {
-		std::string name = st.nameText;
-		while (!name.empty() && name.back() == ' ') name.pop_back();
+		const std::string name = SaveName(st);
 		const Dialog d = DialogBegin(p, st.lay.w, st.lay.h, 560, 210, "Overwrite game");
 		DialogText(p, d, 60, Tr("A save named \"") + name + Tr("\" already exists. Overwrite it?"));
 		DialogButtons(p, d, {{"Overwrite", kSaveOver, 0, true}, {"Cancel", kDelNo}}, mx, my);
@@ -1470,8 +1469,7 @@ void PaintPanel(Painter &p, State &st)
 
 	const SaveRec *rec = FindRec(st, st.selPath);
 	if (save) {
-		std::string name = st.nameText;
-		while (!name.empty() && name.back() == ' ') name.pop_back();
+		const std::string name = SaveName(st);
 		p.Button(16, 590, 170, 36, SaveExists(st, name) ? "Overwrite" : "Save", kSave, 0, mx, my, !name.empty(), true);
 		p.Button(196, 590, 120, 36, "Rename", kRename, 0, mx, my, rec != nullptr && !st.renaming && st.sel.size() <= 1);
 		p.Button(326, 590, 120, 36, "Delete", kDelete, 0, mx, my, rec != nullptr && !st.renaming);
