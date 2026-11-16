@@ -307,6 +307,22 @@ bool TabMatches(const SaveRec &r, int tab)
 	}
 }
 
+std::string SaveName(const State &st)
+{
+	std::string name = st.nameText;
+	while (!name.empty() && name.back() == ' ') name.pop_back();
+	while (!name.empty() && name.front() == ' ') name.erase(0, 1);
+	return name;
+}
+
+bool SaveExists(const State &st, const std::string &name)
+{
+	for (const SaveRec &r : st.recs) {
+		if (TabMatches(r, st.tab) && _stricmp(r.baseName.c_str(), name.c_str()) == 0) return true;
+	}
+	return false;
+}
+
 const SaveRec *FindRec(const State &st, const std::string &path)
 {
 	const std::string want = Lower(path);
@@ -814,16 +830,12 @@ void DoAction(State &st, int action, int arg)
 	case kSave:
 	case kSaveOver: {
 		if (st.mode != 1) break;
-		std::string name = st.nameText;
-		while (!name.empty() && name.back() == ' ') name.pop_back();
-		while (!name.empty() && name.front() == ' ') name.erase(0, 1);
+		const std::string name = SaveName(st);
 		if (!SaveLibValidName(name) || name.find('-') != std::string::npos) {
 			ModUiToast("That name is not valid (no - < > : \" / \\ | ? *)", true);
 			break;
 		}
-		bool exists = false;
-		for (const SaveRec &r : st.recs) exists = exists || (TabMatches(r, st.tab) && _stricmp(r.baseName.c_str(), name.c_str()) == 0);
-		if (exists && action == kSave) {
+		if (SaveExists(st, name) && action == kSave) {
 			st.confirm = 2;
 			break;
 		}
@@ -1460,9 +1472,7 @@ void PaintPanel(Painter &p, State &st)
 	if (save) {
 		std::string name = st.nameText;
 		while (!name.empty() && name.back() == ' ') name.pop_back();
-		bool exists = false;
-		for (const SaveRec &r : st.recs) exists = exists || (TabMatches(r, st.tab) && _stricmp(r.baseName.c_str(), name.c_str()) == 0);
-		p.Button(16, 590, 170, 36, exists ? "Overwrite" : "Save", kSave, 0, mx, my, !name.empty(), true);
+		p.Button(16, 590, 170, 36, SaveExists(st, name) ? "Overwrite" : "Save", kSave, 0, mx, my, !name.empty(), true);
 		p.Button(196, 590, 120, 36, "Rename", kRename, 0, mx, my, rec != nullptr && !st.renaming && st.sel.size() <= 1);
 		p.Button(326, 590, 120, 36, "Delete", kDelete, 0, mx, my, rec != nullptr && !st.renaming);
 		p.Button(kDesignW - 16 - 120, 590, 120, 36, "Back", kClose, 0, mx, my);
