@@ -84,7 +84,7 @@ void PaintDropList(Painter &p, const State &st)
 	}
 	for (int i = 0; i < n; i++) {
 		if ((st.drop == kDropModMenu || st.drop == kDropRowMenu) && i + 1 == n) items[i].color = pal::bad;
-		if (st.drop == kDropMenu && i == 2) items[i].color = pal::bad;
+		if (st.drop == kDropMenu && i + 1 == n) items[i].color = pal::bad;
 		if (st.drop == kDropProfile && (i == 1 || i + 1 == n)) items[i].color = pal::redText;
 	}
 	if (st.drop == kDropClashFiles) {
