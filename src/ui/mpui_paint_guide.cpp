@@ -18,6 +18,7 @@
 #include "ui/leagueui.h"
 
 #include "ui/mpui_internal.h"
+#include "ui/mpui_ranked_kit.h"
 
 using namespace mpui_impl;
 
@@ -27,24 +28,6 @@ namespace mpui_impl {
 namespace {
 
 const int kGap = 24, kPad = 24;
-
-void Display(Painter &p, int size)
-{
-	SelectObject(p.dc, BrandFont(BrandFace::Display, size, p.s));
-}
-
-void Caps(Painter &p, int x, int y, int w, int h, const std::string &text, COLORREF c, UINT fmt = DT_LEFT | DT_VCENTER | DT_SINGLELINE)
-{
-	p.Font(4);
-	p.TextCaps(x, y, w, h, text, c, fmt | DT_END_ELLIPSIS, 2);
-}
-
-void RawText(Painter &p, int x, int y, int w, int h, const std::string &text, COLORREF c, UINT fmt)
-{
-	p.raw = true;
-	p.Text(x, y, w, h, text, c, fmt);
-	p.raw = false;
-}
 
 // Wrapped text at `y`, translated; the height it took.
 int Para(Painter &p, int x, int y, int w, const char *text, COLORREF c)
@@ -61,16 +44,6 @@ int ParaRaw(Painter &p, int x, int y, int w, const std::string &text, COLORREF c
 	p.TextWrapped(x, y, w, h + 2, text, c);
 	p.raw = false;
 	return h;
-}
-
-// A tab of the bar: lit while it is the one shown.
-void Tab(Painter &p, int x, int y, int w, int h, const char *label, bool on, int arg, int mx, int my)
-{
-	const bool hot = !on && p.Hover(x, y, w, h, mx, my);
-	if (on) p.Fill(x, y, w, h, pal::selected);
-	p.Frame(x, y, w, h, on || hot ? pal::edgeHot : pal::edge);
-	Caps(p, x, y, w, h, label, on || hot ? pal::text : pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-	if (!on) p.AddHit(x, y, w, h, kRankedAct, arg);
 }
 
 // The Glory a rank asks for: its hundreds for the six with divisions, the least Glory of the elite for Praetorian and Imperator.
@@ -290,8 +263,8 @@ void PaintRankedGuide(Painter &p, const State &st)
 	}
 	p.Font(4);
 	const int tabW = std::max({220, p.CapsWidth("Ranks and rewards", 2) + 40, p.CapsWidth("How it works", 2) + 40});
-	Tab(p, tx, top, tabW, 44, "Ranks and rewards", st.ranked.guideTab == 0, kRkGuideRanks, mx, my);
-	Tab(p, tx + tabW - 1, top, tabW, 44, "How it works", st.ranked.guideTab == 1, kRkGuideRules, mx, my);
+	Segment(p, tx, top, tabW, 44, "Ranks and rewards", st.ranked.guideTab == 0, kRkGuideRanks, mx, my);
+	Segment(p, tx + tabW - 1, top, tabW, 44, "How it works", st.ranked.guideTab == 1, kRkGuideRules, mx, my);
 
 	const int y0 = top + 72, h = l.h - m - y0;
 	const LeagueMeView me = LeagueMeState();
