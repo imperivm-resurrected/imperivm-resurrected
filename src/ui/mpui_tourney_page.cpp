@@ -1531,7 +1531,7 @@ int PaintPrizesCard(Painter &p, const TourneyDetail &d, int x, int y, int w)
 
 }
 
-bool PaintPageHeader(Painter &p, const State &st, const Ui &u)
+bool PaintPageHeader(Painter &p, const State &st, const HeaderUi &u)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const ScreenLayout l = ScreenLayoutFor(st.viewW, st.viewH);

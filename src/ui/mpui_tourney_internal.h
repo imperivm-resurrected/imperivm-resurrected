@@ -203,10 +203,17 @@ void PaintCreateScreen(Painter &p, const State &st, const Ui &u, PaintOut &out);
 void PaintJoinDialog(Painter &p, const State &st, const Ui &u);
 void PaintCodeDialog(Painter &p, const State &st, const Ui &u);
 void PaintWalkoverDialog(Painter &p, const State &st, const Ui &u);
-bool PaintPageHeader(Painter &p, const State &st, const Ui &u);
-bool PaintMatchHeader(Painter &p, const State &st, const Ui &u);
-bool PaintChampionHeader(Painter &p, const State &st, const Ui &u);
-bool PaintCreateHeader(Painter &p, const State &st, const Ui &u);
+// What the screens' headers show of the tab: copied for them instead of the whole Ui.
+struct HeaderUi {
+	int screen = kScreenList, pageTab = 0;
+	std::string slug, championSlug;
+	int64_t cupEditId = 0;
+	bool cupLocked = false;
+};
+bool PaintPageHeader(Painter &p, const State &st, const HeaderUi &u);
+bool PaintMatchHeader(Painter &p, const State &st, const HeaderUi &u);
+bool PaintChampionHeader(Painter &p, const State &st, const HeaderUi &u);
+bool PaintCreateHeader(Painter &p, const State &st, const HeaderUi &u);
 
 // The double elimination and Swiss cups (mpui_tourney_formats.cpp).
 // A match's stage with its part of the tournament: "Quarterfinal", "Winners' final", "Losers' round 3", "Grand final", a Swiss "Round 2".
