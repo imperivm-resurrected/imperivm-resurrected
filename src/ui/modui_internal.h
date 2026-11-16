@@ -174,10 +174,29 @@ extern std::mutex g_lock;
 extern State g_s;
 extern ListGeom g_listGeomOut;
 extern std::atomic<int> g_installedRows;
+struct RichPos {
+	int y, h, indent;
+};
+// What the blocks' places were measured for: measuring every block on every frame is slow, so they are measured again only when one
+// of these, or the text, changes.
+struct RichMeasure {
+	int width = -1, baseFont = -1;
+	float scale = 0;
+	bool raw = false;
+	HFONT fonts[3] = {};
+	bool operator==(const RichMeasure &o) const
+	{
+		return width == o.width && baseFont == o.baseFont && scale == o.scale && raw == o.raw && fonts[0] == o.fonts[0] && fonts[1] == o.fonts[1] &&
+			fonts[2] == o.fonts[2];
+	}
+};
 struct RichTextState {
 	std::mutex mx;
 	std::string src;
 	std::vector<RichBlock> blocks;
+	std::vector<RichPos> pos;
+	int total = 0;
+	RichMeasure measured;
 	int view = 0;
 	ListState list;
 	ListGeom geom;

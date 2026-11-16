@@ -194,6 +194,7 @@ void PaintRich(Painter &p, const State &st, int x, int y, int w, int h, const st
 			const std::vector<RichBlock> nb = RichFromPlain(note);
 			g_rich.blocks.insert(g_rich.blocks.end(), nb.begin(), nb.end());
 		}
+		g_rich.measured = RichMeasure();
 	}
 	g_rich.view = h;
 	g_rich.rect = p.R(x, y, w, h);
@@ -207,33 +208,44 @@ void PaintRich(Painter &p, const State &st, int x, int y, int w, int h, const st
 		return;
 	}
 	const int barW = 6, tw = w - barW - 8;
-	struct Pos {
-		int y, h, indent;
-	};
-	std::vector<Pos> pos;
-	int total = 0;
-	for (const RichBlock &b : g_rich.blocks) {
-		const int indent = b.kind == 3 ? 16 + b.indent * 14 : 0;
-		const int font = b.kind == 1 ? 2 : b.kind == 2 || b.bold ? 1 : baseFont;
-		int bh;
-		if (b.kind == 4) bh = 9;
-		else if (b.kind == 5) bh = 6;
-		else {
-			p.Font(font);
-			bh = p.Measure(tw - indent, b.text);
+	RichMeasure measure;
+	measure.width = tw;
+	measure.baseFont = baseFont;
+	measure.scale = p.s;
+	measure.raw = p.raw;
+	measure.fonts[0] = p.fonts[1];
+	measure.fonts[1] = p.fonts[2];
+	measure.fonts[2] = p.fonts[baseFont];
+	if (!(g_rich.measured == measure)) {
+		g_rich.pos.clear();
+		int total = 0;
+		for (const RichBlock &b : g_rich.blocks) {
+			const int indent = b.kind == 3 ? 16 + b.indent * 14 : 0;
+			const int font = b.kind == 1 ? 2 : b.kind == 2 || b.bold ? 1 : baseFont;
+			int bh;
+			if (b.kind == 4) bh = 9;
+			else if (b.kind == 5) bh = 6;
+			else {
+				p.Font(font);
+				bh = p.Measure(tw - indent, b.text);
+			}
+			const int before = (b.kind == 1 || b.kind == 2) && total > 0 ? 8 : 0;
+			const int after = b.kind == 1 || b.kind == 2 ? 3 : b.kind == 3 ? 2 : 6;
+			g_rich.pos.push_back({total + before, bh, indent});
+			total += before + bh + after;
 		}
-		const int before = (b.kind == 1 || b.kind == 2) && total > 0 ? 8 : 0;
-		const int after = b.kind == 1 || b.kind == 2 ? 3 : b.kind == 3 ? 2 : 6;
-		pos.push_back({total + before, bh, indent});
-		total += before + bh + after;
+		g_rich.total = total;
+		g_rich.measured = measure;
 	}
+	const std::vector<RichPos> &pos = g_rich.pos;
+	const int total = g_rich.total;
 	const int maxScroll = std::max(0, total - h);
 	g_rich.list.scroll = std::max(0, std::min(g_rich.list.scroll, maxScroll));
 	const int scroll = g_rich.list.scroll;
 	p.Clip(x, y, w, h);
 	for (size_t i = 0; i < g_rich.blocks.size(); i++) {
 		const RichBlock &b = g_rich.blocks[i];
-		const Pos &ps = pos[i];
+		const RichPos &ps = pos[i];
 		if (ps.y + ps.h < scroll || ps.y > scroll + h) continue;
 		const int by = y + ps.y - scroll;
 		if (b.kind == 4) {
