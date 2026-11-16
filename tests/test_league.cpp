@@ -77,6 +77,18 @@ void Tiers()
 	CHECK_EQ(LeagueTierGloryFrom(LeagueTier::Centurion), 900);
 	CHECK_EQ(LeagueTierGloryFrom(LeagueTier::Legate), 1500);
 	CHECK_EQ(LeagueTierGloryFrom(LeagueTier::Imperator), -1);
+	CHECK_EQ(LeagueDivisionIndex(-40), 0);
+	CHECK_EQ(LeagueDivisionIndex(99), 0);
+	CHECK_EQ(LeagueDivisionIndex(450), 4);
+	CHECK_EQ(LeagueDivisionIndex(1799), 17);
+	CHECK_EQ(LeagueDivisionIndex(2600), 17);
+	CHECK(LeagueIndexTier(0) == LeagueTier::Recruit);
+	CHECK_EQ(LeagueIndexDivision(0), 3);
+	CHECK(LeagueIndexTier(4) == LeagueTier::Legionary);
+	CHECK_EQ(LeagueIndexDivision(4), 2);
+	CHECK(LeagueIndexTier(17) == LeagueTier::Legate);
+	CHECK_EQ(LeagueIndexDivision(17), 1);
+	CHECK(LeagueIndexTier(40) == LeagueTier::Legate);
 }
 
 void Divisions()

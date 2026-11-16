@@ -40,6 +40,12 @@ int LeagueDivisionFromJson(const Json *v);
 std::string LeagueDivisionText(int division);
 // "Centurion II" with the tier's name as given (already translated or not).
 std::string LeagueRankText(const std::string &tierName, int division);
+// The divisions counted from the lowest, as the server does: 0 is Recruit III, 17 is Legate I, which has no top (100 Glory each).
+constexpr int kLeagueDivisionCount = 18;
+int LeagueDivisionIndex(int glory);
+// The rank of a division index: its tier (Recruit to Legate) and its division (3 is III).
+LeagueTier LeagueIndexTier(int index);
+int LeagueIndexDivision(int index);
 
 enum class LeagueBadgeKind { None, Rank, Season, Trophy };
 

@@ -41,15 +41,6 @@ bool LeaguePauseRunOut(const LeaguePauseBudget &b, int64_t nowMs);
 // who is the favourite. The English text, the key of its translation; null when the server did not say (a chance outside 0 to 1).
 const char *LeagueEvennessText(double expected, bool team = false);
 
-// A text to translate and the values that fill its %s.
-struct LeagueText {
-	const char *text = nullptr;
-	std::vector<std::string> args;
-};
-// The line under the search: "Opponents between %s and %s Glory", the one end the window has, or any opponent once it holds none (after
-// 5 minutes of waiting). No text without a window.
-LeagueText LeagueWindowText(const LeagueSearchWindow &w);
-
 // What friends see on Steam and Discord: a ranked game first, then a search (a match found that waits for answers is still one).
 enum class LeaguePresence { None, Searching, Playing };
 LeaguePresence LeaguePresenceOf(bool searching, bool rankedGame);

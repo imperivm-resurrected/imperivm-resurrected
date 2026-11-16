@@ -436,7 +436,8 @@ void PaintLeagueBadgeTip(Painter &p, int screenW, int screenH)
 	switch (b.kind) {
 	case LeagueBadgeKind::Rank:
 		title = LeagueRankLabel(b.tier, b.division);
-		line = Tr(LeagueTierHasDivisions(b.tier) ? "Ranked 1 vs 1 league" : "Ranked 1 vs 1 league, by place in the leaderboard");
+		if (b.id == "2v2") line = Tr(LeagueTierHasDivisions(b.tier) ? "Ranked 2 vs 2 league" : "Ranked 2 vs 2 league, by place in the leaderboard");
+		else line = Tr(LeagueTierHasDivisions(b.tier) ? "Ranked 1 vs 1 league" : "Ranked 1 vs 1 league, by place in the leaderboard");
 		break;
 	case LeagueBadgeKind::Season:
 		if (b.founder) {

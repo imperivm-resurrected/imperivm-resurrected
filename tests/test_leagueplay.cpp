@@ -116,32 +116,6 @@ void Evenness()
 	CHECK_EQ(Text(LeagueEvennessText(1.2)), std::string("(none)"));
 }
 
-void Window()
-{
-	LeagueSearchWindow w;
-	CHECK(!LeagueWindowText(w).text);
-	w.present = true;
-	w.from = 1450;
-	w.to = 1650;
-	LeagueText t = LeagueWindowText(w);
-	CHECK_EQ(Text(t.text), std::string("Opponents between %s and %s Glory"));
-	CHECK_EQ(t.args, std::vector<std::string>({"1450", "1650"}));
-	w.from = 1650;
-	w.to = 1450;
-	CHECK_EQ(LeagueWindowText(w).args, std::vector<std::string>({"1450", "1650"}));
-	w.from = -1;
-	w.to = 150;
-	t = LeagueWindowText(w);
-	CHECK_EQ(Text(t.text), std::string("Opponents up to %s Glory"));
-	CHECK_EQ(t.args, std::vector<std::string>({"150"}));
-	w.from = 900;
-	w.to = -1;
-	t = LeagueWindowText(w);
-	CHECK_EQ(Text(t.text), std::string("Opponents from %s Glory"));
-	w.from = w.to = -1;
-	CHECK_EQ(Text(LeagueWindowText(w).text), std::string("Any opponent"));
-}
-
 void Presence()
 {
 	CHECK(LeaguePresenceOf(false, false) == LeaguePresence::None);
@@ -231,7 +205,6 @@ int main()
 	PauseCount();
 	PauseTime();
 	Evenness();
-	Window();
 	Presence();
 	QueueAnswers();
 	Ticket();

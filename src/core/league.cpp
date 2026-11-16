@@ -302,6 +302,23 @@ std::string LeagueRankText(const std::string &tierName, int division)
 	return d.empty() ? tierName : tierName + " " + d;
 }
 
+int LeagueDivisionIndex(int glory)
+{
+	return std::min(kLeagueDivisionCount - 1, std::max(0, glory) / 100);
+}
+
+LeagueTier LeagueIndexTier(int index)
+{
+	index = std::min(kLeagueDivisionCount - 1, std::max(0, index));
+	return static_cast<LeagueTier>(static_cast<int>(LeagueTier::Recruit) + index / 3);
+}
+
+int LeagueIndexDivision(int index)
+{
+	index = std::min(kLeagueDivisionCount - 1, std::max(0, index));
+	return 3 - index % 3;
+}
+
 LeagueMetal LeagueMetalFromId(const std::string &id)
 {
 	const std::string s = Lower(Trim(id));

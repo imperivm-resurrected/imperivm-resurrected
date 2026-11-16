@@ -488,6 +488,88 @@ std::vector<LeagueMatchTeam> MatchTeams(const LeagueRankedView &v)
 	return teams.empty() ? v.found.teams : teams;
 }
 
+// The opponents the league takes now (2-clasificatoria-sistema.md §2.4): the ranks at both ends of the Glory window, then every division
+// on a bar, those inside the window lit and the player's own framed. Only the ranks when the bar does not fit above `bottom`. Returns the y
+// after it.
+int PaintSearchWindow(Painter &p, const LeagueSearchWindow &win, const LeagueRanked &rk, int x, int y, int w, int bottom)
+{
+	const int lo = win.from > 0 ? LeagueDivisionIndex(win.from) : 0;
+	const int hi = win.to >= 0 ? LeagueDivisionIndex(win.to) : kLeagueDivisionCount - 1;
+	const int first = std::min(lo, hi), last = std::max(lo, hi);
+	Caps(p, x, y, w / 3, 22, "Opponents", pal::caption);
+	// The two ends against the right edge, each in its rank's ink.
+	Display(p, 22);
+	p.raw = true;
+	const UINT one = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS;
+	const int left = x + w / 3;
+	if (first == 0 && last == kLeagueDivisionCount - 1) p.TextCaps(left, y, x + w - left, 22, Tr("Any rank"), pal::text, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
+	else {
+		int right = x + w;
+		auto end = [&](int index) {
+			const LeagueTier tier = LeagueIndexTier(index);
+			const std::string name = LeagueRankLabel(tier, LeagueIndexDivision(index));
+			const int nw = std::min(p.CapsWidth(name, 1) + 2, right - left);
+			p.TextCaps(right - nw, y, nw, 22, name, LeagueTierInk(tier), one, 1);
+			right -= nw;
+		};
+		end(last);
+		if (last != first) {
+			const std::string dash = " â ";
+			const int dw = p.TextWidth(dash);
+			p.Text(right - dw, y, dw, 22, dash, pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			right -= dw;
+			end(first);
+		}
+	}
+	p.raw = false;
+	const int n = kLeagueDivisionCount, gap = 2, segH = 16;
+	const int segW = (w - (n - 1) * gap) / n, barW = n * segW + (n - 1) * gap, bx = x + (w - barW) / 2;
+	const int barY = y + 22 + 16, labelsY = barY + segH + 5, labelsH = 16;
+	if (segW < 6 || labelsY + labelsH > bottom) return y + 26;
+	auto segX = [&](int i) { return bx + i * (segW + gap); };
+	for (int i = 0; i < n; i++) PaintTint(p, segX(i), barY, segW, segH, LeagueTierInk(LeagueIndexTier(i)), i >= first && i <= last ? 255 : 72);
+	// The window's bracket over the lit divisions.
+	const int ax = segX(first), az = segX(last) + segW;
+	p.Fill(ax, barY - 8, az - ax, 2, pal::text);
+	p.Fill(ax, barY - 12, 2, 6, pal::text);
+	p.Fill(az - 2, barY - 12, 2, 6, pal::text);
+	// The player's own division, once placed.
+	if (rk.present && rk.placementLeft <= 0) {
+		const int ox = segX(LeagueDivisionIndex(rk.glory));
+		p.Frame(ox - 2, barY - 2, segW + 4, segH + 4, pal::text);
+		p.Frame(ox - 1, barY - 1, segW + 2, segH + 2, pal::text);
+	}
+	// Each rank's name under its three divisions, lit when the window reaches it.
+	Display(p, 15);
+	p.raw = true;
+	for (int t = 0; t < n / 3; t++) {
+		const LeagueTier tier = LeagueIndexTier(t * 3);
+		const bool lit = t * 3 + 2 >= first && t * 3 <= last;
+		p.TextCaps(segX(t * 3), labelsY, 3 * segW + 2 * gap, labelsH, Tr(LeagueTierName(tier)), lit ? LeagueTierInk(tier) : pal::disabled,
+			DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
+	}
+	p.raw = false;
+	return labelsY + labelsH;
+}
+
+// The content the search was let in with: the mounted profile, which the season's queue checked. The y after it.
+int PaintSearchContent(Painter &p, int x, int y, int w)
+{
+	p.Fill(x, y, w, 1, pal::hairline);
+	const int ry = y + 8, rh = 26;
+	p.Font(0);
+	p.Text(x, ry, w / 3, rh, "Content", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	const std::string label = ModsProfileLabel(ModsMountedProfile().name);
+	p.raw = true;
+	const int lw = std::min(p.TextWidth(label) + 2, w - w / 3 - 20);
+	p.Text(x + w - lw, ry, lw, rh, label, pal::ok, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	p.raw = false;
+	const int tx = x + w - lw - 18, ty = ry + rh / 2;
+	p.Line(tx, ty, tx + 4, ty + 4, pal::ok, 2);
+	p.Line(tx + 4, ty + 4, tx + 12, ty - 5, pal::ok, 2);
+	return ry + rh;
+}
+
 void PaintRankCard(Painter &p, const State &st, const HubLayout &h)
 {
 	const int mx = st.mouseX, my = st.mouseY;
@@ -523,16 +605,14 @@ void PaintRankCard(Painter &p, const State &st, const HubLayout &h)
 		int ly = clockY + clockH;
 		RawText(p, x, ly, w, 24, wait, pal::body, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		ly += 28;
-		// The Glory of the opponents the league takes now, as the server widens it.
-		const LeagueText range = LeagueWindowText(v.window);
-		if (range.text) {
-			p.Font(1);
-			RawText(p, x + 16, ly, w - 32, 22, TrFmt(range.text, range.args), pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-			ly += 26;
-		}
-		const int cancelY = y + cardH - 118;
+		const int cancelY = y + cardH - 118, bottom = cancelY - 10;
+		if (v.window.present) ly = PaintSearchWindow(p, v.window, LeagueMeRanked(me.me, v.searchQueue), ix, ly + 8, iw, bottom) + 8;
 		p.Font(3);
-		if (ly + 10 + 44 <= cancelY - 8) p.TextWrapped(ix, ly + 10, iw, 44, "The league widens the range of opponents the longer you wait.", pal::caption);
+		if (ly + 20 <= bottom) {
+			p.Text(ix, ly, iw, 20, "The range widens the longer you wait: after 5 minutes, any rank.", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			ly += 30;
+		}
+		if (ly + 34 <= bottom) PaintSearchContent(p, ix, ly, iw);
 		// The partner of a duo follows the leader's search: only the leader cancels it.
 		if (v.partnerSearch) {
 			p.Font(0);

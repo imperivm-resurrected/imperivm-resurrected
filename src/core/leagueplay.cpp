@@ -54,27 +54,6 @@ const char *LeagueEvennessText(double expected, bool team)
 	return expected > 0.6 ? "You are the favourite" : "Your opponent is the favourite";
 }
 
-LeagueText LeagueWindowText(const LeagueSearchWindow &w)
-{
-	LeagueText t;
-	if (!w.present) return t;
-	const bool low = w.from > 0, high = w.to >= 0;
-	if (low && high) {
-		t.text = "Opponents between %s and %s Glory";
-		t.args = {std::to_string(std::min(w.from, w.to)), std::to_string(std::max(w.from, w.to))};
-	}
-	else if (low) {
-		t.text = "Opponents from %s Glory";
-		t.args = {std::to_string(w.from)};
-	}
-	else if (high) {
-		t.text = "Opponents up to %s Glory";
-		t.args = {std::to_string(w.to)};
-	}
-	else t.text = "Any opponent";
-	return t;
-}
-
 LeaguePresence LeaguePresenceOf(bool searching, bool rankedGame)
 {
 	if (rankedGame) return LeaguePresence::Playing;
