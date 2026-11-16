@@ -119,6 +119,48 @@ bool ModsFind(const std::string &folder, ModInfo &out)
 	return false;
 }
 
+namespace {
+struct CachedProfile {
+	uint64_t size = 0;
+	uint64_t time = 0;
+	ModProfile profile;
+};
+
+std::mutex g_profilesLock;
+std::map<std::string, CachedProfile> g_profiles;
+
+uint64_t Join64(DWORD high, DWORD low) { return static_cast<uint64_t>(high) << 32 | low; }
+
+// The content menu asks for every profile once per installed pack, so a file is parsed again only when its size or time changed.
+ModProfile ReadProfileCached(const std::string &path)
+{
+	WIN32_FILE_ATTRIBUTE_DATA a;
+	if (!GetFileAttributesExA(path.c_str(), GetFileExInfoStandard, &a) || (a.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) return ModProfile();
+	const uint64_t size = Join64(a.nFileSizeHigh, a.nFileSizeLow), time = Join64(a.ftLastWriteTime.dwHighDateTime, a.ftLastWriteTime.dwLowDateTime);
+	const std::string key = Lower(path);
+	{
+		std::lock_guard<std::mutex> lock(g_profilesLock);
+		const auto it = g_profiles.find(key);
+		if (it != g_profiles.end() && it->second.size == size && it->second.time == time) return it->second.profile;
+	}
+	CachedProfile read;
+	read.size = size;
+	read.time = time;
+	read.profile = ReadProfileFile(path);
+	// A file that could not be read (still being written, held by an antivirus) is tried again next time.
+	if (read.profile.name.empty()) return read.profile;
+	std::lock_guard<std::mutex> lock(g_profilesLock);
+	g_profiles[key] = read;
+	return read.profile;
+}
+
+void ForgetCachedProfile(const std::string &path)
+{
+	std::lock_guard<std::mutex> lock(g_profilesLock);
+	g_profiles.erase(Lower(path));
+}
+}
+
 std::vector<std::string> ModsProfileNames()
 {
 	std::vector<std::string> names;
@@ -126,7 +168,7 @@ std::vector<std::string> ModsProfileNames()
 	HANDLE h = FindFirstFileA((ProfilesDir() + "\\*.json").c_str(), &fd);
 	if (h != INVALID_HANDLE_VALUE) {
 		do {
-			ModProfile p = ReadProfileFile(ProfilesDir() + "\\" + fd.cFileName);
+			ModProfile p = ReadProfileCached(ProfilesDir() + "\\" + fd.cFileName);
 			if (!p.name.empty() && _stricmp(p.name.c_str(), kOriginal) != 0 && _stricmp(p.name.c_str(), kNoProfile) != 0) {
 				names.push_back(p.name);
 			}
@@ -146,7 +188,7 @@ ModProfile ModsLoadProfile(const std::string &name)
 		p.name = kOriginal;
 		return p;
 	}
-	ModProfile p = ReadProfileFile(ProfilesDir() + "\\" + SafeFileName(name) + ".json");
+	ModProfile p = ReadProfileCached(ProfilesDir() + "\\" + SafeFileName(name) + ".json");
 	if (p.name.empty() && _stricmp(name.c_str(), kNoProfile) == 0) {
 		p.name = kNoProfile;
 		return p;
@@ -179,7 +221,10 @@ bool ModsSaveProfile(const ModProfile &p)
 	}
 	if (!choices.arr.empty()) j.Set("choices", choices);
 	CreateDirectoryA(ProfilesDir().c_str(), nullptr);
-	return WriteJsonFile(ProfilesDir() + "\\" + SafeFileName(p.name) + ".json", j);
+	const std::string path = ProfilesDir() + "\\" + SafeFileName(p.name) + ".json";
+	const bool written = WriteJsonFile(path, j);
+	ForgetCachedProfile(path);
+	return written;
 }
 
 bool ModsDeleteProfile(const std::string &name)
@@ -187,7 +232,10 @@ bool ModsDeleteProfile(const std::string &name)
 	if (name.empty() || _stricmp(name.c_str(), kOriginal) == 0 || _stricmp(name.c_str(), kNoProfile) == 0) {
 		return false;
 	}
-	return DeleteFileA((ProfilesDir() + "\\" + SafeFileName(name) + ".json").c_str()) != 0;
+	const std::string path = ProfilesDir() + "\\" + SafeFileName(name) + ".json";
+	const bool deleted = DeleteFileA(path.c_str()) != 0;
+	ForgetCachedProfile(path);
+	return deleted;
 }
 
 bool ModsRenameProfile(const std::string &from, const std::string &to)
