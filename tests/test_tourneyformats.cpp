@@ -205,7 +205,7 @@ void Swiss()
 	CHECK(TourneyParseDetail(Parse(kSwiss), d));
 	CHECK(TourneyIsSwiss(d));
 	CHECK(TourneyByRounds(d));
-	CHECK_EQ(d.pace, std::string("rounds"));
+	CHECK(d.pace == TourneyPace::Rounds);
 	CHECK_EQ(d.roundDays, 2);
 	CHECK_EQ(d.currentRound, 2);
 	CHECK(Same(d.roundEndsAt, 1795000000000LL));
@@ -269,13 +269,13 @@ void Swiss()
 	text.replace(text.find("\"swissRounds\":4"), 15, "\"swissRounds\":4,\"rounds\":5");
 	CHECK(TourneyParseDetail(Parse(text), chosen));
 	CHECK_EQ(chosen.rounds, 5);
-	CHECK_EQ(TourneySwissRoundsFor(4), 2);
-	CHECK_EQ(TourneySwissRoundsFor(5), 3);
-	CHECK_EQ(TourneySwissRoundsFor(8), 3);
-	CHECK_EQ(TourneySwissRoundsFor(9), 4);
-	CHECK_EQ(TourneySwissRoundsFor(16), 4);
-	CHECK_EQ(TourneySwissRoundsFor(17), 5);
-	CHECK_EQ(TourneySwissRoundsFor(32), 5);
+	CHECK_EQ(TourneySwissRounds(0, 4), 2);
+	CHECK_EQ(TourneySwissRounds(0, 5), 3);
+	CHECK_EQ(TourneySwissRounds(0, 8), 3);
+	CHECK_EQ(TourneySwissRounds(0, 9), 4);
+	CHECK_EQ(TourneySwissRounds(0, 16), 4);
+	CHECK_EQ(TourneySwissRounds(0, 17), 5);
+	CHECK_EQ(TourneySwissRounds(0, 32), 5);
 }
 
 void LosersRounds()

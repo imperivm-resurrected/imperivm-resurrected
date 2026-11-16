@@ -711,11 +711,6 @@ bool TourneyParseDetail(const Json &j, TourneyDetail &out)
 	if (!TourneyParseSummary(j, out)) return false;
 	out.rounds = Int(j, "rounds");
 	const int sentRounds = out.rounds;
-	out.swissRounds = std::max(0, Int(j, "swissRounds"));
-	out.pace = Lower(Text(j, "pace"));
-	out.roundDays = std::max(0, Int(j, "roundDays"));
-	out.currentRound = std::max(0, Int(j, "currentRound"));
-	out.roundEndsAt = Int64(j, "roundEndsAt");
 	int counted = 0;
 	if (const Json *list = j.Get("entries"); list && list->type == Json::Array) {
 		for (const Json &e : list->arr) {
@@ -784,7 +779,7 @@ bool TourneyParseDetail(const Json &j, TourneyDetail &out)
 	// A double elimination's rounds are its winners' bracket's; the other parts count their own.
 	if (twice && winners) out.rounds = winners;
 	if (twice) out.losersRounds = std::max(out.losersRounds, TourneyLosersRounds(out.rounds));
-	if (swiss && !sentRounds) out.rounds = std::max(out.rounds, out.swissRounds ? out.swissRounds : TourneySwissRoundsFor(out.entries));
+	if (swiss && !sentRounds) out.rounds = std::max(out.rounds, out.swissRounds ? out.swissRounds : TourneySwissRounds(0, out.entries));
 	for (TourneyMatch &m : out.matches) {
 		if (m.stage == TourneyStage::Unknown && m.bracket == TourneyBracket::Winners) m.stage = TourneyStageOf(m.round, out.rounds);
 	}
@@ -930,20 +925,13 @@ bool TourneyIsSwiss(const TourneySummary &t)
 
 bool TourneyByRounds(const TourneyDetail &d)
 {
-	return d.pace == "rounds";
-}
-
-int TourneySwissRoundsFor(int players)
-{
-	int rounds = 1;
-	while ((1 << rounds) < players && rounds < 16) rounds++;
-	return rounds;
+	return d.pace == TourneyPace::Rounds;
 }
 
 int TourneySwissTotalRounds(const TourneyDetail &d)
 {
 	if (d.rounds > 0) return d.rounds;
-	return d.swissRounds > 0 ? d.swissRounds : TourneySwissRoundsFor(d.entries);
+	return d.swissRounds > 0 ? d.swissRounds : TourneySwissRounds(0, d.entries);
 }
 
 int TourneyCurrentRound(const TourneyDetail &d)

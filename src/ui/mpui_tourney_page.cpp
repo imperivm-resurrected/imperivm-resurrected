@@ -935,7 +935,7 @@ void PaintRules(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out)
 		row(Tr("Pace"), d.roundDays > 1 ? TrFmt("%s days per round; the next opens when all its matches are played or the time is up", {std::to_string(d.roundDays)})
 										: Tr("One round a day; the next opens when all its matches are played or the day is up"));
 	}
-	else if (!d.pace.empty()) row(Tr("Pace"), Tr("Live, in one evening"));
+	else row(Tr("Pace"), Tr("Live, in one evening"));
 	row(Tr("Check-in"), TrFmt("From %s to %s; whoever does not check in loses the place", {HourText(d.checkinOpensAt), HourText(d.startsAt)}));
 	row(Tr("No-show"), byRounds ? TrFmt("%s min, only in the last 24 h of the round's deadline", {std::to_string(d.noshowMinutes)})
 								: TrFmt("%s min from when the match is ready", {std::to_string(d.noshowMinutes)}));

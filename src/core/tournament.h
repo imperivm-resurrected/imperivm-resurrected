@@ -312,12 +312,7 @@ struct TourneyDetail : TourneySummary {
 	int rounds = 0;
 	// A double elimination's losers' bracket: twice the winners' rounds less two.
 	int losersRounds = 0;
-	// A Swiss tournament's rounds as it was made; 0 lets the server choose them from the players.
-	int swissRounds = 0;
-	// "live" (in one evening) or "rounds": each round open for `roundDays` days; then the round open now and when its deadline ends.
-	std::string pace;
-	int roundDays = 0, currentRound = 0;
-	int64_t roundEndsAt = 0;
+	// The Swiss rounds, the pace, its days a round, the round open now and its deadline are the summary's.
 	std::vector<TourneyEntrant> entrants;
 	std::vector<TourneyMatch> matches;
 	std::vector<TourneyLogLine> log;
@@ -345,8 +340,6 @@ bool TourneyIsDouble(const TourneySummary &t);
 bool TourneyIsSwiss(const TourneySummary &t);
 // The rounds have a deadline of some days each instead of being played in one evening.
 bool TourneyByRounds(const TourneyDetail &d);
-// The rounds a Swiss tournament plays by default: one for each doubling of its players (3 with 5 to 8, 4 with 9 to 16).
-int TourneySwissRoundsFor(int players);
 // The rounds a Swiss tournament plays: as it was made, or as many as its players need, and never fewer than the ones paired.
 int TourneySwissTotalRounds(const TourneyDetail &d);
 // The round being played: the server's with the pace by rounds; otherwise, in a Swiss tournament, the latest one paired. 0 before any.
