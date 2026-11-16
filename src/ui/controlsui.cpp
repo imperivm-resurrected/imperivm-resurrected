@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <map>
 #include <utility>
 #include <mutex>
 #include <string>
@@ -778,24 +779,40 @@ struct KeyUse {
 	bool Used() const { return !general.empty() || !orders.empty() || gridPos >= 0; }
 };
 
-KeyUse UseOf(const State &st, unsigned short vk, unsigned char mods)
+// Every key's uses, gathered in one pass over the rows: the keyboard asks for each of its keys up to four times on every frame.
+struct KeyUses {
+	std::map<std::pair<unsigned short, unsigned char>, KeyUse> byKey;
+	bool grid = false;
+	std::string gridKeys;
+};
+
+KeyUses UsesOf(const State &st)
 {
-	KeyUse u;
-	if (!vk) return u;
+	KeyUses uses;
 	for (int i = 0; i < static_cast<int>(st.rows.size()); i++) {
 		const ControlInfo &r = st.rows[i];
 		if (r.order && st.grid) continue;
 		for (int slot = 0; slot < 2; slot++) {
 			const ControlKey k = KeyOf(r, slot);
-			if (k.vk != vk || k.mods != mods) continue;
+			if (!k.vk) continue;
+			KeyUse &u = uses.byKey[{k.vk, k.mods}];
 			std::vector<int> &list = r.order ? u.orders : u.general;
 			if (list.empty() || list.back() != i) list.push_back(i);
 			if (st.clash[i * 2 + slot].row >= 0) u.clash = true;
 		}
 	}
-	if (st.grid && mods == 0 && vk >= 'A' && vk <= 'Z') {
-		const std::string keys = ControlsGridKeys();
-		const size_t at = keys.find(static_cast<char>(vk));
+	uses.grid = st.grid;
+	if (st.grid) uses.gridKeys = ControlsGridKeys();
+	return uses;
+}
+
+KeyUse UseOf(const KeyUses &uses, unsigned short vk, unsigned char mods)
+{
+	if (!vk) return KeyUse();
+	const auto found = uses.byKey.find({vk, mods});
+	KeyUse u = found == uses.byKey.end() ? KeyUse() : found->second;
+	if (uses.grid && mods == 0 && vk >= 'A' && vk <= 'Z') {
+		const size_t at = uses.gridKeys.find(static_cast<char>(vk));
 		if (at != std::string::npos) u.gridPos = static_cast<int>(at);
 	}
 	return u;
@@ -848,6 +865,7 @@ void DrawKeyboardView(Painter &p, const State &st, const Layout &l, int mx, int 
 	}
 
 	const std::vector<KbKey> &keys = Keyboard();
+	const KeyUses uses = UsesOf(st);
 	const int u = std::min(m.keyUnit, (w0 - 8) / 23);
 	const int kx = x0 + (w0 - 23 * u) / 2, ky = y0 + ctlH + (l.full ? 30 : 14);
 	const float keyFontScale = l.full ? 1.3f : 1.0f;
@@ -861,10 +879,10 @@ void DrawKeyboardView(Painter &p, const State &st, const Layout &l, int mx, int 
 			(k.w2 > 0 && p.Hover(kx + static_cast<int>(k.x2 * u), ky + static_cast<int>(k.y2 * u), static_cast<int>(k.w2 * u) - 4, static_cast<int>(k.h2 * u) - 4, mx, my)));
 		if (hov) hover = i;
 		const unsigned short vk = KbVk(k);
-		const KeyUse use = k.modifier ? KeyUse() : UseOf(st, vk, static_cast<unsigned char>(st.layer));
+		const KeyUse use = k.modifier ? KeyUse() : UseOf(uses, vk, static_cast<unsigned char>(st.layer));
 		bool other = false;
 		for (int m : layerMods) {
-			if (st.layer == 0 && m != 0 && !k.modifier && UseOf(st, vk, static_cast<unsigned char>(m)).Used()) other = true;
+			if (st.layer == 0 && m != 0 && !k.modifier && UseOf(uses, vk, static_cast<unsigned char>(m)).Used()) other = true;
 		}
 		COLORREF face = pal::selected, edge = pal::lineStrong, fg = pal::caption;
 		if (k.modifier) {
@@ -947,7 +965,7 @@ void DrawKeyboardView(Painter &p, const State &st, const Layout &l, int mx, int 
 	}
 	const KbKey &k = keys[shown];
 	const unsigned short vk = KbVk(k);
-	const KeyUse use = UseOf(st, vk, static_cast<unsigned char>(st.layer));
+	const KeyUse use = UseOf(uses, vk, static_cast<unsigned char>(st.layer));
 	p.Font(1);
 	const std::string title = ControlsKeyLabel({vk, static_cast<unsigned char>(st.layer)});
 	p.Text(tx, dy + 8, tw, 26, title, pal::redText);
