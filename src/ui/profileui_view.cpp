@@ -579,7 +579,8 @@ const char *MetalText(LeagueMetal m)
 	}
 }
 
-// The tournaments: how many phalerae of each metal, and every one with its cup and season.
+// The tournaments: how many phalerae of each metal, and every cup played, official or of the community, with the place reached. A server
+// before the list of cups gives only the phalerae, which are listed instead.
 void PaintLeagueTrophies(Painter &p, const View &v, int x, int y, int w, int h)
 {
 	PaintGlassCard(p, x, y, w, h);
@@ -612,24 +613,52 @@ void PaintLeagueTrophies(Painter &p, const View &v, int x, int y, int w, int h)
 		right -= nw + 30 + 18;
 	}
 	const int listY = y + 52;
-	if (trophies.empty()) {
+	const int count = v.me.cupsKnown ? static_cast<int>(v.me.cups.size()) : static_cast<int>(trophies.size());
+	if (!count) {
 		p.Font(3);
-		p.TextWrapped(ix, listY + 6, iw, 64, "No phalerae yet. The podium of every official cup wins gold, silver and bronze phalerae, which you can wear next to your name.", kMuted);
+		p.TextWrapped(ix, listY + 6, iw, 64,
+			"You have not played any cup yet. The podium of the official cups wins gold, silver and bronze phalerae; anyone can make a community cup in "
+			"Multiplayer, Tournaments.",
+			kMuted);
 		return;
 	}
 	bool more = false;
-	const int rows = ListFit(listY, y + h - 12, static_cast<int>(trophies.size()), more);
+	const int rows = ListFit(listY, y + h - 12, count, more);
 	for (int i = 0; i < rows; i++) {
-		const LeagueBadge &b = *trophies[i];
 		const int ry = listY + i * kLeagueRowH;
 		if (i) p.Fill(ix, ry, iw, 1, pal::hairline);
-		DrawLeaguePhalera(p, ix, ry + 10, 32, b.metal == LeagueMetal::None ? LeagueMetal::Gold : b.metal);
+		if (!v.me.cupsKnown) {
+			const LeagueBadge &b = *trophies[i];
+			DrawLeaguePhalera(p, ix, ry + 10, 32, b.metal == LeagueMetal::None ? LeagueMetal::Gold : b.metal);
+			p.Font(4);
+			Raw(p, ix + 46, ry + 5, iw - 46, 22, b.title.empty() ? Tr("Tournament") : b.title, pal::text);
+			p.Font(3);
+			Raw(p, ix + 46, ry + 27, iw - 46, 20, Tr(MetalText(b.metal)) + "  \xC2\xB7  " + SeasonText(b.season), pal::caption);
+			continue;
+		}
+		const LeagueCup &cup = v.me.cups[i];
+		// The podium's metal: the phalera itself in an official cup, its colour on the place in any cup.
+		const LeagueMetal metal = cup.placement == 1 ? LeagueMetal::Gold : cup.placement == 2 ? LeagueMetal::Silver : cup.placement == 3 ? LeagueMetal::Bronze
+																																	 : LeagueMetal::None;
+		if (cup.official && metal != LeagueMetal::None) DrawLeaguePhalera(p, ix, ry + 10, 32, metal);
+		else {
+			p.Frame(ix, ry + 10, 32, 32, pal::edge);
+			p.Font(4);
+			Raw(p, ix, ry + 10, 32, 32, cup.placement > 0 ? std::to_string(cup.placement) : std::string(kDash), metal != LeagueMetal::None ? LeagueMetalInk(metal) : pal::textDim,
+				DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		}
+		const std::string place = cup.placement > 0 ? TrFmt("place %s of %s", {std::to_string(cup.placement), std::to_string(std::max(cup.placement, cup.entries))})
+													: std::string(kDash);
 		p.Font(4);
-		Raw(p, ix + 46, ry + 5, iw - 46, 22, b.title.empty() ? Tr("Tournament") : b.title, pal::text);
+		const int placeW = std::min(iw / 3, RawWidth(p, place) + 4);
+		Raw(p, ix + iw - placeW, ry + 5, placeW, 22, place, metal != LeagueMetal::None ? LeagueMetalInk(metal) : pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		Raw(p, ix + 46, ry + 5, iw - 46 - placeW - 12, 22, cup.name, pal::text);
+		std::string line = Tr(cup.official ? "Official cup" : "Community cup") + "  \xC2\xB7  " + QueueText(cup.mode);
+		if (cup.season >= 0) line += "  \xC2\xB7  " + SeasonText(cup.season);
 		p.Font(3);
-		Raw(p, ix + 46, ry + 27, iw - 46, 20, Tr(MetalText(b.metal)) + "  \xC2\xB7  " + SeasonText(b.season), pal::caption);
+		Raw(p, ix + 46, ry + 27, iw - 46, 20, line, pal::caption);
 	}
-	if (more) PaintMoreRow(p, ix, listY + rows * kLeagueRowH, iw, static_cast<int>(trophies.size()) - rows);
+	if (more) PaintMoreRow(p, ix, listY + rows * kLeagueRowH, iw, count - rows);
 }
 
 // What each closed season left: its vexillum, the rank reached in which queue, and whether it gave the frame and the title.
