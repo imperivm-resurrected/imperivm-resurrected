@@ -1446,26 +1446,6 @@ void GameRoomSetStartGate(bool (*blocked)())
 	g_countdown.startBlocked.store(blocked);
 }
 
-void GameRoomCountdownCancel()
-{
-	Queue([] {
-		if (!reinterpret_cast<IntThis_t>(addr::kIsHostOrOffline)(g_dlg)) {
-			LogD("room", "countdown: only the host can stop it (a guest stops it by not being ready)");
-			return;
-		}
-		CountdownStep step;
-		uint32_t seq = 0;
-		{
-			std::lock_guard<std::mutex> lock(g_countdown.mx);
-			step = g_countdown.clock.HostCancel();
-			seq = g_countdown.clock.Seq();
-		}
-		if (step.event != CountdownEvent::Cancel) return;
-		LogI("room", "countdown cancelled: %s", CountdownReasonText(step).c_str());
-		CountdownSend(seq, -1);
-	});
-}
-
 void GameRoomCountdownReceived(unsigned seq, int ms)
 {
 	{
@@ -1786,11 +1766,6 @@ static void ApplyColor(int slot, int start, int dir, bool relative)
 		reinterpret_cast<ThisOnly_t>(addr::kUpdatePlayerCounts)(g_dlg);
 		reinterpret_cast<UpdateSlotRow_t>(addr::kUpdateSlotRow)(g_dlg, nullptr, static_cast<unsigned>(slot));
 	});
-}
-
-void GameRoomCycleColor(int slot, int dir)
-{
-	ApplyColor(slot, 0, dir, true);
 }
 
 void GameRoomSwapSlots(int a, int b)

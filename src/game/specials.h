@@ -16,9 +16,7 @@ struct ModSpecial {
 
 void SpecialsRebuild();
 std::vector<ModSpecial> SpecialsList();
-const ModSpecial *SpecialByBit(int bit);
 std::string SpecialDisplayName(const ModSpecial &s);
-std::string SpecialDescription(const ModSpecial &s);
 
 std::vector<std::string> SpecialsErrorsFor(const std::string &folder);
 

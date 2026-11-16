@@ -120,14 +120,11 @@ void GameRoomSetAutoStart(bool on);
 // Called on the game thread, from GameRoomTick, with no lock of the room held: true while the game must not start (players
 // still joining or downloading, a saved game being placed...). Pass nullptr to remove it.
 void GameRoomSetStartGate(bool (*blocked)());
-// The host stops the countdown; a new one starts only after someone stops being ready. Does nothing for a guest.
-void GameRoomCountdownCancel();
 // From the network: the host's countdown of `ms` (already corrected for the latency), or its cancellation when ms < 0.
 void GameRoomCountdownReceived(unsigned seq, int ms);
 void GameRoomCancel();
 void GameRoomSetOption(int id, int index);
 void GameRoomToggleOption(int id);
-void GameRoomCycleColor(int slot, int dir);
 void GameRoomSetColor(int slot, int color);
 void GameRoomSwapSlots(int a, int b);
 // Host only. Cleaned like the creation dialog's name (RoomNameClean). In a Steam room it changes the lobby's name, which the
