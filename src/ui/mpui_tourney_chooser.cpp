@@ -259,10 +259,7 @@ void PaintMapChooser(Painter &p, const State &st, const Ui &u, PaintOut &out)
 			if (!on) p.AddHit(listX + 2, ry, listW - 16, rowH, kTourney, ArgOf(kSubChooserRow, i));
 		}
 		p.Unclip();
-		out.chooserArea.valid = true;
-		out.chooserArea.r = p.R(listX, listY, listW, listH);
-		OffsetRect(&out.chooserArea.r, p.ox, p.oy);
-		out.chooserArea.max = maxScroll;
+		SetScrollArea(p, out.chooserArea, listX, listY, listW, listH, maxScroll);
 		if (maxScroll > 0) PaintScrollbar(p, kBarChooser, listX + listW - 10, listY + 2, listH - 4, {scroll, maxScroll, viewRows}, st.dropBar, mx, my);
 
 		const int pad = 18, size = std::min(220, std::min(dw - 2 * pad, listH - 2 * pad - 150));
@@ -329,10 +326,7 @@ void PaintMapChooser(Painter &p, const State &st, const Ui &u, PaintOut &out)
 			p.TextWrapped(listX + 16, listY + 16, listW - 32, listH - 32, empty, pal::textDim);
 		}
 		p.Unclip();
-		out.chooserArea.valid = true;
-		out.chooserArea.r = p.R(listX, listY, listW, listH);
-		OffsetRect(&out.chooserArea.r, p.ox, p.oy);
-		out.chooserArea.max = maxScroll;
+		SetScrollArea(p, out.chooserArea, listX, listY, listW, listH, maxScroll);
 		if (maxScroll > 0) PaintScrollbar(p, kBarChooser, listX + listW - 10, listY + 2, listH - 4, {scroll, maxScroll, viewRows}, st.dropBar, mx, my);
 
 		const int pad = 18;

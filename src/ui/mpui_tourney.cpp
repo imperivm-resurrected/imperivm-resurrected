@@ -916,6 +916,19 @@ const TourneyMyEntry *MyEntry(const TourneyMineView &mine, int64_t tournament)
 	return mine.loaded ? TourneyMyEntryOf(mine.mine, tournament) : nullptr;
 }
 
+const TourneyMatch *MatchById(const TourneyDetail &d, int64_t id)
+{
+	for (const TourneyMatch &m : d.matches) {
+		if (m.id == id) return &m;
+	}
+	return nullptr;
+}
+
+bool InviteBusy(int64_t tournament)
+{
+	return LeagueTourneyBusy(TourneyOp::Accept, tournament) || LeagueTourneyBusy(TourneyOp::Decline, tournament);
+}
+
 const TourneySummary *Featured(const TourneyListsView &lists)
 {
 	for (const std::vector<TourneySummary> *list : {&lists.open, &lists.live, &lists.finished}) {
@@ -1130,6 +1143,14 @@ void PaintName(Painter &p, int x, int y, int w, int h, const std::string &name, 
 	p.raw = false;
 }
 
+void SetScrollArea(Painter &p, ScrollArea &a, int x, int y, int w, int h, int max)
+{
+	a.valid = true;
+	a.r = p.R(x, y, w, h);
+	OffsetRect(&a.r, p.ox, p.oy);
+	a.max = max;
+}
+
 }
 
 void PaintTournaments(Painter &p, const State &st)
@@ -1253,7 +1274,7 @@ void TourneyAction(int arg)
 			Toast("That invitation is no longer waiting for an answer.");
 			break;
 		}
-		if (LeagueTourneyBusy(TourneyOp::Accept, value) || LeagueTourneyBusy(TourneyOp::Decline, value)) break;
+		if (InviteBusy(value)) break;
 		LogI("league", "%s the invitation to a team of the cup %lld", sub == kSubInviteAccept ? "accepting" : "declining", static_cast<long long>(value));
 		LeagueTourneyAnswerInvite(value, invite->entryId, sub == kSubInviteAccept);
 		break;
@@ -1596,10 +1617,7 @@ void TourneyAction(int arg)
 	case kSubGameB:
 	case kSubReplay: {
 		const TourneyPageView page = LeagueTourneyPage(u.slug, 60000);
-		const TourneyMatch *m = nullptr;
-		for (const TourneyMatch &x : page.detail.matches) {
-			if (x.id == value) m = &x;
-		}
+		const TourneyMatch *m = MatchById(page.detail, value);
 		if (!m) break;
 		const int64_t match = value;
 		if (sub == kSubReplay) {

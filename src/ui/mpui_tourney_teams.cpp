@@ -193,10 +193,7 @@ void PaintTeamDialog(Painter &p, const State &st, const Ui &u, PaintOut &out)
 		p.TextWrapped(bx + 16, listY + 16, bw - 32, listH - 32, empty, pal::textDim);
 	}
 	p.Unclip();
-	out.teamArea.valid = true;
-	out.teamArea.r = p.R(bx, listY, bw, listH);
-	OffsetRect(&out.teamArea.r, p.ox, p.oy);
-	out.teamArea.max = maxScroll;
+	SetScrollArea(p, out.teamArea, bx, listY, bw, listH, maxScroll);
 	out.teamRows = friends;
 	if (maxScroll > 0) PaintScrollbar(p, kBarFriends, bx + bw - 10, listY + 2, listH - 4, {scroll, maxScroll, viewRows}, st.dropBar, mx, my);
 
