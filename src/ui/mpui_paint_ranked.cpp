@@ -1183,32 +1183,40 @@ void PaintBoard(Painter &p, const State &st)
 	const int pages = std::max(1, (b.total + rows - 1) / rows), page = b.offset / rows + 1;
 	const bool defaultView = DefaultBoard(st);
 
-	// The tool bar: back to the summary, the queue, the season, everyone or the friends, the own place and the pages.
+	// The tool bar: back to the summary, the queue, the season, everyone or the friends, the own place and the pages. When the table is
+	// narrow (1280x720 with both queues), "Summary" keeps only its arrow and the season's menu narrows before the own place goes.
+	const int queueW = QueueSegmentsWidth(p, st);
+	const int segW = std::max(ChipWidth(p, "All", 96), ChipWidth(p, "Friends", 96));
+	const int meW = ChipWidth(p, "My place", 130), pagerW = 2 * 48 + 8;
+	int summaryW = 150, seasonW = std::max(220, std::min(300, tableW * 22 / 100));
+	const auto need = [&] { return summaryW + 16 + queueW + 16 + seasonW + 16 + 2 * segW + 16 + meW + 12 + pagerW; };
+	if (need() > tableW) summaryW = 56;
+	if (need() > tableW) seasonW = std::max(170, seasonW - (need() - tableW));
 	int tx = m;
 	{
-		const int w = 150;
+		const int w = summaryW;
 		const bool hot = p.Hover(tx, top, w, 44, mx, my);
 		p.Frame(tx, top, w, 44, hot ? pal::edgeHot : pal::edge);
-		PaintBackArrow(p, tx + 18, top + 22, hot ? pal::text : pal::textDim);
-		Caps(p, tx + 18 + kBackArrowW, top, w - 26 - kBackArrowW, 44, "Summary", hot ? pal::text : pal::textDim);
+		if (w < 100) PaintBackArrow(p, tx + (w - 14) / 2, top + 22, hot ? pal::text : pal::textDim);
+		else {
+			PaintBackArrow(p, tx + 18, top + 22, hot ? pal::text : pal::textDim);
+			Caps(p, tx + 18 + kBackArrowW, top, w - 26 - kBackArrowW, 44, "Summary", hot ? pal::text : pal::textDim);
+		}
 		p.AddHit(tx, top, w, 44, kRankedAct, kRkHub);
 		tx += w + 16;
 	}
-	const int queueW = QueueSegmentsWidth(p, st);
 	QueueSegments(p, st, tx + queueW, top, 44);
 	tx += queueW + 16;
-	const int seasonW = std::max(220, std::min(300, tableW * 22 / 100));
 	UseSharedFonts(p);
 	p.raw = true;
 	Combo(p, st, tx, top, seasonW, 44, BoardSeasonText(st), kDropRankedSeason, 0, true);
 	p.raw = false;
 	UseScreenFonts(p);
 	tx += seasonW + 16;
-	const int segW = std::max(ChipWidth(p, "All", 96), ChipWidth(p, "Friends", 96));
 	Segment(p, tx, top, segW, 44, "All", !st.ranked.boardFriends, kRkBoardAll, mx, my);
 	Segment(p, tx + segW - 1, top, segW, 44, "Friends", st.ranked.boardFriends, kRkBoardFriends, mx, my);
 	tx += 2 * segW + 16;
-	const int right = m + tableW, meW = ChipWidth(p, "My place", 130), pagerW = 2 * 48 + 8;
+	const int right = m + tableW;
 	if (tx + meW + 12 + pagerW <= right) {
 		Ghost(p, tx, top, meW, 44, "My place", kRkBoardMe, v.around.me > 0, mx, my);
 		tx += meW + 12;
