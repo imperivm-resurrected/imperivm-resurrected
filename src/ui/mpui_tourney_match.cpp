@@ -368,6 +368,12 @@ void PaintPickPanel(Painter &p, const State &st, const TourneyNext &n, int x, in
 	p.raw = raw;
 }
 
+std::string NoShowClaimText(const TourneyNext &n)
+{
+	return TrFmt(n.Teams() ? "A player of %s did not come to the room in time: your team can claim the win." : "%s did not come to the room in time: you can claim the win.",
+		{n.opponent.name});
+}
+
 bool PaintMatchHeader(Painter &p, const State &st, const HeaderUi &u)
 {
 	const int mx = st.mouseX, my = st.mouseY;
@@ -1004,8 +1010,7 @@ int PaintTourneyRoomStatus(Painter &p, const State &st, int right, int y, std::s
 		p.Font(1);
 		const int w = p.CapsWidth(Tr("Claim the win"), 1) + 48, x = right - 12 - w;
 		p.Button(x, y, w, kHeaderButtonH, "Claim the win", kTourney, ArgOf(kSubNoShow, n.match), st.mouseX, st.mouseY, !LeagueTourneyBusy(TourneyOp::NoShow, n.match), true);
-		note = TrFmt(n.Teams() ? "A player of %s did not come to the room in time: your team can claim the win." : "%s did not come to the room in time: you can claim the win.",
-			{n.opponent.name});
+		note = NoShowClaimText(n);
 		return x;
 	}
 	const int64_t now = NowMs(), left = n.deadlineAt - now;

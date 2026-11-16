@@ -322,6 +322,8 @@ std::string PendingText(const std::string &partner);
 // The choice of the next game's map in the player's series (mpui_tourney_match.cpp): the options with their pictures and the time left,
 // which the player clicks when it is theirs. Below 170 high the title and the clock go beside the options.
 void PaintPickPanel(Painter &p, const State &st, const TourneyNext &n, int x, int y, int w, int h);
+// The other side did not come to the room in time: the line that offers the win to the player, or to their team.
+std::string NoShowClaimText(const TourneyNext &n);
 
 // Shared drawing.
 const int kCardGap = 32;
