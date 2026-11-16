@@ -196,6 +196,8 @@ const ModIssues *SelectedIssues(const State &st);
 bool Pending(const State &st, const std::string &folder);
 std::vector<int> VisibleRows(const State &st);
 std::vector<int> VisibleRows(const State &st, int state, const CatalogFilter &filter);
+// How many rows each state filter would show under the search and `filter`, counted in one pass.
+void CountStates(const State &st, const CatalogFilter &filter, int counts[kStateCount]);
 CatalogFacts ModFactsOf(const ModInfo &m);
 uint32_t ModCategoriesOf(const ModInfo &m);
 int ModMainCategory(const ModInfo &m);

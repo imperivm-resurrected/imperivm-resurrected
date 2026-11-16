@@ -147,24 +147,40 @@ std::vector<std::string> Targets(const State &st)
 	return {};
 }
 
+// The search `q` comes in lower case.
+bool RowMatches(const State &st, const Row &r, const std::string &q, const CatalogFilter &filter)
+{
+	const ModInfo *m = FindModIn(st.mods, r.folder);
+	if (!q.empty()) {
+		std::string hay = r.folder;
+		if (m) {
+			hay += " " + m->name + " " + m->description;
+			for (const std::string &a : m->authors) hay += " " + a;
+		}
+		if (LowerAscii(hay).find(q) == std::string::npos) return false;
+	}
+	return CatalogFilterEmpty(filter) || (m && CatalogMatches(ModFactsOf(*m), filter));
+}
+
+void CountStates(const State &st, const CatalogFilter &filter, int counts[kStateCount])
+{
+	const std::string q = LowerAscii(st.searchText);
+	for (int k = 0; k < kStateCount; k++) counts[k] = 0;
+	for (const Row &r : st.rows) {
+		if (!RowMatches(st, r, q, filter)) continue;
+		for (int k = 0; k < kStateCount; k++) {
+			if (RowInState(st, r, k)) counts[k]++;
+		}
+	}
+}
+
 std::vector<int> VisibleRows(const State &st, int state, const CatalogFilter &filter)
 {
 	std::vector<int> out;
 	const std::string q = LowerAscii(st.searchText);
 	for (size_t i = 0; i < st.rows.size(); i++) {
 		const Row &r = st.rows[i];
-		const ModInfo *m = FindModIn(st.mods, r.folder);
-		if (!q.empty()) {
-			std::string hay = r.folder;
-			if (m) {
-				hay += " " + m->name + " " + m->description;
-				for (const std::string &a : m->authors) hay += " " + a;
-			}
-			if (LowerAscii(hay).find(q) == std::string::npos) continue;
-		}
-		if (!RowInState(st, r, state)) continue;
-		if (!CatalogFilterEmpty(filter) && (!m || !CatalogMatches(ModFactsOf(*m), filter))) continue;
-		out.push_back(static_cast<int>(i));
+		if (RowInState(st, r, state) && RowMatches(st, r, q, filter)) out.push_back(static_cast<int>(i));
 	}
 	const auto mod = [&](int i) { return FindModIn(st.mods, st.rows[i].folder); };
 	if (st.sort == 1) {
