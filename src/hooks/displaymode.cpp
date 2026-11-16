@@ -147,10 +147,41 @@ std::string DeviceName(const MonitorEntry &monitor)
 	return name;
 }
 
+// The game asks for the display modes one at a time and every answer needs the target monitor: its name is kept for a second, or
+// until the monitor setting or the monitors change.
+const DWORD kTargetDeviceKeptMs = 1000;
+
+struct TargetDeviceCache {
+	std::mutex mx;
+	std::string device;
+	int monitor = 0;
+	DWORD at = 0;
+	bool valid = false;
+};
+TargetDeviceCache g_target;
+
+void ForgetTargetDevice()
+{
+	std::lock_guard<std::mutex> lock(g_target.mx);
+	g_target.valid = false;
+}
+
 std::string TargetDevice()
 {
 	if (!Enabled()) return std::string();
-	return DeviceName(MonitorAt(-1));
+	const int monitor = GetConfig().monitor;
+	const DWORD now = GetTickCount();
+	{
+		std::lock_guard<std::mutex> lock(g_target.mx);
+		if (g_target.valid && g_target.monitor == monitor && now - g_target.at < kTargetDeviceKeptMs) return g_target.device;
+	}
+	const std::string device = DeviceName(MonitorAt(-1));
+	std::lock_guard<std::mutex> lock(g_target.mx);
+	g_target.device = device;
+	g_target.monitor = monitor;
+	g_target.at = now;
+	g_target.valid = true;
+	return device;
 }
 
 bool Enabled() { return GetConfig().fakeModeChange && GetConfig().renderEnabled; }
@@ -417,6 +448,7 @@ bool SwitchMonitorTo(int w, int h)
 		return false;
 	}
 	g_monitorSwitched = true;
+	ForgetTargetDevice();
 	LogI("display", "the monitor is switched to %dx%d at %lu Hz while the game uses it", w, h, best.dmDisplayFrequency);
 	return true;
 }
@@ -587,6 +619,7 @@ LRESULT CALLBACK GameWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 		}
 	}
 	if (msg == WM_DISPLAYCHANGE) {
+		ForgetTargetDevice();
 		std::lock_guard<std::mutex> lock(g_modesMx);
 		g_modesReady = false;
 		g_otherSizes.clear();
@@ -844,6 +877,7 @@ void DisplayRestoreMonitor()
 	g_monitorSwitched = false;
 	const std::string device = TargetDevice();
 	ChangeDisplaySettingsExA(device.empty() ? nullptr : device.c_str(), nullptr, nullptr, 0, nullptr);
+	ForgetTargetDevice();
 	LogI("display", "the monitor is back to its own resolution");
 }
 
