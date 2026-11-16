@@ -630,11 +630,21 @@ void ExecuteLoad(const SaveRec &rec)
 
 bool DialogAlive(void *dlg, uintptr_t global) { return dlg && *reinterpret_cast<void **>(global) == dlg; }
 
-void CloseDialog(void *dlg, uintptr_t global)
+void CallClose(void *dlg)
 {
-	if (!DialogAlive(dlg, global)) return;
 	void **vt = *reinterpret_cast<void ***>(dlg);
 	reinterpret_cast<Close_t>(vt[0x6c / 4])(dlg, nullptr, 0);
+}
+
+void CloseDialog(void *dlg, uintptr_t global)
+{
+	if (DialogAlive(dlg, global)) CallClose(dlg);
+}
+
+void CloseDialogDone(void *dlg)
+{
+	*reinterpret_cast<int *>(static_cast<char *>(dlg) + 0x80) = 0;
+	CallClose(dlg);
 }
 
 void ExecuteCancel(void *dlg, uintptr_t global)
@@ -683,8 +693,7 @@ void ExecuteSave(void *dlg, const std::string &name, bool online)
 	reinterpret_cast<SetText_t>(addr::kSetTextUtf8)(ctrl, nullptr, name.c_str(), 1);
 	const char *err = reinterpret_cast<DoSave_t>(vt[0xa0 / 4])(dlg);
 	if (!err) {
-		*reinterpret_cast<int *>(static_cast<char *>(dlg) + 0x80) = 0;
-		reinterpret_cast<Close_t>(vt[0x6c / 4])(dlg, nullptr, 0);
+		CloseDialogDone(dlg);
 		return;
 	}
 	LogW("saves", "the game could not save: %s", err);
@@ -1894,10 +1903,7 @@ bool HandleImpl(UINT msg, WPARAM wp, LPARAM lp)
 		st.pendingOnlineRoom.clear();
 		lock.unlock();
 		LogI("saves", "\"%s\" is online: leaving the game to open a room with it", path.c_str());
-		if (DialogAlive(dlg, global)) {
-			*reinterpret_cast<int *>(static_cast<char *>(dlg) + 0x80) = 0;
-			reinterpret_cast<Close_t>((*reinterpret_cast<void ***>(dlg))[0x6c / 4])(dlg, nullptr, 0);
-		}
+		if (DialogAlive(dlg, global)) CloseDialogDone(dlg);
 		MpUiHostSaveAfterGame(path);
 		typedef void(__cdecl * RequestQuitToMenu_t)();
 		reinterpret_cast<RequestQuitToMenu_t>(addr::kRequestQuitToMenu)();
@@ -1912,10 +1918,7 @@ bool HandleImpl(UINT msg, WPARAM wp, LPARAM lp)
 		lock.unlock();
 		if (!copy.vfsPath.empty()) {
 			ExecuteLoad(copy);
-			if (DialogAlive(dlg, global)) {
-				*reinterpret_cast<int *>(static_cast<char *>(dlg) + 0x80) = 0;
-				reinterpret_cast<Close_t>((*reinterpret_cast<void ***>(dlg))[0x6c / 4])(dlg, nullptr, 0);
-			}
+			if (DialogAlive(dlg, global)) CloseDialogDone(dlg);
 		}
 		return true;
 	}
