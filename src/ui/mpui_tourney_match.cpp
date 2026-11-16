@@ -425,6 +425,103 @@ bool PaintMatchHeader(Painter &p, const State &st, const HeaderUi &u)
 	return true;
 }
 
+namespace {
+
+// What is checked before the room: the content, the map, Steam and the check-in.
+void PaintReadyCard(Painter &p, const State &st, const TourneyNext &n, const TourneyMineView &mine, const TourneyMap &map, int m, int ry, int cw, int rh, int pad)
+{
+	PaintGlassCard(p, m, ry, cw, rh);
+	PaintCaps(p, m + pad, ry + 20, cw - 2 * pad, 20, "Ready to enter", pal::caption);
+	const bool sameContent = n.contentKey.empty() || n.contentKey == SteamOwnGameplayKey();
+	const CupMapState mapState = LeagueCupMap(map);
+	const TourneyMyEntry *entry = MyEntry(mine, n.tournamentId);
+	struct Check {
+		bool ok;
+		std::string text;
+	} checks[] = {
+		{sameContent, sameContent ? TrFmt("%s active, the same content as the room", {n.contentName.empty() ? Tr("The mod's rules") : n.contentName})
+								  : TrFmt("This tournament needs %s: switch your content profile", {n.contentName.empty() ? Tr("other content") : n.contentName})},
+		{mapState.status == CupMapStatus::Ready, MapCheckText(map, mapState)},
+		{st.ready, st.ready ? Tr("Steam is ready") : Tr("Steam is not available. Open Steam and try again.")},
+		{!entry || entry->checkedIn, Tr(!entry || entry->checkedIn ? "Check-in done" : "Check-in missing")},
+	};
+	int ly = ry + 54;
+	for (const Check &c : checks) {
+		if (ly + 26 > ry + rh) break;
+		PaintCheck(p, m + pad, ly + 2, 20, c.ok);
+		p.Font(0);
+		p.raw = true;
+		p.Text(m + pad + 32, ly, cw - 2 * pad - 32, 24, c.text, c.ok ? pal::body : pal::bad, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.raw = false;
+		ly += 32;
+	}
+}
+
+void PaintMatchRules(Painter &p, const TourneyNext &n, const TourneyPageView &page, const TourneyMap &map, bool teams, bool byRounds, int x2, int ry, int cw, int rh,
+	int pad)
+{
+	PaintGlassCard(p, x2, ry, cw, rh);
+	PaintCaps(p, x2 + pad, ry + 20, cw - 2 * pad, 20, "Rules of this match", pal::caption);
+	// Where the winner goes is told for a single elimination; the other formats' paths are on the cup's page.
+	std::string after;
+	const bool single = n.format == TourneyFormat::Single && n.bracket == TourneyBracket::Winners;
+	if (single && n.round >= n.rounds) after = Tr("The winner is the champion");
+	else if (single && page.loaded) {
+		const TourneyMatch *following = nullptr, *mineM = MatchById(page.detail, n.match);
+		if (mineM) following = TourneyMatchAt(page.detail, mineM->round + 1, mineM->position / 2);
+		const TourneyCard *other = following ? (mineM->position % 2 ? &following->a : &following->b) : nullptr;
+		after = other && other->Present() ? TrFmt("If you win, %s against %s", {StageText(following->stage, following->round), other->name})
+										  : TrFmt("If you win, the %s", {StageText(TourneyStageOf(n.round + 1, n.rounds), n.round + 1)});
+	}
+	std::vector<std::pair<std::string, std::string>> rules;
+	// With the by-rounds pace the deadline and the no-show come first: the card may not have room for every row.
+	if (byRounds && n.deadlineAt) rules.push_back({Tr("Deadline"), UntilText(n.deadlineAt)});
+	if (byRounds && n.noshowFrom) rules.push_back({Tr("No-show"), FromText(n.noshowFrom)});
+	if (teams && (n.team.side == "a" || n.team.side == "b")) rules.push_back({Tr("Teams"), TrFmt("Set by the league: yours is team %s", {n.team.side == "a" ? "1" : "2"})});
+	rules.push_back({Tr("Settings"), PresetText(n.settings)});
+	rules.push_back({Tr("Map"), map.Known() ? MapText(map) : Tr(n.pick.present ? "To be chosen" : "Chosen in the room")});
+	rules.push_back({Tr("Civilizations"), Tr(n.settings.hideCivs ? "Hidden until the game starts" : "Visible in the room")});
+	rules.push_back({Tr("Spectators"), TourneySpecDelay(n.settings) ? TrFmt("With a %s s delay", {std::to_string(TourneySpecDelay(n.settings))}) : Tr("No spectators")});
+	rules.push_back({Tr("After"), after});
+	// The map's view and the diplomacy, as the preset and the cup's switches leave them: last, the first rows to go when the card is short.
+	const TourneyRoomRules room = TourneyRulesOf(n.settings);
+	rules.push_back({Tr("Map view"), Tr(room.explored ? (room.fog ? "Explored, with fog of war" : "Explored, no fog of war") : room.fog ? "Unexplored, with fog of war" : "Unexplored, no fog of war")});
+	rules.push_back({Tr("Diplomacy"), Tr(room.lockedDiplomacy ? "Locked" : "Free")});
+	int ly = ry + 54;
+	for (const auto &r : rules) {
+		if (ly + 26 > ry + rh || r.second.empty()) continue;
+		p.Font(0);
+		p.raw = true;
+		p.Text(x2 + pad, ly, 140, 24, r.first, pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+		p.Text(x2 + pad + 150, ly, cw - 2 * pad - 150, 24, r.second, pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.raw = false;
+		ly += 30;
+	}
+}
+
+// What to do if something fails, with the claim of the win, the dispute and the withdrawal.
+void PaintTroubleCard(Painter &p, const TourneyNext &n, int x3, int ry, int cw, int rh, int pad, int mx, int my)
+{
+	PaintGlassCard(p, x3, ry, cw, rh);
+	PaintCaps(p, x3 + pad, ry + 20, cw - 2 * pad, 20, "If something fails", pal::caption);
+	p.Font(0);
+	const char *const lines[] = {"You drop: you have 5 min to return to the game.", "It ends in the first 3 minutes with no losses: it is played again.",
+		"The mod sends the result. If the reports differ, the organisers decide."};
+	int ly = ry + 54;
+	for (const char *text : lines) {
+		if (ly + 26 > ry + rh - 50) break;
+		p.Text(x3 + pad, ly, cw - 2 * pad, 24, text, pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		ly += 28;
+	}
+	const int fy = ry + rh - 22 - 36, gw = (cw - 2 * pad - 20) / 3;
+	if (n.canClaimNoShow) p.Button(x3 + pad, fy, gw, 36, "Claim the win", kTourney, ArgOf(kSubNoShow, n.match), mx, my, !LeagueTourneyBusy(TourneyOp::NoShow, n.match), true);
+	else PaintGhostButton(p, x3 + pad, fy, gw, 36, "Claim the win", kNone, false, false, mx, my);
+	p.Button(x3 + pad + gw + 10, fy, gw, 36, "Dispute", kTourney, ArgOf(kSubDispute, n.match), mx, my);
+	p.Button(x3 + pad + 2 * (gw + 10), fy, gw, 36, "Withdraw", kTourney, ArgOf(kSubWithdraw, n.tournamentId), mx, my);
+}
+
+}
+
 void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 {
 	const int mx = st.mouseX, my = st.mouseY;
@@ -566,88 +663,11 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 		return;
 	}
 	// Three cards: what is checked, the rules and what to do if something fails.
-	PaintGlassCard(p, m, ry, cw, rh);
-	PaintCaps(p, m + pad, ry + 20, cw - 2 * pad, 20, "Ready to enter", pal::caption);
-	const bool sameContent = n.contentKey.empty() || n.contentKey == SteamOwnGameplayKey();
-	const CupMapState mapState = LeagueCupMap(map);
-	const TourneyMyEntry *entry = MyEntry(mine, n.tournamentId);
-	struct Check {
-		bool ok;
-		std::string text;
-	} checks[] = {
-		{sameContent, sameContent ? TrFmt("%s active, the same content as the room", {n.contentName.empty() ? Tr("The mod's rules") : n.contentName})
-								  : TrFmt("This tournament needs %s: switch your content profile", {n.contentName.empty() ? Tr("other content") : n.contentName})},
-		{mapState.status == CupMapStatus::Ready, MapCheckText(map, mapState)},
-		{st.ready, st.ready ? Tr("Steam is ready") : Tr("Steam is not available. Open Steam and try again.")},
-		{!entry || entry->checkedIn, Tr(!entry || entry->checkedIn ? "Check-in done" : "Check-in missing")},
-	};
-	int ly = ry + 54;
-	for (const Check &c : checks) {
-		if (ly + 26 > ry + rh) break;
-		PaintCheck(p, m + pad, ly + 2, 20, c.ok);
-		p.Font(0);
-		p.raw = true;
-		p.Text(m + pad + 32, ly, cw - 2 * pad - 32, 24, c.text, c.ok ? pal::body : pal::bad, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		p.raw = false;
-		ly += 32;
-	}
-
+	PaintReadyCard(p, st, n, mine, map, m, ry, cw, rh, pad);
 	const int x2 = m + cw + kCardGap;
-	PaintGlassCard(p, x2, ry, cw, rh);
-	PaintCaps(p, x2 + pad, ry + 20, cw - 2 * pad, 20, "Rules of this match", pal::caption);
-	// Where the winner goes is told for a single elimination; the other formats' paths are on the cup's page.
-	std::string after;
-	const bool single = n.format == TourneyFormat::Single && n.bracket == TourneyBracket::Winners;
-	if (single && n.round >= n.rounds) after = Tr("The winner is the champion");
-	else if (single && page.loaded) {
-		const TourneyMatch *following = nullptr, *mineM = MatchById(page.detail, n.match);
-		if (mineM) following = TourneyMatchAt(page.detail, mineM->round + 1, mineM->position / 2);
-		const TourneyCard *other = following ? (mineM->position % 2 ? &following->a : &following->b) : nullptr;
-		after = other && other->Present() ? TrFmt("If you win, %s against %s", {StageText(following->stage, following->round), other->name})
-										  : TrFmt("If you win, the %s", {StageText(TourneyStageOf(n.round + 1, n.rounds), n.round + 1)});
-	}
-	std::vector<std::pair<std::string, std::string>> rules;
-	// With the by-rounds pace the deadline and the no-show come first: the card may not have room for every row.
-	if (byRounds && n.deadlineAt) rules.push_back({Tr("Deadline"), UntilText(n.deadlineAt)});
-	if (byRounds && n.noshowFrom) rules.push_back({Tr("No-show"), FromText(n.noshowFrom)});
-	if (teams && (n.team.side == "a" || n.team.side == "b")) rules.push_back({Tr("Teams"), TrFmt("Set by the league: yours is team %s", {n.team.side == "a" ? "1" : "2"})});
-	rules.push_back({Tr("Settings"), PresetText(n.settings)});
-	rules.push_back({Tr("Map"), map.Known() ? MapText(map) : Tr(n.pick.present ? "To be chosen" : "Chosen in the room")});
-	rules.push_back({Tr("Civilizations"), Tr(n.settings.hideCivs ? "Hidden until the game starts" : "Visible in the room")});
-	rules.push_back({Tr("Spectators"), TourneySpecDelay(n.settings) ? TrFmt("With a %s s delay", {std::to_string(TourneySpecDelay(n.settings))}) : Tr("No spectators")});
-	rules.push_back({Tr("After"), after});
-	// The map's view and the diplomacy, as the preset and the cup's switches leave them: last, the first rows to go when the card is short.
-	const TourneyRoomRules room = TourneyRulesOf(n.settings);
-	rules.push_back({Tr("Map view"), Tr(room.explored ? (room.fog ? "Explored, with fog of war" : "Explored, no fog of war") : room.fog ? "Unexplored, with fog of war" : "Unexplored, no fog of war")});
-	rules.push_back({Tr("Diplomacy"), Tr(room.lockedDiplomacy ? "Locked" : "Free")});
-	ly = ry + 54;
-	for (const auto &r : rules) {
-		if (ly + 26 > ry + rh || r.second.empty()) continue;
-		p.Font(0);
-		p.raw = true;
-		p.Text(x2 + pad, ly, 140, 24, r.first, pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-		p.Text(x2 + pad + 150, ly, cw - 2 * pad - 150, 24, r.second, pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		p.raw = false;
-		ly += 30;
-	}
-
+	PaintMatchRules(p, n, page, map, teams, byRounds, x2, ry, cw, rh, pad);
 	const int x3 = x2 + cw + kCardGap;
-	PaintGlassCard(p, x3, ry, cw, rh);
-	PaintCaps(p, x3 + pad, ry + 20, cw - 2 * pad, 20, "If something fails", pal::caption);
-	p.Font(0);
-	const char *const lines[] = {"You drop: you have 5 min to return to the game.", "It ends in the first 3 minutes with no losses: it is played again.",
-		"The mod sends the result. If the reports differ, the organisers decide."};
-	ly = ry + 54;
-	for (const char *text : lines) {
-		if (ly + 26 > ry + rh - 50) break;
-		p.Text(x3 + pad, ly, cw - 2 * pad, 24, text, pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		ly += 28;
-	}
-	const int fy = ry + rh - 22 - 36, gw = (cw - 2 * pad - 20) / 3;
-	if (n.canClaimNoShow) p.Button(x3 + pad, fy, gw, 36, "Claim the win", kTourney, ArgOf(kSubNoShow, n.match), mx, my, !LeagueTourneyBusy(TourneyOp::NoShow, n.match), true);
-	else PaintGhostButton(p, x3 + pad, fy, gw, 36, "Claim the win", kNone, false, false, mx, my);
-	p.Button(x3 + pad + gw + 10, fy, gw, 36, "Dispute", kTourney, ArgOf(kSubDispute, n.match), mx, my);
-	p.Button(x3 + pad + 2 * (gw + 10), fy, gw, 36, "Withdraw", kTourney, ArgOf(kSubWithdraw, n.tournamentId), mx, my);
+	PaintTroubleCard(p, n, x3, ry, cw, rh, pad, mx, my);
 }
 
 bool PaintChampionHeader(Painter &p, const State &st, const HeaderUi &u)
