@@ -801,6 +801,13 @@ void FocusField(int field)
 
 namespace mpui_impl {
 namespace {
+// Another search shows other rooms: the selection goes back to the first one.
+void SearchChanged()
+{
+	g_s.selected = 0;
+	g_s.detail.scroll = 0;
+}
+
 bool TabSkip(int a)
 {
 	return a == kNone || a == kSelect || a == kPickRow || a == kColResize ||
@@ -834,6 +841,7 @@ void FieldKey(UINT msg, WPARAM wp)
 	if (msg == WM_CHAR) {
 		const bool typed = EditChar(text, g_s.edit, wp, limit);
 		if (typed && g_s.focus == kPickSearchField) g_s.pick.scroll = 0;
+		if (typed && g_s.focus == kSearchField) SearchChanged();
 		if (typed && TourneyOwnsField(field)) TourneyFieldEdited(field);
 	}
 	else if (g_s.focus == kPickSearchField && (wp == VK_UP || wp == VK_DOWN || wp == VK_PRIOR || wp == VK_NEXT)) {
@@ -863,6 +871,7 @@ void FieldKey(UINT msg, WPARAM wp)
 	else {
 		const int edited = EditKey(text, g_s.edit, wp, limit);
 		if (edited == 2 && g_s.focus == kPickSearchField) g_s.pick.scroll = 0;
+		if (edited == 2 && g_s.focus == kSearchField) SearchChanged();
 		if (edited == 2 && TourneyOwnsField(field)) TourneyFieldEdited(field);
 	}
 }
