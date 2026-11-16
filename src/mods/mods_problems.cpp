@@ -96,14 +96,13 @@ bool ModsMountedHasExact(const std::string &id, const std::string &version)
 	return false;
 }
 
-const ModProfile &ModsMountedProfile()
+ModProfile ModsMountedProfile()
 {
-	static ModProfile original;
-	if (original.name.empty()) {
-		original.name = kOriginal;
-	}
 	std::lock_guard<std::mutex> lock(g_lock);
-	return g_mount.known ? g_mount.profile : original;
+	if (g_mount.known) return g_mount.profile;
+	ModProfile original;
+	original.name = kOriginal;
+	return original;
 }
 
 bool ModsLoadsWithoutRestart(const std::string &folder)
@@ -126,7 +125,7 @@ bool ModsRestartNeeded()
 		ModInfo m;
 		return !ModsFind(f, m);
 	}), active.mods.end());
-	const ModProfile &mounted = ModsMountedProfile();
+	const ModProfile mounted = ModsMountedProfile();
 	if (!ModsSameSet(active.mods, mounted.mods)) return true;
 	std::map<std::string, std::string> signatures;
 	{
