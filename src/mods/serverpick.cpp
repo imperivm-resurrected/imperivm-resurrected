@@ -8,6 +8,7 @@
 #include <cmath>
 
 #include "core/json.h"
+#include "mods/modtext.h"
 
 namespace {
 const char kPrefix[] = "filecache";
@@ -23,11 +24,8 @@ uint64_t Fnv1a(const std::string &s)
 	return h;
 }
 
-std::string Lower(std::string s)
-{
-	for (char &c : s) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
-	return s;
-}
+using modtext::Lower;
+
 }
 
 int GbFileServerNumber(const std::string &host)

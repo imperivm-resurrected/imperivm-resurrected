@@ -11,6 +11,7 @@
 #include <iterator>
 #include <map>
 #include <utility>
+#include "mods/modtext.h"
 
 namespace {
 
@@ -52,11 +53,7 @@ bool IsFullFrame(std::string rect)
 	return compact == "0,0,%larghezza%,%altezza%";
 }
 
-std::string Lower(std::string s)
-{
-	for (char &c : s) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
-	return s;
-}
+using modtext::Lower;
 
 std::vector<std::pair<std::string, std::string>> Pairs(const std::string &ini)
 {

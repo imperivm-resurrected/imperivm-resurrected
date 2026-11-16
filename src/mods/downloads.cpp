@@ -31,6 +31,8 @@
 #include "mods/looselayout.h"
 #include "i18n/tr.h"
 #include "core/uiport.h"
+#include "mods/modpaths.h"
+#include "mods/modtext.h"
 
 namespace {
 
@@ -74,23 +76,9 @@ void MakeDirs(const std::string &path)
 	}
 }
 
-bool IsDir(const std::string &p)
-{
-	DWORD a = GetFileAttributesA(p.c_str());
-	return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY);
-}
-
-bool IsFile(const std::string &p)
-{
-	DWORD a = GetFileAttributesA(p.c_str());
-	return a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY);
-}
-
-std::string Lower(std::string s)
-{
-	std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return static_cast<char>(tolower(c)); });
-	return s;
-}
+using modpaths::IsDir;
+using modpaths::IsFile;
+using modtext::Lower;
 
 std::wstring Wide(const std::string &s)
 {

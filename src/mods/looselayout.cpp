@@ -9,13 +9,10 @@
 #include <cstring>
 
 #include "mods/catalogfilter.h"
+#include "mods/modtext.h"
 
 namespace {
-std::string Lower(std::string s)
-{
-	for (char &c : s) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
-	return s;
-}
+using modtext::Lower;
 
 std::string Extension(const std::string &file)
 {

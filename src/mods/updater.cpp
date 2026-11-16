@@ -18,6 +18,7 @@
 #include "i18n/tr.h"
 #include "core/uiport.h"
 #include "core/version.h"
+#include "mods/modpaths.h"
 
 namespace {
 
@@ -42,13 +43,8 @@ bool g_menuSeen = false;
 std::string g_rolledBack;
 UpdaterInfo::Check g_check = UpdaterInfo::kNotChecked;
 
-std::string GameDir()
-{
-	char path[MAX_PATH] = {};
-	GetModuleFileNameA(nullptr, path, MAX_PATH);
-	std::string dir = path;
-	return dir.substr(0, dir.find_last_of("\\/"));
-}
+using modpaths::GameDir;
+using modpaths::IsFile;
 
 std::string IniPath() { return GameDir() + "\\imperivm-mod.ini"; }
 
@@ -62,12 +58,6 @@ std::string IniGet(const char *key, const char *def = "")
 void IniSet(const char *key, const std::string &value)
 {
 	WritePrivateProfileStringA("Updates", key, value.empty() ? nullptr : value.c_str(), IniPath().c_str());
-}
-
-bool IsFile(const std::string &p)
-{
-	const DWORD a = GetFileAttributesA(p.c_str());
-	return a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY);
 }
 
 bool HexToBytes(const std::string &hex, std::vector<unsigned char> &out)

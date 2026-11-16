@@ -5,13 +5,10 @@
 
 #include <cctype>
 #include <cstring>
+#include "mods/modtext.h"
 
 namespace {
-std::string Lower(std::string s)
-{
-	for (char &c : s) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
-	return s;
-}
+using modtext::Lower;
 
 bool StartsWith(const std::string &s, const char *prefix) { return s.compare(0, strlen(prefix), prefix) == 0; }
 

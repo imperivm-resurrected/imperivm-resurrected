@@ -13,6 +13,7 @@
 #include "core/sha256.h"
 #include "core/versioncmp.h"
 #include "mods/modclash.h"
+#include "mods/modpaths.h"
 #include "mods/modrules.h"
 #include "mods/mods.h"
 #include "mods/savelib.h"
@@ -56,11 +57,11 @@ inline std::string ModSignature(const ModInfo &m)
 	return m.version + "|" + std::to_string(m.fileCount) + "|" + std::to_string(m.totalBytes);
 }
 extern std::atomic<bool> g_hashing;
-std::string GameDir();
+using modpaths::GameDir;
 std::string ModsDir();
 std::string ProfilesDir();
 std::string IniPath();
-bool IsDir(const std::string &p);
+using modpaths::IsDir;
 struct ScanFile {
 	std::string rel;
 	uint64_t size = 0;

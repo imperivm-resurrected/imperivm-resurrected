@@ -15,34 +15,19 @@
 #include "mods/savelib.h"
 #include "i18n/tr.h"
 #include "addr/state.h"
+#include "mods/modpaths.h"
+#include "mods/modtext.h"
 
 namespace {
 
-std::string GameDir()
-{
-	char path[MAX_PATH];
-	GetModuleFileNameA(nullptr, path, MAX_PATH);
-	char *slash = strrchr(path, '\\');
-	if (slash) *slash = 0;
-	return path;
-}
-
-std::string Lower(std::string s)
-{
-	for (char &c : s) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
-	return s;
-}
+using modpaths::GameDir;
+using modpaths::IsFile;
+using modtext::Lower;
 
 bool EndsWith(const std::string &s, const char *suffix)
 {
 	const size_t n = strlen(suffix);
 	return s.size() >= n && _stricmp(s.c_str() + s.size() - n, suffix) == 0;
-}
-
-bool FileExists(const std::string &path)
-{
-	const DWORD a = GetFileAttributesA(path.c_str());
-	return a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY);
 }
 
 std::string ProfileDir(const std::string &profile) { return GameDir() + "\\Profiles\\" + profile + "\\"; }
@@ -100,14 +85,14 @@ bool MoveToOnlineFolder(SaveRec &r)
 	const std::string dir = OnlineDir(r.profile);
 	const std::string ext = r.diskPath.substr(r.diskPath.size() - 4);
 	std::string base = r.baseName;
-	for (int n = 2; FileExists(dir + base + ext) && n < 100; n++) base = r.baseName + " (" + std::to_string(n) + ")";
+	for (int n = 2; IsFile(dir + base + ext) && n < 100; n++) base = r.baseName + " (" + std::to_string(n) + ")";
 	const std::string target = dir + base + ext;
-	if (FileExists(target) || !MoveFileA(r.diskPath.c_str(), target.c_str())) {
+	if (IsFile(target) || !MoveFileA(r.diskPath.c_str(), target.c_str())) {
 		LogW("saves", "could not move \"%s\" to the folder %s (error %lu)", r.vfsPath.c_str(), kSaveOnlineFolder, GetLastError());
 		return false;
 	}
 	for (const char *suffix : kAuxSuffixes) {
-		if (FileExists(r.diskPath + suffix)) MoveFileExA((r.diskPath + suffix).c_str(), (target + suffix).c_str(), MOVEFILE_REPLACE_EXISTING);
+		if (IsFile(r.diskPath + suffix)) MoveFileExA((r.diskPath + suffix).c_str(), (target + suffix).c_str(), MOVEFILE_REPLACE_EXISTING);
 		else DeleteFileA((target + suffix).c_str());
 	}
 	const std::string oldVfs = r.vfsPath;
@@ -160,7 +145,7 @@ void ScanDir(const std::string &profile, bool onlineFolder, std::vector<SaveRec>
 		r.diskPath = dir + file;
 		r.time = (static_cast<uint64_t>(fd.ftLastWriteTime.dwHighDateTime) << 32) | fd.ftLastWriteTime.dwLowDateTime;
 		r.size = (static_cast<uint64_t>(fd.nFileSizeHigh) << 32) | fd.nFileSizeLow;
-		r.hasThumb = FileExists(r.diskPath + ".bmp");
+		r.hasThumb = IsFile(r.diskPath + ".bmp");
 		Json j;
 		if (ReadJsonFile(r.diskPath + ".mods.json", j)) {
 			r.online = j.GetBool("online", false);
@@ -276,7 +261,7 @@ bool SaveLibDelete(const SaveRec &rec)
 	std::string list = rec.diskPath;
 	list.push_back('\0');
 	for (const char *suffix : kAuxSuffixes) {
-		if (FileExists(rec.diskPath + suffix)) {
+		if (IsFile(rec.diskPath + suffix)) {
 			list += rec.diskPath + suffix;
 			list.push_back('\0');
 		}
@@ -288,7 +273,7 @@ bool SaveLibDelete(const SaveRec &rec)
 	op.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT;
 	const int rc = SHFileOperationA(&op);
 	LogI("saves", "deleted \"%s\" (%s)", rec.vfsPath.c_str(), rc == 0 && !op.fAnyOperationsAborted ? "to the recycle bin" : "ERROR");
-	return rc == 0 && !op.fAnyOperationsAborted && !FileExists(rec.diskPath);
+	return rc == 0 && !op.fAnyOperationsAborted && !IsFile(rec.diskPath);
 }
 
 namespace {
@@ -316,7 +301,7 @@ bool SaveLibExists(const SaveRec &rec, const std::string &newName)
 	const std::string dir = rec.diskPath.substr(0, rec.diskPath.find_last_of('\\') + 1);
 	const std::string ext = rec.diskPath.substr(rec.diskPath.size() - 4);
 	const std::string target = dir + NewBase(rec, newName) + ext;
-	return _stricmp(target.c_str(), rec.diskPath.c_str()) != 0 && FileExists(target);
+	return _stricmp(target.c_str(), rec.diskPath.c_str()) != 0 && IsFile(target);
 }
 
 std::string SaveLibRename(const SaveRec &rec, const std::string &newName)
@@ -330,7 +315,7 @@ std::string SaveLibRename(const SaveRec &rec, const std::string &newName)
 	if (SaveLibExists(rec, newName)) return "A game with that name already exists";
 	if (!MoveFileA(rec.diskPath.c_str(), target.c_str())) return "Couldn't change the name";
 	for (const char *suffix : kAuxSuffixes) {
-		if (FileExists(rec.diskPath + suffix)) MoveFileExA((rec.diskPath + suffix).c_str(), (target + suffix).c_str(), MOVEFILE_REPLACE_EXISTING);
+		if (IsFile(rec.diskPath + suffix)) MoveFileExA((rec.diskPath + suffix).c_str(), (target + suffix).c_str(), MOVEFILE_REPLACE_EXISTING);
 		else DeleteFileA((target + suffix).c_str());
 	}
 	if (rec.autosave) {

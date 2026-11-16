@@ -19,6 +19,8 @@
 #include <mutex>
 #include <set>
 #include "core/uiport.h"
+#include "mods/modpaths.h"
+#include "mods/modtext.h"
 
 namespace {
 
@@ -66,20 +68,8 @@ std::vector<BuiltinPatch> UsableBuiltinPatches(bool log)
 	return out;
 }
 
-std::string GameDirPath()
-{
-	char path[MAX_PATH];
-	GetModuleFileNameA(nullptr, path, MAX_PATH);
-	char *slash = strrchr(path, '\\');
-	if (slash) *slash = 0;
-	return path;
-}
-
-std::string Lower(std::string s)
-{
-	for (char &c : s) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
-	return s;
-}
+using modpaths::GameDir;
+using modtext::Lower;
 
 void Walk(const std::string &base, const std::string &sub, const std::string &folder, std::map<std::string, std::vector<Source>> &out)
 {
@@ -139,7 +129,7 @@ void PatchRebuild()
 		const std::string folder = it->substr(it->find_last_of('\\') + 1);
 		Walk(*it + "\\patches\\", "", folder, found);
 	}
-	Walk(GameDirPath() + "\\imperivm-resurrected\\patches\\", "", "", found);
+	Walk(GameDir() + "\\imperivm-resurrected\\patches\\", "", "", found);
 	for (const BuiltinPatch &b : UsableBuiltinPatches(true)) found[b.path].insert(found[b.path].begin(), {"Imperivm Resurrected", "", b.text, b.gameFileSha256});
 	unsigned files = 0;
 	for (const auto &kv : found) files += static_cast<unsigned>(kv.second.size());
