@@ -222,16 +222,6 @@ struct Command {
 	int arg = 0;
 };
 
-int HitAt(const State &st, POINT at, int &arg)
-{
-	for (auto it = st.hits.rbegin(); it != st.hits.rend(); ++it) {
-		if (!PtInRect(&it->r, at)) continue;
-		arg = it->arg;
-		return it->action;
-	}
-	return kActNone;
-}
-
 bool OverHistory(const State &st, POINT at)
 {
 	for (const Hit &h : st.hits) {
@@ -354,7 +344,7 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, Command &cmd)
 		if (onBar) return true;
 		g_s.mouseDown = true;
 		int arg = 0;
-		const int action = HitAt(g_s, at, arg);
+		const int action = HitActionAt(g_s.hits, at, arg, kActNone);
 		const DWORD now = GetTickCount();
 		const bool twice = action == kActPick && arg == g_s.lastClickRow && now - g_s.lastClick <= GetDoubleClickTime();
 		g_s.lastClickRow = action == kActPick && !twice ? arg : -1;

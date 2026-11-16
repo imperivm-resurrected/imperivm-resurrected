@@ -74,16 +74,6 @@ std::shared_ptr<Content> Build(std::vector<Patron> patrons)
 	return c;
 }
 
-int HitAt(const std::vector<Hit> &hits, POINT at, int &arg)
-{
-	for (auto it = hits.rbegin(); it != hits.rend(); ++it) {
-		if (!PtInRect(&it->r, at)) continue;
-		arg = it->arg;
-		return it->action;
-	}
-	return kActNone;
-}
-
 // Changes of the screen happen here, under the lock; closing the game's screen is left for afterwards.
 bool Act(State &st, int action, int arg)
 {
@@ -115,7 +105,7 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, bool &close)
 	case WM_LBUTTONDBLCLK: {
 		st.mouseDown = true;
 		int arg = 0;
-		const int action = HitAt(st.hits, at, arg);
+		const int action = HitActionAt(st.hits, at, arg, kActNone);
 		if (action != kActNone) close = Act(st, action, arg);
 		else if (PtInRect(&st.out.column, at)) {
 			st.dragging = true;

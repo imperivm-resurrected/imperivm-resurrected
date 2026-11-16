@@ -323,10 +323,8 @@ void Close()
 
 int HitAt(const std::vector<Hit> &hits, POINT at)
 {
-	for (auto it = hits.rbegin(); it != hits.rend(); ++it) {
-		if (PtInRect(&it->r, at)) return it->action;
-	}
-	return kActNone;
+	const Hit *hit = TopHitAt(hits, at);
+	return hit ? hit->action : kActNone;
 }
 
 bool HandleKeyDown(WPARAM wp)

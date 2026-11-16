@@ -39,16 +39,6 @@ bool g_swallowUp = false, g_escArmed = false, g_enterArmed = false;
 
 bool OtherScreenOwnsInput() { return ModUiIsOpen() || MpUiNeedsDraw(); }
 
-int HitAt(const State &st, POINT at, int &arg)
-{
-	for (auto it = st.hits.rbegin(); it != st.hits.rend(); ++it) {
-		if (!PtInRect(&it->r, at)) continue;
-		arg = it->arg;
-		return it->action;
-	}
-	return kActNone;
-}
-
 void *OpenDialog()
 {
 	DiplomacyDialogState state;
@@ -230,7 +220,7 @@ bool DiplomacyUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		g_swallowUp = true;
 		if (BarMouse(msg, wp, at)) break;
 		int arg = 0;
-		const int action = HitAt(g_s, at, arg);
+		const int action = HitActionAt(g_s.hits, at, arg, kActNone);
 		cmd = CommandFor(g_s.view, action, arg);
 		break;
 	}

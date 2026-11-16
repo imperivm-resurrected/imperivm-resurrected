@@ -205,16 +205,6 @@ void ClearSearch(State &st)
 	QueryChanged(st);
 }
 
-int HitAt(const std::vector<Hit> &hits, POINT at, int &arg)
-{
-	for (auto it = hits.rbegin(); it != hits.rend(); ++it) {
-		if (!PtInRect(&it->r, at)) continue;
-		arg = it->arg;
-		return it->action;
-	}
-	return kActNone;
-}
-
 int MaxScroll(const State &st) { return std::max(0, st.out.contentH - st.out.viewH); }
 
 void ScrollBy(State &st, int delta)
@@ -329,7 +319,7 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, After &after)
 		FieldGeom geom;
 		if (FieldAt(at, fieldAction, geom) && fieldAction == kActSearch) {
 			int arg = 0;
-			if (HitAt(st.hits, at, arg) == kActClearSearch) {
+			if (HitActionAt(st.hits, at, arg, kActNone) == kActClearSearch) {
 				ClearSearch(st);
 				return true;
 			}
@@ -340,7 +330,7 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, After &after)
 		}
 		v.searchFocused = false;
 		int arg = 0;
-		const int action = HitAt(st.hits, at, arg);
+		const int action = HitActionAt(st.hits, at, arg, kActNone);
 		if (action != kActNone) Click(st, action, arg, after);
 		return true;
 	}
