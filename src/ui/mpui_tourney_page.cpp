@@ -38,6 +38,8 @@ struct Ctx {
 	std::vector<uint64_t> ids;
 	// The player's next match, when it is in this tournament.
 	const TourneyNext *next = nullptr;
+	// The cup's disputes, read once a frame for its organizer only.
+	TourneyDisputesView disputes;
 };
 
 // The players' Steam ids, for their badges; the ones without an id are left out.
@@ -1322,7 +1324,7 @@ void PaintOrganizer(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &ou
 	if (maxY > 0) PaintScrollbar(p, kBarBracketY, x + lw + 10, top, viewH, {sy, maxY, viewH}, c.st.dropBar, mx, my);
 
 	// The disputes.
-	const TourneyDisputesView disputes = LeagueTourneyDisputes(d.id);
+	const TourneyDisputesView &disputes = c.disputes;
 	PaintSectionLabel(p, rx, y, rw, 22, "Disputes to settle");
 	const int dTop = y + 32, cardH = 168, dViewH = y + h - dTop;
 	if (disputes.disputes.empty()) {
@@ -1395,7 +1397,7 @@ int PaintOrganizerCard(Painter &p, Ctx &c, int x, int y, int w)
 		signedUp++;
 		checkedIn += e.checkedIn ? 1 : 0;
 	}
-	const TourneyDisputesView open = LeagueTourneyDisputes(d.id);
+	const TourneyDisputesView &open = c.disputes;
 	const int disputes = open.loaded ? static_cast<int>(open.disputes.size()) : own ? own->openDisputes : 0;
 	const bool on = d.status == TourneyStatus::Signup || d.status == TourneyStatus::Checkin || d.status == TourneyStatus::Running;
 	const int codeH = d.isPrivate && !code.empty() ? 96 : 0, buttons = !on ? 0 : d.status == TourneyStatus::Running ? (disputes ? 2 : 1) : 2;
@@ -1586,6 +1588,7 @@ void PaintPageScreen(Painter &p, const State &st, const Ui &u, PaintOut &out)
 	PaintGlassCard(p, m, y, mainW, bottom - y);
 	const int ix = m + 24, iy = y + 18, iw = mainW - 48, ih = bottom - y - 36;
 	const bool organizer = IsOrganizer(page.detail), swiss = TourneyIsSwiss(page.detail);
+	if (organizer) c.disputes = LeagueTourneyDisputes(page.detail.id);
 	const bool bracketTab = u.pageTab == 0 || u.pageTab >= kRoundTab;
 	int tab = page.detail.matches.empty() && bracketTab ? 1 : u.pageTab;
 	if (tab == kOrganizerTab && !organizer) tab = 0;
