@@ -1310,35 +1310,37 @@ int64_t TourneyMatchOfTag(const std::string &tag)
 	return _atoi64(digits.c_str());
 }
 
+namespace {
+
+// A notice of the player's next match: its tournament, the match and who it is against.
+TourneyNotice NextMatchNotice(TourneyNotice::Kind kind, const TourneyNext &n)
+{
+	TourneyNotice x;
+	x.kind = kind;
+	x.tournamentId = n.tournamentId;
+	x.match = n.match;
+	x.slug = n.slug;
+	x.name = n.name;
+	x.opponent = n.opponent.name;
+	x.stage = n.stage;
+	x.bracket = n.bracket;
+	x.round = n.round;
+	return x;
+}
+
+}
+
 std::vector<TourneyNotice> TourneyNewNotices(const TourneyMine &mine, TourneyTold &told)
 {
 	std::vector<TourneyNotice> out;
 	const TourneyNext &n = mine.next;
 	if (n.present && n.status == TourneyMatchStatus::Ready && told.ready.insert(n.match).second && !n.me.inRoom) {
-		TourneyNotice x;
-		x.kind = TourneyNotice::MatchReady;
-		x.tournamentId = n.tournamentId;
-		x.match = n.match;
-		x.slug = n.slug;
-		x.name = n.name;
-		x.opponent = n.opponent.name;
-		x.stage = n.stage;
-		x.bracket = n.bracket;
-		x.round = n.round;
+		TourneyNotice x = NextMatchNotice(TourneyNotice::MatchReady, n);
 		x.deadlineAt = n.deadlineAt;
 		out.push_back(x);
 	}
 	if (n.present && n.MyPick() && told.picks.insert({n.match, n.game}).second) {
-		TourneyNotice x;
-		x.kind = TourneyNotice::PickOpen;
-		x.tournamentId = n.tournamentId;
-		x.match = n.match;
-		x.slug = n.slug;
-		x.name = n.name;
-		x.opponent = n.opponent.name;
-		x.stage = n.stage;
-		x.bracket = n.bracket;
-		x.round = n.round;
+		TourneyNotice x = NextMatchNotice(TourneyNotice::PickOpen, n);
 		x.game = n.game;
 		x.deadlineAt = n.pick.until;
 		out.push_back(x);
