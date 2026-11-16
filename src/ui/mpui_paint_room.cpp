@@ -22,6 +22,7 @@
 
 #include "ui/fullscreen.h"
 #include "ui/leagueui.h"
+#include "ui/leaguerewards.h"
 #include "ui/mpui_internal.h"
 #include "ui/mpui_tourney.h"
 #include "ui/patronui.h"
@@ -492,7 +493,10 @@ void PaintWho(Painter &p, const State &st, int x, int cy, int w, uint64_t who, c
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const int ay = cy - kAvatar / 2;
-	if (!PaintRoundAvatar(p, x, ay, kAvatar, who)) PaintMonogram(p, x, ay, kAvatar, Initials(name));
+	// A player who wears a season's frame shows it here too, around a square picture.
+	const LeagueFrame frame = who ? PlayerFrameOf(who) : LeagueFrame();
+	if (frame.Shown()) PaintFramedAvatar(p, x, ay, kAvatar, who, name, frame);
+	else if (!PaintRoundAvatar(p, x, ay, kAvatar, who)) PaintMonogram(p, x, ay, kAvatar, Initials(name));
 	int tx = x + kAvatar + 14;
 	const PatronInfo patron = who ? PatronOf(who) : PatronInfo();
 	const LeagueBadge badge = who ? PlayerBadgeOf(who) : LeagueBadge();
