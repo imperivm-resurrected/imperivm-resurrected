@@ -213,7 +213,7 @@ TourneyFormat TourneyFormatOf(const TourneySummary &t);
 // a double elimination, whose two brackets count their rounds apart.
 int TourneyRoundCount(const TourneySummary &t);
 // The map of a round (1 is the first); the last one repeats. Empty when the tournament gives none.
-// The rounds of a full bracket for this many places: 4 -> 2, 8 -> 3, 16 -> 4, 32 -> 5.
+// The rounds of a full bracket for this many places: 4 -> 2, 8 -> 3, 16 -> 4, 32 -> 5; never more than 16.
 int TourneyFullRounds(int maxEntries);
 // The map of a round of a bracket of rounds: a list that covers every round counts from the final backwards (with fewer players
 // than places the final keeps its map); a shorter one runs from the first round and its last map repeats.
