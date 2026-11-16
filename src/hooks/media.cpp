@@ -25,6 +25,7 @@
 #include "hooks/tweaks.h"
 #include "addr/state.h"
 #include "addr/media.h"
+#include "core/winpath.h"
 
 namespace {
 typedef HRESULT(WINAPI *CoCreateInstance_t)(REFCLSID, LPUNKNOWN, DWORD, REFIID, LPVOID *);
@@ -268,15 +269,6 @@ const CLSID kClsidAMMultiMediaStream = {0x49c47ce5, 0x9ba4, 0x11d0, {0x82, 0x12,
 const IID kIidAMMultiMediaStream = {0xbebe595c, 0x9a6f, 0x11d0, {0x8f, 0xde, 0x00, 0xc0, 0x4f, 0xd9, 0x18, 0x9d}};
 const unsigned kOpenFileSlot = 16;
 
-std::string Narrow(const std::wstring &w)
-{
-	if (w.empty()) return "";
-	const int n = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), static_cast<int>(w.size()), nullptr, 0, nullptr, nullptr);
-	std::string out(n > 0 ? n : 0, '\0');
-	if (n > 0) WideCharToMultiByte(CP_UTF8, 0, w.c_str(), static_cast<int>(w.size()), &out[0], n, nullptr, nullptr);
-	return out;
-}
-
 bool IsRelative(const wchar_t *p)
 {
 	return p[0] && p[0] != L'\\' && p[0] != L'/' && !(p[1] == L':');
@@ -301,7 +293,7 @@ HRESULT STDMETHODCALLTYPE HookOpenFile(void *self, LPCWSTR file, DWORD flags)
 				std::lock_guard<std::mutex> lock(g_dirsLock);
 				first = g_reportedMovies.insert(rel).second;
 			}
-			if (first) LogI("video", "%s from %s", Narrow(rel).c_str(), Narrow(dir).c_str());
+			if (first) LogI("video", "%s from %s", winpath::Utf8(rel).c_str(), winpath::Utf8(dir).c_str());
 			return g_origOpenFile(self, full.c_str(), flags);
 		}
 	}

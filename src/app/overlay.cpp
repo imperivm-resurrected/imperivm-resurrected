@@ -29,6 +29,7 @@
 #include "ui/uikit.h"
 #include "addr/state.h"
 #include "addr/world.h"
+#include "core/winpath.h"
 
 namespace {
 
@@ -121,14 +122,6 @@ void EnsureFonts(float s)
 	g_bold = make(13, FW_SEMIBOLD);
 	g_small = make(11, FW_NORMAL);
 	g_fontScale = s;
-}
-
-std::wstring Wide(const std::string &s)
-{
-	const int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), static_cast<int>(s.size()), nullptr, 0);
-	std::wstring w(n, L'\0');
-	if (n) MultiByteToWideChar(CP_UTF8, 0, s.c_str(), static_cast<int>(s.size()), &w[0], n);
-	return w;
 }
 
 std::wstring Fmt(const wchar_t *fmt, double v)
@@ -288,7 +281,7 @@ std::vector<Row> BuildRows(bool perf, bool net, bool compact, const std::vector<
 			r.kind = Row::kPeer;
 			r.swatch = PeerColor(n, i);
 			r.hasSwatch = true;
-			std::wstring name = Wide(n.name);
+			std::wstring name = winpath::WidenLenient(n.name, CP_UTF8);
 			if (name.size() > 16) name = name.substr(0, 15) + L"…";
 			r.cells.push_back({name, ui::pal::text});
 			if (!n.connected) {

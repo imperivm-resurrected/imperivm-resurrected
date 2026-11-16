@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "core/strutil.h"
+#include "core/winpath.h"
 
 namespace {
 
@@ -45,29 +46,11 @@ bool ValidUtf8(const std::string &s)
 	return s.empty() || MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, s.data(), static_cast<int>(s.size()), nullptr, 0) > 0;
 }
 
-std::wstring Wide(const std::string &s, UINT cp)
-{
-	if (s.empty()) return std::wstring();
-	const int n = MultiByteToWideChar(cp, 0, s.data(), static_cast<int>(s.size()), nullptr, 0);
-	std::wstring w(n > 0 ? n : 0, L'\0');
-	if (n > 0) MultiByteToWideChar(cp, 0, s.data(), static_cast<int>(s.size()), &w[0], n);
-	return w;
-}
-
-std::string Utf8(const std::wstring &w)
-{
-	if (w.empty()) return std::string();
-	const int n = WideCharToMultiByte(CP_UTF8, 0, w.data(), static_cast<int>(w.size()), nullptr, 0, nullptr, nullptr);
-	std::string s(n > 0 ? n : 0, '\0');
-	if (n > 0) WideCharToMultiByte(CP_UTF8, 0, w.data(), static_cast<int>(w.size()), &s[0], n, nullptr, nullptr);
-	return s;
-}
-
 // The game's files are UTF-8; an old one saved in the Windows code page is read as such.
 std::string AsUtf8(const std::string &raw)
 {
 	std::string s = raw.size() >= 3 && raw.compare(0, 3, "\xEF\xBB\xBF") == 0 ? raw.substr(3) : raw;
-	return ValidUtf8(s) ? s : Utf8(Wide(s, 1252));
+	return ValidUtf8(s) ? s : winpath::Utf8(winpath::Widen(s, 1252));
 }
 
 void AppendCodePoint(std::string &out, unsigned cp)
@@ -661,7 +644,7 @@ HelpNavSpot HelpNavFor(const HelpDoc &doc, const HelpIndex &index, const HelpPla
 
 std::string HelpFold(const std::string &utf8)
 {
-	std::wstring w = Wide(utf8, CP_UTF8);
+	std::wstring w = winpath::WidenLenient(utf8, CP_UTF8);
 	if (w.empty()) return std::string();
 	CharLowerBuffW(&w[0], static_cast<DWORD>(w.size()));
 	const int n = FoldStringW(MAP_COMPOSITE, w.c_str(), static_cast<int>(w.size()), nullptr, 0);
@@ -674,7 +657,7 @@ std::string HelpFold(const std::string &utf8)
 		if (c >= 0x300 && c <= 0x36f) continue;
 		out += c == L'\n' || c == L'\t' ? L' ' : c;
 	}
-	return Utf8(out);
+	return winpath::Utf8(out);
 }
 
 std::vector<HelpHit> HelpSearch(const HelpDoc &doc, const HelpIndex &index, const std::string &query, size_t limit)
