@@ -455,6 +455,19 @@ void SteamLeaveForContent(bool strictMap)
 	});
 }
 
+namespace {
+// Sets a value of the room this computer holds, once for each room and value: the game thread publishes the same value again and again.
+void PublishOwned(const char *key, const std::string &value)
+{
+	static std::map<std::string, std::pair<uint64, std::string>> sent;
+	if (!g_lobby || S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) != g_steam.me) return;
+	std::pair<uint64, std::string> &last = sent[key];
+	if (last.first == g_lobby && last.second == value) return;
+	last = {g_lobby, value};
+	S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, key, value.c_str());
+}
+}
+
 void SteamSetHosting(bool hosting)
 {
 	if (!SteamOnlineReady()) return;
@@ -474,15 +487,7 @@ void SteamPublishOptions(const std::string &text)
 	if (text == pending && GetTickCount() - pendingTick < 2000) return;
 	pending = text;
 	pendingTick = GetTickCount();
-	Post([text] {
-		static std::string last;
-		static uint64 lastLobby = 0;
-		if (!g_lobby || S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) != g_steam.me) return;
-		if (text == last && g_lobby == lastLobby) return;
-		last = text;
-		lastLobby = g_lobby;
-		S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, "opts", text.c_str());
-	});
+	Post([text] { PublishOwned("opts", text); });
 }
 
 void SteamPublishRules(unsigned rules)
@@ -491,29 +496,13 @@ void SteamPublishRules(unsigned rules)
 	char text[16];
 	sprintf_s(text, "%x", rules);
 	const std::string value = text;
-	Post([value] {
-		static std::string last;
-		static uint64 lastLobby = 0;
-		if (!g_lobby || S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) != g_steam.me) return;
-		if (value == last && g_lobby == lastLobby) return;
-		last = value;
-		lastLobby = g_lobby;
-		S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, "rules", value.c_str());
-	});
+	Post([value] { PublishOwned("rules", value); });
 }
 
 void SteamPublishTeamColors(bool on)
 {
 	if (!SteamOnlineReady()) return;
-	Post([on] {
-		static int last = -1;
-		static uint64 lastLobby = 0;
-		if (!g_lobby || S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) != g_steam.me) return;
-		if ((on ? 1 : 0) == last && g_lobby == lastLobby) return;
-		last = on ? 1 : 0;
-		lastLobby = g_lobby;
-		S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, "tcol", on ? "1" : "0");
-	});
+	Post([on] { PublishOwned("tcol", on ? "1" : "0"); });
 }
 
 void SteamPublishSlots(const std::string &text)
@@ -524,15 +513,7 @@ void SteamPublishSlots(const std::string &text)
 	if (text == pending && GetTickCount() - pendingTick < 2000) return;
 	pending = text;
 	pendingTick = GetTickCount();
-	Post([text] {
-		static std::string last;
-		static uint64 lastLobby = 0;
-		if (!g_lobby || S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) != g_steam.me) return;
-		if (text == last && g_lobby == lastLobby) return;
-		last = text;
-		lastLobby = g_lobby;
-		S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, "slots", text.c_str());
-	});
+	Post([text] { PublishOwned("slots", text); });
 }
 
 void SteamPublishSaveColors(const std::string &text)
@@ -626,15 +607,7 @@ OnlineMapStatus SteamSaveStatus()
 void SteamPublishWatchers(int count)
 {
 	if (!SteamOnlineReady()) return;
-	Post([count] {
-		static int last = -1;
-		static uint64 lastLobby = 0;
-		if (!g_lobby || S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) != g_steam.me) return;
-		if (count == last && g_lobby == lastLobby) return;
-		last = count;
-		lastLobby = g_lobby;
-		S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, "watching", count > 0 ? std::to_string(count).c_str() : "");
-	});
+	Post([count] { PublishOwned("watching", count > 0 ? std::to_string(count) : std::string()); });
 }
 
 int SteamRoomWatchers()
