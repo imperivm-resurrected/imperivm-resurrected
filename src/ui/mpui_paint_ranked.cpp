@@ -1141,12 +1141,18 @@ void PaintPlayerCard(Painter &p, const State &st, int x, int y, int w, int h)
 	PaintFramedAvatar(p, ix, y + (tight ? 18 : 24), av, id, name, ready ? c.frame : LeagueFrame());
 	const int tx = ix + av + 20, tw = iw - av - 20;
 	const LeagueBadge badge = PlayerBadgeOf(id);
+	// A patron's laurel before the name, which takes the colour of the honour roll.
+	const PatronInfo patron = id ? PatronOf(id) : PatronInfo();
+	const int laurel = patron.tier != PatronTier::None ? (tight ? 26 : 30) : 0;
+	const int nameX = tx + (laurel ? laurel + 6 : 0), nameY = y + (tight ? 14 : 20);
 	Body(p, tight ? 22 : 24);
-	const int nameW = tw - LeagueBadgeRoom(badge), nameY = y + (tight ? 14 : 20);
-	RawText(p, tx, nameY, nameW, 34, name, pal::text);
+	const int nameW = std::max(20, tw - (nameX - tx) - LeagueBadgeRoom(badge));
 	p.raw = true;
-	DrawBadgeAfterName(p, tx, nameY, nameW, 34, name, badge, mx, my);
+	if (laurel) DrawPatron(p, tx, nameY + (34 - laurel) / 2, laurel, nameX, nameY, nameW, 34, name, patron.tier, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	else p.Text(nameX, nameY, nameW, 34, name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	DrawBadgeAfterName(p, nameX, nameY, nameW, 34, name, badge, mx, my);
 	p.raw = false;
+	if (laurel) PatronHotspot(p, tx, nameY + (34 - laurel) / 2, laurel, patron, mx, my, kPatronLink);
 	const std::string title = ready ? LeagueTitleLabel(c.title) : std::string();
 	if (!title.empty()) {
 		p.Font(4);
