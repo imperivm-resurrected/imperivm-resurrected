@@ -148,7 +148,7 @@ struct State {
 	ListState list;
 	ListGeom listGeom;
 	bool mouseDown = false;
-	std::string search, renameText, error;
+	std::string search, renameText;
 	int focus = kFocusNone;
 	EditState edit;
 	bool renaming = false;
@@ -164,7 +164,6 @@ struct State {
 	std::string nameText, pendingSave;
 	bool pendingSaveOnline = false;
 	bool escArmed = false, escFire = false;
-	std::string defaultName;
 	bool pendingCancel = false;
 	int mouseX = 0, mouseY = 0;
 	MpSaveInfo info;
@@ -308,11 +307,6 @@ bool TabMatches(const SaveRec &r, int tab)
 	}
 }
 
-bool ListMatches(const State &, const SaveRec &r, int tab)
-{
-	return TabMatches(r, tab);
-}
-
 const SaveRec *FindRec(const State &st, const std::string &path)
 {
 	const std::string want = Lower(path);
@@ -354,7 +348,7 @@ View BuildView(const State &st)
 	for (const SaveRec &r : st.recs) {
 		if (!st.showAuto && r.autosave) continue;
 		for (int t = 0; t < kTabCount; t++) {
-			if (ListMatches(st, r, t)) v.counts[t]++;
+			if (TabMatches(r, t)) v.counts[t]++;
 		}
 	}
 	struct Group {
@@ -366,7 +360,7 @@ View BuildView(const State &st)
 	const std::string needle = Lower(st.search);
 	for (size_t i = 0; i < st.recs.size(); i++) {
 		const SaveRec &r = st.recs[i];
-		if (!ListMatches(st, r, st.tab) || (!st.showAuto && r.autosave)) continue;
+		if (!TabMatches(r, st.tab) || (!st.showAuto && r.autosave)) continue;
 		if (!needle.empty() && Lower(r.name).find(needle) == std::string::npos && Lower(r.campaign).find(needle) == std::string::npos) continue;
 		const std::string key = SaveLibGroupKey(r);
 		auto it = index.find(key);
@@ -461,7 +455,6 @@ void FixSelection(State &st)
 	}
 	if (st.anchor.empty()) st.anchor = PrimaryId(st);
 	st.renaming = false;
-	st.error.clear();
 }
 
 void ClearSelection(State &st)
@@ -488,7 +481,6 @@ void SetPrimary(State &st, const std::string &path, const std::string &group)
 	if (want == st.selPath) return;
 	st.selPath = want;
 	st.renaming = false;
-	st.error.clear();
 	if (st.focus == kFocusRename) st.focus = kFocusNone;
 	UpdatePlayers(st);
 }
@@ -564,17 +556,6 @@ void ClickRow(State &st, const Row &r, bool ctrl, bool shift)
 		return;
 	}
 	SelectRow(st, r);
-}
-
-void Rescan(State &st)
-{
-	st.recs = SaveLibScan();
-	st.gameNames = SaveLibLoadGameNames(SaveLibActiveProfile());
-	st.activeProfile = ModsMountedProfile().name;
-	st.activeHash = ModsProfileGameplayHash(ModsMountedProfile());
-	const std::string before = st.selPath;
-	FixSelection(st);
-	if (st.selPath != before) UpdatePlayers(st);
 }
 
 void ScrollToSelection(State &st)
@@ -811,9 +792,8 @@ void DoAction(State &st, int action, int arg)
 		if ((GetKeyState(VK_CONTROL) & 0x8000) || (GetKeyState(VK_SHIFT) & 0x8000)) break;
 		ClearSelection(st);
 		st.renaming = false;
-		st.error.clear();
 		if (st.mode == 1) {
-			st.nameText = st.defaultName;
+			st.nameText.clear();
 			st.focus = kFocusName;
 			EditSelectAll(st.nameText, st.edit);
 		}
@@ -922,7 +902,6 @@ void DoAction(State &st, int action, int arg)
 			st.renameGroup = !st.selGroup.empty();
 			st.renaming = true;
 			st.renameText = st.renameGroup ? PartidaTitle(st, st.selGroup, sel->kind) : sel->name;
-			st.error.clear();
 			st.focus = kFocusRename;
 			EditSelectAll(st.renameText, st.edit);
 			ScrollToSelection(st);
@@ -933,7 +912,6 @@ void DoAction(State &st, int action, int arg)
 		break;
 	case kRenameCancel:
 		st.renaming = false;
-		st.error.clear();
 		if (st.focus == kFocusRename) st.focus = kFocusNone;
 		break;
 	case kRenameOk:
@@ -956,14 +934,12 @@ void DoAction(State &st, int action, int arg)
 			while (!name.empty() && name.back() == ' ') name.pop_back();
 			const std::string err = SaveLibRename(rec, name);
 			if (!err.empty()) {
-				st.error = err;
 				ModUiToast(err, true);
 				break;
 			}
 			const std::string ext = rec.vfsPath.substr(rec.vfsPath.size() - 4);
 			const std::string newPath = rec.vfsPath.substr(0, rec.vfsPath.find_last_of('/') + 1) + name + (rec.campaign.empty() ? "" : "-" + rec.campaign) + ext;
 			st.renaming = false;
-			st.error.clear();
 			if (st.focus == kFocusRename) st.focus = kFocusNone;
 			st.recs = SaveLibScan();
 			st.selPath = Lower(newPath);
@@ -1043,7 +1019,6 @@ void FieldKey(State &st, UINT msg, WPARAM wp)
 		FixSelection(st);
 		UpdatePlayers(st);
 	}
-	if (changed && st.focus == kFocusRename) st.error.clear();
 }
 
 bool TabSkip(int action)
@@ -1112,7 +1087,7 @@ void PaintList(Painter &p, State &st, const View &v)
 		const std::string text = filtered ? "No games match the search." : "There are no saved games.";
 		p.Text(lx + 10, ly + 14, lw - 20, l.full ? 30 : 24, text, pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		bool hiddenAutos = false;
-		for (const SaveRec &r : st.recs) hiddenAutos = hiddenAutos || (r.autosave && ListMatches(st, r, st.tab));
+		for (const SaveRec &r : st.recs) hiddenAutos = hiddenAutos || (r.autosave && TabMatches(r, st.tab));
 		if (!st.showAuto && !filtered && hiddenAutos) {
 			p.Font(3);
 			p.Text(lx + 10, ly + (l.full ? 48 : 40), lw - 20, l.full ? 24 : 20, "Check \"Show autosaves\" to see the automatic ones too.", pal::textDim,
@@ -1646,7 +1621,6 @@ void OpenSaveImpl(void *dlg)
 	g_s.recs = SaveLibScan();
 	g_s.gameNames = SaveLibLoadGameNames(SaveLibActiveProfile());
 	g_s.nameText.clear();
-	g_s.defaultName = g_s.nameText;
 	g_s.focus = kFocusName;
 	EditSelectAll(g_s.nameText, g_s.edit);
 	g_s.activeProfile = ModsMountedProfile().name;
