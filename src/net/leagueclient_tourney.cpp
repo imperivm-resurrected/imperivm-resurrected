@@ -123,7 +123,7 @@ void WaitAfter(const HttpReply &r)
 	if (r.status != 429) return;
 	Json j;
 	const int seconds = !r.body.empty() && Json::Parse(r.body, j) ? TourneyParseRefusal(j).retryAfter : 0;
-	const DWORD wait = std::max(kQuietMinMs, std::min(kQuietMaxMs, static_cast<DWORD>(seconds) * 1000));
+	const DWORD wait = static_cast<DWORD>(std::max<int64_t>(kQuietMinMs, std::min<int64_t>(kQuietMaxMs, static_cast<int64_t>(seconds) * 1000)));
 	LogI("league", "the league asked to wait %u s before reading the tournaments again", static_cast<unsigned>(wait / 1000));
 	std::lock_guard<std::mutex> lock(g_mx);
 	g_quietUntil = GetTickCount() + wait;
