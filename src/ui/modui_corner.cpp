@@ -15,6 +15,15 @@ using namespace modui_impl;
 
 namespace modui_impl {
 namespace {
+void BlendPixel(uint32_t *buf, int w, int h, int x, int y, uint32_t color, unsigned a)
+{
+	if (x < 0 || x >= w || y < 0 || y >= h || !a) return;
+	uint32_t &dst = buf[static_cast<size_t>(y) * w + x];
+	const uint32_t rb = ((color & 0xff00ff) * a + (dst & 0xff00ff) * (255 - a)) >> 8;
+	const uint32_t g = ((color & 0x00ff00) * a + (dst & 0x00ff00) * (255 - a)) >> 8;
+	dst = 0xff000000u | (rb & 0xff00ff) | (g & 0x00ff00);
+}
+
 void LoadDiscordIcon()
 {
 	g_icon.loaded = true;
@@ -122,19 +131,12 @@ void DrawDiscordCorner(uint32_t *buf, int w, int h)
 	const int cy = (r.top + r.bottom) / 2;
 	const uint32_t tint = hover ? 0x5865F2u : PixelOf(pal::text);
 	const int shadow = std::max(1, size / 24);
-	auto blend = [&](int x, int y, uint32_t color, unsigned a) {
-		if (x < 0 || x >= w || y < 0 || y >= h || !a) return;
-		uint32_t &dst = buf[static_cast<size_t>(y) * w + x];
-		const uint32_t rb = ((color & 0xff00ff) * a + (dst & 0xff00ff) * (255 - a)) >> 8;
-		const uint32_t g = ((color & 0x00ff00) * a + (dst & 0x00ff00) * (255 - a)) >> 8;
-		dst = 0xff000000u | (rb & 0xff00ff) | (g & 0x00ff00);
-	};
 	for (int pass = 0; pass < 2; pass++) {
 		for (int y = 0; y < size; y++) {
 			for (int x = 0; x < size; x++) {
 				const unsigned alpha = icon[static_cast<size_t>(y) * size + x] >> 24;
-				if (pass == 0) blend(r.left + x + shadow, r.top + y + shadow, 0x000000u, alpha * 130 / 255);
-				else blend(r.left + x, r.top + y, tint, alpha * (hover ? 255 : 235) / 255);
+				if (pass == 0) BlendPixel(buf, w, h, r.left + x + shadow, r.top + y + shadow, 0x000000u, alpha * 130 / 255);
+				else BlendPixel(buf, w, h, r.left + x, r.top + y, tint, alpha * (hover ? 255 : 235) / 255);
 			}
 		}
 	}
@@ -195,21 +197,14 @@ void DrawVersionCorner(uint32_t *buf, int w, int h)
 	const int size = std::max(36, std::min(72, h / 20));
 	const int margin = std::max(8, size / 5);
 	const int left = w - margin - (inkRight + 1), top = h - margin - (pad + tm.tmAscent);
-	auto blend = [&](int x, int y, uint32_t color, unsigned a) {
-		if (x < 0 || x >= w || y < 0 || y >= h || !a) return;
-		uint32_t &dst = buf[static_cast<size_t>(y) * w + x];
-		const uint32_t rb = ((color & 0xff00ff) * a + (dst & 0xff00ff) * (255 - a)) >> 8;
-		const uint32_t g = ((color & 0x00ff00) * a + (dst & 0x00ff00) * (255 - a)) >> 8;
-		dst = 0xff000000u | (rb & 0xff00ff) | (g & 0x00ff00);
-	};
 	const int shadow = std::max(1, static_cast<int>(s + 0.5f));
 	for (int pass = 0; pass < 2; pass++) {
 		for (int y = 0; y < ch; y++) {
 			for (int x = 0; x < cw; x++) {
 				const unsigned a = (g_versionCanvas.bits[static_cast<size_t>(y) * cw + x] >> 8) & 0xff;
 				if (!a) continue;
-				if (pass == 0) blend(left + x + shadow, top + y + shadow, 0x000000u, a * 190 / 255);
-				else blend(left + x, top + y, PixelOf(pal::textDim), a);
+				if (pass == 0) BlendPixel(buf, w, h, left + x + shadow, top + y + shadow, 0x000000u, a * 190 / 255);
+				else BlendPixel(buf, w, h, left + x, top + y, PixelOf(pal::textDim), a);
 			}
 		}
 	}
