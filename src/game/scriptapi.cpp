@@ -4,8 +4,6 @@
 #include <windows.h>
 
 #include "game/scriptapi.h"
-#include "MinHook.h"
-#include "hooks/hookcount.h"
 #include "core/log.h"
 #include "game/civs.h"
 #include "game/cmdcheck.h"
@@ -14,6 +12,7 @@
 #include "mods/modvars.h"
 #include "game/scriptevents.h"
 #include "game/specials.h"
+#include "game/gamehook.h"
 
 #include <mutex>
 #include <set>
@@ -335,8 +334,7 @@ const char *__fastcall HookInit(void *self, void *edx, void **regs, unsigned n, 
 void InstallScriptApi(bool knownExe)
 {
 	if (!knownExe) return;
-	if (HookCreate(reinterpret_cast<void *>(addr::kScriptEngineInit), reinterpret_cast<void *>(&HookInit), reinterpret_cast<void **>(&g_origInit)) != MH_OK ||
-		HookEnable(reinterpret_cast<void *>(addr::kScriptEngineInit)) != MH_OK) {
+	if (!HookFunction(addr::kScriptEngineInit, &HookInit, &g_origInit)) {
 		LogE("script", "api: could not hook CScriptEngine::Init");
 		return;
 	}

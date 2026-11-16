@@ -4,14 +4,13 @@
 #define NOMINMAX
 #include <windows.h>
 
-#include "MinHook.h"
 #include "core/config.h"
 #include "core/log.h"
 #include "game/allycolors.h"
 #include "game/controls.h"
 #include "game/diplomacyrules.h"
 #include "game/gamelayout.h"
-#include "hooks/hookcount.h"
+#include "game/gamehook.h"
 
 #include <cstdint>
 
@@ -146,9 +145,7 @@ void __fastcall HookPlayerSerialize(void *player, void *edx, int *archive)
 void InstallAllyColors(bool knownExe)
 {
 	if (!knownExe) return;
-	void *target = reinterpret_cast<void *>(addr::kPlayerSerialize);
-	const bool ok = HookCreate(target, reinterpret_cast<void *>(&HookPlayerSerialize), reinterpret_cast<void **>(&g_origSerialize)) == MH_OK &&
-		HookEnable(target) == MH_OK;
+	const bool ok = HookFunction(addr::kPlayerSerialize, &HookPlayerSerialize, &g_origSerialize);
 	if (ok) LogI("game", "ally and enemy colours: hooked");
 	else LogE("game", "ally and enemy colours: could not hook CVXPlayer::Serialize; the option stays off");
 }

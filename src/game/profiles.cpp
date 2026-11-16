@@ -12,7 +12,6 @@
 #include <string>
 #include <vector>
 
-#include "MinHook.h"
 #include "addr/state.h"
 #include "addr/ui.h"
 #include "addr/engine.h"
@@ -20,7 +19,7 @@
 #include "game/civs.h"
 #include "game/cmdcheck.h"
 #include "game/gametext.h"
-#include "hooks/hookcount.h"
+#include "game/gamehook.h"
 
 namespace {
 
@@ -135,7 +134,7 @@ std::string GameDir()
 
 bool HookAt(uintptr_t at, void *detour, void **orig, const char *what)
 {
-	if (HookCreate(reinterpret_cast<void *>(at), detour, orig) == MH_OK && HookEnable(reinterpret_cast<void *>(at)) == MH_OK) return true;
+	if (HookFunction(at, detour, orig)) return true;
 	LogE("profile", "could not hook %s", what);
 	return false;
 }

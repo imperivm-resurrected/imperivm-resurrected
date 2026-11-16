@@ -4,8 +4,7 @@
 #include <windows.h>
 
 #include "game/scripterrors.h"
-#include "MinHook.h"
-#include "hooks/hookcount.h"
+#include "game/gamehook.h"
 #include "core/log.h"
 #include "mods/mods.h"
 #include "mods/features.h"
@@ -129,13 +128,11 @@ void ScriptErrorsInit(bool knownExe)
 {
 	CreateDirectoryA((GameDir() + "\\Logs").c_str(), nullptr);
 	if (!knownExe) return;
-	if (HookCreate(reinterpret_cast<void *>(addr::kReportError), reinterpret_cast<void *>(&HookReportError), &g_origReportError) != MH_OK ||
-		HookEnable(reinterpret_cast<void *>(addr::kReportError)) != MH_OK) {
+	if (!HookFunction(addr::kReportError, &HookReportError, &g_origReportError)) {
 		LogE("script", "errors: could not hook CScriptCompiler::ReportError");
 		return;
 	}
-	if (HookCreate(reinterpret_cast<void *>(addr::kLoadScriptFile), reinterpret_cast<void *>(&HookLoadScriptFile), reinterpret_cast<void **>(&g_origLoadScript)) != MH_OK ||
-		HookEnable(reinterpret_cast<void *>(addr::kLoadScriptFile)) != MH_OK) {
+	if (!HookFunction(addr::kLoadScriptFile, &HookLoadScriptFile, &g_origLoadScript)) {
 		LogE("script", "errors: could not hook LoadScriptFile (errors will appear without the script name)");
 	}
 	LogI("script", "errors: hooked");

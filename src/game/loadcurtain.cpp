@@ -8,13 +8,11 @@
 #include <cstdint>
 #include <vector>
 
-#include "MinHook.h"
-#include "hooks/hookcount.h"
-
 #include "addr/ui.h"
 #include "addr/world.h"
 #include "core/log.h"
 #include "game/loadcurtain.h"
+#include "game/gamehook.h"
 #include "hooks/gameload.h"
 
 // A match exists, with its bars and windows, before its view is painted for the first time: until then the screen keeps
@@ -92,11 +90,6 @@ int __fastcall HookMapViewRender(void *self, void *edx)
 	if (painted && g_up) g_painted = true;
 	return painted;
 }
-
-bool Hook(uintptr_t target, void *detour, void **original)
-{
-	return HookCreate(reinterpret_cast<void *>(target), detour, original) == MH_OK && HookEnable(reinterpret_cast<void *>(target)) == MH_OK;
-}
 }
 
 bool LoadCurtainUp()
@@ -120,12 +113,12 @@ void LoadCurtainOnMatchView(void (*callback)())
 void InstallLoadCurtain(bool knownExe)
 {
 	if (!knownExe) return;
-	const bool ok = Hook(addr::kCreateGameFromSettings, reinterpret_cast<void *>(&HookCreateGame), reinterpret_cast<void **>(&g_origCreateGame)) &&
-		Hook(addr::kLoadReplayFile, reinterpret_cast<void *>(&HookLoadReplay), reinterpret_cast<void **>(&g_origLoadReplay)) &&
-		Hook(addr::kRunMainMenuLoop, reinterpret_cast<void *>(&HookMainMenuLoop), reinterpret_cast<void **>(&g_origMainMenuLoop)) &&
-		Hook(addr::kMapViewCtor, reinterpret_cast<void *>(&HookMapViewCtor), reinterpret_cast<void **>(&g_origMapViewCtor)) &&
-		Hook(addr::kMapViewRender, reinterpret_cast<void *>(&HookMapViewRender), reinterpret_cast<void **>(&g_origMapViewRender)) &&
-		Hook(addr::kShowConquestGameDialog, reinterpret_cast<void *>(&HookConquestMap), reinterpret_cast<void **>(&g_origConquestMap)) &&
+	const bool ok = HookFunction(addr::kCreateGameFromSettings, &HookCreateGame, &g_origCreateGame) &&
+		HookFunction(addr::kLoadReplayFile, &HookLoadReplay, &g_origLoadReplay) &&
+		HookFunction(addr::kRunMainMenuLoop, &HookMainMenuLoop, &g_origMainMenuLoop) &&
+		HookFunction(addr::kMapViewCtor, &HookMapViewCtor, &g_origMapViewCtor) &&
+		HookFunction(addr::kMapViewRender, &HookMapViewRender, &g_origMapViewRender) &&
+		HookFunction(addr::kShowConquestGameDialog, &HookConquestMap, &g_origConquestMap) &&
 		InstallGameLoadHook(knownExe);
 	if (ok) OnGameLoading(&LowerForLoad);
 	LogAt(ok ? kLogInfo : kLogError, "render", "loading curtain: %s", ok ? "ready" : "NOT available");

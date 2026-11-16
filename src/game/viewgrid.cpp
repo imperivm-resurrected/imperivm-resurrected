@@ -7,12 +7,10 @@
 #include <cstdint>
 #include <cstring>
 
-#include "MinHook.h"
-#include "hooks/hookcount.h"
-
 #include "addr/world.h"
 #include "core/log.h"
 #include "game/viewgrid.h"
+#include "game/gamehook.h"
 
 // The engine marks what to redraw on a grid of 128 x 96 cells of 16 px (2048 x 1536) and copies the screen when the view
 // scrolls. Past 2048 px the rest of the screen is never painted again, and past 1536 px the marks are written beyond the
@@ -80,7 +78,6 @@ void InstallViewGrid(bool knownExe)
 	bool expected = true;
 	for (const CodeSwitch &s : kSwitches) expected = expected && memcmp(reinterpret_cast<void *>(s.site), s.grid, s.n) == 0;
 	const bool ok = expected &&
-		HookCreate(reinterpret_cast<void *>(addr::kVisibleMgrSetViewRect), reinterpret_cast<void *>(&HookSetViewRect), reinterpret_cast<void **>(&g_origSetViewRect)) == MH_OK &&
-		HookEnable(reinterpret_cast<void *>(addr::kVisibleMgrSetViewRect)) == MH_OK;
+		HookFunction(addr::kVisibleMgrSetViewRect, &HookSetViewRect, &g_origSetViewRect);
 	LogAt(ok ? kLogInfo : kLogError, "render", "views larger than 2048x1536: %s", ok ? "redrawn whole" : expected ? "NOT handled (hook failed)" : "NOT handled (the code is not the expected one)");
 }

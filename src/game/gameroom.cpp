@@ -11,8 +11,6 @@
 #include <algorithm>
 #include <atomic>
 
-#include "MinHook.h"
-#include "hooks/hookcount.h"
 #include "game/civs.h"
 #include "core/crashlog.h"
 #include "game/gameroom.h"
@@ -26,6 +24,7 @@
 #include "game/roomprefs.h"
 #include "game/roomcountdown.h"
 #include "game/roomname.h"
+#include "game/gamehook.h"
 #include "core/leaguemaps.h"
 #include "core/log.h"
 #include "core/names.h"
@@ -903,12 +902,6 @@ void __fastcall HookPickerDtor(void *picker)
 	g_origPickerDtor(picker);
 }
 
-bool HookAt(uintptr_t addr, void *detour, void **orig)
-{
-	void *t = reinterpret_cast<void *>(addr);
-	return HookCreate(t, detour, orig) == MH_OK && HookEnable(t) == MH_OK;
-}
-
 typedef int(__fastcall *ApplyToGame_t)(void *self, void *edx, char *opts);
 typedef unsigned(__cdecl *AskYesNo_t)(const char *text);
 ApplyToGame_t g_origApplyToGame = nullptr;
@@ -1321,20 +1314,20 @@ void __fastcall HookRefreshOptions(void *room)
 void GameRoomInstall(bool knownExe)
 {
 	if (!knownExe) return;
-	const bool ok = HookAt(addr::kMpGameOnShow, reinterpret_cast<void *>(&HookOnShow), reinterpret_cast<void **>(&g_origOnShow)) &&
-		HookAt(addr::kMpGameDtor, reinterpret_cast<void *>(&HookDtor), reinterpret_cast<void **>(&g_origDtor)) &&
-		HookAt(addr::kPickerOnShow, reinterpret_cast<void *>(&HookPickerOnShow), reinterpret_cast<void **>(&g_origPickerOnShow)) &&
-		HookAt(addr::kPickerDtor, reinterpret_cast<void *>(&HookPickerDtor), reinterpret_cast<void **>(&g_origPickerDtor)) &&
-		HookAt(addr::kSetSlotInfo, reinterpret_cast<void *>(&HookSetSlotInfo), reinterpret_cast<void **>(&g_origSetSlotInfo)) &&
-		HookAt(addr::kApplyToGame, reinterpret_cast<void *>(&HookApplyToGame), reinterpret_cast<void **>(&g_origApplyToGame)) &&
-		HookAt(addr::kAskYesNo, reinterpret_cast<void *>(&HookAskYesNo), reinterpret_cast<void **>(&g_origAskYesNo)) &&
-		HookAt(addr::kBuildSettings, reinterpret_cast<void *>(&HookBuildSettings), reinterpret_cast<void **>(&g_origBuildSettings)) &&
-		HookAt(addr::kEnvGetInt, reinterpret_cast<void *>(&HookEnvGetInt), reinterpret_cast<void **>(&g_origEnvGetInt)) &&
-		HookAt(addr::kDiplomacyExecute, reinterpret_cast<void *>(&HookDiplomacyExecute), reinterpret_cast<void **>(&g_origDiplomacyExecute)) &&
-		HookAt(addr::kDiplomacyApply, reinterpret_cast<void *>(&HookDiplomacyApply), reinterpret_cast<void **>(&g_origDiplomacyApply)) &&
-		HookAt(addr::kCreateSettings, reinterpret_cast<void *>(&HookCreateSettings), reinterpret_cast<void **>(&g_origCreateSettings)) &&
-		HookAt(addr::kRefreshOptions, reinterpret_cast<void *>(&HookRefreshOptions), reinterpret_cast<void **>(&g_origRefreshOptions));
-	if (ok) HookAt(addr::kCreateWorldCore, reinterpret_cast<void *>(&HookCreateWorldCore), reinterpret_cast<void **>(&g_origCreateWorldCore));
+	const bool ok = HookFunction(addr::kMpGameOnShow, &HookOnShow, &g_origOnShow) &&
+		HookFunction(addr::kMpGameDtor, &HookDtor, &g_origDtor) &&
+		HookFunction(addr::kPickerOnShow, &HookPickerOnShow, &g_origPickerOnShow) &&
+		HookFunction(addr::kPickerDtor, &HookPickerDtor, &g_origPickerDtor) &&
+		HookFunction(addr::kSetSlotInfo, &HookSetSlotInfo, &g_origSetSlotInfo) &&
+		HookFunction(addr::kApplyToGame, &HookApplyToGame, &g_origApplyToGame) &&
+		HookFunction(addr::kAskYesNo, &HookAskYesNo, &g_origAskYesNo) &&
+		HookFunction(addr::kBuildSettings, &HookBuildSettings, &g_origBuildSettings) &&
+		HookFunction(addr::kEnvGetInt, &HookEnvGetInt, &g_origEnvGetInt) &&
+		HookFunction(addr::kDiplomacyExecute, &HookDiplomacyExecute, &g_origDiplomacyExecute) &&
+		HookFunction(addr::kDiplomacyApply, &HookDiplomacyApply, &g_origDiplomacyApply) &&
+		HookFunction(addr::kCreateSettings, &HookCreateSettings, &g_origCreateSettings) &&
+		HookFunction(addr::kRefreshOptions, &HookRefreshOptions, &g_origRefreshOptions);
+	if (ok) HookFunction(addr::kCreateWorldCore, &HookCreateWorldCore, &g_origCreateWorldCore);
 	LogAt(ok ? kLogInfo : kLogError, "room", "interface: %s", ok ? "connected to the mod's interface" : "could NOT hook");
 }
 

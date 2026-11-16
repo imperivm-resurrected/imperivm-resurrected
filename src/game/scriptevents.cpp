@@ -3,14 +3,13 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include <windows.h>
 
-#include "MinHook.h"
-#include "hooks/hookcount.h"
 #include "core/log.h"
 #include "mods/mods.h"
 #include "mods/modvars.h"
 #include "game/scriptevents.h"
 #include "game/gamelayout.h"
 #include "game/i1engine.h"
+#include "game/gamehook.h"
 
 #include <atomic>
 #include <string>
@@ -242,30 +241,23 @@ void __fastcall HookStartVictory(void *map)
 void InstallScriptEvents(bool knownExe)
 {
 	if (!knownExe) return;
-	if (HookCreate(reinterpret_cast<void *>(addr::kStartVictoryScripts), reinterpret_cast<void *>(&HookStartVictory),
-			reinterpret_cast<void **>(&g_origStartVictory)) != MH_OK ||
-		HookEnable(reinterpret_cast<void *>(addr::kStartVictoryScripts)) != MH_OK) {
+	if (!HookFunction(addr::kStartVictoryScripts, &HookStartVictory, &g_origStartVictory)) {
 		LogE("script", "events: could not hook StartVictoryScripts");
 		return;
 	}
-	if (HookCreate(reinterpret_cast<void *>(addr::kProcessDeath), reinterpret_cast<void *>(&HookProcessDeath), reinterpret_cast<void **>(&g_origProcessDeath)) != MH_OK ||
-		HookEnable(reinterpret_cast<void *>(addr::kProcessDeath)) != MH_OK) {
+	if (!HookFunction(addr::kProcessDeath, &HookProcessDeath, &g_origProcessDeath)) {
 		LogE("script", "events: could not hook ProcessDeath (OnObjectDie will not be available)");
 	}
-	if (HookCreate(reinterpret_cast<void *>(addr::kOnKilled), reinterpret_cast<void *>(&HookOnKilled), reinterpret_cast<void **>(&g_origOnKilled)) != MH_OK ||
-		HookEnable(reinterpret_cast<void *>(addr::kOnKilled)) != MH_OK) {
+	if (!HookFunction(addr::kOnKilled, &HookOnKilled, &g_origOnKilled)) {
 		LogE("script", "events: could not hook OnKilled (OnObjectKill will not be available)");
 	}
-	if (HookCreate(reinterpret_cast<void *>(addr::kSettlementSetPlayer), reinterpret_cast<void *>(&HookSettlementSetPlayer), reinterpret_cast<void **>(&g_origSettlementSetPlayer)) != MH_OK ||
-		HookEnable(reinterpret_cast<void *>(addr::kSettlementSetPlayer)) != MH_OK) {
+	if (!HookFunction(addr::kSettlementSetPlayer, &HookSettlementSetPlayer, &g_origSettlementSetPlayer)) {
 		LogE("script", "events: could not hook Settlement::SetPlayer (OnSettlementCaptured will not be available)");
 	}
-	if (HookCreate(reinterpret_cast<void *>(addr::kDeclareDefeated), reinterpret_cast<void *>(&HookDeclareDefeated), reinterpret_cast<void **>(&g_origDeclareDefeated)) != MH_OK ||
-		HookEnable(reinterpret_cast<void *>(addr::kDeclareDefeated)) != MH_OK) {
+	if (!HookFunction(addr::kDeclareDefeated, &HookDeclareDefeated, &g_origDeclareDefeated)) {
 		LogE("script", "events: could not hook DeclarePlayersDefeated (OnPlayerDefeated will not be available)");
 	}
-	if (HookCreate(reinterpret_cast<void *>(addr::kCalcAttackOutcome), reinterpret_cast<void *>(&HookCalcAttackOutcome), reinterpret_cast<void **>(&g_origCalcAttack)) != MH_OK ||
-		HookEnable(reinterpret_cast<void *>(addr::kCalcAttackOutcome)) != MH_OK) {
+	if (!HookFunction(addr::kCalcAttackOutcome, &HookCalcAttackOutcome, &g_origCalcAttack)) {
 		LogE("script", "events: could not hook CalcAttackOutcome (OnAttackResolved will not be available)");
 	}
 	LogI("script", "events: hooked");

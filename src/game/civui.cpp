@@ -3,10 +3,9 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include <windows.h>
 
-#include "MinHook.h"
-#include "hooks/hookcount.h"
 #include "hooks/selectionguard.h"
 #include "game/civs.h"
+#include "game/gamehook.h"
 #include "core/log.h"
 
 #include <cstdint>
@@ -76,7 +75,7 @@ void InstallCivUi(bool knownExe)
 	};
 	int failed = 0;
 	for (const Site &s : sites) {
-		if (HookCreate(reinterpret_cast<void *>(s.addr), s.detour, s.orig) != MH_OK || HookEnable(reinterpret_cast<void *>(s.addr)) != MH_OK) {
+		if (!HookFunction(s.addr, s.detour, s.orig)) {
 			LogE("civilizations", "could not hook %s", s.what);
 			failed++;
 		}

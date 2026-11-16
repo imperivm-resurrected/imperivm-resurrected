@@ -12,8 +12,7 @@
 #include <vector>
 
 #include "game/packrules.h"
-#include "MinHook.h"
-#include "hooks/hookcount.h"
+#include "game/gamehook.h"
 #include "core/json.h"
 #include "core/log.h"
 #include "i18n/tr.h"
@@ -222,7 +221,7 @@ void InstallPackRules(bool knownExe)
 		{addr::kScriptObjIsValidTarget, reinterpret_cast<void *>(&HookIsValidTarget), reinterpret_cast<void **>(&g_origIsValidTarget), "CVXScriptObj::IsValidTarget"},
 	};
 	for (const auto &h : hooks) {
-		if (HookCreate(reinterpret_cast<void *>(h.at), h.detour, h.orig) != MH_OK || HookEnable(reinterpret_cast<void *>(h.at)) != MH_OK) {
+		if (!HookFunction(h.at, h.detour, h.orig)) {
 			LogE("game", "rules: could not hook %s; the protected classes of content packs are not protected", h.what);
 		}
 	}

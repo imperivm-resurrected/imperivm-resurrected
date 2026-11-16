@@ -8,13 +8,12 @@
 #include <algorithm>
 #include <memory>
 
-#include "MinHook.h"
-#include "hooks/hookcount.h"
 #include "core/json.h"
 #include "core/log.h"
 #include "mods/mods.h"
 #include "game/gamelayout.h"
 #include "game/specials.h"
+#include "game/gamehook.h"
 #include "i18n/tr.h"
 #include "mods/features.h"
 #include "addr/engine.h"
@@ -308,8 +307,7 @@ void *__cdecl HookBuildStats(void *out, void *cls)
 void InstallSpecials(bool knownExe)
 {
 	if (!knownExe) return;
-	if (HookCreate(reinterpret_cast<void *>(addr::kBuildStatsText), reinterpret_cast<void *>(&HookBuildStats), reinterpret_cast<void **>(&g_origBuildStats)) != MH_OK ||
-		HookEnable(reinterpret_cast<void *>(addr::kBuildStatsText)) != MH_OK) {
+	if (!HookFunction(addr::kBuildStatsText, &HookBuildStats, &g_origBuildStats)) {
 		LogE("specials", "could not hook BuildObjTypeStatsText (they will not appear in the class sheet)");
 		return;
 	}

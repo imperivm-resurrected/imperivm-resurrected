@@ -10,9 +10,6 @@
 #include <cstring>
 #include <string>
 
-#include "MinHook.h"
-#include "hooks/hookcount.h"
-
 #include "addr/state.h"
 #include "addr/ui.h"
 #include "addr/world.h"
@@ -23,6 +20,7 @@
 #include "game/mapfog.h"
 #include "game/quickicons.h"
 #include "game/zoomview.h"
+#include "game/gamehook.h"
 #include "hooks/displaymode.h"
 
 namespace {
@@ -408,10 +406,8 @@ void ZoomViewGameTick()
 void InstallZoomView(bool knownExe)
 {
 	if (!knownExe) return;
-	const bool ok = HookCreate(reinterpret_cast<void *>(addr::kZoomMapOnDraw), reinterpret_cast<void *>(&HookZoomDraw), reinterpret_cast<void **>(&g_origDraw)) == MH_OK &&
-		HookEnable(reinterpret_cast<void *>(addr::kZoomMapOnDraw)) == MH_OK;
-	const bool hideOk = HookCreate(reinterpret_cast<void *>(addr::kZoomMapHide), reinterpret_cast<void *>(&HookZoomHide), reinterpret_cast<void **>(&g_origHide)) == MH_OK &&
-		HookEnable(reinterpret_cast<void *>(addr::kZoomMapHide)) == MH_OK;
+	const bool ok = HookFunction(addr::kZoomMapOnDraw, &HookZoomDraw, &g_origDraw);
+	const bool hideOk = HookFunction(addr::kZoomMapHide, &HookZoomHide, &g_origHide);
 	if (!hideOk) LogW("game", "zoom map: could not hook Hide; a box selection in progress is ended when the map stops being drawn");
 	if (!ok) g_failed = true;
 	LogAt(ok ? kLogInfo : kLogError, "game", "zoom map extras (group icons and box selection): %s", ok ? (ExtrasEnabled() ? "ready" : "ready, turned off in the options") : "NOT available");

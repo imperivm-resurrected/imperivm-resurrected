@@ -7,13 +7,12 @@
 
 #include <cstdint>
 
-#include "MinHook.h"
 #include "addr/state.h"
 #include "addr/ui.h"
 #include "addr/world.h"
 #include "core/log.h"
+#include "game/gamehook.h"
 #include "hooks/gamestate.h"
-#include "hooks/hookcount.h"
 
 namespace {
 const unsigned kMsgButtonClick = 0x12345604, kFlagVisible = 2, kFlagBusy = 0x100, kFlagDisabled = 0x200;
@@ -93,8 +92,7 @@ int ReadWide(void *text, wchar_t *out, int size)
 void InstallGameMenuHooks(bool knownExe)
 {
 	if (!knownExe) return;
-	void *target = reinterpret_cast<void *>(addr::kConfirmSetup);
-	if (HookCreate(target, reinterpret_cast<void *>(&HookConfirmSetup), reinterpret_cast<void **>(&g_origConfirmSetup)) != MH_OK || HookEnable(target) != MH_OK) {
+	if (!HookFunction(addr::kConfirmSetup, &HookConfirmSetup, &g_origConfirmSetup)) {
 		LogE("ui", "could not hook the confirmation dialog");
 	}
 }

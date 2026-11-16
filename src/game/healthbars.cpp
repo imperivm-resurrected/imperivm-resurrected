@@ -6,9 +6,6 @@
 
 #include <cstdint>
 
-#include "MinHook.h"
-#include "hooks/hookcount.h"
-
 #include "addr/state.h"
 #include "addr/world.h"
 #include "core/config.h"
@@ -17,6 +14,7 @@
 #include "game/healthbars.h"
 #include "game/loadcurtain.h"
 #include "game/viewprefs.h"
+#include "game/gamehook.h"
 
 // The key ` of the game shows the health bars: kHealthBarMode is 0 hidden, 1 every bar, 2 and 3 the allies or the others of the
 // local player (Ctrl+` cycles 1 to 3), and only CVXMapView::OnKey writes it. When the view of a match is made, the mod sets the mode
@@ -129,8 +127,7 @@ void HealthBarsGameTick()
 void InstallHealthBars(bool knownExe)
 {
 	if (!knownExe) return;
-	const bool ok = HookCreate(reinterpret_cast<void *>(addr::kDrawVisibleObjHealthBar), reinterpret_cast<void *>(&HookDrawBar), reinterpret_cast<void **>(&g_origDrawBar)) == MH_OK &&
-		HookEnable(reinterpret_cast<void *>(addr::kDrawVisibleObjHealthBar)) == MH_OK;
+	const bool ok = HookFunction(addr::kDrawVisibleObjHealthBar, &HookDrawBar, &g_origDrawBar);
 	if (!ok) g_origDrawBar = nullptr;
 	LoadCurtainOnMatchView(&OnMatchView);
 	g_installed = true;

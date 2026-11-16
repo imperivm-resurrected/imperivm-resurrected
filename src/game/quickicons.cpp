@@ -9,15 +9,13 @@
 #include <cstdio>
 #include <cstring>
 
-#include "MinHook.h"
-#include "hooks/hookcount.h"
-
 #include "addr/engine.h"
 #include "addr/script.h"
 #include "addr/state.h"
 #include "addr/world.h"
 #include "core/config.h"
 #include "core/log.h"
+#include "game/gamehook.h"
 #include "game/gamelayout.h"
 #include "game/quickicons.h"
 
@@ -502,8 +500,7 @@ void InstallQuickIcons(bool knownExe)
 	};
 	bool ok = true;
 	for (const Item &item : items) {
-		const bool created = HookCreate(reinterpret_cast<void *>(item.address), item.detour, item.original) == MH_OK;
-		const bool enabled = created && HookEnable(reinterpret_cast<void *>(item.address)) == MH_OK;
+		const bool enabled = HookFunction(item.address, item.detour, item.original);
 		if (!enabled) LogE("game", "group icons: hook %s NOT available", item.name);
 		ok = ok && enabled;
 	}
