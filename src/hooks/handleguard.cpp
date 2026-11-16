@@ -8,6 +8,7 @@
 #include <intrin.h>
 
 #include "hooks/handleguard.h"
+#include "hooks/codepatch.h"
 #include "hooks/hookcount.h"
 #include "core/log.h"
 #include "addr/script.h"
@@ -316,36 +317,21 @@ void __fastcall HookOnDeathFinish(char *unit)
 	g_origOnDeathFinish(unit);
 }
 
-bool PatchBytes(uintptr_t site, const uint8_t *expected, size_t n, const uint8_t *patch)
-{
-	uint8_t *at = reinterpret_cast<uint8_t *>(site);
-	if (memcmp(at, expected, n) != 0) return false;
-	DWORD old = 0;
-	if (!VirtualProtect(at, n, PAGE_EXECUTE_READWRITE, &old)) return false;
-	memcpy(at, patch, n);
-	VirtualProtect(at, n, old, &old);
-	FlushInstructionCache(GetCurrentProcess(), at, n);
-	return true;
-}
-
 bool CallInsteadOfIsDead(uintptr_t site, void *fn)
 {
 	const uint8_t original[] = {0x8b, 0x16, 0x8b, 0xce, 0xff, 0x52, 0x50};
-	uint8_t patch[7] = {0x8b, 0xce, 0xe8};
-	const int32_t rel = static_cast<int32_t>(reinterpret_cast<uintptr_t>(fn) - (site + 7));
-	memcpy(patch + 3, &rel, 4);
-	return PatchBytes(site, original, sizeof(original), patch);
+	uint8_t patch[7] = {0x8b, 0xce};
+	CallBytes(patch + 2, site + 2, reinterpret_cast<uintptr_t>(fn));
+	return PatchCode(site, original, patch, sizeof(original));
 }
 
 bool RedirectCall(uintptr_t site, uintptr_t expectedTarget, void *fn)
 {
-	uint8_t original[5] = {0xe8};
-	const int32_t oldRel = static_cast<int32_t>(expectedTarget - (site + 5));
-	memcpy(original + 1, &oldRel, 4);
-	uint8_t patch[5] = {0xe8};
-	const int32_t rel = static_cast<int32_t>(reinterpret_cast<uintptr_t>(fn) - (site + 5));
-	memcpy(patch + 1, &rel, 4);
-	return PatchBytes(site, original, sizeof(original), patch);
+	uint8_t original[5];
+	CallBytes(original, site, expectedTarget);
+	uint8_t patch[5];
+	CallBytes(patch, site, reinterpret_cast<uintptr_t>(fn));
+	return PatchCode(site, original, patch, sizeof(original));
 }
 
 }
