@@ -3265,7 +3265,6 @@ extern const TrRow kTrRows[] = {
 	{"Pairing", "Emparejamiento", "Abbinamento"},
 	{"The league looks for players of your level and widens the range the longer you wait: after 5 minutes, anyone.", "La liga busca jugadores de tu nivel y amplía el abanico cuanto más esperas: a los 5 minutos, cualquiera.", "La lega cerca giocatori del tuo livello e allarga la fascia quanto più aspetti: dopo 5 minuti, chiunque."},
 	{"You have 20 seconds to accept. The game makes the room with the season's options, locked.", "Tienes 20 segundos para aceptar. El juego crea la sala con las opciones de la temporada, bloqueadas.", "Hai 20 secondi per accettare. Il gioco crea la stanza con le opzioni della stagione, bloccate."},
-	{"If someone leaves before minute 3 the game is void and counts for nobody; leaving later is a loss.", "Si alguien se va antes del minuto 3 la partida es nula y no cuenta para nadie; irse después es una derrota.", "Se qualcuno esce prima del minuto 3 la partita è nulla e non conta per nessuno; uscire dopo è una sconfitta."},
 	{"Both games report the result and the league checks that they agree. If they don't, nothing counts until the team reviews the game.", "Los dos juegos informan del resultado y la liga comprueba que coinciden. Si no, nada cuenta hasta que el equipo revise la partida.", "Entrambi i giochi riportano il risultato e la lega controlla che coincidano. Altrimenti nulla conta finché il team non rivede la partita."},
 	{"Each game", "Cada partida", "Ogni partita"},
 	{"Between 5 and 40 Glory: about 20 against a rival of your level, more for beating a stronger one, less for a weaker one.", "Entre 5 y 40 de Gloria: unos 20 contra un rival de tu nivel, más si ganas a uno mejor y menos si ganas a uno peor.", "Tra 5 e 40 di Gloria: circa 20 contro un rivale del tuo livello, di più se batti uno più forte, di meno se uno più debole."},
@@ -3282,7 +3281,6 @@ extern const TrRow kTrRows[] = {
 	{"Declining a match", "Rechazar una partida", "Rifiutare una partita"},
 	{"Or letting the 20 seconds go by: 5 minutes out of the queue, twice as long for each other time that day.", "O dejar pasar los 20 segundos: 5 minutos fuera de la cola, el doble por cada otra vez ese día.", "O lasciar passare i 20 secondi: 5 minuti fuori dalla coda, il doppio per ogni altra volta quel giorno."},
 	{"Leaving a game", "Abandonar una partida", "Abbandonare una partita"},
-	{"A loss, and 10 minutes, 30 minutes, 2 hours and then a day out of the queue, by your abandons of the last 30 days.", "Una derrota, y 10 minutos, 30 minutos, 2 horas y luego un día fuera de la cola, según tus abandonos de los últimos 30 días.", "Una sconfitta, e 10 minuti, 30 minuti, 2 ore e poi un giorno fuori dalla coda, secondo i tuoi abbandoni degli ultimi 30 giorni."},
 	{"Reports that disagree", "Informes que no coinciden", "Rapporti che non coincidono"},
 	{"No Glory for anyone until the league's team reviews the game. You can report a problem from the result.", "Nadie gana ni pierde Gloria hasta que el equipo de la liga revise la partida. Puedes informar de un problema desde el resultado.", "Nessuno guadagna o perde Gloria finché il team della lega non rivede la partita. Puoi segnalare un problema dal risultato."},
 	{"Official and community", "Oficiales y de la comunidad", "Ufficiali e della comunità"},
@@ -3309,6 +3307,8 @@ extern const TrRow kTrRows[] = {
 	{"%s free places", "%s plazas libres", "%s posti liberi"},
 	{"Full", "Llena", "Piena"},
 	{"Open rooms", "Salas abiertas", "Stanze aperte"},
+	{"If someone leaves before minute 3 the game is void: no Glory for anyone, but whoever left is still locked out of the queue. Later, leaving is a loss.", "Si alguien se va antes del minuto 3 la partida es nula: nadie gana ni pierde Gloria, pero quien se fue queda igualmente fuera de la cola. Después, irse es una derrota.", "Se qualcuno esce prima del minuto 3 la partita è nulla: nessuno guadagna o perde Gloria, ma chi è uscito resta comunque fuori dalla coda. Dopo, uscire è una sconfitta."},
+	{"A loss (or a void game before minute 3), and 10 minutes, 30 minutes, 2 hours and then a day out of the queue, by your abandons of the last 30 days.", "Una derrota (o una partida nula antes del minuto 3), y 10 minutos, 30 minutos, 2 horas y luego un día fuera de la cola, según tus abandonos de los últimos 30 días.", "Una sconfitta (o una partita nulla prima del minuto 3), e 10 minuti, 30 minuti, 2 ore e poi un giorno fuori dalla coda, secondo i tuoi abbandoni degli ultimi 30 giorni."},
 	{"Problem reported: the league will review the game.", "Problema informado: la liga revisará la partida.", "Problema segnalato: la lega esaminerà la partita."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

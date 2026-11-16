@@ -161,7 +161,7 @@ void PaintWay(Painter &p, int x, int y, int w, int h)
 		{"I", "Search", "Pick 1 vs 1 or 2 vs 2, alone or with your duo. The league picks the map and the options of the season."},
 		{"II", "Pairing", "The league looks for players of your level and widens the range the longer you wait: after 5 minutes, anyone."},
 		{"III", "Accept", "You have 20 seconds to accept. The game makes the room with the season's options, locked."},
-		{"IV", "Play", "If someone leaves before minute 3 the game is void and counts for nobody; leaving later is a loss."},
+		{"IV", "Play", "If someone leaves before minute 3 the game is void: no Glory for anyone, but whoever left is still locked out of the queue. Later, leaving is a loss."},
 		{"V", "Result", "Both games report the result and the league checks that they agree. If they don't, nothing counts until the team reviews the game."},
 	};
 	int ty = y + 54;
@@ -225,7 +225,7 @@ void PaintFairPlay(Painter &p, int x, int y, int w, int h)
 	};
 	static const Rule kRules[] = {
 		{"Declining a match", "Or letting the 20 seconds go by: 5 minutes out of the queue, twice as long for each other time that day."},
-		{"Leaving a game", "A loss, and 10 minutes, 30 minutes, 2 hours and then a day out of the queue, by your abandons of the last 30 days."},
+		{"Leaving a game", "A loss (or a void game before minute 3), and 10 minutes, 30 minutes, 2 hours and then a day out of the queue, by your abandons of the last 30 days."},
 		{"Reports that disagree", "No Glory for anyone until the league's team reviews the game. You can report a problem from the result."},
 	};
 	for (const Rule &r : kRules) {

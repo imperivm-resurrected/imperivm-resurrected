@@ -606,14 +606,14 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 	if (byRounds && n.noshowFrom) rules.push_back({Tr("No-show"), FromText(n.noshowFrom)});
 	if (teams && (n.team.side == "a" || n.team.side == "b")) rules.push_back({Tr("Teams"), TrFmt("Set by the league: yours is team %s", {n.team.side == "a" ? "1" : "2"})});
 	rules.push_back({Tr("Settings"), PresetText(n.settings)});
-	// The map's view and the diplomacy, as the preset and the cup's switches leave them.
-	const TourneyRoomRules room = TourneyRulesOf(n.settings);
-	rules.push_back({Tr("Map view"), Tr(room.explored ? (room.fog ? "Explored, with fog of war" : "Explored, no fog of war") : room.fog ? "Unexplored, with fog of war" : "Unexplored, no fog of war")});
-	rules.push_back({Tr("Diplomacy"), Tr(room.lockedDiplomacy ? "Locked" : "Free")});
 	rules.push_back({Tr("Map"), map.Known() ? MapText(map) : Tr(n.pick.present ? "To be chosen" : "Chosen in the room")});
 	rules.push_back({Tr("Civilizations"), Tr(n.settings.hideCivs ? "Hidden until the game starts" : "Visible in the room")});
 	rules.push_back({Tr("Spectators"), TourneySpecDelay(n.settings) ? TrFmt("With a %s s delay", {std::to_string(TourneySpecDelay(n.settings))}) : Tr("No spectators")});
 	rules.push_back({Tr("After"), after});
+	// The map's view and the diplomacy, as the preset and the cup's switches leave them: last, the first rows to go when the card is short.
+	const TourneyRoomRules room = TourneyRulesOf(n.settings);
+	rules.push_back({Tr("Map view"), Tr(room.explored ? (room.fog ? "Explored, with fog of war" : "Explored, no fog of war") : room.fog ? "Unexplored, with fog of war" : "Unexplored, no fog of war")});
+	rules.push_back({Tr("Diplomacy"), Tr(room.lockedDiplomacy ? "Locked" : "Free")});
 	ly = ry + 54;
 	for (const auto &r : rules) {
 		if (ly + 26 > ry + rh || r.second.empty()) continue;
