@@ -27,29 +27,6 @@ void PaintField(Painter &p, const State &st, int x, int y, int w, int h, const s
 }
 
 namespace mpui_impl {
-namespace {
-std::string ModsColumn(const State &st, const OnlineLobby &g, COLORREF &color)
-{
-	color = pal::textDim;
-	const std::vector<OnlineMod> missing = MissingMods(st, g);
-	if (!missing.empty()) {
-		uint64_t bytes = 0;
-		for (const OnlineMod &m : missing) bytes += m.bytes;
-		color = pal::redText;
-		return Tr("Missing ") + std::to_string(missing.size()) + " (" + HumanBytes(bytes) + ")";
-	}
-	if (SteamRoomContent(g, st.ownKey) == RoomContent::kOtherGameplay) {
-		color = pal::redText;
-		return "Restart";
-	}
-	if (g.mods.empty()) return "Original";
-	color = pal::ok;
-	return "OK";
-}
-}
-}
-
-namespace mpui_impl {
 bool PaintAvatar(Painter &p, int x, int y, int size, uint64_t id)
 {
 	const std::shared_ptr<const OnlineAvatar> a = SteamAvatar(id);
@@ -173,8 +150,7 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis, 
 		g_detail.geomOut = ListGeom();
 		p.Font(0);
 		p.TextWrapped(dx + 24, dy + 24, dw - 48, 120,
-			vis.empty() ? "When there are rooms, pick one to see its content and join, or press \"Quick game\" and we'll find "
-						  "one for you."
+			vis.empty() ? "When there are rooms, pick one to see its content and join, or make your own with \"Create a room\"."
 						: "Pick a room from the list to see its content and join.",
 			pal::textDim);
 		return;
@@ -216,6 +192,13 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis, 
 	const int nameH = std::max(40, p.Measure(w, g.name));
 	p.TextWrapped(x, y, w, nameH, g.name, pal::redText);
 	y += nameH;
+	// Who hosts it and how full it is, under its name.
+	p.Font(3);
+	p.raw = true;
+	p.Text(x, y, w, 22, TrFmt("Hosted by %s", {g.host}) + "  \xC2\xB7  " + (g.playing ? Tr("In game") : TrFmt("%s of %s players", {std::to_string(g.players), std::to_string(g.maxPlayers)})),
+		pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	p.raw = false;
+	y += 26;
 
 	section("Game content");
 	y = PaintLinesInline(p, OnlineLobbyLines(st, g, true), x, y, w, 26) + 8;
@@ -233,11 +216,17 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis, 
 	if (canReturn) note(pal::ok, RGB(26, 36, 22), "You were in this game and your seat is still free: you can return to it.");
 
 	section("Players");
+	// The players there, then how many places are left: a list of empty rows says less.
+	int freePlaces = 0;
 	if (!g.slots.empty()) {
 		int n = 0;
 		bool hostShown = false;
 		for (const OnlineSlot &s : g.slots) {
 			if (s.type == 2) continue;
+			if (s.type != 1 && s.type != 3) {
+				freePlaces++;
+				continue;
+			}
 			n++;
 			const bool human = s.type == 3, ai = s.type == 1;
 			p.Text(x, y, 28, 26, std::to_string(n), pal::textDim);
@@ -271,11 +260,11 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis, 
 		y += 30;
 	}
 	else {
-		for (int i = 0; i < std::max(g.maxPlayers, static_cast<int>(g.playerNames.size())); i++) {
-			const bool taken = i < static_cast<int>(g.playerNames.size());
+		freePlaces = std::max(0, g.maxPlayers - static_cast<int>(g.playerNames.size()));
+		for (int i = 0; i < static_cast<int>(g.playerNames.size()); i++) {
 			p.Text(x, y, 28, 26, std::to_string(i + 1), pal::textDim);
-			const uint64_t pid = taken ? LobbyPlayerId(g, g.playerNames[i]) : 0;
-			const PatronInfo patron = taken ? PatronOf(pid) : PatronInfo();
+			const uint64_t pid = LobbyPlayerId(g, g.playerNames[i]);
+			const PatronInfo patron = PatronOf(pid);
 			const LeagueBadge badge = pid ? PlayerBadgeOf(pid) : LeagueBadge();
 			if (patron.tier != PatronTier::None) {
 				const int nameW = w - 54 - 90 - LeagueBadgeRoom(badge);
@@ -285,16 +274,24 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis, 
 			}
 			else {
 				const int nameW = w - 30 - (i == 0 ? 90 : 0) - LeagueBadgeRoom(badge);
-				p.Text(x + 30, y, nameW, 26, taken ? g.playerNames[i] : "Free", taken ? pal::text : pal::textDim);
-				if (taken) DrawBadgeAfterName(p, x + 30, y, nameW, 26, g.playerNames[i], badge, st.mouseX, st.mouseY, pid);
+				p.Text(x + 30, y, nameW, 26, g.playerNames[i], pal::text);
+				DrawBadgeAfterName(p, x + 30, y, nameW, 26, g.playerNames[i], badge, st.mouseX, st.mouseY, pid);
 			}
-			if (taken && LobbyPlayerId(g, g.playerNames[i])) {
+			if (pid) {
 				const int nameX = patron.tier != PatronTier::None ? x + 54 : x + 30;
 				ProfileHotspot(p, st, nameX, y, w - (nameX - x) - 90, 26, g.playerNames[i], kProfileLobbyName + i);
 			}
-			if (taken && i == 0) p.Text(x + w - 100, y, 100, 26, "host", pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+			if (i == 0) p.Text(x + w - 100, y, 100, 26, "host", pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 			y += 28;
 		}
+	}
+
+	if (freePlaces > 0) {
+		p.Font(3);
+		p.raw = true;
+		p.Text(x, y, w, 24, freePlaces == 1 ? Tr("1 free place") : TrFmt("%s free places", {std::to_string(freePlaces)}), pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+		p.raw = false;
+		y += 30;
 	}
 
 	section("Options");
@@ -499,6 +496,7 @@ std::string RoomSubline(const OnlineLobby &g, const std::vector<uint64_t> &frien
 	if (g.playing) {
 		const long long minutes = g.startedMs > 0 ? (nowMs - g.startedMs) / 60000 : -1;
 		parts.push_back(minutes >= 0 && minutes < 24 * 60 ? TrFmt("Playing for %s min", {std::to_string(minutes)}) : Tr("In game"));
+		if (g.spectators > 0) parts.push_back(TrFmt("%s watching", {std::to_string(g.spectators)}));
 	}
 	else if (!g.saveName.empty()) parts.push_back(TrFmt("Continues the saved game \"%s\"", {g.saveName}));
 	for (size_t i = 0; i < g.playerIds.size() && i < g.playerNames.size(); i++) {
@@ -519,19 +517,51 @@ void PaintList(Painter &p, const State &st)
 	const int mx = st.mouseX, my = st.mouseY;
 	const LobbyLayout l = LobbyLayoutFor(st.viewW, st.viewH);
 	const int m = l.margin, toolY = l.toolY;
-	static const char *const kFilterNames[] = {"All rooms", "Friends'", "No password", "Password protected", "Original game", "With my content", "With open slots", "In progress"};
-	const int filterW = 260;
-	Combo(p, st, m, toolY, filterW, kToolH, kFilterNames[st.filter < 0 || st.filter > 7 ? 0 : st.filter], kDropFilter, 0, true);
-	// Refresh closes the row over the table; the main action, Quick game, sits over the room's card and its Join.
+	// The filters as tabs with their counts: every room, those that can be joined, the games that can be watched and the friends'.
 	const int refreshW = std::max(GhostButtonWidth(p, "Refresh", false), GhostButtonWidth(p, "Searching...", false));
-	const int refreshX = m + l.tableW - refreshW, searchX = m + filterW + 12;
-	PaintField(p, st, searchX, toolY, std::min(440, refreshX - 12 - searchX), kToolH, st.searchInput, "Search room, host or map...", st.focus == kSearchField,
-		kFieldSearch);
+	const int refreshX = m + l.tableW - refreshW;
+	int fx = m;
+	{
+		static const struct {
+			int filter;
+			const char *label;
+		} kTabs[] = {{0, "Every room"}, {6, "Open to join"}, {7, "Live"}, {1, "Friends'"}};
+		const bool known = st.filter == 0 || st.filter == 6 || st.filter == 7 || st.filter == 1;
+		for (const auto &tab : kTabs) {
+			int count = 0;
+			for (const OnlineLobby &g : st.lobbies) count += RoomShown(st, g, tab.filter) ? 1 : 0;
+			const bool on = st.filter == tab.filter || (!known && tab.filter == 0);
+			SelectObject(p.dc, BrandFont(BrandFace::UiStrong, 13, p.s));
+			const int textW = p.CapsWidth(tab.label, 2);
+			const std::string n = std::to_string(count);
+			p.raw = true;
+			SelectObject(p.dc, BrandFont(BrandFace::Ui, 13, p.s));
+			const int countW = p.TextWidth(n) + 14;
+			p.raw = false;
+			const int w = 18 + textW + 8 + countW + 12;
+			const bool hot = !on && p.Hover(fx, toolY, w, kToolH, mx, my);
+			if (on) p.Fill(fx, toolY, w, kToolH, pal::selected);
+			p.Frame(fx, toolY, w, kToolH, on ? pal::edgeHot : hot ? pal::edgeHot : pal::edge);
+			if (on) p.Fill(fx, toolY + kToolH - 2, w, 2, pal::red);
+			SelectObject(p.dc, BrandFont(BrandFace::UiStrong, 13, p.s));
+			p.TextCaps(fx + 18, toolY, textW + 2, kToolH, tab.label, on || hot ? pal::text : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
+			const int cx = fx + 18 + textW + 8;
+			p.Fill(cx, toolY + (kToolH - 22) / 2, countW, 22, count && on ? pal::red : pal::button);
+			SelectObject(p.dc, BrandFont(BrandFace::Ui, 13, p.s));
+			p.raw = true;
+			p.Text(cx, toolY + (kToolH - 22) / 2, countW, 22, n, count ? pal::text : pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			p.raw = false;
+			if (!on) p.AddHit(fx, toolY, w, kToolH, kRoomFilter, tab.filter);
+			fx += w - 1;
+		}
+	}
+	const int searchX = fx + 12, searchW = std::min(420, refreshX - 12 - searchX);
+	if (searchW >= 160) {
+		PaintField(p, st, searchX, toolY, searchW, kToolH, st.searchInput, "Search room, host or map...", st.focus == kSearchField, kFieldSearch);
+	}
 	PaintGhostButton(p, refreshX, toolY, refreshW, kToolH, st.loading ? "Searching..." : "Refresh", kRefresh, false, st.ready && !st.loading, mx, my);
-	// Over the room's card: making a room, and the main action, Quick game.
-	const int createW = (l.detailW - 12) / 2;
-	PaintGhostButton(p, l.w - m - l.detailW, toolY, createW, kToolH, "Create a room", kCreate, false, true, mx, my);
-	p.Button(l.w - m - l.detailW + createW + 12, toolY, l.detailW - createW - 12, kToolH, "Quick game", kQuick, 0, mx, my, st.ready, true);
+	// Over the room's card, the main action: making a room.
+	p.Button(l.w - m - l.detailW, toolY, l.detailW, kToolH, "Create a room", kCreate, 0, mx, my, true, true);
 
 	const int tx = m, tw = l.tableW, ty = l.bodyY, th = l.bodyH, headH = 44, rowH = l.roomy ? 52 : 46;
 	PaintGlassCard(p, tx, ty, tw, th);
@@ -576,7 +606,7 @@ void PaintList(Painter &p, const State &st)
 		p.Font(0);
 		const std::string empty = !st.ready ? (st.status.empty() ? "Connecting to Steam..." : st.status)
 			: st.loading ? "Searching for rooms..."
-			: "There are no open rooms with this filter. Create one with \"Create a room\" and invite your friends.";
+			: "There are no rooms with this filter.";
 		p.TextWrapped(tx + 24, rowsTop + 24, tw - 48, 120, empty, pal::textDim);
 	}
 	// The rooms in their groups, each under its heading with its count. The table has no scroll of its own: when the arrows take the
@@ -660,14 +690,47 @@ void PaintList(Painter &p, const State &st)
 			p.Text(hx, y, nameW, rowH, hostText, g.friendHost ? pal::redText : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 			DrawBadgeAfterName(p, hx, y, nameW, rowH, hostText, hostBadge, mx, my, g.owner);
 		}
-		char watching[48];
-		snprintf(watching, sizeof(watching), Tr("In game  ·  %d watching").c_str(), g.spectators);
-		cell(2, g.playing ? (g.spectators > 0 ? std::string(watching) : std::string("In game")) : std::to_string(g.players) + " / " + std::to_string(g.maxPlayers),
+		cell(2, g.playing ? std::string("In game") : std::to_string(g.players) + " / " + std::to_string(g.maxPlayers),
 			g.players < g.maxPlayers && !g.playing ? pal::text : pal::textDim);
 		cell(3, LobbyMapLabel(g), pal::textDim);
-		COLORREF color;
-		const std::string mods = ModsColumn(st, g, color);
-		cell(4, mods, color);
+		// What the room is played with, after a dot that says whether this PC has it: green, amber when the game must restart, red when
+		// the content must be downloaded.
+		{
+			const OnlineMod *main = nullptr;
+			for (const OnlineMod &mod : g.mods) {
+				if (!main || (mod.gameplay && !main->gameplay)) main = &mod;
+			}
+			std::string content = main ? main->name : Tr("Original game");
+			if (g.mods.size() > 1) content += " +" + std::to_string(g.mods.size() - 1);
+			COLORREF dot = pal::ok;
+			const std::vector<OnlineMod> missing = MissingMods(st, g);
+			if (!missing.empty()) {
+				uint64_t bytes = 0;
+				for (const OnlineMod &mod : missing) bytes += mod.bytes;
+				dot = pal::bad;
+				content += "  \xC2\xB7  " + TrFmt("download %s", {HumanBytes(bytes)});
+			}
+			else if (SteamRoomContent(g, st.ownKey) == RoomContent::kOtherGameplay) {
+				dot = pal::warn;
+				content += "  \xC2\xB7  " + Tr("restart");
+			}
+			const int dx = textX(4);
+			p.Ellipse(dx, y + (rowH - 8) / 2, 8, 8, dot);
+			p.raw = true;
+			p.Text(dx + 16, y, cx[5] - dx - 28, rowH, content, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			p.raw = false;
+		}
+	}
+	// Under a short list, an invitation to make a room, so the table is not an empty box.
+	const int panelTop = vis.empty() ? rowsTop + 96 : cursor + 36, panelH = 160;
+	if (st.ready && panelTop + panelH <= ty + th - 16) {
+		const int pw = std::min(560, tw - 80), px = tx + (tw - pw) / 2;
+		p.Font(4);
+		p.TextCaps(px, panelTop, pw, 22, vis.empty() ? "No rooms here yet" : "None suits you?", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 2);
+		p.Font(0);
+		p.TextWrapped(px, panelTop + 32, pw, 48, "Make your own room: it shows in this list for everyone looking for a game.", pal::textDim);
+		const int bw = std::max(220, GhostButtonWidth(p, "Create a room", false));
+		PaintGhostButton(p, px + (pw - bw) / 2, panelTop + 96, bw, 44, "Create a room", kCreate, false, true, mx, my);
 	}
 	PaintLobbyDetail(p, st, vis, l);
 }

@@ -51,18 +51,6 @@ void DoAction(int action, int arg)
 		g_s.focus = kNoField;
 	}
 	switch (action) {
-	case kQuick: {
-		for (const OnlineLobby &g : g_s.lobbies) {
-			if (g.players < g.maxPlayers && !g.playing && !g.password && !g.kickedMe && SteamRoomContent(g, g_s.ownKey) == RoomContent::kSame) {
-				TryJoin(g, "");
-				return;
-			}
-		}
-		ModUiToast(g_s.ready ? "There are no free rooms with your content right now. Create one with \"Create a room\"."
-							 : Tr("Online is not available: ") + g_s.status);
-		SteamRefreshLobbies();
-		break;
-	}
 	case kRanked:
 		g_s.view = kViewRanked;
 		OfferLink();
@@ -475,6 +463,10 @@ void DoAction(int action, int arg)
 		g_s.leftByUser = true;
 		GameRoomCancel();
 		SteamLeaveForContent(true);
+		break;
+	case kRoomFilter:
+		g_s.filter = arg;
+		g_s.selected = 0;
 		break;
 	case kGTeamColors:
 		g_s.teamColors = !g_s.teamColors;

@@ -39,7 +39,7 @@ typedef int(__fastcall *GetId_t)(void *ctrl);
 
 extern OnMessage_t g_origMainMenu;
 enum Action {
-	kNone, kQuick, kRanked, kCreate, kClassic, kBack, kFilter, kSelect, kJoin, kChatFocus, kChatSend, kCancelSearch,
+	kNone, kRanked, kCreate, kClassic, kBack, kFilter, kSelect, kJoin, kChatFocus, kChatSend, kCancelSearch,
 	kAccept, kDecline, kQueue1v1, kQueue2v2, kFieldName, kFieldPass, kPlayersPrev, kPlayersNext, kMapPrev, kMapNext,
 	kCreateOk, kListView, kRefresh, kFieldJoinPass, kInvite, kChatBottom, kLeave, kHostGame, kEnterGame,
 	kGDropOpen, kGDropPick, kGDropClose, kGTeam, kGReady, kGStart, kGCancel,
@@ -56,6 +56,8 @@ enum Action {
 	kFieldRanked,
 	// "Team colours" of the room, turned on or off by the host.
 	kGTeamColors,
+	// The list's filter tabs: the filter is the argument.
+	kRoomFilter,
 };
 
 typedef int(__cdecl *HostGame_t)(int, unsigned, int);
@@ -416,6 +418,9 @@ extern void *g_mainMenu;
 extern Canvas g_canvas;
 std::string SpectatorText(bool enabled, int delay);
 bool RoomHasNoSeat(const State &st);
+// Whether the list shows a room with `filter` (State::filter: 0 all, 1 friends', 6 with open slots, 7 being played, and the older
+// ones) and the search typed.
+bool RoomShown(const State &st, const OnlineLobby &g, int filter);
 std::vector<int> Visible(const State &st);
 // The list's group of a room, in the order they show: one that can be joined (0), a game being played that can be watched (1), and one
 // nobody can come into now (2), full, playing or that kicked this player.

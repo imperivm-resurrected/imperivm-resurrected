@@ -140,23 +140,24 @@ int RoomGroup(const OnlineLobby &g)
 	return g.players >= g.maxPlayers ? 2 : 0;
 }
 
+bool RoomShown(const State &st, const OnlineLobby &g, int filter)
+{
+	if (g.playing && !g.friendHost && !g.specLobby) return false;
+	if (filter == 1 && !g.friendHost) return false;
+	if (filter == 2 && g.password) return false;
+	if (filter == 3 && !g.password) return false;
+	if (filter == 4 && !g.mods.empty()) return false;
+	if (filter == 5 && (g.mods.empty() || !HasAllMods(st, g))) return false;
+	if (filter == 6 && (g.playing || g.players >= g.maxPlayers)) return false;
+	if (filter == 7 && !(g.playing && g.specLobby)) return false;
+	return st.searchInput.empty() || Contains(g.name, st.searchInput) || Contains(g.host, st.searchInput) || Contains(LobbyMapLabel(g), st.searchInput);
+}
+
 std::vector<int> Visible(const State &st)
 {
 	std::vector<int> out;
 	for (size_t i = 0; i < st.lobbies.size(); i++) {
-		const OnlineLobby &g = st.lobbies[i];
-		if (g.playing && !g.friendHost && !g.specLobby) continue;
-		if (st.filter == 1 && !g.friendHost) continue;
-		if (st.filter == 2 && g.password) continue;
-		if (st.filter == 3 && !g.password) continue;
-		if (st.filter == 4 && !g.mods.empty()) continue;
-		if (st.filter == 5 && (g.mods.empty() || !HasAllMods(st, g))) continue;
-		if (st.filter == 6 && (g.playing || g.players >= g.maxPlayers)) continue;
-		if (st.filter == 7 && !(g.playing && g.specLobby)) continue;
-		if (!st.searchInput.empty() && !Contains(g.name, st.searchInput) && !Contains(g.host, st.searchInput) &&
-			!Contains(LobbyMapLabel(g), st.searchInput)) {
-			continue;
-		}
+		if (!RoomShown(st, st.lobbies[i], st.filter)) continue;
 		out.push_back(static_cast<int>(i));
 	}
 	auto key = [&](const OnlineLobby &g) -> std::string {
