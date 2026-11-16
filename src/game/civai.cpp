@@ -41,9 +41,7 @@ volatile bool g_active = false;
 // CVXScriptClass: its id, a std::string at +4.
 std::string ClassId(const char *cls)
 {
-	const unsigned size = layout::StringSize(cls + 4);
-	const char *text = layout::StringChars(cls + 4);
-	return size && size < 256 ? std::string(text, size) : std::string();
+	return layout::StringValue(cls + 4, 256);
 }
 
 void *FindClass(const char *name)
