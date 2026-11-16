@@ -852,10 +852,11 @@ void *__cdecl OpenImpl(const char *path, unsigned mode, void *err)
 			ModsOnSaveWritten(rel, GameIsMultiplayer());
 		}
 		else {
+			const bool peeked = SaveSessionLoadsIgnored();
 			SaveSessionOnLoad(rel);
-			ModVarsPendingFromSave(rel);
+			if (!peeked) ModVarsPendingFromSave(rel);
 			static std::map<std::string, DWORD> warned;
-			const std::string warning = SaveSessionLoadsIgnored() ? "" : ModsCheckSaveOnLoad(rel);
+			const std::string warning = peeked ? "" : ModsCheckSaveOnLoad(rel);
 			std::lock_guard<std::mutex> lock(g_lock);
 			if (!warning.empty() && GetTickCount() - warned[rel] > 30000) {
 				warned[rel] = GetTickCount();
