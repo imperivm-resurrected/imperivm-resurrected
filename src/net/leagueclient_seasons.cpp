@@ -33,7 +33,8 @@ const size_t kCardsKept = 64;
 struct Seasons {
 	bool loading = false, loaded = false;
 	DWORD at = 0;
-	std::string lang;
+	// The language of the list read, and of the last answer, a failure too.
+	std::string lang, asked;
 	std::vector<LeagueSeasonInfo> list;
 };
 
@@ -89,6 +90,7 @@ void FetchSeasons(std::string lang)
 	std::lock_guard<std::mutex> lock(g_mx);
 	g_seasons.loading = false;
 	g_seasons.at = GetTickCount();
+	g_seasons.asked = lang;
 	if (!ok) return;
 	g_seasons.loaded = true;
 	g_seasons.list = list;
@@ -206,7 +208,7 @@ void LeagueSeasonsRefresh(bool force)
 		std::lock_guard<std::mutex> lock(g_mx);
 		if (g_seasons.loading) return;
 		const DWORD keep = g_seasons.loaded ? kSeasonsKeepMs : kSeasonsRetryMs;
-		if (!force && g_seasons.at && GetTickCount() - g_seasons.at < keep && (!g_seasons.loaded || g_seasons.lang == lang)) return;
+		if (!force && g_seasons.at && GetTickCount() - g_seasons.at < keep && (!g_seasons.loaded || g_seasons.asked == lang)) return;
 		g_seasons.loading = true;
 	}
 	SafeThread(FetchSeasons, lang).detach();
