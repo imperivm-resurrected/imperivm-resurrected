@@ -45,6 +45,7 @@ UpdaterInfo::Check g_check = UpdaterInfo::kNotChecked;
 
 using modpaths::GameDir;
 using modpaths::IsFile;
+using modpaths::MakeDirs;
 
 std::string IniPath() { return GameDir() + "\\imperivm-mod.ini"; }
 
@@ -121,13 +122,6 @@ void Fail(const std::string &why)
 {
 	LogW("update", "%s", TrSource(why).c_str());
 	SetState(kFailed, why);
-}
-
-void MakeDirs(const std::string &path)
-{
-	for (size_t i = 3; i <= path.size(); i++) {
-		if (i == path.size() || path[i] == '\\') CreateDirectoryA(path.substr(0, i).c_str(), nullptr);
-	}
 }
 
 void DeleteTree(const std::string &dir)

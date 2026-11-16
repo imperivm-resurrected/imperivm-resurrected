@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <ctime>
 
+#include "mods/modpaths.h"
+
 namespace {
 
 const char kMagic[4] = {'I', 'G', 'B', 'C'};
@@ -62,12 +64,10 @@ bool ReadAll(const std::string &path, std::string &out)
 	return ok;
 }
 
-void MakeDirs(const std::string &path)
+void MakeDirs(std::string path)
 {
-	for (size_t i = 0; i < path.size(); i++) {
-		if ((path[i] == '\\' || path[i] == '/') && i > 2) CreateDirectoryA(path.substr(0, i).c_str(), nullptr);
-	}
-	CreateDirectoryA(path.c_str(), nullptr);
+	std::replace(path.begin(), path.end(), '/', '\\');
+	modpaths::MakeDirs(path);
 }
 
 void Collect(const std::string &dir, std::vector<GbCacheEntry> &out, std::vector<std::string> &stray, int64_t now)

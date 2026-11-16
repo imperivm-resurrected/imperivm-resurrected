@@ -33,4 +33,11 @@ inline bool IsFile(const std::string &p)
 	return a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY);
 }
 
+inline void MakeDirs(const std::string &path)
+{
+	for (size_t i = 3; i <= path.size(); i++) {
+		if (i == path.size() || path[i] == '\\') CreateDirectoryA(path.substr(0, i).c_str(), nullptr);
+	}
+}
+
 }
