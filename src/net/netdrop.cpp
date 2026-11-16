@@ -8,7 +8,6 @@
 #include <set>
 #include <string>
 #include <vector>
-#include <atomic>
 #include <cstdint>
 
 #include "net/netdrop.h"
@@ -263,32 +262,6 @@ void __cdecl HookCreateAI(int player, char *profile, short difficulty)
 	g_origCreateAI(player, profile, difficulty);
 }
 
-const unsigned kFastQuitMs = 2000;
-std::atomic<DWORD> g_fastUntil{0};
-unsigned g_savedQuit[2] = {0, 0};
-std::atomic<bool> g_fastActive{false};
-
-}
-
-void NetDropPeerLeft()
-{
-	unsigned *a = reinterpret_cast<unsigned *>(addr::kQuitInitial), *b = reinterpret_cast<unsigned *>(addr::kQuitSubsequent);
-	if (*b > 120000) return;
-	if (!g_fastActive.exchange(true)) {
-		g_savedQuit[0] = *a;
-		g_savedQuit[1] = *b;
-	}
-	*a = *b = kFastQuitMs;
-	g_fastUntil = GetTickCount() + 15000;
-	LogI("match", "online game: a player left the room (their game closed): treated as dropped without waiting");
-}
-
-void NetDropTick()
-{
-	if (!g_fastActive || static_cast<int>(GetTickCount() - g_fastUntil) < 0) return;
-	*reinterpret_cast<unsigned *>(addr::kQuitInitial) = g_savedQuit[0];
-	*reinterpret_cast<unsigned *>(addr::kQuitSubsequent) = g_savedQuit[1];
-	g_fastActive = false;
 }
 
 void NetDropReset()
