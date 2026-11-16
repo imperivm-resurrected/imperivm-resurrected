@@ -81,28 +81,6 @@ Canvas g_canvas;
 }
 
 namespace mpui_impl {
-namespace {
-const char *kMaps[] = {"Random map: Continent", "Random map: Islands", "Numantia", "Alesia", "Zama"};
-
-const ModInfo *Installed(const State &st, const OnlineMod &m)
-{
-	for (const ModInfo &i : st.mods) {
-		if (_stricmp(i.id.c_str(), m.id.c_str()) == 0) return &i;
-	}
-	return nullptr;
-}
-
-bool HasAllMods(const State &st, const OnlineLobby &g)
-{
-	for (const OnlineMod &m : g.mods) {
-		if (!Installed(st, m)) return false;
-	}
-	return true;
-}
-}
-}
-
-namespace mpui_impl {
 std::string SpectatorText(bool enabled, int delay)
 {
 	if (!enabled) return "No spectators";
@@ -144,10 +122,6 @@ bool RoomShown(const State &st, const OnlineLobby &g, int filter)
 {
 	if (g.playing && !g.friendHost && !g.specLobby) return false;
 	if (filter == 1 && !g.friendHost) return false;
-	if (filter == 2 && g.password) return false;
-	if (filter == 3 && !g.password) return false;
-	if (filter == 4 && !g.mods.empty()) return false;
-	if (filter == 5 && (g.mods.empty() || !HasAllMods(st, g))) return false;
 	if (filter == 6 && (g.playing || g.players >= g.maxPlayers)) return false;
 	if (filter == 7 && !(g.playing && g.specLobby)) return false;
 	return st.searchInput.empty() || Contains(g.name, st.searchInput) || Contains(g.host, st.searchInput) || Contains(LobbyMapLabel(g), st.searchInput);

@@ -84,12 +84,6 @@ void DoAction(int action, int arg)
 		g_s.view = kViewCreate;
 		break;
 	case kListView: g_s.view = kViewList; break;
-	case kClassic:
-		g_s.open = false;
-		g_s.classicPending = true;
-		g_s.classicPendingAt = GetTickCount();
-		LogI("lobby", "menu closed (classic menu)");
-		break;
 	case kBack:
 		if (g_s.view == kViewRanked && g_s.ranked.disputeMatch) {
 			RankedAction(kRkDisputeCancel);
@@ -103,7 +97,7 @@ void DoAction(int action, int arg)
 			RankedAction(kRkDuoInviteClose);
 			break;
 		}
-		if (g_s.recoverAsk || g_s.recoverWaitHost) {
+		if (g_s.recoverAsk) {
 			DoAction(kRecoverNo, 0);
 			break;
 		}
@@ -130,11 +124,6 @@ void DoAction(int action, int arg)
 			g_s.autoHost = false;
 			g_flow.backToMain = true;
 		}
-		break;
-	case kFilter:
-		g_s.filter = arg;
-		g_s.detail.scroll = 0;
-		g_s.selected = 0;
 		break;
 	case kRefresh: SteamRefreshLobbies(); break;
 	case kSort:
@@ -260,10 +249,6 @@ void DoAction(int action, int arg)
 			g_s.pickSort = std::max(0, std::min(2, arg));
 			g_s.pick.scroll = 0;
 		}
-		else if (g_s.dropKind == kDropFilter) {
-			g_s.filter = arg;
-			g_s.selected = 0;
-		}
 		else if (g_s.dropKind == kDropSaveGame) {
 			g_s.createSave = arg - 1;
 		}
@@ -321,12 +306,6 @@ void DoAction(int action, int arg)
 			s.race = real;
 			Predict(kPredRace, idx & 7, real);
 			GameRoomSetRace(idx & 7, real);
-		}
-		else if (g_s.dropKind == kDropAi) {
-			GameRoomSlot &s = g_s.game.slots[idx & 7];
-			s.nameSel = arg;
-			Predict(kPredAi, idx & 7, arg);
-			GameRoomSetSlotItem(idx & 7, arg);
 		}
 		else if (g_s.dropKind == kDropSites) {
 			if (arg >= 0 && arg < static_cast<int>(sizeof(kSiteChoices) / sizeof(kSiteChoices[0]))) {
@@ -404,13 +383,6 @@ void DoAction(int action, int arg)
 			Predict(kPredOptSel, o.id, arg);
 			GameRoomSetOption(o.id, arg);
 		}
-		break;
-	}
-	case kGTeam: {
-		GameRoomSlot &s = g_s.game.slots[arg & 7];
-		s.team = (s.team < 0 || s.team > 4 ? 0 : s.team + 1) % 5;
-		Predict(kPredTeam, arg & 7, s.team);
-		GameRoomCycleTeam(arg & 7);
 		break;
 	}
 	case kGReady: {
@@ -601,37 +573,24 @@ void DoAction(int action, int arg)
 		const RecoverInfo r = g_s.recover;
 		g_s.recoverAsk = false;
 		ClearOnlineGame();
-		if (r.host && r.saveIndex >= 0 && r.saveIndex < static_cast<int>(g_s.saves.size())) {
-			int players = 1;
-			if (!r.others.empty()) players += 1 + static_cast<int>(std::count(r.others.begin(), r.others.end(), ','));
-			g_s.createSave = r.saveIndex;
-			g_s.createPlayers = std::max(2, std::min(8, players));
-			g_s.createVisibility = 0;
-			g_s.passInput.clear();
-			g_s.nameInput = Tr("Game of ") + g_s.player;
-			g_s.createProfile = ModsMountedProfile().name;
-			DoAction(kCreateOk, 0);
+		RecordOnlineGameRaw(r);
+		std::vector<std::pair<uint64_t, std::string>> others;
+		std::vector<std::string> names;
+		for (size_t p = 0; !r.others.empty();) {
+			const size_t q = r.others.find(", ", p);
+			names.push_back(r.others.substr(p, q == std::string::npos ? std::string::npos : q - p));
+			if (q == std::string::npos) break;
+			p = q + 2;
 		}
-		else if (!r.host) {
-			RecordOnlineGameRaw(r);
-			std::vector<std::pair<uint64_t, std::string>> others;
-			std::vector<std::string> names;
-			for (size_t p = 0; !r.others.empty();) {
-				const size_t q = r.others.find(", ", p);
-				names.push_back(r.others.substr(p, q == std::string::npos ? std::string::npos : q - p));
-				if (q == std::string::npos) break;
-				p = q + 2;
-			}
-			size_t k = 0;
-			for (size_t p = 0; !r.otherIds.empty(); k++) {
-				const size_t q = r.otherIds.find(',', p);
-				const uint64_t id = _strtoui64(r.otherIds.substr(p, q == std::string::npos ? std::string::npos : q - p).c_str(), nullptr, 10);
-				if (id) others.push_back({id, k < names.size() ? names[k] : std::string("another player")});
-				if (q == std::string::npos) break;
-				p = q + 1;
-			}
-			RejoinRequest(r.hostId, r.hostName, others);
+		size_t k = 0;
+		for (size_t p = 0; !r.otherIds.empty(); k++) {
+			const size_t q = r.otherIds.find(',', p);
+			const uint64_t id = _strtoui64(r.otherIds.substr(p, q == std::string::npos ? std::string::npos : q - p).c_str(), nullptr, 10);
+			if (id) others.push_back({id, k < names.size() ? names[k] : std::string("another player")});
+			if (q == std::string::npos) break;
+			p = q + 1;
 		}
+		RejoinRequest(r.hostId, r.hostName, others);
 		break;
 	}
 	case kReturnGame: {
@@ -658,7 +617,6 @@ void DoAction(int action, int arg)
 		break;
 	case kRecoverNo:
 		g_s.recoverAsk = false;
-		g_s.recoverWaitHost = 0;
 		ClearOnlineGame();
 		break;
 	case kPickRow: {
@@ -717,21 +675,6 @@ void DoAction(int action, int arg)
 		g_s.syncConfirm = false;
 		g_s.syncPhase = 0;
 		break;
-	case kCancelSearch: RankedAction(kRkCancel); break;
-	case kAccept: RankedAction(kRkAccept); break;
-	case kDecline: RankedAction(kRkDecline); break;
-	case kQueue1v1:
-		RankedAction(kRkQueueDuel);
-		RankedAction(kRkSearch);
-		break;
-	case kQueue2v2:
-		RankedAction(kRkQueueTeam);
-		RankedAction(kRkSearch);
-		break;
-	case kPlayersPrev: g_s.createPlayers = std::max(2, g_s.createPlayers - 1); break;
-	case kPlayersNext: g_s.createPlayers = std::min(8, g_s.createPlayers + 1); break;
-	case kMapPrev: g_s.createMap = (g_s.createMap + 4) % 5; break;
-	case kMapNext: g_s.createMap = (g_s.createMap + 1) % 5; break;
 	case kCreateOk: {
 		if (g_s.createSave >= 0 && g_s.createSave < static_cast<int>(g_s.saves.size())) {
 			const SaveEntry &save = g_s.saves[g_s.createSave];

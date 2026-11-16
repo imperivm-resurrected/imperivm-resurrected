@@ -526,11 +526,10 @@ void PaintList(Painter &p, const State &st)
 			int filter;
 			const char *label;
 		} kTabs[] = {{0, "Every room"}, {6, "Open to join"}, {7, "Live"}, {1, "Friends'"}};
-		const bool known = st.filter == 0 || st.filter == 6 || st.filter == 7 || st.filter == 1;
 		for (const auto &tab : kTabs) {
 			int count = 0;
 			for (const OnlineLobby &g : st.lobbies) count += RoomShown(st, g, tab.filter) ? 1 : 0;
-			const bool on = st.filter == tab.filter || (!known && tab.filter == 0);
+			const bool on = st.filter == tab.filter;
 			SelectObject(p.dc, BrandFont(BrandFace::UiStrong, 13, p.s));
 			const int textW = p.CapsWidth(tab.label, 2);
 			const std::string n = std::to_string(count);
@@ -946,31 +945,12 @@ void PaintRejoin(Painter &p, const State &st)
 void PaintRecover(Painter &p, const State &st)
 {
 	const int mx = st.mouseX, my = st.mouseY;
-	const RecoverInfo &r = st.recover;
-	const bool waiting = !st.recoverAsk;
-	const Dialog d = DialogBegin(p, st.viewW, st.viewH, 560, 250, waiting ? "Waiting for the host" : "Your last online game");
+	const Dialog d = DialogBegin(p, st.viewW, st.viewH, 560, 250, "Your last online game");
 	p.Font(0);
-	std::string text;
-	if (waiting) {
-		text = Tr("As soon as ") + r.hostName + Tr(" recovers the game, you'll join it automatically.");
-	}
-	else if (r.host) {
-		const uint64_t min = r.saveAge / 60;
-		text = Tr("With ") + (r.others.empty() ? Tr("other players") : r.others) + Tr(". Last saved: ") +
-			(min < 1 ? Tr("less than a minute ago") : std::to_string(min) + (min == 1 ? Tr(" minute ago") : Tr(" minutes ago"))) +
-			Tr(". Continue it? A room will be created that loads it and the others will be able to join.");
-	}
-	else {
-		text = Tr("Your game with ") + r.hostName + Tr(" was cut off. If it's still going you can return to it: the game will pause for a few seconds while "
-			"you join.");
-	}
+	const std::string text = Tr("Your game with ") + st.recover.hostName + Tr(" was cut off. If it's still going you can return to it: the game will pause "
+		"for a few seconds while you join.");
 	p.TextWrapped(d.x + 24, d.y + 62, d.w - 48, 110, text, pal::text);
-	if (waiting) {
-		PaintBusyBar(p, d.x + 24, d.y + 150, d.w - 48, 8, GetTickCount());
-		DialogButtons(p, d, {{"Cancel", kRecoverNo}}, mx, my, true);
-		return;
-	}
-	DialogButtons(p, d, {{r.host ? "Continue the game" : "Return to the game", kRecoverYes, 0, true}, {"Not now", kRecoverNo}}, mx, my);
+	DialogButtons(p, d, {{"Return to the game", kRecoverYes, 0, true}, {"Not now", kRecoverNo}}, mx, my);
 }
 
 COLORREF PlayerColor(const GameRoomSnapshot &g, int index)
@@ -1011,10 +991,6 @@ std::vector<std::string> DropItems(const State &st, int &sel)
 	if (st.dropKind == kDropPickSort) {
 		sel = st.pickSort;
 		return {"Name", "Players", "Size"};
-	}
-	if (st.dropKind == kDropFilter) {
-		sel = st.filter;
-		return {"All rooms", "Friends'", "No password", "Password protected", "Original game", "With my content", "With open slots", "In progress"};
 	}
 	if (st.dropKind == kDropSaveGame) {
 		sel = st.createSave + 1;
@@ -1074,10 +1050,10 @@ std::vector<std::string> DropItems(const State &st, int &sel)
 		for (const SlotChoice &c : SlotChoices(st.game, st.game.slots[idx & 7], sel)) items.push_back(c.label);
 		return items;
 	}
-	if (st.dropKind == kDropRace || st.dropKind == kDropAi) {
+	if (st.dropKind == kDropRace) {
 		const GameRoomSlot &s = st.game.slots[idx & 7];
-		sel = st.dropKind == kDropRace ? s.race : s.nameSel;
-		if (st.dropKind == kDropRace && RaceSeparator(s.raceNames)) {
+		sel = s.race;
+		if (RaceSeparator(s.raceNames)) {
 			const std::vector<int> order = CivsRoomOrder(static_cast<int>(s.raceNames.size()));
 			std::vector<std::string> shown;
 			sel = -1;
@@ -1087,7 +1063,7 @@ std::vector<std::string> DropItems(const State &st, int &sel)
 			}
 			return shown;
 		}
-		return st.dropKind == kDropRace ? s.raceNames : s.nameItems;
+		return s.raceNames;
 	}
 	if (idx >= 0 && idx < static_cast<int>(st.game.options.size())) {
 		const GameRoomOption &o = st.game.options[idx];

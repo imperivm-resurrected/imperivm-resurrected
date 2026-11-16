@@ -42,8 +42,6 @@ ListGeom g_optGeomOut;
 
 namespace mpui_impl {
 namespace {
-const int kDropRowH = 24;
-
 bool PresetGameMatches(const Preset &pr, const OptionGetter &get)
 {
 	if (!pr.game) return true;
@@ -364,7 +362,6 @@ bool RoomActionFrozen(const GameRoomSnapshot &g, int action, int arg)
 {
 	if (!g.online) return false;
 	switch (action) {
-	case kGTeam:
 	case kGColor: return SlotFrozen(g, g.slots[arg & 7]);
 	case kGRuleToggle:
 	case kGSiteToggle:
