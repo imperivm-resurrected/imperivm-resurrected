@@ -267,6 +267,8 @@ const DWORD kCoverMaxMs = 10 * 60 * 1000;
 const size_t kChunk = 48 * 1024;
 const size_t kCaptureChunk = 128;
 const size_t kTicksMsgMax = 192 * 1024;
+// The size of a snapshot comes from the host: reserving more than this up front could throw out of the game's frame.
+const size_t kSnapReserveMax = 64 * 1024 * 1024;
 const double kStartBufferMs = 2000;
 
 struct Msg {
@@ -855,13 +857,17 @@ void ViewerHandle(const Msg &m)
 		g_v.snap.clear();
 		if (Get32(m.data, pos, g_v.snapTotal) && Get32(m.data, pos, g_v.snapBuckets) && Get32(m.data, pos, g_v.snapV)) {
 			g_v.limit = g_v.snapV;
-			g_v.snap.reserve(g_v.snapTotal);
+			g_v.snap.reserve((std::min<size_t>)(g_v.snapTotal, kSnapReserveMax));
 		}
 		g_v.phase = kRecvSnap;
 		SetStatus("Receiving the game...");
 		break;
 	}
 	case kSpSnapData:
+		if (g_v.snap.size() + m.data.size() > g_v.snapTotal) {
+			ViewerFail("The game arrived incomplete.");
+			break;
+		}
 		g_v.snap += m.data;
 		if (g_v.snapTotal) g_progress = static_cast<int>((std::min<size_t>)(100, g_v.snap.size() * 100 / g_v.snapTotal));
 		break;
