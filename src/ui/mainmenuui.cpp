@@ -3,6 +3,7 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include "ui/mainmenuui.h"
 
+#include <atomic>
 #include <mutex>
 #include <set>
 #include <string>
@@ -55,7 +56,9 @@ const Spec kSingleSpecs[] = {
 	{0x1004, "Load game", "LoadGame"},
 };
 
-const int kIdAdditionalContent = 0x1041;
+const int kIdAdditionalContent = 0x1041, kIdMultiplayer = 0x1003;
+// A screen asked for a group's submenu to be open when the menu comes back (the multiplayer screen's Back).
+std::atomic<int> g_groupWanted{1};
 const DWORD kLabelsEveryMs = 1000;
 
 struct State {
@@ -161,7 +164,7 @@ int FirstEnabled(const std::vector<Item> &items, int from, int step)
 int GroupIndex(const View &v)
 {
 	for (size_t i = 0; i < v.main.size(); i++) {
-		if (v.main[i].id == 0) return static_cast<int>(i);
+		if (v.main[i].id == v.openGroup) return static_cast<int>(i);
 	}
 	return -1;
 }
@@ -212,8 +215,26 @@ void Sync(void *dlg, bool onShow)
 	}
 	if (!sub.empty()) {
 		Item group;
+		group.id = kGroupSingle;
 		group.label = Tr("Single-player");
 		main.insert(main.begin(), group);
+	}
+	// Multiplayer opens its own submenu: the rooms, the ranked mode and the tournaments.
+	std::vector<Item> multi;
+	for (Item &item : main) {
+		if (item.id != kIdMultiplayer) continue;
+		item.id = kGroupMulti;
+		const struct {
+			int id;
+			const char *label;
+		} rows[] = {{kMultiRooms, "Rooms"}, {kMultiRanked, "Ranked"}, {kMultiTournaments, "Tournaments"}};
+		for (const auto &row : rows) {
+			Item sub2;
+			sub2.id = row.id;
+			sub2.label = Tr(row.label);
+			sub2.enabled = item.enabled;
+			multi.push_back(sub2);
+		}
 	}
 	const int updates = ModUiUpdatesAvailable();
 	for (Item &item : main) {
@@ -228,8 +249,11 @@ void Sync(void *dlg, bool onShow)
 	}
 	View &v = g_s.view;
 	v.main = std::move(main);
-	v.sub = std::move(sub);
-	v.groupCaption = Tr("Single-player");
+	v.subSingle = std::move(sub);
+	v.subMulti = std::move(multi);
+	if (v.openGroup == kGroupMulti && v.subMulti.empty()) v.openGroup = kGroupSingle;
+	v.sub = v.openGroup == kGroupMulti ? v.subMulti : v.subSingle;
+	v.groupCaption = Tr(v.openGroup == kGroupMulti ? "Multiplayer" : "Single-player");
 	v.tagline = Tr("History never ends.");
 	if (v.sub.empty()) v.subOpen = false;
 	if (v.focusMain >= static_cast<int>(v.main.size())) v.focusMain = -1;
@@ -240,19 +264,43 @@ void Sync(void *dlg, bool onShow)
 		v.keyboard = false;
 	}
 	v.interactive = interactive;
+	// Back from the multiplayer screen leaves its submenu open, as the single player's screens do with theirs.
+	if (interactive) {
+		const int wanted = g_groupWanted.exchange(1);
+		if (wanted != 1) {
+			v.openGroup = wanted;
+			v.sub = wanted == kGroupMulti ? v.subMulti : v.subSingle;
+			v.groupCaption = Tr(wanted == kGroupMulti ? "Multiplayer" : "Single-player");
+			if (!v.sub.empty()) {
+				v.subOpen = true;
+				v.subChangedAt = GetTickCount();
+				v.focusMain = GroupIndex(v);
+				v.focusSub = -1;
+			}
+		}
+	}
 	g_s.shown = true;
 }
 
 void Click(int id)
 {
 	void *dlg = ShownDialog();
+	if (!dlg || !id) return;
+	// A row of the multiplayer group: the game's Multiplayer button, and the screen opens on that section.
+	if (id == kMultiRooms || id == kMultiRanked || id == kMultiTournaments) {
+		MpUiOpenSection(id == kMultiRanked ? MpSection::Ranked : id == kMultiTournaments ? MpSection::Tournaments : MpSection::Rooms);
+		id = kIdMultiplayer;
+	}
 	// The game's dialog can close itself and call back into the mod: no lock here.
-	if (dlg && id) NativeButtonClick(dlg, id);
+	NativeButtonClick(dlg, id);
 }
 
-void OpenGroup(View &v, bool focusFirst)
+void OpenGroup(View &v, int group, bool focusFirst)
 {
-	if (!v.subOpen) v.subChangedAt = GetTickCount();
+	if (!v.subOpen || v.openGroup != group) v.subChangedAt = GetTickCount();
+	v.openGroup = group;
+	v.sub = group == kGroupMulti ? v.subMulti : v.subSingle;
+	v.groupCaption = Tr(group == kGroupMulti ? "Multiplayer" : "Single-player");
 	v.subOpen = true;
 	v.focusMain = GroupIndex(v);
 	v.focusSub = focusFirst ? FirstEnabled(v.sub, 0, 1) : -1;
@@ -277,8 +325,8 @@ int Activate(View &v)
 	if (v.focusMain < 0 || v.focusMain >= static_cast<int>(v.main.size())) return 0;
 	const Item &item = v.main[v.focusMain];
 	if (!item.enabled) return 0;
-	if (item.id == 0) {
-		OpenGroup(v, true);
+	if (IsGroup(item.id)) {
+		OpenGroup(v, item.id, true);
 		return 0;
 	}
 	return item.id;
@@ -308,9 +356,9 @@ bool HandleKey(UINT msg, WPARAM wp, int &clickId)
 			MoveFocus(v, wp == VK_DOWN ? 1 : -1);
 			return true;
 		case VK_RIGHT:
-			if (v.subOpen || v.focusMain < 0 || v.focusMain >= static_cast<int>(v.main.size()) || v.main[v.focusMain].id != 0) return false;
+			if (v.subOpen || v.focusMain < 0 || v.focusMain >= static_cast<int>(v.main.size()) || !IsGroup(v.main[v.focusMain].id)) return false;
 			v.keyboard = true;
-			OpenGroup(v, true);
+			OpenGroup(v, v.main[v.focusMain].id, true);
 			return true;
 		case VK_LEFT:
 			if (!v.subOpen) return false;
@@ -361,13 +409,13 @@ bool HandleClick(UINT msg, POINT at, int &clickId)
 	if (hit->action != kActMain || hit->arg < 0 || hit->arg >= static_cast<int>(v.main.size())) return false;
 	const Item &item = v.main[hit->arg];
 	v.focusMain = hit->arg;
-	if (item.id != 0) {
+	if (!IsGroup(item.id)) {
 		CloseGroup(v);
 		clickId = item.enabled ? item.id : 0;
 	}
 	// A double click is two presses: the second one keeps the submenu open.
-	else if (v.subOpen && msg == WM_LBUTTONDOWN) CloseGroup(v);
-	else OpenGroup(v, false);
+	else if (v.subOpen && v.openGroup == item.id && msg == WM_LBUTTONDOWN) CloseGroup(v);
+	else if (item.enabled) OpenGroup(v, item.id, false);
 	return true;
 }
 
@@ -396,6 +444,11 @@ void MainMenuUiDestroyed(void *dlg)
 	std::lock_guard<std::mutex> lock(g_lock);
 	if (dlg != g_s.dlg) return;
 	g_s = State();
+}
+
+void MainMenuUiOpenMultiplayerGroup()
+{
+	g_groupWanted = kGroupMulti;
 }
 
 bool MainMenuUiNeedsDraw()

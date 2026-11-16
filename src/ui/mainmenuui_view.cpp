@@ -229,7 +229,7 @@ void PaintList(Painter &p, const View &v, const Layout &l)
 	for (int i = 0; i < count; i++) {
 		const Item &item = v.main[i];
 		const int y = kListTop + i * kRowH;
-		const bool open = item.id == 0 && v.subOpen, lit = item.enabled && (open || i == hot);
+		const bool open = IsGroup(item.id) && item.id == v.openGroup && v.subOpen, lit = item.enabled && (open || i == hot);
 		SelectObject(p.dc, g_f.list);
 		p.TextCaps(l.textX, y, l.divider - l.textX - 8, kRowH, item.label, !item.enabled ? pal::disabled : lit ? pal::text : pal::textDim);
 		const int after = l.textX + l.labelW[i] + kChevronGap;

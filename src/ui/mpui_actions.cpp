@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 THIONG
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
+#include <atomic>
 #include <mutex>
 
 #include "ui/textedit.h"
@@ -12,13 +13,26 @@
 #include "mods/modoptions.h"
 #include "net/rejoin.h"
 
+#include "ui/mainmenuui.h"
 #include "ui/mpui_internal.h"
 #include "ui/mpui_tourney.h"
 #include "ui/patronui.h"
 
 using namespace mpui_impl;
 
+namespace {
+std::atomic<int> g_openSection{-1};
+}
+
 namespace mpui_impl {
+void ApplyOpenSection()
+{
+	const int section = g_openSection.exchange(-1);
+	if (section == static_cast<int>(MpSection::Ranked)) DoAction(kRanked, 0);
+	else if (section == static_cast<int>(MpSection::Tournaments)) DoAction(kTourney, kTourneyShowArg);
+	else g_s.view = kViewList;
+}
+
 void DoAction(int action, int arg)
 {
 	if (g_s.game.active && RankedRoomAction(action, arg)) {
@@ -44,7 +58,7 @@ void DoAction(int action, int arg)
 				return;
 			}
 		}
-		ModUiToast(g_s.ready ? "There are no free rooms with your content right now. Create one with \"Create game\"."
+		ModUiToast(g_s.ready ? "There are no free rooms with your content right now. Create one with \"Create a room\"."
 							 : Tr("Online is not available: ") + g_s.status);
 		SteamRefreshLobbies();
 		break;
@@ -123,6 +137,7 @@ void DoAction(int action, int arg)
 		else {
 			g_s.open = false;
 			LogI("lobby", "menu closed (Back)");
+			MainMenuUiOpenMultiplayerGroup();
 			if (g_s.room.id) SteamLeaveLobby();
 			g_s.autoHost = false;
 			g_flow.backToMain = true;
@@ -929,4 +944,9 @@ void OpenMpMenu(bool checkRecover)
 	g_s.lastRefresh = 0;
 	LogI("lobby", "new menu open");
 }
+}
+
+void MpUiOpenSection(MpSection section)
+{
+	g_openSection = static_cast<int>(section);
 }

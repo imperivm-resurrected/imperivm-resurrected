@@ -85,6 +85,7 @@ unsigned __fastcall HookMainMenuOnMessage(void *dlg, void *edx, int *msg)
 			if (!g_s.classicPending) {
 				g_mainMenu = dlg;
 				OpenMpMenu(true);
+				ApplyOpenSection();
 				return 0;
 			}
 			g_s.classicPending = false;

@@ -572,6 +572,8 @@ bool PickInUse(const State &st, int index);
 void PickMove(WPARAM key);
 int PickRowsShown();
 void OpenMpMenu(bool checkRecover);
+// Locked. After OpenMpMenu from the main menu: the section its Multiplayer submenu asked for (MpUiOpenSection), or the rooms.
+void ApplyOpenSection();
 
 // The ranked tab (mpui_ranked.cpp, mpui_paint_ranked.cpp, mpui_paint_result.cpp).
 void RankedAction(int arg);

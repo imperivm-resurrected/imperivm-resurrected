@@ -140,8 +140,8 @@ void PaintHeader(Painter &p, const State &st)
 	// The title and the tabs keep their place whether the search's pill is there or not: the pill takes what is left before "Back".
 	const int right = PaintHeaderActions(p, l, {{"Back", kBack, true, true}}, mx, my);
 	const int tabsEnd = PaintScreenTitle(p, l, "Multiplayer",
-		{{"Games", kListView, 0, st.view == kViewList, true}, {"Create game", kCreate, 0, st.view == kViewCreate, true},
-			{"Ranked", kRanked, 0, st.view == kViewRanked, true}, {"Tournaments", kTourney, kTourneyShowArg, st.view == kViewTournaments, true}},
+		{{"Rooms", kListView, 0, st.view == kViewList || st.view == kViewCreate, true}, {"Ranked", kRanked, 0, st.view == kViewRanked, true},
+			{"Tournaments", kTourney, kTourneyShowArg, st.view == kViewTournaments, true}},
 		right, mx, my);
 	PaintRankedPill(p, st, right, tabsEnd + 16);
 
@@ -538,7 +538,10 @@ void PaintList(Painter &p, const State &st)
 	PaintField(p, st, searchX, toolY, std::min(440, refreshX - 12 - searchX), kToolH, st.searchInput, "Search room, host or map...", st.focus == kSearchField,
 		kFieldSearch);
 	PaintGhostButton(p, refreshX, toolY, refreshW, kToolH, st.loading ? "Searching..." : "Refresh", kRefresh, false, st.ready && !st.loading, mx, my);
-	p.Button(l.w - m - l.detailW, toolY, l.detailW, kToolH, "Quick game", kQuick, 0, mx, my, st.ready, true);
+	// Over the room's card: making a room, and the main action, Quick game.
+	const int createW = (l.detailW - 12) / 2;
+	PaintGhostButton(p, l.w - m - l.detailW, toolY, createW, kToolH, "Create a room", kCreate, false, true, mx, my);
+	p.Button(l.w - m - l.detailW + createW + 12, toolY, l.detailW - createW - 12, kToolH, "Quick game", kQuick, 0, mx, my, st.ready, true);
 
 	const int tx = m, tw = l.tableW, ty = l.bodyY, th = l.bodyH, headH = 44, rowH = l.roomy ? 52 : 46;
 	PaintGlassCard(p, tx, ty, tw, th);
@@ -583,7 +586,7 @@ void PaintList(Painter &p, const State &st)
 		p.Font(0);
 		const std::string empty = !st.ready ? (st.status.empty() ? "Connecting to Steam..." : st.status)
 			: st.loading ? "Searching for rooms..."
-			: "There are no open rooms with this filter. Create one with \"Create game\" and invite your friends.";
+			: "There are no open rooms with this filter. Create one with \"Create a room\" and invite your friends.";
 		p.TextWrapped(tx + 24, rowsTop + 24, tw - 48, 120, empty, pal::textDim);
 	}
 	// The table has no scroll of its own: when the arrows take the selection past the rows that fit, the rows follow it.

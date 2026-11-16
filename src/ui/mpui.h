@@ -12,6 +12,9 @@ void MpUiRejoinInGame();
 #include <string>
 
 void InstallMpUi(bool knownExe);
+// The section the multiplayer screen opens on next, from the main menu's Multiplayer submenu.
+enum class MpSection { Rooms, Ranked, Tournaments };
+void MpUiOpenSection(MpSection section);
 bool MpUiIsOpen();
 bool MpUiMainMenuVisible();
 // The game's main menu dialog while no game runs, also under other screens; null otherwise.

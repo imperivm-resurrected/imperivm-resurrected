@@ -12,8 +12,13 @@ namespace mainmenuui {
 
 enum Action { kActNone, kActMain, kActSub };
 
+// The groups that open a submenu, as the id of their row; and the rows of the multiplayer group, which open its screen on a section.
+constexpr int kGroupSingle = 0, kGroupMulti = -1;
+constexpr int kMultiRooms = -10, kMultiRanked = -11, kMultiTournaments = -12;
+inline bool IsGroup(int id) { return id == kGroupSingle || id == kGroupMulti; }
+
 struct Item {
-	// The game's button it clicks; 0 for the group that opens the submenu.
+	// The game's button it clicks; a group (kGroupSingle, kGroupMulti) opens its submenu; a kMulti* row opens the multiplayer screen.
 	int id = 0;
 	// Already translated: the game's own text, or the mod's through Tr().
 	std::string label;
@@ -25,6 +30,9 @@ struct Item {
 struct View {
 	std::vector<Item> main, sub;
 	std::string groupCaption, tagline;
+	// The group whose submenu `sub` is, and both groups' rows.
+	int openGroup = kGroupSingle;
+	std::vector<Item> subSingle, subMulti;
 	bool subOpen = false;
 	// When the submenu last opened or closed (GetTickCount), for its animation; 0: no animation.
 	unsigned subChangedAt = 0;
