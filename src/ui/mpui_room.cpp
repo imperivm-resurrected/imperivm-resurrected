@@ -304,7 +304,7 @@ bool LocalReady(const GameRoomSnapshot &g)
 
 std::string RoomConfigKey(const OnlineLobby &l)
 {
-	std::string key = l.optionsText + "|" + std::to_string(l.rules) + "|" + l.map + "|" + l.mode;
+	std::string key = l.optionsText + "|" + std::to_string(l.rules) + "|" + l.map + "|" + l.mode + "|" + (l.teamColors ? "1" : "0");
 	for (const OnlineSlot &s : l.slots) {
 		if (s.type != 3) key += "|" + std::to_string(s.type) + ":" + s.name;
 	}
@@ -322,6 +322,8 @@ bool TeamColorsOn(const State &st, const GameRoomSnapshot &g)
 	if (!g.active) return false;
 	const bool load = g.online && (g.host ? !st.hostSave.name.empty() : !st.room.info.saveName.empty());
 	if (load) return false;
+	// A network game without a Steam room has nowhere to tell its guests.
+	if (g.online && !st.room.id) return false;
 	return g.online && !g.host ? st.room.info.teamColors : st.teamColors;
 }
 
@@ -341,20 +343,49 @@ void TeamColorsStep(State &st, const GameRoomSnapshot &g)
 		team[i] = s.team >= 1 && s.team <= 4 ? s.team : 0;
 	}
 	const std::array<int, kTeamColorSlots> target = TeamColorsFor(g.colors, team, used);
+	// A colour, a ready check or a player changing may clear what kept a slot from its colour: every slot gets its tries again.
+	std::string seen;
+	for (const GameRoomSlot &s : g.slots) seen += std::to_string(s.color) + (s.ready ? "r" : "-") + (s.used ? s.name : std::string()) + "|";
+	if (seen != st.teamColorSeen) {
+		st.teamColorSeen = seen;
+		for (int &tries : st.teamColorTries) tries = 0;
+	}
 	for (int i = 0; i < kTeamColorSlots; i++) {
 		if (target[i] == st.teamColorWant[i]) continue;
 		st.teamColorWant[i] = target[i];
 		st.teamColorTries[i] = 0;
 	}
 	if (GetTickCount() - st.teamColorTick < 500) return;
+	auto held = [&](int color, int except) {
+		for (int j = 0; j < kTeamColorSlots; j++) {
+			if (j != except && g.slots[j].used && g.slots[j].color == color) return true;
+		}
+		return false;
+	};
+	auto wanted = [&](int color) { return std::find(target.begin(), target.end(), color) != target.end(); };
+	auto set = [&](int slot, int color) {
+		st.teamColorTick = GetTickCount();
+		st.teamColorTries[slot]++;
+		GameRoomSetColor(slot, color);
+	};
+	// The game turns a colour another slot holds into the next free one, which may be a third slot's: a slot waits until its colour is
+	// free. When none can move, one whose colour another slot wants (two that swap) steps aside to a colour nobody holds or wants.
+	int stepAside = -1;
 	for (int i = 0; i < kTeamColorSlots; i++) {
 		const GameRoomSlot &s = g.slots[i];
 		const bool ours = !g.online || s.local || (g.host && s.type == 1);
 		if (!used[i] || !ours || target[i] < 0 || s.color == target[i] || SlotFrozen(g, s) || st.teamColorTries[i] >= 10) continue;
-		st.teamColorTick = GetTickCount();
-		st.teamColorTries[i]++;
-		GameRoomSetColor(i, target[i]);
-		break;
+		if (!held(target[i], i)) {
+			set(i, target[i]);
+			return;
+		}
+		if (stepAside < 0 && wanted(s.color)) stepAside = i;
+	}
+	if (stepAside < 0) return;
+	for (int c = 0; c < kTeamColorPalette; c++) {
+		if (held(c, -1) || wanted(c)) continue;
+		set(stepAside, c);
+		return;
 	}
 }
 
