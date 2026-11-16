@@ -78,7 +78,7 @@ struct SteamHandles {
 };
 extern SteamHandles g_steam;
 extern std::mutex g_lock;
-extern bool g_ready;
+extern std::atomic<bool> g_ready;
 extern std::string g_status;
 extern std::string g_myName;
 struct SteamSignals {
