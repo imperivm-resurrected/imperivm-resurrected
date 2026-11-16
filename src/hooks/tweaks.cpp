@@ -9,6 +9,7 @@
 #include <cstring>
 #include <vector>
 
+#include "hooks/codepatch.h"
 #include "hooks/hookcount.h"
 #include "core/config.h"
 #include "hooks/displaymode.h"
@@ -61,13 +62,9 @@ void InstallCrashFix()
 			else LogW("boot", "crash protection: the code at %08x is not the expected one, left as is", static_cast<unsigned>(site));
 			continue;
 		}
-		DWORD old = 0;
-		if (!VirtualProtect(at, 5, PAGE_EXECUTE_READWRITE, &old)) continue;
-		at[0] = 0xe8;
-		*reinterpret_cast<int32_t *>(at + 1) = static_cast<int32_t>(reinterpret_cast<uintptr_t>(stub) - (site + 5));
-		VirtualProtect(at, 5, old, &old);
-		FlushInstructionCache(GetCurrentProcess(), at, 5);
-		done++;
+		uint8_t call[5];
+		CallBytes(call, site, reinterpret_cast<uintptr_t>(stub));
+		if (WriteCode(at, call, sizeof(call))) done++;
 	}
 	LogI("boot", "crash protection: %d of %d sites protected", done, static_cast<int>(sizeof(addr::kCrashFixSites) / sizeof(addr::kCrashFixSites[0])));
 }
@@ -95,11 +92,8 @@ void RepaintClosedMenusWhole()
 		LogW("display", "menus: the menu switch code is not the expected one, a closed menu may leave its image behind");
 		return;
 	}
-	DWORD old = 0;
-	if (!VirtualProtect(at, 2, PAGE_EXECUTE_READWRITE, &old)) return;
-	at[1] = 0x00;
-	VirtualProtect(at, 2, old, &old);
-	FlushInstructionCache(GetCurrentProcess(), at, 2);
+	const uint8_t push0 = 0x00;
+	if (!WriteCode(at + 1, &push0, 1)) return;
 	LogI("display", "menus: a closed menu is repainted whole, also under its own opaque background");
 }
 
