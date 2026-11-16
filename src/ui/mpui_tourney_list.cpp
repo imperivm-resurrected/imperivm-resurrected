@@ -187,9 +187,9 @@ void PaintFeatured(Painter &p, const State &st, const TourneySummary *t, const T
 	p.Fill(rx, ry, rightW, 6, pal::button);
 	if (t->maxEntries > 0) p.Fill(rx, ry, rightW * std::min(t->entries, t->maxEntries) / t->maxEntries, 6, pal::red);
 	ry += 18;
-	const TourneyPageView page = LeagueTourneyPage(t->slug, 30000);
+	const auto page = LeagueTourneyPage(t->slug, 30000);
 	std::vector<const TourneyEntrant *> who;
-	for (const TourneyEntrant &e : page.detail.entrants) {
+	for (const TourneyEntrant &e : page->detail.entrants) {
 		if (e.status == TourneyEntryStatus::Signed || e.status == TourneyEntryStatus::Playing || e.status == TourneyEntryStatus::Out) who.push_back(&e);
 	}
 	if (!who.empty() && h >= 220) {
@@ -431,8 +431,8 @@ int PaintLiveCard(Painter &p, const State &st, const TourneyListsView &lists, in
 {
 	const int mx = st.mouseX, my = st.mouseY, pad = 24;
 	const TourneySummary *t = lists.live.empty() ? nullptr : &lists.live.front();
-	const TourneyPageView page = t ? LeagueTourneyPage(t->slug, 15000) : TourneyPageView();
-	const TourneyMatch *m = page.loaded ? LiveMatch(page.detail) : nullptr;
+	const auto page = LeagueTourneyPage(t ? t->slug : std::string(), 15000);
+	const TourneyMatch *m = page->loaded ? LiveMatch(page->detail) : nullptr;
 	const int h = m ? 248 : t ? 150 : 104;
 	PaintGlassCard(p, x, y, w, h);
 	p.Shape(x + pad, y + 28, 8, 8, InUnitEllipse, t ? pal::red : pal::disabled);
@@ -614,8 +614,8 @@ void PaintChampionsCard(Painter &p, const State &st, const TourneyListsView &lis
 	int shown = 0;
 	for (const TourneySummary &t : lists.finished) {
 		if (shown >= 4 || cy + 44 > y + h - 12) break;
-		const TourneyPageView page = LeagueTourneyPage(t.slug, 300000);
-		const TourneyEntrant *champ = page.loaded ? TourneyEntrantOf(page.detail, TourneyChampion(page.detail)) : nullptr;
+		const auto page = LeagueTourneyPage(t.slug, 300000);
+		const TourneyEntrant *champ = page->loaded ? TourneyEntrantOf(page->detail, TourneyChampion(page->detail)) : nullptr;
 		if (t.official) DrawLeaguePhalera(p, x + pad, cy + 4, 30, LeagueMetal::Gold);
 		else DrawCupCrown(p, x + pad, cy + 4, 30, false);
 		const int tx = x + pad + 44, tagW = t.official ? 80 : 0;
@@ -630,7 +630,7 @@ void PaintChampionsCard(Painter &p, const State &st, const TourneyListsView &lis
 			PaintName(p, tx, cy, w - pad - tx + x - tagW, 22, champ->name, champ->steamId, pal::text, mx, my);
 			ids.push_back(champ->steamId);
 		}
-		else p.Text(tx, cy, w - pad - tx + x - tagW, 22, page.loaded ? "No champion" : "...", pal::textDim);
+		else p.Text(tx, cy, w - pad - tx + x - tagW, 22, page->loaded ? "No champion" : "...", pal::textDim);
 		p.Font(3);
 		p.raw = true;
 		p.Text(tx, cy + 22, w - pad - tx + x - tagW, 20, t.name, pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
@@ -653,7 +653,8 @@ void PaintListScreen(Painter &p, const State &st, const Ui &u, PaintOut &out)
 	const int mx = st.mouseX, my = st.mouseY;
 	LeagueTourneyListsRefresh();
 	const TourneyListsView lists = LeagueTourneyLists();
-	const TourneyMineView mine = LeagueTourneyMine();
+	const auto mineView = LeagueTourneyMine();
+	const TourneyMineView &mine = *mineView;
 	const ScreenLayout l = ScreenLayoutFor(st.viewW, st.viewH, false);
 	const int m = l.margin, top = l.top, bottom = l.h - m, inner = l.w - 2 * m;
 	const int sideW = std::max(360, std::min(480, inner * 27 / 100)), mainW = inner - sideW - kCardGap, sx = m + mainW + kCardGap;

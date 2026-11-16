@@ -3,6 +3,7 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #pragma once
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -11,6 +12,9 @@
 // The league's tournaments, official and of the community: the list, a tournament's page, the player's own (polled), what the player
 // does in them and what the organizer of a community cup does in theirs. Every request runs on a background thread; the screens read
 // the last answer.
+//
+// A page and the player's tournaments are given as a shared view that never changes: a change makes a new one, so a screen keeps the one
+// it got for its frame without copying it.
 
 struct TourneyListsView {
 	bool loaded = false, loading = false, failed = false;
@@ -26,13 +30,13 @@ struct TourneyPageView {
 	TourneyDetail detail;
 };
 // A tournament's page as last read; it is read again in the background when older than `maxAgeMs`.
-TourneyPageView LeagueTourneyPage(const std::string &slug, int maxAgeMs = 10000);
+std::shared_ptr<const TourneyPageView> LeagueTourneyPage(const std::string &slug, int maxAgeMs = 10000);
 
 struct TourneyMineView {
 	bool loaded = false, loading = false;
 	TourneyMine mine;
 };
-TourneyMineView LeagueTourneyMine();
+std::shared_ptr<const TourneyMineView> LeagueTourneyMine();
 // Asks for the player's tournaments now.
 void LeagueTourneyMineRefresh();
 // The Tournaments tab is on screen: with none of the player's own on, they are asked for every minute while this keeps being called.

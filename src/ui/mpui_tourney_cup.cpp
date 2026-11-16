@@ -1393,7 +1393,8 @@ void PaintCreateScreen(Painter &p, const State &st, const Ui &u, PaintOut &out)
 	if (editing && u.cupLocked) {
 		problems.erase(std::remove_if(problems.begin(), problems.end(), [](TourneyCupProblem q) { return q != TourneyCupProblem::DescriptionLong; }), problems.end());
 	}
-	const TourneyMineView mine = LeagueTourneyMine();
+	const auto mineView = LeagueTourneyMine();
+	const TourneyMineView &mine = *mineView;
 	const bool selfUnmet = !(editing && u.cupLocked) && u.cup.play && u.cup.mode != TourneyMode::Teams && CupUnmet(u.cup.requirements, mine) != TourneyUnmet::None;
 	const int m = l.margin, inner = l.w - 2 * m, top = l.top, bottom = l.h - m;
 	const int sideW = std::max(360, std::min(440, inner * 26 / 100)), gap = l.roomy ? kCardGap : 24, paneW = inner - sideW - gap, barW = 16;

@@ -1535,7 +1535,8 @@ bool PaintPageHeader(Painter &p, const State &st, const Ui &u)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const ScreenLayout l = ScreenLayoutFor(st.viewW, st.viewH);
-	const TourneyPageView page = LeagueTourneyPage(u.slug);
+	const auto view = LeagueTourneyPage(u.slug);
+	const TourneyPageView &page = *view;
 	const int right = PaintHeaderActions(p, l, {{Tr("Tournaments"), kBack, true, true}}, mx, my);
 	// A Swiss tournament has standings instead of a bracket, and its rounds open from them.
 	const bool swiss = page.loaded && TourneyIsSwiss(page.detail);
@@ -1564,8 +1565,10 @@ bool PaintPageHeader(Painter &p, const State &st, const Ui &u)
 
 void PaintPageScreen(Painter &p, const State &st, const Ui &u, PaintOut &out)
 {
-	const TourneyPageView page = LeagueTourneyPage(u.slug);
-	const TourneyMineView mine = LeagueTourneyMine();
+	const auto pageView = LeagueTourneyPage(u.slug);
+	const auto mineView = LeagueTourneyMine();
+	const TourneyPageView &page = *pageView;
+	const TourneyMineView &mine = *mineView;
 	const ScreenLayout l = ScreenLayoutFor(st.viewW, st.viewH);
 	const int m = l.margin, inner = l.w - 2 * m, bottom = l.h - m;
 	if (!page.loaded) {
@@ -1630,8 +1633,8 @@ void PaintPageScreen(Painter &p, const State &st, const Ui &u, PaintOut &out)
 void PaintWalkoverDialog(Painter &p, const State &st, const Ui &u)
 {
 	const int mx = st.mouseX, my = st.mouseY;
-	const TourneyPageView page = LeagueTourneyPage(u.slug, 60000);
-	const TourneyMatch *m = MatchById(page.detail, u.walkoverMatch);
+	const auto page = LeagueTourneyPage(u.slug, 60000);
+	const TourneyMatch *m = MatchById(page->detail, u.walkoverMatch);
 	const Dialog d = DialogBegin(p, st.viewW, st.viewH, 560, 330, "Give the match without playing", pal::redText);
 	const std::string a = m ? m->a.name : Tr("Side A"), b = m ? m->b.name : Tr("Side B");
 	p.raw = true;

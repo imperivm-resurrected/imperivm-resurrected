@@ -372,7 +372,8 @@ bool PaintMatchHeader(Painter &p, const State &st, const Ui &u)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const ScreenLayout l = ScreenLayoutFor(st.viewW, st.viewH);
-	const TourneyNext next = LeagueTourneyMine().mine.next;
+	const auto mine = LeagueTourneyMine();
+	const TourneyNext &next = mine->mine.next;
 	const int right = PaintHeaderActions(p, l, {{Tr(u.slug.empty() ? "Tournaments" : "Back to the bracket"), kBack, true, true}}, mx, my);
 	const int64_t left = next.present && next.status == TourneyMatchStatus::Ready ? next.deadlineAt - NowMs() : 0;
 	int titleRight = right;
@@ -423,7 +424,8 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 	const int mx = st.mouseX, my = st.mouseY;
 	const ScreenLayout l = ScreenLayoutFor(st.viewW, st.viewH);
 	const int m = l.margin, inner = l.w - 2 * m, bottom = l.h - m;
-	const TourneyMineView mine = LeagueTourneyMine();
+	const auto mineView = LeagueTourneyMine();
+	const TourneyMineView &mine = *mineView;
 	const TourneyNext &n = mine.mine.next;
 	if (!n.present) {
 		PaintGlassCard(p, m, l.top, inner, 200);
@@ -432,7 +434,8 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 		p.Button(m + 32, l.top + 100, 320, 48, "Back to the tournaments", kBack, 0, mx, my);
 		return;
 	}
-	const TourneyPageView page = LeagueTourneyPage(n.slug, 30000);
+	const auto pageView = LeagueTourneyPage(n.slug, 30000);
+	const TourneyPageView &page = *pageView;
 	const TourneyEntrant *meE = page.loaded ? TourneyEntrantBySteamId(page.detail, SteamOwnId()) : nullptr;
 	const TourneyEntrant *themE = page.loaded && n.hasOpponent ? TourneyEntrantBySteamId(page.detail, n.opponent.steamId) : nullptr;
 	const bool teams = n.Teams();
@@ -645,10 +648,10 @@ bool PaintChampionHeader(Painter &p, const State &st, const Ui &u)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const ScreenLayout l = ScreenLayoutFor(st.viewW, st.viewH);
-	const TourneyPageView page = LeagueTourneyPage(u.championSlug, 60000);
+	const auto page = LeagueTourneyPage(u.championSlug, 60000);
 	const int right = PaintHeaderActions(p, l, {{Tr("Back to the bracket"), kBack, true, true}}, mx, my);
-	if (!page.loaded) return true;
-	const TourneyDetail &d = page.detail;
+	if (!page->loaded) return true;
+	const TourneyDetail &d = page->detail;
 	const int y = l.margin + kHeaderButtonH + (l.roomy ? 22 : 12);
 	p.raw = true;
 	PaintCaps(p, l.margin, y, right - l.margin - 420, 22, d.name + " \xC2\xB7 " + Tr("Final result"), pal::redText);
@@ -667,15 +670,15 @@ void PaintChampionScreen(Painter &p, const State &st, const Ui &u)
 	const int mx = st.mouseX, my = st.mouseY;
 	const ScreenLayout l = ScreenLayoutFor(st.viewW, st.viewH);
 	const int m = l.margin, inner = l.w - 2 * m, bottom = l.h - m;
-	const TourneyPageView page = LeagueTourneyPage(u.championSlug, 60000);
+	const auto page = LeagueTourneyPage(u.championSlug, 60000);
 	const int top = l.margin + kHeaderButtonH + (l.roomy ? 64 : 44);
-	if (!page.loaded) {
+	if (!page->loaded) {
 		PaintGlassCard(p, m, top, inner, 160);
 		p.Font(0);
-		p.Text(m + 32, top + 40, inner - 64, 30, page.failed ? "Couldn't reach the league server. Check your connection and try again." : "Reading the tournament...", pal::textDim);
+		p.Text(m + 32, top + 40, inner - 64, 30, page->failed ? "Couldn't reach the league server. Check your connection and try again." : "Reading the tournament...", pal::textDim);
 		return;
 	}
-	const TourneyDetail &d = page.detail;
+	const TourneyDetail &d = page->detail;
 	const TourneyEntrant *champ = TourneyEntrantOf(d, TourneyChampion(d));
 	std::vector<uint64_t> ids;
 	const int blockH = std::min(l.roomy ? 450 : 360, (bottom - top) * 55 / 100);
@@ -988,7 +991,8 @@ int PaintTourneyRoomStatus(Painter &p, const State &st, int right, int y, std::s
 	LeagueMatchKind kind = LeagueMatchKind::Normal;
 	int64_t id = 0;
 	if (!st.room.id || !LeagueParseRoomTag(st.room.info.leagueTag, kind, id) || kind != LeagueMatchKind::Tournament) return right;
-	const TourneyNext n = LeagueTourneyMine().mine.next;
+	const auto mine = LeagueTourneyMine();
+	const TourneyNext &n = mine->mine.next;
 	if (!n.present || n.match != id) return right;
 	const std::string rival = n.opponent.name.empty() ? Tr("Your opponent") : n.opponent.name;
 	if (n.pick.present) {
@@ -1022,7 +1026,8 @@ int PaintTourneyRoomPick(Painter &p, const State &st, int x, int y, int w)
 	LeagueMatchKind kind = LeagueMatchKind::Normal;
 	int64_t id = 0;
 	if (!st.room.id || !LeagueParseRoomTag(st.room.info.leagueTag, kind, id) || kind != LeagueMatchKind::Tournament) return 0;
-	const TourneyNext n = LeagueTourneyMine().mine.next;
+	const auto mine = LeagueTourneyMine();
+	const TourneyNext &n = mine->mine.next;
 	if (!n.present || n.match != id || !n.pick.present) return 0;
 	const int h = 140;
 	PaintPickPanel(p, st, n, x, y, w, h);
