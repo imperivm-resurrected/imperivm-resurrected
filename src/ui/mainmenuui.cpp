@@ -464,7 +464,12 @@ bool MainMenuUiNeedsDraw()
 		waiting = g_s.shown;
 	}
 	// Whether the menu is back on top is known on the game thread, at the game's next frame; with the menu still the game draws none
-	// until the mouse moves, so the menu stayed blank after a screen closed. The game thread is woken to look again.
+	// until the mouse moves, so the menu stayed blank after a screen closed. Once no screen of the mod covers it any more, the game thread
+	// is woken to look again.
+	if (waiting && (MpUiNeedsDraw() || ModUiNeedsDraw() || SavesUiNeedsDraw() || OptionsUiNeedsDraw() || ControlsUiNeedsDraw() || ProfileUiNeedsDraw() ||
+					   BattlesUiNeedsDraw() || ConquestUiNeedsDraw() || CreditsUiNeedsDraw() || SupportPanelOpen() || UpdateUiPanelOpen())) {
+		waiting = false;
+	}
 	static DWORD wokeAt = 0;
 	const DWORD now = GetTickCount();
 	if (waiting && now - wokeAt >= 200) {
