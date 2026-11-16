@@ -2731,6 +2731,7 @@ extern const TrRow kTrRows[] = {
 	{"You will be on the leaderboard once your placement games are over.", "Entrarás en la clasificación al terminar tus partidas de colocación.", "Entrerai in classifica una volta finite le partite di piazzamento."},
 	{"Badge next to your name", "Insignia junto a tu nombre", "Insegna accanto al tuo nome"},
 	{"Current rank: %s", "Rango actual: %s", "Rango attuale: %s"},
+	{"2v2 rank: %s", "Rango 2v2: %s", "Grado 2v2: %s"},
 	{"Current rank (none yet)", "Rango actual (aún ninguno)", "Rango attuale (ancora nessuno)"},
 	{"Tournament trophy", "Trofeo de torneo", "Trofeo di torneo"},
 	{"Saving...", "Guardando...", "Salvataggio..."},

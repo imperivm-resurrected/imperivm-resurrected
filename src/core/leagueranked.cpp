@@ -726,6 +726,8 @@ std::vector<LeagueBadgeChoice> LeagueBadgeChoices(const LeagueMe &me)
 {
 	std::vector<LeagueBadgeChoice> out;
 	const std::string chosen = me.badgeKind.empty() ? std::string("rank") : me.badgeKind;
+	// The rank of each queue: the 1v1 one always (empty while in placement), the 2v2 one once the player has it.
+	const bool team = chosen == "rank" && me.badgeId == "2v2";
 	LeagueBadgeChoice rank;
 	rank.kind = "rank";
 	if (me.ranked.present && me.ranked.tier != LeagueTier::None) {
@@ -733,8 +735,18 @@ std::vector<LeagueBadgeChoice> LeagueBadgeChoices(const LeagueMe &me)
 		rank.look.tier = me.ranked.tier;
 		rank.look.division = me.ranked.division;
 	}
-	rank.chosen = chosen == "rank";
+	rank.chosen = chosen == "rank" && !team;
 	out.push_back(rank);
+	if (me.ranked2v2.present && me.ranked2v2.tier != LeagueTier::None) {
+		LeagueBadgeChoice duo;
+		duo.kind = "rank";
+		duo.id = "2v2";
+		duo.look.kind = LeagueBadgeKind::Rank;
+		duo.look.tier = me.ranked2v2.tier;
+		duo.look.division = me.ranked2v2.division;
+		duo.chosen = team;
+		out.push_back(duo);
+	}
 	for (const LeagueBadge &b : me.badges) {
 		if (b.kind != LeagueBadgeKind::Season && b.kind != LeagueBadgeKind::Trophy) continue;
 		LeagueBadgeChoice c;

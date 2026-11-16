@@ -196,6 +196,7 @@ void Busy(Painter &p, int x, int y, int w, const std::string &text)
 std::string ChoiceLabel(const LeagueBadgeChoice &c)
 {
 	if (c.kind == "rank") {
+		if (c.id == "2v2") return TrFmt("2v2 rank: %s", {LeagueRankText(Tr(LeagueTierName(c.look.tier)), c.look.division)});
 		return c.look.tier != LeagueTier::None ? TrFmt("Current rank: %s", {LeagueRankText(Tr(LeagueTierName(c.look.tier)), c.look.division)})
 											   : Tr("Current rank (none yet)");
 	}

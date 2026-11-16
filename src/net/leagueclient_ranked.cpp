@@ -844,7 +844,8 @@ void BadgeThread(std::string kind, std::string id)
 {
 	Json body = Json::MakeObject();
 	body.Set("kind", Json::MakeString(kind));
-	if (!id.empty()) body.Set("id", Json::MakeNumber(static_cast<double>(_strtoi64(id.c_str(), nullptr, 10))));
+	// A rank names its queue ("2v2"); a season or a trophy is a number.
+	if (!id.empty()) body.Set("id", kind == "rank" ? Json::MakeString(id) : Json::MakeNumber(static_cast<double>(_strtoi64(id.c_str(), nullptr, 10))));
 	const Answer a = Call("PUT", "/v1/league/me/badge", body.Dump(), true);
 	{
 		std::lock_guard<std::mutex> lock(g_mx);

@@ -283,6 +283,24 @@ void ReportAndErrors()
 	CHECK_EQ(LeagueParseError(Parse(R"({"retryAfter":-3})")).retryAfter, 0);
 }
 
+void MeBadgeTeamRank()
+{
+	LeagueMe me;
+	CHECK(LeagueParseMe(Parse(R"({"steamId":"1","name":"Me","ranked":{"queue":"1v1","season":2,"tier":"centurion","division":2,"glory":964,
+		"placementLeft":0},"ranked2v2":{"queue":"2v2","season":2,"tier":"tribune","division":3,"glory":1210,"placementLeft":0},
+		"badge":{"kind":"rank","id":"2v2"},"badges":[]})"),
+		me));
+	const std::vector<LeagueBadgeChoice> choices = LeagueBadgeChoices(me);
+	CHECK_EQ(static_cast<int>(choices.size()), 3);
+	CHECK_EQ(choices[0].kind, std::string("rank"));
+	CHECK(!choices[0].chosen);
+	CHECK_EQ(choices[1].kind, std::string("rank"));
+	CHECK_EQ(choices[1].id, std::string("2v2"));
+	CHECK(choices[1].chosen);
+	CHECK_EQ(TierNumber(choices[1].look.tier), TierNumber(LeagueTier::Tribune));
+	CHECK_EQ(choices[2].kind, std::string("none"));
+}
+
 void MeBadges()
 {
 	LeagueMe me;
@@ -767,6 +785,7 @@ int main()
 	Board();
 	ReportAndErrors();
 	MeBadges();
+	MeBadgeTeamRank();
 	Glory();
 	Countdown();
 	SteadyAnimation();
