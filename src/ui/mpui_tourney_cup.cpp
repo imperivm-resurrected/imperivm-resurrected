@@ -1367,7 +1367,7 @@ std::string RulesText(const TourneySettings &s)
 		(delay ? TrFmt("spectators %s s behind", {std::to_string(delay)}) : Tr("no spectators"));
 }
 
-bool PaintCreateHeader(Painter &p, const State &st, const Ui &u)
+bool PaintCreateHeader(Painter &p, const State &st, const HeaderUi &u)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const ScreenLayout l = ScreenLayoutFor(st.viewW, st.viewH);

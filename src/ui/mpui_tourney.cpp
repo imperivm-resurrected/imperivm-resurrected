@@ -1197,10 +1197,15 @@ void PaintTournaments(Painter &p, const State &st)
 
 bool PaintTourneyHeader(Painter &p, const State &st)
 {
-	Ui u;
+	HeaderUi u;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
-		u = g_tourney;
+		u.screen = g_tourney.screen;
+		u.pageTab = g_tourney.pageTab;
+		u.slug = g_tourney.slug;
+		u.championSlug = g_tourney.championSlug;
+		u.cupEditId = g_tourney.cupEditId;
+		u.cupLocked = g_tourney.cupLocked;
 	}
 	switch (u.screen) {
 	case kScreenPage: return PaintPageHeader(p, st, u);

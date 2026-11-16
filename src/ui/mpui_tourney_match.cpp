@@ -368,7 +368,7 @@ void PaintPickPanel(Painter &p, const State &st, const TourneyNext &n, int x, in
 	p.raw = raw;
 }
 
-bool PaintMatchHeader(Painter &p, const State &st, const Ui &u)
+bool PaintMatchHeader(Painter &p, const State &st, const HeaderUi &u)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const ScreenLayout l = ScreenLayoutFor(st.viewW, st.viewH);
@@ -644,7 +644,7 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 	p.Button(x3 + pad + 2 * (gw + 10), fy, gw, 36, "Withdraw", kTourney, ArgOf(kSubWithdraw, n.tournamentId), mx, my);
 }
 
-bool PaintChampionHeader(Painter &p, const State &st, const Ui &u)
+bool PaintChampionHeader(Painter &p, const State &st, const HeaderUi &u)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const ScreenLayout l = ScreenLayoutFor(st.viewW, st.viewH);
