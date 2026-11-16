@@ -22,14 +22,14 @@ enum Screen { kScreenList, kScreenPage, kScreenMatch, kScreenChampion, kScreenCr
 
 // What an action of the tab does: the high byte of kTourney's argument; the rest is a tournament, a match, an entry or an index.
 enum Sub {
-	kSubShow = 1, kSubFilter, kSubOpen, kSubBack, kSubPageTab, kSubSignUp, kSubWithdraw, kSubCheckIn, kSubMatch, kSubGo, kSubWatch, kSubNoShow,
-	kSubDispute, kSubDisputeSend, kSubDisputeCancel, kSubChampion, kSubField, kSubPan,
+	kSubShow = 1, kSubFilter, kSubOpen, kSubPageTab, kSubSignUp, kSubWithdraw, kSubCheckIn, kSubMatch, kSubGo, kSubWatch, kSubNoShow,
+	kSubDispute, kSubDisputeSend, kSubDisputeCancel, kSubChampion, kSubPan,
 	// The community cups: the form, the code, and the organizer's page (kSubManage opens it on its tab).
 	kSubCreate, kSubCupSet, kSubCupMenu, kSubCupSubmit, kSubCupOpenActive, kSubJoin, kSubJoinSend, kSubJoinCancel, kSubCopyCode, kSubCodeClose,
 	kSubManage, kSubCancelCup, kSubCheckinNow, kSubStartNow, kSubRemove, kSubGameA, kSubGameB, kSubReplay, kSubWalkover, kSubWalkoverA,
 	kSubWalkoverB, kSubWalkoverNobody, kSubWalkoverCancel,
 	// The full form: a section of it brought into view, the map chooser of a round, changing a cup, and its maps tried again.
-	kSubCupSection, kSubMapOpen, kSubChooserTab, kSubChooserRow, kSubChooserType, kSubChooserSize, kSubChooserOk, kSubChooserCancel, kSubEdit,
+	kSubCupSection, kSubMapOpen, kSubChooserTab, kSubChooserRow, kSubChooserSize, kSubChooserOk, kSubChooserCancel, kSubEdit,
 	kSubMapsRetry,
 	// The form's maps of the series: one chosen in the map chooser (its place, or the count to add one) and one taken out.
 	kSubPoolOpen, kSubPoolRemove,
@@ -65,7 +65,7 @@ inline int ArgOf(int sub, int64_t value)
 }
 
 // The tab's scroll bars, as their hits name them.
-enum Bar { kBarList = 0x7100, kBarBracketY, kBarBracketX, kBarSide, kBarForm, kBarChooser, kBarFriends };
+enum Bar { kBarList = 0x7100, kBarBracketY, kBarSide, kBarForm, kBarChooser, kBarFriends };
 
 // Where something scrolls, in the canvas' pixels, and how far it can go.
 struct ScrollArea {
@@ -81,12 +81,9 @@ struct RoomFlow {
 	int64_t match = 0;
 	DWORD at = 0;
 	uint64_t lobby = 0, registeredLobby = 0, registeredSpec = 0;
-	uint64_t opponent = 0;
 	// The room the server sent this player to and that could not be entered, once told to the server as gone.
 	uint64_t stale = 0;
 	std::string waitingFor;
-	TourneyMap map;
-	TourneySettings settings;
 };
 
 // A room to join or to watch once the lobby list has it.
@@ -147,7 +144,6 @@ struct Ui {
 	std::string championSlug;
 	// A tournament of the player's that ended: its result is shown when the tab opens next.
 	std::string pendingChampion;
-	DWORD lastNoticeAt = 0;
 	// The cup being made, what the server answered against it, and the cup the player already organises when that was the answer.
 	TourneyCupForm cup;
 	std::string cupError, cupErrorSlug;
