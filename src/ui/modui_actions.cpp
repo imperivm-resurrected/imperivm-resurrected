@@ -118,7 +118,6 @@ void DoAction(int action, int arg)
 			SetStatus(Tr("Profile \"") + old + Tr("\" deleted"));
 		}
 		break;
-	case kSelect: g_s.selected = arg; break;
 	case kRowClick: {
 		if (arg < 0 || arg >= static_cast<int>(g_s.rows.size())) break;
 		const bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0, shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
@@ -220,9 +219,6 @@ void DoAction(int action, int arg)
 		SetStatus(ModsRestartNeeded() ? TrFmt("The files of %s will be used after restarting", {name}) : TrFmt("The files of %s are used", {name}));
 		break;
 	}
-	case kUninstall:
-		if (g_s.selected >= 0 && g_s.selected < static_cast<int>(g_s.rows.size())) AskUninstall({g_s.rows[g_s.selected].folder});
-		break;
 	case kOpenMod:
 		OpenFolderAsync(g_s.selected >= 0 && g_s.selected < static_cast<int>(g_s.rows.size()) ? g_s.rows[g_s.selected].folder : "");
 		break;
@@ -455,7 +451,7 @@ void DoAction(int action, int arg)
 	}
 	const int maxScroll = std::max(0, static_cast<int>(VisibleRows(g_s).size()) - g_installedRows.load());
 	g_s.list.scroll = std::max(0, std::min(g_s.list.scroll, maxScroll));
-	if (action != kNone && action != kSelect) {
+	if (action != kNone) {
 		g_s.restartNeeded = ModsRestartNeeded();
 	}
 }

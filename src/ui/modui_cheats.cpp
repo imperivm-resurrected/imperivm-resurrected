@@ -28,16 +28,10 @@ int g_chVal[7] = {1000, 1000, 50, 100, 1000, 12, 1};
 }
 
 namespace modui_impl {
-}
-
-namespace modui_impl {
 namespace {
 std::string g_chEditText;
 bool g_chSpawn = false;
 }
-}
-
-namespace modui_impl {
 }
 
 namespace modui_impl {
@@ -49,26 +43,10 @@ const size_t kChSearchLimit = 20;
 }
 
 namespace modui_impl {
-}
-
-namespace modui_impl {
 namespace {
 bool g_chEatUp[256] = {};
 float g_chViewH = 0;
 }
-}
-
-namespace modui_impl {
-}
-
-namespace modui_impl {
-namespace {
-int g_chTopNow = 0;
-int g_chHeadNow = 0;
-}
-}
-
-namespace modui_impl {
 }
 
 namespace modui_impl {
@@ -736,8 +714,6 @@ void DrawCheatsPanel(uint32_t *frame, int frameW, int H, float s)
 	g_ch.maxScroll = maxScroll;
 	g_ch.scroll = std::max(0.0f, std::min(g_ch.scroll, maxScroll));
 	g_ch.winH = H;
-	g_chTopNow = static_cast<int>(top);
-	g_chHeadNow = static_cast<int>(headH);
 	g_ch.btnCount = count;
 	for (int i = 0; i < count; i++) g_ch.btn[i] = buttons[i];
 	g_chViewH = viewH;
