@@ -655,14 +655,9 @@ void RankedAction(int arg)
 		if (i < r.view.history.games.size()) OpenDispute(r.view.history.games[i].id);
 		return;
 	}
-	if (arg >= kRkDisputeRecent && arg < kRkDisputeHistory) {
-		const size_t i = static_cast<size_t>(arg - kRkDisputeRecent);
-		if (i < r.view.recent.size()) OpenDispute(r.view.recent[i].id);
-		return;
-	}
-	if (arg >= kRkRow && arg < kRkDisputeRecent) {
-		r.boardSel = arg - kRkRow;
-		if (r.boardSel < static_cast<int>(r.view.page.rows.size())) r.boardPick = r.view.page.rows[r.boardSel].steamId;
+	if (arg >= kRkRow && arg < kRkDisputeHistory) {
+		const size_t row = static_cast<size_t>(arg - kRkRow);
+		if (row < r.view.page.rows.size()) r.boardPick = r.view.page.rows[row].steamId;
 		return;
 	}
 	switch (arg) {
@@ -703,7 +698,6 @@ void RankedAction(int arg)
 	case kRkDecline: LeagueMatchAnswer(false); break;
 	case kRkBoard:
 		r.sub = kRankedBoard;
-		r.boardSel = -1;
 		r.boardPick.clear();
 		r.boardSeek.clear();
 		r.boardSeason = -1;
@@ -716,19 +710,15 @@ void RankedAction(int arg)
 	case kRkGuideRanks: r.guideTab = 0; break;
 	case kRkGuideRules: r.guideTab = 1; break;
 	case kRkBoardPrev:
-	case kRkBoardNext:
-	case kRkBoardTop: {
+	case kRkBoardNext: {
 		const int total = r.view.page.total;
 		const int rows = RankedBoardRows();
-		int offset = arg == kRkBoardTop ? 0 : r.view.page.offset + (arg == kRkBoardNext ? rows : -rows);
-		offset = std::max(0, std::min(offset, std::max(0, total - 1) / rows * rows));
-		r.boardSel = -1;
-		RankedBoardAsk(offset, false);
+		const int offset = r.view.page.offset + (arg == kRkBoardNext ? rows : -rows);
+		RankedBoardAsk(std::max(0, std::min(offset, std::max(0, total - 1) / rows * rows)), false);
 		break;
 	}
 	case kRkBoardMe: {
 		const int me = r.view.around.me;
-		r.boardSel = -1;
 		if (me > 0) {
 			r.boardSeason = -1;
 			r.boardFriends = false;
@@ -768,7 +758,6 @@ void RankedAction(int arg)
 		// In the Steam overlay's browser, as the account's link opens; in the browser when the overlay is off.
 		if (_strtoui64(r.boardPick.c_str(), nullptr, 10)) SteamOpenWebPage("https://steamcommunity.com/profiles/" + r.boardPick);
 		break;
-	case kRkNotice: LeagueRankedClearNotice(); break;
 	case kRkContentClose: r.contentOpen = false; break;
 	case kRkContentSwitch: {
 		r.contentOpen = false;
