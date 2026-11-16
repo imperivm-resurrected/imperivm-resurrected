@@ -21,30 +21,50 @@ bool ModsExeIsLargeAddressAware()
 	return (nt->FileHeader.Characteristics & IMAGE_FILE_LARGE_ADDRESS_AWARE) != 0;
 }
 
-void ModsPatchExeAtExit(int largeAddress)
+namespace {
+std::string PsQuote(const std::string &s)
 {
-	char exe[MAX_PATH];
-	GetModuleFileNameA(nullptr, exe, MAX_PATH);
-	std::string p;
-	for (char c : std::string(exe)) {
-		p += c;
-		if (c == '\'') p += '\'';
+	std::string out;
+	for (char c : s) {
+		out += c;
+		if (c == '\'') out += '\'';
 	}
-	const std::string cmd = "powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command \"Wait-Process -Id " +
-		std::to_string(GetCurrentProcessId()) + " -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 500; $p='" + p +
-		"'; if (-not (Test-Path ($p+'.no4gb'))) { Copy-Item $p ($p+'.no4gb') }; $b=[IO.File]::ReadAllBytes($p); "
+	return "'" + out + "'";
+}
+
+// Byte 22 past the PE header's offset (kept at 60) is the low byte of the characteristics, and 32 is IMAGE_FILE_LARGE_ADDRESS_AWARE.
+// The first change keeps the untouched exe as .no4gb.
+std::string LargeAddressScript(const std::string &exe, int largeAddress)
+{
+	return "$p=" + PsQuote(exe) + "; if (-not (Test-Path ($p+'.no4gb'))) { Copy-Item $p ($p+'.no4gb') }; $b=[IO.File]::ReadAllBytes($p); "
 		"$o=[BitConverter]::ToInt32($b,60)+22; " +
 		(largeAddress ? std::string("$b[$o]=[byte]($b[$o] -bor 32); ") : std::string("$b[$o]=[byte]($b[$o] -band 223); ")) +
-		"[IO.File]::WriteAllBytes($p,$b)\"";
+		"[IO.File]::WriteAllBytes($p,$b)";
+}
+
+// Returns 0, or the error of CreateProcess.
+DWORD RunHiddenAfterExit(const std::string &script)
+{
+	const std::string cmd = "powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command \"Wait-Process -Id " +
+		std::to_string(GetCurrentProcessId()) + " -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 500; " + script + "\"";
 	STARTUPINFOA si = {sizeof(si)};
 	si.dwFlags = STARTF_USESHOWWINDOW;
 	si.wShowWindow = SW_HIDE;
 	PROCESS_INFORMATION pi = {};
 	std::vector<char> line(cmd.begin(), cmd.end());
 	line.push_back(0);
-	if (CreateProcessA(nullptr, line.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
-		CloseHandle(pi.hThread);
-		CloseHandle(pi.hProcess);
+	if (!CreateProcessA(nullptr, line.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) return GetLastError();
+	CloseHandle(pi.hThread);
+	CloseHandle(pi.hProcess);
+	return 0;
+}
+}
+
+void ModsPatchExeAtExit(int largeAddress)
+{
+	char exe[MAX_PATH];
+	GetModuleFileNameA(nullptr, exe, MAX_PATH);
+	if (RunHiddenAfterExit(LargeAddressScript(exe, largeAddress)) == 0) {
 		LogI("boot", "memory: when the game closes, the 4 GB patch is %s", largeAddress ? "applied" : "removed");
 	}
 }
@@ -55,44 +75,23 @@ void ModsRestartGame(int largeAddress, const std::string &args)
 	GetModuleFileNameA(nullptr, exe, MAX_PATH);
 	char steamApp[32] = {};
 	GetEnvironmentVariableA("SteamAppId", steamApp, sizeof(steamApp));
-	auto quote = [](std::string s) {
-		std::string out;
-		for (char c : s) {
-			out += c;
-			if (c == '\'') out += '\'';
-		}
-		return "'" + out + "'";
-	};
 	std::string steamArgs;
 	for (char c : args) steamArgs += c == ' ' ? std::string("%20") : std::string(1, c);
-	std::string start = steamApp[0] ? "Start-Process " + quote(std::string("steam://rungameid/") + steamApp +
+	std::string start = steamApp[0] ? "Start-Process " + PsQuote(std::string("steam://rungameid/") + steamApp +
 														   (args.empty() ? "" : "//" + steamArgs))
-									 : "Start-Process -FilePath " + quote(exe) + " -WorkingDirectory " + quote(GameDir()) +
-										   (args.empty() ? "" : " -ArgumentList " + quote(args));
+									 : "Start-Process -FilePath " + PsQuote(exe) + " -WorkingDirectory " + PsQuote(GameDir()) +
+										   (args.empty() ? "" : " -ArgumentList " + PsQuote(args));
 	std::string patch;
 	if (largeAddress >= 0) {
-		patch = "$p=" + quote(exe) + "; if (-not (Test-Path ($p+'.no4gb'))) { Copy-Item $p ($p+'.no4gb') }; "
-			"$b=[IO.File]::ReadAllBytes($p); $o=[BitConverter]::ToInt32($b,60)+22; " +
-			(largeAddress ? std::string("$b[$o]=[byte]($b[$o] -bor 32); ") : std::string("$b[$o]=[byte]($b[$o] -band 223); ")) +
-			"[IO.File]::WriteAllBytes($p,$b); ";
+		patch = LargeAddressScript(exe, largeAddress) + "; ";
 		LogI("content", "on restart, the 4 GB patch is %s in gbr.exe", largeAddress ? "applied" : "removed");
 	}
-	std::string cmd = "powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command \"Wait-Process -Id " +
-		std::to_string(GetCurrentProcessId()) + " -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 500; " +
-		patch + start + "\"";
-	STARTUPINFOA si = {sizeof(si)};
-	si.dwFlags = STARTF_USESHOWWINDOW;
-	si.wShowWindow = SW_HIDE;
-	PROCESS_INFORMATION pi = {};
-	std::vector<char> line(cmd.begin(), cmd.end());
-	line.push_back(0);
-	if (CreateProcessA(nullptr, line.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
-		CloseHandle(pi.hThread);
-		CloseHandle(pi.hProcess);
+	const DWORD error = RunHiddenAfterExit(patch + start);
+	if (error == 0) {
 		LogI("content", "restarting the game (%s)", steamApp[0] ? "via Steam" : "directly");
 	}
 	else {
-		LogW("content", "could not prepare the restart (error %lu); the game must be opened by hand", GetLastError());
+		LogW("content", "could not prepare the restart (error %lu); the game must be opened by hand", error);
 	}
 	AudioSetBackgroundMute(false);
 	LogShutdown();
