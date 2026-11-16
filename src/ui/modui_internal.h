@@ -210,6 +210,7 @@ const COLORREF kLink = RGB(130, 182, 238);
 const ModInfo *FindModIn(const std::vector<ModInfo> &mods, const std::string &folder);
 const ModInfo *FindMod(const std::string &folder);
 std::string OverlapText(const ModOverlap &ov);
+const Row *SelectedRow(const State &st);
 const ModIssues *SelectedIssues(const State &st);
 bool Pending(const State &st, const std::string &folder);
 std::vector<int> VisibleRows(const State &st);
