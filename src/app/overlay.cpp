@@ -3,6 +3,7 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include "net/spectator.h"
 #include "net/nettune.h"
+#include "game/gamelayout.h"
 #include "game/healthbars.h"
 #include "game/mapfog.h"
 #include "game/quickicons.h"
@@ -143,7 +144,7 @@ bool PlayerColorOf(int number, COLORREF &out)
 		const uint32_t ip = *reinterpret_cast<uint32_t *>(gs + 0xdc8 + i * 4);
 		const bool match = ip == (0x7f4d0000u | static_cast<uint32_t>(number)) || ip == ((static_cast<uint32_t>(number) << 24) | 0x00004d7fu);
 		if (!match) continue;
-		const uint32_t c = *reinterpret_cast<uint32_t *>(game + 0x12cc + i * 800 + 0x314);
+		const uint32_t c = Field<uint32_t>(layout::PlayerAt(game, i), layout::kPlayerColor);
 		out = RGB(((c >> 10) & 31) * 255 / 31, ((c >> 5) & 31) * 255 / 31, (c & 31) * 255 / 31);
 		return true;
 	}
