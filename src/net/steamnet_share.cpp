@@ -40,12 +40,15 @@ void PumpRejoinOut()
 
 EResult ShareSend(uint64 peer, uint8_t type, const void *data, size_t len)
 {
-	std::vector<uint8_t> buf(1 + len);
-	buf[0] = type;
-	if (len) memcpy(&buf[1], data, len);
+	// Kept between calls, since every 64 KB chunk of a transfer comes through here; Steam copies what it sends.
+	thread_local std::vector<uint8_t> buf;
+	buf.assign(1, type);
+	buf.insert(buf.end(), static_cast<const uint8_t *>(data), static_cast<const uint8_t *>(data) + len);
 	SteamNetworkingIdentity who = Identity(peer);
-	return S.SteamAPI_ISteamNetworkingMessages_SendMessageToUser(g_steam.msgs, who, buf.data(), static_cast<uint32>(buf.size()),
+	const EResult r = S.SteamAPI_ISteamNetworkingMessages_SendMessageToUser(g_steam.msgs, who, buf.data(), static_cast<uint32>(buf.size()),
 		k_nSteamNetworkingSend_Reliable | k_nSteamNetworkingSend_AutoRestartBrokenSession, kShareChannel);
+	if (buf.capacity() > 256 * 1024) std::vector<uint8_t>().swap(buf);
+	return r;
 }
 
 std::vector<std::string> SplitTabs(const std::string &s)
@@ -156,6 +159,9 @@ void HostOnRequest(uint64 peer, const std::string &text)
 
 void PumpOut()
 {
+	// Every tick of the Steam thread: with nothing to send and no progress left to clear, nothing to do.
+	static bool reported = false;
+	if (g_share.out.empty() && !reported) return;
 	for (size_t i = 0; i < g_share.out.size();) {
 		OutTransfer &t = g_share.out[i];
 		bool earlier = false;
@@ -226,6 +232,7 @@ void PumpOut()
 		progress[t.peer].first += t.sent;
 		progress[t.peer].second += t.total;
 	}
+	reported = !progress.empty();
 	std::lock_guard<std::mutex> lock(g_lock);
 	g_share.sendProgress.swap(progress);
 }
@@ -326,7 +333,6 @@ void ClientOnMessage(uint64 peer, const uint8_t *data, size_t len)
 {
 	if (!len || peer != g_share.in.host || g_share.in.tempRoot.empty()) return;
 	const uint8_t type = data[0];
-	const std::string text(reinterpret_cast<const char *>(data + 1), len - 1);
 	if (type == kShData) {
 		DWORD wrote = 0;
 		if (len - 1 > g_share.in.fileLeft) {
@@ -342,7 +348,7 @@ void ClientOnMessage(uint64 peer, const uint8_t *data, size_t len)
 		g_share.download.got += len - 1;
 		return;
 	}
-	const std::vector<std::string> f = SplitTabs(text);
+	const std::vector<std::string> f = SplitTabs(std::string(reinterpret_cast<const char *>(data + 1), len - 1));
 	if (type == kShFile && f.size() >= 4) {
 		if (g_share.in.file != INVALID_HANDLE_VALUE) CloseHandle(g_share.in.file);
 		g_share.in.file = INVALID_HANDLE_VALUE;
