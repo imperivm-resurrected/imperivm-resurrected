@@ -393,8 +393,7 @@ void ClientOnMessage(uint64 peer, const uint8_t *data, size_t len)
 		FailDownload(f[0] + ": " + f[1]);
 	}
 	else if (type == kShDone) {
-		DeleteTree(g_share.in.tempRoot);
-		g_share.in = InTransfer();
+		ResetDownload();
 		std::lock_guard<std::mutex> lock(g_lock);
 		g_share.download.active = false;
 		g_share.download.done = true;
