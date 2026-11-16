@@ -23,6 +23,7 @@
 #include "ui/modui.h"
 
 #include "ui/mpui_internal.h"
+#include "ui/mpui_ranked_kit.h"
 
 using namespace mpui_impl;
 
@@ -38,23 +39,6 @@ int InvitesShown(int count, int h)
 	int n = std::max(0, std::min({2, count, room / kDuoInviteH}));
 	if (n > 0 && n < count && room - n * kDuoInviteH < kDuoMoreH) n--;
 	return n;
-}
-
-void Display(Painter &p, int size)
-{
-	SelectObject(p.dc, BrandFont(BrandFace::Display, size, p.s));
-}
-
-void Body(Painter &p, int size, bool bold = false)
-{
-	SelectObject(p.dc, BrandFont(bold ? BrandFace::BodyBold : BrandFace::Body, size, p.s));
-}
-
-void RawText(Painter &p, int x, int y, int w, int h, const std::string &text, COLORREF c, UINT fmt = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS)
-{
-	p.raw = true;
-	p.Text(x, y, w, h, text, c, fmt);
-	p.raw = false;
 }
 
 // A caption in capitals that keeps to its box: the letters close up, then the type gets smaller, before anything is cut.
@@ -73,7 +57,8 @@ int CapsWidth(Painter &p, const std::string &text, int spacing = 1)
 	return p.CapsWidth(text, spacing);
 }
 
-void Ghost(Painter &p, int x, int y, int w, int h, const std::string &label, int arg, bool enabled, int mx, int my)
+// The ranked tab's outlined button and chip, their labels fitted to the box.
+void FitGhost(Painter &p, int x, int y, int w, int h, const std::string &label, int arg, bool enabled, int mx, int my)
 {
 	const bool hot = enabled && p.Hover(x, y, w, h, mx, my);
 	const bool down = enabled && p.pressAction == kRankedAct && p.pressArg == arg;
@@ -83,7 +68,7 @@ void Ghost(Painter &p, int x, int y, int w, int h, const std::string &label, int
 	if (enabled) p.AddHit(x, y, w, h, kRankedAct, arg);
 }
 
-void Chip(Painter &p, int x, int y, int w, int h, const std::string &text, COLORREF ink, COLORREF back)
+void FitChip(Painter &p, int x, int y, int w, int h, const std::string &text, COLORREF ink, COLORREF back)
 {
 	p.Fill(x, y, w, h, back);
 	FitCaps(p, x + 4, y, w - 8, h, text, ink, DT_CENTER);
@@ -149,16 +134,6 @@ std::string LeftText(int64_t until)
 	return LeagueClockText(std::max<int64_t>(0, until - LeagueServerNowMs()) + 999);
 }
 
-COLORREF Ink(LeagueTier t)
-{
-	return t == LeagueTier::None ? pal::caption : LeagueTierInk(t);
-}
-
-std::string RankLabel(LeagueTier t, int division)
-{
-	return t == LeagueTier::None ? Tr("In placement") : LeagueRankLabel(t, division);
-}
-
 // A player of a 2v2 match found: avatar, name and who they are to this player, their record, and their rank with the Glory, and whether
 // they accepted.
 void PaintTeamCard(Painter &p, int x, int y, int w, int h, const LeaguePlayerCard &c, bool you, bool partner, bool accepted)
@@ -186,7 +161,7 @@ void PaintTeamCard(Painter &p, int x, int y, int w, int h, const LeaguePlayerCar
 	for (const auto &m : marks) {
 		const int cw = ChipWidth(p, m.first, 44);
 		if (mx + cw > x + w - 16) break;
-		Chip(p, mx, y + 16, cw, 20, m.first, m.second, m.second == pal::redText ? RGB(0x3a, 0x12, 0x14) : pal::hairline);
+		FitChip(p, mx, y + 16, cw, 20, m.first, m.second, m.second == pal::redText ? RGB(0x3a, 0x12, 0x14) : pal::hairline);
 		mx += cw + 6;
 	}
 	p.Font(3);
@@ -202,7 +177,7 @@ void PaintTeamCard(Painter &p, int x, int y, int w, int h, const LeaguePlayerCar
 	const int rx = x + 14 + emblem + 10, rw = x + w - 16 - chipW - 12 - rx;
 	Display(p, 26);
 	p.raw = true;
-	p.TextCaps(rx, ry, rw, 28, RankLabel(c.tier, c.division), Ink(c.tier), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
+	p.TextCaps(rx, ry, rw, 28, RankOrPlacement(c.tier, c.division), Ink(c.tier), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
 	p.raw = false;
 	if (c.standing && c.tier != LeagueTier::None) {
 		std::string glory = TrFmt("%s Glory", {std::to_string(c.glory)});
@@ -210,7 +185,7 @@ void PaintTeamCard(Painter &p, int x, int y, int w, int h, const LeaguePlayerCar
 		p.Font(3);
 		RawText(p, rx, ry + 28, rw, 20, glory, pal::body);
 	}
-	Chip(p, x + w - 16 - chipW, ry + (h - 78 - chipH) / 2, chipW, chipH, accepted ? "Accepted" : "Pending", accepted ? pal::ok : pal::textDim,
+	FitChip(p, x + w - 16 - chipW, ry + (h - 78 - chipH) / 2, chipW, chipH, accepted ? "Accepted" : "Pending", accepted ? pal::ok : pal::textDim,
 		accepted ? RGB(0x2a, 0x36, 0x24) : pal::hairline);
 }
 
@@ -220,11 +195,6 @@ void Fact(Painter &p, int x, int y, int w, const std::string &label, const std::
 	FitCaps(p, x, y, w, 16, label, pal::caption);
 	p.Font(0);
 	RawText(p, x, y + 20, w, 26, value, pal::text);
-}
-
-std::string YesNo(int flag)
-{
-	return flag < 0 ? std::string("\xE2\x80\x94") : Tr(flag ? "Yes" : "No");
 }
 
 }
@@ -261,7 +231,7 @@ void PaintRankedDuo(Painter &p, const State &st, int x, int y, int w, int h)
 		// Alone: what a duo is, and the button to invite a friend.
 		const std::string label = Tr("Invite a friend");
 		const int bw = std::min(iw / 2, CapsWidth(p, label, 2) + 40);
-		Ghost(p, ix + iw - bw, ry + 8, bw, 40, label, kRkDuoInviteOpen, !duo.busy && !searching, mx, my);
+		FitGhost(p, ix + iw - bw, ry + 8, bw, 40, label, kRkDuoInviteOpen, !duo.busy && !searching, mx, my);
 		const std::string text = duo.missing ? Tr("The league server does not have duos yet: you search alone.") : Tr("Search alone, or invite a Steam friend to search together.");
 		const int tw = iw - bw - 16;
 		p.Font(3);
@@ -279,7 +249,7 @@ void PaintRankedDuo(Painter &p, const State &st, int x, int y, int w, int h)
 		const char *leave = duo.role == LeagueDuoRole::Waiting ? "Cancel the invitation" : "Leave the duo";
 		const int bw = std::min(iw * 2 / 5, CapsWidth(p, Tr(leave), 2) + 32);
 		// Leaving the duo stops its search: the partner who follows the leader's may, the leader cancels theirs first.
-		Ghost(p, ix + iw - bw, ry + 10, bw, 36, Tr(leave), kRkDuoLeave, !duo.busy && (v.partnerSearch || !searching), mx, my);
+		FitGhost(p, ix + iw - bw, ry + 10, bw, 36, Tr(leave), kRkDuoLeave, !duo.busy && (v.partnerSearch || !searching), mx, my);
 		const int tx = ix + 56, tw = iw - 56 - bw - 12;
 		Body(p, 18);
 		RawText(p, tx, ry + 4, tw, 26, name, pal::text);
@@ -303,7 +273,7 @@ void PaintRankedDuo(Painter &p, const State &st, int x, int y, int w, int h)
 		// Accepting one undoes the invitation this player sent, if any; not a duo already made.
 		const bool can = !duo.busy && (duo.role == LeagueDuoRole::Solo || duo.role == LeagueDuoRole::Waiting) && !searching;
 		p.Button(ix + iw - aw - dw - 8, ry + 9, aw, 32, accept, kRankedAct, kRkDuoAccept + static_cast<int>(i), mx, my, can, true);
-		Ghost(p, ix + iw - dw, ry + 9, dw, 32, decline, kRkDuoDecline + static_cast<int>(i), !duo.busy, mx, my);
+		FitGhost(p, ix + iw - dw, ry + 9, dw, 32, decline, kRkDuoDecline + static_cast<int>(i), !duo.busy, mx, my);
 		const int tx = ix + 44, tw = iw - 44 - aw - dw - 20;
 		p.Font(0);
 		RawText(p, tx, ry + 4, tw, 22, from, pal::text);
@@ -351,7 +321,7 @@ void PaintRankedInvite(Painter &p, const State &st)
 		int chipW = 0;
 		if (f.inGame) {
 			chipW = ChipWidth(p, "Playing now", 90);
-			Chip(p, ix + iw - bw - 12 - chipW, ry + 15, chipW, 22, "Playing now", pal::ok, RGB(0x2a, 0x36, 0x24));
+			FitChip(p, ix + iw - bw - 12 - chipW, ry + 15, chipW, 22, "Playing now", pal::ok, RGB(0x2a, 0x36, 0x24));
 		}
 		p.Font(0);
 		RawText(p, ix + 56, ry, iw - 56 - bw - 24 - chipW, kInviteRowH, f.name, pal::text);
@@ -361,8 +331,8 @@ void PaintRankedInvite(Painter &p, const State &st)
 	// The pages, at the foot on the left; the button to close on the right.
 	if (pages > 1) {
 		const int fy = d.FooterTop();
-		Ghost(p, ix, fy, 48, kDialogBtnH, "\xE2\x80\xB9", kRkDuoFriendsPrev, page > 0, mx, my);
-		Ghost(p, ix + 56, fy, 48, kDialogBtnH, "\xE2\x80\xBA", kRkDuoFriendsNext, page + 1 < pages, mx, my);
+		FitGhost(p, ix, fy, 48, kDialogBtnH, "\xE2\x80\xB9", kRkDuoFriendsPrev, page > 0, mx, my);
+		FitGhost(p, ix + 56, fy, 48, kDialogBtnH, "\xE2\x80\xBA", kRkDuoFriendsNext, page + 1 < pages, mx, my);
 		p.Font(3);
 		RawText(p, ix + 120, fy, 200, kDialogBtnH, TrFmt("Page %s of %s", {std::to_string(page + 1), std::to_string(pages)}), pal::caption);
 	}
@@ -489,7 +459,7 @@ void PaintSearchTeam(Painter &p, const State &st)
 	else {
 		p.fonts[5] = BrandFont(BrandFace::Display, 34, p.s);
 		p.Button(mid - 328, by, 400, 60, "Accept", kRankedAct, kRkAccept, mx, my, !v.answering, true, 5);
-		Ghost(p, mid + 88, by, 240, 60, Tr("Decline"), kRkDecline, !v.answering, mx, my);
+		FitGhost(p, mid + 88, by, 240, 60, Tr("Decline"), kRkDecline, !v.answering, mx, my);
 		UseSharedFonts(p);
 	}
 	p.Font(3);

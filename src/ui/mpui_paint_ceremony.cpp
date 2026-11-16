@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
-#include <ctime>
 #include <initializer_list>
 #include <string>
 #include <vector>
@@ -25,6 +24,7 @@
 #include "ui/leagueui.h"
 
 #include "ui/mpui_internal.h"
+#include "ui/mpui_ranked_kit.h"
 
 using namespace mpui_impl;
 
@@ -33,23 +33,6 @@ namespace {
 
 const int kGap = 24;
 const COLORREF kGoldPlinth = RGB(0x2A, 0x1A, 0x12), kGoldEdge = RGB(0x5A, 0x42, 0x0E), kGoldNumeral = RGB(0xF2, 0xD0, 0x6B);
-
-void Display(Painter &p, int size)
-{
-	SelectObject(p.dc, BrandFont(BrandFace::Display, size, p.s));
-}
-
-void Body(Painter &p, int size, bool bold = false)
-{
-	SelectObject(p.dc, BrandFont(bold ? BrandFace::BodyBold : BrandFace::Body, size, p.s));
-}
-
-void RawText(Painter &p, int x, int y, int w, int h, const std::string &text, COLORREF c, UINT fmt = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS)
-{
-	p.raw = true;
-	p.Text(x, y, w, h, text, c, fmt);
-	p.raw = false;
-}
 
 // Big capitals that shrink, size by size, before they would be cut.
 void FitCaps(Painter &p, int x, int y, int w, int h, const std::string &text, COLORREF c, std::initializer_list<int> sizes)
@@ -77,31 +60,6 @@ void FitLine(Painter &p, int x, int y, int w, int h, const std::string &text, CO
 	if (p.TextWidth(text) > w) Body(p, 15);
 	p.Text(x, y, w, h, text, c, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	p.raw = false;
-}
-
-std::string DateText(int64_t serverMs)
-{
-	const time_t t = static_cast<time_t>((serverMs - LeagueServerClockOffsetMs()) / 1000);
-	tm local = {};
-	if (localtime_s(&local, &t) != 0) return std::string();
-	char buf[32];
-	sprintf_s(buf, "%02d/%02d/%04d", local.tm_mday, local.tm_mon + 1, local.tm_year + 1900);
-	return buf;
-}
-
-std::string RankName(LeagueTier t, int division)
-{
-	return t == LeagueTier::None ? Tr("Unranked") : LeagueRankLabel(t, division);
-}
-
-LeagueBadge RankBadge(LeagueTier t, int division)
-{
-	LeagueBadge b;
-	if (t == LeagueTier::None) return b;
-	b.kind = LeagueBadgeKind::Rank;
-	b.tier = t;
-	b.division = division;
-	return b;
 }
 
 // The sizes of the screen's parts: the mockup's on a 1080 screen, smaller on a shorter one so everything keeps its room.
@@ -366,7 +324,9 @@ void PaintNextSeason(Painter &p, const LeagueSeasonInfo &s, const Look &k, int x
 		DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
 	p.raw = false;
 	p.Font(0);
-	if (s.startsAt && s.endsAt) RawText(p, ix, y + (k.tight ? 76 : 102), iw, 24, TrFmt("From %s to %s", {DateText(s.startsAt), DateText(s.endsAt)}), pal::textDim);
+	if (s.startsAt && s.endsAt) {
+		RawText(p, ix, y + (k.tight ? 76 : 102), iw, 24, TrFmt("From %s to %s", {DateText(LocalTime(s.startsAt)), DateText(LocalTime(s.endsAt))}), pal::textDim);
+	}
 }
 
 }
@@ -394,7 +354,7 @@ void PaintCeremony(Painter &p, const State &st)
 	std::string info = c.reward.seasonName;
 	if (const LeagueSeasonInfo *s = LeagueSeasonById(sv.seasons, season); s && s->startsAt && s->endsAt) {
 		if (info.empty()) info = s->name;
-		info += (info.empty() ? "" : "  \xC2\xB7  ") + DateText(s->startsAt) + " \xE2\x80\x93 " + DateText(s->endsAt);
+		info += (info.empty() ? "" : "  \xC2\xB7  ") + DateText(LocalTime(s->startsAt)) + " \xE2\x80\x93 " + DateText(LocalTime(s->endsAt));
 	}
 	if (!info.empty()) {
 		p.raw = true;

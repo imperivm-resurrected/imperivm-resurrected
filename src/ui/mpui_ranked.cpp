@@ -32,6 +32,7 @@
 #include "ui/modui.h"
 
 #include "ui/mpui_internal.h"
+#include "ui/mpui_ranked_kit.h"
 
 using namespace mpui_impl;
 
@@ -437,35 +438,6 @@ void CallPlayer()
 	else if (!g_s.open) ModUiToast("Ranked match found! Open Multiplayer to accept it.");
 }
 
-COLORREF Ink(LeagueTier t)
-{
-	return t == LeagueTier::None ? pal::caption : LeagueTierInk(t);
-}
-
-std::string RankLabel(LeagueTier t, int division)
-{
-	return t == LeagueTier::None ? Tr("In placement") : LeagueRankLabel(t, division);
-}
-
-// An outlined button whose action is a ranked one, with its argument.
-void Ghost(Painter &p, int x, int y, int w, int h, const std::string &label, int arg, bool enabled, int mx, int my, int font = 4)
-{
-	const bool hot = enabled && p.Hover(x, y, w, h, mx, my);
-	const bool down = enabled && p.pressAction == kRankedAct && p.pressArg == arg;
-	if (down) p.Fill(x, y, w, h, pal::raised);
-	p.Frame(x, y, w, h, !enabled ? pal::hairline : hot || down ? pal::edgeHot : pal::edge);
-	p.Font(font);
-	p.TextCaps(x, y, w, h, label, !enabled ? pal::disabled : hot || down ? pal::text : pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 2);
-	if (enabled) p.AddHit(x, y, w, h, kRankedAct, arg);
-}
-
-void Chip(Painter &p, int x, int y, int w, int h, const std::string &text, COLORREF ink, COLORREF back)
-{
-	p.Fill(x, y, w, h, back);
-	p.Font(4);
-	p.TextCaps(x, y, w, h, text, ink, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
-}
-
 // The record of a player as the found match gives it: wins and losses, the share won, then the streak.
 std::string RecordText(const LeaguePlayerCard &c)
 {
@@ -520,7 +492,7 @@ void PaintSide(Painter &p, int x, int y, int w, int h, uint64_t id, const std::s
 	DrawLeagueEmblem(p, x + 20, y + 108, 80, tier);
 	SelectObject(p.dc, BrandFont(BrandFace::Display, 36, p.s));
 	p.raw = true;
-	p.TextCaps(x + 112, y + 114, w - 136, 38, RankLabel(tier, card.division), Ink(tier), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
+	p.TextCaps(x + 112, y + 114, w - 136, 38, RankOrPlacement(tier, card.division), Ink(tier), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
 	p.raw = false;
 	// Glory and place, once the player has a rank: a player in placement has neither yet.
 	if (card.standing && tier != LeagueTier::None) {
@@ -544,11 +516,6 @@ void Fact(Painter &p, int x, int y, int w, const std::string &label, const std::
 	p.TextCaps(x, y, w, 16, label, pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
 	p.Font(0);
 	p.Text(x, y + 20, w, 26, value, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-}
-
-std::string YesNo(int flag, const char *unknown = "—")
-{
-	return flag < 0 ? std::string(unknown) : Tr(flag ? "Yes" : "No");
 }
 
 }
@@ -1114,7 +1081,7 @@ void PaintSearch(Painter &p, const State &st)
 		SelectObject(p.dc, BrandFont(BrandFace::Display, 36, p.s));
 		p.fonts[5] = BrandFont(BrandFace::Display, 36, p.s);
 		p.Button(mid - 328, by, 400, 64, "Accept", kRankedAct, kRkAccept, mx, my, !v.answering, true, 5);
-		Ghost(p, mid + 88, by, 240, 64, "Decline", kRkDecline, !v.answering, mx, my, 4);
+		Ghost(p, mid + 88, by, 240, 64, "Decline", kRkDecline, !v.answering, mx, my);
 		UseSharedFonts(p);
 	}
 	p.Font(3);
