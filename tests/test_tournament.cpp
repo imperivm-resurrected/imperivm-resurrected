@@ -1121,6 +1121,18 @@ void Estimate()
 	CHECK(e.rounds == 5 && e.series == 7 && e.maxGames == 5 + 6 && e.minutes == 40 * (3 + 6) + 10 * 4);
 	CHECK_EQ(TourneyEstimateFor(TourneyFormat::Double, 1, 1, 1, 0).minutes, 0);
 
+	TourneyDetail d;
+	d.format = "single_elimination";
+	d.startsAt = 1000;
+	d.maxEntries = 16;
+	d.bestOf = 1;
+	d.finalBestOf = 3;
+	CHECK(TourneyEstimatedEnd(d) == 1000 + static_cast<int64_t>(TourneyEstimateFor(16, 1, 3).minutes) * 60000);
+	d.entries = 8;
+	CHECK(TourneyEstimatedEnd(d) == 1000 + static_cast<int64_t>(40 * 5 + 10 * 2) * 60000);
+	d.pace = TourneyPace::Rounds;
+	CHECK(TourneyEstimatedEnd(d) == 0);
+
 	TourneyCupForm f;
 	f.maxEntries = 8;
 	f.bestOf = 1;

@@ -661,6 +661,9 @@ TourneyEstimate TourneyEstimateFor(int places, int bestOf, int finalBestOf, int 
 // plays twice as many, then the grand final and its reset.
 TourneyEstimate TourneyEstimateFor(TourneyFormat format, int places, int bestOf, int finalBestOf, int swissRounds, int gameMinutes = 40);
 TourneyEstimate TourneyEstimateOf(const TourneyCupForm &f);
+// When a cup played in one evening should end: its start and the estimate for those signed up (its places before anyone is). 0 for a cup
+// by rounds or without a start.
+int64_t TourneyEstimatedEnd(const TourneyDetail &d);
 // Past this a live cup is long for one evening: the form says so for a double elimination.
 constexpr int kTourneyLiveWarnMinutes = 300;
 bool TourneyCupLongLive(const TourneyCupForm &f);

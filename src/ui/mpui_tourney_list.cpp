@@ -267,11 +267,56 @@ void PaintSubTabs(Painter &p, const Ui &u, const TourneyListsView &lists, int x,
 	}
 }
 
+// Whether the list's filters let a cup through.
+bool Shown(const TourneySummary &t, const Ui &u, const TourneyMineView &mine)
+{
+	if ((u.listKind == 1 && !t.official) || (u.listKind == 2 && t.official)) return false;
+	const int format = TourneyIsSwiss(t) ? 3 : TourneyIsDouble(t) ? 2 : 1;
+	if (u.listFormat && u.listFormat != format) return false;
+	if (!u.listPlayable || u.filter != 0) return true;
+	const bool open = t.status == TourneyStatus::Signup || t.status == TourneyStatus::Checkin;
+	return open && !t.isPrivate && CupUnmet(t.requirements, mine) == TourneyUnmet::None;
+}
+
+// A filter of the list: its choice now, with a mark of the menu it cycles through, or lit while it is on. Its width.
+int PaintFilter(Painter &p, int x, int y, int h, const std::string &label, bool on, bool cycle, int sub, int mx, int my)
+{
+	UseFace(p, BrandFace::Ui, 13);
+	p.raw = true;
+	const int w = p.TextWidth(label) + (cycle ? 44 : 28);
+	const bool hot = p.Hover(x, y, w, h, mx, my);
+	if (on) p.Fill(x, y, w, h, pal::selected);
+	p.Frame(x, y, w, h, on || hot ? pal::edgeHot : pal::edge);
+	p.Text(x + 14, y, w - 28, h, label, on || hot ? pal::text : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+	p.raw = false;
+	if (cycle) {
+		const int cx = x + w - 20, cy = y + h / 2 - 2;
+		p.Line(cx - 4, cy, cx, cy + 4, pal::caption, 2);
+		p.Line(cx, cy + 4, cx + 4, cy, pal::caption, 2);
+	}
+	p.AddHit(x, y, w, h, kTourney, ArgOf(sub, 0));
+	return w;
+}
+
 void PaintTable(Painter &p, const State &st, const Ui &u, const TourneyListsView &lists, const TourneyMineView &mine, int x, int y, int w, int h, PaintOut &out)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	PaintGlassCard(p, x, y, w, h);
-	const std::vector<TourneySummary> &rows = u.filter == 1 ? lists.live : u.filter == 2 ? lists.finished : lists.open;
+	const std::vector<TourneySummary> &all = u.filter == 1 ? lists.live : u.filter == 2 ? lists.finished : lists.open;
+	std::vector<TourneySummary> rows;
+	for (const TourneySummary &t : all) {
+		if (Shown(t, u, mine)) rows.push_back(t);
+	}
+	{
+		static const char *const kKinds[] = {"Official and community", "Official only", "Community only"};
+		static const char *const kFormats[] = {"All formats", "Single elimination", "Double elimination", "Swiss"};
+		int fx = x + 16;
+		fx += PaintFilter(p, fx, y + 12, 32, Tr(kKinds[u.listKind % 3]), u.listKind != 0, true, kSubListKind, mx, my) + 10;
+		fx += PaintFilter(p, fx, y + 12, 32, Tr(kFormats[u.listFormat % 4]), u.listFormat != 0, true, kSubListFormat, mx, my) + 10;
+		if (u.filter == 0) PaintFilter(p, fx, y + 12, 32, Tr("Only the ones I can play"), u.listPlayable, false, kSubListPlayable, mx, my);
+		y += 48;
+		h -= 48;
+	}
 	// The mockup's grid: the name takes what the other columns leave.
 	const int pad = 16, gap = 16;
 	// "When" has room for a round's deadline, "until Thursday 20:00".
@@ -294,6 +339,7 @@ void PaintTable(Painter &p, const State &st, const Ui &u, const TourneyListsView
 	if (rows.empty()) {
 		p.Font(0);
 		const char *empty = !lists.loaded ? (lists.failed ? "Couldn't reach the league server. Check your connection and try again." : "Reading the tournaments...")
+			: !all.empty()	? "No tournament matches these filters."
 			: u.filter == 0 ? "No tournament is open for sign-up now. The official cups are announced on Discord."
 			: u.filter == 1 ? "No tournament is being played now."
 							: "No tournament has finished yet.";

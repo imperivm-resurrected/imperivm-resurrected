@@ -1803,6 +1803,14 @@ TourneyEstimate TourneyEstimateFor(TourneyFormat format, int places, int bestOf,
 	return e;
 }
 
+int64_t TourneyEstimatedEnd(const TourneyDetail &d)
+{
+	if (TourneyByRounds(d) || d.startsAt <= 0) return 0;
+	const int places = d.entries >= 2 ? d.entries : d.maxEntries;
+	const TourneyEstimate e = TourneyEstimateFor(TourneyFormatOf(d), places, d.bestOf, d.finalBestOf, d.swissRounds, TourneyGameMinutes(d.mode));
+	return e.minutes > 0 ? d.startsAt + static_cast<int64_t>(e.minutes) * 60000 : 0;
+}
+
 TourneyEstimate TourneyEstimateOf(const TourneyCupForm &f)
 {
 	TourneyEstimate e = TourneyEstimateFor(f.format, f.maxEntries, f.bestOf, f.finalBestOf, f.swissRounds, TourneyGameMinutes(f.mode));

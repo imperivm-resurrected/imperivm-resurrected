@@ -1210,6 +1210,18 @@ void TourneyAction(int arg)
 		u.filter = static_cast<int>(value);
 		u.listScroll = 0;
 		break;
+	case kSubListKind:
+		u.listKind = (u.listKind + 1) % 3;
+		u.listScroll = 0;
+		break;
+	case kSubListFormat:
+		u.listFormat = (u.listFormat + 1) % 4;
+		u.listScroll = 0;
+		break;
+	case kSubListPlayable:
+		u.listPlayable = !u.listPlayable;
+		u.listScroll = 0;
+		break;
 	case kSubOpen: OpenPage(SlugOf(value), 0); break;
 	case kSubManage: OpenPage(SlugOf(value), kOrganizerTab); break;
 	case kSubBack: TourneyBack(); break;

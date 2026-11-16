@@ -606,6 +606,10 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 	if (byRounds && n.noshowFrom) rules.push_back({Tr("No-show"), FromText(n.noshowFrom)});
 	if (teams && (n.team.side == "a" || n.team.side == "b")) rules.push_back({Tr("Teams"), TrFmt("Set by the league: yours is team %s", {n.team.side == "a" ? "1" : "2"})});
 	rules.push_back({Tr("Settings"), PresetText(n.settings)});
+	// The map's view and the diplomacy, as the preset and the cup's switches leave them.
+	const TourneyRoomRules room = TourneyRulesOf(n.settings);
+	rules.push_back({Tr("Map view"), Tr(room.explored ? (room.fog ? "Explored, with fog of war" : "Explored, no fog of war") : room.fog ? "Unexplored, with fog of war" : "Unexplored, no fog of war")});
+	rules.push_back({Tr("Diplomacy"), Tr(room.lockedDiplomacy ? "Locked" : "Free")});
 	rules.push_back({Tr("Map"), map.Known() ? MapText(map) : Tr(n.pick.present ? "To be chosen" : "Chosen in the room")});
 	rules.push_back({Tr("Civilizations"), Tr(n.settings.hideCivs ? "Hidden until the game starts" : "Visible in the room")});
 	rules.push_back({Tr("Spectators"), TourneySpecDelay(n.settings) ? TrFmt("With a %s s delay", {std::to_string(TourneySpecDelay(n.settings))}) : Tr("No spectators")});
@@ -780,6 +784,9 @@ void PaintChampionScreen(Painter &p, const State &st, const Ui &u)
 			const int sx = pathX + 62, sw = pathW - 62 - 28;
 			std::string stage = MatchStageText(d, *mm);
 			if (mm->bestOf > 1) stage += " \xC2\xB7 " + TrFmt("Best of %s", {std::to_string(mm->bestOf)});
+			// How long the series took and its first map, when the league kept them.
+			if (!bye && mm->startedAt > 0 && mm->finishedAt > mm->startedAt) stage += " \xC2\xB7 " + DurationText(mm->finishedAt - mm->startedAt);
+			if (!bye && !mm->games.empty() && mm->games[0].map.Known()) stage += " \xC2\xB7 " + MapText(mm->games[0].map);
 			PaintCaps(p, sx, sy, sw, 20, stage, last ? kGold : lost ? pal::redText : pal::caption);
 			const bool sideB = mm->b.entryId == champ->entryId;
 			const TourneyCard &other = sideB ? mm->a : mm->b;
@@ -877,16 +884,32 @@ void PaintChampionScreen(Painter &p, const State &st, const Ui &u)
 			upset = &mm;
 		}
 	}
-	if (upset && ry + 62 + 2 * 92 + 30 < ry + rh) {
+	// The longest series, as the league timed it.
+	const TourneyMatch *longest = nullptr;
+	for (const TourneyMatch &mm : d.matches) {
+		if (mm.startedAt <= 0 || mm.finishedAt <= mm.startedAt || !mm.a.Present() || !mm.b.Present()) continue;
+		if (!longest || mm.finishedAt - mm.startedAt > longest->finishedAt - longest->startedAt) longest = &mm;
+	}
+	int lineY = ry + 62 + 2 * 92 + 4;
+	if ((upset || longest) && lineY + 26 < ry + rh) p.Fill(x2 + pad, lineY - 10, cw - 2 * pad, 1, pal::hairline);
+	if (upset && lineY + 26 < ry + rh) {
 		const TourneyCard &w = upset->winner == upset->a.entryId ? upset->a : upset->b, &lo = upset->winner == upset->a.entryId ? upset->b : upset->a;
-		p.Fill(x2 + pad, ry + 62 + 2 * 92 - 6, cw - 2 * pad, 1, pal::hairline);
 		p.Font(0);
 		p.raw = true;
 		// Only a single elimination knocks a player out with one loss.
 		const char *beat = TourneyIsSwiss(d) || TourneyIsDouble(d) ? "%s beat %s" : "%s knocked out %s";
-		p.Text(x2 + pad, ry + 62 + 2 * 92 + 4, cw - 2 * pad, 24,
+		p.Text(x2 + pad, lineY, cw - 2 * pad, 24,
 			Tr("The surprise") + " \xC2\xB7 " + TrFmt(beat, {w.name + " (" + std::to_string(w.seed) + ")", lo.name + " (" + std::to_string(lo.seed) + ")"}), pal::body,
 			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.raw = false;
+		lineY += 30;
+	}
+	if (longest && lineY + 26 < ry + rh) {
+		p.Font(0);
+		p.raw = true;
+		p.Text(x2 + pad, lineY, cw - 2 * pad, 24,
+			Tr("The longest") + " \xC2\xB7 " + TrFmt("%s, %s against %s", {DurationText(longest->finishedAt - longest->startedAt), longest->a.name, longest->b.name}),
+			pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.raw = false;
 	}
 

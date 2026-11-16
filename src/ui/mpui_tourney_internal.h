@@ -38,6 +38,8 @@ enum Sub {
 	// A cup of teams: the dialog of the team's sign-up (its cup, a friend picked by their place in its list, sent, closed), the invitation to
 	// a team answered and the captain's team taken back while it waits for the partner (both by their cup).
 	kSubTeamOpen, kSubTeamPick, kSubTeamSend, kSubTeamCancel, kSubInviteAccept, kSubInviteDecline, kSubTeamWithdraw,
+	// The list's filters, each click the next choice: official or community cups, the format, and only those the player can sign up for.
+	kSubListKind, kSubListFormat, kSubListPlayable,
 };
 
 // What kSubCupSet changes in the form: the high bits of its value; the low 16 are the choice.
@@ -129,6 +131,10 @@ struct RoomLock {
 struct Ui {
 	int screen = kScreenList;
 	int filter = 0;
+	// The list's filters: every cup (0), the official (1) or the community's (2); every format (0), single (1) or double elimination (2) or
+	// Swiss (3); and only those the player can sign up for now.
+	int listKind = 0, listFormat = 0;
+	bool listPlayable = false;
 	std::string slug;
 	int pageTab = 0;
 	int listScroll = 0, bracketX = 0, bracketY = 0, sideScroll = 0;

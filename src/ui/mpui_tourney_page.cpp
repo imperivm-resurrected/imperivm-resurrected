@@ -1528,6 +1528,9 @@ int PaintProgressCard(Painter &p, Ctx &c, int x, int y, int w)
 	if (total) p.Fill(x + pad, y + 86, (w - 2 * pad) * done / total, 6, pal::red);
 	std::string when = d.status == TourneyStatus::Running || d.status == TourneyStatus::Finished ? TrFmt("Started at %s", {HourText(d.startsAt)}) : TrFmt("Starts %s", {WhenText(d.startsAt)});
 	if (rounds) when = TourneyIsSwiss(d) ? TrFmt("Round %s of %s", {std::to_string(round), std::to_string(TourneySwissTotalRounds(d))}) : TrFmt("Round %s", {std::to_string(round)});
+	// A cup of one evening still to end: when it should, from its format and those in it.
+	const int64_t end = d.status != TourneyStatus::Finished && d.status != TourneyStatus::Cancelled ? TourneyEstimatedEnd(d) : 0;
+	if (!rounds && end > 0) when += "  \xC2\xB7  " + TrFmt("estimated end around %s", {HourText(end)});
 	p.Font(3);
 	p.raw = true;
 	p.Text(x + pad, y + 104, w - 2 * pad, 22, when, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
