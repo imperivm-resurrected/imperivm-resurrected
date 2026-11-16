@@ -118,22 +118,27 @@ int RoomGroup(const OnlineLobby &g)
 	return g.players >= g.maxPlayers ? 2 : 0;
 }
 
-bool RoomShown(const State &st, const OnlineLobby &g, int filter)
+bool RoomInFilter(const OnlineLobby &g, int filter)
 {
 	if (g.playing && !g.friendHost && !g.specLobby) return false;
 	if (filter == 1 && !g.friendHost) return false;
 	if (filter == 6 && (g.playing || g.players >= g.maxPlayers)) return false;
 	if (filter == 7 && !(g.playing && g.specLobby)) return false;
+	return true;
+}
+
+bool RoomMatchesSearch(const State &st, const OnlineLobby &g)
+{
 	return st.searchInput.empty() || Contains(g.name, st.searchInput) || Contains(g.host, st.searchInput) || Contains(LobbyMapLabel(g), st.searchInput);
+}
+
+bool RoomShown(const State &st, const OnlineLobby &g, int filter)
+{
+	return RoomInFilter(g, filter) && RoomMatchesSearch(st, g);
 }
 
 std::vector<int> Visible(const State &st)
 {
-	std::vector<int> out;
-	for (size_t i = 0; i < st.lobbies.size(); i++) {
-		if (!RoomShown(st, st.lobbies[i], st.filter)) continue;
-		out.push_back(static_cast<int>(i));
-	}
 	auto key = [&](const OnlineLobby &g) -> std::string {
 		char num[16];
 		switch (st.sortCol) {
@@ -144,17 +149,28 @@ std::vector<int> Visible(const State &st)
 		default: return g.name;
 		}
 	};
-	std::stable_sort(out.begin(), out.end(), [&](int a, int b) {
+	// What the order compares, worked out once per room rather than on every comparison.
+	struct Row {
+		int index, group;
+		bool tourney;
+		std::string key;
+	};
+	std::vector<Row> rows;
+	for (size_t i = 0; i < st.lobbies.size(); i++) {
+		const OnlineLobby &g = st.lobbies[i];
+		if (RoomShown(st, g, st.filter)) rows.push_back({static_cast<int>(i), RoomGroup(g), TourneyLobby(g), key(g)});
+	}
+	std::stable_sort(rows.begin(), rows.end(), [&](const Row &a, const Row &b) {
 		// The groups in their order; in each, the rooms of tournament matches first, as the matches people come to watch.
-		const int ga = RoomGroup(st.lobbies[a]), gb = RoomGroup(st.lobbies[b]);
-		if (ga != gb) return ga < gb;
-		const bool ta = TourneyLobby(st.lobbies[a]), tb = TourneyLobby(st.lobbies[b]);
-		if (ta != tb) return ta;
-		const std::string ka = key(st.lobbies[a]), kb = key(st.lobbies[b]);
-		const int c = _stricmp(ka.c_str(), kb.c_str());
+		if (a.group != b.group) return a.group < b.group;
+		if (a.tourney != b.tourney) return a.tourney;
+		const int c = _stricmp(a.key.c_str(), b.key.c_str());
 		if (c != 0) return st.sortDesc ? c > 0 : c < 0;
-		return _stricmp(st.lobbies[a].name.c_str(), st.lobbies[b].name.c_str()) < 0;
+		return _stricmp(st.lobbies[a.index].name.c_str(), st.lobbies[b.index].name.c_str()) < 0;
 	});
+	std::vector<int> out;
+	out.reserve(rows.size());
+	for (const Row &r : rows) out.push_back(r.index);
 	return out;
 }
 }

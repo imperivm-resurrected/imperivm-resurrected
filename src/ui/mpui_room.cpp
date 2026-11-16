@@ -317,6 +317,28 @@ bool SlotFrozen(const GameRoomSnapshot &g, const GameRoomSlot &s)
 	return s.local ? s.ready : g.host && s.type == 1 && LocalReady(g);
 }
 
+namespace {
+// TeamColorsFor of the last palette, teams and players, which change far less often than the frames.
+std::array<int, kTeamColorSlots> CachedTeamColors(const uint32_t (&palette)[kTeamColorPalette], const int (&team)[kTeamColorSlots],
+	const bool (&used)[kTeamColorSlots])
+{
+	static uint32_t lastPalette[kTeamColorPalette] = {};
+	static int lastTeam[kTeamColorSlots] = {};
+	static bool lastUsed[kTeamColorSlots] = {}, known = false;
+	static std::array<int, kTeamColorSlots> last = {};
+	if (known && std::equal(palette, palette + kTeamColorPalette, lastPalette) && std::equal(team, team + kTeamColorSlots, lastTeam) &&
+		std::equal(used, used + kTeamColorSlots, lastUsed)) {
+		return last;
+	}
+	std::copy(palette, palette + kTeamColorPalette, lastPalette);
+	std::copy(team, team + kTeamColorSlots, lastTeam);
+	std::copy(used, used + kTeamColorSlots, lastUsed);
+	known = true;
+	last = TeamColorsFor(palette, team, used);
+	return last;
+}
+}
+
 bool TeamColorsOn(const State &st, const GameRoomSnapshot &g)
 {
 	if (!g.active) return false;
@@ -342,7 +364,7 @@ void TeamColorsStep(State &st, const GameRoomSnapshot &g)
 		used[i] = s.used && (s.type == 1 || s.type == 3);
 		team[i] = s.team >= 1 && s.team <= 4 ? s.team : 0;
 	}
-	const std::array<int, kTeamColorSlots> target = TeamColorsFor(g.colors, team, used);
+	const std::array<int, kTeamColorSlots> target = CachedTeamColors(g.colors, team, used);
 	// A colour, a ready check or a player changing may clear what kept a slot from its colour: every slot gets its tries again.
 	std::string seen;
 	for (const GameRoomSlot &s : g.slots) seen += std::to_string(s.color) + (s.ready ? "r" : "-") + (s.used ? s.name : std::string()) + "|";
