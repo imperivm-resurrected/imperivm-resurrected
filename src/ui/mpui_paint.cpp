@@ -609,19 +609,21 @@ void PaintList(Painter &p, const State &st)
 	auto groupOf = [&](int r) { return RoomGroup(st.lobbies[vis[r]]); };
 	int groupCount[3] = {};
 	for (int r = 0; r < count; r++) groupCount[groupOf(r)]++;
-	auto fits = [&](int from) {
-		int used = 0, n = 0;
-		for (int r = from; r < count; r++) {
-			if (r == from || groupOf(r) != groupOf(r - 1)) used += groupH;
-			if (used + rowH > bodyH) break;
-			used += rowH;
-			n++;
-		}
-		return std::max(1, n);
-	};
-	int first = 0;
-	while (first < count - 1 && st.selected >= first + fits(first)) first++;
-	const int fit = fits(first);
+	// The first row shown is the earliest from which the rows down to the selected one fit, each group under its heading. A selection past
+	// the end, left by a search or a refresh, counts as the last row.
+	const int selected = std::max(0, std::min(st.selected, count - 1));
+	int first = selected;
+	for (int used = groupH + rowH; first > 0; first--) {
+		used += rowH + (groupOf(first - 1) != groupOf(first) ? groupH : 0);
+		if (used > bodyH) break;
+	}
+	int fit = 0;
+	for (int r = first, used = 0; r < count; r++, fit++) {
+		if (r == first || groupOf(r) != groupOf(r - 1)) used += groupH;
+		if (used + rowH > bodyH) break;
+		used += rowH;
+	}
+	fit = std::max(1, fit);
 	// Whose rooms have a Steam friend in them.
 	const std::vector<uint64_t> friends = SteamFriendIds();
 	const long long nowMs = static_cast<long long>(std::time(nullptr)) * 1000;
