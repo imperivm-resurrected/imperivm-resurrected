@@ -13,6 +13,7 @@
 
 #include "addr/state.h"
 #include "core/config.h"
+#include "core/guard.h"
 #include "core/league.h"
 #include "core/leaguemaps.h"
 #include "core/leagueplay.h"
@@ -422,9 +423,13 @@ void RoomStep(const LeagueRankedView &v, DWORD now)
 // A match was found: the taskbar flashes and a sound plays even when the game is in the background, and the menu shows the answer.
 void CallPlayer()
 {
+	// This runs under the screen's lock, and flashing the window sends it messages at once (WM_NCACTIVATE) that come back into
+	// the screen's handlers on this thread: the flash goes from another thread, so they wait for the lock.
 	if (const HWND wnd = g_wakeWnd.load()) {
-		FLASHWINFO fi = {sizeof(fi), wnd, FLASHW_ALL | FLASHW_TIMERNOFG, 0, 0};
-		FlashWindowEx(&fi);
+		SafeThread([](HWND w) {
+			FLASHWINFO fi = {sizeof(fi), w, FLASHW_ALL | FLASHW_TIMERNOFG, 0, 0};
+			FlashWindowEx(&fi);
+		}, wnd).detach();
 	}
 	if (GetConfig().matchFoundSound) UiSoundPlay(1);
 	if (!g_s.open && !InGame() && MainMenuOnTop()) OpenRankedTab();

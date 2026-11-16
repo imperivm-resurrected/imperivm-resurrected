@@ -17,6 +17,7 @@
 
 #include "ui/mpui_tourney.h"
 #include "addr/state.h"
+#include "core/guard.h"
 #include "core/league.h"
 #include "core/leaguemaps.h"
 #include "core/log.h"
@@ -115,8 +116,12 @@ void Flash()
 {
 	const HWND hwnd = g_wakeWnd;
 	if (!hwnd || GetForegroundWindow() == hwnd) return;
-	FLASHWINFO fi = {sizeof(fi), hwnd, FLASHW_ALL | FLASHW_TIMERNOFG, 5, 0};
-	FlashWindowEx(&fi);
+	// Called under the screen's lock: flashing sends the window messages at once, which come back into the screen's handlers on this
+	// thread, so it goes from another thread.
+	SafeThread([](HWND w) {
+		FLASHWINFO fi = {sizeof(fi), w, FLASHW_ALL | FLASHW_TIMERNOFG, 5, 0};
+		FlashWindowEx(&fi);
+	}, hwnd).detach();
 }
 
 // Under g_lock: the page of a tournament, on one of its tabs.
