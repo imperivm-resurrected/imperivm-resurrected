@@ -5,9 +5,11 @@
 #include <windows.h>
 
 #include <map>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "net/leagueclient_seasons.h"
@@ -62,6 +64,9 @@ Seasons g_seasons;
 Hall g_hall;
 std::map<std::string, Card> g_cards;
 Cosmetics g_cosmetics;
+// The view the screens were given of the seasons, the hall and the cosmetics, never changed once given: every change of those drops it,
+// and the next read makes a new one.
+std::shared_ptr<const LeagueSeasonsView> g_shown;
 
 std::string CardKey(const std::string &steamId, int season, const std::string &queue)
 {
@@ -76,6 +81,7 @@ void FetchSeasons(std::string lang)
 	const bool ok = r.Ok() && Json::Parse(r.body, j) && LeagueParseSeasons(j, list);
 	if (!ok) LogW("league", "could not read the list of seasons (%s)", r.Describe().c_str());
 	std::lock_guard<std::mutex> lock(g_mx);
+	g_shown.reset();
 	g_seasons.loading = false;
 	g_seasons.at = GetTickCount();
 	g_seasons.asked = lang;
@@ -94,6 +100,7 @@ void FetchHall(unsigned gen, int season, std::string queue, std::string lang)
 	if (!ok && r.status != 404) LogW("league", "could not read the hall of fame of season %d (%s)", season, r.Describe().c_str());
 	std::lock_guard<std::mutex> lock(g_mx);
 	if (gen != g_hall.gen) return;
+	g_shown.reset();
 	g_hall.loading = false;
 	g_hall.at = GetTickCount();
 	g_hall.loaded = ok || r.status == 404;
@@ -145,6 +152,7 @@ void CosmeticsThread(bool setFrame, int frame, bool setTitle, int title)
 	const bool ok = PutCosmetics(setFrame, frame, setTitle, title, error);
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
+		g_shown.reset();
 		g_cosmetics.busy = false;
 		g_cosmetics.error = error;
 	}
@@ -161,6 +169,7 @@ void CeremonyThread(int season, bool equip, bool frameAndTitle, std::string queu
 	else LogW("league", "could not mark the ceremony of season %d seen (%s)", season, r.Describe().c_str());
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
+		g_shown.reset();
 		g_cosmetics.ceremony = false;
 		g_cosmetics.error = error;
 	}
@@ -172,21 +181,28 @@ void CeremonyThread(int season, bool equip, bool frameAndTitle, std::string queu
 
 LeagueSeasonsView LeagueSeasonsState()
 {
-	LeagueSeasonsView v;
+	return *LeagueSeasonsShared();
+}
+
+std::shared_ptr<const LeagueSeasonsView> LeagueSeasonsShared()
+{
 	std::lock_guard<std::mutex> lock(g_mx);
-	v.loaded = g_seasons.loaded;
-	v.loading = g_seasons.loading;
-	v.seasons = g_seasons.list;
-	v.hallSeason = g_hall.season;
-	v.hallQueue = g_hall.queue;
-	v.hallLoading = g_hall.loading;
-	v.hallLoaded = g_hall.loaded;
-	v.hallFailed = g_hall.failed;
-	v.hall = g_hall.hall;
-	v.cosmeticsBusy = g_cosmetics.busy;
-	v.cosmeticsError = g_cosmetics.error;
-	v.ceremonyBusy = g_cosmetics.ceremony;
-	return v;
+	if (g_shown) return g_shown;
+	auto v = std::make_shared<LeagueSeasonsView>();
+	v->loaded = g_seasons.loaded;
+	v->loading = g_seasons.loading;
+	v->seasons = g_seasons.list;
+	v->hallSeason = g_hall.season;
+	v->hallQueue = g_hall.queue;
+	v->hallLoading = g_hall.loading;
+	v->hallLoaded = g_hall.loaded;
+	v->hallFailed = g_hall.failed;
+	v->hall = g_hall.hall;
+	v->cosmeticsBusy = g_cosmetics.busy;
+	v->cosmeticsError = g_cosmetics.error;
+	v->ceremonyBusy = g_cosmetics.ceremony;
+	g_shown = std::move(v);
+	return g_shown;
 }
 
 void LeagueSeasonsRefresh(bool force)
@@ -197,6 +213,7 @@ void LeagueSeasonsRefresh(bool force)
 		if (g_seasons.loading) return;
 		const DWORD keep = g_seasons.loaded ? kSeasonsKeepMs : kSeasonsRetryMs;
 		if (!force && g_seasons.at && GetTickCount() - g_seasons.at < keep && (!g_seasons.loaded || g_seasons.asked == lang)) return;
+		g_shown.reset();
 		g_seasons.loading = true;
 	}
 	SafeThread(FetchSeasons, lang).detach();
@@ -216,6 +233,7 @@ void LeagueHallRequest(int season, const std::string &queue)
 			g_hall.loaded = g_hall.failed = false;
 			g_hall.hall = LeagueHall();
 		}
+		g_shown.reset();
 		g_hall.season = season;
 		g_hall.queue = q;
 		g_hall.loading = true;
@@ -269,6 +287,7 @@ void LeagueCosmeticsSet(bool setFrame, int frame, bool setTitle, int title)
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
 		if (g_cosmetics.busy) return;
+		g_shown.reset();
 		g_cosmetics.busy = true;
 		g_cosmetics.error.clear();
 	}
@@ -280,6 +299,7 @@ void LeagueCeremonyEquip(int season, bool frameAndTitle, const std::string &badg
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
 		if (g_cosmetics.ceremony) return;
+		g_shown.reset();
 		g_cosmetics.ceremony = true;
 		g_cosmetics.error.clear();
 	}
@@ -292,6 +312,7 @@ void LeagueCeremonySeen(int season, const std::string &queue)
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
 		if (g_cosmetics.ceremony) return;
+		g_shown.reset();
 		g_cosmetics.ceremony = true;
 	}
 	SafeThread(CeremonyThread, season, false, false, LeagueQueueId(queue)).detach();

@@ -992,7 +992,8 @@ bool DefaultBoard(const State &st)
 // "Season I · in progress", as the season's menu shows it, short.
 std::string BoardSeasonText(const State &st)
 {
-	const LeagueSeasonsView sv = LeagueSeasonsState();
+	const auto seasonsView = LeagueSeasonsShared();
+	const LeagueSeasonsView &sv = *seasonsView;
 	const LeagueRankedView &v = st.ranked.view;
 	const int season = st.ranked.boardSeason >= 0 ? st.ranked.boardSeason : v.seasonLoaded ? v.season.number : -1;
 	if (season < 0) return Tr("Season being played");

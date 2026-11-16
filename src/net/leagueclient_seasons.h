@@ -2,6 +2,7 @@
 // Copyright (C) 2026 THIONG
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #pragma once
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -26,6 +27,8 @@ struct LeagueSeasonsView {
 	bool ceremonyBusy = false;
 };
 LeagueSeasonsView LeagueSeasonsState();
+// The same view shared, never changed once given (a change makes a new one): for what reads it every frame, without a copy.
+std::shared_ptr<const LeagueSeasonsView> LeagueSeasonsShared();
 // GET /v1/league/seasons, at most every ten minutes unless forced.
 void LeagueSeasonsRefresh(bool force = false);
 // GET /v1/league/seasons/:id/hall of a queue ("1v1", "2v2"), again only after five minutes.
