@@ -28,6 +28,52 @@ std::string IniPath()
 	return path;
 }
 
+// The buffers the texts are read into: a longer value is cut to one character less.
+const size_t kShortText = 32, kDeviceText = 512, kDumpText = 1024, kLongText = 2048;
+
+// imperivm-mod.ini. A missing key reads as the default given.
+struct Ini {
+	std::string path = IniPath();
+
+	bool Flag(const char *section, const char *key, bool def) const { return GetPrivateProfileIntA(section, key, def ? 1 : 0, path.c_str()) != 0; }
+
+	int Number(const char *section, const char *key, int def) const { return static_cast<int>(GetPrivateProfileIntA(section, key, def, path.c_str())); }
+
+	int Clamped(const char *section, const char *key, int def, int low, int high) const
+	{
+		return (std::max)(low, (std::min)(high, Number(section, key, def)));
+	}
+
+	std::string Text(const char *section, const char *key, const char *def, size_t size) const
+	{
+		char buf[kLongText] = {};
+		GetPrivateProfileStringA(section, key, def, buf, static_cast<DWORD>((std::min)(size, sizeof(buf))), path.c_str());
+		return buf;
+	}
+
+	void Write(const char *section, const char *key, const char *value) const { WritePrivateProfileStringA(section, key, value, path.c_str()); }
+
+	void Write(const char *section, const char *key, const std::string &value) const { Write(section, key, value.c_str()); }
+
+	void WriteFlag(const char *section, const char *key, bool value) const { Write(section, key, value ? "1" : "0"); }
+
+	void WriteNumber(const char *section, const char *key, int value) const { Write(section, key, std::to_string(value)); }
+
+	void Remove(const char *section, const char *key) const { Write(section, key, nullptr); }
+
+	// Without the key, the setting takes its default.
+	void WriteNumberOrRemove(const char *section, const char *key, int value, bool keep) const
+	{
+		if (keep) WriteNumber(section, key, value);
+		else Remove(section, key);
+	}
+};
+
+std::string SizeText(int w, int h)
+{
+	return std::to_string(w) + "x" + std::to_string(h);
+}
+
 const char kProtectedPrefix[] = "dpapi:";
 
 // The token is encrypted for this Windows user, so a copied imperivm-mod.ini doesn't carry a usable one. A token written by hand stays
@@ -67,13 +113,6 @@ std::string RevealSecret(const std::string &stored)
 	return plain;
 }
 
-std::string ReadIniString(const char *section, const char *key, const std::string &path)
-{
-	char buf[2048] = {};
-	GetPrivateProfileStringA(section, key, "", buf, sizeof(buf), path.c_str());
-	return buf;
-}
-
 }
 
 const Config &GetConfig()
@@ -84,114 +123,99 @@ const Config &GetConfig()
 void LoadConfig()
 {
 	LegacyMigrate();
-	char path[MAX_PATH];
-	GetModuleFileNameA(nullptr, path, MAX_PATH);
-	char *slash = strrchr(path, '\\');
-	if (slash) {
-		strcpy_s(slash + 1, MAX_PATH - (slash + 1 - path), "imperivm-mod.ini");
-	}
-	char buf[32] = {};
+	const Ini ini;
 
-	g_config.renderEnabled = GetPrivateProfileIntA("Render", "Enabled", 1, path) != 0;
-	g_config.vsync = GetPrivateProfileIntA("Render", "VSync", 1, path) != 0;
-	g_config.movieVolume = static_cast<int>(GetPrivateProfileIntA("Sound", "MovieVolume", 50, path));
+	g_config.renderEnabled = ini.Flag("Render", "Enabled", true);
+	g_config.vsync = ini.Flag("Render", "VSync", true);
+	g_config.movieVolume = ini.Number("Sound", "MovieVolume", 50);
 	if (g_config.movieVolume < 0 || g_config.movieVolume > 100) g_config.movieVolume = 50;
-	g_config.movieMute = GetPrivateProfileIntA("Sound", "MovieMute", 0, path) != 0;
+	g_config.movieMute = ini.Flag("Sound", "MovieMute", false);
 	g_config.largeAddress = true;
-	g_config.brightness = GetPrivateProfileIntA("Render", "Brightness", 100, path);
+	g_config.brightness = ini.Number("Render", "Brightness", 100);
 	if (g_config.brightness < 50 || g_config.brightness > 200) {
 		g_config.brightness = 100;
 	}
-	g_config.fakeModeChange = GetPrivateProfileIntA("Render", "FakeModeChange", 1, path) != 0;
+	g_config.fakeModeChange = ini.Flag("Render", "FakeModeChange", true);
 
-	GetPrivateProfileStringA("Display", "Mode", "fullscreen", buf, sizeof(buf), path);
-	g_config.windowed = _stricmp(buf, "windowed") == 0;
-	g_config.trapMouse = GetPrivateProfileIntA("Display", "TrapMouse", 1, path) != 0;
-	g_config.monitor = (std::max)(0, (std::min)(15, static_cast<int>(GetPrivateProfileIntA("Display", "Monitor", 0, path))));
-	GetPrivateProfileStringA("Display", "Resolution", "", buf, sizeof(buf), path);
+	g_config.windowed = _stricmp(ini.Text("Display", "Mode", "fullscreen", kShortText).c_str(), "windowed") == 0;
+	g_config.trapMouse = ini.Flag("Display", "TrapMouse", true);
+	g_config.monitor = ini.Clamped("Display", "Monitor", 0, 0, 15);
 	int resW = 0, resH = 0;
-	if (sscanf_s(buf, "%dx%d", &resW, &resH) == 2 && resW >= 640 && resH >= 480 && resW <= 8192 && resH <= 8192) {
+	if (sscanf_s(ini.Text("Display", "Resolution", "", kShortText).c_str(), "%dx%d", &resW, &resH) == 2 && resW >= 640 && resH >= 480 && resW <= 8192 &&
+		resH <= 8192) {
 		g_config.resolutionW = resW;
 		g_config.resolutionH = resH;
 	}
-	GetPrivateProfileStringA("Display", "ResolutionScreen", "", buf, sizeof(buf), path);
-	if (sscanf_s(buf, "%dx%d", &resW, &resH) == 2 && resW > 0 && resH > 0 && resW <= 16384 && resH <= 16384) {
+	if (sscanf_s(ini.Text("Display", "ResolutionScreen", "", kShortText).c_str(), "%dx%d", &resW, &resH) == 2 && resW > 0 && resH > 0 && resW <= 16384 &&
+		resH <= 16384) {
 		g_config.resolutionScreenW = resW;
 		g_config.resolutionScreenH = resH;
 	}
-	g_config.extendedView = GetPrivateProfileIntA("Display", "ExtendedView", 0, path) != 0;
-	g_config.fpsLimit = (std::max)(0, (std::min)(1000, static_cast<int>(GetPrivateProfileIntA("Render", "FpsLimit", 0, path))));
-	GetPrivateProfileStringA("Render", "ImageScaling", "sharp", buf, sizeof(buf), path);
-	g_config.imageScaling = _stricmp(buf, "smooth") == 0 ? 1 : _stricmp(buf, "exact") == 0 ? 2 : 0;
-	g_config.showPerf = GetPrivateProfileIntA("Display", "ShowPerformance", 0, path) != 0;
-	g_config.showNet = GetPrivateProfileIntA("Display", "ShowNetwork", 0, path) != 0;
-	g_config.panelX = (std::max)(0, (std::min)(1000, static_cast<int>(GetPrivateProfileIntA("Display", "PanelX", 1000, path))));
-	g_config.panelY = (std::max)(0, (std::min)(1000, static_cast<int>(GetPrivateProfileIntA("Display", "PanelY", 0, path))));
-	g_config.panelCompact = GetPrivateProfileIntA("Display", "PanelCompact", 0, path) != 0;
-	g_config.chatX = (std::max)(-1, (std::min)(1000, static_cast<int>(GetPrivateProfileIntA("Display", "ChatX", -1, path))));
-	g_config.chatY = (std::max)(-1, (std::min)(1000, static_cast<int>(GetPrivateProfileIntA("Display", "ChatY", -1, path))));
+	g_config.extendedView = ini.Flag("Display", "ExtendedView", false);
+	g_config.fpsLimit = ini.Clamped("Render", "FpsLimit", 0, 0, 1000);
+	const std::string scaling = ini.Text("Render", "ImageScaling", "sharp", kShortText);
+	g_config.imageScaling = _stricmp(scaling.c_str(), "smooth") == 0 ? 1 : _stricmp(scaling.c_str(), "exact") == 0 ? 2 : 0;
+	g_config.showPerf = ini.Flag("Display", "ShowPerformance", false);
+	g_config.showNet = ini.Flag("Display", "ShowNetwork", false);
+	g_config.panelX = ini.Clamped("Display", "PanelX", 1000, 0, 1000);
+	g_config.panelY = ini.Clamped("Display", "PanelY", 0, 0, 1000);
+	g_config.panelCompact = ini.Flag("Display", "PanelCompact", false);
+	g_config.chatX = ini.Clamped("Display", "ChatX", -1, -1, 1000);
+	g_config.chatY = ini.Clamped("Display", "ChatY", -1, -1, 1000);
 	if (g_config.chatX < 0 || g_config.chatY < 0) g_config.chatX = g_config.chatY = -1;
-	g_config.panelOpacity = (std::max)(30, (std::min)(100, static_cast<int>(GetPrivateProfileIntA("Display", "PanelOpacity", 90, path))));
-	g_config.dpiAware = GetPrivateProfileIntA("Display", "DpiAware", 1, path) != 0;
-	g_config.muteInBackground = GetPrivateProfileIntA("Sound", "MuteInBackground", 1, path) != 0;
-	g_config.modernAudio = GetPrivateProfileIntA("Sound", "ModernAudio", 1, path) != 0;
-	g_config.fixVoices = GetPrivateProfileIntA("Sound", "FixVoices", 1, path) != 0;
-	g_config.onlineAlerts = GetPrivateProfileIntA("Sound", "OnlineAlerts", 1, path) != 0;
-	g_config.masterVolume = (std::max)(0, (std::min)(100, static_cast<int>(GetPrivateProfileIntA("Sound", "MasterVolume", 100, path))));
-	g_config.natureVolume = static_cast<int>(GetPrivateProfileIntA("Sound", "NatureVolume", -1, path));
+	g_config.panelOpacity = ini.Clamped("Display", "PanelOpacity", 90, 30, 100);
+	g_config.dpiAware = ini.Flag("Display", "DpiAware", true);
+	g_config.muteInBackground = ini.Flag("Sound", "MuteInBackground", true);
+	g_config.modernAudio = ini.Flag("Sound", "ModernAudio", true);
+	g_config.fixVoices = ini.Flag("Sound", "FixVoices", true);
+	g_config.onlineAlerts = ini.Flag("Sound", "OnlineAlerts", true);
+	g_config.masterVolume = ini.Clamped("Sound", "MasterVolume", 100, 0, 100);
+	g_config.natureVolume = ini.Number("Sound", "NatureVolume", -1);
 	if (g_config.natureVolume < 1 || g_config.natureVolume > 100) g_config.natureVolume = -1;
-	g_config.conversationVolume = static_cast<int>(GetPrivateProfileIntA("Sound", "ConversationVolume", 100, path));
+	g_config.conversationVolume = ini.Number("Sound", "ConversationVolume", 100);
 	if (g_config.conversationVolume < 1 || g_config.conversationVolume > 100) g_config.conversationVolume = 100;
-	char device[512] = {};
-	GetPrivateProfileStringA("Sound", "OutputDevice", "", device, sizeof(device), path);
-	g_config.outputDevice = device;
+	g_config.outputDevice = ini.Text("Sound", "OutputDevice", "", kDeviceText);
 
-	GetPrivateProfileStringA("Game", "ScrollSpeed", "1.0", buf, sizeof(buf), path);
-	g_config.scrollSpeed = static_cast<float>(atof(buf));
+	g_config.scrollSpeed = static_cast<float>(atof(ini.Text("Game", "ScrollSpeed", "1.0", kShortText).c_str()));
 	if (g_config.scrollSpeed < 0.25f || g_config.scrollSpeed > 8.0f) {
 		g_config.scrollSpeed = 1.0f;
 	}
-	g_config.autosave = GetPrivateProfileIntA("Game", "Autosave", 1, path) != 0;
-	g_config.autosaveMinutes = GetPrivateProfileIntA("Game", "AutosaveMinutes", 10, path);
+	g_config.autosave = ini.Flag("Game", "Autosave", true);
+	g_config.autosaveMinutes = ini.Number("Game", "AutosaveMinutes", 10);
 	if (g_config.autosaveMinutes < 1 || g_config.autosaveMinutes > 240) {
 		g_config.autosaveMinutes = 10;
 	}
-	g_config.autosaveOnExit = GetPrivateProfileIntA("Game", "AutosaveOnExit", 0, path) != 0;
-	g_config.autosaveSlots = GetPrivateProfileIntA("Game", "AutosaveSlots", 3, path);
+	g_config.autosaveOnExit = ini.Flag("Game", "AutosaveOnExit", false);
+	g_config.autosaveSlots = ini.Number("Game", "AutosaveSlots", 3);
 	if (g_config.autosaveSlots < 1 || g_config.autosaveSlots > 20) {
 		g_config.autosaveSlots = 3;
 	}
-	g_config.crashFix = GetPrivateProfileIntA("Game", "CrashFix", 1, path) != 0;
-	g_config.smoothScroll = GetPrivateProfileIntA("Game", "SmoothScroll", 1, path) != 0;
-	g_config.healthBarOwners = (std::max)(0, (std::min)(3, static_cast<int>(GetPrivateProfileIntA("Game", "HealthBarOwners", 0, path))));
-	g_config.healthBarHeroesOnly = GetPrivateProfileIntA("Game", "HealthBarHeroesOnly", 0, path) != 0;
-	g_config.allyColors = GetPrivateProfileIntA("Game", "AllyColors", 0, path) != 0;
-	g_config.pauseInBackground = GetPrivateProfileIntA("Game", "PauseInBackground", 0, path) != 0;
-	g_config.zoomExtras = GetPrivateProfileIntA("Map", "ZoomExtras", 1, path) != 0;
-	g_config.zoomFog = GetPrivateProfileIntA("Map", "FogVisible", 1, path) != 0;
-	g_config.zoomRefreshMs = (std::max)(0, (std::min)(1000, static_cast<int>(GetPrivateProfileIntA("Map", "RefreshMs", 16, path))));
+	g_config.crashFix = ini.Flag("Game", "CrashFix", true);
+	g_config.smoothScroll = ini.Flag("Game", "SmoothScroll", true);
+	g_config.healthBarOwners = ini.Clamped("Game", "HealthBarOwners", 0, 0, 3);
+	g_config.healthBarHeroesOnly = ini.Flag("Game", "HealthBarHeroesOnly", false);
+	g_config.allyColors = ini.Flag("Game", "AllyColors", false);
+	g_config.pauseInBackground = ini.Flag("Game", "PauseInBackground", false);
+	g_config.zoomExtras = ini.Flag("Map", "ZoomExtras", true);
+	g_config.zoomFog = ini.Flag("Map", "FogVisible", true);
+	g_config.zoomRefreshMs = ini.Clamped("Map", "RefreshMs", 16, 0, 1000);
 
-	g_config.modOverrides = GetPrivateProfileIntA("Mods", "Override", 1, path) != 0;
-	GetPrivateProfileStringA("Debug", "LogLevel", "info", buf, sizeof(buf), path);
-	if (!ParseLogLevel(buf, g_config.logLevel)) g_config.logLevel = kLogInfo;
-	g_config.logFiles = GetPrivateProfileIntA("Debug", "LogFiles", 0, path) != 0;
-	g_config.rejoinTrace = GetPrivateProfileIntA("Debug", "RejoinTrace", IsBetaVersion(ModVersionText()) ? 1 : 0, path) != 0;
-	GetPrivateProfileStringA("Online", "RejoinMode", "reload", buf, sizeof(buf), path);
-	g_config.rejoinReload = _stricmp(buf, "hot") != 0;
-	char dump[1024] = {};
-	GetPrivateProfileStringA("Debug", "Dump", "", dump, sizeof(dump), path);
-	g_config.dumpFiles = dump;
-	char dumpStart[2048] = {};
-	GetPrivateProfileStringA("Debug", "DumpAtStartup", "", dumpStart, sizeof(dumpStart), path);
-	g_config.dumpAtStartup = dumpStart;
-	g_config.leagueUrl = ReadIniString("League", "Url", path);
-	g_config.leagueToken = RevealSecret(ReadIniString("League", "Token", path));
-	g_config.leagueSteamId = ReadIniString("League", "SteamId", path);
-	g_config.leagueName = ReadIniString("League", "Name", path);
-	g_config.leagueOfferLink = GetPrivateProfileIntA("League", "OfferLink", 1, path) != 0;
-	g_config.chatBadges = GetPrivateProfileIntA("League", "ChatBadges", 1, path) != 0;
-	g_config.matchFoundSound = GetPrivateProfileIntA("League", "MatchFoundSound", 1, path) != 0;
-	if (g_config.leagueToken.empty() && !ReadIniString("League", "Token", path).empty()) {
+	g_config.modOverrides = ini.Flag("Mods", "Override", true);
+	if (!ParseLogLevel(ini.Text("Debug", "LogLevel", "info", kShortText), g_config.logLevel)) g_config.logLevel = kLogInfo;
+	g_config.logFiles = ini.Flag("Debug", "LogFiles", false);
+	g_config.rejoinTrace = ini.Flag("Debug", "RejoinTrace", IsBetaVersion(ModVersionText()));
+	g_config.rejoinReload = _stricmp(ini.Text("Online", "RejoinMode", "reload", kShortText).c_str(), "hot") != 0;
+	g_config.dumpFiles = ini.Text("Debug", "Dump", "", kDumpText);
+	g_config.dumpAtStartup = ini.Text("Debug", "DumpAtStartup", "", kLongText);
+	g_config.leagueUrl = ini.Text("League", "Url", "", kLongText);
+	const std::string storedToken = ini.Text("League", "Token", "", kLongText);
+	g_config.leagueToken = RevealSecret(storedToken);
+	g_config.leagueSteamId = ini.Text("League", "SteamId", "", kLongText);
+	g_config.leagueName = ini.Text("League", "Name", "", kLongText);
+	g_config.leagueOfferLink = ini.Flag("League", "OfferLink", true);
+	g_config.chatBadges = ini.Flag("League", "ChatBadges", true);
+	g_config.matchFoundSound = ini.Flag("League", "MatchFoundSound", true);
+	if (g_config.leagueToken.empty() && !storedToken.empty()) {
 		LogW("boot", "config: the league token can't be read on this Windows user; the account has to be linked again");
 	}
 
@@ -210,78 +234,72 @@ Config &MutableConfig()
 
 void SaveConfig()
 {
-	char path[MAX_PATH];
-	GetModuleFileNameA(nullptr, path, MAX_PATH);
-	char *slash = strrchr(path, '\\');
-	if (slash) {
-		strcpy_s(slash + 1, MAX_PATH - (slash + 1 - path), "imperivm-mod.ini");
-	}
-	WritePrivateProfileStringA("Display", "Mode", g_config.windowed ? "windowed" : "fullscreen", path);
+	const Ini ini;
+	ini.Write("Display", "Mode", g_config.windowed ? "windowed" : "fullscreen");
 	// In a window the resolution is the window's size; the old keys are left out.
-	WritePrivateProfileStringA("Display", "WindowWidth", nullptr, path);
-	WritePrivateProfileStringA("Display", "WindowHeight", nullptr, path);
-	WritePrivateProfileStringA("Display", "TrapMouse", g_config.trapMouse ? "1" : "0", path);
-	WritePrivateProfileStringA("Display", "ExtendedView", g_config.extendedView ? "1" : "0", path);
-	WritePrivateProfileStringA("Display", "Monitor", std::to_string(g_config.monitor).c_str(), path);
+	ini.Remove("Display", "WindowWidth");
+	ini.Remove("Display", "WindowHeight");
+	ini.WriteFlag("Display", "TrapMouse", g_config.trapMouse);
+	ini.WriteFlag("Display", "ExtendedView", g_config.extendedView);
+	ini.WriteNumber("Display", "Monitor", g_config.monitor);
 	if (g_config.resolutionW > 0) {
-		WritePrivateProfileStringA("Display", "Resolution", (std::to_string(g_config.resolutionW) + "x" + std::to_string(g_config.resolutionH)).c_str(), path);
+		ini.Write("Display", "Resolution", SizeText(g_config.resolutionW, g_config.resolutionH));
 	}
 	if (g_config.resolutionScreenW > 0) {
-		WritePrivateProfileStringA("Display", "ResolutionScreen",
-			(std::to_string(g_config.resolutionScreenW) + "x" + std::to_string(g_config.resolutionScreenH)).c_str(), path);
+		ini.Write("Display", "ResolutionScreen", SizeText(g_config.resolutionScreenW, g_config.resolutionScreenH));
 	}
-	WritePrivateProfileStringA("Render", "VSync", g_config.vsync ? "1" : "0", path);
-	WritePrivateProfileStringA("Render", "FpsLimit", std::to_string(g_config.fpsLimit).c_str(), path);
+	ini.WriteFlag("Render", "VSync", g_config.vsync);
+	ini.WriteNumber("Render", "FpsLimit", g_config.fpsLimit);
 	static const char *const kScalingNames[] = {"sharp", "smooth", "exact"};
-	WritePrivateProfileStringA("Render", "ImageScaling", kScalingNames[g_config.imageScaling >= 0 && g_config.imageScaling < 3 ? g_config.imageScaling : 0], path);
-	WritePrivateProfileStringA("Render", "Scaling", nullptr, path);
-	WritePrivateProfileStringA("Render", "Filter", nullptr, path);
-	WritePrivateProfileStringA("Render", "Brightness", std::to_string(g_config.brightness).c_str(), path);
-	WritePrivateProfileStringA("Sound", "MovieVolume", std::to_string(g_config.movieVolume).c_str(), path);
-	WritePrivateProfileStringA("Sound", "MovieMute", g_config.movieMute ? "1" : "0", path);
-	WritePrivateProfileStringA("Game", "Use4GB", g_config.largeAddress ? "1" : "0", path);
-	WritePrivateProfileStringA("Game", "Autosave", g_config.autosave ? "1" : "0", path);
-	WritePrivateProfileStringA("Game", "AutosaveMinutes", std::to_string(g_config.autosaveMinutes).c_str(), path);
-	WritePrivateProfileStringA("Game", "AutosaveSlots", std::to_string(g_config.autosaveSlots).c_str(), path);
-	WritePrivateProfileStringA("Game", "AutosaveOnExit", g_config.autosaveOnExit ? "1" : "0", path);
-	WritePrivateProfileStringA("Game", "SmoothScroll", g_config.smoothScroll ? "1" : "0", path);
-	WritePrivateProfileStringA("Game", "HealthBarOwners", std::to_string(g_config.healthBarOwners).c_str(), path);
-	WritePrivateProfileStringA("Game", "HealthBarHeroesOnly", g_config.healthBarHeroesOnly ? "1" : "0", path);
-	WritePrivateProfileStringA("Game", "AllyColors", g_config.allyColors ? "1" : "0", path);
-	WritePrivateProfileStringA("Game", "PauseInBackground", g_config.pauseInBackground ? "1" : "0", path);
-	WritePrivateProfileStringA("Game", "CrashFix", g_config.crashFix ? "1" : "0", path);
-	WritePrivateProfileStringA("Mods", "Override", g_config.modOverrides ? "1" : "0", path);
-	WritePrivateProfileStringA("Display", "ShowPerformance", g_config.showPerf ? "1" : "0", path);
-	WritePrivateProfileStringA("Display", "ShowNetwork", g_config.showNet ? "1" : "0", path);
-	WritePrivateProfileStringA("Display", "PanelX", std::to_string(g_config.panelX).c_str(), path);
-	WritePrivateProfileStringA("Display", "PanelY", std::to_string(g_config.panelY).c_str(), path);
-	WritePrivateProfileStringA("Display", "PanelCompact", g_config.panelCompact ? "1" : "0", path);
-	WritePrivateProfileStringA("Display", "ChatX", g_config.chatX >= 0 ? std::to_string(g_config.chatX).c_str() : nullptr, path);
-	WritePrivateProfileStringA("Display", "ChatY", g_config.chatY >= 0 ? std::to_string(g_config.chatY).c_str() : nullptr, path);
-	WritePrivateProfileStringA("Display", "PanelOpacity", std::to_string(g_config.panelOpacity).c_str(), path);
-	WritePrivateProfileStringA("Sound", "MuteInBackground", g_config.muteInBackground ? "1" : "0", path);
-	WritePrivateProfileStringA("Sound", "ModernAudio", g_config.modernAudio ? "1" : "0", path);
-	WritePrivateProfileStringA("Sound", "OnlineAlerts", g_config.onlineAlerts ? "1" : "0", path);
-	WritePrivateProfileStringA("Sound", "MasterVolume", std::to_string(g_config.masterVolume).c_str(), path);
+	ini.Write("Render", "ImageScaling", kScalingNames[g_config.imageScaling >= 0 && g_config.imageScaling < 3 ? g_config.imageScaling : 0]);
+	ini.Remove("Render", "Scaling");
+	ini.Remove("Render", "Filter");
+	ini.WriteNumber("Render", "Brightness", g_config.brightness);
+	ini.WriteNumber("Sound", "MovieVolume", g_config.movieVolume);
+	ini.WriteFlag("Sound", "MovieMute", g_config.movieMute);
+	ini.WriteFlag("Game", "Use4GB", g_config.largeAddress);
+	ini.WriteFlag("Game", "Autosave", g_config.autosave);
+	ini.WriteNumber("Game", "AutosaveMinutes", g_config.autosaveMinutes);
+	ini.WriteNumber("Game", "AutosaveSlots", g_config.autosaveSlots);
+	ini.WriteFlag("Game", "AutosaveOnExit", g_config.autosaveOnExit);
+	ini.WriteFlag("Game", "SmoothScroll", g_config.smoothScroll);
+	ini.WriteNumber("Game", "HealthBarOwners", g_config.healthBarOwners);
+	ini.WriteFlag("Game", "HealthBarHeroesOnly", g_config.healthBarHeroesOnly);
+	ini.WriteFlag("Game", "AllyColors", g_config.allyColors);
+	ini.WriteFlag("Game", "PauseInBackground", g_config.pauseInBackground);
+	ini.WriteFlag("Game", "CrashFix", g_config.crashFix);
+	ini.WriteFlag("Mods", "Override", g_config.modOverrides);
+	ini.WriteFlag("Display", "ShowPerformance", g_config.showPerf);
+	ini.WriteFlag("Display", "ShowNetwork", g_config.showNet);
+	ini.WriteNumber("Display", "PanelX", g_config.panelX);
+	ini.WriteNumber("Display", "PanelY", g_config.panelY);
+	ini.WriteFlag("Display", "PanelCompact", g_config.panelCompact);
+	ini.WriteNumberOrRemove("Display", "ChatX", g_config.chatX, g_config.chatX >= 0);
+	ini.WriteNumberOrRemove("Display", "ChatY", g_config.chatY, g_config.chatY >= 0);
+	ini.WriteNumber("Display", "PanelOpacity", g_config.panelOpacity);
+	ini.WriteFlag("Sound", "MuteInBackground", g_config.muteInBackground);
+	ini.WriteFlag("Sound", "ModernAudio", g_config.modernAudio);
+	ini.WriteFlag("Sound", "OnlineAlerts", g_config.onlineAlerts);
+	ini.WriteNumber("Sound", "MasterVolume", g_config.masterVolume);
 	// Without the key, nature sounds follow the effects volume.
-	WritePrivateProfileStringA("Sound", "NatureVolume", g_config.natureVolume > 0 ? std::to_string(g_config.natureVolume).c_str() : nullptr, path);
-	WritePrivateProfileStringA("Sound", "ConversationVolume", std::to_string(g_config.conversationVolume).c_str(), path);
-	WritePrivateProfileStringA("Sound", "OutputDevice", g_config.outputDevice.c_str(), path);
-	WritePrivateProfileStringA("League", "ChatBadges", g_config.chatBadges ? "1" : "0", path);
-	WritePrivateProfileStringA("League", "MatchFoundSound", g_config.matchFoundSound ? "1" : "0", path);
-	WritePrivateProfileStringA("Debug", "LogLevel", LogLevelName(g_config.logLevel), path);
+	ini.WriteNumberOrRemove("Sound", "NatureVolume", g_config.natureVolume, g_config.natureVolume > 0);
+	ini.WriteNumber("Sound", "ConversationVolume", g_config.conversationVolume);
+	ini.Write("Sound", "OutputDevice", g_config.outputDevice);
+	ini.WriteFlag("League", "ChatBadges", g_config.chatBadges);
+	ini.WriteFlag("League", "MatchFoundSound", g_config.matchFoundSound);
+	ini.Write("Debug", "LogLevel", LogLevelName(g_config.logLevel));
 }
 
 void SaveLeagueAccount()
 {
-	const std::string path = IniPath();
+	const Ini ini;
 	const bool linked = !g_config.leagueToken.empty();
-	WritePrivateProfileStringA("League", "Token", linked ? ProtectSecret(g_config.leagueToken).c_str() : nullptr, path.c_str());
-	WritePrivateProfileStringA("League", "SteamId", linked ? g_config.leagueSteamId.c_str() : nullptr, path.c_str());
-	WritePrivateProfileStringA("League", "Name", linked ? g_config.leagueName.c_str() : nullptr, path.c_str());
+	ini.Write("League", "Token", linked ? ProtectSecret(g_config.leagueToken).c_str() : nullptr);
+	ini.Write("League", "SteamId", linked ? g_config.leagueSteamId.c_str() : nullptr);
+	ini.Write("League", "Name", linked ? g_config.leagueName.c_str() : nullptr);
 }
 
 void SaveLeagueOffer()
 {
-	WritePrivateProfileStringA("League", "OfferLink", g_config.leagueOfferLink ? nullptr : "0", IniPath().c_str());
+	Ini().Write("League", "OfferLink", g_config.leagueOfferLink ? nullptr : "0");
 }
