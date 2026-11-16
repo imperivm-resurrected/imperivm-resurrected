@@ -732,11 +732,17 @@ inline HFONT BrandFont(BrandFace face, int size, float s)
 			   DEFAULT_PITCH, name);
 }
 
+// One set of fonts per scale, kept for good as BrandFont keeps its own: screens of different scales can draw in the same frame, and a
+// font deleted while a canvas still has it selected is never freed, so swapping one set for another leaked a set each time.
 inline void EnsureFonts(float s)
 {
 	if (g_fonts[0] && g_fontScale == s) return;
-	for (HFONT &f : g_fonts) {
-		if (f) DeleteObject(f);
+	static std::map<int, std::vector<HFONT>> sets;
+	std::vector<HFONT> &set = sets[static_cast<int>(s * 1000 + 0.5f)];
+	if (set.size() == kFontCount) {
+		std::copy(set.begin(), set.end(), g_fonts);
+		g_fontScale = s;
+		return;
 	}
 	auto make = [s](int size, int weight, const wchar_t *face) {
 		return CreateFontW(-static_cast<int>(size * s + 0.5f), 0, 0, 0, weight, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
@@ -759,6 +765,7 @@ inline void EnsureFonts(float s)
 		g_fonts[4] = make(13, FW_SEMIBOLD, pal::kFontUiFallback);
 		g_fonts[5] = make(30, FW_NORMAL, pal::kFontDisplayFallback);
 	}
+	set.assign(g_fonts, g_fonts + kFontCount);
 	g_fontScale = s;
 }
 
