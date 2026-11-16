@@ -456,9 +456,22 @@ void MainMenuUiOpenMultiplayerGroup()
 
 bool MainMenuUiNeedsDraw()
 {
-	std::lock_guard<std::mutex> lock(g_lock);
-	// Under another screen only the background shows: the room and other windows don't cover the whole menu.
-	return g_s.shown && g_s.view.interactive;
+	bool waiting = false;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		// Under another screen only the background shows: the room and other windows don't cover the whole menu.
+		if (g_s.shown && g_s.view.interactive) return true;
+		waiting = g_s.shown;
+	}
+	// Whether the menu is back on top is known on the game thread, at the game's next frame; with the menu still the game draws none
+	// until the mouse moves, so the menu stayed blank after a screen closed. The game thread is woken to look again.
+	static DWORD wokeAt = 0;
+	const DWORD now = GetTickCount();
+	if (waiting && now - wokeAt >= 200) {
+		wokeAt = now;
+		MpUiWakeGameThread();
+	}
+	return false;
 }
 
 void MainMenuUiDraw(uint32_t *buf, int w, int h)

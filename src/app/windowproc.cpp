@@ -51,6 +51,7 @@ LRESULT GameWindowHandler(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 		Guard("game queue", [] {
 			AutosaveQuitIfReady();
 			MpUiGameThreadTick();
+			MainMenuUiGameTick();
 			RejoinMenuTick();
 			SpectatorGameThreadTick();
 			LeagueGameThreadTick();
