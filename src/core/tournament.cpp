@@ -23,12 +23,6 @@ std::string Lower(std::string s)
 	return s;
 }
 
-int Int(const Json &j, const char *key, int def = 0)
-{
-	const Json *v = j.Get(key);
-	return v && v->type == Json::Number ? static_cast<int>(v->num) : def;
-}
-
 int64_t Int64(const Json &j, const char *key)
 {
 	const Json *v = j.Get(key);
@@ -70,7 +64,7 @@ TourneyCard CardFromJson(const Json *v)
 	c.entryId = Int64(*v, "entryId");
 	c.steamId = Id64(v->Get("steamId"));
 	c.name = Text(*v, "name");
-	c.seed = Int(*v, "seed");
+	c.seed = v->GetInt("seed");
 	c.members = TourneyMembersFromJson(v->Get("members"));
 	c.name = TeamNameOf(c.name, c.members);
 	return c;
@@ -123,7 +117,7 @@ TourneyNextSide SideFromJson(const Json *v)
 	if (!s.steamId) s.steamId = Id64(v->Get("steamid"));
 	s.name = Text(*v, "name");
 	s.side = Text(*v, "side");
-	s.seed = Int(*v, "seed");
+	s.seed = v->GetInt("seed");
 	s.inRoom = v->GetBool("inRoom");
 	s.members = TourneyMembersFromJson(v->Get("members"));
 	s.name = TeamNameOf(s.name, s.members);
@@ -320,7 +314,7 @@ TourneyMap TourneyMapFromJson(const Json *v)
 		m.file = Text(*v, "file");
 		m.hash = Lower(Text(*v, "hash"));
 		m.bytes = Int64(*v, "bytes");
-		m.players = Int(*v, "players");
+		m.players = v->GetInt("players");
 		// A file the mod would not write is no file: the round shows no map rather than a path out of Scenarios.
 		if (!TourneyScenarioFileValid(m.file)) m.file.clear();
 		if (m.title.empty()) m.title = TourneyScenarioStem(m.file);
@@ -413,8 +407,8 @@ TourneySettings TourneySettingsFromJson(const Json *v)
 	if (!v || v->type != Json::Object) return s;
 	s.preset = Text(*v, "preset");
 	s.hideCivs = v->GetBool("hideCivs");
-	if (const Json *fog = v->Get("fog"); fog && fog->type == Json::Bool) s.fog = fog->b ? 1 : 0;
-	if (const Json *explored = v->Get("explored"); explored && explored->type == Json::Bool) s.explored = explored->b ? 1 : 0;
+	s.fog = v->GetFlag("fog");
+	s.explored = v->GetFlag("explored");
 	const std::string diplomacy = Lower(Text(*v, "diplomacy"));
 	if (diplomacy == "locked" || diplomacy == "free") s.diplomacy = diplomacy;
 	if (const Json *delay = v->Get("specDelay"); delay && delay->type == Json::Number) s.specDelay = std::max(0, static_cast<int>(delay->num));
@@ -491,7 +485,7 @@ TourneyRequirements TourneyRequirementsFromJson(const Json *v)
 {
 	TourneyRequirements r;
 	if (!v || v->type != Json::Object) return r;
-	r.minGames = std::max(0, Int(*v, "minGames"));
+	r.minGames = std::max(0, v->GetInt("minGames"));
 	const Json *tier = v->Get("maxTier");
 	r.maxTier = tier && tier->type == Json::String ? LeagueTierFromId(tier->str) : LeagueTier::None;
 	if (!TourneyMaxTierValid(r.maxTier)) r.maxTier = LeagueTier::None;
@@ -583,12 +577,12 @@ bool TourneyParseSummary(const Json &j, TourneySummary &out)
 	out.season = season && season->type == Json::Number ? static_cast<int>(season->num) : -1;
 	out.format = Text(j, "format");
 	out.status = TourneyStatusFromId(Text(j, "status"));
-	out.maxEntries = Int(j, "maxEntries");
-	out.minEntries = Int(j, "minEntries");
+	out.maxEntries = j.GetInt("maxEntries");
+	out.minEntries = j.GetInt("minEntries");
 	// The page lists the entries instead of counting them; TourneyParseDetail counts them.
-	out.entries = Int(j, "entries");
-	out.bestOf = std::max(1, Int(j, "bestOf", 1));
-	out.finalBestOf = std::max(1, Int(j, "finalBestOf", out.bestOf));
+	out.entries = j.GetInt("entries");
+	out.bestOf = std::max(1, j.GetInt("bestOf", 1));
+	out.finalBestOf = std::max(1, j.GetInt("finalBestOf", out.bestOf));
 	out.seeding = Text(j, "seeding");
 	out.contentKey = Text(j, "contentKey");
 	out.contentName = Text(j, "contentName");
@@ -598,12 +592,12 @@ bool TourneyParseSummary(const Json &j, TourneySummary &out)
 	out.signupOpensAt = Int64(j, "signupOpensAt");
 	out.checkinOpensAt = Int64(j, "checkinOpensAt");
 	out.startsAt = Int64(j, "startsAt");
-	out.noshowMinutes = Int(j, "noshowMinutes");
-	out.swissRounds = std::max(0, Int(j, "swissRounds"));
+	out.noshowMinutes = j.GetInt("noshowMinutes");
+	out.swissRounds = std::max(0, j.GetInt("swissRounds"));
 	out.pace = TourneyPaceFromId(Text(j, "pace"));
-	out.roundDays = std::max(0, Int(j, "roundDays"));
+	out.roundDays = std::max(0, j.GetInt("roundDays"));
 	out.seriesPool = MapsFromJson(j.Get("seriesPool"));
-	out.currentRound = std::max(0, Int(j, "currentRound"));
+	out.currentRound = std::max(0, j.GetInt("currentRound"));
 	out.roundEndsAt = Int64(j, "roundEndsAt");
 	out.mode = TourneyModeFromId(Text(j, "mode"));
 	return true;
@@ -659,7 +653,7 @@ std::vector<TourneyGame> TourneyGamesFromJson(const Json *v)
 	for (const Json &g : v->arr) {
 		if (g.type != Json::Object) continue;
 		TourneyGame x;
-		x.no = Int(g, "no");
+		x.no = g.GetInt("no");
 		if (x.no < 1) continue;
 		x.map = TourneyMapFromJson(g.Get("map"));
 		x.winner = SideOf(g, "winner");
@@ -709,7 +703,7 @@ bool TourneyParseDetail(const Json &j, TourneyDetail &out)
 {
 	out = TourneyDetail();
 	if (!TourneyParseSummary(j, out)) return false;
-	out.rounds = Int(j, "rounds");
+	out.rounds = j.GetInt("rounds");
 	const int sentRounds = out.rounds;
 	int counted = 0;
 	if (const Json *list = j.Get("entries"); list && list->type == Json::Array) {
@@ -720,8 +714,8 @@ bool TourneyParseDetail(const Json &j, TourneyDetail &out)
 			x.steamId = Id64(e.Get("steamId"));
 			x.name = Text(e, "name");
 			x.status = TourneyEntryStatusFromId(Text(e, "status"));
-			x.seed = Int(e, "seed");
-			x.placement = Int(e, "placement");
+			x.seed = e.GetInt("seed");
+			x.placement = e.GetInt("placement");
 			x.checkedIn = e.GetBool("checkedIn");
 			x.members = TourneyMembersFromJson(e.Get("members"));
 			x.teamName = Text(e, "teamName");
@@ -742,11 +736,11 @@ bool TourneyParseDetail(const Json &j, TourneyDetail &out)
 			if (m.type != Json::Object) continue;
 			TourneyMatch x;
 			x.id = Int64(m, "id");
-			x.round = Int(m, "round");
-			x.position = Int(m, "position");
+			x.round = m.GetInt("round");
+			x.position = m.GetInt("position");
 			x.stage = TourneyStageFromId(Text(m, "stage"));
 			x.bracket = TourneyBracketFromId(Text(m, "bracket"));
-			x.bestOf = std::max(1, Int(m, "bestOf", 1));
+			x.bestOf = std::max(1, m.GetInt("bestOf", 1));
 			x.a = CardFromJson(m.Get("a"));
 			x.b = CardFromJson(m.Get("b"));
 			if (const Json *score = m.Get("score"); score && score->type == Json::Array && score->arr.size() >= 2) {
@@ -1030,14 +1024,14 @@ bool TourneyParseNext(const Json &j, TourneyNext &out)
 		out.isPrivate = out.isPrivate || t->GetBool("private");
 		if (!out.organizer.Present()) out.organizer = TourneyOrganizerFromJson(t->Get("organizer"));
 	}
-	out.round = Int(j, "round");
-	out.rounds = Int(j, "rounds");
+	out.round = j.GetInt("round");
+	out.rounds = j.GetInt("rounds");
 	out.stage = TourneyStageFromId(Text(j, "stage"));
 	out.bracket = TourneyBracketFromId(Text(j, "bracket"));
 	// Only the winners' bracket has stages counted from its final.
 	if (out.stage == TourneyStage::Unknown && out.rounds && out.bracket == TourneyBracket::Winners) out.stage = TourneyStageOf(out.round, out.rounds);
-	out.bestOf = std::max(1, Int(j, "bestOf", 1));
-	out.game = std::max(1, Int(j, "game", 1));
+	out.bestOf = std::max(1, j.GetInt("bestOf", 1));
+	out.game = std::max(1, j.GetInt("game", 1));
 	out.status = TourneyMatchStatusFromId(Text(j, "status"));
 	out.readyAt = Int64(j, "readyAt");
 	out.deadlineAt = Int64(j, "deadlineAt");
@@ -1133,8 +1127,8 @@ bool TourneyParseMine(const Json &j, TourneyMine &out)
 			x.status = TourneyEntryStatusFromId(Text(e, "status"));
 			x.startsAt = Int64(e, "startsAt");
 			x.checkedIn = e.GetBool("checkedIn");
-			x.seed = Int(e, "seed");
-			x.placement = Int(e, "placement");
+			x.seed = e.GetInt("seed");
+			x.placement = e.GetInt("placement");
 			x.entryId = Int64(e, "entryId");
 			if (!x.entryId) x.entryId = Int64(e, "id");
 			x.teamName = Text(e, "teamName");
@@ -1170,8 +1164,8 @@ bool TourneyParseMine(const Json &j, TourneyMine &out)
 		TourneyOrganize &g = out.organize;
 		g.known = true;
 		g.allowed = o->GetBool("allowed");
-		g.gamesPlayed = Int(*o, "gamesPlayed");
-		g.gamesNeeded = Int(*o, "gamesNeeded");
+		g.gamesPlayed = o->GetInt("gamesPlayed");
+		g.gamesNeeded = o->GetInt("gamesNeeded");
 		if (const Json *a = o->Get("active"); a && a->type == Json::Object) {
 			g.activeId = Int64(*a, "id");
 			g.activeSlug = Text(*a, "slug");
@@ -1187,13 +1181,13 @@ bool TourneyParseMine(const Json &j, TourneyMine &out)
 			x.status = TourneyStatusFromId(Text(c, "status"));
 			x.isPrivate = c.GetBool("private");
 			x.inviteCode = Text(c, "inviteCode");
-			x.entries = Int(c, "entries");
-			x.checkedIn = Int(c, "checkedIn");
-			x.maxEntries = Int(c, "maxEntries");
-			x.minEntries = Int(c, "minEntries");
+			x.entries = c.GetInt("entries");
+			x.checkedIn = c.GetInt("checkedIn");
+			x.maxEntries = c.GetInt("maxEntries");
+			x.minEntries = c.GetInt("minEntries");
 			x.startsAt = Int64(c, "startsAt");
 			x.checkinOpensAt = Int64(c, "checkinOpensAt");
-			x.openDisputes = Int(c, "openDisputes");
+			x.openDisputes = c.GetInt("openDisputes");
 			if (x.id && !x.slug.empty()) out.organized.push_back(x);
 		}
 	}
@@ -1429,11 +1423,11 @@ TourneyRefusal TourneyParseRefusal(const Json &j)
 	r.contentName = Text(j, "contentName");
 	r.slug = Text(j, "slug");
 	r.until = Int64(j, "until");
-	r.gamesPlayed = Int(j, "gamesPlayed");
-	r.gamesNeeded = Int(j, "gamesNeeded");
-	r.checkedIn = Int(j, "checkedIn");
-	r.needed = Int(j, "needed");
-	r.retryAfter = std::max(0, Int(j, "retryAfter"));
+	r.gamesPlayed = j.GetInt("gamesPlayed");
+	r.gamesNeeded = j.GetInt("gamesNeeded");
+	r.checkedIn = j.GetInt("checkedIn");
+	r.needed = j.GetInt("needed");
+	r.retryAfter = std::max(0, j.GetInt("retryAfter"));
 	r.requirement = Text(j, "kind");
 	r.who = Lower(Text(j, "who"));
 	for (const auto &field : {std::make_pair("have", &r.have), std::make_pair("need", &r.need)}) {
