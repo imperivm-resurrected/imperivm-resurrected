@@ -1298,20 +1298,17 @@ void TourneyAction(int arg)
 	}
 	case kSubWithdraw: {
 		const int64_t tournament = value;
-		if (TeamsCup(tournament)) {
-			ModUiAsk("Withdraw from the tournament", "Your whole team withdraws, your partner too. Once your match is ready, withdrawing counts as a no-show. Withdraw anyway?",
-				"Withdraw", [tournament] { LeagueTourneyWithdraw(tournament); });
-			break;
-		}
-		ModUiAsk("Withdraw from the tournament", "Once your match is ready, withdrawing counts as a no-show. Withdraw anyway?", "Withdraw",
-			[tournament] { LeagueTourneyWithdraw(tournament); });
+		Confirm(Tr("Withdraw from the tournament"),
+			Tr(TeamsCup(tournament) ? "Your whole team withdraws, your partner too. Once your match is ready, withdrawing counts as a no-show. Withdraw anyway?"
+									: "Once your match is ready, withdrawing counts as a no-show. Withdraw anyway?"),
+			Tr("Withdraw"), [tournament] { LeagueTourneyWithdraw(tournament); });
 		break;
 	}
 	case kSubCheckIn: {
 		const TourneyListsView lists = LeagueTourneyLists();
 		const TourneySummary *t = SummaryOf(lists, value);
 		if (t && !t->contentKey.empty() && t->contentKey != SteamOwnGameplayKey()) {
-			Toast(TrFmt("This tournament is played with %s: switch to that content profile first.", {t->contentName.empty() ? Tr("other content") : t->contentName}), true);
+			Toast(OtherContentText(t->contentName), true);
 			break;
 		}
 		LeagueTourneyCheckIn(value);
