@@ -99,7 +99,8 @@ struct Board {
 struct Season {
 	bool loading = false, loaded = false, none = false;
 	DWORD at = 0;
-	std::string lang;
+	// The language of the season read, and of the last answer, a 404 or a failure too.
+	std::string lang, asked;
 	LeagueSeason season;
 };
 
@@ -273,6 +274,7 @@ void FetchSeason(std::string lang)
 	std::lock_guard<std::mutex> lock(g_mx);
 	g_season.loading = false;
 	g_season.at = GetTickCount();
+	g_season.asked = lang;
 	if (ok) {
 		g_season.loaded = true;
 		g_season.none = false;
@@ -1197,7 +1199,7 @@ void LeagueSeasonRefresh(bool force)
 		std::lock_guard<std::mutex> lock(g_mx);
 		if (g_season.loading) return;
 		const DWORD keep = g_season.loaded ? kSeasonKeepMs : kSeasonRetryMs;
-		if (!force && g_season.at && GetTickCount() - g_season.at < keep && g_season.lang == lang) return;
+		if (!force && g_season.at && GetTickCount() - g_season.at < keep && g_season.asked == lang) return;
 		if (!force && g_season.at && !g_season.loaded && GetTickCount() - g_season.at < kSeasonRetryMs) return;
 		g_season.loading = true;
 	}
