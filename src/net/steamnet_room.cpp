@@ -60,7 +60,7 @@ void RefreshRankedPresence()
 
 void AssignNumbers()
 {
-	if (!g_lobby || S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) != g_steam.me) return;
+	if (!OwnLobby()) return;
 	const int n = S.SteamAPI_ISteamMatchmaking_GetNumLobbyMembers(g_steam.mm, g_lobby);
 	std::vector<uint64> members;
 	const uint64 owner = S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby);
@@ -92,14 +92,14 @@ void AssignNumbers()
 
 void RefreshOwnKey()
 {
-	if (!g_lobby || S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) != g_steam.me) return;
+	if (!OwnLobby()) return;
 	const std::string own = OwnKey();
 	if (!own.empty() && Data(g_lobby, "key") != own) S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, "key", own.c_str());
 }
 
 void TakeOverHostData()
 {
-	if (!g_lobby || S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) != g_steam.me) return;
+	if (!OwnLobby()) return;
 	const std::string prev = Data(g_lobby, "hostid");
 	if (_strtoui64(prev.c_str(), nullptr, 10) == g_steam.me) return;
 	if (!prev.empty() && *reinterpret_cast<void **>(addr::kGame) == nullptr) {
@@ -116,7 +116,7 @@ void TakeOverHostData()
 
 void PublishPlayerList()
 {
-	if (!g_lobby || S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) != g_steam.me) return;
+	if (!OwnLobby()) return;
 	const int n = S.SteamAPI_ISteamMatchmaking_GetNumLobbyMembers(g_steam.mm, g_lobby);
 	std::string list = Name(g_steam.me), ids = std::to_string(g_steam.me);
 	for (int i = 0; i < n; i++) {
@@ -513,7 +513,7 @@ void OpenSpectators(int delay, int visibility)
 		g_spectate.delay = (std::max)(0, (std::min)(600, delay));
 	}
 	g_spectate.visibility = visibility;
-	if (!g_lobby || S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) != g_steam.me) return;
+	if (!OwnLobby()) return;
 	if (g_spectate.lobby || g_spectate.creating) return;
 	g_spectate.creating = true;
 	g_spectate.creatingSince = GetTickCount();
@@ -534,7 +534,7 @@ void CloseSpectators()
 			std::lock_guard<std::mutex> lock(g_spectate.mx);
 			g_spectate.lobby = 0;
 		}
-		if (g_lobby && S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) == g_steam.me) {
+		if (OwnLobby()) {
 			S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, "sl", "");
 			S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, "sd", "");
 			S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, "t0", "");
@@ -554,7 +554,7 @@ void MirrorSpectators()
 	}
 	if (g_spectate.wanted && !g_spectate.lobby && !g_spectate.creating && g_lobby) OpenSpectators(g_spectate.delay, g_spectate.visibility);
 	if (!g_spectate.lobby) return;
-	if (!g_lobby || S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) != g_steam.me) return;
+	if (!OwnLobby()) return;
 	static const char *const kCopy[] = {"name", "host", "hostid", "map", "mode", "key", "scen", "pw", "vis", "irver", "mods", "slots", "plist", "pids", "opts", "rules", "save", "playing", "modsv", "nopt"};
 	for (const char *k : kCopy) SpecSet(k, Data(g_lobby, k));
 	SpecSet("main", std::to_string(g_lobby));
@@ -650,7 +650,7 @@ bool SteamSendRoomCountdown(unsigned seq, int ms)
 	const uint8_t type = ms >= 0 ? kRmCountdown : kRmCountdownCancel;
 	const std::string data = text;
 	Post([type, data] {
-		if (!g_lobby || S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) != g_steam.me) return;
+		if (!OwnLobby()) return;
 		const int n = S.SteamAPI_ISteamMatchmaking_GetNumLobbyMembers(g_steam.mm, g_lobby);
 		for (int i = 0; i < n; i++) {
 			const uint64 m = S.SteamAPI_ISteamMatchmaking_GetLobbyMemberByIndex(g_steam.mm, g_lobby, i);
@@ -676,7 +676,7 @@ bool SteamRenameRoom(const std::string &name)
 		if (!g_room.id || !g_room.owner) return false;
 	}
 	Post([name] {
-		if (!g_lobby || S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) != g_steam.me) {
+		if (!OwnLobby()) {
 			LogW("steam", "the room was not renamed: this PC no longer owns it");
 			return;
 		}

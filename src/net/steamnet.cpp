@@ -286,7 +286,7 @@ void SteamTick()
 	}
 	static DWORD lastBeat = 0;
 	static uint64 beatLobby = 0;
-	if (g_lobby && (now - lastBeat > 30000 || beatLobby != g_lobby) && S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) == g_steam.me) {
+	if (g_lobby && (now - lastBeat > 30000 || beatLobby != g_lobby) && OwnLobby()) {
 		lastBeat = now;
 		beatLobby = g_lobby;
 		S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, "alive", std::to_string(static_cast<long long>(time(nullptr))).c_str());

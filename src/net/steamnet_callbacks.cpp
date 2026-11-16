@@ -279,8 +279,7 @@ void OnCallback(int id, const void *data)
 				(f & k_EChatMemberStateChangeDisconnected) ? "lost the connection to Steam" : (f & k_EChatMemberStateChangeKicked) ? "kicked" :
 				(f & k_EChatMemberStateChangeBanned) ? "banned" : "left on their own (closed the game or left the room)");
 		}
-		if (r->m_ulSteamIDLobby == g_lobby && (r->m_rgfChatMemberStateChange & leftFlags) &&
-			S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) == g_steam.me) {
+		if (r->m_ulSteamIDLobby == g_lobby && (r->m_rgfChatMemberStateChange & leftFlags) && OwnLobby()) {
 			DropTransfers(r->m_ulSteamIDUserChanged);
 		}
 		AssignNumbers();
