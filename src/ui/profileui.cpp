@@ -277,6 +277,7 @@ void Act(View &v, int action, int arg, Command &cmd)
 		cmd.action = action;
 		break;
 	case kActLeagueClose: v.leagueOpen = false; break;
+	case kActTab: v.tab = arg == kTabLeague ? kTabLeague : kTabGeneral; break;
 	case kActMetric: v.metric = std::max(0, std::min(arg, kMetricCount - 1)); break;
 	case kActChartMode: v.chartMode = arg; break;
 	case kActChartRange: v.chartRange = arg; break;

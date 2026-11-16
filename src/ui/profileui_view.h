@@ -56,6 +56,8 @@ struct View {
 	LeagueMe me;
 	// The league account's dialog is open over the screen.
 	bool leagueOpen = false;
+	// The tab shown: the player's games (kTabGeneral) or their league (kTabLeague), which only the player in use has.
+	int tab = 0;
 	// The ranks of the game's constants, which spread the colours of the ranks.
 	int rankCount = 0;
 	int metric = kMetricKills, chartMode = kModeAll, chartRange = kRange20;
@@ -70,14 +72,17 @@ struct View {
 enum Action {
 	kActNone = 0, kActPick, kActUse, kActBack, kActPatron, kActMetric, kActChartMode, kActChartRange, kActOutcome, kActBar, kActGame,
 	kActHistory, kActLeague, kActLeagueClose, kActLeagueLink, kActLeagueOpen, kActLeagueCancel, kActLeagueUnlink, kActLeagueBadge,
-	kActLeagueFrame, kActLeagueTitle,
+	kActLeagueFrame, kActLeagueTitle, kActTab,
 };
+
+constexpr int kTabGeneral = 0, kTabLeague = 1;
 
 constexpr int kBarList = 0, kBarHistory = 1;
 
 // The player goes with the Steam account, so the list is left only for installs that still keep several from before.
 inline bool ShowsList(const View &v) { return v.cards.size() > 1; }
 inline bool SelectedIsActive(const View &v) { return v.selected >= 0 && v.selected < static_cast<int>(v.cards.size()) && v.cards[v.selected].active; }
+inline int ShownTab(const View &v) { return v.tab == kTabLeague && SelectedIsActive(v) ? kTabLeague : kTabGeneral; }
 const Card *SelectedCard(const View &v);
 // How many rows of the list fit; the controller scrolls by rows.
 int ListRows(const View &v);
