@@ -1026,8 +1026,7 @@ bool PaintBanner(Painter &p, Ctx &c, int x, int y, int w)
 		const TourneyMatch *match = MatchById(d, n.match);
 		title = TrFmt("Your %s match is ready.", {match ? MatchStageText(d, *match) : StageText(n.stage, n.round)});
 		if (n.canClaimNoShow) {
-			text = TrFmt(n.Teams() ? "A player of %s did not come to the room in time: your team can claim the win." : "%s did not come to the room in time: you can claim the win.",
-				{n.opponent.name});
+			text = NoShowClaimText(n);
 			buttons.push_back({Tr("Claim the win"), ArgOf(kSubNoShow, n.match)});
 		}
 		// Paced by rounds, the match waits until the round's deadline, days away: its day and hour, not a countdown.
