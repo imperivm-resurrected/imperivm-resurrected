@@ -764,6 +764,9 @@ void PaintSlotRow(Painter &p, const State &st, const TableCtx &t, int i, const A
 		}
 	}
 	if (g.host && g.online && s.type == 3 && !s.local && !moving && !RankedRoomLocked(st)) PaintKick(p, st, c.kick, cy, kGKick, i);
+	// An AI the host added goes the same way: its slot opens again (its level's menu has Open too, but nobody looks for it there).
+	if (g.host && s.type == 1 && !load && !moving && !RankedRoomLocked(st) && !TourneyTeamsLocked(st) && !(g.online && LocalReady(g)))
+		PaintKick(p, st, c.kick, cy, kGSlotType, i);
 }
 
 // The rows are as tall as the mockup's while they fit in `maxH`, and no shorter than the controls in them.
