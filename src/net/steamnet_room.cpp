@@ -507,8 +507,11 @@ void MainSet(const char *k, const std::string &v)
 namespace steamnet_impl {
 void OpenSpectators(int delay, int visibility)
 {
-	g_spectate.wanted = true;
-	g_spectate.delay = (std::max)(0, (std::min)(600, delay));
+	{
+		std::lock_guard<std::mutex> lock(g_spectate.mx);
+		g_spectate.wanted = true;
+		g_spectate.delay = (std::max)(0, (std::min)(600, delay));
+	}
 	g_spectate.visibility = visibility;
 	if (!g_lobby || S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) != g_steam.me) return;
 	if (g_spectate.lobby || g_spectate.creating) return;
@@ -520,11 +523,17 @@ void OpenSpectators(int delay, int visibility)
 
 void CloseSpectators()
 {
-	g_spectate.wanted = false;
+	{
+		std::lock_guard<std::mutex> lock(g_spectate.mx);
+		g_spectate.wanted = false;
+	}
 	if (g_spectate.lobby) {
 		S.SteamAPI_ISteamMatchmaking_LeaveLobby(g_steam.mm, g_spectate.lobby);
 		LogI("steam", "spectator room closed");
-		g_spectate.lobby = 0;
+		{
+			std::lock_guard<std::mutex> lock(g_spectate.mx);
+			g_spectate.lobby = 0;
+		}
 		if (g_lobby && S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) == g_steam.me) {
 			S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, "sl", "");
 			S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, "sd", "");

@@ -97,7 +97,10 @@ void OnCallback(int id, const void *data)
 				S.SteamAPI_ISteamMatchmaking_LeaveLobby(g_steam.mm, r->m_ulSteamIDLobby);
 				return;
 			}
-			g_spectate.lobby = r->m_ulSteamIDLobby;
+			{
+				std::lock_guard<std::mutex> lock(g_spectate.mx);
+				g_spectate.lobby = r->m_ulSteamIDLobby;
+			}
 			g_spectate.sent.clear();
 			S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_spectate.lobby, "imperivm", "1");
 			S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_spectate.lobby, "v", kProtocol);

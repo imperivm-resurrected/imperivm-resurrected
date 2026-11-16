@@ -141,7 +141,7 @@ std::string RouteInfo(uint64 peer);
 void LogRouteChange(uint64 peer, const std::string &name, const std::string &route);
 void LogSilence(uint64 peer, const std::string &name, bool playing);
 extern uint64 g_lobby;
-extern long long g_startedAt;
+extern std::atomic<long long> g_startedAt;
 extern std::atomic<long long> g_startedAtMs;
 bool InLobby(uint64 lobby, uint64 who);
 void SetPresence();
