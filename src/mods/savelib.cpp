@@ -112,14 +112,15 @@ bool MoveToOnlineFolder(SaveRec &r)
 	return true;
 }
 
-void ScanDir(const std::string &profile, bool onlineFolder, std::vector<SaveRec> &out)
+// Returns the indexes in `out` of the online games found outside the online folder.
+std::vector<size_t> ScanDir(const std::string &profile, bool onlineFolder, std::vector<SaveRec> &out)
 {
 	const std::string dir = onlineFolder ? OnlineDir(profile) : ProfileDir(profile);
 	const std::string vfsDir = "Profiles/" + profile + "/" + (onlineFolder ? std::string(kSaveOnlineFolder) + "/" : "");
 	std::vector<size_t> toMove;
 	WIN32_FIND_DATAA fd;
 	HANDLE h = FindFirstFileA((dir + "*").c_str(), &fd);
-	if (h == INVALID_HANDLE_VALUE) return;
+	if (h == INVALID_HANDLE_VALUE) return toMove;
 	do {
 		if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
 		const std::string file = fd.cFileName;
@@ -179,7 +180,7 @@ void ScanDir(const std::string &profile, bool onlineFolder, std::vector<SaveRec>
 		out.push_back(std::move(r));
 	} while (FindNextFileA(h, &fd));
 	FindClose(h);
-	for (size_t i : toMove) MoveToOnlineFolder(out[i]);
+	return toMove;
 }
 
 }
@@ -189,8 +190,10 @@ std::vector<SaveRec> SaveLibScan(const std::string &profileArg)
 	std::vector<SaveRec> out;
 	const std::string profile = profileArg.empty() ? SaveLibActiveProfile() : profileArg;
 	if (profile.empty()) return out;
-	ScanDir(profile, false, out);
+	const std::vector<size_t> toMove = ScanDir(profile, false, out);
 	ScanDir(profile, true, out);
+	// Moved after the online folder was read, which would list them a second time.
+	for (size_t i : toMove) MoveToOnlineFolder(out[i]);
 	std::sort(out.begin(), out.end(), [](const SaveRec &a, const SaveRec &b) { return a.time > b.time; });
 	return out;
 }
