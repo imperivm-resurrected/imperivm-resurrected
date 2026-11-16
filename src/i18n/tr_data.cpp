@@ -3299,6 +3299,16 @@ extern const TrRow kTrRows[] = {
 	{"estimated end around %s", "fin estimado hacia las %s", "fine prevista verso le %s"},
 	{"The longest", "La más larga", "La più lunga"},
 	{"%s, %s against %s", "%s, %s contra %s", "%s, %s contro %s"},
+	{"Live · you can watch", "En directo · se pueden ver", "In diretta · si possono guardare"},
+	{"Not available", "No disponibles", "Non disponibili"},
+	{"Playing for %s min", "En partida desde hace %s min", "In partita da %s min"},
+	{"Continues the saved game \"%s\"", "Continúa la partida guardada «%s»", "Continua la partita salvata «%s»"},
+	{"with your friend %s", "con tu amigo %s", "con il tuo amico %s"},
+	{"spectators with a %s s delay", "espectadores con %s s de retraso", "spettatori con %s s di ritardo"},
+	{"spectators allowed", "se puede mirar", "spettatori ammessi"},
+	{"%s free places", "%s plazas libres", "%s posti liberi"},
+	{"Full", "Llena", "Piena"},
+	{"Open rooms", "Salas abiertas", "Stanze aperte"},
 	{"Problem reported: the league will review the game.", "Problema informado: la liga revisará la partida.", "Problema segnalato: la lega esaminerà la partita."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

@@ -133,6 +133,13 @@ bool Contains(const std::string &text, const std::string &part)
 }
 
 namespace mpui_impl {
+int RoomGroup(const OnlineLobby &g)
+{
+	if (g.kickedMe) return 2;
+	if (g.playing) return g.specLobby ? 1 : 2;
+	return g.players >= g.maxPlayers ? 2 : 0;
+}
+
 std::vector<int> Visible(const State &st)
 {
 	std::vector<int> out;
@@ -163,7 +170,9 @@ std::vector<int> Visible(const State &st)
 		}
 	};
 	std::stable_sort(out.begin(), out.end(), [&](int a, int b) {
-		// The rooms of tournament matches go first, as the matches people come to watch.
+		// The groups in their order; in each, the rooms of tournament matches first, as the matches people come to watch.
+		const int ga = RoomGroup(st.lobbies[a]), gb = RoomGroup(st.lobbies[b]);
+		if (ga != gb) return ga < gb;
 		const bool ta = TourneyLobby(st.lobbies[a]), tb = TourneyLobby(st.lobbies[b]);
 		if (ta != tb) return ta;
 		const std::string ka = key(st.lobbies[a]), kb = key(st.lobbies[b]);

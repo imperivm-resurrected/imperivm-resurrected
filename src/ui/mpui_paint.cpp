@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 THIONG
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
+#include <ctime>
+
 #include "ui/textedit.h"
 #include "MinHook.h"
 #include "core/config.h"
@@ -524,6 +526,29 @@ void PaintPassPrompt(Painter &p, const State &st)
 	DialogButtons(p, d, {{"OK", kPassOk, 0, true}, {"Cancel", kPassCancel}}, mx, my);
 }
 
+// The line under a room's name: the saved game it continues or the game being played, a Steam friend in it, its password, and its
+// spectators.
+std::string RoomSubline(const OnlineLobby &g, const std::vector<uint64_t> &friends, long long nowMs)
+{
+	std::vector<std::string> parts;
+	if (g.playing) {
+		const long long minutes = g.startedMs > 0 ? (nowMs - g.startedMs) / 60000 : -1;
+		parts.push_back(minutes >= 0 && minutes < 24 * 60 ? TrFmt("Playing for %s min", {std::to_string(minutes)}) : Tr("In game"));
+	}
+	else if (!g.saveName.empty()) parts.push_back(TrFmt("Continues the saved game \"%s\"", {g.saveName}));
+	for (size_t i = 0; i < g.playerIds.size() && i < g.playerNames.size(); i++) {
+		if (g.playerIds[i] == g.owner || std::find(friends.begin(), friends.end(), g.playerIds[i]) == friends.end()) continue;
+		parts.push_back(TrFmt("with your friend %s", {g.playerNames[i]}));
+		break;
+	}
+	if (g.password) parts.push_back(Tr("Password protected"));
+	if (g.spectate && !g.playing) parts.push_back(g.specDelay > 0 ? TrFmt("spectators with a %s s delay", {std::to_string(g.specDelay)}) : Tr("spectators allowed"));
+	if (parts.empty()) parts.push_back(g.players < g.maxPlayers ? TrFmt("%s free places", {std::to_string(g.maxPlayers - g.players)}) : Tr("Full"));
+	std::string out;
+	for (const std::string &part : parts) out += (out.empty() ? "" : "  \xC2\xB7  ") + part;
+	return out;
+}
+
 void PaintList(Painter &p, const State &st)
 {
 	const int mx = st.mouseX, my = st.mouseY;
@@ -589,12 +614,46 @@ void PaintList(Painter &p, const State &st)
 			: "There are no open rooms with this filter. Create one with \"Create a room\" and invite your friends.";
 		p.TextWrapped(tx + 24, rowsTop + 24, tw - 48, 120, empty, pal::textDim);
 	}
-	// The table has no scroll of its own: when the arrows take the selection past the rows that fit, the rows follow it.
-	const int fit = std::max(1, (th - headH - 1) / rowH), count = static_cast<int>(vis.size());
-	const int first = std::max(0, std::min(st.selected - fit + 1, count - fit));
+	// The rooms in their groups, each under its heading with its count. The table has no scroll of its own: when the arrows take the
+	// selection past the rows that fit, the rows follow it.
+	const int count = static_cast<int>(vis.size()), groupH = 30, bodyH = th - headH - 1;
+	auto groupOf = [&](int r) { return RoomGroup(st.lobbies[vis[r]]); };
+	int groupCount[3] = {};
+	for (int r = 0; r < count; r++) groupCount[groupOf(r)]++;
+	auto fits = [&](int from) {
+		int used = 0, n = 0;
+		for (int r = from; r < count; r++) {
+			if (r == from || groupOf(r) != groupOf(r - 1)) used += groupH;
+			if (used + rowH > bodyH) break;
+			used += rowH;
+			n++;
+		}
+		return std::max(1, n);
+	};
+	int first = 0;
+	while (first < count - 1 && st.selected >= first + fits(first)) first++;
+	const int fit = fits(first);
+	// Whose rooms have a Steam friend in them.
+	const std::vector<uint64_t> friends = SteamFriendIds();
+	const long long nowMs = static_cast<long long>(std::time(nullptr)) * 1000;
+	int cursor = rowsTop;
 	for (int r = first; r < count && r < first + fit; r++) {
 		const OnlineLobby &g = st.lobbies[vis[r]];
-		const int y = rowsTop + (r - first) * rowH;
+		if (r == first || groupOf(r) != groupOf(r - 1)) {
+			static const char *const kGroups[] = {"Open rooms", "Live \xC2\xB7 you can watch", "Not available"};
+			const int group = groupOf(r);
+			p.Font(4);
+			const int labelW = p.CapsWidth(kGroups[group], 2) + 4;
+			p.TextCaps(tx + 20, cursor, labelW, groupH, kGroups[group], group == 1 ? pal::redText : pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
+			p.Font(3);
+			p.raw = true;
+			p.Text(tx + 20 + labelW + 8, cursor, 60, groupH, std::to_string(groupCount[group]), pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+			p.raw = false;
+			p.Fill(tx + 1, cursor + groupH - 1, tw - 2, 1, pal::hairline);
+			cursor += groupH;
+		}
+		const int y = cursor;
+		cursor += rowH;
 		if (r == st.selected) {
 			p.Fill(tx + 1, y, tw - 2, rowH, pal::selected);
 			p.Fill(tx + 1, y, 3, rowH, pal::red);
@@ -605,15 +664,21 @@ void PaintList(Painter &p, const State &st)
 		auto cell = [&](int c, const std::string &text, COLORREF color) {
 			p.Text(textX(c), y, cx[c + 1] - textX(c) - 12, rowH, text, color, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		};
+		// The name over a line of what is played and how.
+		const int nameY = y + 3, nameH = rowH / 2;
 		p.Font(1);
-		if (g.password) DrawLock(p, cx[0] + 4, y + (rowH - 16) / 2, pal::redText);
+		if (g.password) DrawLock(p, cx[0] + 4, nameY + (nameH - 16) / 2, pal::redText);
 		int lockW = g.password ? 22 : 0;
 		if (TourneyLobby(g)) {
-			PaintBadge(p, cx[0] + 2 + lockW, y + (rowH - 22) / 2, 112, 22, "TOURNAMENT", pal::red, pal::onRed);
+			PaintBadge(p, cx[0] + 2 + lockW, nameY + (nameH - 22) / 2, 112, 22, "TOURNAMENT", pal::red, pal::onRed);
 			lockW += 120;
 			p.Font(1);
 		}
-		p.Text(cx[0] + 2 + lockW, y, cx[1] - cx[0] - 12 - lockW, rowH, g.name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(cx[0] + 2 + lockW, nameY, cx[1] - cx[0] - 12 - lockW, nameH, g.name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Font(3);
+		p.raw = true;
+		p.Text(cx[0] + 2, nameY + nameH, cx[1] - cx[0] - 14, rowH - nameH - 7, RoomSubline(g, friends, nowMs), pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.raw = false;
 		p.Font(0);
 		const PatronInfo hostPatron = PatronOf(g.owner);
 		const LeagueBadge hostBadge = PlayerBadgeOf(g.owner);
@@ -631,7 +696,7 @@ void PaintList(Painter &p, const State &st)
 			DrawBadgeAfterName(p, hx, y, nameW, rowH, hostText, hostBadge, mx, my, g.owner);
 		}
 		char watching[48];
-		snprintf(watching, sizeof(watching), "In game  ·  %d watching", g.spectators);
+		snprintf(watching, sizeof(watching), Tr("In game  ·  %d watching").c_str(), g.spectators);
 		cell(2, g.playing ? (g.spectators > 0 ? std::string(watching) : std::string("In game")) : std::to_string(g.players) + " / " + std::to_string(g.maxPlayers),
 			g.players < g.maxPlayers && !g.playing ? pal::text : pal::textDim);
 		cell(3, LobbyMapLabel(g), pal::textDim);

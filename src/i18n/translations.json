@@ -3292,5 +3292,15 @@
 {"en":"estimated end around %s","es":"fin estimado hacia las %s","it":"fine prevista verso le %s"},
 {"en":"The longest","es":"La más larga","it":"La più lunga"},
 {"en":"%s, %s against %s","es":"%s, %s contra %s","it":"%s, %s contro %s"},
+{"en":"Live · you can watch","es":"En directo · se pueden ver","it":"In diretta · si possono guardare"},
+{"en":"Not available","es":"No disponibles","it":"Non disponibili"},
+{"en":"Playing for %s min","es":"En partida desde hace %s min","it":"In partita da %s min"},
+{"en":"Continues the saved game \"%s\"","es":"Continúa la partida guardada «%s»","it":"Continua la partita salvata «%s»"},
+{"en":"with your friend %s","es":"con tu amigo %s","it":"con il tuo amico %s"},
+{"en":"spectators with a %s s delay","es":"espectadores con %s s de retraso","it":"spettatori con %s s di ritardo"},
+{"en":"spectators allowed","es":"se puede mirar","it":"spettatori ammessi"},
+{"en":"%s free places","es":"%s plazas libres","it":"%s posti liberi"},
+{"en":"Full","es":"Llena","it":"Piena"},
+{"en":"Open rooms","es":"Salas abiertas","it":"Stanze aperte"},
 {"en":"Problem reported: the league will review the game.","es":"Problema informado: la liga revisará la partida.","it":"Problema segnalato: la lega esaminerà la partita."}
 ]

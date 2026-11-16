@@ -410,6 +410,9 @@ extern Canvas g_canvas;
 std::string SpectatorText(bool enabled, int delay);
 bool RoomHasNoSeat(const State &st);
 std::vector<int> Visible(const State &st);
+// The list's group of a room, in the order they show: one that can be joined (0), a game being played that can be watched (1), and one
+// nobody can come into now (2), full, playing or that kicked this player.
+int RoomGroup(const OnlineLobby &g);
 const ModInfo *OlderInstalled(const State &st, const OnlineMod &m);
 std::string MapTypeLabel(const std::string &item);
 std::string LobbyMapLabel(const OnlineLobby &g);
