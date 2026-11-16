@@ -1643,8 +1643,8 @@ void ImageWorker()
 			LogI("download", "images of GameBanana: %d from the disk, %d downloaded", fromDisk.load(), fromNet.load());
 		}
 		if (!img) {
-			static int logged = 0;
-			if (logged++ < 3) LogW("download", "gamebanana: could not show the image %s", url.c_str());
+			static std::atomic<int> failsLogged{0};
+			if (failsLogged++ < 3) LogW("download", "gamebanana: could not show the image %s", url.c_str());
 			img = std::make_shared<GbImage>();
 		}
 		std::lock_guard<std::mutex> lock(g_ioLock);
