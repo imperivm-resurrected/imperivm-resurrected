@@ -2716,6 +2716,7 @@ extern const TrRow kTrRows[] = {
 	{"%s placement games left: then you get your rank.", "Quedan %s partidas de colocación: después tendrás tu rango.", "Mancano %s partite di piazzamento: poi avrai il tuo rango."},
 	{"Your placement games put you in %s with %s Glory.", "Tus partidas de colocación te dejan en %s con %s de Gloria.", "Le partite di piazzamento ti mettono in %s con %s di Gloria."},
 	{"%s + %s = %s: you go up with %s Glory to spare.", "%s + %s = %s: subes con %s de Gloria de sobra.", "%s + %s = %s: sali con %s di Gloria in avanzo."},
+	{"%s Glory left to %s.", "Te faltan %s para %s.", "Ne mancano %s per %s."},
 	{"With 0 Glory in %s and no shield, you drop to %s with %s Glory.", "Con 0 de Gloria en %s y sin escudo, bajas a %s con %s de Gloria.", "Con 0 di Gloria in %s e senza scudo, scendi in %s con %s di Gloria."},
 	{"%s Glory in the top division.", "%s de Gloria en la división más alta.", "%s di Gloria nella divisione più alta."},
 	{"%s %s = %s. %s to %s.", "%s %s = %s. Te faltan %s para %s.", "%s %s = %s. Ne mancano %s per %s."},

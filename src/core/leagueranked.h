@@ -342,8 +342,8 @@ struct LeagueResultFrame {
 	LeagueTier tier = LeagueTier::None;
 	int division = 0;
 	bool switched = false;
-	// The Glory the counter shows.
-	int glory = 0;
+	// The Glory the counter shows, and the Glory won or lost counting from 0 to the game's while it shows.
+	int glory = 0, delta = 0;
 	// How full the bar is, 0 to 1, and the faint part that is about to be won (or that was lost, `ghostLoss`).
 	float bar = 0, ghostFrom = 0, ghostTo = 0;
 	bool ghostLoss = false;
@@ -357,3 +357,7 @@ struct LeagueResultFrame {
 };
 // The frame at `ms` after the screen opened; anything past the end is the end, which is also what skipping shows.
 LeagueResultFrame LeagueResultAt(const LeagueRankedResult &r, uint32_t ms);
+// The sounds of the result screen: the game won or lost when its Glory shows, and the new rank (or the rank lost) when its emblem
+// comes. The ones due by `ms`, as a mask.
+constexpr int kLeagueCueOutcome = 1, kLeagueCueRank = 2;
+int LeagueResultCues(const LeagueRankedResult &r, uint32_t ms);

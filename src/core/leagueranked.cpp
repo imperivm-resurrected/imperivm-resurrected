@@ -786,6 +786,18 @@ int LeagueResultDurationMs(LeagueResultKind kind)
 	}
 }
 
+int LeagueResultCues(const LeagueRankedResult &r, uint32_t ms)
+{
+	const LeagueResultKind kind = LeagueResultKindOf(r);
+	int cues = 0;
+	if ((kind == LeagueResultKind::Steady || kind == LeagueResultKind::Promotion || kind == LeagueResultKind::Demotion) && r.delta != 0 &&
+		ms >= (kind == LeagueResultKind::Steady ? 300u : 0u)) {
+		cues |= kLeagueCueOutcome;
+	}
+	if ((kind == LeagueResultKind::Promotion || kind == LeagueResultKind::Demotion || kind == LeagueResultKind::PlacementDone) && ms >= 800) cues |= kLeagueCueRank;
+	return cues;
+}
+
 LeagueResultFrame LeagueResultAt(const LeagueRankedResult &r, uint32_t ms)
 {
 	LeagueResultFrame f;
@@ -893,6 +905,11 @@ LeagueResultFrame LeagueResultAt(const LeagueRankedResult &r, uint32_t ms)
 		f.glory = Lerp(0, r.gloryAfter, e);
 		break;
 	}
+	}
+	// The delta counts up while it shows, over the first 800 ms.
+	if (f.deltaShown) {
+		const uint32_t from = f.kind == LeagueResultKind::Steady ? 300 : 0;
+		f.delta = Lerp(0, r.delta, EaseInOut(Phase(ms, from, from + 800)));
 	}
 	if (!f.switched && f.kind != LeagueResultKind::Steady) f.newAlpha = 0;
 	if (f.switched && f.done) {

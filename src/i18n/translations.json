@@ -2709,6 +2709,7 @@
 {"en":"%s placement games left: then you get your rank.","es":"Quedan %s partidas de colocación: después tendrás tu rango.","it":"Mancano %s partite di piazzamento: poi avrai il tuo rango."},
 {"en":"Your placement games put you in %s with %s Glory.","es":"Tus partidas de colocación te dejan en %s con %s de Gloria.","it":"Le partite di piazzamento ti mettono in %s con %s di Gloria."},
 {"en":"%s + %s = %s: you go up with %s Glory to spare.","es":"%s + %s = %s: subes con %s de Gloria de sobra.","it":"%s + %s = %s: sali con %s di Gloria in avanzo."},
+{"en":"%s Glory left to %s.","es":"Te faltan %s para %s.","it":"Ne mancano %s per %s."},
 {"en":"With 0 Glory in %s and no shield, you drop to %s with %s Glory.","es":"Con 0 de Gloria en %s y sin escudo, bajas a %s con %s de Gloria.","it":"Con 0 di Gloria in %s e senza scudo, scendi in %s con %s di Gloria."},
 {"en":"%s Glory in the top division.","es":"%s de Gloria en la división más alta.","it":"%s di Gloria nella divisione più alta."},
 {"en":"%s %s = %s. %s to %s.","es":"%s %s = %s. Te faltan %s para %s.","it":"%s %s = %s. Ne mancano %s per %s."},

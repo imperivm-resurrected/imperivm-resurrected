@@ -36,7 +36,7 @@ bool GameStatsLive(std::vector<StatsLivePlayer> &players, uint32_t &clockMs);
 // army, the gold gathered (taxes, captured and the rest) and the unit that reached the highest level, by the name the game gives it
 // (for GameText). False outside a game.
 struct GameRecordFacts {
-	uint32_t killed = 0, lost = 0, armyMax = 0, gold = 0, bestLevel = 0;
+	uint32_t killed = 0, lost = 0, armyMax = 0, gold = 0, bestLevel = 0, produced = 0;
 	std::string bestUnit;
 };
 bool GameStatsRecordOf(int player, GameRecordFacts &out);

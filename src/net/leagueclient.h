@@ -170,10 +170,12 @@ struct LeagueRankedGame {
 	std::string status;
 	LeagueTier tierAfter = LeagueTier::None;
 	int divisionAfter = 0;
-	// What this player did, from the game's own record: units killed and lost, the largest army, the gold gathered and the unit that
+	// Each player's civilization as the report gave it (the game's id), by SteamID.
+	std::vector<std::pair<std::string, std::string>> civs;
+	// What this player did, from the game's own record: units killed, lost and produced, the largest army, the gold gathered and the unit that
 	// reached the highest level (the game's name for it, for GameText). `stats` is false when the game could not be read.
 	bool stats = false;
-	uint32_t killed = 0, lost = 0, armyMax = 0, gold = 0, bestLevel = 0;
+	uint32_t killed = 0, lost = 0, armyMax = 0, gold = 0, bestLevel = 0, produced = 0;
 	std::string bestUnit;
 };
 

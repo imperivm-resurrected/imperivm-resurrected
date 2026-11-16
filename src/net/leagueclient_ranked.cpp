@@ -953,6 +953,7 @@ void RankedGameReported(const LeagueReport &report, const std::string &ownSteamI
 	g.gold = facts.gold;
 	g.bestLevel = facts.bestLevel;
 	g.bestUnit = facts.bestUnit;
+	g.produced = facts.produced;
 	int ownTeam = 0;
 	for (const LeagueReportPlayer &p : report.players) {
 		if (p.steamId == ownSteamId) ownTeam = p.team;
@@ -967,6 +968,7 @@ void RankedGameReported(const LeagueReport &report, const std::string &ownSteamI
 		return c && !c->name.empty() ? c->name : p.name;
 	};
 	for (const LeagueReportPlayer &p : report.players) {
+		if (!p.civ.empty()) g.civs.push_back({p.steamId, p.civ});
 		if (p.steamId == ownSteamId) {
 			g.won = p.result == "win";
 			g.left = p.result == "left";

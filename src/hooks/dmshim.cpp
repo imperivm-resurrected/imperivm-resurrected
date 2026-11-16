@@ -711,14 +711,15 @@ struct UiTone {
 	ma_sound snd;
 	bool ready = false;
 };
-UiTone g_uiTones[4];
+constexpr int kUiTones = 8;
+UiTone g_uiTones[kUiTones];
 std::mutex g_uiMx;
 
 }
 
 void UiSoundPlay(int kind)
 {
-	if (kind < 0 || kind > 3 || !GetConfig().onlineAlerts) return;
+	if (kind < 0 || kind >= kUiTones || !GetConfig().onlineAlerts) return;
 	std::lock_guard<std::mutex> lock(g_uiMx);
 	if (!g_engineReady) return;
 	UiTone &t = g_uiTones[kind];
@@ -728,9 +729,12 @@ void UiSoundPlay(int kind)
 			int notes;
 			float noteSecs;
 			float volume;
-		} kSpec[4] = {{{988.0f, 0, 0, 0}, 1, 0.10f, 0.45f}, {{784.0f, 1047.0f, 1319.0f, 0}, 3, 0.09f, 0.5f}, {{740.0f, 0, 0, 0}, 1, 0.10f, 0.4f},
+		} kSpec[kUiTones] = {{{988.0f, 0, 0, 0}, 1, 0.10f, 0.45f}, {{784.0f, 1047.0f, 1319.0f, 0}, 3, 0.09f, 0.5f}, {{740.0f, 0, 0, 0}, 1, 0.10f, 0.4f},
 			// A patron joins: a short fanfare, G C E G.
-			{{784.0f, 1047.0f, 1319.0f, 1568.0f}, 4, 0.12f, 0.55f}};
+			{{784.0f, 1047.0f, 1319.0f, 1568.0f}, 4, 0.12f, 0.55f},
+			// A ranked game won (C E G) or lost (G E flat), a new rank (C G C E, slower) and a rank lost (D A, low).
+			{{523.0f, 659.0f, 784.0f, 0}, 3, 0.11f, 0.5f}, {{392.0f, 311.0f, 0, 0}, 2, 0.16f, 0.4f}, {{523.0f, 784.0f, 1047.0f, 1319.0f}, 4, 0.14f, 0.55f},
+			{{294.0f, 220.0f, 0, 0}, 2, 0.22f, 0.45f}};
 		const auto &s = kSpec[kind];
 		const ma_uint32 rate = ma_engine_get_sample_rate(&g_engine);
 		const ma_uint32 step = static_cast<ma_uint32>(rate * s.noteSecs), tail = static_cast<ma_uint32>(rate * 0.14f);

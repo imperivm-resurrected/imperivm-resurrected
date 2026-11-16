@@ -10,7 +10,7 @@ void InstallModernAudio(bool knownExe);
 #include <vector>
 
 bool DmShimCreate(REFCLSID clsid, LPVOID *out);
-// 0 chat message, 1 invitation, 2 someone joins, 3 a patron joins.
+// 0 chat message, 1 invitation, 2 someone joins, 3 a patron joins; a ranked game's result: 4 won, 5 lost, 6 a new rank, 7 a rank lost.
 void UiSoundPlay(int kind);
 bool DmShimPausePath(void *path, bool pause);
 // Whether the game's sound goes through miniaudio (the modern audio).

@@ -14,6 +14,7 @@
 #include "core/leagueseasons.h"
 #include "core/leagueranked.h"
 #include "core/leagueteam.h"
+#include "game/civs.h"
 #include "game/profiles.h"
 #include "i18n/tr.h"
 #include "net/leagueclient.h"
@@ -108,9 +109,12 @@ std::string Explanation(const LeagueRankedResult &r, LeagueResultKind kind)
 		return r.placementLeft == 1 ? Tr("1 placement game left: then you get your rank.")
 									: TrFmt("%s placement games left: then you get your rank.", {std::to_string(r.placementLeft)});
 	case LeagueResultKind::PlacementDone: return TrFmt("Your placement games put you in %s with %s Glory.", {RankName(r.tierAfter, r.divisionAfter), std::to_string(r.gloryAfter)});
-	case LeagueResultKind::Promotion:
-		return TrFmt("%s + %s = %s: you go up with %s Glory to spare.", {std::to_string(before.into), std::to_string(r.delta), std::to_string(before.into + r.delta),
-			std::to_string(after.into)});
+	case LeagueResultKind::Promotion: {
+		std::string text = TrFmt("%s + %s = %s: you go up with %s Glory to spare.", {std::to_string(before.into), std::to_string(r.delta),
+			std::to_string(before.into + r.delta), std::to_string(after.into)});
+		if (after.capped && nt != LeagueTier::None) text += " " + TrFmt("%s Glory left to %s.", {std::to_string(100 - after.into), LeagueRankLabel(nt, nd)});
+		return text;
+	}
 	case LeagueResultKind::Demotion:
 		return TrFmt("With 0 Glory in %s and no shield, you drop to %s with %s Glory.", {RankName(r.tierBefore, r.divisionBefore), RankName(r.tierAfter, r.divisionAfter),
 			std::to_string(after.into)});
@@ -260,7 +264,7 @@ void PaintStage(Painter &p, const State &st, int x, int y, int w, int h, Verdict
 			p.TextCaps(x, y + L.deltaY, w, L.deltaH, TrFmt("Placed in %s", {RankName(r.tierAfter, r.divisionAfter)}), Ink(r.tierAfter),
 				DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
 		}
-		else p.Text(x, y + L.deltaY, w, L.deltaH, Signed(r.delta) + " " + Tr("Glory"), r.delta >= 0 ? pal::ok : pal::bad, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		else p.Text(x, y + L.deltaY, w, L.deltaH, Signed(f.delta) + " " + Tr("Glory"), r.delta >= 0 ? pal::ok : pal::bad, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		p.raw = false;
 	}
 
@@ -360,7 +364,7 @@ void FitCaps(Painter &p, int x, int y, int w, int h, const std::string &text, CO
 	p.TextCaps(x, y, w, h, text, c, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, spacing);
 }
 
-// What the game recorded of this player, as the profile keeps it: three to a row, the best unit taking two places.
+// What the game recorded of this player, as the profile keeps it: three to a row, the best unit last.
 void PaintStatsGrid(Painter &p, const LeagueRankedGame &g, int x, int y, int w, int h)
 {
 	const int colW = w / 3, rowH = std::max(50, std::min(64, h / 2));
@@ -368,8 +372,9 @@ void PaintStatsGrid(Painter &p, const LeagueRankedGame &g, int x, int y, int w, 
 		const char *label;
 		std::string value;
 	};
-	const Cell cells[] = {{"Units killed", Grouped(g.killed)}, {"Units lost", Grouped(g.lost)}, {"Peak army", Grouped(g.armyMax)}, {"Gold gathered", Grouped(g.gold)}};
-	for (int i = 0; i < 4; i++) {
+	const Cell cells[] = {{"Units killed", Grouped(g.killed)}, {"Units lost", Grouped(g.lost)}, {"Peak army", Grouped(g.armyMax)}, {"Gold gathered", Grouped(g.gold)},
+		{"Units produced", Grouped(g.produced)}};
+	for (int i = 0; i < 5; i++) {
 		const int cx = x + (i % 3) * colW, cy = y + (i / 3) * rowH;
 		FitCaps(p, cx, cy, colW - 12, 16, cells[i].label, pal::caption);
 		Display(p, 32);
@@ -377,7 +382,7 @@ void PaintStatsGrid(Painter &p, const LeagueRankedGame &g, int x, int y, int w, 
 		p.Text(cx, cy + 18, colW - 12, 34, cells[i].value, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 		p.raw = false;
 	}
-	const int bx = x + colW, by = y + rowH, bw = w - colW - 12;
+	const int bx = x + 2 * colW, by = y + rowH, bw = w - 2 * colW - 12;
 	FitCaps(p, bx, by, bw, 16, "Best unit", pal::caption);
 	// Its name and level, or the level alone when the game kept no name.
 	std::string best = "\xE2\x80\x94";
@@ -390,6 +395,16 @@ void PaintStatsGrid(Painter &p, const LeagueRankedGame &g, int x, int y, int w, 
 	if (p.TextWidth(best) > bw) p.Font(3);
 	p.raw = false;
 	RawText(p, bx, by + 18, bw, 34, best, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+}
+
+// A player's civilization in the game, by the name the game shows; empty when the report did not say.
+std::string CivOfPlayer(const LeagueRankedGame &g, const std::string &steamId)
+{
+	for (const auto &c : g.civs) {
+		if (c.first != steamId) continue;
+		if (const Civ *civ = CivByName(c.second)) return CivDisplayName(*civ);
+	}
+	return std::string();
 }
 
 void PaintSummary(Painter &p, const State &st, int x, int y, int w, int h)
@@ -415,16 +430,20 @@ void PaintSummary(Painter &p, const State &st, int x, int y, int w, int h)
 	int gridY = y + 250;
 	if (team) {
 		// Each team under its result: this player with the partner, and the two opponents.
+		// The name, then what happened to them or, failing that, their civilization.
 		auto member = [&](int sx, int ry, uint64_t id, const std::string &name, const char *mark) {
 			if (!PaintAvatar(p, sx, ry + 2, 22, id)) p.Fill(sx, ry + 2, 22, 22, pal::hairline);
-			p.Font(0);
+			const std::string civ = mark || !id ? std::string() : CivOfPlayer(g, std::to_string(id));
+			p.Font(3);
 			p.raw = true;
-			const int markW = mark ? std::min(half / 2, p.TextWidth(Tr(mark)) + 12) : 0;
+			const std::string right = mark ? Tr(mark) : civ;
+			const int rightW = right.empty() ? 0 : std::min(half / 2, p.TextWidth(right) + 12);
 			p.raw = false;
-			RawText(p, sx + 30, ry, half - 30 - markW, 26, name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-			if (mark) {
+			p.Font(0);
+			RawText(p, sx + 30, ry, half - 30 - rightW, 26, name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			if (rightW) {
 				p.Font(3);
-				p.Text(sx + half - markW, ry, markW, 26, mark, pal::bad, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+				RawText(p, sx + half - rightW, ry, rightW, 26, right, mark ? pal::bad : pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 			}
 		};
 		auto heading = [&](int sx, const char *label, bool won) {
@@ -445,12 +464,19 @@ void PaintSummary(Painter &p, const State &st, int x, int y, int w, int h)
 		gridY = y + 256;
 	}
 	else {
+		// The name, then the outcome and the civilization played.
 		auto side = [&](int sx, uint64_t id, const std::string &name, bool won) {
 			if (!PaintAvatar(p, sx, py + 8, 36, id)) p.Fill(sx, py + 8, 36, 36, pal::hairline);
 			p.Font(1);
 			RawText(p, sx + 48, py + 2, half - 48, 26, name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 			p.Font(3);
-			p.Text(sx + 48, py + 28, half - 48, 20, won ? "Winner" : "Defeated", won ? pal::ok : pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+			const std::string outcome = Tr(won ? "Winner" : "Defeated");
+			p.raw = true;
+			const int outcomeW = std::min(half - 48, p.TextWidth(outcome) + 2);
+			p.raw = false;
+			RawText(p, sx + 48, py + 28, outcomeW, 20, outcome, won ? pal::ok : pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			const std::string civ = id ? CivOfPlayer(g, std::to_string(id)) : std::string();
+			if (!civ.empty()) RawText(p, sx + 48 + outcomeW, py + 28, half - 48 - outcomeW, 20, "  \xC2\xB7  " + civ, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		};
 		side(ix, SteamOwnId(), st.player, g.won);
 		Display(p, 24);

@@ -457,6 +457,13 @@ void SteadyAnimation()
 	CHECK_EQ(Pct(f.ghostTo), 0);
 	// Past the end, and skipping, is the end.
 	CHECK_EQ(LeagueResultAt(win, 99999).glory, 964);
+	// The delta counts up from 0 once it shows, and the sound of the win comes with it.
+	CHECK_EQ(LeagueResultAt(win, 300).delta, 0);
+	CHECK(LeagueResultAt(win, 700).delta > 0 && LeagueResultAt(win, 700).delta < 19);
+	CHECK_EQ(LeagueResultAt(win, 1100).delta, 19);
+	CHECK_EQ(LeagueResultCues(win, 200), 0);
+	CHECK_EQ(LeagueResultCues(win, 300), kLeagueCueOutcome);
+	CHECK_EQ(LeagueResultCues(win, 99999), kLeagueCueOutcome);
 
 	const LeagueRankedResult loss = Result(964, 948, LeagueTier::Centurion, 3, LeagueTier::Centurion, 3, false, false);
 	f = LeagueResultAt(loss, 400);
@@ -507,6 +514,9 @@ void PromotionAnimation()
 	const LeagueRankedResult step = Result(1095, 1110, LeagueTier::Centurion, 2, LeagueTier::Centurion, 1, true, false, 0);
 	CHECK_EQ(LeagueResultAt(step, 2400).rays, 0);
 	CHECK(!LeagueResultAt(step, 2400).shieldShown);
+	CHECK_EQ(LeagueResultCues(up, 0), kLeagueCueOutcome);
+	CHECK_EQ(LeagueResultCues(up, 800), kLeagueCueOutcome | kLeagueCueRank);
+	CHECK_EQ(LeagueResultAt(up, 2400).delta, 21);
 }
 
 void DemotionAndPlacement()

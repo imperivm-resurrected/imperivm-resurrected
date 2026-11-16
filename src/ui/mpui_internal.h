@@ -137,6 +137,8 @@ struct RankedScreen {
 	bool resultOpen = false;
 	int64_t resultMatch = 0;
 	DWORD resultAt = 0;
+	// The result's sounds already played (kLeagueCue*); skipping the animation silences the rest.
+	int resultCues = 0;
 	// The history's pages already passed, newest first: the `before` of each, to go back.
 	std::vector<int64_t> historyBack;
 	// "Report a problem": the match it is about (0: the dialog is closed), what the player wrote, and the last answer already shown.

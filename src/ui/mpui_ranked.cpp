@@ -807,7 +807,10 @@ void RankedAction(int arg)
 		RankedAction(kRkBoard);
 		RankedAction(kRkBoardMe);
 		break;
-	case kRkSkip: r.resultAt = GetTickCount() - 100000; break;
+	case kRkSkip:
+		r.resultAt = GetTickCount() - 100000;
+		r.resultCues = kLeagueCueOutcome | kLeagueCueRank;
+		break;
 	case kRkSteam:
 		// In the Steam overlay's browser, as the account's link opens; in the browser when the overlay is off.
 		if (_strtoui64(r.boardPick.c_str(), nullptr, 10)) SteamOpenWebPage("https://steamcommunity.com/profiles/" + r.boardPick);
@@ -871,7 +874,19 @@ void RankedFrame()
 	g_s.found = g_s.searching;
 	if (r.resultOpen && v.result.state == LeagueResultState::None) r.resultOpen = false;
 	// The animation starts when the server's verdict arrives, not when the screen opened on "sending".
-	if (r.resultOpen && v.result.state == LeagueResultState::Ready && before != LeagueResultState::Ready) r.resultAt = GetTickCount();
+	if (r.resultOpen && v.result.state == LeagueResultState::Ready && before != LeagueResultState::Ready) {
+		r.resultAt = GetTickCount();
+		r.resultCues = 0;
+	}
+	// The sounds of a rated result, each at its moment of the animation.
+	const LeagueRankedResult &rated = v.result.answer.ranked;
+	const bool disputed = v.result.answer.status == "disputed" || v.result.answer.outcome == "disputed";
+	if (r.resultOpen && v.result.state == LeagueResultState::Ready && rated.present && !disputed) {
+		const int due = LeagueResultCues(rated, GetTickCount() - r.resultAt) & ~r.resultCues;
+		if (due & kLeagueCueOutcome) UiSoundPlay(rated.delta > 0 ? 4 : 5);
+		if (due & kLeagueCueRank) UiSoundPlay(LeagueResultKindOf(rated) == LeagueResultKind::Demotion ? 7 : 6);
+		r.resultCues |= due;
+	}
 	if (r.resultOpen) g_s.view = kViewRanked;
 	RankedSeasonsFrame();
 }
@@ -910,6 +925,7 @@ void RankedGameThreadTick()
 			r.resultOpen = true;
 			r.resultMatch = v.result.game.matchId;
 			r.resultAt = now;
+			r.resultCues = 0;
 			r.view = v;
 			LogI("league", "ranked: showing the result of match %lld", static_cast<long long>(v.result.game.matchId));
 		}

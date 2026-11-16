@@ -166,6 +166,7 @@ bool ReadFacts(const char *game, int index, GameRecordFacts &out, char *unit, si
 		out.lost = Field<uint32_t>(record, 0x48);
 		out.armyMax = Field<uint32_t>(record, 0x4c);
 		out.bestLevel = Field<uint32_t>(record, 0x50);
+		out.produced = Field<uint32_t>(record, 0x40);
 		out.gold = Field<uint32_t>(record, 0xac) + Field<uint32_t>(record, 0xb0) + Field<uint32_t>(record, 0xb4);
 		const char *s = record + kRecordBestUnit;
 		const unsigned size = Field<unsigned>(s, 0x14), cap = Field<unsigned>(s, 0x18);
