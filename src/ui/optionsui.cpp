@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <iterator>
+#include <map>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -58,6 +59,25 @@ Values ViewValues()
 	return g_s.view.values;
 }
 
+bool CheckOr(const Values &v, int id, bool fallback)
+{
+	const auto it = v.checks.find(id);
+	return it == v.checks.end() ? fallback : it->second;
+}
+
+int ScrollOr(const Values &v, int id, int fallback)
+{
+	const auto it = v.scrolls.find(id);
+	return it == v.scrolls.end() ? fallback : it->second;
+}
+
+template <typename T>
+void CopyId(std::map<int, T> &to, const std::map<int, T> &from, int id)
+{
+	const auto it = from.find(id);
+	if (it != from.end()) to[id] = it->second;
+}
+
 const int kFpsLimits[] = {0, 30, 60, 120, 144, 240};
 const char *const kFpsLabels[] = {"No limit", "30", "60", "120", "144", "240"};
 
@@ -84,12 +104,8 @@ void SetDisplayExtras(Values &v, const Config &c)
 
 void CopyDisplayExtras(Values &to, const Values &from)
 {
-	for (int id : {kFpsLimit}) {
-		const auto sel = from.combos.find(id);
-		if (sel != from.combos.end()) to.combos[id] = sel->second;
-		const auto items = from.items.find(id);
-		if (items != from.items.end()) to.items[id] = items->second;
-	}
+	CopyId(to.combos, from.combos, kFpsLimit);
+	CopyId(to.items, from.items, kFpsLimit);
 }
 
 void ApplyDisplayLive(const Values &v)
@@ -125,12 +141,8 @@ void SetSystemExtras(Values &v, const Config &c)
 
 void CopySystemExtras(Values &to, const Values &from)
 {
-	for (int id : {kLogLevel}) {
-		const auto combo = from.combos.find(id);
-		if (combo != from.combos.end()) to.combos[id] = combo->second;
-		const auto items = from.items.find(id);
-		if (items != from.items.end()) to.items[id] = items->second;
-	}
+	CopyId(to.combos, from.combos, kLogLevel);
+	CopyId(to.items, from.items, kLogLevel);
 }
 
 // "Normal" and "Detailed" keep a level set by hand in the ini (trace, warn) until they are changed.
@@ -206,25 +218,13 @@ void SetUpdateStatus(Values &v)
 void CopyExtras(Values &to, const Values &from)
 {
 	CopySystemExtras(to, from);
-	for (int id : {kSmoothCamera, kPauseInBackground, kHealthBarHeroes, kChatBadges, kMatchFoundSound, kAllyColors}) {
-		const auto it = from.checks.find(id);
-		if (it != from.checks.end()) to.checks[id] = it->second;
-	}
-	for (int id : {kHealthBars}) {
-		const auto it = from.combos.find(id);
-		if (it != from.combos.end()) to.combos[id] = it->second;
-	}
+	for (int id : {kSmoothCamera, kPauseInBackground, kHealthBarHeroes, kChatBadges, kMatchFoundSound, kAllyColors}) CopyId(to.checks, from.checks, id);
+	CopyId(to.combos, from.combos, kHealthBars);
 	CopyDisplayExtras(to, from);
-	for (int id : kSoundScrolls) {
-		const auto it = from.scrolls.find(id);
-		if (it != from.scrolls.end()) to.scrolls[id] = it->second;
-	}
-	const auto combo = from.combos.find(kOutputDevice);
-	if (combo != from.combos.end()) to.combos[kOutputDevice] = combo->second;
-	const auto items = from.items.find(kOutputDevice);
-	if (items != from.items.end()) to.items[kOutputDevice] = items->second;
-	const auto disabled = from.disabled.find(kOutputDevice);
-	if (disabled != from.disabled.end()) to.disabled[kOutputDevice] = disabled->second;
+	for (int id : kSoundScrolls) CopyId(to.scrolls, from.scrolls, id);
+	CopyId(to.combos, from.combos, kOutputDevice);
+	CopyId(to.items, from.items, kOutputDevice);
+	CopyId(to.disabled, from.disabled, kOutputDevice);
 	// The panel changes as it is edited, so the setting is the truth; its own mouse controls change it too.
 	to.checks[kPanelCompact] = GetConfig().panelCompact;
 	to.scrolls[kPanelOpacity] = GetConfig().panelOpacity;
@@ -233,28 +233,19 @@ void CopyExtras(Values &to, const Values &from)
 void ApplyPanelLive(const Values &v)
 {
 	Config &c = MutableConfig();
-	const auto check = [&](int id, bool fallback) {
-		const auto it = v.checks.find(id);
-		return it == v.checks.end() ? fallback : it->second;
-	};
-	c.showPerf = check(kShowPerf, c.showPerf);
-	c.showNet = check(kShowNet, c.showNet);
-	c.panelCompact = check(kPanelCompact, c.panelCompact);
-	const auto opacity = v.scrolls.find(kPanelOpacity);
-	if (opacity != v.scrolls.end()) c.panelOpacity = opacity->second;
+	c.showPerf = CheckOr(v, kShowPerf, c.showPerf);
+	c.showNet = CheckOr(v, kShowNet, c.showNet);
+	c.panelCompact = CheckOr(v, kPanelCompact, c.panelCompact);
+	c.panelOpacity = ScrollOr(v, kPanelOpacity, c.panelOpacity);
 }
 
 // The volumes are heard while they are dragged; Cancel puts back the ones of the baseline.
 void ApplySoundLive(const Values &v)
 {
 	Config &c = MutableConfig();
-	const auto scroll = [&](int id, int fallback) {
-		const auto it = v.scrolls.find(id);
-		return it == v.scrolls.end() ? fallback : it->second;
-	};
-	c.masterVolume = SoundMasterPercent(scroll(kMasterVolume, c.masterVolume));
-	c.natureVolume = scroll(kNatureVolume, c.natureVolume);
-	c.conversationVolume = SoundTypeVolume(scroll(kConversationVolume, c.conversationVolume), c.conversationVolume);
+	c.masterVolume = SoundMasterPercent(ScrollOr(v, kMasterVolume, c.masterVolume));
+	c.natureVolume = ScrollOr(v, kNatureVolume, c.natureVolume);
+	c.conversationVolume = SoundTypeVolume(ScrollOr(v, kConversationVolume, c.conversationVolume), c.conversationVolume);
 	DmShimSetMasterVolume(c.masterVolume);
 	SoundLevelsApply();
 }
@@ -304,21 +295,16 @@ void CommitDevice(const Values &v)
 void CommitExtras(const Values &v)
 {
 	Config &c = MutableConfig();
-	const auto check = [&](int id, bool fallback) {
-		const auto it = v.checks.find(id);
-		return it == v.checks.end() ? fallback : it->second;
-	};
-	c.panelCompact = check(kPanelCompact, c.panelCompact);
-	c.smoothScroll = check(kSmoothCamera, c.smoothScroll);
-	const auto opacity = v.scrolls.find(kPanelOpacity);
-	if (opacity != v.scrolls.end()) c.panelOpacity = opacity->second;
+	c.panelCompact = CheckOr(v, kPanelCompact, c.panelCompact);
+	c.smoothScroll = CheckOr(v, kSmoothCamera, c.smoothScroll);
+	c.panelOpacity = ScrollOr(v, kPanelOpacity, c.panelOpacity);
 	const auto bars = v.combos.find(kHealthBars);
 	if (bars != v.combos.end()) c.healthBarOwners = bars->second;
-	c.healthBarHeroesOnly = check(kHealthBarHeroes, c.healthBarHeroesOnly);
-	c.pauseInBackground = check(kPauseInBackground, c.pauseInBackground);
-	c.chatBadges = check(kChatBadges, c.chatBadges);
-	c.matchFoundSound = check(kMatchFoundSound, c.matchFoundSound);
-	c.allyColors = check(kAllyColors, c.allyColors);
+	c.healthBarHeroesOnly = CheckOr(v, kHealthBarHeroes, c.healthBarHeroesOnly);
+	c.pauseInBackground = CheckOr(v, kPauseInBackground, c.pauseInBackground);
+	c.chatBadges = CheckOr(v, kChatBadges, c.chatBadges);
+	c.matchFoundSound = CheckOr(v, kMatchFoundSound, c.matchFoundSound);
+	c.allyColors = CheckOr(v, kAllyColors, c.allyColors);
 	CommitDisplayExtras(c, v);
 	ApplySoundLive(v);
 	CommitDevice(v);
@@ -383,11 +369,7 @@ void PreviewResolutions()
 		const Values &v = g_s.view.values;
 		const auto combo = v.combos.find(kMonitor);
 		monitor = combo == v.combos.end() ? GetConfig().monitor : combo->second;
-		const auto check = [&](int id, bool fallback) {
-			const auto it = v.checks.find(id);
-			return it == v.checks.end() ? fallback : it->second;
-		};
-		windowed = check(kWindowed, GetConfig().windowed);
+		windowed = CheckOr(v, kWindowed, GetConfig().windowed);
 		extended = GetConfig().extendedView;
 	}
 	OptionsPreviewResolutions(monitor, windowed, extended);
