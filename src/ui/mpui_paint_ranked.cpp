@@ -132,6 +132,34 @@ std::string DeltaText(const LeagueHistoryGame &g, COLORREF &ink)
 	return SignedText(g.gloryDelta);
 }
 
+// A game's result in its chip, at least `minW` wide and `chipH` tall, centred on the row; returns how wide it came out.
+int PaintResultChip(Painter &p, LeagueGameResult result, int x, int ry, int rowH, int minW, int chipH)
+{
+	COLORREF ink = pal::text, back = pal::hairline;
+	const char *label = ResultLabel(result, ink, back);
+	const int w = std::max(minW, ChipWidth(p, label));
+	Chip(p, x, ry + (rowH - chipH) / 2, w, chipH, label, ink, back);
+	return w;
+}
+
+// What a game gave, after its chip.
+void PaintDelta(Painter &p, const LeagueHistoryGame &g, int x, int y, int w, int h)
+{
+	COLORREF ink = pal::caption;
+	const std::string delta = DeltaText(g, ink);
+	if (g.placed) Caps(p, x, y, w, h, delta, ink, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1);
+	else {
+		Display(p, 26);
+		RawText(p, x, y, w, h, delta, ink, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+	}
+}
+
+// "Rome vs Carthage", a "?" for a civilization the reports did not give.
+std::string CivsText(const LeagueHistoryGame &g)
+{
+	return (g.myCiv.empty() ? std::string("?") : CivText(g.myCiv)) + " " + Tr("vs") + " " + (g.opponentCiv.empty() ? std::string("?") : CivText(g.opponentCiv));
+}
+
 // "Livia and Brennus": both opponents of a 2v2 game.
 std::string OpponentsText(const LeagueHistoryGame &g)
 {
@@ -144,11 +172,7 @@ std::string OpponentsText(const LeagueHistoryGame &g)
 std::string GameFacts(const LeagueHistoryGame &g)
 {
 	std::string facts = g.map.name.empty() ? std::string() : LeagueMapText(g.map.name);
-	if (!g.myCiv.empty() || !g.opponentCiv.empty()) {
-		const std::string civs = (g.myCiv.empty() ? std::string("?") : CivText(g.myCiv)) + " " + Tr("vs") + " " +
-			(g.opponentCiv.empty() ? std::string("?") : CivText(g.opponentCiv));
-		facts += (facts.empty() ? "" : "  \xC2\xB7  ") + civs;
-	}
+	if (!g.myCiv.empty() || !g.opponentCiv.empty()) facts += (facts.empty() ? "" : "  \xC2\xB7  ") + CivsText(g);
 	if (g.durationMs) facts += (facts.empty() ? "" : "  \xC2\xB7  ") + TrFmt("%s min", {std::to_string(g.durationMs / 60000)});
 	return facts;
 }
@@ -379,24 +403,10 @@ void QueueSegments(Painter &p, const State &st, int right, int y, int h)
 		return;
 	}
 	const int x = right - 2 * w + 1;
-	auto segment = [&](int sx, const std::string &label, bool on, int arg) {
-		const bool hot = !on && p.Hover(sx, y, w, h, st.mouseX, st.mouseY);
-		if (on) p.Fill(sx, y, w, h, pal::selected);
-		p.Frame(sx, y, w, h, on || hot ? pal::edgeHot : pal::edge);
-		p.raw = true;
-		Caps(p, sx, y, w, h, label, on || hot ? pal::text : pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
-		p.raw = false;
-		if (!on) p.AddHit(sx, y, w, h, kRankedAct, arg);
-	};
-	segment(x, duel, !team, kRkQueueDuel);
-	segment(x + w - 1, pair, team, kRkQueueTeam);
-}
-
-// The players of the 2v2 being played or found, from the ticket once it is read.
-std::vector<LeagueMatchTeam> MatchTeams(const LeagueRankedView &v)
-{
-	const std::vector<LeagueMatchTeam> teams = v.ticketLoaded ? LeagueTicketTeams(v.ticket) : std::vector<LeagueMatchTeam>();
-	return teams.empty() ? v.found.teams : teams;
+	p.raw = true;
+	Segment(p, x, y, w, h, duel, !team, kRkQueueDuel, st.mouseX, st.mouseY, 1);
+	Segment(p, x + w - 1, y, w, h, pair, team, kRkQueueTeam, st.mouseX, st.mouseY, 1);
+	p.raw = false;
 }
 
 // The opponents the league takes now (2-clasificatoria-sistema.md §2.4): the ranks at both ends of the Glory window, then every division
@@ -703,18 +713,9 @@ const int kRecentRowH = 50, kRecentTop = 51;
 // One ranked game in a row: result, Glory, the rival with their rank, the map and the civilizations, and when.
 void PaintGameRow(Painter &p, const LeagueHistoryGame &g, int x, int ry, int w, int rowH, int64_t now, int mx, int my, int rightW)
 {
-	COLORREF chipInk = pal::text, chipBack = pal::hairline;
-	const char *label = ResultLabel(g.result, chipInk, chipBack);
-	const int chipW = std::max(84, ChipWidth(p, label));
-	Chip(p, x, ry + (rowH - 24) / 2, chipW, 24, label, chipInk, chipBack);
-	COLORREF deltaInk = pal::caption;
-	const std::string delta = DeltaText(g, deltaInk);
+	const int chipW = PaintResultChip(p, g.result, x, ry, rowH, 84, 24);
 	const int deltaX = x + chipW + 12, deltaW = g.placed ? 90 : 56;
-	if (g.placed) Caps(p, deltaX, ry, deltaW, rowH, delta, deltaInk, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1);
-	else {
-		Display(p, 26);
-		RawText(p, deltaX, ry, deltaW, rowH, delta, deltaInk, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-	}
+	PaintDelta(p, g, deltaX, ry, deltaW, rowH);
 	const int tx = deltaX + deltaW + 8, tw = std::max(40, x + w - rightW - tx);
 	if (g.opponents.size() >= 2) {
 		p.Font(0);
@@ -1179,19 +1180,8 @@ void PaintBoard(Painter &p, const State &st)
 	const auto need = [&] { return summaryW + 16 + queueW + 16 + seasonW + 16 + 2 * segW + 16 + meW + 12 + pagerW; };
 	if (need() > tableW) summaryW = 56;
 	if (need() > tableW) seasonW = std::max(170, seasonW - (need() - tableW));
-	int tx = m;
-	{
-		const int w = summaryW;
-		const bool hot = p.Hover(tx, top, w, 44, mx, my);
-		p.Frame(tx, top, w, 44, hot ? pal::edgeHot : pal::edge);
-		if (w < 100) PaintBackArrow(p, tx + (w - 14) / 2, top + 22, hot ? pal::text : pal::textDim);
-		else {
-			PaintBackArrow(p, tx + 18, top + 22, hot ? pal::text : pal::textDim);
-			Caps(p, tx + 18 + kBackArrowW, top, w - 26 - kBackArrowW, 44, "Summary", hot ? pal::text : pal::textDim);
-		}
-		p.AddHit(tx, top, w, 44, kRankedAct, kRkHub);
-		tx += w + 16;
-	}
+	SummaryButton(p, m, top, summaryW, mx, my);
+	int tx = m + summaryW + 16;
 	QueueSegments(p, st, tx + queueW, top, 44);
 	tx += queueW + 16;
 	UseSharedFonts(p);
@@ -1358,16 +1348,8 @@ void PaintHistory(Painter &p, const State &st)
 	const int m = l.margin, top = l.top, inner = l.w - 2 * m;
 	const int page = static_cast<int>(st.ranked.historyBack.size()) + 1;
 
-	int tx = m;
-	{
-		const int w = 150;
-		const bool hot = p.Hover(tx, top, w, 44, mx, my);
-		p.Frame(tx, top, w, 44, hot ? pal::edgeHot : pal::edge);
-		PaintBackArrow(p, tx + 18, top + 22, hot ? pal::text : pal::textDim);
-		Caps(p, tx + 18 + kBackArrowW, top, w - 26 - kBackArrowW, 44, "Summary", hot ? pal::text : pal::textDim);
-		p.AddHit(tx, top, w, 44, kRankedAct, kRkHub);
-		tx += w + 16;
-	}
+	SummaryButton(p, m, top, 150, mx, my);
+	int tx = m + 150 + 16;
 	const int chipW = QueueSegmentsWidth(p, st);
 	QueueSegments(p, st, tx + chipW, top, 44);
 	tx += chipW + 16;
@@ -1424,16 +1406,8 @@ void PaintHistory(Painter &p, const State &st)
 	for (size_t i = 0; i < v.history.games.size() && ry + rowH <= y0 + h; i++) {
 		const LeagueHistoryGame &g = v.history.games[i];
 		if (p.Hover(m, ry, inner, rowH, mx, my)) p.Fill(m + 1, ry, inner - 2, rowH, pal::raised);
-		COLORREF chipInk = pal::text, chipBack = pal::hairline, deltaInk = pal::caption;
-		const char *label = ResultLabel(g.result, chipInk, chipBack);
-		const int chipW2 = std::max(96, ChipWidth(p, label));
-		Chip(p, m + cols[0].x, ry + (rowH - 26) / 2, chipW2, 26, label, chipInk, chipBack);
-		const std::string delta = DeltaText(g, deltaInk);
-		if (g.placed) Caps(p, m + cols[0].x + chipW2 + 12, ry, cols[0].w - chipW2 - 12, rowH, delta, deltaInk, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1);
-		else {
-			Display(p, 26);
-			RawText(p, m + cols[0].x + chipW2 + 12, ry, cols[0].w - chipW2 - 12, rowH, delta, deltaInk, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-		}
+		const int chipW2 = PaintResultChip(p, g.result, m + cols[0].x, ry, rowH, 96, 26);
+		PaintDelta(p, g, m + cols[0].x + chipW2 + 12, ry, cols[0].w - chipW2 - 12, rowH);
 		const uint64_t id = _strtoui64(g.opponent.steamId.c_str(), nullptr, 10);
 		const int av = 32;
 		if (!PaintAvatar(p, m + cols[1].x, ry + (rowH - av) / 2, av, id)) p.Fill(m + cols[1].x, ry + (rowH - av) / 2, av, av, pal::hairline);
@@ -1452,9 +1426,7 @@ void PaintHistory(Painter &p, const State &st)
 		std::string map = g.map.name.empty() ? std::string("\xE2\x80\x94") : LeagueMapText(g.map.name);
 		if (!g.map.size.empty()) map += "  \xC2\xB7  " + LeagueMapText(g.map.size);
 		RawText(p, m + cols[2].x, ry, cols[2].w, rowH, map, pal::body);
-		const std::string civs = g.myCiv.empty() && g.opponentCiv.empty()
-			? std::string("\xE2\x80\x94")
-			: (g.myCiv.empty() ? std::string("?") : CivText(g.myCiv)) + " " + Tr("vs") + " " + (g.opponentCiv.empty() ? std::string("?") : CivText(g.opponentCiv));
+		const std::string civs = g.myCiv.empty() && g.opponentCiv.empty() ? std::string("\xE2\x80\x94") : CivsText(g);
 		RawText(p, m + cols[3].x, ry, cols[3].w, rowH, civs, pal::body);
 		RawText(p, m + cols[4].x, ry, cols[4].w, rowH, g.durationMs ? TrFmt("%s min", {std::to_string(g.durationMs / 60000)}) : std::string("\xE2\x80\x94"), pal::body);
 		p.Font(3);

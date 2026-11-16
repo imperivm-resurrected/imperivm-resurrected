@@ -2,10 +2,14 @@
 // Copyright (C) 2026 THIONG
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #pragma once
+#include <array>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "core/league.h"
+#include "core/leagueranked.h"
+#include "net/leagueclient.h"
 #include "ui/mpui_internal.h"
 
 // What the screens of the ranked tab draw with (the hub, the leaderboard, the history, the guide, the result, the season's ceremony and
@@ -24,6 +28,10 @@ void Ghost(Painter &p, int x, int y, int w, int h, const std::string &label, int
 void Chip(Painter &p, int x, int y, int w, int h, const std::string &text, COLORREF ink, COLORREF back);
 // A button of a bar that picks one of a few, lit while it is the one on, which takes no click.
 void Segment(Painter &p, int x, int y, int w, int h, const std::string &label, bool on, int arg, int mx, int my, int spacing = 2);
+// "Summary", the tool bar's button back to the hub, 44 tall: only its arrow when it is narrower than 100.
+void SummaryButton(Painter &p, int x, int y, int w, int mx, int my, UINT align = DT_LEFT);
+// The avatar, or the first letters of the name on a plain square.
+void Avatar(Painter &p, int x, int y, int size, uint64_t id, const std::string &name);
 
 // The colour of a rank, the caption's before there is one.
 COLORREF Ink(LeagueTier t);
@@ -34,8 +42,27 @@ std::string RankOrPlacement(LeagueTier t, int division);
 LeagueBadge RankBadge(LeagueTier t, int division);
 // "+12", "−8" (with a minus sign) or "0".
 std::string SignedText(int v);
-// "Yes" or "No", translated; a dash for -1, what the season does not say.
-std::string YesNo(int flag);
+// A player's record as the match found gives it: wins and losses, the share won, then the streak.
+std::string RecordText(const LeaguePlayerCard &c);
+// Their Glory, then their place when they have one.
+std::string StandingText(const LeaguePlayerCard &c);
+// The players of the 2v2 being played or found, from the ticket once it is read.
+std::vector<LeagueMatchTeam> MatchTeams(const LeagueRankedView &v);
+
+// The dialog of the match found, `maxW` x `maxH` at most and centred, over a screen whose clicks it takes all; where it went.
+struct FoundBox {
+	int x, y, w, h;
+};
+FoundBox PaintFoundBox(Painter &p, const State &st, int maxW, int maxH);
+// The season's options as the match found lists them, a label over a value: the preset, the fog of war, the explored map, the
+// civilizations, the diplomacy and the spectators. The labels are not translated yet.
+struct MatchFact {
+	const char *label;
+	std::string value;
+};
+std::array<MatchFact, 6> MatchFacts(const LeagueRoomSettings &s);
+// How even the match found is, from the chance the league gives this player's side, centred in `w`; nothing while it does not say.
+void PaintEvenness(Painter &p, const LeagueRankedView &v, bool team, int x, int y, int w);
 
 // A time of the league's server (its clock) as this computer's clock shows it.
 int64_t LocalTime(int64_t serverMs);

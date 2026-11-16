@@ -5,6 +5,7 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <map>
 #include <mutex>
@@ -438,14 +439,6 @@ void CallPlayer()
 	else if (!g_s.open) ModUiToast("Ranked match found! Open Multiplayer to accept it.");
 }
 
-// The record of a player as the found match gives it: wins and losses, the share won, then the streak.
-std::string RecordText(const LeaguePlayerCard &c)
-{
-	std::string text = std::to_string(c.wins) + "\xE2\x80\x93" + std::to_string(c.losses) + "  \xC2\xB7  " + std::to_string(LeagueWinRate(c.wins, c.losses)) + "\xC2\xA0%";
-	if (c.streakKnown && c.streak) text += "  \xC2\xB7  " + LeagueStreakText(c.streak);
-	return text;
-}
-
 // The record the server sent of the same player elsewhere (the ticket's opponent, the found match), when this card has none.
 void TakeStanding(LeaguePlayerCard &into, const LeaguePlayerCard &from)
 {
@@ -468,13 +461,7 @@ void PaintSide(Painter &p, int x, int y, int w, int h, uint64_t id, const std::s
 	p.Fill(x, y, w, h, pal::raised);
 	p.Frame(x, y, w, h, pal::hairline);
 	const int av = 72;
-	if (!PaintAvatar(p, x + 24, y + 24, av, id)) {
-		p.Fill(x + 24, y + 24, av, av, pal::hairline);
-		p.Font(2);
-		p.raw = true;
-		p.Text(x + 24, y + 24, av, av, name.substr(0, std::min<size_t>(2, name.size())), pal::body, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-		p.raw = false;
-	}
+	Avatar(p, x + 24, y + 24, av, id, name);
 	p.Frame(x + 24, y + 24, av, av, you ? pal::red : pal::edge);
 	SelectObject(p.dc, BrandFont(BrandFace::Body, 22, p.s));
 	p.raw = true;
@@ -496,12 +483,8 @@ void PaintSide(Painter &p, int x, int y, int w, int h, uint64_t id, const std::s
 	p.raw = false;
 	// Glory and place, once the player has a rank: a player in placement has neither yet.
 	if (card.standing && tier != LeagueTier::None) {
-		std::string standing = TrFmt("%s Glory", {std::to_string(card.glory)});
-		if (card.place > 0) standing += "  \xC2\xB7  " + TrFmt("place %s", {std::to_string(card.place)});
 		p.Font(0);
-		p.raw = true;
-		p.Text(x + 112, y + 154, w - 136, 24, standing, pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		p.raw = false;
+		RawText(p, x + 112, y + 154, w - 136, 24, StandingText(card), pal::body);
 	}
 	p.Fill(x + 24, y + h - 80, w - 48, 1, pal::hairline);
 	const int cw = accepted ? 150 : 110;
@@ -968,16 +951,8 @@ void PaintSearch(Painter &p, const State &st)
 		return;
 	}
 	const bool accepted = v.phase == LeagueRankedPhase::Accepted;
-	const int dw = std::min(1240, st.viewW - 40), dh = std::min(720, st.viewH - 40);
-	const int dx = (st.viewW - dw) / 2, dy = (st.viewH - dh) / 2;
-	// A dialog: nothing under it takes the mouse.
-	p.hits->clear();
-	p.noHover = false;
-	PaintTint(p, 0, 0, st.viewW, st.viewH, pal::bg, 219);
-	p.Fill(dx + 6, dy + 6, dw, dh, RGB(8, 8, 7));
-	p.Fill(dx, dy, dw, dh, pal::panel);
-	p.Frame(dx, dy, dw, dh, pal::hairline);
-	UseScreenFonts(p);
+	const FoundBox box = PaintFoundBox(p, st, 1240, 720);
+	const int dx = box.x, dy = box.y, dw = box.w;
 	SelectObject(p.dc, BrandFont(BrandFace::Display, 58, p.s));
 	p.TextCaps(dx, dy + 24, dw, 60, "Match found", pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
 	const std::string caption = RankedFoundCaption(v, "Ranked 1 vs 1");
@@ -1030,14 +1005,7 @@ void PaintSearch(Painter &p, const State &st)
 	p.raw = false;
 	p.Font(4);
 	p.TextCaps(mid - 74, ringY + 22, 148, 16, "seconds", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 2);
-	// How even the match is, from the chance the league gives this player to win it.
-	const double expected = v.ticketLoaded && v.ticket.expected >= 0 ? v.ticket.expected : v.found.expected;
-	if (const char *even = LeagueEvennessText(expected)) {
-		const COLORREF ink = std::string(even) == "Even match" ? pal::ok : expected > 0.5 ? pal::text : pal::warn;
-		p.Font(1);
-		if (p.TextWidth(even) > 280) p.Font(3);
-		p.Text(mid - 140, cy + 200, 280, 24, even, ink, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-	}
+	PaintEvenness(p, v, false, mid - 140, cy + 200, 280);
 	p.Font(3);
 	p.TextWrapped(mid - 140, cy + 230, 280, 44, accepted ? TrFmt("Waiting for %s to accept", {otherName}) : Tr("Accept before the countdown ends"), pal::caption);
 
@@ -1062,13 +1030,8 @@ void PaintSearch(Painter &p, const State &st)
 	p.Fill(dx + 532, my2 + 16, 1, 96, pal::hairline);
 	const LeagueRoomSettings &s = v.ticketLoaded ? v.ticket.settings : v.season.settings;
 	const int fx = dx + 562, fw = (dx + 32 + mw - 24 - fx) / 3;
-	Fact(p, fx, my2 + 16, fw - 16, "Preset", s.preset.empty() || s.preset == "competitive" ? Tr("Competitive") : s.preset);
-	Fact(p, fx + fw, my2 + 16, fw - 16, "Fog of war", YesNo(s.fog));
-	Fact(p, fx + 2 * fw, my2 + 16, fw - 16, "Explored map", YesNo(s.explored));
-	Fact(p, fx, my2 + 68, fw - 16, "Civilizations", s.hideCivs == 1 ? Tr("Hidden until the game") : Tr("Visible"));
-	Fact(p, fx + fw, my2 + 68, fw - 16, "Diplomacy", s.diplomacy == "locked" ? Tr("Locked") : s.diplomacy.empty() ? std::string("—") : Tr("Free"));
-	Fact(p, fx + 2 * fw, my2 + 68, fw - 16, "Spectators",
-		s.specDelay == 0 ? Tr("No spectators") : TrFmt("With a %s s delay", {std::to_string(s.specDelay > 0 ? s.specDelay : 120)}));
+	const std::array<MatchFact, 6> facts = MatchFacts(s);
+	for (int i = 0; i < 6; i++) Fact(p, fx + i % 3 * fw, my2 + 16 + i / 3 * 52, fw - 16, facts[i].label, facts[i].value);
 
 	const int by = my2 + mh + 28;
 	UseSharedFonts(p);

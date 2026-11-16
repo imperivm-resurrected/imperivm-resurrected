@@ -251,16 +251,8 @@ void PaintRankedGuide(Painter &p, const State &st)
 	const int mx = st.mouseX, my = st.mouseY;
 	const ScreenLayout l = ScreenLayoutFor(st.viewW, st.viewH, false);
 	const int m = l.margin, top = l.top, inner = l.w - 2 * m;
-	int tx = m;
-	{
-		const int w = 150;
-		const bool hot = p.Hover(tx, top, w, 44, mx, my);
-		p.Frame(tx, top, w, 44, hot ? pal::edgeHot : pal::edge);
-		PaintBackArrow(p, tx + 18, top + 22, hot ? pal::text : pal::textDim);
-		Caps(p, tx + 18 + kBackArrowW, top, w - 26 - kBackArrowW, 44, "Summary", hot ? pal::text : pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-		p.AddHit(tx, top, w, 44, kRankedAct, kRkHub);
-		tx += w + 16;
-	}
+	SummaryButton(p, m, top, 150, mx, my, DT_CENTER);
+	const int tx = m + 150 + 16;
 	p.Font(4);
 	const int tabW = std::max({220, p.CapsWidth("Ranks and rewards", 2) + 40, p.CapsWidth("How it works", 2) + 40});
 	Segment(p, tx, top, tabW, 44, "Ranks and rewards", st.ranked.guideTab == 0, kRkGuideRanks, mx, my);
