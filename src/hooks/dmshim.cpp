@@ -13,7 +13,6 @@
 #include <vector>
 
 #include "miniaudio.h"
-#include "MinHook.h"
 #include "core/config.h"
 #include "hooks/dmshim.h"
 #include "core/log.h"
