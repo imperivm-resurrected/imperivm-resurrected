@@ -48,6 +48,32 @@ void ScaleBackdrop(Backdrop &b, int w, int h)
 	b.h = h;
 	const float scale = std::max(static_cast<float>(w) / m.w, static_cast<float>(h) / m.h);
 	const float offX = (m.w - w / scale) / 2, offY = (m.h - h / scale) / 2;
+	if (scale < 1.0f) {
+		// Smaller than the picture (a 4K map on a 1080p screen): each pixel is the mean of the picture's pixels it covers, so the
+		// map's thin lines stay whole instead of breaking into steps.
+		std::vector<int> from(w + 1), rowFrom(h + 1);
+		for (int x = 0; x <= w; x++) from[x] = std::max(0, std::min(m.w, static_cast<int>(offX + x / scale + 0.5f)));
+		for (int y = 0; y <= h; y++) rowFrom[y] = std::max(0, std::min(m.h, static_cast<int>(offY + y / scale + 0.5f)));
+		for (int y = 0; y < h; y++) {
+			const int ya = rowFrom[y], yb = std::max(ya + 1, rowFrom[y + 1]);
+			uint32_t *out = &b.scaled[static_cast<size_t>(y) * w];
+			for (int x = 0; x < w; x++) {
+				const int xa = from[x], xb = std::max(xa + 1, from[x + 1]);
+				uint32_t sum[3] = {0, 0, 0}, n = 0;
+				for (int sy = ya; sy < yb && sy < m.h; sy++) {
+					const uint32_t *row = &m.px[static_cast<size_t>(sy) * m.w];
+					for (int sx = xa; sx < xb && sx < m.w; sx++) {
+						sum[0] += row[sx] & 255;
+						sum[1] += (row[sx] >> 8) & 255;
+						sum[2] += (row[sx] >> 16) & 255;
+						n++;
+					}
+				}
+				out[x] = n ? (sum[0] / n) | ((sum[1] / n) << 8) | ((sum[2] / n) << 16) : 0;
+			}
+		}
+		return;
+	}
 	std::vector<int> x0(w), x1(w);
 	std::vector<uint32_t> fx(w);
 	for (int x = 0; x < w; x++) {
