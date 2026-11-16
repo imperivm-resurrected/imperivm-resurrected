@@ -339,7 +339,9 @@ int FogWideColumns(void *zoom, int x0, int y0, int x1, int y1)
 	const bool fogOn = vis && At<int>(vis, 0xd4) != 0 && exploration && playerIndex <= 7;
 	const unsigned short fogColor = At<unsigned short>(zoom, 0x30);
 	const int step = 8, gw = (x1 - x0) / step + 1;
-	std::vector<unsigned char> fogged(static_cast<size_t>(gw), 0);
+	// Only the game thread draws the fog, on every refresh of a wide zoom map: the buffer keeps its memory between them.
+	static std::vector<unsigned char> fogged;
+	fogged.assign(static_cast<size_t>(gw), 0);
 	const unsigned hd = At<unsigned>(dst, 4), hs = At<unsigned>(src, 4);
 	reinterpret_cast<MemLock_t>(addr::kMemLock)(hd);
 	reinterpret_cast<MemLock_t>(addr::kMemLock)(hs);
