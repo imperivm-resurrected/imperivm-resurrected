@@ -1440,7 +1440,7 @@ void PaintPanel(Painter &p, State &st)
 	PaintRule(p, 52, kDesignW);
 
 	if (save) {
-		std::string kind = kTabNames[st.tab];
+		std::string kind = Tr(kTabNames[st.tab]);
 		for (char &c : kind) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
 		p.Font(0);
 		p.Text(18, 66, 300, 26, "Save name", pal::textDim);
