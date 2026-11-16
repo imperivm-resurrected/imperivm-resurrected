@@ -329,8 +329,7 @@ LeagueBadge LeagueBadgeFromJson(const Json *v)
 	}
 	else if (kind == "season") {
 		b.kind = LeagueBadgeKind::Season;
-		const Json *tier = v->Get("tier");
-		b.founder = tier && tier->type == Json::String && Folded(tier->str) == "founder";
+		b.founder = FounderTier(v->Get("tier"));
 	}
 	else if (kind == "trophy") {
 		b.kind = LeagueBadgeKind::Trophy;
