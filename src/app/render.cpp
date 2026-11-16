@@ -613,22 +613,6 @@ DWORD WINAPI RenderThread(LPVOID)
 	return 0;
 }
 
-}
-
-bool RenderCopyFrame(std::vector<uint32_t> &out, int &w, int &h)
-{
-	std::lock_guard<std::mutex> lock(g_frameLock);
-	if (g_frame.empty() || g_frameW <= 0 || g_frameH <= 0) {
-		return false;
-	}
-	out = g_frame;
-	w = g_frameW;
-	h = g_frameH;
-	return true;
-}
-
-namespace {
-
 void GameThreadTicks()
 {
 	AutosaveTick();

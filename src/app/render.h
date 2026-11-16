@@ -6,7 +6,3 @@
 bool InstallRenderHooks();
 void ShutdownRender();
 void LogOverlayStatus(const char *when);
-
-#include <cstdint>
-#include <vector>
-bool RenderCopyFrame(std::vector<uint32_t> &out, int &w, int &h);
