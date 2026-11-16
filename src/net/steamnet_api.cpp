@@ -652,7 +652,7 @@ bool SteamSpectatorsOpen(int &delaySeconds)
 
 long long SteamGameStartedAt()
 {
-	return *reinterpret_cast<volatile long long *>(&g_startedAt);
+	return g_startedAt;
 }
 
 long long SteamGameStartedAtMs()
@@ -892,7 +892,8 @@ void SteamRejoinJoinEnd()
 
 uint64_t SteamRejoinLobby()
 {
-	return g_lobby;
+	std::lock_guard<std::mutex> lock(g_lock);
+	return g_room.id;
 }
 
 int SteamLobbyNumberOf(uint64_t id)
