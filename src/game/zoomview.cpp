@@ -19,6 +19,7 @@
 #include "core/config.h"
 #include "core/log.h"
 #include "game/controls.h"
+#include "game/gamelayout.h"
 #include "game/mapfog.h"
 #include "game/quickicons.h"
 #include "game/zoomview.h"
@@ -57,9 +58,6 @@ bool g_swallowLeftUp = false, g_swallowRightUp = false;
 const DWORD kOpenWindowMs = 250;
 const int kDragThreshold = 5;
 const int kMessageLeftDown = 0x111, kMessageLeftDouble = 0x113, kMessageRightDown = 0x121;
-
-template <typename T>
-T &At(void *p, int off) { return *reinterpret_cast<T *>(static_cast<char *>(p) + off); }
 
 bool ExtrasEnabled() { return GetConfig().zoomExtras; }
 

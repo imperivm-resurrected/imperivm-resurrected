@@ -12,14 +12,13 @@
 #include "addr/world.h"
 #include "core/log.h"
 #include "game/allycolors.h"
+#include "game/gamelayout.h"
 #include "hooks/gameload.h"
 
 namespace {
-const size_t kGameClock = 0x1258, kLocalPlayer = 0x12c8, kPlayersStart = 0x12cc, kPlayerSize = 800;
 const size_t kGameStats = 0x258, kStatsRecordSize = 0xd0;
-const size_t kPlayerId = 8, kPlayerDiplomacy = 0x24, kPlayerActive = 0x64, kPlayerControl = 0x80, kPlayerAi = 0x88, kPlayerName = 0x94, kPlayerNameCapacity = 0xa8, kPlayerState = 0x290, kPlayerColor = 0x314;
 const size_t kSettingsSlots = 0xac, kSettingsSlotSize = 0xc0;
-const int kStatePlaying = 1, kSlotAi = 1, kSettingsSlotCount = 8;
+const int kSlotAi = 1, kSettingsSlotCount = 8;
 const char kFileSuffix[] = ".stats";
 
 // The totals function adds up into this: mask at 0, gold 1, food 2, units on the map 3, units in buildings 4, city points 5, mask again at 6.
@@ -42,16 +41,10 @@ bool g_dirty = true;
 bool g_loadPending = false;
 std::string g_loadData;
 
-template <class T>
-T Field(const char *base, size_t offset)
-{
-	return *reinterpret_cast<const T *>(base + offset);
-}
-
 bool ReadClock(const char *game, uint32_t &clock)
 {
 	__try {
-		clock = Field<uint32_t>(game, kGameClock);
+		clock = Field<uint32_t>(game, layout::kGameClock);
 		return true;
 	}
 	__except (EXCEPTION_EXECUTE_HANDLER) {
@@ -82,30 +75,29 @@ struct RawPlayer {
 bool ReadPlayer(const char *game, int index, RawPlayer &out)
 {
 	__try {
-		const char *player = game + kPlayersStart + index * kPlayerSize;
-		const int state = Field<int>(player, kPlayerState);
-		out.active = Field<int>(player, kPlayerActive) != 0 || state != 0;
+		const char *player = layout::PlayerAt(game, index);
+		const int state = Field<int>(player, layout::kPlayerState);
+		out.active = Field<int>(player, layout::kPlayerActive) != 0 || state != 0;
 		if (!out.active) return true;
 		out.state = state;
-		out.control = Field<int>(player, kPlayerControl);
-		out.playing = state == kStatePlaying;
+		out.control = Field<int>(player, layout::kPlayerControl);
+		out.playing = state == layout::kStatePlaying;
 		// A player that lost has no AI object any more, so the game's settings say it better.
 		const char *settings = *reinterpret_cast<const char *const *>(addr::kGameSettings);
 		if (settings && index < kSettingsSlotCount) out.human = Field<int>(settings, kSettingsSlots + index * kSettingsSlotSize) != kSlotAi;
-		else out.human = Field<void *>(player, kPlayerAi) == nullptr;
-		const char *local = Field<const char *>(game, kLocalPlayer);
+		else out.human = Field<void *>(player, layout::kPlayerAi) == nullptr;
+		const char *local = layout::LocalPlayer(game);
 		out.local = local == player;
 		if (local && !out.local) {
-			const int ours = Field<int>(local, kPlayerId), theirs = Field<int>(player, kPlayerId);
-			const bool weAlly = (Field<unsigned char>(local, kPlayerDiplomacy + theirs * 4) & 1) != 0;
-			const bool theyAlly = (Field<unsigned char>(player, kPlayerDiplomacy + ours * 4) & 1) != 0;
+			const int ours = Field<int>(local, layout::kPlayerId), theirs = Field<int>(player, layout::kPlayerId);
+			const bool weAlly = (Field<unsigned char>(local, layout::kPlayerDiplomacy + theirs * 4) & 1) != 0;
+			const bool theyAlly = (Field<unsigned char>(player, layout::kPlayerDiplomacy + ours * 4) & 1) != 0;
 			out.ally = weAlly && theyAlly;
 		}
-		const char *name = Field<unsigned>(player, kPlayerNameCapacity) < 0x10 ? player + kPlayerName : Field<const char *>(player, kPlayerName);
+		const char *name = layout::PlayerName(player);
 		for (size_t i = 0; name && i + 1 < sizeof(out.name) && name[i]; i++) out.name[i] = name[i];
 		// The player's own colour, not the ally or enemy one this PC may draw them in.
-		const unsigned color = AllyColorsRealColor(index, Field<unsigned>(player, kPlayerColor));
-		out.rgb = ((color >> 10 & 0x1f) * 255 / 31) << 16 | ((color >> 5 & 0x1f) * 255 / 31) << 8 | ((color & 0x1f) * 255 / 31);
+		out.rgb = Rgb555ToRgb(AllyColorsRealColor(index, Field<unsigned>(player, layout::kPlayerColor)));
 		return true;
 	}
 	__except (EXCEPTION_EXECUTE_HANDLER) {
@@ -116,9 +108,10 @@ bool ReadPlayer(const char *game, int index, RawPlayer &out)
 bool ReadAllied(const char *game, int a, int b)
 {
 	__try {
-		const char *first = game + kPlayersStart + a * kPlayerSize, *second = game + kPlayersStart + b * kPlayerSize;
-		const int firstId = Field<int>(first, kPlayerId), secondId = Field<int>(second, kPlayerId);
-		return (Field<unsigned char>(first, kPlayerDiplomacy + secondId * 4) & 1) != 0 && (Field<unsigned char>(second, kPlayerDiplomacy + firstId * 4) & 1) != 0;
+		const char *first = layout::PlayerAt(game, a), *second = layout::PlayerAt(game, b);
+		const int firstId = Field<int>(first, layout::kPlayerId), secondId = Field<int>(second, layout::kPlayerId);
+		return (Field<unsigned char>(first, layout::kPlayerDiplomacy + secondId * 4) & 1) != 0 &&
+			(Field<unsigned char>(second, layout::kPlayerDiplomacy + firstId * 4) & 1) != 0;
 	}
 	__except (EXCEPTION_EXECUTE_HANDLER) {
 		return false;

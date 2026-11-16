@@ -22,6 +22,7 @@
 #include "game/cheats.h"
 #include "game/civs.h"
 #include "game/cmdcheck.h"
+#include "game/gamelayout.h"
 #include "game/gametext.h"
 #include "game/techplan.h"
 #include "game/unitcatalog.h"
@@ -428,7 +429,7 @@ void RunSelectedScript(char letter, int level, int player, const std::vector<std
 bool QueueCheat(const std::string &text)
 {
 	char *game = static_cast<char *>(Game());
-	void *player = game ? *reinterpret_cast<void **>(game + 0x12c8) : nullptr;
+	void *player = game ? layout::LocalPlayer(game) : nullptr;
 	if (!player) return false;
 	void *cmd = reinterpret_cast<Create_t>(addr::kCmdMessageCreate)();
 	if (!cmd) return false;
@@ -447,7 +448,7 @@ std::atomic<bool> g_panelKeyOpened{false};
 bool CheatsPanelAvailable()
 {
 	char *game = static_cast<char *>(Game());
-	return game && *reinterpret_cast<unsigned *>(game + 0x1258) > 0 && !GameRoomActive() && !reinterpret_cast<IsDemo_t>(addr::kIsDemoPlayback)() && Allowed();
+	return game && Field<unsigned>(game, layout::kGameClock) > 0 && !GameRoomActive() && !reinterpret_cast<IsDemo_t>(addr::kIsDemoPlayback)() && Allowed();
 }
 
 bool CheatsPanelOpen() { return g_panelOpen; }
@@ -640,7 +641,7 @@ bool CheatsHandleCommand(void *cmd, const char *text, unsigned size)
 		if (x >= 0 && x < 4000000 && y >= 0 && y < 4000000) ref = std::to_string(x) + ", " + std::to_string(y);
 	}
 	char *who = cmd ? *reinterpret_cast<char **>(static_cast<char *>(cmd) + 4) : nullptr;
-	const int slot = who ? *reinterpret_cast<int *>(who + 8) : -1;
+	const int slot = who ? Field<int>(who, layout::kPlayerId) : -1;
 	if (slot < 0 || slot > 7 || !Game()) {
 		LogW("cheats", "command without a valid player; ignored");
 		return true;

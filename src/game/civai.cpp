@@ -6,6 +6,7 @@
 #include "MinHook.h"
 #include "hooks/hookcount.h"
 #include "game/civs.h"
+#include "game/gamelayout.h"
 #include "core/log.h"
 
 #include <map>
@@ -77,7 +78,7 @@ char *ObjFromHandle(unsigned handle, int offset)
 
 bool IsAiPlayer(const char *player)
 {
-	return player && *reinterpret_cast<const int *>(player + 0x88) != 0;
+	return player && Field<int>(player, layout::kPlayerAi) != 0;
 }
 
 const Civ *AliasCivOfRace(int race)
@@ -104,9 +105,9 @@ const Civ *AliasCivOfSettlement(const char *set)
 const Civ *AliasCivOfPlayerId(int id)
 {
 	char *game = *reinterpret_cast<char **>(addr::kGame);
-	if (!game || id < 1 || id > 16) return nullptr;
-	const char *player = game + 0x12cc + (id - 1) * 800;
-	return IsAiPlayer(player) ? AliasCivOfRace(*reinterpret_cast<const int *>(player + 0x7c)) : nullptr;
+	if (!game || id < 1 || id > layout::kPlayerCount) return nullptr;
+	const char *player = layout::PlayerAt(game, id - 1);
+	return IsAiPlayer(player) ? AliasCivOfRace(Field<int>(player, layout::kPlayerRace)) : nullptr;
 }
 
 int __cdecl HookObjRace(int *pSP)

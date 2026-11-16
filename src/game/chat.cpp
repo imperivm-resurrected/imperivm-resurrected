@@ -25,6 +25,7 @@
 #include "i18n/tr.h"
 #include "game/chat.h"
 #include "game/controls.h"
+#include "game/gamelayout.h"
 #include "game/zoomview.h"
 #include "hooks/hookcount.h"
 
@@ -41,15 +42,10 @@ typedef int(__cdecl *IsDemo_t)();
 typedef bool(__cdecl *Bool_t)();
 typedef void(__cdecl *Free_t)(void *p);
 
-// CVXGame and CVXPlayer fields, as the chat dialog (004e4f00, 004e51e0) and CVXChatMessage::Execute (004e7370) read them.
-const unsigned kGameClock = 0x1258, kLocalPlayer = 0x12c8, kPlayers = 0x12cc, kPlayerSize = 800;
-const unsigned kPlayerIndex = 8, kPlayerEnemies = 0x10, kPlayerActive = 0x64, kPlayerControl = 0x80, kPlayerName = 0x94, kPlayerNameSize = 0xa4,
-			   kPlayerNameCapacity = 0xa8, kPlayerState = 0x290, kPlayerColor = 0x314;
+// The players' fields (game/gamelayout.h) are read as the chat dialog (004e4f00, 004e51e0) and CVXChatMessage::Execute (004e7370) read them.
 const int kSlots = 8;
-// player+0x290: 1 while the player is in the match; a defeat or a surrender changes it (read the same way by gamestats).
-const int kStatePlaying = 1;
-// CVXChatMessage: +4 sender, +0xc std::string message (buffer +0x10, size +0x20, capacity +0x24), +0x28 location, +0x30 players mask.
-const unsigned kCmdPlayer = 4, kCmdText = 0xc, kCmdTextBuf = 0x10, kCmdTextSize = 0x20, kCmdTextCapacity = 0x24, kCmdLocation = 0x28, kCmdMask = 0x30;
+// CVXChatMessage: +4 sender, +0xc std::string message, +0x28 location, +0x30 players mask.
+const unsigned kCmdPlayer = 4, kCmdText = 0xc, kCmdLocation = 0x28, kCmdMask = 0x30;
 const unsigned kSlotSetPlayer = 3, kSlotRunScript = 0xa8 / 4;
 // CVXVisibleMgr: the part of the map in view, in the coordinates of the location messages.
 const unsigned kViewRect = 0x618;
@@ -84,16 +80,11 @@ struct RawMatch {
 
 char *Game() { return *reinterpret_cast<char **>(addr::kGame); }
 
-template <class T>
-T Field(const char *base, unsigned offset)
+// The game's std::string at `s`, cut to the size of `out`.
+void CopyGameString(char *out, size_t size, const char *s)
 {
-	return *reinterpret_cast<const T *>(base + offset);
-}
-
-void CopyGameString(char *out, size_t size, const char *base, unsigned buf, unsigned length, unsigned capacity)
-{
-	const char *text = Field<unsigned>(base, capacity) < 0x10 ? base + buf : Field<const char *>(base, buf);
-	const size_t n = std::min<size_t>(Field<unsigned>(base, length), size - 1);
+	const char *text = layout::StringChars(s);
+	const size_t n = std::min<size_t>(layout::StringSize(s), size - 1);
 	if (text && n) memcpy(out, text, n);
 	out[text ? n : 0] = 0;
 }
@@ -101,15 +92,13 @@ void CopyGameString(char *out, size_t size, const char *base, unsigned buf, unsi
 bool ReadClock(const char *game, uint32_t &clock)
 {
 	__try {
-		clock = Field<uint32_t>(game, kGameClock);
+		clock = Field<uint32_t>(game, layout::kGameClock);
 		return true;
 	}
 	__except (EXCEPTION_EXECUTE_HANDLER) {
 		return false;
 	}
 }
-
-uint32_t Rgb555(unsigned c) { return ((c >> 10 & 0x1f) * 255 / 31) << 16 | ((c >> 5 & 0x1f) * 255 / 31) << 8 | ((c & 0x1f) * 255 / 31); }
 
 bool ReadRaw(RawMatch &m)
 {
@@ -135,23 +124,23 @@ bool ReadRaw(RawMatch &m)
 			for (int i = 0; i < 4; i++) m.visible[i] = Field<int>(visible, kViewRect + i * 4);
 			m.haveVisible = m.visible[2] > m.visible[0] && m.visible[3] > m.visible[1];
 		}
-		m.clock = Field<uint32_t>(game, kGameClock);
-		const char *local = Field<const char *>(game, kLocalPlayer);
+		m.clock = Field<uint32_t>(game, layout::kGameClock);
+		const char *local = layout::LocalPlayer(game);
 		if (local) {
-			m.local = Field<int>(local, kPlayerIndex);
-			m.enemies = Field<unsigned>(local, kPlayerEnemies) & kChatEveryone;
-			m.localState = Field<int>(local, kPlayerState);
+			m.local = Field<int>(local, layout::kPlayerId);
+			m.enemies = Field<unsigned>(local, layout::kPlayerEnemies) & kChatEveryone;
+			m.localState = Field<int>(local, layout::kPlayerState);
 		}
 		for (int i = 0; i < kSlots; i++) {
-			const char *p = game + kPlayers + i * kPlayerSize;
+			const char *p = layout::PlayerAt(game, i);
 			RawPlayer &out = m.players[i];
-			CopyGameString(out.name, sizeof(out.name), p, kPlayerName, kPlayerNameSize, kPlayerNameCapacity);
-			out.exists = out.name[0] && (Field<int>(p, kPlayerActive) != 0 || Field<int>(p, kPlayerState) != 0);
-			const int control = Field<int>(p, kPlayerControl);
+			CopyGameString(out.name, sizeof(out.name), p + layout::kPlayerName);
+			out.exists = out.name[0] && (Field<int>(p, layout::kPlayerActive) != 0 || Field<int>(p, layout::kPlayerState) != 0);
+			const int control = Field<int>(p, layout::kPlayerControl);
 			out.human = control == 0;
 			// 3 is the neutral player of the map and 4 an unused slot: nobody writes to them.
 			out.playable = control != 3 && control != 4;
-			out.rgb = Rgb555(Field<unsigned>(p, kPlayerColor));
+			out.rgb = Rgb555ToRgb(Field<unsigned>(p, layout::kPlayerColor));
 		}
 		return true;
 	}
@@ -169,7 +158,7 @@ ChatMatch Build(const RawMatch &raw)
 	m.playing = m.onScreen && !raw.demo && raw.local >= 0 && raw.local < 16;
 	m.severalHumans = raw.severalHumans;
 	m.local = raw.local;
-	m.alive = raw.localState == kStatePlaying;
+	m.alive = raw.localState == layout::kStatePlaying;
 	m.enemies = raw.enemies;
 	m.clockMs = raw.clock;
 	for (int i = 0; i < kSlots; i++) {
@@ -207,7 +196,7 @@ bool QueueChat(const std::string &text, unsigned mask, bool withPoint, int x, in
 {
 	__try {
 		char *game = Game();
-		void *player = game ? Field<void *>(game, kLocalPlayer) : nullptr;
+		void *player = game ? layout::LocalPlayer(game) : nullptr;
 		if (!player) return false;
 		char *cmd = static_cast<char *>(reinterpret_cast<Create_t>(addr::kChatMessageCreate)());
 		if (!cmd) return false;
@@ -412,26 +401,23 @@ bool ReadChat(const char *cmd, RawChat &c)
 		const char *game = Game();
 		if (!game || *reinterpret_cast<int *>(addr::kEditorMode) != 0) return false;
 		const char *sender = Field<const char *>(cmd, kCmdPlayer);
-		const char *local = Field<const char *>(game, kLocalPlayer);
+		const char *local = layout::LocalPlayer(game);
 		if (!sender || !local) return false;
 		c.mask = Field<unsigned short>(cmd, kCmdMask);
-		c.local = Field<int>(local, kPlayerIndex);
-		c.sender = Field<int>(sender, kPlayerIndex);
+		c.local = Field<int>(local, layout::kPlayerId);
+		c.sender = Field<int>(sender, layout::kPlayerId);
 		const bool demo = reinterpret_cast<IsDemo_t>(addr::kIsDemoPlayback)() != 0;
 		c.own = !demo && sender == local;
 		if (!demo && (c.local < 0 || c.local > 15 || !(c.mask & (1u << c.local)))) return false;
 		c.at[0] = Field<int>(cmd, kCmdLocation);
 		c.at[1] = Field<int>(cmd, kCmdLocation + 4);
 		c.location = c.at[0] != -1 && c.at[1] != -1;
-		CopyGameString(c.text, sizeof(c.text), cmd, kCmdTextBuf, kCmdTextSize, kCmdTextCapacity);
+		CopyGameString(c.text, sizeof(c.text), cmd + kCmdText);
 		if (!c.text[0] && !c.location) return false;
-		CopyGameString(c.name, sizeof(c.name), sender, kPlayerName, kPlayerNameSize, kPlayerNameCapacity);
-		c.rgb = Rgb555(Field<unsigned>(sender, kPlayerColor));
-		c.clock = Field<uint32_t>(game, kGameClock);
-		for (int i = 0; i < kSlots; i++) {
-			const char *p = game + kPlayers + i * kPlayerSize;
-			CopyGameString(c.names[i], sizeof(c.names[i]), p, kPlayerName, kPlayerNameSize, kPlayerNameCapacity);
-		}
+		CopyGameString(c.name, sizeof(c.name), sender + layout::kPlayerName);
+		c.rgb = Rgb555ToRgb(Field<unsigned>(sender, layout::kPlayerColor));
+		c.clock = Field<uint32_t>(game, layout::kGameClock);
+		for (int i = 0; i < kSlots; i++) CopyGameString(c.names[i], sizeof(c.names[i]), layout::PlayerAt(game, i) + layout::kPlayerName);
 		c.show = true;
 		return true;
 	}
@@ -616,8 +602,8 @@ bool ChatSend(const std::string &text, ChatTarget target, bool withLocation)
 	if (!ReadRaw(raw) || !raw.game || raw.local < 0) return false;
 	if (!raw.severalHumans && !clean.empty()) RunAsScript(clean);
 	int x = -1, y = -1;
-	const bool point = withLocation && raw.localState == kStatePlaying && CameraCentre(raw, x, y);
-	if (withLocation && !point) LogI("game", "chat: the location is left out (%s)", raw.localState == kStatePlaying ? "the view could not be read" : "you are out of the match");
+	const bool point = withLocation && raw.localState == layout::kStatePlaying && CameraCentre(raw, x, y);
+	if (withLocation && !point) LogI("game", "chat: the location is left out (%s)", raw.localState == layout::kStatePlaying ? "the view could not be read" : "you are out of the match");
 	const unsigned mask = ChatMask(target, raw.local, raw.enemies);
 	const bool ok = QueueChat(clean, mask, point, x, y);
 	const bool shown = ok && point && NotifyPing(kPingHere, x, y);
