@@ -864,7 +864,7 @@ void RankedTick()
 		linked = LeagueLinked();
 	}
 	PartyTick(linked);
-	const bool member = linked && LeagueDuoState().role == LeagueDuoRole::Member;
+	const bool member = linked && LeagueDuoOwnRole() == LeagueDuoRole::Member;
 	const bool inGame = InGame();
 	std::lock_guard<std::mutex> lock(g_mx);
 	if (!g_q.startedAt) g_q.startedAt = now;
@@ -1226,16 +1226,16 @@ void LeagueQueueJoin()
 	const bool linked = LeagueLinked();
 	const LeagueMeView me = LeagueMeState();
 	const std::string contentKey = SteamOwnGameplayKey();
-	const LeagueDuoView duo = LeagueDuoState();
+	const LeagueDuoRole role = LeagueDuoOwnRole();
 	std::lock_guard<std::mutex> lock(g_mx);
 	if (g_q.phase != LeagueRankedPhase::Idle || g_q.busy) return;
 	const std::string queue = g_sel;
 	const bool team = LeagueQueueIsTeam(queue);
-	if (team && duo.role == LeagueDuoRole::Member) {
+	if (team && role == LeagueDuoRole::Member) {
 		SetNotice(g_q, "The leader of your duo searches for both of you.", true);
 		return;
 	}
-	if (team && duo.role == LeagueDuoRole::Waiting) {
+	if (team && role == LeagueDuoRole::Waiting) {
 		SetNotice(g_q, "Your duo is not ready: your friend has to accept the invitation first.", true);
 		return;
 	}
@@ -1265,7 +1265,7 @@ void LeagueQueueJoin()
 	g_q.rejoined = false;
 	g_q.since = NowMs() + g_clockOffset;
 	g_q.notice.clear();
-	LogI("league", "ranked: entering the %s queue%s", queue.c_str(), team && duo.role == LeagueDuoRole::Leader ? " with the duo" : "");
+	LogI("league", "ranked: entering the %s queue%s", queue.c_str(), team && role == LeagueDuoRole::Leader ? " with the duo" : "");
 	SafeThread(JoinThread, g_q.gen, contentKey, queue).detach();
 }
 

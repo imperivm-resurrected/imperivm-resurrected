@@ -236,6 +236,13 @@ LeagueDuoView LeagueDuoState()
 	return v;
 }
 
+LeagueDuoRole LeagueDuoOwnRole()
+{
+	const std::string me = OwnId();
+	std::lock_guard<std::mutex> lock(g_mx);
+	return LeagueDuoRoleOf(g_duo.state.party, me);
+}
+
 void LeagueDuoWatch()
 {
 	const DWORD now = GetTickCount();

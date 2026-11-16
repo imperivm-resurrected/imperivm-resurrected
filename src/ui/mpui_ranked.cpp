@@ -803,7 +803,7 @@ void RankedFrame()
 		}
 	}
 	if (r.contentOpen && g_s.view != kViewRanked) r.contentOpen = false;
-	if (r.inviteOpen && (g_s.view != kViewRanked || LeagueDuoState().role != LeagueDuoRole::Solo)) {
+	if (r.inviteOpen && (g_s.view != kViewRanked || LeagueDuoOwnRole() != LeagueDuoRole::Solo)) {
 		r.inviteOpen = false;
 		if (g_s.focus == kRankedField) g_s.focus = kNoField;
 	}
