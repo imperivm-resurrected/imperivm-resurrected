@@ -159,7 +159,6 @@ struct State {
 	int mode = 0;
 	void *dlg = nullptr;
 	uintptr_t dlgGlobal = 0;
-	int saveKind = kSaveStrategy;
 	std::vector<SaveRec> pendingDelete;
 	bool busy = false;
 	std::string nameText, pendingSave;
@@ -1484,7 +1483,7 @@ void PaintPanel(Painter &p, State &st)
 		std::string name = st.nameText;
 		while (!name.empty() && name.back() == ' ') name.pop_back();
 		bool exists = false;
-		for (const SaveRec &r : st.recs) exists = exists || (r.kind == st.saveKind && _stricmp(r.baseName.c_str(), name.c_str()) == 0);
+		for (const SaveRec &r : st.recs) exists = exists || (TabMatches(r, st.tab) && _stricmp(r.baseName.c_str(), name.c_str()) == 0);
 		p.Button(16, 590, 170, 36, exists ? "Overwrite" : "Save", kSave, 0, mx, my, !name.empty(), true);
 		p.Button(196, 590, 120, 36, "Rename", kRename, 0, mx, my, rec != nullptr && !st.renaming && st.sel.size() <= 1);
 		p.Button(326, 590, 120, 36, "Delete", kDelete, 0, mx, my, rec != nullptr && !st.renaming);
@@ -1638,7 +1637,6 @@ void OpenSaveImpl(void *dlg)
 	g_s.mode = 1;
 	g_s.dlg = dlg;
 	g_s.dlgGlobal = addr::kSaveDlg;
-	g_s.saveKind = kind;
 	g_s.tab = kind == kSaveAdventure ? 1 : kind == kSaveConquest ? 2 : kind == kSaveReplay ? 3 : (MpSaveInMultiplayer() ? 4 : 0);
 	SaveLibCleanOrphans(SaveLibActiveProfile());
 	g_s.recs = SaveLibScan();
