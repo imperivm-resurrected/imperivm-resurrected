@@ -20,9 +20,10 @@ namespace mainmenuui {
 namespace {
 
 // Laid out in pixels of a 1920x1080 screen and scaled with its height.
-constexpr int kLeft = 80, kLogoTop = 64, kIsoW = 184, kLogoGap = 28, kLogoW = 540, kTaglineGap = 14, kTaglineH = 18;
-constexpr int kListTop = 400, kRowH = 56, kListFont = 46, kChevronGap = 14, kChevronW = 22;
-constexpr int kDividerMin = 520, kDividerGap = 48, kSubGap = 40, kSubW = 380, kSubCaptionH = 44, kSubRowH = 56, kSubFont = 20;
+constexpr int kLeft = 80, kLogoTop = 64, kIsoW = 212, kLogoGap = 32, kLogoW = 620, kTaglineGap = 16, kTaglineH = 18;
+// The list fills the height under the logo: eight rows end some 150 px over the bottom, clear of the corner's icons.
+constexpr int kListTop = 372, kRowH = 70, kListFont = 58, kChevronGap = 16, kChevronW = 26;
+constexpr int kDividerMin = 560, kDividerGap = 52, kSubGap = 44, kSubW = 440, kSubCaptionH = 50, kSubRowH = 64, kSubFont = 24;
 // The submenu opens with its rows sliding in from the left one after another, and closes fading out.
 constexpr int kOpenMs = 220, kStaggerMs = 35, kCloseMs = 140, kSlide = 24;
 const char kChevron[] = "\xE2\x80\xBA";
