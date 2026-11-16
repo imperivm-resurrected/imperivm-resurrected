@@ -11,6 +11,7 @@
 #include "mods/modvars.h"
 #include "net/leagueclient.h"
 #include "net/mpsave.h"
+#include "net/netdrop.h"
 #include "net/steamnet.h"
 #include "i18n/tr.h"
 #include "addr/engine.h"
@@ -109,8 +110,11 @@ void HostOnRequest(uint64_t peer, int number)
 	const int hostIndex = *reinterpret_cast<int *>(t + 0x4c);
 	char *gate = *reinterpret_cast<char **>(t + 0x50);
 	if (slot < 0 || slot == hostIndex || !gate) return HostDeny(peer, "your spot in the game could not be found");
+	// A ranked 2v2's player who dropped comes back to the army the AI plays for them, within their five minutes; the stop order takes the
+	// AI away on every computer (NetDropAiRelease).
 	if (slot < 16 && *reinterpret_cast<void **>(static_cast<char *>(game) + 0x12cc + slot * 800 + 0x88)) {
-		return HostDeny(peer, "you left that game and your army is controlled by the AI");
+		if (!NetDropAiReturnable(slot)) return HostDeny(peer, "you left that game and your army is controlled by the AI");
+		if (!LeagueTeamDropOpen(slot)) return HostDeny(peer, "you were away for more than 5 minutes: the AI keeps your army");
 	}
 	if (*reinterpret_cast<uint8_t *>(gate + 0x108) & (1u << slot)) {
 		SteamRejoinSend(peer, kRjWait, "");

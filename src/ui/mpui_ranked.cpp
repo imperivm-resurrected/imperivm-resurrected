@@ -17,6 +17,7 @@
 #include "core/leaguemaps.h"
 #include "core/leagueplay.h"
 #include "core/leagueranked.h"
+#include "core/leagueteam.h"
 #include "core/log.h"
 #include "hooks/dmshim.h"
 #include "i18n/tr.h"
@@ -45,7 +46,7 @@ struct RoomAuto {
 	DWORD lastRead = 0;
 	unsigned foundSerial = 0;
 	int64_t match = 0;
-	DWORD createdAt = 0, joinAt = 0, kickAt = 0, settingsAt = 0;
+	DWORD createdAt = 0, joinAt = 0, kickAt = 0, settingsAt = 0, teamAt = 0;
 	int createTries = 0, joinTries = 0;
 	uint64_t joinLobby = 0, invitedLobby = 0;
 	bool warned = false, settingsLogged = false, mapWarned = false, textWarned = false;
@@ -205,17 +206,37 @@ void ApplySettings(const LeagueMatchTicket &t)
 	}
 }
 
-// The host's Steam room for a ranked match: private (entered by invitation or by its id), two players, the league's tag, and spectators
-// with the season's delay in a room anyone can find.
+// The ticket is of a 2v2: its queue, or its two sides.
+bool TeamTicket(const LeagueMatchTicket &t)
+{
+	return LeagueQueueIsTeam(t.queue) || !t.teams.empty();
+}
+
+// This player's side in the ticket of a 2v2 (1 or 2); 0 when it does not say.
+int MySide(const LeagueRankedView &v)
+{
+	if (v.ticket.mySide) return v.ticket.mySide;
+	return LeagueSideOf(LeagueTicketTeams(v.ticket), std::to_string(SteamOwnId()));
+}
+
+// The host's Steam room for a ranked match: private (entered by invitation or by its id), two players (four in a 2v2, whose "mode" tells
+// every computer what the game is), the league's tag, and spectators with the season's delay in a room anyone can find.
 void CreateRoom(const LeagueRankedView &v)
 {
 	OnlineCreateSettings s;
 	const std::string me = !v.me.name.empty() ? v.me.name : SteamOnlinePlayerName();
-	const std::string other = !v.opponent.name.empty() ? v.opponent.name : Tr("your opponent");
-	s.name = TrFmt("Ranked: %s vs %s", {me, other});
+	const bool team = TeamTicket(v.ticket);
+	if (team) {
+		const LeaguePlayerCard *partner = LeagueTeamPartner(LeagueTicketTeams(v.ticket), std::to_string(SteamOwnId()));
+		s.name = TrFmt("Ranked 2 vs 2: %s and %s", {me, partner && !partner->name.empty() ? partner->name : Tr("your partner")});
+	}
+	else {
+		const std::string other = !v.opponent.name.empty() ? v.opponent.name : Tr("your opponent");
+		s.name = TrFmt("Ranked: %s vs %s", {me, other});
+	}
 	s.map = !v.ticket.map.name.empty() ? v.ticket.map.name : std::string("Chosen in the room");
-	s.mode = "Ranked 1v1";
-	s.maxPlayers = 2;
+	s.mode = team ? kLeagueTeamRoomMode : "Ranked 1v1";
+	s.maxPlayers = team ? 4 : 2;
 	s.visibility = 2;
 	const int delay = v.ticket.settings.specDelay;
 	s.spectators = delay != 0;
@@ -230,11 +251,28 @@ void CreateRoom(const LeagueRankedView &v)
 	g_s.createSave = -1;
 	g_s.createSpec = !s.spectators ? 0 : s.specDelay <= 30 ? 1 : s.specDelay <= 60 ? 2 : 3;
 	SteamCreateLobby(s);
-	g_s.roomLimit = 2;
+	g_s.roomLimit = s.maxPlayers;
 	g_s.autoHost = true;
 	g_s.connecting = true;
 	g_s.connectStart = GetTickCount();
 	LogI("league", "ranked: creating the room of match %lld", static_cast<long long>(v.matchId));
+}
+
+void SetOwnTeam(const LeagueRankedView &v)
+{
+	const int side = MySide(v);
+	const GameRoomSnapshot g = GameRoomGet();
+	if (!g.active || !g.online || g.busy || side <= 0 || side >= g.teamChoices || g.localSlot < 0 || g.localSlot > 7) return;
+	const GameRoomSlot &slot = g.slots[g.localSlot];
+	if (slot.team == side) return;
+	if (LocalReady(g)) {
+		if (Due(-3)) GameRoomToggleReady();
+		return;
+	}
+	if (!Due(-4)) return;
+	GameRoomSetTeam(g.localSlot, side);
+	Predict(kPredTeam, g.localSlot, side);
+	LogI("league", "ranked 2v2: this player's slot goes to team %d", side);
 }
 
 bool InTicket(const LeagueMatchTicket &t, uint64_t id)
@@ -309,11 +347,19 @@ void RoomStep(const LeagueRankedView &v, DWORD now)
 	// The guest may be in the room before its data says what it is for.
 	if (g_s.room.id && (g_s.room.info.leagueTag == tag || g_s.room.id == LeagueTicketLobby(v.ticket))) {
 		LeagueRankedInRoom();
+		if (TeamTicket(v.ticket) && now - g_auto.teamAt > 1000) {
+			g_auto.teamAt = now;
+			SetOwnTeam(v);
+		}
 		if (!v.host || !OwnsRoom()) return;
 		LeagueRankedRoomOpened(g_s.room.id);
 		if (g_auto.invitedLobby != g_s.room.id) {
 			g_auto.invitedLobby = g_s.room.id;
-			SteamInviteToRoom(_strtoui64(v.opponent.steamId.c_str(), nullptr, 10));
+			// Every other player of the ticket: in a 2v2 the partner and both opponents.
+			const std::string own = std::to_string(SteamOwnId());
+			for (const LeaguePlayerCard &pl : v.ticket.players) {
+				if (pl.steamId != own) SteamInviteToRoom(_strtoui64(pl.steamId.c_str(), nullptr, 10));
+			}
 		}
 		if (now - g_auto.kickAt > 1000) {
 			g_auto.kickAt = now;
@@ -551,13 +597,19 @@ void OpenDispute(int64_t matchId)
 
 std::string &RankedFieldText()
 {
-	// The field is the report's while its dialog is open, and the leaderboard's search otherwise.
+	// The field is the report's or the friend's to invite while their dialog is open, and the leaderboard's search otherwise.
+	if (g_s.ranked.inviteOpen) return g_s.ranked.inviteSearch;
 	return g_s.ranked.disputeMatch ? g_s.ranked.disputeText : g_s.ranked.boardSearch;
 }
 
 void RankedFieldEnter()
 {
 	RankedScreen &r = g_s.ranked;
+	if (r.inviteOpen) {
+		r.invitePage = 0;
+		g_s.focus = kNoField;
+		return;
+	}
 	if (!r.disputeMatch) {
 		RankedBoardAsk(0, false);
 		g_s.focus = kNoField;
@@ -618,6 +670,10 @@ void PaintRankedContent(Painter &p, const State &st)
 void RankedAction(int arg)
 {
 	RankedScreen &r = g_s.ranked;
+	if (arg >= kRkBadgeEnd && arg < kRkTeamArgEnd) {
+		RankedTeamAction(arg);
+		return;
+	}
 	if (arg >= kRkArgEnd) {
 		RankedSeasonAction(arg);
 		return;
@@ -780,6 +836,10 @@ void RankedFrame()
 		}
 	}
 	if (r.contentOpen && g_s.view != kViewRanked) r.contentOpen = false;
+	if (r.inviteOpen && (g_s.view != kViewRanked || LeagueDuoState().role != LeagueDuoRole::Solo)) {
+		r.inviteOpen = false;
+		if (g_s.focus == kRankedField) g_s.focus = kNoField;
+	}
 	if (r.disputeMatch && g_s.view != kViewRanked) {
 		r.disputeMatch = 0;
 		if (g_s.focus == kRankedField) g_s.focus = kNoField;
@@ -811,8 +871,9 @@ void RankedGameThreadTick()
 		g_auto.foundSerial = v.foundSerial;
 		if (v.phase == LeagueRankedPhase::Found) CallPlayer();
 	}
-	// A game or a room ends the search: nobody can answer a match from inside one.
-	if ((InGame() || GameRoomActive()) && (v.phase == LeagueRankedPhase::Searching || v.phase == LeagueRankedPhase::Joining)) {
+	RankedTeamGameThreadTick();
+	// A game or a room ends the search: nobody can answer a match from inside one. The partner of a duo cannot end the leader's.
+	if ((InGame() || GameRoomActive()) && !v.partnerSearch && (v.phase == LeagueRankedPhase::Searching || v.phase == LeagueRankedPhase::Joining)) {
 		LogI("league", "ranked: a game or a room started; the search stops");
 		LeagueQueueLeave();
 		ModUiToast("The ranked search stopped because you entered a game or a room.");
@@ -849,13 +910,15 @@ void PaintRankedPill(Painter &p, const State &st, int right, int left)
 		p.raw = true;
 		const int clockW = std::max(p.TextWidth("00:00"), p.TextWidth(clock)) + 8;
 		p.raw = false;
-		// The spinner, the label, the time and the cross: the label shortens, and goes, before anything overlaps.
+		// The spinner, the label, the time and the cross: the label shortens, and goes, before anything overlaps. The partner of a duo has
+		// no cross: only the leader stops the search.
 		p.Font(4);
-		const int fixed = 46 + clockW + 44;
-		const char *label = "Searching 1 vs 1";
+		const bool team = LeagueQueueIsTeam(v.searchQueue), cross = !v.partnerSearch;
+		const int fixed = 46 + clockW + (cross ? 44 : 16);
+		const char *label = team ? "Searching 2 vs 2" : "Searching 1 vs 1";
 		int labelW = p.CapsWidth(label, 2) + 14;
 		if (fixed + labelW > room) {
-			label = "1 vs 1";
+			label = team ? "2 vs 2" : "1 vs 1";
 			labelW = p.CapsWidth(label, 2) + 14;
 		}
 		if (fixed + labelW > room) labelW = 0;
@@ -868,6 +931,10 @@ void PaintRankedPill(Painter &p, const State &st, int right, int left)
 		p.raw = true;
 		p.Text(x + 46 + labelW, y, clockW, h, clock, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 		p.raw = false;
+		if (!cross) {
+			p.AddHit(x, y, w, h, kRanked, 0);
+			return;
+		}
 		const bool hot = p.Hover(x + w - 44, y, 44, h, mx, my);
 		p.Line(x + w - 28, y + 15, x + w - 16, y + 27, hot ? pal::text : pal::textDim, 2);
 		p.Line(x + w - 28, y + 27, x + w - 16, y + 15, hot ? pal::text : pal::textDim, 2);
@@ -888,6 +955,10 @@ void PaintSearch(Painter &p, const State &st)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const LeagueRankedView &v = st.ranked.view;
+	if (LeagueQueueIsTeam(v.searchQueue) || !v.found.teams.empty() || (v.ticketLoaded && TeamTicket(v.ticket))) {
+		PaintSearchTeam(p, st);
+		return;
+	}
 	const bool accepted = v.phase == LeagueRankedPhase::Accepted;
 	const int dw = std::min(1240, st.viewW - 40), dh = std::min(720, st.viewH - 40);
 	const int dx = (st.viewW - dw) / 2, dy = (st.viewH - dh) / 2;
@@ -1007,14 +1078,35 @@ void PaintSearch(Painter &p, const State &st)
 		DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }
 
-int PaintRankedMark(Painter &p, int x, int y, int h)
+int PaintRankedMark(Painter &p, const State &st, int x, int y, int h)
 {
+	const char *label = st.room.info.mode == kLeagueTeamRoomMode ? "Ranked 2 vs 2" : "Ranked 1 vs 1";
 	p.Font(4);
-	const int w = p.CapsWidth("Ranked 1 vs 1", 2) + 24;
+	const int w = p.CapsWidth(label, 2) + 24;
 	p.Fill(x, y, w, h, RGB(0x3a, 0x12, 0x14));
 	p.Fill(x, y, 3, h, pal::red);
-	p.TextCaps(x + 3, y, w - 3, h, "Ranked 1 vs 1", pal::redText, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 2);
+	p.TextCaps(x + 3, y, w - 3, h, label, pal::redText, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 2);
 	return w;
+}
+
+StartBlock RankedStartBlocker(const State &st, const GameRoomSnapshot &g)
+{
+	if (!RankedRoomLocked(st) || st.room.info.mode != kLeagueTeamRoomMode) return {};
+	const LeagueRankedView &v = st.ranked.view;
+	int humans = 0;
+	for (const GameRoomSlot &s : g.slots) humans += s.used && s.type == 3 ? 1 : 0;
+	if (humans < 4) return {"Waiting for the four players...", Tr("The game starts when the four players of the match are in the room.")};
+	if (!v.ticketLoaded) return {};
+	// Each player's slot in the side the league gave them.
+	const std::vector<LeagueMatchTeam> teams = LeagueTicketTeams(v.ticket);
+	for (int i = 0; i < 8; i++) {
+		const GameRoomSlot &s = g.slots[i];
+		if (!s.used || s.type != 3) continue;
+		const uint64_t id = s.local ? SteamOwnId() : MemberIdByName(st, s.name);
+		const int side = id ? LeagueSideOf(teams, std::to_string(id)) : 0;
+		if (side && s.team != side) return {"Setting the teams...", Tr("Wait a moment: each player is being put in their team.")};
+	}
+	return {};
 }
 
 }

@@ -107,6 +107,10 @@ void Evenness()
 	CHECK_EQ(Text(LeagueEvennessText(0.61)), std::string("You are the favourite"));
 	CHECK_EQ(Text(LeagueEvennessText(1.0)), std::string("You are the favourite"));
 	CHECK_EQ(Text(LeagueEvennessText(0.39)), std::string("Your opponent is the favourite"));
+	// In a 2v2 it is the team's chance.
+	CHECK_EQ(Text(LeagueEvennessText(0.5, true)), std::string("Even match"));
+	CHECK_EQ(Text(LeagueEvennessText(0.7, true)), std::string("Your team is the favourite"));
+	CHECK_EQ(Text(LeagueEvennessText(0.3, true)), std::string("The other team is the favourite"));
 	CHECK_EQ(Text(LeagueEvennessText(0.0)), std::string("Your opponent is the favourite"));
 	CHECK_EQ(Text(LeagueEvennessText(-1)), std::string("(none)"));
 	CHECK_EQ(Text(LeagueEvennessText(1.2)), std::string("(none)"));
@@ -147,6 +151,8 @@ void Presence()
 	CHECK_EQ(Text(LeaguePresenceLabel(LeaguePresence::Searching)), std::string("Searching ranked 1 vs 1"));
 	CHECK_EQ(Text(LeaguePresenceLabel(LeaguePresence::Playing)), std::string("Ranked 1 vs 1"));
 	CHECK(!LeaguePresenceLabel(LeaguePresence::None));
+	CHECK_EQ(Text(LeaguePresenceLabel(LeaguePresence::Searching, true)), std::string("Searching ranked 2 vs 2"));
+	CHECK_EQ(Text(LeaguePresenceLabel(LeaguePresence::Playing, true)), std::string("Ranked 2 vs 2"));
 	CHECK_EQ(LeaguePresenceText("Clasificatoria 1 contra 1", "Centurión II"), std::string("Clasificatoria 1 contra 1 \xC2\xB7 Centurión II"));
 	CHECK_EQ(LeaguePresenceText("Ranked 1 vs 1", ""), std::string("Ranked 1 vs 1"));
 }

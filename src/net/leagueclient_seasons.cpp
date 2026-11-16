@@ -15,6 +15,7 @@
 #include "core/json.h"
 #include "core/leagueranked.h"
 #include "core/leagueseasons.h"
+#include "core/leagueteam.h"
 #include "core/log.h"
 #include "mods/mods.h"
 #include "net/leagueclient.h"
@@ -38,6 +39,7 @@ struct Seasons {
 
 struct Hall {
 	int season = -1;
+	std::string queue = "1v1";
 	bool loading = false, loaded = false, failed = false;
 	DWORD at = 0;
 	unsigned gen = 0;
@@ -61,10 +63,11 @@ Hall g_hall;
 std::map<std::string, Card> g_cards;
 Cosmetics g_cosmetics;
 
-std::string CardKey(const std::string &steamId, int season)
+std::string CardKey(const std::string &steamId, int season, const std::string &queue)
 {
-	return steamId + ":" + std::to_string(season);
+	return steamId + ":" + std::to_string(season) + ":" + LeagueQueueId(queue);
 }
+
 
 std::string Failure(const HttpReply &r)
 {
@@ -92,9 +95,9 @@ void FetchSeasons(std::string lang)
 	g_seasons.lang = lang;
 }
 
-void FetchHall(unsigned gen, int season)
+void FetchHall(unsigned gen, int season, std::string queue)
 {
-	const HttpReply r = Http("GET", "/v1/league/seasons/" + std::to_string(season) + "/hall?lang=" + LangCode(), "", false);
+	const HttpReply r = Http("GET", LeagueHallPath(season, LangCode(), queue), "", false);
 	Json j;
 	LeagueHall hall;
 	const bool ok = r.Ok() && Json::Parse(r.body, j) && LeagueParseHall(j, hall);
@@ -109,17 +112,15 @@ void FetchHall(unsigned gen, int season)
 	g_hall.hall.season = season;
 }
 
-void FetchCard(std::string steamId, int season)
+void FetchCard(std::string steamId, int season, std::string queue)
 {
-	std::string path = "/v1/league/players/" + UrlEncode(steamId);
-	if (season >= 0) path += "?season=" + std::to_string(season);
-	const HttpReply r = Http("GET", path, "", false);
+	const HttpReply r = Http("GET", LeaguePlayerPath(UrlEncode(steamId), season, queue), "", false);
 	Json j;
 	LeaguePlayerProfile card;
 	const bool ok = r.Ok() && Json::Parse(r.body, j) && LeagueParsePlayerProfile(j, card);
 	if (!ok && r.status != 404) LogW("league", "could not read a player's card (%s)", r.Describe().c_str());
 	std::lock_guard<std::mutex> lock(g_mx);
-	Card &c = g_cards[CardKey(steamId, season)];
+	Card &c = g_cards[CardKey(steamId, season, queue)];
 	c.at = GetTickCount();
 	c.state = ok ? LeagueCardState::Ready : r.status == 404 ? LeagueCardState::Missing : LeagueCardState::Failed;
 	if (ok) c.card = card;
@@ -160,12 +161,12 @@ void CosmeticsThread(bool setFrame, int frame, bool setTitle, int title)
 	if (ok) Changed();
 }
 
-void CeremonyThread(int season, bool equip, bool frameAndTitle)
+void CeremonyThread(int season, bool equip, bool frameAndTitle, std::string queue)
 {
 	std::string error;
 	bool changed = false;
 	if (equip && frameAndTitle) changed = PutCosmetics(true, season, true, season, error);
-	const HttpReply r = Http("POST", "/v1/league/me/ceremony/" + std::to_string(season) + "/seen", "", true);
+	const HttpReply r = Http("POST", LeagueCeremonySeenPath(season, queue), "", true);
 	if (r.Ok()) LogI("league", "the ceremony of season %d was seen%s", season, equip ? " and its rewards equipped" : "");
 	else LogW("league", "could not mark the ceremony of season %d seen (%s)", season, r.Describe().c_str());
 	{
@@ -187,6 +188,7 @@ LeagueSeasonsView LeagueSeasonsState()
 	v.loading = g_seasons.loading;
 	v.seasons = g_seasons.list;
 	v.hallSeason = g_hall.season;
+	v.hallQueue = g_hall.queue;
 	v.hallLoading = g_hall.loading;
 	v.hallLoaded = g_hall.loaded;
 	v.hallFailed = g_hall.failed;
@@ -210,42 +212,45 @@ void LeagueSeasonsRefresh(bool force)
 	SafeThread(FetchSeasons, lang).detach();
 }
 
-void LeagueHallRequest(int season)
+void LeagueHallRequest(int season, const std::string &queue)
 {
 	if (season < 0) return;
+	const std::string q = LeagueQueueId(queue);
 	unsigned gen = 0;
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
-		if (g_hall.season == season && (g_hall.loading || (g_hall.loaded && GetTickCount() - g_hall.at < kHallKeepMs))) return;
-		if (g_hall.season == season && g_hall.failed && GetTickCount() - g_hall.at < kSeasonsRetryMs) return;
-		if (g_hall.season != season) {
+		const bool same = g_hall.season == season && g_hall.queue == q;
+		if (same && (g_hall.loading || (g_hall.loaded && GetTickCount() - g_hall.at < kHallKeepMs))) return;
+		if (same && g_hall.failed && GetTickCount() - g_hall.at < kSeasonsRetryMs) return;
+		if (!same) {
 			g_hall.loaded = g_hall.failed = false;
 			g_hall.hall = LeagueHall();
 		}
 		g_hall.season = season;
+		g_hall.queue = q;
 		g_hall.loading = true;
 		gen = ++g_hall.gen;
 	}
-	SafeThread(FetchHall, gen, season).detach();
+	SafeThread(FetchHall, gen, season, q).detach();
 }
 
-LeaguePlayerView LeaguePlayerState(const std::string &steamId, int season)
+LeaguePlayerView LeaguePlayerState(const std::string &steamId, int season, const std::string &queue)
 {
 	LeaguePlayerView v;
 	std::lock_guard<std::mutex> lock(g_mx);
-	auto it = g_cards.find(CardKey(steamId, season));
+	auto it = g_cards.find(CardKey(steamId, season, queue));
 	if (it == g_cards.end()) return v;
 	v.state = it->second.state;
 	v.card = it->second.card;
 	return v;
 }
 
-void LeaguePlayerRequest(const std::string &steamId, int season, bool force)
+void LeaguePlayerRequest(const std::string &steamId, int season, bool force, const std::string &queue)
 {
 	if (steamId.empty()) return;
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
-		const std::string key = CardKey(steamId, season);
+		const std::string key = CardKey(steamId, season, queue);
 		auto it = g_cards.find(key);
 		if (it != g_cards.end()) {
 			const Card &c = it->second;
@@ -265,7 +270,7 @@ void LeaguePlayerRequest(const std::string &steamId, int season, bool force)
 		if (c.state != LeagueCardState::Ready) c.state = LeagueCardState::Loading;
 		c.at = GetTickCount();
 	}
-	SafeThread(FetchCard, steamId, season).detach();
+	SafeThread(FetchCard, steamId, season, LeagueQueueId(queue)).detach();
 }
 
 void LeagueCosmeticsSet(bool setFrame, int frame, bool setTitle, int title)
@@ -280,7 +285,7 @@ void LeagueCosmeticsSet(bool setFrame, int frame, bool setTitle, int title)
 	SafeThread(CosmeticsThread, setFrame, frame, setTitle, title).detach();
 }
 
-void LeagueCeremonyEquip(int season, bool frameAndTitle, const std::string &badgeId)
+void LeagueCeremonyEquip(int season, bool frameAndTitle, const std::string &badgeId, const std::string &queue)
 {
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
@@ -289,15 +294,15 @@ void LeagueCeremonyEquip(int season, bool frameAndTitle, const std::string &badg
 		g_cosmetics.error.clear();
 	}
 	if (!badgeId.empty()) LeagueBadgeChoose("season", badgeId);
-	SafeThread(CeremonyThread, season, true, frameAndTitle).detach();
+	SafeThread(CeremonyThread, season, true, frameAndTitle, LeagueQueueId(queue)).detach();
 }
 
-void LeagueCeremonySeen(int season)
+void LeagueCeremonySeen(int season, const std::string &queue)
 {
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
 		if (g_cosmetics.ceremony) return;
 		g_cosmetics.ceremony = true;
 	}
-	SafeThread(CeremonyThread, season, false, false).detach();
+	SafeThread(CeremonyThread, season, false, false, LeagueQueueId(queue)).detach();
 }

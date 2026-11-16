@@ -9,6 +9,7 @@
 #include "core/config.h"
 #include "core/log.h"
 #include "net/leagueclient.h"
+#include "net/netdrop.h"
 #include "net/nettune.h"
 #include "game/cheats.h"
 #include "net/steamnet.h"
@@ -201,10 +202,13 @@ void __fastcall HookMsgExecute(void *cmd)
 	const unsigned cap = *reinterpret_cast<const unsigned *>(s + 0x18);
 	const char *text = cap < 0x10 ? s + 4 : *reinterpret_cast<const char *const *>(s + 4);
 	if (text && size > 4 && size < 32 && memcmp(text, kMagicPrefix, 4) == 0) {
+		const int slot = atoi(std::string(text + 4, size - 4).c_str());
+		// Every computer runs this on the same tick, whatever its role in the return, and so does a spectator of the broadcast: the AI of a
+		// ranked 2v2's player goes here.
+		NetDropAiRelease(slot);
 		if (reinterpret_cast<IsDemo_t>(addr::kIsDemoPlayback)()) return;
 		char *t = Transport();
 		if (!t) return;
-		const int slot = atoi(std::string(text + 4, size - 4).c_str());
 		if (g_session.role == kNoRole && g_session.ignoreFreezeUntil && static_cast<int>(GetTickCount() - g_session.ignoreFreezeUntil) < 0) {
 			g_session.ignoreFreezeUntil = 0;
 			LogW("rejoin", "stop order for slot %d from an already cancelled return; not stopping", slot);
@@ -223,6 +227,7 @@ void __fastcall HookMsgExecute(void *cmd)
 		return;
 	}
 	if (text && size > 7 && CheatsHandleCommand(cmd, text, size)) return;
+	if (text && LeagueVoteCommand(cmd, text, size)) return;
 	g_orig.msgExec(cmd);
 }
 

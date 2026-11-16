@@ -97,6 +97,10 @@ void DoAction(int action, int arg)
 			RankedAction(kRkContentClose);
 			break;
 		}
+		if (g_s.view == kViewRanked && g_s.ranked.inviteOpen) {
+			RankedAction(kRkDuoInviteClose);
+			break;
+		}
 		if (g_s.recoverAsk || g_s.recoverWaitHost) {
 			DoAction(kRecoverNo, 0);
 			break;
@@ -705,8 +709,14 @@ void DoAction(int action, int arg)
 	case kCancelSearch: RankedAction(kRkCancel); break;
 	case kAccept: RankedAction(kRkAccept); break;
 	case kDecline: RankedAction(kRkDecline); break;
-	case kQueue1v1: RankedAction(kRkSearch); break;
-	case kQueue2v2: ModUiToast("Ranked 2 vs 2 is not open yet."); break;
+	case kQueue1v1:
+		RankedAction(kRkQueueDuel);
+		RankedAction(kRkSearch);
+		break;
+	case kQueue2v2:
+		RankedAction(kRkQueueTeam);
+		RankedAction(kRkSearch);
+		break;
 	case kPlayersPrev: g_s.createPlayers = std::max(2, g_s.createPlayers - 1); break;
 	case kPlayersNext: g_s.createPlayers = std::min(8, g_s.createPlayers + 1); break;
 	case kMapPrev: g_s.createMap = (g_s.createMap + 4) % 5; break;

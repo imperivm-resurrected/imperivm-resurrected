@@ -147,6 +147,45 @@ LeagueReward RewardOf(const Json &j)
 	return r;
 }
 
+// A queue's standing in /me (`key`): the season's best, the streak and the placement inside it, or with `beside` also next to it.
+LeagueRanked RankedOf(const Json &j, const char *key, const char *queue, bool beside)
+{
+	LeagueRanked k;
+	const Json *r = j.Get(key);
+	const bool inside = r && r->type == Json::Object;
+	if (inside) {
+		k.present = true;
+		k.queue = r->GetString("queue", queue);
+		k.season = Int(*r, "season");
+		k.tier = LeagueTierFromJson(r->Get("tier"));
+		k.division = LeagueTierHasDivisions(k.tier) ? LeagueDivisionFromJson(r->Get("division")) : 0;
+		k.glory = Int(*r, "glory");
+		k.placementLeft = Int(*r, "placementLeft");
+		k.shield = Int(*r, "shield");
+		k.wins = Int(*r, "wins");
+		k.losses = Int(*r, "losses");
+		k.position = Int(*r, "position");
+		k.elite = r->GetBool("elite");
+		k.streak = Int(*r, "streak");
+	}
+	else k.queue = queue;
+	auto standing = [&](const char *name) {
+		const Json *v = inside ? r->Get(name) : nullptr;
+		return v ? v : beside ? j.Get(name) : nullptr;
+	};
+	k.peak = LeaguePeakFromJson(standing("peak"));
+	if (const Json *s = standing("streak"); s && s->type == Json::Number) k.streak = static_cast<int>(s->num);
+	if (const Json *list = standing("placementResults"); list && list->type == Json::Array) {
+		for (const Json &m : list->arr) {
+			const std::string mark = m.type == Json::String ? Lower(Trim(m.str)) : std::string();
+			if (mark == "win") k.placement.push_back(LeaguePlacementMark::Win);
+			else if (mark == "loss") k.placement.push_back(LeaguePlacementMark::Loss);
+			else if (mark == "void") k.placement.push_back(LeaguePlacementMark::Void);
+		}
+	}
+	return k;
+}
+
 std::string OptionValue(const std::string &text, const char *label)
 {
 	const std::string prefix = std::string(label) + ": ";
@@ -365,36 +404,12 @@ bool LeagueParseMe(const Json &j, LeagueMe &out)
 	out = LeagueMe();
 	out.steamId = IdText(j.Get("steamId"));
 	out.name = j.GetString("name");
-	if (const Json *r = j.Get("ranked"); r && r->type == Json::Object) {
-		LeagueRanked &k = out.ranked;
-		k.present = true;
-		k.queue = r->GetString("queue", "1v1");
-		k.season = Int(*r, "season");
-		k.tier = LeagueTierFromJson(r->Get("tier"));
-		k.division = LeagueTierHasDivisions(k.tier) ? LeagueDivisionFromJson(r->Get("division")) : 0;
-		k.glory = Int(*r, "glory");
-		k.placementLeft = Int(*r, "placementLeft");
-		k.shield = Int(*r, "shield");
-		k.wins = Int(*r, "wins");
-		k.losses = Int(*r, "losses");
-		k.position = Int(*r, "position");
-		k.elite = r->GetBool("elite");
-		k.streak = Int(*r, "streak");
-	}
-	// The season's best, the streak and the placement are the queue's: inside `ranked`, or beside it.
-	auto standing = [&](const char *key) {
-		const Json *r = j.Get("ranked");
-		const Json *v = r && r->type == Json::Object ? r->Get(key) : nullptr;
-		return v ? v : j.Get(key);
-	};
-	out.ranked.peak = LeaguePeakFromJson(standing("peak"));
-	if (const Json *s = standing("streak"); s && s->type == Json::Number) out.ranked.streak = static_cast<int>(s->num);
-	if (const Json *list = standing("placementResults"); list && list->type == Json::Array) {
-		for (const Json &m : list->arr) {
-			const std::string mark = m.type == Json::String ? Lower(Trim(m.str)) : std::string();
-			if (mark == "win") out.ranked.placement.push_back(LeaguePlacementMark::Win);
-			else if (mark == "loss") out.ranked.placement.push_back(LeaguePlacementMark::Loss);
-			else if (mark == "void") out.ranked.placement.push_back(LeaguePlacementMark::Void);
+	// The duel's best, streak and placement may also come beside `ranked`, from a server before the 2v2; the 2v2's only inside.
+	out.ranked = RankedOf(j, "ranked", "1v1", true);
+	out.ranked2v2 = RankedOf(j, "ranked2v2", "2v2", false);
+	if (const Json *queues = j.Get("queues"); queues && queues->type == Json::Array) {
+		for (const Json &q : queues->arr) {
+			if (q.type == Json::String && !q.str.empty()) out.queues.push_back(Lower(Trim(q.str)));
 		}
 	}
 	if (const Json *list = j.Get("rewards"); list && list->type == Json::Array) {
@@ -581,6 +596,7 @@ Json LeagueReportJson(const LeagueReport &r)
 		e.Set("team", Json::MakeNumber(p.team));
 		e.Set("civ", Json::MakeString(p.civ));
 		e.Set("result", Json::MakeString(p.result));
+		e.Set("leftAtMs", p.leftAtMs >= 0 ? Json::MakeNumber(static_cast<double>(p.leftAtMs)) : Json());
 		players.arr.push_back(e);
 	}
 	o.Set("players", players);
@@ -621,8 +637,58 @@ void LeagueCheckpoints::Clear()
 	any_ = false;
 }
 
+namespace {
+
+// A ranked 2v2: a team stands while one of its humans is still in the game, whatever the AI of one who dropped does.
+LeagueOutcome ResolveTeam(std::vector<LeagueSeat> seats, bool desync)
+{
+	LeagueOutcome out;
+	auto standing = [&seats]() {
+		std::set<int> teams;
+		for (const LeagueSeat &s : seats) {
+			if (s.human && s.state == 1 && !s.left) teams.insert(s.team);
+		}
+		return teams;
+	};
+	std::set<int> winners;
+	for (const LeagueSeat &s : seats) {
+		if (s.state == 3) winners.insert(s.team);
+	}
+	if (winners.empty() && !desync) {
+		std::set<int> up = standing();
+		if (up.size() != 1) {
+			for (LeagueSeat &s : seats) {
+				if (s.local && s.state == 1 && !s.left) {
+					s.left = true;
+					out.localLeft = true;
+				}
+			}
+			up = standing();
+		}
+		if (up.size() == 1) winners = up;
+	}
+	bool loserLeft = false, loserSurrendered = false;
+	for (const LeagueSeat &s : seats) {
+		const bool won = !s.left && winners.count(s.team) != 0;
+		out.results.push_back(s.left ? "left" : won ? "win" : "loss");
+		const bool loser = !winners.count(s.team);
+		loserLeft = loserLeft || (s.left && loser && !s.local);
+		loserSurrendered = loserSurrendered || (s.surrendered && loser);
+	}
+	const bool decidedByGame = std::any_of(seats.begin(), seats.end(), [](const LeagueSeat &s) { return s.state == 3; });
+	if (desync) out.endedBy = "desync";
+	else if (loserSurrendered) out.endedBy = "surrender";
+	else if (winners.empty() || out.localLeft) out.endedBy = "disconnect";
+	else if (!decidedByGame && loserLeft) out.endedBy = "opponent_left";
+	else out.endedBy = "victory";
+	return out;
+}
+
+}
+
 LeagueOutcome LeagueResolve(const std::vector<LeagueSeat> &input, bool desync, const LeagueDropRules &rules)
 {
+	if (rules.team) return ResolveTeam(input, desync);
 	std::vector<LeagueSeat> seats = input;
 	LeagueOutcome out;
 	auto standing = [&seats]() {
@@ -686,6 +752,7 @@ std::vector<LeagueReportPlayer> LeagueReportPlayers(const std::vector<LeagueSeat
 		p.civ = s.civ;
 		p.team = static_cast<int>(std::distance(teams.begin(), teams.find(s.team))) + 1;
 		p.result = i < outcome.results.size() ? outcome.results[i] : "loss";
+		if (p.result == "left" || !s.local) p.leftAtMs = s.leftAtMs;
 		out.push_back(p);
 	}
 	return out;

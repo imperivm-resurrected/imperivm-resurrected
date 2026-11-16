@@ -12,6 +12,7 @@
 
 #include "core/league.h"
 #include "core/leagueranked.h"
+#include "core/leagueteam.h"
 #include "game/profiles.h"
 #include "i18n/tr.h"
 #include "net/leagueclient.h"
@@ -145,11 +146,18 @@ StageLayout StageFor(int h)
 }
 
 // The line under the buttons once the game is rated: the run of wins the player is on, when the league already counts this game.
-std::string StreakLine(const LeagueRankedResult &r)
+std::string StreakLine(const LeagueRankedResult &r, const std::string &queue)
 {
 	const LeagueMeView me = LeagueMeState();
-	if (!me.loaded || !me.me.ranked.present || me.me.ranked.glory != r.gloryAfter || me.me.ranked.streak < 2) return std::string();
-	return TrFmt("%s wins in a row", {std::to_string(me.me.ranked.streak)});
+	const LeagueRanked &rk = LeagueMeRanked(me.me, queue);
+	if (!me.loaded || !rk.present || rk.glory != r.gloryAfter || rk.streak < 2) return std::string();
+	return TrFmt("%s wins in a row", {std::to_string(rk.streak)});
+}
+
+// A 2v2 lost while the partner had left it for good: the league takes only half the Glory from whoever stayed.
+bool HalfLoss(const LeagueRankedGame &g)
+{
+	return LeagueQueueIsTeam(g.queue) && !g.won && !g.left && g.partnerLeft;
 }
 
 // Text wrapped in the box, each line centred, at most two lines of `lineH`. The text is already translated.
@@ -175,8 +183,10 @@ void PaintStage(Painter &p, const State &st, int x, int y, int w, int h, Verdict
 	const bool rated = verdict == Verdict::Rated;
 	const LeagueResultFrame f = rated ? LeagueResultAt(r, elapsed) : LeagueResultFrame();
 	const LeagueMeView me = LeagueMeState();
-	const LeagueTier nowTier = rated ? f.tier : me.loaded ? me.me.ranked.tier : LeagueTier::None;
-	const int nowDivision = rated ? f.division : me.loaded ? me.me.ranked.division : 0;
+	const bool team = LeagueQueueIsTeam(o.game.queue);
+	const LeagueRanked &rk = LeagueMeRanked(me.me, o.game.queue);
+	const LeagueTier nowTier = rated ? f.tier : me.loaded ? rk.tier : LeagueTier::None;
+	const int nowDivision = rated ? f.division : me.loaded ? rk.division : 0;
 
 	// The rays come only with a new rank.
 	if (rated && f.rays > 0) PaintRays(p, cx, y + L.emblemY + L.emblem / 2, L.rays, Ink(f.tier), f.rays);
@@ -232,7 +242,7 @@ void PaintStage(Painter &p, const State &st, int x, int y, int w, int h, Verdict
 	COLORREF titleInk = Ink(nowTier);
 	switch (verdict) {
 	case Verdict::Sending: title = Tr("Sending the result"); break;
-	case Verdict::Awaiting: title = Tr("Waiting for your opponent"); break;
+	case Verdict::Awaiting: title = Tr(team ? "Waiting for the other players" : "Waiting for your opponent"); break;
 	case Verdict::Void: title = Tr("Match void"); break;
 	case Verdict::Disputed: title = Tr("In dispute"); break;
 	default: title = f.kind == LeagueResultKind::Placement ? Tr("Placement") : RankName(nowTier, nowDivision); break;
@@ -279,6 +289,7 @@ void PaintStage(Painter &p, const State &st, int x, int y, int w, int h, Verdict
 		if (verdict == Verdict::Sending || verdict == Verdict::Awaiting) PaintBusyBar(p, bx, by + 3, bw, 8, GetTickCount());
 		p.Font(0);
 		const char *text = verdict == Verdict::Sending ? "Your report is on its way to the league. If you are offline it will be sent later."
+			: verdict == Verdict::Awaiting && team	  ? "The league waits for the other players' reports. If they do not come, yours counts after 15 minutes."
 			: verdict == Verdict::Awaiting			  ? "The league waits for your opponent's report. If it does not come, yours counts after 15 minutes."
 			: verdict == Verdict::Disputed			  ? "The two reports disagree: the game does not count until the league reviews it."
 													  : "The game ended too early or did not count: no Glory changes.";
@@ -314,12 +325,20 @@ void PaintStage(Painter &p, const State &st, int x, int y, int w, int h, Verdict
 		Centered(p, x + 20, y + L.footerY, w - 40, 22, line, pal::bad);
 		return;
 	}
-	// A rated game is confirmed in the summary; here the run of wins, once the league counts the game.
-	if (rated) {
-		if (f.done) RawText(p, x + 20, y + L.footerY, w - 40, 22, StreakLine(r), pal::ok);
+	// A 2v2 lost after the partner left it: only half the Glory goes.
+	if (HalfLoss(o.game)) {
+		Centered(p, x + 20, y + L.footerY, w - 40, 22,
+			TrFmt("%s left the game: you only lose half the Glory.", {o.game.partner.empty() ? Tr("Your partner") : o.game.partner}), pal::warn);
 		return;
 	}
-	Centered(p, x + 20, y + L.footerY, w - 40, 22, Tr("If your opponent leaves before minute 3 the game does not count, and whoever left gets the penalty."),
+	// A rated game is confirmed in the summary; here the run of wins, once the league counts the game.
+	if (rated) {
+		if (f.done) RawText(p, x + 20, y + L.footerY, w - 40, 22, StreakLine(r, o.game.queue), pal::ok);
+		return;
+	}
+	Centered(p, x + 20, y + L.footerY, w - 40, 22,
+		Tr(team ? "If a player leaves before minute 3 the game does not count, and whoever left gets the penalty."
+				: "If your opponent leaves before minute 3 the game does not count, and whoever left gets the penalty."),
 		pal::caption);
 }
 
@@ -385,46 +404,87 @@ void PaintSummary(Painter &p, const State &st, int x, int y, int w, int h)
 	p.TextCaps(ix + 108, y + 56, iw - 108, 40, g.map.empty() ? Tr("Ranked match") : LeagueMapText(g.map), pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
 	p.raw = false;
 	p.Font(0);
-	std::string facts = Tr("1 vs 1");
+	const bool team = LeagueQueueIsTeam(g.queue);
+	std::string facts = RankedQueueLabel(g.queue);
 	if (g.durationMs) facts += "  \xC2\xB7  " + TrFmt("%s min", {std::to_string(g.durationMs / 60000)});
 	if (v.seasonLoaded) facts += "  \xC2\xB7  " + TrFmt("Season %s", {std::to_string(v.season.number)});
 	RawText(p, ix + 108, y + 98, iw - 108, 22, facts, pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	p.Fill(ix, y + 160, iw, 1, pal::hairline);
 	const int half = (iw - 60) / 2, py = y + 172;
-	auto side = [&](int sx, uint64_t id, const std::string &name, bool won) {
-		if (!PaintAvatar(p, sx, py + 8, 36, id)) p.Fill(sx, py + 8, 36, 36, pal::hairline);
-		p.Font(1);
-		RawText(p, sx + 48, py + 2, half - 48, 26, name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		p.Font(3);
-		p.Text(sx + 48, py + 28, half - 48, 20, won ? "Winner" : "Defeated", won ? pal::ok : pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-	};
-	side(ix, SteamOwnId(), st.player, g.won);
-	Display(p, 24);
-	p.TextCaps(ix + half, py, 60, 52, "VS", pal::disabled, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
-	side(ix + half + 60, _strtoui64(g.opponentId.c_str(), nullptr, 10), g.opponent.empty() ? Tr("Opponent") : g.opponent, !g.won);
-	p.Fill(ix, y + 236, iw, 1, pal::hairline);
+	int gridY = y + 250;
+	if (team) {
+		// Each team under its result: this player with the partner, and the two opponents.
+		auto member = [&](int sx, int ry, uint64_t id, const std::string &name, const char *mark) {
+			if (!PaintAvatar(p, sx, ry + 2, 22, id)) p.Fill(sx, ry + 2, 22, 22, pal::hairline);
+			p.Font(0);
+			p.raw = true;
+			const int markW = mark ? std::min(half / 2, p.TextWidth(Tr(mark)) + 12) : 0;
+			p.raw = false;
+			RawText(p, sx + 30, ry, half - 30 - markW, 26, name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			if (mark) {
+				p.Font(3);
+				p.Text(sx + half - markW, ry, markW, 26, mark, pal::bad, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			}
+		};
+		auto heading = [&](int sx, const char *label, bool won) {
+			FitCaps(p, sx, py, half, 18, Tr(label) + "  \xC2\xB7  " + Tr(won ? "Winner" : "Defeated"), won ? pal::ok : pal::caption);
+		};
+		heading(ix, "Your team", g.won);
+		member(ix, py + 20, SteamOwnId(), st.player, g.left ? "left the game" : nullptr);
+		member(ix, py + 46, _strtoui64(g.partnerId.c_str(), nullptr, 10), g.partner.empty() ? Tr("Your partner") : g.partner, g.partnerLeft ? "left the game" : nullptr);
+		Display(p, 24);
+		p.TextCaps(ix + half, py + 18, 60, 52, "VS", pal::disabled, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
+		heading(ix + half + 60, "The other team", !g.won);
+		for (size_t i = 0; i < 2; i++) {
+			const bool known = i < g.opponents.size();
+			member(ix + half + 60, py + 20 + static_cast<int>(i) * 26, known ? _strtoui64(g.opponents[i].first.c_str(), nullptr, 10) : 0,
+				known && !g.opponents[i].second.empty() ? g.opponents[i].second : Tr("Opponent"), nullptr);
+		}
+		p.Fill(ix, y + 244, iw, 1, pal::hairline);
+		gridY = y + 256;
+	}
+	else {
+		auto side = [&](int sx, uint64_t id, const std::string &name, bool won) {
+			if (!PaintAvatar(p, sx, py + 8, 36, id)) p.Fill(sx, py + 8, 36, 36, pal::hairline);
+			p.Font(1);
+			RawText(p, sx + 48, py + 2, half - 48, 26, name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			p.Font(3);
+			p.Text(sx + 48, py + 28, half - 48, 20, won ? "Winner" : "Defeated", won ? pal::ok : pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+		};
+		side(ix, SteamOwnId(), st.player, g.won);
+		Display(p, 24);
+		p.TextCaps(ix + half, py, 60, 52, "VS", pal::disabled, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
+		side(ix + half + 60, _strtoui64(g.opponentId.c_str(), nullptr, 10), g.opponent.empty() ? Tr("Opponent") : g.opponent, !g.won);
+		p.Fill(ix, y + 236, iw, 1, pal::hairline);
+	}
 
 	// The verdict and, under it, the game's number in the season and "Report a problem", all at the foot of the card.
 	const int footY = y + h - 66, lineY = footY + 30;
-	if (g.stats) PaintStatsGrid(p, g, ix, y + 250, iw, footY - 8 - (y + 250));
+	if (g.stats) PaintStatsGrid(p, g, ix, gridY, iw, footY - 8 - gridY);
 	else {
 		p.Font(3);
-		p.TextWrapped(ix, y + 252, iw, std::max(20, footY - 8 - (y + 252)), "The league checks that both reports describe the same game before it gives any Glory.", pal::caption);
+		p.TextWrapped(ix, gridY + 2, iw, std::max(20, footY - 8 - (gridY + 2)),
+			team ? "The league checks that the reports describe the same game before it gives any Glory."
+				 : "The league checks that both reports describe the same game before it gives any Glory.",
+			pal::caption);
 	}
 	const Verdict verdict = VerdictOf(v.result);
 	const bool confirmed = verdict == Verdict::Rated && v.result.answer.status == "confirmed";
 	const char *line = verdict == Verdict::Sending ? "Sending your report to the league..."
+		: verdict == Verdict::Awaiting && team	   ? "Pending: waiting for the other players' reports."
 		: verdict == Verdict::Awaiting			   ? "Pending: waiting for your opponent's report."
+		: verdict == Verdict::Disputed && team	   ? "In dispute: the players' reports disagree."
 		: verdict == Verdict::Disputed			   ? "In dispute: the reports of the two players disagree."
 		: verdict == Verdict::Void				   ? "Void: the game does not count."
+		: confirmed && team						   ? "Result confirmed by the players."
 		: confirmed								   ? "Result confirmed by both players."
 												   : "The league settled the game with the reports it got.";
 	// The number counts once the league's standing includes this game: the player's Glory is the one the game left.
 	std::string number;
 	const LeagueMeView me = LeagueMeState();
-	if (verdict == Verdict::Rated && me.loaded && me.me.ranked.present && me.me.ranked.glory == v.result.answer.ranked.gloryAfter &&
-		me.me.ranked.wins + me.me.ranked.losses > 0) {
-		number = TrFmt("Game no. %s of the season", {std::to_string(me.me.ranked.wins + me.me.ranked.losses)});
+	const LeagueRanked &rk = LeagueMeRanked(me.me, g.queue);
+	if (verdict == Verdict::Rated && me.loaded && rk.present && rk.glory == v.result.answer.ranked.gloryAfter && rk.wins + rk.losses > 0) {
+		number = TrFmt("Game no. %s of the season", {std::to_string(rk.wins + rk.losses)});
 	}
 	const bool reported = g.matchId > 0 && std::find(v.disputed.begin(), v.disputed.end(), g.matchId) != v.disputed.end();
 	const bool canReport = g.matchId > 0 && !reported && v.result.state != LeagueResultState::Sending && LeagueDisputeOpen(g.at, LeagueServerNowMs());
@@ -463,7 +523,8 @@ void PaintPlace(Painter &p, const State &st, int x, int y, int w, int h)
 {
 	const LeagueRankedView &v = st.ranked.view;
 	PaintGlassCard(p, x, y, w, h);
-	Caps(p, x + 24, y + 16, w - 48, 22, "Your place  \xC2\xB7  1 vs 1", pal::redText, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+	Caps(p, x + 24, y + 16, w - 48, 22, LeagueQueueIsTeam(v.result.game.queue) ? "Your place  \xC2\xB7  2 vs 2" : "Your place  \xC2\xB7  1 vs 1", pal::redText,
+		DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 	const std::string own = std::to_string(SteamOwnId());
 	const LeagueBoardRow *mine = LeagueBoardFind(v.around, own);
 	if (!mine) {
@@ -513,11 +574,13 @@ void PaintRankedResult(Painter &p, const State &st)
 		const char *title = verdict == Verdict::Rated || verdict == Verdict::Awaiting || verdict == Verdict::Sending ? (o.game.won ? "Victory" : "Defeat")
 																												  : "Ranked result";
 		p.TextCaps(l.margin, l.titleY, l.w - 2 * l.margin - bw - 32, l.titleH, title, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
-		std::string info = Tr("Ranked 1 vs 1");
+		const bool team = LeagueQueueIsTeam(o.game.queue);
+		std::string info = Tr(team ? "Ranked 2 vs 2" : "Ranked 1 vs 1");
 		if (v.seasonLoaded) info += "  \xC2\xB7  " + TrFmt("Season %s", {std::to_string(v.season.number)});
 		if (!o.game.map.empty()) info += "  \xC2\xB7  " + LeagueMapText(o.game.map);
 		if (o.game.durationMs) info += "  \xC2\xB7  " + TrFmt("%s min", {std::to_string(o.game.durationMs / 60000)});
-		if (!o.game.opponent.empty()) info += "  \xC2\xB7  " + TrFmt("against %s", {o.game.opponent});
+		if (team && !o.game.partner.empty()) info += "  \xC2\xB7  " + TrFmt("with %s", {o.game.partner});
+		else if (!team && !o.game.opponent.empty()) info += "  \xC2\xB7  " + TrFmt("against %s", {o.game.opponent});
 		p.raw = true;
 		PaintScreenInfo(p, l, info);
 		p.raw = false;

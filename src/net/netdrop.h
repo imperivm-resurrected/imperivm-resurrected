@@ -7,3 +7,9 @@ void InstallNetDrop(bool knownExe);
 void NetDropReset();
 void NetDropPeerLeft();
 void NetDropTick();
+
+// In a ranked 2v2 the AI plays for a player who drops, until they come back (a normal game keeps their place empty instead): whether
+// that player's army has such an AI (for the host, who lets them in), and, on every computer on the same tick (the rejoin's stop order),
+// taking the AI of a ranked 2v2's player away, by the game's state alone.
+bool NetDropAiReturnable(int player);
+void NetDropAiRelease(int player);

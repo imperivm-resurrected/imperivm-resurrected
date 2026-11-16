@@ -4,6 +4,9 @@
 #define NOMINMAX
 #include <windows.h>
 #include <shellapi.h>
+
+#include <algorithm>
+#include <cstring>
 #pragma warning(push)
 #pragma warning(disable : 4996 4828)
 #pragma warning(pop)
@@ -359,6 +362,10 @@ std::vector<SteamFriendInfo> SteamFriendsInfo()
 				x.inGame = S.SteamAPI_ISteamFriends_GetFriendGamePlayed(g_steam.friends, f, &gi) && gi.m_gameID.AppID() == app;
 				list.push_back(x);
 			}
+			std::sort(list.begin(), list.end(), [](const SteamFriendInfo &a, const SteamFriendInfo &b) {
+				if (a.inGame != b.inGame) return a.inGame;
+				return _stricmp(a.name.c_str(), b.name.c_str()) < 0;
+			});
 			std::lock_guard<std::mutex> done(mx);
 			friends = std::move(list);
 			readAt = GetTickCount();

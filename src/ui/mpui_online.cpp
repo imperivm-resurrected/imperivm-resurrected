@@ -71,6 +71,7 @@ LeagueMatchInfo LeagueInfoOfRoom(const OnlineRoom &room)
 	info.map = LeagueMapFromOptions(room.info.optionsText, room.info.map);
 	info.contentKey = !room.info.gameplayKey.empty() ? room.info.gameplayKey : SteamOwnGameplayKey();
 	info.roomTag = room.info.leagueTag;
+	info.team = room.info.mode == kLeagueTeamRoomMode;
 	for (const OnlineMember &m : room.members) info.members.emplace_back(m.id, m.name);
 	return info;
 }

@@ -78,6 +78,7 @@ OptionGetter HostOptionGetter(const GameRoomSnapshot &g)
 StartBlock StartBlocker(const State &st, const GameRoomSnapshot &g)
 {
 	if (!g.active || !g.host || !g.online) return {};
+	if (StartBlock ranked = RankedStartBlocker(st, g); !ranked.label.empty() || !ranked.toast.empty()) return ranked;
 	auto inRoom = [&](const std::string &name) {
 		const std::string want = LowerName(name);
 		for (const GameRoomSlot &s : g.slots) {
@@ -426,6 +427,15 @@ unsigned __fastcall HookGameMenuMsg(void *dlg, void *edx, int *msg)
 			LogI("league", "ranked: surrender refused before minute 5");
 			ModUiToast("You can surrender from minute 5.", true);
 			return 0;
+		}
+		// In a ranked 2v2 it is the team's: the partner is asked first, unless they are no longer in the game.
+		if (id == 0x1005) {
+			switch (LeagueSurrenderPress()) {
+			case LeagueSurrenderAsk::TooEarly: ModUiToast("You can surrender from minute 5.", true); return 0;
+			case LeagueSurrenderAsk::Proposed: ModUiToast("Your partner has 30 seconds to agree to surrender."); return 0;
+			case LeagueSurrenderAsk::Pending: ModUiToast("The vote to surrender is already open."); return 0;
+			default: break;
+			}
 		}
 		if (id == 0x1005 || id == 0x1006) {
 			g_userQuit.tick = GetTickCount();

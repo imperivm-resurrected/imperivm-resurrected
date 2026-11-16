@@ -267,6 +267,7 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 			}
 			else if (g_s.view == kViewRanked && g_s.ranked.disputeMatch) RankedAction(kRkDisputeCancel);
 			else if (g_s.view == kViewRanked && g_s.ranked.contentOpen) RankedAction(kRkContentClose);
+			else if (g_s.view == kViewRanked && g_s.ranked.inviteOpen) RankedAction(kRkDuoInviteClose);
 			else if (g_s.ranked.resultOpen) RankedAction(kRkResultClose);
 			else if (g_s.ranked.ceremonyOpen) RankedAction(kRkCeremonyLater);
 			else if (g_s.view == kViewRanked && (g_s.ranked.sub == kRankedBoard || g_s.ranked.sub == kRankedHistory)) RankedAction(kRkHub);
