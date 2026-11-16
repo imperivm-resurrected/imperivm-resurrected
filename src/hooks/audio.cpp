@@ -100,9 +100,7 @@ void SoundLevelsApply()
 void InstallSoundLevels(bool knownExe)
 {
 	if (!knownExe) return;
-	void *target = reinterpret_cast<void *>(addr::kApplySoundOptions);
-	if (HookCreate(target, reinterpret_cast<void *>(&HookApplySoundOptions), reinterpret_cast<void **>(&g_origApplySound)) == MH_OK &&
-		HookEnable(target) == MH_OK) {
+	if (HookInstall(addr::kApplySoundOptions, &HookApplySoundOptions, &g_origApplySound)) {
 		LogD("audio", "nature sounds and conversations have their own volume");
 	}
 	else {

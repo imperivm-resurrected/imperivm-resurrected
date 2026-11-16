@@ -62,6 +62,11 @@ MH_STATUS HookEnable(LPVOID target)
 	return status;
 }
 
+bool HookInstall(LPVOID target, LPVOID detour, LPVOID *original)
+{
+	return HookCreate(target, detour, original) == MH_OK && HookEnable(target) == MH_OK;
+}
+
 void HookBatchBegin()
 {
 	g_batch = true;

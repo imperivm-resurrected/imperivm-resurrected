@@ -15,7 +15,6 @@
 #include <set>
 #include <string>
 
-#include "MinHook.h"
 #include "hooks/hookcount.h"
 #include "core/config.h"
 #include "hooks/dmshim.h"
@@ -318,7 +317,7 @@ void HookOpenFileOf(IUnknown *created)
 		return;
 	}
 	void *open = (*reinterpret_cast<void ***>(stream))[kOpenFileSlot];
-	if (HookCreate(open, reinterpret_cast<void *>(&HookOpenFile), reinterpret_cast<void **>(&g_origOpenFile)) == MH_OK && HookEnable(open) == MH_OK) {
+	if (HookInstall(open, &HookOpenFile, &g_origOpenFile)) {
 		LogD("video", "cutscenes are looked up in the active content packs first");
 	}
 	else {
@@ -339,8 +338,7 @@ void HookGraphRun()
 		return;
 	}
 	void *run = (*reinterpret_cast<void ***>(control))[7];
-	if (HookCreate(run, reinterpret_cast<void *>(&HookRun), reinterpret_cast<void **>(&g_origRun)) == MH_OK &&
-		HookEnable(run) == MH_OK) {
+	if (HookInstall(run, &HookRun, &g_origRun)) {
 		LogI("video", "player hooked (full screen and volume)");
 	}
 	control->Release();
@@ -377,9 +375,7 @@ void MediaInstall(bool knownExe)
 	HMODULE ole = GetModuleHandleA("ole32.dll");
 	if (!ole) ole = LoadLibraryA("ole32.dll");
 	void *target = ole ? reinterpret_cast<void *>(GetProcAddress(ole, "CoCreateInstance")) : nullptr;
-	if (target && HookCreate(target, reinterpret_cast<void *>(&HookCoCreateInstance), reinterpret_cast<void **>(&g_origCoCreate)) ==
-					  MH_OK &&
-		HookEnable(target) == MH_OK) {
+	if (target && HookInstall(target, &HookCoCreateInstance, &g_origCoCreate)) {
 		LogI("video", "ready to adjust the cutscenes");
 	}
 	else {

@@ -6,7 +6,6 @@
 #include <cstdint>
 
 #include "hooks/curseguard.h"
-#include "MinHook.h"
 #include "hooks/hookcount.h"
 #include "core/log.h"
 #include "addr/script.h"
@@ -64,8 +63,7 @@ void __fastcall HookClearCurseBless(char *unit)
 void InstallCurseGuard(bool knownExe)
 {
 	if (!knownExe) return;
-	void *target = reinterpret_cast<void *>(addr::kClearCurseBless);
-	if (HookCreate(target, reinterpret_cast<void *>(&HookClearCurseBless), reinterpret_cast<void **>(&g_origClear)) != MH_OK || HookEnable(target) != MH_OK) {
+	if (!HookInstall(addr::kClearCurseBless, &HookClearCurseBless, &g_origClear)) {
 		LogE("game", "curse: could not hook the end of curses and blessings; a crash of the original game when they end stays possible");
 		return;
 	}

@@ -10,7 +10,6 @@
 #include <string>
 #include <cstdint>
 
-#include "MinHook.h"
 #include "hooks/hookcount.h"
 #include "core/crashlog.h"
 #include "hooks/diag.h"
@@ -170,16 +169,13 @@ void DiagSetClassNameMapper(const char *(*mapper)(void *registry, const char *na
 void InstallDiag(bool knownExe)
 {
 	if (!knownExe) return;
-	if (HookCreate(reinterpret_cast<void *>(addr::kSetPaused), reinterpret_cast<void *>(&HookSetPaused), reinterpret_cast<void **>(&g_origSetPaused)) != MH_OK ||
-		HookEnable(reinterpret_cast<void *>(addr::kSetPaused)) != MH_OK) {
+	if (!HookInstall(addr::kSetPaused, &HookSetPaused, &g_origSetPaused)) {
 		LogE("game", "diagnostics: could not hook SetPaused");
 	}
-	if (HookCreate(reinterpret_cast<void *>(addr::kCreateEntityImage), reinterpret_cast<void *>(&HookCreateEntityImage), reinterpret_cast<void **>(&g_origCreateEntityImage)) != MH_OK ||
-		HookEnable(reinterpret_cast<void *>(addr::kCreateEntityImage)) != MH_OK) {
+	if (!HookInstall(addr::kCreateEntityImage, &HookCreateEntityImage, &g_origCreateEntityImage)) {
 		LogE("game", "diagnostics: could not hook CreateEntityImage");
 	}
-	if (HookCreate(reinterpret_cast<void *>(addr::kCreateObject), reinterpret_cast<void *>(&HookCreateObject), reinterpret_cast<void **>(&g_origCreateObject)) != MH_OK ||
-		HookEnable(reinterpret_cast<void *>(addr::kCreateObject)) != MH_OK) {
+	if (!HookInstall(addr::kCreateObject, &HookCreateObject, &g_origCreateObject)) {
 		LogE("game", "diagnostics: could not hook CreateObject");
 	}
 }
