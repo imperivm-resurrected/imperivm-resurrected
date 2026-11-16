@@ -446,6 +446,8 @@ DWORD WINAPI RenderThread(LPVOID)
 			if (!newFrame) {
 				{
 					std::lock_guard<std::mutex> lock(g_frameLock);
+					fw = g_frameW;
+					fh = g_frameH;
 					local = g_frame;
 				}
 				ControlsDrawBarKeys(local.data(), fw, fh);
@@ -456,6 +458,8 @@ DWORD WINAPI RenderThread(LPVOID)
 		else if (!video && !ui && ((!overlay && overlayWasOn) || uiWasOn)) {
 			{
 				std::lock_guard<std::mutex> lock(g_frameLock);
+				fw = g_frameW;
+				fh = g_frameH;
 				local = g_frame;
 			}
 			newFrame = true;
