@@ -348,6 +348,8 @@ struct State {
 	int teamColorWant[8] = {-1, -1, -1, -1, -1, -1, -1, -1};
 	int teamColorTries[8] = {};
 	DWORD teamColorTick = 0;
+	// The slots' colours, ready checks and players when the tries were last counted from zero.
+	std::string teamColorSeen;
 	int guestColorSlot = -1;
 	int guestColorTries = 0;
 	DWORD guestColorTick = 0;

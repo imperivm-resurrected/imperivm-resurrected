@@ -336,7 +336,7 @@ void PaintOptionsCard(Painter &p, const State &st, int x, int y, int w, int h)
 		ruleRow(kRuleFreeAttach, "Free unit attachment", true, "Troops of another civilization can be placed under a hero's command (as in Alternative mode).");
 		ruleRow(kRuleLockDiplomacy, "Lock diplomacy", true, "Alliances can't be changed during the game.");
 		ruleRow(kRuleCheats, "Allow cheats", true, "Players can open the cheats panel during the game.");
-		if (!load) {
+		if (!load && (!g.online || st.room.id)) {
 			grid.Toggle("Team colors", TeamColorsOn(st, g), canEdit, kGTeamColors, 0,
 				"Each team gets a family of colors: team 1 reds, team 2 blues, team 3 greens and team 4 yellows. While it is on, the colors follow the teams.");
 		}

@@ -55,6 +55,9 @@ void MpUiGameThreadTick()
 				LogI("lobby", "game room ready");
 				g_s.createSave = -1;
 				g_s.roomTab = 0;
+				g_s.teamColors = false;
+				for (int &want : g_s.teamColorWant) want = -1;
+				g_s.teamColorSeen.clear();
 			}
 			g_s.open = true;
 			g_s.connecting = false;
