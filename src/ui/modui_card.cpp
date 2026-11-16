@@ -14,6 +14,24 @@ namespace modui_impl {
 namespace {
 std::atomic<DWORD> g_updatesAt{0};
 std::atomic<int> g_updatesCount{0};
+
+void PaintCardBack(HDC dc, int w, int h, int bar, COLORREF accent)
+{
+	RECT all = {0, 0, w, h};
+	HBRUSH b = CreateSolidBrush(pal::panel);
+	FillRect(dc, &all, b);
+	DeleteObject(b);
+	HBRUSH frame = CreateSolidBrush(pal::edge);
+	FrameRect(dc, &all, frame);
+	DeleteObject(frame);
+	RECT stripe = {0, 0, bar, h};
+	HBRUSH ab = CreateSolidBrush(accent);
+	FillRect(dc, &stripe, ab);
+	DeleteObject(ab);
+	SelectObject(dc, g_fonts[3]);
+	SetBkMode(dc, TRANSPARENT);
+	SetTextColor(dc, pal::body);
+}
 }
 
 void ResetUpdatesCache()
@@ -64,20 +82,7 @@ RECT DrawKeysCard(Canvas &canvas, uint32_t *buf, int w, int h, const Card &c, fl
 	const int th = std::max(static_cast<int>(text.cy), static_cast<int>(capH * s + 0.5f)) + padY * 2;
 	if (!canvas.Ensure(tw, th)) return {0, 0, 0, 0};
 	HDC dc = canvas.dc;
-	RECT all = {0, 0, tw, th};
-	HBRUSH b = CreateSolidBrush(pal::panel);
-	FillRect(dc, &all, b);
-	DeleteObject(b);
-	HBRUSH frame = CreateSolidBrush(pal::edge);
-	FrameRect(dc, &all, frame);
-	DeleteObject(frame);
-	RECT accent = {0, 0, bar, th};
-	HBRUSH ab = CreateSolidBrush(c.accent);
-	FillRect(dc, &accent, ab);
-	DeleteObject(ab);
-	SelectObject(dc, g_fonts[3]);
-	SetBkMode(dc, TRANSPARENT);
-	SetTextColor(dc, pal::body);
+	PaintCardBack(dc, tw, th, bar, c.accent);
 	RECT r = {bar + padX, 0, bar + padX + static_cast<int>(text.cx), th};
 	DrawTextW(dc, ws.c_str(), static_cast<int>(ws.size()), &r, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 	Painter p = CardPainter(dc, s);
@@ -111,20 +116,7 @@ RECT DrawCard(Canvas &canvas, uint32_t *buf, int w, int h, const Card &c, float 
 	const int th = static_cast<int>(calc.bottom) + padY * 2 + gap + barH + subH;
 	if (!canvas.Ensure(tw, th)) return {0, 0, 0, 0};
 	HDC dc = canvas.dc;
-	RECT all = {0, 0, tw, th};
-	HBRUSH b = CreateSolidBrush(pal::panel);
-	FillRect(dc, &all, b);
-	DeleteObject(b);
-	HBRUSH frame = CreateSolidBrush(pal::edge);
-	FrameRect(dc, &all, frame);
-	DeleteObject(frame);
-	RECT accent = {0, 0, bar, th};
-	HBRUSH ab = CreateSolidBrush(c.accent);
-	FillRect(dc, &accent, ab);
-	DeleteObject(ab);
-	SelectObject(dc, g_fonts[3]);
-	SetBkMode(dc, TRANSPARENT);
-	SetTextColor(dc, pal::body);
+	PaintCardBack(dc, tw, th, bar, c.accent);
 	RECT r = {bar + padX, padY, tw - padX - closeW, padY + static_cast<int>(calc.bottom)};
 	DrawTextW(dc, ws.c_str(), static_cast<int>(ws.size()), &r, (c.corner ? DT_LEFT : DT_CENTER) | DT_WORDBREAK | DT_NOPREFIX);
 	if (c.progress >= 0) {
