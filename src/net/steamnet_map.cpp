@@ -388,9 +388,8 @@ bool ClientOnMapMessage(uint64 peer, const uint8_t *data, size_t len)
 {
 	if (!len || peer != g_mapIn.host) return false;
 	const uint8_t type = data[0];
-	const std::string text(reinterpret_cast<const char *>(data + 1), len - 1);
 	if (type == kShMapFile) {
-		const std::vector<std::string> f = SplitTabs(text);
+		const std::vector<std::string> f = SplitTabs(std::string(reinterpret_cast<const char *>(data + 1), len - 1));
 		const std::string file = f.empty() ? "" : ScenarioFile(f[0]);
 		if (file.empty()) {
 			MapFailed("the host sent a disallowed path");
