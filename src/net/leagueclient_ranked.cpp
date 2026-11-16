@@ -14,7 +14,6 @@
 #include <vector>
 
 #include "net/leagueclient.h"
-#include "addr/state.h"
 #include "core/guard.h"
 #include "core/json.h"
 #include "core/league.h"
@@ -22,7 +21,6 @@
 #include "core/leagueteam.h"
 #include "core/log.h"
 #include "i18n/tr.h"
-#include "mods/mods.h"
 #include "net/leagueclient_internal.h"
 #include "net/patrons.h"
 #include "net/steamnet.h"
@@ -174,7 +172,7 @@ Answer Call(const char *method, const std::string &path, const std::string &body
 	if (!a.r.Ok() && a.parsed) a.error = LeagueParseError(a.j);
 	// The queue, the match and the stats say the server's time: the countdowns follow its clock, not this computer's.
 	if (a.parsed && a.j.type == Json::Object) {
-		const int64_t serverNow = static_cast<int64_t>(a.j.GetNumber("serverNow"));
+		const int64_t serverNow = a.j.GetInt64("serverNow");
 		if (serverNow > 0) {
 			const int64_t offset = LeagueClockOffsetMs(serverNow, sent, received);
 			const int64_t before = g_clockOffset.exchange(offset);
@@ -182,17 +180,6 @@ Answer Call(const char *method, const std::string &path, const std::string &body
 		}
 	}
 	return a;
-}
-
-std::string OwnId()
-{
-	const uint64_t me = SteamOwnId();
-	return me ? std::to_string(me) : std::string();
-}
-
-std::string LangCode()
-{
-	return LeagueLangCode(ModsLanguage());
 }
 
 std::string MatchPath(int64_t id, const char *tail = "")
@@ -204,9 +191,8 @@ std::string MatchPath(int64_t id, const char *tail = "")
 std::string FailureNotice(const Answer &a)
 {
 	if (!a.r.failure.empty() && a.r.failure == "not linked") return "Link your league account to play ranked.";
-	if (!a.r.status) return "Couldn't reach the league server. Check your connection and try again.";
 	if (a.r.status == 401) return "The league no longer recognises this computer. Link your account again.";
-	return "The league server refused the request. Try again later.";
+	return FailureText(a.r);
 }
 
 // After a poll the server did not answer: the usual retry, or as long as the server asks when polled too often (429), quietly.
@@ -338,7 +324,7 @@ void FetchPage(unsigned gen, LeagueBoardQuery q)
 		g_board.pageQuery = q;
 		g_board.pageError.clear();
 	}
-	else g_board.pageError = !a.r.status ? "Couldn't reach the league server. Check your connection and try again." : "The league server refused the request. Try again later.";
+	else g_board.pageError = FailureText(a.r);
 }
 
 void FetchRecent(std::string queue)
@@ -377,7 +363,7 @@ void FetchHistory(unsigned gen, int64_t before, std::string queue)
 		g_history.pageQueue = queue;
 		g_history.pageError.clear();
 	}
-	else g_history.pageError = !a.r.status ? "Couldn't reach the league server. Check your connection and try again." : "The league server refused the request. Try again later.";
+	else g_history.pageError = FailureText(a.r);
 }
 
 void FetchStats()
@@ -735,7 +721,7 @@ void AnswerThread(unsigned gen, int64_t id, bool accept)
 			return;
 		}
 		ToIdle(g_q);
-		g_q.banUntil = a.parsed ? static_cast<int64_t>(a.j.GetNumber("queueBanUntil")) : 0;
+		g_q.banUntil = a.parsed ? a.j.GetInt64("queueBanUntil") : 0;
 		g_q.banKind = "declined";
 		SetNotice(g_q, "You declined the match: you can't search for a few minutes.", true);
 		LogI("league", "ranked: match %lld declined", static_cast<long long>(id));
@@ -791,7 +777,7 @@ void AbandonThread(unsigned gen, int64_t id, bool automatic)
 		if (a.parsed && LeagueParseMatch(a.j, t) && t.outcome == "abandoned") CalledOff(t);
 		else ToIdle(g_q);
 		if (a.parsed && a.j.GetNumber("queueBanUntil") > 0) {
-			g_q.banUntil = static_cast<int64_t>(a.j.GetNumber("queueBanUntil"));
+			g_q.banUntil = a.j.GetInt64("queueBanUntil");
 			g_q.banKind = "declined";
 		}
 		LogI("league", "ranked: match %lld called off%s", static_cast<long long>(id), automatic ? " after its room failed" : "");
@@ -852,8 +838,7 @@ void BadgeThread(std::string kind, std::string id)
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
 		g_badge.busy = false;
-		g_badge.error = a.r.Ok() ? std::string() : a.r.status ? std::string("The league server refused the request. Try again later.")
-															 : std::string("Couldn't reach the league server. Check your connection and try again.");
+		g_badge.error = a.r.Ok() ? std::string() : std::string(FailureText(a.r));
 	}
 	if (!a.r.Ok()) {
 		LogW("league", "could not change the badge (%s)", a.r.Describe().c_str());
@@ -880,7 +865,7 @@ void RankedTick()
 	}
 	PartyTick(linked);
 	const bool member = linked && LeagueDuoState().role == LeagueDuoRole::Member;
-	const bool inGame = *reinterpret_cast<void **>(addr::kGame) != nullptr;
+	const bool inGame = InGame();
 	std::lock_guard<std::mutex> lock(g_mx);
 	if (!g_q.startedAt) g_q.startedAt = now;
 	if (!linked) {
@@ -1026,7 +1011,7 @@ bool RankedTicketOf(int64_t matchId, LeagueMatchTicket &out)
 void RankedReportAnswered(const Json &report, const std::string &answer)
 {
 	if (report.GetString("kind") != "ranked") return;
-	const int64_t matchId = static_cast<int64_t>(report.GetNumber("matchId"));
+	const int64_t matchId = report.GetInt64("matchId");
 	Json j;
 	LeagueReportAnswer a;
 	if (!matchId || !Json::Parse(answer, j) || !LeagueParseReportAnswer(j, a)) return;

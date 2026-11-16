@@ -17,7 +17,6 @@
 #include "core/leagueseasons.h"
 #include "core/leagueteam.h"
 #include "core/log.h"
-#include "mods/mods.h"
 #include "net/leagueclient.h"
 #include "net/leagueclient_internal.h"
 #include "net/patrons.h"
@@ -67,17 +66,6 @@ Cosmetics g_cosmetics;
 std::string CardKey(const std::string &steamId, int season, const std::string &queue)
 {
 	return steamId + ":" + std::to_string(season) + ":" + LeagueQueueId(queue);
-}
-
-
-std::string Failure(const HttpReply &r)
-{
-	return r.status ? "The league server refused the request. Try again later." : "Couldn't reach the league server. Check your connection and try again.";
-}
-
-std::string LangCode()
-{
-	return LeagueLangCode(ModsLanguage());
 }
 
 void FetchSeasons(std::string lang)
@@ -147,7 +135,7 @@ bool PutCosmetics(bool setFrame, int frame, bool setTitle, int title, std::strin
 		return true;
 	}
 	LogW("league", "could not change the frame or the title (%s)", r.Describe().c_str());
-	error = r.status == 400 ? "That season did not give you a frame and a title." : Failure(r);
+	error = r.status == 400 ? "That season did not give you a frame and a title." : FailureText(r);
 	return false;
 }
 

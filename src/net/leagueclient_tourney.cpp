@@ -15,7 +15,6 @@
 #include <vector>
 
 #include "net/leagueclient_tourney.h"
-#include "addr/state.h"
 #include "core/guard.h"
 #include "core/json.h"
 #include "core/log.h"
@@ -528,7 +527,7 @@ void TourneyTick()
 	const DWORD now = GetTickCount();
 	std::lock_guard<std::mutex> lock(g_mx);
 	// Never during a game: the poll waits for the menus.
-	if (*reinterpret_cast<void *const *>(addr::kGame) != nullptr) {
+	if (InGame()) {
 		g_mine.gameAt = now;
 		return;
 	}

@@ -102,11 +102,6 @@ std::string WithoutAiSuffix(const std::string &name)
 	return clean.empty() ? name : clean;
 }
 
-int64_t TickMs()
-{
-	return static_cast<int64_t>(GetTickCount64());
-}
-
 std::mutex g_syncMx;
 LeagueCheckpoints g_checkpoints;
 
