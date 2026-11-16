@@ -54,6 +54,8 @@ enum Action {
 	kFieldTeamName, kFieldTeamSearch,
 	kLinkOfferYes, kLinkOfferNo,
 	kFieldRanked,
+	// "Team colours" of the room, turned on or off by the host.
+	kGTeamColors,
 };
 
 typedef int(__cdecl *HostGame_t)(int, unsigned, int);
@@ -346,6 +348,11 @@ struct State {
 	int saveColors[8] = {-1, -1, -1, -1, -1, -1, -1, -1};
 	int saveColorTries[8] = {};
 	std::string saveColorWho[8];
+	// "Team colours": the host's choice, and the colour each slot is being given with the tries made (TeamColorsStep).
+	bool teamColors = false;
+	int teamColorWant[8] = {-1, -1, -1, -1, -1, -1, -1, -1};
+	int teamColorTries[8] = {};
+	DWORD teamColorTick = 0;
 	int guestColorSlot = -1;
 	int guestColorTries = 0;
 	DWORD guestColorTick = 0;
@@ -593,6 +600,11 @@ void RankedGameThreadTick();
 // The player left the room of their ranked match by hand: it is not made or joined again by itself.
 void RankedRoomLeftByUser();
 bool RankedRoomLocked(const State &st);
+// Whether the room gives its players the colours of their teams: the host's choice, which the guests read from the room; never in the
+// room of a saved game, whose colours are the save's.
+bool TeamColorsOn(const State &st, const GameRoomSnapshot &g);
+// While it is on, sets this PC's slots to the colours of their teams, one try every half second.
+void TeamColorsStep(State &st, const GameRoomSnapshot &g);
 bool RankedRoomAction(int action, int arg);
 // The hub (linked account) and the full leaderboard; false when the account is not linked and the tab shows the link card.
 bool PaintRankedTab(Painter &p, const State &st);

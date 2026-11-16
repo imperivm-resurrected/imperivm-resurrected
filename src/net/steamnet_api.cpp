@@ -502,6 +502,20 @@ void SteamPublishRules(unsigned rules)
 	});
 }
 
+void SteamPublishTeamColors(bool on)
+{
+	if (!SteamOnlineReady()) return;
+	Post([on] {
+		static int last = -1;
+		static uint64 lastLobby = 0;
+		if (!g_lobby || S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby) != g_steam.me) return;
+		if ((on ? 1 : 0) == last && g_lobby == lastLobby) return;
+		last = on ? 1 : 0;
+		lastLobby = g_lobby;
+		S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, "tcol", on ? "1" : "0");
+	});
+}
+
 void SteamPublishSlots(const std::string &text)
 {
 	if (!SteamOnlineReady()) return;

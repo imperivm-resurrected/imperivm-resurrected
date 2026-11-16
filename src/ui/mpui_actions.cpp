@@ -476,6 +476,10 @@ void DoAction(int action, int arg)
 		GameRoomCancel();
 		SteamLeaveForContent(true);
 		break;
+	case kGTeamColors:
+		g_s.teamColors = !g_s.teamColors;
+		LogI("room", "team colours %s", g_s.teamColors ? "on" : "off");
+		break;
 	case kGRuleToggle:
 		g_s.game.rules ^= static_cast<unsigned>(arg);
 		GameRoomSetRules(g_s.game.rules);

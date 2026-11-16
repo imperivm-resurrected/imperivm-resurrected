@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 THIONG
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
+#include <array>
+
 #include "ui/textedit.h"
 #include "MinHook.h"
 #include "core/names.h"
+#include "core/teamcolors.h"
 #include "ui/modui.h"
 #include "mods/savelib.h"
 
@@ -314,6 +317,47 @@ bool SlotFrozen(const GameRoomSnapshot &g, const GameRoomSlot &s)
 {
 	if (!g.online) return false;
 	return s.local ? s.ready : g.host && s.type == 1 && LocalReady(g);
+}
+
+bool TeamColorsOn(const State &st, const GameRoomSnapshot &g)
+{
+	if (!g.active) return false;
+	const bool load = g.online && (g.host ? !st.hostSave.name.empty() : !st.room.info.saveName.empty());
+	if (load) return false;
+	return g.online && !g.host ? st.room.info.teamColors : st.teamColors;
+}
+
+void TeamColorsStep(State &st, const GameRoomSnapshot &g)
+{
+	if (!TeamColorsOn(st, g)) {
+		for (int &want : st.teamColorWant) want = -1;
+		return;
+	}
+	// Every PC works the colours out from what the room shows them all, and sets only its own slot's (the host the AI's too); the guests'
+	// own changes would undo the host's on theirs.
+	int team[kTeamColorSlots] = {};
+	bool used[kTeamColorSlots] = {};
+	for (int i = 0; i < kTeamColorSlots; i++) {
+		const GameRoomSlot &s = g.slots[i];
+		used[i] = s.used && (s.type == 1 || s.type == 3);
+		team[i] = s.team >= 1 && s.team <= 4 ? s.team : 0;
+	}
+	const std::array<int, kTeamColorSlots> target = TeamColorsFor(g.colors, team, used);
+	for (int i = 0; i < kTeamColorSlots; i++) {
+		if (target[i] == st.teamColorWant[i]) continue;
+		st.teamColorWant[i] = target[i];
+		st.teamColorTries[i] = 0;
+	}
+	if (GetTickCount() - st.teamColorTick < 500) return;
+	for (int i = 0; i < kTeamColorSlots; i++) {
+		const GameRoomSlot &s = g.slots[i];
+		const bool ours = !g.online || s.local || (g.host && s.type == 1);
+		if (!used[i] || !ours || target[i] < 0 || s.color == target[i] || SlotFrozen(g, s) || st.teamColorTries[i] >= 10) continue;
+		st.teamColorTick = GetTickCount();
+		st.teamColorTries[i]++;
+		GameRoomSetColor(i, target[i]);
+		break;
+	}
 }
 
 bool RoomActionFrozen(const GameRoomSnapshot &g, int action, int arg)

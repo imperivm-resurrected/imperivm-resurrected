@@ -120,6 +120,7 @@ void MpUiGameThreadTick()
 				LogI("room", "the room was created for %d players: the other open slots are closed", g_s.roomLimit);
 				g_s.roomLimit = 0;
 			}
+			TeamColorsStep(g_s, snap);
 			if (snap.online && !snap.host) {
 				if (!LocalReady(snap)) {
 					g_s.readySeen = false;
@@ -260,6 +261,7 @@ void MpUiGameThreadTick()
 				}
 				SteamPublishOptions(opts);
 				SteamPublishRules(snap.randomMap ? snap.rules : snap.rules & ~kSeasonBits);
+				SteamPublishTeamColors(g_s.teamColors);
 				{
 					std::string slotsText;
 					for (int i = 0; i < 8; i++) {

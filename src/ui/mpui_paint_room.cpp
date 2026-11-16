@@ -731,7 +731,7 @@ void PaintSlotRow(Painter &p, const State &st, const TableCtx &t, int i, const A
 		SlotCombo(p, st, c.civ, ctlY, c.civW, race, hidden ? pal::textDim : pal::text, kDropRace, i, editable);
 	}
 	{
-		const bool editable = !load && own && !frozen;
+		const bool editable = !load && own && !frozen && !TeamColorsOn(st, g);
 		const bool open = st.dropOpen && st.dropKind == kDropColor && st.dropIndex == i;
 		PaintValueBox(p, st, c.color, ctlY, c.colorW, std::string(), pal::text, editable, open, kGColor, i, PlayerColor(g, s.color));
 	}
