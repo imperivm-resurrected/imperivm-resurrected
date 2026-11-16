@@ -778,4 +778,13 @@ inline void Blend(uint32_t *buf, int w, int h, const Canvas &c, int ox, int oy, 
 	}
 }
 
+// The action of the topmost hit under `at`, with its argument in `arg`; `none` when nothing is there, and then `arg` is left as it was.
+inline int HitActionAt(const std::vector<Hit> &hits, POINT at, int &arg, int none)
+{
+	const Hit *hit = TopHitAt(hits, at);
+	if (!hit) return none;
+	arg = hit->arg;
+	return hit->action;
+}
+
 }

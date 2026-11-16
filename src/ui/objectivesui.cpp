@@ -71,16 +71,6 @@ void Select(State &st, int index, After &after)
 	v.revealSelected = true;
 }
 
-int HitAt(const std::vector<Hit> &hits, POINT at, int &arg)
-{
-	for (auto it = hits.rbegin(); it != hits.rend(); ++it) {
-		if (!PtInRect(&it->r, at)) continue;
-		arg = it->arg;
-		return it->action;
-	}
-	return kActNone;
-}
-
 void TextScrollBy(State &st, int delta)
 {
 	st.view.textScroll = std::max(0, std::min(std::max(0, st.out.textH - st.out.textViewH), st.view.textScroll + delta));
@@ -144,7 +134,7 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, After &after)
 		v.mouseY = at.y;
 		if (onBar) return true;
 		int arg = 0;
-		const int action = HitAt(st.hits, at, arg);
+		const int action = HitActionAt(st.hits, at, arg, kActNone);
 		if (action != kActNone) Click(st, action, arg, after);
 		return true;
 	}

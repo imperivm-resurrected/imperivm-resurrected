@@ -362,16 +362,6 @@ void Execute(const Command &cmd)
 	Refresh();
 }
 
-int HitAt(const std::vector<Hit> &hits, POINT at, int &arg)
-{
-	for (auto it = hits.rbegin(); it != hits.rend(); ++it) {
-		if (!PtInRect(&it->r, at)) continue;
-		arg = it->arg;
-		return it->action;
-	}
-	return kActNone;
-}
-
 // Up and down walk the rows of the tab as they are drawn, through both groups of the great battles.
 void MoveSelection(View &v, int step, Command &cmd)
 {
@@ -427,7 +417,7 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, Command &cmd)
 			return true;
 		}
 		int arg = 0;
-		cmd.action = HitAt(g_s.hits, at, arg);
+		cmd.action = HitActionAt(g_s.hits, at, arg, kActNone);
 		cmd.arg = arg;
 		cmd.start = msg == WM_LBUTTONDBLCLK && cmd.action == kActRow;
 		return true;

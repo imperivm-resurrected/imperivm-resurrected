@@ -163,13 +163,11 @@ void ReadEndMenu(void *dlg, View &v)
 
 int HitAt(const State &st, POINT at, int &arg, RECT *rect = nullptr)
 {
-	for (auto it = st.hits.rbegin(); it != st.hits.rend(); ++it) {
-		if (!PtInRect(&it->r, at)) continue;
-		arg = it->arg;
-		if (rect) *rect = it->r;
-		return it->action;
-	}
-	return kActNone;
+	const Hit *hit = TopHitAt(st.hits, at);
+	if (!hit) return kActNone;
+	arg = hit->arg;
+	if (rect) *rect = hit->r;
+	return hit->action;
 }
 
 int EscapeButton(Screen screen, void *dlg)

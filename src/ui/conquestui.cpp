@@ -36,16 +36,6 @@ bool OtherScreenOwnsInput() { return ModUiIsOpen() || MpUiNeedsDraw() || SavesUi
 
 bool Inside(const RECT &r, POINT at) { return PtInRect(&r, at) != 0; }
 
-int HitAt(const std::vector<ui::Hit> &hits, POINT at, int &arg)
-{
-	for (auto it = hits.rbegin(); it != hits.rend(); ++it) {
-		if (!PtInRect(&it->r, at)) continue;
-		arg = it->arg;
-		return it->action;
-	}
-	return kActNone;
-}
-
 void SetScroll(int line) { g_s.view.scroll = std::max(0, std::min(g_s.painted.maxScroll, line)); }
 
 void ScrollBy(int lines) { SetScroll(g_s.view.scroll + lines); }
@@ -108,7 +98,7 @@ void ConquestUiDraw(uint32_t *buf, int w, int h)
 		std::lock_guard<std::mutex> lock(g_lock);
 		if (!g_s.view.game.open && !g_s.view.victory) return;
 		view = g_s.view;
-		if (g_s.mouseDown) pressAction = HitAt(g_s.painted.hits, {view.mouseX, view.mouseY}, pressArg);
+		if (g_s.mouseDown) pressAction = ui::HitActionAt(g_s.painted.hits, {view.mouseX, view.mouseY}, pressArg, kActNone);
 	}
 	Painted painted;
 	PaintConquest(buf, w, h, view, pressAction, pressArg, painted);
@@ -150,7 +140,7 @@ bool ConquestUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 			g_s.mouseDown = true;
 			g_swallowUp = true;
 			if (BarMouse(msg, wp, at)) break;
-			action = HitAt(pt.hits, at, arg);
+			action = ui::HitActionAt(pt.hits, at, arg, kActNone);
 			break;
 		case WM_MOUSEWHEEL:
 			// The wheel carries screen coordinates: the last position of the mouse is the one inside the game.
