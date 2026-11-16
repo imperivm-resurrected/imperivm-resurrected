@@ -20,6 +20,7 @@
 #include "mods/mods.h"
 #include "net/mpsave.h"
 #include "ui/mpui.h"
+#include "mods/rootrules.h"
 #include "mods/savelib.h"
 #include "ui/savesui.h"
 #include "ui/textedit.h"
@@ -194,31 +195,34 @@ ModCheck ComputeModCheck(const State &st, const SaveRec &r)
 				break;
 			}
 		}
-		const bool rules = !m.ruleset.empty() || (m.kind >= 0 ? m.kind == kModRules : m.oldGameplay);
+		const bool rules = !m.ruleset.empty() || m.rulesetPackage || (m.kind >= 0 ? m.kind == kModRules : m.oldGameplay);
 		if (!found) {
 			if (rules) c.missing.push_back(ModLabel(m));
 			continue;
 		}
-		if (!found->gameplay && m.ruleset.empty() && ModsRulesetOf(mounted.ruleset, found->folder).empty()) continue;
+		// The package itself as the ruleset (no layer): valid while the package still has root files that replace the game's and no layers.
+		const bool savedEntry = m.rulesetPackage && m.ruleset.empty() && found->layers.empty() && !found->globalLoose.empty();
+		const bool mountedEntry = mods_impl::RootEntryMounted(found->folder, mounted.ruleset.pack, mounted.ruleset.id, !found->globalLoose.empty(), !found->layers.empty());
+		if (!found->gameplay && m.ruleset.empty() && !savedEntry && ModsRulesetOf(mounted.ruleset, found->folder).empty() && !mountedEntry) continue;
 		c.rulesFolders.push_back(found->folder);
 		const ModLayer *savedLayer = ModsFindLayer(*found, m.ruleset);
-		if (savedLayer) {
+		if (savedLayer || savedEntry) {
 			c.ruleset.pack = found->folder;
-			c.ruleset.id = savedLayer->id;
+			c.ruleset.id = savedLayer ? savedLayer->id : std::string();
 		}
 		bool active = false;
 		for (const std::string &f : mounted.mods) active = active || _stricmp(f.c_str(), found->folder.c_str()) == 0;
 		// Loaded with the ruleset it was saved with, or with none if it was saved with none.
-		const bool sameRuleset = _stricmp(ModsRulesetOf(mounted.ruleset, found->folder).c_str(), m.ruleset.c_str()) == 0;
+		const bool sameRuleset = _stricmp(ModsRulesetOf(mounted.ruleset, found->folder).c_str(), m.ruleset.c_str()) == 0 && mountedEntry == savedEntry;
 		const bool otherVersion = !m.version.empty() && !found->version.empty() && ModsCompareVersions(m.version, found->version) != 0;
 		const bool otherFiles = sameSchema && !m.hash.empty() && !found->gameplayHash.empty() && m.hash != found->gameplayHash;
 		const bool otherLayerFiles = sameSchema && savedLayer && !m.rulesetHash.empty() && !savedLayer->gameplayHash.empty() && m.rulesetHash != savedLayer->gameplayHash;
 		if (otherVersion) c.other.push_back(ModLabel(m) + Tr(" (you have ") + found->version + ")");
-		else if (!m.ruleset.empty() && !savedLayer) c.other.push_back(ModLabel(m) + Tr(" (without its ruleset)"));
+		else if ((!m.ruleset.empty() && !savedLayer) || (m.rulesetPackage && !savedEntry && m.ruleset.empty())) c.other.push_back(ModLabel(m) + Tr(" (without its ruleset)"));
 		else if (otherFiles || otherLayerFiles) c.other.push_back(ModLabel(m) + Tr(" (different files)"));
 		else if (!active || !sameRuleset) {
 			std::string label = ModLabel(m);
-			if (!sameRuleset) label += " \xC2\xB7 " + (savedLayer ? savedLayer->name : Tr("Original (HD)"));
+			if (!sameRuleset) label += " \xC2\xB7 " + (savedLayer ? savedLayer->name : savedEntry ? TrFmt("%s (original ruleset)", {found->name}) : Tr("Original (HD)"));
 			if (!active) c.rulesetOnly = false;
 			c.inactive.push_back(label);
 		}

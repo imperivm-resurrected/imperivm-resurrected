@@ -61,12 +61,14 @@ ModNeeds ModsNeededFor(const std::string &gamePath, const std::string &profile)
 		n.name = e.GetString("name");
 		n.version = e.GetString("version");
 		n.ruleset = e.GetString("ruleset");
+		n.packageEntry = n.ruleset.empty() && e.GetBool(kSaveRulesetPackageField, false);
 		out.folders.push_back(n.folder);
 		const Json *tp = e.Get("kind");
 		const bool typed = tp && tp->type == Json::String && ModsKindFromId(tp->str) >= 0;
 		// A package whose rules were in a ruleset counts as rules content whatever its root is.
-		if (n.ruleset.empty() && typed && ModsKindFromId(tp->str) != kModRules) continue;
-		if (n.ruleset.empty() && !typed) {
+		const bool ownRules = !n.ruleset.empty() || n.packageEntry;
+		if (!ownRules && typed && ModsKindFromId(tp->str) != kModRules) continue;
+		if (!ownRules && !typed) {
 			const Json *gp = e.Get("gameplay");
 			if (gp ? !gp->b : e.GetString("fingerprint").empty()) continue;
 		}
@@ -79,16 +81,18 @@ ModNeeds ModsNeededFor(const std::string &gamePath, const std::string &profile)
 				break;
 			}
 		}
-		if (!typed && notRulesNow && n.ruleset.empty()) continue;
+		if (!typed && notRulesNow && !ownRules) continue;
 		for (const std::string &f : p.mods) {
 			ModInfo m;
 			if (_stricmp(f.c_str(), n.folder.c_str()) == 0 || (ModsFind(f, m) && !n.id.empty() && _stricmp(m.id.c_str(), n.id.c_str()) == 0)) {
 				// Enabled, but with the ruleset the game was saved with (or with none, if it was saved with none).
-				n.inProfile = _stricmp(ModsRulesetOf(p.ruleset, f).c_str(), n.ruleset.c_str()) == 0;
+				// The package itself as the ruleset has no layer id: it is its own case, not the game's own rules.
+				const bool mountedEntry = p.ruleset.id.empty() && !p.ruleset.pack.empty() && _stricmp(p.ruleset.pack.c_str(), f.c_str()) == 0 && ModsFind(f, m) && !m.globalLoose.empty();
+				n.inProfile = _stricmp(ModsRulesetOf(p.ruleset, f).c_str(), n.ruleset.c_str()) == 0 && mountedEntry == n.packageEntry;
 				break;
 			}
 		}
-		if (!n.ruleset.empty() && n.installed) {
+		if (ownRules && n.installed) {
 			out.ruleset.pack = n.installedFolder;
 			out.ruleset.id = n.ruleset;
 		}
@@ -215,10 +219,11 @@ std::string ModsCheckSaveOnLoad(const std::string &gamePath)
 	// or a ruleset that would need the restart, keeps the warning. (The engine also opens saves to read their headers, so this runs for
 	// every save of the list, not only for the one that is loaded.)
 	if (const Json *mods = j.Get("mods"); mods && mods->type == Json::Array) {
+		// The ruleset the save was made with: a layer, or the package itself, or (nothing recorded) the game's own rules.
 		ModRuleset saved;
 		for (const Json &e : mods->arr) {
 			const std::string id = e.GetString("ruleset");
-			if (id.empty()) continue;
+			if (id.empty() && !e.GetBool(kSaveRulesetPackageField, false)) continue;
 			saved.pack = e.GetString("folder");
 			saved.id = id;
 			break;

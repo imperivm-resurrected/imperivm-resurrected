@@ -67,6 +67,19 @@ static void TheLayerRefusesTheGlobalFilesUnderBothNames()
 	CHECK(!RootRefuses(std::unordered_set<std::string>(), "ui/icons/rhastatus.bmp"));
 }
 
+static void ThePackageEntryIsRecordedOnlyWhenItMountsSomething()
+{
+	CHECK(RootEntryMounted("clash-c", "clash-c", "", true, false));
+	CHECK(RootEntryMounted("Clash-C", "clash-c", "", true, false));
+	// the game's own rules, another package's ruleset, a layer of the package (it has its own id), a package without global files or with layers: not recorded
+	CHECK(!RootEntryMounted("clash-c", "", "", true, false));
+	CHECK(!RootEntryMounted("clash-c", "clash-d", "", true, false));
+	CHECK(!RootEntryMounted("clash-c", "clash-c", "blue", true, false));
+	CHECK(!RootEntryMounted("clash-c", "clash-c", "", false, false));
+	CHECK(!RootEntryMounted("clash-c", "clash-c", "", true, true));
+	CHECK_EQ(std::string(kSaveRulesetPackageField), "rulesetPackage");
+}
+
 int main()
 {
 	PathsAreComparedInTheGamesForm();
@@ -74,5 +87,6 @@ int main()
 	OnlyWhatTheGameHasIsGlobal();
 	TheGlobalFilesApplyOnlyUnderTheOwnRuleset();
 	TheLayerRefusesTheGlobalFilesUnderBothNames();
+	ThePackageEntryIsRecordedOnlyWhenItMountsSomething();
 	return test::Summary("rootrules");
 }

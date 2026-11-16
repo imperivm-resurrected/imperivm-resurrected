@@ -18,6 +18,8 @@ struct SaveMod {
 	bool oldGameplay = false;
 	// The ruleset of this package the game was saved with and its gameplay hash. Empty if it used the package's root alone.
 	std::string ruleset, rulesetHash;
+	// The game was saved with the package itself as the ruleset (see kSaveRulesetPackageField in mods/rootrules.h).
+	bool rulesetPackage = false;
 };
 
 struct SaveRec {

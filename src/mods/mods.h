@@ -287,6 +287,8 @@ struct ModNeed {
 	std::string folder, id, name, version;
 	// The id of the ruleset the game was saved with from this package; empty if it used the package's root alone.
 	std::string ruleset;
+	// The game was saved with the package itself as the ruleset (its root files that replace the game's mounted): no layer id, but not the game's own rules.
+	bool packageEntry = false;
 	bool installed = false;
 	std::string installedFolder;
 	bool inProfile = false;

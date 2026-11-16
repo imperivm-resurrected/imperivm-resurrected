@@ -62,6 +62,11 @@ bool RootGlobalApplies(const std::string &packFolder, const std::string &ruleset
 	return !rulesetPack.empty() && Normal(packFolder) == Normal(rulesetPack);
 }
 
+bool RootEntryMounted(const std::string &packFolder, const std::string &rulesetPack, const std::string &rulesetLayer, bool packHasGlobal, bool packHasLayers)
+{
+	return packHasGlobal && !packHasLayers && rulesetLayer.empty() && RootGlobalApplies(packFolder, rulesetPack);
+}
+
 std::unordered_set<std::string> RootRefusals(const std::vector<std::string> &global)
 {
 	std::unordered_set<std::string> out;

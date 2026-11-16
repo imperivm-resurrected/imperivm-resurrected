@@ -29,6 +29,15 @@ bool RootIsMenuSkin(const std::string &gamePath);
 // of the menu skin. Lowercase, "/", sorted, without repeats.
 std::vector<std::string> RootGlobalFiles(const std::vector<std::string> &rootLoose, const GameFileSet &game);
 
+// The sidecar of a saved game (<save>.mods.json) names the ruleset of each package by the id of its layer ("ruleset": "plain"). The entry of a package
+// that has root files that replace the game's and no layers (the package itself) has no layer: it is recorded as "rulesetPackage": true on that package's
+// line, which an older version ignores (it then sees what it always saw: no ruleset). A room says the same with the "@package" line of its mods list.
+const char kSaveRulesetPackageField[] = "rulesetPackage";
+
+// Whether the package entry is what is mounted, as opposed to the game's own rules: the ruleset names this package with no layer, and the package has
+// global root files (without them the entry mounts nothing more than the game's own rules, and is not worth recording).
+bool RootEntryMounted(const std::string &packFolder, const std::string &rulesetPack, const std::string &rulesetLayer, bool packHasGlobal, bool packHasLayers);
+
 // Whether the global files of the package are mounted: the ruleset in use belongs to it. rulesetPack is empty for the game's own rules.
 bool RootGlobalApplies(const std::string &packFolder, const std::string &rulesetPack);
 
