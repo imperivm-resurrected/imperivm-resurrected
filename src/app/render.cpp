@@ -239,8 +239,7 @@ template <class T> void SafeRelease(T *&p)
 	}
 }
 
-DWORD WINAPI RenderThread(LPVOID)
-{
+struct Gpu {
 	ID3D11Device *dev = nullptr;
 	ID3D11DeviceContext *ctx = nullptr;
 	IDXGISwapChain *swap = nullptr;
@@ -252,17 +251,19 @@ DWORD WINAPI RenderThread(LPVOID)
 	ID3D11SamplerState *sampler = nullptr;
 	ID3D11Buffer *cb = nullptr;
 	int texW = 0, texH = 0, bbW = 0, bbH = 0;
-	std::vector<uint32_t> local;
+};
 
+bool CreateGpu(Gpu &g)
+{
 	RECT rc;
 	DisplayRealClientRect(g_hwnd, &rc);
-	bbW = rc.right - rc.left;
-	bbH = rc.bottom - rc.top;
+	g.bbW = rc.right - rc.left;
+	g.bbH = rc.bottom - rc.top;
 
 	DXGI_SWAP_CHAIN_DESC sd = {};
 	sd.BufferCount = 1;
-	sd.BufferDesc.Width = bbW;
-	sd.BufferDesc.Height = bbH;
+	sd.BufferDesc.Width = g.bbW;
+	sd.BufferDesc.Height = g.bbH;
 	sd.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
 	sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 	sd.OutputWindow = g_hwnd;
@@ -272,14 +273,13 @@ DWORD WINAPI RenderThread(LPVOID)
 
 	D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_10_0;
 	HRESULT hr = D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0, nullptr, 0,
-		D3D11_SDK_VERSION, &sd, &swap, &dev, &featureLevel, &ctx);
+		D3D11_SDK_VERSION, &sd, &g.swap, &g.dev, &featureLevel, &g.ctx);
 	if (FAILED(hr)) {
 		LogE("render", "D3D11CreateDeviceAndSwapChain failed (0x%08x); back to GDI", hr);
-		g_failed = true;
-		return 0;
+		return false;
 	}
 	IDXGIFactory *factory = nullptr;
-	if (SUCCEEDED(swap->GetParent(__uuidof(IDXGIFactory), reinterpret_cast<void **>(&factory)))) {
+	if (SUCCEEDED(g.swap->GetParent(__uuidof(IDXGIFactory), reinterpret_cast<void **>(&factory)))) {
 		factory->MakeWindowAssociation(g_hwnd, DXGI_MWA_NO_WINDOW_CHANGES | DXGI_MWA_NO_ALT_ENTER);
 		factory->Release();
 	}
@@ -288,35 +288,232 @@ DWORD WINAPI RenderThread(LPVOID)
 	if (FAILED(D3DCompile(kShader, sizeof(kShader) - 1, nullptr, nullptr, nullptr, "VS", "vs_4_0", 0, 0, &vsBlob, &err)) ||
 		FAILED(D3DCompile(kShader, sizeof(kShader) - 1, nullptr, nullptr, nullptr, "PS", "ps_4_0", 0, 0, &psBlob, &err))) {
 		LogE("render", "error compiling shaders: %s", err ? static_cast<const char *>(err->GetBufferPointer()) : "?");
-		g_failed = true;
-		return 0;
+		return false;
 	}
-	dev->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, &vs);
-	dev->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, &ps);
+	g.dev->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, &g.vs);
+	g.dev->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, &g.ps);
 	SafeRelease(vsBlob);
 	SafeRelease(psBlob);
 
 	D3D11_SAMPLER_DESC smp = {};
 	smp.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
 	smp.AddressU = smp.AddressV = smp.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
-	dev->CreateSamplerState(&smp, &sampler);
+	g.dev->CreateSamplerState(&smp, &g.sampler);
 
 	D3D11_BUFFER_DESC cbd = {};
 	cbd.ByteWidth = 32;
 	cbd.Usage = D3D11_USAGE_DYNAMIC;
 	cbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 	cbd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-	dev->CreateBuffer(&cbd, nullptr, &cb);
+	g.dev->CreateBuffer(&cbd, nullptr, &g.cb);
 
-	LogI("render", "Direct3D 11 ready (backbuffer %dx%d)", bbW, bbH);
-	LogGpu(dev, featureLevel);
+	LogI("render", "Direct3D 11 ready (backbuffer %dx%d)", g.bbW, g.bbH);
+	LogGpu(g.dev, featureLevel);
 	LogOverlayStatus("at Direct3D creation");
+	return true;
+}
+
+void FitBackBuffer(Gpu &g)
+{
+	RECT rc;
+	DisplayRealClientRect(g_hwnd, &rc);
+	const int cw = rc.right - rc.left, ch = rc.bottom - rc.top;
+	if (cw <= 0 || ch <= 0 || (cw == g.bbW && ch == g.bbH && g.rtv)) return;
+	SafeRelease(g.rtv);
+	if (cw != g.bbW || ch != g.bbH) {
+		g.swap->ResizeBuffers(1, cw, ch, DXGI_FORMAT_B8G8R8A8_UNORM, 0);
+		g.bbW = cw;
+		g.bbH = ch;
+	}
+	ID3D11Texture2D *back = nullptr;
+	g.swap->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&back));
+	g.dev->CreateRenderTargetView(back, nullptr, &g.rtv);
+	SafeRelease(back);
+}
+
+void FitTexture(Gpu &g, int fw, int fh)
+{
+	if (fw == g.texW && fh == g.texH && g.tex) return;
+	SafeRelease(g.srv);
+	SafeRelease(g.tex);
+	D3D11_TEXTURE2D_DESC td = {};
+	td.Width = fw;
+	td.Height = fh;
+	td.MipLevels = 1;
+	td.ArraySize = 1;
+	td.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+	td.SampleDesc.Count = 1;
+	td.Usage = D3D11_USAGE_DYNAMIC;
+	td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+	td.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+	g.dev->CreateTexture2D(&td, nullptr, &g.tex);
+	g.dev->CreateShaderResourceView(g.tex, nullptr, &g.srv);
+	g.texW = fw;
+	g.texH = fh;
+}
+
+void UploadImage(Gpu &g, const std::vector<uint32_t> &image, int fw, int fh)
+{
+	D3D11_MAPPED_SUBRESOURCE map;
+	if (FAILED(g.ctx->Map(g.tex, 0, D3D11_MAP_WRITE_DISCARD, 0, &map))) return;
+	for (int y = 0; y < fh; y++) {
+		memcpy(static_cast<uint8_t *>(map.pData) + static_cast<size_t>(y) * map.RowPitch,
+			&image[static_cast<size_t>(y) * fw], static_cast<size_t>(fw) * 4);
+	}
+	g.ctx->Unmap(g.tex, 0);
+}
+
+// The cursor is mapped with the same scale and margins (displaymode.cpp), so the two must not differ.
+void PlaceImage(Gpu &g, int fw, int fh)
+{
+	const int scaling = GetConfig().imageScaling;
+	const float s = ImageScale(g.bbW, g.bbH, fw, fh, scaling);
+	const float w = fw * s / g.bbW * 2.0f, h = fh * s / g.bbH * 2.0f;
+	D3D11_MAPPED_SUBRESOURCE map;
+	if (FAILED(g.ctx->Map(g.cb, 0, D3D11_MAP_WRITE_DISCARD, 0, &map))) return;
+	float *r = static_cast<float *>(map.pData);
+	r[0] = ImageMargin(g.bbW, fw, s) * 2.0f / g.bbW - 1.0f;
+	r[1] = 1.0f - ImageMargin(g.bbH, fh, s) * 2.0f / g.bbH;
+	r[2] = w;
+	r[3] = h;
+	r[4] = static_cast<float>(fw);
+	r[5] = static_cast<float>(fh);
+	r[6] = ImageSharpness(s, scaling);
+	r[7] = GetConfig().brightness / 100.0f;
+	g.ctx->Unmap(g.cb, 0);
+}
+
+void DrawImage(Gpu &g)
+{
+	const float black[4] = {0, 0, 0, 1};
+	g.ctx->ClearRenderTargetView(g.rtv, black);
+	D3D11_VIEWPORT vp = {0, 0, static_cast<float>(g.bbW), static_cast<float>(g.bbH), 0, 1};
+	g.ctx->RSSetViewports(1, &vp);
+	g.ctx->OMSetRenderTargets(1, &g.rtv, nullptr);
+	g.ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+	g.ctx->VSSetShader(g.vs, nullptr, 0);
+	g.ctx->VSSetConstantBuffers(0, 1, &g.cb);
+	g.ctx->PSSetConstantBuffers(0, 1, &g.cb);
+	g.ctx->PSSetShader(g.ps, nullptr, 0);
+	g.ctx->PSSetShaderResources(0, 1, &g.srv);
+	g.ctx->PSSetSamplers(0, 1, &g.sampler);
+	g.ctx->Draw(4, 0);
+}
+
+void CopyGameFrame(std::vector<uint32_t> &image, int &fw, int &fh)
+{
+	{
+		std::lock_guard<std::mutex> lock(g_frameLock);
+		fw = g_frameW;
+		fh = g_frameH;
+		image = g_frame;
+	}
+	ControlsDrawBarKeys(image.data(), fw, fh);
+}
+
+// A video frame, the game's image when it changed or a video just ended, or the same image again when the letters of the
+// command bar changed. False when there is nothing new.
+bool TakeNewFrame(bool video, bool wasVideo, std::vector<uint32_t> &image, int &fw, int &fh)
+{
+	if (video) {
+		int vw = 0, vh = 0;
+		if (!MediaTakeVideoFrame(image, vw, vh)) return false;
+		fw = vw;
+		fh = vh;
+		return true;
+	}
+	bool taken = false;
+	{
+		std::lock_guard<std::mutex> lock(g_frameLock);
+		if (g_frameDirty || wasVideo) {
+			fw = g_frameW;
+			fh = g_frameH;
+			image = g_frame;
+			g_frameDirty = false;
+			taken = true;
+		}
+	}
+	if (!taken && ControlsBarKeysChanged()) {
+		std::lock_guard<std::mutex> lock(g_frameLock);
+		if (g_frameW > 0 && !g_frame.empty()) {
+			fw = g_frameW;
+			fh = g_frameH;
+			image = g_frame;
+			taken = true;
+		}
+	}
+	if (taken) ControlsDrawBarKeys(image.data(), fw, fh);
+	return taken;
+}
+
+struct UiNeeds {
+	bool saves, mods, mp, controls, options, gameMenu, drop, diplomacy, conquest, profile, battles, credits, chat, help, objectives, mainMenu;
+
+	bool Any() const
+	{
+		return saves || mods || mp || controls || options || gameMenu || drop || diplomacy || conquest || profile || battles || credits || chat ||
+			help || objectives || mainMenu;
+	}
+};
+
+UiNeeds QueryUiNeeds()
+{
+	UiNeeds n;
+	n.saves = SavesUiNeedsDraw();
+	n.mods = ModUiNeedsDraw();
+	n.mp = MpUiNeedsDraw();
+	n.controls = ControlsUiNeedsDraw();
+	n.options = OptionsUiNeedsDraw();
+	n.gameMenu = GameMenuUiNeedsDraw();
+	n.drop = LeagueDropUiNeedsDraw();
+	n.diplomacy = DiplomacyUiNeedsDraw();
+	n.conquest = ConquestUiNeedsDraw();
+	n.profile = ProfileUiNeedsDraw();
+	n.battles = BattlesUiNeedsDraw();
+	n.credits = CreditsUiNeedsDraw();
+	n.chat = ChatUiNeedsDraw();
+	n.help = HelpUiNeedsDraw();
+	n.objectives = ObjectivesUiNeedsDraw();
+	n.mainMenu = MainMenuUiNeedsDraw();
+	return n;
+}
+
+void DrawUi(const UiNeeds &n, uint32_t *buf, int w, int h)
+{
+	Guard("interface drawing", [&] {
+		if (n.mainMenu) MainMenuUiDraw(buf, w, h);
+		if (n.chat) ChatUiDraw(buf, w, h);
+		if (n.conquest) ConquestUiDraw(buf, w, h);
+		if (n.battles) BattlesUiDraw(buf, w, h);
+		MpUiDraw(buf, w, h);
+		SavesUiDraw(buf, w, h);
+		if (n.options) OptionsUiDraw(buf, w, h);
+		if (n.diplomacy) DiplomacyUiDraw(buf, w, h);
+		if (n.drop) LeagueDropUiDraw(buf, w, h);
+		if (n.gameMenu) GameMenuUiDraw(buf, w, h);
+		if (n.profile) ProfileUiDraw(buf, w, h);
+		if (n.credits) CreditsUiDraw(buf, w, h);
+		if (n.help) HelpUiDraw(buf, w, h);
+		if (n.objectives) ObjectivesUiDraw(buf, w, h);
+		ModUiDraw(buf, w, h);
+		ControlsUiDraw(buf, w, h);
+	});
+}
+
+DWORD WINAPI RenderThread(LPVOID)
+{
+	Gpu gpu;
+	if (!CreateGpu(gpu)) {
+		g_failed = true;
+		return 0;
+	}
 
 	// CREATE_WAITABLE_TIMER_HIGH_RESOLUTION: Windows 10 1803 and later; older ones fall back to Sleep.
 	HANDLE paceTimer = CreateWaitableTimerExW(nullptr, nullptr, 0x2, TIMER_ALL_ACCESS);
 	LARGE_INTEGER paceFreq;
 	QueryPerformanceFrequency(&paceFreq);
 	int64_t paceDeadline = 0;
+	std::vector<uint32_t> local;
 	bool haveFrame = false;
 	int fw = 0, fh = 0;
 	int fps = 0, framesThisSecond = 0;
@@ -334,47 +531,14 @@ DWORD WINAPI RenderThread(LPVOID)
 		if (!g_running) {
 			break;
 		}
-		bool newFrame = false;
 		const bool video = MediaVideoActive();
-		if (video) {
-			int vw = 0, vh = 0;
-			if (MediaTakeVideoFrame(local, vw, vh)) {
-				fw = vw;
-				fh = vh;
-				newFrame = true;
-			}
-		}
-		else {
-			{
-				std::lock_guard<std::mutex> lock(g_frameLock);
-				if (g_frameDirty || wasVideo) {
-					fw = g_frameW;
-					fh = g_frameH;
-					local = g_frame;
-					g_frameDirty = false;
-					newFrame = true;
-				}
-			}
-			if (newFrame) ControlsDrawBarKeys(local.data(), fw, fh);
-			else if (ControlsBarKeysChanged()) {
-				{
-					std::lock_guard<std::mutex> lock(g_frameLock);
-					if (g_frameW > 0 && !g_frame.empty()) {
-						fw = g_frameW;
-						fh = g_frameH;
-						local = g_frame;
-						newFrame = true;
-					}
-				}
-				if (newFrame) ControlsDrawBarKeys(local.data(), fw, fh);
-			}
-		}
+		bool newFrame = TakeNewFrame(video, wasVideo, local, fw, fh);
 		wasVideo = video;
 		if (MediaMovieShowing()) {
 			if (!movieBlack) {
 				const float black[4] = {0, 0, 0, 1};
-				ctx->ClearRenderTargetView(rtv, black);
-				swap->Present(0, 0);
+				gpu.ctx->ClearRenderTargetView(gpu.rtv, black);
+				gpu.swap->Present(0, 0);
 				movieBlack = true;
 			}
 			Sleep(15);
@@ -404,140 +568,35 @@ DWORD WINAPI RenderThread(LPVOID)
 		}
 		const bool overlay = GetConfig().showPerf || GetConfig().showNet;
 		if (newFrame && !MpUiNeedsDraw()) MpUiObserveFrame(local.data(), fw, fh);
-		const bool needSaves = SavesUiNeedsDraw(), needMods = ModUiNeedsDraw(), needMp = MpUiNeedsDraw(), needControls = ControlsUiNeedsDraw(), needOptions = OptionsUiNeedsDraw(), needGameMenu = GameMenuUiNeedsDraw(), needDrop = LeagueDropUiNeedsDraw(), needDiplomacy = DiplomacyUiNeedsDraw(), needConquest = ConquestUiNeedsDraw(), needProfile = ProfileUiNeedsDraw(), needBattles = BattlesUiNeedsDraw(), needCredits = CreditsUiNeedsDraw(), needChat = ChatUiNeedsDraw(), needHelp = HelpUiNeedsDraw(), needObjectives = ObjectivesUiNeedsDraw(), needMainMenu = MainMenuUiNeedsDraw();
-		const bool ui = !video && (needSaves || needMods || needMp || needControls || needOptions || needGameMenu || needDrop || needDiplomacy || needConquest || needProfile || needBattles || needCredits || needChat || needHelp || needObjectives || needMainMenu);
+		const UiNeeds needs = QueryUiNeeds();
+		const bool ui = !video && needs.Any();
 		// The credits scroll on their own: they are drawn on every pass, at the pace of the screen.
-		if (ui && (newFrame || needCredits || now - lastUiDraw >= 33)) {
-			if (!newFrame) {
-				{
-					std::lock_guard<std::mutex> lock(g_frameLock);
-					fw = g_frameW;
-					fh = g_frameH;
-					local = g_frame;
-				}
-				ControlsDrawBarKeys(local.data(), fw, fh);
-			}
-			Guard("interface drawing", [&] {
-				if (needMainMenu) MainMenuUiDraw(local.data(), fw, fh);
-				if (needChat) ChatUiDraw(local.data(), fw, fh);
-				if (needConquest) ConquestUiDraw(local.data(), fw, fh);
-				if (needBattles) BattlesUiDraw(local.data(), fw, fh);
-				MpUiDraw(local.data(), fw, fh);
-				SavesUiDraw(local.data(), fw, fh);
-				if (needOptions) OptionsUiDraw(local.data(), fw, fh);
-				if (needDiplomacy) DiplomacyUiDraw(local.data(), fw, fh);
-				if (needDrop) LeagueDropUiDraw(local.data(), fw, fh);
-				if (needGameMenu) GameMenuUiDraw(local.data(), fw, fh);
-				if (needProfile) ProfileUiDraw(local.data(), fw, fh);
-				if (needCredits) CreditsUiDraw(local.data(), fw, fh);
-				if (needHelp) HelpUiDraw(local.data(), fw, fh);
-				if (needObjectives) ObjectivesUiDraw(local.data(), fw, fh);
-				ModUiDraw(local.data(), fw, fh);
-				ControlsUiDraw(local.data(), fw, fh);
-			});
+		if (ui && (newFrame || needs.credits || now - lastUiDraw >= 33)) {
+			if (!newFrame) CopyGameFrame(local, fw, fh);
+			DrawUi(needs, local.data(), fw, fh);
 			if (overlay) {
-				DrawPerfOverlay(local.data(), fw, fh, fps, bbW, bbH);
+				DrawPerfOverlay(local.data(), fw, fh, fps, gpu.bbW, gpu.bbH);
 			}
 			lastUiDraw = now;
 			newFrame = true;
 		}
 		else if (!video && !ui && overlay && (newFrame || overlayTick || uiWasOn || OverlayNeedsRedraw())) {
-			if (!newFrame) {
-				{
-					std::lock_guard<std::mutex> lock(g_frameLock);
-					fw = g_frameW;
-					fh = g_frameH;
-					local = g_frame;
-				}
-				ControlsDrawBarKeys(local.data(), fw, fh);
-			}
-			DrawPerfOverlay(local.data(), fw, fh, fps, bbW, bbH);
+			if (!newFrame) CopyGameFrame(local, fw, fh);
+			DrawPerfOverlay(local.data(), fw, fh, fps, gpu.bbW, gpu.bbH);
 			newFrame = true;
 		}
 		else if (!video && !ui && ((!overlay && overlayWasOn) || uiWasOn)) {
-			{
-				std::lock_guard<std::mutex> lock(g_frameLock);
-				fw = g_frameW;
-				fh = g_frameH;
-				local = g_frame;
-			}
+			CopyGameFrame(local, fw, fh);
 			newFrame = true;
-			ControlsDrawBarKeys(local.data(), fw, fh);
 		}
 		overlayWasOn = overlay;
 		uiWasOn = ui;
 
-		DisplayRealClientRect(g_hwnd, &rc);
-		int cw = rc.right - rc.left, ch = rc.bottom - rc.top;
-		if (cw > 0 && ch > 0 && (cw != bbW || ch != bbH || !rtv)) {
-			SafeRelease(rtv);
-			if (cw != bbW || ch != bbH) {
-				swap->ResizeBuffers(1, cw, ch, DXGI_FORMAT_B8G8R8A8_UNORM, 0);
-				bbW = cw;
-				bbH = ch;
-			}
-			ID3D11Texture2D *back = nullptr;
-			swap->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&back));
-			dev->CreateRenderTargetView(back, nullptr, &rtv);
-			SafeRelease(back);
-		}
-		if (fw != texW || fh != texH || !tex) {
-			SafeRelease(srv);
-			SafeRelease(tex);
-			D3D11_TEXTURE2D_DESC td = {};
-			td.Width = fw;
-			td.Height = fh;
-			td.MipLevels = 1;
-			td.ArraySize = 1;
-			td.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-			td.SampleDesc.Count = 1;
-			td.Usage = D3D11_USAGE_DYNAMIC;
-			td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-			td.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-			dev->CreateTexture2D(&td, nullptr, &tex);
-			dev->CreateShaderResourceView(tex, nullptr, &srv);
-			texW = fw;
-			texH = fh;
-		}
-		D3D11_MAPPED_SUBRESOURCE map;
-		if (newFrame && SUCCEEDED(ctx->Map(tex, 0, D3D11_MAP_WRITE_DISCARD, 0, &map))) {
-			for (int y = 0; y < fh; y++) {
-				memcpy(static_cast<uint8_t *>(map.pData) + static_cast<size_t>(y) * map.RowPitch,
-					&local[static_cast<size_t>(y) * fw], static_cast<size_t>(fw) * 4);
-			}
-			ctx->Unmap(tex, 0);
-		}
-
-		// The cursor is mapped with the same scale and margins (displaymode.cpp), so the two must not differ.
-		const int scaling = GetConfig().imageScaling;
-		const float s = ImageScale(bbW, bbH, fw, fh, scaling);
-		const float w = fw * s / bbW * 2.0f, h = fh * s / bbH * 2.0f;
-		if (SUCCEEDED(ctx->Map(cb, 0, D3D11_MAP_WRITE_DISCARD, 0, &map))) {
-			float *r = static_cast<float *>(map.pData);
-			r[0] = ImageMargin(bbW, fw, s) * 2.0f / bbW - 1.0f;
-			r[1] = 1.0f - ImageMargin(bbH, fh, s) * 2.0f / bbH;
-			r[2] = w;
-			r[3] = h;
-			r[4] = static_cast<float>(fw);
-			r[5] = static_cast<float>(fh);
-			r[6] = ImageSharpness(s, scaling);
-			r[7] = GetConfig().brightness / 100.0f;
-			ctx->Unmap(cb, 0);
-		}
-
-		const float black[4] = {0, 0, 0, 1};
-		ctx->ClearRenderTargetView(rtv, black);
-		D3D11_VIEWPORT vp = {0, 0, static_cast<float>(bbW), static_cast<float>(bbH), 0, 1};
-		ctx->RSSetViewports(1, &vp);
-		ctx->OMSetRenderTargets(1, &rtv, nullptr);
-		ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
-		ctx->VSSetShader(vs, nullptr, 0);
-		ctx->VSSetConstantBuffers(0, 1, &cb);
-		ctx->PSSetConstantBuffers(0, 1, &cb);
-		ctx->PSSetShader(ps, nullptr, 0);
-		ctx->PSSetShaderResources(0, 1, &srv);
-		ctx->PSSetSamplers(0, 1, &sampler);
-		ctx->Draw(4, 0);
+		FitBackBuffer(gpu);
+		FitTexture(gpu, fw, fh);
+		if (newFrame) UploadImage(gpu, local, fw, fh);
+		PlaceImage(gpu, fw, fh);
+		DrawImage(gpu);
 		// With vertical sync the monitor sets the pace and the limit is left out.
 		const int limit = vsync ? 0 : GetConfig().fpsLimit;
 		if (limit > 0) {
@@ -548,7 +607,7 @@ DWORD WINAPI RenderThread(LPVOID)
 		else {
 			paceDeadline = 0;
 		}
-		swap->Present(vsync ? 1 : 0, 0);
+		gpu.swap->Present(vsync ? 1 : 0, 0);
 	}
 	if (paceTimer) CloseHandle(paceTimer);
 	return 0;
@@ -570,8 +629,7 @@ bool RenderCopyFrame(std::vector<uint32_t> &out, int &w, int &h)
 
 namespace {
 
-int WINAPI HookSetDIBitsToDevice(HDC hdc, int xDest, int yDest, DWORD w, DWORD h, int xSrc, int ySrc,
-	UINT startScan, UINT cLines, const VOID *bits, const BITMAPINFO *bmi, UINT colorUse)
+void GameThreadTicks()
 {
 	AutosaveTick();
 	MediaFrameTick();
@@ -596,6 +654,12 @@ int WINAPI HookSetDIBitsToDevice(HDC hdc, int xDest, int yDest, DWORD w, DWORD h
 	ZoomFogNoteImage();
 	NetDropTick();
 	LeagueGameThreadTick();
+}
+
+int WINAPI HookSetDIBitsToDevice(HDC hdc, int xDest, int yDest, DWORD w, DWORD h, int xSrc, int ySrc,
+	UINT startScan, UINT cLines, const VOID *bits, const BITMAPINFO *bmi, UINT colorUse)
+{
+	GameThreadTicks();
 	HWND hwnd = WindowFromDC(hdc);
 	const BITMAPINFOHEADER &hdr = bmi->bmiHeader;
 	bool usable = !g_failed && hwnd && hdr.biBitCount == 16 &&
