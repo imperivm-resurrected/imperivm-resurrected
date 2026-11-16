@@ -202,10 +202,10 @@ void PaintListRow(Painter &p, const Card &c, int rankCount, int index, bool sele
 		nameW -= bw + 8;
 	}
 	p.Font(1);
-	TextAsIs(p, tx, y + 9, nameW, 25, c.name, selected ? pal::text : pal::text);
+	TextAsIs(p, tx, y + 9, nameW, 25, c.name, pal::text);
 	p.Font(3);
 	const std::string games = GamesText(c.summary.games);
-	const COLORREF dim = selected ? pal::textDim : pal::textDim;
+	const COLORREF dim = pal::textDim;
 	if (c.rankName.empty() || !c.readable) {
 		TextAsIs(p, tx, y + 35, w - 80, 21, games, dim);
 	}

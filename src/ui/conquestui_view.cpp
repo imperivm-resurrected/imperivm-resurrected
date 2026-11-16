@@ -389,7 +389,7 @@ void PaintPath(Layer &l, const View &v)
 		if (next) p.Frame(shieldX - 3, top - 2, kSlotShieldW + 6, kSlotShieldH + 4, pal::edgeHot);
 		Shield(l, g, index, shieldX, top, kSlotShieldW, kSlotShieldH, next ? 120 : 255);
 		p.Font(3);
-		Raw(p, sx - 6, top + kSlotShieldH + 2, kSlotW + 12, 15, g.territories[index].name, next ? pal::redText : i == done - 1 ? pal::text : pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		Raw(p, sx - 6, top + kSlotShieldH + 2, kSlotW + 12, 15, g.territories[index].name, next ? pal::redText : pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
 }
 
