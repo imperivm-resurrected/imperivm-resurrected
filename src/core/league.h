@@ -272,7 +272,6 @@ public:
 	// The hashes of ticks 1000, 2000... up to the first one missing: a client that came in late has none.
 	std::vector<uint32_t> Hashes() const;
 	void Clear();
-	uint32_t LastTick() const { return lastTick_; }
 
 private:
 	std::vector<uint32_t> hashes_;
