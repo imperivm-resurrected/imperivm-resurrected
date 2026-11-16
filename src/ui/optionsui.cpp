@@ -52,6 +52,12 @@ std::mutex g_lock;
 State g_s;
 Canvas g_canvas;
 
+Values ViewValues()
+{
+	std::lock_guard<std::mutex> lock(g_lock);
+	return g_s.view.values;
+}
+
 const int kFpsLimits[] = {0, 30, 60, 120, 144, 240};
 const char *const kFpsLabels[] = {"No limit", "30", "60", "120", "144", "240"};
 
@@ -96,16 +102,6 @@ void CommitDisplayExtras(Config &c, const Values &v)
 {
 	const int fps = ComboIndex(v, kFpsLimit, static_cast<int>(sizeof(kFpsLimits) / sizeof(kFpsLimits[0])));
 	if (fps >= 0) c.fpsLimit = kFpsLimits[fps];
-}
-
-void ApplyDisplayFromView()
-{
-	Values values;
-	{
-		std::lock_guard<std::mutex> lock(g_lock);
-		values = g_s.view.values;
-	}
-	ApplyDisplayLive(values);
 }
 
 const int kSoundScrolls[] = {kMasterVolume, kNatureVolume, kConversationVolume};
@@ -261,26 +257,6 @@ void ApplySoundLive(const Values &v)
 	c.conversationVolume = SoundTypeVolume(scroll(kConversationVolume, c.conversationVolume), c.conversationVolume);
 	DmShimSetMasterVolume(c.masterVolume);
 	SoundLevelsApply();
-}
-
-void ApplySoundFromView()
-{
-	Values values;
-	{
-		std::lock_guard<std::mutex> lock(g_lock);
-		values = g_s.view.values;
-	}
-	ApplySoundLive(values);
-}
-
-void ApplyPanelFromView()
-{
-	Values values;
-	{
-		std::lock_guard<std::mutex> lock(g_lock);
-		values = g_s.view.values;
-	}
-	ApplyPanelLive(values);
 }
 
 void Refresh(bool setBaseline = false)
@@ -446,12 +422,12 @@ void Execute(const Command &cmd)
 			OptionsWriteCheck(cmd.arg, !OptionsReadCheck(cmd.arg, false));
 			Refresh();
 		}
-		ApplyPanelFromView();
+		ApplyPanelLive(ViewValues());
 		break;
 	case kActSlider:
 		SetSlider(cmd.arg, cmd.value);
-		ApplyPanelFromView();
-		if (IsExtra(cmd.arg)) ApplySoundFromView();
+		ApplyPanelLive(ViewValues());
+		if (IsExtra(cmd.arg)) ApplySoundLive(ViewValues());
 		break;
 	case kActSegment:
 		OptionsWriteCheck(cmd.arg >> 4, (cmd.arg & 15) != 0);
@@ -465,7 +441,7 @@ void Execute(const Command &cmd)
 				g_s.view.values.combos[cmd.value] = cmd.arg;
 				g_s.view.dirty = !(g_s.view.values == g_s.baseline);
 			}
-			ApplyDisplayFromView();
+			ApplyDisplayLive(ViewValues());
 			break;
 		}
 		OptionsWriteCombo(cmd.value, cmd.arg);
@@ -492,12 +468,12 @@ void Execute(const Command &cmd)
 			SetExtras(g_s.view.values, Config());
 			ApplyPanelLive(g_s.view.values);
 		}
-		ApplyDisplayFromView();
+		ApplyDisplayLive(ViewValues());
 		OptionsWriteScroll(kBrightness, OptionsReadScroll(kBrightness, 100));
 		Refresh();
 		PreviewResolutions();
-		ApplyPanelFromView();
-		ApplySoundFromView();
+		ApplyPanelLive(ViewValues());
+		ApplySoundLive(ViewValues());
 		break;
 	}
 	case kActApply: {
