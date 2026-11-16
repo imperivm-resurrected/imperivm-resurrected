@@ -41,11 +41,6 @@ struct Pauses {
 std::mutex g_mx;
 Pauses g_p;
 
-int64_t TickMs()
-{
-	return static_cast<int64_t>(GetTickCount64());
-}
-
 long long Seconds(int64_t ms)
 {
 	return static_cast<long long>(ms / 1000);

@@ -13,6 +13,7 @@
 #include <thread>
 
 #include "net/leagueclient.h"
+#include "addr/state.h"
 #include "core/config.h"
 #include "core/guard.h"
 #include "core/json.h"
@@ -130,7 +131,7 @@ void StartLink(unsigned serial)
 	Json body = Json::MakeObject();
 	body.Set("steamId", Json::MakeString(std::to_string(SteamOwnId())));
 	body.Set("name", Json::MakeString(SteamOnlinePlayerName()));
-	body.Set("lang", Json::MakeString(LeagueLangCode(ModsLanguage())));
+	body.Set("lang", Json::MakeString(LangCode()));
 	const HttpReply r = Http("POST", "/v1/link/start", body.Dump(), false);
 	Json j;
 	LeagueLinkCode start;
@@ -148,8 +149,7 @@ void StartLink(unsigned serial)
 		if (!ok) {
 			g_link.phase = LeagueLinkPhase::Unlinked;
 			if (r.status == 429) g_link.error = "Too many link codes were asked for this account. Try again in a few minutes.";
-			else if (r.status) g_link.error = "The league server refused the request. Try again later.";
-			else g_link.error = "Couldn't reach the league server. Check your connection and try again.";
+			else g_link.error = FailureText(r);
 			return;
 		}
 		g_link.phase = LeagueLinkPhase::Waiting;
@@ -231,7 +231,7 @@ void Unlink(unsigned serial)
 void FetchMe()
 {
 	// In the game's language: the seasons' names of the rewards come translated.
-	const HttpReply r = Http("GET", "/v1/league/me?lang=" + LeagueLangCode(ModsLanguage()), "", true);
+	const HttpReply r = Http("GET", "/v1/league/me?lang=" + LangCode(), "", true);
 	Json j;
 	LeagueMe me;
 	const bool ok = r.Ok() && Json::Parse(r.body, j) && LeagueParseMe(j, me);
@@ -267,6 +267,32 @@ int64_t NowMs()
 	GetSystemTimeAsFileTime(&ft);
 	const unsigned long long t = (static_cast<unsigned long long>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
 	return static_cast<int64_t>((t - winpath::kUnixEpochAsFileTime) / 10000ULL);
+}
+
+int64_t TickMs()
+{
+	return static_cast<int64_t>(GetTickCount64());
+}
+
+std::string OwnId()
+{
+	const uint64_t me = SteamOwnId();
+	return me ? std::to_string(me) : std::string();
+}
+
+std::string LangCode()
+{
+	return LeagueLangCode(ModsLanguage());
+}
+
+bool InGame()
+{
+	return *reinterpret_cast<void **>(addr::kGame) != nullptr;
+}
+
+const char *FailureText(const HttpReply &r)
+{
+	return r.status ? "The league server refused the request. Try again later." : "Couldn't reach the league server. Check your connection and try again.";
 }
 
 std::string UrlEncode(const std::string &s)

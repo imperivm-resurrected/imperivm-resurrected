@@ -48,7 +48,17 @@ bool AccountFor(std::string &token, std::string &steamId);
 std::string AccountSteamId();
 
 int64_t NowMs();
+// This computer's clock in ms, for the waits measured here.
+int64_t TickMs();
 std::string UrlEncode(const std::string &s);
+// The Steam user playing now, as text; empty while Steam is not running.
+std::string OwnId();
+// The game's language as the league names it: "es", "en" or "it".
+std::string LangCode();
+// A game is on, played or watched.
+bool InGame();
+// A request that got no answer, or a refusal: the English text to translate that tells the player.
+const char *FailureText(const HttpReply &r);
 
 // The matches module, run from LeagueGameThreadTick.
 void MatchTick();

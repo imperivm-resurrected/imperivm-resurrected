@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "net/leagueclient.h"
-#include "addr/state.h"
 #include "core/guard.h"
 #include "core/json.h"
 #include "core/leagueranked.h"
@@ -42,17 +41,6 @@ struct Duo {
 std::mutex g_mx;
 Duo g_duo;
 
-bool InGame()
-{
-	return *reinterpret_cast<void **>(addr::kGame) != nullptr;
-}
-
-std::string OwnId()
-{
-	const uint64_t me = SteamOwnId();
-	return me ? std::to_string(me) : std::string();
-}
-
 // Under g_mx.
 void Notice(const std::string &text, bool bad)
 {
@@ -80,7 +68,7 @@ std::string NameOr(const std::string &name, const char *fallback)
 std::string RefusalText(const HttpReply &r, const LeagueError &e, const std::string &friendName)
 {
 	if (!r.failure.empty() && r.failure == "not linked") return Tr("Link your league account to play ranked.");
-	if (!r.status) return Tr("Couldn't reach the league server. Check your connection and try again.");
+	if (!r.status) return Tr(FailureText(r));
 	const std::string name = NameOr(friendName, "your friend");
 	if (e.code == "not_linked") return TrFmt("%s has not linked their league account yet: they link it in Multiplayer, Ranked.", {name});
 	if (e.code == "already_in_party" && !e.steamId.empty() && e.steamId == OwnId()) return Tr("You already have a duo: leave it first.");
@@ -92,7 +80,7 @@ std::string RefusalText(const HttpReply &r, const LeagueError &e, const std::str
 	if (e.code == "rank_gap") return Tr("You are too far apart in 2 vs 2 to play as a duo.");
 	if (r.status == 404) return Tr("The invitation is no longer valid.");
 	if (r.status == 429) return Tr("Too many requests: wait a few seconds and try again.");
-	return Tr("The league server refused the request. Try again later.");
+	return Tr(FailureText(r));
 }
 
 void PollThread(unsigned gen)
