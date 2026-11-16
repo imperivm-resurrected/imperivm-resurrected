@@ -5,7 +5,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "core/json.h"
@@ -46,6 +48,14 @@ HttpReply HttpWith(const char *method, const std::string &path, const std::strin
 bool AccountFor(std::string &token, std::string &steamId);
 // The SteamID the stored account was linked with, even when it is another user's.
 std::string AccountSteamId();
+
+// Under the module's lock: a copy of the view with `change` made, in its place; whoever holds the old one keeps it as it was.
+template <class T, class F> void ChangeView(std::shared_ptr<const T> &view, F change)
+{
+	auto copy = std::make_shared<T>(*view);
+	change(*copy);
+	view = std::move(copy);
+}
 
 int64_t NowMs();
 // This computer's clock in ms, for the waits measured here.
