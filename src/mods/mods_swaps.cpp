@@ -9,6 +9,7 @@
 #include "i18n/tr.h"
 #include "core/guard.h"
 #include "core/log.h"
+#include "mods/folderlist.h"
 #include "mods/folderswap.h"
 
 #include "mods/mods_internal.h"
@@ -21,21 +22,12 @@ std::vector<std::string> PendingUninstalls()
 {
 	char buf[4096] = {};
 	GetPrivateProfileStringA("Mods", "UninstallOnStart", "", buf, sizeof(buf), IniPath().c_str());
-	std::vector<std::string> out;
-	std::string s = buf;
-	for (size_t p = 0; p < s.size();) {
-		const size_t q = s.find('|', p);
-		const std::string f = s.substr(p, q == std::string::npos ? std::string::npos : q - p);
-		if (!f.empty()) out.push_back(f);
-		p = q == std::string::npos ? s.size() : q + 1;
-	}
-	return out;
+	return ParseFolderList(buf);
 }
 
 void SetPendingUninstalls(const std::vector<std::string> &list)
 {
-	std::string s;
-	for (const std::string &f : list) s += (s.empty() ? "" : "|") + f;
+	const std::string s = JoinFolderList(list);
 	WritePrivateProfileStringA("Mods", "UninstallOnStart", s.empty() ? nullptr : s.c_str(), IniPath().c_str());
 }
 
@@ -458,10 +450,7 @@ bool ModsUninstallPending(const std::string &folder)
 void ModsCancelUninstall(const std::string &folder)
 {
 	std::vector<std::string> pending = PendingUninstalls();
-	const size_t before = pending.size();
-	pending.erase(std::remove_if(pending.begin(), pending.end(), [&](const std::string &f) { return _stricmp(f.c_str(), folder.c_str()) == 0; }),
-		pending.end());
-	if (pending.size() == before) return;
+	if (!RemoveFolderFrom(pending, folder)) return;
 	SetPendingUninstalls(pending);
 	LogI("content", "%s installed again: it is no longer uninstalled on restart", folder.c_str());
 }
