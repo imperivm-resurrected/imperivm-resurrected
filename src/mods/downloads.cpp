@@ -68,17 +68,9 @@ std::string IniGet(const char *section, const char *key)
 	return buf;
 }
 
-void MakeDirs(const std::string &path)
-{
-	for (size_t i = 3; i <= path.size(); i++) {
-		if (i == path.size() || path[i] == '\\') {
-			CreateDirectoryA(path.substr(0, i).c_str(), nullptr);
-		}
-	}
-}
-
 using modpaths::IsDir;
 using modpaths::IsFile;
+using modpaths::MakeDirs;
 using modtext::Lower;
 
 std::wstring Wide(const std::string &s)
