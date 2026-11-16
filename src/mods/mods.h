@@ -139,7 +139,7 @@ bool ModsSaveProfile(const ModProfile &p);
 bool ModsDeleteProfile(const std::string &name);
 std::string ModsActiveProfileName();
 void ModsSetActiveProfileName(const std::string &name);
-const ModProfile &ModsMountedProfile();
+ModProfile ModsMountedProfile();
 bool ModsScenarioProvider(const std::string &scenarioPath, std::string &id, std::string &version, std::string &name);
 
 struct ModsMapPack {
