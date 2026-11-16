@@ -22,6 +22,7 @@
 #include "core/log.h"
 #include "hooks/media.h"
 #include "hooks/soundlevels.h"
+#include "hooks/tweaks.h"
 #include "addr/state.h"
 #include "addr/media.h"
 
@@ -355,13 +356,11 @@ HRESULT WINAPI HookCoCreateInstance(REFCLSID clsid, LPUNKNOWN outer, DWORD ctx, 
 	return hr;
 }
 
-const unsigned kIsPausedSlot = 22;
 // A conversation pauses the match while it is on screen and moves on when its voice (type 9) stops playing.
 const unsigned short kTypeMusic = 1, kTypeUI = 6, kTypeConversation = 9;
 
 typedef void(__fastcall *SetVolume_t)(void *channel, void *edx, long volume);
 typedef void(__fastcall *ThisOnly_t)(void *self);
-typedef int(__fastcall *IsPaused_t)(void *game);
 
 bool g_muted = false;
 std::vector<void *> g_pausedPaths;
@@ -403,7 +402,7 @@ void MediaFrameTick()
 	char *mgr = *reinterpret_cast<char **>(addr::kSoundManager);
 	void *game = *reinterpret_cast<void **>(addr::kGame);
 	if (!mgr) return;
-	const bool paused = game && reinterpret_cast<IsPaused_t>((*reinterpret_cast<void ***>(game))[kIsPausedSlot])(game) != 0;
+	const bool paused = TweaksGamePaused(game);
 	if (paused && !g_muted) {
 		int count = 0;
 		bool realPause = true;

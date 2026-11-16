@@ -479,8 +479,7 @@ void __fastcall HookRequestToggle(void *game, void *edx, int param)
 	const bool only = OnlyHumanOnline(static_cast<char *>(game));
 	LogPauseRequest("Alternar", static_cast<char *>(game), only, _ReturnAddress());
 	if (only) {
-		typedef int(__fastcall * IsPaused_t)(void *game);
-		const int paused = reinterpret_cast<IsPaused_t>((*reinterpret_cast<void ***>(game))[22])(game);
+		const bool paused = GamePaused(static_cast<char *>(game));
 		if (paused && g_pauseHeld) return;
 		return SetPausedNow(static_cast<char *>(game), paused ? 0 : 1, false);
 	}
