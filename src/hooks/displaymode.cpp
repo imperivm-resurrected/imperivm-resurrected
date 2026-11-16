@@ -309,6 +309,12 @@ bool g_realHas16 = false;
 
 void PrepareModes();
 
+bool RealHas16()
+{
+	std::lock_guard<std::mutex> lock(g_modesMx);
+	return g_realHas16;
+}
+
 LONG WINAPI HookChangeDisplaySettingsA(DEVMODEA *mode, DWORD flags)
 {
 	if (!mode) {
@@ -327,7 +333,7 @@ LONG WINAPI HookChangeDisplaySettingsA(DEVMODEA *mode, DWORD flags)
 	PrepareModes();
 	DEVMODEA real = *mode;
 	if ((real.dmFields & DM_DISPLAYFREQUENCY) && real.dmDisplayFrequency == 0) real.dmFields &= ~static_cast<DWORD>(DM_DISPLAYFREQUENCY);
-	if (real.dmBitsPerPel == 16 && !g_realHas16) {
+	if (real.dmBitsPerPel == 16 && !RealHas16()) {
 		real.dmBitsPerPel = 32;
 		real.dmFields |= DM_BITSPERPEL;
 	}
@@ -420,8 +426,12 @@ BOOL CopyMode(DWORD index, DEVMODEA *mode, bool as16)
 	if (!mode) return FALSE;
 	const WORD size = mode->dmSize;
 	if (size != sizeof(DEVMODEA) || mode->dmDriverExtra != 0) {
-		const char *listed = g_modeDevice.empty() ? nullptr : g_modeDevice.c_str();
-		const BOOL ok = g_origEnum(listed, index, mode);
+		std::string listed;
+		{
+			std::lock_guard<std::mutex> lock(g_modesMx);
+			listed = g_modeDevice;
+		}
+		const BOOL ok = g_origEnum(listed.empty() ? nullptr : listed.c_str(), index, mode);
 		if (ok && as16) mode->dmBitsPerPel = 16;
 		return ok;
 	}
@@ -437,11 +447,17 @@ BOOL WINAPI HookEnumDisplaySettingsA(LPCSTR device, DWORD modeNum, DEVMODEA *mod
 {
 	if (!device && modeNum != ENUM_CURRENT_SETTINGS && modeNum != ENUM_REGISTRY_SETTINGS) {
 		PrepareModes();
-		const DWORD n = static_cast<DWORD>(g_modes.size());
+		DWORD n = 0;
+		bool has16 = false;
+		{
+			std::lock_guard<std::mutex> lock(g_modesMx);
+			n = static_cast<DWORD>(g_modes.size());
+			has16 = g_realHas16;
+		}
 		if (modeNum < n) {
 			return CopyMode(modeNum, mode, false);
 		}
-		if (g_realHas16 || modeNum >= 2 * n) {
+		if (has16 || modeNum >= 2 * n) {
 			return FALSE;
 		}
 		return CopyMode(modeNum - n, mode, true);
