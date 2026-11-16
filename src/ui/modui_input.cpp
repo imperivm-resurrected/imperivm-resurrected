@@ -14,6 +14,8 @@
 
 using namespace modui_impl;
 
+namespace modui_impl {
+namespace {
 bool TabSkip(int a)
 {
 	return a == kNone || a == kDropClose || a == kToggle || a == kRichLink || a == kRowClick || a == kMark ||
@@ -75,6 +77,8 @@ void FieldKey(UINT msg, WPARAM wp)
 	}
 	if (changed && g_s.focus == kSearchField) g_s.list.scroll = 0;
 	if (changed && g_s.focus == kIoSearchField) g_s.ioSearchDue = (GetTickCount() + 250) | 1;
+}
+}
 }
 
 bool ModUiHandleCornerMessage(UINT msg, WPARAM wp, LPARAM lp)
