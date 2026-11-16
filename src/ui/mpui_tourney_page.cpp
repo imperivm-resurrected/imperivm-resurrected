@@ -40,6 +40,14 @@ struct Ctx {
 	const TourneyNext *next = nullptr;
 };
 
+// The players' Steam ids, for their badges; the ones without an id are left out.
+void AddIds(Ctx &c, const std::vector<TourneyMember> &players)
+{
+	for (const TourneyMember &pl : players) {
+		if (pl.steamId) c.ids.push_back(pl.steamId);
+	}
+}
+
 void HLine(Painter &p, int x1, int x2, int y, COLORREF c)
 {
 	p.Fill(std::min(x1, x2), y, std::abs(x2 - x1) + 1, 1, c);
@@ -138,9 +146,7 @@ void PaintSide(Painter &p, Ctx &c, const TourneyMatch &m, const TourneyCard &car
 			p.Text(nx + nw - 70, nameY, 70, nameH, "\xC2\xB7 " + extra, pal::ok, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		}
 		p.raw = false;
-		for (const TourneyMember &pl : TourneyPlayersOf(card)) {
-			if (pl.steamId) c.ids.push_back(pl.steamId);
-		}
+		AddIds(c, TourneyPlayersOf(card));
 	}
 	const int sx = x + w - scoreW;
 	p.Fill(sx, y, scoreW, h, won ? pal::button : pal::field);
@@ -247,10 +253,7 @@ Pan BeginPan(Painter &p, const Ctx &c, int x, int y, int w, int h, int contentW,
 	v.maxY = std::max(0, contentH - v.viewH);
 	v.sx = std::min(c.u.bracketX, v.maxX);
 	v.sy = std::min(c.u.bracketY, v.maxY);
-	out.bracketArea.valid = true;
-	out.bracketArea.r = p.R(x, y, w, h);
-	OffsetRect(&out.bracketArea.r, p.ox, p.oy);
-	out.bracketArea.max = v.maxY;
+	SetScrollArea(p, out.bracketArea, x, y, w, h, v.maxY);
 	out.bracketArea.maxX = v.maxX;
 	p.Clip(x, y, v.viewW, v.viewH);
 	return v;
@@ -547,10 +550,7 @@ void PaintStandings(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &ou
 		return;
 	}
 	const int rows = static_cast<int>(d.standings.size()) * rowH, maxY = std::max(0, rows - viewH), sy = std::min(c.u.bracketY, maxY);
-	out.bracketArea.valid = true;
-	out.bracketArea.r = p.R(x, top, w, viewH);
-	OffsetRect(&out.bracketArea.r, p.ox, p.oy);
-	out.bracketArea.max = maxY;
+	SetScrollArea(p, out.bracketArea, x, top, w, viewH, maxY);
 	p.Clip(x, top, w, viewH);
 	int ry = top - sy;
 	for (const TourneyStanding &s : d.standings) {
@@ -590,9 +590,7 @@ void PaintStandings(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &ou
 		}
 		else PaintName(p, nx, ry, room, rowH, s.name, s.steamId, mine ? pal::redText : pal::text, c.mx, c.my);
 		if (mine) PaintTag(p, nx + textW + 10, (under.empty() ? ry + (rowH - 22) / 2 : ry + 7), "You", pal::red, pal::onRed);
-		for (const TourneyMember &pl : players) {
-			if (pl.steamId) c.ids.push_back(pl.steamId);
-		}
+		AddIds(c, players);
 		for (int r = 1; form && r <= total; r++) {
 			const int fx = x + TourneyRoundSquareX(col, r), fy = ry + rowH / 2 - 8;
 			switch (RoundResult(d, s.entryId, r)) {
@@ -660,9 +658,7 @@ void PaintPairingSide(Painter &p, Ctx &c, const TourneyMatch &m, const TourneyCa
 	if (!team.empty()) under = team + " \xC2\xB7 " + under;
 	p.Text(textX1, y + h - 24, avail, 18, under, pal::caption, (right ? DT_LEFT : DT_RIGHT) | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	p.raw = false;
-	for (const TourneyMember &pl : players) {
-		if (pl.steamId) c.ids.push_back(pl.steamId);
-	}
+	AddIds(c, players);
 }
 
 // A pairing of a Swiss round in a row: its table, the two players either side of the score and, on the right, what is happening in it.
@@ -691,9 +687,7 @@ void PaintPairing(Painter &p, Ctx &c, const TourneyMatch &m, int table, int x, i
 		p.Text(x + row.left + discsW + 12, y, w - row.left - discsW - 28, h, TrFmt(c.d.Teams() ? "%s rest this round: a bye, worth a win" : "%s rests this round: a bye, worth a win", {who.name}),
 			who.entryId == c.me ? pal::redText : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.raw = false;
-		for (const TourneyMember &pl : players) {
-			if (pl.steamId) c.ids.push_back(pl.steamId);
-		}
+		AddIds(c, players);
 		return;
 	}
 	// What is happening in it, on the right.
@@ -771,10 +765,7 @@ void PaintSwissRound(Painter &p, Ctx &c, int round, int x, int y, int w, int h, 
 		return;
 	}
 	const int rows = static_cast<int>(list.size()) * rowH - 8, maxY = std::max(0, rows - viewH), sy = std::min(c.u.bracketY, maxY);
-	out.bracketArea.valid = true;
-	out.bracketArea.r = p.R(x, top, w, viewH);
-	OffsetRect(&out.bracketArea.r, p.ox, p.oy);
-	out.bracketArea.max = maxY;
+	SetScrollArea(p, out.bracketArea, x, top, w, viewH, maxY);
 	p.Clip(x, top, w, viewH);
 	int ry = top - sy, table = 0;
 	for (const TourneyMatch *m : list) {
@@ -804,10 +795,7 @@ void PaintEntrants(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out
 	PaintCaps(p, x + w - 120, y, 120, 20, "Place", pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 	const int top = y + 30, rowH = teams ? 54 : 42, viewH = h - 30;
 	const int total = static_cast<int>(d.entrants.size()) * rowH, maxY = std::max(0, total - viewH), sy = std::min(c.u.bracketY, maxY);
-	out.bracketArea.valid = true;
-	out.bracketArea.r = p.R(x, top, w, viewH);
-	OffsetRect(&out.bracketArea.r, p.ox, p.oy);
-	out.bracketArea.max = maxY;
+	SetScrollArea(p, out.bracketArea, x, top, w, viewH, maxY);
 	p.Clip(x, top, w, viewH);
 	int ry = top - sy;
 	for (const TourneyEntrant &e : d.entrants) {
@@ -834,9 +822,7 @@ void PaintEntrants(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out
 			PaintPlayerDisc(p, x + 70, ry + 7, 28, e.steamId, e.name);
 			PaintName(p, x + 108, ry, w / 2 - 70, rowH, e.name, e.steamId, e.entryId == c.me ? pal::redText : pal::text, c.mx, c.my);
 		}
-		for (const TourneyMember &pl : players) {
-			if (pl.steamId) c.ids.push_back(pl.steamId);
-		}
+		AddIds(c, players);
 		const char *status = "Signed up";
 		COLORREF ink = pal::textDim;
 		switch (e.status) {
@@ -984,10 +970,7 @@ void PaintRules(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out)
 	ry += p.TextWrapped(x, ry, w, 80, fails, pal::body);
 	p.Unclip();
 	const int maxY = std::max(0, ry + sy - y + 10 - h);
-	out.bracketArea.valid = true;
-	out.bracketArea.r = p.R(x, y, w, h);
-	OffsetRect(&out.bracketArea.r, p.ox, p.oy);
-	out.bracketArea.max = maxY;
+	SetScrollArea(p, out.bracketArea, x, y, w, h, maxY);
 	if (maxY > 0) PaintScrollbar(p, kBarBracketY, x + w + 8, y, h, {std::min(sy, maxY), maxY, h}, c.st.dropBar, c.mx, c.my);
 }
 
@@ -1006,10 +989,7 @@ void PaintLog(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out)
 {
 	const TourneyDetail &d = c.d;
 	const int rowH = 36, total = static_cast<int>(d.log.size()) * rowH, maxY = std::max(0, total - h), sy = std::min(c.u.bracketY, maxY);
-	out.bracketArea.valid = true;
-	out.bracketArea.r = p.R(x, y, w, h);
-	OffsetRect(&out.bracketArea.r, p.ox, p.oy);
-	out.bracketArea.max = maxY;
+	SetScrollArea(p, out.bracketArea, x, y, w, h, maxY);
 	p.Clip(x, y, w, h);
 	int ry = y - sy;
 	for (const TourneyLogLine &l : d.log) {
@@ -1041,10 +1021,7 @@ bool PaintBanner(Painter &p, Ctx &c, int x, int y, int w)
 	if (c.next && c.next->status == TourneyMatchStatus::Ready) {
 		const TourneyNext &n = *c.next;
 		const int64_t left = n.deadlineAt - NowMs();
-		const TourneyMatch *match = nullptr;
-		for (const TourneyMatch &m : d.matches) {
-			if (m.id == n.match) match = &m;
-		}
+		const TourneyMatch *match = MatchById(d, n.match);
 		title = TrFmt("Your %s match is ready.", {match ? MatchStageText(d, *match) : StageText(n.stage, n.round)});
 		if (n.canClaimNoShow) {
 			text = TrFmt(n.Teams() ? "A player of %s did not come to the room in time: your team can claim the win." : "%s did not come to the room in time: you can claim the win.",
@@ -1085,8 +1062,7 @@ bool PaintBanner(Painter &p, Ctx &c, int x, int y, int w)
 				 : nullptr) {
 		title = Tr("Invitation to a team.");
 		text = InviteText(*invite);
-		const bool busy = LeagueTourneyBusy(TourneyOp::Accept, d.id) || LeagueTourneyBusy(TourneyOp::Decline, d.id);
-		if (!busy) {
+		if (!InviteBusy(d.id)) {
 			buttons.push_back({Tr("Decline"), ArgOf(kSubInviteDecline, d.id)});
 			buttons.push_back({Tr("Accept"), ArgOf(kSubInviteAccept, d.id)});
 			strong = 1;
@@ -1186,7 +1162,7 @@ int PaintStatusCard(Painter &p, Ctx &c, int x, int y, int w)
 		if (!LeagueLinked()) p.Button(x + pad, by, bw, 44, "Link to sign up", kLeagueLink, 0, mx, my, true, true);
 		else if (invite) {
 			const int half = (bw - 10) / 2;
-			const bool busy = LeagueTourneyBusy(TourneyOp::Accept, d.id) || LeagueTourneyBusy(TourneyOp::Decline, d.id);
+			const bool busy = InviteBusy(d.id);
 			p.Button(x + pad, by, half, 44, "Accept", kTourney, ArgOf(kSubInviteAccept, d.id), mx, my, !busy, true);
 			p.Button(x + pad + half + 10, by, bw - half - 10, 44, "Decline", kTourney, ArgOf(kSubInviteDecline, d.id), mx, my, !busy);
 		}
@@ -1300,10 +1276,7 @@ void PaintOrganizer(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &ou
 	// A team's row: its players' discs, its name over its players, its state and the button that takes the whole team off.
 	const int rowH = teams ? 54 : 48, viewH = y + h - top, total = static_cast<int>(rows.size()) * rowH;
 	const int maxY = std::max(0, total - viewH), sy = std::min(c.u.bracketY, maxY);
-	out.bracketArea.valid = true;
-	out.bracketArea.r = p.R(x, top, lw, viewH);
-	OffsetRect(&out.bracketArea.r, p.ox, p.oy);
-	out.bracketArea.max = maxY;
+	SetScrollArea(p, out.bracketArea, x, top, lw, viewH, maxY);
 	p.Clip(x, top, lw, viewH);
 	int ry = top - sy;
 	for (const TourneyEntrant *e : rows) {
@@ -1327,9 +1300,7 @@ void PaintOrganizer(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &ou
 			PaintPlayerDisc(p, x, ry + 9, 30, e->steamId, e->name);
 			PaintName(p, x + 42, ry, lw - 42 - 150 - removeW, rowH, e->name, e->steamId, own ? pal::redText : pal::text, mx, my);
 		}
-		for (const TourneyMember &pl : players) {
-			if (pl.steamId) c.ids.push_back(pl.steamId);
-		}
+		AddIds(c, players);
 		const char *status = *FinishedEntrantText(d, *e) ? FinishedEntrantText(d, *e)
 			: e->status == TourneyEntryStatus::Waitlist ? "Waiting list" : e->status == TourneyEntryStatus::Out ? "Knocked out"
 			: e->status == TourneyEntryStatus::Playing ? "Still in" : e->checkedIn ? "Checked in" : "Signed up";
@@ -1362,17 +1333,11 @@ void PaintOrganizer(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &ou
 		return;
 	}
 	const int dTotal = static_cast<int>(disputes.disputes.size()) * (cardH + 12), dMax = std::max(0, dTotal - dViewH), ds = std::min(c.u.sideScroll, dMax);
-	out.sideArea.valid = true;
-	out.sideArea.r = p.R(rx, dTop, rw, dViewH);
-	OffsetRect(&out.sideArea.r, p.ox, p.oy);
-	out.sideArea.max = dMax;
+	SetScrollArea(p, out.sideArea, rx, dTop, rw, dViewH, dMax);
 	p.Clip(rx, dTop, rw, dViewH);
 	int cy = dTop - ds;
 	for (const TourneyDispute &q : disputes.disputes) {
-		const TourneyMatch *m = nullptr;
-		for (const TourneyMatch &x2 : d.matches) {
-			if (x2.id == q.matchId) m = &x2;
-		}
+		const TourneyMatch *m = MatchById(d, q.matchId);
 		p.Fill(rx, cy, rw, cardH, pal::raised);
 		p.Frame(rx, cy, rw, cardH, pal::edge);
 		p.Fill(rx, cy, 3, cardH, pal::warn);
@@ -1663,10 +1628,7 @@ void PaintWalkoverDialog(Painter &p, const State &st, const Ui &u)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const TourneyPageView page = LeagueTourneyPage(u.slug, 60000);
-	const TourneyMatch *m = nullptr;
-	for (const TourneyMatch &x : page.detail.matches) {
-		if (x.id == u.walkoverMatch) m = &x;
-	}
+	const TourneyMatch *m = MatchById(page.detail, u.walkoverMatch);
 	const Dialog d = DialogBegin(p, st.viewW, st.viewH, 560, 330, "Give the match without playing", pal::redText);
 	const std::string a = m ? m->a.name : Tr("Side A"), b = m ? m->b.name : Tr("Side B");
 	p.raw = true;

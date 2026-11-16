@@ -332,10 +332,7 @@ void PaintTable(Painter &p, const State &st, const Ui &u, const TourneyListsView
 	const int top = y + 44, rowH = 68, viewH = y + h - top;
 	const int total = static_cast<int>(rows.size()) * rowH;
 	const int maxScroll = std::max(0, total - viewH), scroll = std::min(u.listScroll, maxScroll);
-	out.listArea.valid = true;
-	out.listArea.r = p.R(x, top, w, viewH);
-	OffsetRect(&out.listArea.r, p.ox, p.oy);
-	out.listArea.max = maxScroll;
+	SetScrollArea(p, out.listArea, x, top, w, viewH, maxScroll);
 	if (rows.empty()) {
 		p.Font(0);
 		const char *empty = !lists.loaded ? (lists.failed ? "Couldn't reach the league server. Check your connection and try again." : "Reading the tournaments...")
@@ -594,7 +591,7 @@ int PaintMineCard(Painter &p, const State &st, const TourneyMineView &mine, int 
 		p.AddHit(x + pad, cy, w - 2 * pad, 52, kTourney, r.arg);
 		if (r.invite) {
 			const int bw = (w - 2 * pad - 10) / 2, by = cy + 56;
-			const bool busy = LeagueTourneyBusy(TourneyOp::Accept, r.invite) || LeagueTourneyBusy(TourneyOp::Decline, r.invite);
+			const bool busy = InviteBusy(r.invite);
 			p.Button(x + pad, by, bw, 34, "Accept", kTourney, ArgOf(kSubInviteAccept, r.invite), mx, my, !busy, true, 3);
 			p.Button(x + pad + bw + 10, by, w - 2 * pad - bw - 10, 34, "Decline", kTourney, ArgOf(kSubInviteDecline, r.invite), mx, my, !busy, false, 3);
 		}

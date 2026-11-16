@@ -591,10 +591,7 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 	const bool single = n.format == TourneyFormat::Single && n.bracket == TourneyBracket::Winners;
 	if (single && n.round >= n.rounds) after = Tr("The winner is the champion");
 	else if (single && page.loaded) {
-		const TourneyMatch *following = nullptr, *mineM = nullptr;
-		for (const TourneyMatch &mm : page.detail.matches) {
-			if (mm.id == n.match) mineM = &mm;
-		}
+		const TourneyMatch *following = nullptr, *mineM = MatchById(page.detail, n.match);
 		if (mineM) following = TourneyMatchAt(page.detail, mineM->round + 1, mineM->position / 2);
 		const TourneyCard *other = following ? (mineM->position % 2 ? &following->a : &following->b) : nullptr;
 		after = other && other->Present() ? TrFmt("If you win, %s against %s", {StageText(following->stage, following->round), other->name})

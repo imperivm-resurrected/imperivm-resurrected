@@ -335,6 +335,8 @@ void PaintRing(Painter &p, int cx, int cy, int r, COLORREF c);
 void PaintDashedFrame(Painter &p, int x, int y, int w, int h, COLORREF c);
 // A name and the badge after it, drawn as given.
 void PaintName(Painter &p, int x, int y, int w, int h, const std::string &name, uint64_t id, COLORREF ink, int mx, int my);
+// A scrolling area as the input finds it: the box painted at (x, y, w, h) and how far it scrolls.
+void SetScrollArea(Painter &p, ScrollArea &a, int x, int y, int w, int h, int max);
 
 // Texts.
 // "Sun 15 Nov · 18:00", "Today, 18:00", "Tomorrow, 18:00", in this computer's time.
@@ -373,6 +375,10 @@ std::string MapText(const TourneyMap &m);
 std::string ResultText(const TourneyOpResult &r);
 // The player's own entry in a tournament, from their tournaments; null when they are not in it.
 const TourneyMyEntry *MyEntry(const TourneyMineView &mine, int64_t tournament);
+// A match of the tournament by its id; null when it has none.
+const TourneyMatch *MatchById(const TourneyDetail &d, int64_t id);
+// The player's answer to an invitation to a team of this cup is on its way.
+bool InviteBusy(int64_t tournament);
 // The official tournament the tab features: the soonest one open, else one being played, else the latest one over.
 const TourneySummary *Featured(const TourneyListsView &lists);
 int64_t NowMs();
