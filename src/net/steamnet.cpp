@@ -307,9 +307,16 @@ void SteamTick()
 		lastStats = now;
 		VnetLogStats();
 	}
-	static DWORD lastWake = 0;
+	static DWORD lastWake = 0, lastLeagueWake = 0;
 	if (now - lastWake > 250 && (RejoinWantsWake() || SpectatorWantsWake())) {
 		lastWake = now;
+		UiWakeGameThread();
+	}
+	// The game draws no frames while its window is in the background, and the league's tick runs from them: without this a player
+	// who alt-tabs while searching is dropped from the queue, and a duo's partner never hears of the match the leader found.
+	// Once a second, whatever the league holds: its tick is cheap, and this thread takes none of the league's locks.
+	else if (now - lastLeagueWake > 1000) {
+		lastLeagueWake = now;
 		UiWakeGameThread();
 	}
 	VnetPump(1);
