@@ -9,7 +9,6 @@
 #include <string>
 #include <vector>
 
-#include "MinHook.h"
 #include "addr/media.h"
 #include "hooks/hookcount.h"
 #include "hooks/audio.h"
@@ -603,11 +602,11 @@ LONG WINAPI HookSetWindowLongA(HWND hwnd, int index, LONG value)
 	return g_origSetWindowLong(hwnd, index, value);
 }
 
-bool Hook(const char *name, void *detour, void **orig)
+template <class Fn> bool Hook(const char *name, Fn *detour, Fn **orig)
 {
 	HMODULE m = GetModuleHandleW(L"user32.dll");
 	void *target = m ? reinterpret_cast<void *>(GetProcAddress(m, name)) : nullptr;
-	if (target && HookCreate(target, detour, orig) == MH_OK && HookEnable(target) == MH_OK) {
+	if (target && HookInstall(target, detour, orig)) {
 		return true;
 	}
 	LogE("display", "could not intercept %s", name);
@@ -623,21 +622,15 @@ bool DisplayFakeMode(int w, int h, DWORD bpp, bool testOnly)
 
 bool InstallDisplayModeHooks()
 {
-	bool ok = Hook("GetSystemMetrics", reinterpret_cast<void *>(&HookGetSystemMetrics), reinterpret_cast<void **>(&g_origMetrics)) &&
-		Hook("GetClientRect", reinterpret_cast<void *>(&HookGetClientRect), reinterpret_cast<void **>(&g_origGetClientRect));
+	bool ok = Hook("GetSystemMetrics", &HookGetSystemMetrics, &g_origMetrics) && Hook("GetClientRect", &HookGetClientRect, &g_origGetClientRect);
 	if (ok && GetConfig().renderEnabled) {
-		ok = Hook("ChangeDisplaySettingsA", reinterpret_cast<void *>(&HookChangeDisplaySettingsA), reinterpret_cast<void **>(&g_origChange)) &&
-			Hook("EnumDisplaySettingsA", reinterpret_cast<void *>(&HookEnumDisplaySettingsA), reinterpret_cast<void **>(&g_origEnum)) &&
-			Hook("SetWindowLongA", reinterpret_cast<void *>(&HookSetWindowLongA), reinterpret_cast<void **>(&g_origSetWindowLong));
+		ok = Hook("ChangeDisplaySettingsA", &HookChangeDisplaySettingsA, &g_origChange) && Hook("EnumDisplaySettingsA", &HookEnumDisplaySettingsA, &g_origEnum) &&
+			Hook("SetWindowLongA", &HookSetWindowLongA, &g_origSetWindowLong);
 	}
 	if (ok && Enabled()) {
-		ok = Hook("SetWindowPos", reinterpret_cast<void *>(&HookSetWindowPos), reinterpret_cast<void **>(&g_origSetWindowPos)) &&
-			Hook("MoveWindow", reinterpret_cast<void *>(&HookMoveWindow), reinterpret_cast<void **>(&g_origMoveWindow)) &&
-			Hook("GetCursorPos", reinterpret_cast<void *>(&HookGetCursorPos), reinterpret_cast<void **>(&g_origGetCursorPos)) &&
-			Hook("ClipCursor", reinterpret_cast<void *>(&HookClipCursor), reinterpret_cast<void **>(&g_origClipCursor));
-		void *current = reinterpret_cast<void *>(addr::kCurrentDisplayModeIndex);
-		if (ok && !(HookCreate(current, reinterpret_cast<void *>(&HookCurrentModeIndex), reinterpret_cast<void **>(&g_origCurrentModeIndex)) == MH_OK &&
-					  HookEnable(current) == MH_OK)) {
+		ok = Hook("SetWindowPos", &HookSetWindowPos, &g_origSetWindowPos) && Hook("MoveWindow", &HookMoveWindow, &g_origMoveWindow) &&
+			Hook("GetCursorPos", &HookGetCursorPos, &g_origGetCursorPos) && Hook("ClipCursor", &HookClipCursor, &g_origClipCursor);
+		if (ok && !HookInstall(addr::kCurrentDisplayModeIndex, &HookCurrentModeIndex, &g_origCurrentModeIndex)) {
 			LogE("display", "could not intercept the game's current display mode");
 			ok = false;
 		}

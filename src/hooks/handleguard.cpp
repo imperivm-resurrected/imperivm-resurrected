@@ -8,7 +8,6 @@
 #include <intrin.h>
 
 #include "hooks/handleguard.h"
-#include "MinHook.h"
 #include "hooks/hookcount.h"
 #include "core/log.h"
 #include "addr/script.h"
@@ -349,10 +348,6 @@ bool RedirectCall(uintptr_t site, uintptr_t expectedTarget, void *fn)
 	return PatchBytes(site, original, sizeof(original), patch);
 }
 
-bool Hook(uintptr_t at, void *detour, void **orig)
-{
-	return HookCreate(reinterpret_cast<void *>(at), detour, orig) == MH_OK && HookEnable(reinterpret_cast<void *>(at)) == MH_OK;
-}
 }
 
 void InstallHandleGuard(bool knownExe)
@@ -371,22 +366,22 @@ void InstallHandleGuard(bool knownExe)
 		const char *what;
 		bool ok;
 	} done[] = {
-		{"Squad.EvalAttach", Hook(addr::kScriptFnSquadEvalAttach, reinterpret_cast<void *>(&HookEvalAttach), reinterpret_cast<void **>(&g_origEvalAttach))},
-		{"Hero.TSAdvHeroSkills", Hook(addr::kScriptFnHeroTSAdvHeroSkills, reinterpret_cast<void *>(&HookAdvHeroSkills), reinterpret_cast<void **>(&g_origAdvHeroSkills))},
-		{"Unit.HasFreedom", Hook(addr::kScriptFnUnitHasFreedom, reinterpret_cast<void *>(&HookHasFreedom), reinterpret_cast<void **>(&g_origHasFreedom))},
+		{"Squad.EvalAttach", HookInstall(addr::kScriptFnSquadEvalAttach, &HookEvalAttach, &g_origEvalAttach)},
+		{"Hero.TSAdvHeroSkills", HookInstall(addr::kScriptFnHeroTSAdvHeroSkills, &HookAdvHeroSkills, &g_origAdvHeroSkills)},
+		{"Unit.HasFreedom", HookInstall(addr::kScriptFnUnitHasFreedom, &HookHasFreedom, &g_origHasFreedom)},
 		{"AddSquadUnits", CallInsteadOfIsDead(addr::kAddSquadUnitsIsDead, reinterpret_cast<void *>(&AddSquadUnitsIsDead))},
 		{"TVXSquad::ThreadLook", CallInsteadOfIsDead(addr::kThreadLookIsDead, reinterpret_cast<void *>(&ThreadLookIsDead))},
 		{"Unit::BestProtPos", RedirectCall(addr::kBestProtPosFirstUnit, addr::kGetFirstUnit, reinterpret_cast<void *>(&FirstUnitChecked)) &&
 			RedirectCall(addr::kBestProtPosFirstUnitAgain, addr::kGetFirstUnit, reinterpret_cast<void *>(&FirstUnitChecked))},
 		{"CollectPlayerUnits (heroes)", RedirectCall(addr::kCollectHeroFirstUnit, addr::kGetFirstUnit, reinterpret_cast<void *>(&FirstUnitChecked))},
 		{"CollectPlayerUnits (mages)", RedirectCall(addr::kCollectMageFirstUnit, addr::kGetFirstUnit, reinterpret_cast<void *>(&FirstUnitChecked)) &&
-			Hook(addr::kCollectMageMember, reinterpret_cast<void *>(&HookMageMember), &g_mageMemberCont)},
-		{"CollectPlayerUnits", Hook(addr::kCollectMember, reinterpret_cast<void *>(&HookMember), &g_memberCont)},
-		{"SquadizeObjList", Hook(addr::kSquadizeSquadRead, reinterpret_cast<void *>(&HookSquadize), &g_squadizeCont)},
-		{"GetCurrentScriptCommandDef", Hook(addr::kScriptCommandDefQueueRead, reinterpret_cast<void *>(&HookCommandDef), &g_commandDefCont)},
-		{"AIHook_OnUnitRemoved", Hook(addr::kOnUnitRemoved, reinterpret_cast<void *>(&HookOnUnitRemoved), reinterpret_cast<void **>(&g_origOnUnitRemoved))},
-		{"CVXUnit::OnDeathFinish", Hook(addr::kUnitOnDeathFinish, reinterpret_cast<void *>(&HookOnDeathFinish), reinterpret_cast<void **>(&g_origOnDeathFinish))},
-		{"CVXUnit::SetPosition", Hook(addr::kUnitSetPosition, reinterpret_cast<void *>(&HookSetPosition), reinterpret_cast<void **>(&g_origSetPosition))},
+			HookInstall(addr::kCollectMageMember, reinterpret_cast<void *>(&HookMageMember), &g_mageMemberCont)},
+		{"CollectPlayerUnits", HookInstall(addr::kCollectMember, reinterpret_cast<void *>(&HookMember), &g_memberCont)},
+		{"SquadizeObjList", HookInstall(addr::kSquadizeSquadRead, reinterpret_cast<void *>(&HookSquadize), &g_squadizeCont)},
+		{"GetCurrentScriptCommandDef", HookInstall(addr::kScriptCommandDefQueueRead, reinterpret_cast<void *>(&HookCommandDef), &g_commandDefCont)},
+		{"AIHook_OnUnitRemoved", HookInstall(addr::kOnUnitRemoved, &HookOnUnitRemoved, &g_origOnUnitRemoved)},
+		{"CVXUnit::OnDeathFinish", HookInstall(addr::kUnitOnDeathFinish, &HookOnDeathFinish, &g_origOnDeathFinish)},
+		{"CVXUnit::SetPosition", HookInstall(addr::kUnitSetPosition, &HookSetPosition, &g_origSetPosition)},
 	};
 	int ok = 0;
 	for (const Entry &e : done) {

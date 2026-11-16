@@ -7,7 +7,6 @@
 #include <vector>
 
 #include "hooks/gameload.h"
-#include "MinHook.h"
 #include "hooks/hookcount.h"
 #include "addr/world.h"
 
@@ -45,8 +44,7 @@ bool InstallGameLoadHook(bool knownExe)
 	if (g_installed) return g_ok;
 	g_installed = true;
 	if (!knownExe) return false;
-	void *target = reinterpret_cast<void *>(addr::kLoadGameFromFile);
-	g_ok = HookCreate(target, reinterpret_cast<void *>(&HookLoadGameFromFile), reinterpret_cast<void **>(&g_origLoadGameFromFile)) == MH_OK && HookEnable(target) == MH_OK;
+	g_ok = HookInstall(addr::kLoadGameFromFile, &HookLoadGameFromFile, &g_origLoadGameFromFile);
 	return g_ok;
 }
 

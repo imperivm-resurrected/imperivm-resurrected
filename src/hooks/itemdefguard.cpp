@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "hooks/itemdefguard.h"
-#include "MinHook.h"
 #include "hooks/hookcount.h"
 #include "core/log.h"
 #include "addr/state.h"
@@ -105,8 +104,7 @@ void *__fastcall HookLoadFile(char *reader, void *unused, const char *path)
 void InstallItemDefGuard(bool knownExe)
 {
 	if (!knownExe) return;
-	void *target = reinterpret_cast<void *>(addr::kItemsReaderLoadFile);
-	if (HookCreate(target, reinterpret_cast<void *>(&HookLoadFile), reinterpret_cast<void **>(&g_origLoadFile)) != MH_OK || HookEnable(target) != MH_OK) {
+	if (!HookInstall(addr::kItemsReaderLoadFile, &HookLoadFile, &g_origLoadFile)) {
 		LogE("game", "items: could not hook the item types loader; saving after an adventure changes map can crash, as in the original game");
 		return;
 	}

@@ -6,7 +6,6 @@
 #include <cstdint>
 
 #include "hooks/selectionguard.h"
-#include "MinHook.h"
 #include "hooks/hookcount.h"
 #include "core/log.h"
 #include "addr/script.h"
@@ -99,9 +98,7 @@ void DropStaleEffectiveSelection(void *manager)
 void InstallSelectionGuard(bool knownExe)
 {
 	if (!knownExe) return;
-	void *target = reinterpret_cast<void *>(addr::kRebuildCommandList);
-	if (HookCreate(target, reinterpret_cast<void *>(&HookRebuildCommandList), reinterpret_cast<void **>(&g_origRebuild)) != MH_OK ||
-		HookEnable(target) != MH_OK) {
+	if (!HookInstall(addr::kRebuildCommandList, &HookRebuildCommandList, &g_origRebuild)) {
 		LogE("game", "selection: could not hook the rebuilding of the command bar; a crash of the original game when a selected object disappears stays possible");
 		return;
 	}

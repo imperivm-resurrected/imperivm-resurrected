@@ -9,7 +9,6 @@
 #include <cstring>
 #include <vector>
 
-#include "MinHook.h"
 #include "hooks/hookcount.h"
 #include "core/config.h"
 #include "hooks/displaymode.h"
@@ -365,12 +364,9 @@ void *__cdecl HookLoadConfigIni(void *param)
 	return r;
 }
 
-bool HookAt(uintptr_t addr, void *detour, void **orig, const char *what)
+template <class Fn> bool HookAt(uintptr_t addr, Fn *detour, Fn **orig, const char *what)
 {
-	if (HookCreate(reinterpret_cast<void *>(addr), detour, orig) == MH_OK &&
-		HookEnable(reinterpret_cast<void *>(addr)) == MH_OK) {
-		return true;
-	}
+	if (HookInstall(addr, detour, orig)) return true;
 	LogE("boot", "tweaks: could not hook %s (%08x)", what, static_cast<unsigned>(addr));
 	return false;
 }
@@ -675,34 +671,27 @@ int __cdecl HookObjPlayer(int *sp)
 
 void InstallTweaks(bool knownExe)
 {
-	HookAt(addr::kScriptFnGateInside, reinterpret_cast<void *>(&HookGateInside), reinterpret_cast<void **>(&g_origGateInside), "Gate::Inside");
+	HookAt(addr::kScriptFnGateInside, &HookGateInside, &g_origGateInside, "Gate::Inside");
 	if (knownExe) {
 		HookAt(addr::kMapSettlementSite, reinterpret_cast<void *>(&HookTownhallSettlement), &g_townhallCont, "map settlements");
-		HookAt(addr::kScriptFnObjPlayer, reinterpret_cast<void *>(&HookObjPlayer), reinterpret_cast<void **>(&g_origObjPlayer), "Obj::player");
+		HookAt(addr::kScriptFnObjPlayer, &HookObjPlayer, &g_origObjPlayer, "Obj::player");
 	}
 	if (!knownExe) {
 		LogW("boot", "tweaks: unknown executable (patched?) -> address-dependent tweaks are disabled");
 		return;
 	}
 	if (GetConfig().crashFix) InstallCrashFix();
-	HookAt(addr::kPeerLeaveRoomA, reinterpret_cast<void *>(&HookPeerLeaveRoom), reinterpret_cast<void **>(&g_origPeerLeaveRoom), "peerLeaveRoomA");
+	HookAt(addr::kPeerLeaveRoomA, &HookPeerLeaveRoom, &g_origPeerLeaveRoom, "peerLeaveRoomA");
 	RepaintClosedMenusWhole();
-	HookAt(addr::kShowPausedMenu, reinterpret_cast<void *>(&HookShowPausedMenu), reinterpret_cast<void **>(&g_origShowPausedMenu), "ShowPausedMenu");
-	HookAt(addr::kRequestPause, reinterpret_cast<void *>(&HookRequestPause), reinterpret_cast<void **>(&g_origRequestPause), "CVXGameMultiplayer::RequestPause");
-	HookAt(addr::kRequestUnpause, reinterpret_cast<void *>(&HookRequestUnpause), reinterpret_cast<void **>(&g_origRequestUnpause),
-		"CVXGameMultiplayer::RequestUnpause");
-	HookAt(addr::kRequestPauseOnline, reinterpret_cast<void *>(&HookRequestToggle), reinterpret_cast<void **>(&g_origRequestToggle),
-		"CVXGameMultiplayer::RequestPauseOnline");
-	HookAt(addr::kChangeDisplayModeTo, reinterpret_cast<void *>(&HookChangeDisplayModeTo), reinterpret_cast<void **>(&g_origChangeDisplayModeTo),
-		"ChangeDisplayModeTo");
-	HookAt(addr::kInitResolutionList, reinterpret_cast<void *>(&HookInitResolutionList),
-		reinterpret_cast<void **>(&g_origInitResolutionList), "InitResolutionList");
-	HookAt(addr::kSaveGameOptionsToIni, reinterpret_cast<void *>(&HookSaveOptions), reinterpret_cast<void **>(&g_origSaveOptions),
-		"SaveGameOptionsToIni");
-	HookAt(addr::kLoadScrollSettings, reinterpret_cast<void *>(&HookLoadScrollSettings),
-		reinterpret_cast<void **>(&g_origLoadScroll), "LoadScrollSettings");
-	HookAt(addr::kLoadConfigIni, reinterpret_cast<void *>(&HookLoadConfigIni), reinterpret_cast<void **>(&g_origLoadConfigIni),
-		"LoadConfigIni");
+	HookAt(addr::kShowPausedMenu, &HookShowPausedMenu, &g_origShowPausedMenu, "ShowPausedMenu");
+	HookAt(addr::kRequestPause, &HookRequestPause, &g_origRequestPause, "CVXGameMultiplayer::RequestPause");
+	HookAt(addr::kRequestUnpause, &HookRequestUnpause, &g_origRequestUnpause, "CVXGameMultiplayer::RequestUnpause");
+	HookAt(addr::kRequestPauseOnline, &HookRequestToggle, &g_origRequestToggle, "CVXGameMultiplayer::RequestPauseOnline");
+	HookAt(addr::kChangeDisplayModeTo, &HookChangeDisplayModeTo, &g_origChangeDisplayModeTo, "ChangeDisplayModeTo");
+	HookAt(addr::kInitResolutionList, &HookInitResolutionList, &g_origInitResolutionList, "InitResolutionList");
+	HookAt(addr::kSaveGameOptionsToIni, &HookSaveOptions, &g_origSaveOptions, "SaveGameOptionsToIni");
+	HookAt(addr::kLoadScrollSettings, &HookLoadScrollSettings, &g_origLoadScroll, "LoadScrollSettings");
+	HookAt(addr::kLoadConfigIni, &HookLoadConfigIni, &g_origLoadConfigIni, "LoadConfigIni");
 	LogI("boot", "tweaks: installed (ScrollSpeed=%.2f)", GetConfig().scrollSpeed);
 }
 

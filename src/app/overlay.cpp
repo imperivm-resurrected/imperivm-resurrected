@@ -20,7 +20,6 @@
 #include <string>
 #include <vector>
 
-#include "MinHook.h"
 #include "hooks/hookcount.h"
 #include "core/config.h"
 #include "game/controls.h"
@@ -726,9 +725,7 @@ int __fastcall HookGameUpdate(void *game)
 void OverlayInstall(bool knownExe)
 {
 	if (!knownExe) return;
-	void *target = reinterpret_cast<void *>(addr::kGameUpdate);
-	if (HookCreate(target, reinterpret_cast<void *>(&HookGameUpdate), reinterpret_cast<void **>(&g_origGameUpdate)) == MH_OK &&
-		HookEnable(target) == MH_OK) {
+	if (HookInstall(addr::kGameUpdate, &HookGameUpdate, &g_origGameUpdate)) {
 		LogD("perf", "panel: game load measured in CVXGame::Update");
 	}
 	else {

@@ -10,7 +10,6 @@
 #include <mutex>
 #include <vector>
 
-#include "MinHook.h"
 #include "hooks/hookcount.h"
 #include "core/config.h"
 #include "core/framefreeze.h"
@@ -641,10 +640,7 @@ bool InstallRenderHooks()
 	}
 	HMODULE gdi = GetModuleHandleW(L"gdi32.dll");
 	void *target = gdi ? reinterpret_cast<void *>(GetProcAddress(gdi, "SetDIBitsToDevice")) : nullptr;
-	if (!target ||
-		HookCreate(target, reinterpret_cast<void *>(&HookSetDIBitsToDevice),
-			reinterpret_cast<void **>(&g_origSetDIBitsToDevice)) != MH_OK ||
-		HookEnable(target) != MH_OK) {
+	if (!target || !HookInstall(target, &HookSetDIBitsToDevice, &g_origSetDIBitsToDevice)) {
 		LogE("render", "could not intercept SetDIBitsToDevice");
 		return false;
 	}
