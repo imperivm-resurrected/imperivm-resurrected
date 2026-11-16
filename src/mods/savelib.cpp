@@ -13,6 +13,7 @@
 #include "core/log.h"
 #include "mods/mods.h"
 #include "mods/savelib.h"
+#include "mods/saveside.h"
 #include "i18n/tr.h"
 #include "addr/state.h"
 #include "mods/modpaths.h"
@@ -32,8 +33,6 @@ bool EndsWith(const std::string &s, const char *suffix)
 
 std::string ProfileDir(const std::string &profile) { return GameDir() + "\\Profiles\\" + profile + "\\"; }
 std::string OnlineDir(const std::string &profile) { return ProfileDir(profile) + kSaveOnlineFolder + "\\"; }
-
-const char *const kAuxSuffixes[] = {".bmp", ".cameras", ".mods.json", ".stats", ".objectives"};
 
 }
 
@@ -91,10 +90,7 @@ bool MoveToOnlineFolder(SaveRec &r)
 		LogW("saves", "could not move \"%s\" to the folder %s (error %lu)", r.vfsPath.c_str(), kSaveOnlineFolder, GetLastError());
 		return false;
 	}
-	for (const char *suffix : kAuxSuffixes) {
-		if (IsFile(r.diskPath + suffix)) MoveFileExA((r.diskPath + suffix).c_str(), (target + suffix).c_str(), MOVEFILE_REPLACE_EXISTING);
-		else DeleteFileA((target + suffix).c_str());
-	}
+	MoveSaveSideFiles(r.diskPath, target);
 	const std::string oldVfs = r.vfsPath;
 	r.vfsPath = "Profiles/" + r.profile + "/" + kSaveOnlineFolder + "/" + base + ext;
 	r.diskPath = target;
@@ -263,7 +259,7 @@ bool SaveLibDelete(const SaveRec &rec)
 {
 	std::string list = rec.diskPath;
 	list.push_back('\0');
-	for (const char *suffix : kAuxSuffixes) {
+	for (const char *suffix : kSaveSideSuffixes) {
 		if (IsFile(rec.diskPath + suffix)) {
 			list += rec.diskPath + suffix;
 			list.push_back('\0');
@@ -317,10 +313,7 @@ std::string SaveLibRename(const SaveRec &rec, const std::string &newName)
 	if (SaveLibIsAutosaveName(newName)) return "That name is reserved for autosaves";
 	if (SaveLibExists(rec, newName)) return "A game with that name already exists";
 	if (!MoveFileA(rec.diskPath.c_str(), target.c_str())) return "Couldn't change the name";
-	for (const char *suffix : kAuxSuffixes) {
-		if (IsFile(rec.diskPath + suffix)) MoveFileExA((rec.diskPath + suffix).c_str(), (target + suffix).c_str(), MOVEFILE_REPLACE_EXISTING);
-		else DeleteFileA((target + suffix).c_str());
-	}
+	MoveSaveSideFiles(rec.diskPath, target);
 	if (rec.autosave) {
 		Json j;
 		if (ReadJsonFile(target + ".mods.json", j)) {
