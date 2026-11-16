@@ -583,8 +583,8 @@ DWORD WINAPI RenderThread(LPVOID)
 			overlayTick = true;
 		}
 		const bool overlay = GetConfig().showPerf || GetConfig().showNet;
-		if (newFrame && !MpUiNeedsDraw()) MpUiObserveFrame(local.data(), fw, fh);
 		const UiNeeds needs = QueryUiNeeds();
+		if (newFrame && !needs.mp) MpUiObserveFrame(local.data(), fw, fh);
 		const bool ui = !video && needs.Any();
 		// The credits scroll on their own: they are drawn on every pass, at the pace of the screen.
 		if (ui && (newFrame || needs.credits || now - lastUiDraw >= 33)) {
