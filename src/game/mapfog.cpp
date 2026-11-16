@@ -72,6 +72,21 @@ unsigned short *RowPtr(char *bmp, int y)
 	return reinterpret_cast<unsigned short *>(reinterpret_cast<PixelPtr_t>((*reinterpret_cast<void ***>(bmp))[0x10 / 4])(bmp, nullptr, 0, y));
 }
 
+// Runs work with a bitmap of the game locked. A fault inside is caught further up (SafeDarken and the others), so the lock is given
+// back in a __finally: the bitmap would stay locked for the rest of the game.
+template <class Work> auto WhileLocked(unsigned handle, const Work &work) -> decltype(work())
+{
+	decltype(work()) result{};
+	reinterpret_cast<MemLock_t>(addr::kMemLock)(handle);
+	__try {
+		result = work();
+	}
+	__finally {
+		reinterpret_cast<MemUnlock_t>(addr::kMemUnlock)(handle);
+	}
+	return result;
+}
+
 // What a pass of the fog over the zoom map reads before it locks the two bitmaps.
 struct FogPass {
 	void *zoom;
@@ -110,12 +125,8 @@ int Darken(void *zoom)
 	const unsigned short fogColor = At<unsigned short>(zoom, 0x30);
 
 	const unsigned hd = At<unsigned>(dst, 4), hs = At<unsigned>(src, 4);
-	reinterpret_cast<MemLock_t>(addr::kMemLock)(hd);
-	reinterpret_cast<MemLock_t>(addr::kMemLock)(hs);
-	const int asked = DarkenLocked({zoom, dst, src, w, h, exploration, playerIndex, viewer, hasAllies, fogColor});
-	reinterpret_cast<MemUnlock_t>(addr::kMemUnlock)(hs);
-	reinterpret_cast<MemUnlock_t>(addr::kMemUnlock)(hd);
-	return asked;
+	const FogPass pass = {zoom, dst, src, w, h, exploration, playerIndex, viewer, hasAllies, fogColor};
+	return WhileLocked(hd, [&] { return WhileLocked(hs, [&] { return DarkenLocked(pass); }); });
 }
 
 int DarkenLocked(const FogPass &pass)
@@ -343,27 +354,26 @@ int FogWideColumns(void *zoom, int x0, int y0, int x1, int y1)
 	static std::vector<unsigned char> fogged;
 	fogged.assign(static_cast<size_t>(gw), 0);
 	const unsigned hd = At<unsigned>(dst, 4), hs = At<unsigned>(src, 4);
-	reinterpret_cast<MemLock_t>(addr::kMemLock)(hd);
-	reinterpret_cast<MemLock_t>(addr::kMemLock)(hs);
-	for (int by = y0; by <= y1; by += step) {
-		const int py = std::min(y1, by + step / 2);
-		for (int gx = 0; gx < gw; gx++) {
-			fogged[gx] = 0;
-			if (!fogOn) continue;
-			int world[2] = {};
-			PixelToWorld(zoom, std::min(x1, x0 + gx * step + step / 2), py, world);
-			fogged[gx] = reinterpret_cast<IsExplored_t>(addr::kIsExplored)(exploration, nullptr, reinterpret_cast<unsigned *>(world), playerIndex) == 0;
+	const auto draw = [&] {
+		for (int by = y0; by <= y1; by += step) {
+			const int py = std::min(y1, by + step / 2);
+			for (int gx = 0; gx < gw; gx++) {
+				fogged[gx] = 0;
+				if (!fogOn) continue;
+				int world[2] = {};
+				PixelToWorld(zoom, std::min(x1, x0 + gx * step + step / 2), py, world);
+				fogged[gx] = reinterpret_cast<IsExplored_t>(addr::kIsExplored)(exploration, nullptr, reinterpret_cast<unsigned *>(world), playerIndex) == 0;
+			}
+			for (int y = by; y <= y1 && y < by + step; y++) {
+				unsigned short *drow = RowPtr(dst, y);
+				const unsigned short *srow = RowPtr(src, y);
+				if (!drow || !srow) continue;
+				for (int x = x0; x <= x1; x++) drow[x] = fogged[(x - x0) / step] ? fogColor : srow[x];
+			}
 		}
-		for (int y = by; y <= y1 && y < by + step; y++) {
-			unsigned short *drow = RowPtr(dst, y);
-			const unsigned short *srow = RowPtr(src, y);
-			if (!drow || !srow) continue;
-			for (int x = x0; x <= x1; x++) drow[x] = fogged[(x - x0) / step] ? fogColor : srow[x];
-		}
-	}
-	reinterpret_cast<MemUnlock_t>(addr::kMemUnlock)(hs);
-	reinterpret_cast<MemUnlock_t>(addr::kMemUnlock)(hd);
-	return gw;
+		return gw;
+	};
+	return WhileLocked(hd, [&] { return WhileLocked(hs, draw); });
 }
 
 int SafeFogWideColumns(void *zoom, int x0, int y0, int x1, int y1)
@@ -382,14 +392,13 @@ bool CopyCachedFog(void *zoom, int x0, int y0, int x1, int y1)
 	char *dst = At<char *>(zoom, 0x14), *src = At<char *>(zoom, 0x18);
 	if (!dst || src != g_cache.src || At<int>(dst, 8) != g_cache.w || At<int>(dst, 0xc) != g_cache.h || At<short>(dst, 0x10) != 16) return false;
 	if (x0 < 0 || y0 < 0 || x1 >= g_cache.w || y1 >= g_cache.h || x0 > x1 || y0 > y1) return false;
-	const unsigned hd = At<unsigned>(dst, 4);
-	reinterpret_cast<MemLock_t>(addr::kMemLock)(hd);
-	for (int y = y0; y <= y1; y++) {
-		unsigned short *drow = RowPtr(dst, y);
-		if (drow) memcpy(drow + x0, &g_cache.pixels[static_cast<size_t>(y) * g_cache.w + x0], static_cast<size_t>(x1 - x0 + 1) * 2);
-	}
-	reinterpret_cast<MemUnlock_t>(addr::kMemUnlock)(hd);
-	return true;
+	return WhileLocked(At<unsigned>(dst, 4), [&] {
+		for (int y = y0; y <= y1; y++) {
+			unsigned short *drow = RowPtr(dst, y);
+			if (drow) memcpy(drow + x0, &g_cache.pixels[static_cast<size_t>(y) * g_cache.w + x0], static_cast<size_t>(x1 - x0 + 1) * 2);
+		}
+		return true;
+	});
 }
 
 bool SafeCopyCachedFog(void *zoom, int x0, int y0, int x1, int y1)
