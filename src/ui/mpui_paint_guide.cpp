@@ -64,11 +64,9 @@ int PaintKeep(Painter &p, int x, int y, int w, const char *name, const char *tex
 	return 30 + Para(p, x, y + 30, w, text, pal::textDim);
 }
 
-void PaintKeeps(Painter &p, const State &st, int x, int y, int w, int h)
+void PaintKeeps(Painter &p, const State &st, const LeagueRanked &rk, int x, int y, int w, int h)
 {
 	const LeagueRankedView &v = st.ranked.view;
-	const LeagueMeView me = LeagueMeState();
-	const LeagueRanked &rk = LeagueMeRanked(me.me, v.queue);
 	PaintGlassCard(p, x, y, w, h);
 	const int ix = x + kPad, iw = w - 2 * kPad;
 	PaintSectionLabel(p, ix, y + 16, iw, 22, "When the season closes");
@@ -155,10 +153,8 @@ int PaintRule(Painter &p, int x, int y, int w, const char *name, const char *tex
 	return std::max(nh, th);
 }
 
-void PaintGlory(Painter &p, const State &st, int x, int y, int w, int h)
+void PaintGlory(Painter &p, const LeagueRanked &rk, int x, int y, int w, int h)
 {
-	const LeagueMeView me = LeagueMeState();
-	const LeagueRanked &rk = LeagueMeRanked(me.me, st.ranked.view.queue);
 	PaintGlassCard(p, x, y, w, h);
 	const int ix = x + kPad, iw = w - 2 * kPad;
 	PaintSectionLabel(p, ix, y + 16, iw, 22, "Glory");
@@ -264,13 +260,13 @@ void PaintRankedGuide(Painter &p, const State &st)
 	if (st.ranked.guideTab == 0) {
 		const int leftW = (inner - kGap) * 56 / 100;
 		PaintRankLadder(p, m, y0, leftW, h, rk.present && rk.placementLeft <= 0 ? rk.tier : LeagueTier::None);
-		PaintKeeps(p, st, m + leftW + kGap, y0, inner - leftW - kGap, h);
+		PaintKeeps(p, st, rk, m + leftW + kGap, y0, inner - leftW - kGap, h);
 		return;
 	}
 	const int leftW = (inner - kGap) / 2, rx = m + leftW + kGap, rw = inner - leftW - kGap;
 	PaintWay(p, m, y0, leftW, h);
 	const int gloryH = (h - kGap) * 60 / 100;
-	PaintGlory(p, st, rx, y0, rw, gloryH);
+	PaintGlory(p, rk, rx, y0, rw, gloryH);
 	PaintFairPlay(p, rx, y0 + gloryH + kGap, rw, h - gloryH - kGap);
 }
 

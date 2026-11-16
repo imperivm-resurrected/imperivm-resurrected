@@ -107,9 +107,8 @@ StageLayout StageFor(int h)
 }
 
 // The line under the buttons once the game is rated: the run of wins the player is on, when the league already counts this game.
-std::string StreakLine(const LeagueRankedResult &r, const std::string &queue)
+std::string StreakLine(const LeagueRankedResult &r, const LeagueMeView &me, const std::string &queue)
 {
-	const LeagueMeView me = LeagueMeState();
 	const LeagueRanked &rk = LeagueMeRanked(me.me, queue);
 	if (!me.loaded || !rk.present || rk.glory != r.gloryAfter || rk.streak < 2) return std::string();
 	return TrFmt("%s wins in a row", {std::to_string(rk.streak)});
@@ -132,7 +131,7 @@ void Centered(Painter &p, int x, int y, int w, int lineH, const std::string &tex
 	}
 }
 
-void PaintStage(Painter &p, const State &st, int x, int y, int w, int h, Verdict verdict, uint32_t elapsed)
+void PaintStage(Painter &p, const State &st, const LeagueMeView &me, int x, int y, int w, int h, Verdict verdict, uint32_t elapsed)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const LeagueRankedOutcome &o = st.ranked.view.result;
@@ -143,7 +142,6 @@ void PaintStage(Painter &p, const State &st, int x, int y, int w, int h, Verdict
 	p.AddHit(x, y, w, h, kRankedAct, kRkSkip);
 	const bool rated = verdict == Verdict::Rated;
 	const LeagueResultFrame f = rated ? LeagueResultAt(r, elapsed) : LeagueResultFrame();
-	const LeagueMeView me = LeagueMeState();
 	const bool team = LeagueQueueIsTeam(o.game.queue);
 	const LeagueRanked &rk = LeagueMeRanked(me.me, o.game.queue);
 	const LeagueTier nowTier = rated ? f.tier : me.loaded ? rk.tier : LeagueTier::None;
@@ -280,7 +278,7 @@ void PaintStage(Painter &p, const State &st, int x, int y, int w, int h, Verdict
 	p.Font(3);
 	// Whoever left the game is locked out of the queue for a while: they read it here, with when they can search again.
 	if (o.game.left) {
-		const LeagueBan ban = LeagueMeState().me.ban;
+		const LeagueBan &ban = me.me.ban;
 		const int64_t now = LeagueServerNowMs();
 		std::string line = Tr("You left the game before it ended: the league locks your search for a while.");
 		if (ban.until > now) line += " " + TrFmt("You can search again at %s.", {TimeText(LocalTime(ban.until))});
@@ -295,7 +293,7 @@ void PaintStage(Painter &p, const State &st, int x, int y, int w, int h, Verdict
 	}
 	// A rated game is confirmed in the summary; here the run of wins, once the league counts the game.
 	if (rated) {
-		if (f.done) RawText(p, x + 20, y + L.footerY, w - 40, 22, StreakLine(r, o.game.queue), pal::ok, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		if (f.done) RawText(p, x + 20, y + L.footerY, w - 40, 22, StreakLine(r, me, o.game.queue), pal::ok, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		return;
 	}
 	Centered(p, x + 20, y + L.footerY, w - 40, 22,
@@ -364,7 +362,7 @@ std::string CivOfPlayer(const LeagueRankedGame &g, const std::string &steamId)
 	return std::string();
 }
 
-void PaintSummary(Painter &p, const State &st, int x, int y, int w, int h)
+void PaintSummary(Painter &p, const State &st, const LeagueMeView &me, int x, int y, int w, int h)
 {
 	const LeagueRankedView &v = st.ranked.view;
 	const LeagueRankedGame &g = v.result.game;
@@ -465,7 +463,6 @@ void PaintSummary(Painter &p, const State &st, int x, int y, int w, int h)
 												   : "The league settled the game with the reports it got.";
 	// The number counts once the league's standing includes this game: the player's Glory is the one the game left.
 	std::string number;
-	const LeagueMeView me = LeagueMeState();
 	const LeagueRanked &rk = LeagueMeRanked(me.me, g.queue);
 	if (verdict == Verdict::Rated && me.loaded && rk.present && rk.glory == v.result.answer.ranked.gloryAfter && rk.wins + rk.losses > 0) {
 		number = TrFmt("Game no. %s of the season", {std::to_string(rk.wins + rk.losses)});
@@ -548,6 +545,7 @@ void PaintRankedResult(Painter &p, const State &st)
 	const ScreenLayout l = ScreenLayoutFor(st.viewW, st.viewH);
 	const Verdict verdict = VerdictOf(o);
 	const uint32_t elapsed = static_cast<uint32_t>(GetTickCount() - st.ranked.resultAt);
+	const LeagueMeView me = LeagueMeState();
 
 	// The header of the screen: what happened in big and where it happened under it.
 	{
@@ -571,9 +569,9 @@ void PaintRankedResult(Painter &p, const State &st)
 	}
 	const int inner = l.w - 2 * l.margin, rightW = std::min(668, std::max(420, inner * 668 / 1792)), leftW = inner - rightW - 24;
 	const int y = l.top, h = l.h - l.margin - y;
-	PaintStage(p, st, l.margin, y, leftW, h, verdict, elapsed);
+	PaintStage(p, st, me, l.margin, y, leftW, h, verdict, elapsed);
 	const int rx = l.margin + leftW + 24, topH = (h - 24) * 520 / 776;
-	PaintSummary(p, st, rx, y, rightW, topH);
+	PaintSummary(p, st, me, rx, y, rightW, topH);
 	PaintPlace(p, st, rx, y + topH + 24, rightW, h - topH - 24);
 }
 

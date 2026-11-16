@@ -65,15 +65,24 @@ std::string SearchName(const std::string &typed)
 	return Trimmed(t.substr(0, end));
 }
 
+// The friends' leaderboard is asked for this player and their Steam friends, this many at most.
+const size_t kMaxFriendIds = 200;
+
 std::vector<std::string> FriendIds()
 {
 	std::vector<std::string> ids;
 	if (const uint64_t me = SteamOwnId()) ids.push_back(std::to_string(me));
 	for (uint64_t f : SteamFriendIds()) {
-		if (ids.size() >= 200) break;
+		if (ids.size() >= kMaxFriendIds) break;
 		ids.push_back(std::to_string(f));
 	}
 	return ids;
+}
+
+// How many FriendIds gives, without writing them out: the frame checks it while the friends' leaderboard is on.
+size_t FriendIdCount()
+{
+	return std::min(kMaxFriendIds, (SteamOwnId() ? 1 : 0) + SteamFriendIds().size());
 }
 
 // The seasons the menu offers, newest first: the server's list, or the season being played while it has not come.
@@ -262,7 +271,7 @@ void RankedSeasonsFrame()
 		const std::string wanted = SearchName(r.boardSearch);
 		if (wanted != r.boardAsked && now - r.boardTypedAt >= kSearchRestMs) RankedBoardAsk(0, false);
 		// Steam gives the friends a moment after they are first asked for.
-		if (r.boardFriends && FriendIds().size() != g_watch.friendsAsked) RankedBoardAsk(0, false);
+		if (r.boardFriends && FriendIdCount() != g_watch.friendsAsked) RankedBoardAsk(0, false);
 		if (!r.boardSeek.empty()) {
 			const LeaguePlayerView card = LeaguePlayerState(r.boardSeek, -1, r.view.queue);
 			if (card.state == LeagueCardState::Ready) {
