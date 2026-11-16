@@ -4,8 +4,10 @@
 #include <windows.h>
 
 #include "net/patrons.h"
+#include "core/config.h"
 #include "core/guard.h"
 #include "core/json.h"
+#include "core/league.h"
 #include "core/log.h"
 #include "hooks/dmshim.h"
 #include "i18n/tr.h"
@@ -148,7 +150,17 @@ void Lookup(std::vector<uint64_t> ids)
 	for (size_t i = 0; i < ids.size(); i++) list += (i ? "," : "") + std::to_string(ids[i]);
 	std::map<uint64_t, LeagueLookupEntry> found;
 	const bool badges = LookupPlayers(list, found);
-	const bool ok = badges || LookupPatrons(list, found);
+	bool ok = badges || LookupPatrons(list, found);
+	// A league server other than the official one (the test server) has no honour roll: the laurels come from the official one.
+	if (badges && !LeagueUrlIsDefault(LeagueBaseUrl(GetConfig().leagueUrl))) {
+		std::map<uint64_t, LeagueLookupEntry> roll;
+		if (LookupPatrons(list, roll)) {
+			for (const auto &kv : roll) {
+				found[kv.first].patronTier = kv.second.patronTier;
+				found[kv.first].patronPlace = kv.second.patronPlace;
+			}
+		}
+	}
 
 	std::vector<Pending> notices;
 	{
