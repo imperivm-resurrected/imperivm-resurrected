@@ -577,11 +577,11 @@ TourneyPageView LeagueTourneyPage(const std::string &slug, int maxAgeMs)
 	std::lock_guard<std::mutex> lock(g_mx);
 	const DWORD now = GetTickCount();
 	if (!g_pages.count(slug) && g_pages.size() >= kPagesKept) {
-		auto oldest = g_pages.begin();
+		auto oldest = g_pages.end();
 		for (auto it = g_pages.begin(); it != g_pages.end(); ++it) {
-			if (!it->second.loading && it->second.used < oldest->second.used) oldest = it;
+			if (!it->second.loading && (oldest == g_pages.end() || it->second.used < oldest->second.used)) oldest = it;
 		}
-		if (!oldest->second.loading) g_pages.erase(oldest);
+		if (oldest != g_pages.end()) g_pages.erase(oldest);
 	}
 	Page &p = g_pages[slug];
 	p.used = now;
