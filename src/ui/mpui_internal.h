@@ -600,9 +600,9 @@ void RankedFrame();
 // Every frame on the game thread, under g_lock, open screen or not: calls the player when a match is found, makes or joins the room of a
 // ranked match, fixes its options and keeps strangers out.
 void RankedGameThreadTick();
-// The room is the Steam room of a ranked match: its options, slots and seats are the server's.
 // The player left the room of their ranked match by hand: it is not made or joined again by itself.
 void RankedRoomLeftByUser();
+// The room is the Steam room of a ranked match: its options, slots and seats are the server's.
 bool RankedRoomLocked(const State &st);
 // Whether the room gives its players the colours of their teams: the host's choice, which the guests read from the room; never in the
 // room of a saved game, whose colours are the save's.
