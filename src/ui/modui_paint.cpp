@@ -728,8 +728,10 @@ void PaintInstalled(Painter &p, const State &st)
 
 	const int chipsY = l.top + kBarH + 12, chipsH = 30;
 	int tx = listX;
+	int counts[kStateCount];
+	CountStates(st, st.catFilter, counts);
 	for (int k = 0; k < kStateCount; k++) {
-		const int count = static_cast<int>(VisibleRows(st, k, st.catFilter).size());
+		const int count = counts[k];
 		if (k == kStateProblems && count == 0 && st.stateFilter != kStateProblems) continue;
 		const bool on = st.stateFilter == k;
 		const char *names[] = {"All", "Active", "Disabled", "With problems"};
