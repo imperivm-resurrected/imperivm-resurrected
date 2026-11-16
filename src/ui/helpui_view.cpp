@@ -644,7 +644,10 @@ HBITMAP ScaledBitmap(const std::shared_ptr<const BattleImage> &img, int w, int h
 	bi.bmiHeader.biCompression = BI_RGB;
 	void *bits = nullptr;
 	HBITMAP bmp = CreateDIBSection(nullptr, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
-	if (!bmp || !bits) return nullptr;
+	if (!bmp || !bits) {
+		if (bmp) DeleteObject(bmp);
+		return nullptr;
+	}
 	uint32_t *dst = static_cast<uint32_t *>(bits);
 	// Each pixel of the box averages the source pixels it covers, alpha included.
 	for (int y = 0; y < h; y++) {
