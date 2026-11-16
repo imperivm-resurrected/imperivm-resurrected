@@ -185,24 +185,10 @@ std::vector<ModSpecial> SpecialsList()
 	return out;
 }
 
-const ModSpecial *SpecialByBit(int bit)
-{
-	std::lock_guard<std::mutex> lock(g_lock);
-	for (const ModSpecial *s : g_specials) {
-		if (s->bit == bit) return s;
-	}
-	return nullptr;
-}
-
 std::string SpecialDisplayName(const ModSpecial &s)
 {
 	const std::string t = Pick(s.names);
 	return t.empty() ? s.id : t;
-}
-
-std::string SpecialDescription(const ModSpecial &s)
-{
-	return Pick(s.descriptions);
 }
 
 std::vector<std::string> SpecialsErrorsFor(const std::string &folder)
