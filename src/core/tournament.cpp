@@ -1564,6 +1564,14 @@ std::string TourneyTrim(const std::string &text)
 	return text.substr(a, text.find_last_not_of(" \t\r\n") - a + 1);
 }
 
+std::string TourneyCutText(const std::string &text, size_t maxBytes)
+{
+	if (text.size() <= maxBytes) return text;
+	size_t end = maxBytes;
+	while (end > 0 && (static_cast<unsigned char>(text[end]) & 0xC0) == 0x80) end--;
+	return text.substr(0, end);
+}
+
 int TourneyCupDefaultMinimum(int places)
 {
 	return std::max(2, std::min(4, places));

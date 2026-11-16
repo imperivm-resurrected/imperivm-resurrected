@@ -431,6 +431,11 @@ void CupForm()
 	CHECK_EQ(TourneyTextLength("\xF0\x9F\x8F\x86"), 2);
 	CHECK_EQ(TourneyTrim("  a b \t"), std::string("a b"));
 	CHECK_EQ(TourneyTrim("   "), std::string());
+	CHECK_EQ(TourneyCutText("abc", 5), std::string("abc"));
+	CHECK_EQ(TourneyCutText("abcdef", 3), std::string("abc"));
+	CHECK_EQ(TourneyCutText("Espa\xC3\xB1" "a", 5), std::string("Espa"));
+	CHECK_EQ(TourneyCutText("Espa\xC3\xB1" "a", 6), std::string("Espa\xC3\xB1"));
+	CHECK_EQ(TourneyCutText("a\xF0\x9F\x8F\x86", 4), std::string("a"));
 
 	TourneyCupForm bad = f;
 	bad.name = " ab ";
