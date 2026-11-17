@@ -622,5 +622,7 @@ void ForgetLooseFiles()
 }
 
 const bool g_featureRegistered = (ModsRegisterFeature({5, &ForgetLooseFiles, nullptr}), true);
+// A ruleset switched in place changes the mounted folders: the language files they bring (local\<language>\) are looked up again.
+const bool g_swapRegistered = (ModsOnRulesetSwapped(&ForgetLooseFiles), true);
 
 }

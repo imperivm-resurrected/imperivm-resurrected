@@ -371,8 +371,13 @@ typedef bool (*ModsArtProbe)(const std::vector<std::string> &files, bool gameRun
 void ModsSetArtProbe(ModsArtProbe probe);
 // What the caches hold changed (they were emptied): the answers the probe gave are asked again.
 void ModsArtCacheChanged();
-// The images the next reload replaces: those of the rules the game holds and of the mounted ones (game paths, lowercase), to check after the caches are emptied.
-std::vector<std::string> ModsReloadArtFiles();
+// What the next reload replaces, to make the game read again only what changed: the HotSwapKind bits of the files of the rules the game holds and of the
+// mounted ones, and the images among them (game paths, lowercase), to check after the caches are emptied.
+struct ModsReloadChange {
+	unsigned kinds = 0;
+	std::vector<std::string> art;
+};
+ModsReloadChange ModsReloadChanged();
 // Replaces the mounted ruleset if ModsCanSwitchWithoutRestart. The caller saves the profile and sets the choice, as for any other
 // entry that mounts the same files (ModsMountedChoiceSet).
 bool ModsSwitchRulesetWithoutRestart(const ModRuleset &wanted);

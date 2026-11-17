@@ -28,6 +28,7 @@
 #include "game/memcensus.h"
 #include "game/memtrace.h"
 #include "game/scriptevents.h"
+#include "game/textreload.h"
 #include "mods/hotswap.h"
 #include "mods/mods.h"
 #include "mods/vfs.h"
@@ -529,7 +530,17 @@ bool HotReload(const void *game)
 	if (ReloadTable() != Reload::kDone) return false;
 	const DWORD constDone = GetTickCount();
 	DWORD shutdownMs = 0, initMs = 0;
-	g_artChanged = ModsReloadArtFiles();
+	const ModsReloadChange change = ModsReloadChanged();
+	g_artChanged = change.art;
+	if (change.kinds & kHotText) {
+		// Before the tables: the commands, items, classes and skills translate their names when they are read.
+		unsigned before = 0, after = 0;
+		if (!ReloadGameTexts(&before, &after)) {
+			LogE("game", "hot reload: the table of texts could not be read again");
+			return false;
+		}
+		LogI("game", "hot reload: texts read again: %u -> %u entries", before, after);
+	}
 	if (!g_artChanged.empty()) ArtCacheLogCensus("before the reload");
 	if (!RebuildGameData(&shutdownMs, &initMs)) {
 		if (!ArtCacheSurvivors().empty()) {
