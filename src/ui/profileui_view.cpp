@@ -260,8 +260,8 @@ void PaintShowcase(Painter &p, const View &v, int x, int y, int w)
 	PaintSectionLabel(p, x, y + 14, w / 2, 22, "Season showcase");
 	PaintFrameLink(p, v, x + w, y + 14, w / 2);
 	if (!v.meLoaded) {
-		p.Font(3);
-		p.Text(x, y + 48, w, 22, "Reading your season rewards...", kMuted);
+		// The row of vexilla and phalerae the showcase will hold.
+		for (int k = 0; k < 6 && k * 66 + 56 <= w; k++) PaintSkeleton(p, x + k * 66, y + 44, 56, 56);
 		return;
 	}
 	const int shown = PaintLeagueShowcase(p, x, y + 44, w, 56, v.me, kActLeagueBadge, v.mouseX, v.mouseY);
@@ -444,6 +444,16 @@ void PaintLeagueRank(Painter &p, const View &v, const char *title, const LeagueR
 	const int ey = zoneTop + (zoneBottom - zoneTop - emblem) / 2;
 	const bool placed = loaded && played && rk.present && rk.placementLeft <= 0 && rk.tier != LeagueTier::None;
 	const bool placing = loaded && played && !placed;
+	if (!loaded) {
+		// The emblem, the rank and the bar the card will show.
+		const int tx = ix + emblem + 28, tw = ix + iw - tx;
+		const int blockH = std::min(zoneBottom - zoneTop, 128), by = zoneTop + (zoneBottom - zoneTop - blockH) / 2;
+		PaintSkeleton(p, ix, ey, emblem, emblem);
+		PaintSkeleton(p, tx, by + 10, tw * 55 / 100, 24);
+		PaintSkeleton(p, tx, by + 52, tw * 35 / 100, 12);
+		if (blockH >= 96) PaintSkeleton(p, tx, by + 82, tw, 10);
+		return;
+	}
 	if (placed) DrawLeagueEmblem(p, ix, ey, emblem, rk.tier);
 	else {
 		p.Frame(ix, ey, emblem, emblem, pal::edge);
@@ -457,19 +467,13 @@ void PaintLeagueRank(Painter &p, const View &v, const char *title, const LeagueR
 	p.Font(2);
 	std::string headline;
 	COLORREF ink = pal::text;
-	if (!loaded) headline = Tr("Reading your rank...");
-	else if (!played) headline = Tr("Not played this season");
+	if (!played) headline = Tr("Not played this season");
 	else if (placed) {
 		headline = LeagueRankLabel(rk.tier, rk.division);
 		ink = LeagueTierInk(rk.tier);
 	}
 	else headline = Tr(rk.present ? "Placement" : "Not played");
-	if (!loaded) {
-		p.Font(0);
-		TextAsIs(p, tx, by, tw, 44, headline, pal::caption);
-	}
-	else TextAsIs(p, tx, by, tw, 44, headline, loaded && played ? ink : pal::textDim);
-	if (!loaded) return;
+	TextAsIs(p, tx, by, tw, 44, headline, played ? ink : pal::textDim);
 	if (!played) {
 		p.Font(3);
 		p.TextWrapped(tx, by + 50, tw, 44, "This queue is not part of the season being played.", pal::caption);
@@ -579,8 +583,14 @@ void PaintLeagueTrophies(Painter &p, const View &v, int x, int y, int w, int h)
 	const int ix = x + kLeaguePad, iw = w - 2 * kLeaguePad;
 	PaintSectionLabel(p, ix, y + 16, iw / 2, 22, "Tournaments");
 	if (!v.meLoaded) {
-		p.Font(3);
-		p.Text(ix, y + 56, iw, 22, "Reading your tournaments...", kMuted);
+		const int listY = y + 52;
+		for (int i = 0; listY + (i + 1) * kLeagueRowH <= y + h - 12 && i < 4; i++) {
+			const int ry = listY + i * kLeagueRowH;
+			if (i) p.Fill(ix, ry, iw, 1, pal::hairline);
+			PaintSkeleton(p, ix, ry + 10, 32, 32);
+			PaintSkeleton(p, ix + 48, ry + 14, (iw - 48) * (60 - i * 8) / 100, 12);
+			PaintSkeleton(p, ix + 48, ry + 32, (iw - 48) * 30 / 100, 10);
+		}
 		return;
 	}
 	std::vector<const LeagueBadge *> trophies;
@@ -662,8 +672,13 @@ void PaintLeagueSeasons(Painter &p, const View &v, int x, int y, int w, int h)
 	PaintFrameLink(p, v, ix + iw, y + 16, iw / 2);
 	const int listY = y + 52;
 	if (!v.meLoaded) {
-		p.Font(3);
-		p.Text(ix, listY + 4, iw, 22, "Reading your season rewards...", kMuted);
+		for (int i = 0; listY + (i + 1) * kLeagueRowH <= y + h - 12 && i < 4; i++) {
+			const int ry = listY + i * kLeagueRowH;
+			if (i) p.Fill(ix, ry, iw, 1, pal::hairline);
+			PaintSkeleton(p, ix, ry + 10, 32, 32);
+			PaintSkeleton(p, ix + 48, ry + 14, (iw - 48) * (55 - i * 8) / 100, 12);
+			PaintSkeleton(p, ix + 48, ry + 32, (iw - 48) * 25 / 100, 10);
+		}
 		return;
 	}
 	if (v.me.rewards.empty()) {
