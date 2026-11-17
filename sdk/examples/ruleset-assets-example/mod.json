@@ -9,9 +9,9 @@
   "category": "Graphics",
   "authors": ["Imperivm Resurrected"],
   "description": {
-    "spanish": "Ejemplo del SDK: un paquete sin archivos en la raíz y dos conjuntos de reglas. «plain» no cambia nada; «assets» cambia un texto (el nombre del botón del hastato), la voz del hastato, un sonido (el aviso de entrenamiento terminado) y dos imágenes (el botón y el retrato del hastato). Cambiar de uno a otro reinicia el juego. Es cosmético: no hace falta que los demás jugadores lo tengan.",
-    "english": "SDK example: a package with no files in its root and two rulesets. \"plain\" changes nothing; \"assets\" changes a text (the hastatus button name), the hastatus voice, a sound (the training-completed alert) and two images (the hastatus button and portrait). Switching between them restarts the game. It is cosmetic: other players don't need it.",
-    "italian": "Esempio dell'SDK: un pacchetto senza file nella radice e due set di regole. «plain» non cambia nulla; «assets» cambia un testo (il nome del pulsante dell'astato), la voce dell'astato, un suono (l'avviso di addestramento completato) e due immagini (il pulsante e il ritratto dell'astato). Passare dall'uno all'altro riavvia il gioco. È cosmetico: gli altri giocatori non ne hanno bisogno."
+    "spanish": "Ejemplo del SDK: un paquete sin archivos en la raíz y dos conjuntos de reglas. «plain» no cambia nada; «assets» cambia un texto (el nombre del botón del hastato), la voz del hastato, un sonido (el aviso de entrenamiento terminado) y dos imágenes (el botón y el retrato del hastato). Cambiar de uno a otro no reinicia el juego. Es cosmético: no hace falta que los demás jugadores lo tengan.",
+    "english": "SDK example: a package with no files in its root and two rulesets. \"plain\" changes nothing; \"assets\" changes a text (the hastatus button name), the hastatus voice, a sound (the training-completed alert) and two images (the hastatus button and portrait). Switching between them does not restart the game. It is cosmetic: other players don't need it.",
+    "italian": "Esempio dell'SDK: un pacchetto senza file nella radice e due set di regole. «plain» non cambia nulla; «assets» cambia un testo (il nome del pulsante dell'astato), la voce dell'astato, un suono (l'avviso di addestramento completato) e due immagini (il pulsante e il ritratto dell'astato). Passare dall'uno all'altro non riavvia il gioco. È cosmetico: gli altri giocatori non ne hanno bisogno."
   },
   "redistributable": true,
   "rulesets": [

@@ -28,6 +28,7 @@
 #include "game/memcensus.h"
 #include "game/memtrace.h"
 #include "game/scriptevents.h"
+#include "game/soundreload.h"
 #include "game/textreload.h"
 #include "mods/hotswap.h"
 #include "mods/mods.h"
@@ -532,6 +533,16 @@ bool HotReload(const void *game)
 	DWORD shutdownMs = 0, initMs = 0;
 	const ModsReloadChange change = ModsReloadChanged();
 	g_artChanged = change.art;
+	if (change.kinds & kHotSoundData) {
+		unsigned before = 0, after = 0;
+		bool active = false;
+		if (!ReloadSoundEntities(&before, &after, &active)) {
+			LogE("game", "hot reload: the table of sound entities could not be made again");
+			return false;
+		}
+		if (active) LogI("game", "hot reload: sound entities read again: %u -> %u entities", before, after);
+		else LogI("game", "hot reload: the game has no sound: nothing to read again for the sound entities");
+	}
 	if (change.kinds & kHotText) {
 		// Before the tables: the commands, items, classes and skills translate their names when they are read.
 		unsigned before = 0, after = 0;

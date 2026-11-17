@@ -1,0 +1,3 @@
+<patch>
+  <set select="/entity/files/sound" file="Sounds/clash/blue-chime.wav"/>
+</patch>
