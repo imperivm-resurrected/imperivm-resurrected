@@ -139,7 +139,7 @@ bool ModsRestartNeeded()
 		if (IsDir(ModsDir() + "\\_downloads\\pending\\" + mountedPack.first)) return true;
 	}
 	std::map<std::string, std::string> chosen;
-	if (!active.choices.empty()) chosen = ChosenFolders(active, ModsList());
+	if (!active.choices.empty() || !active.files.empty()) chosen = ChosenFolders(active, ModsList());
 	std::lock_guard<std::mutex> lock(g_lock);
 	return chosen != g_mount.chosen;
 }

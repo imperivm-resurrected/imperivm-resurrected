@@ -485,6 +485,15 @@ ModProfile ReadProfileFile(const std::string &path)
 				if (!choice.use.empty() && !choice.over.empty()) p.choices.push_back(choice);
 			}
 		}
+		if (const Json *f = j.Get("files")) {
+			for (const Json &v : f->arr) {
+				if (v.type != Json::Object) continue;
+				ModFileChoice file;
+				file.path = NormPath(v.GetString("path"));
+				file.use = v.GetString("use");
+				if (!file.path.empty() && !file.use.empty()) p.files.push_back(file);
+			}
+		}
 	}
 	return p;
 }

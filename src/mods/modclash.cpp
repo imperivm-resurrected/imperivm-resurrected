@@ -106,7 +106,7 @@ int ClashKindOf(const std::string &path)
 	return kClashCosmetic;
 }
 
-ClashReport ClashAnalyze(const std::vector<ClashMod> &ordered, const std::vector<ClashChoice> &choices)
+ClashReport ClashAnalyze(const std::vector<ClashMod> &ordered, const std::vector<ClashChoice> &choices, const std::vector<ClashFileChoice> &fileChoices)
 {
 	const size_t n = ordered.size();
 	std::map<std::string, std::vector<Owner>> owners;
@@ -166,8 +166,13 @@ ClashReport ClashAnalyze(const std::vector<ClashMod> &ordered, const std::vector
 			}
 		}
 	}
+	std::map<std::string, std::string> fileUse;
+	for (const ClashFileChoice &c : fileChoices) {
+		if (!c.path.empty() && !c.use.empty()) fileUse[mods_impl::NormPath(c.path)] = Folded(c.use);
+	}
 	for (const Shared &s : shared) {
 		size_t used = s.fallback;
+		bool fileChosen = false;
 		if (s.kind == kClashCosmetic) {
 			for (size_t step = 0; step < s.owners.size(); step++) {
 				size_t next = used;
@@ -180,10 +185,21 @@ ClashReport ClashAnalyze(const std::vector<ClashMod> &ordered, const std::vector
 				if (next == used) break;
 				used = next;
 			}
+			const auto chosen = fileUse.find(mods_impl::NormPath(s.path));
+			if (chosen != fileUse.end()) {
+				for (const Owner &w : s.owners) {
+					if (w.loose && Folded(ordered[w.mod].id) == chosen->second) {
+						used = w.mod;
+						fileChosen = true;
+						break;
+					}
+				}
+			}
 		}
 		ClashFile f;
 		f.path = s.path;
 		f.kind = s.kind;
+		f.fileChosen = fileChosen;
 		for (const Owner &w : s.owners) {
 			f.folders.push_back(ordered[w.mod].folder);
 			f.loose.push_back(w.loose);

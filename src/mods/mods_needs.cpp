@@ -134,6 +134,7 @@ ModProfile ModsLooseProfileWith(const std::vector<std::string> &folders)
 	const std::vector<ModInfo> installed = ModsList();
 	const ModProfile active = ModsLoadProfile(ModsActiveProfileName());
 	p.choices = active.choices;
+	p.files = active.files;
 	for (const std::string &f : active.mods) {
 		bool cosmetic = false;
 		for (const ModInfo &m : installed) {

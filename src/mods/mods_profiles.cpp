@@ -220,6 +220,14 @@ bool ModsSaveProfile(const ModProfile &p)
 		choices.arr.push_back(o);
 	}
 	if (!choices.arr.empty()) j.Set("choices", choices);
+	Json files = Json::MakeArray();
+	for (const ModFileChoice &f : p.files) {
+		Json o = Json::MakeObject();
+		o.Set("path", Json::MakeString(f.path));
+		o.Set("use", Json::MakeString(f.use));
+		files.arr.push_back(o);
+	}
+	if (!files.arr.empty()) j.Set("files", files);
 	CreateDirectoryA(ProfilesDir().c_str(), nullptr);
 	const std::string path = ProfilesDir() + "\\" + SafeFileName(p.name) + ".json";
 	const bool written = WriteJsonFile(path, j);

@@ -110,10 +110,16 @@ struct ModChoice {
 	std::string over;
 };
 
+struct ModFileChoice {
+	std::string path;
+	std::string use;
+};
+
 struct ModProfile {
 	std::string name;
 	std::vector<std::string> mods;
 	std::vector<ModChoice> choices;
+	std::vector<ModFileChoice> files;
 };
 
 enum MapOriginKind { kMapBase, kMapLoose, kMapReceived, kMapMod };
@@ -237,6 +243,10 @@ struct ModOverlapFile {
 	std::string used;
 	std::string usedName;
 	bool chosen = false;
+	std::vector<std::string> folders;
+	std::vector<bool> loose;
+	bool choosable = false;
+	bool fileChosen = false;
 };
 struct ModOverlapValue {
 	std::string file;
@@ -257,4 +267,6 @@ std::map<std::string, ModIssues> ModsIssuesForAll(const ModProfile &p);
 std::vector<std::string> ModsProblemsFrom(const ModProfile &p, const std::map<std::string, ModIssues> &issues);
 void ModsReadPatchedFiles();
 void ModsChooseFiles(ModProfile &p, const std::string &useFolder, const std::string &overFolder);
+void ModsChooseFile(ModProfile &p, const std::string &path, const std::string &useFolder);
+void ModsClearChoices(ModProfile &p, const std::string &folder);
 const std::string *ModsChosenFile(const std::string &rel);
