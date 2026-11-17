@@ -1321,9 +1321,13 @@ void PaintOrganizer(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &ou
 	const TourneyDisputesView &disputes = c.disputes;
 	PaintSectionLabel(p, rx, y, rw, 22, "Disputes to settle");
 	const int dTop = y + 32, cardH = 168, dViewH = y + h - dTop;
+	if (disputes.disputes.empty() && !disputes.loaded && !disputes.failed) {
+		for (int k = 0; k < 2 && dTop + k * (cardH + 12) + cardH <= y + h; k++) PaintSkeleton(p, rx, dTop + k * (cardH + 12), rw, cardH);
+		return;
+	}
 	if (disputes.disputes.empty()) {
 		p.Font(0);
-		const char *text = !disputes.loaded ? (disputes.failed ? "Couldn't reach the league server. Check your connection and try again." : "Reading the disputes...")
+		const char *text = !disputes.loaded ? "Couldn't reach the league server. Check your connection and try again."
 											 : "No result is disputed. When a player disputes one, it shows here with the buttons to settle it.";
 		p.TextWrapped(rx, dTop + 6, rw, 80, text, pal::textDim);
 		return;
@@ -1538,10 +1542,14 @@ bool PaintPageHeader(Painter &p, const State &st, const HeaderUi &u)
 		{Tr("Entrants"), kTourney, ArgOf(kSubPageTab, 1), u.pageTab == 1, true}, {Tr("Rules"), kTourney, ArgOf(kSubPageTab, 2), u.pageTab == 2, true},
 		{Tr("Log"), kTourney, ArgOf(kSubPageTab, 3), u.pageTab == 3, true}};
 	if (page.loaded && IsOrganizer(page.detail)) tabs.push_back({Tr("Organise"), kTourney, ArgOf(kSubPageTab, kOrganizerTab), u.pageTab == kOrganizerTab, true});
+	if (!page.loaded) {
+		// The name is on its way: its place shows as a bar the size of a title.
+		PaintSkeleton(p, l.margin, l.titleY + 24, std::min(560, right - l.margin - 40), l.titleSize - 30);
+		return true;
+	}
 	p.raw = true;
-	PaintScreenTitle(p, l, page.loaded ? page.detail.name : std::string("..."), tabs, right, mx, my);
+	PaintScreenTitle(p, l, page.detail.name, tabs, right, mx, my);
 	p.raw = false;
-	if (!page.loaded) return true;
 	const TourneyDetail &d = page.detail;
 	int x = l.margin;
 	if (d.official) x += PaintTag(p, x, l.infoY + 2, "Official", pal::red, pal::onRed) + 14;
@@ -1567,10 +1575,18 @@ void PaintPageScreen(Painter &p, const State &st, const Ui &u, PaintOut &out)
 	const int m = l.margin, inner = l.w - 2 * m, bottom = l.h - m;
 	if (!page.loaded) {
 		PaintGlassCard(p, m, l.top, inner, bottom - l.top);
+		if (!page.missing && !page.failed) {
+			// The tournament's card: a heading, a few lines, and the rows of its players or its bracket under them.
+			PaintSkeleton(p, m + 32, l.top + 32, 320, 18);
+			for (int k = 0; k < 3; k++) PaintSkeleton(p, m + 32, l.top + 70 + k * 26, (inner - 64) * (70 - k * 15) / 100, 12);
+			const int rowsY = l.top + 170, rowH = 52;
+			PaintSkeletonRows(p, m + 1, rowsY, inner - 2, rowH, std::max(0, std::min(8, (bottom - rowsY - 16) / rowH)),
+				{{m + 32, inner * 40 / 100}, {m + 32 + inner * 40 / 100, inner * 25 / 100}, {m + 32 + inner * 65 / 100, inner * 25 / 100}});
+			return;
+		}
 		p.Font(0);
 		p.Text(m + 32, l.top + 32, inner - 64, 30,
-			page.missing ? "This tournament is no longer published." : page.failed ? "Couldn't reach the league server. Check your connection and try again." : "Reading the tournament...",
-			pal::textDim);
+			page.missing ? "This tournament is no longer published." : "Couldn't reach the league server. Check your connection and try again.", pal::textDim);
 		return;
 	}
 	Ctx c{st, u, page.detail, mine};

@@ -333,9 +333,15 @@ void PaintTable(Painter &p, const State &st, const Ui &u, const TourneyListsView
 	const int total = static_cast<int>(rows.size()) * rowH;
 	const int maxScroll = std::max(0, total - viewH), scroll = std::min(u.listScroll, maxScroll);
 	SetScrollArea(p, out.listArea, x, top, w, viewH, maxScroll);
+	if (rows.empty() && !lists.loaded && !lists.failed) {
+		std::vector<std::pair<int, int>> bars;
+		for (int c = 0; c < 5; c++) bars.push_back({cx[c], colW[c]});
+		PaintSkeletonRows(p, x + 1, top, w - 2, rowH, std::max(1, std::min(6, viewH / rowH)), bars);
+		return;
+	}
 	if (rows.empty()) {
 		p.Font(0);
-		const char *empty = !lists.loaded ? (lists.failed ? "Couldn't reach the league server. Check your connection and try again." : "Reading the tournaments...")
+		const char *empty = !lists.loaded ? "Couldn't reach the league server. Check your connection and try again."
 			: !all.empty()	? "No tournament matches these filters."
 			: u.filter == 0 ? "No tournament is open for sign-up now. The official cups are announced on Discord."
 			: u.filter == 1 ? "No tournament is being played now."
@@ -573,9 +579,14 @@ int PaintMineCard(Painter &p, const State &st, const TourneyMineView &mine, int 
 	PaintGlassCard(p, x, y, w, h);
 	PaintCaps(p, x + pad, y + 22, w - 2 * pad, 20, "My tournaments", pal::caption);
 	int cy = y + 52;
-	if (rows.empty()) {
+	if (rows.empty() && !mine.loaded) {
+		PaintSkeleton(p, x + pad, cy + 6, (w - 2 * pad) * 60 / 100, 14);
+		PaintSkeleton(p, x + pad, cy + 32, (w - 2 * pad) * 35 / 100, 10);
+		cy += 62;
+	}
+	else if (rows.empty()) {
 		p.Font(0);
-		p.Text(x + pad, cy, w - 2 * pad, 50, mine.loaded ? "You are not in any tournament." : "Reading your tournaments...", pal::textDim);
+		p.Text(x + pad, cy, w - 2 * pad, 50, "You are not in any tournament.", pal::textDim);
 		cy += 62;
 	}
 	for (int i = 0; i < shown; i++) {
@@ -630,7 +641,8 @@ void PaintChampionsCard(Painter &p, const State &st, const TourneyListsView &lis
 			PaintName(p, tx, cy, w - pad - tx + x - tagW, 22, champ->name, champ->steamId, pal::text, mx, my);
 			ids.push_back(champ->steamId);
 		}
-		else p.Text(tx, cy, w - pad - tx + x - tagW, 22, page->loaded ? "No champion" : "...", pal::textDim);
+		else if (page->loaded) p.Text(tx, cy, w - pad - tx + x - tagW, 22, "No champion", pal::textDim);
+		else PaintSkeleton(p, tx, cy + 5, std::max(40, (w - pad - tx + x - tagW) * 55 / 100), 12);
 		p.Font(3);
 		p.raw = true;
 		p.Text(tx, cy + 22, w - pad - tx + x - tagW, 20, t.name, pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
