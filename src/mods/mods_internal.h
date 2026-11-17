@@ -121,6 +121,14 @@ ModProfile ReadProfileFile(const std::string &path);
 ClashReport ClashesOf(const ModProfile &p, const std::vector<ModInfo> &all);
 void PrepareRleMmp(const ModProfile &p, const std::vector<ModInfo> &all);
 std::string RleProblemOf(const std::string &folder);
+// A ruleset's rle.mmp.tail: the DLL maps the tail file and answers the game's sprite data for the offsets past the end of rle.mmp (a switch does not restart the game).
+// False if the tail was not made for the game's rle.mmp, cannot be read, or a package's root tail is mounted (the file the game maps already has it: only one tail).
+bool RleActivateTail(const std::string &folder, const std::string &tailPath, uint64_t baseSize, const std::string &baseSha256);
+void RleDeactivateTail();
+// Whether the file the game maps is the combined one of a package's root tail (mounted with the profile; it stays).
+bool RleRootTailActive();
+// Whether a ruleset's tail can be served in place (the hook of the sprite data is installed).
+bool RleTailsInPlace();
 uint64_t GameRleSize();
 void InstallRleHook();
 std::string ClashProblemText(const std::string &other);

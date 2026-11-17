@@ -97,7 +97,7 @@ void OnlyTheKindsOfFileTheGameCanReadAgainAreSwitched()
 	CHECK(SwapDecide(false, {"patches/data/classes/rhastatus.sc.xml", "patches/data/ai/main.vs"}, commands) == HotSwap::kReload);
 	CHECK(SwapDecide(true, both, commands) == HotSwap::kNothing);
 	// Anything else restarts, whichever side has it.
-	const Files bad[] = {{"patches/data/const.ini", "rle.mmp.tail"}, {"civs/gaul.json"}, {"specials/x.json"}, {"options/speed.json"},
+	const Files bad[] = {{"patches/data/const.ini", "units/rle.mmp.tail"}, {"civs/gaul.json"}, {"specials/x.json"}, {"options/speed.json"},
 		{"events/ongamestart.vs"}, {"packs/units.pak"}, {"patches/units/rhastatus.ent.xml"}, {"patches/currentlang/game.bmp"},
 		{"patches/data/readme.txt"}, {"patches/data/"}, {"data/"}, {"data/sounds/x.wav"}, {"data/readme.txt"}, {"local/spanish/game.pak"},
 		{"rules/game.json"}, {"modes/sub/x.json"}, {"modes/x.xml"}, {"gameres/selections/x.rle"}, {"hidden.txt.bak"}, {"gameres/icons/x.wav"}, {"gameres/icons/"}};
@@ -277,7 +277,7 @@ void EntityArtIsSwitchedInPlaceByFolder()
 		"visuals/arrow/arrow1.rle", "units/rhastatus/idle.rle.mmp", "units/x/y.bmp"};
 	for (const char *f : art) CHECK_EQ(HotSwapKindOf(f), static_cast<unsigned>(kHotEntity));
 	// The passability and everything else of an entity folder is gameplay or not covered: it keeps the restart.
-	const char *const other[] = {"units/rhastatus/rhastatus.pass", "units/rhastatus/readme.txt", "units/", "units/a.xml", "units/rhastatus/", "rle.mmp.tail", "unitsx/a.rle",
+	const char *const other[] = {"units/rhastatus/rhastatus.pass", "units/rhastatus/readme.txt", "units/", "units/a.xml", "units/rhastatus/", "x/rle.mmp.tail", "unitsx/a.rle",
 		"data/units/a.rle", "units/rhastatus/idle.mmp"};
 	for (const char *f : other) CHECK_EQ(HotSwapKindOf(f), static_cast<unsigned>(kHotOther));
 	const std::vector<std::string> folders = HotSwapEntityFolders({"units/RHastatus/Idle.rle", "Units\\RHastatus\\Walk.rle", "units/rhastatus/rhastatus.ent.xml",
@@ -308,21 +308,19 @@ void MapsAreSwitchedInPlace()
 	CHECK_EQ(HotSwapKindsText(kHotMap), "maps");
 }
 
-void TheGraphicsTailKeepsTheRestartAndSaysWhy()
+void TheGraphicsTailOfARulesetIsItsOwnKind()
 {
-	// Whatever else is in the layer, the tail names itself (unless something read once is also there: that is told first).
-	RestartReason r = HotSwapRestartReason({}, {"rle.mmp.tail", "packs/a.pak", "civs/x.json"});
-	CHECK(r.why == RestartWhy::kGraphicsTail);
-	CHECK_EQ(r.files.size(), size_t(1));
-	CHECK_EQ(r.files[0], "rle.mmp.tail");
-	r = HotSwapRestartReason({"Rulesets\\a\\RLE.MMP.TAIL"}, {});
-	CHECK(r.why == RestartWhy::kGraphicsTail);
-	r = HotSwapRestartReason({}, {"rle.mmp.tail", "gameres/selections/a.rle"});
-	CHECK(r.why == RestartWhy::kReadOnce);
-	CHECK(HotSwapRestartReason({}, {"packs/a.pak"}).why == RestartWhy::kOtherFiles);
-	CHECK(HotSwapRestartReason({}, {"xrle.mmp.tail"}).why == RestartWhy::kOtherFiles);
-	CHECK_EQ(HotSwapKindOf("rle.mmp.tail"), static_cast<unsigned>(kHotOther));
-	CHECK(SwapDecide(false, {}, {"rle.mmp.tail"}) == HotSwap::kRestart);
+	CHECK_EQ(HotSwapKindOf("rle.mmp.tail"), static_cast<unsigned>(kHotTail));
+	CHECK_EQ(HotSwapKindOf("RLE.MMP.TAIL"), static_cast<unsigned>(kHotTail));
+	// Only the one at the root of the folder is the ruleset's tail.
+	CHECK_EQ(HotSwapKindOf("units/rle.mmp.tail"), static_cast<unsigned>(kHotOther));
+	CHECK_EQ(HotSwapKindOf("xrle.mmp.tail"), static_cast<unsigned>(kHotOther));
+	CHECK_EQ(HotSwapKindsText(kHotTail), "graphics tail");
+	// With its descriptors (.rle.mmp in the entity folders) a ruleset of sprites in a tail is switched in place.
+	const Files sprites = {"rle.mmp.tail", "units/rhastatus/idle.rle.mmp", "units/rhastatus/rhastatus.ent.xml"};
+	CHECK(SwapDecide(false, {}, sprites) == HotSwap::kReload);
+	CHECK_EQ(HotSwapKinds(sprites), static_cast<unsigned>(kHotTail | kHotEntity));
+	CHECK(HotSwapEntityFolders(sprites).size() == 1);
 }
 
 void PaksAreJudgedByWhatIsInsideThem()
@@ -393,7 +391,7 @@ int main()
 	SoundsAreSwitchedInPlaceAndTheEntityTableIsReadAgain();
 	EntityArtIsSwitchedInPlaceByFolder();
 	MapsAreSwitchedInPlace();
-	TheGraphicsTailKeepsTheRestartAndSaysWhy();
+	TheGraphicsTailOfARulesetIsItsOwnKind();
 	PaksAreJudgedByWhatIsInsideThem();
 	TheRestartSaysWhyBeforeItHappens();
 	TheSameRulesetNeedsNothing();

@@ -92,7 +92,7 @@ try {
 	assert.match(without.text, /rulesets\/r\/menuini\/Menu\.ini .*menu skin file in a ruleset layer/);
 	assert.match(without.text, /rulesets\/r\/local\/english\/tips\.xml .*menu skin file in a ruleset layer/);
 	// the files that keep the restart say why; the ones that switch in place say nothing
-	assert.match(without.text, /rulesets\/r\/rle\.mmp\.tail .*restarts the game: the graphics tail.*loose \.rle files/);
+	assert.match(without.text, /rulesets\/r\/rle\.mmp\.tail .*only while no package of the profile has an rle\.mmp\.tail in its root/);
 	assert.match(require('../sdk/tools/lib/assetclass').restartKept('patches/extra.pak'), /a \.pak in patches/);
 	assert.match(without.text, /rulesets\/r\/packs\/extra\.pak .*member UI\\CURSORS\\ARROW\.CUR: switching to or from this ruleset restarts the game: a picture the game reads once/);
 	assert.match(without.text, /rulesets\/r\/packs\/extra\.pak .*member CIVS\\X\.JSON: .*civilization/);

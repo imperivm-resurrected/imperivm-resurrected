@@ -31,8 +31,9 @@ bool HotSwapLayerOk(const std::vector<std::string> &files);
 // builds again), and the art of the entities (kHotEntity: .ent.xml, .rle and .bmp in units\, buildings\, mapobjects\ and visuals\; the game keeps each
 // entity it loaded in a cache, and the reload takes out of it those whose folder holds a file that changed) and the maps (kHotMap: the .bfhp, .bmp and documents of
 // scenarios\, adventures\, conquests\ and conquestmaps\, the packs\*.bfhp, the random map pictures of randommap\ and the city templates of
-// randommapsettlements\; the game lists them from disk and opens them when a game is made: nothing is kept). kHotOther is anything else.
-enum HotSwapKind : unsigned { kHotNone = 0, kHotPatch = 1, kHotLoose = 2, kHotModes = 4, kHotHidden = 8, kHotOther = 16, kHotArt = 32, kHotText = 64, kHotSound = 128, kHotSoundData = 256, kHotEntity = 512, kHotMap = 1024 };
+// randommapsettlements\; the game lists them from disk and opens them when a game is made: nothing is kept) and the graphics tail of the ruleset itself (kHotTail: its
+// rle.mmp.tail, which the DLL maps and answers the game's sprite data from; only when no package's root has one, see mods/mods_rle.cpp). kHotOther is anything else.
+enum HotSwapKind : unsigned { kHotNone = 0, kHotPatch = 1, kHotLoose = 2, kHotModes = 4, kHotHidden = 8, kHotOther = 16, kHotArt = 32, kHotText = 64, kHotSound = 128, kHotSoundData = 256, kHotEntity = 512, kHotMap = 1024, kHotTail = 2048 };
 unsigned HotSwapKindOf(const std::string &file);
 
 // Whether a file is one the game reads once, when it starts, or when a menu window is built, and never again for a match: the selection circles,
@@ -69,8 +70,7 @@ std::vector<std::string> HotSwapArtFiles(const std::vector<std::string> &files);
 // Why a change of ruleset keeps the restart, to tell the player before it happens: the first files that are the reason, and which of the two
 // reasons it is (the file is read once, see HotSwapReadOnce; or it is one of the kinds the reload does not cover yet: sounds, voices, texts,
 // packs, sprites...). kNone: nothing keeps it.
-// A third one has its own sentence: the graphics tail (rle.mmp.tail), which the game maps once and every sprite keeps pointers into.
-enum class RestartWhy { kNone, kReadOnce, kGraphicsTail, kOtherFiles };
+enum class RestartWhy { kNone, kReadOnce, kOtherFiles };
 struct RestartReason {
 	RestartWhy why = RestartWhy::kNone;
 	std::vector<std::string> files; // at most kRestartReasonFiles

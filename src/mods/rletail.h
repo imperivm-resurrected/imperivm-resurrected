@@ -25,5 +25,9 @@ struct RleCacheSource {
 	uint64_t tailTime = 0;
 };
 
+// Where byte `offset` of the game's rle.mmp-with-a-tail is in the tail file: the tail goes after the game's rle.mmp (baseSize bytes), and its bytes start after
+// the header in its file. -1 when the offset is in the game's own part, or past the end of the tail.
+int64_t RleTailFileOffset(uint64_t baseSize, uint64_t tailFileSize, uint64_t offset);
+
 std::string RleCacheKey(const RleCacheSource &s);
 uint64_t RleCombinedSize(const RleCacheSource &s);

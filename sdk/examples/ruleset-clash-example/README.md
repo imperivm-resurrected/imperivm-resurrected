@@ -99,6 +99,14 @@ node make-packed-pak.js "<game folder>" "<game folder>\mods\clash-b" english    
 
 It holds, as members, the **green** hastatus portrait and queue icon (`UI\ICONS\RHASTATUS.BMP`), a **two-note falling chime** for the barracks selection (`SOUNDS\SELECTION\BARAKS\BARRAKS_1..4.WAV`, the game's own names: the pak's win over the game's `Sounds.pak`), a map type, **Random: Packed Continent** (`DATA\RANDOMMAP\PACKED CONTINENT.RM.XML`, which uses the game's own Continent pictures) and the text *Equip Hastatus (packed)* (`CURRENTLANG\GAME.LOC.XML`). Under **Packed** all four are there after the switch, with no restart; under Blue, Plain, Original and Clash example A, none. Log: `content: ruleset clash-b/rulesets/packed: 1 pak file systems mounted in the engine's list, below the loose layers (N ms)` the first time (`put back in` after), `... taken out of the engine's list` when you leave it, and the usual `texts read again`, `sound entities read again`, `image caches emptied ... N images change, 0 of them still cached` lines. **Predicted, not yet seen in the game.**
 
+The **tailed** ruleset (`clash-b`, `rulesets\tailed\`) is the cube soldier again, but with its pixels in an **`rle.mmp.tail`** and `.rle.mmp` descriptors instead of `.rle` files. Make it from your own game (the tail says which `rle.mmp` it was made for, by size and sha256, and the offsets of the descriptors depend on it; hashing the 391 MB takes a few seconds):
+
+```text
+node make-tailed-ruleset.js "<game folder>" "<game folder>\mods\clash-b"
+```
+
+Under **Tailed** your hastati are the cube soldier (read from the tail, not from `.rle` files); under Plain, Original, Blue (its `.rle` cube), Packed and Clash example A as before. No restart, in any direction. The first time it is chosen the log says `graphics: clash-b was made for this game's rle.mmp (checked in N s)` and `graphics: the tail of clash-b (0 MB) answers the game's sprites past the end of rle.mmp (N ms)`; leaving it, `graphics: no tail answers past the end of rle.mmp any more`; going back (the view is kept), no new check. If you add a package whose **root** has an `rle.mmp.tail` to the profile, choosing Tailed asks for a restart and says why (*a package of the profile already has one in its root*). **Predicted, not yet seen in the game.**
+
 ### Stress: five rounds and the memory
 
 Start the game with `[Debug] MemoryTrace=1` in `imperivm-mod.ini` (slower loads: a second or two per game). Pick *Blue*, start a skirmish, leave it, pick *Plain*, start, leave, *Original*, start, leave, *Blue*..., five times round. Then:

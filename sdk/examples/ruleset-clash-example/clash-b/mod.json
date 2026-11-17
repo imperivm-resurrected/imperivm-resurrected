@@ -56,6 +56,20 @@
         "italian": "Tutto in un .pak: il ritratto dell'astato in verde, un nuovo suono alla selezione della caserma, il tipo di mappa «Packed Continent» e il testo del pulsante dell'astato. Il .pak si fa con make-packed-pak.js."
       },
       "path": "rulesets/packed"
+    },
+    {
+      "id": "tailed",
+      "name": {
+        "spanish": "Con cola de gráficos",
+        "english": "Tailed",
+        "italian": "Con coda grafica"
+      },
+      "description": {
+        "spanish": "El soldado cúbico como hastato, con sus píxeles en un rle.mmp.tail (descriptores .rle.mmp) en lugar de archivos .rle. Se hace con make-tailed-ruleset.js a partir de tu juego.",
+        "english": "The cube soldier as the hastatus, with its pixels in an rle.mmp.tail (.rle.mmp descriptors) instead of .rle files. It is made with make-tailed-ruleset.js from your game.",
+        "italian": "Il soldato cubico come astato, con i suoi pixel in un rle.mmp.tail (descrittori .rle.mmp) invece di file .rle. Si fa con make-tailed-ruleset.js dal tuo gioco."
+      },
+      "path": "rulesets/tailed"
     }
   ]
 }

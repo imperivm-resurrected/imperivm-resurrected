@@ -356,6 +356,9 @@ else {
 		for (const f of files) {
 			const why = assets.restartKept(f);
 			if (why) warn(f, 0, 'switching to or from this ruleset restarts the game: ' + why);
+			if (/^rle\.mmp\.tail$/i.test(f)) {
+				warn(f, 0, 'the graphics tail of a ruleset is switched in place only while no package of the profile has an rle.mmp.tail in its root (a profile can mount only one tail, and the root\'s is in the file the game maps at start); otherwise switching to or from this ruleset restarts the game. Its sprites need their .rle.mmp descriptors and .ent.xml in units\\<name>\\ (or buildings, mapobjects, visuals) of this ruleset');
+			}
 			// a pak of packs\ is mounted in place: what counts is what is inside it, member by member
 			if (/^packs\/[^/]+\.pak$/i.test(f)) {
 				const names = assets.pakNames(path.join(modDir, f));

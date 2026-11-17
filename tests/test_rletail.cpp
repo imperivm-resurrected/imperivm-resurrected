@@ -76,8 +76,24 @@ void Cache()
 
 }
 
+// An offset of the game's rle.mmp with a tail: below the game's own size it is the game's, then the tail's bytes after its header, and nothing past its end.
+void TheTailsBytesAreWhereTheGameLooksForThem()
+{
+	const uint64_t base = 410048673, file = kRleTailHeaderSize + 1000;
+	CHECK(RleTailFileOffset(base, file, base - 1) == static_cast<int64_t>(-1));
+	CHECK(RleTailFileOffset(base, file, 0) == static_cast<int64_t>(-1));
+	CHECK(RleTailFileOffset(base, file, base) == static_cast<int64_t>(kRleTailHeaderSize));
+	CHECK(RleTailFileOffset(base, file, base + 999) == static_cast<int64_t>(kRleTailHeaderSize + 999));
+	CHECK(RleTailFileOffset(base, file, base + 1000) == static_cast<int64_t>(-1));
+	CHECK(RleTailFileOffset(base, kRleTailHeaderSize, base) == static_cast<int64_t>(-1));
+	CHECK(RleTailFileOffset(base, 10, base) == static_cast<int64_t>(-1));
+	// past 4 GB, which the game cannot ask for, is still answered
+	CHECK(RleTailFileOffset(0x100000000ull, file, 0x100000000ull + 5) == static_cast<int64_t>(kRleTailHeaderSize + 5));
+}
+
 int main()
 {
+	TheTailsBytesAreWhereTheGameLooksForThem();
 	RoundTrip();
 	Rejects();
 	Cache();

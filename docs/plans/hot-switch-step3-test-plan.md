@@ -2,7 +2,7 @@
 
 One setup, one DLL (the CI build of the top of the stack, PR `feat/hot-switch-rletail`), one profile. **Nothing in this plan has been run in the game**: every expected result below is **predicted** from the code and from the decompiled engine; the test is what proves or disproves it. Mark each line ok / not ok and send the log.
 
-What step 3 does: a ruleset switch no longer restarts the game when it changes images (3a), texts (3b), sounds, voices and sound entities (3c), entity art (3d), maps (3e) or `.pak` files in the ruleset's own folder (3g). Files the game reads once, the structural data (civilizations, specials, options, events, `rules\`) and the graphics tail (3f/3h, see section 13) keep the restart, and the dialog says why.
+What step 3 does: a ruleset switch no longer restarts the game when it changes images (3a), texts (3b), sounds, voices and sound entities (3c), entity art (3d), maps (3e), `.pak` files in the ruleset's own folder (3g) or its own `rle.mmp.tail` (3h). Files the game reads once and the structural data (civilizations, specials, options, events, `rules\`) keep the restart, and so does a ruleset's tail when a package's root has one; the dialog says why.
 
 ## 1. Setup (once)
 
@@ -90,9 +90,8 @@ Make a throw-away copy of `clash-b` named `clash-t` (change `id` in `mod.json`, 
 |---|---|
 | `gameres/selections/x.rle` (any bytes with the name) | *It has files the game reads only once, when it starts: gameres/selections/x.rle.* |
 | `local/<language>/splash.ini` | the same, with that file |
-| `rle.mmp.tail` (any bytes) | *It has a graphics tail (rle.mmp.tail): the game maps its sprite file once, when it starts, and every sprite keeps a pointer into it. Sprites as loose .rle files switch without a restart.* |
-| `packs/x.pak` | *It has files the game cannot swap in a running session (civilizations, specials, options, packs, rle.mmp.tail...): packs/x.pak.* |
-| `civs/x.json` | the same sentence with that file |
+| `civs/x.json` | *It has files the game cannot swap in a running session (civilizations, specials, options, events, rle.mmp.tail...): civs/x.json.* |
+| `patches/x.pak` | the same sentence with that file (a pak in `packs/` is judged by its members, section 12) |
 
 Also read the validator: `node sdk\tools\validate-mod.js "<game>\mods\clash-t"` prints one `switching to or from this ruleset restarts the game: ...` warning per file.
 
@@ -128,6 +127,20 @@ Order of the switches to try, one match each: Original -> **Packed** -> Plain ->
 **Held image check (3a) with a pak:** switch to Packed, play a match (the green portrait is cached), switch to Plain: the log must say `image caches emptied ... 0 of them still cached` and the portrait of the next match is the game's: the pak was taken out while its picture was cached, and the cache was emptied for its name.
 
 **Still restarts, with the member named** (a throw-away copy of the `packed` ruleset named `clash-t`, repacked with `node sdk\tools\make-pak.js <folder> <out.pak>` with one extra member): a member `CIVS\X.JSON`, `UI\CURSORS\A.CUR` or `FONTS\A.APF` -> the dialog says *It has files the game cannot swap...* / *reads only once...* and names that member; `node sdk\tools\validate-mod.js "<game>\mods\clash-t"` prints `member <NAME>: switching to or from this ruleset restarts the game: ...`.
+
+## 13. The graphics tail of a ruleset (3h): the **Tailed** ruleset
+
+Make it once from your game (a few seconds, it hashes the 391 MB `rle.mmp`): from `sdk\examples\ruleset-clash-example`, `node make-tailed-ruleset.js "<game>" "<game>\mods\clash-b"`. It writes `rulesets\tailed\rle.mmp.tail`, `units\RHastatus\*.rle.mmp` and the entity. Restart the game once so it scans the new files (the profile of section 1 does not change).
+
+Set **Tailed**, start a match: **no restart**. Train two hastati: they are the **cube soldier**, with the six animations, **read from the tail** (the Blue ruleset's cube is read from loose `.rle` files: they look the same, the log tells them apart). Log, the first time: `graphics: clash-b was made for this game's rle.mmp (checked in N s)`, `graphics: the tail of clash-b (0 MB) answers the game's sprites past the end of rle.mmp (N ms)`, `game: hot reload: entity art: 1 folders changed, 1 of the N cached entities taken out: Units/RHastatus/RHastatus.ent.xml`.
+
+Order, one match each, no restart on any: Original -> **Tailed** -> Plain -> **Tailed** (no new check: the view is kept) -> **Blue** -> **Tailed** -> **Packed** -> Original. In each: the legionary under Original, Plain, Packed and Clash A; a cube under Blue and Tailed. Leaving Tailed the log says `graphics: no tail answers past the end of rle.mmp any more`. A match played under Tailed must not crash on the way out or when the next one loads (a sprite made from the tail is freed with its entity: the tail memory is never freed).
+
+**Held/stale check:** Tailed, play, then Plain: the legionary comes back (the entity of the folder was taken out, not kept with a pointer into the tail's view).
+
+**Conflict (needs a package with a root tail, e.g. the 18 MB `mediterranevm-alpha` of the ported packs; skip if you do not have it):** add it to the profile and restart. Then choosing Tailed asks for the restart with *It has a graphics tail (rle.mmp.tail), and a package of the profile already has one in its root: only one tail can be mounted...*, and the log has `a change of ruleset keeps the restart: its graphics tail cannot be served beside the one of a package's root`.
+
+**Wrong game version (cannot be seen without another `rle.mmp`):** a tail whose header says another size or sha256 is refused at the switch (`extends an rle.mmp of ...`, the card says *Made for another version of the game's graphics*), and the switch restarts instead.
 
 ## 14. What is proven, what is predicted
 

@@ -206,6 +206,7 @@ if(IMPERIVM_BUILD_TESTS)
 		add_test(NAME sdk_clashexample COMMAND "${NODE_EXE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_clashexample.js")
 		add_test(NAME sdk_patchclass COMMAND "${NODE_EXE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_patchclass.js")
 		add_test(NAME sdk_pakwrite COMMAND "${NODE_EXE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_pakwrite.js")
+		add_test(NAME sdk_tailexample COMMAND "${NODE_EXE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_tailexample.js")
 		set(TSV "${CMAKE_CURRENT_BINARY_DIR}/translations.tsv")
 		add_custom_command(OUTPUT "${TSV}"
 			COMMAND "${NODE_EXE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/export-translations-tsv.js" "${TSV}"
