@@ -378,7 +378,7 @@
 {"en":"Removed from the profiles because they are no longer in the content folder: %s","es":"Quitados de los perfiles porque ya no están en la carpeta de contenido: %s","it":"Rimossi dai profili perché non sono più nella cartella dei contenuti: %s"},
 {"en":" (uninstalled on restart)","es":" (se desinstala al reiniciar)","it":" (verrà disinstallato al riavvio)"},
 {"en":"Gameplay","es":"Jugabilidad","it":"="},
-{"en":"Cosmetic","es":"Estético","it":"Estetico"},
+{"en":"Cosmetic","es":"Cosmético","it":"Cosmetico"},
 {"en":"Authors: ","es":"Autores: ","it":"Autori: "},
 {"en":"Not in any profile","es":"No está en ningún perfil","it":"Non è in nessun profilo"},
 {"en":"In profiles: ","es":"En los perfiles: ","it":"Nei profili: "},
@@ -948,7 +948,7 @@
 {"en":"German","es":"Alemán","it":"Tedesco"},
 {"en":"French","es":"Francés","it":"Francese"},
 {"en":"Most liked","es":"Más gustados","it":"Più apprezzati"},
-{"en":"Cosmetics","es":"Estéticos","it":"Estetici"},
+{"en":"Cosmetics","es":"Cosméticos","it":"Cosmetici"},
 {"en":"Profile name","es":"Nombre del perfil","it":"Nome del profilo"},
 {"en":"unknown","es":"desconocido","it":"sconosciuto"},
 {"en":"download","es":"descarga","it":"="},
@@ -1055,10 +1055,10 @@
 {"en":"In progress","es":"En curso","it":"In corso"},
 {"en":"Various","es":"Varios","it":"Vari"},
 {"en":"Classic: like the original game. Competitive: 5000 gold, normal population, no bonuses, unexplored map with fog and diplomacy locked. Various: 10000 gold, high population, with bonuses, explored map and no fog.","es":"Clásico: como el juego original. Competitivo: 5000 de oro, población normal, sin bonificaciones, mapa sin explorar y con niebla, y con la diplomacia bloqueada. Varios: 10000 de oro, población alta, con bonificaciones, mapa explorado y sin niebla.","it":"Classico: come il gioco originale. Competitivo: 5000 di oro, popolazione normale, senza bonus, mappa inesplorata con nebbia e con la diplomazia bloccata. Vari: 10000 di oro, popolazione alta, con bonus, mappa esplorata e senza nebbia."},
-{"en":"Cosmetic: does not affect games","es":"Estético: no afecta a las partidas","it":"Estetico: non influisce sulle partite"},
+{"en":"Cosmetic: does not affect games","es":"Cosmético: no afecta a las partidas","it":"Cosmetico: non influisce sulle partite"},
 {"en":"Will be enabled:","es":"Se activan:","it":"Si attivano:"},
 {"en":"Will be disabled (this game does not use them):","es":"Se desactivan (esta partida no los usa):","it":"Si disattivano (questa partita non li usa):"},
-{"en":"cosmetic","es":"estético","it":"estetico"},
+{"en":"cosmetic","es":"cosmético","it":"cosmetico"},
 {"en":"not installed","es":"no está instalado","it":"non installato"},
 {"en":"The game will restart to apply the profile ","es":"El juego se reiniciará para aplicar el perfil ","it":"Il gioco verrà riavviato per applicare il profilo "},
 {"en":" Anything you have not saved will be lost.","es":" Se perderá lo que no hayas guardado.","it":" Ciò che non hai salvato andrà perso."},
@@ -3407,5 +3407,6 @@
 {"en":"%s are not on GameBanana","es":"%s no están en GameBanana","it":"%s non sono su GameBanana"},
 {"en":"Ask whoever shared the code for them.","es":"Pídeselos a quien te pasó el código.","it":"Chiedili a chi ti ha passato il codice."},
 {"en":"It is made as a new profile; yours does not change.","es":"Se crea como perfil nuevo; el tuyo no cambia.","it":"Si crea come nuovo profilo; il tuo non cambia."},
-{"en":"Import and download","es":"Importar y descargar","it":"Importa e scarica"}
+{"en":"Import and download","es":"Importar y descargar","it":"Importa e scarica"},
+{"en":"Stop waiting for them","es":"Dejar de esperarlos","it":"Smetti di aspettarli"}
 ]

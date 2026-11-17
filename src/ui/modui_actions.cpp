@@ -268,7 +268,11 @@ void DoAction(int action, int arg)
 		break;
 	case kFocusImport: FocusField(kImportField); break;
 	case kImportClear:
+		// Also stops waiting for the packs of an import: what already started downloading still installs, but no longer joins it.
 		g_s.importText.clear();
+		g_s.importProfile.clear();
+		g_s.importWant.clear();
+		g_s.importLoading.clear();
 		g_s.focus = kNoField;
 		break;
 	case kImportCode: {

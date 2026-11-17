@@ -262,6 +262,7 @@ void PaintShareCard(Painter &p, const State &st, const PanelLayout &l)
 			TrFmt("Downloading the packs of \"%s\": %s left. They join the profile as they arrive.",
 				{ModsProfileLabel(st.importProfile), std::to_string(st.importWant.size() + st.importLoading.size())}),
 			pal::text);
+		p.Button(dx, btnY, dw, btnH, "Stop waiting for them", kImportClear, 0, mx, my, true, false, 0);
 		return;
 	}
 	if (st.importText.empty()) return;

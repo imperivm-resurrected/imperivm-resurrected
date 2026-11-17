@@ -400,6 +400,7 @@ void ImportTick()
 		ModsApplyWithoutRestart();
 		BuildRows();
 		BuildUsage();
+		g_s.restartNeeded = ModsRestartNeeded();
 	}
 	if (g_s.importWant.empty() && g_s.importLoading.empty()) g_s.importProfile.clear();
 }
