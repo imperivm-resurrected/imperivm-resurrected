@@ -54,7 +54,8 @@ std::vector<std::string> HotSwapArtFiles(const std::vector<std::string> &files);
 // Why a change of ruleset keeps the restart, to tell the player before it happens: the first files that are the reason, and which of the two
 // reasons it is (the file is read once, see HotSwapReadOnce; or it is one of the kinds the reload does not cover yet: sounds, voices, texts,
 // packs, sprites...). kNone: nothing keeps it.
-enum class RestartWhy { kNone, kReadOnce, kOtherFiles };
+// A third one has its own sentence: the graphics tail (rle.mmp.tail), which the game maps once and every sprite keeps pointers into.
+enum class RestartWhy { kNone, kReadOnce, kGraphicsTail, kOtherFiles };
 struct RestartReason {
 	RestartWhy why = RestartWhy::kNone;
 	std::vector<std::string> files; // at most kRestartReasonFiles

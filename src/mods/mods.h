@@ -359,7 +359,7 @@ bool ModsCanSwitchWithoutRestart(const ModRuleset &wanted);
 // Why a change to `wanted` keeps the restart, to say it before it is asked: kReadOnce (a file the game reads once, when it starts), kOtherFiles (a kind of
 // file the reload does not cover yet: sounds, voices, texts, packs, sprites...) or kHeldImages (an image of the rules the game holds is still in use by
 // something that outlives the reload, so a stale picture could be shown). files names the first ones. kNone: it is not about files (or no restart).
-enum class ModsRestartKind { kNone, kReadOnce, kOtherFiles, kHeldImages };
+enum class ModsRestartKind { kNone, kReadOnce, kGraphicsTail, kOtherFiles, kHeldImages };
 struct ModsRestartInfo {
 	ModsRestartKind kind = ModsRestartKind::kNone;
 	std::vector<std::string> files;

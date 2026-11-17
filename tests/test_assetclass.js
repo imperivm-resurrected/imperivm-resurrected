@@ -80,11 +80,21 @@ try {
 	write(path.join(mod, 'rulesets', 'r', 'gameres', 'icons', 'RHastatus.bmp'));   // in a layer: where it belongs
 	write(path.join(mod, 'rulesets', 'r', 'menuini', 'Menu.ini'));
 	write(path.join(mod, 'rulesets', 'r', 'local', 'english', 'tips.xml'));
+	write(path.join(mod, 'rulesets', 'r', 'rle.mmp.tail'));
+	write(path.join(mod, 'rulesets', 'r', 'packs', 'extra.pak'));
+	write(path.join(mod, 'rulesets', 'r', 'ui', 'cursors', 'arrow.cur'));
+	write(path.join(mod, 'rulesets', 'r', 'ui', 'icons', 'inplace.bmp'));
 	const without = run([mod]);
 	assert.equal(without.status, 0, without.text);
 	assert.doesNotMatch(without.text, /global in-game file/, 'without --game nothing can be compared');
 	assert.match(without.text, /rulesets\/r\/menuini\/Menu\.ini .*menu skin file in a ruleset layer/);
 	assert.match(without.text, /rulesets\/r\/local\/english\/tips\.xml .*menu skin file in a ruleset layer/);
+	// the files that keep the restart say why; the ones that switch in place say nothing
+	assert.match(without.text, /rulesets\/r\/rle\.mmp\.tail .*restarts the game: the graphics tail.*loose \.rle files/);
+	assert.match(without.text, /rulesets\/r\/packs\/extra\.pak .*restarts the game: a \.pak/);
+	assert.match(without.text, /rulesets\/r\/ui\/cursors\/arrow\.cur .*restarts the game: a picture the game reads once/);
+	assert.doesNotMatch(without.text, /inplace\.bmp .*restarts the game/);
+	assert.doesNotMatch(without.text, /gameres\/icons\/RHastatus\.bmp .*restarts the game/);
 	const withGame = run([mod, '--game', game]);
 	assert.equal(withGame.status, 0, withGame.text);
 	const globals = withGame.text.split('\n').filter(l => /global in-game file/.test(l));

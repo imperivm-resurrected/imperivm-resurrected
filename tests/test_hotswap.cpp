@@ -308,6 +308,23 @@ void MapsAreSwitchedInPlace()
 	CHECK_EQ(HotSwapKindsText(kHotMap), "maps");
 }
 
+void TheGraphicsTailKeepsTheRestartAndSaysWhy()
+{
+	// Whatever else is in the layer, the tail names itself (unless something read once is also there: that is told first).
+	RestartReason r = HotSwapRestartReason({}, {"rle.mmp.tail", "packs/a.pak", "civs/x.json"});
+	CHECK(r.why == RestartWhy::kGraphicsTail);
+	CHECK_EQ(r.files.size(), size_t(1));
+	CHECK_EQ(r.files[0], "rle.mmp.tail");
+	r = HotSwapRestartReason({"Rulesets\\a\\RLE.MMP.TAIL"}, {});
+	CHECK(r.why == RestartWhy::kGraphicsTail);
+	r = HotSwapRestartReason({}, {"rle.mmp.tail", "gameres/selections/a.rle"});
+	CHECK(r.why == RestartWhy::kReadOnce);
+	CHECK(HotSwapRestartReason({}, {"packs/a.pak"}).why == RestartWhy::kOtherFiles);
+	CHECK(HotSwapRestartReason({}, {"xrle.mmp.tail"}).why == RestartWhy::kOtherFiles);
+	CHECK_EQ(HotSwapKindOf("rle.mmp.tail"), static_cast<unsigned>(kHotOther));
+	CHECK(SwapDecide(false, {}, {"rle.mmp.tail"}) == HotSwap::kRestart);
+}
+
 void TheRestartSaysWhyBeforeItHappens()
 {
 	CHECK(HotSwapRestartReason({}, {}).why == RestartWhy::kNone);
@@ -318,7 +335,7 @@ void TheRestartSaysWhyBeforeItHappens()
 	CHECK_EQ(r.files.size(), size_t(2));
 	CHECK_EQ(r.files[0], "gameres/selections/a.rle");
 	// Only the not covered kinds.
-	r = HotSwapRestartReason({"packs/a.pak"}, {"civs/gaul.json", "sounds/a.wav", "packs/a.pak", "rle.mmp.tail", "x/y.z"});
+	r = HotSwapRestartReason({"packs/a.pak"}, {"civs/gaul.json", "sounds/a.wav", "packs/a.pak", "specials/a.json", "x/y.z"});
 	CHECK(r.why == RestartWhy::kOtherFiles);
 	CHECK_EQ(r.files.size(), size_t(kRestartReasonFiles));
 	CHECK_EQ(r.files[0], "packs/a.pak");
@@ -331,6 +348,7 @@ int main()
 	SoundsAreSwitchedInPlaceAndTheEntityTableIsReadAgain();
 	EntityArtIsSwitchedInPlaceByFolder();
 	MapsAreSwitchedInPlace();
+	TheGraphicsTailKeepsTheRestartAndSaysWhy();
 	TheRestartSaysWhyBeforeItHappens();
 	TheSameRulesetNeedsNothing();
 	ConstIniAloneIsJustOneKindOfFile();

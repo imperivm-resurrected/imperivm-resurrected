@@ -352,6 +352,11 @@ else {
 	if (layerOf) {
 		// a ruleset is what a host chooses for a game: the menu is not part of it
 		listed(files.filter(f => assets.isMenuSkin(f)), 'menu skin file in a ruleset layer: it belongs to a skin (not the ruleset)');
+		// what makes switching to or from this ruleset restart the game, and why (the DLL says the same in its dialog)
+		for (const f of files) {
+			const why = assets.restartKept(f);
+			if (why) warn(f, 0, 'switching to or from this ruleset restarts the game: ' + why);
+		}
 	}
 	else if (assets.isRulesPackage(files)) {
 		// the root of a rules package (a civilization pack is one) may add files, not replace the game's: such a file is mounted only when a ruleset of the package is chosen
