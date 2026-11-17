@@ -76,7 +76,7 @@ try {
 	write(path.join(mod, 'mod.json'), JSON.stringify({ id: 'patch-test', name: 'Patch test', version: '1', category: 'Civilizations', authors: ['x'] }));
 	write(path.join(mod, 'civs', 'civ10.json'), JSON.stringify({ id: 'civ10', index: 10, base: 'Gaul' }));
 	write(path.join(mod, 'patches', 'data', 'commands', 'RBarracks.xml'), '<patch><add select="/commands"><cmd name="n"/></add><set select="/commands/cmd[@name=\'a\']" costgold="1"/></patch>');
-	write(path.join(mod, 'patches', 'DATA', 'CONST.INI'), '[GamePlay]\nNew = 1\n');
+	write(path.join(mod, 'patches', 'data', 'const.ini'), '[GamePlay]\nNew = 1\n');
 	write(path.join(mod, 'patches', 'menuini', 'MAINMENU.INI'), '[A]\nB = 2\n');
 	let r = run([mod, '--game', game]);
 	assert.equal(r.status, 0, r.text);
@@ -87,7 +87,6 @@ try {
 	fs.rmSync(path.join(mod, 'civs'), { recursive: true });
 	assert.equal(warnings(run([mod, '--game', game]).text).length, 1, 'a patch of a gameplay file makes it a rules package without civilizations');
 	fs.rmSync(path.join(mod, 'patches', 'data'), { recursive: true });
-	fs.rmSync(path.join(mod, 'patches', 'DATA'), { recursive: true });
 	assert.equal(warnings(run([mod, '--game', game]).text).length, 0);
 	console.log('patchclass: ok');
 }
