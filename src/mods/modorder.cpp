@@ -86,3 +86,39 @@ std::vector<std::string> CanonicalOrder(const std::vector<OrderItem> &items)
 	for (size_t i : OrderIndices(items)) out.push_back(items[i].folder);
 	return out;
 }
+
+std::vector<OrderReason> ExplainOrder(const std::vector<OrderItem> &items)
+{
+	const std::vector<size_t> order = OrderIndices(items);
+	std::vector<OrderReason> out;
+	for (size_t k = 0; k < order.size(); k++) {
+		const OrderItem &m = items[order[k]];
+		std::vector<std::string> needs, needed, author;
+		for (size_t j : order) {
+			if (j == order[k]) continue;
+			const OrderItem &o = items[j];
+			if (Names(m.needs, o.id)) needs.push_back(o.folder);
+			if (Names(o.needs, m.id)) needed.push_back(o.folder);
+			if (Names(m.author, o.id) || Names(o.author, m.id)) author.push_back(o.folder);
+		}
+		OrderReason r;
+		r.folder = m.folder;
+		if (!needs.empty()) {
+			r.reason = kOrderNeeds;
+			r.related = needs;
+		}
+		else if (!needed.empty()) {
+			r.reason = kOrderNeeded;
+			r.related = needed;
+		}
+		else if (!author.empty()) {
+			r.reason = kOrderAuthor;
+			r.related = author;
+		}
+		else {
+			r.reason = k == 0 || Rank(items[order[k - 1]]) != Rank(m) ? kOrderByKind : kOrderByName;
+		}
+		out.push_back(r);
+	}
+	return out;
+}
