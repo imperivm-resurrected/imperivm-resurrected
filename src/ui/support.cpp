@@ -335,9 +335,17 @@ void SupportDrawPanel(uint32_t *buf, int w, int h)
 				p.AddHit(cx, y + top, cw, kPodiumMiniH - 8 - top, kTabRoll, 0);
 			}
 		}
+		else if (state == 0) {
+			const int gap = 10, side = (w2 - gap * 2) * 31 / 100, middle = w2 - gap * 2 - side * 2;
+			for (int slot = 0; slot < 3; slot++) {
+				const int cx = slot == 0 ? x : slot == 1 ? x + side + gap : x + side + gap + middle + gap;
+				const int cw = slot == 1 ? middle : side, top = slot == 1 ? 0 : 8;
+				PaintSkeleton(p, cx, y + top, cw, kPodiumMiniH - 8 - top);
+			}
+		}
 		else {
 			p.Font(3);
-			p.Text(x, y, w2, kPodiumMiniH - 8, state == 0 ? "Loading..." : "No patrons yet. Be the first!", pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+			p.Text(x, y, w2, kPodiumMiniH - 8, "No patrons yet. Be the first!", pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 		}
 		y += kPodiumMiniH + 16;
 		int index = 0;
@@ -380,9 +388,17 @@ void SupportDrawPanel(uint32_t *buf, int w, int h)
 	}
 	else {
 		int maxScroll = 0;
-		if (roll.empty()) {
+		if (roll.empty() && state == 0) {
+			// The podium as it will stand, and the first rows of the list under it.
+			const int gap = 12, cw = (w2 - gap * 2) / 3;
+			const int lift[3] = {18, 0, 30};
+			for (int slot = 0; slot < 3; slot++) PaintSkeleton(p, x + slot * (cw + gap), y + lift[slot], cw, kPodiumH - lift[slot]);
+			const int listY = y + kPodiumH + 14;
+			for (int k = 0; k < 4 && listY + (k + 1) * kRollRowH <= H - 76; k++) PaintSkeleton(p, x, listY + k * kRollRowH + (kRollRowH - 12) / 2, w2 * (60 - k * 8) / 100, 12);
+		}
+		else if (roll.empty()) {
 			p.Font(3);
-			p.TextWrapped(x, y + 10, w2, 60, state == 0 ? "Loading..." : "No patrons yet. Be the first!", pal::textDim);
+			p.TextWrapped(x, y + 10, w2, 60, "No patrons yet. Be the first!", pal::textDim);
 		}
 		else {
 			// The podium as on the website: first in the middle and highest, second on the left, third on the right.
