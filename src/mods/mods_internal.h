@@ -100,6 +100,8 @@ void Walk(const std::string &base, const std::string &rel, std::vector<ScanFile>
 std::string LanguageLower();
 std::string LocalizedText(const Json &j, const char *key, const std::string &def);
 ModInfo ScanMod(const std::string &folder, std::vector<ScanFile> &files);
+// Fills ModInfo::globalPatchFiles/Ops/Sample: which patches of the root of a rules package change what the game has (mods/rootrules.h).
+void ScanRootPatches(ModInfo &m, const std::vector<ScanFile> &files);
 bool PatchTextOf(const std::string &folder, const std::string &target, std::string &out, const std::string &layer = "");
 void StartHashing();
 ModProfile ReadProfileFile(const std::string &path);

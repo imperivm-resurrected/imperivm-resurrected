@@ -5,6 +5,7 @@
 
 #include <windows.h>
 
+#include <map>
 #include <mutex>
 
 #include "core/log.h"
@@ -29,6 +30,12 @@ void AddLooseFiles(const std::string &dir, const std::string &rel, GameFileSet &
 	FindClose(h);
 }
 
+struct PakRef {
+	std::string pak;
+	uint32_t offset = 0, size = 0;
+};
+std::map<std::string, PakRef> g_dataRefs;
+
 void AddPakNames(const std::string &dir, bool onlyCurrentLang, GameFileSet &out, unsigned &paks)
 {
 	WIN32_FIND_DATAA fd;
@@ -41,6 +48,7 @@ void AddPakNames(const std::string &dir, bool onlyCurrentLang, GameFileSet &out,
 		for (const PakEntry &e : entries) {
 			const std::string name = RootGamePath(e.name);
 			if (!onlyCurrentLang || name.compare(0, 12, "currentlang/") == 0) out.insert(name);
+			if (!onlyCurrentLang && name.compare(0, 5, "data/") == 0) g_dataRefs[name] = {dir + "\\" + fd.cFileName, e.offset, e.size};
 		}
 	} while (FindNextFileA(h, &fd));
 	FindClose(h);
@@ -67,6 +75,22 @@ const GameFileSet &GameFiles()
 	static std::once_flag once;
 	std::call_once(once, [] { files = Load(); });
 	return files;
+}
+
+bool GameFileText(const std::string &realPath, std::string &out)
+{
+	GameFiles();
+	const auto it = g_dataRefs.find(realPath);
+	if (it == g_dataRefs.end()) return false;
+	HANDLE h = CreateFileA(it->second.pak.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
+	if (h == INVALID_HANDLE_VALUE) return false;
+	out.assign(it->second.size, '\0');
+	DWORD got = 0;
+	const bool ok = SetFilePointer(h, static_cast<LONG>(it->second.offset), nullptr, FILE_BEGIN) != INVALID_SET_FILE_POINTER &&
+		(out.empty() || ReadFile(h, &out[0], it->second.size, &got, nullptr)) && got == it->second.size;
+	CloseHandle(h);
+	if (!ok) out.clear();
+	return ok;
 }
 
 }

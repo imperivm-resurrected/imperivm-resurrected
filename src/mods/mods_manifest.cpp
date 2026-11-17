@@ -441,6 +441,7 @@ ModInfo ScanMod(const std::string &folder, std::vector<ScanFile> &files)
 	// What the root replaces of the game: in a rules package (one with civilizations is always one), whose root is its ruleset. The game's files are
 	// read only if there is something to compare.
 	if (m.kind == kModRules && !m.loosePaths.empty()) m.globalLoose = RootGlobalFiles(m.loosePaths, GameFiles());
+	ScanRootPatches(m, files);
 	return m;
 }
 

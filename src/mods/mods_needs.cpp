@@ -87,7 +87,7 @@ ModNeeds ModsNeededFor(const std::string &gamePath, const std::string &profile)
 			if (_stricmp(f.c_str(), n.folder.c_str()) == 0 || (ModsFind(f, m) && !n.id.empty() && _stricmp(m.id.c_str(), n.id.c_str()) == 0)) {
 				// Enabled, but with the ruleset the game was saved with (or with none, if it was saved with none).
 				// The package itself as the ruleset has no layer id: it is its own case, not the game's own rules.
-				const bool mountedEntry = p.ruleset.id.empty() && !p.ruleset.pack.empty() && _stricmp(p.ruleset.pack.c_str(), f.c_str()) == 0 && ModsFind(f, m) && !m.globalLoose.empty();
+				const bool mountedEntry = p.ruleset.id.empty() && !p.ruleset.pack.empty() && _stricmp(p.ruleset.pack.c_str(), f.c_str()) == 0 && ModsFind(f, m) && ModsHasGlobalRoot(m);
 				n.inProfile = _stricmp(ModsRulesetOf(p.ruleset, f).c_str(), n.ruleset.c_str()) == 0 && mountedEntry == n.packageEntry;
 				break;
 			}

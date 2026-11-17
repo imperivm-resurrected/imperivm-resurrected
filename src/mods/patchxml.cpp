@@ -575,7 +575,7 @@ std::string XmlPatchRun::Text() const
 	return out;
 }
 
-bool XmlPatchRun::Apply(const std::string &patch, std::vector<std::string> &errors, std::vector<PatchedValue> *values)
+bool XmlPatchRun::Apply(const std::string &patch, std::vector<std::string> &errors, std::vector<PatchedValue> *values, PatchPolicy *policy)
 {
 	if (!state->live) {
 		errors.push_back(TrFmt("the game file cannot be read as XML (%s)", {state->error}));
@@ -597,9 +597,13 @@ bool XmlPatchRun::Apply(const std::string &patch, std::vector<std::string> &erro
 		return false;
 	}
 	int applied = 0;
+	const bool addOnly = policy && policy->addOnly;
+	// A node of the game has the key it was read with; what a patch added has one that starts with "+".
+	const auto gamesNode = [](const Node *n) { return n->key.empty() || n->key[0] != '+'; };
 	for (const auto &opPtr : root->kids) {
 		const Node &op = *opPtr;
 		if (op.kind != Node::kElement) continue;
+		bool skippedHere = false;
 		const std::string kind = Lower(op.name);
 		auto fail = [&](const std::string &m) { errors.push_back("<" + op.name + " select=\"" + Attribute(op, "select") + "\">: " + m); };
 		if (kind != "add" && kind != "set" && kind != "remove" && kind != "replace") {
@@ -628,32 +632,62 @@ bool XmlPatchRun::Apply(const std::string &patch, std::vector<std::string> &erro
 								  return false;
 							  }),
 				targets.end());
+			if (addOnly) {
+				const size_t before = targets.size();
+				targets.erase(std::remove_if(targets.begin(), targets.end(), gamesNode), targets.end());
+				skippedHere = targets.size() != before;
+				if (targets.empty()) {
+					if (policy && skippedHere) {
+						policy->skipped++;
+						if (policy->skippedWhat.size() < 5) policy->skippedWhat.push_back(kind + " " + Trim(Attribute(op, "select")));
+					}
+					continue;
+				}
+			}
 		}
 		if (kind == "set") {
 			const std::string shown = Trim(Attribute(op, "select"));
 			const std::vector<std::string> unset = NameList(Attribute(op, "unset"));
+			bool touched = false;
 			for (Node *t : targets) {
 				if (t == doc) continue;
+				const bool game = addOnly && gamesNode(t);
 				for (const Attr &pa : op.attrs) {
 					const std::string n = Lower(pa.name);
 					if (n == "select" || n == "optional" || n == "unset") continue;
 					bool found = false;
 					for (Attr &a : t->attrs) {
 						if (IEq(a.name, pa.name)) {
+							found = true;
+							// An attribute the game's node has is the game's to keep: another value is a change, the same one nothing.
+							if (game) {
+								if (a.value != pa.value) skippedHere = true;
+								continue;
+							}
 							a.value = pa.value;
 							a.quote = pa.quote;
-							found = true;
+							touched = true;
 						}
 					}
-					if (!found) t->attrs.push_back(pa);
-					if (values) values->push_back({"", t->key + "/@" + n, shown + "/@" + pa.name, pa.value, false});
+					if (!found) {
+						t->attrs.push_back(pa);
+						touched = true;
+					}
+					if (values && (!found || !game)) values->push_back({"", t->key + "/@" + n, shown + "/@" + pa.name, pa.value, false});
 				}
 				for (const std::string &name : unset) {
+					bool has = false;
+					for (const Attr &a : t->attrs) has = has || IEq(a.name, name);
+					if (game && has) {
+						skippedHere = true;
+						continue;
+					}
 					t->attrs.erase(std::remove_if(t->attrs.begin(), t->attrs.end(), [&](const Attr &a) { return IEq(a.name, name); }), t->attrs.end());
+					touched = true;
 					if (values) values->push_back({"", t->key + "/@" + Lower(name), shown + "/@" + name, "", true});
 				}
 			}
-			applied++;
+			if (touched || !addOnly) applied++;
 		}
 		else if (kind == "remove") {
 			for (Node *t : targets) {
@@ -734,6 +768,10 @@ bool XmlPatchRun::Apply(const std::string &patch, std::vector<std::string> &erro
 				}
 			}
 			applied++;
+		}
+		if (policy && skippedHere) {
+			policy->skipped++;
+			if (policy->skippedWhat.size() < 5) policy->skippedWhat.push_back(kind + " " + Trim(Attribute(op, "select")));
 		}
 	}
 	if (!applied) return false;
@@ -834,8 +872,36 @@ size_t AppendPoint(const IniLines &r, size_t from, size_t to)
 
 }
 
-bool PatchIniText(std::string &data, const std::string &patch, std::vector<std::string> &errors, std::set<std::string> *removed)
+std::map<std::string, std::string> PatchIniKeys(const std::string &data)
 {
+	std::map<std::string, std::string> out;
+	std::string section;
+	size_t pos = 0;
+	bool first = true;
+	while (pos <= data.size()) {
+		size_t nl = data.find('\n', pos);
+		if (nl == std::string::npos) nl = data.size();
+		std::string line = data.substr(pos, nl - pos);
+		pos = nl + 1;
+		if (first && line.compare(0, 3, "\xEF\xBB\xBF") == 0) line.erase(0, 3);
+		first = false;
+		const std::string t = Trim(line);
+		if (IsComment(t)) continue;
+		if (IsSectionLine(t, &section)) continue;
+		const size_t eq = t.find('=');
+		// A trailing comment is not part of the value the game reads.
+		std::string value = eq == std::string::npos ? "" : Trim(t.substr(eq + 1));
+		const size_t semi = value.find(';');
+		if (semi != std::string::npos) value = Trim(value.substr(0, semi));
+		out[IniValueKey(section, eq == std::string::npos ? t : Trim(t.substr(0, eq)))] = value;
+	}
+	return out;
+}
+
+bool PatchIniText(std::string &data, const std::string &patch, std::vector<std::string> &errors, std::set<std::string> *removed, PatchPolicy *policy)
+{
+	const bool addOnly = policy && policy->addOnly && policy->gameIni;
+	std::set<std::string> skippedDeletes;
 	IniLines ini = SplitLines(data);
 	if (data.compare(0, 3, "\xEF\xBB\xBF") == 0 && !ini.lines.empty()) ini.lines[0].erase(0, 3);
 	const bool bom = data.compare(0, 3, "\xEF\xBB\xBF") == 0;
@@ -862,6 +928,13 @@ bool PatchIniText(std::string &data, const std::string &patch, std::vector<std::
 		const char op = t[0] == '-' || t[0] == '+' ? t[0] : '=';
 		if (op == '-') {
 			const std::string key = Trim(t.substr(1));
+			// A key of the game's file is the game's to keep.
+			if (addOnly && policy->gameIni->count(IniValueKey(section, key))) {
+				skippedDeletes.insert(IniValueKey(section, key));
+				policy->skipped++;
+				if (policy->skippedWhat.size() < 5) policy->skippedWhat.push_back("[" + section + "] -" + key);
+				continue;
+			}
 			bool gone = false;
 			if (exists) {
 				for (size_t i = from; i < to;) {
@@ -907,6 +980,20 @@ bool PatchIniText(std::string &data, const std::string &patch, std::vector<std::
 			}
 			const std::string key = Trim(t.substr(0, eq)), value = Trim(t.substr(eq + 1));
 			const std::string line = key + " = " + value;
+			if (addOnly) {
+				const auto game = policy->gameIni->find(IniValueKey(section, key));
+				if (game != policy->gameIni->end()) {
+					// The game has the key: the same value changes nothing, another one is a change (counted once with a -Key of it just before).
+					std::string mine = value;
+					const size_t semi = mine.find(';');
+					if (semi != std::string::npos) mine = Trim(mine.substr(0, semi));
+					if (mine != game->second && !skippedDeletes.count(game->first)) {
+						policy->skipped++;
+						if (policy->skippedWhat.size() < 5) policy->skippedWhat.push_back("[" + section + "] " + key);
+					}
+					continue;
+				}
+			}
 			if (!exists) {
 				ini.lines.push_back("");
 				ini.lines.push_back("[" + section + "]");
@@ -960,7 +1047,7 @@ std::string VsTrim(const std::string &s)
 
 }
 
-bool PatchScriptText(std::string &data, const std::string &patch, std::vector<std::string> &errors)
+bool PatchScriptText(std::string &data, const std::string &patch, std::vector<std::string> &errors, PatchPolicy *policy)
 {
 	struct Op {
 		std::string kind, anchor;
@@ -1005,6 +1092,12 @@ bool PatchScriptText(std::string &data, const std::string &patch, std::vector<st
 		while (!op.body.empty() && VsTrim(op.body.back()).empty()) op.body.pop_back();
 		if (op.body.empty() && op.kind != "replace") {
 			errors.push_back(TrFmt("line %s: @%s without code below", {std::to_string(op.line), op.kind}));
+			continue;
+		}
+		// A line of the game's script is the game's to keep.
+		if (op.kind == "replace" && policy && policy->addOnly) {
+			policy->skipped++;
+			if (policy->skippedWhat.size() < 5) policy->skippedWhat.push_back("@replace " + op.anchor);
 			continue;
 		}
 		if (op.kind == "bottom") {
@@ -1125,4 +1218,69 @@ std::vector<std::vector<PatchedValue>> PatchXmlResolve(const std::string &file, 
 		for (PatchedValue &v : out[i]) v.file = name;
 	}
 	return out;
+}
+
+std::vector<std::string> PatchSkippedOps(const std::string &file, const std::string &base, const std::string &patch)
+{
+	const auto ends = [&](const char *ext) {
+		const size_t n = strlen(ext);
+		return file.size() >= n && Lower(file.substr(file.size() - n)) == ext;
+	};
+	PatchPolicy policy;
+	policy.addOnly = true;
+	std::vector<std::string> errors;
+	std::string data = base;
+	if (ends(".xml")) {
+		XmlPatchRun run(base);
+		run.Apply(patch, errors, nullptr, &policy);
+	}
+	else if (ends(".ini")) {
+		const std::map<std::string, std::string> keys = PatchIniKeys(base);
+		policy.gameIni = &keys;
+		PatchIniText(data, patch, errors, nullptr, &policy);
+	}
+	else if (ends(".vs")) {
+		PatchScriptText(data, patch, errors, &policy);
+	}
+	// What is listed is the first few; the count is all of them.
+	std::vector<std::string> out = policy.skippedWhat;
+	while (out.size() < policy.skipped) out.push_back("");
+	return out;
+}
+
+bool PatchApplyAll(const std::string &file, std::string &data, const std::vector<PatchInput> &in, std::vector<PatchOutcome> &out)
+{
+	out.assign(in.size(), PatchOutcome());
+	const auto ends = [&](const char *ext) {
+		const size_t n = strlen(ext);
+		return file.size() >= n && Lower(file.substr(file.size() - n)) == ext;
+	};
+	const bool isIni = ends(".ini"), isXml = ends(".xml");
+	std::set<std::string> removed;
+	// The game's own keys, as the file was given before any patch of this file.
+	std::map<std::string, std::string> gameIni;
+	if (isIni && std::any_of(in.begin(), in.end(), [](const PatchInput &p) { return p.addOnly; })) gameIni = PatchIniKeys(data);
+	std::unique_ptr<XmlPatchRun> xml;
+	if (isXml) xml = std::make_unique<XmlPatchRun>(data);
+	bool changed = false;
+	for (size_t i = 0; i < in.size(); i++) {
+		PatchPolicy policy;
+		policy.addOnly = in[i].addOnly;
+		policy.gameIni = &gameIni;
+		bool ok = false;
+		if (xml) {
+			ok = xml->Apply(in[i].text, out[i].errors, nullptr, &policy);
+		}
+		else {
+			std::string work = data;
+			ok = isIni ? PatchIniText(work, in[i].text, out[i].errors, &removed, &policy) : PatchScriptText(work, in[i].text, out[i].errors, &policy);
+			if (ok) data.swap(work);
+		}
+		out[i].applied = ok;
+		out[i].skipped = policy.skipped;
+		out[i].skippedWhat = policy.skippedWhat;
+		changed = changed || ok;
+	}
+	if (xml && changed) data = xml->Text();
+	return changed;
 }

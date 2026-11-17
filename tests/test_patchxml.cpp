@@ -3,6 +3,7 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include "check.h"
 
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
@@ -654,6 +655,150 @@ static void IniValues()
 	CHECK(upper.size() == 1 && upper[0].key == "[game]speed");
 }
 
+// --- the root of a rules package may add, not change (PatchPolicy::addOnly) ---------------------------------------------------------------
+
+static bool AddOnlyXml(std::string &data, const std::string &patch, PatchPolicy &policy)
+{
+	std::vector<std::string> errors;
+	XmlPatchRun run(data);
+	policy.addOnly = true;
+	const bool changed = run.Apply(patch, errors, nullptr, &policy);
+	if (changed) data = run.Text();
+	return changed;
+}
+
+static void AddOnlyXmlAppliesWhatAddsAndSkipsWhatChanges()
+{
+	// adds always apply: a node, an attribute the node lacks, a node before or after a game node
+	std::string data = kCommands;
+	PatchPolicy p;
+	CHECK(AddOnlyXml(data, "<patch><add select=\"/commands\"><cmd name=\"mine\" costgold=\"5\"/></add>"
+		"<set select=\"/commands/cmd[@name='other']\" description=\"new\"/>"
+		"<add select=\"/commands/cmd[@name='other']\" position=\"after\"><cmd name=\"after\"/></add></patch>", p));
+	CHECK_EQ(p.skipped, 0u);
+	CHECK(Contains(data, "name=\"mine\"") && Contains(data, "description=\"new\"") && Contains(data, "name=\"after\""));
+	// a changed attribute, a removed or replaced node and an unset attribute of the game's are skipped, one count per operation
+	data = kCommands;
+	PatchPolicy q;
+	CHECK(!AddOnlyXml(data, "<patch><set select=\"/commands/cmd[@name='trainRHastatus']\" costgold=\"60\"/>"
+		"<set select=\"/commands/cmd[@name='trainRHastatus']\" unset=\"costpop\"/>"
+		"<remove select=\"/commands/cmd[@name='other']\"/>"
+		"<replace select=\"/commands/cmd[@name='trainRArcher']\"><cmd name=\"x\"/></replace></patch>", q));
+	CHECK_EQ(q.skipped, 4u);
+	CHECK_EQ(data, std::string(kCommands));
+	CHECK_EQ(q.skippedWhat.size(), size_t(4));
+}
+
+static void AddOnlyXmlPartialFileAndPartialSet()
+{
+	// a patch that mixes both: the adds apply, the change does not; a <set> with an added and a changed attribute applies the added one
+	std::string data = kCommands;
+	PatchPolicy p;
+	CHECK(AddOnlyXml(data, "<patch><set select=\"/commands/cmd[@name='trainRHastatus']\" costgold=\"60\" rollover=\"Equip\"/>"
+		"<add select=\"/commands\"><cmd name=\"mine\"/></add></patch>", p));
+	CHECK_EQ(p.skipped, 1u);
+	CHECK(Contains(data, "costgold=\"100\"") && Lacks(data, "costgold=\"60\"") && Contains(data, "rollover=\"Equip\"") && Contains(data, "name=\"mine\""));
+	// the same value as the game's changes nothing and is not a change
+	data = kCommands;
+	PatchPolicy same;
+	CHECK(!AddOnlyXml(data, "<patch><set select=\"/commands/cmd[@name='trainRHastatus']\" costgold=\"100\"/></patch>", same));
+	CHECK_EQ(same.skipped, 0u);
+}
+
+static void AddOnlyXmlOperationsOnWhatThePatchAddedApply()
+{
+	std::string data = kCommands;
+	PatchPolicy p;
+	CHECK(AddOnlyXml(data, "<patch><add select=\"/commands\"><cmd name=\"mine\" costgold=\"5\"/></add>"
+		"<set select=\"/commands/cmd[@name='mine']\" costgold=\"9\"/>"
+		"<add select=\"/commands\"><cmd name=\"gone\"/></add>"
+		"<remove select=\"/commands/cmd[@name='gone']\"/>"
+		"<replace select=\"/commands/cmd[@name='mine']\"><cmd name=\"mine\" costgold=\"7\"/></replace></patch>", p));
+	CHECK_EQ(p.skipped, 0u);
+	CHECK(Contains(data, "costgold=\"7\"") && Lacks(data, "name=\"gone\""));
+	// a selector over both the game's and its own nodes: only the game's are kept
+	data = kCommands;
+	PatchPolicy both;
+	CHECK(AddOnlyXml(data, "<patch><add select=\"/commands\"><cmd name=\"mine\" costgold=\"5\"/></add>"
+		"<set select=\"//cmd\" costgold=\"1\"/></patch>", both));
+	CHECK_EQ(both.skipped, 1u);
+	CHECK(Contains(data, "name=\"mine\" costgold=\"1\"") && Contains(data, "costgold=\"100\""));
+	// without the policy, everything applies as before
+	data = kCommands;
+	std::vector<std::string> errors;
+	CHECK(Xml(data, "<patch><set select=\"/commands/cmd[@name='trainRHastatus']\" costgold=\"60\"/></patch>", errors) && Contains(data, "costgold=\"60\""));
+}
+
+static const char *kGameIni = "[GamePlay]\r\nDamageAmplify = 200 ;comment\r\nTelMinDist = 20\r\n\r\n[Vars.All]\r\nAIV_ExcessGold = 10000\r\nBareLine\r\n";
+
+static bool AddOnlyIni(std::string &data, const std::string &patch, PatchPolicy &policy)
+{
+	std::vector<std::string> errors;
+	const std::map<std::string, std::string> keys = PatchIniKeys(data);
+	policy.addOnly = true;
+	policy.gameIni = &keys;
+	return PatchIniText(data, patch, errors, nullptr, &policy);
+}
+
+static void AddOnlyIni()
+{
+	const std::map<std::string, std::string> keys = PatchIniKeys(kGameIni);
+	CHECK_EQ(keys.size(), size_t(4));
+	CHECK_EQ(keys.at("[gameplay]damageamplify"), "200");
+	CHECK_EQ(keys.at("[vars.all]bareline"), "");
+	// new keys, new sections and +Line apply; the same value as the game's changes nothing
+	std::string data = kGameIni;
+	PatchPolicy p;
+	CHECK(AddOnlyIni(data, "[GamePlay]\nMyKey = 5\nDamageAmplify = 200\n[Mine]\nA = 1\n[Vars.All]\n+AnotherLine\n", p));
+	CHECK_EQ(p.skipped, 0u);
+	CHECK(Contains(data, "MyKey = 5") && Contains(data, "[Mine]") && Contains(data, "AnotherLine") && Contains(data, "DamageAmplify = 200 ;comment"));
+	// a game key with another value, -Key of a game key (and the Key = v after it, counted once), -Line of a game line: skipped
+	data = kGameIni;
+	PatchPolicy q;
+	CHECK(!AddOnlyIni(data, "[GamePlay]\nDamageAmplify = 250\n[Vars.All]\n-AIV_ExcessGold\nAIV_ExcessGold = 7000\n-BareLine\n", q));
+	CHECK_EQ(q.skipped, 3u);
+	CHECK_EQ(data, std::string(kGameIni));
+	// a key the patch added is its own: it can be changed and removed
+	data = kGameIni;
+	PatchPolicy r;
+	CHECK(AddOnlyIni(data, "[GamePlay]\nMyKey = 5\nMyKey = 6\n-MyKey\nOther = 1\n", r));
+	CHECK_EQ(r.skipped, 0u);
+	CHECK(Lacks(data, "MyKey") && Contains(data, "Other = 1"));
+}
+
+static const char *kAddOnlyScript = "int a;\nif (nRace == ImperialRome)\n\treturn 1;\nreturn 0;\n";
+
+static void AddOnlyScript()
+{
+	std::string data = kAddOnlyScript;
+	std::vector<std::string> errors;
+	PatchPolicy p;
+	p.addOnly = true;
+	CHECK(PatchScriptText(data, "@before return 0;\n// mod\n@after int a;\nint b;\n@bottom\n// end\n", errors, &p));
+	CHECK_EQ(p.skipped, 0u);
+	data = kAddOnlyScript;
+	PatchPolicy q;
+	q.addOnly = true;
+	CHECK(!PatchScriptText(data, "@replace if (nRace == ImperialRome)\nif (nRace == Greek)\n", errors, &q));
+	CHECK_EQ(q.skipped, 1u);
+	CHECK_EQ(data, std::string(kAddOnlyScript));
+	// the same directives without the policy replace
+	PatchPolicy none;
+	CHECK(PatchScriptText(data, "@replace if (nRace == ImperialRome)\nif (nRace == Greek)\n", errors, &none));
+	CHECK(Contains(data, "nRace == Greek"));
+}
+
+static void SkippedOpsOfAPatchForAGameFile()
+{
+	CHECK_EQ(PatchSkippedOps("data/commands/rbarracks.xml", kCommands, "<patch><add select=\"/commands\"><cmd name=\"n\"/></add></patch>").size(), size_t(0));
+	CHECK_EQ(PatchSkippedOps("data/commands/rbarracks.xml", kCommands, "<patch><set select=\"//cmd[@name='other']\" costgold=\"2\"/><remove select=\"//cmd[@name='other']\"/></patch>").size(), size_t(2));
+	CHECK_EQ(PatchSkippedOps("data/const.ini", kGameIni, "[GamePlay]\nTelMinDist = 30\nNew = 1\n").size(), size_t(1));
+	CHECK_EQ(PatchSkippedOps("data/ai/x.vs", kAddOnlyScript, "@replace return 0;\nreturn 2;\n@top\nint c;\n").size(), size_t(1));
+	// a file that is not a text the patcher knows, or a patch that cannot be read, skips nothing
+	CHECK_EQ(PatchSkippedOps("data/x.bin", "x", "y").size(), size_t(0));
+	CHECK_EQ(PatchSkippedOps("data/commands/rbarracks.xml", kCommands, "<patch><set").size(), size_t(0));
+}
+
 int main()
 {
 	XmlSet();
@@ -674,5 +819,11 @@ int main()
 	XmlResolve();
 	XmlValues();
 	IniValues();
+	AddOnlyXmlAppliesWhatAddsAndSkipsWhatChanges();
+	AddOnlyXmlPartialFileAndPartialSet();
+	AddOnlyXmlOperationsOnWhatThePatchAddedApply();
+	AddOnlyIni();
+	AddOnlyScript();
+	SkippedOpsOfAPatchForAGameFile();
 	return test::Summary("patchxml");
 }

@@ -201,8 +201,8 @@ ModCheck ComputeModCheck(const State &st, const SaveRec &r)
 			continue;
 		}
 		// The package itself as the ruleset (no layer): valid while the package still has root files that replace the game's and no layers.
-		const bool savedEntry = m.rulesetPackage && m.ruleset.empty() && found->layers.empty() && !found->globalLoose.empty();
-		const bool mountedEntry = mods_impl::RootEntryMounted(found->folder, mounted.ruleset.pack, mounted.ruleset.id, !found->globalLoose.empty(), !found->layers.empty());
+		const bool savedEntry = m.rulesetPackage && m.ruleset.empty() && found->layers.empty() && ModsHasGlobalRoot(*found);
+		const bool mountedEntry = mods_impl::RootEntryMounted(found->folder, mounted.ruleset.pack, mounted.ruleset.id, ModsHasGlobalRoot(*found), !found->layers.empty());
 		if (!found->gameplay && m.ruleset.empty() && !savedEntry && ModsRulesetOf(mounted.ruleset, found->folder).empty() && !mountedEntry) continue;
 		c.rulesFolders.push_back(found->folder);
 		const ModLayer *savedLayer = ModsFindLayer(*found, m.ruleset);

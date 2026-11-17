@@ -145,7 +145,7 @@ bool ModsOnSaveWritten(const std::string &gamePath, bool online)
 				e.Set("ruleset", Json::MakeString(layer->id));
 				if (!layer->gameplayHash.empty()) e.Set("rulesetFingerprint", Json::MakeString(layer->gameplayHash));
 			}
-			else if (RootEntryMounted(m.folder, p.ruleset.pack, p.ruleset.id, !m.globalLoose.empty(), !m.layers.empty())) {
+			else if (RootEntryMounted(m.folder, p.ruleset.pack, p.ruleset.id, ModsHasGlobalRoot(m), !m.layers.empty())) {
 				e.Set(kSaveRulesetPackageField, Json::MakeBool(true));
 			}
 			GbKeyToJson(e, m.gbId);

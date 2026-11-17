@@ -8,7 +8,9 @@
 #include "core/log.h"
 #include "core/sha256.h"
 #include "mods/mods.h"
+#include "mods/patchwalk.h"
 #include "mods/patchxml.h"
+#include "mods/rootrules.h"
 #include "mods/vfs.h"
 #include "i18n/tr.h"
 
@@ -27,6 +29,9 @@ struct Source {
 	std::string path;
 	std::string text;
 	std::string gameFileSha256;
+	// A patch of the root of a rules package whose own ruleset is not the one in use: it may add to the game's files but not change what they have
+	// (mods/rootrules.h). The patches of the interface are exempt (see PatchInterface).
+	bool addOnly = false;
 };
 
 std::mutex g_lock;
@@ -75,29 +80,15 @@ std::string GameDirPath()
 	return path;
 }
 
-std::string Lower(std::string s)
+void AddFound(const std::string &dir, const std::string &folder, bool addOnly, std::map<std::string, std::vector<Source>> &out)
 {
-	for (char &c : s) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
-	return s;
-}
-
-void Walk(const std::string &base, const std::string &sub, const std::string &folder, std::map<std::string, std::vector<Source>> &out)
-{
-	WIN32_FIND_DATAA fd;
-	HANDLE h = FindFirstFileA((base + sub + "*").c_str(), &fd);
-	if (h == INVALID_HANDLE_VALUE) return;
-	do {
-		const std::string name = fd.cFileName;
-		if (name == "." || name == "..") continue;
-		if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-			Walk(base, sub + name + "\\", folder, out);
-			continue;
-		}
-		std::string rel = Lower(sub + name);
-		std::replace(rel.begin(), rel.end(), '\\', '/');
-		out[rel].push_back({folder, base + sub + name});
-	} while (FindNextFileA(h, &fd));
-	FindClose(h);
+	for (const PatchFileFound &f : PatchWalk(dir, addOnly)) {
+		Source s;
+		s.folder = folder;
+		s.path = f.path;
+		s.addOnly = f.addOnly;
+		out[f.rel].push_back(s);
+	}
 }
 
 bool ReadFileText(const std::string &path, std::string &out)
@@ -135,10 +126,23 @@ void PatchRebuild()
 {
 	std::map<std::string, std::vector<Source>> found;
 	std::vector<std::string> dirs = ModsMountedDirs();
+	const ModRuleset inUse = ModsMountedProfile().ruleset;
 	for (auto it = dirs.rbegin(); it != dirs.rend(); ++it) {
-		Walk(*it + "\\patches\\", "", ModsPackFolder(*it), found);
+		const std::string pack = ModsPackFolder(*it);
+		// The root of a rules package (not one of its rulesets): its patches that change the game's files apply only under the package's own ruleset.
+		bool addOnly = false;
+		ModInfo info;
+		if (ModsDirVfsName(*it).find('/') == std::string::npos && ModsFind(pack, info) && info.kind == kModRules) {
+			addOnly = !mods_impl::RootGlobalApplies(pack, inUse.pack);
+			if (info.globalPatchOps) {
+				LogI("patch", "%s: %u operations of its root patches change what the game has and are %s (the ruleset in use is %s)", pack.c_str(), info.globalPatchOps,
+					addOnly ? "skipped: they apply only under a ruleset of this pack" : "applied, because its own ruleset is in use",
+					inUse.pack.empty() ? "the game's own" : (inUse.pack + (inUse.id.empty() ? "" : ":" + inUse.id)).c_str());
+			}
+		}
+		AddFound(*it + "\\patches", pack, addOnly, found);
 	}
-	Walk(GameDirPath() + "\\imperivm-resurrected\\patches\\", "", "", found);
+	AddFound(GameDirPath() + "\\imperivm-resurrected\\patches", "", false, found);
 	for (const BuiltinPatch &b : UsableBuiltinPatches(true)) found[b.path].insert(found[b.path].begin(), {"Imperivm Resurrected", "", b.text, b.gameFileSha256});
 	unsigned files = 0;
 	for (const auto &kv : found) files += static_cast<unsigned>(kv.second.size());
@@ -175,16 +179,13 @@ bool PatchApply(const std::string &rel, std::string &data)
 		loadedSha256 = HashString(data);
 		break;
 	}
-	bool changed = false;
-	std::set<std::string> removed;
-	std::unique_ptr<XmlPatchRun> xml;
 	if (isXml) {
-		{
-			std::lock_guard<std::mutex> lock(g_lock);
-			g_bases[rel] = data;
-		}
-		xml = std::make_unique<XmlPatchRun>(data);
+		std::lock_guard<std::mutex> lock(g_lock);
+		g_bases[rel] = data;
 	}
+	// The patches that can be applied, with their text; the others say why they are not.
+	std::vector<PatchInput> inputs;
+	std::vector<const Source *> used;
 	for (const Source &s : sources) {
 		if (!s.gameFileSha256.empty() && s.gameFileSha256 != loadedSha256) {
 			LogI("patch", "built-in fix of %s not applied: the loaded file is not the game's own (a content pack brings its own version)", rel.c_str());
@@ -194,29 +195,32 @@ bool PatchApply(const std::string &rel, std::string &data)
 			AddError(s.folder, rel, Tr("only .xml, .ini and .vs files can be patched"));
 			continue;
 		}
-		std::string text = s.text;
-		if (text.empty() && !ReadFileText(s.path, text)) {
+		PatchInput in;
+		in.text = s.text;
+		if (in.text.empty() && !ReadFileText(s.path, in.text)) {
 			AddError(s.folder, rel, Tr("the patch file cannot be read"));
 			continue;
 		}
-		std::vector<std::string> errors;
-		bool ok = false;
-		if (xml) {
-			ok = xml->Apply(text, errors);
+		in.addOnly = s.addOnly;
+		inputs.push_back(in);
+		used.push_back(&s);
+	}
+	std::vector<PatchOutcome> outcomes;
+	const bool changed = PatchApplyAll(rel, data, inputs, outcomes);
+	for (size_t i = 0; i < outcomes.size(); i++) {
+		const Source &s = *used[i];
+		const PatchOutcome &o = outcomes[i];
+		for (const std::string &e : o.errors) AddError(s.folder, rel, e);
+		const std::string who = s.folder.empty() ? "imperivm-resurrected\\patches" : s.folder;
+		const std::string skipped = o.skipped ? "; " + std::to_string(o.skipped) + " operations skipped: they change what the game has and apply only when a ruleset of this pack is chosen (" + o.skippedWhat[0] + (o.skipped > 1 ? ", ..." : "") + ")" : "";
+		if (o.applied) {
+			LogI("patch", "(%s) %s applied%s%s", who.c_str(), rel.c_str(),
+				o.errors.empty() ? "" : (" (" + std::to_string(o.errors.size()) + " operations with errors)").c_str(), skipped.c_str());
 		}
-		else {
-			std::string work = data;
-			ok = isIni ? PatchIniText(work, text, errors, &removed) : PatchScriptText(work, text, errors);
-			if (ok) data.swap(work);
-		}
-		for (const std::string &e : errors) AddError(s.folder, rel, e);
-		if (ok) {
-			changed = true;
-			LogI("patch", "(%s) %s applied%s", s.folder.empty() ? "imperivm-resurrected\\patches" : s.folder.c_str(), rel.c_str(),
-				errors.empty() ? "" : (" (" + std::to_string(errors.size()) + " operations with errors)").c_str());
+		else if (o.skipped) {
+			LogI("patch", "(%s) %s: nothing applied%s", who.c_str(), rel.c_str(), skipped.c_str());
 		}
 	}
-	if (xml && changed) data = xml->Text();
 	return changed;
 }
 
