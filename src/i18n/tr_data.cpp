@@ -1703,5 +1703,9 @@ extern const TrRow kTrRows[] = {
 	{"There are no conquests here.", "Aquí no hay conquistas.", "Qui non ci sono conquiste."},
 	{"No Imperivm I campaign is installed yet.", "Todavía no hay ninguna campaña de Imperivm I instalada.", "Non è ancora installata nessuna campagna di Imperivm I."},
 	{"No Imperivm II campaign is installed yet.", "Todavía no hay ninguna campaña de Imperivm II instalada.", "Non è ancora installata nessuna campagna di Imperivm II."},
+	{"This is not a content profile code", "Esto no es un código de perfil de contenido", "Questo non è un codice di profilo dei contenuti"},
+	{"This content profile code is damaged or incomplete: copy it again", "Este código de perfil de contenido está dañado o incompleto: vuelve a copiarlo", "Questo codice di profilo dei contenuti è danneggiato o incompleto: copialo di nuovo"},
+	{"This content profile code needs a newer Imperivm Resurrected: update it first", "Este código de perfil de contenido necesita un Imperivm Resurrected más nuevo: actualízalo primero", "Questo codice di profilo dei contenuti richiede un Imperivm Resurrected più recente: aggiornalo prima"},
+	{"Shared profile", "Perfil compartido", "Profilo condiviso"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);
