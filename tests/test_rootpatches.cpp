@@ -86,9 +86,9 @@ static void WalkGivesTheDecisionToEveryFileBelowTheFolder()
 	const std::vector<PatchFileFound> found = PatchWalk(dir.string(), true);
 	CHECK_EQ(found.size(), size_t(5));
 	for (const PatchFileFound &f : found) {
-		const bool interface = f.rel == "menuini/mainmenu.ini" || f.rel == "data/interface/menu/template.ini";
-		if (f.addOnly == interface) std::printf("%s: addOnly %d\n", f.rel.c_str(), f.addOnly);
-		CHECK(f.addOnly != interface);
+		const bool isInterface = f.rel == "menuini/mainmenu.ini" || f.rel == "data/isInterface/menu/template.ini";
+		if (f.addOnly == isInterface) std::printf("%s: addOnly %d\n", f.rel.c_str(), f.addOnly);
+		CHECK(f.addOnly != isInterface);
 	}
 	// the names are the game's: lowercase, "/", relative to the folder
 	bool deep = false;
