@@ -80,15 +80,15 @@ void Cache()
 void TheTailsBytesAreWhereTheGameLooksForThem()
 {
 	const uint64_t base = 410048673, file = kRleTailHeaderSize + 1000;
-	CHECK_EQ(RleTailFileOffset(base, file, base - 1), static_cast<int64_t>(-1));
-	CHECK_EQ(RleTailFileOffset(base, file, 0), static_cast<int64_t>(-1));
-	CHECK_EQ(RleTailFileOffset(base, file, base), static_cast<int64_t>(kRleTailHeaderSize));
-	CHECK_EQ(RleTailFileOffset(base, file, base + 999), static_cast<int64_t>(kRleTailHeaderSize + 999));
-	CHECK_EQ(RleTailFileOffset(base, file, base + 1000), static_cast<int64_t>(-1));
-	CHECK_EQ(RleTailFileOffset(base, kRleTailHeaderSize, base), static_cast<int64_t>(-1));
-	CHECK_EQ(RleTailFileOffset(base, 10, base), static_cast<int64_t>(-1));
+	CHECK(RleTailFileOffset(base, file, base - 1) == static_cast<int64_t>(-1));
+	CHECK(RleTailFileOffset(base, file, 0) == static_cast<int64_t>(-1));
+	CHECK(RleTailFileOffset(base, file, base) == static_cast<int64_t>(kRleTailHeaderSize));
+	CHECK(RleTailFileOffset(base, file, base + 999) == static_cast<int64_t>(kRleTailHeaderSize + 999));
+	CHECK(RleTailFileOffset(base, file, base + 1000) == static_cast<int64_t>(-1));
+	CHECK(RleTailFileOffset(base, kRleTailHeaderSize, base) == static_cast<int64_t>(-1));
+	CHECK(RleTailFileOffset(base, 10, base) == static_cast<int64_t>(-1));
 	// past 4 GB, which the game cannot ask for, is still answered
-	CHECK_EQ(RleTailFileOffset(0x100000000ull, file, 0x100000000ull + 5), static_cast<int64_t>(kRleTailHeaderSize + 5));
+	CHECK(RleTailFileOffset(0x100000000ull, file, 0x100000000ull + 5) == static_cast<int64_t>(kRleTailHeaderSize + 5));
 }
 
 int main()
