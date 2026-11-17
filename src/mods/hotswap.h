@@ -29,8 +29,10 @@ bool HotSwapLayerOk(const std::vector<std::string> &files);
 // makes the game read its table of texts again), the sounds (kHotSound: .wav and .ogg in sounds\, music\ and the voices folders; the game opens them each time
 // it plays one) and the sound entities (kHotSoundData: data\sound entities\*.xml and its patches, which the game reads once into a table that the reload
 // builds again), and the art of the entities (kHotEntity: .ent.xml, .rle and .bmp in units\, buildings\, mapobjects\ and visuals\; the game keeps each
-// entity it loaded in a cache, and the reload takes out of it those whose folder holds a file that changed). kHotOther is anything else.
-enum HotSwapKind : unsigned { kHotNone = 0, kHotPatch = 1, kHotLoose = 2, kHotModes = 4, kHotHidden = 8, kHotOther = 16, kHotArt = 32, kHotText = 64, kHotSound = 128, kHotSoundData = 256, kHotEntity = 512 };
+// entity it loaded in a cache, and the reload takes out of it those whose folder holds a file that changed) and the maps (kHotMap: the .bfhp, .bmp and documents of
+// scenarios\, adventures\, conquests\ and conquestmaps\, the packs\*.bfhp, the random map pictures of randommap\ and the city templates of
+// randommapsettlements\; the game lists them from disk and opens them when a game is made: nothing is kept). kHotOther is anything else.
+enum HotSwapKind : unsigned { kHotNone = 0, kHotPatch = 1, kHotLoose = 2, kHotModes = 4, kHotHidden = 8, kHotOther = 16, kHotArt = 32, kHotText = 64, kHotSound = 128, kHotSoundData = 256, kHotEntity = 512, kHotMap = 1024 };
 unsigned HotSwapKindOf(const std::string &file);
 
 // Whether a file is one the game reads once, when it starts, or when a menu window is built, and never again for a match: the selection circles,

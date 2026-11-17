@@ -291,6 +291,23 @@ void EntityArtIsSwitchedInPlaceByFolder()
 	CHECK_EQ(HotSwapKindsText(kHotEntity), "entity art");
 }
 
+void MapsAreSwitchedInPlace()
+{
+	const char *const maps[] = {"scenarios/Siege.bfhp", "scenarios/Siege.bmp", "Adventures\\Druid.bfhp", "conquests/Gaul.bfhp", "conquestmaps/x.bfhp", "scenarios/readme.txt",
+		"packs/RandomMapSettlements.bfhp", "randommap/Anillo/010.bmp", "RandomMap\\Anillo\\120.bmp", "randommapsettlements/maps/1/map.obj.xml",
+		"randommapsettlements/maps/1/terrain.decor.grid"};
+	for (const char *f : maps) CHECK_EQ(HotSwapKindOf(f), static_cast<unsigned>(kHotMap));
+	// A pak is mounted into the engine's list once, at start; the DLL has no way to take one out: it keeps the restart. So do the other kinds in those folders.
+	const char *const other[] = {"packs/units.pak", "packs/sub/a.bfhp", "scenarios/", "scenarios/a.exe", "scenarios/a.pak", "randommap/Anillo/a.xml", "randommap/", "adventures",
+		"randommapsettlements/", "randommapsettlements/a.dll", "conquests/x.dll"};
+	for (const char *f : other) CHECK_EQ(HotSwapKindOf(f), static_cast<unsigned>(kHotOther));
+	// data\randommap\*.rm.xml (the types) and its tables are data, as before.
+	CHECK_EQ(HotSwapKindOf("data/randommap/Anillo.rm.xml"), static_cast<unsigned>(kHotLoose));
+	CHECK(SwapDecide(false, {}, {"scenarios/a.bfhp", "data/randommap/Anillo.rm.xml", "randommap/Anillo/010.bmp"}) == HotSwap::kReload);
+	CHECK(SwapDecide(false, {"packs/a.bfhp"}, {"packs/a.pak"}) == HotSwap::kRestart);
+	CHECK_EQ(HotSwapKindsText(kHotMap), "maps");
+}
+
 void TheRestartSaysWhyBeforeItHappens()
 {
 	CHECK(HotSwapRestartReason({}, {}).why == RestartWhy::kNone);
@@ -313,6 +330,7 @@ int main()
 	TextsAreSwitchedInPlaceExceptTheSplashScreens();
 	SoundsAreSwitchedInPlaceAndTheEntityTableIsReadAgain();
 	EntityArtIsSwitchedInPlaceByFolder();
+	MapsAreSwitchedInPlace();
 	TheRestartSaysWhyBeforeItHappens();
 	TheSameRulesetNeedsNothing();
 	ConstIniAloneIsJustOneKindOfFile();

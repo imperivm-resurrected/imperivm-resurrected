@@ -1,3 +1,6 @@
 # made from the player's own game by make-clash-files.js: a file of the game does not go in the repository
 clash-c/data/
 clash-d/data/
+# the random map made by the command of the README (6 MB of pictures)
+clash-b/rulesets/blue/randommap/
+clash-b/rulesets/blue/data/

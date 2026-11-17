@@ -83,6 +83,14 @@ The sound is a loose file of the layer (`sounds\clash\blue-chime.wav`, a new nam
 
 The soldier is the layer's `units\RHastatus\` folder: the 12 `.rle` sheets and `RHastatus.ent.xml` of the unit-graphics example, with the entity's name changed, at the paths of the game's own hastatus (`Units/RHastatus/RHastatus.ent.xml` is what the class asks for). The game keeps every entity it has loaded in a cache by that name until it exits, and since the reload keeps it (to not lose memory) the DLL now takes out of it, with the game's own `UnloadEntity`, the entities whose folder holds a changed file: the hastatus, here, and nothing else. Train two hastati and look at them: the cube under Blue, the legionary under Plain. Log: `game: hot reload: entity art: 1 folders changed, 1 of the N cached entities taken out: Units/RHastatus/RHastatus.ent.xml`. (If the hastatus was never loaded by the game before the switch, the cache has no entry and `0 of the N`.) **Predicted, not yet seen in the game.**
 
+The maps: the blue ruleset has a random map type, **Anillo** (the ring of land of the [random-map example](../random-map-example/README.md)): `data\randommap\Anillo.rm.xml` and twelve `randommap\Anillo\*.bmp` of half a megabyte each. They are not in the repository (6 MB of generated pictures): make them once, into the copy of the package in the game's `mods` folder:
+
+```text
+node sdk\tools\create-random-map.js "<game>\mods\clash-b\rulesets\blue" Anillo sdk\examples\random-map-example\drawings\ring.png --players 8
+```
+
+Under **Blue**, the lobby's *Map type* dropdown has *Random: Anillo* (open it after the switch: the dropdown is built when it opens); under Plain, Original and Clash example A it does not. Pick it and start: the map is a ring of land with a sea in the middle. The game reads the type, its pictures and its tables each time it generates a map. **Predicted, not yet seen in the game.**
+
 ### Stress: five rounds and the memory
 
 Start the game with `[Debug] MemoryTrace=1` in `imperivm-mod.ini` (slower loads: a second or two per game). Pick *Blue*, start a skirmish, leave it, pick *Plain*, start, leave, *Original*, start, leave, *Blue*..., five times round. Then:
