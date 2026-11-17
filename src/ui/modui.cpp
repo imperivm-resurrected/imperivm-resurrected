@@ -632,7 +632,7 @@ std::string ModUiRestartReason(const ModRuleset &ruleset)
 	// With the space that joins it to the sentence before it.
 	switch (info.kind) {
 	case ModsRestartKind::kReadOnce: return " " + TrFmt("It has files the game reads only once, when it starts: %s.", {names});
-	case ModsRestartKind::kOtherFiles: return " " + TrFmt("It has files the game cannot swap in a running session yet (sounds, voices, texts, packs, sprites): %s.", {names});
+	case ModsRestartKind::kOtherFiles: return " " + TrFmt("It has files the game cannot swap in a running session yet (sounds, voices, packs, sprites): %s.", {names});
 	case ModsRestartKind::kHeldImages:
 		return " " + (names.empty() ? Tr("The game could not check that its old images are free, so it cannot swap them without a restart.")
 									  : TrFmt("Images of the current rules are still in use by the game: %s. A restart makes sure no old picture is shown.", {names}));

@@ -405,18 +405,21 @@ ModsReload ModsReloadPlan()
 	return g_ready && Decide(false, fromFiles, toFiles, false, nullptr) ? ModsReload::kReload : ModsReload::kRestart;
 }
 
-std::vector<std::string> ModsReloadArtFiles()
+ModsReloadChange ModsReloadChanged()
 {
+	ModsReloadChange change;
 	ModRuleset engine, mounted;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
-		if (!g_engineKnown || !g_mount.known) return {};
+		if (!g_engineKnown || !g_mount.known) return change;
 		engine = g_engineRules;
 		mounted = g_mount.profile.ruleset;
 	}
 	std::vector<std::string> fromFiles, toFiles;
-	if (!LayerFiles(engine, mounted, fromFiles) || !LayerFiles(mounted, engine, toFiles)) return {};
-	return ArtOf(fromFiles, toFiles);
+	if (!LayerFiles(engine, mounted, fromFiles) || !LayerFiles(mounted, engine, toFiles)) return change;
+	change.kinds = HotSwapKinds(fromFiles) | HotSwapKinds(toFiles);
+	change.art = ArtOf(fromFiles, toFiles);
+	return change;
 }
 
 void ModsOnRulesetSwapped(void (*hook)())

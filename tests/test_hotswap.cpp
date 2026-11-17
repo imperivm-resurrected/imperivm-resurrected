@@ -98,7 +98,7 @@ void OnlyTheKindsOfFileTheGameCanReadAgainAreSwitched()
 	CHECK(SwapDecide(true, both, commands) == HotSwap::kNothing);
 	// Anything else restarts, whichever side has it.
 	const Files bad[] = {{"patches/data/const.ini", "rle.mmp.tail"}, {"civs/gaul.json"}, {"specials/x.json"}, {"options/speed.json"},
-		{"events/ongamestart.vs"}, {"packs/units.pak"}, {"patches/units/rhastatus.ent.xml"}, {"patches/currentlang/game.loc.xml"},
+		{"events/ongamestart.vs"}, {"packs/units.pak"}, {"patches/units/rhastatus.ent.xml"}, {"patches/currentlang/game.bmp"},
 		{"patches/data/readme.txt"}, {"patches/data/"}, {"data/"}, {"data/sounds/x.wav"}, {"data/readme.txt"}, {"local/spanish/game.pak"},
 		{"rules/game.json"}, {"modes/sub/x.json"}, {"modes/x.xml"}, {"gameres/selections/x.rle"}, {"hidden.txt.bak"}, {"gameres/icons/x.wav"}, {"gameres/icons/"}};
 	for (const Files &b : bad) {
@@ -178,7 +178,7 @@ void GlobalRootFilesCountAsFilesThatComeWithARuleset()
 	CHECK_EQ(SwapFilesOf(layer, art, true).size(), size_t(1));
 	CHECK_EQ(SwapFilesOf(layer, art, false).size(), size_t(2));
 	// The patches of a root that change the game's files come with the ruleset too: a data patch is hot-switchable, one of anything else is not.
-	const std::vector<std::string> dataPatch = {"patches/data/commands/rbarracks.xml", "patches/data/const.ini"}, otherPatch = {"patches/currentlang/game.loc.xml"};
+	const std::vector<std::string> dataPatch = {"patches/data/commands/rbarracks.xml", "patches/data/const.ini"}, otherPatch = {"patches/units/rhastatus.ent.xml"};
 	CHECK(HotSwapLayerOk(SwapFilesOf(layer, dataPatch, false)));
 	CHECK(!HotSwapLayerOk(SwapFilesOf(layer, otherPatch, false)));
 	CHECK(HotSwapLayerOk(SwapFilesOf(layer, otherPatch, true)));
@@ -228,6 +228,30 @@ void TheImagesOfAMatchAreSwitchedInPlaceAndTheOnesReadOnceAreNot()
 	CHECK(HotSwapArtFiles({}).empty());
 }
 
+void TextsAreSwitchedInPlaceExceptTheSplashScreens()
+{
+	const char *const text[] = {"loc/english.loc.xml", "loc/spanish/extra.loc.xml", "Loc\\Italian.loc.xml", "local/spanish/tips.xml", "local/english/help.xml",
+		"local/spanish/copyrights.txt", "local/spanish/sub/more.ini", "patches/currentlang/game.loc.xml", "currentlang/tips.xml"};
+	for (const char *f : text) CHECK_EQ(HotSwapKindOf(f), static_cast<unsigned>(kHotText));
+	// Read once at start, voices, paks, pictures and what is not a text keep the restart.
+	const char *const other[] = {"local/spanish/splash.ini", "local/english/endsplash1.ini", "currentlang/endsplash2.ini", "local/spanish/voices/rhastatus/1.wav",
+		"local/spanish/game.pak", "local/spanish/conquestdefault.bmp", "loc/english.txt", "loc/", "local/spanish.xml", "local//a.xml", "patches/currentlang/a.bmp",
+		"patches/currentlang/voices/a.xml"};
+	for (const char *f : other) CHECK_EQ(HotSwapKindOf(f), static_cast<unsigned>(kHotOther));
+	CHECK(HotSwapTextReadOnce("local/spanish/splash.ini"));
+	CHECK(!HotSwapTextReadOnce("local/spanish/tips.xml"));
+	CHECK(HotSwapReadOnce("currentlang/splash.ini"));
+	// A layer of texts and images is reloaded; with a splash screen it is not and says why.
+	const Files mixed = {"loc/english.loc.xml", "local/spanish/tips.xml", "gameres/icons/a.bmp", "patches/data/const.ini"};
+	CHECK(SwapDecide(false, {}, mixed) == HotSwap::kReload);
+	CHECK_EQ(HotSwapKinds(mixed), static_cast<unsigned>(kHotText | kHotArt | kHotPatch));
+	CHECK_EQ(HotSwapKindsText(kHotText), "texts");
+	CHECK(SwapDecide(false, {}, {"loc/english.loc.xml", "local/spanish/splash.ini"}) == HotSwap::kRestart);
+	const RestartReason r = HotSwapRestartReason({}, {"loc/english.loc.xml", "local/spanish/splash.ini"});
+	CHECK(r.why == RestartWhy::kReadOnce);
+	CHECK_EQ(r.files.size(), size_t(1));
+}
+
 void TheRestartSaysWhyBeforeItHappens()
 {
 	CHECK(HotSwapRestartReason({}, {}).why == RestartWhy::kNone);
@@ -247,6 +271,7 @@ void TheRestartSaysWhyBeforeItHappens()
 int main()
 {
 	TheImagesOfAMatchAreSwitchedInPlaceAndTheOnesReadOnceAreNot();
+	TextsAreSwitchedInPlaceExceptTheSplashScreens();
 	TheRestartSaysWhyBeforeItHappens();
 	TheSameRulesetNeedsNothing();
 	ConstIniAloneIsJustOneKindOfFile();

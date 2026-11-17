@@ -52,16 +52,16 @@ node tools\validate-mod.js sdk\examples\ruleset-clash-example\clash-a --game "<g
 WARNING  gameres/icons/RHastatus.bmp  global in-game file in the root of a rules package (a civilization pack is one): it is ignored unless a ruleset of this package is chosen; put it in a ruleset layer (rulesets/<id>/)
 ```
 
-## Images in place (`clash-a` and `clash-b`, with `gameres\`)
+## Images and texts in place (`clash-a` and `clash-b`, with `gameres\` and `loc\`)
 
 Every ruleset below is switched **without restarting**, between two matches or from the in-game menu (Load): the game keeps the images of its interface in caches that last until it exits (the file cache, by name; the cache of the interface's windows; the frame of the command bar), so a new match would be handed the old picture of the same name. The DLL empties them between the two matches, after the old game's tables and windows have let go of their pictures. If the name of an image that changes is still in use by something that stays loaded, the switch **does not happen in place** and the game restarts instead of showing the old picture: the dialog says so, with the names, when the game already knows it (the windows of the interface are asked live; a name that an earlier switch found in use is remembered for the session); a name that nobody knew about is found right after the caches are emptied, before the match is entered, and the game restarts then.
 
-| Ruleset | Barracks button | Gold icon in the prices | Queue icon and portrait of the hastatus | Strategic map (ruin, trees) |
-|---|---|---|---|---|
-| **Original** | the game's | the game's (gold coin) | the game's | the game's |
-| **Plain** (`clash-b`) | the game's | the game's | the game's | the game's |
-| **Blue** (`clash-b`) | flat **BLUE** (three frames: normal, lighter, gray) | **BLUE** square | the **BLUE** pattern | cyan trees, blue ruin |
-| **Clash example A** | flat **RED** | **RED** square | the **RED** pattern | the game's |
+| Ruleset | Barracks button | Gold icon in the prices | Queue icon and portrait of the hastatus | Strategic map (ruin, trees) | Rollover text of the hastatus button |
+|---|---|---|---|---|---|
+| **Original** | the game's | the game's (gold coin) | the game's | the game's | *Equip Hastatus* |
+| **Plain** (`clash-b`) | the game's | the game's | the game's | the game's | *Equip Hastatus* |
+| **Blue** (`clash-b`) | flat **BLUE** (three frames: normal, lighter, gray) | **BLUE** square | the **BLUE** pattern | cyan trees, blue ruin | **Equip Hastatus (blue ruleset)** (Spanish *Equipar legionario (conjunto azul)*, Italian *Equipaggia astato (set blu)*) |
+| **Clash example A** | flat **RED** | **RED** square | the **RED** pattern | the game's | *Equip Hastatus* |
 
 The switches to try, none of which restarts: Blue -> Plain -> Original -> Blue -> Clash example A -> Plain -> Blue (and the same from the in-game menu: Load a save made under another ruleset). **Predicted, not yet seen in the game**: all of it.
 
@@ -76,6 +76,8 @@ game: art cache (after the reload): file cache M entries (K in use ...), interfa
 ```
 
 `15 images change, 0 of them still cached` is the proof that no old picture can come back; a number other than 0 would be the restart (`hot reload: images that this switch replaces are still in use by the game (...)`) with the names. `purge file 1` is the first of the files the DLL loads only to make the game's own purge run; a higher number means the first ones were in use.
+
+The text is the **blue** layer's `loc\<language>.loc.xml` (`loc\` is the DLL's own folder for the texts a package adds to `game.loc.xml`). The game reads its table of texts once, when it starts; between two matches the DLL makes the game's own `SetLanguage` clear the table and read `CurrentLang\game.loc.xml` again, served with the mounted files merged in, and then the commands, items and classes are read again with the new table. In the log: `game: hot reload: texts read again: N -> M entries` (M is N plus the texts of the layer, in a language other than English also the DLL's own menu texts) before `image caches emptied`, and `language: K mod texts added to game.loc.xml` as the game opens the file. Under Plain or Original the line reads `... M -> N entries`. **Predicted, not yet seen in the game.**
 
 ### Stress: five rounds and the memory
 

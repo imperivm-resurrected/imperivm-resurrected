@@ -24,14 +24,19 @@ bool HotSwapLayerOk(const std::vector<std::string> &files);
 // replacing files under data/ (kHotLoose: .xml, .ini, .vs; the game reads them when it starts or when the match does, from the loose
 // layer that is mounted in place), the lobby's mode files modes/*.json (kHotModes), hidden.txt (kHotHidden) and the images of the interface
 // that belong to a match (kHotArt: .bmp and .rle in gameres/ (ui/) icons, cmdbar, infobar, noteicons, help and conversations, and the
-// minimap/zoomN/entities pictures; the game keeps them in caches that the reload empties, see game/artcache.h). kHotOther is anything else.
-enum HotSwapKind : unsigned { kHotNone = 0, kHotPatch = 1, kHotLoose = 2, kHotModes = 4, kHotHidden = 8, kHotOther = 16, kHotArt = 32 };
+// minimap/zoomN/entities pictures; the game keeps them in caches that the reload empties, see game/artcache.h) and the texts (kHotText: the
+// loc\<language>.loc.xml files, the files of local\<language>\ and currentlang\ that are .xml, .txt or .ini, patches to currentlang\; the reload
+// makes the game read its table of texts again). kHotOther is anything else.
+enum HotSwapKind : unsigned { kHotNone = 0, kHotPatch = 1, kHotLoose = 2, kHotModes = 4, kHotHidden = 8, kHotOther = 16, kHotArt = 32, kHotText = 64 };
 unsigned HotSwapKindOf(const std::string &file);
 
 // Whether a file is one the game reads once, when it starts, or when a menu window is built, and never again for a match: the selection circles,
 // the cursors and their table, the fonts, the pictures of the menus and of the other windows that are not a match's, the layouts of the
 // interface (gameini/, menuini/, data/interface/). A ruleset that has one keeps the restart, and says so.
 bool HotSwapReadOnce(const std::string &file);
+
+// Whether a file is a text of the game that is read once, at start (the splash screens): it keeps the restart although it is a text.
+bool HotSwapTextReadOnce(const std::string &file);
 
 // The game's own paths (ui/..., lowercase, "/") of the images among files (kHotArt), as the caches name them after the volume gameres/ is
 // turned into ui/. These are the files whose cached copy the reload has to be sure it replaced.

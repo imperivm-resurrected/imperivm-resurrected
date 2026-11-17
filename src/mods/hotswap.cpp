@@ -77,10 +77,40 @@ bool MinimapEntityPicture(const std::string &f)
 }
 }
 
+bool HotSwapTextReadOnce(const std::string &raw)
+{
+	const std::string f = Normal(raw);
+	const size_t slash = f.find_last_of('/');
+	const std::string leaf = slash == std::string::npos ? f : f.substr(slash + 1);
+	return leaf == "splash.ini" || leaf == "endsplash1.ini" || leaf == "endsplash2.ini";
+}
+
+namespace {
+// A text the game reads each time it needs it or when a match starts: the DLL's loc\ files that are merged into game.loc.xml, and the .xml, .txt and .ini
+// of the language folders (local\<language>\, currentlang\ and patches\currentlang\; not voices, not paks, not pictures) except the splash screens.
+bool TextFile(const std::string &f, const std::string &ext)
+{
+	if (ext != ".xml" && ext != ".txt" && ext != ".ini") return false;
+	if (StartsWith(f, "loc/")) return ext == ".xml" && f.size() > 4;
+	std::string rest;
+	if (StartsWith(f, "patches/currentlang/")) rest = f.substr(20);
+	else if (StartsWith(f, "currentlang/")) rest = f.substr(12);
+	else if (StartsWith(f, "local/")) {
+		const size_t slash = f.find('/', 6);
+		if (slash == std::string::npos || slash == 6) return false;
+		rest = f.substr(slash + 1);
+	}
+	else return false;
+	if (rest.empty() || StartsWith(rest, "voices/")) return false;
+	return !HotSwapTextReadOnce(f);
+}
+}
+
 bool HotSwapReadOnce(const std::string &raw)
 {
 	const std::string f = Normal(raw);
 	const std::string real = RealPath(f);
+	if (HotSwapTextReadOnce(f)) return true;
 	if (StartsWith(f, "fonts/") || StartsWith(f, "menuini/") || StartsWith(f, "gameini/") || StartsWith(f, "commonini/") || StartsWith(f, "editorini/") ||
 		StartsWith(f, "cursors/") || StartsWith(f, "data/interface/") || StartsWith(f, "patches/data/interface/") || f == "data/cursors.xml" ||
 		f == "patches/data/cursors.xml") {
@@ -97,6 +127,7 @@ unsigned HotSwapKindOf(const std::string &raw)
 	if (f == "hidden.txt") return kHotHidden;
 	if (HotSwapReadOnce(f)) return kHotOther;
 	const std::string real = RealPath(f);
+	if (TextFile(f, ext)) return kHotText;
 	if (IsImage(ext) && MatchArtFolder(real)) return kHotArt;
 	if (MinimapEntityPicture(f)) return kHotArt;
 	// A file in a subfolder or with no name is not one of these.
@@ -129,6 +160,7 @@ std::string HotSwapKindsText(unsigned kinds)
 	add(kHotModes, "modes");
 	add(kHotHidden, "hidden.txt");
 	add(kHotArt, "interface images");
+	add(kHotText, "texts");
 	add(kHotOther, "other files");
 	return out.empty() ? "nothing" : out;
 }
