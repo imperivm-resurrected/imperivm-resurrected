@@ -70,6 +70,14 @@ std::string RleTailMakeHeader(uint64_t baseSize, const std::string &baseSha256)
 	return out;
 }
 
+int64_t RleTailFileOffset(uint64_t baseSize, uint64_t tailFileSize, uint64_t offset)
+{
+	if (tailFileSize < kRleTailHeaderSize || offset < baseSize) return -1;
+	const uint64_t inside = offset - baseSize;
+	if (inside >= tailFileSize - kRleTailHeaderSize) return -1;
+	return static_cast<int64_t>(kRleTailHeaderSize + inside);
+}
+
 std::string RleCacheKey(const RleCacheSource &s)
 {
 	std::string path;

@@ -36,6 +36,9 @@ inline constexpr uintptr_t kCWinFileServiceCtor = 0x00674ea0;
 inline constexpr uintptr_t kXmlParseNoBytesJump = 0x0067a228;
 inline constexpr uintptr_t kXmlParseFreeBuffer = 0x0067a269;
 inline constexpr uintptr_t kParseFile = 0x0067a880;
+// CMappedFileSource::GetData(this, offset): the address of byte `offset` of the mapped file (the view's base + offset); the sprites made from a .rle.mmp descriptor
+// keep that address. The only source the game makes is rle.mmp (InitRleImageSystem).
+inline constexpr uintptr_t kMappedFileSourceGetData = 0x0067b2c0;
 inline constexpr uintptr_t kOpenMappedFileSource = 0x0067b390;
 inline constexpr uintptr_t kLanguagePersist = 0x0067b920;
 inline constexpr uintptr_t kHasLocalNotes = 0x0067ba00;

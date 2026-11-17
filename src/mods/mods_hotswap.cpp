@@ -74,6 +74,35 @@ std::string LooseLayerPrefix(const ModRuleset &r)
 ModsArtProbe g_artProbe = nullptr;
 std::atomic<unsigned> g_artGeneration{0};
 
+// The tail of a ruleset's layer, if it has one the DLL can serve (it is not damaged): where it is, and the rle.mmp it was made for.
+bool LayerTail(const ModRuleset &r, std::string &folder, std::string &path, uint64_t &baseSize, std::string &baseSha256)
+{
+	ModInfo m;
+	if (r.Empty() || !ModsFind(r.pack, m)) return false;
+	const ModLayer *layer = ModsFindLayer(m, r.id);
+	if (!layer || !layer->rleTail || !layer->rleTailError.empty()) return false;
+	folder = m.folder;
+	path = LayerDir(r) + "\\rle.mmp.tail";
+	baseSize = layer->rleBaseSize;
+	baseSha256 = layer->rleBaseSha256;
+	return true;
+}
+
+// Whether a package of the mounted profile has a tail in its root (mounted with the profile, in the file the game maps): a ruleset's tail cannot be served beside it.
+bool ProfileRootHasTail()
+{
+	ModProfile p;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		p = g_mount.profile;
+	}
+	for (const std::string &folder : p.mods) {
+		ModInfo m;
+		if (ModsFind(folder, m) && m.forbidden.empty() && m.rleTail && m.rleTailError.empty()) return true;
+	}
+	return false;
+}
+
 // The folder of a package and the "rulesets/<id>/" of the ruleset's layer, for its paks; false if the ruleset has no layer.
 bool LayerSub(const ModRuleset &r, std::string &folder, std::string &sub)
 {
@@ -205,17 +234,29 @@ bool Decide(bool sameMount, const std::vector<std::string> &fromFiles, const std
 	if (SwapDecide(sameMount, fromFiles, toFiles) == HotSwap::kRestart) {
 		if (why) {
 			const RestartReason reason = HotSwapRestartReason(fromFiles, toFiles);
-			why->kind = reason.why == RestartWhy::kReadOnce ? ModsRestartKind::kReadOnce
-				: reason.why == RestartWhy::kGraphicsTail ? ModsRestartKind::kGraphicsTail : ModsRestartKind::kOtherFiles;
+			why->kind = reason.why == RestartWhy::kReadOnce ? ModsRestartKind::kReadOnce : ModsRestartKind::kOtherFiles;
 			why->files = reason.files;
 			// One line per distinct reason: the rooms ask on every frame.
 			static std::string last;
 			const std::string line = JoinFirst(reason.files, kRestartReasonFiles);
 			if (last != line) {
 				last = line;
-				LogI("content", "a change of ruleset keeps the restart: %s (%s)", reason.why == RestartWhy::kReadOnce ? "the game reads these files once, when it starts"
-					: reason.why == RestartWhy::kGraphicsTail ? "the game maps its sprite file once and keeps pointers into it" : "files of a kind the reload does not cover",
+				LogI("content", "a change of ruleset keeps the restart: %s (%s)", reason.why == RestartWhy::kReadOnce ? "the game reads these files once, when it starts" : "files of a kind the reload does not cover",
 					line.c_str());
+			}
+		}
+		return false;
+	}
+	// A ruleset's graphics tail is served by the DLL beside the game's rle.mmp: not when a package's root has one in the file the game maps (only one tail at a time),
+	// and not without the hook of the sprite data.
+	if (((HotSwapKinds(fromFiles) | HotSwapKinds(toFiles)) & kHotTail) && (!RleTailsInPlace() || ProfileRootHasTail())) {
+		if (why) {
+			why->kind = ModsRestartKind::kGraphicsTail;
+			why->files = {"rle.mmp.tail"};
+			static bool logged = false;
+			if (!logged) {
+				logged = true;
+				LogI("content", "a change of ruleset keeps the restart: its graphics tail cannot be served beside the one of a package's root (only one tail at a time) or without the hook of the sprite data");
 			}
 		}
 		return false;
@@ -368,6 +409,21 @@ bool ModsSwapMountedRuleset(const ModRuleset &wanted)
 		if (!newLoose.empty()) UnmountLooseFolder(newLoose);
 		return false;
 	}
+	// Its graphics tail, if it has one: the DLL maps the file and answers the game's sprite data for it; the entities of the folders that change are loaded again
+	// by the reload (their .rle.mmp descriptors are among the files that come and go). The tail of the ruleset that goes stays mapped (see mods_rle.cpp).
+	std::string tailFolder, tailPath, tailSha;
+	uint64_t tailBase = 0;
+	std::string oldTailFolder, oldTailPath, oldTailSha;
+	uint64_t oldTailBase = 0;
+	const bool newHasTail = LayerTail(next, tailFolder, tailPath, tailBase, tailSha);
+	const bool oldHadTail = !sameFiles && LayerTail(before, oldTailFolder, oldTailPath, oldTailBase, oldTailSha);
+	if (!sameFiles && newHasTail && !RleActivateTail(tailFolder, tailPath, tailBase, tailSha)) {
+		LogE("content", "the graphics tail of the ruleset %s could not be mounted; nothing was changed", tailFolder.c_str());
+		if (newHasPaks) UnmountLayerPaks(newFolder, newSub);
+		if (!newLoose.empty()) UnmountLooseFolder(newLoose);
+		return false;
+	}
+	if (!sameFiles && !newHasTail && oldHadTail) RleDeactivateTail();
 	std::vector<std::string> dirs;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);

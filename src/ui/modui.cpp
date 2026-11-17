@@ -633,7 +633,7 @@ std::string ModUiRestartReason(const ModRuleset &ruleset)
 	switch (info.kind) {
 	case ModsRestartKind::kReadOnce: return " " + TrFmt("It has files the game reads only once, when it starts: %s.", {names});
 	case ModsRestartKind::kGraphicsTail:
-		return " " + TrFmt("It has a graphics tail (%s): the game maps its sprite file once, when it starts, and every sprite keeps a pointer into it. Sprites as loose .rle files switch without a restart.", {names});
+		return " " + TrFmt("It has a graphics tail (%s), and a package of the profile already has one in its root: only one tail can be mounted, and the game maps the one of the root once, when it starts.", {names});
 	case ModsRestartKind::kOtherFiles: return " " + TrFmt("It has files the game cannot swap in a running session (civilizations, specials, options, events, rle.mmp.tail...): %s.", {names});
 	case ModsRestartKind::kHeldImages:
 		return " " + (names.empty() ? Tr("The game could not check that its old images are free, so it cannot swap them without a restart.")

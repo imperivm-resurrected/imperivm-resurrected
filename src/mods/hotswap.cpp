@@ -191,6 +191,8 @@ unsigned HotSwapKindOf(const std::string &raw)
 	if (TextFile(f, ext)) return kHotText;
 	if (SoundEntityFile(f, ext)) return kHotSoundData;
 	if (EntityArtFile(f)) return kHotEntity;
+	// The tail of a ruleset: the file at the root of its folder (a package's own is not in this list).
+	if (f == "rle.mmp.tail") return kHotTail;
 	if (MapFile(f, ext)) return kHotMap;
 	if (SoundFile(f, ext)) return kHotSound;
 	if (IsImage(ext) && MatchArtFolder(real)) return kHotArt;
@@ -230,6 +232,7 @@ std::string HotSwapKindsText(unsigned kinds)
 	add(kHotSoundData, "sound entities");
 	add(kHotEntity, "entity art");
 	add(kHotMap, "maps");
+	add(kHotTail, "graphics tail");
 	add(kHotOther, "other files");
 	return out.empty() ? "nothing" : out;
 }
@@ -326,17 +329,6 @@ RestartReason HotSwapRestartReason(const std::vector<std::string> &from, const s
 	if (!reason.files.empty()) {
 		reason.why = RestartWhy::kReadOnce;
 		return reason;
-	}
-	// The graphics tail is the one file of its kind the DLL could not make switchable (see docs): it says so by itself.
-	for (const std::vector<std::string> *list : {&from, &to}) {
-		for (const std::string &f : *list) {
-			const std::string n = Normal(f);
-			if (n == "rle.mmp.tail" || (n.size() > 13 && n.compare(n.size() - 13, 13, "/rle.mmp.tail") == 0)) {
-				reason.why = RestartWhy::kGraphicsTail;
-				reason.files = {f};
-				return reason;
-			}
-		}
 	}
 	collect(false);
 	if (!reason.files.empty()) reason.why = RestartWhy::kOtherFiles;
