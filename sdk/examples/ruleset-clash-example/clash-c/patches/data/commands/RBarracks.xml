@@ -1,4 +1,7 @@
 <patch>
+  <!-- A CHANGE of what the game has: the Roman archer costs 55 gold instead of 80. In the root of a rules package this operation is skipped unless a ruleset of
+       this package is chosen (the validator warns), while the ADD below applies under every ruleset: a patch that mixes both is applied in part. -->
+  <set select="/commands/cmd[@name='trainRArcher']" costgold="55"/>
   <!-- A NEW command, with a name the game does not have and images of new names: a patch that only adds applies under every ruleset. It is a second hastatus button. -->
   <add select="/commands">
     <cmd name="trainClashC" priority="9"

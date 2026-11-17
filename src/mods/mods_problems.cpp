@@ -156,7 +156,7 @@ ModRuleset ModsEffectiveRuleset(const ModProfile &p)
 	if (p.ruleset.id.empty()) {
 		// The package without a layer is an entry only for a package that has civilizations (or root files that replace the game's) and no ruleset.
 		// It mounts no folder; the root files that replace the game's are mounted with it.
-		if (!m.layers.empty() || !(RulesetPathsHaveCivs(m.paths) || !m.globalLoose.empty())) return ModRuleset();
+		if (!m.layers.empty() || !(RulesetPathsHaveCivs(m.paths) || ModsHasGlobalRoot(m))) return ModRuleset();
 		return out;
 	}
 	const ModLayer *layer = ModsFindLayer(m, p.ruleset.id);
@@ -175,7 +175,7 @@ std::vector<ModRulesetEntry> ModsRulesetEntries(const std::vector<std::string> &
 		RulesetPackFacts f;
 		f.usable = m.forbidden.empty();
 		f.hasCivs = RulesetPathsHaveCivs(m.paths);
-		f.hasGlobal = !m.globalLoose.empty();
+		f.hasGlobal = ModsHasGlobalRoot(m);
 		f.layers = m.layers.size();
 		facts.push_back(f);
 		packs.push_back(std::move(m));
@@ -270,7 +270,7 @@ std::string ModsProfileGameplayHash(const ModProfile &p)
 			if (m.folder != folder) continue;
 			// "." marks a package whose root files that replace the game's are mounted (its own ruleset is in use): the key of a room has to say so,
 			// or two computers with the same files would play with different ones (mods/rootrules.h). Packages that have no such files are unchanged.
-			if (m.gameplay) parts.push_back({m.id, m.gameplayHash, !m.globalLoose.empty() && RootGlobalApplies(m.folder, p.ruleset.pack) ? "." : ""});
+			if (m.gameplay) parts.push_back({m.id, m.gameplayHash, ModsHasGlobalRoot(m) && RootGlobalApplies(m.folder, p.ruleset.pack) ? "." : ""});
 			// The ruleset the profile mounts is part of what the players share, hashed apart from the package's root.
 			const ModLayer *layer = ModsActiveLayer(p, m);
 			if (layer && layer->gameplay) parts.push_back({m.id, layer->gameplayHash, layer->id});

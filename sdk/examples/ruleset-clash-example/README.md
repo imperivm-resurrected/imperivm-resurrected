@@ -60,6 +60,8 @@ The first round is about an image. These two packages are about the three kinds 
 |---|---|---|
 | What it is | a civilization package (`civs\rome-clash-c.json`, a variant of Republican Rome) | a **rules package without civilizations** (`"kind": "rules"`): its root is its ruleset |
 | (a) a **game data file** in its root, which replaces the game's | `data\commands\RBarracks.xml`: a copy of the game's command file of the Roman barracks with the hastatus at **77** gold | the same file with the hastatus at **88** gold |
+| (a2) a **root patch** that **changes** a game value | `patches\data\commands\RBarracks.xml`: `<set>` of the Roman **archer** `costgold` 80 -> **55** (the same file also holds the new command of (b): a patch that mixes an add and a change) | `patches\data\commands\RBarracks.xml`: `<set>` of the Roman **scout** `costgold` 140 -> **99** |
+| (b2) a **root patch** that only **adds** | the new command `trainClashC` (see (b)) | a new command `trainClashD`, a third hastatus button with the game's own images, key `k`, price 100 |
 | (b) a **new-name** file | `gameres\icons\ClashCUnit.bmp` and `gameres\cmdbar\Actions\ClashCUnit.bmp`, used by a **new command** `trainClashC` that `patches\data\commands\RBarracks.xml` adds to the barracks: a second hastatus button with a green-and-yellow icon, at the game's price (100) | nothing |
 | (c) a **menu skin** file | `gameres\menu\button.bmp`: flat **green menu buttons** | nothing |
 
@@ -83,7 +85,17 @@ The two copies of the game's command file are **not in the repository** (a file 
 | **Clash example C** (the package) | **77** | yes | green | in place (the only global file is `data\...xml`) |
 | **Clash example D** (the package) | **88** | yes | green | in place |
 
-The price is the only thing that follows the ruleset: **(a)** is global, so it is mounted only under the package's own entry. **(b)** and **(c)** never change: a new name is always mounted, and the menu skin is exempt. Switching between *Original*, *Plain*, *C* and *D* does not restart (a data file); *Blue* needs a restart in both directions. If a switch goes to or from *Blue*, read the price in the new game. The `Dump` file after a restart shows the same.
+**Patches (the root patches of (a2) and (b2)).** A root patch may add anywhere but its operations that change what the game has apply only under the package's own ruleset. So, in the barracks, besides the hastatus:
+
+| Ruleset | Archer | Scout | Buttons `trainClashC` and `trainClashD` |
+|---|---:|---:|---|
+| **Original**, **Blue**, **Plain** | **80** | **140** | both (adds apply everywhere) |
+| **Clash example C** | **55** | **140** | both |
+| **Clash example D** | **80** | **99** | both |
+
+Under *Clash example C* the scout stays at the game's 140 (`clash-d`'s change is skipped there) and under *D* the archer stays at 80 (`clash-c`'s is skipped). *Original*, *Plain* and *Blue* have both skipped. Switching between *Original*, *Plain*, *C* and *D* stays in place (the patches are data).
+
+The price is the only thing that follows the ruleset among the **files**: **(a)** is global, so it is mounted only under the package's own entry. **(b)** and **(c)** never change: a new name is always mounted, and the menu skin is exempt. Switching between *Original*, *Plain*, *C* and *D* does not restart (a data file); *Blue* needs a restart in both directions. If a switch goes to or from *Blue*, read the price in the new game. The `Dump` file after a restart shows the same.
 
 ### The log lines, per ruleset
 
@@ -97,6 +109,8 @@ The price is the only thing that follows the ruleset: **(a)** is global, so it i
 | Clash example C | `content: clash-c: 1 files of its root replace the game's and are mounted, because its own ruleset is in use` | `... and are ignored (the ruleset in use is clash-c): ...` |
 | Clash example D | `... and are ignored (the ruleset in use is clash-d): ...` | `content: clash-d: 1 files of its root replace the game's and are mounted, because its own ruleset is in use` |
 
+For the patches, once per package at the start of the game and after every switch: `patch: clash-c: 1 operations of its root patches change what the game has and are skipped: they apply only under a ruleset of this pack (the ruleset in use is the game's own)` (`... and are applied, because its own ruleset is in use (the ruleset in use is clash-c)` under C), the same for `clash-d` (the scout), and for the file: `patch: (clash-c) data/commands/rbarracks.xml applied; 1 operations skipped: they change what the game has and apply only when a ruleset of this pack is chosen (set /commands/cmd[@name='trainRArcher'])` (it is `applied` because the add of `trainClashC` applies; under C the line has no `skipped` part). At the scan: `content: clash-c: 1 root patch files compared with the game's own: 1 operations change what the game has (N ms)`. The two cards say *1 operations of its root patches change what the game has and are skipped: they apply only when a ruleset of this pack is chosen (data/commands/rbarracks.xml: set /commands/cmd[@name='trainRArcher'])* (or *...they apply because a ruleset of this pack is in use*). `Dump=data/commands/RBarracks.xml` shows the file as the game read it: the `costgold` of `trainRArcher` and `trainRScout` follow the table.
+
 After an in-place switch there is also `content: ruleset changed without a restart: ... -> ...` and, when the next game starts, `game: hot reload (after Init): trainRHastatus costgold = 77, costfood = 0; ...` (**100** under Original, Plain; **77** under C; **88** under D). With `LogFiles=1` and `LogLevel=debug` the log has `vfs: opens data/commands/rbarracks.xml` and, for the files that are always mounted, `vfs: opens gameres/icons/clashcunit.bmp` and `vfs: opens gameres/cmdbar/actions/clashcunit.bmp` (no `-> does not exist`) under every ruleset; the green menu buttons are the way to see the skin (`vfs: opens menures/button.bmp` or `gameres/menu/button.bmp`, whichever name the menu uses).
 
 ### The cards and the validator
@@ -108,7 +122,7 @@ node tools\validate-mod.js sdk\examples\ruleset-clash-example\clash-c --game "<g
 WARNING  data/commands/RBarracks.xml  global in-game file in the root of a rules package (a civilization pack is one): it is ignored unless a ruleset of this package is chosen; put it in a ruleset layer (rulesets/<id>/)
 ```
 
-(once the file is made; one warning, for `clash-c` and for `clash-d`: not for `ClashCUnit.bmp`, not for the menu button.) `tests/test_clashexample.js` runs the generator and the validator on a made-up game folder.
+followed by `WARNING  patches/data/commands/RBarracks.xml  1 operation(s) of this patch change what the game has (set /commands/cmd[@name='trainRArcher']): in the root of a rules package they are skipped unless a ruleset of this package is chosen; move the file to a rulesets/<id>/ layer (adding is fine anywhere)` (the patch warning appears with `--game` even without the made file; the first warning only once the file is made; one each for `clash-c` and `clash-d`, with the scout for `clash-d`: not for `ClashCUnit.bmp`, not for the menu button). `tests/test_clashexample.js` runs the generator and the validator on a made-up game folder.
 
 ## What is not here
 

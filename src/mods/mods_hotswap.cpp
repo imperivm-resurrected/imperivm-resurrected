@@ -89,7 +89,9 @@ bool LayerFiles(const ModRuleset &r, const ModRuleset &other, std::vector<std::s
 			if (!layer) return false;
 			layerFiles = layer->files;
 		}
-		out = SwapFilesOf(layerFiles, m.globalLoose, SameFolder(m.folder, other.pack));
+		std::vector<std::string> global = m.globalLoose;
+		global.insert(global.end(), m.globalPatchFiles.begin(), m.globalPatchFiles.end());
+		out = SwapFilesOf(layerFiles, global, SameFolder(m.folder, other.pack));
 		return true;
 	}
 	return false;
@@ -110,7 +112,7 @@ bool ModsSameMount(const ModRuleset &a, const ModRuleset &b)
 	// ruleset is chosen (mods/rootrules.h), so two choices of different packs are the same mount only if neither pack has any.
 	std::lock_guard<std::mutex> lock(g_lock);
 	for (const ModInfo &m : g_mods) {
-		if ((SameFolder(m.folder, a.pack) || SameFolder(m.folder, b.pack)) && !m.globalLoose.empty()) return false;
+		if ((SameFolder(m.folder, a.pack) || SameFolder(m.folder, b.pack)) && ModsHasGlobalRoot(m)) return false;
 	}
 	return true;
 }

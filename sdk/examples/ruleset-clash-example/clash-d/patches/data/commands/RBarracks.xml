@@ -1,0 +1,25 @@
+<patch>
+  <!-- A CHANGE of what the game has: the Roman scout costs 99 gold instead of 140. Skipped unless this package's own entry of the Ruleset row is chosen. -->
+  <set select="/commands/cmd[@name='trainRScout']" costgold="99"/>
+  <!-- A NEW command (a third hastatus button, with the game's own images): it applies under every ruleset. -->
+  <add select="/commands">
+    <cmd name="trainClashD" priority="11"
+      button="actions/train RHastatus.bmp"
+      queueicon="gameres/icons/RHastatus.bmp"
+      groupverifier="data/subai/verify_cmdcost_building.vs"
+      transpicon="1"
+      traincommand="yes"
+      key="k"
+      help="/contents/units/RHastatus"
+      costgold="100"
+      costfood="0"
+      costpop="1"
+      execdelay="6000"
+      rollover="Equip Hastatus"
+      method="train"
+      param="RHastatus"
+      sclass="RHastatus">
+      <src obj="RBarracks"/>
+    </cmd>
+  </add>
+</patch>

@@ -100,7 +100,7 @@ std::string EncodeModList(const std::vector<ModInfo> &mounted, const std::string
 	// The room's ruleset is a package that has no ruleset of its own: say which, so the guests mount its root files that replace the game's too.
 	if (!ruleset.pack.empty() && ruleset.id.empty()) {
 		for (const ModInfo &m : mounted) {
-			if (_stricmp(m.folder.c_str(), ruleset.pack.c_str()) == 0 && !m.globalLoose.empty() && need.count(LowerId(m.id))) out += "@package\t" + m.id + "\n";
+			if (_stricmp(m.folder.c_str(), ruleset.pack.c_str()) == 0 && ModsHasGlobalRoot(m) && need.count(LowerId(m.id))) out += "@package\t" + m.id + "\n";
 		}
 	}
 	return out;

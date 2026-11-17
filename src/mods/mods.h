@@ -87,6 +87,11 @@ struct ModInfo {
 	// The loose files of the root that replace a file of the game, in a package with civilizations (see mods/rootrules.h). They apply only
 	// under a ruleset of this package; anywhere else they are ignored. Lowercase, "/", sorted.
 	std::vector<std::string> globalLoose;
+	// The patches of the root that change what the game has (mods/rootrules.h, PatchPolicy): the files ("patches/<target>", lowercase) with at least one
+	// operation that would be skipped, how many operations that is, and the first few as "<target>: <operation>". Same rule as globalLoose.
+	std::vector<std::string> globalPatchFiles;
+	std::vector<std::string> globalPatchSample;
+	unsigned globalPatchOps = 0;
 	std::vector<PatchedValue> patchValues;
 	std::vector<std::string> forbidden;
 	bool rleTail = false;
@@ -110,6 +115,13 @@ struct ModInfo {
 	std::vector<ModLayer> layers;
 	std::vector<std::string> rulesetProblems;
 };
+
+// Whether the root of the package has something that is mounted only under the package's own ruleset: files that replace the game's, or patches that change
+// what the game has (see mods/rootrules.h).
+inline bool ModsHasGlobalRoot(const ModInfo &m)
+{
+	return !m.globalLoose.empty() || m.globalPatchOps != 0;
+}
 
 inline const ModLayer *ModsFindLayer(const ModInfo &m, const std::string &id)
 {

@@ -40,6 +40,11 @@ function isGameplayPath(rel) {
 	return /^(units|buildings|mapobjects)\/.*\.pass$/.test(p);
 }
 
+// Whether the files of a package root make it a rules package, as the DLL counts it: civilizations, gameplay files, or a patch of a gameplay file.
+function isRulesPackage(files) {
+	return files.some(f => /^civs\//i.test(f) || isGameplayPath(f) || (/^patches\//i.test(f) && isGameplayPath(f.slice(8))));
+}
+
 function isMenuSkin(rel) {
 	const p = gamePath(rel);
 	return MENU_SKIN.some(re => re.test(p));
@@ -70,6 +75,35 @@ function pakNames(file) {
 		}
 	}
 	finally { fs.closeSync(fd); }
+}
+
+// The data of one entry of a .pak (the names are game paths, any case), or null. The entries are stored as they are.
+function pakEntry(file, wanted) {
+	const buf = fs.readFileSync(file);
+	if (buf.length < 0x28 || buf.toString('latin1', 0, 15) !== 'HMMSYS PackFile') return null;
+	const count = buf.readUInt32LE(0x20);
+	let p = 0x28, prev = '';
+	for (let i = 0; i < count; i++) {
+		const len = buf[p], shared = buf[p + 1];
+		p += 2;
+		prev = prev.slice(0, shared) + buf.toString('latin1', p, p + len - shared);
+		p += len - shared;
+		if (prev.replace(/\\/g, '/').toLowerCase() === wanted) return buf.subarray(buf.readUInt32LE(p), buf.readUInt32LE(p) + buf.readUInt32LE(p + 4));
+		p += 8;
+	}
+	return null;
+}
+
+// The text of one of the game's own files (a game path like data/commands/rbarracks.xml) from the .pak files of Packs/ of the game folder, or null.
+function gameFileText(gameDir, wanted) {
+	const dir = path.join(gameDir, 'Packs');
+	if (!fs.existsSync(dir)) return null;
+	for (const f of fs.readdirSync(dir)) {
+		if (!/\.pak$/i.test(f)) continue;
+		const data = pakEntry(path.join(dir, f), wanted);
+		if (data) return data.toString('latin1');
+	}
+	return null;
 }
 
 // The loose files below a folder of the game, as game paths ("units/Ghero1/x.rle.mmp" is "units/ghero1/x.rle.mmp").
@@ -104,4 +138,4 @@ function gameFiles(gameDir) {
 	return out.size ? out : null;
 }
 
-module.exports = { MENU_SKIN, gamePath, isMenuSkin, isGameplayPath, pakNames, gameFiles };
+module.exports = { MENU_SKIN, gamePath, isMenuSkin, isGameplayPath, isRulesPackage, pakEntry, gameFileText, pakNames, gameFiles };

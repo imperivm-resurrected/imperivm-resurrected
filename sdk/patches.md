@@ -23,6 +23,7 @@ mods\my-mod\
 - If your mod also ships its own copy of the file (without `patches`), the other mods' patches are applied on top of it.
 - To test a patch without creating a mod, put it in `<game>\mod\patches\<path>`. It's applied last, on top of everything.
 - A patch changes gameplay if the file does (`data\...`, maps, units). Then all players must run the same mod.
+- In the root of a **rules package** (one with `civs\`, or any package whose root has gameplay files) a patch may **add** to the game's files anywhere, but the operations that **change or delete what the game already has** apply only when a ruleset of that package is chosen: see [Rulesets](rulesets.md#patches-in-the-root-add-anywhere-change-only-under-your-own-ruleset). Patches in a `rulesets\<id>\` layer have no such limit. Patches of the interface (`menuini\`) are exempt.
 - Patches are read when the game opens each file. If you change one, restart the game.
 
 ## See the result

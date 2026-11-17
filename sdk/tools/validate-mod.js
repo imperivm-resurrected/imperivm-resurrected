@@ -353,7 +353,7 @@ else {
 		// a ruleset is what a host chooses for a game: the menu is not part of it
 		listed(files.filter(f => assets.isMenuSkin(f)), 'menu skin file in a ruleset layer: it belongs to a skin (not the ruleset)');
 	}
-	else if (files.some(f => /^civs\//i.test(f) || assets.isGameplayPath(f))) {
+	else if (assets.isRulesPackage(files)) {
 		// the root of a rules package (a civilization pack is one) may add files, not replace the game's: such a file is mounted only when a ruleset of the package is chosen
 		if (gameDir) {
 			const game = assets.gameFiles(gameDir);
@@ -365,6 +365,20 @@ else {
 		// a .pak is mounted whole: the rule cannot leave out the files of it that replace the game's
 		listed(files.filter(f => /^(packs|local)\/[^/]+\.pak$/i.test(f)),
 			'.pak in the root of a rules package: it is mounted whole, so the files in it that replace the game\'s are not ignored under other rulesets; put them in a ruleset layer');
+		// a patch of the root may add to the game's files but not change what they have: the changes apply only when a ruleset of this package is chosen
+		if (gameDir) {
+			const patchclass = require('./lib/patchclass');
+			for (const f of files.filter(x => /^patches\//i.test(x) && /\.(xml|ini|vs)$/i.test(x))) {
+				const target = assets.gamePath(f.slice(8));
+				if (/^data\/interface\//.test(target)) continue;
+				const base = assets.gameFileText(gameDir, target);
+				if (base === null) continue;
+				const skipped = patchclass.skippedOps(target, base, fs.readFileSync(path.join(modDir, f), 'latin1'));
+				if (skipped.length) {
+					warn(f, 0, `${skipped.length} operation(s) of this patch change what the game has (${skipped.slice(0, 3).join('; ')}${skipped.length > 3 ? '; ...' : ''}): in the root of a rules package they are skipped unless a ruleset of this package is chosen; move the file to a rulesets/<id>/ layer (adding is fine anywhere)`);
+				}
+			}
+		}
 	}
 }
 

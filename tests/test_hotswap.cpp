@@ -177,6 +177,12 @@ void GlobalRootFilesCountAsFilesThatComeWithARuleset()
 	CHECK(HotSwapLayerOk(SwapFilesOf(layer, art, true)));
 	CHECK_EQ(SwapFilesOf(layer, art, true).size(), size_t(1));
 	CHECK_EQ(SwapFilesOf(layer, art, false).size(), size_t(2));
+	// The patches of a root that change the game's files come with the ruleset too: a data patch is hot-switchable, one of anything else is not.
+	const std::vector<std::string> dataPatch = {"patches/data/commands/rbarracks.xml", "patches/data/const.ini"}, otherPatch = {"patches/currentlang/game.loc.xml"};
+	CHECK(HotSwapLayerOk(SwapFilesOf(layer, dataPatch, false)));
+	CHECK(!HotSwapLayerOk(SwapFilesOf(layer, otherPatch, false)));
+	CHECK(HotSwapLayerOk(SwapFilesOf(layer, otherPatch, true)));
+	CHECK(SwapDecide(false, SwapFilesOf({}, {}, false), SwapFilesOf({}, dataPatch, false)) == HotSwap::kReload);
 	// A package entry mounts no folder: only its global files change.
 	CHECK(SwapDecide(false, SwapFilesOf({}, {}, false), SwapFilesOf({}, data, false)) == HotSwap::kReload);
 	CHECK(SwapDecide(false, SwapFilesOf({}, {}, false), SwapFilesOf({}, art, false)) == HotSwap::kRestart);

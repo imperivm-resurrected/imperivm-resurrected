@@ -309,6 +309,13 @@ ModIssues IssuesOf(const ModProfile &p, const std::vector<ModInfo> &all, const s
 		if (RootIgnoredOf(p, *m).empty()) out.notices.push_back(TrFmt("%s files of its root replace the game's: they apply because a ruleset of this pack is in use (%s)", {count, names}));
 		else out.notices.push_back(TrFmt("%s files of its root replace the game's and are ignored: they apply only when a ruleset of this pack is chosen (%s)", {count, names}));
 	}
+	if (m->globalPatchOps) {
+		std::string names;
+		for (const std::string &s : m->globalPatchSample) names += (names.empty() ? "" : "; ") + s;
+		const std::string count = std::to_string(m->globalPatchOps);
+		if (RootGlobalApplies(m->folder, p.ruleset.pack)) out.notices.push_back(TrFmt("%s operations of its root patches change what the game has: they apply because a ruleset of this pack is in use (%s)", {count, names}));
+		else out.notices.push_back(TrFmt("%s operations of its root patches change what the game has and are skipped: they apply only when a ruleset of this pack is chosen (%s)", {count, names}));
+	}
 	const ClashReport &clashes = cache.Get();
 	for (const ClashPair &c : clashes.pairs) {
 		const bool first = SameFolder(c.a, folder);

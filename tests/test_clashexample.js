@@ -47,12 +47,13 @@ const globals = text => text.split('\n').filter(l => /global in-game file/.test(
 try {
 	const commands = '<commands>\r\n<cmd name="RBarrack Level 3" priority="2"\r\n\tcostgold = "2000"\r\n\tmethod="research">\r\n\t<src obj="RBarracks"/>\r\n</cmd>\r\n' +
 		'<cmd name="trainRHastatus" priority="3"\r\n\tkey="h"\r\n\tcostgold = "100"\r\n\tcostfood = "0"\r\n\tmethod="train">\r\n\t<src obj="RBarracks"/>\r\n</cmd>\r\n' +
-		'<cmd name="trainRArcher" priority="4"\r\n\tcostgold = "120"\r\n\tmethod="train">\r\n</cmd>\r\n</commands>\r\n';
+		'<cmd name="trainRArcher" priority="4"\r\n\tcostgold = "120"\r\n\tmethod="train">\r\n</cmd>\r\n' +
+		'<cmd name="trainRScout" priority="7"\r\n\tcostgold = "140"\r\n\tmethod="train">\r\n</cmd>\r\n</commands>\r\n';
 
 	// the price changes in that command only, and nothing else of the file
 	const changed = maker.withPrice(commands, 77);
 	assert.equal(changed, commands.replace('costgold = "100"', 'costgold = "77"'));
-	assert.ok(changed.includes('costgold = "2000"') && changed.includes('costgold = "120"'));
+	assert.ok(changed.includes('costgold = "2000"') && changed.includes('costgold = "120"') && changed.includes('costgold = "140"'));
 	assert.throws(() => maker.withPrice('<commands><cmd name="other" costgold="1"></cmd></commands>', 77), /trainRHastatus is not in the file/);
 	assert.throws(() => maker.withPrice('<commands><cmd name="trainRHastatus"></cmd></commands>', 77), /no costgold/);
 
@@ -76,15 +77,22 @@ try {
 	assert.equal(globals(c.text).length, 1, c.text);
 	assert.ok(globals(c.text)[0].includes('data/commands/RBarracks.xml'), c.text);
 	assert.doesNotMatch(c.text, /ClashCUnit|button\.bmp/);
+	// the root patch of each: one operation changes the game's value (the archer, the scout), the other adds a command, which is fine anywhere
+	const patchWarnings = text => text.split('\n').filter(l => /operation\(s\) of this patch change what the game has/.test(l));
+	assert.equal(patchWarnings(c.text).length, 1, c.text);
+	assert.match(patchWarnings(c.text)[0], /1 operation\(s\).*trainRArcher/);
 	const d = run([path.join(out, 'clash-d'), '--game', game]);
 	assert.equal(d.status, 0, d.text);
 	assert.equal(globals(d.text).length, 1, d.text);
 	assert.match(d.text, /global in-game file in the root of a rules package/);
+	assert.equal(patchWarnings(d.text).length, 1, d.text);
+	assert.match(patchWarnings(d.text)[0], /1 operation\(s\).*trainRScout/);
 	// without the files (as in the repository) there is nothing to warn about, and both are valid
 	for (const pack of ['clash-c', 'clash-d']) {
 		const r = run([path.join(example, pack), '--game', game]);
 		assert.equal(r.status, 0, r.text);
 		assert.equal(globals(r.text).length, 0, r.text);
+		assert.equal(patchWarnings(r.text).length, 1, 'the patch is in the repository, the file is not: ' + r.text);
 		assert.doesNotMatch(r.text, /ERROR/);
 	}
 	// the ids are the folders' names, and clash-d is declared a rules package
