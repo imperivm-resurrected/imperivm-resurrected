@@ -71,11 +71,11 @@ What the log says for each switch (`Logs\imperivm\imperivm-mod.log`):
 content: ruleset changed without a restart: clash-b:blue -> clash-b:plain (files of the new one: nothing; ...)
 game: hot reload: starting
 game: art cache (before the reload): file cache N entries (H in use; the game counts N), interface cache B bytes unreferenced
-game: hot reload: image caches emptied in T ms: files N entries (H in use) -> M (K in use), interface B -> 0 bytes unreferenced, command-bar frame set to load again, purge file 1; 5 images change, 0 of them still cached
+game: hot reload: image caches emptied in T ms: files N entries (H in use) -> M (K in use), interface B -> 0 bytes unreferenced, command-bar frame set to load again, purge file 1; 15 images change, 0 of them still cached
 game: art cache (after the reload): file cache M entries (K in use ...), interface cache 0 bytes unreferenced
 ```
 
-`5 images change, 0 of them still cached` is the proof that no old picture can come back; a number other than 0 would be the restart (`hot reload: images that this switch replaces are still in use by the game (...)`) with the names. `purge file 1` is the first of the files the DLL loads only to make the game's own purge run; a higher number means the first ones were in use.
+`15 images change, 0 of them still cached` is the proof that no old picture can come back; a number other than 0 would be the restart (`hot reload: images that this switch replaces are still in use by the game (...)`) with the names. `purge file 1` is the first of the files the DLL loads only to make the game's own purge run; a higher number means the first ones were in use.
 
 ### Stress: five rounds and the memory
 
