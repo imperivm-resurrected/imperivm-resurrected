@@ -3296,5 +3296,9 @@
 {"en":"Hosted by %s","es":"Anfitrión: %s","it":"Ospitata da %s"},
 {"en":"1 free place","es":"1 plaza libre","it":"1 posto libero"},
 {"en":"%s watching","es":"%s mirando","it":"%s spettatori"},
-{"en":"Problem reported: the league will review the game.","es":"Problema informado: la liga revisará la partida.","it":"Problema segnalato: la lega esaminerà la partita."}
+{"en":"Problem reported: the league will review the game.","es":"Problema informado: la liga revisará la partida.","it":"Problema segnalato: la lega esaminerà la partita."},
+{"en":"This is not a content profile code","es":"Esto no es un código de perfil de contenido","it":"Questo non è un codice di profilo dei contenuti"},
+{"en":"This content profile code is damaged or incomplete: copy it again","es":"Este código de perfil de contenido está dañado o incompleto: vuelve a copiarlo","it":"Questo codice di profilo dei contenuti è danneggiato o incompleto: copialo di nuovo"},
+{"en":"This content profile code needs a newer Imperivm Resurrected: update it first","es":"Este código de perfil de contenido necesita un Imperivm Resurrected más nuevo: actualízalo primero","it":"Questo codice di profilo dei contenuti richiede un Imperivm Resurrected più recente: aggiornalo prima"},
+{"en":"Shared profile","es":"Perfil compartido","it":"Profilo condiviso"}
 ]

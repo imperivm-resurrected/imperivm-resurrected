@@ -3304,5 +3304,9 @@ extern const TrRow kTrRows[] = {
 	{"1 free place", "1 plaza libre", "1 posto libero"},
 	{"%s watching", "%s mirando", "%s spettatori"},
 	{"Problem reported: the league will review the game.", "Problema informado: la liga revisará la partida.", "Problema segnalato: la lega esaminerà la partita."},
+	{"This is not a content profile code", "Esto no es un código de perfil de contenido", "Questo non è un codice di profilo dei contenuti"},
+	{"This content profile code is damaged or incomplete: copy it again", "Este código de perfil de contenido está dañado o incompleto: vuelve a copiarlo", "Questo codice di profilo dei contenuti è danneggiato o incompleto: copialo di nuovo"},
+	{"This content profile code needs a newer Imperivm Resurrected: update it first", "Este código de perfil de contenido necesita un Imperivm Resurrected más nuevo: actualízalo primero", "Questo codice di profilo dei contenuti richiede un Imperivm Resurrected più recente: aggiornalo prima"},
+	{"Shared profile", "Perfil compartido", "Profilo condiviso"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

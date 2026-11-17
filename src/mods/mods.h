@@ -122,6 +122,20 @@ struct ModProfile {
 	std::vector<ModFileChoice> files;
 };
 
+struct ModsSharedMod {
+	std::string id, name, version;
+	uint64_t gbId = 0;
+	std::string folder;
+	bool installed = false;
+};
+
+struct ModsSharedProfile {
+	std::string name;
+	std::vector<ModsSharedMod> mods;
+	std::vector<ModChoice> choices;
+	std::vector<ModFileChoice> files;
+};
+
 enum MapOriginKind { kMapBase, kMapLoose, kMapReceived, kMapMod };
 struct MapOrigin {
 	int kind = kMapBase;
@@ -169,6 +183,10 @@ bool ModsRenameProfile(const std::string &from, const std::string &to);
 std::string ModsProfileLabel(const std::string &name);
 bool ModsIsReservedProfileName(const std::string &name);
 std::vector<std::string> ModsProfilesUsing(const std::string &folder);
+std::string ModsProfileCode(const ModProfile &p);
+bool ModsParseProfileCode(const std::string &code, ModsSharedProfile &out, std::string &error);
+std::string ModsImportProfile(const ModsSharedProfile &sp);
+bool ModsAddToProfile(const std::string &profile, const std::string &folder);
 std::string ModsUninstall(const std::string &folder);
 void ModsNoteReceivedMap(const std::string &fullPath);
 bool ModsUninstallPending(const std::string &folder);
