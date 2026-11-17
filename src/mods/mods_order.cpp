@@ -57,7 +57,7 @@ const ModInfo *FindIn(const std::vector<ModInfo> &all, const std::string &folder
 	return nullptr;
 }
 
-std::vector<std::string> OrderOf(const std::vector<std::string> &folders, const std::vector<ModInfo> &all)
+std::vector<OrderItem> ItemsOf(const std::vector<std::string> &folders, const std::vector<ModInfo> &all)
 {
 	std::vector<OrderItem> items;
 	for (const std::string &folder : folders) {
@@ -66,13 +66,21 @@ std::vector<std::string> OrderOf(const std::vector<std::string> &folders, const 
 		if (const ModInfo *m = FindIn(all, folder)) {
 			item.id = m->id;
 			item.kind = m->kind;
-			for (const ModDependency &d : m->requires) item.above.push_back(d.id);
+			for (const ModDependency &d : m->requires) item.needs.push_back(d.id);
+			item.above = item.needs;
 			item.above.insert(item.above.end(), m->loadAfter.begin(), m->loadAfter.end());
 			item.below = m->loadBefore;
+			item.author = m->loadAfter;
+			item.author.insert(item.author.end(), m->loadBefore.begin(), m->loadBefore.end());
 		}
 		items.push_back(item);
 	}
-	return CanonicalOrder(items);
+	return items;
+}
+
+std::vector<std::string> OrderOf(const std::vector<std::string> &folders, const std::vector<ModInfo> &all)
+{
+	return CanonicalOrder(ItemsOf(folders, all));
 }
 
 ClashMod ClashModOf(const ModInfo &m)
@@ -154,6 +162,24 @@ std::map<std::string, std::string> ChosenFolders(const ModProfile &p, const std:
 std::vector<std::string> ModsLoadOrder(const std::vector<std::string> &folders)
 {
 	return OrderOf(folders, ModsList());
+}
+
+std::vector<ModOrderEntry> ModsLoadOrderExplained(const ModProfile &p)
+{
+	const std::vector<ModInfo> all = ModsSummaries();
+	std::vector<ModOrderEntry> out;
+	for (const OrderReason &r : ExplainOrder(ItemsOf(p.mods, all))) {
+		const ModInfo *m = FindIn(all, r.folder);
+		if (!m) continue;
+		ModOrderEntry e;
+		e.folder = m->folder;
+		e.position = static_cast<int>(out.size()) + 1;
+		e.kind = m->kind;
+		e.reason = r.reason;
+		e.related = r.related;
+		out.push_back(e);
+	}
+	return out;
 }
 
 namespace {

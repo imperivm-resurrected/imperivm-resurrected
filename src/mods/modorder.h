@@ -11,6 +11,18 @@ struct OrderItem {
 	int kind = -1;
 	std::vector<std::string> above;
 	std::vector<std::string> below;
+	std::vector<std::string> needs;
+	std::vector<std::string> author;
 };
 
 std::vector<std::string> CanonicalOrder(const std::vector<OrderItem> &items);
+
+enum OrderReasonKind { kOrderByKind = 0, kOrderByName = 1, kOrderNeeds = 2, kOrderNeeded = 3, kOrderAuthor = 4 };
+
+struct OrderReason {
+	std::string folder;
+	int reason = kOrderByName;
+	std::vector<std::string> related;
+};
+
+std::vector<OrderReason> ExplainOrder(const std::vector<OrderItem> &items);

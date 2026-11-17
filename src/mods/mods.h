@@ -222,6 +222,14 @@ bool ModsAllowedFile(const std::string &relPath);
 std::string ModsFolderPath();
 
 std::vector<std::string> ModsLoadOrder(const std::vector<std::string> &folders);
+struct ModOrderEntry {
+	std::string folder;
+	int position = 0;
+	int kind = 0;
+	int reason = 0;
+	std::vector<std::string> related;
+};
+std::vector<ModOrderEntry> ModsLoadOrderExplained(const ModProfile &p);
 bool ModsSameSet(std::vector<std::string> a, std::vector<std::string> b);
 struct ModOverlap {
 	std::string folder;
