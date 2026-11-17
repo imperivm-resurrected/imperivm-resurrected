@@ -750,7 +750,7 @@ void DoAction(int action, int arg)
 			std::vector<std::string> profileMods;
 			for (const ModRow &row : g_s.createProfileInfo.rows) profileMods.push_back(row.name);
 			if (!otherProfile) {
-				ModUiAskRestart("The game will restart with the ruleset you chose. Afterwards, create the room again.", -1,
+				ModUiAskRestart(Tr("The game will restart with the ruleset you chose. Afterwards, create the room again.") + RulesetRestartWhy(g_s.createRuleset), -1,
 					{RulesetLabel(g_s.createProfileInfo.rulesets, g_s.createRuleset)}, "Ruleset that will be loaded:");
 				break;
 			}
@@ -852,7 +852,7 @@ void ChooseRuleset(int item)
 		return;
 	}
 	ModsSetActiveProfileName(profile.name);
-	ModUiAskRestart("The game will restart with the ruleset you chose.", -1, {RulesetLabel(choices, picked)}, "Ruleset that will be loaded:");
+	ModUiAskRestart(Tr("The game will restart with the ruleset you chose.") + RulesetRestartWhy(picked), -1, {RulesetLabel(choices, picked)}, "Ruleset that will be loaded:");
 }
 
 std::string &FocusedText()

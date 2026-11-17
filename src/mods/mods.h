@@ -356,6 +356,23 @@ bool ModsHotSwitchAvailable();
 // Whether the mounted ruleset can be replaced by `wanted` without restarting: the game holds the rules of its start and both rulesets hold only
 // the kinds of file the game can read again (see hotswap.h). While a game is running it is only true for the kinds that can wait for the next one.
 bool ModsCanSwitchWithoutRestart(const ModRuleset &wanted);
+// Why a change to `wanted` keeps the restart, to say it before it is asked: kReadOnce (a file the game reads once, when it starts), kOtherFiles (a kind of
+// file the reload does not cover yet: sounds, voices, texts, packs, sprites...) or kHeldImages (an image of the rules the game holds is still in use by
+// something that outlives the reload, so a stale picture could be shown). files names the first ones. kNone: it is not about files (or no restart).
+enum class ModsRestartKind { kNone, kReadOnce, kOtherFiles, kHeldImages };
+struct ModsRestartInfo {
+	ModsRestartKind kind = ModsRestartKind::kNone;
+	std::vector<std::string> files;
+};
+ModsRestartInfo ModsRestartReason(const ModRuleset &wanted);
+// game/artcache.cpp says which of the images a switch replaces are still held by the game's caches (its names, as the game's own paths ui/...): false if
+// the caches could not be read, which is not knowing, which keeps the restart. gameRunning: a game is alive, so what it holds is not what stays.
+typedef bool (*ModsArtProbe)(const std::vector<std::string> &files, bool gameRunning, std::vector<std::string> &held);
+void ModsSetArtProbe(ModsArtProbe probe);
+// What the caches hold changed (they were emptied): the answers the probe gave are asked again.
+void ModsArtCacheChanged();
+// The images the next reload replaces: those of the rules the game holds and of the mounted ones (game paths, lowercase), to check after the caches are emptied.
+std::vector<std::string> ModsReloadArtFiles();
 // Replaces the mounted ruleset if ModsCanSwitchWithoutRestart. The caller saves the profile and sets the choice, as for any other
 // entry that mounts the same files (ModsMountedChoiceSet).
 bool ModsSwitchRulesetWithoutRestart(const ModRuleset &wanted);

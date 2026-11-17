@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "MinHook.h"
 #include "hooks/gameload.h"
@@ -19,6 +20,9 @@
 #include "core/config.h"
 #include "core/crashlog.h"
 #include "core/log.h"
+#include "core/winpath.h"
+#include "i18n/tr.h"
+#include "game/artcache.h"
 #include "game/cmdcheck.h"
 #include "game/hotreload.h"
 #include "game/memcensus.h"
@@ -248,6 +252,7 @@ void LogProcessState(const char *when)
 		}
 		LogI("game", "memory (%s): entity cache holds %u entities by name and %u by pointer, %u decor types set", when, *Word(addr::kEntityNameCount),
 			*Word(addr::kEntityPointerCount), decors);
+		ArtCacheLogCensus(when);
 	}
 	__except (EXCEPTION_EXECUTE_HANDLER) {
 		LogE("game", "memory (%s): the process state could not be read (the heap may be damaged)", when);
@@ -342,6 +347,10 @@ void KeepEntityCache()
 }
 
 // Makes the game free its data tables and make them again. Only plain data in here, so the __try can protect it.
+// The images that change with this reload (game paths), asked of the mods before the old game data is freed. A global, so that RebuildGameData, which
+// holds a __try, has no object of its own.
+std::vector<std::string> g_artChanged;
+
 bool RebuildGameData(DWORD *shutdownMs, DWORD *initMs)
 {
 	bool ok = false;
@@ -355,6 +364,17 @@ bool RebuildGameData(DWORD *shutdownMs, DWORD *initMs)
 		MemoryCensus(CensusPoint::kAfterShutdown, "after Shutdown", CensusPoint::kBeforeReload);
 		ResetClassCaches();
 		if (!g_entityHookOk) ResetEntityCaches();
+		// The tables and the windows of the old game have let go of their images: the caches are emptied, and a picture that changes and is still in
+		// use by something that stays could not be replaced.
+		if (!g_artChanged.empty()) {
+			ArtCacheFlush(g_artChanged);
+			if (!ArtCacheSurvivors().empty()) {
+				LogE("game", "hot reload: images that this switch replaces are still in use by the game (%s): they cannot be replaced in place", ArtCacheSurvivors()[0].c_str());
+				g_keepEntityCache = false;
+				g_crashLogQuiet--;
+				return false;
+			}
+		}
 		reinterpret_cast<GameDataSystems_t>(addr::kInitGameDataSystems)();
 		if (g_entityHookOk) KeepEntityCache();
 		*shutdownMs = freed - start;
@@ -469,9 +489,13 @@ bool CommandSanity(const char *when)
 	return true;
 }
 
+// What the player is told before a restart nobody asked for (images that the switch replaces are in use): a window, because the game is about to end.
+std::string g_restartNotice;
+
 void RestartNow(const char *why)
 {
 	LogE("game", "hot reload: %s; the game restarts with the chosen rules", why);
+	if (!g_restartNotice.empty()) MessageBoxW(nullptr, winpath::Widen(g_restartNotice, CP_UTF8).c_str(), L"Imperivm Resurrected", MB_OK | MB_ICONINFORMATION | MB_TOPMOST);
 	ModsRestartGame();
 }
 
@@ -505,7 +529,22 @@ bool HotReload(const void *game)
 	if (ReloadTable() != Reload::kDone) return false;
 	const DWORD constDone = GetTickCount();
 	DWORD shutdownMs = 0, initMs = 0;
-	if (!RebuildGameData(&shutdownMs, &initMs)) return false;
+	g_artChanged = ModsReloadArtFiles();
+	if (!g_artChanged.empty()) ArtCacheLogCensus("before the reload");
+	if (!RebuildGameData(&shutdownMs, &initMs)) {
+		if (!ArtCacheSurvivors().empty()) {
+			std::string names;
+			for (size_t i = 0; i < ArtCacheSurvivors().size() && i < 5; i++) names += (i ? ", " : "") + ArtCacheSurvivors()[i];
+			g_restartNotice = Tr("The game will restart with the ruleset you chose.") + " " +
+				TrFmt("Images of the current rules are still in use by the game: %s. A restart makes sure no old picture is shown.", {names});
+		}
+		return false;
+	}
+	if (!g_artChanged.empty()) {
+		// The answers the rooms got about images are asked again: the caches are empty now.
+		ModsArtCacheChanged();
+		ArtCacheLogCensus("after the reload");
+	}
 	if (!TablesExist()) return false;
 	LogProcessState("after Init");
 	MemoryCensus(CensusPoint::kAfterInit, "after Init", CensusPoint::kAfterShutdown);
@@ -608,6 +647,7 @@ void InstallHotReload(bool knownExe)
 	g_entityHookOk = HookCreate(reinterpret_cast<void *>(addr::kClearEntityCache), reinterpret_cast<void *>(&HookClearEntityCache),
 		reinterpret_cast<void **>(&g_origClearEntityCache)) == MH_OK && HookEnable(reinterpret_cast<void *>(addr::kClearEntityCache)) == MH_OK;
 	if (!g_entityHookOk) LogW("game", "hot reload: could not hook ClearEntityCache; the entity cache is emptied on every switch and part of it is not given back");
+	ModsSetArtProbe(&ArtCacheHeldForSwitch);
 	ModsHotReloadSetReady(true);
 	// A load that ends (done or not) has used or lost the switch that was waiting for it.
 	OnGameLoaded([](int) { ModsDropPendingSwitch("the load ended"); });

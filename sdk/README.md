@@ -121,6 +121,7 @@ They're in `tools\` and need [Node.js](https://nodejs.org). Open a terminal in t
 | Sprites from PNG, and a unit or building's entity file | `convert-sprite.js`, `create-entity.js`, `read-rle.js` ([guide](graphics.md)) |
 | Redraw the sprites of `unit-graphics-example` | `draw-soldier.js` ([example](examples/unit-graphics-example)) |
 | Check a mod without opening the game | `validate-mod.js` ([guide](validating.md)) |
+| Read the memory of a run of ruleset switches | `memory-report.js` ([reference](reference.md#9-imperivm-modini)) |
 | Adapt a mod made before the SDK | `shrink-mod.js` ([guide](publishing.md)) |
 | Extract the game data | `extract-data.js` (below) |
 

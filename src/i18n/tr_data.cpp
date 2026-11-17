@@ -1753,5 +1753,9 @@ extern const TrRow kTrRows[] = {
 	{"There are no conquests here.", "Aquí no hay conquistas.", "Qui non ci sono conquiste."},
 	{"No Imperivm I campaign is installed yet.", "Todavía no hay ninguna campaña de Imperivm I instalada.", "Non è ancora installata nessuna campagna di Imperivm I."},
 	{"No Imperivm II campaign is installed yet.", "Todavía no hay ninguna campaña de Imperivm II instalada.", "Non è ancora installata nessuna campagna di Imperivm II."},
+	{"It has files the game reads only once, when it starts: %s.", "Tiene archivos que el juego lee una sola vez, al arrancar: %s.", "Contiene file che il gioco legge una sola volta, all'avvio: %s."},
+	{"It has files the game cannot swap in a running session yet (sounds, voices, texts, packs, sprites): %s.", "Tiene archivos que el juego aún no puede cambiar sin reiniciar (sonidos, voces, textos, paquetes, sprites): %s.", "Contiene file che il gioco non sa ancora cambiare senza riavvio (suoni, voci, testi, pacchetti, sprite): %s."},
+	{"The game could not check that its old images are free, so it cannot swap them without a restart.", "El juego no pudo comprobar que sus imágenes antiguas estén libres, así que no puede cambiarlas sin reiniciar.", "Il gioco non ha potuto verificare che le vecchie immagini siano libere, quindi non può cambiarle senza riavvio."},
+	{"Images of the current rules are still in use by the game: %s. A restart makes sure no old picture is shown.", "El juego aún usa imágenes de las reglas actuales: %s. Reiniciar asegura que no se muestre ninguna imagen vieja.", "Il gioco usa ancora immagini delle regole attuali: %s. Il riavvio garantisce che non compaia nessuna vecchia immagine."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

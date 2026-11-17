@@ -272,6 +272,11 @@ bool RulesetNeedsRestart(const State &st, const ModRuleset &ruleset)
 	return !ModsCanSwitchWithoutRestart(ruleset);
 }
 
+std::string RulesetRestartWhy(const ModRuleset &ruleset)
+{
+	return ModUiRestartReason(ruleset);
+}
+
 const std::vector<RulesetChoice> &RulesetChoicesShown(const State &st)
 {
 	return SkirmishRoom(st) || OpenRoomHost(st) ? MountedRulesets() : st.createProfileInfo.rulesets;
