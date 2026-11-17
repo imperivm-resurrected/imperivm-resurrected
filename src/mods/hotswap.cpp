@@ -106,6 +106,36 @@ bool TextFile(const std::string &f, const std::string &ext)
 }
 }
 
+namespace {
+bool SoundExtension(const std::string &ext)
+{
+	return ext == ".wav" || ext == ".ogg";
+}
+
+// An audio file the game opens each time it plays it: sounds\, music\, and the voices of the language folders.
+bool SoundFile(const std::string &f, const std::string &ext)
+{
+	if (!SoundExtension(ext)) return false;
+	if (StartsWith(f, "sounds/") || StartsWith(f, "music/") || StartsWith(f, "currentlang/voices/")) return f.find('/') != f.size() - 1;
+	if (StartsWith(f, "local/")) {
+		const size_t slash = f.find('/', 6);
+		return slash != std::string::npos && slash > 6 && f.compare(slash, 8, "/voices/") == 0 && f.size() > slash + 8;
+	}
+	return false;
+}
+
+// The definitions of sounds the game reads once, into the table of its sound manager.
+bool SoundEntityFile(const std::string &f, const std::string &ext)
+{
+	if (ext != ".xml") return false;
+	const char *folders[] = {"data/sound entities/", "patches/data/sound entities/"};
+	for (const char *folder : folders) {
+		if (StartsWith(f, folder)) return f.size() > strlen(folder);
+	}
+	return false;
+}
+}
+
 bool HotSwapReadOnce(const std::string &raw)
 {
 	const std::string f = Normal(raw);
@@ -128,6 +158,8 @@ unsigned HotSwapKindOf(const std::string &raw)
 	if (HotSwapReadOnce(f)) return kHotOther;
 	const std::string real = RealPath(f);
 	if (TextFile(f, ext)) return kHotText;
+	if (SoundEntityFile(f, ext)) return kHotSoundData;
+	if (SoundFile(f, ext)) return kHotSound;
 	if (IsImage(ext) && MatchArtFolder(real)) return kHotArt;
 	if (MinimapEntityPicture(f)) return kHotArt;
 	// A file in a subfolder or with no name is not one of these.
@@ -161,6 +193,8 @@ std::string HotSwapKindsText(unsigned kinds)
 	add(kHotHidden, "hidden.txt");
 	add(kHotArt, "interface images");
 	add(kHotText, "texts");
+	add(kHotSound, "sounds");
+	add(kHotSoundData, "sound entities");
 	add(kHotOther, "other files");
 	return out.empty() ? "nothing" : out;
 }

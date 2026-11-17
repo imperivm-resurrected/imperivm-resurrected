@@ -26,8 +26,10 @@ bool HotSwapLayerOk(const std::vector<std::string> &files);
 // that belong to a match (kHotArt: .bmp and .rle in gameres/ (ui/) icons, cmdbar, infobar, noteicons, help and conversations, and the
 // minimap/zoomN/entities pictures; the game keeps them in caches that the reload empties, see game/artcache.h) and the texts (kHotText: the
 // loc\<language>.loc.xml files, the files of local\<language>\ and currentlang\ that are .xml, .txt or .ini, patches to currentlang\; the reload
-// makes the game read its table of texts again). kHotOther is anything else.
-enum HotSwapKind : unsigned { kHotNone = 0, kHotPatch = 1, kHotLoose = 2, kHotModes = 4, kHotHidden = 8, kHotOther = 16, kHotArt = 32, kHotText = 64 };
+// makes the game read its table of texts again), the sounds (kHotSound: .wav and .ogg in sounds\, music\ and the voices folders; the game opens them each time
+// it plays one) and the sound entities (kHotSoundData: data\sound entities\*.xml and its patches, which the game reads once into a table that the reload
+// builds again). kHotOther is anything else.
+enum HotSwapKind : unsigned { kHotNone = 0, kHotPatch = 1, kHotLoose = 2, kHotModes = 4, kHotHidden = 8, kHotOther = 16, kHotArt = 32, kHotText = 64, kHotSound = 128, kHotSoundData = 256 };
 unsigned HotSwapKindOf(const std::string &file);
 
 // Whether a file is one the game reads once, when it starts, or when a menu window is built, and never again for a match: the selection circles,

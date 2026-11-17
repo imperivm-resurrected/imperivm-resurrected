@@ -206,7 +206,7 @@ void TheImagesOfAMatchAreSwitchedInPlaceAndTheOnesReadOnceAreNot()
 		CHECK_EQ(HotSwapKindOf(f), static_cast<unsigned>(kHotOther));
 	}
 	// Not read once, not covered yet.
-	for (const char *f : {"local/spanish/voices/rhastatus/1.wav", "sounds/notifications/a.wav", "gameres/icons/x.db", "gameres/icons/x.png", "minimap/zoom16/terrain/a.bmp",
+	for (const char *f : {"packs/a.pak", "sprites/a.rle", "gameres/icons/x.db", "gameres/icons/x.png", "minimap/zoom16/terrain/a.bmp",
 			 "minimap/zoom16/entities/sub/a.bmp", "minimap/zoomx/entities/a.bmp", "minimap/zoom16/entities/", "units/rhastatus.ent.xml"}) {
 		CHECK(!HotSwapReadOnce(f));
 		CHECK_EQ(HotSwapKindOf(f), static_cast<unsigned>(kHotOther));
@@ -234,7 +234,7 @@ void TextsAreSwitchedInPlaceExceptTheSplashScreens()
 		"local/spanish/copyrights.txt", "local/spanish/sub/more.ini", "patches/currentlang/game.loc.xml", "currentlang/tips.xml"};
 	for (const char *f : text) CHECK_EQ(HotSwapKindOf(f), static_cast<unsigned>(kHotText));
 	// Read once at start, voices, paks, pictures and what is not a text keep the restart.
-	const char *const other[] = {"local/spanish/splash.ini", "local/english/endsplash1.ini", "currentlang/endsplash2.ini", "local/spanish/voices/rhastatus/1.wav",
+	const char *const other[] = {"local/spanish/splash.ini", "local/english/endsplash1.ini", "currentlang/endsplash2.ini",
 		"local/spanish/game.pak", "local/spanish/conquestdefault.bmp", "loc/english.txt", "loc/", "local/spanish.xml", "local//a.xml", "patches/currentlang/a.bmp",
 		"patches/currentlang/voices/a.xml"};
 	for (const char *f : other) CHECK_EQ(HotSwapKindOf(f), static_cast<unsigned>(kHotOther));
@@ -252,26 +252,46 @@ void TextsAreSwitchedInPlaceExceptTheSplashScreens()
 	CHECK_EQ(r.files.size(), size_t(1));
 }
 
+void SoundsAreSwitchedInPlaceAndTheEntityTableIsReadAgain()
+{
+	const char *const sound[] = {"sounds/notifications/barrack idle.wav", "Sounds\\clash\\chime.ogg", "music/gbr_track_9.ogg", "local/spanish/voices/rhastatus/1.wav",
+		"local/english/voices/a/b.ogg", "currentlang/voices/rhastatus/2.wav"};
+	for (const char *f : sound) CHECK_EQ(HotSwapKindOf(f), static_cast<unsigned>(kHotSound));
+	const char *const entity[] = {"data/sound entities/VoiceRHastatus.xml", "patches/data/sound entities/BarracksSelect.xml", "Data\\Sound Entities\\a.xml"};
+	for (const char *f : entity) CHECK_EQ(HotSwapKindOf(f), static_cast<unsigned>(kHotSoundData));
+	// What is not an audio file of those folders, or is another kind of file in them.
+	const char *const other[] = {"sounds/a.txt", "sounds/", "music/a.mp3", "local/spanish/a.wav", "local/spanish/voices/", "data/sounds/x.wav", "data/sound entities/a.txt",
+		"local/voices/a.wav", "sounds"};
+	for (const char *f : other) CHECK_EQ(HotSwapKindOf(f), static_cast<unsigned>(kHotOther));
+	// The entity files were data (kHotLoose, kHotPatch) that the game never read again: they are now the kind that makes the reload build the table again.
+	CHECK_EQ(HotSwapKinds({"data/sound entities/a.xml", "patches/data/sound entities/b.xml", "data/classes/c.xml"}), static_cast<unsigned>(kHotSoundData | kHotLoose));
+	const Files audio = {"sounds/clash/chime.wav", "local/spanish/voices/rhastatus/1.wav", "patches/data/sound entities/barracksselect.xml", "loc/english.loc.xml"};
+	CHECK(SwapDecide(false, {}, audio) == HotSwap::kReload);
+	CHECK(SwapDecide(false, audio, {"gameres/icons/a.bmp", "music/a.ogg"}) == HotSwap::kReload);
+	CHECK_EQ(HotSwapKindsText(kHotSound | kHotSoundData), "sounds, sound entities");
+}
+
 void TheRestartSaysWhyBeforeItHappens()
 {
 	CHECK(HotSwapRestartReason({}, {}).why == RestartWhy::kNone);
 	CHECK(HotSwapRestartReason({"gameres/icons/a.bmp", "patches/data/const.ini"}, {"modes/a.json"}).why == RestartWhy::kNone);
 	// A file read once is the reason even when a sound comes first.
-	RestartReason r = HotSwapRestartReason({"local/spanish/voices/a.wav"}, {"gameres/icons/a.bmp", "gameres/selections/a.rle", "ui/cursors/b.cur"});
+	RestartReason r = HotSwapRestartReason({"packs/a.pak"}, {"gameres/icons/a.bmp", "gameres/selections/a.rle", "ui/cursors/b.cur"});
 	CHECK(r.why == RestartWhy::kReadOnce);
 	CHECK_EQ(r.files.size(), size_t(2));
 	CHECK_EQ(r.files[0], "gameres/selections/a.rle");
 	// Only the not covered kinds.
-	r = HotSwapRestartReason({"sounds/a.wav"}, {"civs/gaul.json", "sounds/a.wav", "packs/a.pak", "rle.mmp.tail", "x/y.z"});
+	r = HotSwapRestartReason({"packs/a.pak"}, {"civs/gaul.json", "sounds/a.wav", "packs/a.pak", "rle.mmp.tail", "x/y.z"});
 	CHECK(r.why == RestartWhy::kOtherFiles);
 	CHECK_EQ(r.files.size(), size_t(kRestartReasonFiles));
-	CHECK_EQ(r.files[0], "sounds/a.wav");
+	CHECK_EQ(r.files[0], "packs/a.pak");
 }
 
 int main()
 {
 	TheImagesOfAMatchAreSwitchedInPlaceAndTheOnesReadOnceAreNot();
 	TextsAreSwitchedInPlaceExceptTheSplashScreens();
+	SoundsAreSwitchedInPlaceAndTheEntityTableIsReadAgain();
 	TheRestartSaysWhyBeforeItHappens();
 	TheSameRulesetNeedsNothing();
 	ConstIniAloneIsJustOneKindOfFile();
