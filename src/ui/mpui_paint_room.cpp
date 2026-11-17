@@ -594,7 +594,9 @@ void PaintSlotRow(Painter &p, const State &st, const TableCtx &t, int i, const A
 	const Columns &c = t.c;
 	const bool load = t.f.load, moving = t.moving;
 	const int cy = rowY + rowH / 2, ctlY = cy - kFieldH / 2;
-	const bool hovered = p.Hover(t.x + 1, rowY, t.w - 2, rowH, mx, my);
+	// A position the map does not have keeps its row, greyed and still: the table always has its eight.
+	const bool available = s.exists || s.used || !arrival.Empty();
+	const bool hovered = available && p.Hover(t.x + 1, rowY, t.w - 2, rowH, mx, my);
 	const bool human = s.used && (s.local || (g.online && s.type == 3));
 	const uint64_t who = !arrival.Empty() ? arrival.id : human ? (s.local ? SteamOwnId() : MemberIdByName(st, s.name)) : 0;
 
@@ -779,10 +781,10 @@ void PaintPlayerTable(Painter &p, const State &st, const RoomFacts &f, int x, in
 	const GameRoomSnapshot &g = st.game;
 	Arrival arriving[8];
 	PlaceArrivals(st, f, arriving);
-	int rows = 0;
-	for (int i = 0; i < 8; i++) rows += g.slots[i].exists || g.slots[i].used || !arriving[i].Empty() ? 1 : 0;
-	const int rowH = std::max(kMinRowH, std::min(kMaxRowH, (maxH - kTableHeadH) / std::max(1, rows)));
-	PaintGlassCard(p, x, y, w, kTableHeadH + std::max(1, rows) * rowH);
+	// Always the eight positions, those the map lacks greyed: the table keeps its size whatever the map, and shows where there is room.
+	const int rows = 8;
+	const int rowH = std::max(kMinRowH, std::min(kMaxRowH, (maxH - kTableHeadH) / rows));
+	PaintGlassCard(p, x, y, w, kTableHeadH + rows * rowH);
 	TableCtx t;
 	t.f = f;
 	t.x = x;
@@ -804,8 +806,8 @@ void PaintPlayerTable(Painter &p, const State &st, const RoomFacts &f, int x, in
 	int rowY = y + kTableHeadH, hovered = -1;
 	for (int i = 0; i < 8; i++) {
 		const GameRoomSlot &s = g.slots[i];
-		if (!s.exists && !s.used && arriving[i].Empty()) continue;
-		if (p.Hover(x + 1, rowY, w - 2, rowH, st.mouseX, st.mouseY)) hovered = i;
+		const bool available = s.exists || s.used || !arriving[i].Empty();
+		if (available && p.Hover(x + 1, rowY, w - 2, rowH, st.mouseX, st.mouseY)) hovered = i;
 		if (hovered == i && g_anim.hoverRow != i) g_anim.hoverAt = GetTickCount();
 		const int hoverPercent = static_cast<int>(std::min<DWORD>(kHoverMs, Since(g_anim.hoverAt)) * 100 / kHoverMs);
 		PaintSlotRow(p, st, t, i, arriving[i], rowY, rowH, hoverPercent);
