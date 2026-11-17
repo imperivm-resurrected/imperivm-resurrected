@@ -20,6 +20,8 @@
 #include "core/config.h"
 #include "core/crashlog.h"
 #include "core/log.h"
+#include "core/winpath.h"
+#include "i18n/tr.h"
 #include "game/artcache.h"
 #include "game/cmdcheck.h"
 #include "game/hotreload.h"
@@ -487,9 +489,13 @@ bool CommandSanity(const char *when)
 	return true;
 }
 
+// What the player is told before a restart nobody asked for (images that the switch replaces are in use): a window, because the game is about to end.
+std::string g_restartNotice;
+
 void RestartNow(const char *why)
 {
 	LogE("game", "hot reload: %s; the game restarts with the chosen rules", why);
+	if (!g_restartNotice.empty()) MessageBoxW(nullptr, winpath::Widen(g_restartNotice, CP_UTF8).c_str(), L"Imperivm Resurrected", MB_OK | MB_ICONINFORMATION | MB_TOPMOST);
 	ModsRestartGame();
 }
 
@@ -525,7 +531,15 @@ bool HotReload(const void *game)
 	DWORD shutdownMs = 0, initMs = 0;
 	g_artChanged = ModsReloadArtFiles();
 	if (!g_artChanged.empty()) ArtCacheLogCensus("before the reload");
-	if (!RebuildGameData(&shutdownMs, &initMs)) return false;
+	if (!RebuildGameData(&shutdownMs, &initMs)) {
+		if (!ArtCacheSurvivors().empty()) {
+			std::string names;
+			for (size_t i = 0; i < ArtCacheSurvivors().size() && i < 5; i++) names += (i ? ", " : "") + ArtCacheSurvivors()[i];
+			g_restartNotice = Tr("The game will restart with the ruleset you chose.") + " " +
+				TrFmt("Images of the current rules are still in use by the game: %s. A restart makes sure no old picture is shown.", {names});
+		}
+		return false;
+	}
 	if (!g_artChanged.empty()) {
 		// The answers the rooms got about images are asked again: the caches are empty now.
 		ModsArtCacheChanged();

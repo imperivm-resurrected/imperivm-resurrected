@@ -624,6 +624,22 @@ void ModUiOpen()
 		static_cast<unsigned>(g_s.mods.size()));
 }
 
+std::string ModUiRestartReason(const ModRuleset &ruleset)
+{
+	const ModsRestartInfo info = ModsRestartReason(ruleset);
+	std::string names;
+	for (size_t i = 0; i < info.files.size(); i++) names += (i ? ", " : "") + info.files[i];
+	// With the space that joins it to the sentence before it.
+	switch (info.kind) {
+	case ModsRestartKind::kReadOnce: return " " + TrFmt("It has files the game reads only once, when it starts: %s.", {names});
+	case ModsRestartKind::kOtherFiles: return " " + TrFmt("It has files the game cannot swap in a running session yet (sounds, voices, texts, packs, sprites): %s.", {names});
+	case ModsRestartKind::kHeldImages:
+		return " " + (names.empty() ? Tr("The game could not check that its old images are free, so it cannot swap them without a restart.")
+									  : TrFmt("Images of the current rules are still in use by the game: %s. A restart makes sure no old picture is shown.", {names}));
+	default: return std::string();
+	}
+}
+
 void ModUiAskRestart(const std::string &reason, int largeAddress, const std::vector<std::string> &items, const std::string &itemsTitle)
 {
 	std::lock_guard<std::mutex> lock(g_lock);

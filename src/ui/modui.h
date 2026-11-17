@@ -14,6 +14,10 @@
 void ModUiOpen();
 void ModUiAskRestart(const std::string &reason = "", int largeAddress = -1, const std::vector<std::string> &items = {},
 	const std::string &itemsTitle = "");
+// The sentence that says why changing to this ruleset restarts the game (the files that keep it), with a space in front so it joins the sentence before
+// it; empty if the restart is not about files. For every dialog and list that says a ruleset needs a restart.
+struct ModRuleset;
+std::string ModUiRestartReason(const ModRuleset &ruleset);
 bool ModUiIsOpen();
 int ModUiUpdatesAvailable();
 void ModUiResetUpdates();

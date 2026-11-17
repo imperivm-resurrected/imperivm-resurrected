@@ -879,7 +879,9 @@ void DoAction(State &st, int action, int arg)
 					items.push_back("##" + Tr("Will be disabled (this game does not use them):"));
 					items.insert(items.end(), off.begin(), off.end());
 				}
-				ModUiAskRestart("This game needs content that is not enabled. The game will restart to enable it; afterwards, load it again.", -1,
+				// The package is enabled in the mounted profile and only the ruleset differs: say why that ruleset is not switched in place.
+				const std::string why = mc.rulesetOnly ? ModUiRestartReason(mc.ruleset) : std::string();
+				ModUiAskRestart(Tr("This game needs content that is not enabled. The game will restart to enable it; afterwards, load it again.") + why, -1,
 					items, off.empty() ? "Content that will be enabled:" : "");
 				break;
 			}
@@ -1305,6 +1307,11 @@ void PaintDetailBody(Painter &p, State &st)
 		group(mc.missing.size() == 1 ? "You are missing 1 content pack (it cannot be loaded):" : Tr("You are missing ") + many + Tr(" content packs (they cannot be loaded):"), mc.missing, kBad);
 		if (mc.inPlace) group("Switches the ruleset, no restart:", mc.inactive, kOk);
 		else group(mc.inactive.size() == 1 ? "You need to enable 1 content pack:" : Tr("You need to enable ") + std::to_string(mc.inactive.size()) + Tr(" content packs:"), mc.inactive, kGold);
+		// The ruleset is the only difference and it is not switched in place: the list says why, like the dialog does.
+		if (!mc.inPlace && mc.needsActivation && mc.rulesetOnly && !mc.blocked) {
+			std::string why = ModUiRestartReason(mc.ruleset);
+			if (!why.empty()) lines.push_back({why.substr(1), kGold, false});
+		}
 		group("Another version or different files:", mc.other, kGold);
 		group(rec->mods.empty() ? "It was saved without additional content. You have enabled:" : "It was saved without this content you have enabled:", mc.extra, kGold);
 		if (lines.empty() && mc.warn) lines.push_back({"The content of this game does not match the one you have enabled.", kGold, false});
