@@ -150,6 +150,23 @@ bool EntityArtFile(const std::string &f)
 }
 }
 
+namespace {
+// The maps the game lists from disk each time a window asks (the lobby's maps, the campaigns, the conquests, the random map types) and opens when a game is made.
+bool MapFile(const std::string &f, const std::string &ext)
+{
+	static const char *const listed[] = {"scenarios/", "adventures/", "conquests/", "conquestmaps/"};
+	for (const char *folder : listed) {
+		if (StartsWith(f, folder)) return f.size() > strlen(folder) && f.back() != '/' && (ext == ".bfhp" || ext == ".bmp" || ext == ".txt" || ext == ".md");
+	}
+	// The packs the random map generator and the editor read by name, one level.
+	if (StartsWith(f, "packs/")) return f.size() > 6 && f.find('/', 6) == std::string::npos && ext == ".bfhp";
+	// The pictures of the random map types (randommap\<Name>\010.bmp) and the templates of the cities of the random maps (the files of the bfhp that holds them, loose).
+	if (StartsWith(f, "randommap/")) return f.size() > 10 && f.back() != '/' && ext == ".bmp";
+	if (StartsWith(f, "randommapsettlements/")) return f.size() > 21 && f.back() != '/' && (ext == ".xml" || ext == ".grid" || ext == ".bmp");
+	return false;
+}
+}
+
 bool HotSwapReadOnce(const std::string &raw)
 {
 	const std::string f = Normal(raw);
@@ -174,6 +191,7 @@ unsigned HotSwapKindOf(const std::string &raw)
 	if (TextFile(f, ext)) return kHotText;
 	if (SoundEntityFile(f, ext)) return kHotSoundData;
 	if (EntityArtFile(f)) return kHotEntity;
+	if (MapFile(f, ext)) return kHotMap;
 	if (SoundFile(f, ext)) return kHotSound;
 	if (IsImage(ext) && MatchArtFolder(real)) return kHotArt;
 	if (MinimapEntityPicture(f)) return kHotArt;
@@ -211,6 +229,7 @@ std::string HotSwapKindsText(unsigned kinds)
 	add(kHotSound, "sounds");
 	add(kHotSoundData, "sound entities");
 	add(kHotEntity, "entity art");
+	add(kHotMap, "maps");
 	add(kHotOther, "other files");
 	return out.empty() ? "nothing" : out;
 }
