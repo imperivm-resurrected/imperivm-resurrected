@@ -207,6 +207,82 @@ void ChoiceWithUnknownModsIsIgnored()
 	CHECK_EQ(Used(r, "gameres/menu.tga"), std::string("a-folder"));
 }
 
+bool FileChosen(const ClashReport &r, const std::string &path)
+{
+	const ClashFile *f = File(r, path);
+	return f && f->fileChosen;
+}
+
+void FileChoiceForOneCosmeticFile()
+{
+	const std::vector<ClashMod> mods = {Mod("a", {"gameres/menu.tga", "gameres/icon.tga"}), Mod("b", {"gameres/menu.tga", "gameres/icon.tga"})};
+	const ClashReport r = ClashAnalyze(mods, {}, {{"gameres/menu.tga", "b"}});
+	CHECK_EQ(Used(r, "gameres/menu.tga"), std::string("b-folder"));
+	CHECK(FileChosen(r, "gameres/menu.tga"));
+	CHECK_EQ(File(r, "gameres/menu.tga")->fallback, std::string("a-folder"));
+	CHECK_EQ(Used(r, "gameres/icon.tga"), std::string("a-folder"));
+	CHECK(!FileChosen(r, "gameres/icon.tga"));
+	CHECK(!FileChosen(ClashAnalyze(mods, {}), "gameres/menu.tga"));
+	const ClashReport loose = ClashAnalyze(mods, {}, {{"GameRes\\Menu.TGA", "B"}});
+	CHECK_EQ(Used(loose, "gameres/menu.tga"), std::string("b-folder"));
+	const ClashReport winner = ClashAnalyze(mods, {}, {{"gameres/menu.tga", "a"}});
+	CHECK_EQ(Used(winner, "gameres/menu.tga"), std::string("a-folder"));
+	CHECK(FileChosen(winner, "gameres/menu.tga"));
+}
+
+void FileChoiceNeedsALooseFile()
+{
+	const std::vector<ClashMod> mods = {Mod("a", {"gameres/menu.tga"}), Mod("b", {}, {"gameres/menu.tga"})};
+	const ClashReport r = ClashAnalyze(mods, {}, {{"gameres/menu.tga", "b"}});
+	CHECK_EQ(Used(r, "gameres/menu.tga"), std::string("a-folder"));
+	CHECK(!FileChosen(r, "gameres/menu.tga"));
+}
+
+void FileChoiceBeatsPairChoice()
+{
+	const std::vector<ClashMod> mods = {Mod("a", {"gameres/menu.tga", "gameres/icon.tga"}), Mod("b", {"gameres/menu.tga", "gameres/icon.tga"})};
+	const ClashReport r = ClashAnalyze(mods, {{"b", "a"}}, {{"gameres/menu.tga", "a"}});
+	CHECK_EQ(Used(r, "gameres/menu.tga"), std::string("a-folder"));
+	CHECK(FileChosen(r, "gameres/menu.tga"));
+	CHECK_EQ(Used(r, "gameres/icon.tga"), std::string("b-folder"));
+	CHECK(!FileChosen(r, "gameres/icon.tga"));
+	const ClashReport last = ClashAnalyze(mods, {}, {{"gameres/menu.tga", "a"}, {"gameres/menu.tga", "b"}});
+	CHECK_EQ(Used(last, "gameres/menu.tga"), std::string("b-folder"));
+}
+
+void FileChoiceNeverTouchesGameplayOrMaps()
+{
+	const std::vector<ClashMod> mods = {Mod("a", {"data/units.xml", "scenarios/x.bfhp", "gameres/menu.tga"}),
+		Mod("b", {"data/units.xml", "scenarios/x.bfhp", "gameres/menu.tga"})};
+	const ClashReport r = ClashAnalyze(mods, {}, {{"data/units.xml", "b"}, {"scenarios/x.bfhp", "b"}, {"gameres/menu.tga", "b"}});
+	CHECK_EQ(Used(r, "data/units.xml"), std::string("a-folder"));
+	CHECK(!FileChosen(r, "data/units.xml"));
+	CHECK_EQ(Used(r, "scenarios/x.bfhp"), std::string("a-folder"));
+	CHECK(!FileChosen(r, "scenarios/x.bfhp"));
+	CHECK(!Pair(r, "a", "b")->choosable);
+	CHECK_EQ(Used(r, "gameres/menu.tga"), std::string("b-folder"));
+	CHECK(FileChosen(r, "gameres/menu.tga"));
+}
+
+void FileChoiceWithUnknownModsIsIgnored()
+{
+	const std::vector<ClashMod> mods = {Mod("a", {"gameres/menu.tga"}), Mod("b", {"gameres/menu.tga"}), Mod("c", {"gameres/other.tga"})};
+	for (const char *use : {"gone", "c", ""}) {
+		const ClashReport r = ClashAnalyze(mods, {}, {{"gameres/menu.tga", use}});
+		CHECK_EQ(Used(r, "gameres/menu.tga"), std::string("a-folder"));
+		CHECK(!FileChosen(r, "gameres/menu.tga"));
+	}
+	CHECK(File(ClashAnalyze(mods, {}, {{"gameres/other.tga", "a"}}), "gameres/other.tga") == nullptr);
+}
+
+void FileChoiceAmongThree()
+{
+	const std::vector<ClashMod> mods = {Mod("a", {"gameres/menu.tga"}), Mod("b", {}, {"gameres/menu.tga"}), Mod("c", {"gameres/menu.tga"})};
+	const ClashReport r = ClashAnalyze(mods, {}, {{"gameres/menu.tga", "c"}});
+	CHECK_EQ(Used(r, "gameres/menu.tga"), std::string("c-folder"));
+	CHECK(File(r, "gameres/menu.tga")->loose == (std::vector<bool>{true, false, true}));
+}
+
 void SameValueFirstInOrderWins()
 {
 	const ClashReport r = ClashAnalyze({Patcher("a", {Set("/unit/@hp", "10"), Set("/unit/@speed", "2")}), Patcher("b", {Set("/unit/@hp", "20")})}, {});
@@ -335,6 +411,12 @@ int main()
 	ChoiceNeverTouchesGameplay();
 	ChoiceWithUnknownModsIsIgnored();
 	ChoiceAmongThree();
+	FileChoiceForOneCosmeticFile();
+	FileChoiceNeedsALooseFile();
+	FileChoiceBeatsPairChoice();
+	FileChoiceNeverTouchesGameplayOrMaps();
+	FileChoiceWithUnknownModsIsIgnored();
+	FileChoiceAmongThree();
 	SameValueFirstInOrderWins();
 	EqualValuesDoNotClash();
 	OtherFilesAndKeysDoNotClash();

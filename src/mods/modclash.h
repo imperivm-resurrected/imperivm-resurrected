@@ -23,6 +23,11 @@ struct ClashChoice {
 	std::string over;
 };
 
+struct ClashFileChoice {
+	std::string path;
+	std::string use;
+};
+
 struct ClashFile {
 	std::string path;
 	int kind = kClashCosmetic;
@@ -30,6 +35,7 @@ struct ClashFile {
 	std::vector<bool> loose;
 	std::string fallback;
 	std::string used;
+	bool fileChosen = false;
 };
 
 struct ClashPair {
@@ -57,4 +63,4 @@ struct ClashReport {
 
 int ClashKindOf(const std::string &path);
 
-ClashReport ClashAnalyze(const std::vector<ClashMod> &ordered, const std::vector<ClashChoice> &choices);
+ClashReport ClashAnalyze(const std::vector<ClashMod> &ordered, const std::vector<ClashChoice> &choices, const std::vector<ClashFileChoice> &fileChoices = {});

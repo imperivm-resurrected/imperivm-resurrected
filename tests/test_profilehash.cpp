@@ -58,6 +58,20 @@ void ChoicesDoNotChangeIt()
 	CHECK_EQ(ProfileGameplayHash(chosen, kInstalled), ProfileGameplayHash(plain, kInstalled));
 }
 
+void FileChoicesDoNotChangeIt()
+{
+	const ModProfile plain = Profile({"Rules", "Skin", "More Rules"});
+	ModProfile chosen = plain;
+	chosen.files.push_back({"gameres/menu.tga", "skin"});
+	chosen.files.push_back({"data/units.xml", "more-rules"});
+	chosen.files.push_back({"units/legionary/walk.rle", "rules"});
+	const std::string hash = ProfileGameplayHash(plain, kInstalled);
+	CHECK(!hash.empty());
+	CHECK_EQ(ProfileGameplayHash(chosen, kInstalled), hash);
+	chosen.choices.push_back({"more-rules", "rules"});
+	CHECK_EQ(ProfileGameplayHash(chosen, kInstalled), hash);
+}
+
 }
 
 int main()
@@ -65,5 +79,6 @@ int main()
 	OnlyGameplayCounts();
 	NotHashedYet();
 	ChoicesDoNotChangeIt();
+	FileChoicesDoNotChangeIt();
 	return test::Summary("profilehash");
 }

@@ -135,13 +135,15 @@ ClashReport ClashesOf(const ModProfile &p, const std::vector<ModInfo> &all)
 	ResolvePatchedValues(mods);
 	std::vector<ClashChoice> choices;
 	for (const ModChoice &c : p.choices) choices.push_back({c.use, c.over});
-	return ClashAnalyze(mods, choices);
+	std::vector<ClashFileChoice> files;
+	for (const ModFileChoice &f : p.files) files.push_back({f.path, f.use});
+	return ClashAnalyze(mods, choices, files);
 }
 
 std::map<std::string, std::string> ChosenFolders(const ModProfile &p, const std::vector<ModInfo> &all)
 {
 	std::map<std::string, std::string> out;
-	if (p.choices.empty()) return out;
+	if (p.choices.empty() && p.files.empty()) return out;
 	for (const ClashFile &f : ClashesOf(p, all).files) {
 		if (f.used != f.fallback) out[f.path] = f.used;
 	}
@@ -251,6 +253,10 @@ ModIssues IssuesOf(const ModProfile &p, const std::vector<ModInfo> &all, const s
 		const ModInfo *u = FindIn(all, f.used);
 		file.usedName = u ? u->name : f.used;
 		file.chosen = f.used != f.fallback;
+		file.folders = f.folders;
+		file.loose = f.loose;
+		file.choosable = f.kind == kClashCosmetic && std::count(f.loose.begin(), f.loose.end(), true) >= 2;
+		file.fileChosen = f.fileChosen;
 		out.files.push_back(file);
 		for (ModOverlap &ov : out.overlaps) {
 			if (!HasFolder(f.folders, ov.folder)) continue;
@@ -331,4 +337,38 @@ void ModsChooseFiles(ModProfile &p, const std::string &useFolder, const std::str
 	};
 	p.choices.erase(std::remove_if(p.choices.begin(), p.choices.end(), samePair), p.choices.end());
 	p.choices.push_back({use.id, over.id});
+	std::sort(use.paths.begin(), use.paths.end());
+	std::sort(over.paths.begin(), over.paths.end());
+	const auto shared = [&](const ModFileChoice &f) {
+		const std::string rel = NormPath(f.path);
+		return std::binary_search(use.paths.begin(), use.paths.end(), rel) && std::binary_search(over.paths.begin(), over.paths.end(), rel);
+	};
+	p.files.erase(std::remove_if(p.files.begin(), p.files.end(), shared), p.files.end());
+}
+
+void ModsChooseFile(ModProfile &p, const std::string &path, const std::string &useFolder)
+{
+	const std::string rel = NormPath(path);
+	ModInfo use;
+	if (rel.empty() || !ModsFind(useFolder, use) || use.id.empty()) return;
+	ModProfile without = p;
+	without.files.erase(std::remove_if(without.files.begin(), without.files.end(), [&](const ModFileChoice &f) { return NormPath(f.path) == rel; }),
+		without.files.end());
+	const ClashReport clashes = ClashesOf(without, ModsList());
+	const auto file = std::find_if(clashes.files.begin(), clashes.files.end(), [&](const ClashFile &f) { return NormPath(f.path) == rel; });
+	if (file == clashes.files.end() || file->kind != kClashCosmetic || !LooseIn(*file, use.folder)) return;
+	p.files = std::move(without.files);
+	if (!SameFolder(file->used, use.folder)) p.files.push_back({rel, use.id});
+}
+
+void ModsClearChoices(ModProfile &p, const std::string &folder)
+{
+	ModInfo m;
+	if (!ModsFind(folder, m) || m.id.empty()) return;
+	std::sort(m.paths.begin(), m.paths.end());
+	p.choices.erase(std::remove_if(p.choices.begin(), p.choices.end(), [&](const ModChoice &c) { return SameId(c.use, m.id) || SameId(c.over, m.id); }),
+		p.choices.end());
+	p.files.erase(std::remove_if(p.files.begin(), p.files.end(), [&](const ModFileChoice &f) {
+		return SameId(f.use, m.id) || std::binary_search(m.paths.begin(), m.paths.end(), NormPath(f.path));
+	}), p.files.end());
 }

@@ -284,7 +284,7 @@ bool ModsApplyWithoutRestart()
 		if (!ContainsFolder(active.mods, f)) removed.push_back(f);
 	}
 	if (added.empty() && removed.empty()) return false;
-	if (!active.choices.empty() && ChosenFolders(active, ModsList()) != chosen) return false;
+	if ((!active.choices.empty() || !active.files.empty()) && ChosenFolders(active, ModsList()) != chosen) return false;
 	std::vector<ModInfo> addedInfo;
 	for (const std::string &f : added) {
 		ModInfo m;
