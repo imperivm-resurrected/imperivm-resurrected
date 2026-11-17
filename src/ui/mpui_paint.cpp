@@ -599,12 +599,14 @@ void PaintList(Painter &p, const State &st)
 		PatronsWatch(ids);
 	}
 	const int rowsTop = ty + headH;
-	if (vis.empty()) {
+	if (vis.empty() && ((!st.ready && st.status.empty()) || (st.ready && st.loading))) {
+		std::vector<std::pair<int, int>> cols;
+		for (int c = 0; c < 5; c++) cols.push_back({textX(c), cx[c + 1] - textX(c)});
+		PaintSkeletonRows(p, tx + 1, rowsTop, tw - 2, rowH, std::min(8, (th - headH) / rowH), cols);
+	}
+	else if (vis.empty()) {
 		p.Font(0);
-		const std::string empty = !st.ready ? (st.status.empty() ? "Connecting to Steam..." : st.status)
-			: st.loading ? "Searching for rooms..."
-			: "There are no rooms with this filter.";
-		p.TextWrapped(tx + 24, rowsTop + 24, tw - 48, 120, empty, pal::textDim);
+		p.TextWrapped(tx + 24, rowsTop + 24, tw - 48, 120, !st.ready ? st.status : std::string("There are no rooms with this filter."), pal::textDim);
 	}
 	// The rooms in their groups, each under its heading with its count. The table has no scroll of its own: when the arrows take the
 	// selection past the rows that fit, the rows follow it.
