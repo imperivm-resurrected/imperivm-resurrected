@@ -248,13 +248,18 @@ void PaintSeasonBand(Painter &p, const State &st, const HubLayout &h)
 	PaintGlassCard(p, x, y, w, kBandH);
 	PaintIsotype(p, x + 56, y + kBandH / 2, 72, 200);
 	if (!v.seasonLoaded) {
-		Caps(p, x + 120, y + 14, 700, 18, "Ranked season", pal::redText);
+		// While the season is read, its number and its days show as the shape they will take.
+		if (v.seasonLoading) PaintSkeleton(p, x + 120, y + 17, 260, 12);
+		else Caps(p, x + 120, y + 14, 700, 18, "Ranked season", pal::redText);
 		Display(p, 52);
 		p.TextCaps(x + 120, y + 34, w - 160, 52, v.noSeason ? "No season yet" : LeagueQueueIsTeam(v.queue) ? "Ranked 2 vs 2" : "Ranked 1 vs 1", pal::text,
 			DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1);
+		if (v.seasonLoading) {
+			PaintSkeleton(p, x + 120, y + 89, 380, 12);
+			return;
+		}
 		p.Font(0);
-		p.Text(x + 120, y + 84, w - 160, 22,
-			v.seasonLoading ? "Reading the season..." : v.noSeason ? "The first season starts soon." : "Couldn't reach the league server. Check your connection and try again.",
+		p.Text(x + 120, y + 84, w - 160, 22, v.noSeason ? "The first season starts soon." : "Couldn't reach the league server. Check your connection and try again.",
 			pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		return;
 	}
@@ -917,9 +922,8 @@ void PaintMiniBoard(Painter &p, const State &st, const HubLayout &h, int y, int 
 		RawText(p, ix + iw - wlW, ry, wlW, rowH, std::to_string(r.wins) + "\xE2\x80\x93" + std::to_string(r.losses), pal::caption);
 	};
 	if (!v.boardLoaded) {
-		p.Spinner(ix + 12, y + 104, 9, 4, GetTickCount());
-		p.Font(3);
-		p.Text(ix + 32, y + 92, iw - 32, 24, "Reading the leaderboard...", pal::caption);
+		PaintSkeletonRows(p, ix, y + 80, iw, rowH, std::max(1, std::min(10, (cardH - 82 - 64) / rowH)),
+			{{ix, 40}, {ix + 40, nameW}, {ix + 40 + nameW + 16, glW}, {ix + iw - wlW, wlW}});
 	}
 	else if (v.top.rows.empty()) {
 		p.Font(0);
@@ -1093,8 +1097,11 @@ void PaintPlayerCard(Painter &p, const State &st, const std::string &seasonText,
 	if (!ready) {
 		p.Font(0);
 		if (pv.state == LeagueCardState::Loading || pv.state == LeagueCardState::None) {
-			p.Spinner(ix + 11, ty + 24, 9, 4, GetTickCount());
-			p.Text(ix + 32, ty + 12, iw - 32, 24, "Reading the player's card...", pal::caption);
+			// The four tiles the card will have, and the lines of its last games under them.
+			const int tileGap = tight ? 8 : 14, tileW = (iw - 3 * tileGap) / 4;
+			for (int k = 0; k < 4; k++) PaintSkeleton(p, ix + k * (tileW + tileGap), ty, tileW, tileH);
+			const int linesY = ty + tileH + 24;
+			for (int k = 0; k < 3 && linesY + k * 30 + 12 < bottom - 12; k++) PaintSkeleton(p, ix, linesY + k * 30, iw * (80 - k * 15) / 100, 12);
 		}
 		else {
 			p.raw = true;
@@ -1293,10 +1300,16 @@ void PaintBoard(Painter &p, const State &st)
 	if (!ids.empty()) PatronsWatch(ids);
 	int ry = y0 + 44;
 	bool listed = false;
-	if (!v.pageLoaded) {
-		p.Spinner(m + 32, ry + 32, 9, 4, GetTickCount());
+	if (!v.pageLoaded && v.pageError.empty()) {
+		std::vector<std::pair<int, int>> bars;
+		for (int i = 0; i < kCols; i++) {
+			if (cols[i].shown) bars.push_back({m + cols[i].x, cols[i].w});
+		}
+		PaintSkeletonRows(p, m + 1, ry, tableW - 2, rowH, std::max(1, std::min(rows, (y0 + h - ry) / rowH)), bars);
+	}
+	else if (!v.pageLoaded) {
 		p.Font(0);
-		p.Text(m + 56, ry + 18, tableW - 80, 28, v.pageError.empty() ? Tr("Reading the leaderboard...") : v.pageError, v.pageError.empty() ? pal::caption : pal::bad);
+		p.Text(m + 24, ry + 18, tableW - 48, 28, v.pageError, pal::bad);
 	}
 	else if (b.rows.empty()) {
 		const LeagueBoardQuery &q = v.pageQuery;
@@ -1388,10 +1401,17 @@ void PaintHistory(Painter &p, const State &st)
 	const int rowH = 56;
 	int ry = y0 + 44;
 	if (!v.historyLoaded || v.historyLoading) {
-		p.Spinner(m + 32, ry + 32, 9, 4, GetTickCount());
-		p.Font(0);
 		const bool failed = !v.historyLoading && !v.historyError.empty();
-		p.Text(m + 56, ry + 18, inner - 80, 28, failed ? v.historyError : Tr("Reading your games..."), failed ? pal::bad : pal::caption);
+		if (failed) {
+			p.Font(0);
+			p.Text(m + 24, ry + 18, inner - 48, 28, v.historyError, pal::bad);
+			return;
+		}
+		std::vector<std::pair<int, int>> bars;
+		for (const Col &c : cols) {
+			if (*c.label) bars.push_back({m + c.x, c.w});
+		}
+		PaintSkeletonRows(p, m + 1, ry, inner - 2, rowH, std::max(1, std::min(10, (y0 + h - ry) / rowH)), bars);
 		return;
 	}
 	if (v.history.games.empty()) {

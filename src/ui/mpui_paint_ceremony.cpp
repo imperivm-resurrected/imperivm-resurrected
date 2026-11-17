@@ -254,8 +254,19 @@ void PaintHall(Painter &p, const State &st, const LeagueSeasonsView &sv, const L
 	if (!ready || top.empty()) {
 		p.Font(0);
 		if (!ready && !(sv.hallSeason == season && sv.hallFailed)) {
-			p.Spinner(ix + 11, y + 72, 9, 4, GetTickCount());
-			p.Text(ix + 32, y + 60, iw - 32, 24, "Reading the hall of fame...", pal::caption);
+			// The podium and the rows under it, as they will stand.
+			const int colW = std::min(195, iw / 3), cx = x + w / 2, bottom = y + k.podiumBottom;
+			const int offsets[3] = {0, -1, 1};
+			for (int place = 0; place < 3; place++) {
+				const int plinth = k.plinths[place], avatar = place == 0 ? k.firstAvatar : k.otherAvatar, px = cx + offsets[place] * colW;
+				const int ay = bottom - plinth - avatar - 62;
+				PaintSkeleton(p, px - avatar / 2, ay, avatar, avatar);
+				PaintSkeleton(p, px - colW / 3, ay + avatar + 14, colW * 2 / 3, 12);
+				PaintSkeleton(p, px - colW / 2 + 10, bottom - plinth, colW - 20, plinth);
+			}
+			p.Fill(ix, bottom, iw, 1, pal::lineStrong);
+			const int rows = std::max(0, (buttonY - 8 - bottom - 8) / k.rowH);
+			PaintSkeletonRows(p, ix, bottom + 8, iw, k.rowH, std::min(7, rows), {{ix, 48}, {ix + 48, iw - 48 - 120}, {ix + iw - 110, 110}});
 		}
 		else {
 			const char *text = !ready ? "Couldn't reach the league server. Check your connection and try again."
