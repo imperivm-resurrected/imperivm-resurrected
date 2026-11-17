@@ -179,6 +179,8 @@ struct State {
 	int ioDetail = -1;
 	int ioShot = -1;
 	bool ioRequested = false;
+	// Refresh keeps the cards on screen while the same page loads again; any other search shows the shape of the cards.
+	bool ioRefreshing = false;
 	GbResults io;
 	GbMod verMod;
 	bool verHas = false;

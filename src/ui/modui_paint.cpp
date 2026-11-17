@@ -154,24 +154,50 @@ void SpinnerDone(const std::string &key)
 	g_spinSeen.erase(key);
 }
 
+// A block of what is still loading: a dark fill with a lighter band that sweeps across the whole screen, so every block on it
+// shimmers together.
+void PaintShimmer(Painter &p, int x, int y, int w, int h)
+{
+	p.Fill(x, y, w, h, pal::raised);
+	const int bandW = 420, period = 1500, span = 1920 + bandW;
+	const int center = -bandW / 2 + static_cast<int>(static_cast<int64_t>(GetTickCount() % period) * span / period);
+	const struct {
+		int half;
+		COLORREF c;
+	} layers[] = {{bandW / 2, RGB(0x21, 0x1d, 0x1a)}, {bandW / 3, RGB(0x26, 0x22, 0x1f)}, {bandW / 6, RGB(0x2b, 0x27, 0x23)}};
+	for (const auto &layer : layers) {
+		const int x0 = std::max(x, center - layer.half), x1 = std::min(x + w, center + layer.half);
+		if (x1 > x0) p.Fill(x0, y, x1 - x0, h, layer.c);
+	}
+}
+
 void PaintIoImage(Painter &p, int x, int y, int w, int h, const std::string &url)
 {
 	const std::shared_ptr<const GbImage> img = GbLogo(url);
 	if (img) {
-		SpinnerDone(url);
 		p.Image(x, y, w, h, img->bgra.data(), img->width, img->height);
 	}
-	else {
+	else if (url.empty()) {
 		p.Fill(x, y, w, h, pal::panel);
-		if (url.empty()) {
-			p.Font(3);
-			p.Text(x, y, w, h, "No image", pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-		}
-		else if (SpinnerDue(url)) {
-			const int radius = std::max(7, std::min(22, std::min(w, h) / 6));
-			p.Spinner(x + w / 2, y + h / 2, radius, std::max(4, radius / 3), GetTickCount());
-		}
+		p.Font(3);
+		p.Text(x, y, w, h, "No image", pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 	}
+	else {
+		PaintShimmer(p, x, y, w, h);
+	}
+}
+
+// The cards of Browse content while a page loads, in the shape the real ones will take: the picture, its category and three lines.
+void PaintSkeletonCard(Painter &p, int x, int y, int cw, int ch, int imgW, int imgH)
+{
+	PaintGlassCard(p, x, y, cw, ch);
+	p.Fill(x + 1, y + 1, cw - 2, imgH, pal::panel);
+	PaintShimmer(p, x + (cw - imgW) / 2, y + 1, imgW, imgH);
+	p.Fill(x + 10, y + 1 + imgH - 36, std::min(cw - 20, 96), 26, pal::panel);
+	p.Frame(x, y, cw, ch, pal::hairline);
+	PaintShimmer(p, x + 14, y + imgH + 16, (cw - 28) * 62 / 100, 18);
+	PaintShimmer(p, x + 14, y + imgH + 46, (cw - 28) * 38 / 100, 12);
+	PaintShimmer(p, x + 14, y + imgH + 68, (cw - 28) * 28 / 100, 12);
 }
 
 void PaintRich(Painter &p, const State &st, int x, int y, int w, int h, const std::string &html, const std::string &plain,
@@ -531,26 +557,21 @@ void PaintExplore(Painter &p, const State &st)
 	PaintField(p, st, l.x, y0, filtersX - gap - l.x, kBarH, st.ioSearch, "Search by name, author or category", st.focus == kIoSearchField, false, kIoFocusSearch, mx, my);
 	p.Button(filtersX, y0, filtersW, kBarH, nFilters ? Tr("Filters (") + std::to_string(nFilters) + ")" : "Filters", kIoFilterOpen, 0, mx, my, true, nFilters > 0, 0);
 	Combo(p, st, sortX, y0, sortW, kBarH, kIoSortNames[st.ioSort], kDropIoSort);
-	p.Button(refreshX, y0, refreshW, kBarH, "Refresh", kIoRefresh, 0, mx, my, !io.loading, false, 0);
-	{
-		const int trackX = l.x, trackW = l.inner, trackY = y0 + kBarH + 5;
-		p.Fill(trackX, trackY, trackW, 2, pal::selected);
-		if (io.loading) {
-			const int segW = 360, cycle = 1400;
-			const int pos = -segW + (trackW + segW) * static_cast<int>(GetTickCount() % cycle) / cycle;
-			const int x0 = std::max(0, pos), x1 = std::min(trackW, pos + segW);
-			if (x1 > x0) p.Fill(trackX + x0, trackY, x1 - x0, 2, pal::redText);
-		}
-	}
+	p.Button(refreshX, y0, refreshW, kBarH, st.ioRefreshing && io.loading ? "Updating..." : "Refresh", kIoRefresh, 0, mx, my, !io.loading, false, 0);
 
 	const int gx = l.x, gy = y0 + kBarH + 16, gw = l.inner, gh = l.cardBottom - gy, cardGap = 16;
+	// A page of kIoPerPage in 4 columns and 2 rows; the pictures keep the shape of GameBanana's cards and the text takes the rest.
+	const int cw = (gw - 3 * cardGap) / 4, ch = (gh - cardGap) / 2;
+	const int imgH = std::max(60, ch - 96), imgW = std::min(cw - 2, imgH * 235 / 152);
+	// A new search, page or filter shows the shape of the cards until they arrive; refreshing keeps the ones on screen meanwhile.
+	if ((io.loading && (!st.ioRefreshing || io.mods.empty())) || (io.mods.empty() && !st.ioRequested)) {
+		for (int i = 0; i < kIoPerPage; i++) {
+			PaintSkeletonCard(p, gx + (i % 4) * (cw + cardGap), gy + (i / 4) * (ch + cardGap), cw, ch, imgW, imgH);
+		}
+		return;
+	}
 	if (io.mods.empty()) {
 		PaintGlassCard(p, gx, gy, gw, gh);
-		if (io.loading || !st.ioRequested) {
-			p.Font(0);
-			p.Text(gx, gy, gw, gh, "Loading...", pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-			return;
-		}
 		p.Font(0);
 		std::string text = !io.error.empty() ? Tr("Could not connect to GameBanana: ") + Tr(io.error)
 			: !st.ioSearch.empty() || nFilters ? "No content matches the search."
@@ -559,9 +580,6 @@ void PaintExplore(Painter &p, const State &st)
 		if (!io.error.empty() && !io.loading) p.Button(gx + 28, gy + 110, 200, kBarH, "Retry", kIoRetry, 0, mx, my);
 		return;
 	}
-	// A page of kIoPerPage in 4 columns and 2 rows; the pictures keep the shape of GameBanana's cards and the text takes the rest.
-	const int cw = (gw - 3 * cardGap) / 4, ch = (gh - cardGap) / 2;
-	const int imgH = std::max(60, ch - 96), imgW = std::min(cw - 2, imgH * 235 / 152);
 	for (size_t i = 0; i < io.mods.size() && i < static_cast<size_t>(kIoPerPage); i++) {
 		const GbMod &m = io.mods[i];
 		const int x = gx + static_cast<int>(i % 4) * (cw + cardGap), y = gy + static_cast<int>(i / 4) * (ch + cardGap);

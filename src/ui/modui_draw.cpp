@@ -63,6 +63,7 @@ void ModUiDraw(uint32_t *buf, int w, int h)
 				const uint64_t before = g_s.io.serial;
 				g_s.io = GbGetResults();
 				if (g_s.io.serial != before) g_s.ioDetail = -1;
+				if (!g_s.io.loading) g_s.ioRefreshing = false;
 			}
 		}
 		st = g_s;

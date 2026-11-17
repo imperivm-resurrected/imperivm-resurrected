@@ -410,6 +410,7 @@ void DoAction(int action, int arg)
 		break;
 	case kIoRefresh:
 		GbForceRefresh();
+		g_s.ioRefreshing = g_s.ioPage == 0;
 		g_s.ioPage = 0;
 		IoSearch();
 		break;
