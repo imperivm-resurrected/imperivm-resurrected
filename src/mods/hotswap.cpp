@@ -136,6 +136,20 @@ bool SoundEntityFile(const std::string &f, const std::string &ext)
 }
 }
 
+namespace {
+// The art of an entity: its definition and the pictures it names, in the folder of the game's units, buildings, map objects and visuals.
+bool EntityArtFile(const std::string &f)
+{
+	const char *roots[] = {"units/", "buildings/", "mapobjects/", "visuals/"};
+	bool inRoot = false;
+	for (const char *root : roots) inRoot = inRoot || (StartsWith(f, root) && f.size() > strlen(root));
+	if (!inRoot || f.back() == '/') return false;
+	const std::string ext = Extension(f);
+	return ext == ".rle" || ext == ".bmp" || (ext == ".xml" && f.size() > 8 && f.compare(f.size() - 8, 8, ".ent.xml") == 0) ||
+		(ext == ".mmp" && f.size() > 8 && f.compare(f.size() - 8, 8, ".rle.mmp") == 0);
+}
+}
+
 bool HotSwapReadOnce(const std::string &raw)
 {
 	const std::string f = Normal(raw);
@@ -159,6 +173,7 @@ unsigned HotSwapKindOf(const std::string &raw)
 	const std::string real = RealPath(f);
 	if (TextFile(f, ext)) return kHotText;
 	if (SoundEntityFile(f, ext)) return kHotSoundData;
+	if (EntityArtFile(f)) return kHotEntity;
 	if (SoundFile(f, ext)) return kHotSound;
 	if (IsImage(ext) && MatchArtFolder(real)) return kHotArt;
 	if (MinimapEntityPicture(f)) return kHotArt;
@@ -195,6 +210,7 @@ std::string HotSwapKindsText(unsigned kinds)
 	add(kHotText, "texts");
 	add(kHotSound, "sounds");
 	add(kHotSoundData, "sound entities");
+	add(kHotEntity, "entity art");
 	add(kHotOther, "other files");
 	return out.empty() ? "nothing" : out;
 }
@@ -217,6 +233,18 @@ bool ConstIniHasGamePlay(const std::string &text)
 		at = end + 1;
 	}
 	return false;
+}
+
+std::vector<std::string> HotSwapEntityFolders(const std::vector<std::string> &files)
+{
+	std::vector<std::string> out;
+	for (const std::string &raw : files) {
+		const std::string f = Normal(raw);
+		if (HotSwapKindOf(f) != kHotEntity) continue;
+		const std::string folder = f.substr(0, f.find_last_of('/'));
+		if (std::find(out.begin(), out.end(), folder) == out.end()) out.push_back(folder);
+	}
+	return out;
 }
 
 std::vector<std::string> HotSwapArtFiles(const std::vector<std::string> &files)

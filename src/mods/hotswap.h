@@ -28,8 +28,9 @@ bool HotSwapLayerOk(const std::vector<std::string> &files);
 // loc\<language>.loc.xml files, the files of local\<language>\ and currentlang\ that are .xml, .txt or .ini, patches to currentlang\; the reload
 // makes the game read its table of texts again), the sounds (kHotSound: .wav and .ogg in sounds\, music\ and the voices folders; the game opens them each time
 // it plays one) and the sound entities (kHotSoundData: data\sound entities\*.xml and its patches, which the game reads once into a table that the reload
-// builds again). kHotOther is anything else.
-enum HotSwapKind : unsigned { kHotNone = 0, kHotPatch = 1, kHotLoose = 2, kHotModes = 4, kHotHidden = 8, kHotOther = 16, kHotArt = 32, kHotText = 64, kHotSound = 128, kHotSoundData = 256 };
+// builds again), and the art of the entities (kHotEntity: .ent.xml, .rle and .bmp in units\, buildings\, mapobjects\ and visuals\; the game keeps each
+// entity it loaded in a cache, and the reload takes out of it those whose folder holds a file that changed). kHotOther is anything else.
+enum HotSwapKind : unsigned { kHotNone = 0, kHotPatch = 1, kHotLoose = 2, kHotModes = 4, kHotHidden = 8, kHotOther = 16, kHotArt = 32, kHotText = 64, kHotSound = 128, kHotSoundData = 256, kHotEntity = 512 };
 unsigned HotSwapKindOf(const std::string &file);
 
 // Whether a file is one the game reads once, when it starts, or when a menu window is built, and never again for a match: the selection circles,
@@ -39,6 +40,10 @@ bool HotSwapReadOnce(const std::string &file);
 
 // Whether a file is a text of the game that is read once, at start (the splash screens): it keeps the restart although it is a text.
 bool HotSwapTextReadOnce(const std::string &file);
+
+// The folders (units/rhastatus, lowercase, "/") of the entity art among files (kHotEntity), once each. Every file of an entity (its .ent.xml and the images it
+// names) is in the folder of the entity's .ent.xml, so a changed file means the entity of that folder has to be loaded again.
+std::vector<std::string> HotSwapEntityFolders(const std::vector<std::string> &files);
 
 // The game's own paths (ui/..., lowercase, "/") of the images among files (kHotArt), as the caches name them after the volume gameres/ is
 // turned into ui/. These are the files whose cached copy the reload has to be sure it replaced.

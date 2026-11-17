@@ -376,6 +376,7 @@ void ModsArtCacheChanged();
 struct ModsReloadChange {
 	unsigned kinds = 0;
 	std::vector<std::string> art;
+	std::vector<std::string> entityFolders;
 };
 ModsReloadChange ModsReloadChanged();
 // Replaces the mounted ruleset if ModsCanSwitchWithoutRestart. The caller saves the profile and sets the choice, as for any other
