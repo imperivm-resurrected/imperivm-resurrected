@@ -7,6 +7,7 @@
 #include "core/guard.h"
 
 #include "ui/modui_internal.h"
+#include "ui/textedit.h"
 
 using namespace modui_impl;
 
@@ -216,6 +217,82 @@ void DoAction(int action, int arg)
 		const ModInfo *u = FindMod(use);
 		const std::string name = u ? u->name : use;
 		SetStatus(ModsRestartNeeded() ? TrFmt("The files of %s will be used after restarting", {name}) : TrFmt("The files of %s are used", {name}));
+		break;
+	}
+	case kUseFile: {
+		const ModIssues *is = SelectedIssues(g_s);
+		const bool mine = arg % 2 == 1;
+		const size_t k = static_cast<size_t>(arg / 2 / 4096), file = static_cast<size_t>(arg / 2 % 4096);
+		if (!is || arg < 0 || k >= is->overlaps.size() || file >= is->files.size()) break;
+		const std::string self = g_s.rows[g_s.selected].folder;
+		const std::string use = mine ? self : is->overlaps[k].folder;
+		const std::string path = is->files[file].path;
+		ModsChooseFile(g_s.profile, path, use);
+		CommitProfile();
+		const ModInfo *u = FindMod(use);
+		SetStatus(TrFmt("%s: the copy of %s is used", {path, u ? u->name : use}));
+		break;
+	}
+	case kDisableOther: {
+		const ModIssues *is = SelectedIssues(g_s);
+		const Row *sel = SelectedRow(g_s);
+		if (!sel) break;
+		std::string folder = sel->folder;
+		if (arg >= 0) {
+			if (!is || arg >= static_cast<int>(is->overlaps.size())) break;
+			folder = is->overlaps[static_cast<size_t>(arg)].folder;
+		}
+		SetActive({folder}, false);
+		break;
+	}
+	case kClearChoices:
+		if (const Row *sel = SelectedRow(g_s)) {
+			ModsClearChoices(g_s.profile, sel->folder);
+			CommitProfile();
+			SetStatus("Back to the load order: the pack higher up wins");
+		}
+		break;
+	case kTabOrder:
+		g_s.tab = kTabListOrder;
+		g_s.catOpen = false;
+		g_s.ioFilterOpen = false;
+		break;
+	case kCardTab: g_s.cardTab = std::max(0, std::min(static_cast<int>(kCardFiles), arg)); break;
+	case kCopyCode:
+		ClipboardSet(ModsProfileCode(g_s.profile));
+		SetStatus("Code copied: send it to whoever you want to share the profile with");
+		break;
+	case kPasteCode:
+		g_s.importText = ClipboardGet();
+		FocusField(kImportField);
+		break;
+	case kFocusImport: FocusField(kImportField); break;
+	case kImportClear:
+		g_s.importText.clear();
+		g_s.focus = kNoField;
+		break;
+	case kImportCode: {
+		ModsSharedProfile sp;
+		std::string error;
+		if (!ModsParseProfileCode(g_s.importText, sp, error)) {
+			SetStatus(error);
+			break;
+		}
+		const std::string name = ModsImportProfile(sp);
+		if (name.empty()) {
+			SetStatus("The profile could not be saved");
+			break;
+		}
+		g_s.importProfile = name;
+		g_s.importWant.clear();
+		g_s.importLoading.clear();
+		for (const ModsSharedMod &m : sp.mods) {
+			if (!m.installed && m.gbId) g_s.importWant.push_back(m.gbId);
+		}
+		g_s.importText.clear();
+		SwitchProfile(name);
+		SetStatus(g_s.importWant.empty() ? TrFmt("Profile \"%s\" imported", {ModsProfileLabel(name)})
+										 : TrFmt("Profile \"%s\" imported: downloading %s packs", {ModsProfileLabel(name), std::to_string(g_s.importWant.size())}));
 		break;
 	}
 	case kOpenMod: {
@@ -443,7 +520,8 @@ void DoAction(int action, int arg)
 	}
 	}
 	const bool keepsFocus =
-		action == kFocusName || action == kFocusSearch || action == kIoFocusSearch || action == kNone || action == kSaveAs ||
+		action == kFocusName || action == kFocusSearch || action == kIoFocusSearch || action == kFocusImport || action == kPasteCode ||
+		action == kNone || action == kSaveAs ||
 		(action == kNameOk && g_s.nameMode != kNameNone) ||
 		(action == kDropPick && g_s.nameMode != kNameNone);
 	if (!keepsFocus) {
@@ -454,6 +532,8 @@ void DoAction(int action, int arg)
 	}
 	const int maxScroll = std::max(0, static_cast<int>(VisibleRows(g_s).size()) - g_installedRows.load());
 	g_s.list.scroll = std::max(0, std::min(g_s.list.scroll, maxScroll));
+	const int maxOrder = std::max(0, static_cast<int>(g_s.order.size()) - g_orderRows.load());
+	g_s.orderList.scroll = std::max(0, std::min(g_s.orderList.scroll, maxOrder));
 	if (action != kNone) {
 		g_s.restartNeeded = ModsRestartNeeded();
 	}

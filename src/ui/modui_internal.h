@@ -19,6 +19,7 @@
 #include "ui/keycaps.h"
 #include "ui/modui.h"
 #include "ui/richtext.h"
+#include "mods/modorder.h"
 #include "mods/mods.h"
 
 namespace modui_impl {
@@ -31,10 +32,22 @@ const int kDesignH = 640;
 
 const int kRowH = 40;
 
+// The rows of the installed list and of the load order: a name over a line of detail.
+const int kModRowH = 54;
+
+// The band that names a group of the load order (cosmetic, maps and campaigns, gameplay, disabled) above its first row.
+const int kGroupH = 30;
+
 // The height of the fields and buttons in the bars of the content screen, and of its row of actions at the bottom.
 const int kBarH = 40;
 
 const int kFootH = 44;
+
+// The tabs of the content screen.
+enum Tab { kTabListInstalled = 0, kTabListOrder = 1, kTabListExplore = 2 };
+
+// The tabs of the card beside the installed list.
+enum CardTab { kCardDetails = 0, kCardConflicts = 1, kCardFiles = 2 };
 
 const char kOriginalName[] = "Original";
 
@@ -51,9 +64,13 @@ enum Action {
 	kIoFilterOpen, kIoFilterClose, kIoFilterToggle, kIoFilterClear,
 	kUseFiles,
 	kRowClick, kMark, kStateFilter, kCatChip, kCatPanel, kCatClear, kBulkOn, kBulkOff, kBulkUninstall, kClearMarks, kSetActive, kForget, kReinstall,
+	kTabOrder, kCardTab, kUseFile, kDisableOther, kClearChoices, kCopyCode, kPasteCode, kFocusImport, kImportCode, kImportClear,
 };
 
-enum Field { kNoField, kSearchField, kNameField, kIoSearchField };
+// kUseFile packs which shared pair, which file of the card and whose copy into one number.
+inline int UseFileArg(int overlap, int file, bool mine) { return (overlap * 4096 + file) * 2 + (mine ? 1 : 0); }
+
+enum Field { kNoField, kSearchField, kNameField, kIoSearchField, kImportField };
 
 enum Drop { kDropNone, kDropProfile, kDropMenu, kDropSort, kDropIoSort, kDropVersions, kDropClashFiles, kDropModMenu, kDropRowMenu };
 
@@ -71,9 +88,19 @@ enum NameMode { kNameNone, kNameSaveAs, kNameRename, kNameNew };
 
 enum Confirm { kConfirmRestart, kConfirmUninstall, kConfirmDelete, kConfirmNotice, kConfirmAction };
 
-const char *const kSortNames[] = {"Name", "Active first", "Recently installed", "Size"};
-const int kSortCount = 4;
-enum StateFilter { kStateAll, kStateActive, kStateDisabled, kStateProblems, kStateCount };
+// Priority is the load order: the active packs as they load, then the rest by name.
+const char *const kSortNames[] = {"Priority", "Name", "Active first", "Recently installed", "Size"};
+const int kSortCount = 5;
+enum Sort { kSortPriority = 0, kSortName, kSortActiveFirst, kSortRecent, kSortSize };
+enum StateFilter { kStateAll, kStateActive, kStateDisabled, kStateConflicts, kStateProblems, kStateCount };
+
+// What a pack shares with the others of the profile: the files it wins and loses, the pairs and values it shares, and whether
+// sharing them is a problem (gameplay files that the order cannot settle).
+struct ClashSummary {
+	int wins = 0, loses = 0, pairs = 0, values = 0;
+	bool problem = false;
+	std::string problemWith;
+};
 
 struct Row {
 	std::string folder;
@@ -128,7 +155,16 @@ struct State {
 	int menuX = 0, menuY = 0;
 	uint64_t listSerial = 0;
 
-	int tab = 0;
+	int tab = kTabListInstalled;
+	int cardTab = kCardDetails;
+	// The active packs as they load, with why each one is where it is.
+	std::vector<ModOrderEntry> order;
+	ListState orderList;
+	ListGeom orderGeom;
+	// The code being imported, and the profile it made while the packs it lacks download.
+	std::string importText;
+	std::string importProfile;
+	std::vector<uint64_t> importWant, importLoading;
 	int focus = kNoField;
 	DownloadStatus dl;
 	bool catalogRequested = false;
@@ -164,16 +200,20 @@ struct State {
 // the Installed tab or the grid of Browse content, down to the row of actions at the bottom.
 struct PanelLayout : ScreenLayout {
 	int x = 0, inner = 0;
+	// The tools over the list and the card, and where the list and the card start: they reach the foot of the screen, which only
+	// Browse content keeps for its pages.
+	int toolsY = 0, cardTop = 0;
 	int footY = 0, cardBottom = 0;
 	int listW = 0, detailX = 0, detailW = 0;
-	int selectionBarY = 0;
 };
 PanelLayout PanelLayoutFor(const State &st);
 
 extern std::mutex g_lock;
 extern State g_s;
 extern ListGeom g_listGeomOut;
+extern ListGeom g_orderGeomOut;
 extern std::atomic<int> g_installedRows;
+extern std::atomic<int> g_orderRows;
 struct RichPos {
 	int y, h, indent;
 };
@@ -221,6 +261,26 @@ CatalogFacts ModFactsOf(const ModInfo &m);
 uint32_t ModCategoriesOf(const ModInfo &m);
 int ModMainCategory(const ModInfo &m);
 bool RowHasProblems(const State &st, const Row &r);
+ClashSummary ClashSummaryOf(const State &st, const std::string &folder);
+// Where the pack loads (position 1 is the first and wins), or null when it does not load.
+const ModOrderEntry *OrderEntryOf(const State &st, const std::string &folder);
+// Why the pack is where it is in the load order, as a sentence.
+std::string OrderReasonText(const State &st, const ModOrderEntry &e);
+// The name of a group of the load order, 0-2 by kind and 3 for what does not load.
+const char *OrderGroupName(int group);
+void ImportTick();
+void PaintOrderTab(Painter &p, const State &st);
+// A bolt `h` tall at (x, y), the mark of the files two packs share.
+void PaintBolt(Painter &p, int x, int y, int h, COLORREF c);
+// A padlock `h` tall at (x, y), for what the load order decides and cannot be chosen.
+void PaintPadlock(Painter &p, int x, int y, int h, COLORREF c);
+// One half of a choice of two: the one in use has the lighter fill and the red rule under it, and only the other can be clicked.
+void PaintSeg(Painter &p, int x, int y, int w, int h, const std::string &label, bool on, bool enabled, int action, int arg, int mx, int my);
+// What a pack shares, in the Conflicts column of the installed list and of the load order.
+void PaintClashCell(Painter &p, const State &st, const Row &r, int x, int y, int w, int h);
+// The band that names a group of the load order and counts its packs.
+void PaintGroupBand(Painter &p, int x, int y, int w, int group, int count);
+void SetTipText(const std::string &text, int x, int y);
 bool IsMarked(const State &st, const std::string &folder);
 std::vector<std::string> Targets(const State &st);
 CatalogCounts InstalledCounts(const State &st);

@@ -263,6 +263,7 @@ bool ModUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		{
 			const POINT at = {g_s.mouseX, g_s.mouseY};
 			ListMove(g_s.list, g_s.listGeom, at);
+			ListMove(g_s.orderList, g_s.orderGeom, at);
 			std::lock_guard<std::mutex> rich(g_rich.mx);
 			ListMove(g_rich.list, g_rich.geom, at);
 		}
@@ -291,7 +292,8 @@ bool ModUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		}
 		if (g_s.confirm && ListDown(g_s.confirmList, g_s.confirmGeom, pt)) return true;
 		if (!g_s.confirm && g_s.drop == kDropNone && !g_s.ioFilterOpen && !g_s.catOpen && g_s.ioShot < 0) {
-			if (ListDown(g_s.list, g_s.listGeom, pt)) return true;
+			if (g_s.tab == kTabListInstalled && ListDown(g_s.list, g_s.listGeom, pt)) return true;
+			if (g_s.tab == kTabListOrder && ListDown(g_s.orderList, g_s.orderGeom, pt)) return true;
 			std::lock_guard<std::mutex> rich(g_rich.mx);
 			if (ListDown(g_rich.list, g_rich.geom, pt)) return true;
 		}
@@ -334,6 +336,7 @@ bool ModUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		g_s.dropBar = ScrollDrag();
 		ListUp(g_s.confirmList);
 		ListUp(g_s.list);
+		ListUp(g_s.orderList);
 		{
 			std::lock_guard<std::mutex> rich(g_rich.mx);
 			ListUp(g_rich.list);
@@ -389,6 +392,11 @@ bool ModUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		}
 		if (g_s.tab == 2) {
 			if (g_s.ioDetail < 0) DoAction(GET_WHEEL_DELTA_WPARAM(wp) < 0 ? kIoNext : kIoPrev, 0);
+			return true;
+		}
+		if (g_s.tab == kTabListOrder) {
+			g_s.orderList.scroll -= GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA * 2;
+			DoAction(kNone, 0);
 			return true;
 		}
 		g_s.list.scroll -= GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA * 2;
@@ -464,6 +472,10 @@ bool ModUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		}
 		if (g_s.catOpen && !g_s.confirm) {
 			if (wp == VK_ESCAPE) g_s.catOpen = false;
+			return true;
+		}
+		if (g_s.tab == kTabListOrder && !g_s.confirm) {
+			if (wp == VK_ESCAPE) DoAction(kClose, 0);
 			return true;
 		}
 		if (wp == VK_ESCAPE) {

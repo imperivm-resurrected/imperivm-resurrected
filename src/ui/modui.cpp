@@ -41,6 +41,7 @@ State g_s;
 
 RichTextState g_rich;
 ListGeom g_listGeomOut;
+ListGeom g_orderGeomOut;
 DropListState g_drop;
 }
 
@@ -131,11 +132,71 @@ bool RowHasProblems(const State &st, const Row &r)
 	return it != st.issues->end() && !it->second.problems.empty();
 }
 
+ClashSummary ClashSummaryOf(const State &st, const std::string &folder)
+{
+	ClashSummary out;
+	const auto it = st.issues->find(folder);
+	if (it == st.issues->end()) return out;
+	for (const ModOverlap &ov : it->second.overlaps) {
+		out.pairs++;
+		out.wins += ov.mine;
+		out.loses += ov.theirs;
+		if (ov.problem && !out.problem) {
+			out.problem = true;
+			out.problemWith = ov.name;
+		}
+	}
+	out.values = static_cast<int>(it->second.values.size());
+	return out;
+}
+
+const ModOrderEntry *OrderEntryOf(const State &st, const std::string &folder)
+{
+	for (const ModOrderEntry &e : st.order) {
+		if (_stricmp(e.folder.c_str(), folder.c_str()) == 0) return &e;
+	}
+	return nullptr;
+}
+
+const char *OrderGroupName(int group)
+{
+	switch (group) {
+	case kModCosmetic: return "Cosmetic";
+	case kModContent: return "Maps and campaigns";
+	case kModRules: return "Gameplay";
+	default: return "Disabled";
+	}
+}
+
+std::string OrderReasonText(const State &st, const ModOrderEntry &e)
+{
+	std::string names;
+	for (size_t i = 0; i < e.related.size(); i++) {
+		const ModInfo *m = FindModIn(st.mods, e.related[i]);
+		names += (i ? ", " : "") + (m ? m->name : e.related[i]);
+	}
+	switch (e.reason) {
+	case kOrderNeeds: return TrFmt("Above %s, which it needs.", {names});
+	case kOrderNeeded: return TrFmt("Below %s, which needs it.", {names});
+	case kOrderAuthor: return TrFmt("Its author asks for it to load next to %s.", {names});
+	default: break;
+	}
+	const std::string kind = e.kind == kModCosmetic ? Tr("Cosmetic: it goes above maps and gameplay.")
+		: e.kind == kModContent						? Tr("Maps and campaigns: below the cosmetic packs, above gameplay.")
+													: Tr("Gameplay: it goes at the end, below everything else.");
+	return e.reason == kOrderByName ? kind + " " + Tr("Within its group, by name.") : kind;
+}
+
 bool RowInState(const State &st, const Row &r, int state)
 {
 	switch (state) {
 	case kStateActive: return r.active;
 	case kStateDisabled: return !r.active;
+	case kStateConflicts: {
+		if (!r.active) return false;
+		const ClashSummary c = ClashSummaryOf(st, r.folder);
+		return c.pairs > 0 || c.values > 0;
+	}
 	case kStateProblems: return RowHasProblems(st, r);
 	default: return true;
 	}
@@ -189,16 +250,23 @@ std::vector<int> VisibleRows(const State &st, int state, const CatalogFilter &fi
 		if (RowInState(st, r, state) && RowMatches(st, r, q, filter)) out.push_back(static_cast<int>(i));
 	}
 	const auto mod = [&](int i) { return FindModIn(st.mods, st.rows[i].folder); };
-	if (st.sort == 1) {
+	if (st.sort == kSortPriority) {
+		const auto rank = [&](int i) {
+			const ModOrderEntry *e = st.rows[i].active ? OrderEntryOf(st, st.rows[i].folder) : nullptr;
+			return e ? e->position : 1 << 20;
+		};
+		std::stable_sort(out.begin(), out.end(), [&](int a, int b) { return rank(a) < rank(b); });
+	}
+	else if (st.sort == kSortActiveFirst) {
 		std::stable_sort(out.begin(), out.end(), [&](int a, int b) { return st.rows[a].active && !st.rows[b].active; });
 	}
-	else if (st.sort == 2) {
+	else if (st.sort == kSortRecent) {
 		std::stable_sort(out.begin(), out.end(), [&](int a, int b) {
 			const ModInfo *ma = mod(a), *mb = mod(b);
 			return (ma ? ma->installedTime : 0) > (mb ? mb->installedTime : 0);
 		});
 	}
-	else if (st.sort == 3) {
+	else if (st.sort == kSortSize) {
 		std::stable_sort(out.begin(), out.end(), [&](int a, int b) {
 			const ModInfo *ma = mod(a), *mb = mod(b);
 			return (ma ? ma->totalBytes : 0) > (mb ? mb->totalBytes : 0);
@@ -262,6 +330,7 @@ void BuildUsage()
 	}
 	g_s.issues = std::make_shared<const std::map<std::string, ModIssues>>(ModsIssuesForAll(g_s.profile));
 	g_s.problems = ModsProblemsFrom(g_s.profile, *g_s.issues);
+	g_s.order = ModsLoadOrderExplained(g_s.profile);
 }
 
 void Reload()
@@ -278,15 +347,61 @@ void Reload()
 
 int FieldOfAction(int action)
 {
-	return action == kFocusSearch ? kSearchField : action == kIoFocusSearch ? kIoSearchField : action == kFocusName ? kNameField : kNoField;
+	return action == kFocusSearch ? kSearchField
+		: action == kIoFocusSearch ? kIoSearchField
+		: action == kFocusName	   ? kNameField
+		: action == kFocusImport   ? kImportField
+								   : kNoField;
 }
 int ActionOfField(int field)
 {
-	return field == kSearchField ? kFocusSearch : field == kIoSearchField ? kIoFocusSearch : field == kNameField ? kFocusName : -1;
+	return field == kSearchField ? kFocusSearch
+		: field == kIoSearchField ? kIoFocusSearch
+		: field == kNameField	  ? kFocusName
+		: field == kImportField	  ? kFocusImport
+								  : -1;
 }
 std::string &FieldRef(int field)
 {
-	return field == kSearchField ? g_s.searchText : field == kIoSearchField ? g_s.ioSearch : g_s.nameText;
+	return field == kSearchField ? g_s.searchText : field == kIoSearchField ? g_s.ioSearch : field == kImportField ? g_s.importText : g_s.nameText;
+}
+
+void ImportTick()
+{
+	// The packs of an imported profile that were missing: their GameBanana page is asked for first, then they install, and each
+	// one that arrives joins the profile.
+	for (size_t i = 0; i < g_s.importWant.size();) {
+		const std::shared_ptr<const GbMod> info = GbInfo(g_s.importWant[i]);
+		if (!info) {
+			i++;
+			continue;
+		}
+		if (info->hasFile) {
+			GbInstall(*info);
+			g_s.importLoading.push_back(g_s.importWant[i]);
+		}
+		else {
+			SetStatus(TrFmt("%s has no file to download on GameBanana", {info->name}));
+		}
+		g_s.importWant.erase(g_s.importWant.begin() + static_cast<std::ptrdiff_t>(i));
+	}
+	bool added = false;
+	for (size_t i = 0; i < g_s.importLoading.size();) {
+		const auto it = std::find_if(g_s.mods.begin(), g_s.mods.end(), [&](const ModInfo &m) { return m.gbId == g_s.importLoading[i]; });
+		if (it == g_s.mods.end()) {
+			i++;
+			continue;
+		}
+		added = ModsAddToProfile(g_s.importProfile, it->folder) || added;
+		g_s.importLoading.erase(g_s.importLoading.begin() + static_cast<std::ptrdiff_t>(i));
+	}
+	if (added && g_s.profile.name == g_s.importProfile) {
+		g_s.profile = ModsLoadProfile(g_s.importProfile);
+		ModsApplyWithoutRestart();
+		BuildRows();
+		BuildUsage();
+	}
+	if (g_s.importWant.empty() && g_s.importLoading.empty()) g_s.importProfile.clear();
 }
 void FocusField(int field)
 {
@@ -404,6 +519,7 @@ void FinishName()
 	if (mode == kNameSaveAs) {
 		p.mods = g_s.profile.mods;
 		p.choices = g_s.profile.choices;
+		p.files = g_s.profile.files;
 	}
 	ModsSaveProfile(p);
 	SwitchProfile(name);

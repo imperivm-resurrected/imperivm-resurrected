@@ -53,6 +53,7 @@ void ModUiDraw(uint32_t *buf, int w, int h)
 				BuildUsage();
 				g_s.restartNeeded = ModsRestartNeeded();
 			}
+			if (!g_s.importWant.empty() || !g_s.importLoading.empty()) ImportTick();
 			if (g_s.tab == 2 && g_s.ioSearchDue && static_cast<int>(GetTickCount() - g_s.ioSearchDue) >= 0) {
 				g_s.ioSearchDue = 0;
 				g_s.ioPage = 0;
@@ -88,6 +89,7 @@ void ModUiDraw(uint32_t *buf, int w, int h)
 			g_s.hits = std::move(r.hits);
 			g_s.confirmGeom = g_confirmGeomOut;
 			g_s.listGeom = g_listGeomOut;
+			g_s.orderGeom = g_orderGeomOut;
 		}
 	}
 	const int left = static_cast<int>(st.toastUntil - GetTickCount());
