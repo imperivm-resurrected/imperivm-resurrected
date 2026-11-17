@@ -294,6 +294,17 @@ RestartReason HotSwapRestartReason(const std::vector<std::string> &from, const s
 		reason.why = RestartWhy::kReadOnce;
 		return reason;
 	}
+	// The graphics tail is the one file of its kind the DLL could not make switchable (see docs): it says so by itself.
+	for (const std::vector<std::string> *list : {&from, &to}) {
+		for (const std::string &f : *list) {
+			const std::string n = Normal(f);
+			if (n == "rle.mmp.tail" || (n.size() > 13 && n.compare(n.size() - 13, 13, "/rle.mmp.tail") == 0)) {
+				reason.why = RestartWhy::kGraphicsTail;
+				reason.files = {f};
+				return reason;
+			}
+		}
+	}
 	collect(false);
 	if (!reason.files.empty()) reason.why = RestartWhy::kOtherFiles;
 	return reason;

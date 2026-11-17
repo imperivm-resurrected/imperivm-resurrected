@@ -138,4 +138,21 @@ function gameFiles(gameDir) {
 	return out.size ? out : null;
 }
 
-module.exports = { MENU_SKIN, gamePath, isMenuSkin, isGameplayPath, isRulesPackage, pakEntry, gameFileText, pakNames, gameFiles };
+// Why a file in a ruleset layer keeps the restart when the player switches to or from that ruleset (the same answer as HotSwapKindOf in the DLL, src/mods/hotswap.cpp),
+// or '' if it is switched in place.
+const RESTART_KEPT = [
+	[/(^|\/)rle\.mmp\.tail$/, 'the graphics tail: the game maps its sprite file (rle.mmp) once, when it starts, and every sprite keeps a pointer into it. Put the sprites as loose .rle files with their .ent.xml in units\\<name>\\ (or buildings, mapobjects, visuals): they switch in place'],
+	[/\.pak$/, 'a .pak: the engine mounts paks once, when the game starts, and the DLL does not unmount them. Loose files switch in place'],
+	[/^(gameres|ui)\/(selections|cursors|menu|interface|common|editor|update|debug)\//, 'a picture the game reads once, at start or when a menu window is built'],
+	[/^(gameres|ui)\/[^/]+\.bmp$/, 'a picture the game reads once, at start or when a menu window is built'],
+	[/^(fonts\/|menuini\/|gameini\/|commonini\/|editorini\/|cursors\/|data\/interface\/|patches\/data\/interface\/)|^(patches\/)?data\/cursors\.xml$/, 'a font, a cursor or a layout of the interface: the game reads it once'],
+	[/(^|\/)(splash|endsplash1|endsplash2)\.ini$/, 'a splash screen: the game reads it once, at start and exit'],
+	[/^(civs|specials|options|events|rules)\//, 'a civilization, special, option, event or rule: the game reads it once, at start'],
+];
+function restartKept(rel) {
+	const p = rel.replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase();
+	for (const [re, why] of RESTART_KEPT) if (re.test(p)) return why;
+	return '';
+}
+
+module.exports = { restartKept, MENU_SKIN, gamePath, isMenuSkin, isGameplayPath, isRulesPackage, pakEntry, gameFileText, pakNames, gameFiles };

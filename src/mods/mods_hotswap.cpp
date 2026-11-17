@@ -190,14 +190,16 @@ bool Decide(bool sameMount, const std::vector<std::string> &fromFiles, const std
 	if (SwapDecide(sameMount, fromFiles, toFiles) == HotSwap::kRestart) {
 		if (why) {
 			const RestartReason reason = HotSwapRestartReason(fromFiles, toFiles);
-			why->kind = reason.why == RestartWhy::kReadOnce ? ModsRestartKind::kReadOnce : ModsRestartKind::kOtherFiles;
+			why->kind = reason.why == RestartWhy::kReadOnce ? ModsRestartKind::kReadOnce
+				: reason.why == RestartWhy::kGraphicsTail ? ModsRestartKind::kGraphicsTail : ModsRestartKind::kOtherFiles;
 			why->files = reason.files;
 			// One line per distinct reason: the rooms ask on every frame.
 			static std::string last;
 			const std::string line = JoinFirst(reason.files, kRestartReasonFiles);
 			if (last != line) {
 				last = line;
-				LogI("content", "a change of ruleset keeps the restart: %s (%s)", reason.why == RestartWhy::kReadOnce ? "the game reads these files once, when it starts" : "files of a kind the reload does not cover yet",
+				LogI("content", "a change of ruleset keeps the restart: %s (%s)", reason.why == RestartWhy::kReadOnce ? "the game reads these files once, when it starts"
+					: reason.why == RestartWhy::kGraphicsTail ? "the game maps its sprite file once and keeps pointers into it" : "files of a kind the reload does not cover",
 					line.c_str());
 			}
 		}

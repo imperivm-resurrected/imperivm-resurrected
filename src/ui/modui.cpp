@@ -632,6 +632,8 @@ std::string ModUiRestartReason(const ModRuleset &ruleset)
 	// With the space that joins it to the sentence before it.
 	switch (info.kind) {
 	case ModsRestartKind::kReadOnce: return " " + TrFmt("It has files the game reads only once, when it starts: %s.", {names});
+	case ModsRestartKind::kGraphicsTail:
+		return " " + TrFmt("It has a graphics tail (%s): the game maps its sprite file once, when it starts, and every sprite keeps a pointer into it. Sprites as loose .rle files switch without a restart.", {names});
 	case ModsRestartKind::kOtherFiles: return " " + TrFmt("It has files the game cannot swap in a running session (civilizations, specials, options, packs, rle.mmp.tail...): %s.", {names});
 	case ModsRestartKind::kHeldImages:
 		return " " + (names.empty() ? Tr("The game could not check that its old images are free, so it cannot swap them without a restart.")
