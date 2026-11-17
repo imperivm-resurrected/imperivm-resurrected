@@ -268,7 +268,7 @@ bool OpenRoomHost(const State &st)
 
 bool RulesetNeedsRestart(const State &st, const ModRuleset &ruleset)
 {
-	if (!OpenRoomHost(st) || ModsSameChoice(ruleset, ModsMountedChoice()) || ModsSameRuleset(ruleset, ModsMountedProfile().ruleset)) return false;
+	if (!OpenRoomHost(st) || ModsSameChoice(ruleset, ModsMountedChoice()) || ModsSameMount(ruleset, ModsMountedProfile().ruleset)) return false;
 	return !ModsCanSwitchWithoutRestart(ruleset);
 }
 
@@ -381,6 +381,7 @@ std::string RoomConfigKey(const OnlineLobby &l)
 	std::string key = l.optionsText + "|" + std::to_string(l.rules) + "|" + l.map + "|" + l.mode + "|" + l.civSets;
 	// The rules of the room count too: a guest who agreed to the game with other rules has to agree again.
 	for (const OnlineMod &m : l.mods) key += "|" + m.id + "#" + m.layer + ":" + m.layerKey;
+	key += "|@" + l.rulesetPackage;
 	for (const OnlineSlot &s : l.slots) {
 		if (s.type != 3) key += "|" + std::to_string(s.type) + ":" + s.name;
 	}
@@ -585,9 +586,9 @@ bool AdoptRoomRules(const OnlineLobby &room)
 	std::vector<RoomPackFact> facts;
 	for (const OnlineMod &m : room.mods) facts.push_back({m.id, m.version, m.copyKey, m.layer, m.layerKey});
 	ModRuleset want;
-	if (!ModsFindRoomRuleset(facts, want)) return false;
+	if (!ModsFindRoomRuleset(facts, room.rulesetPackage, want)) return false;
 	const ModRuleset before = ModsMountedProfile().ruleset;
-	if (ModsSameRuleset(before, want) || !ModsSwitchRulesetAndRemember(want)) return false;
+	if (ModsSameMount(before, want) || !ModsSwitchRulesetAndRemember(want)) return false;
 	if (SteamOwnGameplayKey() != room.gameplayKey) {
 		// Not what the host has (something else differs): put the rules back and let the usual check decide.
 		ModsSwitchRulesetAndRemember(before);
@@ -633,7 +634,7 @@ void ChooseRulesetInRoom(const ModRuleset &picked)
 		ModUiToast("The room is for a saved game: its ruleset is the one it was saved with.");
 		return;
 	}
-	if (ModsSameRuleset(picked, ModsMountedProfile().ruleset)) {
+	if (ModsSameMount(picked, ModsMountedProfile().ruleset)) {
 		// Another entry that mounts the same files: only the civilizations of the room change.
 		ModProfile profile = ModsLoadProfile(ModsMountedProfile().name);
 		profile.ruleset = picked;

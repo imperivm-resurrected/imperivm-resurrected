@@ -73,21 +73,46 @@ std::vector<void (*)()> &SwapHooks()
 	return hooks;
 }
 
-// The files of the folder a ruleset mounts; false if the ruleset is not there. Nothing for the game's own rules.
-bool LayerFiles(const ModRuleset &r, std::vector<std::string> &out)
+// What changes with a ruleset: the files of the folder it mounts and the global files of the root of its package (SwapFilesOf), compared with
+// the ruleset `other`. False if the ruleset is not there. Nothing for the game's own rules. A package entry (a package with civilizations and no
+// ruleset) mounts no folder, but its global root files come with it.
+bool LayerFiles(const ModRuleset &r, const ModRuleset &other, std::vector<std::string> &out)
 {
 	out.clear();
-	if (r.Empty()) return true;
+	if (r.pack.empty()) return true;
 	std::lock_guard<std::mutex> lock(g_lock);
 	for (const ModInfo &m : g_mods) {
 		if (!SameFolder(m.folder, r.pack)) continue;
-		const ModLayer *layer = ModsFindLayer(m, r.id);
-		if (!layer) return false;
-		out = layer->files;
+		std::vector<std::string> layerFiles;
+		if (!r.id.empty()) {
+			const ModLayer *layer = ModsFindLayer(m, r.id);
+			if (!layer) return false;
+			layerFiles = layer->files;
+		}
+		out = SwapFilesOf(layerFiles, m.globalLoose, SameFolder(m.folder, other.pack));
 		return true;
 	}
 	return false;
 }
+
+// Whether the packs of two rulesets are the same pack, for the global files of a root: both none counts.
+bool SamePack(const ModRuleset &a, const ModRuleset &b)
+{
+	return SameFolder(a.pack, b.pack);
+}
+}
+
+bool ModsSameMount(const ModRuleset &a, const ModRuleset &b)
+{
+	if (!ModsSameRuleset(a, b)) return false;
+	if (SamePack(a, b)) return true;
+	// The same folders are mounted. What differs is which package's root files that replace the game's are in use: only those of the package whose
+	// ruleset is chosen (mods/rootrules.h), so two choices of different packs are the same mount only if neither pack has any.
+	std::lock_guard<std::mutex> lock(g_lock);
+	for (const ModInfo &m : g_mods) {
+		if ((SameFolder(m.folder, a.pack) || SameFolder(m.folder, b.pack)) && !m.globalLoose.empty()) return false;
+	}
+	return true;
 }
 
 void ModsHotReloadSetReady(bool ready)
@@ -120,11 +145,11 @@ bool ModsCanSwitchWithoutRestart(const ModRuleset &wanted)
 	p.ruleset = wanted;
 	const ModRuleset to = ModsEffectiveRuleset(p);
 	// The profile may not be able to mount what was asked (its package is not enabled): then it is not this switch.
-	if (!ModsSameChoice(to, wanted) || ModsSameRuleset(from, to)) return false;
+	if (!ModsSameChoice(to, wanted) || ModsSameMount(from, to)) return false;
 	// What the game has to be made to read is the difference between the rules it holds and the ones asked for.
 	std::vector<std::string> fromFiles, toFiles;
-	if (!LayerFiles(engine, fromFiles) || !LayerFiles(to, toFiles)) return false;
-	return SwapDecide(ModsSameRuleset(engine, to), fromFiles, toFiles) != HotSwap::kRestart;
+	if (!LayerFiles(engine, to, fromFiles) || !LayerFiles(to, engine, toFiles)) return false;
+	return SwapDecide(ModsSameMount(engine, to), fromFiles, toFiles) != HotSwap::kRestart;
 }
 
 namespace {
@@ -234,13 +259,15 @@ bool ModsSwapMountedRuleset(const ModRuleset &wanted)
 			now = g_mount.profile;
 		}
 		ApplyHiddenFiles(now);
+		// The global files of the root of the package whose ruleset is now in use are mounted and the other packs' are ignored.
+		PublishRootRefusals(now);
 		PublishVolumeFiles(now);
 		PublishLayerDiag(now);
 		PublishFileSources(now);
 	}
 	for (void (*hook)() : SwapHooks()) hook();
 	std::vector<std::string> files;
-	LayerFiles(next, files);
+	LayerFiles(next, before, files);
 	LogI("content", "ruleset changed without a restart: %s%s%s -> %s%s%s (files of the new one: %s; loose layer: %s%s)", before.pack.c_str(),
 		before.id.empty() ? "" : ":", before.id.c_str(), next.pack.c_str(), next.id.empty() ? "" : ":", next.id.c_str(),
 		HotSwapKindsText(HotSwapKinds(files)).c_str(), newLoose.empty() ? "none" : "mounted", oldLoose.empty() ? "" : ", the old one taken out");
@@ -256,9 +283,9 @@ ModsReload ModsReloadPlan()
 		engine = g_engineRules;
 		mounted = g_mount.profile.ruleset;
 	}
-	if (ModsSameRuleset(engine, mounted)) return ModsReload::kNone;
+	if (ModsSameMount(engine, mounted)) return ModsReload::kNone;
 	std::vector<std::string> fromFiles, toFiles;
-	if (!LayerFiles(engine, fromFiles) || !LayerFiles(mounted, toFiles)) return ModsReload::kRestart;
+	if (!LayerFiles(engine, mounted, fromFiles) || !LayerFiles(mounted, engine, toFiles)) return ModsReload::kRestart;
 	return g_ready && SwapDecide(false, fromFiles, toFiles) == HotSwap::kReload ? ModsReload::kReload : ModsReload::kRestart;
 }
 
@@ -282,7 +309,7 @@ bool ModsSwitchRulesetAndRemember(const ModRuleset &wanted)
 	return true;
 }
 
-bool ModsFindRoomRuleset(const std::vector<RoomPackFact> &packs, ModRuleset &out)
+bool ModsFindRoomRuleset(const std::vector<RoomPackFact> &packs, const std::string &rulesetPackage, ModRuleset &out)
 {
 	out = ModRuleset();
 	const RoomPackFact *with = nullptr;
@@ -290,6 +317,28 @@ bool ModsFindRoomRuleset(const std::vector<RoomPackFact> &packs, ModRuleset &out
 		if (f.layer.empty()) continue;
 		if (with) return false;
 		with = &f;
+	}
+	if (with && !rulesetPackage.empty()) return false;
+	if (!with && !rulesetPackage.empty()) {
+		// The room's ruleset is a package with no ruleset of its own: this computer needs that exact copy, mounted.
+		const RoomPackFact *fact = nullptr;
+		for (const RoomPackFact &f : packs) {
+			if (_stricmp(f.id.c_str(), rulesetPackage.c_str()) == 0) fact = &f;
+		}
+		if (!fact) return false;
+		std::vector<std::string> mounted;
+		{
+			std::lock_guard<std::mutex> lock(g_lock);
+			mounted = g_mount.profile.mods;
+		}
+		std::lock_guard<std::mutex> lock(g_lock);
+		for (const ModInfo &m : g_mods) {
+			if (_stricmp(m.id.c_str(), fact->id.c_str()) != 0 || m.version != fact->version || ModsCompareRoomCopy(m, fact->copyKey) != RoomCopy::kSame) continue;
+			if (!m.layers.empty() || std::none_of(mounted.begin(), mounted.end(), [&](const std::string &f) { return SameFolder(f, m.folder); })) continue;
+			out.pack = m.folder;
+			return true;
+		}
+		return false;
 	}
 	if (!with) return true;
 	std::vector<std::string> mounted;

@@ -656,7 +656,7 @@ void PaintCreate(Painter &p, const State &st)
 		}
 	}
 	const bool restart = st.createProfile != ModsMountedProfile().name;
-	const bool restartRules = !restart && !ModsSameRuleset(st.createRuleset, ModsMountedProfile().ruleset) && !ModsCanSwitchWithoutRestart(st.createRuleset);
+	const bool restartRules = !restart && !ModsSameMount(st.createRuleset, ModsMountedProfile().ruleset) && !ModsCanSwitchWithoutRestart(st.createRuleset);
 	const int by = y0 + h - 60;
 	const int bw = 320;
 	p.Button(x + (w - bw) / 2, by, bw, 42, restart ? "Restart with this content" : restartRules ? "Restart with this ruleset" : "Create room", kCreateOk, 0, mx, my,

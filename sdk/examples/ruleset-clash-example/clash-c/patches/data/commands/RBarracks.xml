@@ -1,0 +1,23 @@
+<patch>
+  <!-- A NEW command, with a name the game does not have and images of new names: a patch that only adds applies under every ruleset. It is a second hastatus button. -->
+  <add select="/commands">
+    <cmd name="trainClashC" priority="9"
+      button="actions/ClashCUnit.bmp"
+      queueicon="gameres/icons/ClashCUnit.bmp"
+      groupverifier="data/subai/verify_cmdcost_building.vs"
+      transpicon="1"
+      traincommand="yes"
+      key="j"
+      help="/contents/units/RHastatus"
+      costgold="100"
+      costfood="0"
+      costpop="1"
+      execdelay="6000"
+      rollover="Equip Hastatus"
+      method="train"
+      param="RHastatus"
+      sclass="RHastatus">
+      <src obj="RBarracks"/>
+    </cmd>
+  </add>
+</patch>

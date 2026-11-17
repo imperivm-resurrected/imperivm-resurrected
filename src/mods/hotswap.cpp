@@ -95,6 +95,13 @@ HotSwap SwapDecide(bool sameRuleset, const std::vector<std::string> &from, const
 	return HotSwapLayerOk(from) && HotSwapLayerOk(to) ? HotSwap::kReload : HotSwap::kRestart;
 }
 
+std::vector<std::string> SwapFilesOf(const std::vector<std::string> &layerFiles, const std::vector<std::string> &packGlobal, bool samePackAsOther)
+{
+	std::vector<std::string> out = layerFiles;
+	if (!samePackAsOther) out.insert(out.end(), packGlobal.begin(), packGlobal.end());
+	return out;
+}
+
 GameKind GameKindOfVtable(uintptr_t vtable)
 {
 	if (vtable == addr::kGameSingleVtable) return GameKind::kSkirmish;

@@ -40,6 +40,9 @@ int RulesetOwnerOf(const std::vector<RulesetDecl> &layers, const std::string &re
 struct RulesetPackFacts {
 	bool usable = true;
 	bool hasCivs = false;
+	// The root has loose files that replace the game's (mods/rootrules.h): they are mounted only under the package's own ruleset, so a package
+	// with none of its own and no civilizations needs the entry that bears its name to be chosen.
+	bool hasGlobal = false;
 	size_t layers = 0;
 };
 

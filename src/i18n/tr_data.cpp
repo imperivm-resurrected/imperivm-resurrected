@@ -1359,6 +1359,8 @@ extern const TrRow kTrRows[] = {
 	{"Shared values (%s)", "Valores compartidos (%s)", "Valori condivisi (%s)"},
 	{"Shared files (%s) and values (%s)", "Archivos (%s) y valores (%s) compartidos", "File (%s) e valori (%s) condivisi"},
 	{"Changes the same values as %s in %s: the ones from this pack are used", "Cambia los mismos valores que %s en %s: se usan los de este paquete", "Cambia gli stessi valori di %s in %s: vengono usati quelli di questo pacchetto"},
+	{"%s files of its root replace the game's: they apply because a ruleset of this pack is in use (%s)", "%s archivos de su raíz sustituyen a los del juego: se aplican porque se usa un conjunto de reglas de este paquete (%s)", "%s file della sua radice sostituiscono quelli del gioco: si applicano perché è in uso un set di regole di questo pacchetto (%s)"},
+	{"%s files of its root replace the game's and are ignored: they apply only when a ruleset of this pack is chosen (%s)", "%s archivos de su raíz sustituyen a los del juego y se ignoran: solo se aplican cuando se elige un conjunto de reglas de este paquete (%s)", "%s file della sua radice sostituiscono quelli del gioco e vengono ignorati: si applicano solo quando si sceglie un set di regole di questo pacchetto (%s)"},
 	{"Changes the same values as %s in %s: the ones from %s are used", "Cambia los mismos valores que %s en %s: se usan los de %s", "Cambia gli stessi valori di %s in %s: vengono usati quelli di %s"},
 	{" (your choice)", " (tu elección)", " (tua scelta)"},
 	{"Use this pack's files", "Usar los de este paquete", "Usa quelli di questo pacchetto"},

@@ -3,6 +3,7 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include <windows.h>
 #include <set>
+#include <unordered_set>
 #include <algorithm>
 #include "MinHook.h"
 #include "mods/downloads.h"
@@ -23,12 +24,28 @@ using namespace mods_impl;
 
 namespace mods_impl {
 namespace {
+// The root files that replace the game's and are ignored now, by the loose layer that would serve them and by the pack's folder. Made again (and
+// the old one left, a few kilobytes) whenever the profile or its ruleset changes; read by the threads that open files.
+struct RootRefusalMap {
+	std::map<void *, std::unordered_set<std::string>> byLayer;
+	std::map<std::string, std::unordered_set<std::string>> byFolder;
+};
+std::atomic<const RootRefusalMap *> g_refusals{nullptr};
+
 void *__fastcall RoOpen(void *self, void *edx, const char *path, unsigned mode, void *err)
 {
 	if (mode & 2) {
 		return nullptr;
 	}
 	typedef void *(__fastcall * Open_t)(void *, void *, const char *, unsigned, void *);
+	// A global file of this layer's pack is not mounted under the ruleset in use: the layer does not have it, and the engine asks the next one. The
+	// layer is asked for a name it never has, in its own folder, so it fails the way it does for any file it lacks.
+	if (const RootRefusalMap *refusals = g_refusals.load(); refusals && path && !refusals->byLayer.empty()) {
+		const auto layer = refusals->byLayer.find(self);
+		if (layer != refusals->byLayer.end() && RootRefuses(layer->second, path)) {
+			return reinterpret_cast<Open_t>(g_readOnly.origTransOpen)(self, edx, "refused.by.rootrules", mode, err);
+		}
+	}
 	return reinterpret_cast<Open_t>(g_readOnly.origTransOpen)(self, edx, path, mode, err);
 }
 const char *__fastcall RoFail1(void *, void *, const char *) { return kReadOnlyError; }
@@ -153,21 +170,48 @@ void PublishChosenFiles(const ModProfile &p)
 std::atomic<const std::map<std::string, std::string> *> g_volumeFiles{nullptr};
 }
 
+void PublishRootRefusals(const ModProfile &p)
+{
+	auto *map = new RootRefusalMap();
+	for (const std::string &folder : p.mods) {
+		ModInfo m;
+		if (!ModsFind(folder, m) || !m.forbidden.empty()) continue;
+		const std::vector<std::string> ignored = RootIgnoredOf(p, m);
+		if (ignored.empty()) {
+			if (!m.globalLoose.empty()) LogI("content", "%s: %u files of its root replace the game's and are mounted, because its own ruleset is in use", m.folder.c_str(), static_cast<unsigned>(m.globalLoose.size()));
+			continue;
+		}
+		const std::unordered_set<std::string> refusals = RootRefusals(ignored);
+		map->byFolder[Lower(m.folder)] = refusals;
+		{
+			std::lock_guard<std::mutex> lock(g_lock);
+			const auto layer = g_mount.looseLayers.find(Lower("mods/" + m.folder + "/"));
+			if (layer != g_mount.looseLayers.end()) map->byLayer[layer->second] = refusals;
+		}
+		LogI("content", "%s: %u files of its root replace the game's and are ignored (the ruleset in use is %s): the game's own are used; they apply only under a ruleset of this package",
+			m.folder.c_str(), static_cast<unsigned>(ignored.size()), p.ruleset.pack.empty() ? "the game's own" : (p.ruleset.pack + (p.ruleset.id.empty() ? "" : ":" + p.ruleset.id)).c_str());
+		for (size_t i = 0; i < ignored.size() && i < 5; i++) LogD("content", "  ignored: %s", ignored[i].c_str());
+	}
+	g_refusals.store(map);
+}
+
 void PublishVolumeFiles(const ModProfile &p)
 {
 	auto *files = new std::map<std::string, std::string>();
 	for (const std::string &folder : p.mods) {
 		ModInfo m;
 		if (!ModsFind(folder, m) || !m.forbidden.empty()) continue;
+		const std::unordered_set<std::string> refused = RootRefusals(RootIgnoredOf(p, m));
 		// The first pack of the profile wins, and a ruleset before its package, as the loose layers are put in front of the engine's list.
-		auto add = [&](const std::vector<std::string> &loose, const std::string &sub) {
+		auto add = [&](const std::vector<std::string> &loose, const std::string &sub, const std::unordered_set<std::string> &skip) {
 			for (const std::string &path : loose) {
+				if (RootRefuses(skip, path)) continue;
 				// Keyed by the real path, so gameres/icons/x.bmp and ui/icons/x.bmp of two packs compete in the packs' order.
 				if (VolumeCovers(path)) files->emplace(VolumeRealPath(path), "mods/" + m.folder + "/" + sub + path);
 			}
 		};
-		if (const ModLayer *layer = ModsActiveLayer(p, m)) add(layer->loosePaths, layer->path + "/");
-		add(m.loosePaths, "");
+		if (const ModLayer *layer = ModsActiveLayer(p, m)) add(layer->loosePaths, layer->path + "/", std::unordered_set<std::string>());
+		add(m.loosePaths, "", refused);
 	}
 	LogI("content", "%u files of the packs answer to a name with a volume (gameres/, gameini/...)", static_cast<unsigned>(files->size()));
 	g_volumeFiles.store(files);
@@ -180,7 +224,10 @@ void PublishFileSources(const ModProfile &p)
 	for (const std::string &folder : p.mods) {
 		ModInfo m;
 		if (!ModsFind(folder, m) || !m.forbidden.empty()) continue;
-		auto add = [&](const std::string &label, const std::string &sub, const std::vector<std::string> &loose) {
+		const std::vector<std::string> ignored = RootIgnoredOf(p, m);
+		auto add = [&](const std::string &label, const std::string &sub, std::vector<std::string> loose) {
+			// The root files that replace the game's and are ignored are not this pack's to serve: they are not shared with anyone.
+			if (sub.empty() && !ignored.empty()) loose.erase(std::remove_if(loose.begin(), loose.end(), [&](const std::string &f) { return std::binary_search(ignored.begin(), ignored.end(), f); }), loose.end());
 			if (loose.empty()) return;
 			std::string dir = ModsDir() + "\\" + m.folder + (sub.empty() ? "" : "\\" + sub.substr(0, sub.size() - 1));
 			std::replace(dir.begin(), dir.end(), '/', '\\');
@@ -324,6 +371,7 @@ void MountProfileLayers(void *list)
 		}
 		MediaSetModDirs(dirs);
 	}
+	PublishRootRefusals(p);
 	PublishChosenFiles(p);
 	PublishVolumeFiles(p);
 	PublishLayerDiag(p);
@@ -333,6 +381,14 @@ void MountProfileLayers(void *list)
 	ModsRebuildFeatures();
 }
 }
+}
+
+bool ModsRootFileIgnored(const std::string &folder, const std::string &rel)
+{
+	const RootRefusalMap *refusals = g_refusals.load();
+	if (!refusals) return false;
+	const auto it = refusals->byFolder.find(Lower(folder));
+	return it != refusals->byFolder.end() && RootRefuses(it->second, rel);
 }
 
 const std::string *ModsVolumeFile(const std::string &rel)
@@ -376,7 +432,7 @@ bool ModsApplyWithoutRestart()
 		if (!ContainsFolder(active.mods, f)) removed.push_back(f);
 	}
 	if (added.empty() && removed.empty()) return false;
-	if (!ModsSameRuleset(ModsEffectiveRuleset(active), mounted.ruleset)) return false;
+	if (!ModsSameMount(ModsEffectiveRuleset(active), mounted.ruleset)) return false;
 	if (!active.choices.empty() && ChosenFolders(active, ModsList()) != chosen) return false;
 	std::vector<ModInfo> addedInfo;
 	for (const std::string &f : added) {
@@ -431,6 +487,7 @@ bool ModsApplyWithoutRestart()
 		dirs = g_mount.dirs;
 	}
 	MediaSetModDirs(dirs);
+	PublishRootRefusals(active);
 	PublishVolumeFiles(active);
 	PublishFileSources(active);
 	return failed.empty();

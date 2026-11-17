@@ -722,6 +722,7 @@ std::string PackArchiveSource(const std::string &rel)
 		if (chosen->compare(0, 5, "mods/") == 0) return DiskPath("mods", chosen->substr(5));
 	}
 	for (const std::string &dir : ModsMountedDirs()) {
+		if (ModsRootFileIgnored(ModsPackFolder(dir), rel)) continue;
 		std::string disk = dir + "\\" + rel;
 		std::replace(disk.begin(), disk.end(), '/', '\\');
 		if (DiskFileExists(disk)) return disk;
@@ -958,6 +959,8 @@ void *__cdecl OpenImpl(const char *path, unsigned mode, void *err)
 	}
 	if (!f && reading && rel.compare(0, 5, "mods/") != 0) {
 		for (const std::string &dir : ModsMountedDirs()) {
+			// A root file that replaces the game's and is ignored is not served, even if the game's own was not found by the engine.
+			if (ModsRootFileIgnored(ModsPackFolder(dir), rel)) continue;
 			std::string disk = dir + "\\" + rel;
 			std::replace(disk.begin(), disk.end(), '/', '\\');
 			if (!DiskFileExists(disk)) continue;

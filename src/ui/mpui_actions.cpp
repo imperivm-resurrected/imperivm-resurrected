@@ -734,8 +734,8 @@ void DoAction(int action, int arg)
 		}
 		const bool otherProfile = g_s.createProfile != ModsMountedProfile().name;
 		// A ruleset the game can read again between matches (see mods/hotswap.h) is mounted now and the match reads it: no restart.
-		const bool rulesInPlace = !otherProfile && !ModsSameRuleset(g_s.createRuleset, ModsMountedProfile().ruleset) && ModsSwitchRulesetWithoutRestart(g_s.createRuleset);
-		if (!rulesInPlace && (otherProfile || !ModsSameRuleset(g_s.createRuleset, ModsMountedProfile().ruleset))) {
+		const bool rulesInPlace = !otherProfile && !ModsSameMount(g_s.createRuleset, ModsMountedProfile().ruleset) && ModsSwitchRulesetWithoutRestart(g_s.createRuleset);
+		if (!rulesInPlace && (otherProfile || !ModsSameMount(g_s.createRuleset, ModsMountedProfile().ruleset))) {
 			// The ruleset is part of the profile, so the profile that will be loaded keeps it.
 			ModProfile chosen = ModsLoadProfile(g_s.createProfile);
 			if (!ModsSameChoice(chosen.ruleset, g_s.createRuleset)) {
@@ -842,7 +842,7 @@ void ChooseRuleset(int item)
 		ModUiToast(Tr("Could not save the ruleset in the content profile."));
 		return;
 	}
-	if (ModsSameRuleset(picked, ModsMountedProfile().ruleset) || ModsSwitchRulesetWithoutRestart(picked)) {
+	if (ModsSameMount(picked, ModsMountedProfile().ruleset) || ModsSwitchRulesetWithoutRestart(picked)) {
 		// The same files stay mounted, or the ruleset is one the game reads again when the match starts: no restart. The room takes
 		// the civilizations of the new entry at once.
 		ModsMountedChoiceSet(picked);

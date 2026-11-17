@@ -42,6 +42,11 @@ bool ConstIniHasGamePlay(const std::string &text);
 // reloaded, anything else restarts.
 HotSwap SwapDecide(bool sameRuleset, const std::vector<std::string> &from, const std::vector<std::string> &to);
 
+// The files that come or go with a ruleset: those of its folder, and the global files of the root of its package (the ones that replace the game's
+// and are mounted only under a ruleset of that package, see mods/rootrules.h), unless the ruleset it is compared with is of the same package: then
+// they are mounted both before and after and change nothing. Art among them is as much an art change as art in the folder.
+std::vector<std::string> SwapFilesOf(const std::vector<std::string> &layerFiles, const std::vector<std::string> &packGlobal, bool samePackAsOther);
+
 // The kinds of game the engine makes (CreateGameFromSettings) and which one a game object is, by its vtable. Every one of them runs
 // CVXBasicGame::LoadGameData on its empty game object, where the DLL reads the game's data again: single-player (also saved games and
 // replays), multiplayer, adventure (campaign), conquest and editor. kUnknown is any other vtable: the data is not read again for it.
