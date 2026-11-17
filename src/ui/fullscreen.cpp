@@ -392,7 +392,9 @@ bool BeginWindow(PanelRender &r, int designW, int designH, int margin, float for
 
 void PaintWindowCard(Painter &p, int w, int h)
 {
-	PaintGlassCard(p, 0, 0, w, h);
+	// Solid, not glass: under a window there is usually the game's own dialog it replaces, whose buttons would show through.
+	p.Fill(0, 0, w, h, pal::panel);
+	p.Frame(0, 0, w, h, pal::hairline);
 }
 
 int PaintWindowTitle(Painter &p, int x, int y, int w, int h, const std::string &title, int size, int letterSpacing)

@@ -80,9 +80,9 @@ int PaintScreenTitle(Painter &p, const ScreenLayout &l, const std::string &title
 void PaintScreenInfo(Painter &p, const ScreenLayout &l, const std::string &text, COLORREF color = pal::caption);
 
 // The windows over a running game keep their size and the map around them, with the look of the full screens but no backdrop.
-// BeginWindow starts one: the game's frame under the window goes into its canvas first, so the glass card lets it through faintly.
+// BeginWindow starts one: the game's frame under the window goes into its canvas first, dimmed around it.
 bool BeginWindow(PanelRender &r, int designW, int designH, int margin = 24, float forceScale = 0.0f);
-// The whole window as one glass card.
+// The whole window as one solid card, which hides the game's own dialog under it.
 void PaintWindowCard(Painter &p, int w, int h);
 // A window's title: League Gothic, uppercase, `size` pixels, at the left of its box; returns how wide it came out.
 int PaintWindowTitle(Painter &p, int x, int y, int w, int h, const std::string &title, int size = 44, int letterSpacing = 1);
