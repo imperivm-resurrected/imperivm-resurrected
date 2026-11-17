@@ -6,6 +6,7 @@
 #include "MinHook.h"
 #include "i18n/tr.h"
 #include "mods/mappack.h"
+#include "mods/profilehash.h"
 
 #include "mods/mods_internal.h"
 
@@ -184,16 +185,8 @@ std::vector<std::string> ModsProblemsFrom(const ModProfile &p, const std::map<st
 
 std::string ModsProfileGameplayHash(const ModProfile &p)
 {
-	std::vector<RulesPart> parts;
 	std::lock_guard<std::mutex> lock(g_lock);
-	for (const std::string &folder : p.mods) {
-		for (const ModInfo &m : g_mods) {
-			if (m.folder == folder && m.gameplay) {
-				parts.push_back({m.id, m.gameplayHash});
-			}
-		}
-	}
-	return RulesFingerprint(parts);
+	return ProfileGameplayHash(p, g_mods);
 }
 
 std::string ModsRulesLevel()
