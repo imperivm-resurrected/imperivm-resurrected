@@ -1247,3 +1247,40 @@ std::vector<std::string> PatchSkippedOps(const std::string &file, const std::str
 	while (out.size() < policy.skipped) out.push_back("");
 	return out;
 }
+
+bool PatchApplyAll(const std::string &file, std::string &data, const std::vector<PatchInput> &in, std::vector<PatchOutcome> &out)
+{
+	out.assign(in.size(), PatchOutcome());
+	const auto ends = [&](const char *ext) {
+		const size_t n = strlen(ext);
+		return file.size() >= n && Lower(file.substr(file.size() - n)) == ext;
+	};
+	const bool isIni = ends(".ini"), isXml = ends(".xml");
+	std::set<std::string> removed;
+	// The game's own keys, as the file was given before any patch of this file.
+	std::map<std::string, std::string> gameIni;
+	if (isIni && std::any_of(in.begin(), in.end(), [](const PatchInput &p) { return p.addOnly; })) gameIni = PatchIniKeys(data);
+	std::unique_ptr<XmlPatchRun> xml;
+	if (isXml) xml = std::make_unique<XmlPatchRun>(data);
+	bool changed = false;
+	for (size_t i = 0; i < in.size(); i++) {
+		PatchPolicy policy;
+		policy.addOnly = in[i].addOnly;
+		policy.gameIni = &gameIni;
+		bool ok = false;
+		if (xml) {
+			ok = xml->Apply(in[i].text, out[i].errors, nullptr, &policy);
+		}
+		else {
+			std::string work = data;
+			ok = isIni ? PatchIniText(work, in[i].text, out[i].errors, &removed, &policy) : PatchScriptText(work, in[i].text, out[i].errors, &policy);
+			if (ok) data.swap(work);
+		}
+		out[i].applied = ok;
+		out[i].skipped = policy.skipped;
+		out[i].skippedWhat = policy.skippedWhat;
+		changed = changed || ok;
+	}
+	if (xml && changed) data = xml->Text();
+	return changed;
+}

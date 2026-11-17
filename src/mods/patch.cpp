@@ -8,6 +8,7 @@
 #include "core/log.h"
 #include "core/sha256.h"
 #include "mods/mods.h"
+#include "mods/patchwalk.h"
 #include "mods/patchxml.h"
 #include "mods/rootrules.h"
 #include "mods/vfs.h"
@@ -79,39 +80,15 @@ std::string GameDirPath()
 	return path;
 }
 
-std::string Lower(std::string s)
+void AddFound(const std::string &dir, const std::string &folder, bool addOnly, std::map<std::string, std::vector<Source>> &out)
 {
-	for (char &c : s) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
-	return s;
-}
-
-// The patches of the menus and the rest of the interface are the look of the game, not its rules: they apply whatever the ruleset is, until the skins exist.
-bool PatchInterface(const std::string &rel)
-{
-	return mods_impl::RootGamePath(rel).compare(0, 15, "data/interface/") == 0;
-}
-
-void Walk(const std::string &base, const std::string &sub, const std::string &folder, std::map<std::string, std::vector<Source>> &out, bool addOnly = false)
-{
-	WIN32_FIND_DATAA fd;
-	HANDLE h = FindFirstFileA((base + sub + "*").c_str(), &fd);
-	if (h == INVALID_HANDLE_VALUE) return;
-	do {
-		const std::string name = fd.cFileName;
-		if (name == "." || name == "..") continue;
-		if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-			Walk(base, sub + name + "\\", folder, out);
-			continue;
-		}
-		std::string rel = Lower(sub + name);
-		std::replace(rel.begin(), rel.end(), '\\', '/');
+	for (const PatchFileFound &f : PatchWalk(dir, addOnly)) {
 		Source s;
 		s.folder = folder;
-		s.path = base + sub + name;
-		s.addOnly = addOnly && !PatchInterface(rel);
-		out[rel].push_back(s);
-	} while (FindNextFileA(h, &fd));
-	FindClose(h);
+		s.path = f.path;
+		s.addOnly = f.addOnly;
+		out[f.rel].push_back(s);
+	}
 }
 
 bool ReadFileText(const std::string &path, std::string &out)
@@ -163,9 +140,9 @@ void PatchRebuild()
 					inUse.pack.empty() ? "the game's own" : (inUse.pack + (inUse.id.empty() ? "" : ":" + inUse.id)).c_str());
 			}
 		}
-		Walk(*it + "\\patches\\", "", pack, found, addOnly);
+		AddFound(*it + "\\patches", pack, addOnly, found);
 	}
-	Walk(GameDirPath() + "\\imperivm-resurrected\\patches\\", "", "", found);
+	AddFound(GameDirPath() + "\\imperivm-resurrected\\patches", "", false, found);
 	for (const BuiltinPatch &b : UsableBuiltinPatches(true)) found[b.path].insert(found[b.path].begin(), {"Imperivm Resurrected", "", b.text, b.gameFileSha256});
 	unsigned files = 0;
 	for (const auto &kv : found) files += static_cast<unsigned>(kv.second.size());
@@ -202,19 +179,13 @@ bool PatchApply(const std::string &rel, std::string &data)
 		loadedSha256 = HashString(data);
 		break;
 	}
-	bool changed = false;
-	std::set<std::string> removed;
-	// The game's own keys, as the file was given before any patch of this file: the INI patcher keeps them (see PatchPolicy).
-	std::map<std::string, std::string> gameIni;
-	if (isIni && std::any_of(sources.begin(), sources.end(), [](const Source &s) { return s.addOnly; })) gameIni = PatchIniKeys(data);
-	std::unique_ptr<XmlPatchRun> xml;
 	if (isXml) {
-		{
-			std::lock_guard<std::mutex> lock(g_lock);
-			g_bases[rel] = data;
-		}
-		xml = std::make_unique<XmlPatchRun>(data);
+		std::lock_guard<std::mutex> lock(g_lock);
+		g_bases[rel] = data;
 	}
+	// The patches that can be applied, with their text; the others say why they are not.
+	std::vector<PatchInput> inputs;
+	std::vector<const Source *> used;
 	for (const Source &s : sources) {
 		if (!s.gameFileSha256.empty() && s.gameFileSha256 != loadedSha256) {
 			LogI("patch", "built-in fix of %s not applied: the loaded file is not the game's own (a content pack brings its own version)", rel.c_str());
@@ -224,37 +195,32 @@ bool PatchApply(const std::string &rel, std::string &data)
 			AddError(s.folder, rel, Tr("only .xml, .ini and .vs files can be patched"));
 			continue;
 		}
-		std::string text = s.text;
-		if (text.empty() && !ReadFileText(s.path, text)) {
+		PatchInput in;
+		in.text = s.text;
+		if (in.text.empty() && !ReadFileText(s.path, in.text)) {
 			AddError(s.folder, rel, Tr("the patch file cannot be read"));
 			continue;
 		}
-		std::vector<std::string> errors;
-		bool ok = false;
-		PatchPolicy policy;
-		policy.addOnly = s.addOnly;
-		if (xml) {
-			ok = xml->Apply(text, errors, nullptr, &policy);
-		}
-		else {
-			std::string work = data;
-			policy.gameIni = &gameIni;
-			ok = isIni ? PatchIniText(work, text, errors, &removed, &policy) : PatchScriptText(work, text, errors, &policy);
-			if (ok) data.swap(work);
-		}
-		for (const std::string &e : errors) AddError(s.folder, rel, e);
+		in.addOnly = s.addOnly;
+		inputs.push_back(in);
+		used.push_back(&s);
+	}
+	std::vector<PatchOutcome> outcomes;
+	const bool changed = PatchApplyAll(rel, data, inputs, outcomes);
+	for (size_t i = 0; i < outcomes.size(); i++) {
+		const Source &s = *used[i];
+		const PatchOutcome &o = outcomes[i];
+		for (const std::string &e : o.errors) AddError(s.folder, rel, e);
 		const std::string who = s.folder.empty() ? "imperivm-resurrected\\patches" : s.folder;
-		const std::string skipped = policy.skipped ? "; " + std::to_string(policy.skipped) + " operations skipped: they change what the game has and apply only when a ruleset of this pack is chosen (" + policy.skippedWhat[0] + (policy.skipped > 1 ? ", ..." : "") + ")" : "";
-		if (ok) {
-			changed = true;
+		const std::string skipped = o.skipped ? "; " + std::to_string(o.skipped) + " operations skipped: they change what the game has and apply only when a ruleset of this pack is chosen (" + o.skippedWhat[0] + (o.skipped > 1 ? ", ..." : "") + ")" : "";
+		if (o.applied) {
 			LogI("patch", "(%s) %s applied%s%s", who.c_str(), rel.c_str(),
-				errors.empty() ? "" : (" (" + std::to_string(errors.size()) + " operations with errors)").c_str(), skipped.c_str());
+				o.errors.empty() ? "" : (" (" + std::to_string(o.errors.size()) + " operations with errors)").c_str(), skipped.c_str());
 		}
-		else if (policy.skipped) {
+		else if (o.skipped) {
 			LogI("patch", "(%s) %s: nothing applied%s", who.c_str(), rel.c_str(), skipped.c_str());
 		}
 	}
-	if (xml && changed) data = xml->Text();
 	return changed;
 }
 

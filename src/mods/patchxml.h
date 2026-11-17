@@ -36,6 +36,24 @@ std::map<std::string, std::string> PatchIniKeys(const std::string &data);
 // The operations of a patch for a game file that would be skipped with addOnly, run on the game's file as it is given (nothing is changed).
 std::vector<std::string> PatchSkippedOps(const std::string &file, const std::string &base, const std::string &patch);
 
+// The patches of one game file, in order, as PatchApply gives them to the patchers: the text of each and whether its changing operations are skipped.
+struct PatchInput {
+	std::string text;
+	bool addOnly = false;
+};
+
+struct PatchOutcome {
+	bool applied = false;
+	std::vector<std::string> errors;
+	unsigned skipped = 0;
+	std::vector<std::string> skippedWhat;
+};
+
+// Applies the patches in order to `data`, the game file named `file` (its extension says which patcher), the way the game does when it opens it. Each patch
+// gets its outcome in `out`. The XML patches share one run, so the second sees what the first did; a patch with addOnly keeps what the game's file had at the
+// start (its XML nodes, its INI keys). Returns whether anything changed.
+bool PatchApplyAll(const std::string &file, std::string &data, const std::vector<PatchInput> &in, std::vector<PatchOutcome> &out);
+
 class XmlPatchRun {
 public:
 	explicit XmlPatchRun(const std::string &base);
