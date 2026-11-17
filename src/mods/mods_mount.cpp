@@ -175,6 +175,8 @@ void ListInsertBelowLoose(void *list, const std::vector<void *> &values, const s
 }
 }
 
+}
+
 // Mounts the paks of the folders of a package's folder or ruleset the way the engine does at start. Returns the file systems it added to the list (it
 // appends them) in `added`. language is the one the game runs in.
 bool MountPaksOf(const std::string &vfsBase, const std::string &diskBase, void *list, const std::string &language, std::vector<void *> &added)
@@ -249,6 +251,8 @@ void UnmountLayerPaks(const std::string &folder, const std::string &sub)
 	for (void *fs : mount.fileSystems) ListUnlink(list, fs);
 	LogI("content", "ruleset %s/%s: %u pak file systems taken out of the engine's list", folder.c_str(), sub.c_str(), static_cast<unsigned>(mount.fileSystems.size()));
 }
+
+namespace {
 
 
 std::string ShowStartupPicker(const std::string &current);
