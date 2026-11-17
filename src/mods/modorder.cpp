@@ -38,9 +38,7 @@ bool MustBeAbove(const OrderItem &a, const OrderItem &b)
 	return Names(a.above, b.id) || Names(b.below, a.id);
 }
 
-}
-
-std::vector<std::string> CanonicalOrder(const std::vector<OrderItem> &items)
+std::vector<size_t> OrderIndices(const std::vector<OrderItem> &items)
 {
 	const size_t n = items.size();
 	std::vector<size_t> base(n);
@@ -52,7 +50,7 @@ std::vector<std::string> CanonicalOrder(const std::vector<OrderItem> &items)
 		if (ia != ib) return ia < ib;
 		return Folded(items[a].folder) < Folded(items[b].folder);
 	});
-	std::vector<std::string> out;
+	std::vector<size_t> out;
 	std::vector<bool> placed(n, false);
 	for (size_t step = 0; step < n; step++) {
 		size_t best = n;
@@ -69,13 +67,22 @@ std::vector<std::string> CanonicalOrder(const std::vector<OrderItem> &items)
 			for (size_t k = 0; k < n; k++) {
 				if (!placed[base[k]]) {
 					placed[base[k]] = true;
-					out.push_back(items[base[k]].folder);
+					out.push_back(base[k]);
 				}
 			}
 			break;
 		}
 		placed[best] = true;
-		out.push_back(items[best].folder);
+		out.push_back(best);
 	}
+	return out;
+}
+
+}
+
+std::vector<std::string> CanonicalOrder(const std::vector<OrderItem> &items)
+{
+	std::vector<std::string> out;
+	for (size_t i : OrderIndices(items)) out.push_back(items[i].folder);
 	return out;
 }
