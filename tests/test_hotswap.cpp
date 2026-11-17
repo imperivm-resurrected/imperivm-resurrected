@@ -100,7 +100,7 @@ void OnlyTheKindsOfFileTheGameCanReadAgainAreSwitched()
 	const Files bad[] = {{"patches/data/const.ini", "rle.mmp.tail"}, {"civs/gaul.json"}, {"specials/x.json"}, {"options/speed.json"},
 		{"events/ongamestart.vs"}, {"packs/units.pak"}, {"patches/units/rhastatus.ent.xml"}, {"patches/currentlang/game.loc.xml"},
 		{"patches/data/readme.txt"}, {"patches/data/"}, {"data/"}, {"data/sounds/x.wav"}, {"data/readme.txt"}, {"local/spanish/game.pak"},
-		{"rules/game.json"}, {"modes/sub/x.json"}, {"modes/x.xml"}, {"gameres/icons/x.bmp"}, {"hidden.txt.bak"}};
+		{"rules/game.json"}, {"modes/sub/x.json"}, {"modes/x.xml"}, {"gameres/selections/x.rle"}, {"hidden.txt.bak"}, {"gameres/icons/x.wav"}, {"gameres/icons/"}};
 	for (const Files &b : bad) {
 		CHECK(SwapDecide(false, both, b) == HotSwap::kRestart);
 		CHECK(SwapDecide(false, b, both) == HotSwap::kRestart);
@@ -168,7 +168,7 @@ void AWaitingSwitchExpires()
 void GlobalRootFilesCountAsFilesThatComeWithARuleset()
 {
 	const std::vector<std::string> layer = {"patches/data/const.ini"};
-	const std::vector<std::string> art = {"ui/icons/rhastatus.bmp"}, data = {"data/classes/rhastatus.sc.xml"};
+	const std::vector<std::string> art = {"ui/selections/circle.rle"}, data = {"data/classes/rhastatus.sc.xml"};
 	// Another package's ruleset: the global root files of this one come or go with it.
 	CHECK(!HotSwapLayerOk(SwapFilesOf(layer, art, false)));
 	CHECK(HotSwapLayerOk(SwapFilesOf(layer, data, false)));
@@ -186,10 +186,68 @@ void GlobalRootFilesCountAsFilesThatComeWithARuleset()
 	// A package entry mounts no folder: only its global files change.
 	CHECK(SwapDecide(false, SwapFilesOf({}, {}, false), SwapFilesOf({}, data, false)) == HotSwap::kReload);
 	CHECK(SwapDecide(false, SwapFilesOf({}, {}, false), SwapFilesOf({}, art, false)) == HotSwap::kRestart);
+	// The images of a match in the root do not keep the restart.
+	CHECK(SwapDecide(false, SwapFilesOf({}, {}, false), SwapFilesOf({}, {"ui/icons/rhastatus.bmp", "ui/cmdbar/actions/train rhastatus.bmp"}, false)) == HotSwap::kReload);
+}
+
+void TheImagesOfAMatchAreSwitchedInPlaceAndTheOnesReadOnceAreNot()
+{
+	// The images of a match: icons, command buttons, info bar, notification icons, help, conversations, in either name of the volume.
+	const char *const art[] = {"gameres/icons/RHastatus.bmp", "ui/icons/rhastatus.bmp", "gameres/cmdbar/Actions/train RHastatus.bmp", "gameres/cmdbar/corners/a1.rle",
+		"gameres/infobar/common/gold_cost.bmp", "GAMERES\\Infobar\\Rome\\bar.bmp", "gameres/noteicons/a.bmp", "gameres/help/x.bmp", "gameres/conversations/p.bmp",
+		"minimap/zoom16/entities/mapobjects-druins1-druins1.bmp", "minimap/zoom8/entities/x.bmp", "ui/icons/sub/deep.bmp"};
+	for (const char *f : art) CHECK_EQ(HotSwapKindOf(f), static_cast<unsigned>(kHotArt));
+	// The ones that are read once, or are not images of a match, keep the restart and say why.
+	const char *const once[] = {"gameres/selections/a.rle", "ui/cursors/arrow.cur", "ui/cursors/a.bmp", "gameres/menu/button.bmp", "ui/menu/profileicons/a.bmp",
+		"ui/interface/currentlang/x.bmp", "gameres/common/check.bmp", "ui/editor/a.bmp", "gameres/frame.bmp", "fonts/tahoma13.apf", "data/cursors.xml",
+		"data/interface/menu/mainmenu.ini", "gameini/cmdbar/frames.ini", "menuini/mainmenu.ini", "patches/data/interface/menu/template.ini", "patches/data/cursors.xml"};
+	for (const char *f : once) {
+		CHECK(HotSwapReadOnce(f));
+		CHECK_EQ(HotSwapKindOf(f), static_cast<unsigned>(kHotOther));
+	}
+	// Not read once, not covered yet.
+	for (const char *f : {"local/spanish/voices/rhastatus/1.wav", "sounds/notifications/a.wav", "gameres/icons/x.db", "gameres/icons/x.png", "minimap/zoom16/terrain/a.bmp",
+			 "minimap/zoom16/entities/sub/a.bmp", "minimap/zoomx/entities/a.bmp", "minimap/zoom16/entities/", "units/rhastatus.ent.xml"}) {
+		CHECK(!HotSwapReadOnce(f));
+		CHECK_EQ(HotSwapKindOf(f), static_cast<unsigned>(kHotOther));
+	}
+	// A layer of images alone, or with data, is reloaded; with a file read once it is not.
+	const Files images = {"gameres/icons/RHastatus.bmp", "gameres/cmdbar/Actions/train RHastatus.bmp", "minimap/zoom8/entities/x.bmp"};
+	CHECK(HotSwapLayerOk(images));
+	CHECK(SwapDecide(false, images, {"patches/data/const.ini", "gameres/icons/RHastatus.bmp"}) == HotSwap::kReload);
+	CHECK(SwapDecide(false, images, {"gameres/icons/RHastatus.bmp", "gameres/selections/a.rle"}) == HotSwap::kRestart);
+	CHECK_EQ(HotSwapKindsText(HotSwapKinds(images)), "interface images");
+	CHECK_EQ(HotSwapKindsText(kHotPatch | kHotArt), "patches of data/, interface images");
+	// The game's paths of the images, once each, with the volume turned into its folder.
+	const std::vector<std::string> real = HotSwapArtFiles({"gameres/icons/RHastatus.bmp", "UI/Icons/rhastatus.bmp", "data/const.ini", "gameres/selections/a.rle",
+		"minimap/zoom8/entities/x.bmp", "gameres\\cmdbar\\Actions\\a b.bmp"});
+	CHECK_EQ(real.size(), size_t(3));
+	CHECK_EQ(real[0], "ui/icons/rhastatus.bmp");
+	CHECK_EQ(real[1], "minimap/zoom8/entities/x.bmp");
+	CHECK_EQ(real[2], "ui/cmdbar/actions/a b.bmp");
+	CHECK(HotSwapArtFiles({}).empty());
+}
+
+void TheRestartSaysWhyBeforeItHappens()
+{
+	CHECK(HotSwapRestartReason({}, {}).why == RestartWhy::kNone);
+	CHECK(HotSwapRestartReason({"gameres/icons/a.bmp", "patches/data/const.ini"}, {"modes/a.json"}).why == RestartWhy::kNone);
+	// A file read once is the reason even when a sound comes first.
+	RestartReason r = HotSwapRestartReason({"local/spanish/voices/a.wav"}, {"gameres/icons/a.bmp", "gameres/selections/a.rle", "ui/cursors/b.cur"});
+	CHECK(r.why == RestartWhy::kReadOnce);
+	CHECK_EQ(r.files.size(), size_t(2));
+	CHECK_EQ(r.files[0], "gameres/selections/a.rle");
+	// Only the not covered kinds.
+	r = HotSwapRestartReason({"sounds/a.wav"}, {"civs/gaul.json", "sounds/a.wav", "packs/a.pak", "rle.mmp.tail", "x/y.z"});
+	CHECK(r.why == RestartWhy::kOtherFiles);
+	CHECK_EQ(r.files.size(), size_t(kRestartReasonFiles));
+	CHECK_EQ(r.files[0], "sounds/a.wav");
 }
 
 int main()
 {
+	TheImagesOfAMatchAreSwitchedInPlaceAndTheOnesReadOnceAreNot();
+	TheRestartSaysWhyBeforeItHappens();
 	TheSameRulesetNeedsNothing();
 	ConstIniAloneIsJustOneKindOfFile();
 	TheTextNeedsAGamePlaySection();

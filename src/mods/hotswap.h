@@ -22,9 +22,31 @@ bool HotSwapLayerOk(const std::vector<std::string> &files);
 
 // What kinds of files a ruleset has, to say it in the log and to test each one: patches to data/ (kHotPatch), new or
 // replacing files under data/ (kHotLoose: .xml, .ini, .vs; the game reads them when it starts or when the match does, from the loose
-// layer that is mounted in place), the lobby's mode files modes/*.json (kHotModes) and hidden.txt (kHotHidden). kHotOther is anything else.
-enum HotSwapKind : unsigned { kHotNone = 0, kHotPatch = 1, kHotLoose = 2, kHotModes = 4, kHotHidden = 8, kHotOther = 16 };
+// layer that is mounted in place), the lobby's mode files modes/*.json (kHotModes), hidden.txt (kHotHidden) and the images of the interface
+// that belong to a match (kHotArt: .bmp and .rle in gameres/ (ui/) icons, cmdbar, infobar, noteicons, help and conversations, and the
+// minimap/zoomN/entities pictures; the game keeps them in caches that the reload empties, see game/artcache.h). kHotOther is anything else.
+enum HotSwapKind : unsigned { kHotNone = 0, kHotPatch = 1, kHotLoose = 2, kHotModes = 4, kHotHidden = 8, kHotOther = 16, kHotArt = 32 };
 unsigned HotSwapKindOf(const std::string &file);
+
+// Whether a file is one the game reads once, when it starts, or when a menu window is built, and never again for a match: the selection circles,
+// the cursors and their table, the fonts, the pictures of the menus and of the other windows that are not a match's, the layouts of the
+// interface (gameini/, menuini/, data/interface/). A ruleset that has one keeps the restart, and says so.
+bool HotSwapReadOnce(const std::string &file);
+
+// The game's own paths (ui/..., lowercase, "/") of the images among files (kHotArt), as the caches name them after the volume gameres/ is
+// turned into ui/. These are the files whose cached copy the reload has to be sure it replaced.
+std::vector<std::string> HotSwapArtFiles(const std::vector<std::string> &files);
+
+// Why a change of ruleset keeps the restart, to tell the player before it happens: the first files that are the reason, and which of the two
+// reasons it is (the file is read once, see HotSwapReadOnce; or it is one of the kinds the reload does not cover yet: sounds, voices, texts,
+// packs, sprites...). kNone: nothing keeps it.
+enum class RestartWhy { kNone, kReadOnce, kOtherFiles };
+struct RestartReason {
+	RestartWhy why = RestartWhy::kNone;
+	std::vector<std::string> files; // at most kRestartReasonFiles
+};
+const unsigned kRestartReasonFiles = 3;
+RestartReason HotSwapRestartReason(const std::vector<std::string> &from, const std::vector<std::string> &to);
 unsigned HotSwapKinds(const std::vector<std::string> &files);
 std::string HotSwapKindsText(unsigned kinds);
 

@@ -3,6 +3,10 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include <windows.h>
 #include <algorithm>
+#include <atomic>
+#include <mutex>
+#include <string>
+#include <vector>
 
 #include "MinHook.h"
 #include "core/log.h"
@@ -67,6 +71,9 @@ std::string LooseLayerPrefix(const ModRuleset &r)
 	return layer && layer->hasLoose ? "mods/" + m.folder + "/" + layer->path + "/" : std::string();
 }
 
+ModsArtProbe g_artProbe = nullptr;
+std::atomic<unsigned> g_artGeneration{0};
+
 std::vector<void (*)()> &SwapHooks()
 {
 	static std::vector<void (*)()> hooks;
@@ -127,12 +134,95 @@ bool ModsHotSwitchAvailable()
 	return g_ready;
 }
 
-bool ModsCanSwitchWithoutRestart(const ModRuleset &wanted)
+namespace {
+// The images two sets of files replace, once each (game paths).
+std::vector<std::string> ArtOf(const std::vector<std::string> &from, const std::vector<std::string> &to)
 {
+	std::vector<std::string> art = HotSwapArtFiles(from);
+	for (const std::string &f : HotSwapArtFiles(to)) {
+		if (std::find(art.begin(), art.end(), f) == art.end()) art.push_back(f);
+	}
+	return art;
+}
+
+std::string JoinFirst(const std::vector<std::string> &names, size_t count)
+{
+	std::string out;
+	for (size_t i = 0; i < names.size() && i < count; i++) out += (i ? ", " : "") + names[i];
+	if (names.size() > count) out += ", ...";
+	return out;
+}
+
+// The caches the game keeps the images in are asked once per distinct set of images and state of the caches: the rooms ask on every frame.
+// held is empty and the result true when nothing is held; false when the caches could not be read.
+bool ArtHeld(const std::vector<std::string> &art, bool gameRunning, std::vector<std::string> &held)
+{
+	held.clear();
+	if (art.empty()) return true;
+	static std::mutex lock;
+	static std::string key;
+	static unsigned generation = ~0u;
+	static bool known = false, result = true;
+	static std::vector<std::string> cached;
+	std::string now = gameRunning ? "1" : "0";
+	for (const std::string &f : art) now += "|" + f;
+	std::lock_guard<std::mutex> guard(lock);
+	if (!known || key != now || generation != g_artGeneration.load()) {
+		const ModsArtProbe probe = g_artProbe;
+		cached.clear();
+		result = probe && probe(art, gameRunning, cached);
+		known = true;
+		key = now;
+		generation = g_artGeneration.load();
+		if (!result) LogW("content", "the image caches of the game could not be read: a change of ruleset with images (%s) keeps the restart", JoinFirst(art, 3).c_str());
+		else if (!cached.empty()) {
+			LogW("content", "a change of ruleset replaces images that something the game keeps loaded still uses (%s): it keeps the restart, so that no old picture is shown",
+				JoinFirst(cached, 5).c_str());
+		}
+	}
+	held = cached;
+	return result;
+}
+
+// Whether the files to come and go with a change of ruleset can be read again, and if not why. engineRunning: a game is alive.
+bool Decide(bool sameMount, const std::vector<std::string> &fromFiles, const std::vector<std::string> &toFiles, bool gameRunning, ModsRestartInfo *why)
+{
+	if (SwapDecide(sameMount, fromFiles, toFiles) == HotSwap::kRestart) {
+		if (why) {
+			const RestartReason reason = HotSwapRestartReason(fromFiles, toFiles);
+			why->kind = reason.why == RestartWhy::kReadOnce ? ModsRestartKind::kReadOnce : ModsRestartKind::kOtherFiles;
+			why->files = reason.files;
+			// One line per distinct reason: the rooms ask on every frame.
+			static std::string last;
+			const std::string line = JoinFirst(reason.files, kRestartReasonFiles);
+			if (last != line) {
+				last = line;
+				LogI("content", "a change of ruleset keeps the restart: %s (%s)", reason.why == RestartWhy::kReadOnce ? "the game reads these files once, when it starts" : "files of a kind the reload does not cover yet",
+					line.c_str());
+			}
+		}
+		return false;
+	}
+	std::vector<std::string> held;
+	if (!ArtHeld(ArtOf(fromFiles, toFiles), gameRunning, held) || !held.empty()) {
+		if (why) {
+			why->kind = ModsRestartKind::kHeldImages;
+			why->files = held;
+		}
+		return false;
+	}
+	return true;
+}
+
+// Everything ModsCanSwitchWithoutRestart and ModsRestartReason need; false if the ruleset cannot be switched in place, and why says it when it is about files.
+bool Verdict(const ModRuleset &wanted, ModsRestartInfo *why)
+{
+	if (why) *why = ModsRestartInfo();
 	if (!g_ready) return false;
 	// A game that is running has the rules it started with and keeps them until it is gone. A switch chosen then waits for the next game (see
 	// ModsSwitchRulesetWithoutRestart); it is only possible for the kinds of game whose load ends in LoadGameData on a new game object.
-	if (void *game = RunningGame()) {
+	void *game = RunningGame();
+	if (game) {
 		if (!GameKindCanSwitchWhileRunning(GameKindOfVtable(*static_cast<const uintptr_t *>(game)))) return false;
 	}
 	ModProfile p;
@@ -151,7 +241,30 @@ bool ModsCanSwitchWithoutRestart(const ModRuleset &wanted)
 	// What the game has to be made to read is the difference between the rules it holds and the ones asked for.
 	std::vector<std::string> fromFiles, toFiles;
 	if (!LayerFiles(engine, to, fromFiles) || !LayerFiles(to, engine, toFiles)) return false;
-	return SwapDecide(ModsSameMount(engine, to), fromFiles, toFiles) != HotSwap::kRestart;
+	return Decide(ModsSameMount(engine, to), fromFiles, toFiles, game != nullptr, why);
+}
+}
+
+bool ModsCanSwitchWithoutRestart(const ModRuleset &wanted)
+{
+	return Verdict(wanted, nullptr);
+}
+
+ModsRestartInfo ModsRestartReason(const ModRuleset &wanted)
+{
+	ModsRestartInfo info;
+	Verdict(wanted, &info);
+	return info;
+}
+
+void ModsSetArtProbe(ModsArtProbe probe)
+{
+	g_artProbe = probe;
+}
+
+void ModsArtCacheChanged()
+{
+	g_artGeneration++;
 }
 
 namespace {
@@ -288,7 +401,22 @@ ModsReload ModsReloadPlan()
 	if (ModsSameMount(engine, mounted)) return ModsReload::kNone;
 	std::vector<std::string> fromFiles, toFiles;
 	if (!LayerFiles(engine, mounted, fromFiles) || !LayerFiles(mounted, engine, toFiles)) return ModsReload::kRestart;
-	return g_ready && SwapDecide(false, fromFiles, toFiles) == HotSwap::kReload ? ModsReload::kReload : ModsReload::kRestart;
+	// The old game is gone: nothing running holds an image of the rules it had.
+	return g_ready && Decide(false, fromFiles, toFiles, false, nullptr) ? ModsReload::kReload : ModsReload::kRestart;
+}
+
+std::vector<std::string> ModsReloadArtFiles()
+{
+	ModRuleset engine, mounted;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		if (!g_engineKnown || !g_mount.known) return {};
+		engine = g_engineRules;
+		mounted = g_mount.profile.ruleset;
+	}
+	std::vector<std::string> fromFiles, toFiles;
+	if (!LayerFiles(engine, mounted, fromFiles) || !LayerFiles(mounted, engine, toFiles)) return {};
+	return ArtOf(fromFiles, toFiles);
 }
 
 void ModsOnRulesetSwapped(void (*hook)())

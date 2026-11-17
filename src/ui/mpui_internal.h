@@ -420,6 +420,8 @@ bool SkirmishRoom(const State &st);
 bool OpenRoomHost(const State &st);
 // A Rules entry that cannot be mounted in place from the rules the game holds (shown with its reason in the open room).
 bool RulesetNeedsRestart(const State &st, const ModRuleset &ruleset);
+// The sentence that says why changing to this ruleset restarts the game (the files that keep it), with a space in front, for the dialog that asks; empty if it is not about files.
+std::string RulesetRestartWhy(const ModRuleset &ruleset);
 // A guest whose key differs from the room's switches to the room's rules if that needs no restart; false if it cannot.
 bool AdoptRoomRules(const OnlineLobby &room);
 void RoomFollowRules(const GameRoomSnapshot &snap);

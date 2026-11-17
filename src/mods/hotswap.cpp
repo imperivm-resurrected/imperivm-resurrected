@@ -7,6 +7,7 @@
 #include "addr/world.h"
 #include "mods/savelib.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cstring>
 
@@ -31,11 +32,73 @@ std::string Extension(const std::string &f)
 }
 }
 
+namespace {
+// The folders of gameres/ (ui/) whose images are made again for every match: the icons and buttons of the command bar and the info bar, the queue
+// icons and portraits, the notification icons, the help pictures and the conversation portraits (CCmdRegistry, the item, skill and class tables, the
+// quick icon bars and the building queues are made in a match's data and in the match's windows). Everything else under gameres/ is read once.
+// The folder of a match's images that real (ui/...) is in, or nullptr.
+const char *MatchFolderOf(const std::string &real)
+{
+	static const char *const folders[] = {"ui/icons/", "ui/cmdbar/", "ui/infobar/", "ui/noteicons/", "ui/help/", "ui/conversations/"};
+	for (const char *folder : folders) {
+		if (StartsWith(real, folder)) return folder;
+	}
+	return nullptr;
+}
+
+bool MatchArtFolder(const std::string &real)
+{
+	const char *folder = MatchFolderOf(real);
+	return folder && real.size() > strlen(folder);
+}
+
+// gameres/x is ui/x: the game names a file with the volume, the caches and the files of a mod with either.
+std::string RealPath(const std::string &f)
+{
+	return StartsWith(f, "gameres/") ? "ui/" + f.substr(8) : f;
+}
+
+bool IsImage(const std::string &ext)
+{
+	return ext == ".bmp" || ext == ".rle";
+}
+
+// minimap/zoom<n>/entities/<name>.bmp: made for each minimap picture (GenerateMiniMapImage keeps its entity cache on the stack).
+bool MinimapEntityPicture(const std::string &f)
+{
+	if (!StartsWith(f, "minimap/zoom")) return false;
+	const size_t slash = f.find('/', 12);
+	if (slash == std::string::npos || slash == 12) return false;
+	for (size_t i = 12; i < slash; i++) {
+		if (!isdigit(static_cast<unsigned char>(f[i]))) return false;
+	}
+	if (f.compare(slash, 10, "/entities/") != 0) return false;
+	return f.size() > slash + 10 && f.find('/', slash + 10) == std::string::npos && Extension(f) == ".bmp";
+}
+}
+
+bool HotSwapReadOnce(const std::string &raw)
+{
+	const std::string f = Normal(raw);
+	const std::string real = RealPath(f);
+	if (StartsWith(f, "fonts/") || StartsWith(f, "menuini/") || StartsWith(f, "gameini/") || StartsWith(f, "commonini/") || StartsWith(f, "editorini/") ||
+		StartsWith(f, "cursors/") || StartsWith(f, "data/interface/") || StartsWith(f, "patches/data/interface/") || f == "data/cursors.xml" ||
+		f == "patches/data/cursors.xml") {
+		return true;
+	}
+	// Anything else under ui/ that is not in one of a match's folders: selections, cursors, menu, interface, common, editor, update, debug...
+	return StartsWith(real, "ui/") && !MatchFolderOf(real);
+}
+
 unsigned HotSwapKindOf(const std::string &raw)
 {
 	const std::string f = Normal(raw);
 	const std::string ext = Extension(f);
 	if (f == "hidden.txt") return kHotHidden;
+	if (HotSwapReadOnce(f)) return kHotOther;
+	const std::string real = RealPath(f);
+	if (IsImage(ext) && MatchArtFolder(real)) return kHotArt;
+	if (MinimapEntityPicture(f)) return kHotArt;
 	// A file in a subfolder or with no name is not one of these.
 	if (StartsWith(f, "patches/data/") && f.size() > 13 && (ext == ".xml" || ext == ".ini" || ext == ".vs")) return kHotPatch;
 	if (StartsWith(f, "data/") && f.size() > 5 && (ext == ".xml" || ext == ".ini" || ext == ".vs")) return kHotLoose;
@@ -65,6 +128,7 @@ std::string HotSwapKindsText(unsigned kinds)
 	add(kHotLoose, "files in data/");
 	add(kHotModes, "modes");
 	add(kHotHidden, "hidden.txt");
+	add(kHotArt, "interface images");
 	add(kHotOther, "other files");
 	return out.empty() ? "nothing" : out;
 }
@@ -87,6 +151,39 @@ bool ConstIniHasGamePlay(const std::string &text)
 		at = end + 1;
 	}
 	return false;
+}
+
+std::vector<std::string> HotSwapArtFiles(const std::vector<std::string> &files)
+{
+	std::vector<std::string> out;
+	for (const std::string &raw : files) {
+		const std::string f = Normal(raw);
+		if (HotSwapKindOf(f) != kHotArt) continue;
+		const std::string real = RealPath(f);
+		if (std::find(out.begin(), out.end(), real) == out.end()) out.push_back(real);
+	}
+	return out;
+}
+
+RestartReason HotSwapRestartReason(const std::vector<std::string> &from, const std::vector<std::string> &to)
+{
+	RestartReason reason;
+	auto collect = [&](bool once) {
+		for (const std::vector<std::string> *list : {&from, &to}) {
+			for (const std::string &f : *list) {
+				if (HotSwapKindOf(f) != kHotOther || HotSwapReadOnce(f) != once) continue;
+				if (reason.files.size() < kRestartReasonFiles && std::find(reason.files.begin(), reason.files.end(), f) == reason.files.end()) reason.files.push_back(f);
+			}
+		}
+	};
+	collect(true);
+	if (!reason.files.empty()) {
+		reason.why = RestartWhy::kReadOnce;
+		return reason;
+	}
+	collect(false);
+	if (!reason.files.empty()) reason.why = RestartWhy::kOtherFiles;
+	return reason;
 }
 
 HotSwap SwapDecide(bool sameRuleset, const std::vector<std::string> &from, const std::vector<std::string> &to)

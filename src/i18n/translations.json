@@ -1745,5 +1745,9 @@
 {"en":"There are no adventures here.","es":"Aquí no hay aventuras.","it":"Qui non ci sono avventure."},
 {"en":"There are no conquests here.","es":"Aquí no hay conquistas.","it":"Qui non ci sono conquiste."},
 {"en":"No Imperivm I campaign is installed yet.","es":"Todavía no hay ninguna campaña de Imperivm I instalada.","it":"Non è ancora installata nessuna campagna di Imperivm I."},
-{"en":"No Imperivm II campaign is installed yet.","es":"Todavía no hay ninguna campaña de Imperivm II instalada.","it":"Non è ancora installata nessuna campagna di Imperivm II."}
+{"en":"No Imperivm II campaign is installed yet.","es":"Todavía no hay ninguna campaña de Imperivm II instalada.","it":"Non è ancora installata nessuna campagna di Imperivm II."},
+{"en":"It has files the game reads only once, when it starts: %s.","es":"Tiene archivos que el juego lee una sola vez, al arrancar: %s.","it":"Contiene file che il gioco legge una sola volta, all'avvio: %s."},
+{"en":"It has files the game cannot swap in a running session yet (sounds, voices, texts, packs, sprites): %s.","es":"Tiene archivos que el juego aún no puede cambiar sin reiniciar (sonidos, voces, textos, paquetes, sprites): %s.","it":"Contiene file che il gioco non sa ancora cambiare senza riavvio (suoni, voci, testi, pacchetti, sprite): %s."},
+{"en":"The game could not check that its old images are free, so it cannot swap them without a restart.","es":"El juego no pudo comprobar que sus imágenes antiguas estén libres, así que no puede cambiarlas sin reiniciar.","it":"Il gioco non ha potuto verificare che le vecchie immagini siano libere, quindi non può cambiarle senza riavvio."},
+{"en":"Images of the current rules are still in use by the game: %s. A restart makes sure no old picture is shown.","es":"El juego aún usa imágenes de las reglas actuales: %s. Reiniciar asegura que no se muestre ninguna imagen vieja.","it":"Il gioco usa ancora immagini delle regole attuali: %s. Il riavvio garantisce che non compaia nessuna vecchia immagine."}
 ]
