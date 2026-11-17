@@ -1,8 +1,8 @@
-# Step 3 (#59): the single in-game test plan for 3a-3f
+# Step 3 (#59): the single in-game test plan for 3a-3h
 
 One setup, one DLL (the CI build of the top of the stack, PR `feat/hot-switch-rletail`), one profile. **Nothing in this plan has been run in the game**: every expected result below is **predicted** from the code and from the decompiled engine; the test is what proves or disproves it. Mark each line ok / not ok and send the log.
 
-What step 3 does: a ruleset switch no longer restarts the game when it changes images (3a), texts (3b), sounds, voices and sound entities (3c), entity art (3d) or maps (3e). `rle.mmp.tail` (3f), `.pak` files, files the game reads once, and the structural data (civilizations, specials, options, events, `rules\`) keep the restart, and the dialog says why.
+What step 3 does: a ruleset switch no longer restarts the game when it changes images (3a), texts (3b), sounds, voices and sound entities (3c), entity art (3d), maps (3e) or `.pak` files in the ruleset's own folder (3g). Files the game reads once, the structural data (civilizations, specials, options, events, `rules\`) and the graphics tail (3f/3h, see section 13) keep the restart, and the dialog says why.
 
 ## 1. Setup (once)
 
@@ -10,6 +10,7 @@ What step 3 does: a ruleset switch no longer restarts the game when it changes i
 2. Make the two files that are copies of the game's own (not in the repository): from `sdk\examples\ruleset-clash-example`, `node make-clash-files.js "<game>" "<game>\mods"`.
 3. Make the random map of the blue ruleset (6 MB of generated pictures, not in the repository), from the repository root:
    `node sdk\tools\create-random-map.js "<game>\mods\clash-b\rulesets\blue" Anillo sdk\examples\random-map-example\drawings\ring.png --players 8`
+3b. Make the pak of the `packed` ruleset (3g) from your own game, once: from `sdk\examples\ruleset-clash-example`, `node make-packed-pak.js "<game>" "<game>\mods\clash-b" english` (or `spanish`, `italian`: the language you play in). It writes `clash-b\rulesets\packed\packs\packed.pak`.
 4. **Options > Content**: a profile with **only those five packages** (call it *Step 3*). Restart the game (this is the only restart the whole plan needs, apart from the ones it tries to provoke in section 9).
 5. `imperivm-mod.ini` (game folder), for sections 2-9: `[Debug]` `LogLevel=debug` is not needed; keep the default. For the stress run (section 10) add `MemoryTrace=1`, and only then (it makes loads slower).
 6. Play the game's **Republican Rome** in a skirmish. The **Ruleset** row is the first row of *Game options* in the skirmish room. The log is `Logs\imperivm\imperivm-mod.log`; open it after each section and search for the lines below.
@@ -109,7 +110,26 @@ Read it as: `failed heaps` is **0** in every row; `file cache` entries and `inte
 2. Host **Clash example C**, guest **Original** (item 11 of #67): the guest follows to C and sees the 77 price.
 3. A pure-ADD civilization package: host on its entry, guest on Original: the keys are equal, no switch asked (item 12 of #67).
 
-## 12. What is proven, what is predicted
+## 12. Paks in a ruleset (3g): the **Packed** ruleset
+
+Set the **Ruleset** row to **Packed** (`clash-b`; the row says no *(needs a restart)*), start a match. **No restart.** Expected (predicted):
+
+| Look at | Under Packed | Under Blue, Plain, Original, Clash A |
+|---|---|---|
+| queue two hastati | the queue icons and the portrait have the **green** pattern with a white stripe (from `UI\ICONS\RHASTATUS.BMP` in the pak) | blue / the game's / red |
+| select the barracks | a **falling two-note chime** (the pak's `SOUNDS\SELECTION\BARAKS\BARRAKS_1..4.WAV` beat the game's `Sounds.pak`) | Blue: its rising chime; others: the game's |
+| hover the hastatus button | *Equip Hastatus (packed)* (or the Spanish/Italian text you made it with) | Blue: *(blue ruleset)*; others: *Equip Hastatus* |
+| lobby *Map type* (open it after the switch) | **Random: Packed Continent** (a data file in the pak, using the game's own Continent pictures); start it: a continent map | not there |
+
+Log lines: the first time, `content: ruleset clash-b/rulesets/packed: 1 pak file systems mounted in the engine's list, below the loose layers (N ms)`; later `... put back in the engine's list ...`; and when you leave it `... pak file systems taken out of the engine's list`. The usual `texts read again`, `sound entities read again` (the pak has a `DATA\RANDOMMAP` file, not an entity: the line appears only if a pak had one), `image caches emptied ... N images change, 0 of them still cached`.
+
+Order of the switches to try, one match each: Original -> **Packed** -> Plain -> **Packed** (the second time the same file systems are put back, no new object) -> **Blue** (loose layer and pak layer swap) -> **Packed** -> Original. In each, the table above holds. **Shadowing**: under Packed the game's barracks sounds are *not* heard (the pak wins over the game's `Sounds.pak`); with Blue's loose chime AND Packed's pak you cannot have both (only one ruleset is mounted), so to see "loose beats pak" copy `clash-b\rulesets\blue\sounds\...` is not needed: it is proven by the unit tests of the list order only (not in game).
+
+**Held image check (3a) with a pak:** switch to Packed, play a match (the green portrait is cached), switch to Plain: the log must say `image caches emptied ... 0 of them still cached` and the portrait of the next match is the game's: the pak was taken out while its picture was cached, and the cache was emptied for its name.
+
+**Still restarts, with the member named** (a throw-away copy of the `packed` ruleset named `clash-t`, repacked with `node sdk\tools\make-pak.js <folder> <out.pak>` with one extra member): a member `CIVS\X.JSON`, `UI\CURSORS\A.CUR` or `FONTS\A.APF` -> the dialog says *It has files the game cannot swap...* / *reads only once...* and names that member; `node sdk\tools\validate-mod.js "<game>\mods\clash-t"` prints `member <NAME>: switching to or from this ruleset restarts the game: ...`.
+
+## 14. What is proven, what is predicted
 
 | | State |
 |---|---|

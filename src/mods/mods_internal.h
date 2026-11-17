@@ -42,6 +42,13 @@ extern std::vector<ModInfo> g_mods;
 void ModsNoteScan(std::vector<ModInfo> &mods);
 void ModsBumpSerial();
 extern std::string g_language;
+// The file systems the engine made for the paks of a ruleset's folder (CPackFS objects), in the order they were mounted, and whether they are in its list now.
+// They are never freed: the engine may still hold a file it opened from one, and the next time the ruleset is chosen the same objects are put back.
+struct LayerPakMount {
+	std::vector<void *> fileSystems;
+	bool linked = false;
+};
+
 struct MountedState {
 	ModProfile profile;
 	ModRuleset choice;
@@ -52,6 +59,7 @@ struct MountedState {
 	std::map<std::string, std::string> signatures;
 	void *layerList = nullptr;
 	std::map<std::string, void *> looseLayers;
+	std::map<std::string, LayerPakMount> layerPaks;
 };
 extern MountedState g_mount;
 // The game files the packs of the profile hide, set in the VFS (the same as MountProfileLayers does at start-up).
@@ -65,6 +73,11 @@ void PublishVolumeFiles(const ModProfile &p);
 void PublishRootRefusals(const ModProfile &p);
 void PublishLayerDiag(const ModProfile &p);
 void PublishFileSources(const ModProfile &p);
+// The paks of a ruleset's folder (<folder>\<sub>Local, Patches, Packs): mounted in the engine's list of file systems for the ruleset in use, taken out of it
+// and put back below the loose layers (above the paks of the game and of the packages: the ruleset wins) when the ruleset changes. sub is "rulesets/<id>/".
+// MountLayerPaks returns false if the engine faulted while mounting them (what it had added is taken out again).
+bool MountLayerPaks(const std::string &folder, const std::string &sub);
+void UnmountLayerPaks(const std::string &folder, const std::string &sub);
 bool MountLooseFolder(const std::string &vfsPrefix);
 bool UnmountLooseFolder(const std::string &vfsPrefix);
 // The root files of a package that are global (they replace the game's) and are not mounted under this profile's ruleset: all of them unless the

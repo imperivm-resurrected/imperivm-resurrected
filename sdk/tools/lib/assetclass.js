@@ -142,7 +142,7 @@ function gameFiles(gameDir) {
 // or '' if it is switched in place.
 const RESTART_KEPT = [
 	[/(^|\/)rle\.mmp\.tail$/, 'the graphics tail: the game maps its sprite file (rle.mmp) once, when it starts, and every sprite keeps a pointer into it. Put the sprites as loose .rle files with their .ent.xml in units\\<name>\\ (or buildings, mapobjects, visuals): they switch in place'],
-	[/\.pak$/, 'a .pak: the engine mounts paks once, when the game starts, and the DLL does not unmount them. Loose files switch in place'],
+	[/^patches\/.*\.pak$/, 'a .pak in patches\\: only the paks of packs\\ and local\\ are mounted and taken out in place'],
 	[/^(gameres|ui)\/(selections|cursors|menu|interface|common|editor|update|debug)\//, 'a picture the game reads once, at start or when a menu window is built'],
 	[/^(gameres|ui)\/[^/]+\.bmp$/, 'a picture the game reads once, at start or when a menu window is built'],
 	[/^(fonts\/|menuini\/|gameini\/|commonini\/|editorini\/|cursors\/|data\/interface\/|patches\/data\/interface\/)|^(patches\/)?data\/cursors\.xml$/, 'a font, a cursor or a layout of the interface: the game reads it once'],

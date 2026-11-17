@@ -227,6 +227,7 @@ namespace {
 // What the files of the package root, or of one ruleset, add up to.
 struct LayerScan {
 	std::set<std::string> paths, loose, files;
+	std::vector<LayerPak> paks;
 	std::vector<PatchedValue> patchValues;
 	std::vector<std::string> hidden;
 	bool rleTail = false;
@@ -362,14 +363,22 @@ ModInfo ScanMod(const std::string &folder, std::vector<ScanFile> &files)
 				continue;
 			}
 			std::vector<PakEntry> entries;
+			LayerPak pak;
+			pak.rel = rel;
+			pak.language = inLocal;
 			if (ReadPakIndex(base + "\\" + f.rel, entries)) {
 				for (const PakEntry &e : entries) {
 					std::string p = NormPath(e.name);
+					pak.members.push_back(p);
 					s.paths.insert(p);
 					f.gameplay = f.gameplay || IsGameplayPath(p);
 					f.content = f.content || IsContentPath(p);
 				}
 			}
+			else {
+				pak.unreadable = true;
+			}
+			s.paks.push_back(std::move(pak));
 			s.gameplay = s.gameplay || f.gameplay;
 			s.content = s.content || f.content;
 			continue;
@@ -403,6 +412,7 @@ ModInfo ScanMod(const std::string &folder, std::vector<ScanFile> &files)
 		l.paths.assign(s.paths.begin(), s.paths.end());
 		l.loosePaths.assign(s.loose.begin(), s.loose.end());
 		l.files.assign(s.files.begin(), s.files.end());
+		l.paks = std::move(s.paks);
 		l.patchValues = std::move(s.patchValues);
 		l.hidden = std::move(s.hidden);
 		l.rleTail = s.rleTail;

@@ -91,6 +91,14 @@ node sdk\tools\create-random-map.js "<game>\mods\clash-b\rulesets\blue" Anillo s
 
 Under **Blue**, the lobby's *Map type* dropdown has *Random: Anillo* (open it after the switch: the dropdown is built when it opens); under Plain, Original and Clash example A it does not. Pick it and start: the map is a ring of land with a sea in the middle. The game reads the type, its pictures and its tables each time it generates a map. **Predicted, not yet seen in the game.**
 
+The **packed** ruleset (`clash-b`, `rulesets\packed\`) has everything in one `.pak`: `packs\packed.pak`. Make it from your own game (the text member is the game's own table of texts with one entry added, so it is not in the repository):
+
+```text
+node make-packed-pak.js "<game folder>" "<game folder>\mods\clash-b" english      (or spanish, italian: the language you play in)
+```
+
+It holds, as members, the **green** hastatus portrait and queue icon (`UI\ICONS\RHASTATUS.BMP`), a **two-note falling chime** for the barracks selection (`SOUNDS\SELECTION\BARAKS\BARRAKS_1..4.WAV`, the game's own names: the pak's win over the game's `Sounds.pak`), a map type, **Random: Packed Continent** (`DATA\RANDOMMAP\PACKED CONTINENT.RM.XML`, which uses the game's own Continent pictures) and the text *Equip Hastatus (packed)* (`CURRENTLANG\GAME.LOC.XML`). Under **Packed** all four are there after the switch, with no restart; under Blue, Plain, Original and Clash example A, none. Log: `content: ruleset clash-b/rulesets/packed: 1 pak file systems mounted in the engine's list, below the loose layers (N ms)` the first time (`put back in` after), `... taken out of the engine's list` when you leave it, and the usual `texts read again`, `sound entities read again`, `image caches emptied ... N images change, 0 of them still cached` lines. **Predicted, not yet seen in the game.**
+
 ### Stress: five rounds and the memory
 
 Start the game with `[Debug] MemoryTrace=1` in `imperivm-mod.ini` (slower loads: a second or two per game). Pick *Blue*, start a skirmish, leave it, pick *Plain*, start, leave, *Original*, start, leave, *Blue*..., five times round. Then:

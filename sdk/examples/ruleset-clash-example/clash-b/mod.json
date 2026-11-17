@@ -42,6 +42,20 @@
         "italian": "Il gioco così com'è."
       },
       "path": "rulesets/plain"
+    },
+    {
+      "id": "packed",
+      "name": {
+        "spanish": "Empaquetado",
+        "english": "Packed",
+        "italian": "Impacchettato"
+      },
+      "description": {
+        "spanish": "Todo en un .pak: el retrato del hastato en verde, un sonido nuevo al seleccionar el cuartel, el tipo de mapa «Packed Continent» y el texto del botón del hastato. El .pak se hace con make-packed-pak.js.",
+        "english": "All in one .pak: the hastatus portrait in green, a new sound when the barracks is selected, the map type \"Packed Continent\" and the text of the hastatus button. The .pak is made with make-packed-pak.js.",
+        "italian": "Tutto in un .pak: il ritratto dell'astato in verde, un nuovo suono alla selezione della caserma, il tipo di mappa «Packed Continent» e il testo del pulsante dell'astato. Il .pak si fa con make-packed-pak.js."
+      },
+      "path": "rulesets/packed"
     }
   ]
 }

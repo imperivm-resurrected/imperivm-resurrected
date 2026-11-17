@@ -74,6 +74,18 @@ std::string LooseLayerPrefix(const ModRuleset &r)
 ModsArtProbe g_artProbe = nullptr;
 std::atomic<unsigned> g_artGeneration{0};
 
+// The folder of a package and the "rulesets/<id>/" of the ruleset's layer, for its paks; false if the ruleset has no layer.
+bool LayerSub(const ModRuleset &r, std::string &folder, std::string &sub)
+{
+	ModInfo m;
+	if (r.Empty() || !ModsFind(r.pack, m)) return false;
+	const ModLayer *layer = ModsFindLayer(m, r.id);
+	if (!layer) return false;
+	folder = m.folder;
+	sub = layer->path + "/";
+	return true;
+}
+
 std::vector<void (*)()> &SwapHooks()
 {
 	static std::vector<void (*)()> hooks;
@@ -94,7 +106,10 @@ bool LayerFiles(const ModRuleset &r, const ModRuleset &other, std::vector<std::s
 		if (!r.id.empty()) {
 			const ModLayer *layer = ModsFindLayer(m, r.id);
 			if (!layer) return false;
-			layerFiles = layer->files;
+			// The paks of the folder are mounted in place: what counts is what is inside them.
+			std::vector<HotSwapPak> paks;
+			for (const LayerPak &p : layer->paks) paks.push_back({p.rel, p.language, p.unreadable, p.members});
+			layerFiles = HotSwapExpandPaks(layer->files, paks, ModsLanguage());
 		}
 		std::vector<std::string> global = m.globalLoose;
 		global.insert(global.end(), m.globalPatchFiles.begin(), m.globalPatchFiles.end());
@@ -345,6 +360,14 @@ bool ModsSwapMountedRuleset(const ModRuleset &wanted)
 		LogE("content", "the loose files of the ruleset %s could not be mounted; nothing was changed", newLoose.c_str());
 		return false;
 	}
+	// Its paks too (the engine's file systems for them are put in its list, below the loose layers).
+	std::string newFolder, newSub, oldFolder, oldSub;
+	const bool newHasPaks = LayerSub(next, newFolder, newSub), oldHasPaks = !sameFiles && LayerSub(before, oldFolder, oldSub);
+	if (!sameFiles && newHasPaks && !MountLayerPaks(newFolder, newSub)) {
+		LogE("content", "the paks of the ruleset %s could not be mounted; nothing was changed", newSub.c_str());
+		if (!newLoose.empty()) UnmountLooseFolder(newLoose);
+		return false;
+	}
 	std::vector<std::string> dirs;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
@@ -366,6 +389,7 @@ bool ModsSwapMountedRuleset(const ModRuleset &wanted)
 		dirs = mounted;
 	}
 	if (!oldLoose.empty()) UnmountLooseFolder(oldLoose);
+	if (oldHasPaks) UnmountLayerPaks(oldFolder, oldSub);
 	VfsResetPatchedAll();
 	MediaSetModDirs(dirs);
 	{

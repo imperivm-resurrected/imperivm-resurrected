@@ -81,7 +81,9 @@ try {
 	write(path.join(mod, 'rulesets', 'r', 'menuini', 'Menu.ini'));
 	write(path.join(mod, 'rulesets', 'r', 'local', 'english', 'tips.xml'));
 	write(path.join(mod, 'rulesets', 'r', 'rle.mmp.tail'));
-	write(path.join(mod, 'rulesets', 'r', 'packs', 'extra.pak'));
+	require('fs').mkdirSync(path.join(mod, 'rulesets', 'r', 'packs'), { recursive: true });
+	require('fs').writeFileSync(path.join(mod, 'rulesets', 'r', 'packs', 'extra.pak'), require('../sdk/tools/lib/pakwrite').buildPak([
+		{ name: 'ui/icons/ok.bmp', data: Buffer.alloc(2) }, { name: 'ui/cursors/arrow.cur', data: Buffer.alloc(2) }, { name: 'civs/x.json', data: Buffer.alloc(2) }]));
 	write(path.join(mod, 'rulesets', 'r', 'ui', 'cursors', 'arrow.cur'));
 	write(path.join(mod, 'rulesets', 'r', 'ui', 'icons', 'inplace.bmp'));
 	const without = run([mod]);
@@ -91,7 +93,10 @@ try {
 	assert.match(without.text, /rulesets\/r\/local\/english\/tips\.xml .*menu skin file in a ruleset layer/);
 	// the files that keep the restart say why; the ones that switch in place say nothing
 	assert.match(without.text, /rulesets\/r\/rle\.mmp\.tail .*restarts the game: the graphics tail.*loose \.rle files/);
-	assert.match(without.text, /rulesets\/r\/packs\/extra\.pak .*restarts the game: a \.pak/);
+	assert.match(require('../sdk/tools/lib/assetclass').restartKept('patches/extra.pak'), /a \.pak in patches/);
+	assert.match(without.text, /rulesets\/r\/packs\/extra\.pak .*member UI\\CURSORS\\ARROW\.CUR: switching to or from this ruleset restarts the game: a picture the game reads once/);
+	assert.match(without.text, /rulesets\/r\/packs\/extra\.pak .*member CIVS\\X\.JSON: .*civilization/);
+	assert.doesNotMatch(without.text, /member UI\\ICONS\\OK\.BMP/);
 	assert.match(without.text, /rulesets\/r\/ui\/cursors\/arrow\.cur .*restarts the game: a picture the game reads once/);
 	assert.doesNotMatch(without.text, /inplace\.bmp .*restarts the game/);
 	assert.doesNotMatch(without.text, /gameres\/icons\/RHastatus\.bmp .*restarts the game/);
