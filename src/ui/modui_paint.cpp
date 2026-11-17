@@ -798,8 +798,8 @@ void PaintInstalled(Painter &p, const State &st)
 	const int listY = chipsY + chipsH + 10;
 	// Down to the card at its right; the bar of the marked packs takes its foot only while some are marked.
 	const int listBottom = st.marked.empty() ? l.cardBottom : l.selectionBarY - 10;
-	const int rows = std::max(1, (listBottom - listY) / kRowH);
-	const int listH = rows * kRowH;
+	const int listH = listBottom - listY;
+	const int rows = std::max(1, listH / kRowH);
 	g_installedRows = rows;
 	PaintGlassCard(p, listX, listY, listW, listH);
 	const std::vector<int> view = VisibleRows(st);
