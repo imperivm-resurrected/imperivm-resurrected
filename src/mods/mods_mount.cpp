@@ -124,6 +124,137 @@ std::string ReadGameLanguage()
 	return Lower(std::string(text, size));
 }
 
+namespace {
+std::string LayerPakKey(const std::string &folder, const std::string &sub)
+{
+	std::string key = Lower(folder) + "/" + Lower(sub);
+	while (!key.empty() && key.back() == '/') key.pop_back();
+	return key;
+}
+
+// The values of the engine's list in order.
+std::vector<void *> ListValues(void *list)
+{
+	std::vector<void *> values;
+	void **node = *reinterpret_cast<void ***>(static_cast<char *>(list) + 0x10);
+	for (unsigned guard = 0; node && guard < 100000; guard++) {
+		values.push_back(node[0]);
+		node = static_cast<void **>(node[1]);
+	}
+	return values;
+}
+
+// The engine's own mount of the *.pak of one folder; only plain data in here so the __try can protect it.
+bool CallMountPaks(const char *dir, void *list, const char *lang)
+{
+	bool ok = true;
+	__try {
+		g_origMountPakFilesInDir(dir, list, lang);
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		ok = false;
+	}
+	return ok;
+}
+
+// Puts the file systems in the list right below the loose layers (which are at its front), in order: they win over every pak mounted at start.
+void ListInsertBelowLoose(void *list, const std::vector<void *> &values, const std::set<void *> &loose)
+{
+	char *l = static_cast<char *>(list);
+	void **link = reinterpret_cast<void **>(l + 0x10);
+	while (*link && loose.count(static_cast<void **>(*link)[0])) link = &static_cast<void **>(*link)[1];
+	for (void *value : values) {
+		auto node = static_cast<void **>(GameNew(8));
+		if (!node) return;
+		node[0] = value;
+		node[1] = *link;
+		*link = node;
+		link = &node[1];
+		*reinterpret_cast<int *>(l + 0xc) += 1;
+	}
+}
+}
+
+}
+
+// Mounts the paks of the folders of a package's folder or ruleset the way the engine does at start. Returns the file systems it added to the list (it
+// appends them) in `added`. language is the one the game runs in.
+bool MountPaksOf(const std::string &vfsBase, const std::string &diskBase, void *list, const std::string &language, std::vector<void *> &added)
+{
+	const size_t before = ListValues(list).size();
+	bool ok = true;
+	if (IsDir(diskBase + "Local")) ok = CallMountPaks((vfsBase + "Local/").c_str(), list, language.c_str()) && ok;
+	if (IsDir(diskBase + "Patches")) ok = CallMountPaks((vfsBase + "Patches/").c_str(), list, nullptr) && ok;
+	if (IsDir(diskBase + "Packs")) ok = CallMountPaks((vfsBase + "Packs/").c_str(), list, nullptr) && ok;
+	const std::vector<void *> all = ListValues(list);
+	added.assign(all.begin() + (std::min)(before, all.size()), all.end());
+	return ok;
+}
+
+bool MountLayerPaks(const std::string &folder, const std::string &sub)
+{
+	const std::string key = LayerPakKey(folder, sub);
+	void *list = nullptr;
+	std::set<void *> loose;
+	LayerPakMount mount;
+	bool known = false;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		if (!g_mount.known || !g_mount.layerList) return false;
+		list = g_mount.layerList;
+		for (const auto &kv : g_mount.looseLayers) loose.insert(kv.second);
+		const auto it = g_mount.layerPaks.find(key);
+		if (it != g_mount.layerPaks.end()) {
+			if (it->second.linked) return true;
+			mount = it->second;
+			known = true;
+		}
+	}
+	const DWORD start = GetTickCount();
+	if (!known) {
+		// The first time this session: the engine mounts them (it appends them to its list), and they are moved to where they belong.
+		std::string diskSub = sub;
+		std::replace(diskSub.begin(), diskSub.end(), '/', '\\');
+		const std::string diskBase = ModsDir() + "\\" + folder + "\\" + diskSub;
+		const bool ok = MountPaksOf("mods/" + folder + "/" + sub, diskBase, list, ReadGameLanguage(), mount.fileSystems);
+		for (void *fs : mount.fileSystems) ListUnlink(list, fs);
+		if (!ok) {
+			LogE("content", "the engine faulted while mounting the paks of %s/%s; %u of them were taken out again", folder.c_str(), sub.c_str(),
+				static_cast<unsigned>(mount.fileSystems.size()));
+			return false;
+		}
+	}
+	ListInsertBelowLoose(list, mount.fileSystems, loose);
+	mount.linked = true;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		g_mount.layerPaks[key] = mount;
+	}
+	LogI("content", "ruleset %s/%s: %u pak file systems %s the engine's list, below the loose layers (%lu ms)", folder.c_str(), sub.c_str(),
+		static_cast<unsigned>(mount.fileSystems.size()), known ? "put back in" : "mounted in", static_cast<unsigned long>(GetTickCount() - start));
+	return true;
+}
+
+void UnmountLayerPaks(const std::string &folder, const std::string &sub)
+{
+	const std::string key = LayerPakKey(folder, sub);
+	void *list = nullptr;
+	LayerPakMount mount;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		const auto it = g_mount.layerPaks.find(key);
+		if (it == g_mount.layerPaks.end() || !it->second.linked || !g_mount.layerList) return;
+		list = g_mount.layerList;
+		mount = it->second;
+		it->second.linked = false;
+	}
+	for (void *fs : mount.fileSystems) ListUnlink(list, fs);
+	LogI("content", "ruleset %s/%s: %u pak file systems taken out of the engine's list", folder.c_str(), sub.c_str(), static_cast<unsigned>(mount.fileSystems.size()));
+}
+
+namespace {
+
+
 std::string ShowStartupPicker(const std::string &current);
 
 std::atomic<const std::map<std::string, std::string> *> g_chosenFiles{nullptr};
@@ -317,15 +448,21 @@ void MountProfileLayers(void *list)
 			std::lock_guard<std::mutex> lock(g_lock);
 			g_mount.dirs.push_back(diskSub.empty() ? ModsDir() + "\\" + folder : diskBase.substr(0, diskBase.size() - 1));
 		}
-		if (IsDir(diskBase + "Local")) {
-			g_origMountPakFilesInDir((vfsBase + "Local/").c_str(), list, lang.c_str());
-			g_mount.localDirs.push_back(diskBase + "Local");
+		if (IsDir(diskBase + "Local")) g_mount.localDirs.push_back(diskBase + "Local");
+		if (!sub.empty()) {
+			// The paks of a ruleset are recorded as they are mounted, so a later switch can take them out of the list.
+			LayerPakMount mount;
+			MountPaksOf(vfsBase, diskBase, list, lang, mount.fileSystems);
+			mount.linked = !mount.fileSystems.empty();
+			if (mount.linked) {
+				std::lock_guard<std::mutex> lock(g_lock);
+				g_mount.layerPaks[LayerPakKey(folder, sub)] = mount;
+			}
 		}
-		if (IsDir(diskBase + "Patches")) {
-			g_origMountPakFilesInDir((vfsBase + "Patches/").c_str(), list, nullptr);
-		}
-		if (IsDir(diskBase + "Packs")) {
-			g_origMountPakFilesInDir((vfsBase + "Packs/").c_str(), list, nullptr);
+		else {
+			if (IsDir(diskBase + "Local")) g_origMountPakFilesInDir((vfsBase + "Local/").c_str(), list, lang.c_str());
+			if (IsDir(diskBase + "Patches")) g_origMountPakFilesInDir((vfsBase + "Patches/").c_str(), list, nullptr);
+			if (IsDir(diskBase + "Packs")) g_origMountPakFilesInDir((vfsBase + "Packs/").c_str(), list, nullptr);
 		}
 		if (hasLoose) {
 			looseLayers.push_back(vfsBase);

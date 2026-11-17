@@ -356,6 +356,15 @@ else {
 		for (const f of files) {
 			const why = assets.restartKept(f);
 			if (why) warn(f, 0, 'switching to or from this ruleset restarts the game: ' + why);
+			// a pak of packs\ is mounted in place: what counts is what is inside it, member by member
+			if (/^packs\/[^/]+\.pak$/i.test(f)) {
+				const names = assets.pakNames(path.join(modDir, f));
+				if (!names.length) warn(f, 0, 'switching to or from this ruleset restarts the game: the pak could not be read (it is not a game .pak)');
+				for (const name of names) {
+					const inside = assets.restartKept(name);
+					if (inside) warn(f, 0, `member ${name}: switching to or from this ruleset restarts the game: ${inside}`);
+				}
+			}
 		}
 	}
 	else if (assets.isRulesPackage(files)) {

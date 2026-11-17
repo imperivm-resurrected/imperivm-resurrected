@@ -325,6 +325,51 @@ void TheGraphicsTailKeepsTheRestartAndSaysWhy()
 	CHECK(SwapDecide(false, {}, {"rle.mmp.tail"}) == HotSwap::kRestart);
 }
 
+void PaksAreJudgedByWhatIsInsideThem()
+{
+	HotSwapPak packed;
+	packed.rel = "packs/packed.pak";
+	packed.members = {"ui/icons/rhastatus.bmp", "sounds/selection/baraks/barraks_1.wav", "data/randommap/packed continent.rm.xml", "data/sound entities/x.xml",
+		"currentlang/game.loc.xml"};
+	// A pak of images, sounds, data and texts is switched in place: what counts is what is inside.
+	const Files layer = {"packs/packed.pak", "sounds/a.wav", "gameres/icons/a.bmp"};
+	const std::vector<std::string> expanded = HotSwapExpandPaks(layer, {packed}, "spanish");
+	CHECK_EQ(expanded.size(), size_t(7));
+	CHECK_EQ(expanded[0], "ui/icons/rhastatus.bmp");
+	CHECK_EQ(expanded[5], "sounds/a.wav");
+	CHECK(SwapDecide(false, {}, expanded) == HotSwap::kReload);
+	CHECK_EQ(HotSwapKinds(expanded) & kHotOther, 0u);
+	CHECK(HotSwapKinds(expanded) & kHotText);
+	// One member of a kind that is not covered keeps the restart, and the reason names the member, not the pak.
+	HotSwapPak withCivs = packed;
+	withCivs.members.push_back("civs/x.json");
+	const std::vector<std::string> bad = HotSwapExpandPaks({"packs/packed.pak"}, {withCivs}, "spanish");
+	CHECK(SwapDecide(false, {}, bad) == HotSwap::kRestart);
+	const RestartReason badReason = HotSwapRestartReason({}, bad);
+	CHECK_EQ(badReason.files.size(), size_t(1));
+	CHECK_EQ(badReason.files[0], "civs/x.json");
+	// A pak that is not known, could not be read, or is not in packs/ or local/ stays as itself: it keeps the restart.
+	CHECK(SwapDecide(false, {}, HotSwapExpandPaks({"packs/unknown.pak"}, {packed}, "spanish")) == HotSwap::kRestart);
+	HotSwapPak broken;
+	broken.rel = "packs/broken.pak";
+	broken.unreadable = true;
+	CHECK(SwapDecide(false, {}, HotSwapExpandPaks({"packs/broken.pak"}, {broken}, "spanish")) == HotSwap::kRestart);
+	CHECK(SwapDecide(false, {}, HotSwapExpandPaks({"patches/x.pak"}, {packed}, "spanish")) == HotSwap::kRestart);
+	// A language pak: only the game's language counts; the members are relative to the language folder.
+	HotSwapPak spanish;
+	spanish.rel = "local/spanish.pak";
+	spanish.language = true;
+	spanish.members = {"currentlang/tips.xml", "rhastatus/1.wav", "currentlang/readme.pdf"};
+	const std::vector<std::string> lang = HotSwapExpandPaks({"local/spanish.pak", "local/italian.pak", "local/spanish_extra.pak"}, {spanish}, "Spanish");
+	CHECK_EQ(lang.size(), size_t(4));
+	CHECK_EQ(lang[1], "local/spanish/voices/rhastatus/1.wav");
+	CHECK_EQ(HotSwapKindOf(lang[0]), static_cast<unsigned>(kHotText));
+	CHECK_EQ(HotSwapKindOf(lang[1]), static_cast<unsigned>(kHotSound));
+	CHECK_EQ(HotSwapKindOf(lang[2]), static_cast<unsigned>(kHotOther));
+	CHECK_EQ(lang[3], "local/spanish_extra.pak");
+	CHECK(HotSwapExpandPaks({}, {}, "spanish").empty());
+}
+
 void TheRestartSaysWhyBeforeItHappens()
 {
 	CHECK(HotSwapRestartReason({}, {}).why == RestartWhy::kNone);
@@ -349,6 +394,7 @@ int main()
 	EntityArtIsSwitchedInPlaceByFolder();
 	MapsAreSwitchedInPlace();
 	TheGraphicsTailKeepsTheRestartAndSaysWhy();
+	PaksAreJudgedByWhatIsInsideThem();
 	TheRestartSaysWhyBeforeItHappens();
 	TheSameRulesetNeedsNothing();
 	ConstIniAloneIsJustOneKindOfFile();

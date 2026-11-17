@@ -47,6 +47,21 @@ bool HotSwapTextReadOnce(const std::string &file);
 // names) is in the folder of the entity's .ent.xml, so a changed file means the entity of that folder has to be loaded again.
 std::vector<std::string> HotSwapEntityFolders(const std::vector<std::string> &files);
 
+// A .pak of a ruleset's folder and what its index says (names lowercase, "/").
+struct HotSwapPak {
+	std::string rel; // packs/x.pak or local/x.pak
+	bool language = false;
+	bool unreadable = false;
+	std::vector<std::string> members;
+};
+
+// What a ruleset's folder brings, with each of its paks replaced by the files inside: the DLL mounts the paks of the ruleset in place (the engine's
+// CPackFS objects are taken out of its list of file systems and put back), so what counts for the switch is what is inside, each member by the same
+// rules as a loose file. A language pak (local/<language>*.pak) of another language is not mounted by the game: it brings nothing. A pak that is not in
+// paks (a pak of patches/, one that could not be read, one that is not in packs/ or local/) stays in the list as itself: it keeps the restart.
+// The members of a language pak are relative to the language folder: currentlang/... as is, the rest are voices (local/<language>/voices/<member>).
+std::vector<std::string> HotSwapExpandPaks(const std::vector<std::string> &files, const std::vector<HotSwapPak> &paks, const std::string &language);
+
 // The game's own paths (ui/..., lowercase, "/") of the images among files (kHotArt), as the caches name them after the volume gameres/ is
 // turned into ui/. These are the files whose cached copy the reload has to be sure it replaced.
 std::vector<std::string> HotSwapArtFiles(const std::vector<std::string> &files);

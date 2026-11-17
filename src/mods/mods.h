@@ -35,6 +35,15 @@ int ModsRulesSchema();
 
 // A ruleset: a folder of the package (rulesets/<id>) shaped like a package root, mounted only when the profile chooses it.
 // It is scanned as a root of its own, so its paths have the folder's prefix cut off.
+// A .pak of a ruleset's folder (packs\*.pak, or local\<the game's language>*.pak) and the names of its members (lowercase, "/"), read when the package is
+// scanned: what the ruleset brings when its paks are mounted (see ModsSwapMountedRuleset). unreadable: the index could not be read.
+struct LayerPak {
+	std::string rel;
+	bool language = false;
+	bool unreadable = false;
+	std::vector<std::string> members;
+};
+
 struct ModLayer {
 	std::string id;
 	std::string name;
@@ -44,6 +53,7 @@ struct ModLayer {
 	std::vector<std::string> loosePaths;
 	// Every file of the folder (patches, hidden.txt, rle.mmp.tail... included, documents not), relative to it.
 	std::vector<std::string> files;
+	std::vector<LayerPak> paks;
 	std::vector<PatchedValue> patchValues;
 	std::vector<std::string> hidden;
 	bool rleTail = false;

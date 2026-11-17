@@ -254,6 +254,39 @@ bool ConstIniHasGamePlay(const std::string &text)
 	return false;
 }
 
+std::vector<std::string> HotSwapExpandPaks(const std::vector<std::string> &files, const std::vector<HotSwapPak> &paks, const std::string &language)
+{
+	const std::string lang = Normal(language);
+	std::vector<std::string> out;
+	for (const std::string &raw : files) {
+		const std::string f = Normal(raw);
+		if (Extension(f) != ".pak") {
+			out.push_back(raw);
+			continue;
+		}
+		const HotSwapPak *pak = nullptr;
+		for (const HotSwapPak &p : paks) {
+			if (Normal(p.rel) == f) pak = &p;
+		}
+		const bool flatLocal = StartsWith(f, "local/") && f.find('/', 6) == std::string::npos;
+		if (!pak) {
+			// The game mounts only the language pak of its language.
+			if (flatLocal && !lang.empty() && f.compare(6, lang.size(), lang) != 0) continue;
+			out.push_back(raw);
+			continue;
+		}
+		if (pak->unreadable) {
+			out.push_back(raw);
+			continue;
+		}
+		for (const std::string &m : pak->members) {
+			if (!pak->language || StartsWith(m, "currentlang/")) out.push_back(m);
+			else out.push_back("local/" + lang + "/voices/" + m);
+		}
+	}
+	return out;
+}
+
 std::vector<std::string> HotSwapEntityFolders(const std::vector<std::string> &files)
 {
 	std::vector<std::string> out;
