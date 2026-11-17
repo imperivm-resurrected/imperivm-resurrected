@@ -599,7 +599,9 @@ void PaintList(Painter &p, const State &st)
 		PatronsWatch(ids);
 	}
 	const int rowsTop = ty + headH;
-	if (vis.empty() && ((!st.ready && st.status.empty()) || (st.ready && st.loading))) {
+	// Rooms still being searched for show as the rows they will fill, without the invitation under them.
+	const bool skeleton = vis.empty() && ((!st.ready && st.status.empty()) || (st.ready && st.loading));
+	if (skeleton) {
 		std::vector<std::pair<int, int>> cols;
 		for (int c = 0; c < 5; c++) cols.push_back({textX(c), cx[c + 1] - textX(c)});
 		PaintSkeletonRows(p, tx + 1, rowsTop, tw - 2, rowH, std::min(8, (th - headH) / rowH), cols);
@@ -715,7 +717,7 @@ void PaintList(Painter &p, const State &st)
 	}
 	// Under a short list, an invitation to make a room, so the table is not an empty box.
 	const int panelTop = vis.empty() ? rowsTop + 96 : cursor + 36, panelH = 160;
-	if (st.ready && panelTop + panelH <= ty + th - 16) {
+	if (st.ready && !skeleton && panelTop + panelH <= ty + th - 16) {
 		const int pw = std::min(560, tw - 80), px = tx + (tw - pw) / 2;
 		p.Font(4);
 		p.TextCaps(px, panelTop, pw, 22, vis.empty() ? "No rooms here yet" : "None suits you?", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 2);
