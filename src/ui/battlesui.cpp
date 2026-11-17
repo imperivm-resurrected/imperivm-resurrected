@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "core/log.h"
+#include "core/uiport.h"
 #include "game/battlelist.h"
 #include "game/greatbattles.h"
 #include "mods/mods.h"
@@ -523,6 +524,8 @@ void BattlesUiDraw(uint32_t *buf, int w, int h)
 	PaintOut out;
 	PaintBattlesScreen(r.p, screenW, ScreenViewFor(w, h), view, out);
 	r.End();
+	// With the menu still the game draws no frame of its own: the cards that change pictures ask for the next one.
+	if (out.turning) UiWakeGameThread();
 	std::lock_guard<std::mutex> lock(g_lock);
 	g_s.hits = std::move(r.hits);
 	g_s.geom = out;

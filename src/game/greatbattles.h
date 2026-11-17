@@ -53,6 +53,12 @@ struct BattlesSnapshot {
 	std::shared_ptr<const BattleImage> image;
 	// A picture for each tab's card on the overview: the first one found among its adventures, in list order; null when none has one.
 	std::shared_ptr<const BattleImage> covers[kBattlesTabCount];
+	// Every adventure of each tab that has a picture, in list order, with its title: the card goes through them in turn.
+	struct Cover {
+		std::shared_ptr<const BattleImage> image;
+		std::string title;
+	};
+	std::vector<Cover> gallery[kBattlesTabCount];
 };
 
 void *BattlesDialogOpen();

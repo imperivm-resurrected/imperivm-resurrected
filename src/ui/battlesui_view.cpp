@@ -569,7 +569,77 @@ std::string CardTitle(const View &v, int tab, int n)
 	return "";
 }
 
-void PaintCampaignCard(Painter &p, int x, int y, int w, int h, int tab, const View &v)
+// The cards with several pictures go through them: each stays kCoverHoldMs and the next fades in over kCoverFadeMs. The cards start
+// apart so they never change together, and the one under the mouse stays on its picture.
+constexpr int kCoverHoldMs = 6000, kCoverFadeMs = 600, kCoverStaggerMs = 1500;
+
+struct CoverTurn {
+	bool started = false;
+	size_t index = 0;
+	DWORD since = 0;
+};
+CoverTurn g_turns[kBattlesTabCount];
+
+COLORREF Mix(COLORREF a, COLORREF b, int t)
+{
+	const auto one = [t](int x, int y) { return x + (y - x) * t / 255; };
+	return RGB(one(GetRValue(a), GetRValue(b)), one(GetGValue(a), GetGValue(b)), one(GetBValue(a), GetBValue(b)));
+}
+
+std::string CoverCaption(const std::string &title)
+{
+	const BattleTitle t = SplitBattleTitle(BattleTitleWithoutGame(title));
+	return t.year.empty() ? t.name : t.name + "  \xC2\xB7  " + t.year;
+}
+
+// The picture shown, and the next one fading in over it (alpha above 0) while a card changes.
+struct CoverStep {
+	size_t shown = 0, next = 0;
+	int alpha = 0;
+};
+
+CoverStep TurnCover(int tab, int slot, size_t count, bool hot)
+{
+	CoverTurn &t = g_turns[tab];
+	const DWORD now = GetTickCount();
+	if (!t.started) {
+		t.started = true;
+		t.index = 0;
+		t.since = now + static_cast<DWORD>(slot * kCoverStaggerMs);
+	}
+	if (t.index >= count) t.index = 0;
+	CoverStep step;
+	step.shown = step.next = t.index;
+	if (count < 2) return step;
+	const int elapsed = static_cast<int>(now - t.since);
+	if (elapsed < kCoverHoldMs) {
+		if (hot) t.since = now;
+		return step;
+	}
+	if (elapsed >= kCoverHoldMs + kCoverFadeMs) {
+		t.index = (t.index + 1) % count;
+		t.since = now;
+		step.shown = step.next = t.index;
+		return step;
+	}
+	step.next = (t.index + 1) % count;
+	step.alpha = (elapsed - kCoverHoldMs) * 255 / kCoverFadeMs;
+	return step;
+}
+
+// A picture fitted in its box as PaintFitted does, over what is there at `alpha`.
+void PaintFittedBlend(Painter &p, int x, int y, int w, int h, const BattleImage *img, int alpha)
+{
+	if (!HasPixels(img)) return;
+	int iw = w, ih = w * img->h / img->w;
+	if (ih > h) {
+		ih = h;
+		iw = h * img->w / img->h;
+	}
+	p.ImageBlend(x + (w - iw) / 2, y + (h - ih) / 2, iw, ih, img->bgra.data(), img->w, img->h, alpha);
+}
+
+void PaintCampaignCard(Painter &p, int x, int y, int w, int h, int tab, int slot, const View &v, PaintOut &out)
 {
 	const BattlesSnapshot &s = v.snap;
 	const bool enabled = s.open && !s.starting && !s.switching && !v.loading;
@@ -579,15 +649,36 @@ void PaintCampaignCard(Painter &p, int x, int y, int w, int h, int tab, const Vi
 	if (hot) p.Frame(x, y, w, h, pal::edgeHot);
 	// A shorter card keeps room for its texts by giving the picture less height.
 	const int picH = std::max(90, std::min(150, h - 148));
+	const std::vector<BattlesSnapshot::Cover> &gallery = s.gallery[tab];
+	const CoverStep step = TurnCover(tab, slot, gallery.size(), hot);
+	if (gallery.size() > 1) out.turning = true;
 	// A campaign whose pack is not active is not in the game's list: its picture comes from the pack.
-	PaintFitted(p, x + 12, y + 12, w - 24, picH, s.covers[tab] ? s.covers[tab].get() : v.packCovers[tab].get());
+	if (gallery.empty()) PaintFitted(p, x + 12, y + 12, w - 24, picH, s.covers[tab] ? s.covers[tab].get() : v.packCovers[tab].get());
+	else {
+		PaintFitted(p, x + 12, y + 12, w - 24, picH, gallery[step.shown].image.get());
+		if (step.alpha > 0) {
+			PaintFittedBlend(p, x + 12, y + 12, w - 24, picH, gallery[step.next].image.get(), step.alpha);
+			p.Frame(x + 12, y + 12, w - 24, picH, pal::hairline);
+		}
+	}
 	const int tx = x + 16, tw = w - 32, ty = y + 22 + picH;
 	p.Font(4);
 	SetTextCharacterExtra(p.dc, p.S(1));
 	TextAsIs(p, tx, ty, tw, 18, Upper(TabName(tab)), pal::redText);
 	SetTextCharacterExtra(p.dc, 0);
 	p.Font(2);
-	RawWrapped(p, tx, ty + 22, tw, 58, Caps(CardTitle(v, tab, n)), n == 0 ? pal::textDim : pal::text);
+	const int titleH = RawWrapped(p, tx, ty + 22, tw, 58, Caps(CardTitle(v, tab, n)), n == 0 ? pal::textDim : pal::text);
+	// The adventure in the picture, under the campaign's name: it fades out and the next one in, with the picture.
+	const int capY = ty + 22 + titleH + 2;
+	if (gallery.size() > 1 && capY + 22 <= y + h - 46) {
+		const bool second = step.alpha >= 128;
+		const int fade = second ? (step.alpha - 128) * 2 : step.alpha * 2;
+		const COLORREF ink = second ? Mix(pal::panel, pal::textDim, fade) : Mix(pal::textDim, pal::panel, fade);
+		p.Font(3);
+		p.raw = true;
+		p.Text(tx, capY, tw, 22, CoverCaption(gallery[second ? step.next : step.shown].title), ink, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.raw = false;
+	}
 	p.Fill(tx, y + h - 42, tw, 1, pal::hairline);
 	p.Font(3);
 	if (n > 0) TextAsIs(p, tx, y + h - 36, tw, 24, CountText(tab, n), pal::textDim);
@@ -602,14 +693,14 @@ void PaintCampaignCard(Painter &p, int x, int y, int w, int h, int tab, const Vi
 	if (enabled) p.AddHit(x, y, w, h, kActOpenTab, tab);
 }
 
-void PaintOverview(Painter &p, const Body &b, const View &v)
+void PaintOverview(Painter &p, const Body &b, const View &v, PaintOut &out)
 {
 	PaintContinue(p, b.x, b.top, b.w, kBannerH, v);
 	const int campaignsY = b.top + kBannerH + kCampaignsGap, cardsY = campaignsY + kCampaignsH;
 	PaintGroupHeader(p, b.x + 4, campaignsY, b.w - 8, Upper("Campaigns"));
 	const int count = static_cast<int>(sizeof(kOverviewTabs) / sizeof(kOverviewTabs[0]));
 	const int cardW = (b.w - kGap * (count - 1)) / count;
-	for (int i = 0; i < count; i++) PaintCampaignCard(p, b.x + i * (cardW + kGap), cardsY, cardW, b.bottom - cardsY, kOverviewTabs[i], v);
+	for (int i = 0; i < count; i++) PaintCampaignCard(p, b.x + i * (cardW + kGap), cardsY, cardW, b.bottom - cardsY, kOverviewTabs[i], i, v, out);
 }
 
 // The caption under the title: how many adventures there are and how many have a game going.
@@ -751,7 +842,7 @@ void PaintBattlesScreen(Painter &p, int screenW, const ScreenView &brand, const 
 	// The overview: the game to go on with and a card per campaign.
 	if (ShowsOverview(v)) {
 		out = PaintOut();
-		PaintOverview(p, b, v);
+		PaintOverview(p, b, v, out);
 		return;
 	}
 	const int listW = std::max(320, std::min(420, screenW * 30 / 100));

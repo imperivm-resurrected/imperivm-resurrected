@@ -331,6 +331,35 @@ struct Painter {
 		StretchDIBits(dc, r.left, r.top, r.right - r.left, r.bottom - r.top, 0, 0, iw, ih, bgra, &bi, DIB_RGB_COLORS, SRCCOPY);
 		SetStretchBltMode(dc, old);
 	}
+	// The picture over what is already there at `alpha` (0-255), for one picture fading into another.
+	void ImageBlend(int x, int y, int w, int h, const uint32_t *bgra, int iw, int ih, int alpha)
+	{
+		if (alpha >= 255) {
+			Image(x, y, w, h, bgra, iw, ih);
+			return;
+		}
+		const RECT r = R(x, y, w, h);
+		const int dw = r.right - r.left, dh = r.bottom - r.top;
+		if (!bgra || iw <= 0 || ih <= 0 || alpha <= 0 || dw <= 0 || dh <= 0) return;
+		HDC mem = CreateCompatibleDC(dc);
+		HBITMAP bmp = CreateCompatibleBitmap(dc, dw, dh);
+		HGDIOBJ prev = SelectObject(mem, bmp);
+		BITMAPINFO bi = {};
+		bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
+		bi.bmiHeader.biWidth = iw;
+		bi.bmiHeader.biHeight = -ih;
+		bi.bmiHeader.biPlanes = 1;
+		bi.bmiHeader.biBitCount = 32;
+		bi.bmiHeader.biCompression = BI_RGB;
+		SetStretchBltMode(mem, HALFTONE);
+		SetBrushOrgEx(mem, 0, 0, nullptr);
+		StretchDIBits(mem, 0, 0, dw, dh, 0, 0, iw, ih, bgra, &bi, DIB_RGB_COLORS, SRCCOPY);
+		const BLENDFUNCTION blend = {AC_SRC_OVER, 0, static_cast<BYTE>(alpha), 0};
+		GdiAlphaBlend(dc, r.left, r.top, dw, dh, mem, 0, 0, dw, dh, blend);
+		SelectObject(mem, prev);
+		DeleteObject(bmp);
+		DeleteDC(mem);
+	}
 	void Text(int x, int y, int w, int h, const std::string &t, COLORREF c, UINT fmt = DT_LEFT | DT_VCENTER | DT_SINGLELINE)
 	{
 		RECT r = R(x, y, w, h);

@@ -381,13 +381,13 @@ BattlesSnapshot BattlesRead()
 	if (!s.image && s.tab == kBattlesTabConquests) s.image = Image("CurrentLang/ConquestDefault.bmp");
 	for (int tab = 0; tab < kBattlesTabCount; tab++) {
 		if (tab == kBattlesTabConquests) continue;
-		for (int list = 0; list < kBattlesListCount && !s.covers[tab]; list++) {
+		for (int list = 0; list < kBattlesListCount; list++) {
 			for (const BattlesEntry &e : s.lists[list]) {
 				if (!BattlesInTab(tab, list, e.path)) continue;
-				s.covers[tab] = Image(e.path + ".bmp");
-				if (s.covers[tab]) break;
+				if (std::shared_ptr<const BattleImage> img = Image(e.path + ".bmp")) s.gallery[tab].push_back({img, e.title});
 			}
 		}
+		if (!s.gallery[tab].empty()) s.covers[tab] = s.gallery[tab][0].image;
 	}
 	return s;
 }

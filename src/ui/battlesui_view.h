@@ -59,6 +59,8 @@ inline bool ShowsOverview(const View &v) { return v.overview && v.snap.tab != kB
 
 struct PaintOut {
 	ui::ListGeom list, desc;
+	// A campaign card goes through its pictures: the game must keep drawing frames for it.
+	bool turning = false;
 };
 
 // The screen fills the frame: its height is always 768 and its width follows the frame's shape. Its header is the full screens'
