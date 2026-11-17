@@ -3,6 +3,7 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #pragma once
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "ui/widgets.h"
@@ -24,6 +25,14 @@ bool BeginFullScreen(PanelRender &r, const ScreenView &view);
 
 // A card of the full screens: the panel colour over the backdrop, a little see-through, with a hairline.
 void PaintGlassCard(Painter &p, int x, int y, int w, int h);
+
+// A block of something still on its way from the league, Steam or GameBanana: a dark fill with a lighter band that sweeps across the
+// whole screen, so every block on it shimmers together. The screens draw the shape of what will come with these, never a loading text.
+// The screen must keep drawing frames while they show.
+void PaintSkeleton(Painter &p, int x, int y, int w, int h);
+// `rows` rows `rowH` tall from (x, y), `w` wide, like the table that will fill them: a bar in each column, given as where its text
+// starts and how wide the column is.
+void PaintSkeletonRows(Painter &p, int x, int y, int w, int rowH, int rows, const std::vector<std::pair<int, int>> &columns);
 
 // The brand's isotype `h` tall, centred on (cx, cy), blended at `alpha` (0-255) over what is there: the mark of a missing picture.
 // Nothing is drawn when brand/isotype.png is missing.

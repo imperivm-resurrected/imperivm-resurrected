@@ -242,6 +242,35 @@ void PaintGlassCard(Painter &p, int x, int y, int w, int h)
 	p.Frame(x, y, w, h, pal::hairline);
 }
 
+void PaintSkeleton(Painter &p, int x, int y, int w, int h)
+{
+	p.Fill(x, y, w, h, pal::raised);
+	const int bandW = 420, period = 1500, span = 1920 + bandW;
+	const int center = -bandW / 2 + static_cast<int>(static_cast<int64_t>(GetTickCount() % period) * span / period);
+	const struct {
+		int half;
+		COLORREF c;
+	} layers[] = {{bandW / 2, RGB(0x21, 0x1d, 0x1a)}, {bandW / 3, RGB(0x26, 0x22, 0x1f)}, {bandW / 6, RGB(0x2b, 0x27, 0x23)}};
+	for (const auto &layer : layers) {
+		const int x0 = std::max(x, center - layer.half), x1 = std::min(x + w, center + layer.half);
+		if (x1 > x0) p.Fill(x0, y, x1 - x0, h, layer.c);
+	}
+}
+
+void PaintSkeletonRows(Painter &p, int x, int y, int w, int rowH, int rows, const std::vector<std::pair<int, int>> &columns)
+{
+	for (int r = 0; r < rows; r++) {
+		const int ry = y + r * rowH;
+		if (r > 0) p.Fill(x, ry, w, 1, pal::hairline);
+		for (size_t c = 0; c < columns.size(); c++) {
+			// Each row a little shorter or longer than the one above, so the rows do not read as one block.
+			const int room = columns[c].second - 16;
+			const int barW = std::max(16, room * (60 + ((r * 7 + static_cast<int>(c) * 13) % 4) * 10) / 100);
+			PaintSkeleton(p, columns[c].first, ry + (rowH - 12) / 2, std::min(room, barW), 12);
+		}
+	}
+}
+
 void UseScreenFonts(Painter &p)
 {
 	p.fonts[0] = BrandFont(BrandFace::Body, 17, p.s);

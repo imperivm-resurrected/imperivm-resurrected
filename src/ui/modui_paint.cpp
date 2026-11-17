@@ -154,23 +154,6 @@ void SpinnerDone(const std::string &key)
 	g_spinSeen.erase(key);
 }
 
-// A block of what is still loading: a dark fill with a lighter band that sweeps across the whole screen, so every block on it
-// shimmers together.
-void PaintShimmer(Painter &p, int x, int y, int w, int h)
-{
-	p.Fill(x, y, w, h, pal::raised);
-	const int bandW = 420, period = 1500, span = 1920 + bandW;
-	const int center = -bandW / 2 + static_cast<int>(static_cast<int64_t>(GetTickCount() % period) * span / period);
-	const struct {
-		int half;
-		COLORREF c;
-	} layers[] = {{bandW / 2, RGB(0x21, 0x1d, 0x1a)}, {bandW / 3, RGB(0x26, 0x22, 0x1f)}, {bandW / 6, RGB(0x2b, 0x27, 0x23)}};
-	for (const auto &layer : layers) {
-		const int x0 = std::max(x, center - layer.half), x1 = std::min(x + w, center + layer.half);
-		if (x1 > x0) p.Fill(x0, y, x1 - x0, h, layer.c);
-	}
-}
-
 void PaintIoImage(Painter &p, int x, int y, int w, int h, const std::string &url)
 {
 	const std::shared_ptr<const GbImage> img = GbLogo(url);
@@ -183,7 +166,7 @@ void PaintIoImage(Painter &p, int x, int y, int w, int h, const std::string &url
 		p.Text(x, y, w, h, "No image", pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 	}
 	else {
-		PaintShimmer(p, x, y, w, h);
+		PaintSkeleton(p, x, y, w, h);
 	}
 }
 
@@ -192,12 +175,12 @@ void PaintSkeletonCard(Painter &p, int x, int y, int cw, int ch, int imgW, int i
 {
 	PaintGlassCard(p, x, y, cw, ch);
 	p.Fill(x + 1, y + 1, cw - 2, imgH, pal::panel);
-	PaintShimmer(p, x + (cw - imgW) / 2, y + 1, imgW, imgH);
+	PaintSkeleton(p, x + (cw - imgW) / 2, y + 1, imgW, imgH);
 	p.Fill(x + 10, y + 1 + imgH - 36, std::min(cw - 20, 96), 26, pal::panel);
 	p.Frame(x, y, cw, ch, pal::hairline);
-	PaintShimmer(p, x + 14, y + imgH + 16, (cw - 28) * 62 / 100, 18);
-	PaintShimmer(p, x + 14, y + imgH + 46, (cw - 28) * 38 / 100, 12);
-	PaintShimmer(p, x + 14, y + imgH + 68, (cw - 28) * 28 / 100, 12);
+	PaintSkeleton(p, x + 14, y + imgH + 16, (cw - 28) * 62 / 100, 18);
+	PaintSkeleton(p, x + 14, y + imgH + 46, (cw - 28) * 38 / 100, 12);
+	PaintSkeleton(p, x + 14, y + imgH + 68, (cw - 28) * 28 / 100, 12);
 }
 
 void PaintRich(Painter &p, const State &st, int x, int y, int w, int h, const std::string &html, const std::string &plain,
