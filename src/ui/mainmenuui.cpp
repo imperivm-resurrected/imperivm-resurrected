@@ -93,11 +93,20 @@ void Fail(void *dlg, const char *why)
 	for (int id : hidden) NativeButtonSetVisible(dlg, id, true);
 }
 
+// The screens of the mod that cover the main menu while it stays under them: the one list both the game thread (whether the menu takes
+// the input) and the draw (whether to wake the game when they close) ask, so the two cannot disagree. It asks whether each screen is
+// open, never whether the mod draws: the corner icons, toasts and downloads draw over the menu without covering it, and asking that
+// left the menu blank after Content closed until the mouse moved. A new full screen goes here.
+bool ScreenCoversMenu()
+{
+	return MpUiIsOpen() || ModUiIsOpen() || SavesUiIsOpen() || ControlsUiNeedsDraw() || OptionsUiNeedsDraw() || ProfileUiNeedsDraw() || BattlesUiNeedsDraw() ||
+		ConquestUiNeedsDraw() || CreditsUiNeedsDraw() || SupportPanelOpen() || UpdateUiPanelOpen();
+}
+
 // Screens of the mod or the game that take the input while the main menu stays under them.
 bool OtherScreenOnTop()
 {
-	return !MpUiMainMenuVisible() || MpUiIsOpen() || ModUiIsOpen() || SavesUiIsOpen() || ControlsUiNeedsDraw() || OptionsUiNeedsDraw() || ProfileUiNeedsDraw() ||
-		BattlesUiNeedsDraw() || ConquestUiNeedsDraw() || CreditsUiNeedsDraw() || SupportPanelOpen() || UpdateUiPanelOpen();
+	return !MpUiMainMenuVisible() || ScreenCoversMenu();
 }
 
 void *ShownDialog()
@@ -466,10 +475,7 @@ bool MainMenuUiNeedsDraw()
 	// Whether the menu is back on top is known on the game thread, at the game's next frame; with the menu still the game draws none
 	// until the mouse moves, so the menu stayed blank after a screen closed. Once no screen of the mod covers it any more, the game thread
 	// is woken to look again.
-	if (waiting && (MpUiNeedsDraw() || ModUiNeedsDraw() || SavesUiNeedsDraw() || OptionsUiNeedsDraw() || ControlsUiNeedsDraw() || ProfileUiNeedsDraw() ||
-					   BattlesUiNeedsDraw() || ConquestUiNeedsDraw() || CreditsUiNeedsDraw() || SupportPanelOpen() || UpdateUiPanelOpen())) {
-		waiting = false;
-	}
+	if (waiting && ScreenCoversMenu()) waiting = false;
 	static DWORD wokeAt = 0;
 	const DWORD now = GetTickCount();
 	if (waiting && now - wokeAt >= 200) {
