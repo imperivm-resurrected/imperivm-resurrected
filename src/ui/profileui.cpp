@@ -418,7 +418,9 @@ bool ProfileUiNeedsDraw()
 {
 	void *dlg = ProfileDialogOpen();
 	std::lock_guard<std::mutex> lock(g_lock);
-	if (!dlg || g_s.dlg != dlg) return false;
+	if (!dlg) return false;
+	// The game's dialog is open but not read yet: the screen's backdrop already covers it, so it never shows for a frame.
+	if (g_s.dlg != dlg) return true;
 	return !g_s.closedAt || GetTickCount() - g_s.closedAt < kCloseTimeoutMs;
 }
 
@@ -429,7 +431,13 @@ void ProfileUiDraw(uint32_t *buf, int w, int h)
 	bool mouseDown = false;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
-		if (!g_s.dlg || ProfileDialogOpen() != g_s.dlg) return;
+		if (!g_s.dlg || ProfileDialogOpen() != g_s.dlg) {
+			if (ProfileDialogOpen()) {
+				PanelRender shell(g_canvas, buf, w, h);
+				if (BeginFullScreen(shell, ScreenViewFor(w, h))) shell.End();
+			}
+			return;
+		}
 		view = g_s.view;
 		previous = g_s.hits;
 		mouseDown = g_s.mouseDown;

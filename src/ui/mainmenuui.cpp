@@ -221,6 +221,9 @@ void Sync(void *dlg, bool onShow)
 			g_s.labels = labels;
 			g_s.labelsAt = GetTickCount();
 		}
+		// Shown from the dialog's first frame, still without taking the input: until the game's next frame fills its list, the menu
+		// draws what it had (or its background and logo), never the game's.
+		g_s.shown = true;
 		return;
 	}
 	if (!sub.empty()) {
@@ -465,24 +468,25 @@ void MainMenuUiOpenMultiplayerGroup()
 
 bool MainMenuUiNeedsDraw()
 {
-	bool waiting = false;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
-		// Under another screen only the background shows: the room and other windows don't cover the whole menu.
-		if (g_s.shown && g_s.view.interactive) return true;
-		waiting = g_s.shown;
+		if (!g_s.shown) return false;
+		if (g_s.view.interactive) return true;
 	}
 	// Whether the menu is back on top is known on the game thread, at the game's next frame; with the menu still the game draws none
 	// until the mouse moves, so the menu stayed blank after a screen closed. Once no screen of the mod covers it any more, the game thread
 	// is woken to look again.
-	if (waiting && ScreenCoversMenu()) waiting = false;
+	const bool covered = ScreenCoversMenu();
 	static DWORD wokeAt = 0;
 	const DWORD now = GetTickCount();
-	if (waiting && now - wokeAt >= 200) {
+	if (!covered && now - wokeAt >= 200) {
 		wokeAt = now;
 		MpUiWakeGameThread();
 	}
-	return false;
+	// Meanwhile, and under the windows that leave it in sight around them, the menu still draws, without taking the input: the game's
+	// own menu must never show. Under a screen that covers it whole there is nothing to see.
+	if (!MpUiMainMenuVisible()) return false;
+	return !(MpUiIsOpen() || ModUiIsOpen() || BattlesUiNeedsDraw() || ConquestUiNeedsDraw() || CreditsUiNeedsDraw() || ProfileUiNeedsDraw());
 }
 
 void MainMenuUiDraw(uint32_t *buf, int w, int h)

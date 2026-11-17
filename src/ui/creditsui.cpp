@@ -215,7 +215,9 @@ bool CreditsUiNeedsDraw()
 {
 	void *dlg = CreditsDialogOpen();
 	std::lock_guard<std::mutex> lock(g_lock);
-	if (!dlg || g_s.dlg != dlg) return false;
+	if (!dlg) return false;
+	// The game's dialog is open but not read yet: the screen's backdrop already covers it, so it never shows for a frame.
+	if (g_s.dlg != dlg) return true;
 	return !g_s.closedAt || GetTickCount() - g_s.closedAt < kCloseTimeoutMs;
 }
 
@@ -226,7 +228,13 @@ void CreditsUiDraw(uint32_t *buf, int w, int h)
 	bool mouseDown = false;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
-		if (!g_s.dlg || CreditsDialogOpen() != g_s.dlg) return;
+		if (!g_s.dlg || CreditsDialogOpen() != g_s.dlg) {
+			if (CreditsDialogOpen()) {
+				PanelRender shell(g_canvas, buf, w, h);
+				if (BeginFullScreen(shell, ScreenViewFor(w, h))) shell.End();
+			}
+			return;
+		}
 		LARGE_INTEGER now, freq;
 		QueryPerformanceCounter(&now);
 		QueryPerformanceFrequency(&freq);
