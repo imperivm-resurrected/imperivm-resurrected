@@ -24,6 +24,7 @@
 #include "i18n/tr.h"
 #include "game/artcache.h"
 #include "game/cmdcheck.h"
+#include "game/entitycache.h"
 #include "game/hotreload.h"
 #include "game/memcensus.h"
 #include "game/memtrace.h"
@@ -561,6 +562,35 @@ bool HotReload(const void *game)
 				TrFmt("Images of the current rules are still in use by the game: %s. A restart makes sure no old picture is shown.", {names});
 		}
 		return false;
+	}
+	if (!change.entityFolders.empty()) {
+		if (!g_entityHookOk) {
+			LogI("game", "hot reload: entity art changes (%u folders): the cache was emptied with the tables", static_cast<unsigned>(change.entityFolders.size()));
+		}
+		else {
+			std::vector<unsigned> decors;
+			for (unsigned i = 0; i < kDecorTypes; i++) {
+				if (void *p = reinterpret_cast<void *const *>(addr::kDecorEntities)[i]) decors.push_back(static_cast<unsigned>(reinterpret_cast<uintptr_t>(p)));
+			}
+			const EntityInvalidation entities = InvalidateEntityFolders(change.entityFolders, decors);
+			if (!entities.ok) {
+				LogE("game", "hot reload: the entity cache could not be read or its entities taken out");
+				return false;
+			}
+			if (entities.decorHit) {
+				// A decoration whose art changes: the cache is emptied as at a new season, and the decor entities are looked up again by the next match.
+				g_origClearEntityCache();
+				ResetEntityCaches();
+				LogI("game", "hot reload: entity art of a decoration changes (%u folders): the whole entity cache was emptied, %u entities", static_cast<unsigned>(change.entityFolders.size()),
+					entities.cached);
+			}
+			else {
+				std::string names;
+				for (size_t i = 0; i < entities.unloaded.size() && i < 4; i++) names += (i ? ", " : "") + entities.unloaded[i];
+				LogI("game", "hot reload: entity art: %u folders changed, %u of the %u cached entities taken out%s%s", static_cast<unsigned>(change.entityFolders.size()),
+					static_cast<unsigned>(entities.unloaded.size()), entities.cached, names.empty() ? "" : ": ", names.c_str());
+			}
+		}
 	}
 	if (!g_artChanged.empty()) {
 		// The answers the rooms got about images are asked again: the caches are empty now.

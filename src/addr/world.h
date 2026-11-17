@@ -114,6 +114,8 @@ inline constexpr uintptr_t kClearSelection = 0x005e7e50;
 inline constexpr uintptr_t kInitForPlayer = 0x005e80c0;
 // ClearEntityCache: deletes every entity (and what it holds) of the cache that LoadEntity fills, and empties its two maps.
 inline constexpr uintptr_t kClearEntityCache = 0x00602250;
+// UnloadEntity(name): takes one entity out of that cache by the name it was loaded under: frees what it holds and erases it from both maps.
+inline constexpr uintptr_t kUnloadEntity = 0x006025b0;
 inline constexpr uintptr_t kScrollRowsCountJump = 0x00607e71;
 inline constexpr uintptr_t kLoadRleFile = 0x0060ca20;
 inline constexpr uintptr_t kCreateEntityImage = 0x0060cb20;

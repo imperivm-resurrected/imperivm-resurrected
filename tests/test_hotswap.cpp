@@ -207,7 +207,7 @@ void TheImagesOfAMatchAreSwitchedInPlaceAndTheOnesReadOnceAreNot()
 	}
 	// Not read once, not covered yet.
 	for (const char *f : {"packs/a.pak", "sprites/a.rle", "gameres/icons/x.db", "gameres/icons/x.png", "minimap/zoom16/terrain/a.bmp",
-			 "minimap/zoom16/entities/sub/a.bmp", "minimap/zoomx/entities/a.bmp", "minimap/zoom16/entities/", "units/rhastatus.ent.xml"}) {
+			 "minimap/zoom16/entities/sub/a.bmp", "minimap/zoomx/entities/a.bmp", "minimap/zoom16/entities/", "units/rhastatus.pass"}) {
 		CHECK(!HotSwapReadOnce(f));
 		CHECK_EQ(HotSwapKindOf(f), static_cast<unsigned>(kHotOther));
 	}
@@ -271,6 +271,26 @@ void SoundsAreSwitchedInPlaceAndTheEntityTableIsReadAgain()
 	CHECK_EQ(HotSwapKindsText(kHotSound | kHotSoundData), "sounds, sound entities");
 }
 
+void EntityArtIsSwitchedInPlaceByFolder()
+{
+	const char *const art[] = {"units/RHastatus/Idle.rle", "Units\\RHastatus\\RHastatus.ent.xml", "buildings/BBarracks/BBarracks.ent.xml", "mapobjects/decors/tr1/tr1_s.rle",
+		"visuals/arrow/arrow1.rle", "units/rhastatus/idle.rle.mmp", "units/x/y.bmp"};
+	for (const char *f : art) CHECK_EQ(HotSwapKindOf(f), static_cast<unsigned>(kHotEntity));
+	// The passability and everything else of an entity folder is gameplay or not covered: it keeps the restart.
+	const char *const other[] = {"units/rhastatus/rhastatus.pass", "units/rhastatus/readme.txt", "units/", "units/a.xml", "units/rhastatus/", "rle.mmp.tail", "unitsx/a.rle",
+		"data/units/a.rle", "units/rhastatus/idle.mmp"};
+	for (const char *f : other) CHECK_EQ(HotSwapKindOf(f), static_cast<unsigned>(kHotOther));
+	const std::vector<std::string> folders = HotSwapEntityFolders({"units/RHastatus/Idle.rle", "Units\\RHastatus\\Walk.rle", "units/rhastatus/rhastatus.ent.xml",
+		"buildings/bbarracks/bbarracks.ent.xml", "data/const.ini", "units/x.rle"});
+	CHECK_EQ(folders.size(), size_t(3));
+	CHECK_EQ(folders[0], "units/rhastatus");
+	CHECK_EQ(folders[1], "buildings/bbarracks");
+	CHECK_EQ(folders[2], "units");
+	CHECK(HotSwapEntityFolders({}).empty());
+	CHECK(SwapDecide(false, Files{"units/rhastatus/idle.rle"}, {"units/rhastatus/rhastatus.ent.xml", "sounds/a.wav"}) == HotSwap::kReload);
+	CHECK_EQ(HotSwapKindsText(kHotEntity), "entity art");
+}
+
 void TheRestartSaysWhyBeforeItHappens()
 {
 	CHECK(HotSwapRestartReason({}, {}).why == RestartWhy::kNone);
@@ -292,6 +312,7 @@ int main()
 	TheImagesOfAMatchAreSwitchedInPlaceAndTheOnesReadOnceAreNot();
 	TextsAreSwitchedInPlaceExceptTheSplashScreens();
 	SoundsAreSwitchedInPlaceAndTheEntityTableIsReadAgain();
+	EntityArtIsSwitchedInPlaceByFolder();
 	TheRestartSaysWhyBeforeItHappens();
 	TheSameRulesetNeedsNothing();
 	ConstIniAloneIsJustOneKindOfFile();

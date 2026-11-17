@@ -419,6 +419,9 @@ ModsReloadChange ModsReloadChanged()
 	if (!LayerFiles(engine, mounted, fromFiles) || !LayerFiles(mounted, engine, toFiles)) return change;
 	change.kinds = HotSwapKinds(fromFiles) | HotSwapKinds(toFiles);
 	change.art = ArtOf(fromFiles, toFiles);
+	std::vector<std::string> both = fromFiles;
+	both.insert(both.end(), toFiles.begin(), toFiles.end());
+	change.entityFolders = HotSwapEntityFolders(both);
 	return change;
 }
 
