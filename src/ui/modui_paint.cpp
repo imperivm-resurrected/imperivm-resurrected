@@ -171,12 +171,17 @@ void PaintIoImage(Painter &p, int x, int y, int w, int h, const std::string &url
 }
 
 // The cards of Browse content while a page loads, in the shape the real ones will take: the picture, its category and three lines.
+// The tags over a card's picture (its category at the bottom left, installed or to update at the top right): as far from the
+// picture's side as from its edge.
+const int kIoTagH = 26, kIoTagInset = 8;
+
 void PaintSkeletonCard(Painter &p, int x, int y, int cw, int ch, int imgW, int imgH)
 {
+	const int imgX = x + (cw - imgW) / 2, imgY = y + 1;
 	PaintGlassCard(p, x, y, cw, ch);
-	p.Fill(x + 1, y + 1, cw - 2, imgH, pal::panel);
-	PaintSkeleton(p, x + (cw - imgW) / 2, y + 1, imgW, imgH);
-	p.Fill(x + 10, y + 1 + imgH - 36, std::min(cw - 20, 96), 26, pal::panel);
+	p.Fill(x + 1, imgY, cw - 2, imgH, pal::panel);
+	PaintSkeleton(p, imgX, imgY, imgW, imgH);
+	p.Fill(imgX + kIoTagInset, imgY + imgH - kIoTagH - kIoTagInset, std::min(imgW - 2 * kIoTagInset, 96), kIoTagH, pal::panel);
 	p.Frame(x, y, cw, ch, pal::hairline);
 	PaintSkeleton(p, x + 14, y + imgH + 16, (cw - 28) * 62 / 100, 18);
 	PaintSkeleton(p, x + 14, y + imgH + 46, (cw - 28) * 38 / 100, 12);
@@ -569,24 +574,25 @@ void PaintExplore(Painter &p, const State &st)
 		const bool hov = p.Hover(x, y, cw, ch, mx, my);
 		PaintGlassCard(p, x, y, cw, ch);
 		if (hov) p.Fill(x + 1, y + 1, cw - 2, ch - 2, pal::field);
-		p.Fill(x + 1, y + 1, cw - 2, imgH, pal::panel);
-		PaintIoImage(p, x + (cw - imgW) / 2, y + 1, imgW, imgH, m.logoUrl);
+		const int imgX = x + (cw - imgW) / 2, imgY = y + 1;
+		p.Fill(x + 1, imgY, cw - 2, imgH, pal::panel);
+		PaintIoImage(p, imgX, imgY, imgW, imgH, m.logoUrl);
 		p.Frame(x, y, cw, ch, hov ? pal::edgeHot : pal::hairline);
 		const std::string catText = m.facts.category >= 0 ? Tr(CatalogCategoryLabel(m.facts.category)) : m.category;
 		if (!catText.empty()) {
 			p.Font(4);
 			const std::string cat = UpperText(catText);
-			const int chipW = std::min(cw - 20, p.TextWidth(cat) + 20), chipH = 26, chipX = x + 10, chipY = y + 1 + imgH - chipH - 10;
-			p.Fill(chipX, chipY, chipW, chipH, pal::panel);
-			p.Text(chipX + 10, chipY, chipW - 14, chipH, cat, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			const int chipW = std::min(imgW - 2 * kIoTagInset, p.TextWidth(cat) + 20), chipX = imgX + kIoTagInset, chipY = imgY + imgH - kIoTagH - kIoTagInset;
+			p.Fill(chipX, chipY, chipW, kIoTagH, pal::panel);
+			p.Text(chipX + 10, chipY, chipW - 14, kIoTagH, cat, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		}
 		const int state = IoInstalledState(st, m);
 		if (state == 1 || state == 2) {
 			p.Font(4);
 			const std::string badge = UpperText(Tr(state == 1 ? "Already installed" : "Update available"));
-			const int badgeW = p.TextWidth(badge) + 20;
-			p.Fill(x + cw - 10 - badgeW, y + 11, badgeW, 26, pal::panel);
-			p.Text(x + cw - 10 - badgeW, y + 11, badgeW, 26, badge, state == 1 ? pal::ok : pal::redText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			const int badgeW = p.TextWidth(badge) + 20, badgeX = imgX + imgW - kIoTagInset - badgeW, badgeY = imgY + kIoTagInset;
+			p.Fill(badgeX, badgeY, badgeW, kIoTagH, pal::panel);
+			p.Text(badgeX, badgeY, badgeW, kIoTagH, badge, state == 1 ? pal::ok : pal::redText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		}
 		p.Font(1);
 		p.Text(x + 14, y + imgH + 12, cw - 28, 26, UpperText(m.name), pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
