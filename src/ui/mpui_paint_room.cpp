@@ -672,6 +672,18 @@ void PaintSlotRow(Painter &p, const State &st, const TableCtx &t, int i, const A
 		return;
 	}
 
+	if (!s.used && s.scenario) {
+		PaintMonogram(p, c.player, cy - kAvatar / 2, kAvatar, Tr("AI"));
+		p.Font(0);
+		p.Text(c.player + kAvatar + 14, cy - 12, std::max(20, c.player + c.playerW - c.player - kAvatar - 14), 24, "Controlled by the scenario", pal::textDim, line);
+		const bool named = s.fixedRace < static_cast<int>(s.raceNames.size());
+		p.raw = true;
+		p.Text(c.civ + 12, ctlY, c.civW - 12, kFieldH, named ? s.raceNames[s.fixedRace] : std::string("\xE2\x80\x94"), pal::textDim, line);
+		p.raw = false;
+		p.Fill(c.color + 12, cy - 8, 16, 16, PlayerColor(g, s.color));
+		p.Frame(c.color + 12, cy - 8, 16, 16, pal::edge);
+		return;
+	}
 	if (!s.used) {
 		p.Font(3);
 		const int textX = c.player, boxW = std::min(260, nameRight - textX);

@@ -39,6 +39,8 @@ struct GameRoomSlot {
 	bool exists = true;
 	bool joining = false;
 	int fixedRace = -1;
+	// A player of a preset map that nobody can take: the scenario plays it, with its fixed civilization.
+	bool scenario = false;
 };
 
 struct GameRoomOption {

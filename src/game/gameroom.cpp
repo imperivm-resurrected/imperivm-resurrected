@@ -575,6 +575,7 @@ void TakeSnapshot()
 			const unsigned char mark = *(static_cast<unsigned char *>(g_dlg) + 0x84 + 0x2c + i);
 			slot.exists = static_cast<unsigned>(i) < positions && mark != 1;
 			slot.aiAllowed = slot.exists && mark == 2;
+			slot.scenario = !slot.exists && mark == 1 && slot.fixedRace >= 0;
 		}
 		void *opts = *reinterpret_cast<void **>(addr::kGameOptionsDialog);
 		if (s.host && opts) {

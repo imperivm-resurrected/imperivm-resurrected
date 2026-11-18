@@ -3416,5 +3416,6 @@ extern const TrRow kTrRows[] = {
 	{"It is made as a new profile; yours does not change.", "Se crea como perfil nuevo; el tuyo no cambia.", "Si crea come nuovo profilo; il tuo non cambia."},
 	{"Import and download", "Importar y descargar", "Importa e scarica"},
 	{"Stop waiting for them", "Dejar de esperarlos", "Smetti di aspettarli"},
+	{"Controlled by the scenario", "Lo controla el escenario", "Controllato dallo scenario"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

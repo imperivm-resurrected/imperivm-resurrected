@@ -3408,5 +3408,6 @@
 {"en":"Ask whoever shared the code for them.","es":"Pídeselos a quien te pasó el código.","it":"Chiedili a chi ti ha passato il codice."},
 {"en":"It is made as a new profile; yours does not change.","es":"Se crea como perfil nuevo; el tuyo no cambia.","it":"Si crea come nuovo profilo; il tuo non cambia."},
 {"en":"Import and download","es":"Importar y descargar","it":"Importa e scarica"},
-{"en":"Stop waiting for them","es":"Dejar de esperarlos","it":"Smetti di aspettarli"}
+{"en":"Stop waiting for them","es":"Dejar de esperarlos","it":"Smetti di aspettarli"},
+{"en":"Controlled by the scenario","es":"Lo controla el escenario","it":"Controllato dallo scenario"}
 ]
