@@ -4,8 +4,8 @@
 #pragma once
 #include <cstdint>
 
-// "Ally and enemy colours" (Config::allyColors): on this PC only, the local player is drawn blue, their allies yellow and everyone else
-// red, as Age of Empires does. Only how the players are drawn changes: the game's sync hash does not read their colours, and saves keep
+// "Ally and enemy colours" (Config::allyColors): on this PC only, the local player is drawn blue, their allies yellow, those at peace
+// with them grey and everyone else red, as Age of Empires does. Only how the players are drawn changes: the game's sync hash does not read their colours, and saves keep
 // the real ones.
 void InstallAllyColors(bool knownExe);
 // On the game thread, every frame: applies the colours when the option or an alliance changed, and puts the real ones back without it.

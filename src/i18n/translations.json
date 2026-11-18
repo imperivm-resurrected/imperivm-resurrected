@@ -3280,8 +3280,6 @@
 {"en":"Team colors","es":"Colores por equipo","it":"Colori per squadra"},
 {"en":"Each team gets a family of colors: team 1 reds, team 2 blues, team 3 greens and team 4 yellows. While it is on, the colors follow the teams.","es":"Cada equipo recibe una familia de colores: el 1 rojos, el 2 azules, el 3 verdes y el 4 amarillos. Mientras esté activo, los colores siguen a los equipos.","it":"Ogni squadra riceve una famiglia di colori: la 1 rossi, la 2 blu, la 3 verdi e la 4 gialli. Finché è attivo, i colori seguono le squadre."},
 {"en":"Ally and enemy colors","es":"Colores de aliados y enemigos","it":"Colori di alleati e nemici"},
-{"en":"you blue, allies yellow, enemies red; only on your screen","es":"tú en azul, aliados en amarillo y enemigos en rojo; solo en tu pantalla","it":"tu in blu, alleati in giallo e nemici in rosso; solo sul tuo schermo"},
-{"en":"You blue, allies yellow, enemies red, only on your screen; a key in Controls switches it during the game","es":"Tú en azul, aliados en amarillo y enemigos en rojo, solo en tu pantalla; una tecla de Controles lo cambia durante la partida","it":"Tu in blu, alleati in giallo e nemici in rosso, solo sul tuo schermo; un tasto dei Comandi lo cambia durante la partita"},
 {"en":"Every room","es":"Todas","it":"Tutte"},
 {"en":"Open to join","es":"Abiertas","it":"Aperte"},
 {"en":"download %s","es":"descarga de %s","it":"download di %s"},
@@ -3411,5 +3409,7 @@
 {"en":"Players ready","es":"Jugadores listos","it":"Giocatori pronti"},
 {"en":"I'm ready","es":"Estoy listo","it":"Sono pronto"},
 {"en":"Starts in %s","es":"Empieza en %s","it":"Inizia tra %s"},
-{"en":"This room plays with content you don't have: it downloads and you come back in.","es":"Esta sala juega con contenido que no tienes: se descarga y vuelves a entrar.","it":"Questa stanza gioca con contenuti che non hai: si scaricano e rientri."}
+{"en":"This room plays with content you don't have: it downloads and you come back in.","es":"Esta sala juega con contenido que no tienes: se descarga y vuelves a entrar.","it":"Questa stanza gioca con contenuti che non hai: si scaricano e rientri."},
+{"en":"you blue, allies yellow, neutrals grey, enemies red; only on your screen","es":"tú en azul, aliados en amarillo, neutrales en gris y enemigos en rojo; solo en tu pantalla","it":"tu in blu, alleati in giallo, neutrali in grigio e nemici in rosso; solo sul tuo schermo"},
+{"en":"You blue, allies yellow, neutrals grey, enemies red, only on your screen; a key in Controls switches it during the game","es":"Tú en azul, aliados en amarillo, neutrales en gris y enemigos en rojo, solo en tu pantalla; una tecla de Controles lo cambia durante la partida","it":"Tu in blu, alleati in giallo, neutrali in grigio e nemici in rosso, solo sul tuo schermo; un tasto dei Comandi lo cambia durante la partita"}
 ]

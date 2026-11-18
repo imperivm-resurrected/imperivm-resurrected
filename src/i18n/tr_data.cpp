@@ -3287,8 +3287,6 @@ extern const TrRow kTrRows[] = {
 	{"Team colors", "Colores por equipo", "Colori per squadra"},
 	{"Each team gets a family of colors: team 1 reds, team 2 blues, team 3 greens and team 4 yellows. While it is on, the colors follow the teams.", "Cada equipo recibe una familia de colores: el 1 rojos, el 2 azules, el 3 verdes y el 4 amarillos. Mientras esté activo, los colores siguen a los equipos.", "Ogni squadra riceve una famiglia di colori: la 1 rossi, la 2 blu, la 3 verdi e la 4 gialli. Finché è attivo, i colori seguono le squadre."},
 	{"Ally and enemy colors", "Colores de aliados y enemigos", "Colori di alleati e nemici"},
-	{"you blue, allies yellow, enemies red; only on your screen", "tú en azul, aliados en amarillo y enemigos en rojo; solo en tu pantalla", "tu in blu, alleati in giallo e nemici in rosso; solo sul tuo schermo"},
-	{"You blue, allies yellow, enemies red, only on your screen; a key in Controls switches it during the game", "Tú en azul, aliados en amarillo y enemigos en rojo, solo en tu pantalla; una tecla de Controles lo cambia durante la partida", "Tu in blu, alleati in giallo e nemici in rosso, solo sul tuo schermo; un tasto dei Comandi lo cambia durante la partita"},
 	{"Every room", "Todas", "Tutte"},
 	{"Open to join", "Abiertas", "Aperte"},
 	{"download %s", "descarga de %s", "download di %s"},
@@ -3419,5 +3417,7 @@ extern const TrRow kTrRows[] = {
 	{"I'm ready", "Estoy listo", "Sono pronto"},
 	{"Starts in %s", "Empieza en %s", "Inizia tra %s"},
 	{"This room plays with content you don't have: it downloads and you come back in.", "Esta sala juega con contenido que no tienes: se descarga y vuelves a entrar.", "Questa stanza gioca con contenuti che non hai: si scaricano e rientri."},
+	{"you blue, allies yellow, neutrals grey, enemies red; only on your screen", "tú en azul, aliados en amarillo, neutrales en gris y enemigos en rojo; solo en tu pantalla", "tu in blu, alleati in giallo, neutrali in grigio e nemici in rosso; solo sul tuo schermo"},
+	{"You blue, allies yellow, neutrals grey, enemies red, only on your screen; a key in Controls switches it during the game", "Tú en azul, aliados en amarillo, neutrales en gris y enemigos en rojo, solo en tu pantalla; una tecla de Controles lo cambia durante la partida", "Tu in blu, alleati in giallo, neutrali in grigio e nemici in rosso, solo sul tuo schermo; un tasto dei Comandi lo cambia durante la partita"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);
