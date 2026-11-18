@@ -3425,10 +3425,5 @@ extern const TrRow kTrRows[] = {
 	{"You blue, allies yellow, enemies red, only on your screen; a key in Controls switches it during the game", "Tú en azul, aliados en amarillo y enemigos en rojo, solo en tu pantalla; una tecla de Controles lo cambia durante la partida", "Tu in blu, alleati in giallo e nemici in rosso, solo sul tuo schermo; un tasto dei Comandi lo cambia durante la partita"},
 	{"you are out of that game: you were defeated or surrendered", "ya no estás en esa partida: te derrotaron o te rendiste", "non sei più in quella partita: sei stato sconfitto o ti sei arreso"},
 	{"Couldn't reload the game: %s. The game goes on.", "No se pudo recargar la partida: %s. La partida sigue.", "Impossibile ricaricare la partita: %s. La partita continua."},
-	{"Dynamic seasons", "Estaciones dinámicas", "Stagioni dinamiche"},
-	{"Spring, autumn and winter take turns during the game: the terrain, the trees and the buildings change, with a fade.", "Primavera, otoño e invierno se turnan durante la partida: cambian el terreno, los árboles y los edificios, con un fundido.", "Primavera, autunno e inverno si alternano durante la partita: cambiano il terreno, gli alberi e gli edifici, con una dissolvenza."},
-	{"Every 10 seconds", "Cada 10 segundos", "Ogni 10 secondi"},
-	{"Every 10 minutes", "Cada 10 minutos", "Ogni 10 minuti"},
-	{"Every 20 minutes", "Cada 20 minutos", "Ogni 20 minuti"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

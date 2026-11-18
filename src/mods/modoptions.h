@@ -21,9 +21,6 @@ const unsigned kModOptionFirstBit = 0x80000;
 const int kModOptionBits = 8;
 const char kSeasonOptionId[] = "season";
 const unsigned kSeasonBits = 3u << 28;
-// Off, or the season changes every 5, 10 or 20 minutes of the match (game/seasons.h).
-const char kDynamicSeasonsOptionId[] = "dynamic-seasons";
-const unsigned kDynamicSeasonsBits = 3u << 30;
 
 const std::vector<ModOption> &ModOptions();
 unsigned ModOptionsMask();

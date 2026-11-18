@@ -8,7 +8,6 @@
 #include "core/guard.h"
 #include "core/log.h"
 #include "game/allycolors.h"
-#include "game/seasons.h"
 #include "game/autosave.h"
 #include "game/cheats.h"
 #include "game/controls.h"
@@ -52,7 +51,6 @@ void RunGameQueue()
 	Guard("game queue", [] {
 		AutosaveQuitIfReady();
 		TweaksResolutionTick();
-		SeasonsQueueTick();
 		MpUiGameThreadTick();
 		MainMenuUiGameTick();
 		RejoinMenuTick();

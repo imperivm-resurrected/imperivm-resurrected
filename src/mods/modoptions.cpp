@@ -92,7 +92,7 @@ void Load()
 			}
 			const int maxValue = o.values.empty() ? 1 : static_cast<int>(o.values.size()) - 1;
 			o.def = (std::max)(0, (std::min)(o.def, maxValue));
-			if (o.id == kSeasonOptionId || o.id == kDynamicSeasonsOptionId) continue;
+			if (o.id == kSeasonOptionId) continue;
 			if (std::find_if(found.begin(), found.end(), [&](const ModOption &x) { return x.id == o.id; }) != found.end()) continue;
 			found.push_back(o);
 		} while (FindNextFileA(h, &fd));
@@ -118,15 +118,6 @@ void Load()
 	season.width = 2;
 	season.pos = 9;
 	season.bit = kSeasonBits;
-	ModOption dynamic;
-	dynamic.id = kDynamicSeasonsOptionId;
-	dynamic.name = Tr("Dynamic seasons");
-	dynamic.description = Tr("Spring, autumn and winter take turns during the game: the terrain, the trees and the buildings change, with a fade.");
-	dynamic.values = {Tr("Off"), Tr("Every 10 seconds"), Tr("Every 10 minutes"), Tr("Every 20 minutes")};
-	dynamic.width = 2;
-	dynamic.pos = 11;
-	dynamic.bit = kDynamicSeasonsBits;
-	placed.insert(placed.begin(), dynamic);
 	placed.insert(placed.begin(), season);
 	g_options = placed;
 }

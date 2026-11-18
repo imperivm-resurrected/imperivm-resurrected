@@ -299,7 +299,6 @@ void SaveConfig()
 	ini.WriteNumber("Game", "HealthBarOwners", g_config.healthBarOwners);
 	ini.WriteFlag("Game", "HealthBarHeroesOnly", g_config.healthBarHeroesOnly);
 	ini.WriteFlag("Game", "AllyColors", g_config.allyColors);
-	ini.Remove("Game", "DynamicSeasons");
 	ini.WriteFlag("Game", "PauseInBackground", g_config.pauseInBackground);
 	ini.WriteFlag("Game", "CrashFix", g_config.crashFix);
 	ini.WriteFlag("Mods", "Override", g_config.modOverrides);
