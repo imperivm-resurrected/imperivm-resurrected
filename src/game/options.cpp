@@ -19,6 +19,7 @@
 #include "i18n/tr.h"
 
 #include "addr/engine.h"
+#include "addr/state.h"
 #include "addr/media.h"
 #include "addr/ui.h"
 #include "core/uiport.h"
@@ -181,6 +182,26 @@ template <size_t N> std::vector<std::string> Items(const char *(&labels)[N])
 	return items;
 }
 
+// The game reads its speed slider back from the match's pace (InitGameOptions, 006e80f0) rounding down, and the top one, a pace of
+// 3000, came back as 99 of 100: the options showed 295 % after 300 % was applied, one step less on every apply. It is read again
+// rounding to the nearest step.
+const size_t kGameSpeed = 0x1244, kDialogOptions = 0x60;
+const int kIdGameSpeed = 0x101d, kSpeedSlot = 8, kSpeedMin = 700, kSpeedSpan = 0x8fd;
+
+void FixSpeedSlider(void *dlg)
+{
+	const char *game = *reinterpret_cast<const char *const *>(addr::kGame);
+	void *scroll = game ? FindScroll(dlg, kIdGameSpeed) : nullptr;
+	if (!scroll) return;
+	const int pace = (std::max)(kSpeedMin, (std::min)(kSpeedMin + kSpeedSpan, *reinterpret_cast<const int *>(game + kGameSpeed)));
+	const int value = (std::max)(1, ((pace - kSpeedMin) * 100 + kSpeedSpan / 2) / kSpeedSpan);
+	int *block = reinterpret_cast<int *>(static_cast<char *>(dlg) + kDialogOptions);
+	if (block[kSpeedSlot] == value) return;
+	block[kSpeedSlot] = value;
+	reinterpret_cast<int *>(addr::kGameOptions)[kSpeedSlot] = value;
+	reinterpret_cast<SetValue_t>((*reinterpret_cast<void ***>(scroll))[0x70 / 4])(scroll, nullptr, value, 1);
+}
+
 std::atomic<void *> g_openDialog{nullptr};
 // The mode the resolution list of the open options is for: a change of it shows the size saved for the other mode.
 bool g_listWindowed = false;
@@ -197,6 +218,7 @@ void __fastcall HookPopulateControls(void *dlg)
 {
 	g_origPopulate(dlg);
 	g_openDialog = dlg;
+	if (!g_useDefaults) FixSpeedSlider(dlg);
 	g_listWindowed = DisplayIsWindowed();
 	// The game's size may not be in the list (in a window, one that no longer fits): the largest that does is shown.
 	void *resolution = FindCombo(dlg, kIdResolution);
