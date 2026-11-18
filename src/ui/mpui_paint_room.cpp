@@ -1021,31 +1021,28 @@ void PaintReadyBlock(Painter &p, const State &st, const RoomFacts &f, int x, int
 	p.Text(ix, ty, iw, 36, count, pal::text, left);
 	p.raw = false;
 	ty += 44;
-	if (g.online) {
-		// One mark per person in the room, full when they are ready.
-		int px = ix;
-		for (const GameRoomSlot &s : g.slots) {
-			if (!s.used || s.type == 1 || px + 14 > ix + iw) continue;
-			if (s.ready) p.Fill(px, ty, 14, 14, pal::ok);
-			else p.Frame(px, ty, 14, 14, pal::edgeHot);
-			px += 20;
+	// A bar cut in one piece per player: online the ready ones (an AI always is) fill green, offline the taken places fill red.
+	int pieces = 0, full = 0;
+	for (const GameRoomSlot &s : g.slots) {
+		if (g.online) {
+			if (!s.used || (s.type != 1 && s.type != 3)) continue;
+			pieces++;
+			full += s.type == 1 || s.ready ? 1 : 0;
 		}
-		ty += 26;
+		else if (s.exists || s.used) {
+			pieces++;
+			full += s.used ? 1 : 0;
+		}
 	}
-	std::string caption;
-	COLORREF captionColor = pal::caption;
-	switch (look) {
-	case kAsk: caption = "The game starts when everyone is ready"; break;
-	case kIsReady: caption = g.host && !f.block.label.empty() ? f.block.label : "The game starts when everyone is ready"; break;
-	case kCount:
-		caption = "Everyone is ready. Click to cancel";
-		captionColor = pal::text;
-		break;
-	default: break;
+	if (pieces > 0) {
+		const int gapW = 6, barH = 6, pieceW = (iw - (pieces - 1) * gapW) / pieces;
+		for (int i = 0; i < pieces; i++) p.RoundRect(ix + i * (pieceW + gapW), ty, pieceW, barH, barH, i < full ? (g.online ? pal::ok : pal::red) : pal::edge);
+		ty += barH + 14;
 	}
-	if (!caption.empty() && btnY - 12 - ty > 16) {
+	// The host reads why the game cannot start yet.
+	if (g.host && look == kIsReady && !f.block.label.empty() && btnY - 12 - ty > 16) {
 		p.Font(3);
-		p.TextWrapped(ix, ty, iw, btnY - 12 - ty, caption, captionColor);
+		p.TextWrapped(ix, ty, iw, btnY - 12 - ty, f.block.label, pal::caption);
 	}
 
 	const bool enabled = look != kWait;
