@@ -38,7 +38,7 @@ const COLORREF kAvatarDisc = RGB(0x2e, 0x29, 0x26);
 // Where the parts of the room go, in the units of ScreenView: the header of the full screens, whose `top` is where the table or the Game
 // tab starts, and the row of cards at the bottom.
 struct RoomLayout : ScreenLayout {
-	int bottomY = 0, bottomH = 0, radius = 75;
+	int bottomY = 0, bottomH = 0;
 };
 
 RoomLayout LayoutFor(const State &st)
@@ -46,7 +46,6 @@ RoomLayout LayoutFor(const State &st)
 	RoomLayout l;
 	static_cast<ScreenLayout &>(l) = ScreenLayoutFor(st.viewW, st.viewH);
 	l.bottomH = l.roomy ? 264 : 220;
-	l.radius = l.roomy ? 75 : 60;
 	l.bottomY = l.h - l.margin - l.bottomH;
 	return l;
 }
@@ -974,125 +973,133 @@ void PaintSummary(Painter &p, const State &st, int cardX, int cardY, int cardW, 
 	p.AddHit(cardX, cardY, cardW, cardH, kGTab, 1);
 }
 
-// The largest display size, up to about two thirds of the radius, that fits the word in the disc.
-void FitCaps(Painter &p, const char *text, int width, int radius)
-{
-	for (int size = radius * 2 / 3; size > 20; size -= 4) {
-		SelectObject(p.dc, BrandFont(BrandFace::Display, size, p.s));
-		if (p.CapsWidth(text, 1) <= width) return;
-	}
-	SelectObject(p.dc, BrandFont(BrandFace::Display, 20, p.s));
-}
-
-void PaintReadyBlock(Painter &p, const State &st, const RoomFacts &f, int x, int y, int w, int h, int radius)
+// What the room waits for and its one button, in a card at the right of the bottom row: how many are ready, a mark for each player and a
+// wide button that says what a click does (be ready, stop being ready, start, stop the countdown).
+void PaintReadyBlock(Painter &p, const State &st, const RoomFacts &f, int x, int y, int w, int h)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const GameRoomSnapshot &g = st.game;
 	const GameRoomSlot &me = g.slots[g.localSlot & 7];
-	const int ringR = radius + 9, cx = x + w / 2, cy = y + ringR + 4;
+	PaintGlassCard(p, x, y, w, h);
+	const int pad = 20, ix = x + pad, iw = w - 2 * pad, btnH = 56, btnY = y + h - pad - btnH;
+	const UINT left = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS;
 	if (g.online && !g.host && st.map.needsPack) {
-		p.Button(x + 8, cy - 24, w - 16, 48, "Download and rejoin", kGResync, 0, mx, my, true, true);
+		p.Font(4);
+		p.TextCaps(ix, y + 20, iw, 20, "Content", pal::caption, left, 2);
+		p.Font(3);
+		p.TextWrapped(ix, y + 50, iw, std::max(20, btnY - 12 - (y + 50)), "This room plays with content you don't have: it downloads and you come back in.", pal::textDim);
+		p.Button(ix, btnY, iw, btnH, "Download and rejoin", kGResync, 0, mx, my, true, true);
 		return;
 	}
 	enum Look { kAsk, kIsReady, kStart, kWait, kCount };
-	const int left = CountdownLeftMs();
+	const int leftMs = CountdownLeftMs();
 	Look look = kAsk;
 	int action = kGReady;
-	if (left >= 0) look = kCount;
+	if (leftMs >= 0) look = kCount;
 	else if (!g.online) {
 		look = kStart;
 		action = kGStart;
 	}
 	else if (me.ready) look = kIsReady;
 	else if (!f.mapReady) look = kWait;
-	const bool enabled = look != kWait;
-	const bool hot = enabled && p.Hover(cx - radius, cy - radius, radius * 2, radius * 2, mx, my);
-	const bool down = enabled && st.mouseDown && st.pressAction == action;
-	const float fx = static_cast<float>(cx), fy = static_cast<float>(cy), fr = static_cast<float>(radius);
-	COLORREF fill = pal::red, ring = pal::red, ink = pal::onRed;
-	switch (look) {
-	case kAsk:
-	case kStart: fill = down ? pal::redPressed : hot ? Mix(pal::red, pal::redText, 35) : pal::red; break;
-	case kIsReady:
-		fill = hot ? pal::body : pal::text;
-		ring = pal::text;
-		ink = pal::bg;
-		break;
-	case kCount:
-		fill = hot ? pal::selected : pal::raised;
-		ring = pal::edge;
-		ink = pal::text;
-		break;
-	case kWait:
-		fill = pal::field;
-		ring = pal::hairline;
-		ink = pal::caption;
-		break;
+
+	p.Font(4);
+	p.TextCaps(ix, y + 20, iw, 20, g.online ? "Players ready" : "Game", pal::caption, left, 2);
+	int ty = y + 48;
+	std::string count;
+	if (g.online) count = f.ReadyText();
+	else {
+		int used = 0, places = 0;
+		for (const GameRoomSlot &s : g.slots) {
+			used += s.used ? 1 : 0;
+			places += s.exists || s.used ? 1 : 0;
+		}
+		count = TrFmt("%s of %s players", {std::to_string(used), std::to_string(places)});
 	}
-	// A gap of the page's colour between the disc and its ring.
-	PaintRing(p, fx, fy, static_cast<float>(ringR), 1.5f, ring);
-	PaintDisc(p, fx, fy + (down ? 1 : 0), fr, fill, fill);
-	const int textY = cy + (down ? 1 : 0);
-	const UINT center = DT_CENTER | DT_VCENTER | DT_SINGLELINE;
-	switch (look) {
-	case kAsk:
-		FitCaps(p, "Ready?", radius * 2 - 24, radius);
-		p.TextCaps(cx - radius, textY - radius / 2, radius * 2, radius, "Ready?", ink, center, 1);
-		break;
-	case kStart:
-		FitCaps(p, "Start", radius * 2 - 24, radius);
-		p.TextCaps(cx - radius, textY - radius / 2, radius * 2, radius, "Start", ink, center, 1);
-		break;
-	case kIsReady:
-		FitCaps(p, "Ready", radius * 2 - 24, radius);
-		p.TextCaps(cx - radius, textY - radius / 2, radius * 2, radius, "Ready", ink, center, 1);
-		break;
-	case kCount: {
-		const float done = 1.0f - std::max(0, std::min(5000, left)) / 5000.0f;
-		PaintRing(p, fx, fy, static_cast<float>(ringR), 4.0f, pal::red, 255, done);
-		p.Font(5);
-		p.Text(cx - radius, textY - radius * 2 / 3, radius * 2, radius * 4 / 3, std::to_string((left + 999) / 1000), ink, center);
-		break;
+	p.Font(2);
+	p.raw = true;
+	p.Text(ix, ty, iw, 36, count, pal::text, left);
+	p.raw = false;
+	ty += 44;
+	if (g.online) {
+		// One mark per person in the room, full when they are ready.
+		int px = ix;
+		for (const GameRoomSlot &s : g.slots) {
+			if (!s.used || s.type == 1 || px + 14 > ix + iw) continue;
+			if (s.ready) p.Fill(px, ty, 14, 14, pal::ok);
+			else p.Frame(px, ty, 14, 14, pal::edgeHot);
+			px += 20;
+		}
+		ty += 26;
 	}
-	case kWait: p.Spinner(cx, cy, 22, 6, GetTickCount()); break;
-	}
-	if (enabled) p.AddHit(cx - radius, cy - radius, radius * 2, radius * 2, action, 0);
-	if (!g.online) return;
-	std::string count, caption;
+	std::string caption;
 	COLORREF captionColor = pal::caption;
 	switch (look) {
-	case kAsk:
-		count = f.ReadyText();
-		caption = "The game starts when everyone is ready";
-		break;
-	case kIsReady:
-		count = f.ReadyText();
-		caption = g.host && !f.block.label.empty() ? f.block.label : "The game starts when everyone is ready";
-		break;
+	case kAsk: caption = "The game starts when everyone is ready"; break;
+	case kIsReady: caption = g.host && !f.block.label.empty() ? f.block.label : "The game starts when everyone is ready"; break;
 	case kCount:
 		caption = "Everyone is ready. Click to cancel";
 		captionColor = pal::text;
 		break;
-	case kWait: caption = !f.saveReady ? "Waiting for the saved game..." : "Waiting for the scenario..."; break;
 	default: break;
 	}
-	int ty = cy + ringR + 12;
-	if (!count.empty()) {
-		p.Font(1);
-		p.Text(x, ty, w, 24, count, pal::text, center);
-		ty += 28;
-	}
-	const int captionH = y + h - ty;
-	if (!caption.empty() && captionH > 10) {
+	if (!caption.empty() && btnY - 12 - ty > 16) {
 		p.Font(3);
-		p.Clip(x, ty, w, captionH);
-		const int th = p.Measure(w - 8, caption);
-		SetTextColor(p.dc, captionColor);
-		const std::wstring ws = W(Tr(caption));
-		RECT box = p.R(x + 4, ty, w - 8, th + 2);
-		DrawTextW(p.dc, ws.c_str(), static_cast<int>(ws.size()), &box, DT_CENTER | DT_WORDBREAK | DT_NOPREFIX);
-		p.Unclip();
+		p.TextWrapped(ix, ty, iw, btnY - 12 - ty, caption, captionColor);
 	}
+
+	const bool enabled = look != kWait;
+	const bool hot = enabled && p.Hover(ix, btnY, iw, btnH, mx, my);
+	const bool down = enabled && st.mouseDown && st.pressAction == action;
+	const int by = btnY + (down ? 1 : 0);
+	COLORREF fill = pal::red, ink = pal::onRed;
+	std::string label;
+	switch (look) {
+	case kAsk:
+	case kStart:
+		fill = down ? pal::redPressed : hot ? Mix(pal::red, pal::redText, 35) : pal::red;
+		label = Tr(look == kAsk ? "I'm ready" : "Start the game");
+		break;
+	case kIsReady:
+		// Ready shows green; under the mouse it says what a click does.
+		fill = hot ? RGB(0x5a, 0x24, 0x26) : RGB(0x2c, 0x46, 0x24);
+		ink = pal::text;
+		label = Tr(hot ? "Cancel" : "Ready");
+		break;
+	case kCount:
+		fill = hot ? pal::selected : pal::raised;
+		ink = pal::text;
+		label = TrFmt("Starts in %s", {std::to_string((leftMs + 999) / 1000)}) + (hot ? "  \xC2\xB7  " + Tr("Cancel") : std::string());
+		break;
+	case kWait:
+		fill = pal::field;
+		ink = pal::caption;
+		label = Tr(!f.saveReady ? "Waiting for the saved game..." : "Waiting for the scenario...");
+		break;
+	}
+	p.Fill(ix, by, iw, btnH, fill);
+	if (look == kCount || look == kWait) p.Frame(ix, by, iw, btnH, pal::edge);
+	if (look == kCount) {
+		const int done = iw * (5000 - std::max(0, std::min(5000, leftMs))) / 5000;
+		p.Fill(ix, by + btnH - 4, done, 4, pal::red);
+	}
+	p.Font(look == kWait ? 3 : 2);
+	const int labelW = look == kWait ? p.TextWidth(label) : p.CapsWidth(label, 1);
+	int mark = 0;
+	if (look == kIsReady && !hot) mark = 26;
+	if (look == kWait) mark = 30;
+	const int lx = ix + std::max(0, (iw - labelW - mark) / 2);
+	if (look == kIsReady && !hot) {
+		const int cy = by + btnH / 2;
+		p.Line(lx + 2, cy, lx + 8, cy + 6, pal::ok, 3);
+		p.Line(lx + 8, cy + 6, lx + 18, cy - 6, pal::ok, 3);
+	}
+	if (look == kWait) p.Spinner(lx + 10, by + btnH / 2, 10, 4, GetTickCount());
+	p.raw = true;
+	if (look == kWait) p.Text(lx + mark, by, iw - (lx + mark - ix), btnH, label, ink, left);
+	else p.TextCaps(lx + mark, by, iw - (lx + mark - ix), btnH, label, ink, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1);
+	p.raw = false;
+	if (enabled) p.AddHit(ix, btnY, iw, btnH, action, 0);
 }
 
 void PaintChatBlock(Painter &p, const State &st, int cardX, int cardY, int cardW, int cardH)
@@ -1114,18 +1121,18 @@ void PaintRoomTab(Painter &p, const State &st, const RoomFacts &f, const RoomLay
 	// In a tournament series, the choice of the next game's map goes over the table while it lasts.
 	const int pick = PaintTourneyRoomPick(p, st, m, l.top, inner);
 	PaintPlayerTable(p, st, f, m, l.top + pick, inner, by - 32 - l.top - pick);
+	// The summary, the chat and, at the right edge where the eye ends, the card with what the room waits for and its button; without a
+	// chat the summary takes its room.
+	const int readyW = std::max(320, std::min(400, inner / 5));
 	if (g.online) {
-		const int centerW = std::max(280, std::min(380, inner / 5)), sideW = (inner - centerW - 2 * gap) / 2;
-		PaintSummary(p, st, m, by, sideW, bh);
-		PaintReadyBlock(p, st, f, m + sideW + gap, by, centerW, bh, l.radius);
-		PaintChatBlock(p, st, l.w - m - sideW, by, sideW, bh);
+		const int summaryW = (inner - readyW - 2 * gap) * 45 / 100, chatW = inner - readyW - summaryW - 2 * gap;
+		PaintSummary(p, st, m, by, summaryW, bh);
+		PaintChatBlock(p, st, m + summaryW + gap, by, chatW, bh);
 	}
 	else {
-		// Without a chat the summary takes its place and the button moves to the right edge.
-		const int readyW = 340;
 		PaintSummary(p, st, m, by, inner - readyW - gap, bh);
-		PaintReadyBlock(p, st, f, l.w - m - readyW, by, readyW, bh, l.radius);
 	}
+	PaintReadyBlock(p, st, f, l.w - m - readyW, by, readyW, bh);
 }
 
 void PaintRoomDialogs(Painter &p, const State &st)

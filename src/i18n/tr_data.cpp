@@ -3417,5 +3417,9 @@ extern const TrRow kTrRows[] = {
 	{"Import and download", "Importar y descargar", "Importa e scarica"},
 	{"Stop waiting for them", "Dejar de esperarlos", "Smetti di aspettarli"},
 	{"Controlled by the scenario", "Lo controla el escenario", "Controllato dallo scenario"},
+	{"Players ready", "Jugadores listos", "Giocatori pronti"},
+	{"I'm ready", "Estoy listo", "Sono pronto"},
+	{"Starts in %s", "Empieza en %s", "Inizia tra %s"},
+	{"This room plays with content you don't have: it downloads and you come back in.", "Esta sala juega con contenido que no tienes: se descarga y vuelves a entrar.", "Questa stanza gioca con contenuti che non hai: si scaricano e rientri."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

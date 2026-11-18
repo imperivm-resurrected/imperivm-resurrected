@@ -3409,5 +3409,9 @@
 {"en":"It is made as a new profile; yours does not change.","es":"Se crea como perfil nuevo; el tuyo no cambia.","it":"Si crea come nuovo profilo; il tuo non cambia."},
 {"en":"Import and download","es":"Importar y descargar","it":"Importa e scarica"},
 {"en":"Stop waiting for them","es":"Dejar de esperarlos","it":"Smetti di aspettarli"},
-{"en":"Controlled by the scenario","es":"Lo controla el escenario","it":"Controllato dallo scenario"}
+{"en":"Controlled by the scenario","es":"Lo controla el escenario","it":"Controllato dallo scenario"},
+{"en":"Players ready","es":"Jugadores listos","it":"Giocatori pronti"},
+{"en":"I'm ready","es":"Estoy listo","it":"Sono pronto"},
+{"en":"Starts in %s","es":"Empieza en %s","it":"Inizia tra %s"},
+{"en":"This room plays with content you don't have: it downloads and you come back in.","es":"Esta sala juega con contenido que no tienes: se descarga y vuelves a entrar.","it":"Questa stanza gioca con contenuti che non hai: si scaricano e rientri."}
 ]
