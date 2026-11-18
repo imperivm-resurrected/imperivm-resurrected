@@ -39,6 +39,10 @@ const unsigned kSlotIsPaused = 22;
 
 const unsigned kSlotSetPaused = 16;
 
+// The match's own exit to the menu: what RequestQuitToMenu calls when nobody else is connected, and CVXPlayerWantsToQuit::Execute for
+// the local player.
+const unsigned kSlotExitToMenu = 26;
+
 enum : uint8_t { kRjReq = 20, kRjAccept, kRjDeny, kRjState, kRjFile, kRjFileEnd, kRjReady, kRjGo, kRjCancel, kRjWait, kRjThreads, kRjDump, kRjObjects, kRjRawUnused, kRjReport, kRjQueries, kRjAi, kRjSquads, kRjModVars, kRjHandles };
 static_assert(kRejoinMessages.Has(kRjReq) && kRejoinMessages.Has(kRjHandles), "rejoin messages out of their range");
 

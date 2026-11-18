@@ -3423,5 +3423,7 @@ extern const TrRow kTrRows[] = {
 	{"Go back", "Volver", "Torna indietro"},
 	{"you blue, allies yellow, enemies red; only on your screen", "tú en azul, aliados en amarillo y enemigos en rojo; solo en tu pantalla", "tu in blu, alleati in giallo e nemici in rosso; solo sul tuo schermo"},
 	{"You blue, allies yellow, enemies red, only on your screen; a key in Controls switches it during the game", "Tú en azul, aliados en amarillo y enemigos en rojo, solo en tu pantalla; una tecla de Controles lo cambia durante la partida", "Tu in blu, alleati in giallo e nemici in rosso, solo sul tuo schermo; un tasto dei Comandi lo cambia durante la partita"},
+	{"you are out of that game: you were defeated or surrendered", "ya no estás en esa partida: te derrotaron o te rendiste", "non sei più in quella partita: sei stato sconfitto o ti sei arreso"},
+	{"Couldn't reload the game: %s. The game goes on.", "No se pudo recargar la partida: %s. La partida sigue.", "Impossibile ricaricare la partita: %s. La partita continua."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

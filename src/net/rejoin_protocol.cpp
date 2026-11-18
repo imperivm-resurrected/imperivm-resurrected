@@ -6,6 +6,7 @@
 #include <set>
 #include "MinHook.h"
 #include "game/autosave.h"
+#include "game/gamelayout.h"
 #include "core/config.h"
 #include "core/log.h"
 #include "mods/modvars.h"
@@ -110,6 +111,10 @@ void HostOnRequest(uint64_t peer, int number)
 	const int hostIndex = *reinterpret_cast<int *>(t + 0x4c);
 	char *gate = *reinterpret_cast<char **>(t + 0x50);
 	if (slot < 0 || slot == hostIndex || !gate) return HostDeny(peer, "your spot in the game could not be found");
+	// A player defeated, or who surrendered, has no army to come back to: the return would stop and reload everyone's game for nothing.
+	if (slot < 16 && *reinterpret_cast<const int *>(layout::PlayerAt(static_cast<const char *>(game), slot) + layout::kPlayerState) != layout::kStatePlaying) {
+		return HostDeny(peer, std::string(kDenyOut) + "you are out of that game: you were defeated or surrendered");
+	}
 	// A ranked 2v2's player who dropped comes back to the army the AI plays for them, within their five minutes; the stop order takes the
 	// AI away on every computer (NetDropAiRelease).
 	if (slot < 16 && *reinterpret_cast<void **>(static_cast<char *>(game) + 0x12cc + slot * 800 + 0x88)) {

@@ -6,7 +6,6 @@
 #include <algorithm>
 #include "MinHook.h"
 #include "core/log.h"
-#include "game/autosave.h"
 #include "i18n/tr.h"
 #include "core/framefreeze.h"
 #include "core/json.h"
@@ -35,6 +34,16 @@ const DWORD kGoMs = 150000;
 const DWORD kQuitMs = 30000;
 const DWORD kLoadMs = 120000;
 const DWORD kGoneMs = 3000;
+
+// Leaving to load the game again goes straight to the match's exit. RequestQuitToMenu, with other players still connected, shows the
+// leave dialog and queues the leave command instead, which only runs on a tick of the game, and the game is stopped for the reload:
+// it never closed, and in games of three or more the reload always failed. Everyone is leaving to load it again, so nobody needs the
+// leave notice either.
+void ExitForReload()
+{
+	void *game = Game();
+	reinterpret_cast<void(__fastcall *)(void *, void *)>(Vt(game)[kSlotExitToMenu])(game, nullptr);
+}
 
 void Arm(int phase, DWORD ms)
 {
@@ -205,6 +214,13 @@ void ReloadCancel(const std::string &why, bool tellHost)
 		return;
 	}
 	MpSaveSetPendingLoad("");
+	// Still in the match: it goes on rather than staying stopped, and whoever already left drops as usual.
+	if (Game()) {
+		Unfreeze();
+		ResetRole();
+		UiToast(TrFmt("Couldn't reload the game: %s. The game goes on.", {Tr(why)}), true);
+		return;
+	}
 	UiToast(Tr("Couldn't reload the game: ") + Tr(why), true);
 	if (phase >= kRStart) SteamLeaveLobby();
 }
@@ -332,7 +348,7 @@ void ReloadTick()
 			if (!g_reload.quitAsked) {
 				g_reload.quitAsked = true;
 				LogI("rejoin", "reload: leaving the game to load it again");
-				AutosaveQuitWithoutSaving();
+				ExitForReload();
 			}
 			return;
 		}
