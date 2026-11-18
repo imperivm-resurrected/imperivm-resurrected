@@ -3417,11 +3417,11 @@ extern const TrRow kTrRows[] = {
 	{"I'm ready", "Estoy listo", "Sono pronto"},
 	{"Starts in %s", "Empieza en %s", "Inizia tra %s"},
 	{"This room plays with content you don't have: it downloads and you come back in.", "Esta sala juega con contenido que no tienes: se descarga y vuelves a entrar.", "Questa stanza gioca con contenuti che non hai: si scaricano e rientri."},
-	{"you blue, allies yellow, neutrals grey, enemies red; only on your screen", "tú en azul, aliados en amarillo, neutrales en gris y enemigos en rojo; solo en tu pantalla", "tu in blu, alleati in giallo, neutrali in grigio e nemici in rosso; solo sul tuo schermo"},
-	{"You blue, allies yellow, neutrals grey, enemies red, only on your screen; a key in Controls switches it during the game", "Tú en azul, aliados en amarillo, neutrales en gris y enemigos en rojo, solo en tu pantalla; una tecla de Controles lo cambia durante la partida", "Tu in blu, alleati in giallo, neutrali in grigio e nemici in rosso, solo sul tuo schermo; un tasto dei Comandi lo cambia durante la partita"},
 	{"Keep %s?", "¿Mantener %s?", "Mantenere %s?"},
 	{"If the screen looks right, keep it. If not, the previous resolution comes back in %s seconds.", "Si la pantalla se ve bien, mantenla. Si no, vuelve la resolución anterior en %s segundos.", "Se lo schermo si vede bene, mantienila. Altrimenti torna la risoluzione precedente tra %s secondi."},
 	{"Keep", "Mantener", "Mantieni"},
 	{"Go back", "Volver", "Torna indietro"},
+	{"you blue, allies yellow, enemies red; only on your screen", "tú en azul, aliados en amarillo y enemigos en rojo; solo en tu pantalla", "tu in blu, alleati in giallo e nemici in rosso; solo sul tuo schermo"},
+	{"You blue, allies yellow, enemies red, only on your screen; a key in Controls switches it during the game", "Tú en azul, aliados en amarillo y enemigos en rojo, solo en tu pantalla; una tecla de Controles lo cambia durante la partida", "Tu in blu, alleati in giallo e nemici in rosso, solo sul tuo schermo; un tasto dei Comandi lo cambia durante la partita"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

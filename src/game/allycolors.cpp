@@ -23,14 +23,15 @@ namespace {
 const size_t kVisibleScreenRect = 0x618;
 // CVXPersistArchive: its mode, in ints.
 const int kArchiveMode = 4, kArchiveLoading = 1;
+// CVXPlayer+0x80 (layout::kPlayerControl): 3 is the map's neutral player, owner of the settlements and troops of nobody.
+const int kControlNeutral = 3;
 
 constexpr unsigned Rgb555(unsigned r, unsigned g, unsigned b)
 {
 	return (r >> 3) << 10 | (g >> 3) << 5 | (b >> 3);
 }
-// Blue, yellow and red of the game's own palette: red and yellow tell apart for most colour-blind players, as blue does from both. Grey
-// stays apart from all three by its lightness alone.
-const unsigned kSelfColor = Rgb555(0, 0, 255), kAllyColor = Rgb555(255, 255, 0), kEnemyColor = Rgb555(255, 0, 0), kNeutralColor = Rgb555(144, 144, 144);
+// Blue, yellow and red of the game's own palette: red and yellow tell apart for most colour-blind players, as blue does from both.
+const unsigned kSelfColor = Rgb555(0, 0, 255), kAllyColor = Rgb555(255, 255, 0), kEnemyColor = Rgb555(255, 0, 0);
 
 typedef void(__cdecl *BuildShades_t)(unsigned color, unsigned short *out);
 typedef void(__fastcall *ClearCache_t)(void *cache);
@@ -55,20 +56,20 @@ int IndexOf(const char *game, const void *player)
 	return static_cast<int>(at / layout::kPlayerSize);
 }
 
-// The colour a player takes on this PC: theirs without the option, else by their diplomacy with the local player. Allies are those who
-// grant each other the whole alliance (ceasefire, vision and support); neutrals are only in mutual ceasefire; anyone who can attack, or
-// be attacked, is an enemy.
+// The colour a player takes on this PC: theirs without the option, else by their diplomacy with the local player. Allies are those in
+// mutual ceasefire (at peace or allied); anyone who can attack, or be attacked, is an enemy. The map's neutral player keeps its own
+// colour: red would take what belongs to nobody for an army.
 unsigned Wanted(const char *game, int index, const char *local, bool on)
 {
 	if (!on || !local) return g_shown.real[index];
 	const char *player = layout::PlayerAt(game, index);
 	if (player == local) return kSelfColor;
+	if (At<int>(player, layout::kPlayerControl) == kControlNeutral) return g_shown.real[index];
 	const int ours = At<int>(local, layout::kPlayerId), theirs = At<int>(player, layout::kPlayerId);
 	if (ours < 0 || ours >= layout::kPlayerCount || theirs < 0 || theirs >= layout::kPlayerCount) return g_shown.real[index];
-	const unsigned mine = At<unsigned>(local, layout::kPlayerDiplomacy + theirs * 4), back = At<unsigned>(player, layout::kPlayerDiplomacy + ours * 4);
-	if (!(mine & diplomacy::kCeasefire) || !(back & diplomacy::kCeasefire)) return kEnemyColor;
-	const unsigned alliance = diplomacy::kAllianceFlags;
-	return (mine & alliance) == alliance && (back & alliance) == alliance ? kAllyColor : kNeutralColor;
+	const bool peace = (At<unsigned>(local, layout::kPlayerDiplomacy + theirs * 4) & diplomacy::kCeasefire) != 0 &&
+		(At<unsigned>(player, layout::kPlayerDiplomacy + ours * 4) & diplomacy::kCeasefire) != 0;
+	return peace ? kAllyColor : kEnemyColor;
 }
 
 // Redraws the players with their new shades, as the editor does when it changes a colour.
