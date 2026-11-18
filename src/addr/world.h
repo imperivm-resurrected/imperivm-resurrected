@@ -141,6 +141,10 @@ inline constexpr uintptr_t kRebuild = 0x00616c40;
 // CPaletteShaderCache::Clear (__fastcall, the cache in kPaletteShaderCache): forgets the palettes made from the players' shades.
 inline constexpr uintptr_t kPaletteShaderCacheClear = 0x0061ae00;
 inline constexpr uintptr_t kScreenToMap = 0x006243b0;
+// CVXVisibleMgr::RectToTileMask (__thiscall: rect, 128-bit column mask out, first and last row out; 0 off the view) and
+// CVXVisibleMgr::GetDirtyRects (__thiscall: rects out, how many at most; returns how many): the redraw grid's cells, 16 px.
+inline constexpr uintptr_t kVisibleMgrRectToTileMask = 0x00625840;
+inline constexpr uintptr_t kVisibleMgrGetDirtyRects = 0x00625a00;
 inline constexpr uintptr_t kVisibleMgrInvalidateRect = 0x00625d80;
 inline constexpr uintptr_t kDirtyGridRowsJump = 0x00625dcf;
 inline constexpr uintptr_t kVisibleMgrSetViewRect = 0x006265c0;
