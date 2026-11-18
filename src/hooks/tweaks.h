@@ -22,6 +22,12 @@ void TweaksPreviewResolutions(const ResolutionChoice *choice);
 std::vector<ResSize> TweaksResolutionList();
 
 void TweaksApplySmoothScroll();
+// The window mode changed (Alt+Enter): on the game thread, at once or once the options close, the game takes the size saved for
+// the new mode.
+void TweaksModeSwitched();
+// The mode switch and the answer to a full screen's size on trial: on the game thread, between frames (the wake of the game
+// thread, which the frames ask for while one waits).
+void TweaksResolutionTick();
 void TweaksFrameTick();
 bool TweaksOnlyHumanOnline(void *game);
 // Pauses or resumes the match at once, without the game's pause notice: only for a player alone in it, whose pause no one else follows.

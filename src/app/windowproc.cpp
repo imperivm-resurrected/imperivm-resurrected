@@ -50,6 +50,7 @@ void RunGameQueue()
 	MpUiWakeHandled();
 	Guard("game queue", [] {
 		AutosaveQuitIfReady();
+		TweaksResolutionTick();
 		MpUiGameThreadTick();
 		MainMenuUiGameTick();
 		RejoinMenuTick();
@@ -110,6 +111,7 @@ bool DisplayMessageTakes(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 		SaveConfig();
 		LogI("display", "Alt+Enter: %s", c.windowed ? "windowed mode" : "full screen");
 		DisplayApplySettings(true);
+		TweaksModeSwitched();
 		return true;
 	}
 	return msg == WM_SYSCHAR && wp == VK_RETURN;

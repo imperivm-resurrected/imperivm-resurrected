@@ -182,6 +182,8 @@ template <size_t N> std::vector<std::string> Items(const char *(&labels)[N])
 }
 
 std::atomic<void *> g_openDialog{nullptr};
+// The mode the resolution list of the open options is for: a change of it shows the size saved for the other mode.
+bool g_listWindowed = false;
 PopulateControls_t g_origDtor = nullptr;
 
 void __fastcall HookDtor(void *dlg)
@@ -195,6 +197,7 @@ void __fastcall HookPopulateControls(void *dlg)
 {
 	g_origPopulate(dlg);
 	g_openDialog = dlg;
+	g_listWindowed = DisplayIsWindowed();
 	// The game's size may not be in the list (in a window, one that no longer fits): the largest that does is shown.
 	void *resolution = FindCombo(dlg, kIdResolution);
 	if (resolution && GetComboIndex(dlg, kIdResolution) < 0 && !TweaksResolutionList().empty()) {
@@ -458,7 +461,14 @@ void OptionsPreviewResolutions(int monitor, bool windowed, bool extendedView)
 	list = TweaksResolutionList();
 	ResSize screen;
 	DisplayMonitorSize(monitor, screen.w, screen.h);
-	const int kept = KeepResolution(list, shown, screen);
+	int kept = KeepResolution(list, shown, screen);
+	// Each mode keeps its own size: going to a window shows the window's, going back to full screen the full screen's.
+	if (windowed != g_listWindowed) {
+		const SavedSize s = ConfigSavedSize(GetConfig(), windowed);
+		const ResPick pick = PickStartResolution(list, {s.w, s.h}, {s.screenW, s.screenH}, screen, !windowed && DisplayMonitorHasMode(s.w, s.h));
+		if (pick.index >= 0) kept = pick.index;
+		g_listWindowed = windowed;
+	}
 	std::vector<std::string> labels;
 	for (const ResSize &size : list) labels.push_back(std::to_string(size.w) + " x " + std::to_string(size.h));
 	FillCombo(dlg, kIdResolution, labels, kept >= 0 ? kept : 0);

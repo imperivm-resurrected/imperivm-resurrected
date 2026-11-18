@@ -34,8 +34,11 @@ void ModUiDraw(uint32_t *buf, int w, int h)
 		g_rich.rectValid = false;
 	}
 	State st;
+	bool timed = false;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
+		if (g_s.confirm && g_s.confirmDeadline && static_cast<int>(GetTickCount() - g_s.confirmDeadline) >= 0) DoAction(kConfirmAlt, 0);
+		timed = g_s.confirm && g_s.confirmDeadline;
 		if (!g_s.open) ModsWatchStop();
 		if (g_s.open && ModsListSerial() != g_s.listSerial) {
 			const Row *sel = SelectedRow(g_s);
@@ -93,6 +96,8 @@ void ModUiDraw(uint32_t *buf, int w, int h)
 			g_s.orderGeom = g_orderGeomOut;
 		}
 	}
+	// In the menu the game sends no frames: the seconds of a timed question ask for the next one.
+	if (timed) MpUiWakeGameThread();
 	const int left = static_cast<int>(st.toastUntil - GetTickCount());
 	if (!st.toast.empty() && left > 0) {
 		const int shown = static_cast<int>(st.toastLen) - left;

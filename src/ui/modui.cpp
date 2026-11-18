@@ -810,7 +810,25 @@ void ModUiChoose(const std::string &title, const std::string &text, const std::s
 	g_s.action = std::move(onYes);
 	g_s.actionAlt = alt;
 	g_s.alt = std::move(onAlt);
+	g_s.confirmDeadline = 0;
 	g_s.confirmItems.clear();
+}
+
+void ModUiChooseTimed(const std::string &title, const std::string &text, const std::string &yes, void (*onYes)(), const std::string &alt, void (*onAlt)(),
+	unsigned deadline)
+{
+	ModUiChoose(title, text, yes, onYes, alt, onAlt);
+	std::lock_guard<std::mutex> lock(g_lock);
+	g_s.confirmDeadline = deadline ? deadline : 1;
+}
+
+void ModUiCancelTimed()
+{
+	std::lock_guard<std::mutex> lock(g_lock);
+	if (!g_s.confirm || !g_s.confirmDeadline) return;
+	g_s.action = nullptr;
+	g_s.alt = nullptr;
+	DoAction(kConfirmNo, 0);
 }
 
 int ModUiUpdatesAvailable()

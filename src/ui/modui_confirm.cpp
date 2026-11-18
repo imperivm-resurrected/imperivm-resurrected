@@ -51,6 +51,10 @@ void PaintConfirm(Painter &p, const State &st)
 	if (st.confirmKind == kConfirmNotice || st.confirmKind == kConfirmAction) {
 		title = st.noticeTitle;
 		text = Tr(st.noticeText);
+		if (st.confirmDeadline) {
+			const int left = std::max(0, static_cast<int>(st.confirmDeadline - GetTickCount()));
+			text = TrFmt(st.noticeText, {std::to_string((left + 999) / 1000)});
+		}
 		yes = st.actionYes;
 	}
 	else if (st.confirmKind == kConfirmUninstall) {
@@ -97,6 +101,7 @@ void PaintConfirm(Painter &p, const State &st)
 		ListPaint(p, d.BodyX(), d.BodyTop() + textH + 4, d.BodyW(), rows * kConfirmRowH + 8, lines, ls, g_confirmGeomOut, 0, kConfirmRowH, mx, my);
 	}
 	if (st.confirmKind == kConfirmNotice) DialogButtons(p, d, {{"OK", kConfirmNo, 0, true}}, mx, my);
+	else if (st.confirmKind == kConfirmAction && st.confirmDeadline) DialogButtons(p, d, {{yes, kConfirmYes, 0, true}, {st.actionAlt, kConfirmAlt}}, mx, my);
 	else if (st.confirmKind == kConfirmAction && !st.actionAlt.empty()) DialogButtons(p, d, {{yes, kConfirmYes, 0, true}, {st.actionAlt, kConfirmAlt}, {"Later", kConfirmNo}}, mx, my);
 	else DialogButtons(p, d, {{yes, kConfirmYes, 0, true}, {st.confirmKind == kConfirmRestart ? "Later" : "Cancel", kConfirmNo}}, mx, my);
 }

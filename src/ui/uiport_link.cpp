@@ -40,6 +40,8 @@ const bool g_registered = [] {
 	port.joinFromDiscord = &MpUiJoinFromDiscord;
 	port.openControls = &ControlsUiOpen;
 	port.wakeGameThread = &MpUiWakeGameThread;
+	port.askTimed = &ModUiChooseTimed;
+	port.cancelTimed = &ModUiCancelTimed;
 	UiPortSet(port);
 	return true;
 }();

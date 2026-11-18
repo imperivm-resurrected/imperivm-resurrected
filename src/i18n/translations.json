@@ -3411,5 +3411,9 @@
 {"en":"Starts in %s","es":"Empieza en %s","it":"Inizia tra %s"},
 {"en":"This room plays with content you don't have: it downloads and you come back in.","es":"Esta sala juega con contenido que no tienes: se descarga y vuelves a entrar.","it":"Questa stanza gioca con contenuti che non hai: si scaricano e rientri."},
 {"en":"you blue, allies yellow, neutrals grey, enemies red; only on your screen","es":"tú en azul, aliados en amarillo, neutrales en gris y enemigos en rojo; solo en tu pantalla","it":"tu in blu, alleati in giallo, neutrali in grigio e nemici in rosso; solo sul tuo schermo"},
-{"en":"You blue, allies yellow, neutrals grey, enemies red, only on your screen; a key in Controls switches it during the game","es":"Tú en azul, aliados en amarillo, neutrales en gris y enemigos en rojo, solo en tu pantalla; una tecla de Controles lo cambia durante la partida","it":"Tu in blu, alleati in giallo, neutrali in grigio e nemici in rosso, solo sul tuo schermo; un tasto dei Comandi lo cambia durante la partita"}
+{"en":"You blue, allies yellow, neutrals grey, enemies red, only on your screen; a key in Controls switches it during the game","es":"Tú en azul, aliados en amarillo, neutrales en gris y enemigos en rojo, solo en tu pantalla; una tecla de Controles lo cambia durante la partida","it":"Tu in blu, alleati in giallo, neutrali in grigio e nemici in rosso, solo sul tuo schermo; un tasto dei Comandi lo cambia durante la partita"},
+{"en":"Keep %s?","es":"¿Mantener %s?","it":"Mantenere %s?"},
+{"en":"If the screen looks right, keep it. If not, the previous resolution comes back in %s seconds.","es":"Si la pantalla se ve bien, mantenla. Si no, vuelve la resolución anterior en %s segundos.","it":"Se lo schermo si vede bene, mantienila. Altrimenti torna la risoluzione precedente tra %s secondi."},
+{"en":"Keep","es":"Mantener","it":"Mantieni"},
+{"en":"Go back","es":"Volver","it":"Torna indietro"}
 ]

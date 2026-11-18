@@ -4,14 +4,18 @@
 #include <windows.h>
 #include <intrin.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <cstring>
+#include <string>
 #include <vector>
 
 #include "hooks/codepatch.h"
 #include "hooks/hookcount.h"
 #include "core/config.h"
+#include "core/uiport.h"
+#include "i18n/tr.h"
 #include "hooks/displaymode.h"
 #include "hooks/focuspause.h"
 #include "hooks/gamestate.h"
@@ -166,16 +170,128 @@ void SetResolutionIndex(int index)
 	g_sizeAtStart = size;
 }
 
+// Where the size saved for a mode is in the list: that size, else the screen's own, else the first.
+ResPick SavedPick(bool windowed)
+{
+	const SavedSize s = ConfigSavedSize(GetConfig(), windowed);
+	return PickStartResolution(ResolutionSizes(), {s.w, s.h}, {s.screenW, s.screenH}, ScreenSize(), DisplayMonitorHasMode(s.w, s.h));
+}
+
 void UseSavedResolution()
 {
-	const Config &c = GetConfig();
+	const bool windowed = DisplayIsWindowed();
+	const SavedSize s = ConfigSavedSize(GetConfig(), windowed);
 	const ResSize screen = ScreenSize();
-	const ResPick pick = PickStartResolution(ResolutionSizes(), {c.resolutionW, c.resolutionH}, {c.resolutionScreenW, c.resolutionScreenH}, screen,
-		DisplayMonitorHasMode(c.resolutionW, c.resolutionH));
+	const ResPick pick = SavedPick(windowed);
 	SetResolutionIndex(pick.index);
 	static const char *const kWhy[] = {"the saved size", "the screen's own size", "the first of the list", "none"};
-	LogI("display", "resolution at start: saved %dx%d (chosen on a %dx%d screen), the screen is %dx%d -> %ldx%ld, %s", c.resolutionW, c.resolutionH,
-		c.resolutionScreenW, c.resolutionScreenH, screen.w, screen.h, g_sizeAtStart.x, g_sizeAtStart.y, kWhy[static_cast<int>(pick.why)]);
+	LogI("display", "resolution at start (%s): saved %dx%d (chosen on a %dx%d screen), the screen is %dx%d -> %ldx%ld, %s", windowed ? "window" : "full screen",
+		s.w, s.h, s.screenW, s.screenH, screen.w, screen.h, g_sizeAtStart.x, g_sizeAtStart.y, kWhy[static_cast<int>(pick.why)]);
+}
+
+void SaveSize(bool windowed, ResSize size)
+{
+	const ResSize screen = ScreenSize();
+	SavedSize s;
+	s.w = size.w;
+	s.h = size.h;
+	s.screenW = screen.w;
+	s.screenH = screen.h;
+	ConfigSetSavedSize(MutableConfig(), windowed, s);
+	SaveConfig();
+	LogI("display", "resolution saved for the %s: %dx%d, chosen on a %dx%d screen", windowed ? "window" : "full screen", size.w, size.h, screen.w, screen.h);
+}
+
+// g_gameOptions: 8 the game speed in percent, 13 the resolution (kResolutionSlot). A match's speed is game+0x1244, 700..3000, and
+// ApplyGameOptions sends it as percent * 0x8fd / 100 + 700.
+const int kSpeedSlot = 8, kOptionsCount = 15;
+const size_t kGameSpeed = 0x1244;
+const int kSpeedMin = 700, kSpeedSpan = 0x8fd;
+const unsigned kFlagVisible = 2;
+typedef bool(__fastcall *HasFlags_t)(void *window, void *edx, unsigned flags);
+typedef void(__fastcall *ModifyFlags_t)(void *window, void *edx, unsigned add, unsigned remove, int redraw);
+
+// The game changes its size through ApplyGameOptions, as the options dialog does, with the options it has and another size. That
+// call also sends the options' speed to a running match, so it gets the one the match runs at; and the change of size shows the
+// pause notice at its end, which goes back to hidden if it was.
+// In a match with other humans the change of size stays the game's own, from its options: ApplyGameOptions would send them a speed
+// command.
+bool OthersInMatch()
+{
+	typedef int(__cdecl *IsMultiHumans_t)();
+	return *reinterpret_cast<void **>(addr::kGame) && reinterpret_cast<IsMultiHumans_t>(addr::kMultiHumans)() != 0;
+}
+
+bool ApplySize(ResSize size)
+{
+	const int index = ResolutionIndexOf(size.w, size.h);
+	if (index < 0) {
+		LogW("display", "the size %dx%d is not in the list of this mode: the game keeps its own", size.w, size.h);
+		return false;
+	}
+	int block[kOptionsCount];
+	memcpy(block, reinterpret_cast<const int *>(addr::kGameOptions), sizeof(block));
+	if (block[kResolutionSlot] == index && g_sizeAtStart.x == size.w && g_sizeAtStart.y == size.h) return true;
+	int &current = *reinterpret_cast<int *>(addr::kCurrentResolutionIndex);
+	const int before = ResolutionIndexOf(g_sizeAtStart.x, g_sizeAtStart.y);
+	// The list was built again for another mode: the game's position may already name the new size while it is at another one.
+	if (block[kResolutionSlot] == index) current = -1;
+	block[kResolutionSlot] = index;
+	const char *game = *reinterpret_cast<const char *const *>(addr::kGame);
+	if (game) {
+		const int speed = (std::max)(kSpeedMin, (std::min)(kSpeedMin + kSpeedSpan, *reinterpret_cast<const int *>(game + kGameSpeed)));
+		block[kSpeedSlot] = ((speed - kSpeedMin) * 100 + kSpeedSpan / 2) / kSpeedSpan;
+	}
+	void *notice = *reinterpret_cast<void **>(addr::kPausedMenu);
+	const bool noticeShown = notice && reinterpret_cast<HasFlags_t>(addr::kWindowHasFlags)(notice, nullptr, kFlagVisible);
+	reinterpret_cast<int(__cdecl *)(int *)>(addr::kApplyGameOptions)(block);
+	notice = *reinterpret_cast<void **>(addr::kPausedMenu);
+	if (notice && !noticeShown) reinterpret_cast<ModifyFlags_t>(addr::kModifyFlags)(notice, nullptr, 0, kFlagVisible, 1);
+	// A failed change leaves the game at the size before, and a position the options would not find.
+	if (current != index) {
+		LogW("display", "the game did not take %dx%d (its position is %d, not %d): it stays at %ldx%ld", size.w, size.h, current, index, g_sizeAtStart.x,
+			g_sizeAtStart.y);
+		if (current < 0) current = before;
+		return false;
+	}
+	g_sizeAtStart = {size.w, size.h};
+	return true;
+}
+
+// A full screen's size chosen in the options is tried first: it is saved when the player keeps it, and without an answer in kTrialMs
+// (a black screen, a monitor out of range) the size before comes back. On the game thread, but for the answer.
+const DWORD kTrialMs = 15000;
+struct Trial {
+	bool active = false;
+	ResSize tried, back;
+};
+Trial g_trial;
+enum Answer { kNoAnswer, kKeep, kBack };
+std::atomic<int> g_answer{kNoAnswer};
+bool g_modeSwitched = false;
+
+void AnswerKeep()
+{
+	g_answer = kKeep;
+	UiWakeGameThread();
+}
+
+void AnswerBack()
+{
+	g_answer = kBack;
+	UiWakeGameThread();
+}
+
+void StartTrial(ResSize tried, ResSize back)
+{
+	g_trial.active = true;
+	g_trial.tried = tried;
+	g_trial.back = back;
+	g_answer = kNoAnswer;
+	const std::string size = std::to_string(tried.w) + " x " + std::to_string(tried.h);
+	LogI("display", "full screen at %dx%d on trial; it goes back to %dx%d without an answer", tried.w, tried.h, back.w, back.h);
+	UiAskTimed(TrFmt("Keep %s?", {size}), "If the screen looks right, keep it. If not, the previous resolution comes back in %s seconds.", "Keep", &AnswerKeep,
+		"Go back", &AnswerBack, GetTickCount() + kTrialMs);
 }
 
 void __fastcall HookSaveOptions(unsigned *block)
@@ -184,14 +300,12 @@ void __fastcall HookSaveOptions(unsigned *block)
 	if (index >= 0 && index < ResolutionCount()) {
 		const POINT size = (*reinterpret_cast<POINT **>(addr::kResolutionList + 4))[index];
 		if (size.x != g_sizeAtStart.x || size.y != g_sizeAtStart.y) {
-			const ResSize screen = ScreenSize();
-			Config &c = MutableConfig();
-			c.resolutionW = size.x;
-			c.resolutionH = size.y;
-			c.resolutionScreenW = screen.w;
-			c.resolutionScreenH = screen.h;
-			SaveConfig();
-			LogI("display", "resolution saved by size: %ldx%ld, chosen on a %dx%d screen", size.x, size.y, screen.w, screen.h);
+			const bool windowed = DisplayIsWindowed();
+			const ResPick back = SavedPick(windowed);
+			const std::vector<ResSize> list = ResolutionSizes();
+			// The size this mode had (after a change of mode in the options) needs no question; a window is seen as it changes.
+			if (!windowed && back.index >= 0 && back.index != index && !OthersInMatch()) StartTrial({size.x, size.y}, list[back.index]);
+			else SaveSize(windowed, {size.x, size.y});
 			g_sizeAtStart = size;
 		}
 	}
@@ -725,8 +839,48 @@ void TweaksApplySmoothScroll()
 	ApplySmoothScroll();
 }
 
+void TweaksModeSwitched()
+{
+	g_modeSwitched = true;
+	UiWakeGameThread();
+}
+
+void TweaksResolutionTick()
+{
+	if (g_modeSwitched && !*reinterpret_cast<void **>(addr::kOptionsDialog)) {
+		g_modeSwitched = false;
+		// The trial of a full screen's size ends with the mode it was tried in.
+		if (g_trial.active) {
+			g_trial.active = false;
+			UiCancelTimed();
+		}
+		const bool windowed = DisplayIsWindowed();
+		ReplaceResolutionList();
+		const ResPick pick = SavedPick(windowed);
+		if (OthersInMatch()) {
+			LogI("display", "%s in a match with other players: the size stays as it is", windowed ? "window" : "full screen");
+		}
+		else if (pick.index >= 0) {
+			const ResSize size = ResolutionSizes()[pick.index];
+			LogI("display", "%s: the size of this mode is %dx%d", windowed ? "window" : "full screen", size.w, size.h);
+			ApplySize(size);
+		}
+	}
+	const int answer = g_answer.exchange(kNoAnswer);
+	if (!g_trial.active || answer == kNoAnswer) return;
+	g_trial.active = false;
+	if (answer == kKeep) {
+		SaveSize(false, g_trial.tried);
+		return;
+	}
+	LogI("display", "full screen at %dx%d not kept: back to %dx%d", g_trial.tried.w, g_trial.tried.h, g_trial.back.w, g_trial.back.h);
+	ApplySize(g_trial.back);
+}
+
 void TweaksFrameTick()
 {
+	// The size changes between frames, where the game reads its window's messages, as it does from its options: never inside a frame.
+	if ((g_modeSwitched && !*reinterpret_cast<void **>(addr::kOptionsDialog)) || g_answer != kNoAnswer) UiWakeGameThread();
 	static LARGE_INTEGER freq = {}, last = {}, start = {};
 	static unsigned frames = 0;
 	static double maxGapMs = 0;

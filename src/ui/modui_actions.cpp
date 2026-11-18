@@ -367,6 +367,12 @@ void DoAction(int action, int arg)
 		break;
 	}
 	case kConfirmNo:
+		// A timed question has no "Later": closing it is its second answer.
+		if (g_s.confirmDeadline && g_s.alt) {
+			DoAction(kConfirmAlt, 0);
+			break;
+		}
+		g_s.confirmDeadline = 0;
 		g_s.confirm = false, g_s.confirmItems.clear();
 		if ((g_s.confirmKind == kConfirmRestart || g_s.confirmKind == kConfirmNotice || g_s.confirmKind == kConfirmAction) && g_s.confirmOnly) {
 			g_s.open = false;

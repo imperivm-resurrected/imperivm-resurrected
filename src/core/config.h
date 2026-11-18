@@ -23,6 +23,11 @@ struct Config {
 	int resolutionH = 0;
 	int resolutionScreenW = 0;
 	int resolutionScreenH = 0;
+	// The window's size and the screen it was chosen on: resolutionW/H is the full screen's.
+	int windowW = 0;
+	int windowH = 0;
+	int windowScreenW = 0;
+	int windowScreenH = 0;
 	bool extendedView = false;
 	int fpsLimit = 0;
 	int imageScaling = 0;
@@ -84,6 +89,12 @@ struct Config {
 };
 
 const Config &GetConfig();
+// The size saved for full screen or for a window, and the screen it was chosen on; 0 when none was.
+struct SavedSize {
+	int w = 0, h = 0, screenW = 0, screenH = 0;
+};
+SavedSize ConfigSavedSize(const Config &c, bool windowed);
+void ConfigSetSavedSize(Config &c, bool windowed, const SavedSize &s);
 Config &MutableConfig();
 void SaveConfig();
 void LoadConfig();

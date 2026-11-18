@@ -20,6 +20,9 @@ struct UiPort {
 	void (*joinFromDiscord)(uint64_t lobbyId) = nullptr;
 	void (*openControls)() = nullptr;
 	void (*wakeGameThread)() = nullptr;
+	void (*askTimed)(const std::string &title, const std::string &text, const std::string &yes, void (*onYes)(), const std::string &alt, void (*onAlt)(),
+		unsigned deadline) = nullptr;
+	void (*cancelTimed)() = nullptr;
 };
 
 void UiPortSet(const UiPort &port);
@@ -38,3 +41,9 @@ void UiRefreshMainMenuButton();
 void UiJoinFromDiscord(uint64_t lobbyId);
 void UiOpenControls();
 void UiWakeGameThread();
+// A question that answers itself: `text` has "%s" for the seconds left until `deadline` (GetTickCount), when `onAlt` is taken, as
+// on Escape. The answers run on the interface's threads, so they only note the answer.
+void UiAskTimed(const std::string &title, const std::string &text, const std::string &yes, void (*onYes)(), const std::string &alt, void (*onAlt)(),
+	unsigned deadline);
+// Takes the timed question away unanswered.
+void UiCancelTimed();

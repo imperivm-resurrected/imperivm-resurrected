@@ -25,6 +25,11 @@ void ModUiAsk(const std::string &title, const std::string &text, const std::stri
 // As ModUiAsk with two answers: `yes` and `alt` each run theirs, and a third button, "Later", and Esc only close it.
 void ModUiChoose(const std::string &title, const std::string &text, const std::string &yes, std::function<void()> onYes, const std::string &alt,
 	std::function<void()> onAlt);
+// As ModUiChoose without "Later": `text` shows the seconds left until `deadline` (GetTickCount) where it has "%s", and then, or on
+// Esc, `onAlt` runs. The answers run with the screen's lock held.
+void ModUiChooseTimed(const std::string &title, const std::string &text, const std::string &yes, void (*onYes)(), const std::string &alt, void (*onAlt)(),
+	unsigned deadline);
+void ModUiCancelTimed();
 
 bool ModUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp);
 bool ModUiHandleCornerMessage(UINT msg, WPARAM wp, LPARAM lp);

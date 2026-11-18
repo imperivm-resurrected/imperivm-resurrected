@@ -106,6 +106,19 @@ void UiOpenControls()
 	else Missing("controls screen");
 }
 
+void UiAskTimed(const std::string &title, const std::string &text, const std::string &yes, void (*onYes)(), const std::string &alt, void (*onAlt)(),
+	unsigned deadline)
+{
+	if (g_port.askTimed) g_port.askTimed(title, text, yes, onYes, alt, onAlt, deadline);
+	else Missing("timed question");
+}
+
+void UiCancelTimed()
+{
+	if (g_port.cancelTimed) g_port.cancelTimed();
+	else Missing("timed question");
+}
+
 void UiWakeGameThread()
 {
 	if (g_port.wakeGameThread) g_port.wakeGameThread();

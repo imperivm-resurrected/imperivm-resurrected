@@ -148,6 +148,22 @@ void LoadConfig()
 		g_config.resolutionScreenW = resW;
 		g_config.resolutionScreenH = resH;
 	}
+	const std::string windowSize = ini.Text("Display", "WindowSize", "", kShortText);
+	if (sscanf_s(windowSize.c_str(), "%dx%d", &resW, &resH) == 2 && resW >= 640 && resH >= 480 && resW <= 8192 && resH <= 8192) {
+		g_config.windowW = resW;
+		g_config.windowH = resH;
+	}
+	if (sscanf_s(ini.Text("Display", "WindowScreen", "", kShortText).c_str(), "%dx%d", &resW, &resH) == 2 && resW > 0 && resH > 0 && resW <= 16384 &&
+		resH <= 16384) {
+		g_config.windowScreenW = resW;
+		g_config.windowScreenH = resH;
+	}
+	// Before each mode kept its own size, Resolution was the size of the mode in use: a window's goes to its own key and full screen
+	// starts at the screen's own size.
+	if (windowSize.empty() && g_config.windowed && g_config.resolutionW > 0) {
+		ConfigSetSavedSize(g_config, true, ConfigSavedSize(g_config, false));
+		ConfigSetSavedSize(g_config, false, SavedSize());
+	}
 	g_config.extendedView = ini.Flag("Display", "ExtendedView", false);
 	g_config.fpsLimit = ini.Clamped("Render", "FpsLimit", 0, 0, 1000);
 	const std::string scaling = ini.Text("Render", "ImageScaling", "sharp", kShortText);
@@ -224,6 +240,24 @@ void LoadConfig()
 		g_config.autosaveSlots, g_config.rejoinReload ? "reload" : "hot");
 }
 
+SavedSize ConfigSavedSize(const Config &c, bool windowed)
+{
+	SavedSize s;
+	s.w = windowed ? c.windowW : c.resolutionW;
+	s.h = windowed ? c.windowH : c.resolutionH;
+	s.screenW = windowed ? c.windowScreenW : c.resolutionScreenW;
+	s.screenH = windowed ? c.windowScreenH : c.resolutionScreenH;
+	return s;
+}
+
+void ConfigSetSavedSize(Config &c, bool windowed, const SavedSize &s)
+{
+	(windowed ? c.windowW : c.resolutionW) = s.w;
+	(windowed ? c.windowH : c.resolutionH) = s.h;
+	(windowed ? c.windowScreenW : c.resolutionScreenW) = s.screenW;
+	(windowed ? c.windowScreenH : c.resolutionScreenH) = s.screenH;
+}
+
 Config &MutableConfig()
 {
 	return g_config;
@@ -239,12 +273,14 @@ void SaveConfig()
 	ini.WriteFlag("Display", "TrapMouse", g_config.trapMouse);
 	ini.WriteFlag("Display", "ExtendedView", g_config.extendedView);
 	ini.WriteNumber("Display", "Monitor", g_config.monitor);
-	if (g_config.resolutionW > 0) {
-		ini.Write("Display", "Resolution", SizeText(g_config.resolutionW, g_config.resolutionH));
-	}
-	if (g_config.resolutionScreenW > 0) {
-		ini.Write("Display", "ResolutionScreen", SizeText(g_config.resolutionScreenW, g_config.resolutionScreenH));
-	}
+	auto writeSize = [&](const char *key, int w, int h) {
+		if (w > 0) ini.Write("Display", key, SizeText(w, h));
+		else ini.Remove("Display", key);
+	};
+	writeSize("Resolution", g_config.resolutionW, g_config.resolutionH);
+	writeSize("ResolutionScreen", g_config.resolutionScreenW, g_config.resolutionScreenH);
+	writeSize("WindowSize", g_config.windowW, g_config.windowH);
+	writeSize("WindowScreen", g_config.windowScreenW, g_config.windowScreenH);
 	ini.WriteFlag("Render", "VSync", g_config.vsync);
 	ini.WriteNumber("Render", "FpsLimit", g_config.fpsLimit);
 	static const char *const kScalingNames[] = {"sharp", "smooth", "exact"};

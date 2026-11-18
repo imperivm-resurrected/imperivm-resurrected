@@ -194,6 +194,8 @@ struct State {
 	// A second answer beside yes (ModUiChoose); Esc and the third button only close.
 	std::string actionAlt;
 	std::function<void()> alt;
+	// A question that takes `alt` by itself at this time (GetTickCount), and on Esc; 0 for the others.
+	unsigned confirmDeadline = 0;
 	// The size of the frame being painted, in its own design units: the whole screen while the content screen is open.
 	int viewW = kDesignW, viewH = kDesignH;
 };
