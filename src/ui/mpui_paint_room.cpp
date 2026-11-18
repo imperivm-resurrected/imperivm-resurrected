@@ -335,17 +335,17 @@ void SlotCombo(Painter &p, const State &st, int x, int y, int w, const std::stri
 
 // Where each column of the player table starts; the player's column takes what the others leave.
 struct Columns {
-	int player = 0, playerW = 0, team = 0, teamW = 0, civ = 0, civW = 0, color = 0, colorW = 0, bonus = 0, bonusW = 0, diff = 0, diffW = 0,
-		status = 0, statusW = 0, kick = 0, kickW = 32;
-	bool bonusOn = false, statusOn = false;
+	int player = 0, playerW = 0, team = 0, teamW = 0, civ = 0, civW = 0, color = 0, colorW = 0, bonus = 0, bonusW = 0, status = 0, statusW = 0,
+		kick = 0, kickW = 32;
+	bool statusOn = false;
 };
 
 // The columns grow from the narrow widths, a table of 1150 that still fits "No team" and the longest civilization, to the wide ones of
-// the full-width table at 1080p; the player's column takes the rest.
-Columns TableColumns(int x, int w, bool bonusOn, bool statusOn)
+// the full-width table at 1080p; the player's column, where an empty slot or an AI keeps its menu, takes the rest. The bonus column is
+// always there, a dash while the game has bonuses off, so the table keeps its shape.
+Columns TableColumns(int x, int w, bool statusOn)
 {
 	Columns c;
-	c.bonusOn = bonusOn;
 	c.statusOn = statusOn;
 	const float t = std::max(0.0f, std::min(1.0f, (w - 1150) / 550.0f));
 	auto width = [t](int narrow, int wide) { return narrow + static_cast<int>((wide - narrow) * t + 0.5f); };
@@ -353,7 +353,6 @@ Columns TableColumns(int x, int w, bool bonusOn, bool statusOn)
 	c.civW = width(170, 230);
 	c.colorW = width(64, 76);
 	c.bonusW = width(150, 200);
-	c.diffW = width(130, 180);
 	c.statusW = width(150, 190);
 	const int gap = width(12, 16);
 	int right = x + w - 16;
@@ -363,12 +362,8 @@ Columns TableColumns(int x, int w, bool bonusOn, bool statusOn)
 		c.status = right - c.statusW;
 		right = c.status - gap;
 	}
-	c.diff = right - c.diffW;
-	right = c.diff - gap;
-	if (bonusOn) {
-		c.bonus = right - c.bonusW;
-		right = c.bonus - gap;
-	}
+	c.bonus = right - c.bonusW;
+	right = c.bonus - gap;
 	c.color = right - c.colorW;
 	right = c.color - gap;
 	c.civ = right - c.civW;
@@ -680,7 +675,8 @@ void PaintSlotRow(Painter &p, const State &st, const TableCtx &t, int i, const A
 		p.raw = true;
 		p.Text(c.civ + 12, ctlY, c.civW - 12, kFieldH, named ? s.raceNames[s.fixedRace] : std::string("\xE2\x80\x94"), pal::textDim, line);
 		p.raw = false;
-		p.Fill(c.color + 12, cy - 8, 16, 16, PlayerColor(g, s.color));
+		const uint32_t mapColor = s.scenarioColor;
+		p.Fill(c.color + 12, cy - 8, 16, 16, mapColor ? RGB((mapColor >> 16) & 255, (mapColor >> 8) & 255, mapColor & 255) : PlayerColor(g, s.color));
 		p.Frame(c.color + 12, cy - 8, 16, 16, pal::edge);
 		return;
 	}
@@ -718,9 +714,12 @@ void PaintSlotRow(Painter &p, const State &st, const TableCtx &t, int i, const A
 	}
 
 	if (s.type == 1) {
-		PaintMonogram(p, c.player, cy - kAvatar / 2, kAvatar, Tr("AI"));
-		p.Font(1);
-		p.Text(c.player + kAvatar + 14, cy - 13, std::max(20, nameRight - c.player - kAvatar - 14), 26, "AI", pal::text, line);
+		// The AI's level is one of the slot's own choices, next to Open and Closed, as the game keeps them: its menu stays where the empty
+		// slot's was, so choosing an AI does not move it across the row.
+		int sel = 0;
+		const std::vector<SlotChoice> choices = SlotChoices(g, s, sel);
+		const bool editable = g.host && !s.local && !load && choices.size() > 1 && !moving && !(g.online && LocalReady(g)) && !RankedRoomLocked(st);
+		SlotCombo(p, st, c.player, ctlY, std::min(300, nameRight - c.player), AiLevel(s), pal::text, kDropSlot, i, editable);
 	}
 	else {
 		PaintWho(p, st, c.player, cy, nameRight - c.player, who, SlotLabel(s), i == t.f.hostSlot ? std::string("Host") : std::string(), pal::redText, true,
@@ -749,22 +748,12 @@ void PaintSlotRow(Painter &p, const State &st, const TableCtx &t, int i, const A
 		const bool open = st.dropOpen && st.dropKind == kDropColor && st.dropIndex == i;
 		PaintValueBox(p, st, c.color, ctlY, c.colorW, std::string(), pal::text, editable, open, kGColor, i, PlayerColor(g, s.color));
 	}
-	if (c.bonusOn) {
+	{
+		const bool off = BonusesDisabled(g);
 		const bool known = s.bonus > 0 && s.bonus < static_cast<int>(g.bonuses.size());
-		const std::string bonus = s.bonus <= 0 ? "—" : known ? g.bonuses[s.bonus].name : "?";
-		const bool editable = !load && g.bonuses.size() > 1 && !GameModeLocksOption(GameModeFor(g.mode.c_str()), 0x10a7) && own && !frozen;
+		const std::string bonus = off || s.bonus <= 0 ? "—" : known ? g.bonuses[s.bonus].name : "?";
+		const bool editable = !off && !load && g.bonuses.size() > 1 && !GameModeLocksOption(GameModeFor(g.mode.c_str()), 0x10a7) && own && !frozen;
 		SlotCombo(p, st, c.bonus, ctlY, c.bonusW, bonus, s.bonus <= 0 ? pal::textDim : pal::text, kDropBonus, i, editable);
-	}
-	if (s.type == 1) {
-		// The level is one of the slot's own choices, next to Open and Closed, as the game keeps them.
-		int sel = 0;
-		const std::vector<SlotChoice> choices = SlotChoices(g, s, sel);
-		const bool editable = g.host && !s.local && !load && choices.size() > 1 && !moving && !(g.online && LocalReady(g)) && !RankedRoomLocked(st);
-		SlotCombo(p, st, c.diff, ctlY, c.diffW, AiLevel(s), pal::text, kDropSlot, i, editable);
-	}
-	else {
-		p.Font(0);
-		p.Text(c.diff + 12, ctlY, c.diffW - 12, kFieldH, "—", pal::disabled, line);
 	}
 	if (c.statusOn) {
 		if (s.type == 3 && !s.exists) {
@@ -802,7 +791,7 @@ void PaintPlayerTable(Painter &p, const State &st, const RoomFacts &f, int x, in
 	t.x = x;
 	t.w = w;
 	t.moving = g.host && st.moveFrom >= 0 && st.moveFrom < 8;
-	t.c = TableColumns(x, w, !BonusesDisabled(g), g.online);
+	t.c = TableColumns(x, w, g.online);
 	const Columns &c = t.c;
 	p.Font(4);
 	const int hy = y + 2, hh = kTableHeadH - 4;
@@ -811,8 +800,7 @@ void PaintPlayerTable(Painter &p, const State &st, const RoomFacts &f, int x, in
 	p.TextCaps(c.team, hy, c.teamW, hh, "Team", pal::caption, head, 2);
 	p.TextCaps(c.civ, hy, c.civW, hh, "Civilization", pal::caption, head, 2);
 	p.TextCaps(c.color, hy, c.colorW + 8, hh, "Color", pal::caption, head, 2);
-	if (c.bonusOn) p.TextCaps(c.bonus, hy, c.bonusW, hh, "Bonus", pal::caption, head, 2);
-	p.TextCaps(c.diff, hy, c.diffW, hh, "Difficulty", pal::caption, head, 2);
+	p.TextCaps(c.bonus, hy, c.bonusW, hh, "Bonus", pal::caption, head, 2);
 	if (c.statusOn) p.TextCaps(c.status, hy, c.statusW, hh, "Status", pal::caption, head, 2);
 
 	int rowY = y + kTableHeadH, hovered = -1;

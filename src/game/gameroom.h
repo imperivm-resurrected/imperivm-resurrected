@@ -41,6 +41,8 @@ struct GameRoomSlot {
 	int fixedRace = -1;
 	// A player of a preset map that nobody can take: the scenario plays it, with its fixed civilization.
 	bool scenario = false;
+	// That player's colour in the map (0xRRGGBB), 0 when unknown.
+	uint32_t scenarioColor = 0;
 };
 
 struct GameRoomOption {

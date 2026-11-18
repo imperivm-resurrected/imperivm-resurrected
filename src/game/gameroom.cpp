@@ -7,6 +7,7 @@
 #include <deque>
 #include <functional>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <algorithm>
 #include <atomic>
@@ -25,6 +26,7 @@
 #include "game/roomcountdown.h"
 #include "game/roomname.h"
 #include "game/gamehook.h"
+#include "game/mappreview.h"
 #include "core/leaguemaps.h"
 #include "core/log.h"
 #include "core/names.h"
@@ -107,6 +109,45 @@ ThisOnly_t g_origPickerDtor = nullptr;
 std::mutex g_lock;
 GameRoomSnapshot g_snap;
 std::deque<std::function<void()>> g_actions;
+
+// The player of a preset map behind each row of the room, and that player's colour. The game gives its rows to the players a person
+// may take (control Human or Both in the map) in their order, while the civilizations it reads come per player: a map whose second
+// human is its fourth player has that player in the second row, with the fourth player's colour. The players the scenario keeps follow,
+// in their order. Until the map's file has been read, or when its players do not match the room's positions, row i is player i.
+struct RowMap {
+	int player[8] = {0, 1, 2, 3, 4, 5, 6, 7};
+	uint32_t color[8] = {};
+	bool known = false;
+};
+
+RowMap RowPlayers(const std::string &scenario, unsigned positions)
+{
+	RowMap m;
+	const std::shared_ptr<const MapPreviewData> d = scenario.empty() ? nullptr : MapPreviewGet(scenario);
+	if (!d || d->failed) return m;
+	std::vector<const MapPlayer *> people, others;
+	for (const MapPlayer &p : d->info.players) {
+		if (p.slot >= 0 && p.slot < 8) (p.human ? people : others).push_back(&p);
+	}
+	if (people.size() != positions) return m;
+	int row = 0;
+	for (const std::vector<const MapPlayer *> *group : {&people, &others}) {
+		for (const MapPlayer *p : *group) {
+			m.player[row] = p->slot;
+			m.color[row] = p->color;
+			row++;
+		}
+	}
+	for (; row < 8; row++) m.player[row] = -1;
+	m.known = true;
+	return m;
+}
+
+unsigned RoomPositions(void *dlg)
+{
+	const unsigned raw = *reinterpret_cast<unsigned short *>(static_cast<char *>(dlg) + 0xcc);
+	return raw && raw <= 8 ? raw : 8;
+}
 
 struct CountdownState {
 	std::mutex mx;
@@ -533,6 +574,12 @@ void TakeSnapshot()
 		s.localSlot = reinterpret_cast<IntThis_t>(addr::kGetLocalSlot)(g_dlg);
 		s.teamChoices = TeamChoices(Button(g_dlg, (((s.localSlot & 7) + 1) << 12) | 0x32));
 		memcpy(s.colors, reinterpret_cast<const void *>(addr::kPlayerColorTable), sizeof(s.colors));
+		std::string lastScenario;
+		{
+			std::lock_guard<std::mutex> lock(g_lock);
+			lastScenario = g_snap.scenario;
+		}
+		const RowMap rows = RowPlayers(lastScenario, RoomPositions(g_dlg));
 		for (int i = 0; i < 8; i++) {
 			GameRoomSlot &slot = s.slots[i];
 			const char *name = nullptr;
@@ -565,7 +612,8 @@ void TakeSnapshot()
 				reinterpret_cast<ComboSetSelected_t>(addr::kComboSetSelected)(raceCombo, nullptr, 0, 0);
 				slot.race = ComboSel(raceCombo);
 			}
-			slot.fixedRace = *reinterpret_cast<int *>(static_cast<char *>(g_dlg) + 0x9c) == 0 ? g_scenarioRace[i] : -1;
+			const int mapPlayer = rows.player[i];
+			slot.fixedRace = *reinterpret_cast<int *>(static_cast<char *>(g_dlg) + 0x9c) == 0 && mapPlayer >= 0 ? g_scenarioRace[mapPlayer] : -1;
 			if (slot.fixedRace >= 0 && slot.fixedRace < static_cast<int>(slot.raceNames.size())) slot.race = slot.fixedRace;
 			void *nameCombo = Combo(g_dlg, base | 0x02);
 			slot.nameItems = ComboItems(nameCombo);
@@ -576,6 +624,7 @@ void TakeSnapshot()
 			slot.exists = static_cast<unsigned>(i) < positions && mark != 1;
 			slot.aiAllowed = slot.exists && mark == 2;
 			slot.scenario = !slot.exists && mark == 1 && slot.fixedRace >= 0;
+			if (slot.scenario && rows.known) slot.scenarioColor = rows.color[i];
 		}
 		void *opts = *reinterpret_cast<void **>(addr::kGameOptionsDialog);
 		if (s.host && opts) {
@@ -1249,8 +1298,16 @@ void EnforceFixedRaces()
 {
 	if (!g_dlg || *reinterpret_cast<int *>(static_cast<char *>(g_dlg) + 0x9c) != 0) return;
 	char *choice = static_cast<char *>(g_dlg) + 0xa8;
-	for (int i = 0; i < 8; i++) {
-		const int want = g_scenarioRace[i];
+	const unsigned positions = RoomPositions(g_dlg);
+	std::string scenario;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		scenario = g_snap.scenario;
+	}
+	const RowMap rows = RowPlayers(scenario, positions);
+	for (int i = 0; i < static_cast<int>(positions); i++) {
+		const int player = rows.player[i];
+		const int want = player >= 0 ? g_scenarioRace[player] : -1;
 		if (want < 0 || choice[i] == want) continue;
 		static int logged = 0;
 		if (logged++ < 12) LogD("room", "slot %d has the map's fixed civilization (%d); setting it again (was %d)", i + 1, want, static_cast<int>(choice[i]));
