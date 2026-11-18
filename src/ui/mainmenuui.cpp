@@ -286,7 +286,7 @@ void Sync(void *dlg, bool onShow)
 			v.groupCaption = Tr(wanted == kGroupMulti ? "Multiplayer" : "Single-player");
 			if (!v.sub.empty()) {
 				v.subOpen = true;
-				v.subChangedAt = GetTickCount();
+				v.subChangedAt = MenuClockMs();
 				v.focusMain = GroupIndex(v);
 				v.focusSub = -1;
 			}
@@ -310,7 +310,7 @@ void Click(int id)
 
 void OpenGroup(View &v, int group, bool focusFirst)
 {
-	if (!v.subOpen || v.openGroup != group) v.subChangedAt = GetTickCount();
+	if (!v.subOpen || v.openGroup != group) v.subChangedAt = MenuClockMs();
 	v.openGroup = group;
 	v.sub = group == kGroupMulti ? v.subMulti : v.subSingle;
 	v.groupCaption = Tr(group == kGroupMulti ? "Multiplayer" : "Single-player");
@@ -321,7 +321,7 @@ void OpenGroup(View &v, int group, bool focusFirst)
 
 void CloseGroup(View &v)
 {
-	if (v.subOpen) v.subChangedAt = GetTickCount();
+	if (v.subOpen) v.subChangedAt = MenuClockMs();
 	v.subOpen = false;
 	v.focusSub = -1;
 }
@@ -466,41 +466,72 @@ void MainMenuUiOpenMultiplayerGroup()
 	g_groupWanted = kGroupMulti;
 }
 
+namespace {
+// A screen that covers the menu whole stops drawing the moment its dialog goes, but the game's frame under it is still the last one the
+// game drew, with its own dialog in it, until the game draws again. For a moment after such a screen leaves, the menu draws anyway.
+const DWORD kHandoffMs = 1500;
+std::atomic<DWORD> g_coveredAt{0};
+
+bool FullScreenOnMenu()
+{
+	return MpUiIsOpen() || ModUiIsOpen() || BattlesUiNeedsDraw() || ConquestUiNeedsDraw() || CreditsUiNeedsDraw() || ProfileUiNeedsDraw();
+}
+
+bool HandingOff(DWORD now)
+{
+	const DWORD at = g_coveredAt.load();
+	return at && now - at < kHandoffMs && ShownDialog() != nullptr;
+}
+}
+
 bool MainMenuUiNeedsDraw()
 {
+	const DWORD now = GetTickCount();
+	const bool full = FullScreenOnMenu();
+	if (full && MpUiMainMenu()) g_coveredAt = now;
+	bool shown = false;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
-		if (!g_s.shown) return false;
-		if (g_s.view.interactive) return true;
+		shown = g_s.shown;
+		if (shown && g_s.view.interactive && !full) return true;
 	}
+	const bool handoff = !full && HandingOff(now);
+	if (!shown && !handoff) return false;
 	// Whether the menu is back on top is known on the game thread, at the game's next frame; with the menu still the game draws none
 	// until the mouse moves, so the menu stayed blank after a screen closed. Once no screen of the mod covers it any more, the game thread
 	// is woken to look again.
-	const bool covered = ScreenCoversMenu();
 	static DWORD wokeAt = 0;
-	const DWORD now = GetTickCount();
-	if (!covered && now - wokeAt >= 200) {
+	if (!ScreenCoversMenu() && now - wokeAt >= 200) {
 		wokeAt = now;
 		MpUiWakeGameThread();
 	}
 	// Meanwhile, and under the windows that leave it in sight around them, the menu still draws, without taking the input: the game's
 	// own menu must never show. Under a screen that covers it whole there is nothing to see.
-	if (!MpUiMainMenuVisible()) return false;
-	return !(MpUiIsOpen() || ModUiIsOpen() || BattlesUiNeedsDraw() || ConquestUiNeedsDraw() || CreditsUiNeedsDraw() || ProfileUiNeedsDraw());
+	if (full) return false;
+	return handoff || MpUiMainMenuVisible();
+}
+
+bool MainMenuUiAnimating()
+{
+	std::lock_guard<std::mutex> lock(g_lock);
+	return g_s.shown && g_s.view.subChangedAt && MenuClockMs() - g_s.view.subChangedAt < kMenuAnimMs;
 }
 
 void MainMenuUiDraw(uint32_t *buf, int w, int h)
 {
 	View view;
+	bool shown = false;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
-		if (!g_s.shown) return;
+		shown = g_s.shown;
+		if (!shown && !HandingOff(GetTickCount())) return;
 		view = g_s.view;
 	}
+	if (!shown) view.interactive = false;
 	std::vector<Hit> hits;
 	Paint(buf, w, h, view, hits);
 	std::lock_guard<std::mutex> lock(g_lock);
-	if (g_s.shown) g_s.hits = std::move(hits);
+	if (g_s.shown && shown) g_s.hits = std::move(hits);
 }
 
 bool MainMenuUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
