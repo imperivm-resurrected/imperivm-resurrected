@@ -1265,8 +1265,10 @@ void PaintChatLog(Painter &p, const State &st, int x, int y, int w, int h)
 			patronBand(joinedTier, py - 2, it.h);
 			p.Font(1);
 			const int nameX = x + pad + 2 + kChatLaurel + 4, nameW = std::min(p.TextWidth(l.who), textW / 2);
-			DrawPatron(p, x + pad + 2, py + 2, kChatLaurel, nameX, py + 1, nameW, lineH, l.who, joinedTier, DT_LEFT | DT_TOP | DT_SINGLELINE);
-			if (py + 2 >= y && py + 2 + kChatLaurel <= y + h) PatronHotspot(p, x + pad + 2, py + 2, kChatLaurel, PatronOf(l.id), st.mouseX, st.mouseY, kPatronLink);
+			// The laurel centred on the name, which is in a larger type than the line is measured in.
+			const int laurelY = py + 1 + (p.Measure(nameW + 40, "A") - kChatLaurel) / 2;
+			DrawPatron(p, x + pad + 2, laurelY, kChatLaurel, nameX, py + 1, nameW, lineH, l.who, joinedTier, DT_LEFT | DT_TOP | DT_SINGLELINE);
+			if (laurelY >= y && laurelY + kChatLaurel <= y + h) PatronHotspot(p, x + pad + 2, laurelY, kChatLaurel, PatronOf(l.id), st.mouseX, st.mouseY, kPatronLink);
 			const std::string rest = l.text.compare(0, l.who.size(), l.who) == 0 ? l.text.substr(l.who.size()) : " " + l.text;
 			p.Font(3);
 			p.Text(nameX + nameW, py + 1, x + pad + textW - nameX - nameW, lineH, rest, pal::text, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS);
@@ -1295,8 +1297,10 @@ void PaintChatLog(Painter &p, const State &st, int x, int y, int w, int h)
 		p.Font(1);
 		if (tier != PatronTier::None) {
 			const int nameX = laurelX + kChatLaurel + 3, nameW = x + pad + textW - nameX;
-			DrawPatron(p, laurelX, py + 1, kChatLaurel, nameX, py, nameW, boxH, who, tier, DT_LEFT | DT_TOP | DT_SINGLELINE);
-			if (py + 1 >= y && py + 1 + kChatLaurel <= y + h) PatronHotspot(p, laurelX, py + 1, kChatLaurel, PatronOf(l.id), st.mouseX, st.mouseY, kPatronLink);
+			// The laurel centred on the name, which is in a larger type than the line is measured in.
+			const int laurelY = py + (p.Measure(std::max(40, nameW), "A") - kChatLaurel) / 2;
+			DrawPatron(p, laurelX, laurelY, kChatLaurel, nameX, py, nameW, boxH, who, tier, DT_LEFT | DT_TOP | DT_SINGLELINE);
+			if (laurelY >= y && laurelY + kChatLaurel <= y + h) PatronHotspot(p, laurelX, laurelY, kChatLaurel, PatronOf(l.id), st.mouseX, st.mouseY, kPatronLink);
 			if (badge.Shown()) ChatNameBadge(p, nameX, py, nameW - LeagueBadgeRoom(badge) - 12, boxH, l.who, badge, pal::text, st.mouseX, st.mouseY);
 		}
 		else {
