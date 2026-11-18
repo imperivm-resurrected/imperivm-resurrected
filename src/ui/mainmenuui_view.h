@@ -12,6 +12,18 @@ namespace mainmenuui {
 
 enum Action { kActNone, kActMain, kActSub };
 
+// Milliseconds from the performance counter: GetTickCount moves in steps of 15.6 ms, which made the submenu's slide jerk.
+inline unsigned MenuClockMs()
+{
+	LARGE_INTEGER now, freq;
+	QueryPerformanceCounter(&now);
+	QueryPerformanceFrequency(&freq);
+	return static_cast<unsigned>(now.QuadPart * 1000 / freq.QuadPart);
+}
+
+// How long the submenu's rows take to slide in, the last one after the others.
+constexpr unsigned kMenuAnimMs = 400;
+
 // The groups that open a submenu, as the id of their row; and the rows of the multiplayer group, which open its screen on a section.
 constexpr int kGroupSingle = 0, kGroupMulti = -1;
 constexpr int kMultiRooms = -10, kMultiRanked = -11, kMultiTournaments = -12;

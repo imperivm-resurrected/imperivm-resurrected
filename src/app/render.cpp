@@ -460,6 +460,8 @@ bool TakeNewFrame(bool video, bool wasVideo, std::vector<uint32_t> &image, int &
 
 struct UiNeeds {
 	bool saves, mods, mp, controls, options, gameMenu, drop, diplomacy, conquest, profile, battles, credits, chat, help, objectives, mainMenu;
+	// Something moves on its own and needs every pass, not the 30 a second of a still screen.
+	bool animating = false;
 
 	bool Any() const
 	{
@@ -487,6 +489,7 @@ UiNeeds QueryUiNeeds()
 	n.help = HelpUiNeedsDraw();
 	n.objectives = ObjectivesUiNeedsDraw();
 	n.mainMenu = MainMenuUiNeedsDraw();
+	n.animating = n.mainMenu && MainMenuUiAnimating();
 	return n;
 }
 
@@ -586,8 +589,8 @@ DWORD WINAPI RenderThread(LPVOID)
 		const UiNeeds needs = QueryUiNeeds();
 		if (newFrame && !needs.mp) MpUiObserveFrame(local.data(), fw, fh);
 		const bool ui = !video && needs.Any();
-		// The credits scroll on their own: they are drawn on every pass, at the pace of the screen.
-		if (ui && (newFrame || needs.credits || now - lastUiDraw >= 33)) {
+		// The credits and the sliding submenu move on their own: they are drawn on every pass, at the pace of the screen.
+		if (ui && (newFrame || needs.credits || needs.animating || now - lastUiDraw >= 33)) {
 			if (!newFrame) CopyGameFrame(local, fw, fh);
 			DrawUi(needs, local.data(), fw, fh);
 			if (overlay) {

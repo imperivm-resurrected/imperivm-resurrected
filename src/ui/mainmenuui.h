@@ -14,5 +14,7 @@ void MainMenuUiDestroyed(void *dlg);
 // When the menu next comes back, the multiplayer group's submenu is open (the multiplayer screen's Back).
 void MainMenuUiOpenMultiplayerGroup();
 bool MainMenuUiNeedsDraw();
+// While the submenu slides, the menu is drawn on every pass of the screen, not at the pace of a still menu.
+bool MainMenuUiAnimating();
 void MainMenuUiDraw(uint32_t *buf, int w, int h);
 bool MainMenuUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp);
