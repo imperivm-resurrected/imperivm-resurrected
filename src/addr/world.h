@@ -26,6 +26,8 @@ inline constexpr uintptr_t kSquadizeNextUnit = 0x00447584;
 inline constexpr uintptr_t kThreadLookIsDead = 0x0044779e;
 inline constexpr uintptr_t kAiUpdate = 0x00448dd0;
 inline constexpr uintptr_t kAiAddOrder = 0x004494c0;
+// CVXBasicGame::SetSeason (__thiscall, 1 spring, 2 autumn, 3 winter; an error text or null): reloads the terrain and the decors.
+inline constexpr uintptr_t kSetSeason = 0x00493090;
 inline constexpr uintptr_t kGetBonus = 0x004da370;
 inline constexpr uintptr_t kBuildingRepair = 0x004dba60;
 inline constexpr uintptr_t kCatapultByRace = 0x004e3b30;

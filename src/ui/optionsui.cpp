@@ -169,6 +169,7 @@ void SetExtras(Values &v, const Config &c)
 	v.checks[kChatBadges] = c.chatBadges;
 	v.checks[kMatchFoundSound] = c.matchFoundSound;
 	v.checks[kAllyColors] = c.allyColors;
+	v.checks[kDynamicSeasons] = c.dynamicSeasons;
 	v.scrolls[kMasterVolume] = c.masterVolume;
 	v.scrolls[kNatureVolume] = c.natureVolume;
 	v.scrolls[kConversationVolume] = c.conversationVolume;
@@ -218,7 +219,7 @@ void SetUpdateStatus(Values &v)
 void CopyExtras(Values &to, const Values &from)
 {
 	CopySystemExtras(to, from);
-	for (int id : {kSmoothCamera, kPauseInBackground, kHealthBarHeroes, kChatBadges, kMatchFoundSound, kAllyColors}) CopyId(to.checks, from.checks, id);
+	for (int id : {kSmoothCamera, kPauseInBackground, kHealthBarHeroes, kChatBadges, kMatchFoundSound, kAllyColors, kDynamicSeasons}) CopyId(to.checks, from.checks, id);
 	CopyId(to.combos, from.combos, kHealthBars);
 	CopyDisplayExtras(to, from);
 	for (int id : kSoundScrolls) CopyId(to.scrolls, from.scrolls, id);
@@ -305,6 +306,7 @@ void CommitExtras(const Values &v)
 	c.chatBadges = CheckOr(v, kChatBadges, c.chatBadges);
 	c.matchFoundSound = CheckOr(v, kMatchFoundSound, c.matchFoundSound);
 	c.allyColors = CheckOr(v, kAllyColors, c.allyColors);
+	c.dynamicSeasons = CheckOr(v, kDynamicSeasons, c.dynamicSeasons);
 	CommitDisplayExtras(c, v);
 	ApplySoundLive(v);
 	CommitDevice(v);

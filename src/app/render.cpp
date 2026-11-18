@@ -21,6 +21,7 @@
 #include "core/log.h"
 #include "hooks/displaymode.h"
 #include "game/allycolors.h"
+#include "game/seasons.h"
 #include "game/autosave.h"
 #include "ui/modui.h"
 #include "ui/conquestui.h"
@@ -644,6 +645,7 @@ void GameThreadTicks()
 	LeagueDropUiGameTick();
 	MainMenuUiGameTick();
 	AllyColorsGameTick();
+	SeasonsGameTick();
 	DiplomacyUiGameTick();
 	ConquestUiGameTick();
 	ProfileUiGameTick();
