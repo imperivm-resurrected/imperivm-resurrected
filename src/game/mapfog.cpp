@@ -210,29 +210,26 @@ int DarkenLocked(const FogPass &pass)
 		gridsUpdated = true;
 		explored = nextExplored;
 		seen = nextSeen;
-		const int radius = 2, taps = radius * 2 + 1;
-		auto soften = [&](const std::vector<unsigned char> &in, std::vector<int> &out) {
-			blurA.resize(in.size());
-			blurB.resize(in.size());
-			for (size_t i = 0; i < in.size(); i++) blurA[i] = in[i] ? 256 : 0;
-			for (int pass = 0; pass < 3; pass++) {
+			// One pass of 1-2-1 over cells of 8 px: an edge of about 12 px. Three passes of a five-cell box (about 48 px) blurred the
+			// fog over what the player had explored, and the players found the narrower one clearer.
+			auto soften = [&](const std::vector<unsigned char> &in, std::vector<int> &out) {
+				blurA.resize(in.size());
+				blurB.resize(in.size());
+				for (size_t i = 0; i < in.size(); i++) blurA[i] = in[i] ? 256 : 0;
 				for (int gy = 0; gy < gh; gy++) {
+					const size_t row = static_cast<size_t>(gy) * gw;
 					for (int gx = 0; gx < gw; gx++) {
-						int sum = 0;
-						for (int d = -radius; d <= radius; d++) sum += blurA[static_cast<size_t>(gy) * gw + std::max(0, std::min(gw - 1, gx + d))];
-						blurB[static_cast<size_t>(gy) * gw + gx] = sum / taps;
+						const int left = blurA[row + std::max(0, gx - 1)], right = blurA[row + std::min(gw - 1, gx + 1)];
+						blurB[row + gx] = (left + 2 * blurA[row + gx] + right) / 4;
 					}
 				}
 				for (int gy = 0; gy < gh; gy++) {
-					for (int gx = 0; gx < gw; gx++) {
-						int sum = 0;
-						for (int d = -radius; d <= radius; d++) sum += blurB[static_cast<size_t>(std::max(0, std::min(gh - 1, gy + d))) * gw + gx];
-						blurA[static_cast<size_t>(gy) * gw + gx] = sum / taps;
-					}
+					const size_t up = static_cast<size_t>(std::max(0, gy - 1)) * gw, row = static_cast<size_t>(gy) * gw;
+					const size_t down = static_cast<size_t>(std::min(gh - 1, gy + 1)) * gw;
+					for (int gx = 0; gx < gw; gx++) blurA[row + gx] = (blurB[up + gx] + 2 * blurB[row + gx] + blurB[down + gx]) / 4;
 				}
-			}
-			out = blurA;
-		};
+				out = blurA;
+			};
 		soften(explored, fogA);
 		for (int &a : fogA) a = std::max(0, std::min(256, a * 2 - 256));
 		soften(seen, seenS);
