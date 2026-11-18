@@ -58,8 +58,6 @@ struct Config {
 	bool healthBarHeroesOnly = false;
 	// [Game] AllyColors: on this PC, the player blue, allies yellow and enemies red in the game (game/allycolors.h).
 	bool allyColors = false;
-	// [Game] DynamicSeasons: spring, autumn and winter take turns during the match (game/seasons.h).
-	bool dynamicSeasons = false;
 	bool pauseInBackground = false;
 	bool zoomExtras = true;
 	bool zoomFog = true;

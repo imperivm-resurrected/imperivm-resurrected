@@ -17,7 +17,7 @@ enum ControlId {
 	kMuteBackground = 0x1105, kShowPerf = 0x1106, kAutosave = 0x1109, kAutosaveEvery = 0x110A, kBrightness = 0x110C, kMovieVolume = 0x1110, kMovieOn = 0x1111,
 	kAlerts = 0x1113, kAutosaveCopies = 0x1116, kSaveOnExit = 0x1119, kShowNet = 0x111A, kLanguage = 0x111C, kMonitor = 0x111D, kUpdates = 0x111E,
 	kPanelCompact = 0x9001, kPanelOpacity = 0x9002, kSmoothCamera = 0x9003, kOpenLogs = 0x9101, kCreateReport = 0x9102,
-	kHealthBars = 0x9030, kPauseInBackground = 0x9031, kHealthBarHeroes = 0x9035, kAllyColors = 0x9036, kDynamicSeasons = 0x9037,
+	kHealthBars = 0x9030, kPauseInBackground = 0x9031, kHealthBarHeroes = 0x9035, kAllyColors = 0x9036,
 	kFpsLimit = 0x9012,
 	kMasterVolume = 0x9020, kNatureVolume = 0x9021, kConversationVolume = 0x9022, kOutputDevice = 0x9023,
 	kModVersion = 0x9040, kLogLevel = 0x9042, kCheckUpdates = 0x9103, kResetChatPlace = 0x9104,

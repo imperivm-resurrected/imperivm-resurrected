@@ -12,6 +12,7 @@
 
 #include "hooks/hookcount.h"
 #include "core/config.h"
+#include "core/framefade.h"
 #include "core/framefreeze.h"
 #include "core/framepace.h"
 #include "core/imagefit.h"
@@ -424,6 +425,43 @@ void CopyGameFrame(std::vector<uint32_t> &image, int &fw, int &fh)
 	ControlsDrawBarKeys(image.data(), fw, fh);
 }
 
+// The old picture, weighed by alpha (0..256), over the new one.
+void BlendOver(std::vector<uint32_t> &image, const std::vector<uint32_t> &old, int alpha)
+{
+	const uint32_t a = static_cast<uint32_t>(alpha), b = 256 - a;
+	for (size_t i = 0; i < image.size() && i < old.size(); i++) {
+		const uint32_t n = image[i], o = old[i];
+		const uint32_t rb = (((o & 0xff00ff) * a + (n & 0xff00ff) * b) >> 8) & 0xff00ff;
+		const uint32_t g = (((o & 0x00ff00) * a + (n & 0x00ff00) * b) >> 8) & 0x00ff00;
+		image[i] = 0xff000000u | rb | g;
+	}
+}
+
+// A cross-fade asked for (core/framefade.h): the picture of the moment of the hold, kept while the game changes and then faded out.
+struct Fade {
+	unsigned seq = 0;
+	std::vector<uint32_t> picture;
+	int w = 0, h = 0;
+
+	// The old picture's weight now, 0 when there is none.
+	int Alpha(DWORD now)
+	{
+		const FrameFade f = FrameFadeState();
+		if (f.seq != seq) {
+			seq = f.seq;
+			CopyGameFrame(picture, w, h);
+			FrameFadeMarkTaken(f.seq);
+		}
+		if (picture.empty()) return 0;
+		const DWORD passed = now - static_cast<DWORD>(f.start);
+		int alpha = 0;
+		if (f.holding) alpha = passed < kFrameFadeHoldMs ? 256 : 0;
+		else if (f.ms && passed < f.ms) alpha = 256 - static_cast<int>(passed * 256 / f.ms);
+		if (alpha <= 0) picture.clear();
+		return alpha;
+	}
+};
+
 // A video frame, the game's image when it changed or a video just ended, or the same image again when the letters of the
 // command bar changed. False when there is nothing new.
 bool TakeNewFrame(bool video, bool wasVideo, std::vector<uint32_t> &image, int &fw, int &fh)
@@ -579,6 +617,13 @@ DWORD WINAPI RenderThread(LPVOID)
 			framesThisSecond++;
 		}
 		DWORD now = GetTickCount();
+		static Fade fade;
+		const int fadeAlpha = video ? 0 : fade.Alpha(now);
+		if (fadeAlpha > 0) {
+			if (!newFrame) CopyGameFrame(local, fw, fh);
+			if (fade.w == fw && fade.h == fh) BlendOver(local, fade.picture, fadeAlpha);
+			newFrame = true;
+		}
 		bool overlayTick = false;
 		if (now - secondStart >= 1000) {
 			fps = framesThisSecond;

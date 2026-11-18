@@ -8,11 +8,12 @@
 
 #include "addr/state.h"
 #include "addr/world.h"
-#include "core/config.h"
+#include "core/framefade.h"
 #include "core/log.h"
 #include "core/uiport.h"
 #include "game/gamelayout.h"
 #include "game/seasons.h"
+#include "mods/modoptions.h"
 
 namespace {
 
@@ -20,15 +21,20 @@ namespace {
 const size_t kGameSeason = 0x174;
 const int kCycle[3] = {1, 2, 3};
 const char *const kNames[4] = {"none", "spring", "autumn", "winter"};
-// A test of how the change looks and costs: every 10 s of the match.
-const uint32_t kSeasonMs = 10000;
+// The rule's values: off, then every 5, 10 or 20 minutes of the match.
+const uint32_t kIntervals[4] = {0, 5 * 60000, 10 * 60000, 20 * 60000};
+const unsigned kFadeMs = 2500;
+// How long the change waits for the renderer to keep the picture before it.
+const DWORD kHoldWaitMs = 100;
 
 typedef const char *(__fastcall *SetSeason_t)(void *game, void *edx, int season);
 
+// The season the match had at its clock's 0, worked out from the one it has the first time it is seen: every computer, a rejoin and
+// a loaded game land on the same seasons at the same time of the match.
 struct Match {
 	const char *game = nullptr;
-	int startIndex = 0;
-	uint32_t startClock = 0;
+	int baseIndex = 0;
+	bool failed = false;
 };
 Match g_match;
 
@@ -40,24 +46,32 @@ int IndexOf(int season)
 	return -1;
 }
 
+uint32_t Interval()
+{
+	const int v = ModOptionValue(kDynamicSeasonsOptionId);
+	return v > 0 && v < 4 ? kIntervals[v] : 0;
+}
+
 // The season the match should show now, 0 when none is due.
 int Due(char *&gameOut)
 {
 	gameOut = nullptr;
-	if (!GetConfig().dynamicSeasons || *reinterpret_cast<int *>(addr::kEditorMode)) return 0;
+	const uint32_t interval = Interval();
+	if (!interval || *reinterpret_cast<int *>(addr::kEditorMode)) return 0;
 	char *game = *reinterpret_cast<char **>(addr::kGame);
 	if (!game || !*reinterpret_cast<void **>(addr::kMap)) return 0;
 	const int now = *reinterpret_cast<int *>(game + kGameSeason);
-	const uint32_t clock = *reinterpret_cast<uint32_t *>(game + layout::kGameClock);
+	const uint32_t turns = *reinterpret_cast<uint32_t *>(game + layout::kGameClock) / interval;
 	if (g_match.game != game) {
 		const int at = IndexOf(now);
 		if (at < 0) return 0;
+		g_match = Match();
 		g_match.game = game;
-		g_match.startIndex = at;
-		g_match.startClock = clock;
+		g_match.baseIndex = static_cast<int>((at + 3 - turns % 3) % 3);
+		LogI("game", "seasons: dynamic, every %u min; %s now", interval / 60000, kNames[now]);
 	}
-	const uint32_t passed = clock >= g_match.startClock ? clock - g_match.startClock : 0;
-	const int want = kCycle[(g_match.startIndex + passed / kSeasonMs) % 3];
+	if (g_match.failed) return 0;
+	const int want = kCycle[(g_match.baseIndex + turns) % 3];
 	if (want == now) return 0;
 	gameOut = game;
 	return want;
@@ -77,12 +91,16 @@ void SeasonsQueueTick()
 	const int want = Due(game);
 	if (!want) return;
 	const int before = *reinterpret_cast<int *>(game + kGameSeason);
+	// The picture before the change stays on screen while the game reloads the terrain, and then fades into the new one.
+	const unsigned hold = FrameFadeHold();
+	const DWORD asked = GetTickCount();
+	while (!FrameFadeTaken(hold) && GetTickCount() - asked < kHoldWaitMs) Sleep(1);
 	const DWORD t0 = GetTickCount();
 	const char *error = reinterpret_cast<SetSeason_t>(addr::kSetSeason)(game, nullptr, want);
+	FrameFadeRelease(kFadeMs);
 	if (error) {
-		LogE("game", "seasons: the change to %s failed; dynamic seasons stop for this match", kNames[want]);
-		g_match.game = nullptr;
-		MutableConfig().dynamicSeasons = false;
+		LogE("game", "seasons: the change to %s failed; the seasons stop changing in this match", kNames[want]);
+		g_match.failed = true;
 		return;
 	}
 	LogI("game", "seasons: %s -> %s in %lu ms", kNames[before >= 0 && before < 4 ? before : 0], kNames[want], GetTickCount() - t0);

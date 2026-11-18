@@ -208,7 +208,6 @@ void LoadConfig()
 	g_config.healthBarOwners = ini.Clamped("Game", "HealthBarOwners", 0, 0, 3);
 	g_config.healthBarHeroesOnly = ini.Flag("Game", "HealthBarHeroesOnly", false);
 	g_config.allyColors = ini.Flag("Game", "AllyColors", false);
-	g_config.dynamicSeasons = ini.Flag("Game", "DynamicSeasons", false);
 	g_config.pauseInBackground = ini.Flag("Game", "PauseInBackground", false);
 	g_config.zoomExtras = ini.Flag("Map", "ZoomExtras", true);
 	g_config.zoomFog = ini.Flag("Map", "FogVisible", true);
@@ -300,7 +299,7 @@ void SaveConfig()
 	ini.WriteNumber("Game", "HealthBarOwners", g_config.healthBarOwners);
 	ini.WriteFlag("Game", "HealthBarHeroesOnly", g_config.healthBarHeroesOnly);
 	ini.WriteFlag("Game", "AllyColors", g_config.allyColors);
-	ini.WriteFlag("Game", "DynamicSeasons", g_config.dynamicSeasons);
+	ini.Remove("Game", "DynamicSeasons");
 	ini.WriteFlag("Game", "PauseInBackground", g_config.pauseInBackground);
 	ini.WriteFlag("Game", "CrashFix", g_config.crashFix);
 	ini.WriteFlag("Mods", "Override", g_config.modOverrides);
