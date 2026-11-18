@@ -22,6 +22,10 @@ const unsigned kMaxCached = 400;
 
 std::mutex g_lock;
 std::map<std::string, std::shared_ptr<const MapPreviewData>> g_done;
+// When a map could not be read: its file can be busy for a moment (the room just made, a pack being mounted), so it is read again later
+// instead of staying without a preview.
+std::map<std::string, unsigned long long> g_failedAt;
+const unsigned long long kRetryMs = 2000;
 std::deque<std::string> g_queue;
 std::set<std::string> g_queued;
 std::map<std::string, std::string> g_paths;
@@ -150,8 +154,13 @@ void Work()
 		std::lock_guard<std::mutex> lock(g_lock);
 		g_queued.erase(key);
 		if (generation != g_generation) continue;
-		if (g_done.size() >= kMaxCached) g_done.clear();
+		if (g_done.size() >= kMaxCached) {
+			g_done.clear();
+			g_failedAt.clear();
+		}
 		g_done[key] = data;
+		if (data->failed) g_failedAt[key] = NowMs();
+		else g_failedAt.erase(key);
 	}
 }
 
@@ -174,8 +183,19 @@ std::shared_ptr<const MapPreviewData> MapPreviewGet(const std::string &scenarioP
 {
 	if (scenarioPath.empty()) return nullptr;
 	std::lock_guard<std::mutex> lock(g_lock);
-	const auto found = g_done.find(Key(scenarioPath));
-	if (found != g_done.end()) return found->second;
+	const std::string key = Key(scenarioPath);
+	const auto found = g_done.find(key);
+	if (found != g_done.end()) {
+		const auto failed = g_failedAt.find(key);
+		if (failed != g_failedAt.end() && NowMs() - failed->second >= kRetryMs) {
+			const std::shared_ptr<const MapPreviewData> last = found->second;
+			g_done.erase(found);
+			g_failedAt.erase(failed);
+			Enqueue(scenarioPath, true);
+			return last;
+		}
+		return found->second;
+	}
 	Enqueue(scenarioPath, true);
 	return nullptr;
 }
@@ -196,6 +216,7 @@ void MapPreviewReset()
 	std::lock_guard<std::mutex> lock(g_lock);
 	g_generation++;
 	g_done.clear();
+	g_failedAt.clear();
 	g_queue.clear();
 	g_queued.clear();
 	g_paths.clear();
