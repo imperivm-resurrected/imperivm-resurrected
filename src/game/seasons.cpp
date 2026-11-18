@@ -21,8 +21,8 @@ namespace {
 const size_t kGameSeason = 0x174;
 const int kCycle[3] = {1, 2, 3};
 const char *const kNames[4] = {"none", "spring", "autumn", "winter"};
-// The rule's values: off, then every 5, 10 or 20 minutes of the match.
-const uint32_t kIntervals[4] = {0, 5 * 60000, 10 * 60000, 20 * 60000};
+// The rule's values: off, then every 10 seconds (to try it), 10 or 20 minutes of the match.
+const uint32_t kIntervals[4] = {0, 10000, 10 * 60000, 20 * 60000};
 const unsigned kFadeMs = 2500;
 // How long the change waits for the renderer to keep the picture before it.
 const DWORD kHoldWaitMs = 100;
@@ -68,7 +68,7 @@ int Due(char *&gameOut)
 		g_match = Match();
 		g_match.game = game;
 		g_match.baseIndex = static_cast<int>((at + 3 - turns % 3) % 3);
-		LogI("game", "seasons: dynamic, every %u min; %s now", interval / 60000, kNames[now]);
+		LogI("game", "seasons: dynamic, every %u s; %s now", interval / 1000, kNames[now]);
 	}
 	if (g_match.failed) return 0;
 	const int want = kCycle[(g_match.baseIndex + turns) % 3];

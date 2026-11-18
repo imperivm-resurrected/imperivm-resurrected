@@ -122,7 +122,7 @@ void Load()
 	dynamic.id = kDynamicSeasonsOptionId;
 	dynamic.name = Tr("Dynamic seasons");
 	dynamic.description = Tr("Spring, autumn and winter take turns during the game: the terrain, the trees and the buildings change, with a fade.");
-	dynamic.values = {Tr("Off"), Tr("Every 5 minutes"), Tr("Every 10 minutes"), Tr("Every 20 minutes")};
+	dynamic.values = {Tr("Off"), Tr("Every 10 seconds"), Tr("Every 10 minutes"), Tr("Every 20 minutes")};
 	dynamic.width = 2;
 	dynamic.pos = 11;
 	dynamic.bit = kDynamicSeasonsBits;

@@ -3420,7 +3420,7 @@
 {"en":"Couldn't reload the game: %s. The game goes on.","es":"No se pudo recargar la partida: %s. La partida sigue.","it":"Impossibile ricaricare la partita: %s. La partita continua."},
 {"en":"Dynamic seasons","es":"Estaciones dinámicas","it":"Stagioni dinamiche"},
 {"en":"Spring, autumn and winter take turns during the game: the terrain, the trees and the buildings change, with a fade.","es":"Primavera, otoño e invierno se turnan durante la partida: cambian el terreno, los árboles y los edificios, con un fundido.","it":"Primavera, autunno e inverno si alternano durante la partita: cambiano il terreno, gli alberi e gli edifici, con una dissolvenza."},
-{"en":"Every 5 minutes","es":"Cada 5 minutos","it":"Ogni 5 minuti"},
+{"en":"Every 10 seconds","es":"Cada 10 segundos","it":"Ogni 10 secondi"},
 {"en":"Every 10 minutes","es":"Cada 10 minutos","it":"Ogni 10 minuti"},
 {"en":"Every 20 minutes","es":"Cada 20 minutos","it":"Ogni 20 minuti"}
 ]
