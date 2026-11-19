@@ -90,6 +90,8 @@ void PaintChat(uint32_t *buf, int w, int h, const View &v, Painted &out);
 // The width the chat takes at this screen size, in game pixels, to keep it inside the screen.
 int ChatWidth(int w, int h, int maxWidth);
 void PaintPingMenu(uint32_t *buf, int w, int h, const PingMenuView &v);
+// A player's name in their colour with a dark outline, centred on x with its bottom at y: over a mark on the map.
+void PaintMarkName(uint32_t *buf, int w, int h, int x, int y, const std::string &name, COLORREF color);
 // How far the mouse has to move from the press before it points at a type, in game pixels.
 int PingMenuDeadZone(int w, int h);
 // Where the menu of a press at "at" goes so that it stays inside area (left, top, right, bottom).

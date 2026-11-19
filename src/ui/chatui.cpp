@@ -855,7 +855,8 @@ bool ChatUiNeedsDraw()
 void DrawMarkLabels(uint32_t *buf, int w, int h)
 {
 	for (const ChatMarkLabel &l : ChatMarkLabels()) {
-		ModUiDrawHoverCard(buf, w, h, l.name, ColorOf(l.rgb), l.x - 24, l.y - 34);
+		// Over the mark's icon, which stands on its point.
+		PaintMarkName(buf, w, h, l.x, l.y - static_cast<int>(30 * std::max(0.85f, std::min(1.3f, h / 880.0f))), l.name, ColorOf(l.rgb));
 	}
 }
 

@@ -38,7 +38,7 @@ struct Fonts {
 	float s = 0;
 };
 Fonts g_f;
-Canvas g_black, g_white, g_menuBlack, g_menuWhite;
+Canvas g_black, g_white, g_menuBlack, g_menuWhite, g_nameBlack, g_nameWhite;
 
 // The share of its square each icon really covers, so the gaps on both sides of it look the same whatever its shape.
 struct Extent {
@@ -89,7 +89,7 @@ void EnsureChatFonts(float s)
 {
 	if (g_f.text && g_f.s == s) return;
 	// DeleteObject refuses a font still selected into a DC, and each canvas keeps the last one it drew with.
-	for (const Canvas *c : {&g_black, &g_white, &g_menuBlack, &g_menuWhite}) {
+	for (const Canvas *c : {&g_black, &g_white, &g_menuBlack, &g_menuWhite, &g_nameBlack, &g_nameWhite}) {
 		if (c->dc) SelectObject(c->dc, GetStockObject(SYSTEM_FONT));
 	}
 	for (HFONT f : {g_f.text, g_f.name, g_f.meta, g_f.chip}) {
@@ -620,6 +620,43 @@ void PaintPingMenu(uint32_t *buf, int w, int h, const PingMenuView &v)
 	PaintMenuPass(b, v, kMenuSize, true);
 	GdiFlush();
 	Composite(buf, w, h, v.x - px / 2, v.y - px / 2, {0, 0, px, px}, 255, g_menuBlack, g_menuWhite);
+}
+
+void PaintMarkName(uint32_t *buf, int w, int h, int x, int y, const std::string &name, COLORREF color)
+{
+	if (name.empty()) return;
+	const float s = Scale(w, h);
+	EnsureChatFonts(s);
+	const std::wstring t = W(name);
+	// The canvases only grow: names of other lengths reuse them.
+	if (!g_nameBlack.dc && !g_nameBlack.Ensure(128, 32)) return;
+	SelectObject(g_nameBlack.dc, g_f.name);
+	SIZE size = {};
+	GetTextExtentPoint32W(g_nameBlack.dc, t.c_str(), static_cast<int>(t.size()), &size);
+	// A pixel of outline all round.
+	const int cw = size.cx + 4, ch = size.cy + 4;
+	const int nw = std::max(cw, g_nameBlack.w), nh = std::max(ch, g_nameBlack.h);
+	if (!g_nameBlack.Ensure(nw, nh) || !g_nameWhite.Ensure(nw, nh)) return;
+	const COLORREF fill = Readable(color);
+	for (const Canvas *c : {&g_nameBlack, &g_nameWhite}) {
+		const bool white = c == &g_nameWhite;
+		RECT all = {0, 0, cw, ch};
+		HBRUSH bg = CreateSolidBrush(white ? RGB(255, 255, 255) : RGB(0, 0, 0));
+		FillRect(c->dc, &all, bg);
+		DeleteObject(bg);
+		SelectObject(c->dc, g_f.name);
+		SetBkMode(c->dc, TRANSPARENT);
+		const auto draw = [&](int dx, int dy, COLORREF col) {
+			RECT q = {2 + dx, 2 + dy, cw, ch};
+			SetTextColor(c->dc, col);
+			DrawTextW(c->dc, t.c_str(), static_cast<int>(t.size()), &q, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX | DT_NOCLIP);
+		};
+		const int around[][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}, {1, 1}, {-1, -1}, {1, -1}, {-1, 1}};
+		for (const auto &o : around) draw(o[0], o[1], RGB(0, 0, 0));
+		draw(0, 0, fill);
+	}
+	GdiFlush();
+	Composite(buf, w, h, x - cw / 2, y - ch, {0, 0, cw, ch}, 255, g_nameBlack, g_nameWhite);
 }
 
 }
