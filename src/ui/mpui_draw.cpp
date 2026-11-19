@@ -287,9 +287,6 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 			g_s.pickOpened = true;
 			CupScenariosRescan();
 			MapPreviewReset();
-			std::vector<std::string> paths;
-			for (const CupScenario &s : PickScenarios()) paths.push_back(s.path);
-			MapPreviewWanted(paths, 0);
 		}
 		const std::string name = SteamOnlinePlayerName();
 		g_s.player = name.empty() ? "Player" : name;

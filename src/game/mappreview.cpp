@@ -5,6 +5,7 @@
 
 #include <windows.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <deque>
 #include <map>
@@ -167,7 +168,18 @@ void Work()
 void Enqueue(const std::string &path, bool front)
 {
 	const std::string key = Key(path);
-	if (g_done.count(key) || g_queued.count(key)) return;
+	if (g_done.count(key)) return;
+	if (g_queued.count(key)) {
+		// Asked for again where it is shown: it goes ahead of the ones only wanted.
+		if (front) {
+			const auto at = std::find(g_queue.begin(), g_queue.end(), key);
+			if (at != g_queue.end() && at != g_queue.begin()) {
+				g_queue.erase(at);
+				g_queue.push_front(key);
+			}
+		}
+		return;
+	}
 	g_queued.insert(key);
 	g_paths[key] = path;
 	if (front) g_queue.push_front(key);
@@ -198,6 +210,14 @@ std::shared_ptr<const MapPreviewData> MapPreviewGet(const std::string &scenarioP
 	}
 	Enqueue(scenarioPath, true);
 	return nullptr;
+}
+
+std::shared_ptr<const MapPreviewData> MapPreviewPeek(const std::string &scenarioPath)
+{
+	if (scenarioPath.empty()) return nullptr;
+	std::lock_guard<std::mutex> lock(g_lock);
+	const auto found = g_done.find(Key(scenarioPath));
+	return found == g_done.end() ? nullptr : found->second;
 }
 
 void MapPreviewWanted(const std::vector<std::string> &scenarioPaths, int first)

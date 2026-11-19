@@ -18,5 +18,7 @@ struct MapPreviewData {
 };
 
 std::shared_ptr<const MapPreviewData> MapPreviewGet(const std::string &scenarioPath);
+// The preview if it is read already, without asking for it: for what is not on screen.
+std::shared_ptr<const MapPreviewData> MapPreviewPeek(const std::string &scenarioPath);
 void MapPreviewWanted(const std::vector<std::string> &scenarioPaths, int first);
 void MapPreviewReset();

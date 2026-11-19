@@ -115,10 +115,18 @@ std::vector<int> ScenarioOrder(const std::vector<CupScenario> &list, const std::
 	};
 	std::vector<Item> items;
 	const std::string q = Lower(search);
+	// Only the rows on screen ask for their previews; ordering by size needs them all, behind those.
+	if (sort == 2) {
+		std::vector<std::string> paths;
+		for (int i : rows) {
+			if (i >= 0 && i < static_cast<int>(list.size())) paths.push_back(list[static_cast<size_t>(i)].path);
+		}
+		MapPreviewWanted(paths, 0);
+	}
 	for (int i : rows) {
 		if (i < 0 || i >= static_cast<int>(list.size())) continue;
 		const CupScenario &s = list[static_cast<size_t>(i)];
-		const std::shared_ptr<const MapPreviewData> d = MapPreviewGet(s.path);
+		const std::shared_ptr<const MapPreviewData> d = MapPreviewPeek(s.path);
 		if (!q.empty()) {
 			const std::string hay = Lower(s.title + " " + s.file + " " + ScenarioOriginLine(s));
 			if (hay.find(q) == std::string::npos) continue;
