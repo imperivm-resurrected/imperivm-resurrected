@@ -1323,18 +1323,19 @@ void PaintChatLog(Painter &p, const State &st, int x, int y, int w, int h)
 		// With a badge the name goes alone, the badge after it and then the colon.
 		const std::string who = badge.Shown() ? l.who : l.who + ":";
 		p.Font(1);
+		// The name is in a larger type than the line: it sits in the middle of the line's height, as the time and the message do.
+		const int nameH = p.Measure(200, "A"), nameY = py + (it.lineH - nameH) / 2;
 		if (tier != PatronTier::None) {
 			const int nameX = laurelX + kChatLaurel + 3, nameW = x + pad + textW - nameX;
-			// The laurel centred on the name, which is in a larger type than the line is measured in.
-			const int laurelY = py + (p.Measure(std::max(40, nameW), "A") - kChatLaurel) / 2;
-			DrawPatron(p, laurelX, laurelY, kChatLaurel, nameX, py, nameW, boxH, who, tier, DT_LEFT | DT_TOP | DT_SINGLELINE);
+			const int laurelY = nameY + (nameH - kChatLaurel) / 2;
+			DrawPatron(p, laurelX, laurelY, kChatLaurel, nameX, nameY, nameW, nameH, who, tier, DT_LEFT | DT_TOP | DT_SINGLELINE);
 			if (laurelY >= y && laurelY + kChatLaurel <= y + h) PatronHotspot(p, laurelX, laurelY, kChatLaurel, PatronOf(l.id), st.mouseX, st.mouseY, kPatronLink);
-			if (badge.Shown()) ChatNameBadge(p, nameX, py, nameW - LeagueBadgeRoom(badge) - 12, boxH, l.who, badge, pal::text, st.mouseX, st.mouseY);
+			if (badge.Shown()) ChatNameBadge(p, nameX, nameY, nameW - LeagueBadgeRoom(badge) - 12, nameH, l.who, badge, pal::text, st.mouseX, st.mouseY);
 		}
 		else {
 			const int nameW = textW - it.timeW - 6;
-			p.Text(laurelX, py, nameW, boxH, who, me ? pal::redText : pal::text, DT_LEFT | DT_TOP | DT_SINGLELINE);
-			if (badge.Shown()) ChatNameBadge(p, laurelX, py, nameW - LeagueBadgeRoom(badge) - 12, boxH, l.who, badge, me ? pal::redText : pal::text, st.mouseX, st.mouseY);
+			p.Text(laurelX, nameY, nameW, nameH, who, me ? pal::redText : pal::text, DT_LEFT | DT_TOP | DT_SINGLELINE);
+			if (badge.Shown()) ChatNameBadge(p, laurelX, nameY, nameW - LeagueBadgeRoom(badge) - 12, nameH, l.who, badge, me ? pal::redText : pal::text, st.mouseX, st.mouseY);
 		}
 		p.Font(3);
 		for (size_t k = 0; k < it.lines.size(); k++) {

@@ -283,6 +283,19 @@ struct Painter {
 		SelectObject(dc, old);
 		DeleteObject(pen);
 	}
+	// Strokes through the points with round ends and joins: a check mark drawn with two Line calls breaks at its corner.
+	void Stroke(const POINT *points, int count, COLORREF c, int width)
+	{
+		if (count < 2) return;
+		LOGBRUSH lb = {BS_SOLID, c, 0};
+		HPEN pen = ExtCreatePen(PS_GEOMETRIC | PS_SOLID | PS_ENDCAP_ROUND | PS_JOIN_ROUND, std::max(1, S(width)), &lb, 0, nullptr);
+		HGDIOBJ old = SelectObject(dc, pen);
+		std::vector<POINT> at(points, points + count);
+		for (POINT &pt : at) pt = {S(pt.x), S(pt.y)};
+		Polyline(dc, at.data(), count);
+		SelectObject(dc, old);
+		DeleteObject(pen);
+	}
 	void Ellipse(int x, int y, int w, int h, COLORREF c)
 	{
 		if (ShapeAt(R(x, y, w, h), InUnitEllipse, c)) return;

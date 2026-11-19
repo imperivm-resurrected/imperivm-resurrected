@@ -1088,8 +1088,8 @@ void PaintReadyBlock(Painter &p, const State &st, const RoomFacts &f, int x, int
 	const int lx = ix + std::max(0, (iw - labelW - mark) / 2);
 	if (look == kIsReady && !hot) {
 		const int cy = by + btnH / 2;
-		p.Line(lx + 2, cy, lx + 8, cy + 6, pal::ok, 3);
-		p.Line(lx + 8, cy + 6, lx + 18, cy - 6, pal::ok, 3);
+		const POINT check[3] = {{lx + 2, cy}, {lx + 8, cy + 6}, {lx + 18, cy - 7}};
+		p.Stroke(check, 3, pal::text, 3);
 	}
 	if (look == kWait) p.Spinner(lx + 10, by + btnH / 2, 10, 4, GetTickCount());
 	p.raw = true;
