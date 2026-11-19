@@ -845,7 +845,8 @@ bool ChatUiNeedsDraw()
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
 		if (!g_s.match.onScreen) return false;
-		if (!g_s.open && !g_s.menu && (g_s.lines.empty() || GetTickCount() - g_s.lines.back().arrivedMs >= kChatShowMs)) return false;
+		// The names over the marks outlast the lines that brought them.
+		if (!g_s.open && !g_s.menu && ChatMarkLabels().empty() && (g_s.lines.empty() || GetTickCount() - g_s.lines.back().arrivedMs >= kChatShowMs)) return false;
 	}
 	return !OtherScreenOpen();
 }

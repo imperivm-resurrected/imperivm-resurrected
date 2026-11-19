@@ -674,21 +674,34 @@ void UpdateMarkLabels()
 {
 	std::vector<ChatMarkLabel> labels;
 	RawMatch raw;
-	if (!g_marks.empty() && ReadRaw(raw) && raw.game && raw.haveVisible) {
+	if (!g_marks.empty() && ReadRaw(raw) && raw.game) {
 		const ChatMatch m = Build(raw);
+		// On the zoom map when it is open, else on the main view.
+		const bool zoomMap = ZoomViewOpen();
 		const int spanX = std::max(1, raw.visible[2] - raw.visible[0]), spanY = std::max(1, raw.visible[3] - raw.visible[1]);
 		for (const Mark &mark : g_marks) {
-			if (mark.sender < 0 || mark.sender >= kSlots || mark.x < 0 || !m.haveView || !NodeAlive(mark)) continue;
+			if (mark.sender < 0 || mark.sender >= kSlots || mark.x < 0 || !NodeAlive(mark)) continue;
 			const RawPlayer &p = raw.players[mark.sender];
 			if (!p.exists) continue;
 			ChatMarkLabel l;
-			l.x = m.viewLeft + (mark.x - raw.visible[0]) * (m.viewRight - m.viewLeft) / spanX;
-			l.y = m.viewTop + (mark.y - raw.visible[1]) * (m.viewBottom - m.viewTop) / spanY;
-			if (l.x < m.viewLeft || l.x >= m.viewRight || l.y < m.viewTop || l.y >= m.viewBottom) continue;
+			if (zoomMap) {
+				if (!ZoomViewPointOnScreen(mark.x, mark.y, &l.x, &l.y)) continue;
+			}
+			else {
+				if (!raw.haveVisible || !m.haveView) continue;
+				l.x = m.viewLeft + (mark.x - raw.visible[0]) * (m.viewRight - m.viewLeft) / spanX;
+				l.y = m.viewTop + (mark.y - raw.visible[1]) * (m.viewBottom - m.viewTop) / spanY;
+				if (l.x < m.viewLeft || l.x >= m.viewRight || l.y < m.viewTop || l.y >= m.viewBottom) continue;
+			}
 			l.name = p.name;
 			l.rgb = p.rgb;
 			labels.push_back(l);
 		}
+	}
+	static size_t s_logged = 0;
+	if (labels.size() != s_logged) {
+		LogD("game", "chat: %u of %u marks named on the %s", static_cast<unsigned>(labels.size()), static_cast<unsigned>(g_marks.size()), ZoomViewOpen() ? "zoom map" : "main view");
+		s_logged = labels.size();
 	}
 	std::lock_guard<std::mutex> lock(g_labelLock);
 	g_labels = std::move(labels);

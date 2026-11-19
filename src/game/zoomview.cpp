@@ -394,6 +394,33 @@ bool ZoomViewScreenPoint(int x, int y, int *point)
 	return true;
 }
 
+bool ZoomViewPointOnScreen(int px, int py, int *x, int *y)
+{
+	if (g_failed || !ZoomOpen()) return false;
+	int width = 0, height = 0;
+	if (!ZoomBitmapSize(&width, &height) || width < 2 || height < 2) return false;
+	// The picture is the map seen from above: the world goes straight across it, so two corners give the scale.
+	int a[2] = {}, b[2] = {};
+	if (!ZoomPixelToWorld(0, 0, a) || !ZoomPixelToWorld(width - 1, height - 1, b) || b[0] == a[0] || b[1] == a[1]) return false;
+	// The point's y is the world's, shortened by the view (181/256) and raised by the ground's height there; one guess of the height
+	// is close enough for a label.
+	int worldY = py * 256 / 0xb5;
+	void *map = *reinterpret_cast<void **>(addr::kMap);
+	if (map && px >= 0 && worldY >= 0) {
+		__try {
+			unsigned position[2] = {static_cast<unsigned>(px), static_cast<unsigned>(worldY)};
+			const unsigned ground = reinterpret_cast<Height_t>(addr::kGetHeightAt)(map, nullptr, position);
+			worldY = (py + static_cast<int>(ground)) * 256 / 0xb5;
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER) {
+		}
+	}
+	const int spanX = g_geo.right - g_geo.left, spanY = g_geo.bottom - g_geo.top;
+	*x = g_geo.left + (px - a[0]) * spanX / (b[0] - a[0]);
+	*y = g_geo.top + (worldY - a[1]) * spanY / (b[1] - a[1]);
+	return *x >= g_geo.left && *x <= g_geo.right && *y >= g_geo.top && *y <= g_geo.bottom;
+}
+
 void ZoomViewGameTick()
 {
 	if (g_failed || ZoomOpen()) return;

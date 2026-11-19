@@ -12,6 +12,9 @@ bool ZoomViewHandleMouse(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 void ZoomViewGameTick();
 // The point of the open zoom map under (x, y), in the view coordinates the game's location messages carry.
 bool ZoomViewScreenPoint(int x, int y, int *point);
+// The other way: where a point in those coordinates is on the open zoom map's picture. False when the map is closed or the point is
+// outside the picture.
+bool ZoomViewPointOnScreen(int px, int py, int *x, int *y);
 bool ZoomViewOpen();
 bool ZoomViewContains(int x, int y);
 // The big map's picture on screen: left, top, right, bottom (exclusive).
