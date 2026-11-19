@@ -246,7 +246,13 @@ void FormatIcon(Painter &p, int x, int y, TourneyFormat format, COLORREF c)
 		}
 		return out;
 	}();
-	PaintSquareStrokes(p, x, y, 34, 26, format == TourneyFormat::Swiss ? kSwiss : format == TourneyFormat::Double ? kDouble : kSingle, 1.5f, c);
+	// On the pixel grid, one pixel wide: at the game's scale the mockup's 1.5 on half pixels came out blurred, and the double elimination's
+	// close lines ran together.
+	std::vector<std::array<float, 4>> snapped = format == TourneyFormat::Swiss ? kSwiss : format == TourneyFormat::Double ? kDouble : kSingle;
+	for (std::array<float, 4> &s : snapped) {
+		for (float &v : s) v = std::floor(v) + 0.5f;
+	}
+	PaintSquareStrokes(p, x, y, 34, 26, snapped, 1.0f, c);
 }
 
 void Option(Form &c, int x, int y, int w, int h, bool on, bool enabled, const std::string &title, const std::string &text, const std::string &aside, bool soon,
