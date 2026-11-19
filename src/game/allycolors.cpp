@@ -14,6 +14,7 @@
 #include "game/roomcolors.h"
 
 #include <cstdint>
+#include <string>
 
 #include "addr/state.h"
 #include "addr/world.h"
@@ -24,8 +25,9 @@ namespace {
 const size_t kVisibleScreenRect = 0x618;
 // CVXPersistArchive: its mode, in ints.
 const int kArchiveMode = 4, kArchiveLoading = 1;
-// CVXPlayer+0x80 (layout::kPlayerControl): 3 is the map's neutral player, owner of the settlements and troops of nobody.
-const int kControlNeutral = 3;
+// The settlements and troops of nobody: players 14 and 15 are the independents, the neutral populations of the map, and a player
+// whose CVXPlayer+0x80 (layout::kPlayerControl) is 3 is the map's neutral one.
+const int kControlNeutral = 3, kFirstIndependent = 14;
 
 constexpr unsigned Rgb555(unsigned r, unsigned g, unsigned b)
 {
@@ -73,7 +75,7 @@ unsigned Wanted(const char *game, int index, const char *local, bool on)
 	if (!on || !local) return g_shown.real[index];
 	const char *player = layout::PlayerAt(game, index);
 	if (player == local) return PaletteColor(kSelf);
-	if (At<int>(player, layout::kPlayerControl) == kControlNeutral) return g_shown.real[index];
+	if (index >= kFirstIndependent || At<int>(player, layout::kPlayerControl) == kControlNeutral) return g_shown.real[index];
 	const int ours = At<int>(local, layout::kPlayerId), theirs = At<int>(player, layout::kPlayerId);
 	if (ours < 0 || ours >= layout::kPlayerCount || theirs < 0 || theirs >= layout::kPlayerCount) return g_shown.real[index];
 	const bool peace = (At<unsigned>(local, layout::kPlayerDiplomacy + theirs * 4) & diplomacy::kCeasefire) != 0 &&
@@ -114,6 +116,18 @@ void ApplyRoomColors(const char *game)
 	Redraw();
 }
 
+// Who is who in the match, once: the players that play, with their control (0 human, 3 the neutral one), for the colours of nobody.
+void LogPlayers(const char *game)
+{
+	std::string text;
+	for (int i = 0; i < layout::kPlayerCount; i++) {
+		const char *player = layout::PlayerAt(game, i);
+		if (At<int>(player, layout::kPlayerActive) == 0 && At<int>(player, layout::kPlayerState) == 0) continue;
+		text += " " + std::to_string(i) + ":" + std::to_string(At<int>(player, layout::kPlayerControl));
+	}
+	LogI("game", "ally colours: players (index:control)%s", text.c_str());
+}
+
 bool Step()
 {
 	__try {
@@ -127,6 +141,7 @@ bool Step()
 		if (g_shown.roomColorsDue) {
 			g_shown.roomColorsDue = false;
 			ApplyRoomColors(game);
+			LogPlayers(game);
 		}
 		const char *local = layout::LocalPlayer(game);
 		// Only for one of the match's eight seats: never in the editor, whose colours are the map's own, nor for the observer (player 9)

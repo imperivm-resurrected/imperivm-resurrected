@@ -118,7 +118,7 @@ const Action kActions[] = {
 	{"ping_location", kPageMod, "Ping location", "marks the point under the cursor for your allies", 'G', kCtrl, kMod, kRuleShortcut},
 	{"ping_attack", kPageMod, "Ping: attack here", "the point under the cursor, with the swords", 0, 0, kMod, kRuleShortcut},
 	{"ping_danger", kPageMod, "Ping: danger", "the point under the cursor, with the red flag", 0, 0, kMod, kRuleShortcut},
-	{"ally_colors", kPageMod, "Ally and enemy colors", "you blue, allies yellow, enemies red; only on your screen", 'G', kAlt, kMod, kRuleShortcut},
+	{"ally_colors", kPageMod, "Ally and enemy colors", "each side in its own colour, only on your screen", 'G', kAlt, kMod, kRuleShortcut},
 };
 const int kActionCount = static_cast<int>(sizeof(kActions) / sizeof(kActions[0]));
 const int kFirstModAction = kActionCount - 14;

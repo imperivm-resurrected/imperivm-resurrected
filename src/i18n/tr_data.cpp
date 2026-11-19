@@ -3421,8 +3421,6 @@ extern const TrRow kTrRows[] = {
 	{"If the screen looks right, keep it. If not, the previous resolution comes back in %s seconds.", "Si la pantalla se ve bien, mantenla. Si no, vuelve la resolución anterior en %s segundos.", "Se lo schermo si vede bene, mantienila. Altrimenti torna la risoluzione precedente tra %s secondi."},
 	{"Keep", "Mantener", "Mantieni"},
 	{"Go back", "Volver", "Torna indietro"},
-	{"you blue, allies yellow, enemies red; only on your screen", "tú en azul, aliados en amarillo y enemigos en rojo; solo en tu pantalla", "tu in blu, alleati in giallo e nemici in rosso; solo sul tuo schermo"},
-	{"You blue, allies yellow, enemies red, only on your screen; a key in Controls switches it during the game", "Tú en azul, aliados en amarillo y enemigos en rojo, solo en tu pantalla; una tecla de Controles lo cambia durante la partida", "Tu in blu, alleati in giallo e nemici in rosso, solo sul tuo schermo; un tasto dei Comandi lo cambia durante la partita"},
 	{"you are out of that game: you were defeated or surrendered", "ya no estás en esa partida: te derrotaron o te rendiste", "non sei più in quella partita: sei stato sconfitto o ti sei arreso"},
 	{"Couldn't reload the game: %s. The game goes on.", "No se pudo recargar la partida: %s. La partida sigue.", "Impossibile ricaricare la partita: %s. La partita continua."},
 	{"Share profile", "Compartir perfil", "Condividi profilo"},
@@ -3440,5 +3438,7 @@ extern const TrRow kTrRows[] = {
 	{"Own colour (in use)...", "Color propio (en uso)...", "Colore proprio (in uso)..."},
 	{"Use", "Usar", "Usa"},
 	{"Too close to the colour of %s: pick another one.", "Demasiado parecido al color de %s: elige otro.", "Troppo simile al colore di %s: scegline un altro."},
+	{"Each side in its own colour, only on your screen", "Cada bando de su color, solo en tu pantalla", "Ogni schieramento del suo colore, solo sul tuo schermo"},
+	{"each side in its own colour, only on your screen", "cada bando de su color, solo en tu pantalla", "ogni schieramento del suo colore, solo sul tuo schermo"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

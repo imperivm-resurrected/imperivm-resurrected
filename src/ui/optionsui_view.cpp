@@ -155,6 +155,36 @@ constexpr Metrics kScreenMetrics = {56, 46, 24, 24, 260, 38, 240, 64, 160, 170, 
 // The pages' columns were drawn for this width: a page's leftW is the left one's part of it, and the window and the screen scale it to theirs.
 constexpr int kColumnsW = 822;
 
+// A hint wraps to a second line rather than being cut on a narrow screen or in a long language.
+constexpr int kHintLines = 2;
+
+// The width the label and its hint get beside the row's control, as PaintRow lays them out.
+int LabelWidth(const Metrics &m, const Row &r, int w)
+{
+	switch (r.kind) {
+	case kRowToggle: return w - kBigToggleW - 12;
+	case kRowSlider: return w - m.valueW - m.sliderW - kSliderMargin * 2;
+	case kRowToggleSlider: return w - m.valueW - m.sliderW - kSliderMargin * 2 - kBigToggleW - 8;
+	case kRowCombo: return w - m.comboW - 10;
+	case kRowSegment: return w - m.segW * static_cast<int>(r.items.size()) - 8;
+	case kRowAction: return w - m.actionW - 8;
+	case kRowColors: {
+		const int n = static_cast<int>(r.colors.size()), chipW = m.screen ? 130 : 96;
+		return w - n * chipW - (n - 1) * 8 - 8;
+	}
+	default: return w / 2;
+	}
+}
+
+// A row with a hint grows by the hint's lines beyond the first.
+int RowHeight(Painter &p, const Metrics &m, const Row &r, int w)
+{
+	if (r.hint.empty()) return m.rowH;
+	p.Font(3);
+	const int lines = std::max(1, std::min(kHintLines, (p.Measure(std::max(40, LabelWidth(m, r, w)), r.hint) + m.hintH / 2) / m.hintH));
+	return m.rowH + (lines - 1) * m.hintH;
+}
+
 void PaintRowLabel(Painter &p, const Metrics &m, const Row &r, int x, int y, int w)
 {
 	const bool hint = !r.hint.empty();
@@ -167,7 +197,7 @@ void PaintRowLabel(Painter &p, const Metrics &m, const Row &r, int x, int y, int
 	}
 	if (hint) {
 		p.Font(3);
-		p.Text(x, y + m.hintY, w, m.hintH, r.hint, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.TextWrapped(x, y + m.hintY, w, m.hintH * kHintLines, r.hint, pal::textDim);
 	}
 }
 
@@ -280,7 +310,12 @@ void PaintRow(Painter &p, const Metrics &m, const Row &r, const View &v, int x, 
 int PaintCard(Painter &p, const Metrics &m, const Card &c, const View &v, int x, int y, int w, RECT &dropAnchor, std::vector<std::string> &dropItems,
 	int &dropSel)
 {
-	const int h = m.cardHead + static_cast<int>(c.rows.size()) * m.rowH + 4;
+	std::vector<int> heights;
+	int h = m.cardHead + 4;
+	for (const Row &r : c.rows) {
+		heights.push_back(RowHeight(p, m, r, w - m.cardPad * 2));
+		h += heights.back();
+	}
 	p.Font(4);
 	if (m.screen) {
 		PaintGlassCard(p, x, y, w, h);
@@ -291,7 +326,7 @@ int PaintCard(Painter &p, const Metrics &m, const Card &c, const View &v, int x,
 		p.Text(x + m.cardPad, y + m.titleY, w - m.cardPad * 2, m.titleH, c.title, pal::redText);
 	}
 	int ry = y + m.cardHead;
-	for (size_t i = 0; i < c.rows.size(); i++, ry += m.rowH) {
+	for (size_t i = 0; i < c.rows.size(); ry += heights[i], i++) {
 		if (i) p.Fill(x + m.cardPad, ry, w - m.cardPad * 2, 1, pal::hairline);
 		PaintRow(p, m, c.rows[i], v, x + m.cardPad, ry, w - m.cardPad * 2, dropAnchor, dropItems, dropSel);
 	}
@@ -361,7 +396,7 @@ std::vector<Page> BuildPages(const Values &v)
 		Row colors = Colors(v, "Colors", {{kAllySelf, "You"}, {kAllyAllies, "Allies"}, {kAllyEnemies, "Enemies"}});
 		colors.enabled = Check(v, kAllyColors);
 		page.left.push_back({"Interface", {Combo(v, "Language", kLanguage, "", true), bars, heroes,
-			Toggle(v, "Ally and enemy colors", kAllyColors, "You blue, allies yellow, enemies red, only on your screen; a key in Controls switches it during the game"), palette,
+			Toggle(v, "Ally and enemy colors", kAllyColors, "Each side in its own colour, only on your screen"), palette,
 			colors, chat}});
 		const bool autosave = Check(v, kAutosave);
 		page.right.push_back({"Autosave", {Toggle(v, "Autosave", kAutosave), Combo(v, "Every", kAutosaveEvery, "", false, autosave), Combo(v, "Copies", kAutosaveCopies, "", false, autosave),

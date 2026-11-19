@@ -3414,8 +3414,6 @@
 {"en":"If the screen looks right, keep it. If not, the previous resolution comes back in %s seconds.","es":"Si la pantalla se ve bien, mantenla. Si no, vuelve la resolución anterior en %s segundos.","it":"Se lo schermo si vede bene, mantienila. Altrimenti torna la risoluzione precedente tra %s secondi."},
 {"en":"Keep","es":"Mantener","it":"Mantieni"},
 {"en":"Go back","es":"Volver","it":"Torna indietro"},
-{"en":"you blue, allies yellow, enemies red; only on your screen","es":"tú en azul, aliados en amarillo y enemigos en rojo; solo en tu pantalla","it":"tu in blu, alleati in giallo e nemici in rosso; solo sul tuo schermo"},
-{"en":"You blue, allies yellow, enemies red, only on your screen; a key in Controls switches it during the game","es":"Tú en azul, aliados en amarillo y enemigos en rojo, solo en tu pantalla; una tecla de Controles lo cambia durante la partida","it":"Tu in blu, alleati in giallo e nemici in rosso, solo sul tuo schermo; un tasto dei Comandi lo cambia durante la partita"},
 {"en":"you are out of that game: you were defeated or surrendered","es":"ya no estás en esa partida: te derrotaron o te rendiste","it":"non sei più in quella partita: sei stato sconfitto o ti sei arreso"},
 {"en":"Couldn't reload the game: %s. The game goes on.","es":"No se pudo recargar la partida: %s. La partida sigue.","it":"Impossibile ricaricare la partita: %s. La partita continua."},
 {"en":"Share profile","es":"Compartir perfil","it":"Condividi profilo"},
@@ -3432,5 +3430,7 @@
 {"en":"Own colour...","es":"Color propio...","it":"Colore proprio..."},
 {"en":"Own colour (in use)...","es":"Color propio (en uso)...","it":"Colore proprio (in uso)..."},
 {"en":"Use","es":"Usar","it":"Usa"},
-{"en":"Too close to the colour of %s: pick another one.","es":"Demasiado parecido al color de %s: elige otro.","it":"Troppo simile al colore di %s: scegline un altro."}
+{"en":"Too close to the colour of %s: pick another one.","es":"Demasiado parecido al color de %s: elige otro.","it":"Troppo simile al colore di %s: scegline un altro."},
+{"en":"Each side in its own colour, only on your screen","es":"Cada bando de su color, solo en tu pantalla","it":"Ogni schieramento del suo colore, solo sul tuo schermo"},
+{"en":"each side in its own colour, only on your screen","es":"cada bando de su color, solo en tu pantalla","it":"ogni schieramento del suo colore, solo sul tuo schermo"}
 ]
