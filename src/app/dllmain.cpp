@@ -60,6 +60,7 @@
 #include "game/packrules.h"
 #include "hooks/builtinfixes.h"
 #include "net/nettune.h"
+#include "hooks/movestart.h"
 #include "hooks/orderdelay.h"
 #include "net/rejoin.h"
 #include "net/spectator.h"
@@ -231,6 +232,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 		InstallRejoin(knownExe);
 		InstallNetTune(knownExe);
 		InstallOrderDelay(knownExe);
+		InstallMoveStart(knownExe);
 		InstallSpectator(knownExe);
 		InstallChat(knownExe);
 		ChatUiInstall();

@@ -11,6 +11,7 @@
 
 #include "mods/netmods.h"
 #include "MinHook.h"
+#include "hooks/movestart.h"
 #include "hooks/hookcount.h"
 #include "core/json.h"
 #include "core/guard.h"
@@ -146,7 +147,8 @@ int __cdecl HookVersionHash(int options)
 {
 	StartServer();
 	const unsigned key = ProfileKey();
-	return g_origHash(options) ^ static_cast<int>(key << 16);
+	// The movement patch marks the low word as Classic Modern does (0xc000), so a game without it refuses the room.
+	return g_origHash(options) ^ static_cast<int>(key << 16) ^ (MoveStartActive() ? 0xc000 : 0);
 }
 
 typedef void(__fastcall *PublishGameOptions_t)(void *self, void *edx, int *options);
