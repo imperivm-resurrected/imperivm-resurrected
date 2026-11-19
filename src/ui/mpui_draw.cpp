@@ -283,7 +283,7 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 			g_s.pickNote.clear();
 			if (g_s.focus == kPickSearchField) g_s.focus = kNoField;
 		}
-		else if (!g_s.pickOpened) {
+		else if (g_s.game.picker && !g_s.pickOpened) {
 			g_s.pickOpened = true;
 			CupScenariosRescan();
 			MapPreviewReset();
