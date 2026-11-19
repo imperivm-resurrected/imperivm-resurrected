@@ -41,7 +41,6 @@ State g_s;
 
 RichTextState g_rich;
 ListGeom g_listGeomOut;
-ListGeom g_orderGeomOut;
 DropListState g_drop;
 }
 

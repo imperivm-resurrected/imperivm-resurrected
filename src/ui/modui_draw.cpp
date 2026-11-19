@@ -93,7 +93,6 @@ void ModUiDraw(uint32_t *buf, int w, int h)
 			g_s.hits = std::move(r.hits);
 			g_s.confirmGeom = g_confirmGeomOut;
 			g_s.listGeom = g_listGeomOut;
-			g_s.orderGeom = g_orderGeomOut;
 		}
 	}
 	// In the menu the game sends no frames: the seconds of a timed question ask for the next one.

@@ -44,7 +44,8 @@ const int kBarH = 40;
 const int kFootH = 44;
 
 // The tabs of the content screen.
-enum Tab { kTabListInstalled = 0, kTabListOrder = 1, kTabListExplore = 2 };
+// Explore keeps the 2 of the time Load order was a tab between the two.
+enum Tab { kTabListInstalled = 0, kTabListExplore = 2 };
 
 // The tabs of the card beside the installed list.
 enum CardTab { kCardDetails = 0, kCardConflicts = 1, kCardFiles = 2 };
@@ -64,7 +65,7 @@ enum Action {
 	kIoFilterOpen, kIoFilterClose, kIoFilterToggle, kIoFilterClear,
 	kUseFiles,
 	kRowClick, kMark, kStateFilter, kCatChip, kCatPanel, kCatClear, kBulkOn, kBulkOff, kBulkUninstall, kClearMarks, kSetActive, kForget, kReinstall,
-	kTabOrder, kCardTab, kUseFile, kDisableOther, kClearChoices, kCopyCode, kPasteCode, kFocusImport, kImportCode, kImportClear,
+	kShareOpen, kShareClose, kCardTab, kUseFile, kDisableOther, kClearChoices, kCopyCode, kPasteCode, kFocusImport, kImportCode, kImportClear,
 };
 
 // kUseFile packs which shared pair, which file of the card and whose copy into one number.
@@ -159,8 +160,8 @@ struct State {
 	int cardTab = kCardDetails;
 	// The active packs as they load, with why each one is where it is.
 	std::vector<ModOrderEntry> order;
-	ListState orderList;
-	ListGeom orderGeom;
+	// Installed shows the profile's code to share beside the list, in place of the pack's card.
+	bool shareOpen = false;
 	// The code being imported, and the profile it made while the packs it lacks download.
 	std::string importText;
 	std::string importProfile;
@@ -215,9 +216,7 @@ PanelLayout PanelLayoutFor(const State &st);
 extern std::mutex g_lock;
 extern State g_s;
 extern ListGeom g_listGeomOut;
-extern ListGeom g_orderGeomOut;
 extern std::atomic<int> g_installedRows;
-extern std::atomic<int> g_orderRows;
 struct RichPos {
 	int y, h, indent;
 };
@@ -273,7 +272,8 @@ std::string OrderReasonText(const State &st, const ModOrderEntry &e);
 // The name of a group of the load order, 0-2 by kind and 3 for what does not load.
 const char *OrderGroupName(int group);
 void ImportTick();
-void PaintOrderTab(Painter &p, const State &st);
+// The profile as a code to share, and the field to import one, in place of the selected pack's card.
+void PaintShareCard(Painter &p, const State &st, const PanelLayout &l);
 // A bolt `h` tall at (x, y), the mark of the files two packs share.
 void PaintBolt(Painter &p, int x, int y, int h, COLORREF c);
 // A padlock `h` tall at (x, y), for what the load order decides and cannot be chosen.

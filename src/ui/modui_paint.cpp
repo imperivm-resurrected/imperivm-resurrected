@@ -1290,15 +1290,14 @@ void PaintPanel(Painter &p, const State &st)
 	}
 	PaintScreenTitle(p, l, "Content",
 		{{Tr("Installed") + " (" + std::to_string(st.mods.size()) + ")", kTabInstalled, 0, st.tab == kTabListInstalled, true},
-			{"Load order", kTabOrder, 0, st.tab == kTabListOrder, true}, {"Browse content", kTabExplore, 0, st.tab == kTabListExplore, true}},
+			{"Browse content", kTabExplore, 0, st.tab == kTabListExplore, true}},
 		right - 16, mx, my);
 	if (st.tab == kTabListExplore) {
 		PaintExplore(p, st);
 	}
 	else {
 		PaintTools(p, st, l);
-		if (st.tab == kTabListOrder) PaintOrderTab(p, st);
-		else PaintInstalled(p, st);
+		PaintInstalled(p, st);
 	}
 	PaintFooter(p, st);
 	p.noHover = false;
@@ -1521,20 +1520,21 @@ void PaintInstalled(Painter &p, const State &st)
 		}
 	}
 	else {
-		const std::string link = Tr("See the load order");
+		const std::string link = Tr("Share profile");
 		p.Font(4);
 		const int lw = p.CapsWidth(link, 1) + 12;
 		const int lx = listX + listW - 22 - lw;
 		const bool hov = p.Hover(lx, footY, lw, footH, mx, my);
 		p.TextCaps(lx, footY, lw, footH, link, hov ? pal::text : pal::redText, DT_RIGHT | DT_VCENTER | DT_SINGLELINE, 1);
-		p.AddHit(lx, footY, lw, footH, kTabOrder, 0);
+		p.AddHit(lx, footY, lw, footH, kShareOpen, 0);
 		p.Font(3);
 		p.Text(listX + 20, footY, lx - 16 - listX - 20, footH,
 			"Higher up wins: when two packs bring the same file, the one higher up is used. The order is automatic and the same on every PC.", pal::textDim,
 			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
 
-	PaintModCard(p, st, l);
+	if (st.shareOpen) PaintShareCard(p, st, l);
+	else PaintModCard(p, st, l);
 }
 
 void PaintField(Painter &p, const State &st, int x, int y, int w, int h, const std::string &text, const std::string &placeholder,

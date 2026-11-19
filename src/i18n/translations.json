@@ -3417,5 +3417,6 @@
 {"en":"you blue, allies yellow, enemies red; only on your screen","es":"tú en azul, aliados en amarillo y enemigos en rojo; solo en tu pantalla","it":"tu in blu, alleati in giallo e nemici in rosso; solo sul tuo schermo"},
 {"en":"You blue, allies yellow, enemies red, only on your screen; a key in Controls switches it during the game","es":"Tú en azul, aliados en amarillo y enemigos en rojo, solo en tu pantalla; una tecla de Controles lo cambia durante la partida","it":"Tu in blu, alleati in giallo e nemici in rosso, solo sul tuo schermo; un tasto dei Comandi lo cambia durante la partita"},
 {"en":"you are out of that game: you were defeated or surrendered","es":"ya no estás en esa partida: te derrotaron o te rendiste","it":"non sei più in quella partita: sei stato sconfitto o ti sei arreso"},
-{"en":"Couldn't reload the game: %s. The game goes on.","es":"No se pudo recargar la partida: %s. La partida sigue.","it":"Impossibile ricaricare la partita: %s. La partita continua."}
+{"en":"Couldn't reload the game: %s. The game goes on.","es":"No se pudo recargar la partida: %s. La partida sigue.","it":"Impossibile ricaricare la partita: %s. La partita continua."},
+{"en":"Share profile","es":"Compartir perfil","it":"Condividi profilo"}
 ]

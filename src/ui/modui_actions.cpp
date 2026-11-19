@@ -121,6 +121,7 @@ void DoAction(int action, int arg)
 		break;
 	case kRowClick: {
 		if (arg < 0 || arg >= static_cast<int>(g_s.rows.size())) break;
+		g_s.shareOpen = false;
 		const bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0, shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
 		const std::string folder = g_s.rows[arg].folder;
 		if (shift && g_s.anchor >= 0 && g_s.anchor < static_cast<int>(g_s.rows.size())) {
@@ -252,11 +253,12 @@ void DoAction(int action, int arg)
 			SetStatus("Back to the load order: the pack higher up wins");
 		}
 		break;
-	case kTabOrder:
-		g_s.tab = kTabListOrder;
+	case kShareOpen:
+		g_s.tab = kTabListInstalled;
+		g_s.shareOpen = true;
 		g_s.catOpen = false;
-		g_s.ioFilterOpen = false;
 		break;
+	case kShareClose: g_s.shareOpen = false; break;
 	case kCardTab: g_s.cardTab = std::max(0, std::min(static_cast<int>(kCardFiles), arg)); break;
 	case kCopyCode:
 		ClipboardSet(ModsProfileCode(g_s.profile));
@@ -543,8 +545,6 @@ void DoAction(int action, int arg)
 	}
 	const int maxScroll = std::max(0, static_cast<int>(VisibleRows(g_s).size()) - g_installedRows.load());
 	g_s.list.scroll = std::max(0, std::min(g_s.list.scroll, maxScroll));
-	const int maxOrder = std::max(0, static_cast<int>(g_s.order.size()) - g_orderRows.load());
-	g_s.orderList.scroll = std::max(0, std::min(g_s.orderList.scroll, maxOrder));
 	if (action != kNone) {
 		g_s.restartNeeded = ModsRestartNeeded();
 	}
