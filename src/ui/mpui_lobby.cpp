@@ -305,6 +305,13 @@ void StepSaveMap(const GameRoomSnapshot &snap)
 			const std::string k = MapKey(snap.pickerPaths[i]);
 			if (k.substr(k.find_last_of('/') + 1) == wantFile) idx = static_cast<int>(i);
 		}
+		// The game's selector holds no map until one is offered: the saved game's, then it is looked for again.
+		if (idx < 0 && g_s.saveMapOffered != want) {
+			GameRoomPickerOffer(g_s.saveMap, false);
+			g_s.saveMapOffered = want;
+			g_s.saveMapTick = now;
+			return;
+		}
 		if (idx < 0 || idx >= static_cast<int>(snap.pickerItems.size())) {
 			LogD("saves", "saved game: the scenario \"%s\" is not among the %u in the selector%s%s", g_s.saveMap.c_str(),
 				static_cast<unsigned>(snap.pickerPaths.size()), snap.pickerPaths.empty() ? "" : " (e.g.",

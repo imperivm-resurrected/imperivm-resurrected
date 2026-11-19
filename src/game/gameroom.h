@@ -82,6 +82,8 @@ struct GameRoomSnapshot {
 	std::vector<std::string> pickerItems;
 	std::string pickerDescription;
 	std::vector<std::string> pickerPaths;
+	// The last scenario offered to the selector that the game refused (not for multiplayer, or unreadable): its path.
+	std::string pickerRefused;
 	std::vector<BonusDef> bonuses;
 };
 
@@ -139,5 +141,9 @@ void GameRoomUseOnlineName(const std::string &name);
 void GameRoomRestoreProfileName();
 bool GameRoomOnlineNameActive();
 void GameRoomPickerSelect(int index);
+// The game's selector opens without reading any map (it read them all, one after another, before the room could be drawn again). A
+// scenario chosen from the mod's own list is offered to it: the selector reads that one file and holds it, selected; with accept, it is
+// taken on the next tick. A file the game refuses is told in pickerRefused.
+void GameRoomPickerOffer(const std::string &scenarioPath, bool accept);
 void GameRoomPickerAccept();
 void GameRoomPickerCancel();

@@ -177,6 +177,7 @@ void MpUiGameThreadTick()
 						g_s.saveMapStep = 0;
 						g_s.saveMapPick = -1;
 						g_s.saveMapTries = 0;
+						g_s.saveMapOffered.clear();
 						g_s.saveMapTick = 0;
 						g_s.saveMapError.clear();
 						{

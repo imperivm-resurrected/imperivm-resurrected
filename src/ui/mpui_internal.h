@@ -18,6 +18,7 @@
 #include "mods/mods.h"
 #include "ui/mpui.h"
 #include "game/gameroom.h"
+#include "game/cupmaps.h"
 #include "net/leagueclient.h"
 #include "net/mpsave.h"
 #include "net/steamnet.h"
@@ -340,6 +341,8 @@ struct State {
 	int saveMapStep = 0;
 	int saveMapPick = -1;
 	int saveMapTries = 0;
+	// The saved game's scenario, once offered to the game's selector.
+	std::string saveMapOffered;
 	DWORD saveMapTick = 0;
 	std::string saveMapError;
 	std::string saveConfiguredFor = "-";
@@ -599,6 +602,9 @@ void FocusField(int field);
 void TabStep(bool back);
 void FieldKey(UINT msg, WPARAM wp);
 void PaintPickCombo(Painter &p, const State &st, int x, int y, int w, int h, const std::string &text);
+// The scenarios of the room's selector: the mod's own list, read in the background (the game's selector reads them only when one is
+// chosen). PickView's indexes and pickSel are positions in it.
+std::vector<CupScenario> PickScenarios();
 std::vector<int> PickView(const State &st);
 bool PickInUse(const State &st, int index);
 void PickMove(WPARAM key);

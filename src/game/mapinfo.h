@@ -23,6 +23,10 @@ struct MapInfo {
 	std::string name;
 	std::string victory;
 	std::string season;
+	// The scenario's own text, as game.xml has it (its "\n" made line breaks).
+	std::string description;
+	// game.xml's single_only: the game leaves these out of the multiplayer selector.
+	bool singleOnly = false;
 	int gameType = 0;
 	int units = 0;
 	std::vector<MapPlayer> players;

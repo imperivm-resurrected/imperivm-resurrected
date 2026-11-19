@@ -7,6 +7,7 @@
 #include <algorithm>
 
 #include "game/civs.h"
+#include "game/cupmaps.h"
 #include "game/mappreview.h"
 #include "i18n/tr.h"
 #include "mods/mods.h"
@@ -89,6 +90,14 @@ COLORREF SlotColor(const GameRoomSnapshot &g, const MapPlayer &p)
 bool Deletable(const MapPreviewData *d) { return d && (d->origin.kind == kMapLoose || d->origin.kind == kMapReceived); }
 }
 
+std::vector<CupScenario> PickScenarios()
+{
+	const CupScenariosView v = CupScenarios();
+	std::vector<CupScenario> all = v.list;
+	all.insert(all.end(), v.rules.begin(), v.rules.end());
+	return all;
+}
+
 std::vector<int> PickView(const State &st)
 {
 	struct Item {
@@ -99,18 +108,17 @@ std::vector<int> PickView(const State &st)
 	};
 	std::vector<Item> items;
 	const std::string q = Lower(st.pickSearch);
-	const std::vector<std::string> &names = st.game.pickerItems;
-	for (size_t i = 0; i < names.size(); i++) {
-		if (names[i].empty() || i >= st.game.pickerPaths.size()) continue;
-		const std::string &path = st.game.pickerPaths[i];
+	const std::vector<CupScenario> list = PickScenarios();
+	for (size_t i = 0; i < list.size(); i++) {
+		const std::string &path = list[i].path;
 		if (st.pickGone.count(StemKey(path))) continue;
 		const std::shared_ptr<const MapPreviewData> d = MapPreviewGet(path);
 		if (!q.empty()) {
-			std::string hay = Lower(names[i] + " " + FileStem(path));
+			std::string hay = Lower(list[i].title + " " + FileStem(path));
 			if (d && !d->failed) hay += " " + Lower(OriginText(*d));
 			if (hay.find(q) == std::string::npos) continue;
 		}
-		items.push_back({static_cast<int>(i), names[i], d && !d->failed ? d->humans : -1, d && !d->failed ? d->info.units : -1});
+		items.push_back({static_cast<int>(i), list[i].title, d && !d->failed ? d->humans : list[i].humans, d && !d->failed ? d->info.units : -1});
 	}
 	const auto byName = [](const Item &a, const Item &b) { return CompareNames(a.name, b.name) < 0; };
 	if (st.pickSort == 1) {
@@ -135,8 +143,9 @@ std::vector<int> PickView(const State &st)
 
 bool PickInUse(const State &st, int index)
 {
-	if (st.game.scenario.empty() || index < 0 || index >= static_cast<int>(st.game.pickerPaths.size())) return false;
-	return StemKey(st.game.pickerPaths[index]) == StemKey(st.game.scenario) || FileStem(st.game.pickerPaths[index]) == FileStem(st.game.scenario);
+	const std::vector<CupScenario> list = PickScenarios();
+	if (st.game.scenario.empty() || index < 0 || index >= static_cast<int>(list.size())) return false;
+	return StemKey(list[index].path) == StemKey(st.game.scenario) || FileStem(list[index].path) == FileStem(st.game.scenario);
 }
 
 void PickMove(WPARAM key)
@@ -152,7 +161,6 @@ void PickMove(WPARAM key)
 	pos += key == VK_UP ? -1 : key == VK_DOWN ? 1 : key == VK_PRIOR ? -kRows : key == VK_NEXT ? kRows : key == VK_HOME ? -n : n;
 	pos = std::max(0, std::min(n - 1, pos));
 	g_s.pickSel = view[pos];
-	GameRoomPickerSelect(view[pos]);
 	if (pos < g_s.pick.scroll) g_s.pick.scroll = pos;
 	if (pos >= g_s.pick.scroll + kRows) g_s.pick.scroll = pos - kRows + 1;
 }
@@ -175,18 +183,21 @@ void PaintScenarioPicker(Painter &p, const State &st)
 
 	p.Fill(lx, ly, kListW, kRows * kRowH + 4, pal::bg);
 	p.Frame(lx, ly, kListW, kRows * kRowH + 4, pal::lineStrong);
+	const std::vector<CupScenario> list = PickScenarios();
+	const bool listed = CupScenarios().loaded;
 	const std::vector<int> view = PickView(st);
 	const int count = static_cast<int>(view.size());
 	const int scroll = std::max(0, std::min(st.pick.scroll, count - kRows));
 	p.Font(0);
-	if (!g.pickerItems.size()) p.Text(lx + 12, ly + 8, kListW - 24, 28, "There are no scenarios for multiplayer", pal::textDim);
+	if (!listed) p.Text(lx + 12, ly + 8, kListW - 24, 28, "Reading the scenarios...", pal::textDim);
+	else if (list.empty()) p.Text(lx + 12, ly + 8, kListW - 24, 28, "There are no scenarios for multiplayer", pal::textDim);
 	else if (!count) p.Text(lx + 12, ly + 8, kListW - 24, 28, "No map matches the search.", pal::textDim);
 	for (int r = 0; r < kRows && scroll + r < count; r++) {
 		const int i = view[scroll + r], ry = ly + 2 + r * kRowH;
 		const bool hov = p.Hover(lx + 2, ry, kListW - 20, kRowH, mx, my);
 		if (i == st.pickSel) p.Fill(lx + 2, ry, kListW - 4, kRowH, pal::selected);
 		else if (hov) p.Fill(lx + 2, ry, kListW - 4, kRowH, pal::raised);
-		const std::shared_ptr<const MapPreviewData> d = MapPreviewGet(g.pickerPaths[i]);
+		const std::shared_ptr<const MapPreviewData> d = MapPreviewGet(list[i].path);
 		const bool inUse = PickInUse(st, i);
 		int textRight = lx + kListW - 22;
 		p.Font(3);
@@ -197,7 +208,7 @@ void PaintScenarioPicker(Painter &p, const State &st)
 			PaintBadge(p, textRight + 6, ry + 6, w, 18, tag, RGB(40, 80, 44), pal::ok);
 		}
 		p.Font(0);
-		p.Text(lx + 12, ry + 2, textRight - lx - 18, 22, g.pickerItems[i].empty() ? "-" : g.pickerItems[i], i == st.pickSel ? pal::text : pal::text,
+		p.Text(lx + 12, ry + 2, textRight - lx - 18, 22, list[i].title.empty() ? "-" : list[i].title, pal::text,
 			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.Font(3);
 		if (!d) {
@@ -220,8 +231,9 @@ void PaintScenarioPicker(Painter &p, const State &st)
 
 	const int dx = lx + kListW + 20, dw = x + kDlgW - 20 - dx;
 	PaintCard(p, dx, ly, dw, kRows * kRowH + 4);
-	const bool has = st.pickSel >= 0 && st.pickSel < static_cast<int>(g.pickerPaths.size());
-	const std::shared_ptr<const MapPreviewData> d = has ? MapPreviewGet(g.pickerPaths[st.pickSel]) : nullptr;
+	const bool has = st.pickSel >= 0 && st.pickSel < static_cast<int>(list.size());
+	const std::shared_ptr<const MapPreviewData> d = has ? MapPreviewGet(list[st.pickSel].path) : nullptr;
+	const std::string gameText = d && !d->failed ? d->info.description : std::string();
 	if (!has) {
 		p.Font(0);
 		p.TextWrapped(dx + 16, ly + 14, dw - 32, 80, "Pick a scenario from the list to see its preview and description.", pal::textDim);
@@ -256,7 +268,7 @@ void PaintScenarioPicker(Painter &p, const State &st)
 
 		const int tx = px + kPreview + 16, tw = x + kDlgW - 34 - tx;
 		p.Font(1);
-		const int nameH = p.TextWrapped(tx, py, tw, 56, g.pickerItems[st.pickSel], pal::redText);
+		const int nameH = p.TextWrapped(tx, py, tw, 56, list[st.pickSel].title, pal::redText);
 		int ty = py + std::max(24, nameH) + 6;
 		p.Font(0);
 		if (d && !d->failed) {
@@ -280,7 +292,7 @@ void PaintScenarioPicker(Painter &p, const State &st)
 			p.Font(3);
 			const int colW = (dw - 28) / 2;
 			int n = 0;
-			const std::vector<std::pair<int, std::string>> named = MapPlayerLines(g.pickerDescription);
+			const std::vector<std::pair<int, std::string>> named = MapPlayerLines(gameText);
 			for (const MapPlayer &pl : d->info.players) {
 				const int col = n % 2, row = n / 2;
 				const int cx = px + col * colW, cy = py2 + row * 20;
@@ -296,7 +308,7 @@ void PaintScenarioPicker(Painter &p, const State &st)
 		if (descH > 30) {
 			p.Fill(px, py2 - 4, dw - 28, 1, pal::hairline);
 			p.Font(3);
-			const std::string body = MapDescriptionBody(g.pickerDescription, d && !d->failed && !d->info.players.empty());
+			const std::string body = MapDescriptionBody(gameText, d && !d->failed && !d->info.players.empty());
 			p.Clip(px, py2, dw - 28, descH);
 			p.TextWrapped(px, py2 + 2, dw - 28, descH, body.empty() ? "No description." : body, body.empty() ? pal::textDim : pal::text);
 			p.Unclip();
@@ -313,6 +325,10 @@ void PaintScenarioPicker(Painter &p, const State &st)
 		else if (d->origin.kind == kMapBase) note = "This map is part of the game and cannot be deleted";
 		else if (PickInUse(st, st.pickSel)) note = "This map is in use in the room: choose another one first";
 	}
+	if (note.empty() && has && !g.pickerRefused.empty() && StemKey(g.pickerRefused) == StemKey(list[st.pickSel].path)) {
+		note = "The game does not let this scenario be played in multiplayer";
+		noteColor = pal::bad;
+	}
 	if (note.empty() && !st.pickNote.empty() && GetTickCount() < st.pickNoteUntil) {
 		note = st.pickNote;
 		noteColor = pal::ok;
@@ -325,7 +341,7 @@ void PaintScenarioPicker(Painter &p, const State &st)
 
 	if (confirming) {
 		p.noHover = false;
-		const std::string name = st.pickDelete < static_cast<int>(g.pickerItems.size()) ? g.pickerItems[st.pickDelete] : "";
+		const std::string name = st.pickDelete < static_cast<int>(list.size()) ? list[st.pickDelete].title : "";
 		const Dialog c = DialogBegin(p, st.viewW, st.viewH, 560, 220, "Delete map");
 		DialogText(p, c, 60, TrFmt("\"%s\" will be moved to the recycle bin. You can restore it from there.", {name}));
 		DialogButtons(p, c, {{"Delete", kPickDeleteYes, 0, true}, {"Cancel", kPickDeleteNo}}, mx, my);

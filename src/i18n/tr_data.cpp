@@ -3466,5 +3466,7 @@ extern const TrRow kTrRows[] = {
 	{"With a 300 s delay", "Con 300 s de retraso", "Con 300 s di ritardo"},
 	{"Type it, or move it 15 minutes", "Escríbela o muévela de 15 en 15 minutos", "Scrivila o spostala di 15 minuti"},
 	{"Choose 4, 8, 16 or 32 places; a double elimination, up to 16.", "Elige 4, 8, 16 o 32 plazas; una doble eliminación, hasta 16.", "Scegli 4, 8, 16 o 32 posti; un'eliminazione doppia, fino a 16."},
+	{"Reading the scenarios...", "Leyendo los escenarios...", "Lettura degli scenari..."},
+	{"The game does not let this scenario be played in multiplayer", "El juego no deja jugar este escenario en multijugador", "Il gioco non permette di giocare questo scenario in multigiocatore"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

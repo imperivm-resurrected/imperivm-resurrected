@@ -113,12 +113,10 @@ void Scan(unsigned serial)
 		s.file = file;
 		s.path = CupScenarioPath(file);
 		s.origin = ModsMapOrigin(s.path);
+		bool rules = false;
 		if (s.origin.kind == kMapMod) {
 			ModInfo mod;
-			if (ModsFind(s.origin.modFolder, mod) && mod.gameplay) {
-				view.fromRules++;
-				continue;
-			}
+			rules = ModsFind(s.origin.modFolder, mod) && mod.gameplay;
 		}
 		std::string bytes;
 		if (!CupScenarioRead(file, bytes)) continue;
@@ -126,15 +124,21 @@ void Scan(unsigned serial)
 		if (!MapInfoParse(reinterpret_cast<const unsigned char *>(bytes.data()), bytes.size(), info)) continue;
 		// Adventures and conquests kept in Scenarios are not in the room's selector.
 		s.humans = MapHumanSlots(info);
-		if (info.gameType != 0 || s.humans < 2) continue;
+		if (info.gameType != 0 || s.humans < 2 || info.singleOnly) continue;
 		s.bytes = bytes.size();
 		s.sha256 = Sha256Of(bytes);
 		s.title = ShortTitle(info.name.empty() ? TourneyScenarioStem(file) : info.name);
 		if (s.title.empty()) s.title = ShortTitle(TourneyScenarioStem(file));
 		s.game = s.origin.kind != kMapMod && BaseScenarioIs(file, s.sha256);
-		view.list.push_back(std::move(s));
+		if (rules) {
+			view.fromRules++;
+			view.rules.push_back(std::move(s));
+		}
+		else view.list.push_back(std::move(s));
 	}
-	std::sort(view.list.begin(), view.list.end(), [](const CupScenario &a, const CupScenario &b) { return _stricmp(a.title.c_str(), b.title.c_str()) < 0; });
+	const auto byTitle = [](const CupScenario &a, const CupScenario &b) { return _stricmp(a.title.c_str(), b.title.c_str()) < 0; };
+	std::sort(view.list.begin(), view.list.end(), byTitle);
+	std::sort(view.rules.begin(), view.rules.end(), byTitle);
 	int game = 0;
 	for (const CupScenario &s : view.list) game += s.game ? 1 : 0;
 	LogI("league", "cup scenarios: %d of the game's, %d of the player's, %d left out for coming with rules", game, static_cast<int>(view.list.size()) - game,

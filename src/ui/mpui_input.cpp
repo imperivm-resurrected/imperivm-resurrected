@@ -195,7 +195,7 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 			g_s.dropScroll = ClampDropScroll(g_s.dropScroll - GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA * 3, count);
 		}
 		else if (g_s.game.picker && !SaveMapPicking(g_s)) {
-			const int count = static_cast<int>(g_s.game.pickerItems.size());
+			const int count = static_cast<int>(PickView(g_s).size());
 			g_s.pick.scroll = std::max(0, std::min(g_s.pick.scroll - GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA * 3, count - PickRowsShown()));
 		}
 		return true;

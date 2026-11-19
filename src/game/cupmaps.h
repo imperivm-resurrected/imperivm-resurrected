@@ -33,6 +33,8 @@ struct CupScenariosView {
 	std::vector<CupScenario> list;
 	// Scenarios left out because a content pack that changes the rules brings them: those go with the cup's content, not as a map.
 	int fromRules = 0;
+	// Those scenarios, for the room's selector, where they can be played with their pack.
+	std::vector<CupScenario> rules;
 };
 // The last list read; it is read again in the background the first time and after CupScenariosRescan.
 CupScenariosView CupScenarios();

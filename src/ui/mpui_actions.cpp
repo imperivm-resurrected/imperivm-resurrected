@@ -648,26 +648,30 @@ void DoAction(int action, int arg)
 		const DWORD now = GetTickCount();
 		const bool twice = arg == g_s.pickLastIndex && now - g_s.pickLastClick < 450;
 		g_s.pickSel = arg;
-		GameRoomPickerSelect(arg);
 		g_s.pickLastIndex = arg;
 		g_s.pickLastClick = now;
 		g_s.focus = kNoField;
-		if (twice) GameRoomPickerAccept();
+		if (twice) {
+			const std::vector<CupScenario> list = PickScenarios();
+			if (arg >= 0 && arg < static_cast<int>(list.size())) GameRoomPickerOffer(list[arg].path, true);
+		}
 		break;
 	}
 	case kFieldPickSearch: FocusField(kPickSearchField); break;
 	case kPickDelete:
-		if (g_s.pickSel >= 0 && g_s.pickSel < static_cast<int>(g_s.game.pickerPaths.size()) && !PickInUse(g_s, g_s.pickSel)) g_s.pickDelete = g_s.pickSel;
+		if (g_s.pickSel >= 0 && g_s.pickSel < static_cast<int>(PickScenarios().size()) && !PickInUse(g_s, g_s.pickSel)) g_s.pickDelete = g_s.pickSel;
 		break;
 	case kPickDeleteNo: g_s.pickDelete = -1; break;
 	case kPickDeleteYes: {
 		const int index = g_s.pickDelete;
 		g_s.pickDelete = -1;
-		if (index < 0 || index >= static_cast<int>(g_s.game.pickerPaths.size())) break;
+		const std::vector<CupScenario> list = PickScenarios();
+		if (index < 0 || index >= static_cast<int>(list.size())) break;
 		std::string message;
-		const bool ok = ModsDeleteMap(g_s.game.pickerPaths[index], message);
+		const bool ok = ModsDeleteMap(list[index].path, message);
 		if (ok) {
-			std::string key = g_s.game.pickerPaths[index];
+			CupScenariosRescan();
+			std::string key = list[index].path;
 			for (char &c : key) c = c == '\\' ? '/' : static_cast<char>(tolower(static_cast<unsigned char>(c)));
 			if (key.size() > 5 && key.compare(key.size() - 5, 5, ".bfhp") == 0) key.resize(key.size() - 5);
 			g_s.pickGone.insert(key);
@@ -678,9 +682,11 @@ void DoAction(int action, int arg)
 		g_s.pickNoteUntil = GetTickCount() + 6000;
 		break;
 	}
-	case kPickOk:
-		if (g_s.pickSel >= 0) GameRoomPickerAccept();
+	case kPickOk: {
+		const std::vector<CupScenario> list = PickScenarios();
+		if (g_s.pickSel >= 0 && g_s.pickSel < static_cast<int>(list.size())) GameRoomPickerOffer(list[g_s.pickSel].path, true);
 		break;
+	}
 	case kPickCancel: GameRoomPickerCancel(); break;
 	case kSyncAccept:
 	case kSyncUpdate:

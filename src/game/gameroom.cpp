@@ -105,6 +105,17 @@ void SaveRoomRules(unsigned rules)
 }
 typedef int(__fastcall *GetGameOptions_t)(void *dlg);
 PickerOnShow_t g_origPickerOnShow = nullptr;
+typedef void(__fastcall *PickerFill_t)(void *picker);
+typedef const char *(__cdecl *LoadGameInfo_t)(const char *path, void *info, void *players, void *extra);
+PickerFill_t g_origPickerFill = nullptr;
+LoadGameInfo_t g_origLoadGameInfo = nullptr;
+// While the selector fills its list (game thread): the file stem it may read, empty for none.
+bool g_filling = false;
+std::string g_fillOnly;
+bool g_loggedFillPath = false;
+// The selector's OK, pressed on the tick after an offer selected its file.
+bool g_acceptOffer = false;
+std::string g_pickerRefused;
 ThisOnly_t g_origPickerDtor = nullptr;
 std::mutex g_lock;
 GameRoomSnapshot g_snap;
@@ -733,6 +744,7 @@ void TakeSnapshot()
 				s.pickerDescription = winpath::Utf8(winpath::Widen(buf, CP_ACP));
 			}
 			s.pickerPaths = PickerPaths(g_picker);
+			s.pickerRefused = g_pickerRefused;
 		}
 	}
 	std::lock_guard<std::mutex> lock(g_lock);
@@ -927,8 +939,42 @@ void __fastcall HookDtor(void *dlg)
 	g_origDtor(dlg);
 }
 
+std::string FileStemOf(const char *path)
+{
+	std::string s = path ? path : "";
+	for (char &c : s) c = c == '\\' ? '/' : static_cast<char>(tolower(static_cast<unsigned char>(c)));
+	const size_t slash = s.find_last_of('/');
+	if (slash != std::string::npos) s = s.substr(slash + 1);
+	if (s.size() > 5 && s.compare(s.size() - 5, 5, ".bfhp") == 0) s.resize(s.size() - 5);
+	return s;
+}
+
+// LoadGameInfoFromFile mounts each scenario and reads its game.xml, map.xml and the 16 player files: for every file of Scenarios, in
+// CVXUIScenarioPicker::FillScenarioList (006f9b30), the room stopped until all were read. While it fills, a file other than the one
+// offered is refused at once (a non-null result is an error: FillScenarioList leaves it out); its other callers are left alone.
+const char *__cdecl HookLoadGameInfo(const char *path, void *info, void *players, void *extra)
+{
+	if (g_filling) {
+		if (!g_loggedFillPath) {
+			g_loggedFillPath = true;
+			LogD("room", "scenario selector: the game names its files as \"%s\"", path ? path : "");
+		}
+		if (g_fillOnly.empty() || FileStemOf(path) != g_fillOnly) return "skipped by the mod's selector";
+	}
+	return g_origLoadGameInfo(path, info, players, extra);
+}
+
+void __fastcall HookPickerFill(void *picker)
+{
+	g_filling = true;
+	g_origPickerFill(picker);
+	g_filling = false;
+}
+
 int __fastcall HookPickerOnShow(void *picker)
 {
+	g_fillOnly.clear();
+	g_pickerRefused.clear();
 	const int r = g_origPickerOnShow(picker);
 	g_picker = picker;
 	LogI("room", "scenario selector open");
@@ -1364,6 +1410,8 @@ void GameRoomInstall(bool knownExe)
 	const bool ok = HookFunction(addr::kMpGameOnShow, &HookOnShow, &g_origOnShow) &&
 		HookFunction(addr::kMpGameDtor, &HookDtor, &g_origDtor) &&
 		HookFunction(addr::kPickerOnShow, &HookPickerOnShow, &g_origPickerOnShow) &&
+		HookFunction(addr::kPickerFillList, &HookPickerFill, &g_origPickerFill) &&
+		HookFunction(addr::kLoadGameInfoFromFile, &HookLoadGameInfo, &g_origLoadGameInfo) &&
 		HookFunction(addr::kPickerDtor, &HookPickerDtor, &g_origPickerDtor) &&
 		HookFunction(addr::kSetSlotInfo, &HookSetSlotInfo, &g_origSetSlotInfo) &&
 		HookFunction(addr::kApplyToGame, &HookApplyToGame, &g_origApplyToGame) &&
@@ -1420,6 +1468,10 @@ void StepSlotTypes()
 
 void GameRoomTick()
 {
+	if (g_acceptOffer) {
+		g_acceptOffer = false;
+		if (g_dlg && g_picker) Click(Child(g_picker, 0xa001, addr::kClassNameCUIButton));
+	}
 	for (;;) {
 		std::function<void()> fn;
 		{
@@ -1881,6 +1933,27 @@ void GameRoomPickerSelect(int index)
 	Queue([index] {
 		void *list = g_picker ? Child(g_picker, 0xa105, addr::kClassNameCUISList) : nullptr;
 		if (list) reinterpret_cast<SelectExclusive_t>(addr::kListSelectExclusive)(list, nullptr, static_cast<unsigned>(index), 1, 1);
+	});
+}
+
+void GameRoomPickerOffer(const std::string &scenarioPath, bool accept)
+{
+	Queue([scenarioPath, accept] {
+		if (!g_picker) return;
+		g_fillOnly = FileStemOf(scenarioPath.c_str());
+		g_origPickerFill(g_picker);
+		g_fillOnly.clear();
+		void *list = Child(g_picker, 0xa105, addr::kClassNameCUISList);
+		const unsigned count = list ? *reinterpret_cast<const unsigned *>(static_cast<const char *>(list) + 0x58) : 0;
+		if (!count) {
+			g_pickerRefused = scenarioPath;
+			LogW("room", "scenario selector: the game did not take \"%s\" (not for multiplayer, or unreadable)", scenarioPath.c_str());
+			return;
+		}
+		g_pickerRefused.clear();
+		reinterpret_cast<SelectExclusive_t>(addr::kListSelectExclusive)(list, nullptr, 0, 1, 1);
+		g_acceptOffer = accept;
+		LogI("room", "scenario selector: \"%s\" offered%s", scenarioPath.c_str(), accept ? " and taken" : "");
 	});
 }
 

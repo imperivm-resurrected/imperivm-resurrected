@@ -251,6 +251,11 @@ bool MapInfoParse(const unsigned char *data, size_t size, MapInfo &out)
 				out.name = Attr(tag, "name");
 				out.victory = Attr(tag, "victory_condition");
 				out.season = Attr(tag, "season");
+				out.singleOnly = ToInt(Attr(tag, "single_only")) != 0;
+				std::string text = Attr(tag, "description");
+				for (size_t at = text.find("\\n"); at != std::string::npos; at = text.find("\\n", at + 1)) text.replace(at, 2, "\n");
+				while (!text.empty() && (text[0] == '\n' || text[0] == ' ')) text.erase(0, 1);
+				out.description = text;
 				out.gameType = ToInt(Attr(tag, "game_type"));
 			}
 			from = 0;

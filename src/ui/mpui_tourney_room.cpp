@@ -145,6 +145,11 @@ bool PickScenario(GameRoomSnapshot &g, const TourneyMap &m, RoomLock &k)
 		for (size_t i = 0; i < g.pickerPaths.size() && idx < 0; i++) {
 			if (FileOfKey(MapKey(g.pickerPaths[i])) == FileOfKey(want)) idx = static_cast<int>(i);
 		}
+		if (idx < 0 && k.offered != want) {
+			GameRoomPickerOffer(CupScenarioPath(m.file), false);
+			k.offered = want;
+			return false;
+		}
 		if (idx < 0) {
 			GameRoomPickerCancel();
 			k.mapAllowed = true;

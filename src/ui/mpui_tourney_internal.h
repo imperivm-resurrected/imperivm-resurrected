@@ -106,6 +106,8 @@ struct RoomLock {
 	// A scenario being chosen in the room's selector: the item picked and when, and the warning about this computer's copy, once.
 	int pick = -1;
 	DWORD pickAt = 0;
+	// The scenario offered to the game's selector, which holds none until then.
+	std::string offered;
 	bool mapWarned = false;
 	// This room was the player's match: once the match is settled without a game (a no-show), the room has nothing left to do.
 	bool wasMine = false;
