@@ -76,7 +76,7 @@ void PaintCivMenu(Painter &p, const State &st, int x, int y, int w)
 	const COLORREF ink = MatchColorRef(g_tourney);
 	const int cy = y + 34 + 8;
 	p.raw = true;
-	PaintCombo(p, x, cy, w, 34, Tr("Colour") + ": " + (ink == CLR_INVALID ? Tr("automatic") : std::string()), g_tourney.colorOpen, true, st.mouseX, st.mouseY, kTourney,
+	PaintCombo(p, x, cy, w, 34, Tr("Colour") + ":", g_tourney.colorOpen, true, st.mouseX, st.mouseY, kTourney,
 		ArgOf(kSubColorOpen, 0), &g_colorAnchor);
 	p.raw = raw;
 	if (ink != CLR_INVALID) {
@@ -485,9 +485,10 @@ int MatchCiv(Ui &u)
 int MatchColor(Ui &u)
 {
 	if (u.colorPick == -2) {
-		u.colorPick = GameRoomLoadSetting("TourneyColor", -1);
+		u.colorPick = GameRoomLoadSetting("TourneyColor", 0);
 		u.colorRgb = static_cast<uint32_t>(GameRoomLoadSetting("TourneyColorRgb", 0)) & 0xffffff;
-		if (u.colorPick != kOwnColor && (u.colorPick < -1 || u.colorPick >= 12)) u.colorPick = -1;
+		if (u.colorPick != kOwnColor && (u.colorPick < 0 || u.colorPick >= 12)) u.colorPick = 0;
+		if (u.colorPick == kOwnColor && !u.colorRgb) u.colorPick = 0;
 	}
 	return u.colorPick;
 }
@@ -499,6 +500,7 @@ COLORREF MatchColorRef(Ui &u)
 	if (pick < 0 || pick >= 12) return CLR_INVALID;
 	uint32_t palette[12] = {};
 	GameRoomPalette(palette);
+	if (!palette[pick]) return CLR_INVALID;
 	return RGB((palette[pick] >> 16) & 255, (palette[pick] >> 8) & 255, palette[pick] & 255);
 }
 
@@ -529,8 +531,8 @@ void PaintMatchColorMenu(Painter &p, const State &st)
 		return;
 	}
 	// The game's twelve, as the room's menu shows them; under them the room's own and the wheel.
-	const int cell = 34, gap = 6, rowH = 32;
-	const int w = pad * 2 + 6 * cell + 5 * gap, h = pad * 2 + 2 * cell + gap + 10 + 2 * rowH + gap;
+	const int cell = 34, gap = 6, rowH = 30;
+	const int w = pad * 2 + 6 * cell + 5 * gap, h = pad * 2 + 2 * cell + 2 * gap + rowH;
 	const int x = std::min<int>(a.left, st.viewW - 16 - w);
 	int y = a.bottom + 4;
 	if (y + h > st.viewH - 8) y = a.top - 4 - h;
@@ -545,13 +547,19 @@ void PaintMatchColorMenu(Painter &p, const State &st)
 		const int cx = x + pad + (c % 6) * (cell + gap), cy = y + pad + (c / 6) * (cell + gap);
 		const bool hot = p.Hover(cx, cy, cell, cell, mx, my);
 		p.Fill(cx, cy, cell, cell, RGB((palette[c] >> 16) & 255, (palette[c] >> 8) & 255, palette[c] & 255));
-		p.Frame(cx, cy, cell, cell, c == pick ? pal::text : hot ? pal::edgeHot : pal::bg);
-		if (c == pick) p.Frame(cx + 1, cy + 1, cell - 2, cell - 2, pal::text);
+		if (c == pick) {
+			p.Frame(cx - 3, cy - 3, cell + 6, cell + 6, pal::text);
+			p.Frame(cx, cy, cell, cell, pal::panel);
+		}
+		else {
+			p.Frame(cx, cy, cell, cell, hot ? pal::text : pal::lineStrong);
+			if (hot) p.Frame(cx - 2, cy - 2, cell + 4, cell + 4, pal::edgeHot);
+		}
 		p.AddHit(cx, cy, cell, cell, kTourney, ArgOf(kSubColorPick, c));
 	}
-	const int ly = y + pad + 2 * cell + gap + 10, lw = w - 2 * pad;
-	p.Button(x + pad, ly, lw, rowH, "Automatic", kTourney, ArgOf(kSubColorPick, -1), mx, my, pick != -1, false, 3);
-	p.Button(x + pad, ly + rowH + gap, lw, rowH, "Own colour...", kTourney, ArgOf(kSubColorOpen, 1), mx, my, true, pick == kOwnColor, 3);
+	const int ly = y + pad + 2 * cell + 2 * gap;
+	p.Button(x + pad, ly, w - 2 * pad, rowH, pick == kOwnColor ? "Own colour (in use)..." : "Own colour...", kTourney, ArgOf(kSubColorOpen, 1), mx, my, true,
+		pick == kOwnColor, 3);
 }
 
 namespace {

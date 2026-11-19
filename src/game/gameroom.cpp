@@ -1488,8 +1488,46 @@ void StepSlotTypes()
 	}
 }
 
+// The game reads its players' twelve colours ([PlayerColors] of its settings, LoadPlayerColorTable 006081b0) only when a room or a
+// game needs them: a match page shows them before any room.
+bool g_paletteLoaded = false;
+
+bool ReadPaletteTable(uint32_t out[12])
+{
+	__try {
+		memcpy(out, reinterpret_cast<const void *>(addr::kPlayerColorTable), 12 * sizeof(uint32_t));
+		for (int i = 0; i < 12; i++) {
+			if (out[i]) return true;
+		}
+		return false;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return false;
+	}
+}
+
+bool LoadPaletteTable()
+{
+	__try {
+		reinterpret_cast<int(__cdecl *)()>(addr::kLoadPlayerColorTable)();
+		return true;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return false;
+	}
+}
+
 void GameRoomTick()
 {
+	if (!g_paletteLoaded) {
+		uint32_t now[12];
+		g_paletteLoaded = true;
+		if (!ReadPaletteTable(now)) {
+			const bool ok = LoadPaletteTable() && ReadPaletteTable(now);
+			LogI("room", "players' colours %s from the game's settings", ok ? "loaded" : "could NOT be loaded");
+			if (ok) KeepPalette(now);
+		}
+	}
 	if (g_acceptOffer) {
 		g_acceptOffer = false;
 		if (g_dlg && g_picker) Click(Child(g_picker, 0xa001, addr::kClassNameCUIButton));
@@ -1979,24 +2017,10 @@ void GameRoomPickerOffer(const std::string &scenarioPath, bool accept)
 	});
 }
 
-bool ReadPaletteTable(uint32_t out[12])
-{
-	__try {
-		memcpy(out, reinterpret_cast<const void *>(addr::kPlayerColorTable), 12 * sizeof(uint32_t));
-		for (int i = 0; i < 12; i++) {
-			if (out[i]) return true;
-		}
-		return false;
-	}
-	__except (EXCEPTION_EXECUTE_HANDLER) {
-		return false;
-	}
-}
-
 void GameRoomPalette(uint32_t out[12])
 {
 	if (ReadPaletteTable(out)) return;
-	// The game fills its table only with a room open: the one a room had (kept in the room's settings), else the usual twelve.
+	// Not loaded yet (GameRoomTick loads it on the game thread): the twelve of the last room, if one was seen.
 	std::lock_guard<std::mutex> lock(g_paletteLock);
 	if (!g_paletteKnown) {
 		bool all = true;
@@ -2007,11 +2031,8 @@ void GameRoomPalette(uint32_t out[12])
 			all = all && v >= 0;
 			g_palette[i] = v >= 0 ? static_cast<uint32_t>(v) & 0xffffff : 0;
 		}
-		g_paletteKnown = true;
-		if (!all) {
-			static const uint32_t kUsual[12] = {0xd02020, 0x2050d8, 0x20a030, 0xe8d020, 0x9030c0, 0xe87818, 0x20c8d0, 0xe880c8, 0xe8e8e8, 0x885028, 0x909090, 0x303030};
-			memcpy(g_palette, kUsual, sizeof(kUsual));
-		}
+		if (!all) memset(g_palette, 0, sizeof(g_palette));
+		g_paletteKnown = all;
 	}
 	memcpy(out, g_palette, 12 * sizeof(uint32_t));
 }

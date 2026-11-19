@@ -1457,7 +1457,6 @@ extern const TrRow kTrRows[] = {
 	{"main", "principal", "principale"},
 	{"Updates", "Actualizaciones", "Aggiornamenti"},
 	{"Notify", "Avisar", "Avvisa"},
-	{"Automatic", "Automático", "Automatico"},
 	{"Never", "Nunca", "Mai"},
 	{"Season", "Estación", "Stagione"},
 	{"Spring", "Primavera", "Primavera"},
@@ -3482,6 +3481,6 @@ extern const TrRow kTrRows[] = {
 	{"A cup match starts when all its players are in the room.", "Un partido de copa empieza cuando todos sus jugadores están en la sala.", "Una partita di coppa inizia quando tutti i suoi giocatori sono nella sala."},
 	{"Colour", "Color", "Colore"},
 	{"The room's own", "El de la sala", "Quello della sala"},
-	{"automatic", "automático", "automatico"},
+	{"Automatic", "Automático", "Automatico"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

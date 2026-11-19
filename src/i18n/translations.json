@@ -1450,7 +1450,6 @@
 {"en":"main","es":"principal","it":"principale"},
 {"en":"Updates","es":"Actualizaciones","it":"Aggiornamenti"},
 {"en":"Notify","es":"Avisar","it":"Avvisa"},
-{"en":"Automatic","es":"Automático","it":"Automatico"},
 {"en":"Never","es":"Nunca","it":"Mai"},
 {"en":"Season","es":"Estación","it":"Stagione"},
 {"en":"Spring","es":"Primavera","it":"Primavera"},
@@ -3475,5 +3474,5 @@
 {"en":"A cup match starts when all its players are in the room.","es":"Un partido de copa empieza cuando todos sus jugadores están en la sala.","it":"Una partita di coppa inizia quando tutti i suoi giocatori sono nella sala."},
 {"en":"Colour","es":"Color","it":"Colore"},
 {"en":"The room's own","es":"El de la sala","it":"Quello della sala"},
-{"en":"automatic","es":"automático","it":"automatico"}
+{"en":"Automatic","es":"Automático","it":"Automatico"}
 ]

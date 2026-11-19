@@ -17,6 +17,7 @@ inline constexpr uintptr_t kSelectionRevalidate = 0x005b9560;
 inline constexpr uintptr_t kLoadGameInfoFromFile = 0x005bf560;
 inline constexpr uintptr_t kRebuildCommandList = 0x005e7710;
 inline constexpr uintptr_t kPlayMovieFile = 0x005f97d0;
+inline constexpr uintptr_t kLoadPlayerColorTable = 0x006081b0;
 inline constexpr uintptr_t kWindowHasFlags = 0x00631ca0;
 inline constexpr uintptr_t kModifyFlags = 0x00631cc0;
 inline constexpr uintptr_t kBringChildToTop = 0x00631ed0;

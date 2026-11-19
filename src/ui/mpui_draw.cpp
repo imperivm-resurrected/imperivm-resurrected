@@ -15,6 +15,7 @@
 #include "game/mappreview.h"
 #include "ui/leagueui.h"
 #include "ui/mpui_internal.h"
+#include "ui/mpui_tourney.h"
 #include "ui/patronui.h"
 
 using namespace mpui_impl;
@@ -334,7 +335,8 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 	g_s.createModsGeom = g_createModsGeomOut;
 	const bool overlay = OverlayActive(st);
 	g_s.pickGeom = g_pickGeomOut;
-	g_s.optGeom = overlay || !st.game.active ? ListGeom() : g_optGeomOut;
+	// A hidden cup room was not painted: its options list, where it was last drawn, would take the match page's clicks.
+	g_s.optGeom = overlay || !st.game.active || TourneyRoomHidden(st) ? ListGeom() : g_optGeomOut;
 	g_s.detailGeom = overlay ? ListGeom() : g_detail.geomOut;
 	g_s.chatGeom = overlay ? ListGeom() : g_chat.geomOut;
 }

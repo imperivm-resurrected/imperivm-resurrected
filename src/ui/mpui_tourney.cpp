@@ -1539,7 +1539,7 @@ void TourneyAction(int arg)
 	}
 	case kSubColorPick: {
 		const int pick = static_cast<int>(value);
-		if (pick < -1 || pick >= 12) break;
+		if (pick < 0 || pick >= 12) break;
 		u.colorPick = pick;
 		u.colorOpen = u.colorWheel = false;
 		GameRoomSaveSetting("TourneyColor", u.colorPick);
@@ -2006,9 +2006,11 @@ int TourneyRoomPlayers(const mpui_impl::State &st)
 	if (!st.room.id || st.room.info.spectate) return 0;
 	const int64_t match = TourneyMatchOfTag(st.room.info.leagueTag);
 	if (!match) return 0;
+	// By the room alone: once the league has settled the match, its room may still be counting down.
 	const auto mine = LeagueTourneyMine();
 	const TourneyNext &n = mine->mine.next;
-	return n.present && n.match == match && n.Teams() ? 4 : 2;
+	if (n.present && n.match == match) return n.Teams() ? 4 : 2;
+	return st.room.info.maxPlayers >= 4 ? 4 : 2;
 }
 
 bool TourneyRoomHidden(const mpui_impl::State &st)
