@@ -1223,7 +1223,8 @@ void PaintChatLog(Painter &p, const State &st, int x, int y, int w, int h)
 	OffsetRect(&g_chat.rect, p.ox, p.oy);
 	g_chat.rectValid = true;
 	if (chat.empty()) return;
-	const int pad = 2, barW = 6, textW = w - pad * 2 - barW - 2;
+	// A margin on the left, past the patron's stripe, so the time does not touch it.
+	const int pad = 10, barW = 6, textW = w - pad * 2 - barW - 2;
 	struct Item {
 		int y, h, timeW, indent, lineH;
 		std::string text;

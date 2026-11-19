@@ -721,8 +721,15 @@ void PaintSlotRow(Painter &p, const State &st, const TableCtx &t, int i, const A
 		SlotCombo(p, st, c.player, ctlY, std::min(300, nameRight - c.player), AiLevel(s), pal::text, kDropSlot, i, editable);
 	}
 	else {
-		PaintWho(p, st, c.player, cy, nameRight - c.player, who, SlotLabel(s), i == t.f.hostSlot ? std::string("Host") : std::string(), pal::redText, true,
-			kProfileRoomSlot + i);
+		int whoW = nameRight - c.player;
+		if (i == t.f.hostSlot) {
+			p.Font(3);
+			const std::string tag = Tr("Host");
+			const int tagW = p.CapsWidth(tag, 2) + 4;
+			p.TextCaps(nameRight - tagW, cy - 10, tagW, 20, tag, pal::redText, DT_RIGHT | DT_VCENTER | DT_SINGLELINE, 2);
+			whoW -= tagW + 12;
+		}
+		PaintWho(p, st, c.player, cy, whoW, who, SlotLabel(s), std::string(), pal::redText, true, kProfileRoomSlot + i);
 	}
 	paintSeat();
 
@@ -1087,9 +1094,9 @@ void PaintReadyBlock(Painter &p, const State &st, const RoomFacts &f, int x, int
 	if (look == kWait) mark = 30;
 	const int lx = ix + std::max(0, (iw - labelW - mark) / 2);
 	if (look == kIsReady && !hot) {
-		const int cy = by + btnH / 2;
-		const POINT check[3] = {{lx + 2, cy}, {lx + 8, cy + 6}, {lx + 18, cy - 7}};
-		p.Stroke(check, 3, pal::text, 3);
+		const float cx = static_cast<float>(lx + 10), cy = static_cast<float>(by + btnH / 2);
+		PaintDisc(p, cx, cy, 11.0f, pal::text, pal::text);
+		PaintCheckMark(p, cx, cy, 12.0f, 2.4f, fill);
 	}
 	if (look == kWait) p.Spinner(lx + 10, by + btnH / 2, 10, 4, GetTickCount());
 	p.raw = true;
