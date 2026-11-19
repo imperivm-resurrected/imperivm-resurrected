@@ -436,7 +436,14 @@ const TourneyMatch *LiveMatch(const TourneyDetail &d)
 int PaintLiveCard(Painter &p, const State &st, const TourneyListsView &lists, int x, int y, int w, std::vector<uint64_t> &ids)
 {
 	const int mx = st.mouseX, my = st.mouseY, pad = 24;
-	const TourneySummary *t = lists.live.empty() ? nullptr : &lists.live.front();
+	// The first cup being played, unless its page already knows it is not any more (cancelled or over since the list was read).
+	const TourneySummary *t = nullptr;
+	for (const TourneySummary &s : lists.live) {
+		const auto known = LeagueTourneyPage(s.slug, 15000);
+		if (known->loaded && known->detail.status != TourneyStatus::Running) continue;
+		t = &s;
+		break;
+	}
 	const auto page = LeagueTourneyPage(t ? t->slug : std::string(), 15000);
 	const TourneyMatch *m = page->loaded ? LiveMatch(page->detail) : nullptr;
 	const int h = m ? 248 : t ? 150 : 104;

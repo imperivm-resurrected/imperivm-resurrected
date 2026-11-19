@@ -37,6 +37,8 @@ const DWORD kQuietMinMs = 5000, kQuietMaxMs = 3600000;
 struct Lists {
 	bool loaded = false, loading = false, failed = false;
 	DWORD at = 0;
+	// Counts the player's changes: a read that started before one brings the lists as they were, and is read again.
+	unsigned changes = 0;
 	std::vector<TourneySummary> open, live, finished;
 };
 
@@ -141,6 +143,11 @@ void RememberCode(const std::string &slug, int64_t id, const std::string &code)
 
 void FetchLists()
 {
+	unsigned changes = 0;
+	{
+		std::lock_guard<std::mutex> lock(g_mx);
+		changes = g_lists.changes;
+	}
 	const HttpReply r = Http("GET", "/v1/tournaments", "", false);
 	Json j;
 	std::vector<TourneySummary> all;
@@ -149,7 +156,7 @@ void FetchLists()
 	WaitAfter(r);
 	std::lock_guard<std::mutex> lock(g_mx);
 	g_lists.loading = false;
-	g_lists.at = GetTickCount();
+	g_lists.at = changes == g_lists.changes ? GetTickCount() : 0;
 	g_lists.failed = !ok;
 	if (!ok) return;
 	g_lists.loaded = true;
@@ -420,6 +427,7 @@ void Run(TourneyOp op, int64_t id, std::string method, std::string path, std::st
 	if (op != TourneyOp::Presence && op != TourneyOp::Claim && op != TourneyOp::Register && op != TourneyOp::FindCode) {
 		StartMine();
 		g_lists.at = 0;
+		g_lists.changes++;
 		for (auto &p : g_pages) p.second.at = 0;
 		for (auto &d : g_disputes) d.second.at = 0;
 	}
