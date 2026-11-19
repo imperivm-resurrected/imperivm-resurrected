@@ -270,6 +270,17 @@ static void TestSlash()
 	CHECK_EQ(s.name, std::string("Marc"));
 	CHECK_EQ(s.rest, std::string("see you"));
 	CHECK(s.complete);
+	// /mute and /mutepings take the rest of the line as the name, spaces and all.
+	s = ChatParseSlash("/silenciar Juan Carlos ");
+	CHECK_EQ(s.kind, static_cast<int>(kSlashMute));
+	CHECK(!s.marks);
+	CHECK_EQ(s.name, std::string("Juan Carlos"));
+	for (const char *m : {"/mutepings all", "/silenciarmarcas todos", "/silenziasegnali tutti"}) {
+		CHECK_EQ(ChatParseSlash(m).kind, static_cast<int>(kSlashMute));
+		CHECK(ChatParseSlash(m).marks);
+	}
+	CHECK(!ChatParseSlash("/mute").complete);
+
 	s = ChatParseSlash("/p Marc");
 	CHECK_EQ(s.name, std::string("Marc"));
 	CHECK(!s.complete);

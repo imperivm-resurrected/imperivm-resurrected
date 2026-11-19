@@ -3432,5 +3432,22 @@
 {"en":"Use","es":"Usar","it":"Usa"},
 {"en":"Too close to the colour of %s: pick another one.","es":"Demasiado parecido al color de %s: elige otro.","it":"Troppo simile al colore di %s: scegline un altro."},
 {"en":"Each side in its own colour, only on your screen","es":"Cada bando de su color, solo en tu pantalla","it":"Ogni schieramento del suo colore, solo sul tuo schermo"},
-{"en":"each side in its own colour, only on your screen","es":"cada bando de su color, solo en tu pantalla","it":"ogni schieramento del suo colore, solo sul tuo schermo"}
+{"en":"each side in its own colour, only on your screen","es":"cada bando de su color, solo en tu pantalla","it":"ogni schieramento del suo colore, solo sul tuo schermo"},
+{"en":"Mute","es":"Silenciar","it":"Silenzia"},
+{"en":"a player's messages","es":"los mensajes de un jugador","it":"i messaggi di un giocatore"},
+{"en":"a player's marks on the map","es":"las marcas de un jugador en el mapa","it":"i segnali di un giocatore sulla mappa"},
+{"en":"/mute","es":"/silenciar","it":"/silenzia"},
+{"en":"/mutepings","es":"/silenciarmarcas","it":"/silenziasegnali"},
+{"en":"‹name› · all","es":"‹nombre› · todos","it":"‹nome› · tutti"},
+{"en":"the same again shows them; only on your screen, for this match","es":"lo mismo otra vez los vuelve a mostrar; solo en tu pantalla, en esta partida","it":"lo stesso di nuovo li mostra; solo sul tuo schermo, in questa partita"},
+{"en":"Write a name after /mute, or all.","es":"Escribe un nombre después de /silenciar, o todos.","it":"Scrivi un nome dopo /silenzia, o tutti."},
+{"en":"Write a name after /mutepings, or all.","es":"Escribe un nombre después de /silenciarmarcas, o todos.","it":"Scrivi un nome dopo /silenziasegnali, o tutti."},
+{"en":"Marks of %s muted: you no longer see them on the map.","es":"Marcas de %s silenciadas: ya no las ves en el mapa.","it":"Segnali di %s silenziati: non li vedi più sulla mappa."},
+{"en":"You see the marks of %s again.","es":"Vuelves a ver las marcas de %s.","it":"Vedi di nuovo i segnali di %s."},
+{"en":"Messages of %s muted.","es":"Mensajes de %s silenciados.","it":"Messaggi di %s silenziati."},
+{"en":"You read the messages of %s again.","es":"Vuelves a leer los mensajes de %s.","it":"Leggi di nuovo i messaggi di %s."},
+{"en":"Show this player's messages again","es":"Volver a mostrar los mensajes de este jugador","it":"Mostra di nuovo i messaggi di questo giocatore"},
+{"en":"Show this player's marks again","es":"Volver a mostrar las marcas de este jugador","it":"Mostra di nuovo i segnali di questo giocatore"},
+{"en":"Hide this player's messages, only on your screen","es":"Ocultar los mensajes de este jugador, solo en tu pantalla","it":"Nascondi i messaggi di questo giocatore, solo sul tuo schermo"},
+{"en":"Hide this player's marks on the map, only on your screen","es":"Ocultar las marcas de este jugador en el mapa, solo en tu pantalla","it":"Nascondi i segnali di questo giocatore sulla mappa, solo sul tuo schermo"}
 ]

@@ -50,6 +50,11 @@ void ChatSetOpenHandler(ChatOpenFn fn);
 
 // Text and target as typed; withLocation adds the centre of the camera, as the dialog's "Send location". False if nothing was sent.
 bool ChatSend(const std::string &text, ChatTarget target, bool withLocation);
+// What this computer hides of a player in the match being played, by the player's index: their messages, their marks on the map.
+// Only here, until the match ends.
+void ChatSetMuted(int player, bool messages, bool marks);
+bool ChatMutedMessages(int player);
+bool ChatMutedMarks(int player);
 // An empty chat line with a location: the point under the mouse (map or open zoom map), else the centre of the camera. The
 // sender also gets the type's notification, which the game itself only gives to the others. how says what asked for it, for
 // the log; type is a ChatPingType.

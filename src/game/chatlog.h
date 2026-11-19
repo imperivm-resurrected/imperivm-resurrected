@@ -108,14 +108,17 @@ int ChatDefaultTarget(const std::vector<ChatTarget> &targets, bool everyone);
 int ChatCycle(int current, int count, bool back);
 int ChatFindTarget(const std::vector<ChatTarget> &targets, ChatTarget wanted);
 
-// The chat bar's own commands, in the three languages: /help, /all, /allies and /w or /p with a name. They are never sent.
-enum ChatSlashKind { kSlashNone, kSlashHelp, kSlashTarget, kSlashWhisper, kSlashOther };
+// The chat bar's own commands, in the three languages: /help, /all, /allies, /w or /p with a name, and /mute and /mutepings with a
+// name or "all". They are never sent.
+enum ChatSlashKind { kSlashNone, kSlashHelp, kSlashTarget, kSlashWhisper, kSlashMute, kSlashOther };
 struct ChatSlash {
 	int kind = kSlashNone;
 	// For kSlashTarget: kTargetAll or kTargetAllies.
 	int target = kTargetAll;
-	// The command word, lower case, for kSlashOther; the name typed after /w for kSlashWhisper.
+	// The command word, lower case, for kSlashOther; the name typed after /w for kSlashWhisper, after /mute for kSlashMute.
 	std::string verb, name;
+	// For kSlashMute: the marks on the map rather than the messages.
+	bool marks = false;
 	// The message after the command.
 	std::string rest;
 	// The command word (and the name of /w) is finished: a space follows it.

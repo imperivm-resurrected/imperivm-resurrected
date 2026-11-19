@@ -187,6 +187,10 @@ void ShowHelp()
 	HelpEntry(kLocalRow, Tr("your allies"), Tr("/allies \xc2\xb7 /a"));
 	HelpEntry(kLocalRow, Tr("one player"), "/w \xc2\xb7 /p", {}, Tr("\xe2\x80\xb9name\xe2\x80\xba"));
 	HelpEntry(kLocalRow, Tr("a line that starts with /"), "//");
+	HelpEntry(kLocalSection, Tr("Mute"));
+	HelpEntry(kLocalRow, Tr("a player's messages"), Tr("/mute"), {}, Tr("\xe2\x80\xb9name\xe2\x80\xba \xc2\xb7 all"));
+	HelpEntry(kLocalRow, Tr("a player's marks on the map"), Tr("/mutepings"), {}, Tr("\xe2\x80\xb9name\xe2\x80\xba \xc2\xb7 all"));
+	HelpEntry(kLocalRow, Tr("the same again shows them; only on your screen, for this match"));
 	HelpEntry(kLocalSection, Tr("Keys"));
 	HelpEntry(kLocalRow, Tr("who reads it"), "", {{VK_TAB, 0}});
 	HelpEntry(kLocalRow, Tr("what you sent"), "", {{VK_UP, 0}, {VK_DOWN, 0}});
@@ -226,6 +230,51 @@ bool Whisper(const ChatSlash &sl, const ChatMatch &m, ChatTarget &target)
 	}
 	target = {kTargetPlayer, m.others[found].index};
 	return true;
+}
+
+// /mute and /mutepings: a player, or everyone else, on or off again. Only on this computer.
+void Mute(const ChatSlash &sl, const ChatMatch &m)
+{
+	if (sl.name.empty()) {
+		ChatAddLocal(Tr(sl.marks ? "Write a name after /mutepings, or all." : "Write a name after /mute, or all."));
+		return;
+	}
+	std::vector<int> who;
+	std::string label;
+	const std::string lower = [&] {
+		std::string s = sl.name;
+		for (char &c : s) c = static_cast<char>(c >= 'A' && c <= 'Z' ? c - 'A' + 'a' : c);
+		return s;
+	}();
+	if (lower == "all" || lower == "todos" || lower == "tutti") {
+		for (const ChatPlayer &p : m.others) who.push_back(p.index);
+		label = Tr("everyone");
+	}
+	else {
+		std::vector<std::string> names;
+		for (const ChatPlayer &p : m.others) names.push_back(p.name);
+		const int found = ChatMatchName(sl.name, names);
+		if (found == -1) {
+			ChatAddLocal(TrFmt("No player is called %s.", {sl.name}));
+			return;
+		}
+		if (found == -2) {
+			ChatAddLocal(TrFmt("Several players start with %s: write more of the name.", {sl.name}));
+			return;
+		}
+		who.push_back(m.others[found].index);
+		label = m.others[found].name;
+	}
+	if (who.empty()) return;
+	// With everyone, all go the way the first one does not go yet: muted if any is still shown.
+	bool mute = false;
+	for (int i : who) mute = mute || !(sl.marks ? ChatMutedMarks(i) : ChatMutedMessages(i));
+	for (int i : who) {
+		if (sl.marks) ChatSetMuted(i, ChatMutedMessages(i), mute);
+		else ChatSetMuted(i, mute, ChatMutedMarks(i));
+	}
+	if (sl.marks) ChatAddLocal(TrFmt(mute ? "Marks of %s muted: you no longer see them on the map." : "You see the marks of %s again.", {label}));
+	else ChatAddLocal(TrFmt(mute ? "Messages of %s muted." : "You read the messages of %s again.", {label}));
 }
 
 bool OnOpen(bool withLocation)
@@ -294,6 +343,10 @@ void Send(bool withLocation)
 		}
 		text = sl.rest;
 		break;
+	case kSlashMute:
+		Mute(sl, m);
+		keep = clear = true;
+		break;
 	case kSlashOther:
 		ChatAddLocal(TrFmt("Unknown command: /%s \xc2\xb7 %s", {sl.verb, Tr("/help")}));
 		keep = true;
@@ -309,7 +362,7 @@ void Send(bool withLocation)
 				g_s.text.clear();
 				g_s.edit = EditState();
 			}
-			LogD("ui", "chat: command handled here (%s)", sl.kind == kSlashHelp ? "help" : sl.kind == kSlashOther ? "unknown" : "incomplete");
+			LogD("ui", "chat: command handled here (%s)", sl.kind == kSlashHelp ? "help" : sl.kind == kSlashMute ? "mute" : sl.kind == kSlashOther ? "unknown" : "incomplete");
 			return;
 		}
 		CloseLocked(g_s);

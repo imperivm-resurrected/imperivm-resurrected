@@ -132,10 +132,36 @@ void PaintPlayerCard(Painter &p, const View &v, int index, int x, int y, int w, 
 	if (c.team > 0) tag += "  ·  " + TrFmt("Team %d", {std::to_string(c.team)});
 	p.Font(3);
 	Raw(p, true);
-	const int tagW = std::min(iw / 2, p.TextWidth(tag) + 4);
-	p.Text(ix + iw - tagW, y + 12, tagW, 24, tag, pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+	int right = ix + iw;
+	// A human's messages and marks can be hidden on this computer: two small switches, crossed out while muted.
+	if (!c.ai) {
+		const struct {
+			const char *label;
+			bool muted;
+			int action;
+		} mutes[2] = {{"Marks", c.mutedMarks, kActMuteMarks}, {"Chat", c.mutedChat, kActMuteChat}};
+		for (const auto &m : mutes) {
+			const std::string label = Tr(m.label);
+			const int bw = p.TextWidth(label) + 18, bx = right - bw, by = y + 12;
+			const bool hot = p.Hover(bx, by, bw, 24, v.mouseX, v.mouseY);
+			p.Fill(bx, by, bw, 24, m.muted ? pal::selected : hot ? pal::button : pal::bg);
+			p.Frame(bx, by, bw, 24, m.muted ? pal::redText : hot ? pal::edgeHot : pal::edge);
+			p.Text(bx, by, bw, 24, label, m.muted ? pal::redText : pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			if (m.muted) p.Line(bx + 6, by + 12, bx + bw - 6, by + 12, pal::redText, 1);
+			p.AddHit(bx, by, bw, 24, m.action, index);
+			if (hot) {
+				tip.text = m.muted ? (m.action == kActMuteChat ? "Show this player's messages again" : "Show this player's marks again")
+								   : (m.action == kActMuteChat ? "Hide this player's messages, only on your screen" : "Hide this player's marks on the map, only on your screen");
+				tip.x = bx;
+				tip.y = by + 28;
+			}
+			right = bx - 6;
+		}
+	}
+	const int tagW = std::min((right - ix) / 2, p.TextWidth(tag) + 4);
+	p.Text(right - tagW, y + 12, tagW, 24, tag, pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 	p.Font(1);
-	p.Text(ix, y + 12, iw - tagW - 10, 24, c.name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	p.Text(ix, y + 12, right - tagW - 10 - ix, 24, c.name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 
 	const std::string text = StatusText(c, status);
 	if (IsOffer(status)) {

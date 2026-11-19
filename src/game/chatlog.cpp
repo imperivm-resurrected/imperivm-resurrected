@@ -331,6 +331,15 @@ ChatSlash ChatParseSlash(const std::string &text)
 			out.complete = false;
 		}
 	}
+	else if (OneOf(verb, {"mute", "silenciar", "silenzia", "mutepings", "silenciarmarcas", "silenziasegnali"})) {
+		out.kind = kSlashMute;
+		out.marks = OneOf(verb, {"mutepings", "silenciarmarcas", "silenziasegnali"});
+		// The rest of the line is the name: names may have spaces.
+		out.name = text.substr(pos);
+		while (!out.name.empty() && out.name.back() == ' ') out.name.pop_back();
+		out.complete = !out.name.empty();
+		return out;
+	}
 	else {
 		out.kind = kSlashOther;
 		out.verb = verb;

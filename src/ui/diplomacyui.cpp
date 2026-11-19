@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "core/log.h"
+#include "game/chat.h"
 #include "game/diplomacy.h"
 #include "game/diplomacyrules.h"
 #include "ui/diplomacyui_view.h"
@@ -49,7 +50,7 @@ void *OpenDialog()
 
 // What a click asks of the game's dialog; done outside the lock, since the dialog can close and call back.
 struct Command {
-	enum Kind { kNone, kSetMine, kSetAllied, kApply, kCancel } kind = kNone;
+	enum Kind { kNone, kSetMine, kSetAllied, kApply, kCancel, kMute } kind = kNone;
 	int row = 0;
 	unsigned flags = 0;
 	bool on = false;
@@ -89,6 +90,15 @@ Command CommandFor(const View &v, int action, int arg)
 		if (!v.locked) cmd.kind = Command::kApply;
 		break;
 	case kActCancel: cmd.kind = Command::kCancel; break;
+	case kActMuteChat:
+	case kActMuteMarks:
+		// Muting is this computer's alone: a locked diplomacy does not stop it.
+		if (arg < 0 || arg >= static_cast<int>(v.cards.size()) || v.cards[arg].player < 0) break;
+		cmd.kind = Command::kMute;
+		cmd.row = v.cards[arg].player;
+		cmd.flags = action == kActMuteChat ? 1u : 2u;
+		cmd.on = action == kActMuteChat ? !v.cards[arg].mutedChat : !v.cards[arg].mutedMarks;
+		break;
 	default: break;
 	}
 	return cmd;
@@ -104,6 +114,10 @@ void Run(void *dlg, const Command &cmd)
 		DiplomacyDialogApply(dlg);
 		break;
 	case Command::kCancel: DiplomacyDialogCancel(dlg); break;
+	case Command::kMute:
+		if (cmd.flags == 1u) ChatSetMuted(cmd.row, cmd.on, ChatMutedMarks(cmd.row));
+		else ChatSetMuted(cmd.row, ChatMutedMessages(cmd.row), cmd.on);
+		break;
 	default: return;
 	}
 	std::lock_guard<std::mutex> lock(g_lock);
@@ -146,6 +160,9 @@ void DiplomacyUiGameTick()
 		c.team = row.team;
 		c.mine = row.mine;
 		c.theirs = row.theirs;
+		c.player = row.player;
+		c.mutedChat = ChatMutedMessages(row.player);
+		c.mutedMarks = ChatMutedMarks(row.player);
 		fresh.cards.push_back(c);
 	}
 	fresh.scroll = std::max(0, std::min(fresh.scroll, MaxScroll(fresh)));

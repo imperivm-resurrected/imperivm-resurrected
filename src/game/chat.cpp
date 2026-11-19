@@ -455,6 +455,24 @@ void CallExecuteWithoutLocation(void *cmd)
 	at[1] = y;
 }
 
+// The players muted on this computer in the match of g_mutedGame.
+struct Muted {
+	const void *game = nullptr;
+	bool messages[16] = {}, marks[16] = {};
+};
+Muted g_muted;
+std::mutex g_mutedLock;
+
+Muted &MutedNow()
+{
+	const void *game = Game();
+	if (g_muted.game != game) {
+		g_muted = Muted();
+		g_muted.game = game;
+	}
+	return g_muted;
+}
+
 void __fastcall HookExecute(void *cmd)
 {
 	RawChat raw;
@@ -463,6 +481,23 @@ void __fastcall HookExecute(void *cmd)
 		return;
 	}
 	ChatEntry e = EntryOf(raw);
+	bool hideMark = false, hideLine = false;
+	if (!raw.own && raw.sender >= 0 && raw.sender < 16) {
+		std::lock_guard<std::mutex> lock(g_mutedLock);
+		const Muted &m = MutedNow();
+		hideMark = e.location && m.marks[raw.sender];
+		// A mark's own phrase is the mark, not a message: it goes with the marks.
+		hideLine = e.ping >= 0 ? hideMark || (m.messages[raw.sender] && !e.location) : m.messages[raw.sender];
+	}
+	if (hideMark || hideLine) {
+		CallExecuteWithoutLocation(cmd);
+		LogD("game", "chat: player %d is muted here: %s", raw.sender + 1, hideLine ? (hideMark ? "line and mark hidden" : "line hidden") : "mark hidden");
+		if (hideLine) return;
+		e.location = false;
+		std::lock_guard<std::mutex> lock(g_logLock);
+		g_log.Add(std::move(e));
+		return;
+	}
 	// The sender raised its own when sending; the game gives the sender none.
 	const bool typed = e.ping == kPingAttack || e.ping == kPingDanger;
 	if (typed && !raw.own) {
@@ -551,6 +586,30 @@ bool Create(uintptr_t target, void *detour, void **orig, const char *what)
 	return false;
 }
 
+}
+
+void ChatSetMuted(int player, bool messages, bool marks)
+{
+	if (player < 0 || player >= 16) return;
+	std::lock_guard<std::mutex> lock(g_mutedLock);
+	Muted &m = MutedNow();
+	m.messages[player] = messages;
+	m.marks[player] = marks;
+	LogI("game", "chat: player %d's messages %s, marks %s here", player + 1, messages ? "muted" : "shown", marks ? "muted" : "shown");
+}
+
+bool ChatMutedMessages(int player)
+{
+	if (player < 0 || player >= 16) return false;
+	std::lock_guard<std::mutex> lock(g_mutedLock);
+	return MutedNow().messages[player];
+}
+
+bool ChatMutedMarks(int player)
+{
+	if (player < 0 || player >= 16) return false;
+	std::lock_guard<std::mutex> lock(g_mutedLock);
+	return MutedNow().marks[player];
 }
 
 void InstallChat(bool knownExe)

@@ -10,7 +10,7 @@
 
 namespace diplomacyui {
 
-enum Action { kActNone, kActPreset, kActToggle, kActAccept, kActAllied, kActApply, kActCancel };
+enum Action { kActNone, kActPreset, kActToggle, kActAccept, kActAllied, kActApply, kActCancel, kActMuteChat, kActMuteMarks };
 
 constexpr int kBarCards = 0;
 
@@ -20,6 +20,9 @@ struct Card {
 	bool ai = false;
 	int team = 0;
 	unsigned mine = 0, theirs = 0;
+	// The player's index in the match, and what this computer hides of them (the chat's /mute and /mutepings).
+	int player = -1;
+	bool mutedChat = false, mutedMarks = false;
 };
 
 struct View {
