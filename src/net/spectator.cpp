@@ -5,6 +5,7 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <deque>
 #include <mutex>
 #include <vector>
@@ -29,6 +30,8 @@
 #include "addr/world.h"
 #include "core/uiport.h"
 #include "core/version.h"
+#include "game/cmdcheck.h"
+#include "game/gamelayout.h"
 
 namespace {
 const unsigned kMagic = 0x76787367;
@@ -257,8 +260,9 @@ enum : uint8_t {
 	kSpBye = 48,
 	kSpWait = 49,
 	kSpResend = 50,
+	kSpCams = 51,
 };
-static_assert(kSpectatorMessages.Has(kSpHello) && kSpectatorMessages.Has(kSpResend), "spectator messages out of their range");
+static_assert(kSpectatorMessages.Has(kSpHello) && kSpectatorMessages.Has(kSpCams), "spectator messages out of their range");
 const DWORD kResendWaitMs = 6000;
 // The cover over a catch-up only gives up when the game stops getting closer to live: a long game
 // on a slow computer can take minutes and must not be shown fast-forwarding.
@@ -285,10 +289,24 @@ struct Rec {
 	uint32_t first = 0, count = 0, tick = 0;
 	std::string bytes;
 };
+// A player's camera at a time of the match, for the spectators who follow that player.
+struct CamSample {
+	uint32_t clock = 0;
+	int32_t x = 0, y = 0;
+	uint32_t player = 0;
+};
+const size_t kCamsMax = 400000;
+const size_t kCamsPerMsg = 300;
+// A spectator who joins gets the cameras of the last minute before what they will see first.
+const uint32_t kCamsBackMs = 60000;
+std::mutex g_camMx;
+std::vector<CamSample> g_hostCams;
+
 struct Client {
 	uint64_t id = 0;
 	int state = 0;
 	size_t next = 0;
+	size_t camNext = 0;
 	uint32_t nextBucket = 0;
 	uint32_t sentV = 0;
 	DWORD lastSend = 0, since = 0, lastWait = 0;
@@ -339,9 +357,35 @@ void HostSendSnapshot(Client &c, uint8_t *game, uint32_t V, uint32_t clock)
 	c.nextBucket = static_cast<uint32_t>(nb);
 	c.sentV = V;
 	c.state = 2;
+	{
+		std::lock_guard<std::mutex> lock(g_camMx);
+		c.camNext = 0;
+		while (c.camNext < g_hostCams.size() && g_hostCams[c.camNext].clock + kCamsBackMs < V) c.camNext++;
+	}
 	c.lastSend = GetTickCount();
 	LogD("spectator", "header sent to %llu (%u bytes, %u buckets up to tick %u)", c.id, static_cast<unsigned>(file.size()),
 		static_cast<unsigned>(nb), V);
+}
+
+// The cameras that arrived since the last ones sent to this spectator. An older viewer ignores the message.
+void HostSendCams(Client &c)
+{
+	std::string data;
+	{
+		std::lock_guard<std::mutex> lock(g_camMx);
+		if (c.camNext >= g_hostCams.size()) return;
+		const size_t last = (std::min)(g_hostCams.size(), c.camNext + kCamsPerMsg);
+		Put32(data, static_cast<uint32_t>(last - c.camNext));
+		for (size_t i = c.camNext; i < last; i++) {
+			const CamSample &s = g_hostCams[i];
+			Put32(data, s.clock);
+			Put32(data, s.player);
+			Put32(data, static_cast<uint32_t>(s.x));
+			Put32(data, static_cast<uint32_t>(s.y));
+		}
+		c.camNext = last;
+	}
+	Send(c.id, kSpCams, data);
 }
 
 void HostSendTicks(Client &c, uint32_t V, bool force, bool all = false)
@@ -372,6 +416,7 @@ void HostSendTicks(Client &c, uint32_t V, bool force, bool all = false)
 	c.next = last;
 	c.sentV = V;
 	c.lastSend = now;
+	HostSendCams(c);
 }
 void HostFinish()
 {
@@ -386,6 +431,10 @@ void HostFinish()
 		}
 	}
 	LogI("spectator", "the game ended; %u buckets, %u spectators", static_cast<unsigned>(g_h.captured), static_cast<unsigned>(g_h.clients.size()));
+	{
+		std::lock_guard<std::mutex> lock(g_camMx);
+		g_hostCams.clear();
+	}
 	g_h.armed = false;
 	g_h.game = nullptr;
 	g_h.recs.clear();
@@ -603,6 +652,21 @@ struct Viewer {
 };
 Viewer g_v;
 std::mutex g_viewMx;
+
+// The cameras the host sent, per player, in the order of the match's clock; and the player followed. Game thread, but for the
+// state the bar reads.
+std::vector<CamSample> g_viewCams[16];
+struct Follow {
+	int player = -1;
+	bool paused = false;
+	bool placed = false;
+	int lastX = 0, lastY = 0;
+	std::string name;
+	uint32_t rgb = 0;
+};
+Follow g_follow;
+std::mutex g_followMx;
+std::atomic<int> g_followAsk{0};
 std::string g_status;
 std::atomic<bool> g_viewing{false}, g_watching{false}, g_covering{false};
 std::atomic<int> g_progress{-1};
@@ -897,6 +961,24 @@ void ViewerHandle(const Msg &m)
 		if (g_v.phase == kViewing && !g_sk.reloading) ViewerApplyTicks(m.data);
 		else g_v.pending.push_back(m);
 		break;
+	case kSpCams: {
+		size_t pos = 0;
+		uint32_t n = 0;
+		if (!Get32(m.data, pos, n) || n > kCamsPerMsg) break;
+		for (uint32_t i = 0; i < n; i++) {
+			CamSample s;
+			uint32_t x = 0, y = 0;
+			if (!Get32(m.data, pos, s.clock) || !Get32(m.data, pos, s.player) || !Get32(m.data, pos, x) || !Get32(m.data, pos, y)) break;
+			if (s.player >= 16) continue;
+			s.x = static_cast<int32_t>(x);
+			s.y = static_cast<int32_t>(y);
+			std::vector<CamSample> &v = g_viewCams[s.player];
+			if (v.size() >= kCamsMax / 16) continue;
+			if (v.empty() || v.back().clock <= s.clock) v.push_back(s);
+			else v.insert(std::upper_bound(v.begin(), v.end(), s, [](const CamSample &a, const CamSample &b) { return a.clock < b.clock; }), s);
+		}
+		break;
+	}
 	case kSpEnd:
 		if (g_v.phase == kViewing && !g_sk.reloading) {
 			size_t pos = 0;
@@ -1435,6 +1517,101 @@ static void SyncPauseVisual()
 	}
 }
 
+namespace {
+// Where the followed player looked at this time of the match: between two cameras close in time it moves from one to the other.
+bool FollowedCamera(int player, uint32_t clock, int &x, int &y)
+{
+	const std::vector<CamSample> &v = g_viewCams[player];
+	if (v.empty() || v.front().clock > clock) return false;
+	auto it = std::upper_bound(v.begin(), v.end(), clock, [](uint32_t c, const CamSample &s) { return c < s.clock; });
+	const CamSample &a = *(it - 1);
+	x = a.x;
+	y = a.y;
+	if (it != v.end() && it->clock - a.clock <= 2000 && it->clock > a.clock) {
+		const double f = static_cast<double>(clock - a.clock) / (it->clock - a.clock);
+		x = a.x + static_cast<int>((it->x - a.x) * f);
+		y = a.y + static_cast<int>((it->y - a.y) * f);
+	}
+	return true;
+}
+
+std::string PlayerNameAt(uint8_t *game, int player)
+{
+	return GameStringAt(layout::PlayerAt(reinterpret_cast<const char *>(game), player) + layout::kPlayerName);
+}
+
+uint32_t PlayerRgbAt(uint8_t *game, int player)
+{
+	const unsigned c = *reinterpret_cast<const unsigned *>(layout::PlayerAt(reinterpret_cast<const char *>(game), player) + layout::kPlayerColor);
+	const unsigned r = (c >> 10) & 31, g = (c >> 5) & 31, b = c & 31;
+	return (r << 3 | r >> 2) << 16 | (g << 3 | g >> 2) << 8 | (b << 3 | b >> 2);
+}
+
+// A click on the bar's button: the next player with cameras, then nobody; with the follow paused, it goes on with the same one.
+void FollowStep(uint8_t *game)
+{
+	if (g_follow.player >= 0 && g_follow.paused) {
+		g_follow.paused = false;
+		g_follow.placed = false;
+		return;
+	}
+	int next = -1;
+	for (int i = g_follow.player + 1; i < 16; i++) {
+		if (!g_viewCams[i].empty()) {
+			next = i;
+			break;
+		}
+	}
+	g_follow.player = next;
+	g_follow.paused = false;
+	g_follow.placed = false;
+	g_follow.name = next >= 0 && game ? PlayerNameAt(game, next) : std::string();
+	g_follow.rgb = next >= 0 && game ? PlayerRgbAt(game, next) : 0;
+	LogI("spectator", next >= 0 ? "following player %d's view" : "no longer following a player's view", next);
+}
+
+void FollowTick()
+{
+	uint8_t *game = Game();
+	const bool broadcast = game && IsDemo() && g_ctl.active && g_ctl.broadcast;
+	std::lock_guard<std::mutex> lock(g_followMx);
+	if (!broadcast) {
+		if (g_follow.player >= 0 || g_followAsk) g_follow = Follow();
+		g_followAsk = 0;
+		if (!g_watching) {
+			for (auto &v : g_viewCams) v.clear();
+		}
+		return;
+	}
+	for (int asks = g_followAsk.exchange(0); asks > 0; asks--) FollowStep(game);
+	if (g_follow.player < 0 || g_follow.paused || g_sk.reloading) return;
+	int x = 0, y = 0, cx = 0, cy = 0;
+	if (!FollowedCamera(g_follow.player, *reinterpret_cast<uint32_t *>(game + layout::kGameClock), x, y) || !GetCamera(cx, cy)) return;
+	// The spectator moved the camera: the follow waits until the button is pressed again.
+	if (g_follow.placed && (std::abs(cx - g_follow.lastX) > 48 || std::abs(cy - g_follow.lastY) > 48)) {
+		g_follow.paused = true;
+		LogI("spectator", "following player %d's view: paused, the camera was moved", g_follow.player);
+		return;
+	}
+	if (std::abs(x - cx) > 2 || std::abs(y - cy) > 2) SetCamera(x, y);
+	GetCamera(g_follow.lastX, g_follow.lastY);
+	g_follow.placed = true;
+}
+}
+
+void SpectatorNoteCamera(int player, int x, int y, uint32_t clock)
+{
+	if (player < 0 || player >= 16 || !clock || !g_h.armed) return;
+	std::lock_guard<std::mutex> lock(g_camMx);
+	if (g_hostCams.size() >= kCamsMax) return;
+	CamSample s;
+	s.clock = clock;
+	s.player = static_cast<uint32_t>(player);
+	s.x = x;
+	s.y = y;
+	g_hostCams.push_back(s);
+}
+
 void SpectatorGameThreadTick()
 {
 	static bool inside = false;
@@ -1467,6 +1644,7 @@ void SpectatorGameThreadTick()
 	}
 	HostDrive(msgs);
 	ViewerTick(msgs);
+	FollowTick();
 	SyncPauseVisual();
 }
 
@@ -1484,6 +1662,12 @@ bool SpectatorControls(SpectatorState &out)
 	out.total = g_totalMs;
 	out.target = g_effMs;
 	out.busy = g_busy;
+	std::lock_guard<std::mutex> lock(g_followMx);
+	out.canFollow = out.broadcast;
+	out.follow = g_follow.player;
+	out.followPaused = g_follow.paused;
+	out.followName = g_follow.name;
+	out.followRgb = g_follow.rgb;
 	return true;
 }
 
@@ -1568,6 +1752,9 @@ void SpectatorControl(int id)
 	}
 	else if (id == 6) {
 		g_ctl.collapsed = !g_ctl.collapsed;
+	}
+	else if (id == 7 && g_ctl.broadcast) {
+		g_followAsk++;
 	}
 
 }

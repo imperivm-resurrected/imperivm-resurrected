@@ -829,12 +829,13 @@ void SteamReportDownloadProgress(uint64_t got, uint64_t total)
 	});
 }
 
-void SteamBroadcastCamera(int player, int x, int y)
+void SteamBroadcastCamera(int player, int x, int y, uint32_t clock)
 {
 	if (!SteamOnlineReady()) return;
-	Post([player, x, y] {
+	Post([player, x, y, clock] {
 		if (!g_lobby) return;
-		const std::string text = std::to_string(player) + " " + std::to_string(x) + " " + std::to_string(y);
+		// An older version reads the first three numbers and leaves the clock.
+		const std::string text = std::to_string(player) + " " + std::to_string(x) + " " + std::to_string(y) + " " + std::to_string(clock);
 		const int n = S.SteamAPI_ISteamMatchmaking_GetNumLobbyMembers(g_steam.mm, g_lobby);
 		for (int i = 0; i < n; i++) {
 			const uint64 m = S.SteamAPI_ISteamMatchmaking_GetLobbyMemberByIndex(g_steam.mm, g_lobby, i);

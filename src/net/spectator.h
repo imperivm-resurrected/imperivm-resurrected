@@ -26,6 +26,12 @@ struct SpectatorState {
 	int speed = 1;
 	unsigned cur = 0, total = 0;
 	unsigned target = 0;
+	// Following a player's view (a broadcast only): -1 nobody; paused once the spectator moves the camera.
+	bool canFollow = false;
+	int follow = -1;
+	bool followPaused = false;
+	std::string followName;
+	uint32_t followRgb = 0;
 };
 bool SpectatorControls(SpectatorState &out);
 void SpectatorControl(int id);
@@ -34,3 +40,7 @@ void SpectatorSeekFraction(double fraction);
 bool SpectatorHandleKey(unsigned msg, unsigned wp, long lp);
 
 int SpectatorCount();
+
+// A player's camera (the centre of their view) at a time of the match's clock, from the player's computer: the host keeps them while
+// it broadcasts and sends them to the spectators, who can follow a player's view.
+void SpectatorNoteCamera(int player, int x, int y, uint32_t clock);

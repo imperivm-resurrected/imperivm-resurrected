@@ -10,6 +10,8 @@
 #include "mods/modoptions.h"
 #include "net/netdrop.h"
 #include "net/rejoin.h"
+#include "game/gamelayout.h"
+#include "net/spectator.h"
 #include "addr/state.h"
 #include "addr/ui.h"
 
@@ -499,12 +501,17 @@ void MpUiGameThreadTick()
 			LogI("lobby", "in a room by invitation; opening the menu to join the game");
 			OpenMpMenu(false);
 		}
-		if (g_s.inOnlineGame && *reinterpret_cast<void **>(addr::kGame) != nullptr && GetTickCount() - g_s.camTick > 3000) {
-			g_s.camTick = GetTickCount();
+		// The camera goes out four times a second while it moves, for the spectators who follow this player, and every 3 s anyway.
+		if (g_s.inOnlineGame && *reinterpret_cast<void **>(addr::kGame) != nullptr && GetTickCount() - g_s.camTick > 250) {
 			int player = 0, x = 0, y = 0;
-			if (MpSaveLocalCamera(player, x, y)) {
+			if (MpSaveLocalCamera(player, x, y) && (x != g_s.camX || y != g_s.camY || GetTickCount() - g_s.camTick > 3000)) {
+				g_s.camTick = GetTickCount();
+				g_s.camX = x;
+				g_s.camY = y;
+				const uint32_t clock = *reinterpret_cast<uint32_t *>(*reinterpret_cast<char **>(addr::kGame) + layout::kGameClock);
 				MpSaveSetPlayerCamera(player, x, y);
-				SteamBroadcastCamera(player, x, y);
+				SpectatorNoteCamera(player, x, y, clock);
+				SteamBroadcastCamera(player, x, y, clock);
 			}
 		}
 		if (g_s.inOnlineGame && *reinterpret_cast<void **>(addr::kGame) != nullptr && GetTickCount() - g_s.leagueTick > 2000) {

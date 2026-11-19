@@ -110,7 +110,7 @@ void DrawSpectatorBar(uint32_t *buf, int W, int H, float s, int topY)
 	const bool pinned = st.broadcast && st.atLive;
 	const unsigned shownCur = pinned ? st.total : st.cur;
 	const float barH = collapsed ? 40 * s : 58 * s;
-	const float barW = collapsed ? 150 * s : std::min(static_cast<float>(W) - 24, (st.broadcast ? 900.0f : 790.0f) * s);
+	const float barW = collapsed ? 150 * s : std::min(static_cast<float>(W) - 24, (st.broadcast ? 1080.0f : 790.0f) * s);
 	float bx = static_cast<float>(posX * W - barW / 2), by =posTop >= 0 ? static_cast<float>(posTop * H) : static_cast<float>(topY);
 	bx = std::max(4.0f, std::min(static_cast<float>(W) - barW - 4, std::floor(bx)));
 	by = std::max(2.0f, std::min(static_cast<float>(H) - barH - 4, by));
@@ -135,7 +135,7 @@ void DrawSpectatorBar(uint32_t *buf, int W, int H, float s, int topY)
 	};
 
 	RectF rCollapse{bx + pad, cy - 13 * s, 26 * s, 26 * s};
-	RectF rBack, rPlay, rFwd, rSpeed, rUi, rLive, rCur, rTotal, rTrack;
+	RectF rBack, rPlay, rFwd, rSpeed, rUi, rLive, rFollow, rCur, rTotal, rTrack;
 	std::string tipFor;
 	std::vector<ControlKey> tipKeys;
 	float tipX = bx;
@@ -161,6 +161,10 @@ void DrawSpectatorBar(uint32_t *buf, int W, int H, float s, int topY)
 			rLive = {rx - 104 * s, cy - pillH / 2, 104 * s, pillH};
 			rx -= rLive.w + gap;
 		}
+		if (st.canFollow) {
+			rFollow = {rx - 170 * s, cy - pillH / 2, 170 * s, pillH};
+			rx -= rFollow.w + gap;
+		}
 		rUi = {rx - 40 * s, cy - pillH / 2, 40 * s, pillH};
 		rx -= rUi.w + gap;
 		rSpeed = {rx - 52 * s, cy - pillH / 2, 52 * s, pillH};
@@ -174,6 +178,7 @@ void DrawSpectatorBar(uint32_t *buf, int W, int H, float s, int topY)
 
 		const bool hCollapse = rCollapse.Has(mx, my), hBack = rBack.Has(mx, my), hPlay = rPlay.Has(mx, my), hFwd = rFwd.Has(mx, my);
 		const bool hSpeed = rSpeed.Has(mx, my), hUi = rUi.Has(mx, my), hLive = st.broadcast && rLive.Has(mx, my), hTrack = rTrack.Has(mx, my) || drag;
+		const bool hFollow = st.canFollow && rFollow.Has(mx, my);
 
 		button(rCollapse, false, false, hCollapse);
 		arrow(rCollapse.x + rCollapse.w / 2, cy, 12 * s, true, label);
@@ -210,6 +215,20 @@ void DrawSpectatorBar(uint32_t *buf, int W, int H, float s, int topY)
 		}
 		button(rUi, false, st.uiHidden, hUi);
 		DrawLabel(buf, W, H, L"UI", rUi.x, rUi.y, rUi.w, rUi.h, DT_CENTER, label, 1.0f);
+		if (st.canFollow) {
+			button(rFollow, false, st.follow >= 0 && !st.followPaused, hFollow);
+			float tx = rFollow.x + 10 * s;
+			std::string text;
+			if (st.follow < 0) text = Tr("Follow: nobody");
+			else {
+				const COLORREF dot = RGB((st.followRgb >> 16) & 0xff, (st.followRgb >> 8) & 0xff, st.followRgb & 0xff);
+				FillDisc(buf, W, H, tx + 5 * s, cy, 5 * s, dot, 1.0f);
+				tx += 16 * s;
+				const std::string name = st.followName.empty() ? Tr("Player") : st.followName;
+				text = st.followPaused ? TrFmt("%s (paused)", {name}) : name;
+			}
+			DrawLabel(buf, W, H, ::W(text), tx, rFollow.y, rFollow.x + rFollow.w - 8 * s - tx, rFollow.h, DT_LEFT | DT_END_ELLIPSIS, label, 1.0f);
+		}
 
 		if (st.broadcast) {
 			button(rLive, st.ended, st.atLive, hLive);
@@ -251,6 +270,11 @@ void DrawSpectatorBar(uint32_t *buf, int W, int H, float s, int topY)
 			else if (hSpeed) { tipFor = "Speed: click, or"; tipKeys = {ControlsModKey(kModKeySpecFaster), ControlsModKey(kModKeySpecSlower)}; tipX = rSpeed.x - 120 * s; }
 			else if (hUi) { tipFor = st.uiHidden ? "Show the game interface" : "Hide the game interface"; tipKeys = {ControlsModKey(kModKeySpecUi)}; tipX = rUi.x - 100 * s; }
 			else if (hLive) { tipFor = st.ended ? "Leave to the menu" : "Jump to live"; tipKeys = {ControlsModKey(kModKeySpecLive)}; tipX = rLive.x - 40 * s; }
+			else if (hFollow) {
+				tipFor = st.followPaused ? "Follow the player again" : "Follow a player's view: each click picks the next one";
+				tipKeys = {};
+				tipX = rFollow.x - 120 * s;
+			}
 		}
 	}
 	if (!tipFor.empty()) {
@@ -271,6 +295,7 @@ void DrawSpectatorBar(uint32_t *buf, int W, int H, float s, int topY)
 		if (st.broadcast) store(4, rLive);
 		store(6, rUi);
 		store(7, rCollapse);
+		if (st.canFollow) store(8, rFollow);
 		const float trackX0 = rTrack.x + 6 * s, trackX1 = rTrack.x + rTrack.w - 6 * s;
 		g_spec.btn[5] = {static_cast<LONG>(trackX0), static_cast<LONG>(rTrack.y), static_cast<LONG>(trackX1), static_cast<LONG>(rTrack.y + rTrack.h)};
 	}

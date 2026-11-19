@@ -3426,5 +3426,9 @@ extern const TrRow kTrRows[] = {
 	{"you are out of that game: you were defeated or surrendered", "ya no estás en esa partida: te derrotaron o te rendiste", "non sei più in quella partita: sei stato sconfitto o ti sei arreso"},
 	{"Couldn't reload the game: %s. The game goes on.", "No se pudo recargar la partida: %s. La partida sigue.", "Impossibile ricaricare la partita: %s. La partita continua."},
 	{"Share profile", "Compartir perfil", "Condividi profilo"},
+	{"Follow: nobody", "Seguir: nadie", "Segui: nessuno"},
+	{"%s (paused)", "%s (en pausa)", "%s (in pausa)"},
+	{"Follow the player again", "Volver a seguir al jugador", "Segui di nuovo il giocatore"},
+	{"Follow a player's view: each click picks the next one", "Seguir la vista de un jugador: cada clic elige el siguiente", "Segui la visuale di un giocatore: ogni clic sceglie il successivo"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

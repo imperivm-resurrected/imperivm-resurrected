@@ -137,7 +137,7 @@ bool ModUiHandleCornerMessage(UINT msg, WPARAM wp, LPARAM lp)
 					g_spec.dragFrac = std::max(0.0, std::min(1.0, (pt.x - g_spec.btn[5].left) / static_cast<double>(std::max<LONG>(1, g_spec.btn[5].right - g_spec.btn[5].left))));
 				}
 				else {
-					SpectatorControl(i == 6 ? 5 : i == 7 ? 6 : i);
+					SpectatorControl(i == 6 ? 5 : i == 7 ? 6 : i == 8 ? 7 : i);
 				}
 				g_spec.swallowUp = true;
 				return true;

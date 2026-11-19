@@ -224,7 +224,8 @@ bool SteamTakeKicked();
 bool SteamTakeJoinRefused();
 bool SteamTakeWrongPassword();
 bool SteamTakeCreateFailed();
-void SteamBroadcastCamera(int player, int x, int y);
+// The local player's camera to the room's other members, with the match's clock: for the saved games and for the spectators.
+void SteamBroadcastCamera(int player, int x, int y, uint32_t clock);
 void SteamPublishOptions(const std::string &text);
 void SteamPublishRules(unsigned rules);
 void SteamPublishSlots(const std::string &text);

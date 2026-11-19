@@ -325,6 +325,7 @@ struct State {
 	bool inOnlineGame = false;
 	bool leftByUser = false;
 	DWORD camTick = 0;
+	int camX = 0, camY = 0;
 	DWORD leagueTick = 0;
 	bool closedByUser = false;
 	bool startingCover = false;

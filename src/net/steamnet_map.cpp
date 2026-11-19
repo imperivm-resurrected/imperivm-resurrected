@@ -12,6 +12,7 @@
 #include "core/log.h"
 #include "mods/downloads.h"
 #include "mods/mods.h"
+#include "net/spectator.h"
 #include "net/mpsave.h"
 #include "net/rejoin.h"
 #include "net/scenvalue.h"
@@ -526,8 +527,11 @@ void ReceiveShare()
 		}
 		else if (len && data[0] == kShCam) {
 			int player = 0, x = 0, y = 0;
+			unsigned clock = 0;
 			const std::string t(reinterpret_cast<const char *>(data + 1), len - 1);
-			if (sscanf_s(t.c_str(), "%d %d %d", &player, &x, &y) == 3) MpSaveSetPlayerCamera(player, x, y);
+			const int read = sscanf_s(t.c_str(), "%d %d %d %u", &player, &x, &y, &clock);
+			if (read >= 3) MpSaveSetPlayerCamera(player, x, y);
+			if (read == 4) SpectatorNoteCamera(player, x, y, clock);
 		}
 		else if (len && kSpectatorMessages.Has(data[0])) {
 			const bool fromViewer = g_spectate.lobby && InLobby(g_spectate.lobby, peer);
