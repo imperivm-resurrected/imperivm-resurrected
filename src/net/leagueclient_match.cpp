@@ -25,10 +25,12 @@
 #include "core/leagueteam.h"
 #include "core/log.h"
 #include "core/names.h"
+#include "core/tournament.h"
 #include "game/civs.h"
 #include "game/gamestats.h"
 #include "hooks/tweaks.h"
 #include "net/leagueclient_internal.h"
+#include "net/leagueclient_tourney.h"
 #include "net/rejoin.h"
 #include "net/spectator.h"
 #include "net/steamnet.h"
@@ -440,6 +442,25 @@ bool BuildReport(const Match &m, LeagueReport &r, std::string &why)
 	rules.team = m.team;
 	const LeagueDropPhase drop = LeagueDropPhaseAt(m.drop, TickMs());
 	rules.claimable = drop == LeagueDropPhase::Claimable || drop == LeagueDropPhase::Claimed;
+	// A cup match against a staging test bot was played by the game's AI in its seat: that seat goes as the bot, or the league could not
+	// match the game to its match.
+	{
+		LeagueMatchKind kind = LeagueMatchKind::Normal;
+		int64_t matchId = 0;
+		if (LeagueParseRoomTag(m.info.roomTag, kind, matchId) && kind == LeagueMatchKind::Tournament) {
+			const auto mine = LeagueTourneyMine();
+			const TourneyNext &next = mine->mine.next;
+			if (next.present && next.match == matchId && TourneyIsTestBot(next.opponent.steamId)) {
+				for (LeagueSeat &s : seats) {
+					if (s.human) continue;
+					s.human = true;
+					s.steamId = next.opponent.steamId;
+					LogI("league", "the game's AI played the test bot of tournament match %lld", static_cast<long long>(matchId));
+					break;
+				}
+			}
+		}
+	}
 	const LeagueOutcome outcome = LeagueResolve(seats, m.desync, rules);
 	r.players = LeagueReportPlayers(seats, outcome);
 	// A 2v2's teams are the ticket's sides, whichever player has the lower index in the game.

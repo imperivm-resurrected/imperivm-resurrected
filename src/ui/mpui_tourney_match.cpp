@@ -564,10 +564,13 @@ void PaintMatchColorMenu(Painter &p, const State &st, const Ui &u)
 namespace {
 
 // What is checked before the room: the content, the map, Steam and the check-in.
-void PaintReadyCard(Painter &p, const State &st, const TourneyNext &n, const TourneyMineView &mine, const TourneyMap &map, int m, int ry, int cw, int rh, int pad)
+void PaintReadyCard(Painter &p, const State &st, const Ui &u, const TourneyNext &n, const TourneyMineView &mine, const TourneyMap &map, int m, int ry, int cw,
+	int rh, int pad)
 {
 	PaintGlassCard(p, m, ry, cw, rh);
-	PaintCaps(p, m + pad, ry + 20, cw - 2 * pad, 20, "Ready to enter", pal::caption);
+	// What the player takes into the room; under it only what would keep them out of it.
+	const bool choose = n.status == TourneyMatchStatus::Ready;
+	PaintCaps(p, m + pad, ry + 20, cw - 2 * pad, 20, choose ? "Your side" : "Ready to enter", pal::caption);
 	const bool sameContent = n.contentKey.empty() || n.contentKey == SteamOwnGameplayKey();
 	const CupMapState mapState = LeagueCupMap(map);
 	const TourneyMyEntry *entry = MyEntry(mine, n.tournamentId);
@@ -582,7 +585,12 @@ void PaintReadyCard(Painter &p, const State &st, const TourneyNext &n, const Tou
 		{!entry || entry->checkedIn, Tr(!entry || entry->checkedIn ? "Check-in done" : "Check-in missing")},
 	};
 	int ly = ry + 54;
+	if (choose) {
+		PaintCivMenu(p, st, u, m + pad, ly, cw - 2 * pad);
+		ly += 34 + 8 + 34 + 16;
+	}
 	for (const Check &c : checks) {
+		if (choose && c.ok) continue;
 		if (ly + 26 > ry + rh) break;
 		PaintCheck(p, m + pad, ly + 2, 20, c.ok);
 		p.Font(0);
@@ -695,7 +703,6 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 	if (teams) {
 		PaintTeamColumn(p, st, n, m + sideW / 2, cy, sideW - 40, cardH, n.team.name.empty() && meE ? meE->name : n.team.name, n.me.seed, ours, true,
 			meE ? PreviousText(page.detail, meE->entryId, n.round) : std::string(), live);
-		if (!live && n.status == TourneyMatchStatus::Ready) PaintCivMenu(p, st, u, m + sideW / 2 - 140, cy + cardH - 84, 280);
 		if (n.hasOpponent) {
 			PaintTeamColumn(p, st, n, m + sideW + centerW + sideW / 2, cy, sideW - 40, cardH, n.opponent.name, n.opponent.seed, theirs, false,
 				themE ? PreviousText(page.detail, themE->entryId, n.round) : std::string(), live);
@@ -706,10 +713,8 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 		}
 	}
 	else {
-		const bool civ = !live && n.status == TourneyMatchStatus::Ready;
-		const int under = PaintPlayerColumn(p, m + sideW / 2, cy, cardH, SteamOwnId(), st.player, true, n.me.seed, meE ? PreviousText(page.detail, meE->entryId, n.round) : std::string(),
-			live ? std::string() : Tr(n.me.inRoom ? "In the room" : "You're not in the room yet"), n.me.inRoom, civ ? 80 : 0);
-		if (civ) PaintCivMenu(p, st, u, m + sideW / 2 - 140, under + 6, 280);
+		PaintPlayerColumn(p, m + sideW / 2, cy, cardH, SteamOwnId(), st.player, true, n.me.seed, meE ? PreviousText(page.detail, meE->entryId, n.round) : std::string(),
+			live ? std::string() : Tr(n.me.inRoom ? "In the room" : "You're not in the room yet"), n.me.inRoom);
 		if (n.hasOpponent) {
 			PaintPlayerColumn(p, m + sideW + centerW + sideW / 2, cy, cardH, n.opponent.steamId, n.opponent.name, false, n.opponent.seed,
 				themE ? PreviousText(page.detail, themE->entryId, n.round) : std::string(), live ? std::string() : Tr(n.opponent.inRoom ? "In the room" : "Not in the room yet"),
@@ -821,7 +826,7 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 		return;
 	}
 	// Three cards: what is checked, the rules and what to do if something fails.
-	PaintReadyCard(p, st, n, mine, map, m, ry, cw, rh, pad);
+	PaintReadyCard(p, st, u, n, mine, map, m, ry, cw, rh, pad);
 	const int x2 = m + cw + kCardGap;
 	PaintMatchRules(p, n, page, map, teams, byRounds, x2, ry, cw, rh, pad);
 	const int x3 = x2 + cw + kCardGap;

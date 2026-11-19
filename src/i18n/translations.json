@@ -3476,5 +3476,6 @@
 {"en":"The room's own","es":"El de la sala","it":"Quello della sala"},
 {"en":"Automatic","es":"Automático","it":"Automatico"},
 {"en":"Preparing the room...","es":"Preparando la sala...","it":"Preparazione della sala..."},
-{"en":"The tournament's map and rules are being set in the room.","es":"Se están poniendo en la sala el mapa y las reglas del torneo.","it":"Si stanno impostando nella sala la mappa e le regole del torneo."}
+{"en":"The tournament's map and rules are being set in the room.","es":"Se están poniendo en la sala el mapa y las reglas del torneo.","it":"Si stanno impostando nella sala la mappa e le regole del torneo."},
+{"en":"Your side","es":"Tu bando","it":"La tua parte"}
 ]

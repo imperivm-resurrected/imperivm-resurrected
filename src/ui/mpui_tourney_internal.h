@@ -122,6 +122,8 @@ struct RoomLock {
 	int setTries = 0;
 	uint32_t ownTried = 0;
 	bool unreadied = false;
+	// The game's AI put in a test bot's seat.
+	bool aiSet = false;
 	bool mapWarned = false;
 	// This room was the player's match: once the match is settled without a game (a no-show), the room has nothing left to do.
 	bool wasMine = false;

@@ -575,6 +575,17 @@ void StepInRoom(const TourneyNext &next)
 			k.unreadied = false;
 		}
 	}
+	// Against a staging test bot the host puts the game's AI in the open seat: the bot plays through it, and the game is reported.
+	if (slotOk && g_s.game.host && !k.aiSet && TourneyIsTestBot(next.opponent.steamId) && !next.Teams()) {
+		for (int i = 0; i < 8; i++) {
+			const GameRoomSlot &o = g_s.game.slots[static_cast<size_t>(i)];
+			if (i == slot || o.type != 0) continue;
+			k.aiSet = true;
+			GameRoomSetSlotType(i, 1);
+			LogI("league", "tournament match %lld: the game's AI takes the test bot's seat (%d)", static_cast<long long>(match), i + 1);
+			break;
+		}
+	}
 	// Ready once the slot has what the page chose, the team is set (2v2) and the host has put the tournament's options in.
 	const bool teamReady = !next.Teams() || k.teamSet;
 	const bool optionsReady = !g_s.game.host || k.applied;
@@ -2057,6 +2068,8 @@ int TourneyRoomPlayers(const mpui_impl::State &st)
 	// By the room alone: once the league has settled the match, its room may still be counting down.
 	const auto mine = LeagueTourneyMine();
 	const TourneyNext &n = mine->mine.next;
+	// Against a test bot the other seat is the game's AI: the player alone is all the room waits for.
+	if (n.present && n.match == match && TourneyIsTestBot(n.opponent.steamId) && !n.Teams()) return 1;
 	if (n.present && n.match == match) return n.Teams() ? 4 : 2;
 	return st.room.info.maxPlayers >= 4 ? 4 : 2;
 }

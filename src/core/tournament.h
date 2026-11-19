@@ -504,6 +504,9 @@ int TourneyTeamOf(const std::vector<std::vector<uint64_t>> &teams, uint64_t stea
 // The tag of a tournament room in its lobby data ("tournament:<match>") and the match of a tag; 0 for any other room.
 std::string TourneyRoomTag(int64_t match);
 int64_t TourneyMatchOfTag(const std::string &tag);
+// A test player of the league's staging worker: its SteamID64 is below every real account's. In a match against one, the mod puts the
+// game's AI in its seat and reports the game as the bot's.
+bool TourneyIsTestBot(uint64_t steamId);
 
 // What the player is told in any menu once.
 struct TourneyNotice {

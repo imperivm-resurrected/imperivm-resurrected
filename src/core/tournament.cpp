@@ -1301,6 +1301,12 @@ std::string TourneyRoomTag(int64_t match)
 	return match > 0 ? "tournament:" + std::to_string(match) : std::string();
 }
 
+bool TourneyIsTestBot(uint64_t steamId)
+{
+	const uint64_t base = 76561190000000000ULL;
+	return steamId > base && steamId < base + 100000ULL;
+}
+
 int64_t TourneyMatchOfTag(const std::string &tag)
 {
 	static const char kPrefix[] = "tournament:";
