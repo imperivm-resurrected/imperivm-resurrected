@@ -2218,7 +2218,6 @@ extern const TrRow kTrRows[] = {
 	{"The waiting time is over: enter the room now.", "Se acabó el plazo: entra ya en la sala.", "Il tempo è scaduto: entra subito nella stanza."},
 	{"Go to the room", "Ir a la sala", "Vai alla stanza"},
 	{"Your match is being played.", "Tu partida se está jugando.", "La tua partita è in corso."},
-	{"The result is reported by the mod when the game ends.", "El mod envía el resultado al terminar la partida.", "La mod invia il risultato alla fine della partita."},
 	{"You lost the last game: choose the map of game %s below. If time runs out, it is drawn.", "Perdiste la última partida: elige abajo el mapa de la partida %s. Si se acaba el tiempo, se sortea.", "Hai perso l'ultima partita: scegli qui sotto la mappa della partita %s. Se il tempo scade, si sorteggia."},
 	{"%s is choosing the map of game %s among the series' maps.", "%s está eligiendo el mapa de la partida %s entre los de las series.", "%s sta scegliendo la mappa della partita %s tra quelle delle serie."},
 	{"Agree on a time with %s before the deadline. The no-show counts %s: whoever is not in the room then loses the match.", "Quedad a una hora con %s antes del plazo. La incomparecencia cuenta %s: quien no esté entonces en la sala pierde la partida.", "Accordati sull'ora con %s prima della scadenza. L'assenza conta %s: chi allora non è nella stanza perde la partita."},

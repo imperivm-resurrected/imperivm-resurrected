@@ -623,7 +623,9 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 		if (n.status == TourneyMatchStatus::Pending && teams) line = Tr("The other team comes from a match still being played. We tell you when it is over.");
 		else if (n.status == TourneyMatchStatus::Pending) line = Tr("Your opponent comes from a match still being played. We tell you when it is over.");
 		else if (n.status == TourneyMatchStatus::Disputed) line = Tr("The organisers are looking at the reports of the game.");
-		else if (live) line = Tr("The result is reported by the mod when the game ends.");
+		else if (live) {
+			// The button says the game is under way: nothing to add under it.
+		}
 		else if (n.pick.present && n.MyPick()) line = TrFmt("You lost the last game: choose the map of game %s below. If time runs out, it is drawn.", {std::to_string(n.game)});
 		else if (n.pick.present) line = TrFmt("%s is choosing the map of game %s among the series' maps.", {n.opponent.name.empty() ? Tr("Your opponent") : n.opponent.name, std::to_string(n.game)});
 		else if (n.lobby && n.roomClaimBy == n.opponent.steamId && n.opponent.steamId)

@@ -1039,7 +1039,6 @@ bool PaintBanner(Painter &p, Ctx &c, int x, int y, int w)
 	}
 	else if (c.next && c.next->status == TourneyMatchStatus::Live) {
 		title = Tr("Your match is being played.");
-		text = Tr("The result is reported by the mod when the game ends.");
 	}
 	else if (c.next && c.next->status == TourneyMatchStatus::Disputed) {
 		title = Tr("Your match is under review.");

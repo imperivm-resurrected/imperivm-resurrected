@@ -2211,7 +2211,6 @@
 {"en":"The waiting time is over: enter the room now.","es":"Se acabó el plazo: entra ya en la sala.","it":"Il tempo è scaduto: entra subito nella stanza."},
 {"en":"Go to the room","es":"Ir a la sala","it":"Vai alla stanza"},
 {"en":"Your match is being played.","es":"Tu partida se está jugando.","it":"La tua partita è in corso."},
-{"en":"The result is reported by the mod when the game ends.","es":"El mod envía el resultado al terminar la partida.","it":"La mod invia il risultato alla fine della partita."},
 {"en":"You lost the last game: choose the map of game %s below. If time runs out, it is drawn.","es":"Perdiste la última partida: elige abajo el mapa de la partida %s. Si se acaba el tiempo, se sortea.","it":"Hai perso l'ultima partita: scegli qui sotto la mappa della partita %s. Se il tempo scade, si sorteggia."},
 {"en":"%s is choosing the map of game %s among the series' maps.","es":"%s está eligiendo el mapa de la partida %s entre los de las series.","it":"%s sta scegliendo la mappa della partita %s tra quelle delle serie."},
 {"en":"Agree on a time with %s before the deadline. The no-show counts %s: whoever is not in the room then loses the match.","es":"Quedad a una hora con %s antes del plazo. La incomparecencia cuenta %s: quien no esté entonces en la sala pierde la partida.","it":"Accordati sull'ora con %s prima della scadenza. L'assenza conta %s: chi allora non è nella stanza perde la partita."},
