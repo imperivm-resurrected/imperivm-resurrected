@@ -1295,7 +1295,7 @@ void PaintScreen(Painter &p, const State &st)
 	const bool linkOffer = LinkOfferShown(st);
 	p.noHover = st.dropOpen || st.passPrompt || st.syncConfirm || st.syncPhase || st.searching || st.connecting || st.recoverAsk ||
 		RejoinClientActive() || RejoinClientFailed() || (st.game.active && st.game.picker) || linkOffer;
-	if (st.game.active) {
+	if (st.game.active && !TourneyRoomHidden(st)) {
 		PaintGameRoom(p, st);
 		if (st.game.picker && !SaveMapPicking(st)) {
 			PaintScenarioPicker(p, st);

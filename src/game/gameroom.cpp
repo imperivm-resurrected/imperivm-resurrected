@@ -1957,6 +1957,16 @@ void GameRoomPickerOffer(const std::string &scenarioPath, bool accept)
 	});
 }
 
+void GameRoomPalette(uint32_t out[12])
+{
+	__try {
+		memcpy(out, reinterpret_cast<const void *>(addr::kPlayerColorTable), 12 * sizeof(uint32_t));
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		memset(out, 0, 12 * sizeof(uint32_t));
+	}
+}
+
 void GameRoomPickerAccept()
 {
 	Queue([] {

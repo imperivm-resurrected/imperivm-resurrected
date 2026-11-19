@@ -496,6 +496,7 @@ void StepInRoom(const TourneyNext &next)
 	if (k.room != g_s.room.id) {
 		k = RoomLock();
 		k.room = g_s.room.id;
+		g_tourney.showRoom = false;
 		LogI("league", "in the room of tournament match %lld", static_cast<long long>(match));
 	}
 	const DWORD now = GetTickCount();
@@ -513,7 +514,12 @@ void StepInRoom(const TourneyNext &next)
 		k.presenceAt = now;
 		LeagueTourneyPresence(match, false);
 	}
-	if (mine && !k.shownAt && g_s.game.active) k.shownAt = now;
+	if (mine && !k.shownAt && g_s.game.active) {
+		k.shownAt = now;
+		// The room stays under the match page: the player chose there, and gets ready and sees the start there.
+		g_s.view = kViewTournaments;
+		g_tourney.screen = kScreenMatch;
+	}
 	// The civilization of the match page in the player's slot, once; then ready, once (the room's countdown starts the game when both are).
 	const int slot = g_s.game.localSlot;
 	const bool slotOk = mine && g_s.game.active && !g_s.game.busy && !g_s.inOnlineGame && slot >= 0 && slot < 8 && g_s.game.slots[static_cast<size_t>(slot)].used;
@@ -527,6 +533,15 @@ void StepInRoom(const TourneyNext &next)
 			Predict(kPredRace, slot, item);
 			GameRoomSetRace(slot, item);
 			LogI("league", "tournament match %lld: race %d in the player's slot", static_cast<long long>(match), race);
+		}
+		// The colour too, unless another player has it.
+		const int color = MatchColor(g_tourney);
+		bool taken = false;
+		for (int i = 0; i < 8; i++) taken = taken || (i != slot && g_s.game.slots[i].used && g_s.game.slots[i].color == color);
+		if (color >= 0 && !taken && s.color != color && !LocalReady(g_s.game)) {
+			s.color = color;
+			Predict(kPredColor, slot, color);
+			GameRoomSetColor(slot, color);
 		}
 	}
 	const bool teamReady = !next.Teams() || k.teamSet;
@@ -1514,6 +1529,20 @@ void TourneyAction(int arg)
 		g_s.dropScroll = ClampDropScroll(g_s.tourneyDropSel - kDropRows / 2, static_cast<int>(g_s.tourneyDropItems.size()));
 		break;
 	}
+	case kSubColorPick: {
+		const int pick = static_cast<int>(value);
+		if (pick < -1 || pick >= 12) break;
+		u.colorPick = pick == MatchColor(u) ? -1 : pick;
+		GameRoomSaveSetting("TourneyColor", u.colorPick);
+		break;
+	}
+	case kSubReady:
+		if (g_s.game.active && g_s.room.id && TourneyMatchOfTag(g_s.room.info.leagueTag) == value && !LocalReady(g_s.game)) {
+			Predict(kPredReady, g_s.game.localSlot, 1);
+			GameRoomToggleReady();
+		}
+		break;
+	case kSubShowRoom: u.showRoom = true; break;
 	case kSubCupSection:
 		if (value >= 0 && value < 3) u.formScroll = std::max(0, std::min(u.formArea.max, u.sectionTop[value]));
 		break;
@@ -1944,6 +1973,16 @@ bool TeamsLocked(const State &st)
 	return st.game.active && st.room.id && TourneyMatchOfTag(st.room.info.leagueTag) && g_tourney.lock.room == st.room.id && g_tourney.lock.team > 0;
 }
 
+}
+
+bool TourneyRoomHidden(const mpui_impl::State &st)
+{
+	if (!st.game.active || !st.room.id || st.room.info.spectate) return false;
+	const int64_t match = TourneyMatchOfTag(st.room.info.leagueTag);
+	if (!match) return false;
+	const auto mine = LeagueTourneyMine();
+	std::lock_guard<std::mutex> lock(g_lock);
+	return !g_tourney.showRoom && st.view == kViewTournaments && mine->mine.next.present && mine->mine.next.match == match;
 }
 
 bool TourneyTeamsLocked(const mpui_impl::State &st)

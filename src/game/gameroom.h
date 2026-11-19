@@ -121,6 +121,8 @@ void GameRoomStart();
 // over the mod's channel; in local network rooms only the host counts.
 // Milliseconds left on this PC, 0 while waiting for the start, -1 without a countdown.
 int GameRoomCountdownLeftMs();
+// The game's 12 player colours (0xRRGGBB), the same a room shows; zero when they cannot be read.
+void GameRoomPalette(uint32_t out[12]);
 // Off by default: the host only counts down once the interface turns it on.
 void GameRoomSetAutoStart(bool on);
 // Called on the game thread, from GameRoomTick, with no lock of the room held: true while the game must not start (players

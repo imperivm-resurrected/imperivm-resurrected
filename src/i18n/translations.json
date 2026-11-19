@@ -3469,5 +3469,7 @@
 {"en":"Carthage","es":"Cartago","it":"Cartagine"},
 {"en":"Germany","es":"Germania","it":"Germania"},
 {"en":"Egypt","es":"Egipto","it":"Egitto"},
-{"en":"Britain","es":"Britania","it":"Britannia"}
+{"en":"Britain","es":"Britania","it":"Britannia"},
+{"en":"Waiting for your opponent...","es":"Esperando a tu rival...","it":"In attesa del tuo avversario..."},
+{"en":"Show the room","es":"Ver la sala","it":"Vedi la sala"}
 ]

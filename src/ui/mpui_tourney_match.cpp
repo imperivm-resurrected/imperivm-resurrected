@@ -67,6 +67,19 @@ void PaintCivMenu(Painter &p, const State &st, int x, int y, int w)
 	p.raw = true;
 	PaintCombo(p, x, y, w, 34, Tr("Civilization") + ": " + name, open, true, st.mouseX, st.mouseY, kTourney, ArgOf(kSubCivMenu, 0), &g_dropAnchor);
 	p.raw = raw;
+	// The colour under it: the game's twelve; none marked is the room's own.
+	uint32_t palette[12] = {};
+	GameRoomPalette(palette);
+	const int pick = MatchColor(g_tourney), gap = 3, cell = (w - 11 * gap) / 12, cy = y + 34 + 8;
+	for (int c = 0; c < 12; c++) {
+		const int cx = x + c * (cell + gap);
+		const COLORREF ink = RGB((palette[c] >> 16) & 255, (palette[c] >> 8) & 255, palette[c] & 255);
+		const bool on = c == pick, hot = p.Hover(cx, cy, cell, cell, st.mouseX, st.mouseY);
+		p.Fill(cx, cy, cell, cell, ink);
+		p.Frame(cx, cy, cell, cell, on ? pal::text : hot ? pal::edgeHot : pal::bg);
+		if (on) p.Frame(cx + 1, cy + 1, cell - 2, cell - 2, pal::text);
+		p.AddHit(cx, cy, cell, cell, kTourney, ArgOf(kSubColorPick, c));
+	}
 }
 
 int PaintPlayerColumn(Painter &p, int cx, int y, int h, uint64_t id, const std::string &name, bool me, int seed, const std::string &before,
@@ -466,6 +479,12 @@ int MatchCiv(Ui &u)
 	return u.civRace;
 }
 
+int MatchColor(Ui &u)
+{
+	if (u.colorPick == -2) u.colorPick = GameRoomLoadSetting("TourneyColor", -1);
+	return u.colorPick;
+}
+
 namespace {
 
 // What is checked before the room: the content, the map, Steam and the check-in.
@@ -600,7 +619,7 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 	if (teams) {
 		PaintTeamColumn(p, st, n, m + sideW / 2, cy, sideW - 40, cardH, n.team.name.empty() && meE ? meE->name : n.team.name, n.me.seed, ours, true,
 			meE ? PreviousText(page.detail, meE->entryId, n.round) : std::string(), live);
-		if (!live && n.status == TourneyMatchStatus::Ready) PaintCivMenu(p, st, m + sideW / 2 - 140, cy + cardH - 48, 280);
+		if (!live && n.status == TourneyMatchStatus::Ready) PaintCivMenu(p, st, m + sideW / 2 - 140, cy + cardH - 80, 280);
 		if (n.hasOpponent) {
 			PaintTeamColumn(p, st, n, m + sideW + centerW + sideW / 2, cy, sideW - 40, cardH, n.opponent.name, n.opponent.seed, theirs, false,
 				themE ? PreviousText(page.detail, themE->entryId, n.round) : std::string(), live);
@@ -613,7 +632,7 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 	else {
 		const bool civ = !live && n.status == TourneyMatchStatus::Ready;
 		const int under = PaintPlayerColumn(p, m + sideW / 2, cy, cardH, SteamOwnId(), st.player, true, n.me.seed, meE ? PreviousText(page.detail, meE->entryId, n.round) : std::string(),
-			live ? std::string() : Tr(n.me.inRoom ? "In the room" : "You're not in the room yet"), n.me.inRoom, civ ? 44 : 0);
+			live ? std::string() : Tr(n.me.inRoom ? "In the room" : "You're not in the room yet"), n.me.inRoom, civ ? 74 : 0);
 		if (civ) PaintCivMenu(p, st, m + sideW / 2 - 140, under + 6, 280);
 		if (n.hasOpponent) {
 			PaintPlayerColumn(p, m + sideW + centerW + sideW / 2, cy, cardH, n.opponent.steamId, n.opponent.name, false, n.opponent.seed,
@@ -635,9 +654,18 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 	const RoomFlow &f = u.room;
 	const bool flowing = f.phase != RoomFlow::kIdle && f.match == n.match;
 	const bool inRoom = st.room.id && TourneyMatchOfTag(st.room.info.leagueTag) == n.match;
-	std::string label = "Go to the room", line;
+	std::string label = "Ready", line;
 	bool enabled = n.status == TourneyMatchStatus::Ready && !inRoom && !flowing;
-	if (inRoom) label = "In the room";
+	int action = kSubGo;
+	if (inRoom) {
+		// In the room: ready (the mod gets the player ready on entering; pressed again after taking it back), then the start.
+		const bool ready = LocalReady(st.game);
+		const int left = GameRoomCountdownLeftMs();
+		action = kSubReady;
+		enabled = !ready && !live;
+		label = ready ? (left > 0 ? TrFmt("Starts in %s", {std::to_string((left + 999) / 1000)}) : Tr("Waiting for your opponent...")) : "Ready";
+		if (live) label = "Game in progress";
+	}
 	else if (n.pick.present) {
 		// The room opens once the next game's map is chosen: until then the league has the claim wait.
 		label = "Waiting for the map...";
@@ -672,6 +700,9 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 		}
 		else if (n.pick.present && n.MyPick()) line = TrFmt("You lost the last game: choose the map of game %s below. If time runs out, it is drawn.", {std::to_string(n.game)});
 		else if (n.pick.present) line = TrFmt("%s is choosing the map of game %s among the series' maps.", {n.opponent.name.empty() ? Tr("Your opponent") : n.opponent.name, std::to_string(n.game)});
+		else if (inRoom) {
+			// The button says where it stands.
+		}
 		else if (n.lobby && n.roomClaimBy == n.opponent.steamId && n.opponent.steamId)
 			line = TrFmt("%s opened the room. You enter as a player; the map and the rules are the tournament's.", {n.opponent.name});
 		else if (n.lobby && teams) line = Tr("The room is open. You enter in your team; the teams, the map and the rules are the tournament's.");
@@ -695,8 +726,10 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 	const int bw = 460, bh = l.roomy ? 72 : 60, by = cy + cardH + (l.roomy ? 24 : 16);
 	const bool chat = byRounds && n.hasOpponent && n.opponent.steamId;
 	const int chatW = chat ? ChatButtonWidth(p) : 0, groupW = bw + (chat ? 16 + chatW : 0), bx = (l.w - groupW) / 2;
-	p.Button(bx, by, bw, bh, label, kTourney, ArgOf(kSubGo, n.match), mx, my, enabled, true, 2);
+	p.Button(bx, by, bw, bh, label, kTourney, ArgOf(action, n.match), mx, my, enabled, true, 2);
 	if (chat) PaintSecondButton(p, bx + bw + 16, by, chatW, bh, Tr("Write on Steam"), ArgOf(kSubSteamChat, 0), true, mx, my);
+	// The room is there under the page, for when something needs it.
+	if (inRoom && !live) PaintSecondButton(p, bx - 16 - 200, by, 200, bh, Tr("Show the room"), ArgOf(kSubShowRoom, 0), true, mx, my);
 	p.Font(0);
 	p.raw = true;
 	p.Text(m, by + bh + 8, inner, 24, line, n.pick.present && n.MyPick() ? pal::warn : lineInk, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);

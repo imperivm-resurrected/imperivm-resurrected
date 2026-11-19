@@ -49,6 +49,8 @@ void TourneyDropPick(int index, int item);
 bool TourneyBlocksAction(int action, int arg);
 // The room is a tournament match of teams whose teams the league set: nobody changes them.
 bool TourneyTeamsLocked(const mpui_impl::State &st);
+// The room of the player's own cup match stays under its match page, which chooses, gets ready and shows the countdown.
+bool TourneyRoomHidden(const mpui_impl::State &st);
 // The room of this player's tournament match: `note` gets the line under its title (how long the rival has to come) and, once the
 // rival let the time run out, a button that claims the win is painted left of `right` at `y`. Returns where the header's
 // buttons start now.
