@@ -315,7 +315,19 @@ inline void PaintEditField(Painter &p, int x, int y, int w, int h, const std::st
 		if (caretPx - scroll < 0) scroll = caretPx;
 		scroll = std::max(0, std::min(scroll, std::max(0, totalW - innerW + 2)));
 	}
-	p.Clip(x + 6, y + 1, w - 12, h - 2);
+	// Inside the clip already set (a scrolling form): the text must not show where the form hides the field.
+	HRGN outer = CreateRectRgn(0, 0, 0, 0);
+	if (GetClipRgn(p.dc, outer) != 1) {
+		DeleteObject(outer);
+		outer = nullptr;
+	}
+	{
+		const RECT cr = p.R(x + 6, y + 1, w - 12, h - 2);
+		HRGN own = CreateRectRgn(cr.left, cr.top, cr.right, cr.bottom);
+		if (outer) CombineRgn(own, own, outer, RGN_AND);
+		SelectClipRgn(p.dc, own);
+		DeleteObject(own);
+	}
 	const int origin = px0 - scroll;
 	if (focused && es.caret != es.anchor) {
 		const size_t a = indexOf(SelLo(es)), b = indexOf(SelHi(es));
@@ -338,11 +350,19 @@ inline void PaintEditField(Painter &p, int x, int y, int w, int h, const std::st
 		FillRect(p.dc, &cr, br);
 		DeleteObject(br);
 	}
-	p.Unclip();
+	// Only what the outer clip shows of the field takes clicks.
+	RECT shown = p.R(x, y, w, h);
+	if (outer) {
+		RECT box = {};
+		GetRgnBox(outer, &box);
+		if (!IntersectRect(&shown, &shown, &box)) shown = RECT{};
+	}
+	SelectClipRgn(p.dc, outer);
+	if (outer) DeleteObject(outer);
 	{
 		std::lock_guard<std::mutex> lock(g_fieldMx);
 		FieldGeom &g = g_fields[action];
-		g.r = p.R(x, y, w, h);
+		g.r = shown;
 		OffsetRect(&g.r, p.ox, p.oy);
 		g.textX = p.ox + px0;
 		g.scroll = scroll;
