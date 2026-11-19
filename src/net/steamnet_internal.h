@@ -55,7 +55,7 @@
 	X(SteamAPI_ISteamUtils_GetImageSize) X(SteamAPI_ISteamUtils_GetImageRGBA)
 
 // Used when steam_api.dll has them; without them only that feature falls back, and online play still starts.
-#define STEAM_OPTIONAL_FUNCS(X) X(SteamAPI_ISteamFriends_ActivateGameOverlayToWebPage)
+#define STEAM_OPTIONAL_FUNCS(X) X(SteamAPI_ISteamFriends_ActivateGameOverlayToWebPage) X(SteamAPI_ISteamFriends_GetLargeFriendAvatar)
 
 namespace steamnet_impl {
 

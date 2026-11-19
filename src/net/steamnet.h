@@ -129,6 +129,8 @@ uint64_t SteamOwnId();
 
 struct OnlineAvatar {
 	int width = 0, height = 0;
+	// The large picture (184 px); the medium one (64 px) stands in while Steam is still bringing it.
+	bool large = false;
 	std::vector<uint32_t> bgra;
 };
 std::shared_ptr<const OnlineAvatar> SteamAvatar(uint64_t id);

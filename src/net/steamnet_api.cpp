@@ -52,7 +52,11 @@ std::map<uint64_t, DWORD> g_avatarAsked;
 
 void LoadAvatar(uint64 id)
 {
-	const int image = S.SteamAPI_ISteamFriends_GetMediumFriendAvatar(g_steam.friends, id);
+	// The big discs of the match and the profile drew the 64 px picture at twice its size: the 184 px one when Steam has it (-1 while it
+	// brings it, asked again shortly), the medium one meanwhile.
+	const int largeImage = S.SteamAPI_ISteamFriends_GetLargeFriendAvatar ? S.SteamAPI_ISteamFriends_GetLargeFriendAvatar(g_steam.friends, id) : 0;
+	const bool large = largeImage > 0;
+	const int image = large ? largeImage : S.SteamAPI_ISteamFriends_GetMediumFriendAvatar(g_steam.friends, id);
 	if (image == 0) {
 		S.SteamAPI_ISteamFriends_RequestUserInformation(g_steam.friends, id, false);
 		return;
@@ -64,6 +68,7 @@ void LoadAvatar(uint64 id)
 	std::vector<uint8_t> rgba(w * h * 4);
 	if (!S.SteamAPI_ISteamUtils_GetImageRGBA(utils, image, rgba.data(), static_cast<int>(rgba.size()))) return;
 	auto a = std::make_shared<OnlineAvatar>();
+	a->large = large || !S.SteamAPI_ISteamFriends_GetLargeFriendAvatar;
 	a->width = static_cast<int>(w);
 	a->height = static_cast<int>(h);
 	a->bgra.resize(w * h);
@@ -78,16 +83,18 @@ void LoadAvatar(uint64 id)
 std::shared_ptr<const OnlineAvatar> SteamAvatar(uint64_t id)
 {
 	if (!id || !SteamOnlineReady()) return nullptr;
+	std::shared_ptr<const OnlineAvatar> have;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
 		const auto it = g_avatars.find(id);
-		if (it != g_avatars.end()) return it->second;
+		if (it != g_avatars.end()) have = it->second;
+		if (have && have->large) return have;
 		DWORD &asked = g_avatarAsked[id];
-		if (asked && GetTickCount() - asked < 2000) return nullptr;
+		if (asked && GetTickCount() - asked < 2000) return have;
 		asked = GetTickCount();
 	}
 	Post([id] { LoadAvatar(id); });
-	return nullptr;
+	return have;
 }
 
 void SteamRefreshLobbies()
