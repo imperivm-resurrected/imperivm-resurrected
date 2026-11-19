@@ -561,6 +561,27 @@ bool SlotHandshaking(int row)
 	return *reinterpret_cast<void **>(record + 0x1d) != nullptr && *reinterpret_cast<int *>(record + 8) == 0;
 }
 
+// The players' twelve colours of the last room, kept (and saved once they change) for when no room is open.
+std::mutex g_paletteLock;
+uint32_t g_palette[12] = {};
+bool g_paletteKnown = false;
+
+void KeepPalette(const uint32_t colors[12])
+{
+	bool any = false;
+	for (int i = 0; i < 12; i++) any = any || colors[i] != 0;
+	if (!any) return;
+	std::lock_guard<std::mutex> lock(g_paletteLock);
+	if (g_paletteKnown && memcmp(g_palette, colors, sizeof(g_palette)) == 0) return;
+	memcpy(g_palette, colors, sizeof(g_palette));
+	g_paletteKnown = true;
+	for (int i = 0; i < 12; i++) {
+		char key[16];
+		sprintf_s(key, "Palette%d", i);
+		GameRoomSaveSetting(key, static_cast<int>(colors[i] & 0xffffff));
+	}
+}
+
 void TakeSnapshot()
 {
 	GameRoomSnapshot s;
@@ -585,6 +606,7 @@ void TakeSnapshot()
 		s.localSlot = reinterpret_cast<IntThis_t>(addr::kGetLocalSlot)(g_dlg);
 		s.teamChoices = TeamChoices(Button(g_dlg, (((s.localSlot & 7) + 1) << 12) | 0x32));
 		memcpy(s.colors, reinterpret_cast<const void *>(addr::kPlayerColorTable), sizeof(s.colors));
+		KeepPalette(s.colors);
 		std::string lastScenario;
 		{
 			std::lock_guard<std::mutex> lock(g_lock);
@@ -1957,14 +1979,41 @@ void GameRoomPickerOffer(const std::string &scenarioPath, bool accept)
 	});
 }
 
-void GameRoomPalette(uint32_t out[12])
+bool ReadPaletteTable(uint32_t out[12])
 {
 	__try {
 		memcpy(out, reinterpret_cast<const void *>(addr::kPlayerColorTable), 12 * sizeof(uint32_t));
+		for (int i = 0; i < 12; i++) {
+			if (out[i]) return true;
+		}
+		return false;
 	}
 	__except (EXCEPTION_EXECUTE_HANDLER) {
-		memset(out, 0, 12 * sizeof(uint32_t));
+		return false;
 	}
+}
+
+void GameRoomPalette(uint32_t out[12])
+{
+	if (ReadPaletteTable(out)) return;
+	// The game fills its table only with a room open: the one a room had (kept in the room's settings), else the usual twelve.
+	std::lock_guard<std::mutex> lock(g_paletteLock);
+	if (!g_paletteKnown) {
+		bool all = true;
+		for (int i = 0; i < 12; i++) {
+			char key[16];
+			sprintf_s(key, "Palette%d", i);
+			const int v = GameRoomLoadSetting(key, -1);
+			all = all && v >= 0;
+			g_palette[i] = v >= 0 ? static_cast<uint32_t>(v) & 0xffffff : 0;
+		}
+		g_paletteKnown = true;
+		if (!all) {
+			static const uint32_t kUsual[12] = {0xd02020, 0x2050d8, 0x20a030, 0xe8d020, 0x9030c0, 0xe87818, 0x20c8d0, 0xe880c8, 0xe8e8e8, 0x885028, 0x909090, 0x303030};
+			memcpy(g_palette, kUsual, sizeof(kUsual));
+		}
+	}
+	memcpy(out, g_palette, 12 * sizeof(uint32_t));
 }
 
 void GameRoomPickerAccept()

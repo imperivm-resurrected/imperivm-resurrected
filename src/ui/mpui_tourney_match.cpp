@@ -76,7 +76,7 @@ void PaintCivMenu(Painter &p, const State &st, int x, int y, int w)
 	const COLORREF ink = MatchColorRef(g_tourney);
 	const int cy = y + 34 + 8;
 	p.raw = true;
-	PaintCombo(p, x, cy, w, 34, Tr("Colour") + ": " + (ink == CLR_INVALID ? Tr("the room's own") : std::string()), g_tourney.colorOpen, true, st.mouseX, st.mouseY, kTourney,
+	PaintCombo(p, x, cy, w, 34, Tr("Colour") + ": " + (ink == CLR_INVALID ? Tr("automatic") : std::string()), g_tourney.colorOpen, true, st.mouseX, st.mouseY, kTourney,
 		ArgOf(kSubColorOpen, 0), &g_colorAnchor);
 	p.raw = raw;
 	if (ink != CLR_INVALID) {
@@ -550,7 +550,7 @@ void PaintMatchColorMenu(Painter &p, const State &st)
 		p.AddHit(cx, cy, cell, cell, kTourney, ArgOf(kSubColorPick, c));
 	}
 	const int ly = y + pad + 2 * cell + gap + 10, lw = w - 2 * pad;
-	p.Button(x + pad, ly, lw, rowH, "The room's own", kTourney, ArgOf(kSubColorPick, -1), mx, my, pick != -1, false, 3);
+	p.Button(x + pad, ly, lw, rowH, "Automatic", kTourney, ArgOf(kSubColorPick, -1), mx, my, pick != -1, false, 3);
 	p.Button(x + pad, ly + rowH + gap, lw, rowH, "Own colour...", kTourney, ArgOf(kSubColorOpen, 1), mx, my, true, pick == kOwnColor, 3);
 }
 
