@@ -3465,5 +3465,6 @@ extern const TrRow kTrRows[] = {
 	{"Own maps are your scenarios that are not the game's own: made with the editor or downloaded. The cup uploads the one you choose, and the players download it when they check in.", "Los mapas propios son tus escenarios que no son los originales del juego: hechos con el editor o descargados. La copa sube el que elijas y los jugadores lo descargan al hacer el check-in.", "Le mappe proprie sono i tuoi scenari che non sono quelli originali del gioco: fatti con l'editor o scaricati. La coppa carica quello che scegli e i giocatori lo scaricano al check-in."},
 	{"With a 300 s delay", "Con 300 s de retraso", "Con 300 s di ritardo"},
 	{"Type it, or move it 15 minutes", "Escríbela o muévela de 15 en 15 minutos", "Scrivila o spostala di 15 minuti"},
+	{"Choose 4, 8, 16 or 32 places; a double elimination, up to 16.", "Elige 4, 8, 16 o 32 plazas; una doble eliminación, hasta 16.", "Scegli 4, 8, 16 o 32 posti; un'eliminazione doppia, fino a 16."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

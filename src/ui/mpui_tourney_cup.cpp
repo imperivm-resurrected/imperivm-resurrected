@@ -377,7 +377,8 @@ int FormatLeft(Form &c, int x, int y, int w)
 	at += c.k.rowGap;
 	at += Label(c, x, at, w, Tr(teams ? "Places (teams)" : "Places"));
 	Segments(c, x, at, w, c.k.fieldH,
-		{{"4", CupArg(kCupPlaces, 4), f.maxEntries == 4}, {"8", CupArg(kCupPlaces, 8), f.maxEntries == 8}, {"16", CupArg(kCupPlaces, 16), f.maxEntries == 16}});
+		{{"4", CupArg(kCupPlaces, 4), f.maxEntries == 4}, {"8", CupArg(kCupPlaces, 8), f.maxEntries == 8}, {"16", CupArg(kCupPlaces, 16), f.maxEntries == 16},
+			{"32", CupArg(kCupPlaces, 32), f.maxEntries == 32}});
 	at += c.k.fieldH + 8;
 	at += Hint(c, x, at, w,
 		TrFmt(teams ? "It starts with the teams that have checked in, if there are at least %s; else it is cancelled on its own."
@@ -478,7 +479,7 @@ int RulesRight(Form &c, int x, int y, int w)
 	const int delay = TourneySpecDelay(f.settings);
 	at += Label(c, x, at, w, Tr("Spectators"));
 	Segments(c, x, at, w, c.k.fieldH,
-		{{Tr("None"), CupArg(kCupSpectators, 0), delay == 0}, {"60 s", CupArg(kCupSpectators, 60), delay == 60}, {"120 s", CupArg(kCupSpectators, 120), delay == 120},
+		{{Tr("None"), CupArg(kCupSpectators, 0), delay == 0}, {"30 s", CupArg(kCupSpectators, 30), delay == 30}, {"60 s", CupArg(kCupSpectators, 60), delay == 60}, {"120 s", CupArg(kCupSpectators, 120), delay == 120},
 			{"300 s", CupArg(kCupSpectators, 300), delay == 300}});
 	at += c.k.fieldH + 8;
 	at += Hint(c, x, at, w, delay ? TrFmt("Anyone can watch the games %s s behind, so nobody can tell the players what they see.", {std::to_string(delay)})
@@ -1210,7 +1211,7 @@ void ApplyCupSetting(TourneyCupForm &f, int setting, int choice, int64_t nowMs)
 	TourneySettings &s = f.settings;
 	switch (setting) {
 	case kCupPlaces:
-		if (choice != 4 && choice != 8 && choice != 16) break;
+		if (choice != 4 && choice != 8 && choice != 16 && choice != 32) break;
 		// The minimum follows the places: it is not asked.
 		f.minEntries = TourneyCupDefaultMinimum(choice);
 		f.maxEntries = choice;
@@ -1357,7 +1358,7 @@ std::string CupProblemText(TourneyCupProblem problem)
 	case TourneyCupProblem::NameShort: return Tr("The name needs at least 3 characters.");
 	case TourneyCupProblem::NameLong: return Tr("The name can have up to 40 characters.");
 	case TourneyCupProblem::DescriptionLong: return Tr("The description can have up to 200 characters.");
-	case TourneyCupProblem::Places: return Tr("Choose 4, 8 or 16 places.");
+	case TourneyCupProblem::Places: return Tr("Choose 4, 8, 16 or 32 places; a double elimination, up to 16.");
 	case TourneyCupProblem::Minimum: return Tr("The minimum goes from 2 to the number of places.");
 	case TourneyCupProblem::Format: return Tr("A Swiss plays 3 to 6 rounds, or the automatic count.");
 	case TourneyCupProblem::Series: return Tr("Choose the games of the rounds and of the final.");

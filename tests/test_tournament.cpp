@@ -450,6 +450,11 @@ void CupForm()
 	bad = f;
 	bad.maxEntries = 6;
 	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::Places));
+	bad.maxEntries = 32;
+	CHECK(!HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::Places));
+	bad.format = TourneyFormat::Double;
+	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::Places));
+	bad.format = f.format;
 	bad.maxEntries = 4;
 	bad.minEntries = 5;
 	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::Minimum));
@@ -636,7 +641,7 @@ void Settings()
 	none.specDelay = 0;
 	CHECK(Json::Parse(TourneySettingsJson(none).Dump(), back));
 	CHECK_EQ(static_cast<int>(back.GetNumber("specDelay", -1)), 0);
-	for (int ok : {0, 60, 120, 300}) CHECK(TourneySpecDelayValid(ok));
+	for (int ok : {0, 30, 60, 120, 300}) CHECK(TourneySpecDelayValid(ok));
 	CHECK(!TourneySpecDelayValid(90));
 	TourneySettings classic;
 	classic.preset = "classic";
@@ -740,7 +745,7 @@ void CupFull()
 	bad.requirements.maxTier = LeagueTier::Praetorian;
 	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::Requirements));
 	bad = f;
-	bad.settings.specDelay = 30;
+	bad.settings.specDelay = 45;
 	CHECK(HasProblem(TourneyCheckCup(bad, now), TourneyCupProblem::Settings));
 	bad = f;
 	bad.settings.preset = "chaos";

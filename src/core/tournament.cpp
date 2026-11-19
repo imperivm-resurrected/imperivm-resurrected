@@ -457,7 +457,7 @@ int TourneySpecDelay(const TourneySettings &s)
 
 bool TourneySpecDelayValid(int seconds)
 {
-	return seconds == 0 || seconds == 60 || seconds == 120 || seconds == 300;
+	return seconds == 0 || seconds == 30 || seconds == 60 || seconds == 120 || seconds == 300;
 }
 
 TourneySettings TourneyCupDefaultSettings()
@@ -1594,8 +1594,9 @@ std::vector<TourneyCupProblem> TourneyCheckCup(const TourneyCupForm &f, int64_t 
 	if (name < kTourneyCupNameMin) out.push_back(TourneyCupProblem::NameShort);
 	else if (name > kTourneyCupNameMax) out.push_back(TourneyCupProblem::NameLong);
 	if (TourneyTextLength(TourneyTrim(f.description)) > kTourneyCupDescriptionMax) out.push_back(TourneyCupProblem::DescriptionLong);
-	const bool places = f.maxEntries == 4 || f.maxEntries == 8 || f.maxEntries == 16;
-	if (!places) out.push_back(TourneyCupProblem::Places);
+	const bool places = f.maxEntries == 4 || f.maxEntries == 8 || f.maxEntries == 16 || f.maxEntries == 32;
+	// A double elimination of 32 would last far more than an evening: up to 16 places, as the league has it.
+	if (!places || (f.maxEntries > 16 && f.format == TourneyFormat::Double)) out.push_back(TourneyCupProblem::Places);
 	else if (f.minEntries < 2 || f.minEntries > f.maxEntries) out.push_back(TourneyCupProblem::Minimum);
 	if (f.format == TourneyFormat::Swiss && f.swissRounds != 0 && (f.swissRounds < kTourneySwissRoundsMin || f.swissRounds > kTourneySwissRoundsMax)) {
 		out.push_back(TourneyCupProblem::Format);
