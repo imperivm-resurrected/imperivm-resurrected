@@ -225,37 +225,39 @@ void Segments(Form &c, int x, int y, int w, int h, const std::vector<Seg> &segs)
 }
 
 // A choice of a list with a radio, its name and a line under it, and at the right an estimate (in `asideInk` when it warns) or "Coming soon".
-// The format's sign, in a box of 26 by 22: a bracket (single), two brackets that meet (double), a grid of rounds (Swiss).
+// The format's sign, as the cup's mockup draws it (TorneoCrear.dc.html), in a box of 34 by 26: two brackets that meet (single), a
+// winners' and a losers' bracket that join (double), a grid of three rounds of three (Swiss).
 void FormatIcon(Painter &p, int x, int y, TourneyFormat format, COLORREF c)
 {
+	// An open box: across from (x0, y0) by w, down by h, and back.
 	const auto line = [&](int x0, int y0, int x1, int y1) { p.Line(x + x0, y + y0, x + x1, y + y1, c, 2); };
+	const auto open = [&](int x0, int y0, int w, int h) {
+		line(x0, y0, x0 + w, y0);
+		line(x0 + w, y0, x0 + w, y0 + h);
+		line(x0 + w, y0 + h, x0, y0 + h);
+	};
 	if (format == TourneyFormat::Swiss) {
 		for (int r = 0; r < 3; r++) {
-			for (int k = 0; k < 3; k++) p.Fill(x + 3 + k * 8, y + 2 + r * 7, 5, 5, c);
+			for (int k = 0; k < 3; k++) p.Frame(x + 1 + k * 11, y + 2 + r * 8, 10, 7, c);
 		}
 		return;
 	}
 	if (format == TourneyFormat::Single) {
-		for (int top : {2, 12}) {
-			line(0, top, 8, top);
-			line(0, top + 8, 8, top + 8);
-			line(8, top, 8, top + 9);
-			line(8, top + 4, 15, top + 4);
-		}
-		line(15, 6, 15, 17);
-		line(15, 11, 26, 11);
+		open(1, 3, 9, 8);
+		open(1, 15, 9, 8);
+		open(10, 7, 5, 12);
+		line(15, 13, 23, 13);
+		open(23, 9, 9, 8);
 		return;
 	}
-	line(0, 1, 8, 1);
-	line(0, 8, 8, 8);
-	line(8, 1, 8, 9);
-	line(8, 4, 17, 4);
-	line(5, 14, 12, 14);
-	line(5, 20, 12, 20);
-	line(12, 14, 12, 21);
-	line(12, 17, 17, 17);
-	line(17, 4, 17, 18);
-	line(17, 11, 26, 11);
+	open(1, 2, 8, 5);
+	open(1, 9, 8, 5);
+	open(9, 5, 5, 6);
+	line(14, 8, 20, 8);
+	open(1, 18, 8, 6);
+	line(9, 21, 20, 21);
+	open(20, 6, 4, 16);
+	line(24, 14, 33, 14);
 }
 
 void Option(Form &c, int x, int y, int w, int h, bool on, bool enabled, const std::string &title, const std::string &text, const std::string &aside, bool soon,
@@ -291,8 +293,8 @@ void Option(Form &c, int x, int y, int w, int h, bool on, bool enabled, const st
 	}
 	int tx = rx + r + 14;
 	if (format >= 0) {
-		FormatIcon(p, tx, y + (h - 22) / 2, static_cast<TourneyFormat>(format), on ? pal::redText : enabled ? pal::body : pal::textDim);
-		tx += 26 + 14;
+		FormatIcon(p, tx, y + (h - 26) / 2, static_cast<TourneyFormat>(format), on ? pal::text : enabled ? pal::body : pal::textDim);
+		tx += 34 + 14;
 	}
 	const int tw = right - tx;
 	UseFace(p, BrandFace::UiStrong, 16);
