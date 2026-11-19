@@ -225,39 +225,28 @@ void Segments(Form &c, int x, int y, int w, int h, const std::vector<Seg> &segs)
 }
 
 // A choice of a list with a radio, its name and a line under it, and at the right an estimate (in `asideInk` when it warns) or "Coming soon".
-// The format's sign, as the cup's mockup draws it (TorneoCrear.dc.html), in a box of 34 by 26: two brackets that meet (single), a
-// winners' and a losers' bracket that join (double), a grid of three rounds of three (Swiss).
+// The format's sign, as the cup's mockup draws it (TorneoCrear.dc.html).
 void FormatIcon(Painter &p, int x, int y, TourneyFormat format, COLORREF c)
 {
-	// An open box: across from (x0, y0) by w, down by h, and back.
-	const auto line = [&](int x0, int y0, int x1, int y1) { p.Line(x + x0, y + y0, x + x1, y + y1, c, 2); };
-	const auto open = [&](int x0, int y0, int w, int h) {
-		line(x0, y0, x0 + w, y0);
-		line(x0 + w, y0, x0 + w, y0 + h);
-		line(x0 + w, y0 + h, x0, y0 + h);
-	};
-	if (format == TourneyFormat::Swiss) {
-		for (int r = 0; r < 3; r++) {
-			for (int k = 0; k < 3; k++) p.Frame(x + 1 + k * 11, y + 2 + r * 8, 10, 7, c);
+	// The mockup's paths, in its box of 34 by 26.
+	static const std::vector<std::array<float, 4>> kSingle = {{1, 3, 10, 3}, {10, 3, 10, 11}, {10, 11, 1, 11}, {1, 15, 10, 15}, {10, 15, 10, 23},
+		{10, 23, 1, 23}, {10, 7, 15, 7}, {15, 7, 15, 19}, {15, 19, 10, 19}, {15, 13, 23, 13}, {23, 9, 32, 9}, {32, 9, 32, 17}, {32, 17, 23, 17}};
+	static const std::vector<std::array<float, 4>> kDouble = {{1, 2, 9, 2}, {9, 2, 9, 7}, {9, 7, 1, 7}, {1, 9, 9, 9}, {9, 9, 9, 14}, {9, 14, 1, 14},
+		{9, 4.5f, 14, 4.5f}, {14, 4.5f, 14, 11.5f}, {14, 11.5f, 9, 11.5f}, {14, 8, 20, 8}, {1, 18, 9, 18}, {9, 18, 9, 24}, {9, 24, 1, 24},
+		{9, 21, 20, 21}, {20, 6, 24, 6}, {24, 6, 24, 22}, {24, 22, 20, 22}, {24, 14, 33, 14}};
+	static const std::vector<std::array<float, 4>> kSwiss = [] {
+		std::vector<std::array<float, 4>> out;
+		for (float gx : {1.0f, 12.0f, 23.0f}) {
+			for (float gy : {2.0f, 10.0f, 18.0f}) {
+				out.push_back({gx, gy, gx + 9, gy});
+				out.push_back({gx + 9, gy, gx + 9, gy + 6});
+				out.push_back({gx + 9, gy + 6, gx, gy + 6});
+				out.push_back({gx, gy + 6, gx, gy});
+			}
 		}
-		return;
-	}
-	if (format == TourneyFormat::Single) {
-		open(1, 3, 9, 8);
-		open(1, 15, 9, 8);
-		open(10, 7, 5, 12);
-		line(15, 13, 23, 13);
-		open(23, 9, 9, 8);
-		return;
-	}
-	open(1, 2, 8, 5);
-	open(1, 9, 8, 5);
-	open(9, 5, 5, 6);
-	line(14, 8, 20, 8);
-	open(1, 18, 8, 6);
-	line(9, 21, 20, 21);
-	open(20, 6, 4, 16);
-	line(24, 14, 33, 14);
+		return out;
+	}();
+	PaintSquareStrokes(p, x, y, 34, 26, format == TourneyFormat::Swiss ? kSwiss : format == TourneyFormat::Double ? kDouble : kSingle, 1.5f, c);
 }
 
 void Option(Form &c, int x, int y, int w, int h, bool on, bool enabled, const std::string &title, const std::string &text, const std::string &aside, bool soon,

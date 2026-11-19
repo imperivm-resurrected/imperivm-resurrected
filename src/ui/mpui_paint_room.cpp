@@ -862,6 +862,23 @@ void PaintRoomHeader(Painter &p, const State &st, const RoomFacts &f, const Room
 
 }
 
+void PaintSquareStrokes(Painter &p, int x, int y, int w, int h, const std::vector<std::array<float, 4>> &segments, float width, COLORREF c)
+{
+	const float half = width / 2;
+	PaintShape(p, x, y, w, h, c, c, 255, [&](float px, float py) {
+		px -= static_cast<float>(x);
+		py -= static_cast<float>(y);
+		float best = -1e9f;
+		for (const std::array<float, 4> &s : segments) {
+			// The stroke's box, half a width past each end: corners meet square, as an SVG path's do.
+			const float left = std::min(s[0], s[2]) - half, right = std::max(s[0], s[2]) + half;
+			const float top = std::min(s[1], s[3]) - half, bottom = std::max(s[1], s[3]) + half;
+			best = std::max(best, std::min(std::min(px - left, right - px), std::min(py - top, bottom - py)));
+		}
+		return best;
+	});
+}
+
 void PaintSearchRing(Painter &p, float cx, float cy, float radius, float width, COLORREF c, DWORD tick)
 {
 	// The track, faint, all the way round.

@@ -8,6 +8,7 @@
 #include "mods/downloads.h"
 #include <functional>
 #include <set>
+#include <array>
 #include <string>
 #include <vector>
 #include <map>
@@ -552,6 +553,8 @@ void ProfileHotspot(ui::Painter &p, const State &st, int x, int y, int w, int h,
 // kColumnBaseW wide, so the ones the player dragged follow the screen.
 int LobbyTableWidth(int viewW, int viewH);
 const int kColumnBaseW = 600;
+// Straight strokes, each {x0, y0, x1, y1} across or down, in a box of w by h at (x, y), smoothed, with square corners.
+void PaintSquareStrokes(Painter &p, int x, int y, int w, int h, const std::vector<std::array<float, 4>> &segments, float width, COLORREF c);
 // The ranked search's ring: a faint track and an arc turning round it, centred on (cx, cy).
 void PaintSearchRing(Painter &p, float cx, float cy, float radius, float width, COLORREF c, DWORD tick);
 void PaintHeader(Painter &p, const State &st);
