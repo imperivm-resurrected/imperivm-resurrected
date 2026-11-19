@@ -364,19 +364,26 @@ void PaintRow(Painter &p, const View &v, const Layout &L, int r, int y)
 	ShadowLine(p, m.nameX, y, m.name, nameColor);
 	if (l.badge.Shown()) DrawLeagueBadge(p, m.badgeX, y + (kRowH - kBadge) / 2, kBadge, l.badge);
 	if (!m.to.empty()) ShadowLine(p, m.toX, y, m.to, kPrivate);
+	// With the chat open, the mark and its line's text take the view to its place: lit and underlined under the mouse.
+	const bool goTo = l.location && L.typing && l.atX >= 0 && l.atY >= 0 && l.atX < 0x8000 && l.atY < 0x10000;
+	const int textEnd = m.textX + WidthOf(p.dc, g_f.text, row.text, p.s);
+	const bool goToHot = goTo && p.Hover(m.pinX - 4, y, textEnd - m.pinX + 4, kRowH, v.mouseX, v.mouseY);
 	if (l.location) {
 		const int type = std::max(0, PingOf(l));
+		if (goToHot) p.Fill(m.pinX - 2, y + 1, kIcon + 4, kRowH - 2, pal::buttonHover);
 		PaintOrnament(p, PingOrnament(type), m.pinX - 1, y + 1, kIcon + 2, kIcon + 2, RGB(0, 0, 0));
 		PaintOrnament(p, PingOrnament(type), m.pinX, y + 2, kIcon, kIcon, PingColor(type));
-		// With the chat open, the mark takes the view to its place.
-		if (L.typing && l.atX >= 0 && l.atY >= 0 && l.atX < 0x8000 && l.atY < 0x10000) {
-			p.AddHit(m.pinX - 4, y, kIcon + 8, kRowH, kActGoTo, l.atX << 16 | l.atY);
-		}
+		if (goTo) p.AddHit(m.pinX - 4, y, textEnd - m.pinX + 4, kRowH, kActGoTo, l.atX << 16 | l.atY);
 	}
 	SelectObject(p.dc, g_f.text);
 	if (!m.note) ShadowLine(p, m.textX - WidthOf(p.dc, g_f.text, L": ", p.s), y, L": ", kCream);
 	SelectObject(p.dc, g_f.text);
-	ShadowLine(p, m.textX, y, row.text, m.note ? (PingOf(l) == kPingHere ? kNote : PingColor(PingOf(l))) : kCream);
+	const COLORREF textColor = m.note ? (PingOf(l) == kPingHere ? kNote : PingColor(PingOf(l))) : kCream;
+	ShadowLine(p, m.textX, y, row.text, textColor);
+	if (goToHot) {
+		p.Line(m.textX, y + kRowH - 3, textEnd, y + kRowH - 3, RGB(0, 0, 0), 1);
+		p.Line(m.textX, y + kRowH - 4, textEnd, y + kRowH - 4, textColor, 1);
+	}
 }
 
 void PaintChip(Painter &p, const View &v, int x, int y, int w, int h)
