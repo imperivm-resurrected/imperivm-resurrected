@@ -55,7 +55,7 @@ bool ChatSend(const std::string &text, ChatTarget target, bool withLocation);
 void ChatSetMuted(int player, bool messages, bool marks);
 // Centres the view on a place of the map, as a line's location gives it.
 void ChatCenterOn(int x, int y);
-// The other players' marks on the screen, at the frame's pixels, with the name and colour of who made each.
+// The marks on the screen, the player's own too, at the frame's pixels, with the name and colour of who made each.
 struct ChatMarkLabel {
 	int x = 0, y = 0;
 	std::string name;

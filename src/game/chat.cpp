@@ -669,7 +669,7 @@ namespace {
 std::mutex g_labelLock;
 std::vector<ChatMarkLabel> g_labels;
 
-// The other players' marks that are on the map, with their sender's name, where the frame shows them.
+// The marks on the map, with their sender's name, where the frame shows them.
 void UpdateMarkLabels()
 {
 	std::vector<ChatMarkLabel> labels;
@@ -678,18 +678,16 @@ void UpdateMarkLabels()
 		const ChatMatch m = Build(raw);
 		const int spanX = std::max(1, raw.visible[2] - raw.visible[0]), spanY = std::max(1, raw.visible[3] - raw.visible[1]);
 		for (const Mark &mark : g_marks) {
-			if (mark.sender == raw.local || mark.x < 0 || !m.haveView || !NodeAlive(mark)) continue;
-			for (const ChatPlayer &p : m.others) {
-				if (p.index != mark.sender) continue;
-				ChatMarkLabel l;
-				l.x = m.viewLeft + (mark.x - raw.visible[0]) * (m.viewRight - m.viewLeft) / spanX;
-				l.y = m.viewTop + (mark.y - raw.visible[1]) * (m.viewBottom - m.viewTop) / spanY;
-				if (l.x < m.viewLeft || l.x >= m.viewRight || l.y < m.viewTop || l.y >= m.viewBottom) break;
-				l.name = p.name;
-				l.rgb = p.rgb;
-				labels.push_back(l);
-				break;
-			}
+			if (mark.sender < 0 || mark.sender >= kSlots || mark.x < 0 || !m.haveView || !NodeAlive(mark)) continue;
+			const RawPlayer &p = raw.players[mark.sender];
+			if (!p.exists) continue;
+			ChatMarkLabel l;
+			l.x = m.viewLeft + (mark.x - raw.visible[0]) * (m.viewRight - m.viewLeft) / spanX;
+			l.y = m.viewTop + (mark.y - raw.visible[1]) * (m.viewBottom - m.viewTop) / spanY;
+			if (l.x < m.viewLeft || l.x >= m.viewRight || l.y < m.viewTop || l.y >= m.viewBottom) continue;
+			l.name = p.name;
+			l.rgb = p.rgb;
+			labels.push_back(l);
 		}
 	}
 	std::lock_guard<std::mutex> lock(g_labelLock);

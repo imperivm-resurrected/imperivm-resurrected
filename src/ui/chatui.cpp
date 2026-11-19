@@ -850,7 +850,7 @@ bool ChatUiNeedsDraw()
 	return !OtherScreenOpen();
 }
 
-// Over each other player's mark, who made it, in their colour.
+// Over each mark, who made it, in their colour.
 void DrawMarkLabels(uint32_t *buf, int w, int h)
 {
 	for (const ChatMarkLabel &l : ChatMarkLabels()) {
