@@ -273,7 +273,7 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 		if (g_s.dropOpen && g_s.dropKind == kDropSlot && (g_flow.arrivingIds[g_s.dropIndex & 7] || g_s.game.slots[g_s.dropIndex & 7].joining)) {
 			g_s.dropOpen = false;
 		}
-		if (!g_s.game.picker) {
+		if (!g_s.game.picker && g_s.pickOpened) {
 			g_s.pickSel = -1;
 			g_s.pick.scroll = 0;
 			g_s.pickOpened = false;

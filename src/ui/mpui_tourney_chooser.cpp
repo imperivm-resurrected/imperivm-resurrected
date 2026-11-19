@@ -41,59 +41,7 @@ std::vector<int> TabRows(const CupScenariosView &v, int tab, TourneyMode mode)
 	return out;
 }
 
-std::string OriginLine(const CupScenario &s)
-{
-	if (s.game) return Tr("Scenario of the game");
-	switch (s.origin.kind) {
-	case kMapMod: return TrFmt("From the content pack %s", {s.origin.modName.empty() ? s.origin.modFolder : s.origin.modName});
-	case kMapReceived: return Tr("Received from another player");
-	default: return Tr("Yours");
-	}
-}
-
-std::string SizeLine(const std::shared_ptr<const MapPreviewData> &d)
-{
-	return d && !d->failed && d->info.units > 0 ? Tr(MapSizeName(d->info.units)) : std::string();
-}
-
-// The preview of a scenario, with the starts of its human players when it is big enough to read them, or the dots of a random map.
-void Preview(Painter &p, const std::string &path, int x, int y, int size, bool starts = true)
-{
-	p.Fill(x, y, size, size, pal::bg);
-	if (path.empty()) {
-		const int dot = size / 9, a = x + size / 4, b = x + size * 3 / 4, t = y + size / 4, u = y + size * 3 / 4;
-		for (const int px : {a, b}) {
-			for (const int py : {t, u}) p.Ellipse(px - dot / 2, py - dot / 2, dot, dot, pal::edgeHot);
-		}
-		p.Ellipse(x + size / 2 - dot / 2, y + size / 2 - dot / 2, dot, dot, pal::edgeHot);
-		p.Frame(x, y, size, size, pal::lineStrong);
-		return;
-	}
-	const std::shared_ptr<const MapPreviewData> d = MapPreviewGet(path);
-	if (d && !d->failed && d->image.w > 0 && d->image.h > 0) {
-		int iw = size, ih = size * d->image.h / d->image.w;
-		if (ih > size) {
-			iw = size * d->image.w / d->image.h;
-			ih = size;
-		}
-		const int ix = x + (size - iw) / 2, iy = y + (size - ih) / 2;
-		p.Image(ix, iy, iw, ih, d->image.bgra.data(), d->image.w, d->image.h);
-		const int dot = std::max(8, std::min(14, size / 20));
-		for (const MapPlayer &pl : d->info.players) {
-			if (!starts) break;
-			if (!pl.hasStart || !pl.human || d->info.units <= 0) continue;
-			const int cx = ix + static_cast<int>(static_cast<long long>(pl.x) * iw / d->info.units);
-			const int cy = iy + static_cast<int>(static_cast<long long>(pl.y) * ih / d->info.units);
-			p.Ellipse(cx - dot / 2 - 1, cy - dot / 2 - 1, dot + 2, dot + 2, pal::bg);
-			p.Ellipse(cx - dot / 2, cy - dot / 2, dot, dot, RGB((pl.color >> 16) & 255, (pl.color >> 8) & 255, pl.color & 255));
-		}
-	}
-	else {
-		p.Font(3);
-		p.Text(x, y, size, size, Tr(!d ? "Reading..." : "No preview"), pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-	}
-	p.Frame(x, y, size, size, pal::lineStrong);
-}
+void Preview(Painter &p, const std::string &path, int x, int y, int size, bool starts = true) { PaintScenarioThumb(p, path, x, y, size, starts); }
 
 // The chooser on a map: its tab, and the random map's type and size or the scenario's file.
 void OpenOn(Ui &u, const TourneyMap &m)
@@ -111,6 +59,8 @@ void OpenOn(Ui &u, const TourneyMap &m)
 		if (sizes[i] == (m.Scenario() ? std::string("medium") : m.size)) u.chooserSize = static_cast<int>(i);
 	}
 	u.chooserTab = !m.Scenario() ? 0 : m.kind == TourneyMapKind::Game ? 1 : 2;
+	g_s.pickSearch.clear();
+	if (g_s.focus == kPickSearchField) g_s.focus = kNoField;
 	if (m.Scenario()) u.chooserFile = Lower(m.file);
 	CupScenariosRescan();
 }
@@ -234,11 +184,14 @@ void PaintMapChooser(Painter &p, const State &st, const Ui &u, PaintOut &out)
 	PaintTabs(p, d.BodyX(), tabsY, tabs, mx, my, tabW, 42, 1);
 
 	const int listX = d.BodyX(), listY = tabsY + 58, listW = std::min(440, d.BodyW() * 42 / 100), listH = d.FooterTop() - 18 - listY;
+	const int listYTop = listY, listHTop = listH;
 	const int dx = listX + listW + 22, dw = d.x + d.w - d.pad - dx;
 	const TourneyMap chosen = ChooserMap(u);
 	bool usable = chosen.Known();
-	p.Fill(listX, listY, listW, listH, pal::bg);
-	p.Frame(listX, listY, listW, listH, pal::lineStrong);
+	if (u.chooserTab == 0) {
+		p.Fill(listX, listY, listW, listH, pal::bg);
+		p.Frame(listX, listY, listW, listH, pal::lineStrong);
+	}
 	PaintCard(p, dx, listY, dw, listH);
 
 	if (u.chooserTab == 0) {
@@ -294,29 +247,28 @@ void PaintMapChooser(Painter &p, const State &st, const Ui &u, PaintOut &out)
 		}
 	}
 	else {
-		const std::vector<int> &rows = u.chooserTab == 1 ? game : mine;
-		const int rowH = 56, viewRows = std::max(1, (listH - 4) / rowH), maxScroll = std::max(0, static_cast<int>(rows.size()) - viewRows);
+		// The same search and order as the room's selector, over the tab's scenarios.
+		PaintScenarioToolbar(p, st, listX, listY, listW, 36);
+		const int tabRows = static_cast<int>((u.chooserTab == 1 ? game : mine).size());
+		const std::vector<int> rows = ScenarioOrder(v.list, u.chooserTab == 1 ? game : mine, st.pickSearch, st.pickSort);
+		const int listY = listYTop + 50, listH = listHTop - 50;
+		p.Fill(listX, listY, listW, listH, pal::bg);
+		p.Frame(listX, listY, listW, listH, pal::lineStrong);
+		const int rowH = kScenarioRowH, viewRows = std::max(1, (listH - 4) / rowH), maxScroll = std::max(0, static_cast<int>(rows.size()) - viewRows);
 		const int scroll = std::max(0, std::min(u.chooserScroll, maxScroll));
 		p.Clip(listX + 1, listY + 1, listW - 2, listH - 2);
 		for (int r = 0; r < viewRows && scroll + r < static_cast<int>(rows.size()); r++) {
 			const int i = rows[static_cast<size_t>(scroll + r)], ry = listY + 2 + r * rowH;
 			const CupScenario &s = v.list[static_cast<size_t>(i)];
 			const bool on = Lower(s.file) == u.chooserFile, hot = !on && p.Hover(listX + 2, ry, listW - 16, rowH, mx, my);
-			if (on) p.Fill(listX + 2, ry, listW - 4, rowH, pal::selected);
-			else if (hot) p.Fill(listX + 2, ry, listW - 4, rowH, pal::raised);
-			if (on) p.Fill(listX + 2, ry, 3, rowH, pal::red);
-			// The list's thumbnails are too small for the starts: the big preview of the chosen one shows them.
-			Preview(p, s.path, listX + 12, ry + 6, rowH - 12, false);
-			const int tx = listX + 12 + rowH - 12 + 12, tw = listX + listW - 20 - tx;
-			p.Font(0);
-			p.Text(tx, ry + 5, tw, 22, s.title, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-			const std::string size = SizeLine(MapPreviewGet(s.path));
-			p.Font(3);
-			p.Text(tx, ry + 29, tw, 18, TrFmt("%s players", {std::to_string(s.humans)}) + (size.empty() ? std::string() : " \xC2\xB7 " + size) + " \xC2\xB7 " + OriginLine(s),
-				s.bytes > static_cast<uint64_t>(kTourneyScenarioMaxBytes) && !s.game ? pal::bad : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			PaintScenarioRow(p, s, listX + 2, ry, listW - 16, rowH, on, hot, std::string(), pal::ok, s.bytes > static_cast<uint64_t>(kTourneyScenarioMaxBytes) && !s.game);
 			if (!on) p.AddHit(listX + 2, ry, listW - 16, rowH, kTourney, ArgOf(kSubChooserRow, i));
 		}
-		if (rows.empty()) {
+		if (rows.empty() && tabRows > 0) {
+			p.Font(0);
+			p.Text(listX + 16, listY + 12, listW - 32, 28, Tr("No map matches the search."), pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+		}
+		else if (rows.empty()) {
 			p.Font(0);
 			const bool teams = u.cup.mode == TourneyMode::Teams;
 			std::string empty = Tr("Looking for the scenarios...");
@@ -349,34 +301,12 @@ void PaintMapChooser(Painter &p, const State &st, const Ui &u, PaintOut &out)
 			p.TextWrapped(dx + pad, listY + pad, dw - 2 * pad, listH - 2 * pad, text, pal::textDim);
 		}
 		else {
-			const int size = std::min(260, std::min(dw - 2 * pad, listH - 2 * pad - 120));
-			Preview(p, s->path, dx + pad, listY + pad, size);
-			const int tx = dx + pad + size + 18, tw = dx + dw - pad - tx;
-			UseFace(p, BrandFace::UiStrong, 20);
-			const int titleH = std::min(56, p.Measure(tw, s->title));
-			p.TextWrapped(tx, listY + pad, tw, titleH + 2, s->title, pal::text);
-			int ty = listY + pad + titleH + 10;
-			const std::shared_ptr<const MapPreviewData> pv = MapPreviewGet(s->path);
-			const std::string size2 = SizeLine(pv);
-			const std::string lines[] = {TrFmt("%s players", {std::to_string(s->humans)}), size2.empty() ? std::string() : Tr("Size: ") + size2, OriginLine(*s),
-				HumanBytes(s->bytes)};
-			p.Font(0);
-			for (const std::string &line : lines) {
-				if (line.empty()) continue;
-				p.Text(tx, ty, tw, 24, line, pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-				ty += 26;
-			}
 			const bool large = !s->game && s->bytes > static_cast<uint64_t>(kTourneyScenarioMaxBytes);
 			usable = usable && !large;
 			std::string note = s->game ? Tr("Every player has it as it is: nothing goes up or down.")
 				: large				  ? Tr("It is larger than 16 MB: the league does not keep files that large.")
 									  : Tr("It goes up to the league when you publish the cup, and each player downloads it on their own when they sign up or open the cup.");
-			const int ny = listY + pad + size + 18, nh = listY + listH - pad - ny;
-			if (nh > 30) {
-				p.Fill(dx + pad, ny, dw - 2 * pad, 1, pal::hairline);
-				p.Font(3);
-				p.TextWrapped(dx + pad, ny + 12, dw - 2 * pad, nh - 12, note, large ? pal::bad : pal::body);
-			}
+			PaintScenarioCard(p, *s, dx, listYTop, dw, listHTop, {HumanBytes(s->bytes)}, note, large ? pal::bad : pal::body, ScenarioSeat());
 		}
 	}
 	DialogButtons(p, d, {{Tr("Use this map"), kTourney, ArgOf(kSubChooserOk, 0), true, usable}, {Tr("Cancel"), kTourney, ArgOf(kSubChooserCancel, 0)}}, mx, my);

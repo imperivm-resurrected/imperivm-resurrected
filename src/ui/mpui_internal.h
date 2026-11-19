@@ -20,6 +20,7 @@
 #include "ui/mpui.h"
 #include "game/gameroom.h"
 #include "game/cupmaps.h"
+#include "game/mapinfo.h"
 #include "net/leagueclient.h"
 #include "net/mpsave.h"
 #include "net/steamnet.h"
@@ -608,6 +609,23 @@ void PaintPickCombo(Painter &p, const State &st, int x, int y, int w, int h, con
 // The scenarios of the room's selector: the mod's own list, read in the background (the game's selector reads them only when one is
 // chosen). PickView's indexes and pickSel are positions in it.
 std::vector<CupScenario> PickScenarios();
+
+// What the room's selector and the cup's map chooser share (mpui_scenarios.cpp). A seat's colour on the map: the room's player in it, or
+// the map's own when it is empty.
+typedef std::function<COLORREF(const MapPlayer &)> ScenarioSeat;
+constexpr int kScenarioRowH = 56;
+std::string ScenarioOriginLine(const CupScenario &s);
+std::string ScenarioSizeLine(const std::string &path);
+// The picture of a scenario, with the human starts when asked; an empty path draws a random map's dots.
+void PaintScenarioThumb(Painter &p, const std::string &path, int x, int y, int size, bool starts, const ScenarioSeat &seat = ScenarioSeat());
+// rows (indexes into list) that match the search, in the order chosen: 0 name, 1 players, 2 size.
+std::vector<int> ScenarioOrder(const std::vector<CupScenario> &list, const std::vector<int> &rows, const std::string &search, int sort);
+// The search field and the order menu over the list; both screens keep them in pickSearch and pickSort.
+void PaintScenarioToolbar(Painter &p, const State &st, int x, int y, int w, int h);
+void PaintScenarioRow(Painter &p, const CupScenario &s, int x, int y, int w, int h, bool on, bool hot, const std::string &tag, COLORREF tagInk, bool warn);
+// The chosen scenario: its picture with the starts, its lines (and the extra ones), each seat's civilization, a note and its own text.
+void PaintScenarioCard(Painter &p, const CupScenario &s, int x, int y, int w, int h, const std::vector<std::string> &extra, const std::string &note, COLORREF noteInk,
+	const ScenarioSeat &seat);
 std::vector<int> PickView(const State &st);
 bool PickInUse(const State &st, int index);
 void PickMove(WPARAM key);
