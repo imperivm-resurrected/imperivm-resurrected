@@ -56,8 +56,8 @@ std::string SizeLine(const std::shared_ptr<const MapPreviewData> &d)
 	return d && !d->failed && d->info.units > 0 ? Tr(MapSizeName(d->info.units)) : std::string();
 }
 
-// The preview of a scenario with the starts of its human players, or the dots of a random map.
-void Preview(Painter &p, const std::string &path, int x, int y, int size)
+// The preview of a scenario, with the starts of its human players when it is big enough to read them, or the dots of a random map.
+void Preview(Painter &p, const std::string &path, int x, int y, int size, bool starts = true)
 {
 	p.Fill(x, y, size, size, pal::bg);
 	if (path.empty()) {
@@ -78,12 +78,14 @@ void Preview(Painter &p, const std::string &path, int x, int y, int size)
 		}
 		const int ix = x + (size - iw) / 2, iy = y + (size - ih) / 2;
 		p.Image(ix, iy, iw, ih, d->image.bgra.data(), d->image.w, d->image.h);
+		const int dot = std::max(8, std::min(14, size / 20));
 		for (const MapPlayer &pl : d->info.players) {
+			if (!starts) break;
 			if (!pl.hasStart || !pl.human || d->info.units <= 0) continue;
 			const int cx = ix + static_cast<int>(static_cast<long long>(pl.x) * iw / d->info.units);
 			const int cy = iy + static_cast<int>(static_cast<long long>(pl.y) * ih / d->info.units);
-			p.Ellipse(cx - 6, cy - 6, 12, 12, pal::bg);
-			p.Ellipse(cx - 5, cy - 5, 10, 10, RGB((pl.color >> 16) & 255, (pl.color >> 8) & 255, pl.color & 255));
+			p.Ellipse(cx - dot / 2 - 1, cy - dot / 2 - 1, dot + 2, dot + 2, pal::bg);
+			p.Ellipse(cx - dot / 2, cy - dot / 2, dot, dot, RGB((pl.color >> 16) & 255, (pl.color >> 8) & 255, pl.color & 255));
 		}
 	}
 	else {
@@ -303,7 +305,8 @@ void PaintMapChooser(Painter &p, const State &st, const Ui &u, PaintOut &out)
 			if (on) p.Fill(listX + 2, ry, listW - 4, rowH, pal::selected);
 			else if (hot) p.Fill(listX + 2, ry, listW - 4, rowH, pal::raised);
 			if (on) p.Fill(listX + 2, ry, 3, rowH, pal::red);
-			Preview(p, s.path, listX + 12, ry + 6, rowH - 12);
+			// The list's thumbnails are too small for the starts: the big preview of the chosen one shows them.
+			Preview(p, s.path, listX + 12, ry + 6, rowH - 12, false);
 			const int tx = listX + 12 + rowH - 12 + 12, tw = listX + listW - 20 - tx;
 			p.Font(0);
 			p.Text(tx, ry + 5, tw, 22, s.title, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
