@@ -252,20 +252,20 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 			}
 			WakeGameThread();
 		}
-		else if (g_s.game.picker && !SaveMapPicking(g_s) && g_s.pickDelete >= 0) {
+		else if (g_s.game.picker && !SaveMapPicking(g_s) && !TourneyRoomHiddenHeld(g_s) && g_s.pickDelete >= 0) {
 			if (wp == VK_ESCAPE) DoAction(kPickDeleteNo, 0);
 			else if (wp == VK_RETURN) DoAction(kPickDeleteYes, 0);
 		}
-		else if (g_s.game.picker && !SaveMapPicking(g_s) && (wp == VK_UP || wp == VK_DOWN || wp == VK_PRIOR || wp == VK_NEXT || wp == VK_HOME || wp == VK_END)) {
+		else if (g_s.game.picker && !SaveMapPicking(g_s) && !TourneyRoomHiddenHeld(g_s) && (wp == VK_UP || wp == VK_DOWN || wp == VK_PRIOR || wp == VK_NEXT || wp == VK_HOME || wp == VK_END)) {
 			PickMove(wp);
 		}
-		else if (g_s.game.picker && !SaveMapPicking(g_s) && wp == 'F' && (GetKeyState(VK_CONTROL) & 0x8000)) {
+		else if (g_s.game.picker && !SaveMapPicking(g_s) && !TourneyRoomHiddenHeld(g_s) && wp == 'F' && (GetKeyState(VK_CONTROL) & 0x8000)) {
 			DoAction(kFieldPickSearch, 0);
 		}
-		else if (g_s.game.picker && !SaveMapPicking(g_s) && wp == VK_RETURN) {
+		else if (g_s.game.picker && !SaveMapPicking(g_s) && !TourneyRoomHiddenHeld(g_s) && wp == VK_RETURN) {
 			DoAction(kPickOk, 0);
 		}
-		else if (wp == VK_ESCAPE && g_s.game.picker && !SaveMapPicking(g_s) && !g_s.dropOpen) {
+		else if (wp == VK_ESCAPE && g_s.game.picker && !SaveMapPicking(g_s) && !TourneyRoomHiddenHeld(g_s) && !g_s.dropOpen) {
 			DoAction(kPickCancel, 0);
 		}
 		else if (wp == VK_ESCAPE && g_s.dropOpen) {

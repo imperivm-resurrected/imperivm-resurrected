@@ -60,9 +60,9 @@ RECT g_colorAnchor = {};
 }
 
 // The civilization the player takes into the room, as a menu: the mod puts it in their slot there and gets them ready.
-void PaintCivMenu(Painter &p, const State &st, int x, int y, int w)
+void PaintCivMenu(Painter &p, const State &st, const Ui &u, int x, int y, int w)
 {
-	const int race = MatchCiv(g_tourney);
+	const int race = u.civRace;
 	std::string name = Tr("The one the room gives you");
 	for (const auto &c : MatchCivChoices()) {
 		if (c.first == race) name = c.second;
@@ -73,10 +73,10 @@ void PaintCivMenu(Painter &p, const State &st, int x, int y, int w)
 	PaintCombo(p, x, y, w, 34, Tr("Civilization") + ": " + name, open, true, st.mouseX, st.mouseY, kTourney, ArgOf(kSubCivMenu, 0), &g_dropAnchor);
 	p.raw = raw;
 	// The colour under it, as the room's: the one chosen, and its menu on a click.
-	const COLORREF ink = MatchColorRef(g_tourney);
+	const COLORREF ink = MatchColorRef(u);
 	const int cy = y + 34 + 8;
 	p.raw = true;
-	PaintCombo(p, x, cy, w, 34, Tr("Colour") + ":", g_tourney.colorOpen, true, st.mouseX, st.mouseY, kTourney,
+	PaintCombo(p, x, cy, w, 34, Tr("Colour") + ":", u.colorOpen, true, st.mouseX, st.mouseY, kTourney,
 		ArgOf(kSubColorOpen, 0), &g_colorAnchor);
 	p.raw = raw;
 	if (ink != CLR_INVALID) {
@@ -493,9 +493,9 @@ int MatchColor(Ui &u)
 	return u.colorPick;
 }
 
-COLORREF MatchColorRef(Ui &u)
+COLORREF MatchColorRef(const Ui &u)
 {
-	const int pick = MatchColor(u);
+	const int pick = u.colorPick;
 	if (pick == kOwnColor) return colorwheel::Ref(u.colorRgb);
 	if (pick < 0 || pick >= 12) return CLR_INVALID;
 	uint32_t palette[12] = {};
@@ -504,9 +504,8 @@ COLORREF MatchColorRef(Ui &u)
 	return RGB((palette[pick] >> 16) & 255, (palette[pick] >> 8) & 255, palette[pick] & 255);
 }
 
-void PaintMatchColorMenu(Painter &p, const State &st)
+void PaintMatchColorMenu(Painter &p, const State &st, const Ui &u)
 {
-	Ui &u = g_tourney;
 	const int mx = st.mouseX, my = st.mouseY, pad = 12;
 	const RECT a = g_colorAnchor;
 	p.hits->clear();
@@ -542,7 +541,7 @@ void PaintMatchColorMenu(Painter &p, const State &st)
 	p.AddHit(x, y, w, h, kNone, 0);
 	uint32_t palette[12] = {};
 	GameRoomPalette(palette);
-	const int pick = MatchColor(u);
+	const int pick = u.colorPick;
 	for (int c = 0; c < 12; c++) {
 		const int cx = x + pad + (c % 6) * (cell + gap), cy = y + pad + (c / 6) * (cell + gap);
 		const bool hot = p.Hover(cx, cy, cell, cell, mx, my);
@@ -696,7 +695,7 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 	if (teams) {
 		PaintTeamColumn(p, st, n, m + sideW / 2, cy, sideW - 40, cardH, n.team.name.empty() && meE ? meE->name : n.team.name, n.me.seed, ours, true,
 			meE ? PreviousText(page.detail, meE->entryId, n.round) : std::string(), live);
-		if (!live && n.status == TourneyMatchStatus::Ready) PaintCivMenu(p, st, m + sideW / 2 - 140, cy + cardH - 84, 280);
+		if (!live && n.status == TourneyMatchStatus::Ready) PaintCivMenu(p, st, u, m + sideW / 2 - 140, cy + cardH - 84, 280);
 		if (n.hasOpponent) {
 			PaintTeamColumn(p, st, n, m + sideW + centerW + sideW / 2, cy, sideW - 40, cardH, n.opponent.name, n.opponent.seed, theirs, false,
 				themE ? PreviousText(page.detail, themE->entryId, n.round) : std::string(), live);
@@ -710,7 +709,7 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 		const bool civ = !live && n.status == TourneyMatchStatus::Ready;
 		const int under = PaintPlayerColumn(p, m + sideW / 2, cy, cardH, SteamOwnId(), st.player, true, n.me.seed, meE ? PreviousText(page.detail, meE->entryId, n.round) : std::string(),
 			live ? std::string() : Tr(n.me.inRoom ? "In the room" : "You're not in the room yet"), n.me.inRoom, civ ? 80 : 0);
-		if (civ) PaintCivMenu(p, st, m + sideW / 2 - 140, under + 6, 280);
+		if (civ) PaintCivMenu(p, st, u, m + sideW / 2 - 140, under + 6, 280);
 		if (n.hasOpponent) {
 			PaintPlayerColumn(p, m + sideW + centerW + sideW / 2, cy, cardH, n.opponent.steamId, n.opponent.name, false, n.opponent.seed,
 				themE ? PreviousText(page.detail, themE->entryId, n.round) : std::string(), live ? std::string() : Tr(n.opponent.inRoom ? "In the room" : "Not in the room yet"),
@@ -739,8 +738,10 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 		const bool ready = LocalReady(st.game);
 		const int left = GameRoomCountdownLeftMs();
 		action = kSubReady;
-		enabled = !ready && !live;
-		label = ready ? (left > 0 ? TrFmt("Starts in %s", {std::to_string((left + 999) / 1000)}) : Tr("Waiting for your opponent...")) : "Ready";
+		// Ready: the countdown, or what the room still waits for (the opponent, a download, the tournament's options).
+		const std::string waits = StartBlocker(st, st.game).label;
+		label = ready ? (left > 0 ? TrFmt("Starts in %s", {std::to_string((left + 999) / 1000)}) : !waits.empty() ? waits : Tr("Waiting for your opponent...")) : "Ready";
+		enabled = !live;
 		if (live) label = "Game in progress";
 	}
 	else if (n.pick.present) {

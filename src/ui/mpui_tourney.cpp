@@ -522,35 +522,63 @@ void StepInRoom(const TourneyNext &next)
 		g_s.view = kViewTournaments;
 		g_tourney.screen = kScreenMatch;
 	}
-	// The civilization of the match page in the player's slot, once; then ready, once (the room's countdown starts the game when both are).
+	// What the match page chose goes into the player's slot and stays there: sent again until the room has it, and again when the page
+	// changes it. A ready player's row does not change: the player is made not ready first, and ready again after.
 	const int slot = g_s.game.localSlot;
 	const bool slotOk = mine && g_s.game.active && !g_s.game.busy && !g_s.inOnlineGame && slot >= 0 && slot < 8 && g_s.game.slots[static_cast<size_t>(slot)].used;
-	if (slotOk && !k.civSet && k.shownAt && now - k.shownAt >= 800) {
-		k.civSet = true;
+	bool slotDone = false;
+	if (slotOk && k.shownAt && now - k.shownAt >= 800) {
+		GameRoomSlot &s = g_s.game.slots[static_cast<size_t>(slot)];
+		const bool ready = LocalReady(g_s.game);
 		const int race = MatchCiv(g_tourney);
 		const int item = race >= 0 ? CivsRoomItemOfRace(race) : -1;
-		GameRoomSlot &s = g_s.game.slots[static_cast<size_t>(slot)];
-		if (item >= 0 && item < static_cast<int>(s.raceNames.size()) && s.race != item && !LocalReady(g_s.game)) {
-			s.race = item;
-			Predict(kPredRace, slot, item);
-			GameRoomSetRace(slot, item);
-			LogI("league", "tournament match %lld: race %d in the player's slot", static_cast<long long>(match), race);
-		}
-		// The colour too, unless another player has it.
+		const bool raceWanted = item >= 0 && item < static_cast<int>(s.raceNames.size()) && s.race != item;
 		const int color = MatchColor(g_tourney);
 		bool taken = false;
 		for (int i = 0; i < 8; i++) taken = taken || (i != slot && g_s.game.slots[i].used && g_s.game.slots[i].color == color);
-		if (color == kOwnColor && !LocalReady(g_s.game)) {
-			if (!UseCustomColor(g_s, slot, g_tourney.colorRgb)) LogI("league", "tournament match %lld: the own colour is too close to another player's; the room's stays", static_cast<long long>(match));
+		const uint32_t own = CustomColorOf(g_s, g_s.game, slot);
+		const bool ownWanted = color == kOwnColor && g_tourney.colorRgb && own != g_tourney.colorRgb && k.ownTried != g_tourney.colorRgb;
+		const bool presetWanted = color >= 0 && color < 12 && !taken && (s.color != color || own != 0);
+		const bool want = (raceWanted || ownWanted || presetWanted) && k.setTries < 12;
+		if (want && ready) {
+			if (!k.unreadied) {
+				k.unreadied = true;
+				k.readySent = false;
+				Predict(kPredReady, slot, 0);
+				GameRoomToggleReady();
+			}
 		}
-		else if (color >= 0 && color < 12 && !taken && s.color != color && !LocalReady(g_s.game)) {
-			s.color = color;
-			Predict(kPredColor, slot, color);
-			GameRoomSetColor(slot, color);
+		else if (want && now - k.setAt >= 600) {
+			k.setAt = now;
+			k.setTries++;
+			if (raceWanted) {
+				s.race = item;
+				Predict(kPredRace, slot, item);
+				GameRoomSetRace(slot, item);
+				LogI("league", "tournament match %lld: race %d in the player's slot", static_cast<long long>(match), race);
+			}
+			if (ownWanted) {
+				k.ownTried = g_tourney.colorRgb;
+				if (!UseCustomColor(g_s, slot, g_tourney.colorRgb))
+					LogI("league", "tournament match %lld: the own colour is too close to another player's; the room's stays", static_cast<long long>(match));
+			}
+			else if (presetWanted) {
+				ClearCustomColor(g_s, slot);
+				s.color = color;
+				Predict(kPredColor, slot, color);
+				GameRoomSetColor(slot, color);
+			}
+		}
+		else if (!want) {
+			slotDone = true;
+			k.civSet = true;
+			k.unreadied = false;
 		}
 	}
+	// Ready once the slot has what the page chose, the team is set (2v2) and the host has put the tournament's options in.
 	const bool teamReady = !next.Teams() || k.teamSet;
-	if (slotOk && k.civSet && teamReady && !k.readySent && now - k.shownAt >= 1600) {
+	const bool optionsReady = !g_s.game.host || k.applied;
+	if (slotOk && slotDone && teamReady && optionsReady && !k.readySent && now - k.shownAt >= 1600) {
 		k.readySent = true;
 		if (!LocalReady(g_s.game)) {
 			Predict(kPredReady, slot, 1);
@@ -1221,7 +1249,7 @@ void PaintTournaments(Painter &p, const State &st)
 	case kScreenPage: PaintPageScreen(p, st, u, out); break;
 	case kScreenMatch:
 		PaintMatchScreen(p, st, u);
-		if (u.colorOpen) PaintMatchColorMenu(p, st);
+		if (u.colorOpen) PaintMatchColorMenu(p, st, u);
 		break;
 	case kScreenChampion: PaintChampionScreen(p, st, u); break;
 	case kScreenCreate: PaintCreateScreen(p, st, u, out); break;
@@ -1562,12 +1590,22 @@ void TourneyAction(int arg)
 		GameRoomSaveSetting("TourneyColorRgb", static_cast<int>(u.colorRgb));
 		break;
 	case kSubColorClose: u.colorOpen = u.colorWheel = false; break;
-	case kSubReady:
-		if (g_s.game.active && g_s.room.id && TourneyMatchOfTag(g_s.room.info.leagueTag) == value && !LocalReady(g_s.game)) {
-			Predict(kPredReady, g_s.game.localSlot, 1);
-			GameRoomToggleReady();
+	case kSubReady: {
+		if (!g_s.game.active || !g_s.room.id || TourneyMatchOfTag(g_s.room.info.leagueTag) != value) break;
+		const DWORD now = GetTickCount();
+		if (u.readyAt && now - u.readyAt < 1500) break;
+		const auto mine = LeagueTourneyMine();
+		if (!LocalReady(g_s.game) && mine->mine.next.Teams() && !u.lock.teamSet) {
+			Toast("Your team is being set in the room: get ready in a moment.");
+			break;
 		}
+		u.readyAt = now;
+		// Ready and not ready: after this, the player's own choice; the mod does not make them ready again.
+		u.lock.readySent = true;
+		Predict(kPredReady, g_s.game.localSlot, LocalReady(g_s.game) ? 0 : 1);
+		GameRoomToggleReady();
 		break;
+	}
 	case kSubShowRoom: u.showRoom = true; break;
 	case kSubCupSection:
 		if (value >= 0 && value < 3) u.formScroll = std::max(0, std::min(u.formArea.max, u.sectionTop[value]));
@@ -1759,6 +1797,10 @@ void TourneyAction(int arg)
 bool TourneyBack()
 {
 	Ui &u = g_tourney;
+	if (u.colorOpen) {
+		u.colorOpen = u.colorWheel = false;
+		return true;
+	}
 	if (u.disputeMatch) {
 		u.disputeMatch = 0;
 		g_s.focus = kNoField;
@@ -2001,6 +2043,12 @@ bool TeamsLocked(const State &st)
 
 }
 
+bool TourneyRoomApplying(const mpui_impl::State &st)
+{
+	if (!st.game.host || !st.room.id || !TourneyMatchOfTag(st.room.info.leagueTag)) return false;
+	return g_tourney.lock.room == st.room.id && !g_tourney.lock.applied;
+}
+
 int TourneyRoomPlayers(const mpui_impl::State &st)
 {
 	if (!st.room.id || st.room.info.spectate) return 0;
@@ -2013,14 +2061,19 @@ int TourneyRoomPlayers(const mpui_impl::State &st)
 	return st.room.info.maxPlayers >= 4 ? 4 : 2;
 }
 
-bool TourneyRoomHidden(const mpui_impl::State &st)
+bool TourneyRoomHiddenHeld(const mpui_impl::State &st)
 {
 	if (!st.game.active || !st.room.id || st.room.info.spectate) return false;
 	const int64_t match = TourneyMatchOfTag(st.room.info.leagueTag);
 	if (!match) return false;
 	const auto mine = LeagueTourneyMine();
-	std::lock_guard<std::mutex> lock(g_lock);
 	return !g_tourney.showRoom && st.view == kViewTournaments && mine->mine.next.present && mine->mine.next.match == match;
+}
+
+bool TourneyRoomHidden(const mpui_impl::State &st)
+{
+	std::lock_guard<std::mutex> lock(g_lock);
+	return TourneyRoomHiddenHeld(st);
 }
 
 bool TourneyTeamsLocked(const mpui_impl::State &st)
@@ -2118,6 +2171,8 @@ void TourneyGameThreadTick()
 	std::lock_guard<std::mutex> lock(g_lock);
 	TakeNotices();
 	TakeResults();
+	MatchCiv(g_tourney);
+	MatchColor(g_tourney);
 	if (!g_s.ready) return;
 	StepJoin();
 	StepRoom();

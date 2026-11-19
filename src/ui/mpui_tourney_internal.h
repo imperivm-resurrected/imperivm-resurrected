@@ -116,6 +116,12 @@ struct RoomLock {
 	// The civilization of the match page put in the player's slot, and the player made ready, once each; since when the room is shown.
 	bool civSet = false, readySent = false;
 	DWORD shownAt = 0;
+	// What the page chose, put in the slot: when it was last sent and how many times, the own colour last tried, and the player made not
+	// ready to change the slot (the game keeps a ready row as it is).
+	DWORD setAt = 0;
+	int setTries = 0;
+	uint32_t ownTried = 0;
+	bool unreadied = false;
 	bool mapWarned = false;
 	// This room was the player's match: once the match is settled without a game (a no-show), the room has nothing left to do.
 	bool wasMine = false;
@@ -147,6 +153,8 @@ struct Ui {
 	// The colour chosen on the match page, -1 for the room's own; and the match's room shown instead of the match page.
 	int colorPick = -2;
 	bool showRoom = false;
+	// When the page's Ready was last pressed: a second press (a double click) before the room has the first is ignored.
+	DWORD readyAt = 0;
 	// The colour's menu, its wheel, and the player's own colour (0xRRGGBB) when colorPick is kOwnColor.
 	bool colorOpen = false, colorWheel = false;
 	uint32_t colorRgb = 0;
@@ -281,9 +289,9 @@ int MatchColor(Ui &u);
 // colorPick for the player's own colour, from the wheel.
 constexpr int kOwnColor = 100;
 // The colour chosen as it looks, or CLR_INVALID for the room's own.
-COLORREF MatchColorRef(Ui &u);
+COLORREF MatchColorRef(const Ui &u);
 // The colour's menu over the match page, under its button.
-void PaintMatchColorMenu(Painter &p, const State &st);
+void PaintMatchColorMenu(Painter &p, const State &st, const Ui &u);
 // The start time field: filled with the chosen time when it takes the keys; what is typed moves the start once it reads as a time, and
 // on Return (done) the field shows the time the start took.
 // "21:30": a start in the computer's time.

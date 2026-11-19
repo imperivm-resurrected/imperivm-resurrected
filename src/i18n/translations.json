@@ -3474,5 +3474,7 @@
 {"en":"A cup match starts when all its players are in the room.","es":"Un partido de copa empieza cuando todos sus jugadores están en la sala.","it":"Una partita di coppa inizia quando tutti i suoi giocatori sono nella sala."},
 {"en":"Colour","es":"Color","it":"Colore"},
 {"en":"The room's own","es":"El de la sala","it":"Quello della sala"},
-{"en":"Automatic","es":"Automático","it":"Automatico"}
+{"en":"Automatic","es":"Automático","it":"Automatico"},
+{"en":"Preparing the room...","es":"Preparando la sala...","it":"Preparazione della sala..."},
+{"en":"The tournament's map and rules are being set in the room.","es":"Se están poniendo en la sala el mapa y las reglas del torneo.","it":"Si stanno impostando nella sala la mappa e le regole del torneo."}
 ]

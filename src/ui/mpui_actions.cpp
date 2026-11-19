@@ -113,7 +113,9 @@ void DoAction(int action, int arg)
 			g_s.syncConfirm = false;
 			break;
 		}
-		if (g_s.game.active) LeaveGameRoom();
+		// Under a cup match's page its room stays: back moves within the tournaments' screens, the room is left only from itself.
+		if (g_s.game.active && TourneyRoomHiddenHeld(g_s)) TourneyBack();
+		else if (g_s.game.active) LeaveGameRoom();
 		else if (g_s.connecting || (g_s.room.id && !g_s.game.active)) {
 			DoAction(kLeave, 0);
 		}

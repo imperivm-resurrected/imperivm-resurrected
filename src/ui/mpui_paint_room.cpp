@@ -1293,9 +1293,10 @@ namespace mpui_impl {
 void PaintScreen(Painter &p, const State &st)
 {
 	const bool linkOffer = LinkOfferShown(st);
+	const bool hiddenRoom = TourneyRoomHidden(st);
 	p.noHover = st.dropOpen || st.passPrompt || st.syncConfirm || st.syncPhase || st.searching || st.connecting || st.recoverAsk ||
-		RejoinClientActive() || RejoinClientFailed() || (st.game.active && st.game.picker) || linkOffer;
-	if (st.game.active && !TourneyRoomHidden(st)) {
+		RejoinClientActive() || RejoinClientFailed() || (st.game.active && st.game.picker && !hiddenRoom) || linkOffer;
+	if (st.game.active && !hiddenRoom) {
 		PaintGameRoom(p, st);
 		if (st.game.picker && !SaveMapPicking(st)) {
 			PaintScenarioPicker(p, st);

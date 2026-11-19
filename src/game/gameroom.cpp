@@ -1519,13 +1519,15 @@ bool LoadPaletteTable()
 
 void GameRoomTick()
 {
-	if (!g_paletteLoaded) {
+	static DWORD paletteAt = 0;
+	if (!g_paletteLoaded && GetTickCount() - paletteAt >= 2000) {
+		// Its settings may not be read yet so early: tried again every two seconds until it has them.
+		paletteAt = GetTickCount();
 		uint32_t now[12];
-		g_paletteLoaded = true;
-		if (!ReadPaletteTable(now)) {
-			const bool ok = LoadPaletteTable() && ReadPaletteTable(now);
-			LogI("room", "players' colours %s from the game's settings", ok ? "loaded" : "could NOT be loaded");
-			if (ok) KeepPalette(now);
+		if (ReadPaletteTable(now) || (LoadPaletteTable() && ReadPaletteTable(now))) {
+			g_paletteLoaded = true;
+			KeepPalette(now);
+			LogI("room", "players' colours read from the game's settings");
 		}
 	}
 	if (g_acceptOffer) {

@@ -329,14 +329,16 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 	PaintLeagueBadgeTip(r.p, st.viewW, st.viewH);
 	WakeGameThread();
 	r.End(255);
+	// Asked before the lock: it takes it.
+	const bool hiddenRoom = TourneyRoomHidden(st);
 	std::lock_guard<std::mutex> lock(g_lock);
 	g_s.hits = std::move(r.hits);
 	g_s.syncGeom = g_syncGeomOut;
 	g_s.createModsGeom = g_createModsGeomOut;
 	const bool overlay = OverlayActive(st);
-	g_s.pickGeom = g_pickGeomOut;
-	// A hidden cup room was not painted: its options list, where it was last drawn, would take the match page's clicks.
-	g_s.optGeom = overlay || !st.game.active || TourneyRoomHidden(st) ? ListGeom() : g_optGeomOut;
+	// A hidden cup room was not painted: its lists, where they were last drawn, would take the match page's clicks.
+	g_s.pickGeom = hiddenRoom ? ListGeom() : g_pickGeomOut;
+	g_s.optGeom = overlay || !st.game.active || hiddenRoom ? ListGeom() : g_optGeomOut;
 	g_s.detailGeom = overlay ? ListGeom() : g_detail.geomOut;
 	g_s.chatGeom = overlay ? ListGeom() : g_chat.geomOut;
 }
