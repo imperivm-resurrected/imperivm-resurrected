@@ -58,6 +58,8 @@ struct Config {
 	bool healthBarHeroesOnly = false;
 	// [Game] AllyColors: on this PC, the player blue, allies yellow and enemies red in the game (game/allycolors.h).
 	bool allyColors = false;
+	// [Game] AllyPalette: 0 blue, yellow and red; 1 for colour blindness, blue, light blue and orange.
+	int allyPalette = 0;
 	bool pauseInBackground = false;
 	bool zoomExtras = true;
 	bool zoomFog = true;

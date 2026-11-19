@@ -317,8 +317,12 @@ std::vector<Page> BuildPages(const Values &v)
 		heroes.enabled = bars.selected > 0;
 		Row chat = ActionRow("Chat position", kResetChatPlace, "Reset", "Back above the command bar");
 		chat.enabled = !(v.disabled.count(kResetChatPlace) && v.disabled.at(kResetChatPlace));
+		Row palette = Combo(v, "Palette", kAllyPalette);
+		palette.items = {"Classic: blue, yellow, red", "Colour blindness: blue, light blue, orange"};
+		palette.enabled = Check(v, kAllyColors);
 		page.left.push_back({"Interface", {Combo(v, "Language", kLanguage, "", true), bars, heroes,
-			Toggle(v, "Ally and enemy colors", kAllyColors, "You blue, allies yellow, enemies red, only on your screen; a key in Controls switches it during the game"), chat}});
+			Toggle(v, "Ally and enemy colors", kAllyColors, "You blue, allies yellow, enemies red, only on your screen; a key in Controls switches it during the game"), palette,
+			chat}});
 		const bool autosave = Check(v, kAutosave);
 		page.right.push_back({"Autosave", {Toggle(v, "Autosave", kAutosave), Combo(v, "Every", kAutosaveEvery, "", false, autosave), Combo(v, "Copies", kAutosaveCopies, "", false, autosave),
 			Toggle(v, "Save when leaving the game", kSaveOnExit)}});

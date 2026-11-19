@@ -3430,5 +3430,8 @@ extern const TrRow kTrRows[] = {
 	{"%s (paused)", "%s (en pausa)", "%s (in pausa)"},
 	{"Follow the player again", "Volver a seguir al jugador", "Segui di nuovo il giocatore"},
 	{"Follow a player's view: each click picks the next one", "Seguir la vista de un jugador: cada clic elige el siguiente", "Segui la visuale di un giocatore: ogni clic sceglie il successivo"},
+	{"Palette", "Paleta", "Tavolozza"},
+	{"Classic: blue, yellow, red", "Clásica: azul, amarillo, rojo", "Classica: blu, giallo, rosso"},
+	{"Colour blindness: blue, light blue, orange", "Daltonismo: azul, celeste, naranja", "Daltonismo: blu, azzurro, arancione"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

@@ -30,8 +30,20 @@ constexpr unsigned Rgb555(unsigned r, unsigned g, unsigned b)
 {
 	return (r >> 3) << 10 | (g >> 3) << 5 | (b >> 3);
 }
-// Blue, yellow and red of the game's own palette: red and yellow tell apart for most colour-blind players, as blue does from both.
-const unsigned kSelfColor = Rgb555(0, 0, 255), kAllyColor = Rgb555(255, 255, 0), kEnemyColor = Rgb555(255, 0, 0);
+// Self, allies and enemies in each palette (Config::allyPalette). The classic one is blue, yellow and red of the game's own palette.
+// The one for colour blindness keeps to what red-green colour blindness still tells apart, the blue-yellow axis and lightness: a dark
+// blue, a light blue and an orange; a purple would look blue to most of them.
+const unsigned kPalettes[2][3] = {
+	{Rgb555(0, 0, 255), Rgb555(255, 255, 0), Rgb555(255, 0, 0)},
+	{Rgb555(0, 72, 255), Rgb555(40, 224, 255), Rgb555(255, 136, 0)},
+};
+enum { kSelf, kAlly, kEnemy };
+
+unsigned PaletteColor(int who)
+{
+	const int palette = GetConfig().allyPalette == 1 ? 1 : 0;
+	return kPalettes[palette][who];
+}
 
 typedef void(__cdecl *BuildShades_t)(unsigned color, unsigned short *out);
 typedef void(__fastcall *ClearCache_t)(void *cache);
@@ -63,13 +75,13 @@ unsigned Wanted(const char *game, int index, const char *local, bool on)
 {
 	if (!on || !local) return g_shown.real[index];
 	const char *player = layout::PlayerAt(game, index);
-	if (player == local) return kSelfColor;
+	if (player == local) return PaletteColor(kSelf);
 	if (At<int>(player, layout::kPlayerControl) == kControlNeutral) return g_shown.real[index];
 	const int ours = At<int>(local, layout::kPlayerId), theirs = At<int>(player, layout::kPlayerId);
 	if (ours < 0 || ours >= layout::kPlayerCount || theirs < 0 || theirs >= layout::kPlayerCount) return g_shown.real[index];
 	const bool peace = (At<unsigned>(local, layout::kPlayerDiplomacy + theirs * 4) & diplomacy::kCeasefire) != 0 &&
 		(At<unsigned>(player, layout::kPlayerDiplomacy + ours * 4) & diplomacy::kCeasefire) != 0;
-	return peace ? kAllyColor : kEnemyColor;
+	return PaletteColor(peace ? kAlly : kEnemy);
 }
 
 // Redraws the players with their new shades, as the editor does when it changes a colour.

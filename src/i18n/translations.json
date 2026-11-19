@@ -3422,5 +3422,8 @@
 {"en":"Follow: nobody","es":"Seguir: nadie","it":"Segui: nessuno"},
 {"en":"%s (paused)","es":"%s (en pausa)","it":"%s (in pausa)"},
 {"en":"Follow the player again","es":"Volver a seguir al jugador","it":"Segui di nuovo il giocatore"},
-{"en":"Follow a player's view: each click picks the next one","es":"Seguir la vista de un jugador: cada clic elige el siguiente","it":"Segui la visuale di un giocatore: ogni clic sceglie il successivo"}
+{"en":"Follow a player's view: each click picks the next one","es":"Seguir la vista de un jugador: cada clic elige el siguiente","it":"Segui la visuale di un giocatore: ogni clic sceglie il successivo"},
+{"en":"Palette","es":"Paleta","it":"Tavolozza"},
+{"en":"Classic: blue, yellow, red","es":"Clásica: azul, amarillo, rojo","it":"Classica: blu, giallo, rosso"},
+{"en":"Colour blindness: blue, light blue, orange","es":"Daltonismo: azul, celeste, naranja","it":"Daltonismo: blu, azzurro, arancione"}
 ]

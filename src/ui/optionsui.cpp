@@ -164,6 +164,7 @@ void SetExtras(Values &v, const Config &c)
 	v.checks[kSmoothCamera] = c.smoothScroll;
 	v.scrolls[kPanelOpacity] = c.panelOpacity;
 	v.combos[kHealthBars] = c.healthBarOwners;
+	v.combos[kAllyPalette] = c.allyPalette;
 	v.checks[kHealthBarHeroes] = c.healthBarHeroesOnly;
 	v.checks[kPauseInBackground] = c.pauseInBackground;
 	v.checks[kChatBadges] = c.chatBadges;
@@ -220,6 +221,7 @@ void CopyExtras(Values &to, const Values &from)
 	CopySystemExtras(to, from);
 	for (int id : {kSmoothCamera, kPauseInBackground, kHealthBarHeroes, kChatBadges, kMatchFoundSound, kAllyColors}) CopyId(to.checks, from.checks, id);
 	CopyId(to.combos, from.combos, kHealthBars);
+	CopyId(to.combos, from.combos, kAllyPalette);
 	CopyDisplayExtras(to, from);
 	for (int id : kSoundScrolls) CopyId(to.scrolls, from.scrolls, id);
 	CopyId(to.combos, from.combos, kOutputDevice);
@@ -300,6 +302,8 @@ void CommitExtras(const Values &v)
 	c.panelOpacity = ScrollOr(v, kPanelOpacity, c.panelOpacity);
 	const auto bars = v.combos.find(kHealthBars);
 	if (bars != v.combos.end()) c.healthBarOwners = bars->second;
+	const auto palette = v.combos.find(kAllyPalette);
+	if (palette != v.combos.end()) c.allyPalette = palette->second == 1 ? 1 : 0;
 	c.healthBarHeroesOnly = CheckOr(v, kHealthBarHeroes, c.healthBarHeroesOnly);
 	c.pauseInBackground = CheckOr(v, kPauseInBackground, c.pauseInBackground);
 	c.chatBadges = CheckOr(v, kChatBadges, c.chatBadges);
