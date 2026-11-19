@@ -682,9 +682,9 @@ void PaintList(Painter &p, const State &st)
 		p.Font(0);
 		const PatronInfo hostPatron = PatronOf(g.owner);
 		const LeagueBadge hostBadge = PlayerBadgeOf(g.owner);
-		const std::string hostText = g.friendHost ? g.host + Tr("  (friend)") : g.host;
+		const std::string hostText = g.friendHost ? g.host + Tr("  (friend)") : !g.friendIn.empty() ? g.host + "  Â·  " + TrFmt("with %s", {g.friendIn}) : g.host;
 		PaintLaurelName(p, st, textX(1), y, cx[2] - textX(1) - 12, rowH, hostText, g.owner, hostPatron, hostBadge,
-			g.friendHost ? pal::redText : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			g.friendHost || !g.friendIn.empty() ? pal::redText : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		cell(2, g.playing ? std::string("In game") : std::to_string(g.players) + " / " + std::to_string(g.maxPlayers),
 			g.players < g.maxPlayers && !g.playing ? pal::text : pal::textDim);
 		cell(3, LobbyMapLabel(g), pal::textDim);

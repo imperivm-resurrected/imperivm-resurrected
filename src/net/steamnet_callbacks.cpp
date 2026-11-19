@@ -38,7 +38,11 @@ namespace {
 void StoreLobbyEntry(uint64 lobby)
 {
 	OnlineLobby l = ReadLobby(lobby);
-	l.friendHost = l.friendHost || std::find(g_search.friendLobbies.begin(), g_search.friendLobbies.end(), lobby) != g_search.friendLobbies.end();
+	// Found through a friend who plays in it: the friend is in the room, its host is not one for that.
+	if (!l.friendHost) {
+		const auto it = g_search.friendInLobby.find(lobby);
+		if (it != g_search.friendInLobby.end()) l.friendIn = it->second;
+	}
 	std::lock_guard<std::mutex> lock(g_lock);
 	for (auto it = g_search.lobbies.begin(); it != g_search.lobbies.end();) {
 		if (it->specOnly && _strtoui64(Data(it->id, "main").c_str(), nullptr, 10) == lobby) {
@@ -157,6 +161,7 @@ void OnCallback(int id, const void *data)
 		}
 		MergeSpectateLobbies(list);
 		g_search.friendLobbies.clear();
+		g_search.friendInLobby.clear();
 		const uint32 app = S.SteamAPI_ISteamUtils_GetAppID(S.SteamAPI_SteamUtils_v011());
 		const int friends = S.SteamAPI_ISteamFriends_GetFriendCount(g_steam.friends, k_EFriendFlagImmediate);
 		for (int i = 0; i < friends && i < 500; i++) {
@@ -171,6 +176,7 @@ void OnCallback(int id, const void *data)
 			}
 			if (known) continue;
 			g_search.friendLobbies.push_back(lobby);
+			g_search.friendInLobby[lobby] = Name(f);
 			S.SteamAPI_ISteamMatchmaking_RequestLobbyData(g_steam.mm, lobby);
 		}
 		static DWORD lastLog = 0;

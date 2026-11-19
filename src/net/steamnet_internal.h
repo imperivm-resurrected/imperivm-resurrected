@@ -100,6 +100,8 @@ extern ResyncState g_resync;
 struct LobbySearchState {
 	std::vector<OnlineLobby> lobbies;
 	std::vector<uint64> friendLobbies;
+	// Who of the player's friends each of those rooms was found through.
+	std::map<uint64, std::string> friendInLobby;
 	std::map<uint64, unsigned> dataSerial;
 	bool loading = false;
 	DWORD loadingSince = 0;

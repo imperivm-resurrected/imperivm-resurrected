@@ -45,6 +45,8 @@ struct OnlineLobby {
 	std::string cams;
 	uint64_t owner = 0;
 	bool friendHost = false;
+	// A Steam friend who is in the room and is not its host (the room was found through them): their name.
+	std::string friendIn;
 	std::string optionsText;
 	unsigned rules = 0;
 	std::string saveName;

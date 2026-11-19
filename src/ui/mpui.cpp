@@ -120,8 +120,9 @@ int RoomGroup(const OnlineLobby &g)
 
 bool RoomInFilter(const OnlineLobby &g, int filter)
 {
-	if (g.playing && !g.friendHost && !g.specLobby) return false;
-	if (filter == 1 && !g.friendHost) return false;
+	const bool friendly = g.friendHost || !g.friendIn.empty();
+	if (g.playing && !friendly && !g.specLobby) return false;
+	if (filter == 1 && !friendly) return false;
 	if (filter == 6 && (g.playing || g.players >= g.maxPlayers)) return false;
 	if (filter == 7 && !(g.playing && g.specLobby)) return false;
 	return true;
