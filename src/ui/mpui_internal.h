@@ -50,7 +50,7 @@ enum Action {
 	kLeagueLink, kLeagueOpen, kLeagueCancel, kLeagueUnlink,
 	kRankedAct,
 	kTourney, kFieldTourney, kFieldCupName, kFieldCupDescription, kFieldCupCode,
-	kFieldTeamName, kFieldTeamSearch,
+	kFieldTeamName, kFieldTeamSearch, kFieldCupTime,
 	kLinkOfferYes, kLinkOfferNo,
 	kFieldRanked,
 	// "Team colours" of the room, turned on or off by the host.
@@ -97,7 +97,7 @@ extern JoinFlowState g_flow;
 enum View { kViewList, kViewRanked, kViewCreate, kViewTournaments };
 
 enum Field { kNoField, kChatField, kNameField, kPassField, kJoinPassField, kSearchField, kPickSearchField, kRoomNameField, kTourneyField, kCupNameField, kCupDescriptionField, kCupCodeField, kRankedField,
-	kTeamNameField, kTeamSearchField };
+	kTeamNameField, kTeamSearchField, kCupTimeField };
 
 enum { kPredTeam, kPredRace, kPredAi, kPredReady, kPredOptSel, kPredOptVal, kPredColor };
 

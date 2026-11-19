@@ -1477,7 +1477,7 @@ void TourneyAction(int arg)
 	case kSubMapOpen:
 		if (u.cupLocked) break;
 		// The keys go to the chooser, not to the field behind it.
-		if (g_s.focus == kCupNameField || g_s.focus == kCupDescriptionField) g_s.focus = kNoField;
+		if (g_s.focus == kCupNameField || g_s.focus == kCupDescriptionField || g_s.focus == kCupTimeField) g_s.focus = kNoField;
 		OpenMapChooser(u, static_cast<int>(value));
 		break;
 	case kSubChooserTab:
@@ -1538,7 +1538,7 @@ void TourneyAction(int arg)
 		break;
 	case kSubPoolOpen:
 		if (u.cupLocked) break;
-		if (g_s.focus == kCupNameField || g_s.focus == kCupDescriptionField) g_s.focus = kNoField;
+		if (g_s.focus == kCupNameField || g_s.focus == kCupDescriptionField || g_s.focus == kCupTimeField) g_s.focus = kNoField;
 		OpenPoolChooser(u, static_cast<int>(value));
 		break;
 	case kSubPoolRemove:
@@ -1749,10 +1749,12 @@ bool TourneyScrollTo(int bar, int pos)
 	}
 }
 
+void TourneyCupTimeFocus() { CupTimeFocus(g_tourney); }
+
 bool TourneyOwnsField(int field)
 {
 	return field == kTourneyField || field == kCupNameField || field == kCupDescriptionField || field == kCupCodeField || field == kTeamNameField ||
-		field == kTeamSearchField;
+		field == kTeamSearchField || field == kCupTimeField;
 }
 
 std::string &TourneyFieldText(int field)
@@ -1764,6 +1766,7 @@ std::string &TourneyFieldText(int field)
 	case kCupCodeField: return u.joinCode;
 	case kTeamNameField: return u.teamName;
 	case kTeamSearchField: return u.teamSearch;
+	case kCupTimeField: return u.cupTime;
 	default: return u.disputeText;
 	}
 }
@@ -1776,6 +1779,7 @@ size_t TourneyFieldBytes(int field)
 	case kCupCodeField: return 24;
 	case kTeamNameField: return 4 * kTourneyTeamNameMax;
 	case kTeamSearchField: return 128;
+	case kCupTimeField: return 5;
 	default: return 200;
 	}
 }
@@ -1796,6 +1800,11 @@ void TourneyFieldEdited(int field)
 		g_tourney.teamScroll = 0;
 		return;
 	}
+	if (field == kCupTimeField) {
+		CupTimeTyped(g_tourney, false);
+		EditFix(text, g_s.edit);
+		return;
+	}
 	const int most = field == kCupNameField ? kTourneyCupNameMax : field == kCupDescriptionField ? kTourneyCupDescriptionMax : field == kTeamNameField ? kTourneyTeamNameMax : 0;
 	if (!most) return;
 	while (TourneyTextLength(text) > most) text.erase(static_cast<size_t>(PrevCp(text, static_cast<int>(text.size()))));
@@ -1812,6 +1821,11 @@ void TourneyFieldEnter(int field)
 		return;
 	}
 	if (field == kCupDescriptionField) {
+		g_s.focus = kNoField;
+		return;
+	}
+	if (field == kCupTimeField) {
+		CupTimeTyped(u, true);
 		g_s.focus = kNoField;
 		return;
 	}

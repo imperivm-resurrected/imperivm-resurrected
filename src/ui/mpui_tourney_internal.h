@@ -45,7 +45,7 @@ enum Sub {
 // What kSubCupSet changes in the form: the high bits of its value; the low 16 are the choice.
 enum CupSetting {
 	kCupPlaces = 1, kCupMinimum, kCupBestOf, kCupFinal, kCupSeeding, kCupCheckin, kCupPrivate, kCupPlay, kCupPreset, kCupHideCivs, kCupFog,
-	kCupExplored, kCupDiplomacy, kCupSpectators, kCupDay, kCupMinute, kCupNoshow, kCupFormat, kCupSwissRounds, kCupPace, kCupRoundDays, kCupMode,
+	kCupExplored, kCupDiplomacy, kCupSpectators, kCupDay, kCupMinute, kCupNoshow, kCupFormat, kCupSwissRounds, kCupPace, kCupRoundDays, kCupMode, kCupTimeStep,
 };
 
 // The menus of the form (kDropTourney), by the index they open with.
@@ -164,6 +164,8 @@ struct Ui {
 	// The dialog of the invitation code: open, what is typed and why it was not found.
 	bool joinOpen = false;
 	std::string joinCode, joinError;
+	// The start time as it is being typed, "21:30".
+	std::string cupTime;
 	// The code of the private cup just made, shown once in large.
 	std::string shownCode;
 	// The match the organizer is giving without playing.
@@ -247,6 +249,12 @@ std::string CupRoundName(const TourneyCupForm &f, int index);
 bool OrganizerPlays(const TourneyDetail &d, const TourneyMatch &m);
 // The earliest and latest start the form offers, in this computer's local time (see LocalMs).
 void CupStartBounds(int64_t nowMs, int64_t &localMin, int64_t &localMax);
+// The start time field: filled with the chosen time when it takes the keys; what is typed moves the start once it reads as a time, and
+// on Return (done) the field shows the time the start took.
+// "21:30": a start in the computer's time.
+std::string CupStartClock(int64_t utcMs);
+void CupTimeFocus(Ui &u);
+void CupTimeTyped(Ui &u, bool done);
 // The menus of the form: their items and the one chosen now, and what picking an item does.
 std::vector<std::string> CupMenuItems(const TourneyCupForm &f, int menu, int &selected);
 void CupMenuPick(TourneyCupForm &f, int menu, int item, int64_t nowMs);

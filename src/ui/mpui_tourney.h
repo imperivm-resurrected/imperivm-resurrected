@@ -40,6 +40,8 @@ size_t TourneyFieldBytes(int field);
 void TourneyFieldEdited(int field);
 // Locked. Return in one of the tab's fields.
 void TourneyFieldEnter(int field);
+// The cup's start time field takes the time chosen now, to be typed over.
+void TourneyCupTimeFocus();
 // Locked. An item of a menu the tab opened (kDropTourney) picked.
 void TourneyDropPick(int index, int item);
 // Locked. What the tournament fixes in its room (map, options, open seats, the teams of a match of teams) cannot be changed: true, with a

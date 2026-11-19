@@ -707,19 +707,19 @@ int CalendarLeft(Form &c, int x, int y, int w)
 	}
 	at += headH + 4 + cal.rows * (cellH + gap) - gap + c.k.rowGap;
 	at += Label(c, x, at, w, Tr("Time"));
-	const int64_t local = LocalMs(f.startsAt);
-	const int hour = LocalHour(local), minute = LocalMinute(local);
-	char hourText[8];
-	sprintf_s(hourText, "%02d", hour);
-	const int hourW = 96, colonW = 22;
-	Combo(c, x, at, hourW, hourText, kCupMenuHour);
-	if (!c.measure) {
-		UseDisplay(p, 28);
-		p.Text(x + hourW, at, colonW, c.k.fieldH, ":", pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	// The time is typed (21:30), or moved a quarter of an hour at a time.
+	{
+		const bool typing = c.st.focus == kCupTimeField;
+		const int bw = c.k.fieldH + 4, fw = 110;
+		if (!c.measure) p.Button(x, at, bw, c.k.fieldH, "-", kTourney, CupArg(kCupTimeStep, 0), c.mx, c.my, !c.locked);
+		Field(c, x + bw + 4, at, fw, typing ? c.u.cupTime : CupStartClock(f.startsAt), "21:30", kCupTimeField, kFieldCupTime, !c.locked);
+		if (!c.measure) {
+			p.Button(x + bw + fw + 8, at, bw, c.k.fieldH, "+", kTourney, CupArg(kCupTimeStep, 1), c.mx, c.my, !c.locked);
+			p.Font(3);
+			const int hx = x + 2 * bw + fw + 22;
+			p.Text(hx, at, x + w - hx, c.k.fieldH, Tr("Type it, or move it 15 minutes"), pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		}
 	}
-	Segments(c, x + hourW + colonW, at, std::min(320, w - hourW - colonW),
-		c.k.fieldH, {{"00", CupArg(kCupMinute, 0), minute == 0}, {"15", CupArg(kCupMinute, 15), minute == 15}, {"30", CupArg(kCupMinute, 30), minute == 30},
-						{"45", CupArg(kCupMinute, 45), minute == 45}});
 	at += c.k.fieldH + 14;
 	if (!c.measure) {
 		UseFace(p, BrandFace::UiStrong, 18);
@@ -1162,6 +1162,47 @@ void CupStartBounds(int64_t nowMs, int64_t &localMin, int64_t &localMax)
 	localMax = LocalMs(nowMs + kTourneyCupLeadMaxMs);
 }
 
+// "21:30" of a start, in the computer's time.
+std::string CupStartClock(int64_t utcMs)
+{
+	const int64_t local = LocalMs(utcMs);
+	char text[8];
+	sprintf_s(text, "%02d:%02d", LocalHour(local), LocalMinute(local));
+	return text;
+}
+
+void CupTimeFocus(Ui &u) { u.cupTime = CupStartClock(u.cup.startsAt); }
+
+void CupTimeTyped(Ui &u, bool done)
+{
+	std::string &t = u.cupTime;
+	std::string clean;
+	for (char ch : t) {
+		if ((ch >= '0' && ch <= '9') || ch == ':') clean += ch;
+	}
+	if (clean != t) t = clean;
+	int hour = -1, minute = -1;
+	const size_t colon = t.find(':');
+	if (colon != std::string::npos) {
+		const std::string h = t.substr(0, colon), m = t.substr(colon + 1);
+		if (!h.empty() && h.size() <= 2 && m.size() == 2 && m.find(':') == std::string::npos) {
+			hour = atoi(h.c_str());
+			minute = atoi(m.c_str());
+		}
+	}
+	else if (t.size() == 4) {
+		hour = atoi(t.substr(0, 2).c_str());
+		minute = atoi(t.substr(2).c_str());
+	}
+	if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59 && !u.cupLocked) {
+		int64_t lo = 0, hi = 0;
+		CupStartBounds(NowMs(), lo, hi);
+		u.cup.startsAt = UtcMs(TourneyAtTime(LocalMs(u.cup.startsAt), hour, minute, lo, hi));
+		u.cupError.clear();
+	}
+	if (done) t = CupStartClock(u.cup.startsAt);
+}
+
 void ApplyCupSetting(TourneyCupForm &f, int setting, int choice, int64_t nowMs)
 {
 	int64_t lo = 0, hi = 0;
@@ -1231,6 +1272,11 @@ void ApplyCupSetting(TourneyCupForm &f, int setting, int choice, int64_t nowMs)
 		const TourneyCalendar cal = TourneyCalendarOf(TourneyDayOf(LocalMs(nowMs)), TourneyDayOf(hi));
 		const int64_t day = cal.first + choice;
 		if (choice >= 0 && choice < cal.rows * 7 && TourneyDayOpen(day, lo, hi)) f.startsAt = UtcMs(TourneyOnDay(LocalMs(f.startsAt), day, lo, hi));
+		break;
+	}
+	case kCupTimeStep: {
+		const int64_t local = LocalMs(f.startsAt) + (choice ? kTourneyQuarterMs : -kTourneyQuarterMs);
+		f.startsAt = UtcMs(TourneySnapStart(local, lo, hi));
 		break;
 	}
 	case kCupMinute:
