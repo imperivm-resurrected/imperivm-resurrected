@@ -225,8 +225,41 @@ void Segments(Form &c, int x, int y, int w, int h, const std::vector<Seg> &segs)
 }
 
 // A choice of a list with a radio, its name and a line under it, and at the right an estimate (in `asideInk` when it warns) or "Coming soon".
+// The format's sign, in a box of 26 by 22: a bracket (single), two brackets that meet (double), a grid of rounds (Swiss).
+void FormatIcon(Painter &p, int x, int y, TourneyFormat format, COLORREF c)
+{
+	const auto line = [&](int x0, int y0, int x1, int y1) { p.Line(x + x0, y + y0, x + x1, y + y1, c, 2); };
+	if (format == TourneyFormat::Swiss) {
+		for (int r = 0; r < 3; r++) {
+			for (int k = 0; k < 3; k++) p.Fill(x + 3 + k * 8, y + 2 + r * 7, 5, 5, c);
+		}
+		return;
+	}
+	if (format == TourneyFormat::Single) {
+		for (int top : {2, 12}) {
+			line(0, top, 8, top);
+			line(0, top + 8, 8, top + 8);
+			line(8, top, 8, top + 9);
+			line(8, top + 4, 15, top + 4);
+		}
+		line(15, 6, 15, 17);
+		line(15, 11, 26, 11);
+		return;
+	}
+	line(0, 1, 8, 1);
+	line(0, 8, 8, 8);
+	line(8, 1, 8, 9);
+	line(8, 4, 17, 4);
+	line(5, 14, 12, 14);
+	line(5, 20, 12, 20);
+	line(12, 14, 12, 21);
+	line(12, 17, 17, 17);
+	line(17, 4, 17, 18);
+	line(17, 11, 26, 11);
+}
+
 void Option(Form &c, int x, int y, int w, int h, bool on, bool enabled, const std::string &title, const std::string &text, const std::string &aside, bool soon,
-	int arg, COLORREF asideInk = CLR_INVALID)
+	int arg, COLORREF asideInk = CLR_INVALID, int format = -1)
 {
 	if (c.measure) return;
 	Painter &p = c.p;
@@ -256,7 +289,12 @@ void Option(Form &c, int x, int y, int w, int h, bool on, bool enabled, const st
 		p.Text(right, y, aw, h, aside, asideInk != CLR_INVALID ? asideInk : on ? pal::text : pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 		right -= 12;
 	}
-	const int tx = rx + r + 14, tw = right - tx;
+	int tx = rx + r + 14;
+	if (format >= 0) {
+		FormatIcon(p, tx, y + (h - 22) / 2, static_cast<TourneyFormat>(format), on ? pal::redText : enabled ? pal::body : pal::textDim);
+		tx += 26 + 14;
+	}
+	const int tw = right - tx;
 	UseFace(p, BrandFace::UiStrong, 16);
 	p.Text(tx, y + h / 2 - 22, tw, 22, title, enabled || on ? pal::text : pal::textDim, DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_END_ELLIPSIS);
 	p.Font(3);
@@ -340,15 +378,18 @@ int FormatLeft(Form &c, int x, int y, int w)
 	at += Label(c, x, at, w, Tr(teams ? "Places (teams)" : "Places"));
 	Segments(c, x, at, w, c.k.fieldH,
 		{{"4", CupArg(kCupPlaces, 4), f.maxEntries == 4}, {"8", CupArg(kCupPlaces, 8), f.maxEntries == 8}, {"16", CupArg(kCupPlaces, 16), f.maxEntries == 16}});
-	at += c.k.fieldH;
-	at += Problem(c, x, at, w, {TourneyCupProblem::Places});
+	at += c.k.fieldH + 8;
+	at += Hint(c, x, at, w,
+		TrFmt(teams ? "It starts with the teams that have checked in, if there are at least %s; else it is cancelled on its own."
+					: "It starts with the players who have checked in, if there are at least %s; else it is cancelled on its own.",
+			{std::to_string(f.minEntries)}));
+	at += Problem(c, x, at, w, {TourneyCupProblem::Places, TourneyCupProblem::Minimum});
 	return at - y;
 }
 
 int FormatRight(Form &c, int x, int y, int w)
 {
 	const TourneyCupForm &f = c.f;
-	Painter &p = c.p;
 	int at = y;
 	at += Label(c, x, at, w, TrFmt(f.mode == TourneyMode::Teams ? "Format \xC2\xB7 estimated time with %s teams" : "Format \xC2\xB7 estimated time with %s players",
 		{std::to_string(f.maxEntries)}));
@@ -363,7 +404,7 @@ int FormatRight(Form &c, int x, int y, int w)
 		TourneyCupForm as = f;
 		as.format = d.format;
 		Option(c, x, at, w, c.k.optionH, f.format == d.format, true, Tr(d.title), Tr(d.text), EstimateText(TourneyEstimateOf(as)), false,
-			CupArg(kCupFormat, static_cast<int>(d.format)), TourneyCupLongLive(as) ? pal::warn : CLR_INVALID);
+			CupArg(kCupFormat, static_cast<int>(d.format)), TourneyCupLongLive(as) ? pal::warn : CLR_INVALID, static_cast<int>(d.format));
 		at += c.k.optionH + 8;
 		if (d.format != TourneyFormat::Swiss || f.format != TourneyFormat::Swiss) continue;
 		// The Swiss's rounds, under its choice.
@@ -387,25 +428,6 @@ int FormatRight(Form &c, int x, int y, int w)
 			pal::warn);
 		at += 8;
 	}
-	at += c.k.rowGap - 8;
-	at += Label(c, x, at, w, Tr("Minimum to start"));
-	if (!c.measure) {
-		const int bw = c.k.fieldH + 4, nw = 72;
-		const bool enabled = !c.locked;
-		p.Button(x, at, bw, c.k.fieldH, "-", kTourney, CupArg(kCupMinimum, 0), c.mx, c.my, enabled && f.minEntries > 2);
-		p.Fill(x + bw + 2, at, nw, c.k.fieldH, pal::field);
-		UseFace(p, BrandFace::UiStrong, 18);
-		p.Text(x + bw + 2, at, nw, c.k.fieldH, std::to_string(f.minEntries), enabled ? pal::text : pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-		p.Button(x + bw + nw + 4, at, bw, c.k.fieldH, "+", kTourney, CupArg(kCupMinimum, 1), c.mx, c.my, enabled && f.minEntries < f.maxEntries);
-		p.Font(3);
-		const int hx = x + 2 * bw + nw + 20;
-		p.Text(hx, at, x + w - hx, c.k.fieldH, TrFmt("of %s places", {std::to_string(f.maxEntries)}), pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-	}
-	at += c.k.fieldH + 8;
-	at += Hint(c, x, at, w,
-		Tr(f.mode == TourneyMode::Teams ? "If fewer teams have checked in when it starts, the cup is cancelled on its own."
-										: "If fewer players have checked in when it starts, the cup is cancelled on its own."));
-	at += Problem(c, x, at, w, {TourneyCupProblem::Minimum});
 	return at - y;
 }
 
@@ -481,7 +503,8 @@ int RulesRight(Form &c, int x, int y, int w)
 		}
 	}
 	at += Problem(c, x, at, w, {TourneyCupProblem::Series}) + c.k.rowGap;
-	at += Label(c, x, at, w, Tr("Seeding"));
+	at += Label(c, x, at, w, Tr("Pairings"));
+	at += Hint(c, x, at, w, Tr("Who meets whom in the first round.")) + 8;
 	if (f.mode == TourneyMode::Teams) {
 		Option(c, x, at, w, c.k.optionH, !f.randomSeeding, true, Tr("By 2v2 Glory"), Tr("The average of both players' 2v2 Glory, or 1v1 without it."), Tr("Recommended"),
 			false, CupArg(kCupSeeding, 0));
@@ -1147,7 +1170,8 @@ void ApplyCupSetting(TourneyCupForm &f, int setting, int choice, int64_t nowMs)
 	switch (setting) {
 	case kCupPlaces:
 		if (choice != 4 && choice != 8 && choice != 16) break;
-		if (f.minEntries == TourneyCupDefaultMinimum(f.maxEntries) || f.minEntries > choice) f.minEntries = TourneyCupDefaultMinimum(choice);
+		// The minimum follows the places: it is not asked.
+		f.minEntries = TourneyCupDefaultMinimum(choice);
 		f.maxEntries = choice;
 		TourneyFitMaps(f.maps, TourneyCupMapRounds(f));
 		break;

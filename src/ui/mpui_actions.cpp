@@ -265,10 +265,12 @@ void DoAction(int action, int arg)
 			g_s.createPlayers = std::max(2, std::min(8, arg + 2));
 		}
 		else if (g_s.dropKind == kDropSpectators) {
-			g_s.createSpec = std::max(0, std::min(4, arg));
+			// The list shows 300 s before Live; the stored index keeps Live at 4, as before 300 s came.
+			static const int kStoredOfRow[] = {0, 1, 2, 3, 5, 4};
+			g_s.createSpec = kStoredOfRow[std::max(0, std::min(5, arg))];
 			GameRoomSaveSetting("Spectators", g_s.createSpec);
 			if (g_s.room.id && g_s.room.owner) {
-				static const int kDelays[] = {0, 30, 60, 120, 0};
+				static const int kDelays[] = {0, 30, 60, 120, 0, 300};
 				SteamSetSpectators(g_s.createSpec != 0, kDelays[g_s.createSpec]);
 			}
 		}
@@ -742,9 +744,9 @@ void DoAction(int action, int arg)
 		s.maxPlayers = g_s.createPlayers;
 		s.visibility = g_s.createVisibility == 2 ? 1 : 0;
 		{
-			static const int kSpecDelays[] = {0, 30, 60, 120, 0};
+			static const int kSpecDelays[] = {0, 30, 60, 120, 0, 300};
 			s.spectators = g_s.createSpec != 0;
-			s.specDelay = kSpecDelays[std::max(0, std::min(4, g_s.createSpec))];
+			s.specDelay = kSpecDelays[std::max(0, std::min(5, g_s.createSpec))];
 		}
 		g_s.hostSave = g_s.createSave >= 0 && g_s.createSave < static_cast<int>(g_s.saves.size()) ? g_s.saves[g_s.createSave] : SaveEntry();
 		g_s.hostSavePublished = false;
@@ -925,7 +927,7 @@ void OpenMpMenu(bool checkRecover)
 	g_s.createProfileInfo = ProfileSummaryFor(g_s.createProfile), g_s.createModsList = ListState();
 	g_s.saves = ListSaves();
 	g_s.createSave = -1;
-	g_s.createSpec = std::max(0, std::min(4, GameRoomLoadSetting("Spectators", g_s.createSpec)));
+	g_s.createSpec = std::max(0, std::min(5, GameRoomLoadSetting("Spectators", g_s.createSpec)));
 	if (checkRecover) CheckRecover();
 	g_s.ownKey = SteamOwnGameplayKey();
 	g_s.lastRefresh = 0;

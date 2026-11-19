@@ -3457,5 +3457,12 @@ extern const TrRow kTrRows[] = {
 	{"Show this player's marks again", "Volver a mostrar las marcas de este jugador", "Mostra di nuovo i segnali di questo giocatore"},
 	{"Hide this player's messages, only on your screen", "Ocultar los mensajes de este jugador, solo en tu pantalla", "Nascondi i messaggi di questo giocatore, solo sul tuo schermo"},
 	{"Hide this player's marks on the map, only on your screen", "Ocultar las marcas de este jugador en el mapa, solo en tu pantalla", "Nascondi i segnali di questo giocatore sulla mappa, solo sul tuo schermo"},
+	{"It starts with the teams that have checked in, if there are at least %s; else it is cancelled on its own.", "Empieza con los equipos que hayan hecho el check-in, si son al menos %s; si no, se cancela sola.", "Inizia con le squadre che hanno fatto il check-in, se sono almeno %s; altrimenti si annulla da sola."},
+	{"It starts with the players who have checked in, if there are at least %s; else it is cancelled on its own.", "Empieza con los jugadores que hayan hecho el check-in, si son al menos %s; si no, se cancela sola.", "Inizia con i giocatori che hanno fatto il check-in, se sono almeno %s; altrimenti si annulla da sola."},
+	{"Pairings", "Emparejamientos", "Accoppiamenti"},
+	{"Who meets whom in the first round.", "Quién se enfrenta a quién en la primera ronda.", "Chi affronta chi al primo turno."},
+	{"Own maps", "Mapas propios", "Mappe proprie"},
+	{"Own maps are your scenarios that are not the game's own: made with the editor or downloaded. The cup uploads the one you choose, and the players download it when they check in.", "Los mapas propios son tus escenarios que no son los originales del juego: hechos con el editor o descargados. La copa sube el que elijas y los jugadores lo descargan al hacer el check-in.", "Le mappe proprie sono i tuoi scenari che non sono quelli originali del gioco: fatti con l'editor o scaricati. La coppa carica quello che scegli e i giocatori lo scaricano al check-in."},
+	{"With a 300 s delay", "Con 300 s de retraso", "Con 300 s di ritardo"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

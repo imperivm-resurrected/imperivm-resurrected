@@ -519,7 +519,7 @@ void CupForm()
 	CHECK_EQ(back.GetString("contentKey"), std::string("c35f0a1b2c3d4e5f"));
 	CHECK_EQ(back.GetString("contentName"), std::string("Caesar Mod"));
 
-	CHECK_EQ(TourneyCupDefaultMinimum(4), 4);
+	CHECK_EQ(TourneyCupDefaultMinimum(4), 3);
 	CHECK_EQ(TourneyCupDefaultMinimum(16), 4);
 	CHECK_EQ(TourneyCupDefaultMinimum(2), 2);
 	CHECK_EQ(TourneyRoundsFor(4), 2);

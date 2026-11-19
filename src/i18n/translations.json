@@ -3449,5 +3449,12 @@
 {"en":"Show this player's messages again","es":"Volver a mostrar los mensajes de este jugador","it":"Mostra di nuovo i messaggi di questo giocatore"},
 {"en":"Show this player's marks again","es":"Volver a mostrar las marcas de este jugador","it":"Mostra di nuovo i segnali di questo giocatore"},
 {"en":"Hide this player's messages, only on your screen","es":"Ocultar los mensajes de este jugador, solo en tu pantalla","it":"Nascondi i messaggi di questo giocatore, solo sul tuo schermo"},
-{"en":"Hide this player's marks on the map, only on your screen","es":"Ocultar las marcas de este jugador en el mapa, solo en tu pantalla","it":"Nascondi i segnali di questo giocatore sulla mappa, solo sul tuo schermo"}
+{"en":"Hide this player's marks on the map, only on your screen","es":"Ocultar las marcas de este jugador en el mapa, solo en tu pantalla","it":"Nascondi i segnali di questo giocatore sulla mappa, solo sul tuo schermo"},
+{"en":"It starts with the teams that have checked in, if there are at least %s; else it is cancelled on its own.","es":"Empieza con los equipos que hayan hecho el check-in, si son al menos %s; si no, se cancela sola.","it":"Inizia con le squadre che hanno fatto il check-in, se sono almeno %s; altrimenti si annulla da sola."},
+{"en":"It starts with the players who have checked in, if there are at least %s; else it is cancelled on its own.","es":"Empieza con los jugadores que hayan hecho el check-in, si son al menos %s; si no, se cancela sola.","it":"Inizia con i giocatori che hanno fatto il check-in, se sono almeno %s; altrimenti si annulla da sola."},
+{"en":"Pairings","es":"Emparejamientos","it":"Accoppiamenti"},
+{"en":"Who meets whom in the first round.","es":"Quién se enfrenta a quién en la primera ronda.","it":"Chi affronta chi al primo turno."},
+{"en":"Own maps","es":"Mapas propios","it":"Mappe proprie"},
+{"en":"Own maps are your scenarios that are not the game's own: made with the editor or downloaded. The cup uploads the one you choose, and the players download it when they check in.","es":"Los mapas propios son tus escenarios que no son los originales del juego: hechos con el editor o descargados. La copa sube el que elijas y los jugadores lo descargan al hacer el check-in.","it":"Le mappe proprie sono i tuoi scenari che non sono quelli originali del gioco: fatti con l'editor o scaricati. La coppa carica quello che scegli e i giocatori lo scaricano al check-in."},
+{"en":"With a 300 s delay","es":"Con 300 s de retraso","it":"Con 300 s di ritardo"}
 ]

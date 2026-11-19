@@ -1574,9 +1574,10 @@ std::string TourneyCutText(const std::string &text, size_t maxBytes)
 	return text.substr(0, end);
 }
 
+// A cup of four starts with three (one goes straight on); a bigger one with four.
 int TourneyCupDefaultMinimum(int places)
 {
-	return std::max(2, std::min(4, places));
+	return std::max(2, places <= 4 ? std::min(3, places) : 4);
 }
 
 int TourneyRoundsFor(int places)

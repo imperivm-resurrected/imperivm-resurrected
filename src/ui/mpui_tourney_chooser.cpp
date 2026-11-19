@@ -226,7 +226,7 @@ void PaintMapChooser(Painter &p, const State &st, const Ui &u, PaintOut &out)
 	const std::vector<int> game = TabRows(v, 1, u.cup.mode), mine = TabRows(v, 2, u.cup.mode);
 	const std::string counts[] = {std::string(), v.loaded ? " (" + std::to_string(game.size()) + ")" : std::string(), v.loaded ? " (" + std::to_string(mine.size()) + ")" : std::string()};
 	const std::vector<TabSpec> tabs = {{Tr("Random map"), kTourney, ArgOf(kSubChooserTab, 0), u.chooserTab == 0},
-		{Tr("Scenarios of the game") + counts[1], kTourney, ArgOf(kSubChooserTab, 1), u.chooserTab == 1}, {Tr("My maps") + counts[2], kTourney, ArgOf(kSubChooserTab, 2), u.chooserTab == 2}};
+		{Tr("Scenarios of the game") + counts[1], kTourney, ArgOf(kSubChooserTab, 1), u.chooserTab == 1}, {Tr("Own maps") + counts[2], kTourney, ArgOf(kSubChooserTab, 2), u.chooserTab == 2}};
 	const int tabsY = d.y + 62, tabW = (d.BodyW() - 12) / 3;
 	p.Fill(d.BodyX(), tabsY + 42, d.BodyW(), 1, pal::hairline);
 	PaintTabs(p, d.BodyX(), tabsY, tabs, mx, my, tabW, 42, 1);
@@ -339,6 +339,7 @@ void PaintMapChooser(Painter &p, const State &st, const Ui &u, PaintOut &out)
 		if (!s) {
 			p.Font(0);
 			std::string text = Tr("Choose a scenario from the list to see it here.");
+			if (u.chooserTab == 2) text += "\n\n" + Tr("Own maps are your scenarios that are not the game's own: made with the editor or downloaded. The cup uploads the one you choose, and the players download it when they check in.");
 			if (u.chooserTab == 2 && v.fromRules > 0) {
 				text += "\n\n" + TrFmt("%s scenarios of content packs that change the rules are not listed: they go with the cup's content.", {std::to_string(v.fromRules)});
 			}

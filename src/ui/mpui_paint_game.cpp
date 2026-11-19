@@ -149,8 +149,8 @@ struct OptionGrid {
 
 std::string SpectatorChoice(const State &st)
 {
-	static const char *const kSpecNames[] = {"No spectators", "With a 30 s delay", "With a 60 s delay", "With a 120 s delay", "Live"};
-	if (st.game.host) return kSpecNames[std::max(0, std::min(4, st.createSpec))];
+	static const char *const kSpecNames[] = {"No spectators", "With a 30 s delay", "With a 60 s delay", "With a 120 s delay", "Live", "With a 300 s delay"};
+	if (st.game.host) return kSpecNames[std::max(0, std::min(5, st.createSpec))];
 	return SpectatorText(st.room.info.specLobby != 0, st.room.info.specDelay);
 }
 

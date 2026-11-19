@@ -1004,8 +1004,8 @@ std::vector<std::string> DropItems(const State &st, int &sel)
 		return {"Public", "Password protected", "Friends only"};
 	}
 	if (st.dropKind == kDropSpectators) {
-		sel = st.createSpec;
-		return {"No spectators", "With a 30 s delay", "With a 60 s delay", "With a 120 s delay", "Live"};
+		sel = st.createSpec == 5 ? 4 : st.createSpec == 4 ? 5 : st.createSpec;
+		return {"No spectators", "With a 30 s delay", "With a 60 s delay", "With a 120 s delay", "With a 300 s delay", "Live"};
 	}
 	if (st.dropKind == kDropPlayers) {
 		sel = st.createPlayers - 2;
