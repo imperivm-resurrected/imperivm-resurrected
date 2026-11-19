@@ -862,6 +862,31 @@ void PaintRoomHeader(Painter &p, const State &st, const RoomFacts &f, const Room
 
 }
 
+void PaintSearchRing(Painter &p, float cx, float cy, float radius, float width, COLORREF c, DWORD tick)
+{
+	// The track, faint, all the way round.
+	PaintRing(p, cx, cy, radius, width * 0.5f, c, 46);
+	// An arc that turns once every 1.6 s, bright at its head and fading over three quarters of the turn behind it.
+	const float turn = 6.2831853f, tail = turn * 0.75f;
+	const float head = static_cast<float>(tick % 1600) / 1600.0f * turn;
+	const float outer = radius + width + 2;
+	const int x = static_cast<int>(std::floor(cx - outer)), y = static_cast<int>(std::floor(cy - outer)), size = static_cast<int>(std::ceil(outer * 2 + 1));
+	PaintShape(p, x, y, size, size, c, c, 255, [=](float px, float py) {
+		const float dx = px - cx, dy = py - cy, dist = std::hypot(dx, dy);
+		float a = std::atan2(dx, -dy);
+		if (a < 0) a += turn;
+		float behind = head - a;
+		if (behind < 0) behind += turn;
+		if (behind > tail) return -1.0f;
+		const float share = 1.0f - behind / tail;
+		// Thinner towards the end of the tail, and as faint as it is thin.
+		const float w = width * (0.45f + 0.55f * share);
+		return std::min(w / 2 - std::fabs(dist - radius), share * share);
+	});
+	// The head: a round tip a little wider than the arc.
+	PaintDisc(p, cx + std::sin(head) * radius, cy - std::cos(head) * radius, width * 0.75f, c, c, 255, false);
+}
+
 void PaintMapThumb(Painter &p, const State &st, int x, int y, int size, bool markers)
 {
 	const GameRoomSnapshot &g = st.game;

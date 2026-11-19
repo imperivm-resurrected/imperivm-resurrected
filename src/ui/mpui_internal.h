@@ -549,6 +549,8 @@ void ProfileHotspot(ui::Painter &p, const State &st, int x, int y, int w, int h,
 // kColumnBaseW wide, so the ones the player dragged follow the screen.
 int LobbyTableWidth(int viewW, int viewH);
 const int kColumnBaseW = 600;
+// The ranked search's ring: a faint track and an arc turning round it, centred on (cx, cy).
+void PaintSearchRing(Painter &p, float cx, float cy, float radius, float width, COLORREF c, DWORD tick);
 void PaintHeader(Painter &p, const State &st);
 void PaintPassPrompt(Painter &p, const State &st);
 void PaintList(Painter &p, const State &st);

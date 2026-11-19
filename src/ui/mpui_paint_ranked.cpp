@@ -512,7 +512,7 @@ void PaintRankCard(Painter &p, const State &st, const HubLayout &h, const League
 		// The emblem inside its spinner, smaller on a short card (900 lines) so the lines under it keep their room.
 		const bool tall = cardH >= 600;
 		const int emblem = tall ? 160 : 120, ring = emblem * 108 / 160, ringY = y + 60 + ring;
-		p.Spinner(cx, ringY, ring, 6, GetTickCount());
+		PaintSearchRing(p, static_cast<float>(cx), static_cast<float>(ringY), static_cast<float>(ring), 5.0f, pal::redText, GetTickCount());
 		DrawLeagueEmblem(p, cx - emblem / 2, ringY - emblem / 2, emblem, tier);
 		const int clockY = ringY + ring + 8, clockH = tall ? 84 : 70;
 		Display(p, clockH);
