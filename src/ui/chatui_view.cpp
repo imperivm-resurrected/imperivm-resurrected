@@ -14,6 +14,7 @@
 #include "ui/keycaps.h"
 #include "ui/leagueui.h"
 #include "ui/ornaments.h"
+#include "ui/patronui.h"
 #include "ui/textedit.h"
 #include "ui/uikit.h"
 #include "ui/widgets.h"
@@ -23,6 +24,7 @@ namespace {
 
 using namespace ui;
 
+constexpr int kLaurel = 15, kLaurelGap = 3;
 constexpr int kWidth = 500, kBarH = 28, kRowH = 19, kGap = 6, kPad = 8, kIdleRows = 8, kTypingRows = 16, kIcon = 15, kIconGap = 4, kGripH = 12;
 constexpr COLORREF kCream = pal::text, kClock = pal::caption, kAllies = RGB(146, 214, 122), kAll = pal::warn, kPrivate = RGB(224, 156, 234),
 				   kNote = pal::body, kPanel = pal::shadow, kAttack = pal::redText, kDanger = pal::warn, kMuted = pal::textDim,
@@ -114,7 +116,7 @@ const char *TagOf(int scope) { return scope == kChatAllies ? "Allies" : scope ==
 COLORREF TagColor(int scope) { return scope == kChatAllies ? kAllies : scope == kChatPrivate ? kPrivate : kAll; }
 
 struct Measured {
-	int clockX = 0, tagX = 0, nameX = 0, badgeX = 0, toX = 0, pinX = 0, textX = 0, indent = 0;
+	int clockX = 0, tagX = 0, laurelX = 0, nameX = 0, badgeX = 0, toX = 0, pinX = 0, textX = 0, indent = 0;
 	std::wstring clock, tag, name, to;
 	bool note = false;
 	bool local = false;
@@ -158,6 +160,10 @@ Measured Measure(Painter &p, const Line &l)
 	m.indent = x;
 	m.tagX = x;
 	x += WidthOf(p.dc, g_f.meta, m.tag, p.s) + 6;
+	if (l.patron != PatronTier::None) {
+		m.laurelX = x;
+		x += kLaurel + kLaurelGap;
+	}
 	m.nameX = x;
 	x += WidthOf(p.dc, g_f.name, m.name, p.s);
 	if (l.badge.Shown()) {
@@ -352,6 +358,7 @@ void PaintRow(Painter &p, const View &v, const Layout &L, int r, int y)
 	SelectObject(p.dc, g_f.meta);
 	if (!m.clock.empty()) ShadowLine(p, m.clockX, y + 3, m.clock, kClock);
 	ShadowLine(p, m.tagX, y + 3, m.tag, TagColor(l.scope));
+	if (l.patron != PatronTier::None) DrawPatron(p, m.laurelX, y + (kRowH - kLaurel) / 2, kLaurel, m.laurelX, y, 0, 0, std::string(), l.patron, DT_LEFT);
 	SelectObject(p.dc, g_f.name);
 	const COLORREF nameColor = Readable(l.color);
 	ShadowLine(p, m.nameX, y, m.name, nameColor);

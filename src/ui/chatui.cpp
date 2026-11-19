@@ -81,6 +81,8 @@ struct State {
 	ScrollDrag bar;
 	// The league badges of the room's players by name, for the lines they write.
 	std::vector<std::pair<std::string, LeagueBadge>> badges;
+	// And the patrons among them, with their tier, for the laurel.
+	std::vector<std::pair<std::string, PatronTier>> patrons;
 };
 
 std::mutex g_lock;
@@ -682,15 +684,20 @@ Line LineOf(const ChatEntry &e, int alpha)
 		for (const auto &b : g_s.badges) {
 			if (!l.badge.Shown() && PlayerNameMatches(b.first, e.name)) l.badge = b.second;
 		}
+		for (const auto &pt : g_s.patrons) {
+			if (SamePlayerName(pt.first, e.name)) l.patron = pt.second;
+		}
+		for (const auto &pt : g_s.patrons) {
+			if (l.patron == PatronTier::None && PlayerNameMatches(pt.first, e.name)) l.patron = pt.second;
+		}
 	}
 	return l;
 }
 
-// The room's players and their badges, as the room shows them; none when the options hide them.
-std::vector<std::pair<std::string, LeagueBadge>> ReadBadges()
+// The room's players and their badges, as the room shows them, none when the options hide them; and their patron's laurels.
+std::vector<std::pair<std::string, LeagueBadge>> ReadBadges(std::vector<std::pair<std::string, PatronTier>> &patrons)
 {
 	std::vector<std::pair<std::string, LeagueBadge>> out;
-	if (!GetConfig().chatBadges) return out;
 	const OnlineRoom room = SteamCurrentRoom();
 	std::vector<uint64_t> ids;
 	for (const OnlineMember &m : room.members) {
@@ -699,8 +706,11 @@ std::vector<std::pair<std::string, LeagueBadge>> ReadBadges()
 	if (ids.empty()) return out;
 	PatronsWatch(ids);
 	for (const OnlineMember &m : room.members) {
+		if (m.name.empty()) continue;
+		const PatronTier tier = PatronOf(m.id).tier;
+		if (tier != PatronTier::None) patrons.push_back({m.name, tier});
 		const LeagueBadge badge = PlayerBadgeOf(m.id);
-		if (badge.Shown() && !m.name.empty()) out.push_back({m.name, badge});
+		if (badge.Shown() && GetConfig().chatBadges) out.push_back({m.name, badge});
 	}
 	return out;
 }
@@ -728,9 +738,10 @@ void ChatUiGameTick()
 	}
 	const bool readBadges = now - g_badgesAt >= kBadgesEveryMs;
 	std::vector<std::pair<std::string, LeagueBadge>> badges;
+	std::vector<std::pair<std::string, PatronTier>> patrons;
 	if (readBadges) {
 		g_badgesAt = now;
-		badges = ReadBadges();
+		badges = ReadBadges(patrons);
 	}
 	const uint32_t fresh = ChatLogSerial();
 	std::vector<ChatEntry> lines;
@@ -740,7 +751,10 @@ void ChatUiGameTick()
 	if (read) m = ChatReadMatch();
 	const bool other = open && OtherScreenOpen();
 	std::lock_guard<std::mutex> lock(g_lock);
-	if (readBadges) g_s.badges = std::move(badges);
+	if (readBadges) {
+		g_s.badges = std::move(badges);
+		g_s.patrons = std::move(patrons);
+	}
 	if (newLines) {
 		g_s.lines = std::move(lines);
 		g_s.serial = fresh;
