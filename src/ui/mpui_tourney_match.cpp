@@ -7,6 +7,8 @@
 #include <vector>
 
 #include "core/tournament.h"
+#include "game/civs.h"
+#include "game/gameroom.h"
 #include "i18n/tr.h"
 #include "net/leagueclient.h"
 #include "net/leagueclient_tourney.h"
@@ -425,6 +427,30 @@ bool PaintMatchHeader(Painter &p, const State &st, const HeaderUi &u)
 	return true;
 }
 
+std::vector<std::pair<int, std::string>> MatchCivChoices()
+{
+	// The room's order of the game's eight (race 8 is the random one), each in the words of the mod.
+	static const struct {
+		int race;
+		const char *name;
+	} kBase[] = {{8, "Random"}, {1, "Republican Rome"}, {4, "Imperial Rome"}, {0, "Gaul"}, {3, "Iberia"}, {2, "Carthage"}, {7, "Germany"}, {6, "Egypt"}, {5, "Britain"}};
+	const std::vector<Civ> civs = CivsList();
+	std::vector<std::pair<int, std::string>> out;
+	for (const auto &b : kBase) {
+		bool replaced = false;
+		for (const Civ &c : civs) replaced = replaced || (c.replacesBase && c.base == b.race);
+		if (!replaced) out.push_back({b.race, Tr(b.name)});
+	}
+	for (const Civ &c : civs) out.push_back({c.index, CivDisplayName(c)});
+	return out;
+}
+
+int MatchCiv(Ui &u)
+{
+	if (u.civRace == -2) u.civRace = GameRoomLoadSetting("TourneyCiv", -1);
+	return u.civRace;
+}
+
 namespace {
 
 // What is checked before the room: the content, the map, Steam and the check-in.
@@ -454,6 +480,25 @@ void PaintReadyCard(Painter &p, const State &st, const TourneyNext &n, const Tou
 		p.Text(m + pad + 32, ly, cw - 2 * pad - 32, 24, c.text, c.ok ? pal::body : pal::bad, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.raw = false;
 		ly += 32;
+	}
+	// The civilization taken into the room: the mod puts it in the player's slot there and gets them ready.
+	if (ly + 40 <= ry + rh) {
+		const int race = MatchCiv(g_tourney);
+		std::string name = Tr("The one the room gives you");
+		for (const auto &c : MatchCivChoices()) {
+			if (c.first == race) name = c.second;
+		}
+		const int lw = 150, bx = m + pad + lw, bw = cw - 2 * pad - lw, by = ly + 2;
+		p.Font(0);
+		p.raw = true;
+		p.Text(m + pad, by, lw - 10, 32, Tr("Your civilization"), pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		const bool hot = p.Hover(bx, by, bw, 32, st.mouseX, st.mouseY);
+		p.Fill(bx, by, bw, 32, hot ? pal::raised : pal::field);
+		p.Frame(bx, by, bw, 32, hot ? pal::edgeHot : pal::edge);
+		p.Text(bx + 10, by, bw - 34, 32, name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.raw = false;
+		p.ArrowDown(bx + bw - 20, by + 13, 9, 6, pal::textDim);
+		p.AddHit(bx, by, bw, 32, kTourney, ArgOf(kSubCivMenu, 0));
 	}
 }
 

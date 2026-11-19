@@ -22,6 +22,7 @@
 #include "core/leaguemaps.h"
 #include "core/log.h"
 #include "core/tournament.h"
+#include "game/civs.h"
 #include "game/cupmaps.h"
 #include "game/gameroom.h"
 #include "i18n/tr.h"
@@ -511,6 +512,31 @@ void StepInRoom(const TourneyNext &next)
 	if (mine && (!k.presenceAt || now - k.presenceAt >= kPresenceEveryMs)) {
 		k.presenceAt = now;
 		LeagueTourneyPresence(match, false);
+	}
+	if (mine && !k.shownAt && g_s.game.active) k.shownAt = now;
+	// The civilization of the match page in the player's slot, once; then ready, once (the room's countdown starts the game when both are).
+	const int slot = g_s.game.localSlot;
+	const bool slotOk = mine && g_s.game.active && !g_s.game.busy && !g_s.inOnlineGame && slot >= 0 && slot < 8 && g_s.game.slots[static_cast<size_t>(slot)].used;
+	if (slotOk && !k.civSet && k.shownAt && now - k.shownAt >= 800) {
+		k.civSet = true;
+		const int race = MatchCiv(g_tourney);
+		const int item = race >= 0 ? CivsRoomItemOfRace(race) : -1;
+		GameRoomSlot &s = g_s.game.slots[static_cast<size_t>(slot)];
+		if (item >= 0 && item < static_cast<int>(s.raceNames.size()) && s.race != item && !LocalReady(g_s.game)) {
+			s.race = item;
+			Predict(kPredRace, slot, item);
+			GameRoomSetRace(slot, item);
+			LogI("league", "tournament match %lld: race %d in the player's slot", static_cast<long long>(match), race);
+		}
+	}
+	const bool teamReady = !next.Teams() || k.teamSet;
+	if (slotOk && k.civSet && teamReady && !k.readySent && now - k.shownAt >= 1600) {
+		k.readySent = true;
+		if (!LocalReady(g_s.game)) {
+			Predict(kPredReady, slot, 1);
+			GameRoomToggleReady();
+			LogI("league", "tournament match %lld: the player is made ready", static_cast<long long>(match));
+		}
 	}
 	if (mine && g_s.inOnlineGame && !k.startedSent) {
 		k.startedSent = true;
@@ -1471,6 +1497,23 @@ void TourneyAction(int arg)
 		g_s.dropScroll = ClampDropScroll(g_s.tourneyDropSel - kDropRows / 2, static_cast<int>(g_s.tourneyDropItems.size()));
 		break;
 	}
+	case kSubCivMenu: {
+		const std::vector<std::pair<int, std::string>> choices = MatchCivChoices();
+		const int race = MatchCiv(u);
+		g_s.tourneyDropItems = {Tr("The one the room gives you")};
+		u.civChoices = {-1};
+		g_s.tourneyDropSel = 0;
+		for (const auto &c : choices) {
+			if (c.first == race) g_s.tourneyDropSel = static_cast<int>(u.civChoices.size());
+			g_s.tourneyDropItems.push_back(c.second);
+			u.civChoices.push_back(c.first);
+		}
+		g_s.dropOpen = true;
+		g_s.dropKind = kDropTourney;
+		g_s.dropIndex = kCupMenuCiv;
+		g_s.dropScroll = ClampDropScroll(g_s.tourneyDropSel - kDropRows / 2, static_cast<int>(g_s.tourneyDropItems.size()));
+		break;
+	}
 	case kSubCupSection:
 		if (value >= 0 && value < 3) u.formScroll = std::max(0, std::min(u.formArea.max, u.sectionTop[value]));
 		break;
@@ -1880,6 +1923,14 @@ void TourneyFieldEnter(int field)
 
 void TourneyDropPick(int index, int item)
 {
+	if (index == kCupMenuCiv) {
+		Ui &u = g_tourney;
+		if (item < 0 || item >= static_cast<int>(u.civChoices.size())) return;
+		u.civRace = u.civChoices[static_cast<size_t>(item)];
+		GameRoomSaveSetting("TourneyCiv", u.civRace);
+		LogI("league", "the civilization for the cup matches is race %d", u.civRace);
+		return;
+	}
 	if (g_tourney.cupLocked) return;
 	CupMenuPick(g_tourney.cup, index, item, NowMs());
 	g_tourney.cupError.clear();
@@ -1931,9 +1982,11 @@ bool TourneyBlocksAction(int action, int arg)
 			const int id = index >= 0 && index < static_cast<int>(g_s.game.options.size()) ? g_s.game.options[index].id : 0;
 			blocked = !(g_tourney.lock.mapAllowed && (id == 0x1000 || id == 0x01000008));
 		}
-		else blocked = kind == kDropPreset || kind == kDropSites || kind == kDropModOption || kind == kDropSpectators || kind == kDropSlot;
+		else blocked = kind == kDropPreset || kind == kDropSites || kind == kDropModOption || kind == kDropSpectators || kind == kDropSlot || kind == kDropTeam;
 		break;
 	}
+	// A 1v1 has no teams to choose: two in one would be allies.
+	case kGTeam: blocked = true; break;
 	default: break;
 	}
 	if (blocked) Toast("The tournament sets the map and the rules of this room.");

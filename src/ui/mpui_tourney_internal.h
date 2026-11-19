@@ -40,6 +40,8 @@ enum Sub {
 	kSubTeamOpen, kSubTeamPick, kSubTeamSend, kSubTeamCancel, kSubInviteAccept, kSubInviteDecline, kSubTeamWithdraw,
 	// The list's filters, each click the next choice: official or community cups, the format, and only those the player can sign up for.
 	kSubListKind, kSubListFormat, kSubListPlayable,
+	// The civilization the player takes into the match's room: its menu opened.
+	kSubCivMenu,
 };
 
 // What kSubCupSet changes in the form: the high bits of its value; the low 16 are the choice.
@@ -49,7 +51,7 @@ enum CupSetting {
 };
 
 // The menus of the form (kDropTourney), by the index they open with.
-enum CupMenu { kCupMenuHour = 0x100, kCupMenuGames, kCupMenuTier };
+enum CupMenu { kCupMenuHour = 0x100, kCupMenuGames, kCupMenuTier, kCupMenuCiv };
 
 inline int CupArg(int setting, int choice)
 {
@@ -108,6 +110,9 @@ struct RoomLock {
 	DWORD pickAt = 0;
 	// The scenario offered to the game's selector, which holds none until then.
 	std::string offered;
+	// The civilization of the match page put in the player's slot, and the player made ready, once each; since when the room is shown.
+	bool civSet = false, readySent = false;
+	DWORD shownAt = 0;
 	bool mapWarned = false;
 	// This room was the player's match: once the match is settled without a game (a no-show), the room has nothing left to do.
 	bool wasMine = false;
@@ -131,6 +136,9 @@ struct Ui {
 	int screen = kScreenList;
 	// The cup whose game is being played, to come back to its page in the menu when the game ends.
 	std::string afterSlug;
+	// The civilization chosen on the match page (a race of the game, -1 for the room's own), kept between matches; the races of its open menu.
+	int civRace = -2;
+	std::vector<int> civChoices;
 	int filter = 0;
 	// The list's filters: every cup (0), the official (1) or the community's (2); every format (0), single (1) or double elimination (2) or
 	// Swiss (3); and only those the player can sign up for now.
@@ -253,6 +261,11 @@ std::string CupRoundName(const TourneyCupForm &f, int index);
 bool OrganizerPlays(const TourneyDetail &d, const TourneyMatch &m);
 // The earliest and latest start the form offers, in this computer's local time (see LocalMs).
 void CupStartBounds(int64_t nowMs, int64_t &localMin, int64_t &localMax);
+// The civilizations a player can take into a match: the random one, the game's (unless a content pack replaces one) and the packs'. Each is a
+// race and its name.
+std::vector<std::pair<int, std::string>> MatchCivChoices();
+// The civilization chosen for the matches, read once from the room's settings.
+int MatchCiv(Ui &u);
 // The start time field: filled with the chosen time when it takes the keys; what is typed moves the start once it reads as a time, and
 // on Return (done) the field shows the time the start took.
 // "21:30": a start in the computer's time.

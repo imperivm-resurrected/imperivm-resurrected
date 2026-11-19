@@ -3467,5 +3467,15 @@ extern const TrRow kTrRows[] = {
 	{"Choose 4, 8, 16 or 32 places; a double elimination, up to 16.", "Elige 4, 8, 16 o 32 plazas; una doble eliminación, hasta 16.", "Scegli 4, 8, 16 o 32 posti; un'eliminazione doppia, fino a 16."},
 	{"Reading the scenarios...", "Leyendo los escenarios...", "Lettura degli scenari..."},
 	{"The game does not let this scenario be played in multiplayer", "El juego no deja jugar este escenario en multijugador", "Il gioco non permette di giocare questo scenario in multigiocatore"},
+	{"Your civilization", "Tu civilización", "La tua civiltà"},
+	{"The one the room gives you", "La que te dé la sala", "Quella che ti dà la sala"},
+	{"Republican Rome", "Roma republicana", "Roma repubblicana"},
+	{"Imperial Rome", "Roma imperial", "Roma imperiale"},
+	{"Gaul", "Galia", "Gallia"},
+	{"Iberia", "Iberia", "Iberia"},
+	{"Carthage", "Cartago", "Cartagine"},
+	{"Germany", "Germania", "Germania"},
+	{"Egypt", "Egipto", "Egitto"},
+	{"Britain", "Britania", "Britannia"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

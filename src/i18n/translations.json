@@ -3459,5 +3459,15 @@
 {"en":"Type it, or move it 15 minutes","es":"Escríbela o muévela de 15 en 15 minutos","it":"Scrivila o spostala di 15 minuti"},
 {"en":"Choose 4, 8, 16 or 32 places; a double elimination, up to 16.","es":"Elige 4, 8, 16 o 32 plazas; una doble eliminación, hasta 16.","it":"Scegli 4, 8, 16 o 32 posti; un'eliminazione doppia, fino a 16."},
 {"en":"Reading the scenarios...","es":"Leyendo los escenarios...","it":"Lettura degli scenari..."},
-{"en":"The game does not let this scenario be played in multiplayer","es":"El juego no deja jugar este escenario en multijugador","it":"Il gioco non permette di giocare questo scenario in multigiocatore"}
+{"en":"The game does not let this scenario be played in multiplayer","es":"El juego no deja jugar este escenario en multijugador","it":"Il gioco non permette di giocare questo scenario in multigiocatore"},
+{"en":"Your civilization","es":"Tu civilización","it":"La tua civiltà"},
+{"en":"The one the room gives you","es":"La que te dé la sala","it":"Quella che ti dà la sala"},
+{"en":"Republican Rome","es":"Roma republicana","it":"Roma repubblicana"},
+{"en":"Imperial Rome","es":"Roma imperial","it":"Roma imperiale"},
+{"en":"Gaul","es":"Galia","it":"Gallia"},
+{"en":"Iberia","es":"Iberia","it":"Iberia"},
+{"en":"Carthage","es":"Cartago","it":"Cartagine"},
+{"en":"Germany","es":"Germania","it":"Germania"},
+{"en":"Egypt","es":"Egipto","it":"Egitto"},
+{"en":"Britain","es":"Britania","it":"Britannia"}
 ]
