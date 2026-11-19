@@ -1953,6 +1953,26 @@ bool TourneyLobbyWatchOnly(const OnlineLobby &g)
 	return !(mine->mine.next.present && mine->mine.next.match == match);
 }
 
+// The game of a cup match ends in the game's main menu: the multiplayer menu opens on the cup's page, where the score, the next match
+// (with its own button) or the final result are.
+void StepAfterGame(const TourneyNext &next)
+{
+	Ui &u = g_tourney;
+	if (g_s.inOnlineGame) {
+		const int64_t match = g_s.room.id && !g_s.room.info.spectate ? TourneyMatchOfTag(g_s.room.info.leagueTag) : 0;
+		if (match && next.present && next.match == match && !next.slug.empty()) u.afterSlug = next.slug;
+		return;
+	}
+	if (u.afterSlug.empty() || g_s.game.active || g_s.room.id || g_s.connecting) return;
+	if (!g_s.open && !MainMenuOnTop()) return;
+	if (!g_s.open) OpenMpMenu(false);
+	g_s.view = kViewTournaments;
+	LeagueTourneyMineRefresh();
+	OpenPage(u.afterSlug, 0);
+	LogI("league", "back from a cup game: its page (%s)", u.afterSlug.c_str());
+	u.afterSlug.clear();
+}
+
 void TourneyGameThreadTick()
 {
 	const auto mine = LeagueTourneyMine();
@@ -1963,4 +1983,5 @@ void TourneyGameThreadTick()
 	StepJoin();
 	StepRoom();
 	StepInRoom(mine->mine.next);
+	StepAfterGame(mine->mine.next);
 }

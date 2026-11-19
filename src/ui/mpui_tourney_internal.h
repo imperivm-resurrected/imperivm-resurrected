@@ -129,6 +129,8 @@ struct RoomLock {
 
 struct Ui {
 	int screen = kScreenList;
+	// The cup whose game is being played, to come back to its page in the menu when the game ends.
+	std::string afterSlug;
 	int filter = 0;
 	// The list's filters: every cup (0), the official (1) or the community's (2); every format (0), single (1) or double elimination (2) or
 	// Swiss (3); and only those the player can sign up for now.
