@@ -195,7 +195,7 @@ const int kShareChannel = 2;
 
 const int kShareChunk = 64 * 1024;
 
-enum : uint8_t { kShReq = 1, kShFile = 2, kShData = 3, kShModEnd = 4, kShDeny = 5, kShDone = 6, kShMapReq = 7, kShMapFile = 8, kShMapEnd = 9, kShCam = 10, kShSeat = 11, kShSwap = 12, kShProgress = 13, kShMapHave = 14 };
+enum : uint8_t { kShReq = 1, kShFile = 2, kShData = 3, kShModEnd = 4, kShDeny = 5, kShDone = 6, kShMapReq = 7, kShMapFile = 8, kShMapEnd = 9, kShCam = 10, kShSeat = 11, kShSwap = 12, kShProgress = 13, kShMapHave = 14, kShColor = 15 };
 static_assert(kContentMessages.Has(kShReq) && kContentMessages.Has(kShMapHave), "content messages out of their range");
 
 // The start countdown of the game room, from the host to the other players: "<seq> <ms>" and "<seq>".
@@ -213,6 +213,8 @@ struct SeatState {
 	std::mutex mx;
 	std::deque<std::pair<uint64_t, int>> requests;
 	std::deque<std::pair<uint64_t, std::string>> swaps;
+	// A guest's own colour for a slot (slot, 0xRRGGBB; 0 back to the game's), for the host to publish.
+	std::deque<std::pair<int, uint32_t>> colors;
 };
 extern SeatState g_seats;
 void PumpRejoinOut();

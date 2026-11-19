@@ -3428,5 +3428,9 @@
 {"en":"Colour blindness: blue, light blue, orange","es":"Daltonismo: azul, celeste, naranja","it":"Daltonismo: blu, azzurro, arancione"},
 {"en":"Colors","es":"Colores","it":"Colori"},
 {"en":"Enemies","es":"Enemigos","it":"Nemici"},
-{"en":"Colour blindness","es":"Daltonismo","it":"Daltonismo"}
+{"en":"Colour blindness","es":"Daltonismo","it":"Daltonismo"},
+{"en":"Own colour...","es":"Color propio...","it":"Colore proprio..."},
+{"en":"Own colour (in use)...","es":"Color propio (en uso)...","it":"Colore proprio (in uso)..."},
+{"en":"Use","es":"Usar","it":"Usa"},
+{"en":"Too close to the colour of %s: pick another one.","es":"Demasiado parecido al color de %s: elige otro.","it":"Troppo simile al colore di %s: scegline un altro."}
 ]

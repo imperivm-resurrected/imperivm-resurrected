@@ -3,6 +3,8 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include <array>
 
+#include "game/roomcolors.h"
+#include "ui/colorwheel.h"
 #include "ui/textedit.h"
 #include "MinHook.h"
 #include "core/names.h"
@@ -337,6 +339,88 @@ std::array<int, kTeamColorSlots> CachedTeamColors(const uint32_t (&palette)[kTea
 	last = TeamColorsFor(palette, team, used);
 	return last;
 }
+}
+
+uint32_t CustomColorOf(const State &st, const GameRoomSnapshot &g, int slot)
+{
+	if (slot < 0 || slot >= 8) return 0;
+	if (g.online && !g.host) return slot < static_cast<int>(st.room.info.customColors.size()) ? st.room.info.customColors[slot] : 0;
+	return st.customColors[slot];
+}
+
+COLORREF SlotColor(const State &st, const GameRoomSnapshot &g, int slot)
+{
+	const uint32_t own = CustomColorOf(st, g, slot);
+	return own ? colorwheel::Ref(own) : PlayerColor(g, g.slots[slot & 7].color);
+}
+
+namespace {
+uint32_t RgbOf(COLORREF c)
+{
+	return static_cast<uint32_t>(GetRValue(c)) << 16 | static_cast<uint32_t>(GetGValue(c)) << 8 | GetBValue(c);
+}
+
+// The slot whose colour is too close to `rgb` for `slot` to take it, or -1.
+int CloserSlot(const State &st, const GameRoomSnapshot &g, int slot, uint32_t rgb)
+{
+	for (int i = 0; i < 8; i++) {
+		if (i == slot || !g.slots[i].used) continue;
+		if (RoomColorsTooClose(rgb, RgbOf(SlotColor(st, g, i)))) return i;
+	}
+	return -1;
+}
+}
+
+bool UseCustomColor(State &st, int slot, uint32_t rgb)
+{
+	const GameRoomSnapshot &g = st.game;
+	if (slot < 0 || slot >= 8 || !rgb) return false;
+	const int other = CloserSlot(st, g, slot, rgb);
+	if (other >= 0) {
+		ModUiToast(TrFmt("Too close to the colour of %s: pick another one.", {g.slots[other].name.empty() ? Tr("another player") : g.slots[other].name}), true);
+		return false;
+	}
+	if (g.online && !g.host) SteamRequestColor(slot, rgb);
+	else st.customColors[slot] = rgb;
+	LogI("room", "slot %d takes its own colour #%06x", slot + 1, rgb);
+	return true;
+}
+
+void ClearCustomColor(State &st, int slot)
+{
+	const GameRoomSnapshot &g = st.game;
+	if (slot < 0 || slot >= 8 || !CustomColorOf(st, g, slot)) return;
+	if (g.online && !g.host) SteamRequestColor(slot, 0);
+	else st.customColors[slot] = 0;
+}
+
+void CustomColorsStep(State &st, const GameRoomSnapshot &g)
+{
+	if (!g.online || g.host) {
+		int slot = -1;
+		uint32_t rgb = 0;
+		while (SteamTakeColorRequest(slot, rgb)) {
+			if (slot < 0 || slot >= 8 || !g.slots[slot].used) continue;
+			if (rgb && CloserSlot(st, g, slot, rgb) >= 0) continue;
+			st.customColors[slot] = rgb;
+		}
+		// A slot left empty, or under the team colours, has the game's colour again.
+		for (int i = 0; i < 8; i++) {
+			if (!g.slots[i].used || TeamColorsOn(st, g)) st.customColors[i] = 0;
+		}
+		if (g.online && st.room.id) {
+			std::string text;
+			for (int i = 0; i < 8; i++) {
+				char one[8] = {};
+				if (st.customColors[i]) sprintf_s(one, "%06x", st.customColors[i]);
+				text += (i ? "," : "") + std::string(one);
+			}
+			SteamPublishCustomColors(text);
+		}
+	}
+	uint32_t table[kRoomColorSlots] = {};
+	for (int i = 0; i < kRoomColorSlots; i++) table[i] = CustomColorOf(st, g, i);
+	RoomColorsSet(table);
 }
 
 bool TeamColorsOn(const State &st, const GameRoomSnapshot &g)

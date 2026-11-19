@@ -3436,5 +3436,9 @@ extern const TrRow kTrRows[] = {
 	{"Colors", "Colores", "Colori"},
 	{"Enemies", "Enemigos", "Nemici"},
 	{"Colour blindness", "Daltonismo", "Daltonismo"},
+	{"Own colour...", "Color propio...", "Colore proprio..."},
+	{"Own colour (in use)...", "Color propio (en uso)...", "Colore proprio (in uso)..."},
+	{"Use", "Usar", "Usa"},
+	{"Too close to the colour of %s: pick another one.", "Demasiado parecido al color de %s: elige otro.", "Troppo simile al colore di %s: scegline un altro."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

@@ -55,6 +55,8 @@ struct OnlineLobby {
 	std::vector<int> saveColors;
 	// The host gives every player the colour of their team ("tcol").
 	bool teamColors = false;
+	// The colours the players picked outside the game's twelve, per slot (0xRRGGBB, 0 for none): "pcolors".
+	std::vector<uint32_t> customColors;
 	std::vector<int> saveRaces;
 	std::vector<OnlineMod> mods;
 	int optionalMods = 0;
@@ -231,6 +233,11 @@ void SteamPublishRules(unsigned rules);
 void SteamPublishSlots(const std::string &text);
 void SteamPublishSaveColors(const std::string &text);
 void SteamPublishTeamColors(bool on);
+// A guest asks the host for its own colour in a slot (0 goes back to the game's); the host publishes them all.
+void SteamRequestColor(int slot, uint32_t rgb);
+bool SteamTakeColorRequest(int &slot, uint32_t &rgb);
+// The host: every slot's own colour, as "rrggbb" per slot separated by commas (empty for none).
+void SteamPublishCustomColors(const std::string &text);
 // The host sends the start countdown (ms >= 0) or its cancellation (ms < 0) to the other members of its Steam room. False when
 // this PC is not the owner of a Steam room.
 bool SteamSendRoomCountdown(unsigned seq, int ms);

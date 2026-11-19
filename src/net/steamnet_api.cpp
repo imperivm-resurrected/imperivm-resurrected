@@ -765,6 +765,38 @@ bool SteamTakeSwap(uint64_t &from, std::string &text)
 	return true;
 }
 
+void SteamRequestColor(int slot, uint32_t rgb)
+{
+	if (!SteamOnlineReady()) return;
+	Post([slot, rgb] {
+		if (!g_lobby) return;
+		const uint64 owner = S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby);
+		if (!owner || owner == g_steam.me) return;
+		char text[32];
+		sprintf_s(text, "%d %06x", slot, rgb & 0xffffff);
+		ShareSend(owner, kShColor, text, strlen(text));
+	});
+}
+
+bool SteamTakeColorRequest(int &slot, uint32_t &rgb)
+{
+	std::lock_guard<std::mutex> lock(g_seats.mx);
+	if (g_seats.colors.empty()) return false;
+	slot = g_seats.colors.front().first;
+	rgb = g_seats.colors.front().second;
+	g_seats.colors.pop_front();
+	return true;
+}
+
+void SteamPublishCustomColors(const std::string &text)
+{
+	if (!SteamOnlineReady()) return;
+	static std::string last;
+	if (text == last) return;
+	last = text;
+	Post([text] { PublishOwned("pcolors", text); });
+}
+
 bool SteamTakeSeatRequest(uint64_t &member, int &slot)
 {
 	std::lock_guard<std::mutex> lock(g_seats.mx);

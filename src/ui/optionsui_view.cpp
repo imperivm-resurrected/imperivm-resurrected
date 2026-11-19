@@ -11,6 +11,7 @@
 
 #include "core/logcore.h"
 #include "core/version.h"
+#include "ui/colorwheel.h"
 #include "ui/fullscreen.h"
 #include "ui/widgets.h"
 
@@ -133,41 +134,6 @@ Row Colors(const Values &v, const char *label, const std::vector<std::pair<int, 
 	return r;
 }
 
-// Hue, saturation and value, each 0..1, and back.
-void ToHsv(uint32_t rgb, double &h, double &s, double &v)
-{
-	const double r = ((rgb >> 16) & 0xff) / 255.0, g = ((rgb >> 8) & 0xff) / 255.0, b = (rgb & 0xff) / 255.0;
-	const double mx = std::max({r, g, b}), mn = std::min({r, g, b}), d = mx - mn;
-	v = mx;
-	s = mx > 0 ? d / mx : 0;
-	h = 0;
-	if (d > 0) {
-		if (mx == r) h = (g - b) / d + (g < b ? 6 : 0);
-		else if (mx == g) h = (b - r) / d + 2;
-		else h = (r - g) / d + 4;
-		h /= 6;
-	}
-}
-
-uint32_t FromHsv(double h, double s, double v)
-{
-	const double f = h * 6 - std::floor(h * 6);
-	const double p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s);
-	double r = v, g = t, b = p;
-	switch (static_cast<int>(std::floor(h * 6)) % 6) {
-	case 1: r = q, g = v, b = p; break;
-	case 2: r = p, g = v, b = t; break;
-	case 3: r = p, g = q, b = v; break;
-	case 4: r = t, g = p, b = v; break;
-	case 5: r = v, g = p, b = q; break;
-	default: break;
-	}
-	const auto byte = [](double c) { return static_cast<uint32_t>(std::max(0.0, std::min(255.0, c * 255 + 0.5))); };
-	return byte(r) << 16 | byte(g) << 8 | byte(b);
-}
-
-COLORREF Ref(uint32_t rgb) { return RGB((rgb >> 16) & 0xff, (rgb >> 8) & 0xff, rgb & 0xff); }
-
 // Where the open picker hangs from: the colour it changes, as painted this frame.
 RECT g_colorAnchor = {};
 
@@ -288,7 +254,7 @@ void PaintRow(Painter &p, const Metrics &m, const Row &r, const View &v, int x, 
 			const bool hot = r.enabled && p.Hover(cx, controlY, chipW, m.controlH, v.mouseX, v.mouseY);
 			p.Fill(cx, controlY, chipW, m.controlH, open || hot ? pal::button : pal::bg);
 			p.Frame(cx, controlY, chipW, m.controlH, open ? pal::text : pal::edge);
-			p.Fill(cx + 4, controlY + 4, sw - 8, m.controlH - 8, r.enabled ? Ref(r.colors[i]) : pal::edge);
+			p.Fill(cx + 4, controlY + 4, sw - 8, m.controlH - 8, r.enabled ? colorwheel::Ref(r.colors[i]) : pal::edge);
 			p.Font(3);
 			p.Text(cx + sw + 2, controlY, chipW - sw - 6, m.controlH, r.items[i], r.enabled ? pal::text : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 			if (r.enabled) p.AddHit(cx, controlY, chipW, m.controlH, kActColor, r.colorIds[i]);
@@ -422,39 +388,12 @@ std::vector<Page> BuildPages(const Values &v)
 }
 
 namespace {
-// A wheel of hue and saturation at full brightness, with the panel's colour around it: the painter copies pictures without alpha.
-const std::vector<uint32_t> &WheelPicture(int side, COLORREF around)
-{
-	static std::vector<uint32_t> picture;
-	static int madeSide = 0;
-	static COLORREF madeAround = 0;
-	if (madeSide == side && madeAround == around && !picture.empty()) return picture;
-	madeSide = side;
-	madeAround = around;
-	picture.assign(static_cast<size_t>(side) * side, 0);
-	const double c = (side - 1) / 2.0;
-	const uint32_t bg = static_cast<uint32_t>(GetRValue(around)) << 16 | static_cast<uint32_t>(GetGValue(around)) << 8 | GetBValue(around);
-	for (int py = 0; py < side; py++) {
-		for (int px = 0; px < side; px++) {
-			const double dx = px - c, dy = py - c, d = std::sqrt(dx * dx + dy * dy) / c;
-			if (d > 1.0) {
-				picture[static_cast<size_t>(py) * side + px] = 0xff000000u | bg;
-				continue;
-			}
-			double h = std::atan2(dy, dx) / (2 * 3.14159265358979) + 0.5;
-			if (h >= 1) h -= 1;
-			picture[static_cast<size_t>(py) * side + px] = 0xff000000u | FromHsv(h, d, 1.0);
-		}
-	}
-	return picture;
-}
-
 void PaintColorPicker(Painter &p, const View &v, int canvasW, int canvasH)
 {
 	if (!v.colorId) return;
 	const auto it = v.values.combos.find(v.colorId);
 	const uint32_t color = it != v.values.combos.end() ? static_cast<uint32_t>(it->second) : 0;
-	const int pad = 14, wheel = 180, stripW = 22, w = pad * 3 + wheel + stripW, h = pad * 2 + wheel + 44;
+	const int pad = 14, wheel = colorwheel::kWheel, w = pad * 2 + colorwheel::kWidth, h = pad * 2 + wheel + 44;
 	int x = g_colorAnchor.right - w, y = g_colorAnchor.bottom + 6;
 	if (x < 4) x = 4;
 	if (y + h > canvasH - 4) y = g_colorAnchor.top - 6 - h;
@@ -464,28 +403,10 @@ void PaintColorPicker(Painter &p, const View &v, int canvasW, int canvasH)
 	p.Fill(x, y, w, h, pal::raised);
 	p.Frame(x, y, w, h, pal::lineStrong);
 	p.AddHit(x, y, w, h, kActNone, 0);
-	double hh = 0, ss = 0, vv = 0;
-	ToHsv(color, hh, ss, vv);
 	const int wx = x + pad, wy = y + pad;
-	const int side = p.S(wheel);
-	p.Image(wx, wy, wheel, wheel, WheelPicture(side, pal::raised).data(), side, side);
-	const double angle = (hh - 0.5) * 2 * 3.14159265358979, r = ss * (wheel / 2.0);
-	const int mx = wx + wheel / 2 + static_cast<int>(std::cos(angle) * r), my = wy + wheel / 2 + static_cast<int>(std::sin(angle) * r);
-	p.Frame(mx - 5, my - 5, 11, 11, pal::bg);
-	p.Frame(mx - 4, my - 4, 9, 9, pal::text);
-	p.AddHit(wx, wy, wheel, wheel, kActColorWheel, v.colorId);
-	// The brightness, from the colour's own hue at the top to black at the bottom.
-	const int sx = wx + wheel + pad;
-	for (int i = 0; i < wheel; i += 4) {
-		const uint32_t c = FromHsv(hh, ss, 1.0 - static_cast<double>(i) / wheel);
-		p.Fill(sx, wy + i, stripW, 4, Ref(c));
-	}
-	p.Frame(sx, wy, stripW, wheel, pal::edge);
-	const int vy = wy + static_cast<int>((1.0 - vv) * (wheel - 1));
-	p.Fill(sx - 3, vy - 1, stripW + 6, 3, pal::text);
-	p.AddHit(sx - 4, wy, stripW + 8, wheel, kActColorValue, v.colorId);
-	p.Fill(wx, wy + wheel + 12, wheel + pad + stripW, 30, Ref(color));
-	p.Frame(wx, wy + wheel + 12, wheel + pad + stripW, 30, pal::edge);
+	colorwheel::Paint(p, wx, wy, color, pal::raised, kActColorWheel, kActColorValue, v.colorId);
+	p.Fill(wx, wy + wheel + 12, colorwheel::kWidth, 30, colorwheel::Ref(color));
+	p.Frame(wx, wy + wheel + 12, colorwheel::kWidth, 30, pal::edge);
 }
 
 void PaintDrop(Painter &p, const View &v, const RECT &dropAnchor, const std::vector<std::string> &dropItems, int dropSel, int comboW, int canvasW, int canvasH)
@@ -589,19 +510,7 @@ void PaintOptionsScreen(Painter &p, const View &v)
 
 uint32_t PickedColor(int part, const RECT &hit, int mx, int my, uint32_t current)
 {
-	double h = 0, s = 0, v = 0;
-	ToHsv(current, h, s, v);
-	const int w = std::max<LONG>(1, hit.right - hit.left), ht = std::max<LONG>(1, hit.bottom - hit.top);
-	if (part == kActColorValue) {
-		v = 1.0 - std::max(0.0, std::min(1.0, static_cast<double>(my - hit.top) / ht));
-		return FromHsv(h, s, v);
-	}
-	const double c = w / 2.0, dx = mx - hit.left - c, dy = my - hit.top - ht / 2.0;
-	s = std::min(1.0, std::sqrt(dx * dx + dy * dy) / c);
-	h = std::atan2(dy, dx) / (2 * 3.14159265358979) + 0.5;
-	if (h >= 1) h -= 1;
-	// A colour picked as black would leave nothing to see: the wheel keeps a brightness of at least a third.
-	return FromHsv(h, s, std::max(v, 0.35));
+	return colorwheel::Pick(part == kActColorValue, hit, mx, my, current);
 }
 
 }

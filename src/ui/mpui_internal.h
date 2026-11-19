@@ -55,6 +55,8 @@ enum Action {
 	kFieldRanked,
 	// "Team colours" of the room, turned on or off by the host.
 	kGTeamColors,
+	// The colour menu's own colour: open the wheel, drag on it or on its brightness, take it, go back to the twelve.
+	kGColorCustom, kGColorWheel, kGColorValue, kGColorUse, kGColorBack,
 	// The list's filter tabs: the filter is the argument.
 	kRoomFilter,
 };
@@ -347,6 +349,13 @@ struct State {
 	// "Team colours": the host's choice, and the colour each slot is being given with the tries made (TeamColorsStep).
 	bool teamColors = false;
 	int teamColorWant[8] = {-1, -1, -1, -1, -1, -1, -1, -1};
+	// The colours picked outside the game's twelve, per slot (0xRRGGBB, 0 for none): the host's and an offline room's own table.
+	uint32_t customColors[8] = {};
+	// The colour menu shows the wheel; the colour on it, and the part being dragged with its hit.
+	bool colorWheel = false;
+	uint32_t colorTry = 0;
+	int colorDrag = 0;
+	RECT colorRect = {};
 	int teamColorTries[8] = {};
 	DWORD teamColorTick = 0;
 	// The slots' colours, ready checks and players when the tries were last counted from zero.
@@ -610,6 +619,16 @@ bool RankedRoomLocked(const State &st);
 // Whether the room gives its players the colours of their teams: the host's choice, which the guests read from the room; never in the
 // room of a saved game, whose colours are the save's.
 bool TeamColorsOn(const State &st, const GameRoomSnapshot &g);
+// A slot's own colour (0xRRGGBB), 0 when it has the game's: the host's or an offline room's table, the room's for a guest.
+uint32_t CustomColorOf(const State &st, const GameRoomSnapshot &g, int slot);
+// What a slot looks like: its own colour, else the game's.
+COLORREF SlotColor(const State &st, const GameRoomSnapshot &g, int slot);
+// The host takes the guests' colours and publishes them; every PC hands the room's colours to the match that starts next.
+void CustomColorsStep(State &st, const GameRoomSnapshot &g);
+// Takes the wheel's colour for the slot of the colour menu, when no other player's is too close; false otherwise.
+bool UseCustomColor(State &st, int slot, uint32_t rgb);
+// A colour of the twelve for a slot: its own colour goes.
+void ClearCustomColor(State &st, int slot);
 // While it is on, sets this PC's slots to the colours of their teams, one try every half second.
 void TeamColorsStep(State &st, const GameRoomSnapshot &g);
 bool RankedRoomAction(int action, int arg);

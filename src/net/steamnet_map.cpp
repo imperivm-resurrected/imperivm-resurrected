@@ -498,6 +498,16 @@ void ReceiveShare()
 				if (g_seats.requests.size() < 32) g_seats.requests.push_back({peer, slot});
 			}
 		}
+		else if (len && data[0] == kShColor) {
+			if (OwnLobby()) {
+				int slot = -1;
+				unsigned rgb = 0;
+				if (sscanf_s(std::string(reinterpret_cast<const char *>(data + 1), len - 1).c_str(), "%d %x", &slot, &rgb) == 2 && slot >= 0 && slot < 8) {
+					std::lock_guard<std::mutex> lock(g_seats.mx);
+					if (g_seats.colors.size() < 32) g_seats.colors.push_back({slot, rgb & 0xffffff});
+				}
+			}
+		}
 		else if (len && data[0] == kShSwap) {
 			bool member = false;
 			const int n = g_lobby ? S.SteamAPI_ISteamMatchmaking_GetNumLobbyMembers(g_steam.mm, g_lobby) : 0;

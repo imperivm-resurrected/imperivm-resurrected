@@ -3,6 +3,7 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include <mutex>
 
+#include "ui/colorwheel.h"
 #include "ui/textedit.h"
 #include "MinHook.h"
 #include "core/log.h"
@@ -89,6 +90,9 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 			FieldGeom geom;
 			if (FieldGet(ActionOfField(g_s.focus), geom)) g_s.edit.caret = EditIndexAt(geom, FocusedText(), g_s.mouseX);
 		}
+		if (g_s.colorDrag && g_s.mouseDown) {
+			g_s.colorTry = colorwheel::Pick(g_s.colorDrag == kGColorValue, g_s.colorRect, g_s.mouseX, g_s.mouseY, g_s.colorTry);
+		}
 		if (g_s.resizeCol >= 0 && g_s.mouseDown) {
 			const int c = g_s.resizeCol & 3;
 			int others = 0;
@@ -129,6 +133,12 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 				g_s.pressTime = GetTickCount();
 				g_s.mouseDown = true;
 				hit = true;
+				if (h.action == kGColorWheel || h.action == kGColorValue) {
+					g_s.colorDrag = h.action;
+					g_s.colorRect = h.r;
+					g_s.colorTry = colorwheel::Pick(h.action == kGColorValue, h.r, pt.x, pt.y, g_s.colorTry);
+					break;
+				}
 				DoAction(h.action, h.arg);
 				if (msg == WM_LBUTTONDBLCLK && h.action == kSelect && g_s.ready) {
 					const std::vector<int> vis = Visible(g_s);
@@ -192,6 +202,7 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 	case WM_LBUTTONUP:
 		g_s.edit.dragging = false;
 		g_s.mouseDown = false;
+		g_s.colorDrag = 0;
 		g_s.resizeCol = -1;
 		g_s.dropBar = ScrollDrag();
 		ListUp(g_s.pick);

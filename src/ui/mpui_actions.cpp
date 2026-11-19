@@ -288,6 +288,7 @@ void DoAction(int action, int arg)
 			g_s.game.slots[idx & 7].color = arg;
 			Predict(kPredColor, idx & 7, arg);
 			GameRoomSetColor(idx & 7, arg);
+			ClearCustomColor(g_s, idx & 7);
 		}
 		else if (g_s.dropKind == kDropTeam) {
 			if (arg >= 0 && arg <= kRoomTeams) {
@@ -461,7 +462,24 @@ void DoAction(int action, int arg)
 		}
 		GameRoomToggleOption(arg);
 		break;
-	case kGColor: DoAction(kGDropOpen, DropArg(kDropColor, arg & 7)); break;
+	case kGColor:
+		g_s.colorWheel = false;
+		DoAction(kGDropOpen, DropArg(kDropColor, arg & 7));
+		break;
+	case kGColorCustom: {
+		const int slot = g_s.dropIndex & 7;
+		const COLORREF now = SlotColor(g_s, g_s.game, slot);
+		g_s.colorTry = static_cast<uint32_t>(GetRValue(now)) << 16 | static_cast<uint32_t>(GetGValue(now)) << 8 | GetBValue(now);
+		g_s.colorWheel = true;
+		break;
+	}
+	case kGColorBack: g_s.colorWheel = false; break;
+	case kGColorUse:
+		if (UseCustomColor(g_s, g_s.dropIndex & 7, g_s.colorTry)) {
+			g_s.colorWheel = false;
+			g_s.dropOpen = false;
+		}
+		break;
 	case kGKickJoining:
 		if (arg >= 0 && arg < 8 && g_flow.arrivingIds[arg]) SteamKick(g_flow.arrivingIds[arg]);
 		break;

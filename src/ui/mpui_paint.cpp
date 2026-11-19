@@ -3,6 +3,7 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include <ctime>
 
+#include "ui/colorwheel.h"
 #include "ui/textedit.h"
 #include "MinHook.h"
 #include "core/config.h"
@@ -1097,9 +1098,31 @@ void PaintDropList(Painter &p, const State &st)
 	const std::vector<std::string> items = DropItems(st, sel);
 	const int count = static_cast<int>(items.size());
 	if (!count) return;
+	if (st.dropKind == kDropColor && st.colorWheel) {
+		// The slot's own colour: the wheel, what it looks like, and the buttons to take it or go back to the twelve.
+		const int mx = st.mouseX, my = st.mouseY, pad = 12, btnH = 34;
+		const int w = pad * 2 + colorwheel::kWidth, h = pad * 2 + colorwheel::kWheel + 10 + 28 + 10 + btnH;
+		const int x = std::min<int>(g_dropAnchor.left, st.viewW - 16 - w);
+		int y = g_dropAnchor.bottom + 4;
+		if (y + h > st.viewH - 8) y = g_dropAnchor.top - 4 - h;
+		p.hits->clear();
+		p.AddHit(0, 0, st.viewW, st.viewH, kGDropClose, 0);
+		p.Fill(x + 4, y + 4, w, h, pal::shadow);
+		p.Fill(x, y, w, h, pal::panel);
+		p.Frame(x, y, w, h, pal::lineStrong);
+		p.AddHit(x, y, w, h, kNone, 0);
+		colorwheel::Paint(p, x + pad, y + pad, st.colorTry, pal::panel, kGColorWheel, kGColorValue, st.dropIndex);
+		const int sy = y + pad + colorwheel::kWheel + 10;
+		p.Fill(x + pad, sy, colorwheel::kWidth, 28, colorwheel::Ref(st.colorTry));
+		p.Frame(x + pad, sy, colorwheel::kWidth, 28, pal::edge);
+		const int by = sy + 28 + 10, half = (colorwheel::kWidth - 8) / 2;
+		p.Button(x + pad, by, half, btnH, "Back", kGColorBack, 0, mx, my, true, false, 3);
+		p.Button(x + pad + half + 8, by, colorwheel::kWidth - half - 8, btnH, "Use", kGColorUse, 0, mx, my, true, true, 3);
+		return;
+	}
 	if (st.dropKind == kDropColor) {
-		const int mx = st.mouseX, my = st.mouseY, cell = 34, gap = 6, pad = 10;
-		const int w = pad * 2 + 6 * cell + 5 * gap, h = pad * 2 + 2 * cell + gap;
+		const int mx = st.mouseX, my = st.mouseY, cell = 34, gap = 6, pad = 10, customH = 30;
+		const int w = pad * 2 + 6 * cell + 5 * gap, h = pad * 2 + 2 * cell + gap + gap + customH;
 		const int x = std::min<int>(g_dropAnchor.left, st.viewW - 16 - w);
 		int y = g_dropAnchor.bottom + 4;
 		if (y + h > st.viewH - 8) y = g_dropAnchor.top - 4 - h;
@@ -1132,6 +1155,11 @@ void PaintDropList(Painter &p, const State &st)
 				if (hov) p.Frame(cx - 2, cy - 2, cell + 4, cell + 4, pal::edgeHot);
 			}
 			p.AddHit(cx, cy, cell, cell, kGDropPick, c);
+		}
+		{
+			const int cy = y + pad + 2 * cell + 2 * gap, cw = w - 2 * pad;
+			const bool own = CustomColorOf(st, st.game, st.dropIndex & 7) != 0;
+			p.Button(x + pad, cy, cw, customH, own ? "Own colour (in use)..." : "Own colour...", kGColorCustom, 0, mx, my, true, own, 3);
 		}
 		return;
 	}

@@ -126,6 +126,7 @@ void MpUiGameThreadTick()
 				g_s.roomLimit = 0;
 			}
 			TeamColorsStep(g_s, snap);
+			CustomColorsStep(g_s, snap);
 			if (snap.online && !snap.host) {
 				if (!LocalReady(snap)) {
 					g_s.readySeen = false;

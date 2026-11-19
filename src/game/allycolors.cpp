@@ -11,6 +11,7 @@
 #include "game/diplomacyrules.h"
 #include "game/gamelayout.h"
 #include "game/gamehook.h"
+#include "game/roomcolors.h"
 
 #include <cstdint>
 
@@ -49,6 +50,8 @@ Serialize_t g_origSerialize = nullptr;
 // What this PC shows of each player of the game being played: their real colour, and the one drawn now. Only the game thread uses it.
 struct Shown {
 	const char *game = nullptr;
+	// The room's own colours (game/roomcolors.h) wait for the match's players.
+	bool roomColorsDue = false;
 	bool known[layout::kPlayerCount] = {};
 	unsigned real[layout::kPlayerCount] = {}, drawn[layout::kPlayerCount] = {};
 };
@@ -87,6 +90,30 @@ void Redraw()
 	if (mgr) reinterpret_cast<Invalidate_t>(addr::kVisibleMgrInvalidateRect)(mgr, nullptr, reinterpret_cast<int *>(mgr + kVisibleScreenRect));
 }
 
+// The colours the room's players picked outside the game's twelve: room slot s plays the s-th entry of the settings that holds its
+// own index (as CivsBuildEnd finds a slot's player). Before the players are first read, so they are their real colours.
+void ApplyRoomColors(const char *game)
+{
+	uint32_t rgb[kRoomColorSlots];
+	if (!RoomColorsTake(rgb) || *reinterpret_cast<int *>(addr::kEditorMode)) return;
+	const char *gs = *reinterpret_cast<const char *const *>(addr::kGameSettings);
+	if (!gs) return;
+	int entries[layout::kSettingsEntryCount];
+	int count = 0;
+	for (int i = 0; i < layout::kSettingsEntryCount; i++) {
+		if (At<int>(layout::SettingsEntry(gs, i), layout::kEntrySlot) == i) entries[count++] = i;
+	}
+	for (int slot = 0; slot < kRoomColorSlots && slot < count; slot++) {
+		if (!rgb[slot]) continue;
+		char *player = const_cast<char *>(layout::PlayerAt(game, entries[slot]));
+		const unsigned color = Rgb555((rgb[slot] >> 16) & 0xff, (rgb[slot] >> 8) & 0xff, rgb[slot] & 0xff);
+		At<unsigned>(player, layout::kPlayerColor) = color;
+		reinterpret_cast<BuildShades_t>(addr::kBuildColorShadeTable)(color, &At<unsigned short>(player, layout::kPlayerShades));
+		LogI("game", "room colours: player %d (room slot %d) is #%06x", entries[slot], slot, rgb[slot]);
+	}
+	Redraw();
+}
+
 bool Step()
 {
 	__try {
@@ -94,8 +121,13 @@ bool Step()
 		if (game != g_shown.game) {
 			g_shown = Shown();
 			g_shown.game = game;
+			g_shown.roomColorsDue = game != nullptr;
 		}
 		if (!game || !*reinterpret_cast<void **>(addr::kMap)) return false;
+		if (g_shown.roomColorsDue) {
+			g_shown.roomColorsDue = false;
+			ApplyRoomColors(game);
+		}
 		const char *local = layout::LocalPlayer(game);
 		// Only for one of the match's eight seats: never in the editor, whose colours are the map's own, nor for the observer (player 9)
 		// a replay or a broadcast puts the watcher in, who is at peace with nobody and would see everyone red.

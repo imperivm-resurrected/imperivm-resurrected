@@ -745,7 +745,7 @@ void PaintSlotRow(Painter &p, const State &st, const TableCtx &t, int i, const A
 	{
 		const bool editable = !load && own && !frozen && !TeamColorsOn(st, g);
 		const bool open = st.dropOpen && st.dropKind == kDropColor && st.dropIndex == i;
-		PaintValueBox(p, st, c.color, ctlY, c.colorW, std::string(), pal::text, editable, open, kGColor, i, PlayerColor(g, s.color));
+		PaintValueBox(p, st, c.color, ctlY, c.colorW, std::string(), pal::text, editable, open, kGColor, i, SlotColor(st, g, i));
 	}
 	{
 		const bool off = BonusesDisabled(g);

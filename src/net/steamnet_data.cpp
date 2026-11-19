@@ -145,6 +145,16 @@ OnlineLobby ReadLobby(uint64 id)
 	l.rules = static_cast<unsigned>(strtoul(Data(id, "rules").c_str(), nullptr, 16));
 	l.teamColors = Data(id, "tcol") == "1";
 	{
+		const std::string colors = Data(id, "pcolors");
+		for (size_t p = 0; !colors.empty() && p <= colors.size() && l.customColors.size() < 8;) {
+			const size_t q = colors.find(',', p);
+			const std::string one = colors.substr(p, q == std::string::npos ? std::string::npos : q - p);
+			l.customColors.push_back(one.empty() ? 0 : static_cast<uint32_t>(strtoul(one.c_str(), nullptr, 16)) & 0xffffff);
+			if (q == std::string::npos) break;
+			p = q + 1;
+		}
+	}
+	{
 		const std::string colors = Data(id, "savecolors");
 		for (size_t p = 0; !colors.empty() && p <= colors.size();) {
 			const size_t q = colors.find(',', p);
