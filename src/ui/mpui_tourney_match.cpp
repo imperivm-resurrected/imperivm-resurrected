@@ -54,11 +54,26 @@ std::string PreviousText(const TourneyDetail &d, int64_t entry, int round)
 	return TrFmt("%s: won against %s %s", {stage, other.name, std::to_string(mine) + "\xE2\x80\x93" + std::to_string(theirs)});
 }
 
-void PaintPlayerColumn(Painter &p, int cx, int y, int h, uint64_t id, const std::string &name, bool me, int seed, const std::string &before,
-	const std::string &state, bool stateOk)
+// The civilization the player takes into the room, as a menu: the mod puts it in their slot there and gets them ready.
+void PaintCivMenu(Painter &p, const State &st, int x, int y, int w)
+{
+	const int race = MatchCiv(g_tourney);
+	std::string name = Tr("The one the room gives you");
+	for (const auto &c : MatchCivChoices()) {
+		if (c.first == race) name = c.second;
+	}
+	const bool open = st.dropOpen && st.dropKind == kDropTourney && st.dropIndex == kCupMenuCiv;
+	const bool raw = p.raw;
+	p.raw = true;
+	PaintCombo(p, x, y, w, 34, Tr("Civilization") + ": " + name, open, true, st.mouseX, st.mouseY, kTourney, ArgOf(kSubCivMenu, 0), &g_dropAnchor);
+	p.raw = raw;
+}
+
+int PaintPlayerColumn(Painter &p, int cx, int y, int h, uint64_t id, const std::string &name, bool me, int seed, const std::string &before,
+	const std::string &state, bool stateOk, int extraH = 0)
 {
 	const int disc = h >= 400 ? 132 : 108;
-	int cy = y + (h - (disc + 216)) / 2;
+	int cy = y + (h - (disc + 216 + extraH)) / 2;
 	PaintPlayerDisc(p, cx - disc / 2, cy, disc, id, name, me ? pal::redText : pal::edgeHot);
 	cy += disc + 22;
 	PaintCaps(p, cx - 150, cy, 300, 20, me ? "You" : "Opponent", me ? pal::redText : pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
@@ -83,6 +98,7 @@ void PaintPlayerColumn(Painter &p, int cx, int y, int h, uint64_t id, const std:
 		PaintPill(p, cx, cy + 62, state, stateOk);
 		p.raw = false;
 	}
+	return cy + 62 + 34;
 }
 
 // A team's side of the match: its name, its seed and how it got here, and its two players, each with their picture and whether they are
@@ -155,9 +171,8 @@ void MapLines(const TourneyNext &n, const TourneyMap &map, std::string &name, st
 	name = map.Known() ? MapText(mapOnly) : Tr("Chosen in the room");
 	// The size alone, as MapText writes it after the name.
 	const std::string full = MapText(map);
-	sub = Tr(map.Scenario() ? "Scenario" : "Random map");
-	if (map.Known() && full.size() > name.size()) sub += full.substr(name.size());
-	sub += " \xC2\xB7 " + Tr(n.Teams() ? "4 players" : "2 players");
+	(void)full;
+	sub.clear();
 }
 
 // The games of a series, one a row: its number, its map and how it went for this player.
@@ -481,25 +496,6 @@ void PaintReadyCard(Painter &p, const State &st, const TourneyNext &n, const Tou
 		p.raw = false;
 		ly += 32;
 	}
-	// The civilization taken into the room: the mod puts it in the player's slot there and gets them ready.
-	if (ly + 40 <= ry + rh) {
-		const int race = MatchCiv(g_tourney);
-		std::string name = Tr("The one the room gives you");
-		for (const auto &c : MatchCivChoices()) {
-			if (c.first == race) name = c.second;
-		}
-		const int lw = 150, bx = m + pad + lw, bw = cw - 2 * pad - lw, by = ly + 2;
-		p.Font(0);
-		p.raw = true;
-		p.Text(m + pad, by, lw - 10, 32, Tr("Your civilization"), pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		const bool hot = p.Hover(bx, by, bw, 32, st.mouseX, st.mouseY);
-		p.Fill(bx, by, bw, 32, hot ? pal::raised : pal::field);
-		p.Frame(bx, by, bw, 32, hot ? pal::edgeHot : pal::edge);
-		p.Text(bx + 10, by, bw - 34, 32, name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		p.raw = false;
-		p.ArrowDown(bx + bw - 20, by + 13, 9, 6, pal::textDim);
-		p.AddHit(bx, by, bw, 32, kTourney, ArgOf(kSubCivMenu, 0));
-	}
 }
 
 void PaintMatchRules(Painter &p, const TourneyNext &n, const TourneyPageView &page, const TourneyMap &map, bool teams, bool byRounds, int x2, int ry, int cw, int rh,
@@ -604,6 +600,7 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 	if (teams) {
 		PaintTeamColumn(p, st, n, m + sideW / 2, cy, sideW - 40, cardH, n.team.name.empty() && meE ? meE->name : n.team.name, n.me.seed, ours, true,
 			meE ? PreviousText(page.detail, meE->entryId, n.round) : std::string(), live);
+		if (!live && n.status == TourneyMatchStatus::Ready) PaintCivMenu(p, st, m + sideW / 2 - 140, cy + cardH - 48, 280);
 		if (n.hasOpponent) {
 			PaintTeamColumn(p, st, n, m + sideW + centerW + sideW / 2, cy, sideW - 40, cardH, n.opponent.name, n.opponent.seed, theirs, false,
 				themE ? PreviousText(page.detail, themE->entryId, n.round) : std::string(), live);
@@ -614,8 +611,10 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 		}
 	}
 	else {
-		PaintPlayerColumn(p, m + sideW / 2, cy, cardH, SteamOwnId(), st.player, true, n.me.seed, meE ? PreviousText(page.detail, meE->entryId, n.round) : std::string(),
-			live ? std::string() : Tr(n.me.inRoom ? "In the room" : "You're not in the room yet"), n.me.inRoom);
+		const bool civ = !live && n.status == TourneyMatchStatus::Ready;
+		const int under = PaintPlayerColumn(p, m + sideW / 2, cy, cardH, SteamOwnId(), st.player, true, n.me.seed, meE ? PreviousText(page.detail, meE->entryId, n.round) : std::string(),
+			live ? std::string() : Tr(n.me.inRoom ? "In the room" : "You're not in the room yet"), n.me.inRoom, civ ? 44 : 0);
+		if (civ) PaintCivMenu(p, st, m + sideW / 2 - 140, under + 6, 280);
 		if (n.hasOpponent) {
 			PaintPlayerColumn(p, m + sideW + centerW + sideW / 2, cy, cardH, n.opponent.steamId, n.opponent.name, false, n.opponent.seed,
 				themE ? PreviousText(page.detail, themE->entryId, n.round) : std::string(), live ? std::string() : Tr(n.opponent.inRoom ? "In the room" : "Not in the room yet"),
@@ -678,8 +677,9 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 		else if (n.lobby && teams) line = Tr("The room is open. You enter in your team; the teams, the map and the rules are the tournament's.");
 		else if (n.lobby) line = Tr("The room is open. You enter as a player; the map and the rules are the tournament's.");
 		else if (!opener.empty() && !byRounds) line = opener;
-		else if (byRounds && n.noshowFrom > now)
-			line = TrFmt("Agree on a time with %s before the deadline. The no-show counts %s: whoever is not in the room then loses the match.", {rival, FromText(n.noshowFrom)});
+		else if (byRounds && n.noshowFrom > now) {
+			// The deadline is over the title and the no-show in the rules: nothing to repeat here.
+		}
 		else if (byRounds) line = TrFmt("Last day of the round: if %s does not come to the room, you can claim the win.", {rival});
 		else if (teams) line = Tr("Nobody has opened the room yet: you will open it, with the teams, the map and the rules of the tournament.");
 		else line = Tr("Nobody has opened the room yet: you will open it, with the map and the rules of the tournament.");

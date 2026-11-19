@@ -327,20 +327,18 @@ void PaintChampionEnd(Painter &p, Ctx &c, int fx, int fy, bool over)
 	HLine(p, fx, fx + 40, fy, over ? kLinePath : pal::lineStrong);
 	const int cx = fx + 40 + kChampW / 2, size = 76;
 	const TourneyEntrant *champ = TourneyEntrantOf(d, TourneyChampion(d));
-	if (champ) DrawCupCrown(p, cx - size / 2, fy - size / 2 - 30, size, d.official);
-	else {
-		PaintRing(p, cx, fy - 30, size / 2, kGoldDark);
-		PaintRing(p, cx, fy - 30, size / 2 - 6, kGoldDark);
-		PaintRing(p, cx, fy - 30, size / 2 - 16, kGoldDark);
-	}
-	PaintCaps(p, fx + 40, fy + 16, kChampW, 18, "Champion", kGold, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-	UseFace(p, champ ? BrandFace::UiStrong : BrandFace::Ui, 15);
+	// On the line out of the final: the cup's crown once it has a champion, the gold phalera the champion wins until then.
+	if (champ) DrawCupCrown(p, cx - size / 2, fy - size / 2, size, d.official);
+	else DrawLeaguePhalera(p, cx - size / 2, fy - size / 2, size, LeagueMetal::Gold);
+	const int ty = fy + size / 2 + 8;
+	PaintCaps(p, fx + 40, ty, kChampW, 18, "Champion", kGold, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	UseFace(p, BrandFace::UiStrong, 15);
 	p.raw = true;
-	p.Text(fx + 40, fy + 38, kChampW, 22, champ ? champ->name : Tr("To be decided"), champ ? pal::text : pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	if (champ) p.Text(fx + 40, ty + 22, kChampW, 22, champ->name, pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	const std::string players = champ && d.Teams() ? TeamPlayersLine(champ->name, champ->members) : std::string();
 	if (!players.empty()) {
 		UseFace(p, BrandFace::Ui, 12);
-		p.Text(fx + 40, fy + 60, kChampW, 18, players, pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(fx + 40, ty + 44, kChampW, 18, players, pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
 	p.raw = false;
 }
