@@ -24,6 +24,8 @@ struct Line {
 	std::string name, toName, text;
 	COLORREF color = ui::pal::text;
 	bool location = false;
+	// Where it points, in the map's pixels (-1 without a location).
+	int atX = -1, atY = -1;
 	// The type of a ping (ChatPingType), or -1.
 	int ping = -1;
 	// Written by the mod for the reader only, laid out as ChatLocalKind says.
@@ -69,7 +71,8 @@ struct View {
 	ui::ScrollDrag bar;
 };
 
-enum Action { kActNone = 0, kActChip, kActPin, kActField, kActHistory, kActGrip };
+// kActGoTo carries the place of a line's mark: x << 16 | y, in the map's pixels.
+enum Action { kActNone = 0, kActChip, kActPin, kActField, kActHistory, kActGrip, kActGoTo };
 
 constexpr int kBarHistory = 0;
 

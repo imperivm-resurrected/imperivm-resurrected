@@ -284,6 +284,8 @@ struct Mark {
 	char *node = nullptr;
 	DWORD at = 0;
 	int sender = -1;
+	// Where it is, in the map's pixels, for the sender's name over it.
+	int x = -1, y = -1;
 };
 std::vector<Mark> g_marks;
 
@@ -331,12 +333,14 @@ bool NewestNode(int type, Mark &m)
 
 // After a notification of a ping: the newest state of its type is the mark (a nearby one may have been refreshed instead, which
 // renews it). A sender keeps at most kPingMarksPerSender marks; the oldest gives way.
-void TrackMark(int type, int sender)
+void TrackMark(int type, int sender, int x, int y)
 {
 	Mark m;
 	if (!NewestNode(type, m)) return;
 	m.at = GetTickCount();
 	m.sender = sender;
+	m.x = x;
+	m.y = y;
 	g_marks.erase(std::remove_if(g_marks.begin(), g_marks.end(), [&](const Mark &o) { return o.node == m.node || !NodeAlive(o); }), g_marks.end());
 	g_marks.push_back(m);
 	int count = 0;
@@ -437,6 +441,8 @@ ChatEntry EntryOf(const RawChat &c)
 	if (e.scope == kChatPrivate && c.own && to >= 0 && to < kSlots) e.toName = c.names[to];
 	e.text = c.text;
 	e.location = c.location;
+	e.x = c.at[0];
+	e.y = c.at[1];
 	e.own = c.own;
 	std::vector<std::string> phrases[kPingTypes];
 	for (int t = 0; t < kPingTypes; t++) phrases[t] = TrAllLanguages(ChatPingPhrase(t));
@@ -503,14 +509,14 @@ void __fastcall HookExecute(void *cmd)
 	if (typed && !raw.own) {
 		CallExecuteWithoutLocation(cmd);
 		const bool shown = NotifyPing(e.ping, raw.at[0], raw.at[1]);
-		if (shown) TrackMark(e.ping, raw.sender);
+		if (shown) TrackMark(e.ping, raw.sender, raw.at[0], raw.at[1]);
 		LogI("game", "chat: %s ping from player %d at %d,%d, %s", e.ping == kPingAttack ? "attack" : "danger", raw.sender + 1, raw.at[0], raw.at[1],
 			shown ? "notified here" : "NOT notified here");
 	}
 	else {
 		CallExecute(cmd);
 		// The game raised its own location message for this line: it is a mark too.
-		if (e.location && !raw.own) TrackMark(kPingHere, raw.sender);
+		if (e.location && !raw.own) TrackMark(kPingHere, raw.sender, raw.at[0], raw.at[1]);
 	}
 	LogD("game", "chat: line from player %d (%s%s, %u bytes)", raw.sender + 1, e.scope == kChatAll ? "everyone" : e.scope == kChatPrivate ? "private" : "allies",
 		e.location ? ", with a location" : "", static_cast<unsigned>(e.text.size()));
@@ -588,6 +594,21 @@ bool Create(uintptr_t target, void *detour, void **orig, const char *what)
 
 }
 
+void ChatCenterOn(int x, int y)
+{
+	typedef void(__fastcall *CenterOn_t)(void *view, void *edx, int *pos, int moveNow);
+	void *view = *reinterpret_cast<void **>(addr::kVisibleMgr);
+	if (!view || !InMatch() || x < 0 || y < 0) return;
+	int pos[2] = {x, y};
+	__try {
+		reinterpret_cast<CenterOn_t>(addr::kCenterOn)(view, nullptr, pos, 0);
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return;
+	}
+	LogI("game", "chat: the view goes to a line's place (%d,%d)", x, y);
+}
+
 void ChatSetMuted(int player, bool messages, bool marks)
 {
 	if (player < 0 || player >= 16) return;
@@ -644,6 +665,44 @@ ChatMatch ChatReadMatch()
 
 void ChatSetOpenHandler(ChatOpenFn fn) { g_openHandler = fn; }
 
+namespace {
+std::mutex g_labelLock;
+std::vector<ChatMarkLabel> g_labels;
+
+// The other players' marks that are on the map, with their sender's name, where the frame shows them.
+void UpdateMarkLabels()
+{
+	std::vector<ChatMarkLabel> labels;
+	RawMatch raw;
+	if (!g_marks.empty() && ReadRaw(raw) && raw.game && raw.haveVisible) {
+		const ChatMatch m = Build(raw);
+		const int spanX = std::max(1, raw.visible[2] - raw.visible[0]), spanY = std::max(1, raw.visible[3] - raw.visible[1]);
+		for (const Mark &mark : g_marks) {
+			if (mark.sender == raw.local || mark.x < 0 || !m.haveView || !NodeAlive(mark)) continue;
+			for (const ChatPlayer &p : m.others) {
+				if (p.index != mark.sender) continue;
+				ChatMarkLabel l;
+				l.x = m.viewLeft + (mark.x - raw.visible[0]) * (m.viewRight - m.viewLeft) / spanX;
+				l.y = m.viewTop + (mark.y - raw.visible[1]) * (m.viewBottom - m.viewTop) / spanY;
+				if (l.x < m.viewLeft || l.x >= m.viewRight || l.y < m.viewTop || l.y >= m.viewBottom) break;
+				l.name = p.name;
+				l.rgb = p.rgb;
+				labels.push_back(l);
+				break;
+			}
+		}
+	}
+	std::lock_guard<std::mutex> lock(g_labelLock);
+	g_labels = std::move(labels);
+}
+}
+
+std::vector<ChatMarkLabel> ChatMarkLabels()
+{
+	std::lock_guard<std::mutex> lock(g_labelLock);
+	return g_labels;
+}
+
 bool ChatSend(const std::string &text, ChatTarget target, bool withLocation)
 {
 	const std::string clean = ChatCleanText(text);
@@ -657,7 +716,7 @@ bool ChatSend(const std::string &text, ChatTarget target, bool withLocation)
 	const unsigned mask = ChatMask(target, raw.local, raw.enemies);
 	const bool ok = QueueChat(clean, mask, point, x, y);
 	const bool shown = ok && point && NotifyPing(kPingHere, x, y);
-	if (shown) TrackMark(kPingHere, raw.local);
+	if (shown) TrackMark(kPingHere, raw.local, x, y);
 	LogAt(ok ? kLogDebug : kLogError, "game", "chat: %s %u bytes to mask %04x%s", ok ? "sent" : "could NOT send", static_cast<unsigned>(clean.size()), mask,
 		point ? (shown ? " with the camera's location (shown here too)" : " with the camera's location (NOT shown here)") : "");
 	return ok;
@@ -693,7 +752,7 @@ bool ChatPing(int mouseX, int mouseY, bool haveMouse, const char *how, int type,
 	const std::string phrase = ChatCleanText(Tr(ChatPingPhrase(type)));
 	const bool ok = QueueChat(phrase, ChatMask(target, raw.local, raw.enemies), true, point[0], point[1]);
 	const bool shown = NotifyPing(type, point[0], point[1]);
-	if (shown) TrackMark(type, raw.local);
+	if (shown) TrackMark(type, raw.local, point[0], point[1]);
 	const int humans = OtherHumans(m);
 	static const char *const kTypeNames[kPingTypes] = {"here", "attack", "danger"};
 	LogAt(ok && shown ? kLogInfo : kLogError, "game", "chat: %s ping (%s) at %d,%d from %s: %s to %s (%d other humans), %s here", kTypeNames[type], how, point[0], point[1], from,
@@ -806,6 +865,7 @@ void ChatGameTick()
 	// A C++ exception thrown through Execute would leave the console silenced.
 	g_suppressConsole = 0;
 	ExpireMarks();
+	UpdateMarkLabels();
 	static char *lastGame = nullptr;
 	static uint32_t lastClock = 0;
 	char *game = Game();

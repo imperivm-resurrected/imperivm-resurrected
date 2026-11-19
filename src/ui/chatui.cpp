@@ -445,6 +445,11 @@ bool HandleMouse(UINT msg, WPARAM wp, POINT at)
 		if (!inside) return false;
 		g_swallowLeftUp = true;
 		const int action = HitAt(hits, at);
+		if (action == kActGoTo) {
+			const Hit *hit = TopHitAt(hits, at);
+			if (hit) ChatCenterOn(hit->arg >> 16, hit->arg & 0xffff);
+			return true;
+		}
 		if (action == kActPin) {
 			Send(true);
 			return true;
@@ -730,6 +735,10 @@ Line LineOf(const ChatEntry &e, int alpha)
 	l.error = e.error;
 	for (const uint32_t k : e.keys) l.keys.push_back({static_cast<unsigned short>(k & 0xffff), static_cast<unsigned char>(k >> 16)});
 	l.alpha = alpha;
+	if (e.location) {
+		l.atX = e.x;
+		l.atY = e.y;
+	}
 	if (!e.local && !e.name.empty()) {
 		for (const auto &b : g_s.badges) {
 			if (SamePlayerName(b.first, e.name)) l.badge = b.second;
@@ -841,8 +850,17 @@ bool ChatUiNeedsDraw()
 	return !OtherScreenOpen();
 }
 
+// Over each other player's mark, who made it, in their colour.
+void DrawMarkLabels(uint32_t *buf, int w, int h)
+{
+	for (const ChatMarkLabel &l : ChatMarkLabels()) {
+		ModUiDrawHoverCard(buf, w, h, l.name, ColorOf(l.rgb), l.x - 24, l.y - 34);
+	}
+}
+
 void ChatUiDraw(uint32_t *buf, int w, int h)
 {
+	DrawMarkLabels(buf, w, h);
 	View v;
 	bool menu = false;
 	PingMenuView menuView;

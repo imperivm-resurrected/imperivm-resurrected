@@ -29,6 +29,8 @@ struct ChatEntry {
 	std::string toName;
 	std::string text;
 	bool location = false;
+	// Where the line points, in the map's pixels, when it has a location.
+	int x = -1, y = -1;
 	bool own = false;
 	// A ping's type (ChatPingType), or -1 for a line that is not one.
 	int ping = -1;

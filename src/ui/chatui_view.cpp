@@ -368,6 +368,10 @@ void PaintRow(Painter &p, const View &v, const Layout &L, int r, int y)
 		const int type = std::max(0, PingOf(l));
 		PaintOrnament(p, PingOrnament(type), m.pinX - 1, y + 1, kIcon + 2, kIcon + 2, RGB(0, 0, 0));
 		PaintOrnament(p, PingOrnament(type), m.pinX, y + 2, kIcon, kIcon, PingColor(type));
+		// With the chat open, the mark takes the view to its place.
+		if (L.typing && l.atX >= 0 && l.atY >= 0 && l.atX < 0x8000 && l.atY < 0x10000) {
+			p.AddHit(m.pinX - 4, y, kIcon + 8, kRowH, kActGoTo, l.atX << 16 | l.atY);
+		}
 	}
 	SelectObject(p.dc, g_f.text);
 	if (!m.note) ShadowLine(p, m.textX - WidthOf(p.dc, g_f.text, L": ", p.s), y, L": ", kCream);
