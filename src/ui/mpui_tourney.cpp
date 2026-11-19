@@ -2167,6 +2167,8 @@ void StepAfterGame(const TourneyNext &next)
 		if (!u.afterSlug.empty() && !g_s.room.id && !g_s.connecting && !g_s.gameClosedAt && !g_s.startingCover) u.afterSlug.clear();
 		return;
 	}
+	// With the menu closed its room is not followed (MpUiDraw does): the one left at the game's end would still look current.
+	if (!g_s.open) g_s.room = SteamCurrentRoom();
 	if (g_s.game.active || g_s.room.id || g_s.connecting) return;
 	if (!g_s.open && !MainMenuOnTop()) return;
 	if (!g_s.open) OpenMpMenu(false);

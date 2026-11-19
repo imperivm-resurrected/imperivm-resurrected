@@ -135,6 +135,8 @@ void PaintSide(Painter &p, Ctx &c, const TourneyMatch &m, const TourneyCard &car
 			p.raw = false;
 		}
 		else PaintName(p, nx, y, nw - youW - (extra.empty() ? 0 : 70), h, card.name, card.steamId, ink, c.mx, c.my);
+		// Out of the match: the name struck through.
+		if (lost && m.status != TourneyMatchStatus::Bye) p.Fill(nx - 2, nameY + nameH / 2, std::min(textW, nw - youW) + 4, 1, pal::caption);
 		if (mine) PaintTag(p, nx + std::min(textW, nw - youW) + 6, nameY + (nameH - 22) / 2, "You", pal::red, pal::onRed);
 		if (two) {
 			UseFace(p, BrandFace::Ui, 12);
@@ -151,7 +153,9 @@ void PaintSide(Painter &p, Ctx &c, const TourneyMatch &m, const TourneyCard &car
 		AddIds(c, TourneyPlayersOf(card));
 	}
 	const int sx = x + w - scoreW;
-	p.Fill(sx, y, scoreW, h, won ? pal::button : pal::field);
+	// The loser's score on a dark red, the winner's on the button's grey.
+	const COLORREF kLostScore = RGB(0x4e, 0x15, 0x18);
+	p.Fill(sx, y, scoreW, h, won ? pal::button : lost ? kLostScore : pal::field);
 	if (m.status == TourneyMatchStatus::Bye && won) {
 		UseFace(p, BrandFace::UiStrong, 11);
 		p.TextCaps(sx - 14, y, scoreW + 14, h, "Bye", pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
@@ -164,7 +168,7 @@ void PaintSide(Painter &p, Ctx &c, const TourneyMatch &m, const TourneyCard &car
 		std::string text = showScore ? std::to_string(score) : std::string();
 		if (m.status == TourneyMatchStatus::Walkover && won) text = "W";
 		else if (m.status == TourneyMatchStatus::Live && !showScore) text = "-";
-		p.Text(sx, y, scoreW, h, text, won ? pal::text : pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.Text(sx, y, scoreW, h, text, won ? pal::text : lost ? pal::redText : pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		p.raw = false;
 	}
 }
