@@ -5,6 +5,7 @@
 #include <wincrypt.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
@@ -208,7 +209,12 @@ void LoadConfig()
 	g_config.healthBarOwners = ini.Clamped("Game", "HealthBarOwners", 0, 0, 3);
 	g_config.healthBarHeroesOnly = ini.Flag("Game", "HealthBarHeroesOnly", false);
 	g_config.allyColors = ini.Flag("Game", "AllyColors", false);
-	g_config.allyPalette = ini.Clamped("Game", "AllyPalette", 0, 0, 1);
+	g_config.allyPalette = ini.Clamped("Game", "AllyPalette", 0, 0, 2);
+	{
+		static const char *const kKeys[3] = {"AllySelf", "AllyAllies", "AllyEnemies"};
+		const uint32_t *preset = kAllyPresets[g_config.allyPalette == 1 ? 1 : 0];
+		for (int i = 0; i < 3; i++) g_config.allyRgb[i] = static_cast<uint32_t>(ini.Clamped("Game", kKeys[i], static_cast<int>(preset[i]), 0, 0xffffff));
+	}
 	g_config.pauseInBackground = ini.Flag("Game", "PauseInBackground", false);
 	g_config.zoomExtras = ini.Flag("Map", "ZoomExtras", true);
 	g_config.zoomFog = ini.Flag("Map", "FogVisible", true);
@@ -301,6 +307,9 @@ void SaveConfig()
 	ini.WriteFlag("Game", "HealthBarHeroesOnly", g_config.healthBarHeroesOnly);
 	ini.WriteFlag("Game", "AllyColors", g_config.allyColors);
 	ini.WriteNumber("Game", "AllyPalette", g_config.allyPalette);
+	ini.WriteNumber("Game", "AllySelf", static_cast<int>(g_config.allyRgb[0]));
+	ini.WriteNumber("Game", "AllyAllies", static_cast<int>(g_config.allyRgb[1]));
+	ini.WriteNumber("Game", "AllyEnemies", static_cast<int>(g_config.allyRgb[2]));
 	ini.WriteFlag("Game", "PauseInBackground", g_config.pauseInBackground);
 	ini.WriteFlag("Game", "CrashFix", g_config.crashFix);
 	ini.WriteFlag("Mods", "Override", g_config.modOverrides);

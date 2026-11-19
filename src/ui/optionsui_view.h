@@ -2,6 +2,7 @@
 // Copyright (C) 2026 THIONG
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #pragma once
+#include <cstdint>
 #include <map>
 #include <string>
 #include <vector>
@@ -17,14 +18,14 @@ enum ControlId {
 	kMuteBackground = 0x1105, kShowPerf = 0x1106, kAutosave = 0x1109, kAutosaveEvery = 0x110A, kBrightness = 0x110C, kMovieVolume = 0x1110, kMovieOn = 0x1111,
 	kAlerts = 0x1113, kAutosaveCopies = 0x1116, kSaveOnExit = 0x1119, kShowNet = 0x111A, kLanguage = 0x111C, kMonitor = 0x111D, kUpdates = 0x111E,
 	kPanelCompact = 0x9001, kPanelOpacity = 0x9002, kSmoothCamera = 0x9003, kOpenLogs = 0x9101, kCreateReport = 0x9102,
-	kHealthBars = 0x9030, kPauseInBackground = 0x9031, kHealthBarHeroes = 0x9035, kAllyColors = 0x9036, kAllyPalette = 0x9037,
+	kHealthBars = 0x9030, kPauseInBackground = 0x9031, kHealthBarHeroes = 0x9035, kAllyColors = 0x9036, kAllyPalette = 0x9037, kAllySelf = 0x9038, kAllyAllies = 0x9039, kAllyEnemies = 0x903A,
 	kFpsLimit = 0x9012,
 	kMasterVolume = 0x9020, kNatureVolume = 0x9021, kConversationVolume = 0x9022, kOutputDevice = 0x9023,
 	kModVersion = 0x9040, kLogLevel = 0x9042, kCheckUpdates = 0x9103, kResetChatPlace = 0x9104,
 	kChatBadges = 0x9050, kMatchFoundSound = 0x9051,
 };
 
-enum RowKind { kRowToggle, kRowSlider, kRowToggleSlider, kRowCombo, kRowSegment, kRowAction, kRowInfo };
+enum RowKind { kRowToggle, kRowSlider, kRowToggleSlider, kRowCombo, kRowSegment, kRowAction, kRowInfo, kRowColors };
 
 struct Row {
 	std::string label, hint;
@@ -40,6 +41,9 @@ struct Row {
 	std::string text, badge;
 	bool restart = false;
 	bool enabled = true;
+	// A row of colours (kRowColors): each one's value id, colour (0xRRGGBB) and name, in items.
+	std::vector<int> colorIds;
+	std::vector<uint32_t> colors;
 };
 
 struct Card {
@@ -67,6 +71,7 @@ std::vector<Page> BuildPages(const Values &v);
 
 enum Action {
 	kActNone = 0, kActPage, kActToggle, kActSlider, kActCombo, kActSegment, kActRow, kActPick, kActDropClose, kActOk, kActApply, kActCancel, kActReset, kActControls,
+	kActColor, kActColorWheel, kActColorValue, kActColorClose,
 };
 
 struct View {
@@ -75,6 +80,8 @@ struct View {
 	int dropId = 0, dropScroll = 0;
 	ui::ScrollDrag dropBar;
 	int dragId = 0;
+	// The colour whose picker is open, and the part of it being dragged (kActColorWheel or kActColorValue).
+	int colorId = 0, colorDrag = 0;
 	bool dirty = false;
 	Values values;
 	// Out of a game the screen fills the whole screen, laid out in these units (ScreenView); over a game it stays a window.
@@ -86,5 +93,8 @@ constexpr int kScreenW = 1100, kScreenH = 680;
 constexpr int kSliderMargin = 10;
 
 void PaintOptionsScreen(ui::Painter &p, const View &v);
+// The colour a click or a drag at (mx, my) picks in the picker's wheel (kActColorWheel: hue and saturation, keeping the brightness of
+// `current`) or its strip (kActColorValue: the brightness), whose hit is `hit`.
+uint32_t PickedColor(int part, const RECT &hit, int mx, int my, uint32_t current);
 
 }

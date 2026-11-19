@@ -3,9 +3,15 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #pragma once
 
+#include <cstdint>
 #include <string>
 
 #include "core/log.h"
+
+// The ally colours' presets, you, allies and enemies: blue, yellow and red; and for colour blindness, which keeps to the blue-yellow
+// axis and lightness that red-green colour blindness still tells apart (a purple would look blue to most of them), blue, light blue
+// and orange.
+constexpr uint32_t kAllyPresets[2][3] = {{0x0000ff, 0xffff00, 0xff0000}, {0x0048ff, 0x28e0ff, 0xff8800}};
 
 struct Config {
 	bool renderEnabled = true;
@@ -58,8 +64,9 @@ struct Config {
 	bool healthBarHeroesOnly = false;
 	// [Game] AllyColors: on this PC, the player blue, allies yellow and enemies red in the game (game/allycolors.h).
 	bool allyColors = false;
-	// [Game] AllyPalette: 0 blue, yellow and red; 1 for colour blindness, blue, light blue and orange.
+	// [Game] AllyPalette: 0 classic, 1 for colour blindness, 2 the player's own; AllySelf, AllyAllies, AllyEnemies: the colours (0xRRGGBB).
 	int allyPalette = 0;
+	uint32_t allyRgb[3] = {0x0000ff, 0xffff00, 0xff0000};
 	bool pauseInBackground = false;
 	bool zoomExtras = true;
 	bool zoomFog = true;

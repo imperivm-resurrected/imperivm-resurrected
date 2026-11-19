@@ -30,19 +30,13 @@ constexpr unsigned Rgb555(unsigned r, unsigned g, unsigned b)
 {
 	return (r >> 3) << 10 | (g >> 3) << 5 | (b >> 3);
 }
-// Self, allies and enemies in each palette (Config::allyPalette). The classic one is blue, yellow and red of the game's own palette.
-// The one for colour blindness keeps to what red-green colour blindness still tells apart, the blue-yellow axis and lightness: a dark
-// blue, a light blue and an orange; a purple would look blue to most of them.
-const unsigned kPalettes[2][3] = {
-	{Rgb555(0, 0, 255), Rgb555(255, 255, 0), Rgb555(255, 0, 0)},
-	{Rgb555(0, 72, 255), Rgb555(40, 224, 255), Rgb555(255, 136, 0)},
-};
+// You, allies and enemies: the colours chosen in the options (Config::allyRgb), a preset's or the player's own.
 enum { kSelf, kAlly, kEnemy };
 
 unsigned PaletteColor(int who)
 {
-	const int palette = GetConfig().allyPalette == 1 ? 1 : 0;
-	return kPalettes[palette][who];
+	const uint32_t rgb = GetConfig().allyRgb[who];
+	return Rgb555((rgb >> 16) & 0xff, (rgb >> 8) & 0xff, rgb & 0xff);
 }
 
 typedef void(__cdecl *BuildShades_t)(unsigned color, unsigned short *out);

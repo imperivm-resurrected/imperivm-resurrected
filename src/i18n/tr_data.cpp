@@ -3433,5 +3433,8 @@ extern const TrRow kTrRows[] = {
 	{"Palette", "Paleta", "Tavolozza"},
 	{"Classic: blue, yellow, red", "Clásica: azul, amarillo, rojo", "Classica: blu, giallo, rosso"},
 	{"Colour blindness: blue, light blue, orange", "Daltonismo: azul, celeste, naranja", "Daltonismo: blu, azzurro, arancione"},
+	{"Colors", "Colores", "Colori"},
+	{"Enemies", "Enemigos", "Nemici"},
+	{"Colour blindness", "Daltonismo", "Daltonismo"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

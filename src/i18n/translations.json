@@ -3425,5 +3425,8 @@
 {"en":"Follow a player's view: each click picks the next one","es":"Seguir la vista de un jugador: cada clic elige el siguiente","it":"Segui la visuale di un giocatore: ogni clic sceglie il successivo"},
 {"en":"Palette","es":"Paleta","it":"Tavolozza"},
 {"en":"Classic: blue, yellow, red","es":"Clásica: azul, amarillo, rojo","it":"Classica: blu, giallo, rosso"},
-{"en":"Colour blindness: blue, light blue, orange","es":"Daltonismo: azul, celeste, naranja","it":"Daltonismo: blu, azzurro, arancione"}
+{"en":"Colour blindness: blue, light blue, orange","es":"Daltonismo: azul, celeste, naranja","it":"Daltonismo: blu, azzurro, arancione"},
+{"en":"Colors","es":"Colores","it":"Colori"},
+{"en":"Enemies","es":"Enemigos","it":"Nemici"},
+{"en":"Colour blindness","es":"Daltonismo","it":"Daltonismo"}
 ]

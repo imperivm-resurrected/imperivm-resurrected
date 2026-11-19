@@ -165,6 +165,9 @@ void SetExtras(Values &v, const Config &c)
 	v.scrolls[kPanelOpacity] = c.panelOpacity;
 	v.combos[kHealthBars] = c.healthBarOwners;
 	v.combos[kAllyPalette] = c.allyPalette;
+	v.combos[kAllySelf] = static_cast<int>(c.allyRgb[0]);
+	v.combos[kAllyAllies] = static_cast<int>(c.allyRgb[1]);
+	v.combos[kAllyEnemies] = static_cast<int>(c.allyRgb[2]);
 	v.checks[kHealthBarHeroes] = c.healthBarHeroesOnly;
 	v.checks[kPauseInBackground] = c.pauseInBackground;
 	v.checks[kChatBadges] = c.chatBadges;
@@ -222,6 +225,7 @@ void CopyExtras(Values &to, const Values &from)
 	for (int id : {kSmoothCamera, kPauseInBackground, kHealthBarHeroes, kChatBadges, kMatchFoundSound, kAllyColors}) CopyId(to.checks, from.checks, id);
 	CopyId(to.combos, from.combos, kHealthBars);
 	CopyId(to.combos, from.combos, kAllyPalette);
+	for (int id : {kAllySelf, kAllyAllies, kAllyEnemies}) CopyId(to.combos, from.combos, id);
 	CopyDisplayExtras(to, from);
 	for (int id : kSoundScrolls) CopyId(to.scrolls, from.scrolls, id);
 	CopyId(to.combos, from.combos, kOutputDevice);
@@ -303,7 +307,14 @@ void CommitExtras(const Values &v)
 	const auto bars = v.combos.find(kHealthBars);
 	if (bars != v.combos.end()) c.healthBarOwners = bars->second;
 	const auto palette = v.combos.find(kAllyPalette);
-	if (palette != v.combos.end()) c.allyPalette = palette->second == 1 ? 1 : 0;
+	if (palette != v.combos.end()) c.allyPalette = palette->second >= 0 && palette->second <= 2 ? palette->second : 0;
+	{
+		const int ids[3] = {kAllySelf, kAllyAllies, kAllyEnemies};
+		for (int i = 0; i < 3; i++) {
+			const auto color = v.combos.find(ids[i]);
+			if (color != v.combos.end()) c.allyRgb[i] = static_cast<uint32_t>(color->second) & 0xffffff;
+		}
+	}
 	c.healthBarHeroesOnly = CheckOr(v, kHealthBarHeroes, c.healthBarHeroesOnly);
 	c.pauseInBackground = CheckOr(v, kPauseInBackground, c.pauseInBackground);
 	c.chatBadges = CheckOr(v, kChatBadges, c.chatBadges);
@@ -362,6 +373,17 @@ int SliderValue(const State &st, int id, const RECT &hit, int mouseX)
 }
 
 RECT g_dragRect = {};
+RECT g_colorRect = {};
+
+// A click or a drag in the colour picker: the colour changes and the palette becomes the player's own. Under the lock.
+void PickColor(View &v, int part, const RECT &hit, POINT at)
+{
+	if (!v.colorId) return;
+	int &value = v.values.combos[v.colorId];
+	value = static_cast<int>(PickedColor(part, hit, at.x, at.y, static_cast<uint32_t>(value)));
+	v.values.combos[kAllyPalette] = 2;
+	v.dirty = !(v.values == g_s.baseline);
+}
 
 // The resolution list follows the monitor and mode picked here before they are applied.
 void PreviewResolutions()
@@ -425,6 +447,11 @@ void Execute(const Command &cmd)
 			{
 				std::lock_guard<std::mutex> lock(g_lock);
 				g_s.view.values.combos[cmd.value] = cmd.arg;
+				// A preset fills the three colours; the player's own keeps them.
+				if (cmd.value == kAllyPalette && cmd.arg >= 0 && cmd.arg < 2) {
+					const int ids[3] = {kAllySelf, kAllyAllies, kAllyEnemies};
+					for (int i = 0; i < 3; i++) g_s.view.values.combos[ids[i]] = static_cast<int>(kAllyPresets[cmd.arg][i]);
+				}
 				g_s.view.dirty = !(g_s.view.values == g_s.baseline);
 			}
 			ApplyDisplayLive(ViewValues());
@@ -515,6 +542,7 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, Command &cmd)
 			cmd.arg = v.dragId;
 			cmd.value = SliderValue(g_s, v.dragId, g_dragRect, at.x);
 		}
+		if (v.colorDrag) PickColor(v, v.colorDrag, g_colorRect, at);
 		return false;
 	case WM_LBUTTONDOWN:
 	case WM_LBUTTONDBLCLK: {
@@ -533,6 +561,17 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, Command &cmd)
 			v.dropScroll = 0;
 			break;
 		case kActDropClose: v.dropId = 0; break;
+		case kActColor:
+			v.colorId = v.colorId == arg ? 0 : arg;
+			v.dropId = 0;
+			break;
+		case kActColorClose: v.colorId = 0; break;
+		case kActColorWheel:
+		case kActColorValue:
+			v.colorDrag = action;
+			g_colorRect = rect;
+			PickColor(v, action, rect, at);
+			break;
 		case kActPick:
 			cmd.action = action;
 			cmd.arg = arg;
@@ -562,6 +601,7 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, Command &cmd)
 	case WM_LBUTTONUP:
 		g_s.mouseDown = false;
 		v.dragId = 0;
+		v.colorDrag = 0;
 		return true;
 	case WM_MOUSEWHEEL:
 		if (v.dropId) {
@@ -574,6 +614,7 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, Command &cmd)
 	case WM_KEYDOWN:
 		if (wp == VK_ESCAPE) {
 			if (v.dropId) v.dropId = 0;
+			else if (v.colorId) v.colorId = 0;
 			else g_s.escArmed = true;
 		}
 		else if (wp == VK_RETURN && !v.dropId) g_s.enterArmed = true;
