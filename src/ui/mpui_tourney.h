@@ -51,6 +51,8 @@ bool TourneyBlocksAction(int action, int arg);
 bool TourneyTeamsLocked(const mpui_impl::State &st);
 // The room of the player's own cup match stays under its match page, which chooses, gets ready and shows the countdown.
 bool TourneyRoomHidden(const mpui_impl::State &st);
+// The players a cup match's room needs before it may start (2, or 4 in 2v2); 0 for any other room. Takes no lock.
+int TourneyRoomPlayers(const mpui_impl::State &st);
 // The room of this player's tournament match: `note` gets the line under its title (how long the rival has to come) and, once the
 // rival let the time run out, a button that claims the win is painted left of `right` at `y`. Returns where the header's
 // buttons start now.

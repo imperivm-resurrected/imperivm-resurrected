@@ -514,6 +514,8 @@ void StepInRoom(const TourneyNext &next)
 		k.presenceAt = now;
 		LeagueTourneyPresence(match, false);
 	}
+	// The cup to come back to when its game ends, known from the room on (the room is not there while the game is played).
+	if (mine && !next.slug.empty()) g_tourney.afterSlug = next.slug;
 	if (mine && !k.shownAt && g_s.game.active) {
 		k.shownAt = now;
 		// The room stays under the match page: the player chose there, and gets ready and sees the start there.
@@ -538,7 +540,10 @@ void StepInRoom(const TourneyNext &next)
 		const int color = MatchColor(g_tourney);
 		bool taken = false;
 		for (int i = 0; i < 8; i++) taken = taken || (i != slot && g_s.game.slots[i].used && g_s.game.slots[i].color == color);
-		if (color >= 0 && !taken && s.color != color && !LocalReady(g_s.game)) {
+		if (color == kOwnColor && !LocalReady(g_s.game)) {
+			if (!UseCustomColor(g_s, slot, g_tourney.colorRgb)) LogI("league", "tournament match %lld: the own colour is too close to another player's; the room's stays", static_cast<long long>(match));
+		}
+		else if (color >= 0 && color < 12 && !taken && s.color != color && !LocalReady(g_s.game)) {
 			s.color = color;
 			Predict(kPredColor, slot, color);
 			GameRoomSetColor(slot, color);
@@ -1214,7 +1219,10 @@ void PaintTournaments(Painter &p, const State &st)
 	if (dialog) p.noHover = true;
 	switch (u.screen) {
 	case kScreenPage: PaintPageScreen(p, st, u, out); break;
-	case kScreenMatch: PaintMatchScreen(p, st, u); break;
+	case kScreenMatch:
+		PaintMatchScreen(p, st, u);
+		if (u.colorOpen) PaintMatchColorMenu(p, st);
+		break;
 	case kScreenChampion: PaintChampionScreen(p, st, u); break;
 	case kScreenCreate: PaintCreateScreen(p, st, u, out); break;
 	default: PaintListScreen(p, st, u, out); break;
@@ -1532,10 +1540,28 @@ void TourneyAction(int arg)
 	case kSubColorPick: {
 		const int pick = static_cast<int>(value);
 		if (pick < -1 || pick >= 12) break;
-		u.colorPick = pick == MatchColor(u) ? -1 : pick;
+		u.colorPick = pick;
+		u.colorOpen = u.colorWheel = false;
 		GameRoomSaveSetting("TourneyColor", u.colorPick);
 		break;
 	}
+	case kSubColorOpen: {
+		u.colorOpen = true;
+		u.colorWheel = value == 1;
+		if (u.colorWheel) {
+			const COLORREF now = MatchColorRef(u);
+			g_s.colorTry = now == CLR_INVALID ? 0xc0392b : static_cast<uint32_t>(GetRValue(now)) << 16 | static_cast<uint32_t>(GetGValue(now)) << 8 | GetBValue(now);
+		}
+		break;
+	}
+	case kSubColorUse:
+		u.colorPick = kOwnColor;
+		u.colorRgb = g_s.colorTry;
+		u.colorOpen = u.colorWheel = false;
+		GameRoomSaveSetting("TourneyColor", u.colorPick);
+		GameRoomSaveSetting("TourneyColorRgb", static_cast<int>(u.colorRgb));
+		break;
+	case kSubColorClose: u.colorOpen = u.colorWheel = false; break;
 	case kSubReady:
 		if (g_s.game.active && g_s.room.id && TourneyMatchOfTag(g_s.room.info.leagueTag) == value && !LocalReady(g_s.game)) {
 			Predict(kPredReady, g_s.game.localSlot, 1);
@@ -1975,6 +2001,16 @@ bool TeamsLocked(const State &st)
 
 }
 
+int TourneyRoomPlayers(const mpui_impl::State &st)
+{
+	if (!st.room.id || st.room.info.spectate) return 0;
+	const int64_t match = TourneyMatchOfTag(st.room.info.leagueTag);
+	if (!match) return 0;
+	const auto mine = LeagueTourneyMine();
+	const TourneyNext &n = mine->mine.next;
+	return n.present && n.match == match && n.Teams() ? 4 : 2;
+}
+
 bool TourneyRoomHidden(const mpui_impl::State &st)
 {
 	if (!st.game.active || !st.room.id || st.room.info.spectate) return false;
@@ -2050,12 +2086,20 @@ bool TourneyLobbyWatchOnly(const OnlineLobby &g)
 void StepAfterGame(const TourneyNext &next)
 {
 	Ui &u = g_tourney;
+	(void)next;
 	if (g_s.inOnlineGame) {
-		const int64_t match = g_s.room.id && !g_s.room.info.spectate ? TourneyMatchOfTag(g_s.room.info.leagueTag) : 0;
-		if (match && next.present && next.match == match && !next.slug.empty()) u.afterSlug = next.slug;
+		if (!u.afterSlug.empty() && !u.afterGame) {
+			u.afterGame = true;
+			LogI("league", "a cup game is played: its page (%s) opens when it ends", u.afterSlug.c_str());
+		}
 		return;
 	}
-	if (u.afterSlug.empty() || g_s.game.active || g_s.room.id || g_s.connecting) return;
+	if (!u.afterGame) {
+		// Out of the room without a game (not while the game is starting): nothing to come back to.
+		if (!u.afterSlug.empty() && !g_s.room.id && !g_s.connecting && !g_s.gameClosedAt && !g_s.startingCover) u.afterSlug.clear();
+		return;
+	}
+	if (g_s.game.active || g_s.room.id || g_s.connecting) return;
 	if (!g_s.open && !MainMenuOnTop()) return;
 	if (!g_s.open) OpenMpMenu(false);
 	g_s.view = kViewTournaments;
@@ -2063,6 +2107,7 @@ void StepAfterGame(const TourneyNext &next)
 	OpenPage(u.afterSlug, 0);
 	LogI("league", "back from a cup game: its page (%s)", u.afterSlug.c_str());
 	u.afterSlug.clear();
+	u.afterGame = false;
 }
 
 void TourneyGameThreadTick()

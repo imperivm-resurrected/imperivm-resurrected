@@ -14,6 +14,7 @@
 #include "net/leagueclient_tourney.h"
 #include "net/patrons.h"
 #include "net/steamnet.h"
+#include "ui/colorwheel.h"
 #include "ui/fullscreen.h"
 #include "ui/leagueui.h"
 #include "ui/mpui_tourney_internal.h"
@@ -54,6 +55,10 @@ std::string PreviousText(const TourneyDetail &d, int64_t entry, int round)
 	return TrFmt("%s: won against %s %s", {stage, other.name, std::to_string(mine) + "\xE2\x80\x93" + std::to_string(theirs)});
 }
 
+namespace {
+RECT g_colorAnchor = {};
+}
+
 // The civilization the player takes into the room, as a menu: the mod puts it in their slot there and gets them ready.
 void PaintCivMenu(Painter &p, const State &st, int x, int y, int w)
 {
@@ -67,18 +72,16 @@ void PaintCivMenu(Painter &p, const State &st, int x, int y, int w)
 	p.raw = true;
 	PaintCombo(p, x, y, w, 34, Tr("Civilization") + ": " + name, open, true, st.mouseX, st.mouseY, kTourney, ArgOf(kSubCivMenu, 0), &g_dropAnchor);
 	p.raw = raw;
-	// The colour under it: the game's twelve; none marked is the room's own.
-	uint32_t palette[12] = {};
-	GameRoomPalette(palette);
-	const int pick = MatchColor(g_tourney), gap = 3, cell = (w - 11 * gap) / 12, cy = y + 34 + 8;
-	for (int c = 0; c < 12; c++) {
-		const int cx = x + c * (cell + gap);
-		const COLORREF ink = RGB((palette[c] >> 16) & 255, (palette[c] >> 8) & 255, palette[c] & 255);
-		const bool on = c == pick, hot = p.Hover(cx, cy, cell, cell, st.mouseX, st.mouseY);
-		p.Fill(cx, cy, cell, cell, ink);
-		p.Frame(cx, cy, cell, cell, on ? pal::text : hot ? pal::edgeHot : pal::bg);
-		if (on) p.Frame(cx + 1, cy + 1, cell - 2, cell - 2, pal::text);
-		p.AddHit(cx, cy, cell, cell, kTourney, ArgOf(kSubColorPick, c));
+	// The colour under it, as the room's: the one chosen, and its menu on a click.
+	const COLORREF ink = MatchColorRef(g_tourney);
+	const int cy = y + 34 + 8;
+	p.raw = true;
+	PaintCombo(p, x, cy, w, 34, Tr("Colour") + ": " + (ink == CLR_INVALID ? Tr("the room's own") : std::string()), g_tourney.colorOpen, true, st.mouseX, st.mouseY, kTourney,
+		ArgOf(kSubColorOpen, 0), &g_colorAnchor);
+	p.raw = raw;
+	if (ink != CLR_INVALID) {
+		p.Fill(x + 92, cy + 8, w - 92 - 40, 18, ink);
+		p.Frame(x + 92, cy + 8, w - 92 - 40, 18, pal::bg);
 	}
 }
 
@@ -481,8 +484,74 @@ int MatchCiv(Ui &u)
 
 int MatchColor(Ui &u)
 {
-	if (u.colorPick == -2) u.colorPick = GameRoomLoadSetting("TourneyColor", -1);
+	if (u.colorPick == -2) {
+		u.colorPick = GameRoomLoadSetting("TourneyColor", -1);
+		u.colorRgb = static_cast<uint32_t>(GameRoomLoadSetting("TourneyColorRgb", 0)) & 0xffffff;
+		if (u.colorPick != kOwnColor && (u.colorPick < -1 || u.colorPick >= 12)) u.colorPick = -1;
+	}
 	return u.colorPick;
+}
+
+COLORREF MatchColorRef(Ui &u)
+{
+	const int pick = MatchColor(u);
+	if (pick == kOwnColor) return colorwheel::Ref(u.colorRgb);
+	if (pick < 0 || pick >= 12) return CLR_INVALID;
+	uint32_t palette[12] = {};
+	GameRoomPalette(palette);
+	return RGB((palette[pick] >> 16) & 255, (palette[pick] >> 8) & 255, palette[pick] & 255);
+}
+
+void PaintMatchColorMenu(Painter &p, const State &st)
+{
+	Ui &u = g_tourney;
+	const int mx = st.mouseX, my = st.mouseY, pad = 12;
+	const RECT a = g_colorAnchor;
+	p.hits->clear();
+	p.AddHit(0, 0, st.viewW, st.viewH, kTourney, ArgOf(kSubColorClose, 0));
+	if (u.colorWheel) {
+		// The player's own colour: the wheel and what it looks like, then back to the twelve or take it.
+		const int btnH = 34, w = pad * 2 + colorwheel::kWidth, h = pad * 2 + colorwheel::kWheel + 10 + 28 + 10 + btnH;
+		const int x = std::min<int>(a.left, st.viewW - 16 - w);
+		int y = a.bottom + 4;
+		if (y + h > st.viewH - 8) y = a.top - 4 - h;
+		p.Fill(x + 4, y + 4, w, h, pal::shadow);
+		p.Fill(x, y, w, h, pal::panel);
+		p.Frame(x, y, w, h, pal::lineStrong);
+		p.AddHit(x, y, w, h, kNone, 0);
+		colorwheel::Paint(p, x + pad, y + pad, st.colorTry, pal::panel, kGColorWheel, kGColorValue, 0);
+		const int sy = y + pad + colorwheel::kWheel + 10;
+		p.Fill(x + pad, sy, colorwheel::kWidth, 28, colorwheel::Ref(st.colorTry));
+		p.Frame(x + pad, sy, colorwheel::kWidth, 28, pal::edge);
+		const int by = sy + 38, half = (colorwheel::kWidth - 8) / 2;
+		p.Button(x + pad, by, half, btnH, "Back", kTourney, ArgOf(kSubColorOpen, 0), mx, my, true, false, 3);
+		p.Button(x + pad + half + 8, by, colorwheel::kWidth - half - 8, btnH, "Use", kTourney, ArgOf(kSubColorUse, 0), mx, my, true, true, 3);
+		return;
+	}
+	// The game's twelve, as the room's menu shows them; under them the room's own and the wheel.
+	const int cell = 34, gap = 6, rowH = 32;
+	const int w = pad * 2 + 6 * cell + 5 * gap, h = pad * 2 + 2 * cell + gap + 10 + 2 * rowH + gap;
+	const int x = std::min<int>(a.left, st.viewW - 16 - w);
+	int y = a.bottom + 4;
+	if (y + h > st.viewH - 8) y = a.top - 4 - h;
+	p.Fill(x + 4, y + 4, w, h, pal::shadow);
+	p.Fill(x, y, w, h, pal::panel);
+	p.Frame(x, y, w, h, pal::lineStrong);
+	p.AddHit(x, y, w, h, kNone, 0);
+	uint32_t palette[12] = {};
+	GameRoomPalette(palette);
+	const int pick = MatchColor(u);
+	for (int c = 0; c < 12; c++) {
+		const int cx = x + pad + (c % 6) * (cell + gap), cy = y + pad + (c / 6) * (cell + gap);
+		const bool hot = p.Hover(cx, cy, cell, cell, mx, my);
+		p.Fill(cx, cy, cell, cell, RGB((palette[c] >> 16) & 255, (palette[c] >> 8) & 255, palette[c] & 255));
+		p.Frame(cx, cy, cell, cell, c == pick ? pal::text : hot ? pal::edgeHot : pal::bg);
+		if (c == pick) p.Frame(cx + 1, cy + 1, cell - 2, cell - 2, pal::text);
+		p.AddHit(cx, cy, cell, cell, kTourney, ArgOf(kSubColorPick, c));
+	}
+	const int ly = y + pad + 2 * cell + gap + 10, lw = w - 2 * pad;
+	p.Button(x + pad, ly, lw, rowH, "The room's own", kTourney, ArgOf(kSubColorPick, -1), mx, my, pick != -1, false, 3);
+	p.Button(x + pad, ly + rowH + gap, lw, rowH, "Own colour...", kTourney, ArgOf(kSubColorOpen, 1), mx, my, true, pick == kOwnColor, 3);
 }
 
 namespace {
@@ -619,7 +688,7 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 	if (teams) {
 		PaintTeamColumn(p, st, n, m + sideW / 2, cy, sideW - 40, cardH, n.team.name.empty() && meE ? meE->name : n.team.name, n.me.seed, ours, true,
 			meE ? PreviousText(page.detail, meE->entryId, n.round) : std::string(), live);
-		if (!live && n.status == TourneyMatchStatus::Ready) PaintCivMenu(p, st, m + sideW / 2 - 140, cy + cardH - 80, 280);
+		if (!live && n.status == TourneyMatchStatus::Ready) PaintCivMenu(p, st, m + sideW / 2 - 140, cy + cardH - 84, 280);
 		if (n.hasOpponent) {
 			PaintTeamColumn(p, st, n, m + sideW + centerW + sideW / 2, cy, sideW - 40, cardH, n.opponent.name, n.opponent.seed, theirs, false,
 				themE ? PreviousText(page.detail, themE->entryId, n.round) : std::string(), live);
@@ -632,7 +701,7 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 	else {
 		const bool civ = !live && n.status == TourneyMatchStatus::Ready;
 		const int under = PaintPlayerColumn(p, m + sideW / 2, cy, cardH, SteamOwnId(), st.player, true, n.me.seed, meE ? PreviousText(page.detail, meE->entryId, n.round) : std::string(),
-			live ? std::string() : Tr(n.me.inRoom ? "In the room" : "You're not in the room yet"), n.me.inRoom, civ ? 74 : 0);
+			live ? std::string() : Tr(n.me.inRoom ? "In the room" : "You're not in the room yet"), n.me.inRoom, civ ? 80 : 0);
 		if (civ) PaintCivMenu(p, st, m + sideW / 2 - 140, under + 6, 280);
 		if (n.hasOpponent) {
 			PaintPlayerColumn(p, m + sideW + centerW + sideW / 2, cy, cardH, n.opponent.steamId, n.opponent.name, false, n.opponent.seed,

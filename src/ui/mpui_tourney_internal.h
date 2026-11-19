@@ -43,6 +43,8 @@ enum Sub {
 	// The civilization the player takes into the match's room: its menu opened; the colour picked (again: the room's own); ready in the
 	// hidden room; the room shown after all.
 	kSubCivMenu, kSubColorPick, kSubReady, kSubShowRoom,
+	// The colour's menu on the match page: opened (1: the wheel), the wheel's colour taken, closed.
+	kSubColorOpen, kSubColorUse, kSubColorClose,
 };
 
 // What kSubCupSet changes in the form: the high bits of its value; the low 16 are the choice.
@@ -137,12 +139,17 @@ struct Ui {
 	int screen = kScreenList;
 	// The cup whose game is being played, to come back to its page in the menu when the game ends.
 	std::string afterSlug;
+	// A game of that cup was played: its end brings the page back.
+	bool afterGame = false;
 	// The civilization chosen on the match page (a race of the game, -1 for the room's own), kept between matches; the races of its open menu.
 	int civRace = -2;
 	std::vector<int> civChoices;
 	// The colour chosen on the match page, -1 for the room's own; and the match's room shown instead of the match page.
 	int colorPick = -2;
 	bool showRoom = false;
+	// The colour's menu, its wheel, and the player's own colour (0xRRGGBB) when colorPick is kOwnColor.
+	bool colorOpen = false, colorWheel = false;
+	uint32_t colorRgb = 0;
 	int filter = 0;
 	// The list's filters: every cup (0), the official (1) or the community's (2); every format (0), single (1) or double elimination (2) or
 	// Swiss (3); and only those the player can sign up for now.
@@ -271,6 +278,12 @@ std::vector<std::pair<int, std::string>> MatchCivChoices();
 // The civilization chosen for the matches, read once from the room's settings.
 int MatchCiv(Ui &u);
 int MatchColor(Ui &u);
+// colorPick for the player's own colour, from the wheel.
+constexpr int kOwnColor = 100;
+// The colour chosen as it looks, or CLR_INVALID for the room's own.
+COLORREF MatchColorRef(Ui &u);
+// The colour's menu over the match page, under its button.
+void PaintMatchColorMenu(Painter &p, const State &st);
 // The start time field: filled with the chosen time when it takes the keys; what is typed moves the start once it reads as a time, and
 // on Return (done) the field shows the time the start took.
 // "21:30": a start in the computer's time.
