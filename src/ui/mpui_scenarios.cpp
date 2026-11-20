@@ -68,6 +68,13 @@ std::string ScenarioSizeLine(const std::string &path)
 	return d && !d->failed && d->info.units > 0 ? Tr(MapSizeName(d->info.units)) : std::string();
 }
 
+void PaintLoadingThumb(Painter &p, int x, int y, int size)
+{
+	PaintSkeleton(p, x, y, size, size);
+	const int r = std::max(7, std::min(22, size * 11 / 40));
+	p.Spinner(x + size / 2, y + size / 2, r, std::max(3, std::min(8, r / 3)), GetTickCount());
+}
+
 void PaintScenarioThumb(Painter &p, const std::string &path, int x, int y, int size, bool starts, const ScenarioSeat &seat)
 {
 	p.Fill(x, y, size, size, pal::bg);
@@ -101,9 +108,8 @@ void PaintScenarioThumb(Painter &p, const std::string &path, int x, int y, int s
 		}
 	}
 	else if (!d) {
-		// Still being read: a shimmering square, as the content browser's cards, and the spinner where the picture is big.
-		PaintSkeleton(p, x, y, size, size);
-		if (size >= 80) p.Spinner(x + size / 2, y + size / 2, std::max(10, std::min(22, size / 8)), size >= 160 ? 6 : 4, GetTickCount());
+		// Still being read: the loading circle, as Browse content has it.
+		PaintLoadingThumb(p, x, y, size);
 	}
 	else {
 		p.Font(3);

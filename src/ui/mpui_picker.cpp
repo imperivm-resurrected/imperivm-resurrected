@@ -125,7 +125,7 @@ void PaintScenarioPicker(Painter &p, const State &st)
 		// The scenarios still being read: rows of the list's shape (picture, name, details), shimmering.
 		for (int r = 0; r < g_pickRows; r++) {
 			const int ry = listY + 2 + r * rowH, thumb = rowH - 12, tx = listX + 12 + thumb + 12, room = listW - 16 - (tx - listX) - 14;
-			PaintSkeleton(p, listX + 12, ry + 6, thumb, thumb);
+			PaintLoadingThumb(p, listX + 12, ry + 6, thumb);
 			PaintSkeleton(p, tx, ry + 11, room * (55 + (r * 7 % 4) * 10) / 100, 12);
 			PaintSkeleton(p, tx, ry + 34, room * (40 + (r * 5 % 3) * 10) / 100, 10);
 		}

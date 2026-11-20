@@ -620,6 +620,8 @@ constexpr int kScenarioRowH = 56;
 std::string ScenarioOriginLine(const CupScenario &s);
 std::string ScenarioSizeLine(const std::string &path);
 // The picture of a scenario, with the human starts when asked; an empty path draws a random map's dots.
+// A map's picture still being read: a shimmering square with the red loading circle in its middle.
+void PaintLoadingThumb(Painter &p, int x, int y, int size);
 void PaintScenarioThumb(Painter &p, const std::string &path, int x, int y, int size, bool starts, const ScenarioSeat &seat = ScenarioSeat());
 // rows (indexes into list) that match the search, in the order chosen: 0 name, 1 players, 2 size.
 std::vector<int> ScenarioOrder(const std::vector<CupScenario> &list, const std::vector<int> &rows, const std::string &search, int sort);
