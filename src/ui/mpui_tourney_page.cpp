@@ -134,10 +134,12 @@ void PaintSide(Painter &p, Ctx &c, const TourneyMatch &m, const TourneyCard &car
 			p.Text(nx, nameY, nw - youW - (extra.empty() ? 0 : 70), nameH, card.name, ink, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 			p.raw = false;
 		}
-		else PaintName(p, nx, y, nw - youW - (extra.empty() ? 0 : 70), h, card.name, card.steamId, ink, c.mx, c.my);
+		int at = nx;
+		if (!c.d.Teams()) at = PaintName(p, nx, y, nw - youW - (extra.empty() ? 0 : 70), h, card.name, card.steamId, ink, c.mx, c.my);
+		const int shownW = std::min(textW, nw - youW - (at - nx));
 		// Out of the match: the name struck through.
-		if (lost && m.status != TourneyMatchStatus::Bye) p.Fill(nx - 2, nameY + nameH / 2, std::min(textW, nw - youW) + 4, 1, pal::caption);
-		if (mine) PaintTag(p, nx + std::min(textW, nw - youW) + 6, nameY + (nameH - 22) / 2, "You", pal::red, pal::onRed);
+		if (lost && m.status != TourneyMatchStatus::Bye) p.Fill(at - 2, nameY + nameH / 2, shownW + 4, 1, pal::caption);
+		if (mine) PaintTag(p, at + shownW + 6, nameY + (nameH - 22) / 2, "You", pal::red, pal::onRed);
 		if (two) {
 			UseFace(p, BrandFace::Ui, 12);
 			p.raw = true;

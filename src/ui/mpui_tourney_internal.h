@@ -396,7 +396,9 @@ void PaintCheck(Painter &p, int x, int y, int size, bool ok);
 void PaintRing(Painter &p, int cx, int cy, int r, COLORREF c);
 void PaintDashedFrame(Painter &p, int x, int y, int w, int h, COLORREF c);
 // A name and the badge after it, drawn as given.
-void PaintName(Painter &p, int x, int y, int w, int h, const std::string &name, uint64_t id, COLORREF ink, int mx, int my);
+// A player's name: a patron's laurel before it (and the name in their tier's colour, as in the rooms), the league badge after it.
+// Returns where the name starts.
+int PaintName(Painter &p, int x, int y, int w, int h, const std::string &name, uint64_t id, COLORREF ink, int mx, int my);
 // A scrolling area as the input finds it: the box painted at (x, y, w, h) and how far it scrolls.
 void SetScrollArea(Painter &p, ScrollArea &a, int x, int y, int w, int h, int max);
 

@@ -34,6 +34,7 @@
 #include "ui/leagueui.h"
 #include "ui/modui.h"
 #include "ui/mpui_tourney_internal.h"
+#include "ui/patronui.h"
 #include "ui/textedit.h"
 
 namespace mpui_tourney_impl {
@@ -1225,14 +1226,26 @@ void PaintDashedFrame(Painter &p, int x, int y, int w, int h, COLORREF c)
 	}
 }
 
-void PaintName(Painter &p, int x, int y, int w, int h, const std::string &name, uint64_t id, COLORREF ink, int mx, int my)
+int PaintName(Painter &p, int x, int y, int w, int h, const std::string &name, uint64_t id, COLORREF ink, int mx, int my)
 {
 	const LeagueBadge badge = id ? PlayerBadgeOf(id) : LeagueBadge();
-	const int nameW = std::max(20, w - LeagueBadgeRoom(badge));
+	const PatronInfo patron = id ? PatronOf(id) : PatronInfo();
+	const UINT fmt = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS;
 	p.raw = true;
-	p.Text(x, y, nameW, h, name, ink, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	if (patron.tier != PatronTier::None) {
+		const int size = std::max(12, std::min(20, h - 2)), ly = y + (h - size) / 2, nx = x + size + 4;
+		const int nameW = std::max(20, w - (nx - x) - LeagueBadgeRoom(badge));
+		DrawPatron(p, x, ly, size, nx, y, nameW, h, name, patron.tier, fmt);
+		PatronHotspot(p, x, ly, size, patron, mx, my, kPatronLink);
+		DrawBadgeAfterName(p, nx, y, nameW, h, name, badge, mx, my, id);
+		p.raw = false;
+		return nx;
+	}
+	const int nameW = std::max(20, w - LeagueBadgeRoom(badge));
+	p.Text(x, y, nameW, h, name, ink, fmt);
 	DrawBadgeAfterName(p, x, y, nameW, h, name, badge, mx, my, id);
 	p.raw = false;
+	return x;
 }
 
 void SetScrollArea(Painter &p, ScrollArea &a, int x, int y, int w, int h, int max)

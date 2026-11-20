@@ -18,6 +18,7 @@
 #include "ui/fullscreen.h"
 #include "ui/leagueui.h"
 #include "ui/mpui_tourney_internal.h"
+#include "ui/patronui.h"
 #include "ui/textedit.h"
 
 namespace mpui_tourney_impl {
@@ -98,10 +99,15 @@ int PaintPlayerColumn(Painter &p, int cx, int y, int h, uint64_t id, const std::
 	p.raw = true;
 	const int nameW = std::min(560, p.CapsWidth(name, 1) + 4);
 	const LeagueBadge badge = id ? PlayerBadgeOf(id) : LeagueBadge();
-	const int room = LeagueBadgeRoom(badge);
-	p.TextCaps(cx - (nameW + room) / 2, cy, nameW, 66, name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
+	// A patron's laurel before the name, and the name in their tier's colour, as in the rooms.
+	const PatronInfo patron = id ? PatronOf(id) : PatronInfo();
+	const int laurel = patron.tier != PatronTier::None ? 40 : 0, laurelRoom = laurel ? laurel + 10 : 0;
+	const int room = LeagueBadgeRoom(badge), left = cx - (laurelRoom + nameW + room) / 2;
+	if (laurel) DrawPatron(p, left, cy + (66 - laurel) / 2, laurel, left, cy, 0, 0, std::string(), patron.tier, DT_LEFT);
+	const COLORREF ink = laurel ? PatronColorsOf(patron.tier).name : pal::text;
+	p.TextCaps(left + laurelRoom, cy, nameW, 66, name, ink, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
 	p.raw = false;
-	if (badge.Shown()) DrawLeagueBadge(p, cx - (nameW + room) / 2 + nameW + kLeagueBadgeGap, cy + 23, kLeagueBadgeSize, badge);
+	if (badge.Shown()) DrawLeagueBadge(p, left + laurelRoom + nameW + kLeagueBadgeGap, cy + 23, kLeagueBadgeSize, badge);
 	cy += 72;
 	p.Font(0);
 	p.raw = true;
