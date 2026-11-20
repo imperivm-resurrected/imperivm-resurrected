@@ -427,13 +427,19 @@ bool BuildReport(const Match &m, LeagueReport &r, std::string &why)
 			const auto mine = LeagueTourneyMine();
 			const TourneyNext &next = mine->mine.next;
 			if (next.present && next.match == matchId && TourneyIsTestBot(next.opponent.steamId)) {
-				for (LeagueSeat &s : seats) {
-					if (s.human) continue;
-					s.human = true;
-					s.steamId = next.opponent.steamId;
-					LogI("league", "the game's AI played the test bot of tournament match %lld", static_cast<long long>(matchId));
-					break;
+				// The other side's test bots, one for each seat the AI played: a 1v1's bot, or a team's two.
+				std::vector<uint64_t> bots;
+				for (const TourneyMember &b : next.opponent.members) {
+					if (b.steamId) bots.push_back(b.steamId);
 				}
+				if (bots.empty()) bots.push_back(next.opponent.steamId);
+				size_t k = 0;
+				for (LeagueSeat &s : seats) {
+					if (s.human || k >= bots.size()) continue;
+					s.human = true;
+					s.steamId = bots[k++];
+				}
+				LogI("league", "the game's AI played %u test bot(s) of tournament match %lld", static_cast<unsigned>(k), static_cast<long long>(matchId));
 			}
 		}
 	}

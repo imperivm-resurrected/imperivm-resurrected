@@ -116,6 +116,7 @@ const char *OpName(TourneyOp op)
 	case TourneyOp::Decline: return "team invitation refusal";
 	case TourneyOp::CancelTeam: return "team cancellation";
 	case TourneyOp::Concede: return "game given up";
+	case TourneyOp::TestResult: return "test result";
 	default: return "resolution";
 	}
 }
@@ -753,6 +754,13 @@ void LeagueTourneyPresence(int64_t match, bool started)
 void LeagueTourneyClaimNoShow(int64_t match)
 {
 	Start(TourneyOp::NoShow, match, "POST", MatchPath(match, "/claim-noshow"));
+}
+
+void LeagueTourneyTestResult(int64_t match, bool win)
+{
+	Json body = Json::MakeObject();
+	body.Set("win", Json::MakeBool(win));
+	Start(TourneyOp::TestResult, match, "POST", MatchPath(match, "/test-result"), body.Dump());
 }
 
 void LeagueTourneyConcede(int64_t match)

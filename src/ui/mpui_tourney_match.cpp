@@ -827,6 +827,13 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 	const int chatW = chat ? ChatButtonWidth(p) : 0, groupW = bw + (chat ? 16 + chatW : 0), bx = (l.w - groupW) / 2;
 	p.Button(bx, by, bw, bh, label, kTourney, ArgOf(action, n.match), mx, my, enabled, true, 2);
 	if (chat) PaintSecondButton(p, bx + bw + 16, by, chatW, bh, Tr("Write on Steam"), ArgOf(kSubSteamChat, 0), true, mx, my);
+	// STAGING TEST TOOL: win or lose the game without playing it, on the staging worker only.
+	if (n.staging && (n.status == TourneyMatchStatus::Ready || n.status == TourneyMatchStatus::Live)) {
+		const int tw = 200, th = (bh - 6) / 2, tx = bx - 16 - tw;
+		const bool busy = LeagueTourneyBusy(TourneyOp::TestResult, n.match);
+		PaintSecondButton(p, tx, by, tw, th, Tr("Win (test)"), ArgOf(kSubTestWin, n.match), !busy, mx, my);
+		PaintSecondButton(p, tx, by + th + 6, tw, th, Tr("Lose (test)"), ArgOf(kSubTestLose, n.match), !busy, mx, my);
+	}
 	p.Font(0);
 	p.raw = true;
 	p.Text(m, by + bh + 8, inner, 24, line, n.pick.present && n.MyPick() ? pal::warn : lineInk, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);

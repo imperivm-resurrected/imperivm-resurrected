@@ -54,6 +54,8 @@ enum class TourneyOp {
 	Accept, Decline, CancelTeam,
 	// A staging cup's game against a test bot given up: it closed with the game.
 	Concede,
+	// STAGING TEST TOOL: a game won or lost without playing it.
+	TestResult,
 };
 
 // The answer to something the player did.
@@ -108,6 +110,8 @@ void LeagueTourneyPresence(int64_t match, bool started);
 void LeagueTourneyClaimNoShow(int64_t match);
 // A staging cup's game against a test bot, left behind when the game closed in it: it is given up (the bot was this computer's AI).
 void LeagueTourneyConcede(int64_t match);
+// STAGING TEST TOOL: the player's side wins (or loses) the game being played, without playing it.
+void LeagueTourneyTestResult(int64_t match, bool win);
 void LeagueTourneyDispute(int64_t match, const std::string &text);
 // The map of the next game of the player's series, by its place among the pick's options; once the league takes it, the player's next
 // match has no pick any more and that game has its map.

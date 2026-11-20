@@ -315,6 +315,13 @@ void TakeResults()
 		case TourneyOp::Concede:
 			if (r.ok) Toast("Your cup game against the bot closed with the game: it counts as lost.");
 			break;
+		case TourneyOp::TestResult:
+			Toast(r.ok ? Tr("Test result sent.") : ResultText(r), !r.ok);
+			if (r.ok) {
+				LeagueTourneyMineRefresh();
+				LeagueTourneyListsRefresh(true);
+			}
+			break;
 		case TourneyOp::Create: CupMade(r); break;
 		case TourneyOp::Edit: CupEdited(r); break;
 		case TourneyOp::FindCode: CodeFound(r); break;
@@ -582,15 +589,24 @@ void StepInRoom(const TourneyNext &next)
 			k.unreadied = false;
 		}
 	}
-	// Against a staging test bot the host puts the game's AI in the open seat: the bot plays through it, and the game is reported.
-	if (slotOk && g_s.game.host && !k.aiSet && TourneyIsTestBot(next.opponent.steamId) && !next.Teams()) {
-		for (int i = 0; i < 8; i++) {
+	// Against staging test bots the host puts the game's AI in an open seat for each of them (two against a team), in the other side's team:
+	// the bots play through it, and the game is reported.
+	if (slotOk && g_s.game.host && TourneyIsTestBot(next.opponent.steamId)) {
+		const int want = next.Teams() ? 2 : 1;
+		for (int i = 0; i < 8 && static_cast<int>(k.aiSlots.size()) < want; i++) {
 			const GameRoomSlot &o = g_s.game.slots[static_cast<size_t>(i)];
-			if (i == slot || o.type != 0) continue;
-			k.aiSet = true;
+			if (i == slot || o.type != 0 || std::find(k.aiSlots.begin(), k.aiSlots.end(), i) != k.aiSlots.end()) continue;
+			k.aiSlots.push_back(i);
 			GameRoomSetSlotType(i, 1);
-			LogI("league", "tournament match %lld: the game's AI takes the test bot's seat (%d)", static_cast<long long>(match), i + 1);
-			break;
+			LogI("league", "tournament match %lld: the game's AI takes a test bot's seat (%d)", static_cast<long long>(match), i + 1);
+		}
+		// In a match of teams, the bots' seats go to the other side's team.
+		const int foe = k.team == 1 ? 2 : k.team == 2 ? 1 : 0;
+		if (foe && !g_s.game.busy) {
+			for (const int i : k.aiSlots) {
+				const GameRoomSlot &o = g_s.game.slots[static_cast<size_t>(i)];
+				if (o.type == 1 && o.team != foe && foe < g_s.game.teamChoices) GameRoomSetTeam(i, foe);
+			}
 		}
 	}
 	// Ready once the slot has what the page chose, the team is set (2v2) and the host has put the tournament's options in.
@@ -1548,6 +1564,9 @@ void TourneyAction(int arg)
 		u.disputeText.clear();
 		g_s.focus = kNoField;
 		break;
+	// STAGING TEST TOOL: the match page's test buttons.
+	case kSubTestWin:
+	case kSubTestLose: LeagueTourneyTestResult(value, sub == kSubTestWin); break;
 	case kSubChampion: {
 		const std::string slug = SlugOf(value);
 		if (slug.empty()) break;
@@ -2199,8 +2218,8 @@ int TourneyRoomPlayers(const mpui_impl::State &st)
 	// By the room alone: once the league has settled the match, its room may still be counting down.
 	const auto mine = LeagueTourneyMine();
 	const TourneyNext &n = mine->mine.next;
-	// Against a test bot the other seat is the game's AI: the player alone is all the room waits for.
-	if (n.present && n.match == match && TourneyIsTestBot(n.opponent.steamId) && !n.Teams()) return 1;
+	// Against test bots their seats are the game's AI: the room waits for the people only, the player (and their partner).
+	if (n.present && n.match == match && TourneyIsTestBot(n.opponent.steamId)) return n.Teams() ? 2 : 1;
 	if (n.present && n.match == match) return n.Teams() ? 4 : 2;
 	return st.room.info.maxPlayers >= 4 ? 4 : 2;
 }

@@ -23,7 +23,7 @@ enum Screen { kScreenList, kScreenPage, kScreenMatch, kScreenChampion, kScreenCr
 // What an action of the tab does: the high byte of kTourney's argument; the rest is a tournament, a match, an entry or an index.
 enum Sub {
 	kSubShow = 1, kSubFilter, kSubOpen, kSubPageTab, kSubSignUp, kSubWithdraw, kSubCheckIn, kSubMatch, kSubGo, kSubWatch, kSubNoShow,
-	kSubDispute, kSubDisputeSend, kSubDisputeCancel, kSubChampion, kSubPan, kSubZoom,
+	kSubDispute, kSubDisputeSend, kSubDisputeCancel, kSubChampion, kSubPan, kSubZoom, kSubTestWin, kSubTestLose,
 	// The community cups: the form, the code, and the organizer's page (kSubManage opens it on its tab).
 	kSubCreate, kSubCupSet, kSubCupMenu, kSubCupSubmit, kSubCupOpenActive, kSubJoin, kSubJoinSend, kSubJoinCancel, kSubCopyCode, kSubCodeClose,
 	kSubManage, kSubCancelCup, kSubCheckinNow, kSubStartNow, kSubRemove, kSubGameA, kSubGameB, kSubReplay, kSubWalkover, kSubWalkoverA,
@@ -133,6 +133,8 @@ struct RoomLock {
 	bool unreadied = false;
 	// The game's AI put in a test bot's seat.
 	bool aiSet = false;
+	// The room's seats the game's AI plays for the staging test bots.
+	std::vector<int> aiSlots;
 	bool mapWarned = false;
 	// This room was the player's match: once the match is settled without a game (a no-show), the room has nothing left to do.
 	bool wasMine = false;

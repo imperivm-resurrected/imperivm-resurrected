@@ -3481,5 +3481,8 @@ extern const TrRow kTrRows[] = {
 	{"Drawn", "Sorteados", "Sorteggiate"},
 	{"Everyone signs up alone. When the check-in closes the teams are drawn, the best player with the weakest, so they come out even. The maps need room for four players.", "Cada uno se inscribe solo. Al cerrar el check-in se sortean los equipos, el mejor con el más flojo, para que queden igualados. Los mapas tienen que admitir cuatro jugadores.", "Ognuno si iscrive da solo. Alla chiusura del check-in si sorteggiano le squadre, il migliore con il più debole, perché siano equilibrate. Le mappe devono avere posto per quattro giocatori."},
 	{"Twice as many players sign up. It starts with the teams drawn among those who have checked in, if there are at least %s; else it is cancelled on its own.", "Se inscribe el doble de jugadores. Empieza con los equipos sorteados entre quienes hicieron el check-in, si hay al menos %s; si no, se cancela sola.", "Si iscrive il doppio dei giocatori. Inizia con le squadre sorteggiate tra chi ha fatto il check-in, se sono almeno %s; altrimenti si annulla da sola."},
+	{"Win (test)", "Ganar (prueba)", "Vinci (prova)"},
+	{"Lose (test)", "Perder (prueba)", "Perdi (prova)"},
+	{"Test result sent.", "Resultado de prueba enviado.", "Risultato di prova inviato."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);
