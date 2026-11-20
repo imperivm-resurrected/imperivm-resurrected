@@ -54,7 +54,7 @@ enum CupSetting {
 };
 
 // The menus of the form (kDropTourney), by the index they open with.
-enum CupMenu { kCupMenuHour = 0x100, kCupMenuGames, kCupMenuTier, kCupMenuCiv };
+enum CupMenu { kCupMenuHour = 0x100, kCupMenuGames, kCupMenuTier, kCupMenuCiv, kCupMenuListKind, kCupMenuListFormat };
 
 inline int CupArg(int setting, int choice)
 {

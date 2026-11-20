@@ -278,8 +278,8 @@ bool Shown(const TourneySummary &t, const Ui &u, const TourneyMineView &mine)
 	return open && !t.isPrivate && CupUnmet(t.requirements, mine) == TourneyUnmet::None;
 }
 
-// A filter of the list: its choice now, with a mark of the menu it cycles through, or lit while it is on. Its width.
-int PaintFilter(Painter &p, int x, int y, int h, const std::string &label, bool on, bool cycle, int sub, int mx, int my)
+// A filter of the list: its choice now with the arrow of its menu (which opens under it), or lit while it is on. Its width.
+int PaintFilter(Painter &p, int x, int y, int h, const std::string &label, bool on, bool cycle, int sub, int mx, int my, bool open = false)
 {
 	UseFace(p, BrandFace::Ui, 13);
 	p.raw = true;
@@ -293,6 +293,8 @@ int PaintFilter(Painter &p, int x, int y, int h, const std::string &label, bool 
 		const int cx = x + w - 20, cy = y + h / 2 - 2;
 		p.Line(cx - 4, cy, cx, cy + 4, pal::caption, 2);
 		p.Line(cx, cy + 4, cx + 4, cy, pal::caption, 2);
+		// Its menu opens under it, at least wide enough for its longest choice.
+		if (open) g_dropAnchor = {x, y, x + std::max(w, 230), y + h};
 	}
 	p.AddHit(x, y, w, h, kTourney, ArgOf(sub, 0));
 	return w;
@@ -311,8 +313,11 @@ void PaintTable(Painter &p, const State &st, const Ui &u, const TourneyListsView
 		static const char *const kKinds[] = {"Official and community", "Official only", "Community only"};
 		static const char *const kFormats[] = {"All formats", "Single elimination", "Double elimination", "Swiss"};
 		int fx = x + 16;
-		fx += PaintFilter(p, fx, y + 12, 32, Tr(kKinds[u.listKind % 3]), u.listKind != 0, true, kSubListKind, mx, my) + 10;
-		fx += PaintFilter(p, fx, y + 12, 32, Tr(kFormats[u.listFormat % 4]), u.listFormat != 0, true, kSubListFormat, mx, my) + 10;
+		const bool menu = st.dropOpen && st.dropKind == kDropTourney;
+		fx += PaintFilter(p, fx, y + 12, 32, Tr(kKinds[u.listKind % 3]), u.listKind != 0, true, kSubListKind, mx, my, menu && st.dropIndex == kCupMenuListKind) + 10;
+		fx += PaintFilter(p, fx, y + 12, 32, Tr(kFormats[u.listFormat % 4]), u.listFormat != 0, true, kSubListFormat, mx, my,
+				  menu && st.dropIndex == kCupMenuListFormat) +
+			10;
 		if (u.filter == 0) PaintFilter(p, fx, y + 12, 32, Tr("Only the ones I can play"), u.listPlayable, false, kSubListPlayable, mx, my);
 		y += 48;
 		h -= 48;

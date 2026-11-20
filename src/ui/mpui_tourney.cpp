@@ -1375,13 +1375,22 @@ void TourneyAction(int arg)
 		u.listScroll = 0;
 		break;
 	case kSubListKind:
-		u.listKind = (u.listKind + 1) % 3;
-		u.listScroll = 0;
+	case kSubListFormat: {
+		// The list's filters are menus: their choices, the one in use marked.
+		const bool kind = sub == kSubListKind;
+		if (g_s.dropOpen && g_s.dropKind == kDropTourney && g_s.dropIndex == (kind ? kCupMenuListKind : kCupMenuListFormat)) {
+			g_s.dropOpen = false;
+			break;
+		}
+		g_s.tourneyDropItems = kind ? std::vector<std::string>{Tr("Official and community"), Tr("Official only"), Tr("Community only")}
+									: std::vector<std::string>{Tr("All formats"), Tr("Single elimination"), Tr("Double elimination"), Tr("Swiss")};
+		g_s.tourneyDropSel = kind ? u.listKind : u.listFormat;
+		g_s.dropOpen = true;
+		g_s.dropKind = kDropTourney;
+		g_s.dropIndex = kind ? kCupMenuListKind : kCupMenuListFormat;
+		g_s.dropScroll = 0;
 		break;
-	case kSubListFormat:
-		u.listFormat = (u.listFormat + 1) % 4;
-		u.listScroll = 0;
-		break;
+	}
 	case kSubListPlayable:
 		u.listPlayable = !u.listPlayable;
 		u.listScroll = 0;
@@ -2136,6 +2145,13 @@ void TourneyFieldEnter(int field)
 
 void TourneyDropPick(int index, int item)
 {
+	if (index == kCupMenuListKind || index == kCupMenuListFormat) {
+		Ui &u = g_tourney;
+		if (item < 0 || item >= (index == kCupMenuListKind ? 3 : 4)) return;
+		(index == kCupMenuListKind ? u.listKind : u.listFormat) = item;
+		u.listScroll = 0;
+		return;
+	}
 	if (index == kCupMenuCiv) {
 		Ui &u = g_tourney;
 		if (item < 0 || item >= static_cast<int>(u.civChoices.size())) return;
