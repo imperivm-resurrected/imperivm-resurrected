@@ -45,6 +45,10 @@ const size_t kTransportTick = 0x54, kTransportPrevHash = 0x80, kTransportLocal =
 // The gate's bitmask of the players whose ticks it still waits for: a player who drops leaves it, one who rejoins comes back.
 const size_t kGateConnected = 0x108;
 const DWORD kPollMs = 1000, kSendCheckMs = 5000;
+// From the game being decided to its report: the states and the statistics of that moment land first.
+const DWORD kDecidedSettleMs = 1500;
+
+void ReportIfDecided();
 
 typedef int(__cdecl *IsDemo_t)();
 
@@ -68,6 +72,9 @@ struct Match {
 	std::set<int> surrendered;
 	uint32_t clockMs = 0, decidedMs = 0;
 	bool decided = false, desync = false;
+	// When the game was decided (GetTickCount), and whether its report went then: the winner may stay in the game for a long time.
+	DWORD decidedTick = 0;
+	bool reported = false;
 	DWORD lastPoll = 0;
 	// A ranked match (the room's tag) and the wait for an opponent who dropped, which holds the game's pause. A ranked 2v2 (`team`)
 	// has no such wait: the AI plays for whoever drops.
@@ -338,6 +345,7 @@ void Poll(Match &m)
 			if (kv.second.state != 3) continue;
 			m.decided = true;
 			m.decidedMs = clock;
+			m.decidedTick = GetTickCount();
 			LogI("league", "the game has a winner at %u s", clock / 1000);
 			break;
 		}
@@ -511,6 +519,7 @@ void MatchTick()
 	}
 	PauseTick(ranked, rankedId, held, over);
 	TeamTick();
+	ReportIfDecided();
 	std::lock_guard<std::mutex> lock(g_mx);
 	if (g_match.active && GetTickCount() - g_match.lastPoll >= kPollMs) {
 		g_match.lastPoll = GetTickCount();
@@ -573,37 +582,11 @@ void LeagueMatchPlaying(const LeagueMatchInfo &info)
 	}
 }
 
-void LeagueMatchEnded()
+namespace {
+
+// Not under g_mx: the report goes to the outbox and the sender. The ranked queue learns its game was played.
+void QueueReport(const LeagueReport &report, bool ranked, int64_t rankedId, const GameRecordFacts &facts, bool factsRead)
 {
-	LeagueReport report;
-	std::string why;
-	bool ready = false, ranked = false, factsRead = false;
-	int64_t rankedId = 0;
-	GameRecordFacts facts;
-	{
-		std::lock_guard<std::mutex> lock(g_mx);
-		g_rankedNow = false;
-		g_teamNow = false;
-		if (!g_match.active) {
-			why = "it was not recorded";
-		}
-		else {
-			Poll(g_match);
-			ranked = g_match.ranked;
-			rankedId = g_match.rankedId;
-			facts = g_match.facts;
-			factsRead = g_match.factsRead;
-			if (g_match.pauseHeld) TweaksHoldPause(false);
-			ready = BuildReport(g_match, report, why);
-			g_match = Match();
-		}
-	}
-	if (!ready) {
-		if (!why.empty() && why != "it was not recorded") LogI("league", "the online game is not reported: %s", why.c_str());
-		// Without a report the queue follows the server again instead of staying in the match.
-		RankedGameEnded(rankedId);
-		return;
-	}
 	unsigned wins = 0;
 	for (const LeagueReportPlayer &p : report.players) wins += p.result == "win" ? 1 : 0;
 	LogI("league", "online game over after %u s (%s, %s), %u players, %u winners, %u checkpoints", report.durationMs / 1000, report.endedBy.c_str(),
@@ -624,6 +607,75 @@ void LeagueMatchEnded()
 	LeagueQueueAdd(g_out.items, item);
 	g_out.dirty = true;
 	KickSender();
+}
+
+// A game is reported once it is decided, a moment later (for what is still settling to land): who won does not change after, and
+// the result is not held up by whoever stays in the game to look at it.
+void ReportIfDecided()
+{
+	LeagueReport report;
+	bool ready = false, ranked = false, factsRead = false;
+	int64_t rankedId = 0;
+	GameRecordFacts facts;
+	{
+		std::lock_guard<std::mutex> lock(g_mx);
+		Match &m = g_match;
+		if (!m.active || !m.decided || m.reported || m.desync || !m.decidedTick || GetTickCount() - m.decidedTick < kDecidedSettleMs) return;
+		Poll(m);
+		std::string why;
+		ready = BuildReport(m, report, why);
+		// Not buildable yet (an account still unknown): the game's end tries again.
+		if (!ready) return;
+		m.reported = true;
+		ranked = m.ranked;
+		rankedId = m.rankedId;
+		facts = m.facts;
+		factsRead = m.factsRead;
+	}
+	LogI("league", "the game is decided: its report goes now, while the game goes on");
+	QueueReport(report, ranked, rankedId, facts, factsRead);
+}
+
+}
+
+void LeagueMatchEnded()
+{
+	LeagueReport report;
+	std::string why;
+	bool ready = false, ranked = false, factsRead = false;
+	int64_t rankedId = 0;
+	GameRecordFacts facts;
+	{
+		std::lock_guard<std::mutex> lock(g_mx);
+		g_rankedNow = false;
+		g_teamNow = false;
+		if (!g_match.active) {
+			why = "it was not recorded";
+		}
+		else if (g_match.reported) {
+			// Reported when it was decided.
+			if (g_match.pauseHeld) TweaksHoldPause(false);
+			g_match = Match();
+			return;
+		}
+		else {
+			Poll(g_match);
+			ranked = g_match.ranked;
+			rankedId = g_match.rankedId;
+			facts = g_match.facts;
+			factsRead = g_match.factsRead;
+			if (g_match.pauseHeld) TweaksHoldPause(false);
+			ready = BuildReport(g_match, report, why);
+			g_match = Match();
+		}
+	}
+	if (!ready) {
+		if (!why.empty() && why != "it was not recorded") LogI("league", "the online game is not reported: %s", why.c_str());
+		// Without a report the queue follows the server again instead of staying in the match.
+		RankedGameEnded(rankedId);
+		return;
+	}
+	QueueReport(report, ranked, rankedId, facts, factsRead);
 }
 
 void LeagueMatchSurrendered(int player)
