@@ -307,10 +307,10 @@ void Poll(Match &m)
 		// defeat the player in the same second, so leaving is judged on the state before.
 		if (p.state >= 1 && p.state <= 3 && s.state != 3 && !(s.state == 2 && p.state == 1)) s.state = p.state;
 		if (m.surrendered.count(s.index)) s.surrendered = true;
-		if (m.team && m.quitters.count(s.index) && !s.quit) {
+		if (m.dropRules && m.quitters.count(s.index) && !s.quit) {
 			s.quit = s.gone = true;
 			if (!s.left) s.leftAt = clock;
-			LogI("league", "ranked 2v2: player %d left on purpose; the AI keeps their army", s.index);
+			LogI("league", "player %d left the game on purpose; they are gone", s.index);
 		}
 		if (s.local && m.ranked) {
 			GameRecordFacts facts;
@@ -677,7 +677,7 @@ bool LeagueMatchRankedTeam()
 void LeagueMatchPlayerQuit(int player)
 {
 	std::lock_guard<std::mutex> lock(g_mx);
-	if (g_match.active && g_match.team) g_match.quitters.insert(player);
+	if (g_match.active && g_match.dropRules) g_match.quitters.insert(player);
 }
 
 bool LeagueTeamDropOpen(int player)

@@ -7,6 +7,7 @@
 #pragma warning(push)
 #pragma warning(disable : 4996 4828)
 #pragma warning(pop)
+#include "core/league.h"
 #include "core/log.h"
 #include "mods/mods.h"
 #include "hooks/dmshim.h"
@@ -127,8 +128,10 @@ void OnCallback(int id, const void *data)
 		set("pw", g_creating.password.empty() ? "" : Fnv(g_creating.password));
 		set("vis", std::to_string(g_creating.visibility));
 		if (!g_creating.leagueTag.empty()) set("irm", g_creating.leagueTag);
-		// A ranked or a cup game is under the league's drop rules.
-		if (g_creating.leagueTag.rfind("ranked:", 0) == 0 || g_creating.leagueTag.rfind("tournament:", 0) == 0) set("drop", "ai");
+		// A ranked or a cup game is under the league's drop rules: the tag read as the players read it (LeagueMatchPlaying).
+		LeagueMatchKind kind = LeagueMatchKind::Normal;
+		int64_t matchId = 0;
+		if (LeagueParseRoomTag(g_creating.leagueTag, kind, matchId) && (kind == LeagueMatchKind::Ranked || kind == LeagueMatchKind::Tournament)) set("drop", "ai");
 		set("key", OwnKey());
 		PublishMods("");
 		set("irver", ModVersionText());

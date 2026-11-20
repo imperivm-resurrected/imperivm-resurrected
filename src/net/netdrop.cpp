@@ -257,6 +257,7 @@ void __cdecl HookCreateAI(int player, char *profile, short difficulty)
 			std::lock_guard<std::mutex> lock(g_lock);
 			first = g_dropped.insert(player).second;
 		}
+		if (rankedQuit) LeagueMatchPlayerQuit(player);
 		if (first && rankedQuit) LogI("match", "league game: player %d (%s) left; the AI does not replace them", player, name.c_str());
 		else if (first) {
 			LogI("match", "online game: player %d (%s) dropped; the AI does not replace them", player, name.c_str());

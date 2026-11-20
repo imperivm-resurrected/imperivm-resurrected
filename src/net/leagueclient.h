@@ -100,7 +100,7 @@ bool LeagueSurrenderLocked();
 bool LeagueMatchDropRules();
 // A ranked 2v2 being played (its room's tag and mode), the same on every computer from the game's start.
 bool LeagueMatchRankedTeam();
-// A player of it left on purpose: the AI keeps their army and they are gone for good.
+// A player of a game under the drop rules left it on purpose: they are gone for good (in a 2v2 the AI keeps their army).
 void LeagueMatchPlayerQuit(int player);
 // The player of that index dropped less than 5 minutes ago (or the game does not know): their return is let in.
 bool LeagueTeamDropOpen(int player);
