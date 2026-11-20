@@ -136,7 +136,8 @@ void PaintSide(Painter &p, Ctx &c, const TourneyMatch &m, const TourneyCard &car
 	const int sx = x + w - scoreW;
 	// The loser's score on a dark red, the winner's on the button's grey.
 	const COLORREF kLostScore = RGB(0x4e, 0x15, 0x18);
-	p.Fill(sx, y, scoreW, h, won ? pal::button : lost ? kLostScore : pal::field);
+	// The player's row keeps its red through the score until there is one.
+	p.Fill(sx, y, scoreW, h, won ? pal::button : lost ? kLostScore : own ? RGB(0x3a, 0x15, 0x17) : pal::field);
 	if (m.status == TourneyMatchStatus::Bye && won) {
 		UseFace(p, BrandFace::UiStrong, 11);
 		p.TextCaps(sx - 14, y, scoreW + 14, h, "Bye", pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
