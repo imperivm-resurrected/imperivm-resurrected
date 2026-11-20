@@ -286,7 +286,7 @@ void EndPan(Painter &p, const Ctx &c, const Pan &v, PaintOut &out)
 	const int bw = 34, mw = 64, bh = 30, zx = v.x + v.viewW - (2 * bw + mw + 4) - 6, zy = v.y + v.viewH - bh - 8;
 	p.Fill(zx - 4, zy - 4, 2 * bw + mw + 12, bh + 8, pal::panel);
 	p.raw = true;
-	p.Button(zx, zy, bw, bh, "â", kTourney, ArgOf(kSubZoom, 2), c.mx, c.my, c.u.bracketZoom > kZoomMin, false, 3);
+	p.Button(zx, zy, bw, bh, "-", kTourney, ArgOf(kSubZoom, 2), c.mx, c.my, c.u.bracketZoom > kZoomMin, false, 3);
 	p.Button(zx + bw + 2, zy, mw, bh, std::to_string(c.u.bracketZoom) + " %", kTourney, ArgOf(kSubZoom, 0), c.mx, c.my, true, false, 3);
 	p.Button(zx + bw + mw + 4, zy, bw, bh, "+", kTourney, ArgOf(kSubZoom, 1), c.mx, c.my, c.u.bracketZoom < kZoomMax, false, 3);
 	p.raw = false;
@@ -425,10 +425,6 @@ void PaintEntrantColumn(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut
 		DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 	p.raw = false;
 	int top = y + 28;
-	if (d.matches.empty()) {
-		p.Font(3);
-		top += p.TextWrapped(x, top, w, 60, "The bracket is drawn when the check-in closes.", pal::textDim) + 10;
-	}
 	const int rowH = 46, viewH = y + h - top;
 	const int total = static_cast<int>(d.entrants.size()) * rowH, maxY = std::max(0, total - viewH), sy = std::min(c.u.sideScroll, maxY);
 	SetScrollArea(p, out.sideArea, x, top, w, viewH, maxY);
