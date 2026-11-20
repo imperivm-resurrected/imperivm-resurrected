@@ -143,12 +143,29 @@ void StartServer()
 	SafeThread(ServerThread).detach();
 }
 
+// What this build adds to the game's hash: the content's key in the high word and the movement patch's mark in the low one. The same
+// in the room the host publishes and in the check of whoever joins (HookVersionHash), or nobody can join anybody.
+int HashMarks()
+{
+	return static_cast<int>(ProfileKey() << 16) ^ (MoveStartActive() ? 0xc000 : 0);
+}
+
 int __cdecl HookVersionHash(int options)
 {
 	StartServer();
 	const unsigned key = ProfileKey();
 	// The movement patch marks the low word as Classic Modern does (0xc000), so a game without it refuses the room.
-	return g_origHash(options) ^ static_cast<int>(key << 16) ^ (MoveStartActive() ? 0xc000 : 0);
+	const int plain = g_origHash(options);
+	const int out = plain ^ HashMarks();
+	// What the game compares to join a room ("different protocol version"): logged when it changes, to tell two computers apart.
+	static int lastPlain = 0, lastOut = 0;
+	if (plain != lastPlain || out != lastOut) {
+		lastPlain = plain;
+		lastOut = out;
+		LogI("net", "online: version hash %08x (the game's %08x, content key %04x, movement %s)", static_cast<unsigned>(out), static_cast<unsigned>(plain), key,
+			MoveStartActive() ? "on" : "off");
+	}
+	return out;
 }
 
 typedef void(__fastcall *PublishGameOptions_t)(void *self, void *edx, int *options);
@@ -166,12 +183,13 @@ void __fastcall HookBroadcastGameDesc(void *shell, void *edx, int to)
 
 void __fastcall HookPublishGameOptions(void *self, void *edx, int *options)
 {
-	const unsigned key = ProfileKey();
-	t_publishing = key != 0 && options != nullptr;
+	// The game publishes its options with its own hash, not through NetComputeGameVersionHash: the marks are put in here.
+	const int marks = HashMarks();
+	t_publishing = marks != 0 && options != nullptr;
 	g_origPublish(self, edx, options);
 	t_publishing = false;
-	if (!key || !options) return;
-	options[0] = g_origHash(reinterpret_cast<int>(options)) ^ static_cast<int>(key << 16);
+	if (!marks || !options) return;
+	options[0] = g_origHash(reinterpret_cast<int>(options)) ^ marks;
 	char *dlg = static_cast<char *>(self);
 	*reinterpret_cast<int *>(dlg + 0x84) = options[0];
 	char *shell = *reinterpret_cast<char **>(dlg + 0x8228);
@@ -253,7 +271,15 @@ int __fastcall HookAddFoundGame(void *self, void *edx, unsigned char *desc, void
 		const unsigned stored = *reinterpret_cast<unsigned *>(desc + 0x4a);
 		const unsigned plain = static_cast<unsigned>(g_origHash(options));
 		const unsigned diff = stored ^ plain;
-		if ((diff & 0xffff) == 0 && (diff >> 16) != ProfileKey()) {
+		{
+			// A game found in the network: its published hash next to what this computer makes of the same options.
+			static unsigned lastStored = 0;
+			if (stored != lastStored) {
+				lastStored = stored;
+				LogI("net", "online: a game found publishes version hash %08x; the game's own for its options %08x", stored, plain);
+			}
+		}
+		if ((diff & 0xffff) == (MoveStartActive() ? 0xc000u : 0u) && (diff >> 16) != ProfileKey()) {
 			const unsigned hostKey = diff >> 16;
 			const unsigned ip = AddrIp(addr);
 			char key[48];
