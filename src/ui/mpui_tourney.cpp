@@ -85,12 +85,13 @@ const TourneySummary *SummaryOf(const TourneyListsView &lists, int64_t tournamen
 }
 
 // Under g_lock: a cup of teams, by what the lists, the page on screen or the player's next match say of it.
+// A cup of teams whose players sign up with their partner (not one whose teams are drawn).
 bool TeamsCup(int64_t tournament)
 {
 	const TourneyListsView lists = LeagueTourneyLists();
-	if (const TourneySummary *t = SummaryOf(lists, tournament)) return t->Teams();
+	if (const TourneySummary *t = SummaryOf(lists, tournament)) return t->Teams() && !t->teamDraw;
 	const auto page = LeagueTourneyPage(g_tourney.slug, 60000);
-	if (page->loaded && page->detail.id == tournament) return page->detail.Teams();
+	if (page->loaded && page->detail.id == tournament) return page->detail.Teams() && !page->detail.teamDraw;
 	const auto mine = LeagueTourneyMine();
 	const TourneyNext &next = mine->mine.next;
 	return next.present && next.tournamentId == tournament && next.Teams();
@@ -854,7 +855,8 @@ std::string StageText(TourneyStage stage, int round)
 
 std::string FormatText(const TourneySummary &t)
 {
-	return Tr(TourneyIsSwiss(t) ? "Swiss" : TourneyIsDouble(t) ? "Double elimination" : "Single elimination") + " \xC2\xB7 " + Tr(t.Teams() ? "2 vs 2" : "1 vs 1");
+	return Tr(TourneyIsSwiss(t) ? "Swiss" : TourneyIsDouble(t) ? "Double elimination" : "Single elimination") + " \xC2\xB7 " + Tr(t.Teams() ? "2 vs 2" : "1 vs 1") +
+		(t.teamDraw ? " \xC2\xB7 " + Tr("drawn teams") : std::string());
 }
 
 std::string ContentText(const TourneySummary &t)

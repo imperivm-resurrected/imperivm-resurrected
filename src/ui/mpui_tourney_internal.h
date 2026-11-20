@@ -50,7 +50,7 @@ enum Sub {
 // What kSubCupSet changes in the form: the high bits of its value; the low 16 are the choice.
 enum CupSetting {
 	kCupPlaces = 1, kCupMinimum, kCupBestOf, kCupFinal, kCupSeeding, kCupCheckin, kCupPrivate, kCupPlay, kCupPreset, kCupHideCivs, kCupFog,
-	kCupExplored, kCupDiplomacy, kCupSpectators, kCupDay, kCupMinute, kCupNoshow, kCupFormat, kCupSwissRounds, kCupPace, kCupRoundDays, kCupMode, kCupTimeStep,
+	kCupExplored, kCupDiplomacy, kCupSpectators, kCupDay, kCupMinute, kCupNoshow, kCupFormat, kCupSwissRounds, kCupPace, kCupRoundDays, kCupMode, kCupTeamDraw, kCupTimeStep,
 };
 
 // The menus of the form (kDropTourney), by the index they open with.

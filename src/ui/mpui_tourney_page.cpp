@@ -447,11 +447,11 @@ void PaintBracketPreview(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOu
 void PaintEntrantColumn(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out)
 {
 	const TourneyDetail &d = c.d;
-	const bool teams = d.Teams();
+	const bool teams = d.Teams() && !d.DrawPending();
 	PaintCaps(p, x, y, w - 70, 20, teams ? "Teams" : "Players", pal::caption);
 	UseFace(p, BrandFace::Ui, 12);
 	p.raw = true;
-	p.Text(x + w - 90, y, 90, 20, std::to_string(d.entrants.size()) + (d.maxEntries ? " / " + std::to_string(d.maxEntries) : std::string()), pal::caption,
+	p.Text(x + w - 90, y, 90, 20, std::to_string(d.entrants.size()) + (d.maxEntries ? " / " + std::to_string(d.DrawPending() ? d.maxEntries * 2 : d.maxEntries) : std::string()), pal::caption,
 		DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 	p.raw = false;
 	int top = y + 28;
@@ -1258,7 +1258,7 @@ int PaintStatusCard(Painter &p, Ctx &c, int x, int y, int w)
 	const TourneyMyEntry *e = MyEntry(c.mine, d.id);
 	const bool in = e && TourneyEntryActive(e->status);
 	if (d.status == TourneyStatus::Signup || d.status == TourneyStatus::Checkin) {
-		const bool reqs = d.requirements.Any(), teams = d.Teams();
+		const bool reqs = d.requirements.Any(), teams = d.Teams() && !d.teamDraw;
 		const TourneyInvite *invite = !in && teams ? TourneyInviteOf(c.mine.mine, d.id) : nullptr;
 		const bool pending = !in && !invite && e && e->Pending();
 		const TourneyUnmet unmet = in || invite || pending || (IsOrganizer(d) && !teams) ? TourneyUnmet::None : CupUnmet(d.requirements, c.mine);

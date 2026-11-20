@@ -368,8 +368,13 @@ int FormatLeft(Form &c, int x, int y, int w)
 	Segments(c, x, at, w, c.k.fieldH, {{Tr("1 vs 1"), CupArg(kCupMode, 0), !teams}, {Tr("2 vs 2"), CupArg(kCupMode, 1), teams}});
 	at += c.k.fieldH;
 	if (teams) {
-		at += 8;
-		at += Hint(c, x, at, w, Tr("Each team is a captain and the partner they invite, a Steam friend. The maps need room for four players."));
+		at += c.k.rowGap;
+		at += Label(c, x, at, w, Tr("Teams"));
+		Segments(c, x, at, w, c.k.fieldH, {{Tr("Chosen by the players"), CupArg(kCupTeamDraw, 0), !f.teamDraw}, {Tr("Drawn"), CupArg(kCupTeamDraw, 1), f.teamDraw}});
+		at += c.k.fieldH + 8;
+		at += Hint(c, x, at, w,
+			Tr(f.teamDraw ? "Everyone signs up alone. When the check-in closes the teams are drawn, the best player with the weakest, so they come out even. The maps need room for four players."
+						  : "Each team is a captain and the partner they invite, a Steam friend. The maps need room for four players."));
 	}
 	at += c.k.rowGap;
 	at += Label(c, x, at, w, Tr(teams ? "Places (teams)" : "Places"));
@@ -378,7 +383,8 @@ int FormatLeft(Form &c, int x, int y, int w)
 			{"32", CupArg(kCupPlaces, 32), f.maxEntries == 32}});
 	at += c.k.fieldH + 8;
 	at += Hint(c, x, at, w,
-		TrFmt(teams ? "It starts with the teams that have checked in, if there are at least %s; else it is cancelled on its own."
+		TrFmt(teams && f.teamDraw ? "Twice as many players sign up. It starts with the teams drawn among those who have checked in, if there are at least %s; else it is cancelled on its own."
+			: teams ? "It starts with the teams that have checked in, if there are at least %s; else it is cancelled on its own."
 					: "It starts with the players who have checked in, if there are at least %s; else it is cancelled on its own.",
 			{std::to_string(f.minEntries)}));
 	at += Problem(c, x, at, w, {TourneyCupProblem::Places, TourneyCupProblem::Minimum});
@@ -803,7 +809,7 @@ int AccessBlock(Form &c, int x, int y, int w)
 	Option(c, x + half + 16, at, w - half - 16, c.k.optionH, f.isPrivate, true, Tr("Private cup"), Tr("Only with its 6-character code, which you share."), std::string(),
 		false, CupArg(kCupPrivate, 1));
 	at += c.k.optionH + c.k.rowGap;
-	if (f.mode == TourneyMode::Teams) {
+	if (f.mode == TourneyMode::Teams && !f.teamDraw) {
 		// The organizer's team needs a partner: it signs up from the cup's page, as any other.
 		at += Hint(c, x, at, w, Tr("To play your own cup, sign your team up from its page once it is published, with your partner."));
 		return at - y;
@@ -1231,6 +1237,7 @@ void ApplyCupSetting(TourneyCupForm &f, int setting, int choice, int64_t nowMs)
 		f.mode = choice ? TourneyMode::Teams : TourneyMode::Solo;
 		TourneyFitCupToMode(f, LeagueTourneyMapTypes());
 		break;
+	case kCupTeamDraw: f.teamDraw = choice != 0; break;
 	case kCupRoundDays:
 		if (TourneyRoundDaysValid(choice)) f.roundDays = choice;
 		break;

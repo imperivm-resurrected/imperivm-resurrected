@@ -79,12 +79,14 @@ int PaintSideDiscs(Painter &p, int x, int y, int size, const std::vector<Tourney
 
 std::string SideCountText(const TourneySummary &t, int n)
 {
-	if (t.Teams()) return n == 1 ? Tr("1 team") : TrFmt("%s teams", {std::to_string(n)});
+	if (t.Teams() && !t.DrawPending()) return n == 1 ? Tr("1 team") : TrFmt("%s teams", {std::to_string(n)});
 	return n == 1 ? Tr("1 player") : TrFmt("%s players", {std::to_string(n)});
 }
 
 std::string SignedUpText(const TourneySummary &t, int entries, int places)
 {
+	// Before the draw of its teams, a cup of drawn teams counts its players, two to a place.
+	if (t.DrawPending()) return TrFmt("%s of %s signed up", {std::to_string(entries), std::to_string(places * 2)});
 	return TrFmt(t.Teams() ? "%s of %s teams signed up" : "%s of %s signed up", {std::to_string(entries), std::to_string(places)});
 }
 

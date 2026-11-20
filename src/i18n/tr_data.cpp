@@ -3476,5 +3476,10 @@ extern const TrRow kTrRows[] = {
 	{"%s did not come back in 5 minutes: the game is yours. You may leave it whenever you like.", "%s no ha vuelto en 5 minutos: la partida es tuya. Puedes salir cuando quieras.", "%s non è tornato in 5 minuti: la partita è tua. Puoi uscire quando vuoi."},
 	{"Your cup game against the bot closed with the game: it counts as lost.", "Tu partida de copa contra el bot se cerró con el juego: cuenta como perdida.", "La tua partita di coppa contro il bot si è chiusa con il gioco: conta come persa."},
 	{"The champions of the official cups will show here.", "Aquí saldrán los campeones de las copas oficiales.", "Qui compariranno i campioni delle coppe ufficiali."},
+	{"drawn teams", "equipos sorteados", "squadre sorteggiate"},
+	{"Chosen by the players", "Los eligen los jugadores", "Le scelgono i giocatori"},
+	{"Drawn", "Sorteados", "Sorteggiate"},
+	{"Everyone signs up alone. When the check-in closes the teams are drawn, the best player with the weakest, so they come out even. The maps need room for four players.", "Cada uno se inscribe solo. Al cerrar el check-in se sortean los equipos, el mejor con el más flojo, para que queden igualados. Los mapas tienen que admitir cuatro jugadores.", "Ognuno si iscrive da solo. Alla chiusura del check-in si sorteggiano le squadre, il migliore con il più debole, perché siano equilibrate. Le mappe devono avere posto per quattro giocatori."},
+	{"Twice as many players sign up. It starts with the teams drawn among those who have checked in, if there are at least %s; else it is cancelled on its own.", "Se inscribe el doble de jugadores. Empieza con los equipos sorteados entre quienes hicieron el check-in, si hay al menos %s; si no, se cancela sola.", "Si iscrive il doppio dei giocatori. Inizia con le squadre sorteggiate tra chi ha fatto il check-in, se sono almeno %s; altrimenti si annulla da sola."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

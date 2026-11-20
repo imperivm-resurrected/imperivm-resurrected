@@ -3468,5 +3468,10 @@
 {"en":"Your side","es":"Tu bando","it":"La tua parte"},
 {"en":"%s did not come back in 5 minutes: the game is yours. You may leave it whenever you like.","es":"%s no ha vuelto en 5 minutos: la partida es tuya. Puedes salir cuando quieras.","it":"%s non è tornato in 5 minuti: la partita è tua. Puoi uscire quando vuoi."},
 {"en":"Your cup game against the bot closed with the game: it counts as lost.","es":"Tu partida de copa contra el bot se cerró con el juego: cuenta como perdida.","it":"La tua partita di coppa contro il bot si è chiusa con il gioco: conta come persa."},
-{"en":"The champions of the official cups will show here.","es":"Aquí saldrán los campeones de las copas oficiales.","it":"Qui compariranno i campioni delle coppe ufficiali."}
+{"en":"The champions of the official cups will show here.","es":"Aquí saldrán los campeones de las copas oficiales.","it":"Qui compariranno i campioni delle coppe ufficiali."},
+{"en":"drawn teams","es":"equipos sorteados","it":"squadre sorteggiate"},
+{"en":"Chosen by the players","es":"Los eligen los jugadores","it":"Le scelgono i giocatori"},
+{"en":"Drawn","es":"Sorteados","it":"Sorteggiate"},
+{"en":"Everyone signs up alone. When the check-in closes the teams are drawn, the best player with the weakest, so they come out even. The maps need room for four players.","es":"Cada uno se inscribe solo. Al cerrar el check-in se sortean los equipos, el mejor con el más flojo, para que queden igualados. Los mapas tienen que admitir cuatro jugadores.","it":"Ognuno si iscrive da solo. Alla chiusura del check-in si sorteggiano le squadre, il migliore con il più debole, perché siano equilibrate. Le mappe devono avere posto per quattro giocatori."},
+{"en":"Twice as many players sign up. It starts with the teams drawn among those who have checked in, if there are at least %s; else it is cancelled on its own.","es":"Se inscribe el doble de jugadores. Empieza con los equipos sorteados entre quienes hicieron el check-in, si hay al menos %s; si no, se cancela sola.","it":"Si iscrive il doppio dei giocatori. Inizia con le squadre sorteggiate tra chi ha fatto il check-in, se sono almeno %s; altrimenti si annulla da sola."}
 ]

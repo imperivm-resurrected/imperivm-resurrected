@@ -60,7 +60,7 @@ Act ActionFor(const TourneySummary &t, const TourneyMineView &mine)
 		else if (!in) {
 			const bool busy = LeagueTourneyBusy(TourneyOp::SignUp, t.id);
 			a.label = busy ? "Signing up..." : "Sign up";
-			a.arg = ArgOf(t.Teams() ? kSubTeamOpen : kSubSignUp, t.id);
+			a.arg = ArgOf(t.Teams() && !t.teamDraw ? kSubTeamOpen : kSubSignUp, t.id);
 			a.strong = true;
 			// A cup whose requirements the player doesn't meet: its row says why.
 			a.enabled = !busy && CupUnmet(t.requirements, mine) == TourneyUnmet::None;
@@ -175,7 +175,7 @@ void PaintFeatured(Painter &p, const State &st, const TourneySummary *t, const T
 	const int countW = p.TextWidth(count) + 4;
 	p.Text(rx, ry, countW, 44, count, pal::text, DT_LEFT | DT_BOTTOM | DT_SINGLELINE);
 	p.Font(0);
-	p.Text(rx + countW + 6, ry, rightW - countW - 6, 40, TrFmt(t->Teams() ? "of %s teams signed up" : "of %s signed up", {std::to_string(t->maxEntries)}), pal::caption,
+	p.Text(rx + countW + 6, ry, rightW - countW - 6, 40, TrFmt(t->Teams() && !t->DrawPending() ? "of %s teams signed up" : "of %s signed up", {std::to_string(t->DrawPending() ? t->maxEntries * 2 : t->maxEntries)}), pal::caption,
 		DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_END_ELLIPSIS);
 	const int left = std::max(0, t->maxEntries - t->entries);
 	p.Font(3);

@@ -600,6 +600,7 @@ bool TourneyParseSummary(const Json &j, TourneySummary &out)
 	out.currentRound = std::max(0, j.GetInt("currentRound"));
 	out.roundEndsAt = Int64(j, "roundEndsAt");
 	out.mode = TourneyModeFromId(Text(j, "mode"));
+	out.teamDraw = out.Teams() && j.GetBool("teamDraw");
 	return true;
 }
 
@@ -1668,6 +1669,7 @@ Json TourneyCupJson(const TourneyCupForm &f, bool edit)
 	body.Set("maxEntries", Json::MakeNumber(f.maxEntries));
 	body.Set("minEntries", Json::MakeNumber(f.minEntries));
 	body.Set("mode", Json::MakeString(TourneyModeId(f.mode)));
+	body.Set("teamDraw", Json::MakeBool(f.mode == TourneyMode::Teams && f.teamDraw));
 	body.Set("format", Json::MakeString(TourneyFormatId(f.format)));
 	// The Swiss's rounds, null for the automatic count and outside a Swiss; the days of a round, null when it is played live.
 	const bool chosen = f.format == TourneyFormat::Swiss && f.swissRounds >= kTourneySwissRoundsMin && f.swissRounds <= kTourneySwissRoundsMax;
@@ -1694,7 +1696,7 @@ Json TourneyCupJson(const TourneyCupForm &f, bool edit)
 	body.Set("private", Json::MakeBool(f.isPrivate));
 	// In a cup of teams the organizer's entry needs a partner: they sign their team up from the cup's page, so a new cup is made without
 	// them, and a change leaves out "play", which would otherwise withdraw the team they signed up.
-	if (f.mode != TourneyMode::Teams) body.Set("play", Json::MakeBool(f.play));
+	if (f.mode != TourneyMode::Teams || f.teamDraw) body.Set("play", Json::MakeBool(f.play));
 	else if (!edit) body.Set("play", Json::MakeBool(false));
 	if (!f.contentKey.empty()) {
 		body.Set("contentKey", Json::MakeString(f.contentKey));
@@ -1737,6 +1739,7 @@ TourneyCupForm TourneyCupFormOf(const TourneyDetail &d)
 	f.maxEntries = d.maxEntries;
 	f.minEntries = d.minEntries;
 	f.mode = d.mode;
+	f.teamDraw = d.teamDraw;
 	f.bestOf = d.bestOf;
 	f.finalBestOf = d.finalBestOf;
 	f.randomSeeding = Lower(d.seeding) == "random";

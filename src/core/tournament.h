@@ -204,7 +204,11 @@ struct TourneySummary {
 	int64_t roundEndsAt = 0;
 	// One against one or teams of two: in a cup of teams its places, entries and sides are teams.
 	TourneyMode mode = TourneyMode::Solo;
+	// Teams of two drawn when the check-in closes: until then its players sign up alone, twice as many as its places.
+	bool teamDraw = false;
 	bool Teams() const { return mode == TourneyMode::Teams; }
+	// Its entries are players still waiting for the draw of the teams.
+	bool DrawPending() const { return Teams() && teamDraw && (status == TourneyStatus::Signup || status == TourneyStatus::Checkin); }
 };
 bool TourneyParseSummary(const Json &j, TourneySummary &out);
 bool TourneyParseList(const Json &j, std::vector<TourneySummary> &out);
@@ -621,8 +625,9 @@ struct TourneyCupForm {
 	// The maps the loser of a game chooses the next one from, 3 to 5, or none; only sent when the cup has series.
 	std::vector<TourneyMap> seriesPool;
 	// Teams of two: the places count teams, and every map needs room for four. The organizer signs their own team up from the cup's page,
-	// with their partner, so "I play too" is not sent.
+	// with their partner, so "I play too" is not sent; with drawn teams (`teamDraw`) everyone signs up alone, the organizer too.
 	TourneyMode mode = TourneyMode::Solo;
+	bool teamDraw = false;
 };
 constexpr int kTourneyCupNameMin = 3, kTourneyCupNameMax = 40, kTourneyCupDescriptionMax = 200, kTourneyCupMapsMax = 5;
 constexpr int kTourneyPoolMin = 3, kTourneyPoolMax = 5;
