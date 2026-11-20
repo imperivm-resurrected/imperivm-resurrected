@@ -79,10 +79,14 @@ void PaintSide(Painter &p, Ctx &c, const TourneyMatch &m, const TourneyCard &car
 	const bool over = TourneyMatchOver(m.status);
 	const bool won = card.Present() && m.winner == card.entryId;
 	const bool lost = over && card.Present() && !won;
-	p.Fill(x, y, seedW, h, pal::selected);
+	// The player's own place: its row on a dark red and its seed on the red, instead of a tag that crowded the badge after the name.
+	const bool own = card.Present() && c.me && card.entryId == c.me;
+	if (own) p.Fill(x + seedW, y, w - seedW, h, RGB(0x3a, 0x15, 0x17));
+	p.Fill(x, y, seedW, h, own ? pal::red : pal::selected);
 	UseFace(p, BrandFace::UiStrong, 12);
 	p.raw = true;
-	p.Text(x, y, seedW, h, card.Present() ? (card.seed ? std::to_string(card.seed) : std::string("-")) : std::string(), pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	p.Text(x, y, seedW, h, card.Present() ? (card.seed ? std::to_string(card.seed) : std::string("-")) : std::string(), own ? pal::onRed : pal::caption,
+		DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 	p.raw = false;
 	const int nx = x + seedW + 10, nw = w - seedW - scoreW - 20;
 	if (!card.Present()) {
@@ -95,7 +99,7 @@ void PaintSide(Painter &p, Ctx &c, const TourneyMatch &m, const TourneyCard &car
 		UseFace(p, won || card.entryId == c.me ? BrandFace::UiStrong : BrandFace::Body, 15);
 		const COLORREF ink = won || card.entryId == c.me ? pal::text : lost ? pal::caption : pal::textDim;
 		const bool mine = card.entryId == c.me;
-		const int youW = mine ? 30 : 0;
+		const int youW = 0;
 		std::string extra;
 		if (c.next && c.next->match == m.id && !mine && c.next->opponent.inRoom && !over) extra = Tr("in the room");
 		// A team: its name over its players, when the box is tall enough and the name is not theirs already.
@@ -115,7 +119,6 @@ void PaintSide(Painter &p, Ctx &c, const TourneyMatch &m, const TourneyCard &car
 		const int shownW = std::min(textW, nw - youW - (at - nx));
 		// Out of the match: the name struck through.
 		if (lost && m.status != TourneyMatchStatus::Bye) p.Fill(at - 2, nameY + nameH / 2, shownW + 4, 1, pal::caption);
-		if (mine) PaintTag(p, at + shownW + 6, nameY + (nameH - 22) / 2, "You", pal::red, pal::onRed);
 		if (two) {
 			UseFace(p, BrandFace::Ui, 12);
 			p.raw = true;
