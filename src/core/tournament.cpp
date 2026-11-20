@@ -1245,7 +1245,8 @@ bool TourneyHasActiveEntry(const TourneyMine &m)
 
 int TourneyPollEveryMs(bool activeEntry, bool tabOpen)
 {
-	if (activeEntry) return 30000;
+	// In a cup with its tab open the next match, its room and the start come in at once (the league takes a read every 5 s).
+	if (activeEntry) return tabOpen ? 5000 : 30000;
 	return tabOpen ? 60000 : kTourneyIdlePollMs;
 }
 

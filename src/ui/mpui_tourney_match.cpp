@@ -734,12 +734,15 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 		}
 	}
 	else {
+		// In the room and ready as the room has them, at once (as the game's own room shows it); the league's word when not in it.
+		const int meRoom = MemberRoomState(st, n.match, SteamOwnId()), themRoom = MemberRoomState(st, n.match, n.opponent.steamId);
+		const bool meIn = meRoom < 0 ? n.me.inRoom : meRoom > 0, themIn = themRoom < 0 ? n.opponent.inRoom : themRoom > 0;
 		PaintPlayerColumn(p, m + sideW / 2, cy, cardH, SteamOwnId(), st.player, true, n.me.seed, meE ? PreviousText(page.detail, meE->entryId, n.round) : std::string(),
-			live ? std::string() : Tr(n.me.inRoom ? "In the room" : "You're not in the room yet"), n.me.inRoom);
+			live ? std::string() : Tr(meRoom == 2 ? "Ready" : meIn ? "In the room" : "You're not in the room yet"), meIn);
 		if (n.hasOpponent) {
 			PaintPlayerColumn(p, m + sideW + centerW + sideW / 2, cy, cardH, n.opponent.steamId, n.opponent.name, false, n.opponent.seed,
-				themE ? PreviousText(page.detail, themE->entryId, n.round) : std::string(), live ? std::string() : Tr(n.opponent.inRoom ? "In the room" : "Not in the room yet"),
-				n.opponent.inRoom);
+				themE ? PreviousText(page.detail, themE->entryId, n.round) : std::string(),
+				live ? std::string() : Tr(themRoom == 2 ? "Ready" : themIn ? "In the room" : "Not in the room yet"), themIn);
 		}
 		else {
 			p.Font(0);

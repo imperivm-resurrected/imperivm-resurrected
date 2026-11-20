@@ -380,6 +380,9 @@ std::string SignedUpText(const TourneySummary &t, int entries, int places);
 // A player of the match is in its room: this computer's room when the player is in it, otherwise the league's word for them, otherwise their
 // side's.
 bool MemberInRoom(const State &st, int64_t match, const TourneyMember &m, bool sideIn);
+// A player in the match's room as this computer's room has it, at once: -1 when this computer is not in it (the league tells then), 0
+// not in it, 1 in it, 2 in it and ready.
+int MemberRoomState(const State &st, int64_t match, uint64_t steamId);
 // The Steam friends the team's dialog lists, by name with those playing the game first; only the ones whose name has `filter`.
 std::vector<SteamFriendInfo> TeamFriends(const std::string &filter);
 // Opens the dialog of a team's sign-up for a cup.

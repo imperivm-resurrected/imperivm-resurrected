@@ -239,7 +239,7 @@ void Mine()
 	CHECK(TourneyHasActiveEntry(signed_));
 
 	CHECK_EQ(TourneyPollEveryMs(true, false), 30000);
-	CHECK_EQ(TourneyPollEveryMs(true, true), 30000);
+	CHECK_EQ(TourneyPollEveryMs(true, true), 5000);
 	CHECK_EQ(TourneyPollEveryMs(false, true), 60000);
 	CHECK_EQ(TourneyPollEveryMs(false, false), kTourneyIdlePollMs);
 }

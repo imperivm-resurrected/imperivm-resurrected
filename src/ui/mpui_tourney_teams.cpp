@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "addr/state.h"
+#include "core/names.h"
 #include "core/tournament.h"
 #include "i18n/tr.h"
 #include "net/leagueclient.h"
@@ -101,6 +102,20 @@ bool MemberInRoom(const State &st, int64_t match, const TourneyMember &m, bool s
 	}
 	if (m.inRoom >= 0) return m.inRoom != 0;
 	return sideIn;
+}
+
+int MemberRoomState(const State &st, int64_t match, uint64_t steamId)
+{
+	if (!st.room.id || st.room.info.spectate || TourneyMatchOfTag(st.room.info.leagueTag) != match) return -1;
+	for (const OnlineMember &x : st.room.members) {
+		if (x.id != steamId) continue;
+		if (!st.game.active) return 1;
+		for (const GameRoomSlot &s : st.game.slots) {
+			if (s.used && s.ready && (x.me ? s.local : PlayerNameMatches(s.name, x.name))) return 2;
+		}
+		return 1;
+	}
+	return 0;
 }
 
 std::vector<SteamFriendInfo> TeamFriends(const std::string &filter)
