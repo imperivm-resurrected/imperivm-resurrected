@@ -401,7 +401,9 @@ bool BuildReport(const Match &m, LeagueReport &r, std::string &why)
 		// goes with them, and the league tells an abandon from it. The one closing the game leaves it now.
 		if (m.dropRules) {
 			seat.left = s.gone;
-			seat.leftAtMs = s.gone || s.left || s.quit ? s.leftAt : s.local ? m.clockMs : -1;
+			// As signed numbers: mixed with the unsigned clocks, the -1 of a player who did not leave became 4294967295, and the league
+			// refused the report.
+			seat.leftAtMs = s.gone || s.left || s.quit ? static_cast<int64_t>(s.leftAt) : s.local ? static_cast<int64_t>(m.clockMs) : int64_t{-1};
 		}
 		seats.push_back(seat);
 	}
