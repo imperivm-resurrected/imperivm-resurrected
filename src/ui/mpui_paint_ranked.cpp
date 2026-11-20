@@ -190,6 +190,7 @@ void PaintName(Painter &p, int x, int y, int w, int h, const std::string &name, 
 	const int textW = std::min(nameW, p.TextWidth(name));
 	if (laurel) DrawPatron(p, x, y + (h - laurel) / 2, laurel, nameX, y, nameW, h, name, patron.tier, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	else p.Text(nameX, y, nameW, h, name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	SteamProfileHotspot(p, nameX, y, nameW, h, name, id, mx, my);
 	DrawBadgeAfterName(p, nameX, y, nameW, h, name, badge, mx, my, id);
 	p.raw = false;
 	if (you) Chip(p, nameX + textW + LeagueBadgeRoom(badge) + 8, y + (h - 20) / 2, youW, 20, "You", pal::textDim, pal::hairline);

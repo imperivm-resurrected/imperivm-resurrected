@@ -299,6 +299,7 @@ void PaintHall(Painter &p, const State &st, const LeagueSeasonsView &sv, const L
 		const int nameW = iw - 40 - 200 - LeagueBadgeRoom(badge);
 		RawText(p, ix + 40, ry, nameW, rowH, r.name.empty() ? Tr("Player") : r.name, pal::text);
 		p.raw = true;
+		SteamProfileHotspot(p, ix + 40, ry, nameW, rowH, r.name.empty() ? Tr("Player") : r.name, id, mx, my);
 		DrawBadgeAfterName(p, ix + 40, ry, nameW, rowH, r.name.empty() ? Tr("Player") : r.name, badge, mx, my, id);
 		p.raw = false;
 		p.Font(3);

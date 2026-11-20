@@ -106,6 +106,8 @@ int PaintPlayerColumn(Painter &p, int cx, int y, int h, uint64_t id, const std::
 	if (laurel) DrawPatron(p, left, cy + (66 - laurel) / 2, laurel, left, cy, 0, 0, std::string(), patron.tier, DT_LEFT);
 	const COLORREF ink = laurel ? PatronColorsOf(patron.tier).name : pal::text;
 	p.TextCaps(left + laurelRoom, cy, nameW, 66, name, ink, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
+	// The name opens the player's Steam profile (the hit only: the column is drawn without the pointer).
+	if ((id >> 32) == 0x01100001ULL) p.AddHit(left + laurelRoom, cy + 8, nameW, 50, kSteamProfile, static_cast<int>(static_cast<uint32_t>(id)));
 	p.raw = false;
 	if (badge.Shown()) DrawLeagueBadge(p, left + laurelRoom + nameW + kLeagueBadgeGap, cy + 23, kLeagueBadgeSize, badge);
 	cy += 72;

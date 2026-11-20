@@ -170,7 +170,7 @@ void CupMade(const TourneyOpResult &r)
 	}
 	u.cupError.clear();
 	u.cupErrorSlug.clear();
-	if (u.screen == kScreenCreate && !u.cupEditId) OpenPage(r.slug, kOrganizerTab);
+	if (u.screen == kScreenCreate && !u.cupEditId) OpenPage(r.slug, 0);
 	if (!r.inviteCode.empty()) u.shownCode = r.inviteCode;
 	else Toast("Your cup is published: it is in the list of tournaments.");
 }
@@ -188,7 +188,7 @@ void CupEdited(const TourneyOpResult &r)
 	u.cupError.clear();
 	if (u.screen == kScreenCreate && u.cupEditId == r.id) {
 		u.cupEditId = 0;
-		OpenPage(r.slug.empty() ? u.cupEditSlug : r.slug, kOrganizerTab);
+		OpenPage(r.slug.empty() ? u.cupEditSlug : r.slug, 0);
 	}
 	Toast("Changes saved: the cup's page and the list show them now.");
 }
@@ -1237,12 +1237,14 @@ int PaintName(Painter &p, int x, int y, int w, int h, const std::string &name, u
 		const int nameW = std::max(20, w - (nx - x) - LeagueBadgeRoom(badge));
 		DrawPatron(p, x, ly, size, nx, y, nameW, h, name, patron.tier, fmt);
 		PatronHotspot(p, x, ly, size, patron, mx, my, kPatronLink);
+		SteamProfileHotspot(p, nx, y, nameW, h, name, id, mx, my);
 		DrawBadgeAfterName(p, nx, y, nameW, h, name, badge, mx, my, id);
 		p.raw = false;
 		return nx;
 	}
 	const int nameW = std::max(20, w - LeagueBadgeRoom(badge));
 	p.Text(x, y, nameW, h, name, ink, fmt);
+	SteamProfileHotspot(p, x, y, nameW, h, name, id, mx, my);
 	DrawBadgeAfterName(p, x, y, nameW, h, name, badge, mx, my, id);
 	p.raw = false;
 	return x;
@@ -1385,7 +1387,7 @@ void TourneyAction(int arg)
 		u.listScroll = 0;
 		break;
 	case kSubOpen: OpenPage(SlugOf(value), 0); break;
-	case kSubManage: OpenPage(SlugOf(value), kOrganizerTab); break;
+	case kSubManage: OpenPage(SlugOf(value), 0); break;
 	case kSubPageTab:
 		u.pageTab = static_cast<int>(value);
 		u.bracketX = u.bracketY = u.sideScroll = 0;
@@ -1557,7 +1559,7 @@ void TourneyAction(int arg)
 		const auto mine = LeagueTourneyMine();
 		const TourneyOrganize &o = mine->mine.organize;
 		if (o.activeId) {
-			OpenPage(o.activeSlug.empty() ? SlugOf(o.activeId) : o.activeSlug, kOrganizerTab);
+			OpenPage(o.activeSlug.empty() ? SlugOf(o.activeId) : o.activeSlug, 0);
 			break;
 		}
 		if (o.known && !o.allowed) {
@@ -1779,7 +1781,7 @@ void TourneyAction(int arg)
 		}
 		break;
 	}
-	case kSubCupOpenActive: OpenPage(u.cupErrorSlug, kOrganizerTab); break;
+	case kSubCupOpenActive: OpenPage(u.cupErrorSlug, 0); break;
 	case kSubJoin:
 		u.joinOpen = true;
 		u.joinCode.clear();
@@ -1897,7 +1899,7 @@ bool TourneyBack()
 	}
 	if (u.screen == kScreenCreate && u.cupEditId) {
 		u.cupEditId = 0;
-		OpenPage(u.cupEditSlug, kOrganizerTab);
+		OpenPage(u.cupEditSlug, 0);
 		return true;
 	}
 	if (u.screen == kScreenList) return false;

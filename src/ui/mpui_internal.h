@@ -49,7 +49,7 @@ enum Action {
 	kPickRow, kPickOk, kPickCancel,
 	kRecoverYes, kRecoverNo, kRejoinCancel, kRejoinClose,
 	kGKick, kGKickJoining, kPassOk, kPassCancel, kGSeat, kGMove, kGMoveTo, kGSwapAsk, kSwapAccept, kSwapDecline, kDropYes, kDropNo, kPassShow, kGSiteToggle, kGRuleToggle, kSpectate, kReturnGame,
-	kFieldPickSearch, kPickDelete, kPickDeleteYes, kPickDeleteNo, kGResync, kPatronLink, kProfile, kGTab, kFieldRoomName,
+	kFieldPickSearch, kPickDelete, kPickDeleteYes, kPickDeleteNo, kGResync, kPatronLink, kProfile, kSteamProfile, kGTab, kFieldRoomName,
 	kLeagueLink, kLeagueOpen, kLeagueCancel, kLeagueUnlink,
 	kRankedAct,
 	kTourney, kFieldTourney, kFieldCupName, kFieldCupDescription, kFieldCupCode,
@@ -550,6 +550,9 @@ uint64_t MemberIdByName(const State &st, const std::string &name, bool skipMe = 
 // The argument of kProfile says where the player was clicked.
 const int kProfileLobbySlot = 0, kProfileLobbyName = 0x1000, kProfileRoomSlot = 0x2000;
 void ProfileHotspot(ui::Painter &p, const State &st, int x, int y, int w, int h, const std::string &name, int arg);
+// A player's name drawn at (x, y) in a box w wide: a click on it opens their Steam profile, and it is underlined under the pointer.
+// Only a person's account (not a staging test player's).
+void SteamProfileHotspot(ui::Painter &p, int x, int y, int w, int h, const std::string &name, uint64_t id, int mx, int my);
 // The lobby's table of rooms is this wide in a frame of viewW x viewH; the widths of its columns are kept in units of a table
 // kColumnBaseW wide, so the ones the player dragged follow the screen.
 int LobbyTableWidth(int viewW, int viewH);

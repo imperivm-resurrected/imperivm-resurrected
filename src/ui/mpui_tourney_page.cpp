@@ -293,16 +293,41 @@ void EndPan(Painter &p, const Ctx &c, const Pan &v, PaintOut &out)
 }
 
 // A column's heading: its round in small capitals and, after it, the series and the map.
-void PaintColumnHead(Painter &p, int x, int y, int w, const std::string &stage, const std::string &detail)
+// The tip of a round's heading, drawn after the bracket so no box covers it.
+struct HeadTip {
+	bool show = false;
+	int x = 0, y = 0;
+	std::string text;
+};
+HeadTip g_headTip;
+
+// A column's heading: its round in small capitals. How it is played (the series, the map) shows on hovering it.
+void PaintColumnHead(Painter &p, const Ctx &c, int x, int y, int w, const std::string &stage, const std::string &detail)
 {
 	UseFace(p, BrandFace::UiStrong, 12);
 	p.raw = true;
 	const int stageW = std::min(w, p.CapsWidth(stage, 2) + 4);
-	p.TextCaps(x, y, stageW, 20, stage, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
-	if (!detail.empty() && stageW + 8 < w) {
-		UseFace(p, BrandFace::Ui, 12);
-		p.Text(x + stageW + 8, y, w - stageW - 8, 20, detail, pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	const bool hover = !detail.empty() && p.Hover(x, y, stageW, 20, c.mx, c.my);
+	p.TextCaps(x, y, stageW, 20, stage, hover ? pal::redText : pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
+	p.raw = false;
+	if (hover) {
+		g_headTip.show = true;
+		g_headTip.x = x;
+		g_headTip.y = y + 24;
+		g_headTip.text = detail;
 	}
+}
+
+void PaintHeadTip(Painter &p)
+{
+	if (!g_headTip.show) return;
+	g_headTip.show = false;
+	UseFace(p, BrandFace::Ui, 13);
+	p.raw = true;
+	const int tw = p.TextWidth(g_headTip.text) + 24;
+	p.Fill(g_headTip.x, g_headTip.y, tw, 30, pal::panel);
+	p.Frame(g_headTip.x, g_headTip.y, tw, 30, pal::edgeHot);
+	p.Text(g_headTip.x + 12, g_headTip.y, tw - 24, 30, g_headTip.text, pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 	p.raw = false;
 }
 
@@ -376,7 +401,7 @@ void PaintBracket(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out)
 		const TourneyMatch *first = TourneyMatchAt(d, r, 0);
 		const int bestOf = first ? first->bestOf : r == d.rounds ? d.finalBestOf : d.bestOf;
 		const TourneyMap map = TourneyMapOfRound(d, r, d.rounds);
-		PaintColumnHead(p, ox + TourneyBoxX(bm, r), oy, bm.boxW, StageText(TourneyStageOf(r, d.rounds), r), BestOfText(bestOf) + (map.Known() ? " \xC2\xB7 " + MapText(map) : std::string()));
+		PaintColumnHead(p, c, ox + TourneyBoxX(bm, r), oy, bm.boxW, StageText(TourneyStageOf(r, d.rounds), r), BestOfText(bestOf) + (map.Known() ? " \xC2\xB7 " + MapText(map) : std::string()));
 	}
 	for (const TourneyMatch &m : d.matches) {
 		const std::vector<TourneySegment> segs = TourneyConnector(bm, m.round, m.position, d.rounds);
@@ -387,6 +412,7 @@ void PaintBracket(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out)
 	if (const TourneyMatch *final = TourneyMatchAt(d, d.rounds, 0)) {
 		PaintChampionEnd(p, c, ox + TourneyBoxX(bm, d.rounds) + bm.boxW, oy + TourneyBoxMidY(bm, d.rounds, 0), TourneyMatchOver(final->status));
 	}
+	PaintHeadTip(p);
 	EndPan(p, c, v, out);
 }
 
@@ -559,15 +585,15 @@ void PaintDoubleBracket(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut
 	PaintBracketTitle(p, ox, oy + l.losersY - titleH, TourneyBoxX(bm, l.losersRounds) + bm.boxW, Tr("Losers' bracket"));
 	for (int r = 1; r <= l.winnersRounds; r++) {
 		const TourneyMatch *first = TourneyMatchAt(d, r, 0);
-		PaintColumnHead(p, ox + TourneyBoxX(bm, r), oy + l.winnersY, bm.boxW, DoubleColumnText(r, l.winnersRounds, false), BestOfText(first ? first->bestOf : d.bestOf));
+		PaintColumnHead(p, c, ox + TourneyBoxX(bm, r), oy + l.winnersY, bm.boxW, DoubleColumnText(r, l.winnersRounds, false), BestOfText(first ? first->bestOf : d.bestOf));
 	}
 	for (int r = 1; r <= l.losersRounds; r++) {
 		const TourneyMatch *first = TourneyMatchAt(d, r, 0, TourneyBracket::Losers);
-		PaintColumnHead(p, ox + TourneyBoxX(bm, r), oy + l.losersY, bm.boxW, DoubleColumnText(r, l.losersRounds, true), BestOfText(first ? first->bestOf : d.bestOf));
+		PaintColumnHead(p, c, ox + TourneyBoxX(bm, r), oy + l.losersY, bm.boxW, DoubleColumnText(r, l.losersRounds, true), BestOfText(first ? first->bestOf : d.bestOf));
 	}
 	const int finalBestOf = grand ? grand->bestOf : d.finalBestOf;
-	PaintColumnHead(p, ox + l.finalX, oy + l.finalY - 46, bm.boxW, Tr("Grand final"), BestOfText(finalBestOf));
-	if (l.reset) PaintColumnHead(p, ox + l.resetX, oy + l.finalY - 46, bm.boxW, Tr("Reset match"), BestOfText(reset ? reset->bestOf : finalBestOf));
+	PaintColumnHead(p, c, ox + l.finalX, oy + l.finalY - 46, bm.boxW, Tr("Grand final"), BestOfText(finalBestOf));
+	if (l.reset) PaintColumnHead(p, c, ox + l.resetX, oy + l.finalY - 46, bm.boxW, Tr("Reset match"), BestOfText(reset ? reset->bestOf : finalBestOf));
 
 	for (const TourneyMatch &m : d.matches) {
 		if (m.bracket == TourneyBracket::Winners) {
@@ -616,6 +642,7 @@ void PaintDoubleBracket(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut
 		p.raw = false;
 	}
 	PaintChampionEnd(p, c, ox + l.width, oy + l.finalY + bm.boxH / 2, TourneyChampion(d) != 0);
+	PaintHeadTip(p);
 	EndPan(p, c, v, out);
 }
 
@@ -1516,7 +1543,7 @@ int PaintOrganizerCard(Painter &p, Ctx &c, int x, int y, int w)
 		cy += 50;
 	}
 	else if (d.status == TourneyStatus::Running && disputes) {
-		p.Button(x + pad, cy, bw, 40, "Settle the disputes", kTourney, ArgOf(kSubPageTab, kOrganizerTab), mx, my, c.u.pageTab != kOrganizerTab, true);
+		p.Button(x + pad, cy, bw, 40, "Settle the disputes", kTourney, ArgOf(kSubPageTab, 3), mx, my, c.u.pageTab != 3, true);
 		cy += 50;
 	}
 	if (on) {
@@ -1662,9 +1689,9 @@ void PaintPageScreen(Painter &p, const State &st, const Ui &u, PaintOut &out)
 	// The players are listed on the bracket's tab (1 was their own tab).
 	int tab = u.pageTab == 1 ? 0 : u.pageTab;
 	(void)bracketTab;
-	if (tab == kOrganizerTab && !organizer) tab = 0;
-	if (tab == kOrganizerTab) PaintOrganizer(p, c, ix, iy, iw - 20, ih, out);
-	else if ((tab == 0 || tab >= kRoundTab) && swiss) {
+	// The organizer's tab is gone: its disputes are in the log's tab.
+	if (tab == kOrganizerTab) tab = 0;
+	if ((tab == 0 || tab >= kRoundTab) && swiss) {
 		if (page.detail.matches.empty()) {
 			p.Font(3);
 			p.Text(ix, iy, iw, 22, "The first round is paired when the check-in closes. Meanwhile, these are the players signed up.", pal::caption);
@@ -1682,6 +1709,12 @@ void PaintPageScreen(Painter &p, const State &st, const Ui &u, PaintOut &out)
 		else PaintBracket(p, c, bx, iy, bw, ih, out);
 	}
 	else if (tab == 2) PaintRules(p, c, ix, iy, iw - 20, ih, out);
+	else if (organizer && !c.disputes.disputes.empty()) {
+		// The organizer's disputes over the log, while there are any.
+		const int dh = std::min(ih / 2 + 40, 40 + static_cast<int>(c.disputes.disputes.size()) * 180);
+		PaintOrganizer(p, c, ix, iy, iw - 20, dh, out);
+		PaintLog(p, c, ix, iy + dh + 24, iw - 20, ih - dh - 24, out);
+	}
 	else PaintLog(p, c, ix, iy, iw - 20, ih, out);
 
 	int sy = y;

@@ -565,6 +565,7 @@ void DoAction(int action, int arg)
 		}
 		break;
 	}
+	case kSteamProfile: SteamOpenProfile(0x0110000100000000ULL | static_cast<uint32_t>(arg)); break;
 	case kPatronLink:
 		OpenPatronPage();
 		break;

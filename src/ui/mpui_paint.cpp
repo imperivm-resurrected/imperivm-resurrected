@@ -471,6 +471,16 @@ void ProfileHotspot(Painter &p, const State &st, int x, int y, int w, int h, con
 	if (p.Hover(x, y, textW, h, st.mouseX, st.mouseY)) p.Fill(x, y + h / 2 + 9, textW, 1, pal::redText);
 }
 
+void SteamProfileHotspot(Painter &p, int x, int y, int w, int h, const std::string &name, uint64_t id, int mx, int my)
+{
+	// An individual account in the public universe: 0x01100001 in the high half.
+	if ((id >> 32) != 0x01100001ULL) return;
+	const int textW = std::min(w, p.TextWidth(name));
+	if (textW <= 0) return;
+	p.AddHit(x, y, textW, h, kSteamProfile, static_cast<int>(static_cast<uint32_t>(id)));
+	if (p.Hover(x, y, textW, h, mx, my)) p.Fill(x, y + h / 2 + std::max(9, h / 4), textW, 1, pal::redText);
+}
+
 void PaintPassPrompt(Painter &p, const State &st)
 {
 	const int mx = st.mouseX, my = st.mouseY;
