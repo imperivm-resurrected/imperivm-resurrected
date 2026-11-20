@@ -23,7 +23,7 @@ enum Screen { kScreenList, kScreenPage, kScreenMatch, kScreenChampion, kScreenCr
 // What an action of the tab does: the high byte of kTourney's argument; the rest is a tournament, a match, an entry or an index.
 enum Sub {
 	kSubShow = 1, kSubFilter, kSubOpen, kSubPageTab, kSubSignUp, kSubWithdraw, kSubCheckIn, kSubMatch, kSubGo, kSubWatch, kSubNoShow,
-	kSubDispute, kSubDisputeSend, kSubDisputeCancel, kSubChampion, kSubPan,
+	kSubDispute, kSubDisputeSend, kSubDisputeCancel, kSubChampion, kSubPan, kSubZoom,
 	// The community cups: the form, the code, and the organizer's page (kSubManage opens it on its tab).
 	kSubCreate, kSubCupSet, kSubCupMenu, kSubCupSubmit, kSubCupOpenActive, kSubJoin, kSubJoinSend, kSubJoinCancel, kSubCopyCode, kSubCodeClose,
 	kSubManage, kSubCancelCup, kSubCheckinNow, kSubStartNow, kSubRemove, kSubGameA, kSubGameB, kSubReplay, kSubWalkover, kSubWalkoverA,
@@ -77,6 +77,15 @@ struct ScrollArea {
 	RECT r = {};
 	bool valid = false;
 	int max = 0, maxX = 0;
+};
+
+// The bracket as it was drawn: its bottom bar's thumb (screen pixels), the bar's track and thumb, and the bracket's size at 100 % and its
+// view's (UI units), for dragging it and zooming it.
+const int kZoomMin = 40, kZoomMax = 130;
+struct BracketPanGeom {
+	RECT thumb = {};
+	bool valid = false;
+	int track = 0, thumbLen = 0, contentW = 0, contentH = 0, viewW = 0, viewH = 0;
 };
 
 // The way to the room of the player's match: claim it, then create the room or join the other's.
@@ -169,6 +178,12 @@ struct Ui {
 	int pageTab = 0;
 	int listScroll = 0, bracketX = 0, bracketY = 0, sideScroll = 0;
 	ScrollArea listArea, bracketArea, sideArea;
+	// The bracket's zoom in percent, and its drag: by the bracket itself (0) or by its bottom bar's thumb (1).
+	int bracketZoom = 100;
+	bool panning = false;
+	int panMode = 0, panStartX = 0, panStartY = 0;
+	POINT panFrom = {};
+	BracketPanGeom pan;
 	RoomFlow room;
 	PendingJoin join;
 	RoomLock lock;
@@ -223,6 +238,7 @@ extern Ui g_tourney;
 // What a frame painted that the input needs: the scrolling areas.
 struct PaintOut {
 	ScrollArea listArea, bracketArea, sideArea, formArea, chooserArea, teamArea;
+	BracketPanGeom pan;
 	std::vector<SteamFriendInfo> teamRows;
 	int sectionTop[3] = {};
 	bool form = false;

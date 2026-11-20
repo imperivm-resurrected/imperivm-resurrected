@@ -60,30 +60,6 @@ void VLine(Painter &p, int x, int y1, int y2, COLORREF c)
 	p.Fill(x, std::min(y1, y2), 1, std::abs(y2 - y1) + 1, c);
 }
 
-std::string MetaText(const TourneyDetail &d)
-{
-	std::vector<std::string> parts;
-	if (!OrganizerText(d).empty()) parts.push_back(OrganizerText(d));
-	parts.push_back(FormatText(d));
-	// By rounds: the round being played and its deadline, "Round 2 of 4 · until Thursday 20:00", or the pace before it starts. The pace is the
-	// one the list's view has too, read as the summary's.
-	const TourneySummary &summary = d;
-	const std::string round = RoundText(summary);
-	if (!round.empty()) parts.push_back(round);
-	else if (summary.pace == TourneyPace::Rounds && d.status != TourneyStatus::Finished && d.status != TourneyStatus::Cancelled) parts.push_back(PaceText(summary));
-	parts.push_back(SideCountText(d, d.entries));
-	parts.push_back(ContentText(d));
-	parts.push_back(PresetText(d.settings));
-	if (d.status == TourneyStatus::Running) {
-		if (round.empty()) parts.push_back(TrFmt("Since %s", {HourText(d.startsAt)}));
-	}
-	else if (d.status == TourneyStatus::Finished) parts.push_back(DayText(d.startsAt));
-	else parts.push_back(WhenText(d.startsAt));
-	std::string out;
-	for (const std::string &part : parts) out += (out.empty() ? "" : "   \xC2\xB7   ") + part;
-	return out;
-}
-
 // The name of whoever comes to an empty side: the two of the match before, or nobody yet. Only the winners' bracket has a match before
 // each side; the losers' bracket takes in players from both brackets.
 std::string ComingName(const TourneyDetail &d, const TourneyMatch &m, bool sideB)
@@ -246,11 +222,13 @@ TourneyMap MatchMap(const TourneyDetail &d, const TourneyMatch &m)
 }
 
 // A bracket larger than its view, panned by its scroll bars: where its origin falls this frame.
+// Zoomed, the bracket is drawn with the painter's scale times the zoom: its origin is in those units.
 struct Pan {
 	int x = 0, y = 0, w = 0, h = 0, viewW = 0, viewH = 0, contentW = 0, sx = 0, sy = 0, maxX = 0, maxY = 0;
 	bool barX = false, barY = false;
-	int ox() const { return x - sx; }
-	int oy() const { return y - sy; }
+	float zoom = 1.0f, scale = 1.0f;
+	int ox() const { return static_cast<int>((x - sx) / zoom); }
+	int oy() const { return static_cast<int>((y - sy) / zoom); }
 };
 
 Pan BeginPan(Painter &p, const Ctx &c, int x, int y, int w, int h, int contentW, int contentH, PaintOut &out)
@@ -260,6 +238,11 @@ Pan BeginPan(Painter &p, const Ctx &c, int x, int y, int w, int h, int contentW,
 	v.y = y;
 	v.w = w;
 	v.h = h;
+	v.zoom = std::max(kZoomMin, std::min(kZoomMax, c.u.bracketZoom)) / 100.0f;
+	out.pan.contentW = contentW;
+	out.pan.contentH = contentH;
+	contentW = static_cast<int>(contentW * v.zoom);
+	contentH = static_cast<int>(contentH * v.zoom);
 	v.contentW = std::max(1, contentW);
 	v.barY = contentH > h;
 	v.barX = contentW > w - (v.barY ? 14 : 0);
@@ -271,22 +254,42 @@ Pan BeginPan(Painter &p, const Ctx &c, int x, int y, int w, int h, int contentW,
 	v.sy = std::min(c.u.bracketY, v.maxY);
 	SetScrollArea(p, out.bracketArea, x, y, w, h, v.maxY);
 	out.bracketArea.maxX = v.maxX;
+	out.pan.viewW = v.viewW;
+	out.pan.viewH = v.viewH;
 	p.Clip(x, y, v.viewW, v.viewH);
+	v.scale = p.s;
+	p.s = v.scale * v.zoom;
 	return v;
 }
 
-void EndPan(Painter &p, const Ctx &c, const Pan &v)
+void EndPan(Painter &p, const Ctx &c, const Pan &v, PaintOut &out)
 {
+	p.s = v.scale;
 	p.Unclip();
 	if (v.barY) PaintScrollbar(p, kBarBracketY, v.x + v.w - 8, v.y, v.viewH, {v.sy, v.maxY, v.viewH}, c.st.dropBar, c.mx, c.my);
 	if (v.barX) {
-		// A bar along the bottom: the halves either side of the thumb page left and right.
+		// A bar along the bottom: its thumb is dragged, the halves either side of it page left and right.
 		const int track = v.viewW, thumb = std::max(40, track * v.viewW / v.contentW), at = v.maxX ? (track - thumb) * v.sx / v.maxX : 0;
+		const bool hot = c.u.panning && c.u.panMode == 1;
+		const bool over = p.Hover(v.x + at, v.y + v.h - 14, thumb, 14, c.mx, c.my);
 		p.Fill(v.x, v.y + v.h - 6, track, 4, pal::field);
-		p.Fill(v.x + at, v.y + v.h - 6, thumb, 4, pal::lineStrong);
+		p.Fill(v.x + at, v.y + v.h - (hot || over ? 8 : 6), thumb, hot || over ? 6 : 4, hot || over ? pal::edgeHot : pal::lineStrong);
 		p.AddHit(v.x, v.y + v.h - 14, at, 14, kTourney, ArgOf(kSubPan, 0));
 		p.AddHit(v.x + at + thumb, v.y + v.h - 14, track - at - thumb, 14, kTourney, ArgOf(kSubPan, 1));
+		out.pan.valid = true;
+		out.pan.thumb = p.R(v.x + at, v.y + v.h - 14, thumb, 14);
+		OffsetRect(&out.pan.thumb, p.ox, p.oy);
+		out.pan.track = track;
+		out.pan.thumbLen = thumb;
 	}
+	// The zoom: out, the zoom itself (which fits the bracket in its view) and in. Ctrl and the wheel zoom too.
+	const int bw = 34, mw = 64, bh = 30, zx = v.x + v.viewW - (2 * bw + mw + 4) - 6, zy = v.y + v.viewH - bh - 8;
+	p.Fill(zx - 4, zy - 4, 2 * bw + mw + 12, bh + 8, pal::panel);
+	p.raw = true;
+	p.Button(zx, zy, bw, bh, "â", kTourney, ArgOf(kSubZoom, 2), c.mx, c.my, c.u.bracketZoom > kZoomMin, false, 3);
+	p.Button(zx + bw + 2, zy, mw, bh, std::to_string(c.u.bracketZoom) + " %", kTourney, ArgOf(kSubZoom, 0), c.mx, c.my, true, false, 3);
+	p.Button(zx + bw + mw + 4, zy, bw, bh, "+", kTourney, ArgOf(kSubZoom, 1), c.mx, c.my, c.u.bracketZoom < kZoomMax, false, 3);
+	p.raw = false;
 }
 
 // A column's heading: its round in small capitals and, after it, the series and the map.
@@ -384,7 +387,7 @@ void PaintBracket(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out)
 	if (const TourneyMatch *final = TourneyMatchAt(d, d.rounds, 0)) {
 		PaintChampionEnd(p, c, ox + TourneyBoxX(bm, d.rounds) + bm.boxW, oy + TourneyBoxMidY(bm, d.rounds, 0), TourneyMatchOver(final->status));
 	}
-	EndPan(p, c, v);
+	EndPan(p, c, v, out);
 }
 
 // Before the draw: the bracket of the cup's places, its boxes empty, filled once the check-in closes.
@@ -448,7 +451,14 @@ void PaintEntrantColumn(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut
 			PaintPlayerDisc(p, nx, ry + 9, 28, e.steamId, e.name);
 			nx += 36;
 		}
-		const int place = EntrantPlace(d, e), placeW = place ? 40 : 0, nw = x + w - nx - placeW - 4;
+		// Before the draw the organizer takes a player off from their row, on hovering it.
+		const bool own = e.steamId == SteamOwnId() || TourneyMemberOf(e.members, SteamOwnId());
+		const bool before = d.status == TourneyStatus::Signup || d.status == TourneyStatus::Checkin;
+		const bool removable = IsOrganizer(d) && before && !own && (e.status == TourneyEntryStatus::Signed || e.status == TourneyEntryStatus::Waitlist) &&
+			ry >= top && ry + rowH <= top + viewH;
+		const bool busy = removable && LeagueTourneyBusy(TourneyOp::RemoveEntry, e.entryId);
+		const bool offer = removable && (busy || p.Hover(x, ry, w, rowH, c.mx, c.my));
+		const int place = EntrantPlace(d, e), placeW = offer ? 76 : place ? 40 : 0, nw = x + w - nx - placeW - 4;
 		UseFace(p, e.entryId == c.me ? BrandFace::UiStrong : BrandFace::Body, 15);
 		const COLORREF ink = e.entryId == c.me ? pal::redText : e.status == TourneyEntryStatus::Out ? pal::caption : pal::text;
 		if (teams) {
@@ -490,7 +500,8 @@ void PaintEntrantColumn(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut
 		}
 		UseFace(p, BrandFace::Ui, 12);
 		p.Text(nx, ry + 25, nw, 16, status, sink, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		if (place) {
+		if (offer) p.Button(x + w - 72, ry + 9, 72, 28, busy ? "Taking off..." : "Take off", kTourney, ArgOf(kSubRemove, e.entryId), c.mx, c.my, !busy, false, 3);
+		else if (place) {
 			const int last = TourneyIsDouble(d) ? TourneyDoublePlaceEnd(place) : place;
 			UseDisplay(p, 20);
 			p.raw = true;
@@ -609,7 +620,7 @@ void PaintDoubleBracket(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut
 		p.raw = false;
 	}
 	PaintChampionEnd(p, c, ox + l.width, oy + l.finalY + bm.boxH / 2, TourneyChampion(d) != 0);
-	EndPan(p, c, v);
+	EndPan(p, c, v, out);
 }
 
 // A player's result in a Swiss round: 'w' won, 'l' lost (a no-show of both is lost by both), 'b' a bye, 'v' being played, 'p' still to
@@ -1367,79 +1378,8 @@ void PaintOrganizer(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &ou
 {
 	const TourneyDetail &d = c.d;
 	const int mx = c.mx, my = c.my;
-	const bool before = d.status == TourneyStatus::Signup || d.status == TourneyStatus::Checkin;
-	const int lw = w * 52 / 100, rx = x + lw + 40, rw = x + w - rx;
-
-	// The players.
-	int signedUp = 0, checkedIn = 0;
-	std::vector<const TourneyEntrant *> rows;
-	for (const TourneyEntrant &e : d.entrants) {
-		const bool in = e.status == TourneyEntryStatus::Signed || e.status == TourneyEntryStatus::Playing || e.status == TourneyEntryStatus::Out;
-		signedUp += in ? 1 : 0;
-		checkedIn += in && e.checkedIn ? 1 : 0;
-		if (in || e.status == TourneyEntryStatus::Waitlist) rows.push_back(&e);
-	}
-	const bool teams = d.Teams();
-	PaintSectionLabel(p, x, y, lw, 22, teams ? "Teams" : "Players");
-	p.Font(3);
-	p.raw = true;
-	p.Text(x, y, lw, 22, d.status == TourneyStatus::Checkin ? TrFmt("%s of %s checked in", {std::to_string(checkedIn), std::to_string(signedUp)})
-															 : SignedUpText(d, signedUp, d.maxEntries),
-		pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
-	p.raw = false;
-	int top = y + 32;
-	if (!before) {
-		p.Font(3);
-		p.Text(x, top, lw, 20, "The bracket is drawn: nobody can be taken off now.", pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		top += 28;
-	}
-	// A team's row: its players' discs, its name over its players, its state and the button that takes the whole team off.
-	const int rowH = teams ? 54 : 48, viewH = y + h - top, total = static_cast<int>(rows.size()) * rowH;
-	const int maxY = std::max(0, total - viewH), sy = std::min(c.u.bracketY, maxY);
-	SetScrollArea(p, out.bracketArea, x, top, lw, viewH, maxY);
-	p.Clip(x, top, lw, viewH);
-	int ry = top - sy;
-	for (const TourneyEntrant *e : rows) {
-		p.Fill(x, ry, lw, 1, pal::hairline);
-		UseFace(p, BrandFace::Body, 16);
-		const int removeW = 110;
-		const std::vector<TourneyMember> players = TourneyPlayersOf(*e);
-		const bool own = e->steamId == SteamOwnId() || TourneyMemberOf(e->members, SteamOwnId());
-		if (teams) {
-			const int nx = x + PaintSideDiscs(p, x, ry + (rowH - 28) / 2, 28, players) + 12, nw = lw - (nx - x) - 150 - removeW;
-			const std::string under = TeamPlayersLine(e->name, players);
-			p.raw = true;
-			p.Text(nx, under.empty() ? ry : ry + 6, nw, under.empty() ? rowH : 24, e->name, own ? pal::redText : pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-			if (!under.empty()) {
-				p.Font(3);
-				p.Text(nx, ry + 29, nw, 20, under, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-			}
-			p.raw = false;
-		}
-		else {
-			PaintPlayerDisc(p, x, ry + 9, 30, e->steamId, e->name);
-			PaintName(p, x + 42, ry, lw - 42 - 150 - removeW, rowH, e->name, e->steamId, own ? pal::redText : pal::text, mx, my);
-		}
-		AddIds(c, players);
-		const char *status = *FinishedEntrantText(d, *e) ? FinishedEntrantText(d, *e)
-			: e->status == TourneyEntryStatus::Waitlist ? "Waiting list" : e->status == TourneyEntryStatus::Out ? "Knocked out"
-			: e->status == TourneyEntryStatus::Playing ? "Still in" : e->checkedIn ? "Checked in" : "Signed up";
-		p.Font(3);
-		p.Text(x + lw - 150 - removeW, ry, 140, rowH, status, e->checkedIn && e->status == TourneyEntryStatus::Signed ? pal::ok : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		const bool shown = ry + 8 >= top && ry + rowH - 8 <= top + viewH;
-		const bool removable = shown && before && !own && (e->status == TourneyEntryStatus::Signed || e->status == TourneyEntryStatus::Waitlist);
-		if (removable) {
-			const bool busy = LeagueTourneyBusy(TourneyOp::RemoveEntry, e->entryId);
-			p.Button(x + lw - removeW, ry + 8, removeW, rowH - 16, busy ? "Taking off..." : "Take off", kTourney, ArgOf(kSubRemove, e->entryId), mx, my, !busy, false, 3);
-		}
-		ry += rowH;
-	}
-	if (rows.empty()) {
-		p.Font(0);
-		p.Text(x, top + 10, lw, 30, teams ? "No team has signed up yet." : "Nobody has signed up yet.", pal::textDim);
-	}
-	p.Unclip();
-	if (maxY > 0) PaintScrollbar(p, kBarBracketY, x + lw + 10, top, viewH, {sy, maxY, viewH}, c.st.dropBar, mx, my);
+	// Reached from the organizer's card when a result is disputed: the players are on the bracket's tab.
+	const int rx = x, rw = w;
 
 	// The disputes.
 	const TourneyDisputesView &disputes = c.disputes;
@@ -1665,7 +1605,6 @@ bool PaintPageHeader(Painter &p, const State &st, const HeaderUi &u)
 	std::vector<TabSpec> tabs = {{Tr(swiss ? "Standings" : "Bracket"), kTourney, ArgOf(kSubPageTab, 0), u.pageTab == 0 || u.pageTab >= kRoundTab, true},
 		{Tr("Rules"), kTourney, ArgOf(kSubPageTab, 2), u.pageTab == 2, true},
 		{Tr("Log"), kTourney, ArgOf(kSubPageTab, 3), u.pageTab == 3, true}};
-	if (page.loaded && IsOrganizer(page.detail)) tabs.push_back({Tr("Organise"), kTourney, ArgOf(kSubPageTab, kOrganizerTab), u.pageTab == kOrganizerTab, true});
 	if (!page.loaded) {
 		// The name is on its way: its place shows as a bar the size of a title.
 		PaintSkeleton(p, l.margin, l.titleY + 24, std::min(560, right - l.margin - 40), l.titleSize - 30);
@@ -1682,10 +1621,7 @@ bool PaintPageHeader(Painter &p, const State &st, const HeaderUi &u)
 	const TourneyStatus s = d.status;
 	const char *status = s == TourneyStatus::Signup ? "Sign-up open" : s == TourneyStatus::Checkin ? "Check-in open" : s == TourneyStatus::Running ? "Live" : s == TourneyStatus::Finished ? "Over" : "Cancelled";
 	x += PaintTag(p, x, l.infoY + 2, status, s == TourneyStatus::Running ? pal::redText : pal::edgeHot, s == TourneyStatus::Running ? pal::redText : pal::textDim, true) + 14;
-	p.Font(0);
-	p.raw = true;
-	p.Text(x, l.infoY, l.w - l.margin - x, l.infoH, MetaText(d), pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-	p.raw = false;
+	(void)x;
 	return true;
 }
 

@@ -80,6 +80,7 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 				if (to.id == kDropMenuBar) g_s.dropScroll = to.pos;
 				else TourneyScrollTo(to.id, to.pos);
 			}
+			if (g_s.view == kViewTournaments) TourneyPanMove(at, wp);
 		}
 		if (g_s.syncConfirm || g_s.view == kViewCreate) {
 			const POINT at = {g_s.mouseX, g_s.mouseY};
@@ -116,6 +117,7 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 				return true;
 			}
 		}
+		if (g_s.view == kViewTournaments && !g_s.dropOpen && !g_s.room.id && TourneyPanDown(pt, g_s.hits)) return true;
 		if (g_s.syncConfirm && ListDown(g_s.syncList, g_s.syncGeom, pt)) return true;
 		if (!g_s.syncConfirm && g_s.view == kViewCreate && ListDown(g_s.createModsList, g_s.createModsGeom, pt)) return true;
 		if (g_s.game.picker && !SaveMapPicking(g_s)) {
@@ -171,7 +173,7 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 			return true;
 		}
 		if (g_s.view == kViewCreate && !g_s.dropOpen && ListWheel(g_s.createModsList, g_s.createModsGeom, POINT{g_s.mouseX, g_s.mouseY}, GET_WHEEL_DELTA_WPARAM(wp))) return true;
-		if (g_s.view == kViewTournaments && !g_s.dropOpen && !g_s.room.id && TourneyWheel(GET_WHEEL_DELTA_WPARAM(wp), (GET_KEYSTATE_WPARAM(wp) & MK_SHIFT) != 0)) return true;
+		if (g_s.view == kViewTournaments && !g_s.dropOpen && !g_s.room.id && TourneyWheel(GET_WHEEL_DELTA_WPARAM(wp), (GET_KEYSTATE_WPARAM(wp) & MK_SHIFT) != 0, (GET_KEYSTATE_WPARAM(wp) & MK_CONTROL) != 0)) return true;
 	}
 		{
 			std::lock_guard<std::mutex> lock(g_chat.mx);
@@ -205,6 +207,7 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		g_s.colorDrag = 0;
 		g_s.resizeCol = -1;
 		g_s.dropBar = ScrollDrag();
+		TourneyPanUp();
 		ListUp(g_s.pick);
 		ListUp(g_s.opt);
 		ListUp(g_s.detail);

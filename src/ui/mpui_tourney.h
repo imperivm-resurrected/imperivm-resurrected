@@ -4,6 +4,7 @@
 #pragma once
 #include <cstddef>
 #include <string>
+#include <vector>
 
 #include "net/steamnet.h"
 #include "ui/uikit.h"
@@ -27,7 +28,11 @@ void TourneyAction(int arg);
 // Locked. Esc and Back go from the tab's inner screens to the list; false on the list.
 bool TourneyBack();
 // Locked. The wheel over a list or the bracket; false when it is over nothing of the tab.
-bool TourneyWheel(int delta, bool shift);
+bool TourneyWheel(int delta, bool shift, bool ctrl);
+// Locked. The bracket dragged with the mouse, or its bottom bar's thumb: true when a press starts it (on nothing else of the screen).
+bool TourneyPanDown(POINT at, const std::vector<ui::Hit> &hits);
+void TourneyPanMove(POINT at, WPARAM buttons);
+void TourneyPanUp();
 // Locked. A scroll bar of the tab dragged or paged.
 bool TourneyScrollTo(int bar, int pos);
 // The text fields of the tab: the dispute's, the cup's name and description, the invitation code.

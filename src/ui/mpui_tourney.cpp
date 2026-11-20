@@ -1248,6 +1248,35 @@ int PaintName(Painter &p, int x, int y, int w, int h, const std::string &name, u
 	return x;
 }
 
+// The bracket's zoom steps, in percent.
+const int kZoomSteps[] = {40, 50, 60, 70, 80, 90, 100, 115, 130};
+
+int ZoomStep(int zoom, int dir)
+{
+	const int n = static_cast<int>(sizeof(kZoomSteps) / sizeof(kZoomSteps[0]));
+	if (dir > 0) {
+		for (int i = 0; i < n; i++) {
+			if (kZoomSteps[i] > zoom) return kZoomSteps[i];
+		}
+		return kZoomSteps[n - 1];
+	}
+	for (int i = n - 1; i >= 0; i--) {
+		if (kZoomSteps[i] < zoom) return kZoomSteps[i];
+	}
+	return kZoomSteps[0];
+}
+
+// A new zoom, keeping the point (fx, fy) of the view (UI units) on the same place of the bracket.
+void SetZoom(Ui &u, int zoom, int fx, int fy)
+{
+	zoom = std::max(kZoomMin, std::min(kZoomMax, zoom));
+	if (zoom == u.bracketZoom) return;
+	const float k = static_cast<float>(zoom) / static_cast<float>(u.bracketZoom);
+	u.bracketX = std::max(0, static_cast<int>((u.bracketX + fx) * k) - fx);
+	u.bracketY = std::max(0, static_cast<int>((u.bracketY + fy) * k) - fy);
+	u.bracketZoom = zoom;
+}
+
 void SetScrollArea(Painter &p, ScrollArea &a, int x, int y, int w, int h, int max)
 {
 	a.valid = true;
@@ -1293,6 +1322,7 @@ void PaintTournaments(Painter &p, const State &st)
 	std::lock_guard<std::mutex> lock(g_lock);
 	g_tourney.listArea = out.listArea;
 	g_tourney.bracketArea = out.bracketArea;
+	g_tourney.pan = out.pan;
 	g_tourney.sideArea = out.sideArea;
 	g_tourney.formArea = out.formArea;
 	g_tourney.chooserArea = out.chooserArea;
@@ -1506,6 +1536,17 @@ void TourneyAction(int arg)
 	case kSubPan: {
 		const int page = std::max(200, static_cast<int>((u.bracketArea.r.right - u.bracketArea.r.left) / std::max(0.1f, g_s.uiScale)) * 3 / 4);
 		u.bracketX = std::max(0, std::min(u.bracketArea.maxX, u.bracketX + (value ? page : -page)));
+		break;
+	}
+	case kSubZoom: {
+		// 0 fits the bracket in its view; 1 and 2 zoom in and out a step.
+		int zoom = u.bracketZoom;
+		if (value == 0 && u.pan.contentW > 0 && u.pan.contentH > 0) {
+			zoom = std::min(100, std::min(u.pan.viewW * 100 / u.pan.contentW, u.pan.viewH * 100 / u.pan.contentH));
+			zoom = std::max(kZoomMin, zoom);
+		}
+		else zoom = ZoomStep(zoom, value == 1 ? 1 : -1);
+		SetZoom(u, zoom, u.pan.viewW / 2, u.pan.viewH / 2);
 		break;
 	}
 	case kSubCreate: {
@@ -1864,10 +1905,17 @@ bool TourneyBack()
 	return true;
 }
 
-bool TourneyWheel(int delta, bool shift)
+bool TourneyWheel(int delta, bool shift, bool ctrl)
 {
 	Ui &u = g_tourney;
 	const POINT at = {g_s.mouseX, g_s.mouseY};
+	// Ctrl and the wheel over the bracket zoom it about the pointer.
+	if (ctrl && u.screen == kScreenPage && u.bracketArea.valid && PtInRect(&u.bracketArea.r, at) && u.pan.contentW > 0) {
+		const float scale = std::max(0.1f, g_s.uiScale);
+		SetZoom(u, ZoomStep(u.bracketZoom, delta > 0 ? 1 : -1), static_cast<int>((at.x - u.bracketArea.r.left) / scale),
+			static_cast<int>((at.y - u.bracketArea.r.top) / scale));
+		return true;
+	}
 	const int step = -delta / WHEEL_DELTA * 60;
 	if (u.teamCup) {
 		if (u.teamArea.valid && PtInRect(&u.teamArea.r, at)) u.teamScroll = std::max(0, std::min(u.teamArea.max, u.teamScroll + (delta > 0 ? -1 : 1)));
@@ -1898,6 +1946,47 @@ bool TourneyWheel(int delta, bool shift)
 		return true;
 	}
 	return false;
+}
+
+bool TourneyPanDown(POINT at, const std::vector<ui::Hit> &hits)
+{
+	Ui &u = g_tourney;
+	if (u.screen != kScreenPage) return false;
+	int mode = -1;
+	if (u.pan.valid && PtInRect(&u.pan.thumb, at)) mode = 1;
+	else if (u.bracketArea.valid && PtInRect(&u.bracketArea.r, at) && (u.bracketArea.max > 0 || u.bracketArea.maxX > 0) && !ui::TopHitAt(hits, at)) mode = 0;
+	if (mode < 0) return false;
+	u.panning = true;
+	u.panMode = mode;
+	u.panFrom = at;
+	u.panStartX = u.bracketX;
+	u.panStartY = u.bracketY;
+	return true;
+}
+
+void TourneyPanMove(POINT at, WPARAM buttons)
+{
+	Ui &u = g_tourney;
+	if (!u.panning) return;
+	// The release can happen where the window doesn't hear it.
+	if (!(buttons & MK_LBUTTON)) {
+		u.panning = false;
+		return;
+	}
+	const float scale = std::max(0.1f, g_s.uiScale);
+	const int dx = static_cast<int>((at.x - u.panFrom.x) / scale), dy = static_cast<int>((at.y - u.panFrom.y) / scale);
+	if (u.panMode == 1) {
+		const int room = std::max(1, u.pan.track - u.pan.thumbLen);
+		u.bracketX = std::max(0, std::min(u.bracketArea.maxX, u.panStartX + dx * u.bracketArea.maxX / room));
+		return;
+	}
+	u.bracketX = std::max(0, std::min(u.bracketArea.maxX, u.panStartX - dx));
+	u.bracketY = std::max(0, std::min(u.bracketArea.max, u.panStartY - dy));
+}
+
+void TourneyPanUp()
+{
+	g_tourney.panning = false;
 }
 
 bool TourneyScrollTo(int bar, int pos)
