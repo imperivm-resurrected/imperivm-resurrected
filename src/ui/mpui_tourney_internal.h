@@ -103,6 +103,8 @@ struct RoomFlow {
 // A room to join or to watch once the lobby list has it.
 struct PendingJoin {
 	uint64_t lobby = 0;
+	// The spectators' room of the match, to watch it when its own room is not in the list (a game being played may not be).
+	uint64_t spec = 0;
 	bool watch = false;
 	DWORD at = 0, refresh = 0;
 };

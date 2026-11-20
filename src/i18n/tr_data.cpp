@@ -3456,7 +3456,6 @@ extern const TrRow kTrRows[] = {
 	{"Reading the scenarios...", "Leyendo los escenarios...", "Lettura degli scenari..."},
 	{"The game does not let this scenario be played in multiplayer", "El juego no deja jugar este escenario en multijugador", "Il gioco non permette di giocare questo scenario in multigiocatore"},
 	{"Your civilization", "Tu civilización", "La tua civiltà"},
-	{"The one the room gives you", "La que te dé la sala", "Quella che ti dà la sala"},
 	{"Republican Rome", "Roma republicana", "Roma repubblicana"},
 	{"Imperial Rome", "Roma imperial", "Roma imperiale"},
 	{"Gaul", "Galia", "Gallia"},

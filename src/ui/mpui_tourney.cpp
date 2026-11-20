@@ -412,6 +412,21 @@ void StepJoin()
 		else TryJoin(lobby, "");
 		return;
 	}
+	// Watching: the game's own room may be out of the list while it is played; its spectators' room (copied from it) is enough.
+	if (j.watch && j.spec) {
+		for (const OnlineLobby &l : g_s.lobbies) {
+			if (l.id != j.spec) continue;
+			OnlineLobby lobby = l;
+			lobby.id = j.lobby;
+			lobby.specLobby = j.spec;
+			lobby.spectate = false;
+			lobby.playing = true;
+			j = PendingJoin();
+			LogI("league", "watching a tournament game through its spectators' room");
+			TrySpectate(lobby, "");
+			return;
+		}
+	}
 	const DWORD now = GetTickCount();
 	if (now - j.at > kJoinWaitMs) {
 		const uint64_t lobby = j.lobby;
@@ -1529,6 +1544,7 @@ void TourneyAction(int arg)
 		}
 		u.join = PendingJoin();
 		u.join.lobby = lobby;
+		u.join.spec = spec;
 		u.join.watch = true;
 		u.join.at = GetTickCount();
 		SteamRefreshLobbies();
@@ -1658,8 +1674,9 @@ void TourneyAction(int arg)
 	case kSubCivMenu: {
 		const std::vector<std::pair<int, std::string>> choices = MatchCivChoices();
 		const int race = MatchCiv(u);
-		g_s.tourneyDropItems = {Tr("The one the room gives you")};
-		u.civChoices = {-1};
+		// The game's civilizations, Random first: a random one is the room's own choice.
+		g_s.tourneyDropItems.clear();
+		u.civChoices.clear();
 		g_s.tourneyDropSel = 0;
 		for (const auto &c : choices) {
 			if (c.first == race) g_s.tourneyDropSel = static_cast<int>(u.civChoices.size());

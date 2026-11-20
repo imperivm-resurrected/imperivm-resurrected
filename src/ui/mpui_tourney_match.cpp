@@ -60,11 +60,14 @@ namespace {
 RECT g_colorAnchor = {};
 }
 
+// The game's random civilization, race 8.
+constexpr int kRandomRace = 8;
+
 // The civilization the player takes into the room, as a menu: the mod puts it in their slot there and gets them ready.
 void PaintCivMenu(Painter &p, const State &st, const Ui &u, int x, int y, int w)
 {
-	const int race = u.civRace;
-	std::string name = Tr("The one the room gives you");
+	const int race = u.civRace < 0 ? kRandomRace : u.civRace;
+	std::string name = Tr("Random");
 	for (const auto &c : MatchCivChoices()) {
 		if (c.first == race) name = c.second;
 	}
@@ -494,7 +497,9 @@ std::vector<std::pair<int, std::string>> MatchCivChoices()
 
 int MatchCiv(Ui &u)
 {
-	if (u.civRace == -2) u.civRace = GameRoomLoadSetting("TourneyCiv", -1);
+	// None chosen yet (or the room's own, as it was): Random.
+	if (u.civRace == -2) u.civRace = GameRoomLoadSetting("TourneyCiv", kRandomRace);
+	if (u.civRace < 0) u.civRace = kRandomRace;
 	return u.civRace;
 }
 

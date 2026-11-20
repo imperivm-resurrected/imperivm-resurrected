@@ -6,6 +6,7 @@
 
 #include "ui/textedit.h"
 #include "MinHook.h"
+#include "core/league.h"
 #include "core/names.h"
 
 #include "ui/mpui_internal.h"
@@ -159,6 +160,10 @@ std::vector<int> Visible(const State &st)
 	std::vector<Row> rows;
 	for (size_t i = 0; i < st.lobbies.size(); i++) {
 		const OnlineLobby &g = st.lobbies[i];
+		// The rooms of ranked and cup matches are not for anyone to join: their games are watched from their tournament and the league.
+		LeagueMatchKind kind = LeagueMatchKind::Normal;
+		int64_t matchId = 0;
+		if (LeagueParseRoomTag(g.leagueTag, kind, matchId) && kind != LeagueMatchKind::Normal) continue;
 		if (RoomShown(st, g, st.filter)) rows.push_back({static_cast<int>(i), RoomGroup(g), TourneyLobby(g), key(g)});
 	}
 	std::stable_sort(rows.begin(), rows.end(), [&](const Row &a, const Row &b) {
