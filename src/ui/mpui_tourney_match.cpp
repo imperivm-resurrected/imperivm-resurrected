@@ -101,11 +101,19 @@ int PaintPlayerColumn(Painter &p, int cx, int y, int h, uint64_t id, const std::
 	const LeagueBadge badge = id ? PlayerBadgeOf(id) : LeagueBadge();
 	// A patron's laurel before the name, and the name in their tier's colour, as in the rooms.
 	const PatronInfo patron = id ? PatronOf(id) : PatronInfo();
-	const int laurel = patron.tier != PatronTier::None ? 40 : 0, laurelRoom = laurel ? laurel + 10 : 0;
+	// The laurel about as tall as the capitals and level with them; the name in the tier's colour with its sweep of light.
+	const int laurel = patron.tier != PatronTier::None ? (h >= 400 ? 52 : 44) : 0, laurelRoom = laurel ? laurel + 8 : 0;
 	const int room = LeagueBadgeRoom(badge), left = cx - (laurelRoom + nameW + room) / 2;
-	if (laurel) DrawPatron(p, left, cy + (66 - laurel) / 2, laurel, left, cy, 0, 0, std::string(), patron.tier, DT_LEFT);
-	const COLORREF ink = laurel ? PatronColorsOf(patron.tier).name : pal::text;
-	p.TextCaps(left + laurelRoom, cy, nameW, 66, name, ink, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
+	if (laurel) {
+		// In capitals, as the other names of the page.
+		std::wstring wide = W(name);
+		if (!wide.empty()) CharUpperBuffW(&wide[0], static_cast<DWORD>(wide.size()));
+		std::string upper(static_cast<size_t>(WideCharToMultiByte(CP_UTF8, 0, wide.data(), static_cast<int>(wide.size()), nullptr, 0, nullptr, nullptr)), '\0');
+		if (!upper.empty()) WideCharToMultiByte(CP_UTF8, 0, wide.data(), static_cast<int>(wide.size()), &upper[0], static_cast<int>(upper.size()), nullptr, nullptr);
+		DrawPatron(p, left, cy + (66 - laurel) / 2 + 1, laurel, left + laurelRoom, cy, nameW, 66, upper.empty() ? name : upper, patron.tier,
+			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	}
+	else p.TextCaps(left, cy, nameW, 66, name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
 	// The name opens the player's Steam profile (the hit only: the column is drawn without the pointer).
 	if ((id >> 32) == 0x01100001ULL) p.AddHit(left + laurelRoom, cy + 8, nameW, 50, kSteamProfile, static_cast<int>(static_cast<uint32_t>(id)));
 	p.raw = false;

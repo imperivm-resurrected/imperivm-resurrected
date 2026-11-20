@@ -1192,8 +1192,8 @@ bool PaintBanner(Painter &p, Ctx &c, int x, int y, int w)
 		else if (left > 0 && n.Teams()) text = TrFmt("Your team has to be complete in the room within %s, or the match counts as a no-show.", {TourneyClock(left)});
 		else if (left > 0) text = TrFmt("Enter the room within %s, or the match counts as a no-show.", {TourneyClock(left)});
 		else text = Tr("The waiting time is over: enter the room now.");
+		// One way in: the match's page, where the civilization and the colour are chosen and Ready takes the player to the room.
 		buttons.push_back({Tr("Your match"), ArgOf(kSubMatch, n.match)});
-		buttons.push_back({Tr("Go to the room"), ArgOf(kSubGo, n.match)});
 		strong = static_cast<int>(buttons.size()) - 1;
 	}
 	else if (c.next && c.next->status == TourneyMatchStatus::Live) {
@@ -1677,6 +1677,11 @@ void PaintPageScreen(Painter &p, const State &st, const Ui &u, PaintOut &out)
 	c.my = st.mouseY;
 	if (const TourneyEntrant *e = TourneyEntrantBySteamId(page.detail, SteamOwnId())) c.me = e->entryId;
 	if (mine.mine.next.present && mine.mine.next.tournamentId == page.detail.id) c.next = &mine.mine.next;
+	// The page may know before the player's tournaments that the match is over (they are read apart): it is not theirs to play then.
+	if (c.next) {
+		const TourneyMatch *shown = MatchById(page.detail, c.next->match);
+		if ((shown && TourneyMatchOver(shown->status)) || page.detail.status == TourneyStatus::Finished || page.detail.status == TourneyStatus::Cancelled) c.next = nullptr;
+	}
 	int y = l.top - (l.roomy ? 14 : 8);
 	if (PaintBanner(p, c, m, y, inner)) y += 64 + 20;
 	else y += l.roomy ? 14 : 8;

@@ -52,6 +52,10 @@ struct Mine {
 	bool tried = false;
 	// `gameAt`: the last tick seen during a game, after which a series' pick opens.
 	DWORD at = 0, watched = 0, gameAt = 0;
+	// Reads that failed in a row: the next one comes soon (3 s, then twice as long each time) instead of at the poll's pace.
+	int fails = 0;
+	// Asked for again while a read was on its way (a result came in meanwhile, say): read once more when it lands.
+	bool again = false;
 	std::string steamId;
 	// As a page's view.
 	std::shared_ptr<const TourneyMineView> view = std::make_shared<const TourneyMineView>();
@@ -216,6 +220,8 @@ void Notify(const TourneyMine &mine)
 	}
 }
 
+void StartMine();
+
 void FetchMine()
 {
 	const std::string steamId = AccountSteamId();
@@ -227,8 +233,12 @@ void FetchMine()
 	WaitAfter(r);
 	std::lock_guard<std::mutex> lock(g_mx);
 	g_mine.at = GetTickCount();
+	const bool again = g_mine.again;
+	g_mine.again = false;
+	g_mine.fails = ok || r.status == 401 || r.failure == "not linked" ? 0 : std::min(g_mine.fails + 1, 4);
 	if (!ok) {
 		ChangeView(g_mine.view, [](TourneyMineView &v) { v.loading = false; });
+		if (again) StartMine();
 		return;
 	}
 	if (g_mine.steamId != steamId) {
@@ -246,6 +256,7 @@ void FetchMine()
 	v->loaded = true;
 	v->mine = std::move(mine);
 	g_mine.view = std::move(v);
+	if (again) StartMine();
 }
 
 void FetchMapTypes()
@@ -289,7 +300,10 @@ void FetchDisputes(int64_t tournament)
 // Under g_mx.
 void StartMine()
 {
-	if (g_mine.view->loading) return;
+	if (g_mine.view->loading) {
+		g_mine.again = true;
+		return;
+	}
 	ChangeView(g_mine.view, [](TourneyMineView &v) { v.loading = true; });
 	g_mine.tried = true;
 	SafeThread(FetchMine).detach();
@@ -570,6 +584,10 @@ void TourneyTick()
 	const int64_t sinceGame = g_mine.gameAt ? static_cast<int64_t>(now - g_mine.gameAt) : -1;
 	const DWORD series = v->loaded ? static_cast<DWORD>(TourneySeriesPollMs(v->mine.next, sinceGame)) : 0;
 	if (series && (!every || series < every)) every = series;
+	if (g_mine.fails && now - g_mine.at >= (3000u << (g_mine.fails - 1))) {
+		StartMine();
+		return;
+	}
 	if (every && now - g_mine.at >= every) StartMine();
 }
 
