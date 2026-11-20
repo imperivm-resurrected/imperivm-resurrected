@@ -24,6 +24,36 @@ MatchFacts Game(uint32_t minutes, bool multi, bool lost, uint32_t kills, uint32_
 
 bool Near(double a, double b) { return std::fabs(a - b) < 1e-9; }
 
+void Leagues()
+{
+	const int64_t start = 1763650000;
+	const std::vector<MatchTag> tags = {{start - 3600, kMatchCup}, {start, kMatchLeague}};
+	// Recorded at its start (to the minute) or at its end, 10 minutes later.
+	CHECK_EQ(MatchLeagueOf(tags, start - 40, 600000), static_cast<int>(kMatchLeague));
+	CHECK_EQ(MatchLeagueOf(tags, start + 600, 600000), static_cast<int>(kMatchLeague));
+	CHECK_EQ(MatchLeagueOf(tags, start - 3600 + 1200, 1200000), static_cast<int>(kMatchCup));
+	// A game well before or after the notes is an ordinary one.
+	CHECK_EQ(MatchLeagueOf(tags, start + 2000, 600000), static_cast<int>(kMatchOpen));
+	CHECK_EQ(MatchLeagueOf(tags, start - 7200, 600000), static_cast<int>(kMatchOpen));
+	CHECK_EQ(MatchLeagueOf({}, start, 600000), static_cast<int>(kMatchOpen));
+
+	std::vector<MatchFacts> games(4);
+	for (MatchFacts &g : games) {
+		g.multi = true;
+		g.durationMs = 20 * 60000;
+		g.kills = 5;
+	}
+	games[1].league = kMatchLeague;
+	games[2].league = kMatchCup;
+	games[3].multi = false;
+	const std::vector<size_t> league = MatchSelect(games, kModeLeague, kOutcomeAll, 0), cup = MatchSelect(games, kModeCup, kOutcomeAll, 0);
+	CHECK_EQ(league.size(), size_t(1));
+	CHECK_EQ(league[0], size_t(1));
+	CHECK_EQ(cup.size(), size_t(1));
+	CHECK_EQ(cup[0], size_t(2));
+	CHECK_EQ(MatchSelect(games, kModeMultiplayer, kOutcomeAll, 0).size(), size_t(3));
+}
+
 void Results()
 {
 	CHECK_EQ(static_cast<int>(MatchResultOf(Game(20, false, false, 10, 3))), static_cast<int>(kMatchWon));
@@ -127,6 +157,7 @@ int main()
 	Results();
 	Metrics();
 	Select();
+	Leagues();
 	Scale();
 	Ages();
 	return test::Summary("matchhistory");

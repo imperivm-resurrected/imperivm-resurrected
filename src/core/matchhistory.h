@@ -12,7 +12,19 @@ struct MatchFacts {
 	uint32_t durationMs = 0;
 	bool multi = false, lost = false;
 	uint32_t kills = 0, losses = 0, armyMax = 0, gold = 0;
+	// A league (ranked) game or a cup game, as this computer noted when it started (MatchLeagueOf); the game does not record it.
+	int league = 0;
 };
+
+enum MatchLeague { kMatchOpen, kMatchLeague, kMatchCup };
+// A league or cup game this computer started: when (seconds since 1970) and which (MatchLeague).
+struct MatchTag {
+	int64_t startSec = 0;
+	int league = kMatchOpen;
+};
+// Which of the noted games a recorded one is: the game records its time to the minute, at its start or its end, so a note that
+// started from two minutes before that time to two minutes past its length tells it; the latest such note when several do.
+int MatchLeagueOf(const std::vector<MatchTag> &tags, int64_t recordedSec, uint32_t durationMs);
 
 enum MatchResult { kMatchWon, kMatchLost, kMatchAbandoned };
 
@@ -25,7 +37,8 @@ enum MatchMetric { kMetricKills, kMetricLosses, kMetricKillsPerLoss, kMetricArmy
 // Kills per loss counts a game without losses as one loss; the duration is in minutes.
 double MatchMetricValue(const MatchFacts &m, MatchMetric metric);
 
-enum MatchMode { kModeAll, kModeSkirmish, kModeMultiplayer };
+// League and cup games are multiplayer games too: "Multiplayer" keeps them.
+enum MatchMode { kModeAll, kModeSkirmish, kModeMultiplayer, kModeLeague, kModeCup };
 enum MatchOutcome { kOutcomeAll, kOutcomeVictories, kOutcomeDefeats };
 // The positions in `games` (newest first) that pass both filters, newest first, at most `limit` of them (0: all). Victories
 // and defeats leave the abandoned games out; "all" keeps them.

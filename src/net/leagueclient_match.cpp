@@ -80,6 +80,8 @@ struct Match {
 	// §8.3, 4-torneos.md §6): the game goes on, the AI plays for whoever drops and they have 5 minutes of the game's clock to come back;
 	// whoever does not is gone. Known from the room's tag, the same on every computer.
 	bool ranked = false, team = false, dropRules = false;
+	// Noted in the list of league and cup games (the statistics tell them by it).
+	bool tagged = false;
 	std::set<int> quitters;
 	int64_t rankedId = 0;
 	// The game's record of this player as last read, for the result screen: the game is gone when it is shown.
@@ -111,6 +113,52 @@ std::string WithoutAiSuffix(const std::string &name)
 
 std::mutex g_syncMx;
 LeagueCheckpoints g_checkpoints;
+
+std::string TagsPath()
+{
+	char path[MAX_PATH];
+	GetModuleFileNameA(nullptr, path, MAX_PATH);
+	std::string p = path;
+	return p.substr(0, p.find_last_of('\\') + 1) + "imperivm-resurrected\\league\\games.txt";
+}
+
+// One line for each league or cup game this computer started: "<start, seconds since 1970> <league|cup>", the newest last; the
+// last 500 are kept.
+std::vector<MatchTag> ReadTags()
+{
+	std::vector<MatchTag> out;
+	FILE *f = nullptr;
+	if (fopen_s(&f, TagsPath().c_str(), "rb") != 0 || !f) return out;
+	char line[96];
+	while (fgets(line, sizeof(line), f)) {
+		long long sec = 0;
+		char kind[16] = {};
+		if (sscanf_s(line, "%lld %15s", &sec, kind, static_cast<unsigned>(sizeof(kind))) != 2) continue;
+		const std::string k = kind;
+		if (k == "league" || k == "cup") out.push_back({static_cast<int64_t>(sec), k == "league" ? kMatchLeague : kMatchCup});
+	}
+	fclose(f);
+	return out;
+}
+
+// Under g_mx: the first time the game is known to be a league or a cup one, it is noted.
+void NoteTaggedGame(Match &m, LeagueMatchKind kind)
+{
+	if (m.tagged || (kind != LeagueMatchKind::Ranked && kind != LeagueMatchKind::Tournament)) return;
+	m.tagged = true;
+	std::vector<MatchTag> tags = ReadTags();
+	tags.push_back({m.localStartMs / 1000, kind == LeagueMatchKind::Ranked ? kMatchLeague : kMatchCup});
+	if (tags.size() > 500) tags.erase(tags.begin(), tags.end() - 500);
+	const std::string path = TagsPath();
+	CreateDirectoryA(path.substr(0, path.find_last_of('\\')).c_str(), nullptr);
+	FILE *f = nullptr;
+	if (fopen_s(&f, path.c_str(), "wb") != 0 || !f) {
+		LogW("league", "could not note the league game in %s", path.c_str());
+		return;
+	}
+	for (const MatchTag &t : tags) fprintf(f, "%lld %s\n", static_cast<long long>(t.startSec), t.league == kMatchLeague ? "league" : "cup");
+	fclose(f);
+}
 
 std::string OutboxPath()
 {
@@ -509,6 +557,12 @@ void MatchTick()
 
 }
 
+std::vector<MatchTag> LeagueGameTags()
+{
+	std::lock_guard<std::mutex> lock(g_mx);
+	return ReadTags();
+}
+
 void LeagueMatchPlaying(const LeagueMatchInfo &info)
 {
 	if (!info.lobby || SpectatorWatching() || SpectatorViewing() || reinterpret_cast<IsDemo_t>(addr::kIsDemoPlayback)()) return;
@@ -533,6 +587,7 @@ void LeagueMatchPlaying(const LeagueMatchInfo &info)
 		g_teamNow = team;
 		g_dropNow = dropRules;
 		LogI("league", "recording the online game%s (%s)", team ? ", a ranked 2v2" : "", LeagueLinked() ? "it will be reported" : "the account is not linked, so it won't be reported");
+		NoteTaggedGame(g_match, kind);
 		return;
 	}
 	Match &m = g_match;
@@ -553,6 +608,7 @@ void LeagueMatchPlaying(const LeagueMatchInfo &info)
 		m.dropRules = true;
 		g_dropNow = true;
 	}
+	NoteTaggedGame(m, kind);
 	for (const auto &member : info.members) {
 		const bool known = std::any_of(m.info.members.begin(), m.info.members.end(), [&](const std::pair<uint64_t, std::string> &k) { return k.first == member.first; });
 		if (!known) m.info.members.push_back(member);

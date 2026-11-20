@@ -835,7 +835,12 @@ COLORREF ResultColor(MatchResult r) { return r == kMatchWon ? kWonColor : r == k
 const char *ResultText(MatchResult r) { return r == kMatchWon ? "Victory" : r == kMatchLost ? "Defeat" : "Abandoned"; }
 
 std::string CivText(const GameRow &g) { return g.civ.empty() ? Tr("Unknown") : g.civ; }
-std::string ModeText(const GameRow &g) { return Tr(g.multi ? "Multiplayer" : "Skirmish"); }
+std::string ModeText(const GameRow &g)
+{
+	if (g.league == kMatchLeague) return Tr("Ranked");
+	if (g.league == kMatchCup) return Tr("Tournament");
+	return Tr(g.multi ? "Multiplayer" : "Skirmish");
+}
 
 std::vector<MatchFacts> FactsOfCard(const Card &c)
 {
@@ -926,7 +931,7 @@ void PaintEvolution(Painter &p, const View &v, const Card &c, const Box &b, Tip 
 		return;
 	}
 	// The mode follows the title, the metrics take the row under it and the range goes under the plot.
-	const std::vector<std::string> modes = Translated({"All games", "Skirmish", "Multiplayer"});
+	const std::vector<std::string> modes = Translated({"All games", "Skirmish", "Multiplayer", "Ranked", "Tournament"});
 	const int modeW = SegmentsWidth(p, modes);
 	PaintSegments(p, right - modeW, b.y + 8, modeW, modes, v.chartMode, kActChartMode, v.mouseX, v.mouseY);
 	const int cy = b.y + kCardHead + 2;
@@ -1270,6 +1275,7 @@ MatchFacts FactsOf(const GameRow &g)
 	m.day = g.day;
 	m.durationMs = g.durationMs;
 	m.multi = g.multi;
+	m.league = g.league;
 	m.lost = !g.won;
 	m.kills = g.kills;
 	m.losses = g.losses;

@@ -21,6 +21,8 @@ namespace profileui {
 struct GameRow {
 	int day = 0, month = 0, year = 0, hour = 0, minute = 0;
 	bool won = false, multi = false;
+	// MatchLeague: a league or a cup game.
+	int league = 0;
 	std::string civ, bestUnit;
 	uint32_t durationMs = 0, kills = 0, losses = 0, produced = 0, armyMax = 0, gold = 0, food = 0, bestLevel = 0;
 	uint32_t damageDealt = 0, damageTaken = 0;

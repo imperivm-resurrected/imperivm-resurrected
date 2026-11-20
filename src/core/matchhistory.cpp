@@ -27,6 +27,21 @@ double MatchMetricValue(const MatchFacts &m, MatchMetric metric)
 	}
 }
 
+int MatchLeagueOf(const std::vector<MatchTag> &tags, int64_t recordedSec, uint32_t durationMs)
+{
+	const int64_t slack = 120;
+	int league = kMatchOpen;
+	int64_t best = 0;
+	for (const MatchTag &t : tags) {
+		if (t.league == kMatchOpen || recordedSec < t.startSec - slack || recordedSec > t.startSec + durationMs / 1000 + slack) continue;
+		if (league == kMatchOpen || t.startSec > best) {
+			league = t.league;
+			best = t.startSec;
+		}
+	}
+	return league;
+}
+
 std::vector<size_t> MatchSelect(const std::vector<MatchFacts> &games, MatchMode mode, MatchOutcome outcome, size_t limit)
 {
 	std::vector<size_t> out;
@@ -34,6 +49,8 @@ std::vector<size_t> MatchSelect(const std::vector<MatchFacts> &games, MatchMode 
 		const MatchFacts &m = games[i];
 		if (mode == kModeSkirmish && m.multi) continue;
 		if (mode == kModeMultiplayer && !m.multi) continue;
+		if (mode == kModeLeague && m.league != kMatchLeague) continue;
+		if (mode == kModeCup && m.league != kMatchCup) continue;
 		const MatchResult r = MatchResultOf(m);
 		if (outcome == kOutcomeVictories && r != kMatchWon) continue;
 		if (outcome == kOutcomeDefeats && r != kMatchLost) continue;

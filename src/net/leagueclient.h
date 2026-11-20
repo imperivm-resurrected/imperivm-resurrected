@@ -12,6 +12,7 @@
 #include "core/league.h"
 #include "core/leagueranked.h"
 #include "core/leagueteam.h"
+#include "core/matchhistory.h"
 
 // The client of the league server (imperivm-league): the account linked to this computer's Steam user, the player's standing and
 // the report of every online game. Every request runs on a background thread; the game thread only reads what came back.
@@ -84,6 +85,8 @@ struct LeagueMatchInfo {
 // On the game thread, every few seconds while this computer plays an online game (never as a spectator): starts recording it, or
 // keeps recording it after a rejoin.
 void LeagueMatchPlaying(const LeagueMatchInfo &info);
+// The league and cup games this computer started, as noted when each started (the statistics tell them by it).
+std::vector<MatchTag> LeagueGameTags();
 // The game is over for this computer (it is back in the menu). The report goes to the server in the background when the account is
 // linked; when it cannot be sent, it waits on disk and is tried again.
 void LeagueMatchEnded();

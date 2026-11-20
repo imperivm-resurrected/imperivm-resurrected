@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <ctime>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -94,6 +95,7 @@ Card BuildCard(const ProfileSlot &slot, const std::vector<RankStep> &ranks)
 	c.favoriteCiv = ProfileCivName(c.summary.favoriteRace);
 	if (!ini.favoriteUnit.empty()) c.favoriteUnit = ProfileUnitName(ini.favoriteUnit);
 	if (!c.summary.bestUnit.empty()) c.bestUnit = ProfileUnitName(c.summary.bestUnit);
+	const std::vector<MatchTag> tags = LeagueGameTags();
 	for (const PlayedGame &g : RecentGames(ini, ini.played.size())) {
 		GameRow r;
 		r.day = g.day;
@@ -103,6 +105,18 @@ Card BuildCard(const ProfileSlot &slot, const std::vector<RankStep> &ranks)
 		r.minute = g.minute;
 		r.won = !g.lost;
 		r.multi = g.multi;
+		if (g.multi && !tags.empty()) {
+			// The game records its local time; the notes are in seconds since 1970.
+			tm local = {};
+			local.tm_year = g.year - 1900;
+			local.tm_mon = g.month - 1;
+			local.tm_mday = g.day;
+			local.tm_hour = g.hour;
+			local.tm_min = g.minute;
+			local.tm_isdst = -1;
+			const time_t at = mktime(&local);
+			if (at != static_cast<time_t>(-1)) r.league = MatchLeagueOf(tags, static_cast<int64_t>(at), g.durationMs);
+		}
 		r.civ = ProfileCivName(g.race);
 		if (!g.levelMaxUnit.empty()) r.bestUnit = ProfileUnitName(g.levelMaxUnit);
 		r.bestLevel = g.levelMax;
