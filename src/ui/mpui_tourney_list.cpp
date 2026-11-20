@@ -245,8 +245,8 @@ void PaintSubTabs(Painter &p, const Ui &u, const TourneyListsView &lists, int x,
 	struct Tab {
 		const char *label;
 		size_t count;
-	} tabs[] = {{"Sign-up open", lists.open.size()}, {"Live", lists.live.size()}, {"Finished", 0}};
-	for (int i = 0; i < 3; i++) {
+	} tabs[] = {{"Active", lists.open.size() + lists.live.size()}, {"Finished", 0}};
+	for (int i = 0; i < 2; i++) {
 		UseFace(p, BrandFace::UiStrong, 13);
 		const int textW = p.CapsWidth(tabs[i].label, 2);
 		const std::string n = tabs[i].count ? std::to_string(tabs[i].count) : std::string();
@@ -275,7 +275,12 @@ bool Shown(const TourneySummary &t, const Ui &u, const TourneyMineView &mine)
 	if (u.listFormat && u.listFormat != format) return false;
 	if (!u.listPlayable || u.filter != 0) return true;
 	const bool open = t.status == TourneyStatus::Signup || t.status == TourneyStatus::Checkin;
-	return open && !t.isPrivate && CupUnmet(t.requirements, mine) == TourneyUnmet::None;
+	// A cup being played stays for whoever is in it.
+	if (!open) {
+		const TourneyMyEntry *e = MyEntry(mine, t.id);
+		return e && TourneyEntryActive(e->status);
+	}
+	return !t.isPrivate && CupUnmet(t.requirements, mine) == TourneyUnmet::None;
 }
 
 // A filter of the list: its choice now with the arrow of its menu (which opens under it), or lit while it is on. Its width.
@@ -304,7 +309,13 @@ void PaintTable(Painter &p, const State &st, const Ui &u, const TourneyListsView
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	PaintGlassCard(p, x, y, w, h);
-	const std::vector<TourneySummary> &all = u.filter == 1 ? lists.live : u.filter == 2 ? lists.finished : lists.open;
+	// The active cups: those open for sign-up, then those being played.
+	std::vector<TourneySummary> active;
+	if (u.filter != 1) {
+		active = lists.open;
+		active.insert(active.end(), lists.live.begin(), lists.live.end());
+	}
+	const std::vector<TourneySummary> &all = u.filter == 1 ? lists.finished : active;
 	std::vector<const TourneySummary *> rows;
 	for (const TourneySummary &t : all) {
 		if (Shown(t, u, mine)) rows.push_back(&t);
@@ -348,8 +359,7 @@ void PaintTable(Painter &p, const State &st, const Ui &u, const TourneyListsView
 		p.Font(0);
 		const char *empty = !lists.loaded ? "Couldn't reach the league server. Check your connection and try again."
 			: !all.empty()	? "No tournament matches these filters."
-			: u.filter == 0 ? "No tournament is open for sign-up now. The official cups are announced on Discord."
-			: u.filter == 1 ? "No tournament is being played now."
+			: u.filter == 0 ? "No tournament is open or being played now. The official cups are announced on Discord."
 							: "No tournament has finished yet.";
 		p.TextWrapped(x + 24, top + 20, w - 48, 80, empty, pal::textDim);
 		return;

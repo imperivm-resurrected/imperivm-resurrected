@@ -3474,5 +3474,6 @@
 {"en":"Win (test)","es":"Ganar (prueba)","it":"Vinci (prova)"},
 {"en":"Lose (test)","es":"Perder (prueba)","it":"Perdi (prova)"},
 {"en":"Test result sent.","es":"Resultado de prueba enviado.","it":"Risultato di prova inviato."},
-{"en":"The host plays with other content (Options > Content): both of you need the same to play this match.","es":"El anfitrión juega con otro contenido (Opciones > Contenido): los dos necesitáis el mismo para jugar esta partida.","it":"L'host gioca con altri contenuti (Opzioni > Contenuti): vi servono gli stessi per giocare questa partita."}
+{"en":"The host plays with other content (Options > Content): both of you need the same to play this match.","es":"El anfitrión juega con otro contenido (Opciones > Contenido): los dos necesitáis el mismo para jugar esta partida.","it":"L'host gioca con altri contenuti (Opzioni > Contenuti): vi servono gli stessi per giocare questa partita."},
+{"en":"No tournament is open or being played now. The official cups are announced on Discord.","es":"Ahora no hay ningún torneo abierto ni en juego. Las copas oficiales se anuncian en Discord.","it":"Ora non ci sono tornei aperti né in corso. Le coppe ufficiali vengono annunciate su Discord."}
 ]

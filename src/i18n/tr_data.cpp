@@ -3482,5 +3482,6 @@ extern const TrRow kTrRows[] = {
 	{"Lose (test)", "Perder (prueba)", "Perdi (prova)"},
 	{"Test result sent.", "Resultado de prueba enviado.", "Risultato di prova inviato."},
 	{"The host plays with other content (Options > Content): both of you need the same to play this match.", "El anfitrión juega con otro contenido (Opciones > Contenido): los dos necesitáis el mismo para jugar esta partida.", "L'host gioca con altri contenuti (Opzioni > Contenuti): vi servono gli stessi per giocare questa partita."},
+	{"No tournament is open or being played now. The official cups are announced on Discord.", "Ahora no hay ningún torneo abierto ni en juego. Las copas oficiales se anuncian en Discord.", "Ora non ci sono tornei aperti né in corso. Le coppe ufficiali vengono annunciate su Discord."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);
