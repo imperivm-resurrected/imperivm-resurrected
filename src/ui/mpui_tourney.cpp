@@ -498,7 +498,6 @@ void StepInRoom(const TourneyNext &next)
 	if (k.room != g_s.room.id) {
 		k = RoomLock();
 		k.room = g_s.room.id;
-		g_tourney.showRoom = false;
 		LogI("league", "in the room of tournament match %lld", static_cast<long long>(match));
 	}
 	const DWORD now = GetTickCount();
@@ -1683,7 +1682,6 @@ void TourneyAction(int arg)
 		GameRoomToggleReady();
 		break;
 	}
-	case kSubShowRoom: u.showRoom = true; break;
 	case kSubCupSection:
 		if (value >= 0 && value < 3) u.formScroll = std::max(0, std::min(u.formArea.max, u.sectionTop[value]));
 		break;
@@ -2201,7 +2199,7 @@ bool TourneyRoomHiddenHeld(const mpui_impl::State &st)
 	const int64_t match = TourneyMatchOfTag(st.room.info.leagueTag);
 	if (!match) return false;
 	const auto mine = LeagueTourneyMine();
-	return !g_tourney.showRoom && st.view == kViewTournaments && mine->mine.next.present && mine->mine.next.match == match;
+	return st.view == kViewTournaments && mine->mine.next.present && mine->mine.next.match == match;
 }
 
 bool TourneyRoomHidden(const mpui_impl::State &st)

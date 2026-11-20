@@ -3477,7 +3477,6 @@ extern const TrRow kTrRows[] = {
 	{"Egypt", "Egipto", "Egitto"},
 	{"Britain", "Britania", "Britannia"},
 	{"Waiting for your opponent...", "Esperando a tu rival...", "In attesa del tuo avversario..."},
-	{"Show the room", "Ver la sala", "Vedi la sala"},
 	{"A cup match starts when all its players are in the room.", "Un partido de copa empieza cuando todos sus jugadores están en la sala.", "Una partita di coppa inizia quando tutti i suoi giocatori sono nella sala."},
 	{"Colour", "Color", "Colore"},
 	{"The room's own", "El de la sala", "Quello della sala"},

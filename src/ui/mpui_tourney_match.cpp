@@ -827,8 +827,6 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 	const int chatW = chat ? ChatButtonWidth(p) : 0, groupW = bw + (chat ? 16 + chatW : 0), bx = (l.w - groupW) / 2;
 	p.Button(bx, by, bw, bh, label, kTourney, ArgOf(action, n.match), mx, my, enabled, true, 2);
 	if (chat) PaintSecondButton(p, bx + bw + 16, by, chatW, bh, Tr("Write on Steam"), ArgOf(kSubSteamChat, 0), true, mx, my);
-	// The room is there under the page, for when something needs it.
-	if (inRoom && !live) PaintSecondButton(p, bx - 16 - 200, by, 200, bh, Tr("Show the room"), ArgOf(kSubShowRoom, 0), true, mx, my);
 	p.Font(0);
 	p.raw = true;
 	p.Text(m, by + bh + 8, inner, 24, line, n.pick.present && n.MyPick() ? pal::warn : lineInk, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);

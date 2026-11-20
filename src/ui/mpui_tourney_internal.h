@@ -42,7 +42,7 @@ enum Sub {
 	kSubListKind, kSubListFormat, kSubListPlayable,
 	// The civilization the player takes into the match's room: its menu opened; the colour picked (again: the room's own); ready in the
 	// hidden room; the room shown after all.
-	kSubCivMenu, kSubColorPick, kSubReady, kSubShowRoom,
+	kSubCivMenu, kSubColorPick, kSubReady,
 	// The colour's menu on the match page: opened (1: the wheel), the wheel's colour taken, closed.
 	kSubColorOpen, kSubColorUse, kSubColorClose,
 };
@@ -161,9 +161,8 @@ struct Ui {
 	// The civilization chosen on the match page (a race of the game, -1 for the room's own), kept between matches; the races of its open menu.
 	int civRace = -2;
 	std::vector<int> civChoices;
-	// The colour chosen on the match page, -1 for the room's own; and the match's room shown instead of the match page.
+	// The colour chosen on the match page, -1 for the room's own.
 	int colorPick = -2;
-	bool showRoom = false;
 	// When the page's Ready was last pressed: a second press (a double click) before the room has the first is ignored.
 	DWORD readyAt = 0;
 	// The colour's menu, its wheel, and the player's own colour (0xRRGGBB) when colorPick is kOwnColor.
