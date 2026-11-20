@@ -199,6 +199,7 @@ void SendDue()
 		if (r.Ok()) {
 			LogI("league", "game report sent: %s", status.empty() ? "accepted" : status.c_str());
 			RankedReportAnswered(item.body, r.body);
+			if (item.body.GetString("kind") == "tournament") LeagueTourneyGameReported();
 		}
 		else if (Retriable(r.status)) LogW("league", "game report not sent (%s); trying again later", r.Describe().c_str());
 		else LogE("league", "the server refused a game report (%s); it is dropped", r.Describe().c_str());

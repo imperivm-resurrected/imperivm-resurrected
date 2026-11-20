@@ -71,3 +71,4 @@ bool TourneyLobby(const OnlineLobby &g);
 bool TourneyLobbyWatchOnly(const OnlineLobby &g);
 // Every frame on the game thread: the notices in any menu, the answers of the server and the room of the player's match.
 void TourneyGameThreadTick();
+bool CupReturnPending();

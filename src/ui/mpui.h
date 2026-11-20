@@ -17,6 +17,8 @@ enum class MpSection { Rooms, Ranked, Tournaments };
 void MpUiOpenSection(MpSection section);
 bool MpUiIsOpen();
 bool MpUiMainMenuVisible();
+// Back from a cup game, in the moment before its page opens over the main menu: the menu is not painted (a few seconds at most).
+bool MpUiCupReturnPending();
 // The game's main menu dialog while no game runs, also under other screens; null otherwise.
 void *MpUiMainMenu();
 bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp);

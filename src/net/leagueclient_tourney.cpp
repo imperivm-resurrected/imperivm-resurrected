@@ -636,6 +636,16 @@ void LeagueTourneyMineRefresh()
 	StartMine();
 }
 
+void LeagueTourneyGameReported()
+{
+	std::lock_guard<std::mutex> lock(g_mx);
+	StartMine();
+	g_lists.at = 0;
+	g_lists.changes++;
+	for (auto &p : g_pages) p.second.at = 0;
+	for (auto &d : g_disputes) d.second.at = 0;
+}
+
 void LeagueTourneyWatching()
 {
 	std::lock_guard<std::mutex> lock(g_mx);

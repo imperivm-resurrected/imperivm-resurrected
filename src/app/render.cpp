@@ -5,6 +5,7 @@
 #include <d3d11.h>
 #include <d3dcompiler.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <mutex>
@@ -496,7 +497,11 @@ UiNeeds QueryUiNeeds()
 void DrawUi(const UiNeeds &n, uint32_t *buf, int w, int h)
 {
 	Guard("interface drawing", [&] {
-		if (n.mainMenu) MainMenuUiDraw(buf, w, h);
+		if (n.mainMenu) {
+			// Back from a cup game the cup's page opens in a moment: the menu is not shown before it, only the page's own background.
+			if (MpUiCupReturnPending()) std::fill(buf, buf + static_cast<size_t>(w) * h, 0xff121110u);
+			else MainMenuUiDraw(buf, w, h);
+		}
 		if (n.chat) ChatUiDraw(buf, w, h);
 		if (n.conquest) ConquestUiDraw(buf, w, h);
 		if (n.battles) BattlesUiDraw(buf, w, h);

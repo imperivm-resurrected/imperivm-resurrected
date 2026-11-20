@@ -5,6 +5,7 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <cstdint>
 #include <functional>
@@ -2149,6 +2150,9 @@ bool TourneyLobbyWatchOnly(const OnlineLobby &g)
 	return !(mine->mine.next.present && mine->mine.next.match == match);
 }
 
+// From the game's end to the cup page: the tick that ended the game is set, the page is not open yet. Read by the render thread.
+std::atomic<DWORD> g_cupReturnAt{0};
+
 // The game of a cup match ends in the game's main menu: the multiplayer menu opens on the cup's page, where the score, the next match
 // (with its own button) or the final result are.
 void StepAfterGame(const TourneyNext &next)
@@ -2162,6 +2166,7 @@ void StepAfterGame(const TourneyNext &next)
 		}
 		return;
 	}
+	if (u.afterGame && !g_cupReturnAt.load()) g_cupReturnAt = GetTickCount() | 1;
 	if (!u.afterGame) {
 		// Out of the room without a game (not while the game is starting): nothing to come back to.
 		if (!u.afterSlug.empty() && !g_s.room.id && !g_s.connecting && !g_s.gameClosedAt && !g_s.startingCover) u.afterSlug.clear();
@@ -2180,6 +2185,16 @@ void StepAfterGame(const TourneyNext &next)
 	LogI("league", "back from a cup game: its page (%s)", u.afterSlug.c_str());
 	u.afterSlug.clear();
 	u.afterGame = false;
+	g_cupReturnAt = 0;
+}
+
+bool CupReturnPending()
+{
+	const DWORD at = g_cupReturnAt.load();
+	if (!at) return false;
+	if (GetTickCount() - at < 3000) return true;
+	g_cupReturnAt = 0;
+	return false;
 }
 
 void TourneyGameThreadTick()

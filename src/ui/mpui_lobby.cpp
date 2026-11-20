@@ -10,6 +10,7 @@
 #include "addr/ui.h"
 
 #include "ui/mpui_internal.h"
+#include "ui/mpui_tourney.h"
 
 using namespace mpui_impl;
 
@@ -23,6 +24,11 @@ bool MainMenuOnTop()
 		if (modal && modal != g_mainMenu) return false;
 	}
 	return true;
+}
+
+bool MpUiCupReturnPending()
+{
+	return CupReturnPending();
 }
 
 bool MpUiMainMenuVisible()

@@ -39,6 +39,8 @@ struct TourneyMineView {
 std::shared_ptr<const TourneyMineView> LeagueTourneyMine();
 // Asks for the player's tournaments now.
 void LeagueTourneyMineRefresh();
+// A game report was taken by the league: the player's tournaments, the lists and the pages are read again (a cup game's result).
+void LeagueTourneyGameReported();
 // The Tournaments tab is on screen: with none of the player's own on, they are asked for every minute while this keeps being called.
 void LeagueTourneyWatching();
 
