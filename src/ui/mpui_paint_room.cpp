@@ -578,7 +578,7 @@ DWORD Since(DWORD at)
 std::string AiLevel(const GameRoomSlot &s)
 {
 	const int n = static_cast<int>(s.nameItems.size());
-	return s.nameSel >= 0 && s.nameSel < n && !s.nameItems[s.nameSel].empty() ? s.nameItems[s.nameSel] : std::string("???");
+	return s.nameSel >= 0 && s.nameSel < n && !s.nameItems[s.nameSel].empty() ? s.nameItems[s.nameSel] : std::string("—");
 }
 
 void PaintSlotRow(Painter &p, const State &st, const TableCtx &t, int i, const Arrival &arrival, int rowY, int rowH, int hoverPercent)
@@ -628,7 +628,7 @@ void PaintSlotRow(Painter &p, const State &st, const TableCtx &t, int i, const A
 		}
 		else if (!s.local && g.online) {
 			const bool asked = st.swapPendingTo && st.swapPendingName == s.name && GetTickCount() - st.swapPendingTime < 20000;
-			seatLabel = asked ? "Asked???" : "Swap";
+			seatLabel = asked ? "Asked…" : "Swap";
 			seatAction = asked ? -1 : kGSwapAsk;
 			seatAlways = asked;
 		}
@@ -746,7 +746,7 @@ void PaintSlotRow(Painter &p, const State &st, const TableCtx &t, int i, const A
 		const bool editable = RaceEditable(g, s, load) && !frozen;
 		const bool hidden = (g.rules & kRuleBlindPick) && !load && !s.local && !(g.host && s.type == 1);
 		const std::string race = hidden ? "Hidden"
-			: s.race >= 0 && s.race < static_cast<int>(s.raceNames.size()) ? (RaceSeparator(s.raceNames) && s.race == 9 ? "???" : s.raceNames[s.race])
+			: s.race >= 0 && s.race < static_cast<int>(s.raceNames.size()) ? (RaceSeparator(s.raceNames) && s.race == 9 ? "—" : s.raceNames[s.race])
 																			: "?";
 		SlotCombo(p, st, c.civ, ctlY, c.civW, race, hidden ? pal::textDim : pal::text, kDropRace, i, editable);
 	}
@@ -758,7 +758,7 @@ void PaintSlotRow(Painter &p, const State &st, const TableCtx &t, int i, const A
 	{
 		const bool off = BonusesDisabled(g);
 		const bool known = s.bonus > 0 && s.bonus < static_cast<int>(g.bonuses.size());
-		const std::string bonus = off || s.bonus <= 0 ? "???" : known ? g.bonuses[s.bonus].name : "?";
+		const std::string bonus = off || s.bonus <= 0 ? "—" : known ? g.bonuses[s.bonus].name : "?";
 		const bool editable = !off && !load && g.bonuses.size() > 1 && !GameModeLocksOption(GameModeFor(g.mode.c_str()), 0x10a7) && own && !frozen;
 		SlotCombo(p, st, c.bonus, ctlY, c.bonusW, bonus, s.bonus <= 0 ? pal::textDim : pal::text, kDropBonus, i, editable);
 	}
@@ -959,18 +959,18 @@ std::string RoomNotice(const State &st, COLORREF &color)
 	std::string text = Tr("Saved game: ") + saveName;
 	if (g.host && !st.saveMapError.empty()) {
 		color = pal::bad;
-		text += "  ??  " + Tr("Map: ") + st.saveMapError;
+		text += "  ·  " + Tr("Map: ") + st.saveMapError;
 	}
 	else if (g.host && st.saveMapStep < 2) {
-		text += "  ??  " + Tr("Choosing the game's map...");
+		text += "  ·  " + Tr("Choosing the game's map...");
 	}
 	else if (!g.host && st.save.state == 1) {
 		const uint64_t total = std::max<uint64_t>(1, st.save.total);
-		text += "  ??  " + Tr("Receiving it from the host: ") + std::to_string(std::min<uint64_t>(100, st.save.got * 100 / total)) + " %";
+		text += "  ·  " + Tr("Receiving it from the host: ") + std::to_string(std::min<uint64_t>(100, st.save.got * 100 / total)) + " %";
 	}
 	else if (!g.host && st.save.state == 2) {
 		color = pal::bad;
-		text += "  ??  " + Tr("Could not receive: ") + st.save.error;
+		text += "  ·  " + Tr("Could not receive: ") + st.save.error;
 	}
 	return text;
 }
@@ -1011,7 +1011,7 @@ void PaintSummary(Painter &p, const State &st, int cardX, int cardY, int cardW, 
 		p.Font(4);
 		p.TextCaps(lx, ly, colW, 18, l.label, pal::caption, line, 2);
 		p.Font(0);
-		p.Text(lx, ly + 20, colW, 26, v.empty() ? std::string("???") : v, pal::text, line);
+		p.Text(lx, ly + 20, colW, 26, v.empty() ? std::string("—") : v, pal::text, line);
 		shown++;
 	}
 	if (!notice.empty()) {
