@@ -385,6 +385,127 @@ void PaintBracket(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out)
 	EndPan(p, c, v);
 }
 
+// Before the draw: the bracket of the cup's places, its boxes empty, filled once the check-in closes.
+void PaintBracketPreview(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out)
+{
+	TourneyDetail s = c.d;
+	s.rounds = TourneyFullRounds(std::max(2, std::max(c.d.maxEntries, static_cast<int>(c.d.entrants.size()))));
+	s.matches.clear();
+	s.entrants.clear();
+	for (int r = 1; r <= s.rounds; r++) {
+		for (int k = 0; k < (1 << (s.rounds - r)); k++) {
+			TourneyMatch m;
+			m.round = r;
+			m.position = k;
+			m.status = TourneyMatchStatus::Pending;
+			m.bestOf = r == s.rounds ? s.finalBestOf : s.bestOf;
+			s.matches.push_back(m);
+		}
+	}
+	Ctx sc{c.st, c.u, s, c.mine};
+	sc.mx = c.mx;
+	sc.my = c.my;
+	PaintBracket(p, sc, x, y, w, h, out);
+}
+
+// The players beside the bracket: seed, name, and how they stand (signed up, checked in, still in, knocked out) or their place.
+void PaintEntrantColumn(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out)
+{
+	const TourneyDetail &d = c.d;
+	const bool teams = d.Teams();
+	PaintCaps(p, x, y, w - 70, 20, teams ? "Teams" : "Players", pal::caption);
+	UseFace(p, BrandFace::Ui, 12);
+	p.raw = true;
+	p.Text(x + w - 90, y, 90, 20, std::to_string(d.entrants.size()) + (d.maxEntries ? " / " + std::to_string(d.maxEntries) : std::string()), pal::caption,
+		DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+	p.raw = false;
+	int top = y + 28;
+	if (d.matches.empty()) {
+		p.Font(3);
+		top += p.TextWrapped(x, top, w, 60, "The bracket is drawn when the check-in closes.", pal::textDim) + 10;
+	}
+	const int rowH = 46, viewH = y + h - top;
+	const int total = static_cast<int>(d.entrants.size()) * rowH, maxY = std::max(0, total - viewH), sy = std::min(c.u.sideScroll, maxY);
+	SetScrollArea(p, out.sideArea, x, top, w, viewH, maxY);
+	p.Clip(x, top, w, viewH);
+	int ry = top - sy;
+	for (const TourneyEntrant &e : d.entrants) {
+		p.Fill(x, ry, w, 1, pal::hairline);
+		if (ry + rowH < top || ry > top + viewH) {
+			ry += rowH;
+			continue;
+		}
+		UseFace(p, BrandFace::UiStrong, 12);
+		p.raw = true;
+		p.Text(x, ry, 22, rowH, e.seed ? std::to_string(e.seed) : std::string("-"), pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+		p.raw = false;
+		const std::vector<TourneyMember> players = TourneyPlayersOf(e);
+		int nx = x + 26;
+		if (teams) nx += PaintSideDiscs(p, nx, ry + 9, 28, players) + 8;
+		else {
+			PaintPlayerDisc(p, nx, ry + 9, 28, e.steamId, e.name);
+			nx += 36;
+		}
+		const int place = EntrantPlace(d, e), placeW = place ? 40 : 0, nw = x + w - nx - placeW - 4;
+		UseFace(p, e.entryId == c.me ? BrandFace::UiStrong : BrandFace::Body, 15);
+		const COLORREF ink = e.entryId == c.me ? pal::redText : e.status == TourneyEntryStatus::Out ? pal::caption : pal::text;
+		if (teams) {
+			p.raw = true;
+			p.Text(nx, ry + 4, nw, 22, e.name, ink, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			p.raw = false;
+		}
+		else PaintName(p, nx, ry + 4, nw, 22, e.name, e.steamId, ink, c.mx, c.my);
+		AddIds(c, players);
+		const char *status = "Signed up";
+		COLORREF sink = pal::caption;
+		switch (e.status) {
+		case TourneyEntryStatus::PendingPartner:
+			status = "Waiting for the partner";
+			sink = pal::warn;
+			break;
+		case TourneyEntryStatus::Waitlist: status = "Waiting list"; break;
+		case TourneyEntryStatus::Playing:
+			status = "Still in";
+			sink = pal::ok;
+			break;
+		case TourneyEntryStatus::Out: status = "Knocked out"; break;
+		case TourneyEntryStatus::Withdrawn: status = "Withdrew"; break;
+		case TourneyEntryStatus::Disqualified:
+			status = "Disqualified";
+			sink = pal::bad;
+			break;
+		case TourneyEntryStatus::MissedCheckin: status = "Missed the check-in"; break;
+		default:
+			if (e.checkedIn) {
+				status = "Checked in";
+				sink = pal::ok;
+			}
+			break;
+		}
+		if (*FinishedEntrantText(d, e)) {
+			status = FinishedEntrantText(d, e);
+			sink = place == 1 ? kGold : pal::caption;
+		}
+		UseFace(p, BrandFace::Ui, 12);
+		p.Text(nx, ry + 25, nw, 16, status, sink, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		if (place) {
+			const int last = TourneyIsDouble(d) ? TourneyDoublePlaceEnd(place) : place;
+			UseDisplay(p, 20);
+			p.raw = true;
+			p.Text(x + w - placeW, ry, placeW, rowH, last > place ? std::to_string(place) + "\xE2\x80\x93" + std::to_string(last) : std::to_string(place),
+				place == 1 ? kGold : pal::text, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+			p.raw = false;
+		}
+		ry += rowH;
+	}
+	if (d.entrants.empty()) {
+		p.Font(3);
+		p.Text(x, top + 8, w, 24, teams ? "No team has signed up yet." : "Nobody has signed up yet.", pal::textDim);
+	}
+	p.Unclip();
+	if (maxY > 0) PaintScrollbar(p, kBarSide, x + w + 6, top, viewH, {sy, maxY, viewH}, c.st.dropBar, c.mx, c.my);
+}
+
 // A double elimination's column heading: the plain stage, as the title over the bracket says which bracket it is.
 std::string DoubleColumnText(int round, int rounds, bool losers)
 {
@@ -1540,7 +1661,7 @@ bool PaintPageHeader(Painter &p, const State &st, const HeaderUi &u)
 	// A Swiss tournament has standings instead of a bracket, and its rounds open from them.
 	const bool swiss = page.loaded && TourneyIsSwiss(page.detail);
 	std::vector<TabSpec> tabs = {{Tr(swiss ? "Standings" : "Bracket"), kTourney, ArgOf(kSubPageTab, 0), u.pageTab == 0 || u.pageTab >= kRoundTab, true},
-		{Tr("Entrants"), kTourney, ArgOf(kSubPageTab, 1), u.pageTab == 1, true}, {Tr("Rules"), kTourney, ArgOf(kSubPageTab, 2), u.pageTab == 2, true},
+		{Tr("Rules"), kTourney, ArgOf(kSubPageTab, 2), u.pageTab == 2, true},
 		{Tr("Log"), kTourney, ArgOf(kSubPageTab, 3), u.pageTab == 3, true}};
 	if (page.loaded && IsOrganizer(page.detail)) tabs.push_back({Tr("Organise"), kTourney, ArgOf(kSubPageTab, kOrganizerTab), u.pageTab == kOrganizerTab, true});
 	if (!page.loaded) {
@@ -1604,24 +1725,27 @@ void PaintPageScreen(Painter &p, const State &st, const Ui &u, PaintOut &out)
 	const bool organizer = IsOrganizer(page.detail), swiss = TourneyIsSwiss(page.detail);
 	if (organizer) c.disputes = LeagueTourneyDisputes(page.detail.id);
 	const bool bracketTab = u.pageTab == 0 || u.pageTab >= kRoundTab;
-	int tab = page.detail.matches.empty() && bracketTab ? 1 : u.pageTab;
+	// The players are listed on the bracket's tab (1 was their own tab).
+	int tab = u.pageTab == 1 ? 0 : u.pageTab;
+	(void)bracketTab;
 	if (tab == kOrganizerTab && !organizer) tab = 0;
 	if (tab == kOrganizerTab) PaintOrganizer(p, c, ix, iy, iw - 20, ih, out);
-	else if (tab == 0 || tab >= kRoundTab) {
-		if (swiss) PaintSwiss(p, c, ix, iy, iw - 20, ih, out);
-		else if (TourneyIsDouble(page.detail)) PaintDoubleBracket(p, c, ix, iy, iw, ih, out);
-		else PaintBracket(p, c, ix, iy, iw, ih, out);
-	}
-	else if (tab == 1) {
-		if (page.detail.matches.empty() && bracketTab) {
+	else if ((tab == 0 || tab >= kRoundTab) && swiss) {
+		if (page.detail.matches.empty()) {
 			p.Font(3);
-			p.Text(ix, iy, iw, 22,
-				swiss ? "The first round is paired when the check-in closes. Meanwhile, these are the players signed up."
-					  : "The bracket is drawn when the check-in closes. Meanwhile, these are the players signed up.",
-				pal::caption);
+			p.Text(ix, iy, iw, 22, "The first round is paired when the check-in closes. Meanwhile, these are the players signed up.", pal::caption);
 			PaintEntrants(p, c, ix, iy + 34, iw - 20, ih - 34, out);
 		}
-		else PaintEntrants(p, c, ix, iy, iw - 20, ih, out);
+		else PaintSwiss(p, c, ix, iy, iw - 20, ih, out);
+	}
+	else if (tab == 0 || tab >= kRoundTab) {
+		// The players on the left, the bracket they fill on the right: empty until the draw.
+		const int listW = std::max(240, std::min(320, iw * 24 / 100)), gap = 36, bx = ix + listW + gap, bw = iw - listW - gap;
+		PaintEntrantColumn(p, c, ix, iy, listW, ih, out);
+		p.Fill(ix + listW + gap / 2, iy, 1, ih, pal::hairline);
+		if (page.detail.matches.empty()) PaintBracketPreview(p, c, bx, iy, bw, ih, out);
+		else if (TourneyIsDouble(page.detail)) PaintDoubleBracket(p, c, bx, iy, bw, ih, out);
+		else PaintBracket(p, c, bx, iy, bw, ih, out);
 	}
 	else if (tab == 2) PaintRules(p, c, ix, iy, iw - 20, ih, out);
 	else PaintLog(p, c, ix, iy, iw - 20, ih, out);
