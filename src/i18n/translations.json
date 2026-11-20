@@ -3475,5 +3475,6 @@
 {"en":"Twice as many players sign up. It starts with the teams drawn among those who have checked in, if there are at least %s; else it is cancelled on its own.","es":"Se inscribe el doble de jugadores. Empieza con los equipos sorteados entre quienes hicieron el check-in, si hay al menos %s; si no, se cancela sola.","it":"Si iscrive il doppio dei giocatori. Inizia con le squadre sorteggiate tra chi ha fatto il check-in, se sono almeno %s; altrimenti si annulla da sola."},
 {"en":"Win (test)","es":"Ganar (prueba)","it":"Vinci (prova)"},
 {"en":"Lose (test)","es":"Perder (prueba)","it":"Perdi (prova)"},
-{"en":"Test result sent.","es":"Resultado de prueba enviado.","it":"Risultato di prova inviato."}
+{"en":"Test result sent.","es":"Resultado de prueba enviado.","it":"Risultato di prova inviato."},
+{"en":"The host plays with other content (Options > Content): both of you need the same to play this match.","es":"El anfitrión juega con otro contenido (Opciones > Contenido): los dos necesitáis el mismo para jugar esta partida.","it":"L'host gioca con altri contenuti (Opzioni > Contenuti): vi servono gli stessi per giocare questa partita."}
 ]

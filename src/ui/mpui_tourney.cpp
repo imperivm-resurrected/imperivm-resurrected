@@ -31,6 +31,8 @@
 #include "net/leagueclient_tourney.h"
 #include "net/patrons.h"
 #include "net/steamnet.h"
+#include "core/version.h"
+#include "mods/mods.h"
 #include "ui/leagueui.h"
 #include "ui/modui.h"
 #include "ui/mpui_tourney_internal.h"
@@ -527,6 +529,17 @@ void StepInRoom(const TourneyNext &next)
 		k = RoomLock();
 		k.room = g_s.room.id;
 		LogI("league", "in the room of tournament match %lld", static_cast<long long>(match));
+		// What the host's game is next to this one: a different build or content makes the game refuse the join ("different version of
+		// the protocol"), which says nothing more.
+		const OnlineLobby &info = g_s.room.info;
+		const std::string ownKey = SteamOwnGameplayKey();
+		LogI("league", "tournament room: the host's build %s, rules %s, content key %s; this one %s, %s, %s", info.version.c_str(), info.rulesLevel.c_str(),
+			info.gameplayKey.c_str(), ModVersionText(), ModsRulesLevel().c_str(), ownKey.c_str());
+		if (!g_s.room.owner) {
+			const std::string mismatch = SteamVersionMismatch(info.version, info.rulesLevel);
+			if (!mismatch.empty()) Toast(mismatch, true);
+			else if (!info.gameplayKey.empty() && info.gameplayKey != ownKey) Toast("The host plays with other content (Options > Content): both of you need the same to play this match.", true);
+		}
 	}
 	const DWORD now = GetTickCount();
 	const bool mine = next.present && next.match == match;

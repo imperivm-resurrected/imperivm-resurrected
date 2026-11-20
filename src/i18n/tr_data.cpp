@@ -3483,5 +3483,6 @@ extern const TrRow kTrRows[] = {
 	{"Win (test)", "Ganar (prueba)", "Vinci (prova)"},
 	{"Lose (test)", "Perder (prueba)", "Perdi (prova)"},
 	{"Test result sent.", "Resultado de prueba enviado.", "Risultato di prova inviato."},
+	{"The host plays with other content (Options > Content): both of you need the same to play this match.", "El anfitrión juega con otro contenido (Opciones > Contenido): los dos necesitáis el mismo para jugar esta partida.", "L'host gioca con altri contenuti (Opzioni > Contenuti): vi servono gli stessi per giocare questa partita."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);
