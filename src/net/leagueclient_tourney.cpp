@@ -115,6 +115,7 @@ const char *OpName(TourneyOp op)
 	case TourneyOp::Accept: return "team invitation acceptance";
 	case TourneyOp::Decline: return "team invitation refusal";
 	case TourneyOp::CancelTeam: return "team cancellation";
+	case TourneyOp::Concede: return "game given up";
 	default: return "resolution";
 	}
 }
@@ -752,6 +753,11 @@ void LeagueTourneyPresence(int64_t match, bool started)
 void LeagueTourneyClaimNoShow(int64_t match)
 {
 	Start(TourneyOp::NoShow, match, "POST", MatchPath(match, "/claim-noshow"));
+}
+
+void LeagueTourneyConcede(int64_t match)
+{
+	Start(TourneyOp::Concede, match, "POST", MatchPath(match, "/concede"));
 }
 
 void LeagueTourneyDispute(int64_t match, const std::string &text)

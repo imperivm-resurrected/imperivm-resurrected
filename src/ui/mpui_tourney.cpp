@@ -48,6 +48,8 @@ const DWORD kClaimRetryMs = 5000, kFlowTimeoutMs = 45000, kPresenceEveryMs = 300
 const int kTeamTries = 24;
 // Not in the room the server gave after this long: it is taken as gone (Steam enters a room in a few seconds).
 const DWORD kStaleAfterMs = 20000;
+// The setting with the match of a game against a test bot being played (0 for none).
+const char *const kBotGameSetting = "TourneyBotGame";
 
 // Under g_lock: the tournament of an id, from the lists and the player's own.
 std::string SlugOf(int64_t tournament)
@@ -309,6 +311,9 @@ void TakeResults()
 			if (!r.ok) Toast(ResultText(r), true);
 			break;
 		case TourneyOp::Presence: break;
+		case TourneyOp::Concede:
+			if (r.ok) Toast("Your cup game against the bot closed with the game: it counts as lost.");
+			break;
 		case TourneyOp::Create: CupMade(r); break;
 		case TourneyOp::Edit: CupEdited(r); break;
 		case TourneyOp::FindCode: CodeFound(r); break;
@@ -602,6 +607,11 @@ void StepInRoom(const TourneyNext &next)
 		k.startedSent = true;
 		k.presenceAt = now;
 		LeagueTourneyPresence(match, true);
+		// A game against a test bot lives on this computer only: if it closes with the game, the next start gives it up.
+		if (TourneyIsTestBot(next.opponent.steamId)) {
+			GameRoomSaveSetting(kBotGameSetting, static_cast<int>(match));
+			g_tourney.botGameMarked = true;
+		}
 	}
 	if (!g_s.inOnlineGame) k.startedSent = false;
 	// A match of teams: the sides of this player's claim set the room's teams, side A team 1 and side B team 2.
@@ -2277,6 +2287,11 @@ void StepAfterGame(const TourneyNext &next)
 {
 	Ui &u = g_tourney;
 	(void)next;
+	// The game ended here: a game against a test bot needs nothing at the next start.
+	if (!g_s.inOnlineGame && u.botGameMarked) {
+		u.botGameMarked = false;
+		GameRoomSaveSetting(kBotGameSetting, 0);
+	}
 	if (g_s.inOnlineGame) {
 		if (!u.afterSlug.empty() && !u.afterGame) {
 			u.afterGame = true;
@@ -2318,6 +2333,17 @@ bool CupReturnPending()
 void TourneyGameThreadTick()
 {
 	const auto mine = LeagueTourneyMine();
+	// Once a start: a game against a test bot that closed with the game is given up; the league would only give it to the bot later.
+	static bool botGameChecked = false;
+	if (!botGameChecked && mine->loaded && LeagueLinked()) {
+		botGameChecked = true;
+		const int match = GameRoomLoadSetting(kBotGameSetting, 0);
+		if (match > 0) {
+			GameRoomSaveSetting(kBotGameSetting, 0);
+			LogI("league", "tournament match %d: its game against a test bot closed with the game; it is given up", match);
+			LeagueTourneyConcede(match);
+		}
+	}
 	std::lock_guard<std::mutex> lock(g_lock);
 	TakeNotices();
 	TakeResults();

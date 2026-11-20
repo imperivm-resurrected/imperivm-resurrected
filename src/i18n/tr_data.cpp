@@ -3485,5 +3485,6 @@ extern const TrRow kTrRows[] = {
 	{"The tournament's map and rules are being set in the room.", "Se están poniendo en la sala el mapa y las reglas del torneo.", "Si stanno impostando nella sala la mappa e le regole del torneo."},
 	{"Your side", "Tu bando", "La tua parte"},
 	{"%s did not come back in 5 minutes: the game is yours. You may leave it whenever you like.", "%s no ha vuelto en 5 minutos: la partida es tuya. Puedes salir cuando quieras.", "%s non è tornato in 5 minuti: la partita è tua. Puoi uscire quando vuoi."},
+	{"Your cup game against the bot closed with the game: it counts as lost.", "Tu partida de copa contra el bot se cerró con el juego: cuenta como perdida.", "La tua partita di coppa contro il bot si è chiusa con il gioco: conta come persa."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

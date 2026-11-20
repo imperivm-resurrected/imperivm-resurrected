@@ -163,6 +163,8 @@ struct Ui {
 	std::vector<int> civChoices;
 	// The colour chosen on the match page, -1 for the room's own.
 	int colorPick = -2;
+	// A game against a staging test bot is being played: its match is in the settings until it ends here.
+	bool botGameMarked = false;
 	// When the page's Ready was last pressed: a second press (a double click) before the room has the first is ignored.
 	DWORD readyAt = 0;
 	// The colour's menu, its wheel, and the player's own colour (0xRRGGBB) when colorPick is kOwnColor.

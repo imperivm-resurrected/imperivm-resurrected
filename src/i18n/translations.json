@@ -3477,5 +3477,6 @@
 {"en":"Preparing the room...","es":"Preparando la sala...","it":"Preparazione della sala..."},
 {"en":"The tournament's map and rules are being set in the room.","es":"Se están poniendo en la sala el mapa y las reglas del torneo.","it":"Si stanno impostando nella sala la mappa e le regole del torneo."},
 {"en":"Your side","es":"Tu bando","it":"La tua parte"},
-{"en":"%s did not come back in 5 minutes: the game is yours. You may leave it whenever you like.","es":"%s no ha vuelto en 5 minutos: la partida es tuya. Puedes salir cuando quieras.","it":"%s non è tornato in 5 minuti: la partita è tua. Puoi uscire quando vuoi."}
+{"en":"%s did not come back in 5 minutes: the game is yours. You may leave it whenever you like.","es":"%s no ha vuelto en 5 minutos: la partida es tuya. Puedes salir cuando quieras.","it":"%s non è tornato in 5 minuti: la partita è tua. Puoi uscire quando vuoi."},
+{"en":"Your cup game against the bot closed with the game: it counts as lost.","es":"Tu partida de copa contra el bot se cerró con el juego: cuenta como perdida.","it":"La tua partita di coppa contro il bot si è chiusa con il gioco: conta come persa."}
 ]
