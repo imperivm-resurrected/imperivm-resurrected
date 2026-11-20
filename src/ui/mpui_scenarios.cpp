@@ -100,9 +100,14 @@ void PaintScenarioThumb(Painter &p, const std::string &path, int x, int y, int s
 			p.Ellipse(cx - dot / 2, cy - dot / 2, dot, dot, seat ? seat(pl) : Rgb(pl.color));
 		}
 	}
+	else if (!d) {
+		// Still being read: a shimmering square, as the content browser's cards, and the spinner where the picture is big.
+		PaintSkeleton(p, x, y, size, size);
+		if (size >= 80) p.Spinner(x + size / 2, y + size / 2, std::max(10, std::min(22, size / 8)), size >= 160 ? 6 : 4, GetTickCount());
+	}
 	else {
 		p.Font(3);
-		p.Text(x, y, size, size, Tr(!d ? "Reading..." : "No preview"), pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.Text(x, y, size, size, Tr("No preview"), pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 	}
 	p.Frame(x, y, size, size, pal::lineStrong);
 }

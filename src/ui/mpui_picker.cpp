@@ -121,7 +121,15 @@ void PaintScenarioPicker(Painter &p, const State &st)
 	g_pickRows = std::max(1, (listH - 4) / rowH);
 	const int scroll = std::max(0, std::min(st.pick.scroll, count - g_pickRows));
 	p.Font(0);
-	if (!listed) p.Text(listX + 16, listY + 12, listW - 32, 28, "Reading the scenarios...", pal::textDim);
+	if (!listed) {
+		// The scenarios still being read: rows of the list's shape (picture, name, details), shimmering.
+		for (int r = 0; r < g_pickRows; r++) {
+			const int ry = listY + 2 + r * rowH, thumb = rowH - 12, tx = listX + 12 + thumb + 12, room = listW - 16 - (tx - listX) - 14;
+			PaintSkeleton(p, listX + 12, ry + 6, thumb, thumb);
+			PaintSkeleton(p, tx, ry + 11, room * (55 + (r * 7 % 4) * 10) / 100, 12);
+			PaintSkeleton(p, tx, ry + 34, room * (40 + (r * 5 % 3) * 10) / 100, 10);
+		}
+	}
 	else if (list.empty()) p.Text(listX + 16, listY + 12, listW - 32, 28, "There are no scenarios for multiplayer", pal::textDim);
 	else if (!count) p.Text(listX + 16, listY + 12, listW - 32, 28, "No map matches the search.", pal::textDim);
 	p.Clip(listX + 1, listY + 1, listW - 2, listH - 2);
