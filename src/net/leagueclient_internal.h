@@ -109,11 +109,13 @@ struct TeamSeat {
 };
 struct TeamGame {
 	int64_t matchId = 0;
+	// A ranked 2v2: the partner's vote to surrender. Any game under the drop rules has the drops' notices.
+	bool team = false;
 	uint32_t clockMs = 0;
 	bool decided = false;
 	std::vector<TeamSeat> seats;
 };
-// False outside a ranked 2v2.
+// False outside a game under the drop rules.
 bool MatchTeamGame(TeamGame &out);
 // The 2v2 module, run from MatchTick on the game thread: the vote and the notices of drops.
 void TeamTick();

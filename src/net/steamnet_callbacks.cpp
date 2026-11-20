@@ -127,6 +127,8 @@ void OnCallback(int id, const void *data)
 		set("pw", g_creating.password.empty() ? "" : Fnv(g_creating.password));
 		set("vis", std::to_string(g_creating.visibility));
 		if (!g_creating.leagueTag.empty()) set("irm", g_creating.leagueTag);
+		// A ranked or a cup game is under the league's drop rules.
+		if (g_creating.leagueTag.rfind("ranked:", 0) == 0 || g_creating.leagueTag.rfind("tournament:", 0) == 0) set("drop", "ai");
 		set("key", OwnKey());
 		PublishMods("");
 		set("irver", ModVersionText());

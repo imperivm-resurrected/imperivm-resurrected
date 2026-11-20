@@ -94,25 +94,11 @@ bool LeagueMatchRanked();
 // A ranked game cannot be surrendered yet: its clock is under minute 5.
 bool LeagueSurrenderLocked();
 
-// A ranked 1v1 whose opponent dropped (2-clasificatoria-sistema.md §8.3): the game stays paused while it waits for them, and after 3
-// minutes the player may claim the win. Nobody takes the place of the one who left.
-struct LeagueDropView {
-	LeagueDropPhase phase = LeagueDropPhase::None;
-	std::string opponent;
-	// What is left of the wait.
-	int64_t leftMs = 0;
-	// The one who left is coming back into the game now (the rejoin runs).
-	bool returning = false;
-};
-LeagueDropView LeagueDropState();
-// Takes the win once the wait is over: the report says "opponent_left", whatever happens before the game is closed.
-bool LeagueDropClaimWin();
-// The wait holds the game's pause; the rejoin of the one who left lets it go just before it brings them in.
-bool LeagueDropHoldsPause();
-void LeagueDropReleasePause();
-
-// A ranked 2v2 being played (its room's tag and mode), the same on every computer from the game's start: whoever drops is played by the
-// AI and may come back within 5 minutes of the game's clock (2-clasificatoria-sistema.md §8.3).
+// A ranked or a cup game being played (its room's tag), the same on every computer from the game's start: the game goes on, whoever
+// drops is played by the AI and may come back within 5 minutes of the game's clock; who does not has left it (2-clasificatoria-sistema.md
+// §8.3, 4-torneos.md §6).
+bool LeagueMatchDropRules();
+// A ranked 2v2 being played (its room's tag and mode), the same on every computer from the game's start.
 bool LeagueMatchRankedTeam();
 // A player of it left on purpose: the AI keeps their army and they are gone for good.
 void LeagueMatchPlayerQuit(int player);

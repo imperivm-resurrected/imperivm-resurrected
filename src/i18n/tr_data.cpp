@@ -3484,5 +3484,6 @@ extern const TrRow kTrRows[] = {
 	{"Preparing the room...", "Preparando la sala...", "Preparazione della sala..."},
 	{"The tournament's map and rules are being set in the room.", "Se están poniendo en la sala el mapa y las reglas del torneo.", "Si stanno impostando nella sala la mappa e le regole del torneo."},
 	{"Your side", "Tu bando", "La tua parte"},
+	{"%s did not come back in 5 minutes: the game is yours. You may leave it whenever you like.", "%s no ha vuelto en 5 minutos: la partida es tuya. Puedes salir cuando quieras.", "%s non è tornato in 5 minuti: la partita è tua. Puoi uscire quando vuoi."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

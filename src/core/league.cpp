@@ -725,10 +725,9 @@ LeagueOutcome LeagueResolve(const std::vector<LeagueSeat> &input, bool desync, c
 		if (s.state == 3) winners.insert(s.team);
 		otherLeft = otherLeft || (s.left && !s.local);
 	}
-	const bool waiting = rules.ranked && otherLeft && !rules.claimable;
 	if (winners.empty() && !desync) {
 		std::set<int> up = standing();
-		if (up.size() != 1 || waiting) {
+		if (up.size() != 1) {
 			for (LeagueSeat &s : seats) {
 				if (s.local && s.state == 1 && !s.left) {
 					s.left = true;

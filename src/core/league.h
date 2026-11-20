@@ -306,15 +306,12 @@ struct LeagueOutcome {
 	// The local player closed a game nobody had won yet.
 	bool localLeft = false;
 };
-// How a ranked 1v1 ends when the other player dropped (2-clasificatoria-sistema.md §8.3): it waits for them, and once the wait is over
-// the one who stayed claims the win ("opponent_left", which the league gives to whoever reports it). Closing the game before that is
-// leaving it too, as any undecided game closed ("disconnect").
+// How a league game ends when players dropped.
 struct LeagueDropRules {
 	bool ranked = false;
-	// The wait for the one who left is over (or the win was claimed).
-	bool claimable = false;
-	// A ranked 2v2 (§8.3): the AI plays for whoever drops, and only those gone for good (`left`: they quit, or 5 minutes passed) are
-	// out. A team whose humans all left loses: closing the game then is the other team's win ("opponent_left").
+	// The drop rules of a ranked or a cup game (2-clasificatoria-sistema.md §8.3, 4-torneos.md §6): the AI plays for whoever drops, and
+	// only those gone for good (`left`: they quit, or 5 minutes passed) are out. A side whose humans all left loses: the game is the other
+	// side's ("opponent_left"), whether they play on or close it.
 	bool team = false;
 };
 // Who won: the victorious team, or the only team still standing. A game that closed undecided on this computer, without a desync,

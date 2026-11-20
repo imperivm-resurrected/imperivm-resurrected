@@ -437,23 +437,33 @@ void Resolve()
 void ResolveRankedDrop()
 {
 	std::vector<LeagueSeat> seats = {Seat(0, 11, 0, 1, true), Seat(1, 22, 1, 1)};
+	// People: the drop rules count only those.
+	for (LeagueSeat &s : seats) s.human = true;
 	seats[1].left = true;
 	LeagueDropRules rules;
 	rules.ranked = true;
 
-	// The wait for the one who left is over (or the win was claimed): this player wins, by "opponent_left".
-	rules.claimable = true;
+	// Under the drop rules a 1v1's opponent gone for good (`left`: 5 minutes passed) leaves the game to this player, by "opponent_left".
+	rules.team = true;
 	LeagueOutcome o = LeagueResolve(seats, false, rules);
 	CHECK(!o.localLeft);
 	CHECK_EQ(o.results, std::vector<std::string>({"win", "left"}));
 	CHECK_EQ(o.endedBy, std::string("opponent_left"));
 
-	// Closing the game while still waiting is leaving it too: no win, and not a claim.
-	rules.claimable = false;
+	// This player gone for good while the other stays: they left it.
+	seats[0].left = true;
+	seats[1].left = false;
+	o = LeagueResolve(seats, false, rules);
+	CHECK_EQ(o.results, std::vector<std::string>({"left", "win"}));
+
+	// Closing the game while the opponent is still within their 5 minutes is leaving it: the game is theirs.
+	seats[0].left = false;
 	o = LeagueResolve(seats, false, rules);
 	CHECK(o.localLeft);
-	CHECK_EQ(o.results, std::vector<std::string>({"left", "left"}));
+	CHECK_EQ(o.results, std::vector<std::string>({"left", "win"}));
 	CHECK_EQ(o.endedBy, std::string("disconnect"));
+	seats[1].left = true;
+	rules.team = false;
 
 	// A normal game keeps its rules: the one who stayed wins, by a drop.
 	o = LeagueResolve(seats, false);

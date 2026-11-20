@@ -196,7 +196,9 @@ void TeamTick()
 				return false;
 			};
 			if (s.gone && !s.quit && !told(g_vote.gonesTold, s.index)) {
-				toasts.push_back(TrFmt("%s did not come back: they left the game, and the AI keeps their army.", {NameOf(&s, "A player")}));
+				// A 1v1's opponent gone for good leaves the game to this player.
+				if (g.team) toasts.push_back(TrFmt("%s did not come back: they left the game, and the AI keeps their army.", {NameOf(&s, "A player")}));
+				else toasts.push_back(TrFmt("%s did not come back in 5 minutes: the game is yours. You may leave it whenever you like.", {NameOf(&s, "Your opponent")}));
 			}
 			if (!s.connected && !s.gone) told(g_vote.dropsTold, s.index);
 			else if (s.connected && !s.gone) {
@@ -235,7 +237,7 @@ bool LeagueVoteCommand(void *cmd, const char *text, unsigned size)
 LeagueSurrenderAsk LeagueSurrenderPress()
 {
 	TeamGame g;
-	if (!MatchTeamGame(g) || g.decided) return LeagueSurrenderAsk::NotTeam;
+	if (!MatchTeamGame(g) || g.decided || !g.team) return LeagueSurrenderAsk::NotTeam;
 	LeagueSurrenderStep step = LeagueSurrenderStep::TooEarly;
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
@@ -257,7 +259,7 @@ LeagueSurrenderAsk LeagueSurrenderPress()
 void LeagueVoteAnswer(bool yes)
 {
 	TeamGame g;
-	if (!MatchTeamGame(g)) return;
+	if (!MatchTeamGame(g) || !g.team) return;
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
 		const TeamSeat *me = Local(g);
@@ -285,7 +287,7 @@ LeagueTeamView LeagueTeamState()
 	}
 	std::lock_guard<std::mutex> lock(g_mx);
 	const LeagueVote &vote = g_vote.vote;
-	if (vote.open && me) {
+	if (vote.open && me && g.team) {
 		v.vote = vote.proposer == me->index ? LeagueTeamVote::Proposed : LeagueTeamVote::Asked;
 		v.voteLeftMs = LeagueVoteLeftMs(vote, GameClock());
 	}

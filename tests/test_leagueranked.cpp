@@ -720,41 +720,6 @@ void PlaceAndLines()
 	CHECK(LeagueSurrenderAllowed(false, 0));
 }
 
-void DropWait()
-{
-	LeagueDropWait w;
-	CHECK(LeagueDropPhaseAt(w, 0) == LeagueDropPhase::None);
-	CHECK_EQ(static_cast<int>(LeagueDropLeftMs(w, 0)), 0);
-	CHECK(!LeagueDropClaim(w, 0));
-
-	// The opponent leaves at minute 7 of the game: 3 minutes of this computer's clock to come back.
-	LeagueDropGone(w, 10000, 420000);
-	CHECK(LeagueDropPhaseAt(w, 10000) == LeagueDropPhase::Waiting);
-	CHECK_EQ(static_cast<int>(w.dropAtMs), 420000);
-	CHECK_EQ(static_cast<int>(LeagueDropLeftMs(w, 10000)), 180000);
-	CHECK_EQ(LeagueClockText(LeagueDropLeftMs(w, 29000) + 999), std::string("2:41"));
-	CHECK(!LeagueDropClaim(w, 189999));
-	CHECK(LeagueDropPhaseAt(w, 189999) == LeagueDropPhase::Waiting);
-
-	// They come back: the game goes on, and a new drop waits the whole time again.
-	LeagueDropBack(w);
-	CHECK(LeagueDropPhaseAt(w, 500000) == LeagueDropPhase::None);
-	LeagueDropGone(w, 600000, 900000);
-	CHECK_EQ(static_cast<int>(w.dropAtMs), 900000);
-	CHECK(LeagueDropPhaseAt(w, 779999) == LeagueDropPhase::Waiting);
-	CHECK(LeagueDropPhaseAt(w, 780000) == LeagueDropPhase::Claimable);
-	CHECK_EQ(static_cast<int>(LeagueDropLeftMs(w, 900000)), 0);
-
-	// The claim, once the wait is over; afterwards nothing changes it.
-	CHECK(LeagueDropClaim(w, 780000));
-	CHECK(LeagueDropPhaseAt(w, 780000) == LeagueDropPhase::Claimed);
-	CHECK(!LeagueDropClaim(w, 790000));
-	LeagueDropBack(w);
-	LeagueDropGone(w, 800000, 1);
-	CHECK(LeagueDropPhaseAt(w, 800000) == LeagueDropPhase::Claimed);
-	CHECK_EQ(static_cast<int>(w.dropAtMs), 900000);
-}
-
 void SeatsFromTicket()
 {
 	LeagueMatchTicket t;
@@ -805,7 +770,6 @@ int main()
 	StatsAndClock();
 	BanAndPlacement();
 	PlaceAndLines();
-	DropWait();
 	SeatsFromTicket();
 	return test::Summary("leagueranked");
 }

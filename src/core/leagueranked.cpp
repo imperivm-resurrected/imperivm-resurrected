@@ -588,41 +588,6 @@ bool LeagueSurrenderAllowed(bool ranked, uint32_t gameMs)
 	return !ranked || gameMs >= kLeagueSurrenderFromMs;
 }
 
-void LeagueDropGone(LeagueDropWait &w, int64_t nowMs, uint32_t gameMs)
-{
-	if (w.claimed) return;
-	w.gone = true;
-	w.since = nowMs;
-	w.dropAtMs = gameMs;
-}
-
-void LeagueDropBack(LeagueDropWait &w)
-{
-	if (w.claimed) return;
-	w.gone = false;
-	w.since = 0;
-}
-
-bool LeagueDropClaim(LeagueDropWait &w, int64_t nowMs)
-{
-	if (LeagueDropPhaseAt(w, nowMs) != LeagueDropPhase::Claimable) return false;
-	w.claimed = true;
-	return true;
-}
-
-LeagueDropPhase LeagueDropPhaseAt(const LeagueDropWait &w, int64_t nowMs)
-{
-	if (w.claimed) return LeagueDropPhase::Claimed;
-	if (!w.gone) return LeagueDropPhase::None;
-	return nowMs - w.since >= kLeagueDropWaitMs ? LeagueDropPhase::Claimable : LeagueDropPhase::Waiting;
-}
-
-int64_t LeagueDropLeftMs(const LeagueDropWait &w, int64_t nowMs)
-{
-	if (!w.gone || w.claimed) return 0;
-	return std::max<int64_t>(0, kLeagueDropWaitMs - (nowMs - w.since));
-}
-
 void LeagueSeatsFromTicket(std::vector<LeagueSeat> &seats, const LeagueMatchTicket &t, uint64_t ownId)
 {
 	const LeaguePlayerCard *other = LeagueTicketPlayer(t, std::to_string(ownId), true);

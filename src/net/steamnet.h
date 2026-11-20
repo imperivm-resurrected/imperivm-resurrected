@@ -76,6 +76,9 @@ struct OnlineLobby {
 	long long startedMs = 0;
 	// "irm": what a ranked or tournament room is for the league server, "ranked:<id>" or "tournament:<id>".
 	std::string leagueTag;
+	// "drop" = "ai": the game is under the league's drop rules (the AI plays for whoever drops while they come back). The spectators'
+	// room copies it, so a broadcast replays the drops as the game ran them.
+	bool dropAi = false;
 };
 
 struct OnlineMember {

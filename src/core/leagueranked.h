@@ -277,26 +277,6 @@ bool LeagueImperatorLineAfter(const LeagueBoardRow &row, const LeagueBoardRow *n
 constexpr uint32_t kLeagueSurrenderFromMs = 5 * 60 * 1000;
 bool LeagueSurrenderAllowed(bool ranked, uint32_t gameMs);
 
-// A ranked 1v1 whose opponent dropped waits 3 minutes for them, paused (2-clasificatoria-sistema.md §8.3); then the one who stayed may
-// claim the win. The times are this computer's clock in ms: the game's own does not run while it is paused.
-constexpr int64_t kLeagueDropWaitMs = 3 * 60 * 1000;
-enum class LeagueDropPhase { None, Waiting, Claimable, Claimed };
-struct LeagueDropWait {
-	bool gone = false, claimed = false;
-	int64_t since = 0;
-	// The game's time when they left, for the report.
-	uint32_t dropAtMs = 0;
-};
-// The opponent left at `gameMs` of the game (leaving again starts the wait again).
-void LeagueDropGone(LeagueDropWait &w, int64_t nowMs, uint32_t gameMs);
-// They came back: the game goes on.
-void LeagueDropBack(LeagueDropWait &w);
-// The player claims the win: only once the wait is over. True when it was taken.
-bool LeagueDropClaim(LeagueDropWait &w, int64_t nowMs);
-LeagueDropPhase LeagueDropPhaseAt(const LeagueDropWait &w, int64_t nowMs);
-// What is left of the wait, never negative.
-int64_t LeagueDropLeftMs(const LeagueDropWait &w, int64_t nowMs);
-
 // The accounts of a ranked 1v1 that the game's names could not tell, from its ticket: this computer's seat is `ownId` and the other
 // human is the ticket's other player.
 void LeagueSeatsFromTicket(std::vector<LeagueSeat> &seats, const LeagueMatchTicket &t, uint64_t ownId);

@@ -555,7 +555,7 @@ void MirrorSpectators()
 	if (g_spectate.wanted && !g_spectate.lobby && !g_spectate.creating && g_lobby) OpenSpectators(g_spectate.delay, g_spectate.visibility);
 	if (!g_spectate.lobby) return;
 	if (!OwnLobby()) return;
-	static const char *const kCopy[] = {"name", "host", "hostid", "map", "mode", "key", "scen", "pw", "vis", "irver", "mods", "slots", "plist", "pids", "opts", "rules", "save", "playing", "modsv", "nopt"};
+	static const char *const kCopy[] = {"name", "host", "hostid", "map", "mode", "key", "scen", "pw", "vis", "irver", "mods", "slots", "plist", "pids", "opts", "rules", "save", "playing", "modsv", "nopt", "drop"};
 	for (const char *k : kCopy) SpecSet(k, Data(g_lobby, k));
 	SpecSet("main", std::to_string(g_lobby));
 	SpecSet("delay", std::to_string(g_spectate.delay));

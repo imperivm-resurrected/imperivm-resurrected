@@ -200,6 +200,7 @@ OnlineLobby ReadLobby(uint64 id)
 	l.started = _atoi64(Data(id, "t0").c_str());
 	l.startedMs = _atoi64(Data(id, "t0ms").c_str());
 	l.leagueTag = Data(id, "irm");
+	l.dropAi = Data(id, "drop") == "ai";
 	l.players = S.SteamAPI_ISteamMatchmaking_GetNumLobbyMembers(g_steam.mm, id);
 	l.maxPlayers = S.SteamAPI_ISteamMatchmaking_GetLobbyMemberLimit(g_steam.mm, id);
 	{
