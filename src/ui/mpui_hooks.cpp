@@ -202,6 +202,9 @@ void HideGameReleaseLabel(void *dlg)
 int __fastcall HookMainMenuOnShow(void *dlg)
 {
 	const int r = g_origMainMenuOnShow(dlg);
+	// Known from its first showing, not its first message: after a game the menu is shown with no click yet, and the cup page that
+	// follows a cup game opens over it (StepAfterGame) only once the mod knows it.
+	g_mainMenu = dlg;
 	HideGameReleaseLabel(dlg);
 	MainMenuUiShown(dlg);
 	return r;
