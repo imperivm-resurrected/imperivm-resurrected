@@ -276,9 +276,15 @@ void PaintSubmenu(Painter &p, const View &v, const Layout &l, unsigned since)
 		const float t = shown(i + 1);
 		const int x = l.subX - slide(t);
 		Faded(p, l.subX - kSlide, y, kSubW + kSlide, kSubRowH, t, [&] {
+			// The row under the pointer (or the keys) stands out: a dark red band with a red edge, and its name steps in.
+			if (lit) {
+				p.Fill(x - 16, y + 1, kSubW + 16, kSubRowH - 1, RGB(0x2e, 0x12, 0x14));
+				p.Fill(x - 16, y + 1, 3, kSubRowH - 1, pal::red);
+			}
 			p.Fill(x, y, kSubW, 1, pal::hairline);
 			SelectObject(p.dc, g_f.sub);
-			p.Text(x, y, kSubW - 36, kSubRowH, item.label, !item.enabled ? pal::disabled : lit ? pal::text : pal::textDim);
+			const int step = lit ? 10 : 0;
+			p.Text(x + step, y, kSubW - 36 - step, kSubRowH, item.label, !item.enabled ? pal::disabled : lit ? pal::text : pal::textDim);
 			if (lit) p.Text(x + kSubW - 24, y, 24, kSubRowH, kChevron, pal::redText, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 		});
 		if (item.enabled && v.interactive && v.subOpen) p.AddHit(l.subX, y, kSubW, kSubRowH, kActSub, i);
