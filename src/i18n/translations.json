@@ -2115,7 +2115,6 @@
 {"en":"You left your ranked match's room. Go back to it, or cancel the match, from Ranked.","es":"Has salido de la sala de tu clasificatoria. Vuelve a ella o cancela la partida desde Clasificatoria.","it":"Sei uscito dalla stanza della tua classificata. Tornaci o annulla la partita da Classificata."},
 {"en":"Champion of the cup","es":"Campeón de la copa","it":"Campione della coppa"},
 {"en":"No champion","es":"Sin campeón","it":"Nessun campione"},
-{"en":"The champions of the cups will show here.","es":"Aquí saldrán los campeones de las copas.","it":"Qui compariranno i campioni delle coppe."},
 {"en":"Since %s","es":"Desde las %s","it":"Dalle %s"},
 {"en":"Bye","es":"Pasa","it":"Passa"},
 {"en":"Straight through","es":"Pase directo","it":"Passaggio diretto"},
@@ -3468,5 +3467,6 @@
 {"en":"The tournament's map and rules are being set in the room.","es":"Se están poniendo en la sala el mapa y las reglas del torneo.","it":"Si stanno impostando nella sala la mappa e le regole del torneo."},
 {"en":"Your side","es":"Tu bando","it":"La tua parte"},
 {"en":"%s did not come back in 5 minutes: the game is yours. You may leave it whenever you like.","es":"%s no ha vuelto en 5 minutos: la partida es tuya. Puedes salir cuando quieras.","it":"%s non è tornato in 5 minuti: la partita è tua. Puoi uscire quando vuoi."},
-{"en":"Your cup game against the bot closed with the game: it counts as lost.","es":"Tu partida de copa contra el bot se cerró con el juego: cuenta como perdida.","it":"La tua partita di coppa contro il bot si è chiusa con il gioco: conta come persa."}
+{"en":"Your cup game against the bot closed with the game: it counts as lost.","es":"Tu partida de copa contra el bot se cerró con el juego: cuenta como perdida.","it":"La tua partita di coppa contro il bot si è chiusa con il gioco: conta come persa."},
+{"en":"The champions of the official cups will show here.","es":"Aquí saldrán los campeones de las copas oficiales.","it":"Qui compariranno i campioni delle coppe ufficiali."}
 ]

@@ -635,13 +635,16 @@ void PaintChampionsCard(Painter &p, const State &st, const TourneyListsView &lis
 	PaintCaps(p, x + pad, y + 22, w - 2 * pad, 20, "Latest champions", pal::caption);
 	int cy = y + 56;
 	int shown = 0;
+	// The official cups only: theirs are the champions the league keeps (the phalerae). Each row opens the cup's final result.
 	for (const TourneySummary &t : lists.finished) {
+		if (!t.official) continue;
 		if (shown >= 4 || cy + 44 > y + h - 12) break;
+		const bool hot = p.Hover(x + pad - 8, cy - 6, w - 2 * pad + 16, 56, mx, my);
+		if (hot) p.Fill(x + pad - 8, cy - 6, w - 2 * pad + 16, 56, pal::selected);
 		const auto page = LeagueTourneyPage(t.slug, 300000);
 		const TourneyEntrant *champ = page->loaded ? TourneyEntrantOf(page->detail, TourneyChampion(page->detail)) : nullptr;
-		if (t.official) DrawLeaguePhalera(p, x + pad, cy + 4, 30, LeagueMetal::Gold);
-		else DrawCupCrown(p, x + pad, cy + 4, 30, false);
-		const int tx = x + pad + 44, tagW = t.official ? 80 : 0;
+		DrawLeaguePhalera(p, x + pad, cy + 4, 30, LeagueMetal::Gold);
+		const int tx = x + pad + 44, tagW = 30;
 		p.Font(1);
 		if (champ && t.Teams()) {
 			p.raw = true;
@@ -659,14 +662,15 @@ void PaintChampionsCard(Painter &p, const State &st, const TourneyListsView &lis
 		p.raw = true;
 		p.Text(tx, cy + 22, w - pad - tx + x - tagW, 20, t.name, pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.raw = false;
-		if (t.official) PaintTag(p, x + w - pad - 72, cy + 8, "Official", pal::edgeHot, pal::textDim, true);
-		p.AddHit(x + pad, cy, w - 2 * pad, 44, kTourney, ArgOf(kSubChampion, t.id));
+		// The arrow of a row that opens: its result, the podium and the bracket.
+		p.ArrowRight(x + w - pad - 12, cy + 15, 8, 14, hot ? pal::text : pal::caption);
+		p.AddHit(x + pad - 8, cy - 6, w - 2 * pad + 16, 56, kTourney, ArgOf(kSubChampion, t.id));
 		cy += 58;
 		shown++;
 	}
 	if (!shown) {
 		p.Font(0);
-		p.Text(x + pad, cy, w - 2 * pad, 26, "The champions of the cups will show here.", pal::textDim);
+		p.TextWrapped(x + pad, cy, w - 2 * pad, 52, "The champions of the official cups will show here.", pal::textDim);
 	}
 }
 

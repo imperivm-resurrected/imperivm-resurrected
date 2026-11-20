@@ -2122,7 +2122,6 @@ extern const TrRow kTrRows[] = {
 	{"You left your ranked match's room. Go back to it, or cancel the match, from Ranked.", "Has salido de la sala de tu clasificatoria. Vuelve a ella o cancela la partida desde Clasificatoria.", "Sei uscito dalla stanza della tua classificata. Tornaci o annulla la partita da Classificata."},
 	{"Champion of the cup", "Campeón de la copa", "Campione della coppa"},
 	{"No champion", "Sin campeón", "Nessun campione"},
-	{"The champions of the cups will show here.", "Aquí saldrán los campeones de las copas.", "Qui compariranno i campioni delle coppe."},
 	{"Since %s", "Desde las %s", "Dalle %s"},
 	{"Bye", "Pasa", "Passa"},
 	{"Straight through", "Pase directo", "Passaggio diretto"},
@@ -3476,5 +3475,6 @@ extern const TrRow kTrRows[] = {
 	{"Your side", "Tu bando", "La tua parte"},
 	{"%s did not come back in 5 minutes: the game is yours. You may leave it whenever you like.", "%s no ha vuelto en 5 minutos: la partida es tuya. Puedes salir cuando quieras.", "%s non è tornato in 5 minuti: la partita è tua. Puoi uscire quando vuoi."},
 	{"Your cup game against the bot closed with the game: it counts as lost.", "Tu partida de copa contra el bot se cerró con el juego: cuenta como perdida.", "La tua partita di coppa contro il bot si è chiusa con il gioco: conta come persa."},
+	{"The champions of the official cups will show here.", "Aquí saldrán los campeones de las copas oficiales.", "Qui compariranno i campioni delle coppe ufficiali."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);
