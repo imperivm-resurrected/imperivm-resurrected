@@ -140,7 +140,9 @@ TourneySettings TourneyExplicitSettings(const TourneySettings &s);
 struct TourneyRequirements {
 	int minGames = 0;
 	LeagueTier maxTier = LeagueTier::None;
-	bool Any() const { return minGames > 0 || maxTier != LeagueTier::None; }
+	// Official cups only (the season final): the highest place on the season's ladder that may sign up; 0 = any. The cup form never sets it.
+	int maxPlace = 0;
+	bool Any() const { return minGames > 0 || maxTier != LeagueTier::None || maxPlace > 0; }
 };
 constexpr int kTourneyMinGamesMax = 100;
 // {minGames, maxTier: null | "recruit"..."legate"}.

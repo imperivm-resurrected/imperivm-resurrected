@@ -624,6 +624,7 @@ Json LeagueReportJson(const LeagueReport &r)
 	Json hashes = Json::MakeArray();
 	for (uint32_t h : r.hashes) hashes.arr.push_back(Json::MakeNumber(h));
 	o.Set("hashes", hashes);
+	if (r.stats.type == Json::Object) o.Set("stats", r.stats);
 	return o;
 }
 

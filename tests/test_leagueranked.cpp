@@ -69,6 +69,35 @@ void Season()
 	CHECK_EQ(Pct(LeagueSeasonElapsed(s, 1000 + 43200000)), 50);
 	CHECK_EQ(Pct(LeagueSeasonElapsed(s, 999999999)), 100);
 
+	{
+		const int64_t day = 86400000;
+		LeagueSeason t;
+		t.number = 3;
+		t.active = true;
+		t.startsAt = 100 * day;
+		t.endsAt = 190 * day;
+		LeagueSeasonTold told;
+		CHECK(LeagueSeasonNoticeFor(t, 101 * day, told) == LeagueSeasonNotice::Started);
+		CHECK(LeagueSeasonNoticeFor(t, 101 * day + 1, told) == LeagueSeasonNotice::None);
+		CHECK(LeagueSeasonNoticeFor(t, 150 * day, told) == LeagueSeasonNotice::None);
+		CHECK(LeagueSeasonNoticeFor(t, 184 * day, told) == LeagueSeasonNotice::WeekLeft);
+		CHECK(LeagueSeasonNoticeFor(t, 185 * day, told) == LeagueSeasonNotice::None);
+		CHECK(LeagueSeasonNoticeFor(t, 189 * day + 1, told) == LeagueSeasonNotice::LastDay);
+		CHECK(LeagueSeasonNoticeFor(t, 189 * day + 2, told) == LeagueSeasonNotice::None);
+		CHECK(LeagueSeasonNoticeFor(t, 190 * day, told) == LeagueSeasonNotice::None);
+		// Back after a long time on the last day: only the last day is told; and past the first 3 days nobody is told it started.
+		LeagueSeasonTold late;
+		CHECK(LeagueSeasonNoticeFor(t, 104 * day, late) == LeagueSeasonNotice::None);
+		CHECK(LeagueSeasonNoticeFor(t, 189 * day + 1, late) == LeagueSeasonNotice::LastDay);
+		CHECK_EQ(late.weekLeft, 3);
+		// The next season is told again; one that is not being played is not.
+		t.number = 4;
+		CHECK(LeagueSeasonNoticeFor(t, 101 * day, told) == LeagueSeasonNotice::Started);
+		t.active = false;
+		LeagueSeasonTold none;
+		CHECK(LeagueSeasonNoticeFor(t, 101 * day, none) == LeagueSeasonNotice::None);
+	}
+
 	CHECK_EQ(LeagueLangCode("spanish"), std::string("es"));
 	CHECK_EQ(LeagueLangCode("Italian"), std::string("it"));
 	CHECK_EQ(LeagueLangCode("english"), std::string("en"));

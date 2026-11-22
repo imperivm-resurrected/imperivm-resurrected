@@ -489,6 +489,7 @@ TourneyRequirements TourneyRequirementsFromJson(const Json *v)
 	const Json *tier = v->Get("maxTier");
 	r.maxTier = tier && tier->type == Json::String ? LeagueTierFromId(tier->str) : LeagueTier::None;
 	if (!TourneyMaxTierValid(r.maxTier)) r.maxTier = LeagueTier::None;
+	r.maxPlace = std::max(0, v->GetInt("maxPlace"));
 	return r;
 }
 

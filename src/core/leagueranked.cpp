@@ -240,6 +240,25 @@ std::string LeagueSeasonName(const LeagueSeason &s, const std::string &lang)
 	return it != s.names.end() ? it->second : s.name;
 }
 
+LeagueSeasonNotice LeagueSeasonNoticeFor(const LeagueSeason &s, int64_t nowMs, LeagueSeasonTold &told)
+{
+	if (!s.active || nowMs < s.startsAt || nowMs >= s.endsAt) return LeagueSeasonNotice::None;
+	const int64_t day = 86400000, left = s.endsAt - nowMs;
+	if (left <= day) {
+		if (told.lastDay == s.number) return LeagueSeasonNotice::None;
+		told.lastDay = told.weekLeft = told.started = s.number;
+		return LeagueSeasonNotice::LastDay;
+	}
+	if (left <= 7 * day) {
+		if (told.weekLeft == s.number) return LeagueSeasonNotice::None;
+		told.weekLeft = told.started = s.number;
+		return LeagueSeasonNotice::WeekLeft;
+	}
+	if (nowMs - s.startsAt > 3 * day || told.started == s.number) return LeagueSeasonNotice::None;
+	told.started = s.number;
+	return LeagueSeasonNotice::Started;
+}
+
 int LeagueDaysLeft(int64_t endsAt, int64_t nowMs)
 {
 	if (endsAt <= nowMs) return 0;

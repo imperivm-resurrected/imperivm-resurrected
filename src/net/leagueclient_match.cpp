@@ -21,6 +21,7 @@
 #include "core/guard.h"
 #include "core/json.h"
 #include "core/league.h"
+#include "core/leaguestats.h"
 #include "core/leagueranked.h"
 #include "core/leagueteam.h"
 #include "core/log.h"
@@ -113,6 +114,8 @@ std::string WithoutAiSuffix(const std::string &name)
 
 std::mutex g_syncMx;
 LeagueCheckpoints g_checkpoints;
+// The players' values at ticks of a ranked or tournament game, read where the checkpoints are (LeagueSyncAfterAdvance).
+LeagueTickStats g_tickStats;
 
 std::string TagsPath()
 {
@@ -517,6 +520,18 @@ bool BuildReport(const Match &m, LeagueReport &r, std::string &why)
 	{
 		std::lock_guard<std::mutex> lock(g_syncMx);
 		r.hashes = g_checkpoints.Hashes();
+		if (r.kind != LeagueMatchKind::Normal && !g_tickStats.Empty()) {
+			std::vector<LeagueStatsSeat> statSeats;
+			for (const LeagueSeat &s : seats) {
+				LeagueStatsSeat x;
+				x.index = s.index;
+				x.steamId = s.steamId ? std::to_string(s.steamId) : std::string();
+				x.name = s.name;
+				x.team = s.team;
+				statSeats.push_back(x);
+			}
+			r.stats = LeagueStatsJson(g_tickStats, statSeats);
+		}
 	}
 	if (outcome.localLeft) LogI("league", "this player left the game before it was decided");
 	return true;
@@ -799,4 +814,17 @@ void LeagueSyncAfterAdvance(void *transport)
 	if (!tick) return;
 	std::lock_guard<std::mutex> lock(g_syncMx);
 	g_checkpoints.Add(tick - 1, *reinterpret_cast<const uint32_t *>(t + kTransportPrevHash));
+	// The stats of a ranked or tournament game, at the same ticks on every computer: the league compares the two reports' numbers.
+	if (!g_dropNow || !g_tickStats.Due(tick)) return;
+	StatSample samples[kStatMaxPlayers];
+	bool active[kStatMaxPlayers];
+	if (!GameStatsReadAll(samples, active)) return;
+	for (int i = 0; i < kStatMaxPlayers; i++) {
+		if (!active[i]) continue;
+		LeagueStatsPoint p;
+		p.tick = tick;
+		p.ms = samples[i].ms;
+		std::copy(std::begin(samples[i].values), std::end(samples[i].values), std::begin(p.values));
+		g_tickStats.Add(i, p);
+	}
 }

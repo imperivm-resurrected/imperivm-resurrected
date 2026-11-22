@@ -178,28 +178,37 @@ bool ReadFacts(const char *game, int index, GameRecordFacts &out, char *unit, si
 	}
 }
 
+// One player's values now; false for a seat nobody plays, or a record that cannot be read.
+bool ReadSample(const char *game, int index, uint32_t clock, RawPlayer &raw, StatSample &s)
+{
+	if (!ReadPlayer(game, index, raw) || !raw.active) return false;
+	s = StatSample();
+	s.ms = clock;
+	s.values[kStatInGame] = raw.playing ? 1 : 0;
+	int killRatio = 100, strength = 0;
+	if (!ReadRecord(game, index, s, killRatio, strength)) return false;
+	// A player out of the game keeps the strength the game stored when they lost; the totals would find nothing.
+	Totals totals;
+	if (raw.playing && ReadTotals(index, totals)) {
+		s.values[kStatGoldHeld] = totals.gold;
+		s.values[kStatFoodHeld] = totals.food;
+		strength = totals.cityPoints + static_cast<int>((static_cast<unsigned>(totals.food) >> 1) + totals.unitsInside + totals.unitsOutside + totals.gold) / 100;
+	}
+	s.values[kStatArmyStrength] = strength;
+	// As CPlayerStats::CalcPowerScore.
+	s.values[kStatScore] = strength * killRatio / 100 + s.values[kStatDevelopment];
+	return true;
+}
+
 void Sample(const char *game, uint32_t clock)
 {
 	bool active[kStatMaxPlayers] = {};
 	for (int index = 0; index < kStatMaxPlayers; index++) {
 		RawPlayer raw;
+		StatSample s;
 		if (!ReadPlayer(game, index, raw) || !raw.active) continue;
 		active[index] = true;
-		StatSample s;
-		s.ms = clock;
-		s.values[kStatInGame] = raw.playing ? 1 : 0;
-		int killRatio = 100, strength = 0;
-		if (!ReadRecord(game, index, s, killRatio, strength)) continue;
-		// A player out of the game keeps the strength the game stored when they lost; the totals would find nothing.
-		Totals totals;
-		if (raw.playing && ReadTotals(index, totals)) {
-			s.values[kStatGoldHeld] = totals.gold;
-			s.values[kStatFoodHeld] = totals.food;
-			strength = totals.cityPoints + static_cast<int>((static_cast<unsigned>(totals.food) >> 1) + totals.unitsInside + totals.unitsOutside + totals.gold) / 100;
-		}
-		s.values[kStatArmyStrength] = strength;
-		// As CPlayerStats::CalcPowerScore.
-		s.values[kStatScore] = strength * killRatio / 100 + s.values[kStatDevelopment];
+		if (!ReadSample(game, index, clock, raw, s)) continue;
 		g_history.Add(index, s);
 		StatsPlayerInfo &info = g_info[index];
 		info.index = index;
@@ -301,6 +310,23 @@ void GameStatsTick()
 	if (!advanced || firstTick) return;
 	if (g_sampled && clock - g_lastSample < g_history.IntervalMs()) return;
 	Sample(game, clock);
+}
+
+int GameStatsReadAll(StatSample out[kStatMaxPlayers], bool active[kStatMaxPlayers])
+{
+	int n = 0;
+	for (int index = 0; index < kStatMaxPlayers; index++) active[index] = false;
+	char *game = *reinterpret_cast<char **>(addr::kGame);
+	if (!game || !*reinterpret_cast<void **>(addr::kMap)) return 0;
+	uint32_t clock = 0;
+	if (!ReadClock(game, clock)) return 0;
+	for (int index = 0; index < kStatMaxPlayers; index++) {
+		RawPlayer raw;
+		if (!ReadSample(game, index, clock, raw, out[index])) continue;
+		active[index] = true;
+		n++;
+	}
+	return n;
 }
 
 void GameStatsSampleNow()

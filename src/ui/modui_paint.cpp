@@ -10,6 +10,18 @@
 
 using namespace modui_impl;
 
+namespace {
+// The tick of a marked pack's box in the unit square: two strokes 0.15 wide, drawn with smooth edges.
+double SegmentGap(double x, double y, double ax, double ay, double bx, double by)
+{
+	const double dx = bx - ax, dy = by - ay;
+	const double t = std::max(0.0, std::min(1.0, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy)));
+	const double px = ax + t * dx - x, py = ay + t * dy - y;
+	return std::sqrt(px * px + py * py);
+}
+bool InUnitTick(double x, double y) { return std::min(SegmentGap(x, y, 0.22, 0.53, 0.42, 0.72), SegmentGap(x, y, 0.42, 0.72, 0.79, 0.30)) <= 0.075; }
+}
+
 namespace modui_impl {
 int DropCurrent(const State &st)
 {
@@ -1420,11 +1432,14 @@ void PaintInstalled(Painter &p, const State &st)
 
 		const int boxY = y + (kModRowH - 20) / 2;
 		const bool boxHov = p.Hover(boxX - 10, y, 40, kModRowH, mx, my);
-		p.Fill(boxX, boxY, 20, 20, pal::bg);
-		p.Frame(boxX, boxY, 20, 20, boxHov ? pal::text : pal::edgeHot);
+		// Marked: the red of the switches with a white tick; unmarked: an empty box that lights up under the mouse.
 		if (marked) {
-			p.Line(boxX + 4, boxY + 10, boxX + 8, boxY + 15, pal::redText, 2);
-			p.Line(boxX + 8, boxY + 15, boxX + 16, boxY + 5, pal::redText, 2);
+			p.Fill(boxX, boxY, 20, 20, boxHov ? pal::redPressed : pal::red);
+			p.Shape(boxX, boxY, 20, 20, InUnitTick, pal::onRed);
+		}
+		else {
+			p.Fill(boxX, boxY, 20, 20, pal::field);
+			p.Frame(boxX, boxY, 20, 20, boxHov ? pal::edgeHot : pal::edge);
 		}
 		p.AddHit(boxX - 10, y, 40, kModRowH, kMark, i);
 
