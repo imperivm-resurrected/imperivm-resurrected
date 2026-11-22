@@ -199,6 +199,7 @@ void PaintRowLabel(Painter &p, const Metrics &m, const Row &r, int x, int y, int
 	}
 	if (hint) {
 		p.Font(3);
+		// The label and the hint's first line are centred in the row; a second line takes what RowHeight added under it.
 		p.TextWrapped(x, labelY + m.hintY, w, m.hintH * kHintLines, r.hint, pal::textDim);
 	}
 }
@@ -335,11 +336,14 @@ int PaintCard(Painter &p, const Metrics &m, const Card &c, const View &v, int x,
 	return h;
 }
 
-// How tall a column of cards is with rows `rowH` tall.
-int ColumnHeight(const Metrics &m, const std::vector<Card> &cards, int rowH)
+// How tall a column of cards `w` wide is with rows `rowH` tall, and the second lines of the hints that wrap (RowHeight).
+int ColumnHeight(Painter &p, const Metrics &m, const std::vector<Card> &cards, int rowH, int w)
 {
 	int h = 0;
-	for (size_t i = 0; i < cards.size(); i++) h += (i ? m.cardGap : 0) + m.cardHead + static_cast<int>(cards[i].rows.size()) * rowH + 4;
+	for (size_t i = 0; i < cards.size(); i++) {
+		h += (i ? m.cardGap : 0) + m.cardHead + static_cast<int>(cards[i].rows.size()) * rowH + 4;
+		for (const Row &r : cards[i].rows) h += RowHeight(p, m, r, w - m.cardPad * 2) - m.rowH;
+	}
 	return h;
 }
 
@@ -351,12 +355,12 @@ int ColumnRows(const std::vector<Card> &cards)
 }
 
 // The rows as tall as the space lets the taller column be, between the metrics' two heights.
-Metrics FitMetrics(const Metrics &base, const Page &page, int avail)
+Metrics FitMetrics(Painter &p, const Metrics &base, const Page &page, int avail, int leftW, int rightW)
 {
 	Metrics m = base;
-	for (const std::vector<Card> *column : {&page.left, &page.right}) {
-		const int rows = ColumnRows(*column);
-		m.rowH = std::min(m.rowH, FitRowHeight(avail, ColumnHeight(base, *column, 0), rows, base.rowH, base.minRowH));
+	for (const auto &column : {std::make_pair(&page.left, leftW), std::make_pair(&page.right, rightW)}) {
+		const int rows = ColumnRows(*column.first);
+		m.rowH = std::min(m.rowH, FitRowHeight(avail, ColumnHeight(p, base, *column.first, 0, column.second), rows, base.rowH, base.minRowH));
 	}
 	return m;
 }
@@ -365,15 +369,15 @@ Metrics FitMetrics(const Metrics &base, const Page &page, int avail)
 void PaintColumns(Painter &p, const Metrics &base, const Page &page, const View &v, int x, int top, int contentW, int gap, int avail, int barX,
 	RECT &dropAnchor, std::vector<std::string> &dropItems, int &dropSel)
 {
-	const Metrics m = FitMetrics(base, page, avail);
 	const int leftW = (contentW - gap) * page.leftW / kColumnsW, rightX = x + leftW + gap, rightW = contentW - leftW - gap;
+	const Metrics m = FitMetrics(p, base, page, avail, leftW, rightW);
 	PaneSpec spec;
 	spec.id = kPaneColumns;
 	spec.x = x;
 	spec.y = top;
 	spec.w = barX + spec.look.width - x;
 	spec.h = avail;
-	spec.contentH = std::max(ColumnHeight(m, page.left, m.rowH), ColumnHeight(m, page.right, m.rowH));
+	spec.contentH = std::max(ColumnHeight(p, m, page.left, m.rowH, leftW), ColumnHeight(p, m, page.right, m.rowH, rightW));
 	spec.barX = barX;
 	spec.drag = &v.dropBar;
 	spec.mx = v.mouseX;
@@ -387,6 +391,11 @@ void PaintColumns(Painter &p, const Metrics &base, const Page &page, const View 
 	if (dropAnchor.bottom > dropAnchor.top) {
 		dropAnchor.top = std::max<LONG>(dropAnchor.top, top);
 		dropAnchor.bottom = std::max(dropAnchor.top, std::min<LONG>(dropAnchor.bottom, top + avail));
+	}
+	// The same for the colour whose picker is open.
+	if (v.colorId && g_colorAnchor.bottom > g_colorAnchor.top) {
+		g_colorAnchor.top = std::max<LONG>(g_colorAnchor.top, top);
+		g_colorAnchor.bottom = std::max(g_colorAnchor.top, std::min<LONG>(g_colorAnchor.bottom, top + avail));
 	}
 }
 
