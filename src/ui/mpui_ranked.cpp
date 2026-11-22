@@ -642,6 +642,19 @@ void PaintRankedContent(Painter &p, const State &st)
 void RankedAction(int arg)
 {
 	RankedScreen &r = g_s.ranked;
+	if (arg >= kRkDetailOpen && arg < kRkDetailArgEnd) {
+		if (arg == kRkDetailClose) r.detailMatch = 0;
+		else if (arg >= kRkDetailMetric) r.detailMetric = arg - kRkDetailMetric;
+		else {
+			const size_t i = static_cast<size_t>(arg - kRkDetailOpen);
+			if (i < r.view.history.games.size()) {
+				r.detailMatch = r.view.history.games[i].id;
+				r.detailMetric = 0;
+				LeagueMatchDetailRequest(r.detailMatch);
+			}
+		}
+		return;
+	}
 	if (arg >= kRkBadgeEnd && arg < kRkTeamArgEnd) {
 		RankedTeamAction(arg);
 		return;
@@ -663,6 +676,7 @@ void RankedAction(int arg)
 	switch (arg) {
 	case kRkHistory:
 		r.sub = kRankedHistory;
+		r.detailMatch = 0;
 		r.historyBack.clear();
 		LeagueHistoryRequest(0);
 		break;
@@ -835,6 +849,35 @@ void RankedFrame()
 	RankedSeasonsFrame();
 }
 
+// The season's notices in whatever menu the player is, never in a game: it started, a week is left, the last day. What was told is
+// kept with the game's settings, so a restart does not tell it again.
+void SeasonNotices(const LeagueRankedView &v)
+{
+	if (!v.linked) return;
+	LeagueSeasonRefresh();
+	if (!v.seasonLoaded || InGame()) return;
+	static bool loaded = false;
+	static LeagueSeasonTold told;
+	if (!loaded) {
+		loaded = true;
+		told.started = GameRoomLoadSetting("LeagueSeasonStartedTold", -1);
+		told.weekLeft = GameRoomLoadSetting("LeagueSeasonWeekLeftTold", -1);
+		told.lastDay = GameRoomLoadSetting("LeagueSeasonLastDayTold", -1);
+	}
+	const int64_t now = LeagueServerNowMs();
+	const LeagueSeasonNotice n = LeagueSeasonNoticeFor(v.season, now, told);
+	if (n == LeagueSeasonNotice::None) return;
+	GameRoomSaveSetting("LeagueSeasonStartedTold", told.started);
+	GameRoomSaveSetting("LeagueSeasonWeekLeftTold", told.weekLeft);
+	GameRoomSaveSetting("LeagueSeasonLastDayTold", told.lastDay);
+	const std::string name = LeagueSeasonName(v.season, v.lang);
+	if (n == LeagueSeasonNotice::Started) ModUiToast(TrFmt("The ranked season %s has started. Good luck in the queue!", {name}));
+	else if (n == LeagueSeasonNotice::WeekLeft) {
+		ModUiToast(TrFmt("The ranked season %s ends in %s days: play your last games to earn its rewards.", {name, std::to_string(LeagueDaysLeft(v.season.endsAt, now))}));
+	}
+	else ModUiToast(TrFmt("Last day of the ranked season %s: it ends in less than 24 hours.", {name}));
+}
+
 void RankedGameThreadTick()
 {
 	const DWORD now = GetTickCount();
@@ -853,6 +896,7 @@ void RankedGameThreadTick()
 		if (v.phase == LeagueRankedPhase::Found) CallPlayer();
 	}
 	RankedTeamGameThreadTick();
+	SeasonNotices(v);
 	// A game or a room ends the search: nobody can answer a match from inside one. The partner of a duo cannot end the leader's.
 	if ((InGame() || GameRoomActive()) && !v.partnerSearch && (v.phase == LeagueRankedPhase::Searching || v.phase == LeagueRankedPhase::Joining)) {
 		LogI("league", "ranked: a game or a room started; the search stops");

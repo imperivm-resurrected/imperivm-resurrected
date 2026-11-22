@@ -121,6 +121,11 @@ struct History {
 	int64_t pageBefore = 0;
 	LeagueHistoryPage page;
 	std::string pageError;
+	unsigned detailGen = 0;
+	bool detailLoading = false, detailLoaded = false;
+	int64_t detailId = 0;
+	LeagueMatchDetail detail;
+	std::string detailError;
 };
 
 struct Stats {
@@ -366,6 +371,23 @@ void FetchHistory(unsigned gen, int64_t before, std::string queue)
 		g_history.pageError.clear();
 	}
 	else g_history.pageError = FailureText(a.r);
+}
+
+void FetchDetail(unsigned gen, int64_t id)
+{
+	const Answer a = Call("GET", "/v1/league/matches/" + std::to_string(id) + "/detail", "", false);
+	LeagueMatchDetail d;
+	const bool ok = a.r.Ok() && a.parsed && LeagueParseMatchDetail(a.j, d);
+	if (!ok) LogW("league", "could not read the page of ranked game %lld (%s)", static_cast<long long>(id), a.r.Describe().c_str());
+	std::lock_guard<std::mutex> lock(g_mx);
+	if (gen != g_history.detailGen) return;
+	g_history.detailLoading = false;
+	g_history.detailLoaded = ok;
+	if (ok) {
+		g_history.detail = d;
+		g_history.detailError.clear();
+	}
+	else g_history.detailError = FailureText(a.r);
 }
 
 void FetchStats()
@@ -1108,6 +1130,11 @@ LeagueRankedView LeagueRankedState()
 	v.historyBefore = g_history.pageBefore;
 	v.history = g_history.page;
 	v.historyError = g_history.pageError;
+	v.detailLoading = g_history.detailLoading;
+	v.detailLoaded = g_history.detailLoaded;
+	v.detailId = g_history.detailId;
+	v.detail = g_history.detail;
+	v.detailError = g_history.detailError;
 	v.statsLoaded = g_stats.loaded;
 	v.stats = g_stats.stats;
 	v.disputeBusy = g_dispute.busy;
@@ -1147,6 +1174,20 @@ void LeagueHistoryRequest(int64_t before)
 		queue = g_sel;
 	}
 	SafeThread(FetchHistory, gen, std::max<int64_t>(0, before), queue).detach();
+}
+
+void LeagueMatchDetailRequest(int64_t matchId)
+{
+	unsigned gen = 0;
+	{
+		std::lock_guard<std::mutex> lock(g_mx);
+		gen = ++g_history.detailGen;
+		g_history.detailLoading = true;
+		g_history.detailLoaded = false;
+		g_history.detailId = matchId;
+		g_history.detailError.clear();
+	}
+	SafeThread(FetchDetail, gen, matchId).detach();
 }
 
 void LeagueStatsRefresh()

@@ -47,6 +47,14 @@ std::string LeagueSeasonName(const LeagueSeason &s, const std::string &lang);
 int LeagueDaysLeft(int64_t endsAt, int64_t nowMs);
 // How much of the season has gone, 0 to 1.
 float LeagueSeasonElapsed(const LeagueSeason &s, int64_t nowMs);
+// What the player is told of the season in any menu, each once a season: it started (in its first 3 days), a week is left, the last day.
+// The last one due wins: a player back on the last day hears only that.
+enum class LeagueSeasonNotice { None, Started, WeekLeft, LastDay };
+// The season numbers already told, by notice; -1 for none.
+struct LeagueSeasonTold {
+	int started = -1, weekLeft = -1, lastDay = -1;
+};
+LeagueSeasonNotice LeagueSeasonNoticeFor(const LeagueSeason &s, int64_t nowMs, LeagueSeasonTold &told);
 // "es", "en" or "it" from the game's language ("spanish", "Italiano"...): English for anything else.
 std::string LeagueLangCode(const std::string &gameLanguage);
 

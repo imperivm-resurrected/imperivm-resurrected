@@ -11,6 +11,7 @@
 #include "core/json.h"
 #include "core/league.h"
 #include "core/leagueranked.h"
+#include "core/leaguestats.h"
 #include "core/leagueteam.h"
 #include "core/matchhistory.h"
 
@@ -252,6 +253,11 @@ struct LeagueRankedView {
 	int64_t historyBefore = 0;
 	LeagueHistoryPage history;
 	std::string historyError;
+	// The page of one game of the history (GET /v1/league/matches/:id/detail): which game, and its answer.
+	bool detailLoading = false, detailLoaded = false;
+	int64_t detailId = 0;
+	LeagueMatchDetail detail;
+	std::string detailError;
 	// Who uses the queue now.
 	bool statsLoaded = false;
 	LeagueStats stats;
@@ -278,6 +284,8 @@ constexpr int kLeagueRecentGames = 5, kLeagueHistoryPage = 10;
 void LeagueRecentRefresh(bool force = false);
 // A page of the full history: the games played before `before` (0: the newest).
 void LeagueHistoryRequest(int64_t before);
+// The page of a finished ranked game, for anyone: who played and every player's numbers through it.
+void LeagueMatchDetailRequest(int64_t matchId);
 // GET /v1/league/stats, at most every 15 s.
 void LeagueStatsRefresh();
 // "Report a problem" with a ranked game (POST /v1/league/matches/:id/dispute): the result stays, and the league reviews it.

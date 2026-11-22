@@ -136,6 +136,8 @@ enum RankedTeamArg {
 	kRkQueueDuel = kRkBadgeEnd, kRkQueueTeam, kRkDuoInviteOpen, kRkDuoInviteClose, kRkDuoLeave, kRkDuoFriendsPrev, kRkDuoFriendsNext,
 	kRkDuoAccept = kRkBadgeEnd + 0x40, kRkDuoDecline = kRkBadgeEnd + 0x80, kRkDuoFriend = kRkBadgeEnd + 0x100, kRkTeamArgEnd = kRkBadgeEnd + 0x200,
 };
+// The page of one game of the history: a row opens it (kRkDetailOpen plus the row), back to the history, the number the chart shows.
+enum RankedDetailArg { kRkDetailOpen = kRkTeamArgEnd, kRkDetailClose = kRkDetailOpen + 0x40, kRkDetailMetric, kRkDetailArgEnd = kRkDetailMetric + 0x10 };
 enum RankedSub { kRankedHub, kRankedBoard, kRankedHistory, kRankedGuide };
 // The rows of a page of the full leaderboard at most; RankedBoardRows says how many fit the screen.
 const int kRankedBoardRows = 13;
@@ -154,6 +156,9 @@ struct RankedScreen {
 	int resultCues = 0;
 	// The history's pages already passed, newest first: the `before` of each, to go back.
 	std::vector<int64_t> historyBack;
+	// The page of one game of the history (0: the list), and the number its chart shows (kDetailMetrics).
+	int64_t detailMatch = 0;
+	int detailMetric = 0;
 	// "Report a problem": the match it is about (0: the dialog is closed), what the player wrote, and the last answer already shown.
 	int64_t disputeMatch = 0;
 	std::string disputeText;

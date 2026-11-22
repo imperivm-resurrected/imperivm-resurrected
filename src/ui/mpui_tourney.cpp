@@ -998,6 +998,9 @@ std::string ResultText(const TourneyOpResult &r)
 	if (e == "closed") return Tr("Sign-up for this tournament is closed.");
 	if (e == "suspended" && r.who == "partner") return TrFmt("Two no-shows in 30 days: your partner can sign up for official tournaments again from %s.", {WhenText(r.until)});
 	if (e == "suspended") return TrFmt("Two no-shows in 30 days: you can sign up for official tournaments again from %s.", {WhenText(r.until)});
+	if (e == "banned" && r.who == "partner") return TrFmt("The league team has banned your partner until %s: they can't play tournaments until then.", {WhenText(r.until)});
+	if (e == "banned") return TrFmt("The league team has banned you until %s: you can't play or organize tournaments until then.", {WhenText(r.until)});
+	if (e == "dispute_closed") return Tr("This match can no longer be disputed: a finished match can be disputed for one day.");
 	if (e == "already_signed") return Tr("You are already signed up.");
 	if (e == "checkin_closed") return Tr("The check-in is not open.");
 	if (e == "wrong_content") return OtherContentText(r.contentName);
@@ -1020,7 +1023,11 @@ std::string ResultText(const TourneyOpResult &r)
 		std::string why;
 		// The other player of a team: the partner a captain invites, or the captain whose invitation is accepted.
 		const bool partner = r.who == "partner", captain = r.who == "captain";
-		if (r.requirement == "tier") {
+		if (r.requirement == "place") {
+			why = r.have.empty() ? TrFmt("This cup is for the top %s of the season's ranked ladder, and you are not placed on it yet.", {r.need})
+								 : TrFmt("This cup is for the top %s of the season's ranked ladder, and you are number %s.", {r.need, r.have});
+		}
+		else if (r.requirement == "tier") {
 			const LeagueTier need = LeagueTierFromId(r.need), have = LeagueTierFromId(r.have);
 			why = TrFmt(partner ? "This cup is for players up to %s, and your partner is %s."
 						: captain ? "This cup is for players up to %s, and the team's captain is %s."

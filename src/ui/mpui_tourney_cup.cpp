@@ -1433,6 +1433,7 @@ std::string RequirementsText(const TourneyRequirements &r)
 	std::string out;
 	if (r.minGames > 0) out = GamesText(r.minGames);
 	if (TourneyMaxTierValid(r.maxTier)) out += (out.empty() ? "" : " \xC2\xB7 ") + TrFmt("up to %s", {Tr(LeagueTierName(r.maxTier))});
+	if (r.maxPlace > 0) out += (out.empty() ? "" : " \xC2\xB7 ") + TrFmt("top %s of the ranked ladder", {std::to_string(r.maxPlace)});
 	return out;
 }
 

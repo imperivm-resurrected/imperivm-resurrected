@@ -1489,10 +1489,171 @@ void PaintBoard(Painter &p, const State &st)
 
 // The player's ranked games, ten a page, newest first: what each gave, against whom, where and with which civilizations, and
 // "Report a problem" for a day after each.
+// The page of one game: what the chart can show, by kRkDetailMetric's argument.
+struct DetailMetric {
+	StatMetric metric;
+	const char *label;
+};
+const DetailMetric kDetailMetrics[] = {
+	{kStatArmyStrength, "Army"}, {kStatScore, "Score"}, {kStatUnitsAlive, "Units"}, {kStatKilled, "Killed"}, {kStatGoldTotal, "Gold"},
+};
+// One colour a player, in the order the page lists them.
+const COLORREF kDetailLines[] = {RGB(86, 156, 214), RGB(214, 92, 80), RGB(110, 190, 110), RGB(222, 180, 70), RGB(170, 120, 210), RGB(90, 200, 200),
+	RGB(230, 140, 60), RGB(200, 200, 200)};
+
+LeagueGameResult DetailResult(const std::string &r)
+{
+	if (r == "win") return LeagueGameResult::Win;
+	if (r == "loss") return LeagueGameResult::Loss;
+	if (r == "void") return LeagueGameResult::Void;
+	return LeagueGameResult::Pending;
+}
+
+std::string DetailCheckText(const std::string &check, COLORREF &ink)
+{
+	ink = pal::caption;
+	if (check == "verified") {
+		ink = pal::ok;
+		return Tr("Both players' games gave the same numbers");
+	}
+	if (check == "mismatch") {
+		ink = pal::warn;
+		return Tr("The two players' games gave different numbers: they may not be exact");
+	}
+	if (check == "single") return Tr("Only one player's game sent numbers");
+	return Tr("No numbers were sent for this game");
+}
+
+void PaintMatchDetail(Painter &p, const State &st)
+{
+	const int mx = st.mouseX, my = st.mouseY;
+	const LeagueRankedView &v = st.ranked.view;
+	const ScreenLayout l = ScreenLayoutFor(st.viewW, st.viewH, false);
+	const int m = l.margin, top = l.top, inner = l.w - 2 * m;
+	Ghost(p, m, top, 190, 44, "Back to list", kRkDetailClose, true, mx, my);
+	const bool ready = v.detailLoaded && v.detailId == st.ranked.detailMatch;
+	const LeagueMatchDetail &d = v.detail;
+	if (ready) {
+		std::string head = d.mapName.empty() ? std::string("\xE2\x80\x94") : LeagueMapText(d.mapName);
+		if (!d.mapSize.empty()) head += "  \xC2\xB7  " + LeagueMapText(d.mapSize);
+		if (d.durationMs) head += "  \xC2\xB7  " + TrFmt("%s min", {std::to_string(d.durationMs / 60000)});
+		if (d.playedAt) head += "  \xC2\xB7  " + DateText(LocalTime(d.playedAt), true);
+		p.Font(0);
+		RawText(p, m + 190 + 24, top, inner - 214, 44, head, pal::text);
+	}
+	const int y0 = top + 72, h = l.h - m - y0;
+	PaintGlassCard(p, m, y0, inner, h);
+	if (!ready) {
+		p.Font(0);
+		if (!v.detailLoading && !v.detailError.empty()) p.Text(m + 24, y0 + 24, inner - 48, 28, v.detailError, pal::bad);
+		else PaintSkeletonRows(p, m + 1, y0 + 24, inner - 2, 56, 4, {{m + 24, inner / 3}, {m + inner / 2, inner / 3}});
+		return;
+	}
+	COLORREF checkInk = pal::caption;
+	const std::string check = DetailCheckText(d.statsCheck, checkInk);
+	p.Font(3);
+	RawText(p, m + 24, y0 + 12, inner - 48, 28, check, checkInk);
+
+	// The table: one row a player, with what the game counted by its end.
+	struct Col {
+		const char *label;
+		int w;
+		StatMetric metric;
+	};
+	const int nameW = std::max(220, inner / 4);
+	const Col cols[] = {{"Score", 0, kStatScore}, {"Killed", 0, kStatKilled}, {"Lost", 0, kStatLost}, {"Units made", 0, kStatUnitsBuilt},
+		{"Largest army", 0, kStatUnitsMax}, {"Gold", 0, kStatGoldTotal}};
+	const int resultW = 190, n = static_cast<int>(sizeof(cols) / sizeof(cols[0]));
+	const int colW = std::max(80, (inner - 48 - nameW - resultW - 16) / n);
+	int ty = y0 + 48;
+	Caps(p, m + 24, ty, nameW, 36, "Player", pal::caption);
+	Caps(p, m + 24 + nameW, ty, resultW, 36, "Result", pal::caption);
+	for (int i = 0; i < n; i++) Caps(p, m + 24 + nameW + resultW + i * colW, ty, colW - 8, 36, cols[i].label, pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+	ty += 36;
+	p.Fill(m + 1, ty - 1, inner - 2, 1, pal::lineStrong);
+	const int rowH = 52;
+	std::vector<std::pair<const LeagueDetailStats *, COLORREF>> lines;
+	for (size_t i = 0; i < d.players.size(); i++) {
+		const LeagueDetailPlayer &pl = d.players[i];
+		const COLORREF color = kDetailLines[i % (sizeof(kDetailLines) / sizeof(kDetailLines[0]))];
+		const LeagueDetailStats *s = LeagueDetailStatsOf(d, pl);
+		if (s) lines.push_back({s, color});
+		p.Fill(m + 24, ty + rowH / 2 - 6, 12, 12, color);
+		p.Font(0);
+		RawText(p, m + 44, ty + 4, nameW - 28, 26, pl.name.empty() ? Tr("Player") : pl.name, pal::text);
+		p.Font(3);
+		RawText(p, m + 44, ty + 28, nameW - 28, 20, pl.civ.empty() ? std::string("\xE2\x80\x94") : CivText(pl.civ), pal::caption);
+		const int chip = PaintResultChip(p, DetailResult(pl.result), m + 24 + nameW, ty, rowH, 90, 26);
+		if (pl.hasDelta) {
+			p.Font(0);
+			RawText(p, m + 24 + nameW + chip + 10, ty, resultW - chip - 10, rowH, SignedText(pl.gloryDelta), pl.gloryDelta >= 0 ? pal::ok : pal::bad);
+		}
+		p.Font(0);
+		for (int c = 0; c < n; c++) {
+			const std::string value = s ? StatsFormatShort(s->points.back().values[cols[c].metric]) : std::string("\xE2\x80\x94");
+			p.Text(m + 24 + nameW + resultW + c * colW, ty, colW - 8, rowH, value, pal::body, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+		}
+		ty += rowH;
+		p.Fill(m + 1, ty - 1, inner - 2, 1, pal::hairline);
+	}
+	if (lines.empty()) return;
+
+	// The chart: the chosen number of every player through the game.
+	const int metricIndex = std::max(0, std::min(st.ranked.detailMetric, static_cast<int>(sizeof(kDetailMetrics) / sizeof(kDetailMetrics[0])) - 1));
+	const StatMetric metric = kDetailMetrics[metricIndex].metric;
+	int cx = m + 24;
+	const int chipsY = ty + 20;
+	for (int i = 0; i < static_cast<int>(sizeof(kDetailMetrics) / sizeof(kDetailMetrics[0])); i++) {
+		p.Font(3);
+		const int w = p.TextWidth(Tr(kDetailMetrics[i].label)) + 32;
+		const bool on = i == metricIndex;
+		if (on) p.Fill(cx, chipsY, w, 34, pal::selected);
+		else if (p.Hover(cx, chipsY, w, 34, mx, my)) p.Fill(cx, chipsY, w, 34, pal::raised);
+		p.Text(cx, chipsY, w, 34, Tr(kDetailMetrics[i].label), on ? pal::text : pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.AddHit(cx, chipsY, w, 34, kRankedAct, kRkDetailMetric + i);
+		cx += w + 8;
+	}
+	const int gx = m + 84, gy = chipsY + 56, gw = inner - 84 - 32, gh = y0 + h - 40 - gy;
+	if (gh < 80) return;
+	uint32_t lastMs = 1;
+	int maximum = 1;
+	for (const auto &line : lines) {
+		for (const LeagueStatsPoint &pt : line.first->points) {
+			lastMs = std::max(lastMs, pt.ms);
+			maximum = std::max(maximum, static_cast<int>(pt.values[metric]));
+		}
+	}
+	const StatsAxis axis = StatsNiceAxis(maximum);
+	p.Font(3);
+	for (int v2 = 0; v2 <= axis.top; v2 += axis.step) {
+		const int y = gy + gh - static_cast<int>(static_cast<int64_t>(gh) * v2 / axis.top);
+		p.Fill(gx, y, gw, 1, v2 ? pal::hairline : pal::lineStrong);
+		p.Text(m + 8, y - 10, gx - m - 16, 20, StatsFormatShort(v2), pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+	}
+	for (int k = 0; k <= 4; k++) {
+		const uint32_t at = static_cast<uint32_t>(static_cast<uint64_t>(lastMs) * k / 4);
+		p.Text(gx + gw * k / 4 - 40, gy + gh + 6, 80, 20, StatsFormatTime(at), pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	}
+	for (const auto &line : lines) {
+		int px = -1, py = -1;
+		for (const LeagueStatsPoint &pt : line.first->points) {
+			const int x = gx + static_cast<int>(static_cast<int64_t>(gw) * pt.ms / lastMs);
+			const int y = gy + gh - static_cast<int>(static_cast<int64_t>(gh) * std::max(0, static_cast<int>(pt.values[metric])) / axis.top);
+			if (px >= 0) p.Line(px, py, x, y, line.second, 2);
+			px = x;
+			py = y;
+		}
+	}
+}
+
 void PaintHistory(Painter &p, const State &st)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const LeagueRankedView &v = st.ranked.view;
+	if (st.ranked.detailMatch) {
+		PaintMatchDetail(p, st);
+		return;
+	}
 	const ScreenLayout l = ScreenLayoutFor(st.viewW, st.viewH, false);
 	const int m = l.margin, top = l.top, inner = l.w - 2 * m;
 	const int page = static_cast<int>(st.ranked.historyBack.size()) + 1;
@@ -1562,6 +1723,8 @@ void PaintHistory(Painter &p, const State &st)
 	for (size_t i = 0; i < v.history.games.size() && ry + rowH <= y0 + h; i++) {
 		const LeagueHistoryGame &g = v.history.games[i];
 		if (p.Hover(m, ry, inner, rowH, mx, my)) p.Fill(m + 1, ry, inner - 2, rowH, pal::raised);
+		// The whole row opens the game's page; the name's badge and "Report" over it keep their own clicks.
+		p.AddHit(m, ry, inner, rowH, kRankedAct, kRkDetailOpen + static_cast<int>(i));
 		const int chipW2 = PaintResultChip(p, g.result, m + cols[0].x, ry, rowH, 96, 26);
 		PaintDelta(p, g, m + cols[0].x + chipW2 + 12, ry, cols[0].w - chipW2 - 12, rowH);
 		const uint64_t id = _strtoui64(g.opponent.steamId.c_str(), nullptr, 10);

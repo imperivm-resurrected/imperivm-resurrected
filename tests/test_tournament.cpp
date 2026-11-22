@@ -659,9 +659,14 @@ void Requirements()
 	CHECK(r.Any());
 	CHECK_EQ(r.minGames, 10);
 	CHECK(r.maxTier == LeagueTier::Centurion);
-	j = Parse(R"({"minGames":0,"maxTier":null})");
+	j = Parse(R"({"minGames":0,"maxTier":null,"maxPlace":null})");
 	r = TourneyRequirementsFromJson(&j);
 	CHECK(!r.Any());
+	// The season final: the top of the ladder only.
+	j = Parse(R"({"minGames":0,"maxTier":null,"maxPlace":8})");
+	r = TourneyRequirementsFromJson(&j);
+	CHECK(r.Any());
+	CHECK_EQ(r.maxPlace, 8);
 	// Pretorian and Imperator are no cap.
 	j = Parse(R"({"minGames":0,"maxTier":"imperator"})");
 	CHECK(TourneyRequirementsFromJson(&j).maxTier == LeagueTier::None);

@@ -294,6 +294,8 @@ struct LeagueReport {
 	int64_t dropAtMs = -1;
 	std::vector<LeagueReportPlayer> players;
 	std::vector<uint32_t> hashes;
+	// Ranked and tournament games: every player's values at ticks of the game (LeagueStatsJson); null otherwise, and then not sent.
+	Json stats;
 };
 // matchId only goes with a ranked or tournament game.
 Json LeagueReportJson(const LeagueReport &r);

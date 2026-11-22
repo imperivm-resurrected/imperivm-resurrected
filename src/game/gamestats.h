@@ -20,6 +20,9 @@ void InstallGameStats(bool knownExe);
 void GameStatsTick();
 // One more sample now, whatever the time since the last one.
 void GameStatsSampleNow();
+// Every player's values now, without keeping them: what the league reports, read at the same tick of the game on every computer. The
+// number of players read; `active` marks them. 0 outside a game.
+int GameStatsReadAll(StatSample out[kStatMaxPlayers], bool active[kStatMaxPlayers]);
 std::shared_ptr<const StatsSnapshot> GameStatsSnapshot();
 
 struct StatsLivePlayer {
