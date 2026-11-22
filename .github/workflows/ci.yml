@@ -41,6 +41,10 @@ jobs:
         with:
           arch: x86
 
+      - name: Campaign converter checks
+        run: |
+          node tools/imperivm1/selfcheck.js
+
       - name: Syntax check (the Steamworks SDK is not available here)
         run: node tools/syntax-check.js
 

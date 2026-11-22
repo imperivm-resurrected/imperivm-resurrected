@@ -1,41 +1,47 @@
-// Converts the campaign of Imperivm I ("Celtic Kings Adventure") into an adventure for Great Battles of Rome HD.
+// Converts the campaign of Imperivm I ("Celtic Kings Adventure") into two mods of Imperivm Resurrected for Great Battles
+// of Rome HD:
+//   <id>         the adventure alone (mod.json, adventures\"<name>.bfhp" and "<name>.bmp", the 440x360 preview, and the
+//                report): a mod of maps only loads without restarting the game, so a new conversion does too.
+//   <id>-data    what the adventure needs from the game's data: Imperivm I's own versions of the classes that behave otherwise
+//                in Great Battles of Rome (lib/i1classes.js), which only the campaign uses, their command patches and the
+//                movies. It changes the game's data, so enabling it restarts the game; it rarely changes.
+// The adventure requires the data mod. Copy both folders into the game's mods\ and enable them in the profile.
 //
 //   node tools/imperivm1/convert.js --i1 "<Imperivm I folder>" --gbr "<Great Battles of Rome folder>" --out <folder>
-//        [--name "<adventure name>"] [--dry-run] [--keep-class <I1 class>]... [--movies] [--unpacked] [--probe]
-//        [--audit] [--census <imperivm-mod.log>]
+//        [--name "<adventure name>"] [--mod-id <id>] [--dry-run] [--keep-class <I1 class>]... [--movies] [--unpacked]
+//        [--audit]
 //
 //   --i1          the Imperivm I install (read only): adventures\Celtic Kings Adventure.bfhp, data.pak, assets.pak, local.pak
 //   --gbr         the Great Battles of Rome install (read only): Packs\data.pak, MapObjects.pak and UI.pak
-//   --out         where the adventure is written: "<name>.bfhp", "<name>.bmp" (the 440x360 preview) and report.txt
+//   --out         where the two mod folders are written; report.txt goes in the adventure's
 //   --name        name of the adventure and of its files (default "Imperivm I - La guerra de las Galias")
+//   --mod-id      id of the adventure's mod (default "imperivm1-campaign"); the data mod is "<id>-data"
 //   --dry-run     converts and checks everything but writes only report.txt
 //   --keep-class  keeps an Imperivm I class instead of substituting it, for a mod that provides it
-//   --movies      also converts the two movies of Imperivm I (Packs\data*.bfhp, MPEG-1) into <out>\Movies\ and plays them
-//                 from movies\ (they have to be copied to the game's Movies folder); without it, the calls are commented out
+//   --movies      also converts the two movies of Imperivm I (Packs\data*.bfhp, MPEG-1) into the data mod's movies\ and plays
+//                 them from movies\ (the game looks for them in the active mods); without it, the calls are commented out
 //   --unpacked    also writes the files of the adventure, unpacked, to <out>\unpacked\
-//   --probe       adds diagnostics to the Kormaris opening and the Teuton ambush on its road, that write "I1PROBE ..." lines to
-//                 Logs\imperivm\imperivm-mod.log (they need Imperivm Resurrected's Mod_Log); for testing only. On every
-//                 map it also lists the units and buildings in the world ("I1PROBE census")
-//   --audit       writes <out>\audit.txt: what the conversion keeps of each XML attribute, the diplomacy, the script API
+//   --audit       writes audit.txt next to report.txt: what the conversion keeps of each XML attribute, the diplomacy, the script API
 //                 and the classes, against Great Battles of Rome's own adventures and gbr.exe (lib/audit.js); its errors
 //                 fail the conversion
-//   --census      with --audit, compares the "I1PROBE census" lines of a --probe build's log with the maps
 //
 // The output is a conversion of your own copy of the game, for your own use: do not redistribute it.
 'use strict';
 const fs = require('fs');
 const path = require('path');
 const { readHpfs, writeHpfs } = require('./lib/hpfs');
-const { loadGbr, loadI1, findFile } = require('./lib/catalog');
-const { convertAdventure } = require('./lib/adventure');
+const { loadGbr, loadI1, i1Source, findFile } = require('./lib/catalog');
+const M = require('./lib/mapping');
+const { convertAdventure, Report } = require('./lib/adventure');
+const { planI1Classes, i1ClassFiles } = require('./lib/i1classes');
 const { validateAdventure } = require('./lib/validate');
 const { readBmp, writeBmp24, coverResize, fillKey } = require('./lib/bmp');
-const { auditAdventure, compareCensus } = require('./lib/audit');
+const { auditAdventure } = require('./lib/audit');
 
 const ADVENTURE = 'Celtic Kings Adventure';
 
 function parseArgs(argv) {
-	const opts = { keep: new Set(), name: 'Imperivm I - La guerra de las Galias' };
+	const opts = { keep: new Set(), name: 'Imperivm I - La guerra de las Galias', modId: 'imperivm1-campaign' };
 	for (let i = 0; i < argv.length; i++) {
 		const a = argv[i];
 		const value = () => {
@@ -46,17 +52,17 @@ function parseArgs(argv) {
 		else if (a === '--gbr') opts.gbr = value();
 		else if (a === '--out') opts.out = value();
 		else if (a === '--name') opts.name = value();
+		else if (a === '--mod-id') opts.modId = value();
 		else if (a === '--keep-class') opts.keep.add(value());
 		else if (a === '--dry-run') opts.dryRun = true;
 		else if (a === '--movies') opts.movies = true;
 		else if (a === '--unpacked') opts.unpacked = true;
-		else if (a === '--probe') opts.probe = true;
 		else if (a === '--audit') opts.audit = true;
-		else if (a === '--census') opts.census = value();
 		else throw new Error(`unknown option ${a}`);
 	}
 	if (!opts.i1 || !opts.gbr || !opts.out) throw new Error('--i1, --gbr and --out are required');
 	if (/[\\/:*?"<>|]/.test(opts.name)) throw new Error('the name cannot have \\ / : * ? " < > |');
+	if (!/^[a-z0-9][a-z0-9-]*$/.test(opts.modId)) throw new Error('--mod-id takes lowercase letters, numbers and hyphens');
 	return opts;
 }
 
@@ -100,6 +106,43 @@ function referenceAdventures(gbrDir, skip) {
 	return files;
 }
 
+// The cards of the two mods. Not redistributable: they are made from the player's own copy of Imperivm I.
+function modJsons(opts) {
+	const own = {
+		spanish: ' Convertido desde tu propia copia de Imperivm I: para uso propio, no lo compartas.',
+		english: ' Converted from your own copy of Imperivm I: for your own use, do not share it.',
+		italian: ' Convertito dalla tua copia di Imperivm I: per uso personale, non condividerlo.',
+	};
+	const describe = (texts) => Object.fromEntries(Object.entries(texts).map(([k, v]) => [k, v + own[k]]));
+	const common = { version: '1.0', authors: ['Imperivm Resurrected converter'], redistributable: false };
+	return {
+		adventure: {
+			id: opts.modId,
+			name: opts.name,
+			...common,
+			description: describe({
+				spanish: 'La campaña de Imperivm I. Necesita el contenido "Imperivm I: clases de la campaña".',
+				english: 'The campaign of Imperivm I. It needs the content "Imperivm I: campaign classes".',
+				italian: 'La campagna di Imperivm I. Richiede il contenuto "Imperivm I: classi della campagna".',
+			}),
+			category: 'Adventures',
+			tags: ['Language: Multilingual'],
+			requires: [`${opts.modId}-data`],
+		},
+		data: {
+			id: `${opts.modId}-data`,
+			name: { spanish: 'Imperivm I: clases de la campaña', english: 'Imperivm I: campaign classes', italian: 'Imperivm I: classi della campagna' },
+			...common,
+			description: describe({
+				spanish: 'Las unidades y edificios de Imperivm I que se comportan distinto en Great Battles of Rome (la tienda teutona, los ghouls, los teutones), solo para su campaña.',
+				english: "Imperivm I's units and buildings that behave otherwise in Great Battles of Rome (the Teuton tent, the ghouls, the Teutons), for its campaign only.",
+				italian: 'Le unità e gli edifici di Imperivm I che si comportano diversamente in Great Battles of Rome (la tenda teutonica, i ghoul, i teutoni), solo per la sua campagna.',
+			}),
+			category: 'Gameplay & Balance',
+		},
+	};
+}
+
 function main() {
 	const opts = parseArgs(process.argv.slice(2));
 	const functionsFile = path.join(__dirname, '..', '..', 'sdk', 'game-functions.txt');
@@ -113,6 +156,9 @@ function main() {
 	const movies = opts.movies ? findMovies(opts.i1) : null;
 
 	console.log(`converting ${files.size} files...`);
+	const report = new Report();
+	const source = i1Source(i1);
+	const plan = planI1Classes(gbr, source, report, { manual: M.I1_CLASSES, substitutes: M.CLASS_SUBSTITUTES, keepGbr: M.I1_KEEP_GBR_CLASSES });
 	const result = convertAdventure({
 		files,
 		gbr,
@@ -122,9 +168,10 @@ function main() {
 		name: opts.name,
 		keep: opts.keep,
 		movies: movies && new Map([...movies].map(([k, v]) => [k, v.name])),
-		probe: opts.probe,
+		report,
+		i1Classes: plan,
 	});
-	const { report } = result;
+	const modFiles = i1ClassFiles(plan, gbr, source, result.classLiterals, report, M.AI_PROFILE);
 	if (movies) {
 		for (const [k, v] of movies) {
 			if (!report.lines('Movies').some((l) => l.includes(v.name))) movies.delete(k);
@@ -132,7 +179,9 @@ function main() {
 	}
 
 	console.log('checking...');
-	const check = validateAdventure(result.files, { gbr, i1Classes: i1.classes, customItems: result.customItems });
+	// The mod's class files and scripts are checked with the adventure's (as "mod/<path>").
+	const checked = new Map([...result.files, ...[...modFiles].map(([p, buf]) => [`mod/${p}`, buf])]);
+	const check = validateAdventure(checked, { gbr, i1Classes: i1.classes, customItems: result.customItems });
 	const pkg = writeHpfs(result.files, 512, result.dirs);
 	// The written package must read back to exactly the same files, and have the empty folders.
 	const back = readHpfs(pkg);
@@ -153,8 +202,6 @@ function main() {
 			gbrExe: fs.readFileSync(findFile(opts.gbr, 'gbr.exe')),
 			i1Exe: fs.readFileSync(findFile(opts.i1, 'Imperivm.exe')),
 			actorRows: result.actorRows,
-			sight: result.sight,
-			modFunctions: new Set(['Mod_Log', 'Mod_LogInt']),
 		});
 		for (const e of audit.errors) check.errors.push(`audit: ${e}`);
 		report.add('Audit', `${audit.errors.length} errors, ${audit.warnings.length} warnings (audit.txt)`);
@@ -169,26 +216,36 @@ function main() {
 	for (const w of check.warnings) report.add('Check warnings', w);
 	if (!check.errors.length) report.add('Check errors', 'none');
 
-	fs.mkdirSync(opts.out, { recursive: true });
+	const advDir = path.join(opts.out, opts.modId);
+	const dataDir = path.join(opts.out, `${opts.modId}-data`);
+	fs.mkdirSync(advDir, { recursive: true });
 	const reportText = report.toText();
 	if (audit) {
-		let t = audit.text;
-		if (opts.census) t += `\nCensus: the I1PROBE census lines of ${opts.census} against the maps\n${compareCensus(fs.readFileSync(opts.census, 'latin1'), result.files, result.mapNames)}`;
-		fs.writeFileSync(path.join(opts.out, 'audit.txt'), t);
+		fs.writeFileSync(path.join(advDir, 'audit.txt'), audit.text);
 	}
-	fs.writeFileSync(path.join(opts.out, 'report.txt'), reportText);
+	fs.writeFileSync(path.join(advDir, 'report.txt'), reportText);
 	if (!opts.dryRun) {
 		if (check.errors.length) {
 			console.log(reportText);
 			console.error(`${check.errors.length} errors: nothing written but report.txt`);
 			process.exit(1);
 		}
-		fs.writeFileSync(path.join(opts.out, opts.name + '.bfhp'), pkg);
+		const cards = modJsons(opts);
+		fs.writeFileSync(path.join(advDir, 'mod.json'), JSON.stringify(cards.adventure, null, '\t') + '\n');
+		fs.mkdirSync(path.join(advDir, 'adventures'), { recursive: true });
+		fs.writeFileSync(path.join(advDir, 'adventures', opts.name + '.bfhp'), pkg);
 		const map = files.get('global_map.bmp');
-		if (map) fs.writeFileSync(path.join(opts.out, opts.name + '.bmp'), writeBmp24(coverResize(fillKey(readBmp(map), [34, 26, 18]), 440, 360)));
+		if (map) fs.writeFileSync(path.join(advDir, 'adventures', opts.name + '.bmp'), writeBmp24(coverResize(fillKey(readBmp(map), [34, 26, 18]), 440, 360)));
+		fs.mkdirSync(dataDir, { recursive: true });
+		fs.writeFileSync(path.join(dataDir, 'mod.json'), JSON.stringify(cards.data, null, '\t') + '\n');
+		for (const [p, buf] of modFiles) {
+			const dest = path.join(dataDir, ...p.split('/'));
+			fs.mkdirSync(path.dirname(dest), { recursive: true });
+			fs.writeFileSync(dest, buf);
+		}
 		if (movies && movies.size) {
-			fs.mkdirSync(path.join(opts.out, 'Movies'), { recursive: true });
-			for (const v of movies.values()) fs.copyFileSync(v.file, path.join(opts.out, 'Movies', v.name));
+			fs.mkdirSync(path.join(dataDir, 'movies'), { recursive: true });
+			for (const v of movies.values()) fs.copyFileSync(v.file, path.join(dataDir, 'movies', v.name));
 		}
 		if (opts.unpacked) {
 			for (const d of result.dirs) fs.mkdirSync(path.join(opts.out, 'unpacked', ...d.split('/')), { recursive: true });
