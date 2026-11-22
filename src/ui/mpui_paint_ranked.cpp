@@ -1178,10 +1178,20 @@ void PaintPlayerCard(Painter &p, const State &st, const std::string &seasonText,
 	p.raw = false;
 	if (laurel) PatronHotspot(p, tx, nameY + (34 - laurel) / 2, laurel, patron, mx, my, kPatronLink);
 	const std::string title = ready ? LeagueTitleLabel(c.title) : std::string();
-	if (!title.empty()) {
+	// The title of a calendar cup held now (the Crown of the month, Champion of a season), in gold after the season's title.
+	const std::string cupTitle = ready && !c.cupTitles.empty() ? c.cupTitles.front().name : std::string();
+	if (!title.empty() || !cupTitle.empty()) {
 		p.Font(4);
 		p.raw = true;
-		p.TextCaps(tx, y + (tight ? 46 : 56), tw, 20, title, LeagueFrameInk(c.title), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 2);
+		int cx = tx;
+		if (!title.empty()) {
+			const int tw1 = cupTitle.empty() ? tw : std::min(tw / 2, p.CapsWidth(title, 2) + 4);
+			p.TextCaps(cx, y + (tight ? 46 : 56), tw1, 20, title, LeagueFrameInk(c.title), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 2);
+			cx += tw1 + 12;
+		}
+		if (!cupTitle.empty()) {
+			p.TextCaps(cx, y + (tight ? 46 : 56), tx + tw - cx, 20, cupTitle, RGB(0xd8, 0xae, 0x46), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 2);
+		}
 		p.raw = false;
 	}
 	p.Font(0);

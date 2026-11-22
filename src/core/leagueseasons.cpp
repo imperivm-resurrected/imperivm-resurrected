@@ -124,6 +124,7 @@ bool LeagueParsePlayerProfile(const Json &j, LeaguePlayerProfile &out)
 	}
 	out.frame = LeagueFrameFromJson(j.Get("frame"));
 	out.title = LeagueFrameFromJson(j.Get("title"));
+	out.cupTitles = LeagueParseCupTitles(j.Get("cupTitles"));
 	// A frame or a title of the season shown takes its rank from the card when the server only gives the season.
 	for (LeagueFrame *f : {&out.frame, &out.title}) {
 		if (f->Shown() && f->tier == LeagueTier::None && !f->founder && f->season == out.season) f->tier = out.tier;

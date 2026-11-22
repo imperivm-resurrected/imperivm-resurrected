@@ -701,8 +701,28 @@ void Queue()
 
 }
 
+void TitlesAndRecap()
+{
+	LeagueMe me;
+	CHECK(LeagueParseMe(Parse(R"({"steamId":"76561198000000401","cupTitles":[{"kind":"traveling","name":"Corona del mes","tournament":{"id":3,"slug":"x","name":"Copa del mes"},"since":1,"season":2},{"kind":"season","name":""}],
+		"recap":{"season":2,"name":"Hispania","queue":"1v1","games":7,"wins":3,"losses":4,"rewarded":false,"frame":false,"missing":{"vexillum":{"games":3,"wins":2},"frame":{"games":18,"wins":9}}}})"), me));
+	CHECK(me.cupTitles.size() == 1);
+	CHECK_EQ(me.cupTitles[0].name, std::string("Corona del mes"));
+	CHECK_EQ(me.cupTitles[0].cupName, std::string("Copa del mes"));
+	CHECK_EQ(me.cupTitles[0].season, 2);
+	CHECK(me.recap.present && !me.recap.rewarded);
+	CHECK_EQ(me.recap.games, 7);
+	CHECK_EQ(me.recap.vexGames, 3);
+	CHECK_EQ(me.recap.vexWins, 2);
+	CHECK_EQ(me.recap.frameWins, 9);
+	LeagueMe old;
+	CHECK(LeagueParseMe(Parse(R"({"steamId":"76561198000000401"})"), old));
+	CHECK(!old.recap.present && old.cupTitles.empty());
+}
+
 int main()
 {
+	TitlesAndRecap();
 	BaseUrl();
 	Tiers();
 	Divisions();

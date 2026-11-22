@@ -203,6 +203,23 @@ struct LeagueMasteryChange {
 LeagueMasteryChange LeagueMasteryChangeFromJson(const Json *v);
 
 // GET /v1/league/me.
+// A title of a calendar cup the player holds, named in the player's language: "traveling" (the Crown of the month, until the next cup of
+// its entry is won) or "season" (Champion of a season, for good).
+struct LeagueCupTitle {
+	std::string kind, name, cupName;
+	int season = -1;
+};
+std::vector<LeagueCupTitle> LeagueParseCupTitles(const Json *v);
+
+// The last season the player played, closed in the last month, whether it gave a reward or not: what it left and what was missing.
+struct LeagueRecap {
+	bool present = false, rewarded = false, frame = false;
+	int season = 0, games = 0, wins = 0, losses = 0;
+	std::string name, queue;
+	// What the vexillum and the frame still asked for at the close: games and wins.
+	int vexGames = 0, vexWins = 0, frameGames = 0, frameWins = 0;
+};
+
 struct LeagueMe {
 	std::string steamId, name;
 	// The standing in the duel and in the 2v2 queue (`ranked2v2`, absent from a server without it), and the queues the season plays.
@@ -226,6 +243,9 @@ struct LeagueMe {
 	// Every civilization rated with, the highest mastery first; `masteryKnown` is false for a server before the mastery.
 	bool masteryKnown = false;
 	std::vector<LeagueCivMastery> mastery;
+	// The titles of calendar cups held now, and the recap of the last season played.
+	std::vector<LeagueCupTitle> cupTitles;
+	LeagueRecap recap;
 };
 bool LeagueParseMe(const Json &j, LeagueMe &out);
 

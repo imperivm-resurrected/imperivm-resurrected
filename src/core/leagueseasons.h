@@ -60,6 +60,8 @@ struct LeaguePlayerProfile {
 	int civGames = 0;
 	std::vector<LeagueHistoryGame> recent;
 	LeagueFrame frame, title;
+	// The titles of calendar cups the player holds now.
+	std::vector<LeagueCupTitle> cupTitles;
 };
 bool LeagueParsePlayerProfile(const Json &j, LeaguePlayerProfile &out);
 

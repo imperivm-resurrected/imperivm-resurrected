@@ -879,6 +879,29 @@ void SeasonNotices(const LeagueRankedView &v)
 	else ModUiToast(TrFmt("Last day of the ranked season %s: it ends in less than 24 hours.", {name}));
 }
 
+// The recap of the last season for a player it gave no reward (the ceremony tells the others), once a season: the record, and what the
+// vexillum still asked for.
+void RecapNotice(const LeagueRankedView &v)
+{
+	if (!v.linked || InGame()) return;
+	LeagueMeRefresh();
+	const auto me = LeagueMeShared();
+	if (!me || !me->loaded || !me->me.recap.present || me->me.recap.rewarded) return;
+	const LeagueRecap &r = me->me.recap;
+	static int seen = -2;
+	if (seen == -2) seen = GameRoomLoadSetting("LeagueRecapSeen", -1);
+	if (seen == r.season) return;
+	seen = r.season;
+	GameRoomSaveSetting("LeagueRecapSeen", r.season);
+	const std::string name = r.name.empty() ? TrFmt("Season %s", {LeagueRoman(r.season)}) : r.name;
+	std::string missing;
+	if (r.vexGames > 0 && r.vexWins > 0) missing = TrFmt("%s more games and %s more wins", {std::to_string(r.vexGames), std::to_string(r.vexWins)});
+	else if (r.vexGames > 0) missing = TrFmt("%s more games", {std::to_string(r.vexGames)});
+	else if (r.vexWins > 0) missing = TrFmt("%s more wins", {std::to_string(r.vexWins)});
+	const std::string record = TrFmt("The ranked season %s is over: you played %s games and won %s.", {name, std::to_string(r.games), std::to_string(r.wins)});
+	ModUiToast(missing.empty() ? record : record + " " + TrFmt("The vexillum needed %s.", {missing}));
+}
+
 void RankedGameThreadTick()
 {
 	const DWORD now = GetTickCount();
@@ -898,6 +921,7 @@ void RankedGameThreadTick()
 	}
 	RankedTeamGameThreadTick();
 	SeasonNotices(v);
+	RecapNotice(v);
 	// A game or a room ends the search: nobody can answer a match from inside one. The partner of a duo cannot end the leader's.
 	if ((InGame() || GameRoomActive()) && !v.partnerSearch && (v.phase == LeagueRankedPhase::Searching || v.phase == LeagueRankedPhase::Joining)) {
 		LogI("league", "ranked: a game or a room started; the search stops");

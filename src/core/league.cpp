@@ -447,6 +447,23 @@ LeagueMasteryChange LeagueMasteryChangeFromJson(const Json *v)
 	return c;
 }
 
+std::vector<LeagueCupTitle> LeagueParseCupTitles(const Json *v)
+{
+	std::vector<LeagueCupTitle> out;
+	if (!v || v->type != Json::Array) return out;
+	for (const Json &t : v->arr) {
+		if (t.type != Json::Object || Trim(t.GetString("name")).empty()) continue;
+		LeagueCupTitle x;
+		x.kind = t.GetString("kind");
+		x.name = Trim(t.GetString("name"));
+		if (const Json *cup = t.Get("tournament"); cup && cup->type == Json::Object) x.cupName = cup->GetString("name");
+		const Json *season = t.Get("season");
+		x.season = season && season->type == Json::Number ? static_cast<int>(season->num) : -1;
+		out.push_back(x);
+	}
+	return out;
+}
+
 bool LeagueParseMe(const Json &j, LeagueMe &out)
 {
 	if (j.type != Json::Object) return false;
@@ -511,6 +528,29 @@ bool LeagueParseMe(const Json &j, LeagueMe &out)
 				m.seasonWins = std::max(0, std::min(m.seasonGames, s->GetInt("wins")));
 			}
 			out.mastery.push_back(m);
+		}
+	}
+	out.cupTitles = LeagueParseCupTitles(j.Get("cupTitles"));
+	if (const Json *r = j.Get("recap"); r && r->type == Json::Object && SeasonNumber(r->Get("season")) >= 0) {
+		LeagueRecap &rc = out.recap;
+		rc.present = true;
+		rc.season = SeasonNumber(r->Get("season"));
+		rc.name = r->GetString("name");
+		rc.queue = r->GetString("queue", "1v1");
+		rc.games = std::max(0, r->GetInt("games"));
+		rc.wins = std::max(0, r->GetInt("wins"));
+		rc.losses = std::max(0, r->GetInt("losses"));
+		rc.rewarded = r->GetBool("rewarded");
+		rc.frame = r->GetBool("frame");
+		if (const Json *miss = r->Get("missing"); miss && miss->type == Json::Object) {
+			if (const Json *v = miss->Get("vexillum"); v && v->type == Json::Object) {
+				rc.vexGames = std::max(0, v->GetInt("games"));
+				rc.vexWins = std::max(0, v->GetInt("wins"));
+			}
+			if (const Json *f = miss->Get("frame"); f && f->type == Json::Object) {
+				rc.frameGames = std::max(0, f->GetInt("games"));
+				rc.frameWins = std::max(0, f->GetInt("wins"));
+			}
 		}
 	}
 	if (const Json *list = j.Get("cups"); list && list->type == Json::Array) {
