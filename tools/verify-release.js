@@ -2,6 +2,7 @@
 //   - the version of the tag is the one in src/core/version_info.h (IMPERIVM_VERSION_TEXT, and the same numbers in IMPERIVM_VERSION_NUMBER);
 //   - version.json: same version, the link of the zip points to this release, size and SHA-256 of the zip are the real ones, and the
 //     signature is valid for the public key that the mod has in src/mods/updater.cpp (the one the game checks before installing);
+//   - its build, when it has one, is the SHA-256 of the zip's winmm.dll and its signature is valid for the same key;
 //   - the zip holds winmm.dll, steam_api.dll and the imperivm-resurrected\ folder and nothing else, with no path that escapes;
 //   - the installer (imperivm-resurrected-setup-<version>.exe), if there is one, carries that same zip byte for byte;
 //   - release-notes/<version>.md is the one source of the notes: the notes in version.json and, with --body, the body of the release are the same text;
@@ -85,6 +86,19 @@ if (fs.existsSync(zipPath) && info) {
   } catch (e) { bad('the signature could not be checked: ' + e.message); }
   const entries = listZip(zipPath);
   if (!entries.includes('winmm.dll')) bad(`${zipName} has no winmm.dll`);
+  // The build: the SHA-256 of the zip's winmm.dll, signed apart. Releases from before it have none.
+  if (info.build !== undefined && entries.includes('winmm.dll')) {
+    const dllHash = sha256(execFileSync(tarExe, ['-x', '-O', '-f', zipPath, 'winmm.dll'], { maxBuffer: 1 << 28 }));
+    if (!info.build || info.build.sha256 !== dllHash) bad("version.json has another build than the SHA-256 of the zip's winmm.dll");
+    try {
+      const message = Buffer.from(`imperivm-resurrected-build
+${version}
+${dllHash}`);
+      if (!/^[0-9a-f]{128}$/.test((info.build && info.build.signature) || '') || !crypto.verify('sha256', message, { key: publicKey(), dsaEncoding: 'ieee-p1363' }, Buffer.from(info.build.signature, 'hex'))) {
+        bad('the signature of the build in version.json is not valid for the public key of the mod');
+      }
+    } catch (e) { bad('the signature of the build could not be checked: ' + e.message); }
+  }
   if (!entries.includes('steam_api.dll')) bad(`${zipName} has no steam_api.dll`);
   for (const e of entries) {
     if (e !== 'winmm.dll' && e !== 'steam_api.dll' && !e.startsWith('imperivm-resurrected/')) bad(`${zipName} holds ${e}, only winmm.dll, steam_api.dll and imperivm-resurrected/ may go in`);

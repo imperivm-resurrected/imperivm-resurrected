@@ -3417,5 +3417,7 @@ extern const TrRow kTrRows[] = {
 	{"Import and download", "Importar y descargar", "Importa e scarica"},
 	{"Stop waiting for them", "Dejar de esperarlos", "Smetti di aspettarli"},
 	{"Controlled by the scenario", "Lo controla el escenario", "Controllato dallo scenario"},
+	{"This copy of Imperivm Resurrected is not an official version. Install the official one to play the league and tournaments.", "Esta copia de Imperivm Resurrected no es una versión oficial. Instala la oficial para jugar la liga y los torneos.", "Questa copia di Imperivm Resurrected non è una versione ufficiale. Installa quella ufficiale per giocare la lega e i tornei."},
+	{"This game could not read its own mod DLL, so it cannot join rooms that check the build. Reinstall Imperivm Resurrected.", "Este juego no ha podido leer su propia DLL del mod, así que no puede entrar en salas que comprueban la build. Reinstala Imperivm Resurrected.", "Questo gioco non è riuscito a leggere la propria DLL della mod, quindi non può entrare nelle stanze che controllano la build. Reinstalla Imperivm Resurrected."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

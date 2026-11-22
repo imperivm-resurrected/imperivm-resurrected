@@ -7,6 +7,7 @@
 
 #include "MinHook.h"
 #include "hooks/hookcount.h"
+#include "core/buildid.h"
 #include "core/config.h"
 #include "game/chat.h"
 #include "game/controls.h"
@@ -198,6 +199,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 		InstallRenderHooks();
 		InstallDisplayModeHooks();
 		InstallTweaks(knownExe);
+		// Before the updater can move this DLL aside: the build this game announces is the one it loaded.
+		BuildPin();
 		InstallUpdater();
 		OverlayInstall(knownExe);
 		InstallLanguage(knownExe);

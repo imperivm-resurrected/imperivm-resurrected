@@ -66,6 +66,14 @@ const message = Buffer.from(`imperivm-resurrected\n${version}\n${sha256}\n${byte
 const signature = crypto.sign('sha256', message, { key, dsaEncoding: 'ieee-p1363' }).toString('hex');
 if (!crypto.verify('sha256', message, { key: crypto.createPublicKey(key), dsaEncoding: 'ieee-p1363' }, Buffer.from(signature, 'hex'))) fail('the signature could not be verified');
 
+// The build of this release, the SHA-256 of its winmm.dll, signed apart: the league takes the builds of the releases as the official
+// ones (imperivm-league src/builds.ts), and every game announces its own in multiplayer rooms.
+const dllSha256 = crypto.createHash('sha256').update(fs.readFileSync(dll)).digest('hex');
+const buildMessage = Buffer.from(`imperivm-resurrected-build
+${version}
+${dllSha256}`);
+const buildSignature = crypto.sign('sha256', buildMessage, { key, dsaEncoding: 'ieee-p1363' }).toString('hex');
+
 const date = new Date().toISOString().slice(0, 10);
 const info = {
   version,
@@ -73,6 +81,7 @@ const info = {
   notes,
   zip: { url: `https://github.com/${repo}/releases/download/v${version}/${zipName}`, bytes, sha256 },
   signature,
+  build: { sha256: dllSha256, signature: buildSignature },
   fecha: date,
   notas: notes,
   firma: signature,
@@ -82,5 +91,5 @@ fs.writeFileSync(path.join(out, 'version.json'), JSON.stringify(info, null, 2) +
 execFileSync(process.execPath, [path.join(__dirname, 'verify-release.js'), out, '--tag', `v${version}`, '--repo', repo], { stdio: 'inherit' });
 console.log(`Version ${version} ready in ${out}`);
 console.log(`  ${zipName}  (${(bytes / 1048576).toFixed(1)} MB, sha256 ${sha256.slice(0, 16)}...)`);
-console.log('  version.json (signed)');
+console.log(`  version.json (signed; build ${dllSha256.slice(0, 12)})`);
 console.log(`  ${setupName}  (installer: the same zip inside)`);

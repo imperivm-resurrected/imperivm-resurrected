@@ -6,7 +6,9 @@
 #pragma warning(push)
 #pragma warning(disable : 4996 4828)
 #pragma warning(pop)
+#include "core/buildid.h"
 #include "core/log.h"
+#include "core/version.h"
 #include "hooks/dmshim.h"
 #include "game/gameroom.h"
 #include "net/vnet.h"
@@ -34,6 +36,62 @@ bool InLobby(uint64 lobby, uint64 who)
 namespace {
 // What the league says friends should see, as last read on this thread: a ranked search or game; empty for anything else.
 std::string g_rankedPresence;
+
+// The host waits this long for a new member to announce its build: it arrives a moment after the member enters, and a build from
+// before the check never sends one.
+const DWORD kBuildGraceMs = 15000;
+uint64 g_buildRoom = 0;
+ArrivalClock g_buildSeen;
+
+std::string MemberBuild(uint64 member)
+{
+	const char *b = S.SteamAPI_ISteamMatchmaking_GetLobbyMemberData(g_steam.mm, g_lobby, member, "irbuild");
+	return b ? b : "";
+}
+
+// The host turns away a member of another build, or of none: it loses its number, so the game's network does not take it, and it is
+// put on the room's list of other builds ("nobuild"), which makes a build of the check leave with the reason. It is not kicked: once
+// it has the room's build it comes in again. One from before the check stays in the room without a number, and the start waits for
+// the host to kick it.
+void RefuseBuild(uint64 member, const std::string &theirs)
+{
+	const std::string key = "k:" + std::to_string(member);
+	if (!Data(g_lobby, key.c_str()).empty()) S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, key.c_str(), "");
+	const std::string list = Data(g_lobby, "nobuild");
+	if (IdListHas(list, member)) return;
+	S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, "nobuild", IdListWith(list, member).c_str());
+	DropTransfers(member);
+	LogW("steam", "%s runs %s and this room %s: turned away", Name(member).c_str(),
+		theirs.empty() ? "no announced build (a modified one or from before the check)" : ("the build " + BuildShortId(theirs)).c_str(),
+		BuildShortId(BuildSha256()).c_str());
+}
+
+// Whether the host gives a member a number now: its build is this one, or it is still within the wait and already had one.
+bool AdmitBuild(uint64 member, bool numbered)
+{
+	const std::string theirs = MemberBuild(member);
+	switch (JudgeMemberBuild(BuildSha256(), theirs, g_buildSeen.Waited(member, GetTickCount()), kBuildGraceMs)) {
+	case BuildVerdict::kAdmit: {
+		const std::string list = Data(g_lobby, "nobuild");
+		if (IdListHas(list, member)) S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, "nobuild", IdListWithout(list, member).c_str());
+		return true;
+	}
+	case BuildVerdict::kWait: return numbered;
+	default:
+		RefuseBuild(member, theirs);
+		return false;
+	}
+}
+}
+
+void AnnounceOwnBuild()
+{
+	if (g_lobby) S.SteamAPI_ISteamMatchmaking_SetLobbyMemberData(g_steam.mm, g_lobby, "irbuild", BuildSha256().c_str());
+}
+
+void ForgetArrival(uint64 member)
+{
+	g_buildSeen.Forget(member);
 }
 
 void SetPresence()
@@ -65,9 +123,21 @@ void AssignNumbers()
 	std::vector<uint64> members;
 	const uint64 owner = S.SteamAPI_ISteamMatchmaking_GetLobbyOwner(g_steam.mm, g_lobby);
 	members.push_back(owner);
+	// Who left is forgotten, so that coming back starts a new wait for its build; another room starts with nobody.
+	{
+		std::vector<unsigned long long> present;
+		for (int i = 0; i < n; i++) present.push_back(S.SteamAPI_ISteamMatchmaking_GetLobbyMemberByIndex(g_steam.mm, g_lobby, i));
+		if (g_buildRoom != g_lobby) {
+			g_buildRoom = g_lobby;
+			g_buildSeen.Clear();
+		}
+		g_buildSeen.KeepOnly(present);
+	}
 	for (int i = 0; i < n; i++) {
 		const uint64 m = S.SteamAPI_ISteamMatchmaking_GetLobbyMemberByIndex(g_steam.mm, g_lobby, i);
-		if (m != owner && !IsBanned(g_lobby, m)) members.push_back(m);
+		if (m == owner || IsBanned(g_lobby, m)) continue;
+		const bool numbered = !Data(g_lobby, ("k:" + std::to_string(m)).c_str()).empty();
+		if (AdmitBuild(m, numbered)) members.push_back(m);
 	}
 	int maxK = atoi(Data(g_lobby, "kmax").c_str());
 	std::map<int, uint64> holder;
@@ -111,6 +181,7 @@ void TakeOverHostData()
 	}
 	S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, "hostid", std::to_string(g_steam.me).c_str());
 	S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, "host", g_myName.c_str());
+	S.SteamAPI_ISteamMatchmaking_SetLobbyData(g_steam.mm, g_lobby, "irbuild", BuildSha256().c_str());
 	LogI("steam", "the host left; the room is in my charge");
 }
 
@@ -190,6 +261,21 @@ void UpdateRoom()
 		Notice("You have been kicked from the room.");
 		g_signal.kicked = true;
 		if (DownloadActive()) FailDownload("you were kicked from the room");
+		Leave();
+		g_signal.kickedHandled = false;
+		return;
+	}
+	// A game that comes back with the room's build waits for the host to take it off the list.
+	if (g_lobby && !BuildSha256().empty()) {
+		const char *announced = S.SteamAPI_ISteamMatchmaking_GetLobbyMemberData(g_steam.mm, g_lobby, g_steam.me, "irbuild");
+		if (!announced || BuildSha256() != announced) AnnounceOwnBuild();
+	}
+	if (g_lobby && !g_signal.kickedHandled && IdListHas(Data(g_lobby, "nobuild"), g_steam.me) && CompareBuilds(BuildSha256(), Data(g_lobby, "irbuild")) != BuildMatch::kSame) {
+		g_signal.kickedHandled = true;
+		LogW("steam", "the host turned this game away: its build %s is not the room's %s", BuildShortId(BuildSha256()).c_str(), BuildShortId(Data(g_lobby, "irbuild")).c_str());
+		Notice(TrFmt("That room uses another build of Imperivm Resurrected %s. Both must install the same build.", {ModVersionText()}));
+		g_signal.joinRefused = true;
+		if (DownloadActive()) FailDownload("the room uses another build");
 		Leave();
 		g_signal.kickedHandled = false;
 		return;
@@ -555,7 +641,7 @@ void MirrorSpectators()
 	if (g_spectate.wanted && !g_spectate.lobby && !g_spectate.creating && g_lobby) OpenSpectators(g_spectate.delay, g_spectate.visibility);
 	if (!g_spectate.lobby) return;
 	if (!OwnLobby()) return;
-	static const char *const kCopy[] = {"name", "host", "hostid", "map", "mode", "key", "scen", "pw", "vis", "irver", "mods", "slots", "plist", "pids", "opts", "rules", "save", "playing", "modsv", "nopt"};
+	static const char *const kCopy[] = {"name", "host", "hostid", "map", "mode", "key", "scen", "pw", "vis", "irver", "irlvl", "irbuild", "mods", "slots", "plist", "pids", "opts", "rules", "save", "playing", "modsv", "nopt"};
 	for (const char *k : kCopy) SpecSet(k, Data(g_lobby, k));
 	SpecSet("main", std::to_string(g_lobby));
 	SpecSet("delay", std::to_string(g_spectate.delay));

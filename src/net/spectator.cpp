@@ -17,6 +17,7 @@
 #include "game/civs.h"
 #include "game/controls.h"
 #include "net/spectator.h"
+#include "core/buildid.h"
 #include "core/log.h"
 #include "mods/savelib.h"
 #include "net/sharemsg.h"
@@ -405,7 +406,16 @@ void HostHello(uint64_t peer, const std::string &hello, bool open, int delaySec)
 		Send(peer, kSpNo, mismatch);
 		return;
 	}
-	const std::string key = tab == std::string::npos ? "" : hello.substr(tab + 1), own = SteamOwnGameplayKey();
+	// The rest is the gameplay key and, after another tab, the SHA-256 of the viewer's mod DLL.
+	const std::string rest = tab == std::string::npos ? "" : hello.substr(tab + 1);
+	const size_t tab2 = rest.find('\t');
+	const std::string key = rest.substr(0, tab2), build = tab2 == std::string::npos ? "" : rest.substr(tab2 + 1), own = SteamOwnGameplayKey();
+	if (!BuildSha256().empty() && CompareBuilds(BuildSha256(), build) != BuildMatch::kSame) {
+		Send(peer, kSpNo, TrFmt("That room uses another build of Imperivm Resurrected %s. Both must install the same build.", {ModVersionText()}));
+		LogW("spectator", "%llu runs %s and this game %s; not accepted", peer, build.empty() ? "no announced build" : ("the build " + BuildShortId(build)).c_str(),
+			BuildShortId(BuildSha256()).c_str());
+		return;
+	}
 	if (key.empty() || key != own) {
 		Send(peer, kSpNo, "This game uses different content. Join it from the game list to download it.");
 		LogI("spectator", "%llu has different content (%s, the game's %s); not accepted", peer, key.empty() ? "unknown" : key.c_str(), own.c_str());
@@ -951,7 +961,7 @@ void ViewerReattach(uint8_t *game)
 
 std::string HelloText()
 {
-	return std::string(ModVersionText()) + "\t" + SteamOwnGameplayKey();
+	return std::string(ModVersionText()) + "\t" + SteamOwnGameplayKey() + "\t" + BuildSha256();
 }
 
 bool ViewerContentReady(const OnlineRoom &room)

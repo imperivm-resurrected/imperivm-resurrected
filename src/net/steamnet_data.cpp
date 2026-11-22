@@ -184,6 +184,7 @@ OnlineLobby ReadLobby(uint64 id)
 	l.modsRequiredOnly = Data(id, "modsv") == "2";
 	l.version = Data(id, "irver");
 	l.rulesLevel = Data(id, "irlvl");
+	l.build = Data(id, "irbuild");
 	l.spectate = Data(id, "spec") == "1";
 	l.specLobby = _strtoui64(Data(id, "sl").c_str(), nullptr, 10);
 	l.specDelay = atoi(Data(id, l.spectate ? "delay" : "sd").c_str());

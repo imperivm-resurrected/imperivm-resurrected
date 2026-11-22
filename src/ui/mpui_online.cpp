@@ -179,7 +179,7 @@ void TryJoinNow(const OnlineLobby &lobby, const std::string &password, bool watc
 		ModUiToast("This room is for a tournament match: you can watch it once it starts.");
 		return;
 	}
-	const std::string mismatch = SteamVersionMismatch(g.version, g.rulesLevel);
+	const std::string mismatch = SteamVersionMismatch(g.version, g.rulesLevel, g.build);
 	if (!mismatch.empty()) {
 		ModUiToast(mismatch, true);
 		return;
