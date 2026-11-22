@@ -17,11 +17,13 @@
 #include "game/gamehook.h"
 
 // The key ` of the game shows the health bars: kHealthBarMode is 0 hidden, 1 every bar, 2 and 3 the allies or the others of the
-// local player (Ctrl+` cycles 1 to 3), and only CVXMapView::OnKey writes it. When the view of a match is made, the mod sets the mode
-// chosen in the options the same way the key does. "My units", "enemy units" and "heroes only" are the mode 1 with the other bars
-// left out while drawing. Enemies are decided as the game's modes 2 and 3 do: the allied flag (1) of the local player's relation[] towards
-// the owner. Units that are neither the player's nor allied count as enemies, neutrals and animals included, as in the game's mode 3.
-// Nothing of the match changes: the mode is local and is not saved or sent.
+// local player, and only CVXMapView::OnKey (00627ef0) writes it: a tap shows or hides, held longer than 500 ms it hides again on
+// release, and Ctrl+` writes (mode + 1) % 3 + 1. The options and the key are one setting: the mod sets the options' choice when the
+// view of a match is made and whenever the options change, and a change of the key is written back to the options (Ctrl+` moves
+// through every unit, my units and enemy units instead of the game's modes 2 and 3). "My units", "enemy units" and "heroes only" are
+// the mode 1 with the other bars left out while drawing. Enemies are decided as the game's modes 2 and 3 do: the allied flag (1) of the
+// local player's relation[] towards the owner. Units that are neither the player's nor allied count as enemies, neutrals and animals
+// included, as in the game's mode 3. Nothing of the match changes: the mode is local and is not sent.
 namespace {
 // DrawVisibleObjHealthBar (0062ac80): thiscall, ECX = the device context, one argument (the visible object), ret 4.
 typedef void(__fastcall *DrawBar_t)(void *dc, void *edx, char *visible);
@@ -30,9 +32,11 @@ typedef void(__fastcall *RefreshAllBounds_t)(void *manager, void *edx, void *unu
 typedef char *(__fastcall *IsKindOf_t)(void *self, void *edx, const char *name);
 
 DrawBar_t g_origDrawBar = nullptr;
-bool g_installed = false, g_pending = false, g_filterFailed = false;
+bool g_installed = false, g_pending = false, g_filterFailed = false, g_active = false;
 HealthBarsChoice g_choice;
 bool g_filtering = false;
+// The game's mode the mod last set, to tell a press of the key; whose bars the key shows again after hiding them.
+int g_lastNative = 0, g_lastShown = kBarsAll;
 
 const unsigned kOffVisibleScript = 0x60c, kOffFlags = 0x2c, kOffOwner = 0x70;
 const unsigned kRelationAllied = 1;
@@ -79,14 +83,8 @@ bool SafeKeep(char *visible, const HealthBarsChoice &choice)
 
 void __fastcall HookDrawBar(void *dc, void *edx, char *visible)
 {
-	if (g_filtering && !g_filterFailed) {
-		if (!HealthBarsFilterHolds(*reinterpret_cast<int *>(addr::kHealthBarMode))) {
-			g_filtering = false;
-			LogI("game", "health bars: the mode was changed with Ctrl, the game's own modes from now on");
-		}
-		else if (!SafeKeep(visible, g_choice)) {
-			return;
-		}
+	if (g_filtering && !g_filterFailed && HealthBarsFilterHolds(*reinterpret_cast<int *>(addr::kHealthBarMode))) {
+		if (!SafeKeep(visible, g_choice)) return;
 		if (g_filterFailed) LogE("game", "health bars: ERROR reading a unit, every bar is drawn");
 	}
 	g_origDrawBar(dc, edx, visible);
@@ -108,20 +106,63 @@ bool Apply(void *manager, int mode)
 }
 }
 
+namespace {
+// The view the bars were set on: another one is another match, which sets them again when it starts.
+void *g_manager = nullptr;
+
+void Set(void *manager, const char *why)
+{
+	g_manager = manager;
+	if (g_choice.owners != kBarsNone) g_lastShown = g_choice.owners;
+	g_filtering = g_origDrawBar && HealthBarsFilters(g_choice);
+	const int mode = HealthBarsNativeMode(g_choice);
+	static const char *const kNames[] = {"hidden", "every unit", "your units", "enemy units"};
+	if (Apply(manager, mode)) {
+		g_lastNative = mode;
+		LogI("game", "health bars %s: %s%s", why, kNames[g_choice.owners], g_choice.owners != kBarsNone && g_choice.heroesOnly ? ", heroes only" : "");
+	}
+	else {
+		g_active = false;
+		LogE("game", "health bars: ERROR setting them %s", why);
+	}
+}
+}
+
 void HealthBarsGameTick()
 {
-	if (!g_pending || !g_installed) return;
+	if (!g_installed) return;
 	void *manager = *reinterpret_cast<void **>(addr::kVisibleMgr);
-	if (!manager || !*reinterpret_cast<void **>(addr::kGame)) return;
-	g_pending = false;
-	g_choice.owners = HealthBarsClampOwners(GetConfig().healthBarOwners);
-	g_choice.heroesOnly = GetConfig().healthBarHeroesOnly;
-	g_filtering = g_origDrawBar && HealthBarsFilters(g_choice);
-	static const char *const kNames[] = {"hidden", "every unit", "your units", "enemy units"};
-	if (Apply(manager, HealthBarsNativeMode(g_choice))) {
-		LogI("game", "health bars at the start of the match: %s%s", kNames[g_choice.owners], g_choice.owners != kBarsNone && g_choice.heroesOnly ? ", heroes only" : "");
+	if (!manager || !*reinterpret_cast<void **>(addr::kGame)) {
+		g_active = false;
+		return;
 	}
-	else LogE("game", "health bars: ERROR setting them at the start of the match");
+	if (g_active && manager != g_manager && !g_pending) {
+		g_active = false;
+		return;
+	}
+	const Config &config = GetConfig();
+	const int owners = HealthBarsClampOwners(config.healthBarOwners);
+	if (g_pending || (g_active && (owners != g_choice.owners || config.healthBarHeroesOnly != g_choice.heroesOnly))) {
+		const bool start = g_pending;
+		g_pending = false;
+		g_active = true;
+		g_choice.owners = owners;
+		g_choice.heroesOnly = config.healthBarHeroesOnly;
+		Set(manager, start ? "at the start of the match" : "changed in the options");
+		return;
+	}
+	if (!g_active) return;
+	const int now = *reinterpret_cast<int *>(addr::kHealthBarMode);
+	if (now == g_lastNative) return;
+	// Without the drawing hook only the game's own modes work: its key keeps doing what it always did.
+	if (!g_origDrawBar) {
+		g_lastNative = now;
+		return;
+	}
+	g_choice.owners = HealthBarsOwnersAfterKey(g_choice.owners, g_lastShown, g_lastNative, now);
+	Set(manager, "changed with the key");
+	MutableConfig().healthBarOwners = g_choice.owners;
+	SaveHealthBarOwners();
 }
 
 void InstallHealthBars(bool knownExe)

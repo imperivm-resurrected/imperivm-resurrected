@@ -402,7 +402,7 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis, 
 		}
 		if (!pub.empty()) {
 			heading("RULES");
-			checkRow("Fog of war", "No fog", true);
+			checkRow("No fog of war", "No fog", false);
 			checkRow("Explored map", "Map pre-explored", false);
 			checkRow("Shared control", "Shared control", false);
 			checkRow("Bonuses", "Disable bonuses", true);

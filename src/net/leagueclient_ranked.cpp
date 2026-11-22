@@ -82,7 +82,7 @@ struct Queue {
 };
 
 struct Board {
-	bool loading = false, loaded = false;
+	bool loading = false, loaded = false, failed = false;
 	DWORD at = 0;
 	// The queue the first ten and the page around the player are of.
 	std::string queue;
@@ -95,7 +95,7 @@ struct Board {
 };
 
 struct Season {
-	bool loading = false, loaded = false, none = false;
+	bool loading = false, loaded = false, none = false, failed = false;
 	DWORD at = 0;
 	// The language of the season read, and of the last answer, a 404 or a failure too.
 	std::string lang, asked;
@@ -261,6 +261,7 @@ void FetchSeason(std::string lang)
 	g_season.loading = false;
 	g_season.at = GetTickCount();
 	g_season.asked = lang;
+	g_season.failed = !ok && a.r.status != 404;
 	if (ok) {
 		g_season.loaded = true;
 		g_season.none = false;
@@ -291,6 +292,7 @@ void FetchBoard(bool linked, std::string queue)
 		g_board.at = 0;
 		return;
 	}
+	g_board.failed = !okTop;
 	if (okTop) {
 		g_board.loaded = true;
 		g_board.top = t;
@@ -1048,6 +1050,7 @@ LeagueRankedView LeagueRankedState()
 	std::lock_guard<std::mutex> lock(g_mx);
 	v.seasonLoaded = g_season.loaded && !g_season.none;
 	v.seasonLoading = g_season.loading;
+	v.seasonFailed = g_season.failed;
 	v.noSeason = g_season.loaded && g_season.none;
 	v.season = g_season.season;
 	v.lang = g_season.lang.empty() ? LangCode() : g_season.lang;
@@ -1057,6 +1060,7 @@ LeagueRankedView LeagueRankedState()
 	// What was read of the other queue is not shown: the picked one's comes.
 	const bool board = g_board.queue == g_sel;
 	v.boardLoaded = g_board.loaded && board;
+	v.boardFailed = g_board.failed && !v.boardLoaded;
 	if (board) {
 		v.top = g_board.top;
 		v.around = g_board.around;

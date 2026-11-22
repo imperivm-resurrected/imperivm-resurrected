@@ -21,6 +21,7 @@
 #include "game/gameroom.h"
 #include "game/cupmaps.h"
 #include "game/mapinfo.h"
+#include "game/mappreview.h"
 #include "net/leagueclient.h"
 #include "net/mpsave.h"
 #include "net/steamnet.h"
@@ -628,6 +629,11 @@ std::vector<int> ScenarioOrder(const std::vector<CupScenario> &list, const std::
 // The search field and the order menu over the list; both screens keep them in pickSearch and pickSort.
 void PaintScenarioToolbar(Painter &p, const State &st, int x, int y, int w, int h);
 void PaintScenarioRow(Painter &p, const CupScenario &s, int x, int y, int w, int h, bool on, bool hot, const std::string &tag, COLORREF tagInk, bool warn);
+// A seat's player name after its civilization, empty for none.
+typedef std::function<std::string(const MapPlayer &)> ScenarioSeatName;
+// Each seat of a scenario with its colour and civilization, in columns, down to bottom; the y under the last line.
+int PaintScenarioPlayers(Painter &p, const ::MapPreviewData &d, int x, int y, int w, int bottom, int columns, const ScenarioSeat &seat,
+	const ScenarioSeatName &who = ScenarioSeatName());
 // The chosen scenario: its picture with the starts, its lines (and the extra ones), each seat's civilization, a note and its own text.
 void PaintScenarioCard(Painter &p, const CupScenario &s, int x, int y, int w, int h, const std::vector<std::string> &extra, const std::string &note, COLORREF noteInk,
 	const ScenarioSeat &seat);

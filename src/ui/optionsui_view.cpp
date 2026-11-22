@@ -384,10 +384,9 @@ std::vector<Page> BuildPages(const Values &v)
 		speed.shown = GameSpeedPercent(speed.value);
 		page.left.push_back({"Pace", {speed, Slider(v, "Scroll speed", kScrollSpeed, 1, 100), Toggle(v, "Smooth camera", kSmoothCamera),
 			Toggle(v, "Pause in the background", kPauseInBackground, "Single player, when you switch to another window")}});
-		Row bars = Combo(v, "Health bars", kHealthBars, "When a match starts");
+		Row bars = Combo(v, "Health bars", kHealthBars, "Their key shows and hides them; Ctrl and the key change whose");
 		bars.items = {"No bars", "All units", "My units", "Enemy units"};
-		Row heroes = Toggle(v, "Heroes only", kHealthBarHeroes);
-		heroes.enabled = bars.selected > 0;
+		Row heroes = Toggle(v, "Heroes only", kHealthBarHeroes, "Also when their key shows them");
 		Row chat = ActionRow("Chat position", kResetChatPlace, "Reset", "Back above the command bar");
 		chat.enabled = !(v.disabled.count(kResetChatPlace) && v.disabled.at(kResetChatPlace));
 		Row palette = Combo(v, "Palette", kAllyPalette);

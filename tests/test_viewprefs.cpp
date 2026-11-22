@@ -63,9 +63,27 @@ static void Keep()
 	CHECK(!HealthBarsKeep(Choice(kBarsEnemies, true), false, UnitSide::kEnemy));
 }
 
+static void Key()
+{
+	CHECK_EQ(HealthBarsNextOwners(kBarsAll), static_cast<int>(kBarsMine));
+	CHECK_EQ(HealthBarsNextOwners(kBarsMine), static_cast<int>(kBarsEnemies));
+	CHECK_EQ(HealthBarsNextOwners(kBarsEnemies), static_cast<int>(kBarsAll));
+	CHECK_EQ(HealthBarsNextOwners(kBarsNone), static_cast<int>(kBarsAll));
+	// Tapping the key hides, and shows again whose bars were shown.
+	CHECK_EQ(HealthBarsOwnersAfterKey(kBarsMine, kBarsMine, 1, 0), static_cast<int>(kBarsNone));
+	CHECK_EQ(HealthBarsOwnersAfterKey(kBarsNone, kBarsMine, 0, 1), static_cast<int>(kBarsMine));
+	CHECK_EQ(HealthBarsOwnersAfterKey(kBarsNone, kBarsNone, 0, 1), static_cast<int>(kBarsAll));
+	// Ctrl+` from hidden only shows them; over shown bars it moves to the next.
+	CHECK_EQ(HealthBarsOwnersAfterKey(kBarsNone, kBarsEnemies, 0, 2), static_cast<int>(kBarsEnemies));
+	CHECK_EQ(HealthBarsOwnersAfterKey(kBarsAll, kBarsAll, 1, 3), static_cast<int>(kBarsMine));
+	CHECK_EQ(HealthBarsOwnersAfterKey(kBarsEnemies, kBarsEnemies, 1, 3), static_cast<int>(kBarsAll));
+	CHECK_EQ(HealthBarsOwnersAfterKey(kBarsMine, kBarsMine, 1, 1), static_cast<int>(kBarsMine));
+}
+
 int main()
 {
 	ModeAndFilter();
+	Key();
 	Sides();
 	Keep();
 	return test::Summary("viewprefs");

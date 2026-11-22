@@ -343,6 +343,11 @@ void SaveLeagueAccount()
 	ini.Write("League", "Name", linked ? g_config.leagueName.c_str() : nullptr);
 }
 
+void SaveHealthBarOwners()
+{
+	Ini().WriteNumber("Game", "HealthBarOwners", g_config.healthBarOwners);
+}
+
 void SaveLeagueOffer()
 {
 	Ini().Write("League", "OfferLink", g_config.leagueOfferLink ? nullptr : "0");

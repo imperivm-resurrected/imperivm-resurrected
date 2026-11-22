@@ -250,12 +250,14 @@ void PaintSeasonBand(Painter &p, const State &st, const HubLayout &h)
 	PaintIsotype(p, x + 56, y + kBandH / 2, 72, 200);
 	if (!v.seasonLoaded) {
 		// While the season is read, its number and its days show as the shape they will take.
-		if (v.seasonLoading) PaintSkeleton(p, x + 120, y + 17, 260, 12);
+		// After a failure the retries show the failure, not the shape of a season that may never come.
+		const bool waiting = v.seasonLoading && !v.seasonFailed;
+		if (waiting) PaintSkeleton(p, x + 120, y + 17, 260, 12);
 		else Caps(p, x + 120, y + 14, 700, 18, "Ranked season", pal::redText);
 		Display(p, 52);
 		p.TextCaps(x + 120, y + 34, w - 160, 52, v.noSeason ? "No season yet" : LeagueQueueIsTeam(v.queue) ? "Ranked 2 vs 2" : "Ranked 1 vs 1", pal::text,
 			DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1);
-		if (v.seasonLoading) {
+		if (waiting) {
 			PaintSkeleton(p, x + 120, y + 89, 380, 12);
 			return;
 		}
@@ -615,12 +617,20 @@ void PaintRankCard(Painter &p, const State &st, const HubLayout &h, const League
 	DrawLeagueEmblem(p, cx - emblem / 2, emblemY, emblem, tier);
 	Display(p, tight ? 50 : 60);
 	p.raw = true;
-	p.TextCaps(x, nameY, w, nameH, placing ? Tr("Placement") : RankName(tier, rk.division), Ink(placing ? LeagueTier::None : tier),
-		DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
+	// While the standing is read, the shape of a rank; when it can't be read, that: never a "Placement" and a 0-0 that are not this player's.
+	const bool waiting = !me.loaded && me.loading && !me.failed;
+	if (me.loaded) {
+		p.TextCaps(x, nameY, w, nameH, placing ? Tr("Placement") : RankName(tier, rk.division), Ink(placing ? LeagueTier::None : tier),
+			DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
+	}
+	else if (waiting) PaintSkeleton(p, cx - 120, nameY + nameH / 2 - 14, 240, 28);
 	p.raw = false;
 	p.Font(0);
 	if (!me.loaded) {
-		p.Text(x, lineY, w, 24, me.loading ? "Reading your rank..." : "Your rank will show here.", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		if (!waiting) {
+			p.Text(x + 16, lineY, w - 32, 48, me.failed ? "Couldn't reach the league server. Check your connection and try again." : "Your rank will show here.",
+				pal::caption, DT_CENTER | DT_WORDBREAK);
+		}
 	}
 	else if (placing) {
 		const int left = rk.present ? rk.placementLeft : 5, played = std::max(0, 5 - left);
@@ -679,18 +689,23 @@ void PaintRankCard(Painter &p, const State &st, const HubLayout &h, const League
 	}
 	// Record, win rate and the streak (W3, L2).
 	const int tw = (iw - 2 * 20) / 3;
-	Tile(p, ix, tilesY, tw, tileH, std::to_string(rk.wins) + "\xE2\x80\x93" + std::to_string(rk.losses), "Record");
-	Tile(p, ix + tw + 20, tilesY, tw, tileH, std::to_string(LeagueWinRate(rk.wins, rk.losses)) + " %", "Win rate");
-	Tile(p, ix + 2 * (tw + 20), tilesY, tw, tileH, LeagueStreakText(rk.streak), "Streak", rk.streak > 0 ? pal::ok : rk.streak < 0 ? pal::bad : pal::text);
 	int peakY = tilesY + tileH + 16;
-	if (rk.shield > 0) {
-		p.Font(0);
-		p.Fill(ix, tilesY + tileH + 10, iw, 28, RGB(0x22, 0x2c, 0x1e));
-		RawText(p, ix + 12, tilesY + tileH + 10, iw - 24, 28, rk.shield == 1 ? Tr("Rank shield: 1 more game") : TrFmt("Rank shield: %s more games", {std::to_string(rk.shield)}),
-			pal::ok);
-		peakY += 28;
+	if (waiting) {
+		for (int k = 0; k < 3; k++) PaintSkeleton(p, ix + k * (tw + 20), tilesY, tw, tileH);
 	}
-	PaintPeakLine(p, rk, ix, peakY, iw);
+	else if (me.loaded) {
+		Tile(p, ix, tilesY, tw, tileH, std::to_string(rk.wins) + "\xE2\x80\x93" + std::to_string(rk.losses), "Record");
+		Tile(p, ix + tw + 20, tilesY, tw, tileH, std::to_string(LeagueWinRate(rk.wins, rk.losses)) + " %", "Win rate");
+		Tile(p, ix + 2 * (tw + 20), tilesY, tw, tileH, LeagueStreakText(rk.streak), "Streak", rk.streak > 0 ? pal::ok : rk.streak < 0 ? pal::bad : pal::text);
+		if (rk.shield > 0) {
+			p.Font(0);
+			p.Fill(ix, tilesY + tileH + 10, iw, 28, RGB(0x22, 0x2c, 0x1e));
+			RawText(p, ix + 12, tilesY + tileH + 10, iw - 24, 28, rk.shield == 1 ? Tr("Rank shield: 1 more game") : TrFmt("Rank shield: %s more games", {std::to_string(rk.shield)}),
+				pal::ok);
+			peakY += 28;
+		}
+		PaintPeakLine(p, rk, ix, peakY, iw);
+	}
 	const LeagueBan ban = BanOf(v, me.me);
 	// In 2v2, alone or as the leader of a ready duo; the season has to play the queue.
 	const LeagueDuoRole role = team ? duo.role : LeagueDuoRole::Solo;
@@ -922,7 +937,11 @@ void PaintMiniBoard(Painter &p, const State &st, const HubLayout &h, int y, int 
 		p.Font(0);
 		RawText(p, ix + iw - wlW, ry, wlW, rowH, std::to_string(r.wins) + "\xE2\x80\x93" + std::to_string(r.losses), pal::caption);
 	};
-	if (!v.boardLoaded) {
+	if (!v.boardLoaded && v.boardFailed) {
+		p.Font(0);
+		p.TextWrapped(ix, y + 84, iw, 60, "Couldn't reach the league server. Check your connection and try again.", pal::caption);
+	}
+	else if (!v.boardLoaded) {
 		PaintSkeletonRows(p, ix, y + 80, iw, rowH, std::max(1, std::min(10, (cardH - 82 - 64) / rowH)),
 			{{ix, 40}, {ix + 40, nameW}, {ix + 40 + nameW + 16, glW}, {ix + iw - wlW, wlW}});
 	}

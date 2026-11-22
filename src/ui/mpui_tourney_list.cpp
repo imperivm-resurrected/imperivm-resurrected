@@ -345,8 +345,20 @@ void PaintTable(Painter &p, const State &st, const Ui &u, const TourneyListsView
 	for (int c = 1; c < 6; c++) cx[c] = cx[c - 1] + colW[c - 1] + gap;
 	static const char *const kHeads[] = {"Tournament", "Format", "Places", "Content", "When"};
 	for (int c = 0; c < 5; c++) PaintCaps(p, cx[c], y + 14, colW[c], 18, kHeads[c], pal::caption);
-	const int top = y + 44, rowH = 68, viewH = y + h - top;
-	const int total = static_cast<int>(rows.size()) * rowH;
+	const int top = y + 44, rowH = 68, viewH = y + h - top, groupH = 30;
+	// Under "Active", the cups open for sign-up and those being played, each group under its heading with its count, as the rooms are.
+	const bool grouped = u.filter == 0;
+	auto groupOf = [](const TourneySummary &t) { return t.status == TourneyStatus::Signup || t.status == TourneyStatus::Checkin ? 0 : 1; };
+	auto startsGroup = [&](size_t i) { return grouped && (i == 0 || groupOf(*rows[i]) != groupOf(*rows[i - 1])); };
+	int groupCount[2] = {};
+	std::vector<int> rowY(rows.size());
+	int total = 0;
+	for (size_t i = 0; i < rows.size(); i++) {
+		if (grouped) groupCount[groupOf(*rows[i])]++;
+		if (startsGroup(i)) total += groupH;
+		rowY[i] = total;
+		total += rowH;
+	}
 	const int maxScroll = std::max(0, total - viewH), scroll = std::min(u.listScroll, maxScroll);
 	SetScrollArea(p, out.listArea, x, top, w, viewH, maxScroll);
 	if (rows.empty() && !lists.loaded && !lists.failed) {
@@ -367,7 +379,19 @@ void PaintTable(Painter &p, const State &st, const Ui &u, const TourneyListsView
 	p.Clip(x + 1, top, w - 2, viewH);
 	for (size_t i = 0; i < rows.size(); i++) {
 		const TourneySummary &t = *rows[i];
-		const int ry = top + static_cast<int>(i) * rowH - scroll;
+		const int ry = top + rowY[i] - scroll;
+		if (startsGroup(i) && ry > top && ry - groupH < top + viewH) {
+			static const char *const kGroups[] = {"Sign-up open", "Live \xC2\xB7 under way"};
+			const int group = groupOf(t), gy = ry - groupH;
+			p.Fill(x + 1, gy, w - 2, 1, pal::hairline);
+			p.Font(4);
+			const int labelW = p.CapsWidth(kGroups[group], 2) + 4;
+			p.TextCaps(cx[0], gy, labelW, groupH, kGroups[group], group == 1 ? pal::redText : pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
+			p.Font(3);
+			p.raw = true;
+			p.Text(cx[0] + labelW + 8, gy, 60, groupH, std::to_string(groupCount[group]), pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+			p.raw = false;
+		}
 		if (ry + rowH < top || ry > top + viewH) continue;
 		p.Fill(x + 1, ry, w - 2, 1, pal::hairline);
 		const int vy = std::max(ry, top), vh = std::min(ry + rowH, top + viewH) - vy;

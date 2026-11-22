@@ -109,5 +109,7 @@ void SaveConfig();
 void LoadConfig();
 // Writes only the league account ([League] Token, SteamId and Name), or removes it when the token is empty.
 void SaveLeagueAccount();
+// Writes only [Game] HealthBarOwners, which the health bars key changes during a match.
+void SaveHealthBarOwners();
 // Writes only [League] OfferLink.
 void SaveLeagueOffer();

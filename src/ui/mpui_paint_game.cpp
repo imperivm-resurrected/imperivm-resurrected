@@ -208,6 +208,16 @@ void PaintMapCard(Painter &p, const State &st, int x, int y, int w, int h)
 	if (positions < 8) line(Tr("Positions"), std::to_string(positions), pal::text);
 	COLORREF color = pal::textDim;
 	const std::string notice = RoomNotice(st, color);
+	// Each seat of the scenario as the map chooser shows it, in the colour of its marker and with whoever sits in it. The room's
+	// notice (a save being received, a map that failed) keeps two lines under it.
+	const int seatsBottom = y + h - pad - (notice.empty() ? 0 : 50);
+	if (d && !d->failed && !d->info.players.empty() && ty + 28 < seatsBottom) {
+		auto seated = [&g](const MapPlayer &pl) { return pl.human && pl.slot >= 0 && pl.slot < 8 && g.slots[pl.slot].used; };
+		ty = PaintScenarioPlayers(p, *d, tx, ty + 6, tw, seatsBottom, 1,
+				 [&](const MapPlayer &pl) { return seated(pl) ? PlayerColor(g, g.slots[pl.slot].color) : RGB((pl.color >> 16) & 255, (pl.color >> 8) & 255, pl.color & 255); },
+				 [&](const MapPlayer &pl) { return seated(pl) ? g.slots[pl.slot].name : std::string(); }) +
+			4;
+	}
 	if (!notice.empty() && ty + 24 < y + h - pad) {
 		ty += 8;
 		p.Clip(tx, ty, tw, y + h - pad - ty);
@@ -328,7 +338,7 @@ void PaintOptionsCard(Painter &p, const State &st, int x, int y, int w, int h)
 					 : "The host decides whether the game can be watched and with how much delay.");
 		}
 		grid.Section("RULES");
-		checkRow(0x1007, "Fog of war", "No fog", true, "Whatever your troops can't see stays hidden.");
+		checkRow(0x1007, "No fog of war", "No fog", false, "You see everything on the map, also where your troops are not.");
 		checkRow(0x1008, "Explored map", "Map pre-explored", false, "The terrain of the whole map is visible from the start.");
 		checkRow(0x100a, "Shared control", "Shared control", false, "Allies can give orders to each other's troops.");
 		checkRow(0x10a7, "Bonuses", "Disable bonuses", true, "At the start, each player picks a boost: gold or a level 12 hero.");

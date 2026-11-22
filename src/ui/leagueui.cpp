@@ -275,10 +275,11 @@ void DrawLeagueEmblem(Painter &p, int x, int y, int size, LeagueTier tier, int a
 	const int px = std::max(8, static_cast<int>(r.right - r.left));
 	Blit(p, Bitmap(kArtEmblem, static_cast<int>(tier), px), r.left, r.top, px, px, alpha);
 	if (tier != LeagueTier::None || alpha < 128) return;
-	// The unranked shield carries a question mark, as on the website.
+	// The unranked card carries a question mark, as on the website, centred on the card: its box spans 51.5 to 140.5 of the 160 units, so
+	// its middle is 16 below the square's; 14 makes up for the room the font keeps above its capitals, for accents.
 	BigFont font(p, std::max(12, size * 56 / 160));
 	p.raw = true;
-	p.Text(x, y + size * 22 / 160, size, size, "?", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	p.Text(x, y + size * 14 / 160, size, size, "?", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 	p.raw = false;
 }
 

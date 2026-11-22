@@ -24,6 +24,26 @@ bool HealthBarsFilterHolds(int nativeMode)
 	return nativeMode == 0 || nativeMode == 1;
 }
 
+int HealthBarsNextOwners(int owners)
+{
+	switch (HealthBarsClampOwners(owners)) {
+	case kBarsAll: return kBarsMine;
+	case kBarsMine: return kBarsEnemies;
+	default: return kBarsAll;
+	}
+}
+
+int HealthBarsOwnersAfterKey(int owners, int lastShown, int before, int now)
+{
+	if (now == before) return HealthBarsClampOwners(owners);
+	if (now == 0) return kBarsNone;
+	if (before == 0) {
+		const int back = HealthBarsClampOwners(lastShown);
+		return back == kBarsNone ? kBarsAll : back;
+	}
+	return HealthBarsNextOwners(owners);
+}
+
 UnitSide HealthBarsSide(bool mine, bool known, bool allied)
 {
 	if (mine) return UnitSide::kMine;

@@ -60,6 +60,8 @@ void LeagueDeclineLinkOffer();
 
 struct LeagueMeView {
 	bool loaded = false, loading = false;
+	// The last answer did not come (no connection, the server down): what the screen tells instead of waiting.
+	bool failed = false;
 	LeagueMe me;
 };
 LeagueMeView LeagueMeState();
@@ -201,6 +203,8 @@ struct LeagueRankedView {
 	std::string searchQueue = "1v1";
 	bool partnerSearch = false;
 	bool seasonLoaded = false, seasonLoading = false, noSeason = false;
+	// The last answer for the season, or for the leaderboard, failed: shown as such while it is asked again.
+	bool seasonFailed = false, boardFailed = false;
 	LeagueSeason season;
 	std::string lang;
 	// The first ten and the page around the player, for the hub.

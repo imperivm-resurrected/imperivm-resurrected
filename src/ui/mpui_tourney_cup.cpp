@@ -225,34 +225,57 @@ void Segments(Form &c, int x, int y, int w, int h, const std::vector<Seg> &segs)
 }
 
 // A choice of a list with a radio, its name and a line under it, and at the right an estimate (in `asideInk` when it warns) or "Coming soon".
-// The format's sign, as the cup's mockup draws it (TorneoCrear.dc.html).
-void FormatIcon(Painter &p, int x, int y, TourneyFormat format, COLORREF c)
+// The format's sign, 40 by 28: the players as solid slots joined by two-pixel lines, the winner's slot in the accent colour. Solid
+// shapes on whole pixels stay sharp at every scale, where the mockup's thin strokes blurred and ran together.
+void FormatIcon(Painter &p, int x, int y, TourneyFormat format, COLORREF ink, COLORREF back, COLORREF accent)
 {
-	// The mockup's paths, in its box of 34 by 26.
-	static const std::vector<std::array<float, 4>> kSingle = {{1, 3, 10, 3}, {10, 3, 10, 11}, {10, 11, 1, 11}, {1, 15, 10, 15}, {10, 15, 10, 23},
-		{10, 23, 1, 23}, {10, 7, 15, 7}, {15, 7, 15, 19}, {15, 19, 10, 19}, {15, 13, 23, 13}, {23, 9, 32, 9}, {32, 9, 32, 17}, {32, 17, 23, 17}};
-	static const std::vector<std::array<float, 4>> kDouble = {{1, 2, 9, 2}, {9, 2, 9, 7}, {9, 7, 1, 7}, {1, 9, 9, 9}, {9, 9, 9, 14}, {9, 14, 1, 14},
-		{9, 4.5f, 14, 4.5f}, {14, 4.5f, 14, 11.5f}, {14, 11.5f, 9, 11.5f}, {14, 8, 20, 8}, {1, 18, 9, 18}, {9, 18, 9, 24}, {9, 24, 1, 24},
-		{9, 21, 20, 21}, {20, 6, 24, 6}, {24, 6, 24, 22}, {24, 22, 20, 22}, {24, 14, 33, 14}};
-	static const std::vector<std::array<float, 4>> kSwiss = [] {
-		std::vector<std::array<float, 4>> out;
-		for (float gx : {1.0f, 12.0f, 23.0f}) {
-			for (float gy : {2.0f, 10.0f, 18.0f}) {
-				out.push_back({gx, gy, gx + 9, gy});
-				out.push_back({gx + 9, gy, gx + 9, gy + 6});
-				out.push_back({gx + 9, gy + 6, gx, gy + 6});
-				out.push_back({gx, gy + 6, gx, gy});
-			}
+	const auto blend = [](COLORREF a, COLORREF b, int percent) {
+		const auto channel = [&](int shift) { return static_cast<BYTE>((((a >> shift) & 0xff) * percent + ((b >> shift) & 0xff) * (100 - percent)) / 100); };
+		return RGB(channel(0), channel(8), channel(16));
+	};
+	const COLORREF line = blend(ink, back, 55), faint = blend(ink, back, 35);
+	const auto slot = [&](int sx, int sy, int w, COLORREF c) { p.Fill(x + sx, y + sy, w, 4, c); };
+	// Two slots centred on rows a and b, ending at column `from`, joined into one that starts at `to`.
+	const auto join = [&](int from, int a, int b, int to, COLORREF c) {
+		const int bend = from + (to - from) / 2, mid = (a + b) / 2;
+		p.Fill(x + from, y + a - 1, bend - from, 2, c);
+		p.Fill(x + from, y + b - 1, bend - from, 2, c);
+		p.Fill(x + bend, y + a - 1, 2, b - a + 2, c);
+		p.Fill(x + bend, y + mid - 1, to - bend, 2, c);
+	};
+	static const int kSwissWins[] = {3, 2, 1, 0};
+	switch (format) {
+	case TourneyFormat::Double:
+		// The winners' bracket above; the losers', fainter, below, and the line by which who loses above drops into it.
+		for (int sy : {1, 7}) slot(0, sy, 10, ink);
+		join(10, 3, 9, 15, line);
+		slot(15, 4, 9, ink);
+		for (int sy : {17, 23}) slot(0, sy, 10, faint);
+		join(10, 19, 25, 15, faint);
+		slot(15, 20, 9, faint);
+		p.Fill(x + 19, y + 9, 2, 10, faint);
+		join(24, 6, 22, 30, line);
+		slot(30, 12, 10, accent);
+		break;
+	case TourneyFormat::Swiss:
+		// A table of points: each player's slot and three rounds, won in full colour and lost faint; nobody leaves it.
+		for (int row = 0; row < 4; ++row) {
+			const int ry = 1 + row * 7;
+			slot(0, ry, 16, row == 0 ? accent : ink);
+			for (int round = 0; round < 3; ++round) p.Fill(x + 21 + round * 7, y + ry, 5, 4, round < kSwissWins[row] ? ink : faint);
 		}
-		return out;
-	}();
-	// On the pixel grid, one pixel wide: at the game's scale the mockup's 1.5 on half pixels came out blurred, and the double elimination's
-	// close lines ran together.
-	std::vector<std::array<float, 4>> snapped = format == TourneyFormat::Swiss ? kSwiss : format == TourneyFormat::Double ? kDouble : kSingle;
-	for (std::array<float, 4> &s : snapped) {
-		for (float &v : s) v = std::floor(v) + 0.5f;
+		break;
+	default:
+		// Four players, two, one.
+		for (int sy : {1, 7, 17, 23}) slot(0, sy, 10, ink);
+		join(10, 3, 9, 15, line);
+		join(10, 19, 25, 15, line);
+		slot(15, 4, 9, ink);
+		slot(15, 20, 9, ink);
+		join(24, 6, 22, 30, line);
+		slot(30, 12, 10, accent);
+		break;
 	}
-	PaintSquareStrokes(p, x, y, 34, 26, snapped, 1.0f, c);
 }
 
 void Option(Form &c, int x, int y, int w, int h, bool on, bool enabled, const std::string &title, const std::string &text, const std::string &aside, bool soon,
@@ -288,8 +311,9 @@ void Option(Form &c, int x, int y, int w, int h, bool on, bool enabled, const st
 	}
 	int tx = rx + r + 14;
 	if (format >= 0) {
-		FormatIcon(p, tx, y + (h - 26) / 2, static_cast<TourneyFormat>(format), on ? pal::text : enabled ? pal::body : pal::textDim);
-		tx += 34 + 14;
+		const COLORREF ink = on ? pal::text : enabled ? pal::body : pal::textDim;
+		FormatIcon(p, tx, y + (h - 28) / 2, static_cast<TourneyFormat>(format), ink, on ? pal::selected : pal::raised, on ? pal::redText : ink);
+		tx += 40 + 14;
 	}
 	const int tw = right - tx;
 	UseFace(p, BrandFace::UiStrong, 16);
@@ -468,7 +492,7 @@ int RulesLeft(Form &c, int x, int y, int w)
 	at += c.k.fieldH + 8;
 	at += Hint(c, x, at, w, PresetSummary(r.preset) + ". " + Tr("The switches below change it.")) + 14;
 	at += Switch(c, x, at, w, r.hideCivs, Tr("Hide the civilizations until the game starts"), kCupHideCivs) + 4;
-	at += Switch(c, x, at, w, r.fog, Tr("Fog of war"), kCupFog) + 4;
+	at += Switch(c, x, at, w, !r.fog, Tr("No fog of war"), kCupFog) + 4;
 	at += Switch(c, x, at, w, r.explored, Tr("Map explored from the start"), kCupExplored) + 4;
 	at += Switch(c, x, at, w, r.lockedDiplomacy, Tr("Diplomacy locked"), kCupDiplomacy);
 	at += Problem(c, x, at, w, {TourneyCupProblem::Settings});
@@ -1267,7 +1291,7 @@ void ApplyCupSetting(TourneyCupForm &f, int setting, int choice, int64_t nowMs)
 		break;
 	}
 	case kCupHideCivs: s.hideCivs = choice != 0; break;
-	case kCupFog: s.fog = choice ? 1 : 0; break;
+	case kCupFog: s.fog = choice ? 0 : 1; break;
 	case kCupExplored: s.explored = choice ? 1 : 0; break;
 	case kCupDiplomacy: s.diplomacy = choice ? "locked" : "free"; break;
 	case kCupSpectators:

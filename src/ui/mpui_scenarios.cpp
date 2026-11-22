@@ -192,6 +192,28 @@ void PaintScenarioRow(Painter &p, const CupScenario &s, int x, int y, int w, int
 		warn ? pal::bad : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }
 
+int PaintScenarioPlayers(Painter &p, const MapPreviewData &d, int x, int y, int w, int bottom, int columns, const ScenarioSeat &seat, const ScenarioSeatName &who)
+{
+	p.Font(3);
+	const int colW = w / columns;
+	const std::vector<std::pair<int, std::string>> named = MapPlayerLines(d.info.description);
+	int n = 0;
+	for (const MapPlayer &pl : d.info.players) {
+		const int cx = x + (n % columns) * colW, cy = y + (n / columns) * 20;
+		if (cy + 20 > bottom) break;
+		p.Fill(cx, cy + 4, 12, 12, seat ? seat(pl) : Rgb(pl.color));
+		p.Frame(cx, cy + 4, 12, 12, pal::bg);
+		std::string line = TrFmt("Player %s", {std::to_string(pl.slot + 1)}) + ": " + CivText(pl, named);
+		const std::string name = who ? who(pl) : std::string();
+		if (!name.empty()) line += " \xC2\xB7 " + name;
+		p.raw = !name.empty();
+		p.Text(cx + 18, cy, colW - 22, 20, line, pl.human ? pal::text : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.raw = false;
+		n++;
+	}
+	return y + ((n + columns - 1) / columns) * 20;
+}
+
 void PaintScenarioCard(Painter &p, const CupScenario &s, int x, int y, int w, int h, const std::vector<std::string> &extra, const std::string &note, COLORREF noteInk,
 	const ScenarioSeat &seat)
 {
@@ -217,22 +239,7 @@ void PaintScenarioCard(Painter &p, const CupScenario &s, int x, int y, int w, in
 	int by = y + pad + size + 14;
 	const int bw = w - 2 * pad, bottom = y + h - pad;
 	const std::string text = d && !d->failed ? d->info.description : std::string();
-	if (d && !d->failed && !d->info.players.empty()) {
-		p.Font(3);
-		const int colW = bw / 2;
-		const std::vector<std::pair<int, std::string>> named = MapPlayerLines(text);
-		int n = 0;
-		for (const MapPlayer &pl : d->info.players) {
-			const int cx = x + pad + (n % 2) * colW, cy = by + (n / 2) * 20;
-			if (cy + 20 > bottom) break;
-			p.Fill(cx, cy + 4, 12, 12, seat ? seat(pl) : Rgb(pl.color));
-			p.Frame(cx, cy + 4, 12, 12, pal::bg);
-			p.Text(cx + 18, cy, colW - 22, 20, TrFmt("Player %s", {std::to_string(pl.slot + 1)}) + ": " + CivText(pl, named), pl.human ? pal::text : pal::textDim,
-				DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-			n++;
-		}
-		by += ((n + 1) / 2) * 20 + 10;
-	}
+	if (d && !d->failed && !d->info.players.empty()) by = PaintScenarioPlayers(p, *d, x + pad, by, bw, bottom, 2, seat) + 10;
 	if (!note.empty() && by + 24 < bottom) {
 		p.Fill(x + pad, by, bw, 1, pal::hairline);
 		p.Font(3);

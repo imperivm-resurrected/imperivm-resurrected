@@ -244,7 +244,11 @@ void FetchMe(std::string lang)
 	std::lock_guard<std::mutex> lock(g_mx);
 	g_me.at = GetTickCount();
 	if (!ok) {
-		ChangeView(g_me.view, [](LeagueMeView &v) { v.loading = false; });
+		const bool failed = r.status != 401;
+		ChangeView(g_me.view, [failed](LeagueMeView &v) {
+			v.loading = false;
+			v.failed = failed;
+		});
 		return;
 	}
 	auto v = std::make_shared<LeagueMeView>();
