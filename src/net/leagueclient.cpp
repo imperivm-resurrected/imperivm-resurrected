@@ -16,9 +16,11 @@
 
 #include "net/leagueclient.h"
 #include "addr/state.h"
+#include "core/buildid.h"
 #include "core/config.h"
 #include "core/guard.h"
 #include "core/json.h"
+#include "i18n/tr.h"
 #include "core/league.h"
 #include "core/leagueranked.h"
 #include "core/log.h"
@@ -305,6 +307,8 @@ bool InGame()
 
 const char *FailureText(const HttpReply &r)
 {
+	// The league plays only official builds (the server's src/builds.ts): this one is not, and trying again will not help.
+	if (r.status == 426 && r.body.find("\"unofficial_build\"") != std::string::npos) return "This copy of Imperivm Resurrected is not an official version. Install the official one to play the league and tournaments.";
 	return r.status ? "The league server refused the request. Try again later." : "Couldn't reach the league server. Check your connection and try again.";
 }
 
@@ -386,6 +390,8 @@ HttpReply HttpWith(const char *method, const std::string &path, const std::strin
 	std::wstring headers = winpath::Widen(std::string("Accept: ") + (options.accept ? options.accept : "application/json") + "\r\n", CP_UTF8);
 	if (!body.empty()) headers += winpath::Widen(std::string("Content-Type: ") + (options.contentType ? options.contentType : "application/json; charset=utf-8") + "\r\n", CP_UTF8);
 	if (auth) headers += L"Authorization: Bearer " + winpath::Widen(token, CP_UTF8) + L"\r\n";
+	// The league plays only official builds of the mod: every request says which one this is (the SHA-256 of its DLL).
+	if (!BuildSha256().empty()) headers += L"X-IR-Build: " + winpath::Widen(BuildSha256(), CP_UTF8) + L"\r\n";
 	const DWORD size = static_cast<DWORD>(body.size());
 	// With a progress to tell, the body goes in pieces.
 	const bool pieces = options.progress && size > 0;

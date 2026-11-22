@@ -1061,6 +1061,7 @@ std::string ResultText(const TourneyOpResult &r)
 	}
 	if (e == "not_ready" && r.op == TourneyOp::Resolve) return Tr("That match is not being played any more.");
 	if (e == "not_found") return Tr("The league could not find it. It may have changed: try again.");
+	if (e == "unofficial_build") return Tr("This copy of Imperivm Resurrected is not an official version. Install the official one to play the league and tournaments.");
 	if (!r.status) return Tr("Couldn't reach the league server. Check your connection and try again.");
 	if ((r.op == TourneyOp::Create || r.op == TourneyOp::Edit) && r.status == 400) return Tr("The league did not accept the cup's details. Check them and try again.");
 	return Tr("The league server refused the request. Try again later.");

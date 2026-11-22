@@ -7,6 +7,7 @@
 #pragma warning(push)
 #pragma warning(disable : 4996 4828)
 #pragma warning(pop)
+#include "core/buildid.h"
 #include "core/league.h"
 #include "core/log.h"
 #include "mods/mods.h"
@@ -136,6 +137,8 @@ void OnCallback(int id, const void *data)
 		PublishMods("");
 		set("irver", ModVersionText());
 		set("irlvl", ModsRulesLevel());
+		set("irbuild", BuildSha256());
+		AnnounceOwnBuild();
 		set(("k:" + std::to_string(g_steam.me)).c_str(), "1");
 		LogI("steam", "room \"%s\" created (%llu)", g_creating.name.c_str(), g_lobby);
 		SetPresence();
@@ -238,7 +241,7 @@ void OnCallback(int id, const void *data)
 			g_signal.wrongPassword = true;
 			return;
 		}
-		const std::string mismatch = SteamVersionMismatch(Data(lobby, "irver"), Data(lobby, "irlvl"));
+		const std::string mismatch = SteamVersionMismatch(Data(lobby, "irver"), Data(lobby, "irlvl"), Data(lobby, "irbuild"));
 		if (!mismatch.empty()) {
 			S.SteamAPI_ISteamMatchmaking_LeaveLobby(g_steam.mm, lobby);
 			LogW("steam", "not entering the room: %s", mismatch.c_str());
@@ -257,6 +260,7 @@ void OnCallback(int id, const void *data)
 		}
 		g_lobby = lobby;
 		g_membership++;
+		AnnounceOwnBuild();
 		LogI("steam", "inside room \"%s\" of %s", Data(lobby, "name").c_str(), Data(lobby, "host").c_str());
 		SetPresence();
 		UpdateRoom();
@@ -293,6 +297,7 @@ void OnCallback(int id, const void *data)
 		if (r->m_ulSteamIDLobby == g_lobby && (r->m_rgfChatMemberStateChange & leftFlags) && OwnLobby()) {
 			DropTransfers(r->m_ulSteamIDUserChanged);
 		}
+		if (r->m_ulSteamIDLobby == g_lobby && (r->m_rgfChatMemberStateChange & k_EChatMemberStateChangeEntered)) ForgetArrival(r->m_ulSteamIDUserChanged);
 		AssignNumbers();
 		UpdateRoom();
 		break;

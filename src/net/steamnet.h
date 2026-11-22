@@ -65,6 +65,8 @@ struct OnlineLobby {
 	int myNumber = 0;
 	bool modsRequiredOnly = false;
 	std::string version, rulesLevel;
+	// The SHA-256 of the host's mod DLL ("irbuild"); empty for a room of a build from before the check.
+	std::string build;
 	bool spectate = false;
 	uint64_t specLobby = 0;
 	bool specOnly = false;
@@ -182,7 +184,9 @@ std::string SteamCurrentRoomName();
 bool SteamRenameRoom(const std::string &name);
 // The chat line for a patron who joined, once their lookup has finished. Dropped if the room has changed since.
 void SteamAddPatronJoined(uint64_t room, uint64_t id, const std::string &name);
-std::string SteamVersionMismatch(const std::string &roomVersion, const std::string &roomRulesLevel = std::string());
+// Why this game cannot play in a room of another version, rules level or build of the mod (the SHA-256 of its DLL); empty when it can.
+// A room that announces no build is judged by its version alone.
+std::string SteamVersionMismatch(const std::string &roomVersion, const std::string &roomRulesLevel = std::string(), const std::string &roomBuild = std::string());
 std::vector<std::string> SteamMissingScenario();
 std::string SteamScenarioModName();
 void SteamReportDownloadProgress(uint64_t got, uint64_t total);

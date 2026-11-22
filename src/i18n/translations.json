@@ -3509,5 +3509,7 @@
 {"en":"The mastery counts your ranked wins with each civilization, in every season and queue.","es":"La maestría cuenta tus victorias de liga con cada civilización, en todas las temporadas y colas.","it":"La maestria conta le tue vittorie in classificata con ogni civiltà, in tutte le stagioni e code."},
 {"en":"Mastery: the highest level","es":"Maestría: el nivel más alto","it":"Maestria: il livello più alto"},
 {"en":"New level of mastery","es":"Nuevo nivel de maestría","it":"Nuovo livello di maestria"},
-{"en":"The laurel of the civilization is yours.","es":"El laurel de la civilización es tuyo.","it":"L'alloro della civiltà è tuo."}
+{"en":"The laurel of the civilization is yours.","es":"El laurel de la civilización es tuyo.","it":"L'alloro della civiltà è tuo."},
+{"en":"This copy of Imperivm Resurrected is not an official version. Install the official one to play the league and tournaments.","es":"Esta copia de Imperivm Resurrected no es una versión oficial. Instala la oficial para jugar la liga y los torneos.","it":"Questa copia di Imperivm Resurrected non è una versione ufficiale. Installa quella ufficiale per giocare la lega e i tornei."},
+{"en":"This game could not read its own mod DLL, so it cannot join rooms that check the build. Reinstall Imperivm Resurrected.","es":"Este juego no ha podido leer su propia DLL del mod, así que no puede entrar en salas que comprueban la build. Reinstala Imperivm Resurrected.","it":"Questo gioco non è riuscito a leggere la propria DLL della mod, quindi non può entrare nelle stanze che controllano la build. Reinstalla Imperivm Resurrected."}
 ]

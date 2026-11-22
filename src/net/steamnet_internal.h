@@ -41,7 +41,8 @@
 	X(SteamAPI_ISteamMatchmaking_SetLobbyMemberLimit)                                                      \
 	X(SteamAPI_ISteamMatchmaking_SendLobbyChatMsg) X(SteamAPI_ISteamMatchmaking_GetLobbyChatEntry)         \
 	X(SteamAPI_ISteamMatchmaking_SetLobbyJoinable) X(SteamAPI_ISteamMatchmaking_RequestLobbyData)           \
-	X(SteamAPI_ISteamMatchmaking_InviteUserToLobby)                                                        \
+	X(SteamAPI_ISteamMatchmaking_InviteUserToLobby) X(SteamAPI_ISteamMatchmaking_SetLobbyMemberData)         \
+	X(SteamAPI_ISteamMatchmaking_GetLobbyMemberData)                                                       \
 	X(SteamAPI_ISteamFriends_GetFriendCount) X(SteamAPI_ISteamFriends_GetFriendByIndex)                    \
 	X(SteamAPI_ISteamFriends_GetFriendGamePlayed) X(SteamAPI_ISteamFriends_HasFriend)                      \
 	X(SteamAPI_SteamNetworkingUtils_SteamAPI_v004) X(SteamAPI_ISteamNetworkingUtils_InitRelayNetworkAccess) \
@@ -153,6 +154,10 @@ bool InLobby(uint64 lobby, uint64 who);
 void SetPresence();
 // Every few seconds on the Steam thread: what friends see changes when a ranked search or game starts or ends.
 void RefreshRankedPresence();
+// Every member announces the SHA-256 of its mod DLL as its own data in the room ("irbuild"); the host numbers only those of its build.
+void AnnounceOwnBuild();
+// A member has just entered the host's room: its wait for the build starts now.
+void ForgetArrival(uint64 member);
 void AssignNumbers();
 void RefreshOwnKey();
 void TakeOverHostData();
