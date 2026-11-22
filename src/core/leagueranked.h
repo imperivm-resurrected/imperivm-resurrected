@@ -121,6 +121,8 @@ struct LeagueRankedResult {
 	int shield = 0, placementLeft = 0;
 	// The game that ended the placement: it gives a rank, not a change of Glory (`delta` is null and reads 0).
 	bool placed = false;
+	// The civilization played and the level of mastery it reached; absent from a server before the mastery.
+	LeagueMasteryChange mastery;
 };
 LeagueRankedResult LeagueParseRankedResult(const Json *v);
 
@@ -172,6 +174,9 @@ struct LeagueBoardRow {
 	int delta7 = 0;
 	// +3: three wins in a row, -2: two losses.
 	int streak = 0;
+	// The civilization of the player's highest mastery; empty without one.
+	std::string masteryCiv;
+	LeagueMastery mastery;
 };
 
 // GET /v1/league/leaderboard.

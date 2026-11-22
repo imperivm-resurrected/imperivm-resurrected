@@ -20,6 +20,7 @@
 #include "net/leagueclient_seasons.h"
 #include "net/patrons.h"
 #include "net/steamnet.h"
+#include "ui/leaguemastery.h"
 #include "ui/leaguerewards.h"
 #include "ui/leagueui.h"
 #include "ui/patronui.h"
@@ -84,12 +85,7 @@ int ChipWidth(Painter &p, const std::string &text, int minW = 0)
 
 std::string CivText(const std::string &id)
 {
-	if (id.empty()) return std::string();
-	if (const Civ *c = CivByName(id)) return CivDisplayName(*c);
-	std::string s = id;
-	std::replace(s.begin(), s.end(), '_', ' ');
-	s[0] = static_cast<char>(toupper(static_cast<unsigned char>(s[0])));
-	return s;
+	return LeagueCivName(id);
 }
 
 // "Victory", "Defeat", "Void", "Pending" or "In dispute", with the ink and the back of its chip.
@@ -178,13 +174,17 @@ std::string GameFacts(const LeagueHistoryGame &g)
 }
 
 // A player's name with the patron's laurel on its left and, where asked, the badge on its right.
-void PaintName(Painter &p, int x, int y, int w, int h, const std::string &name, uint64_t id, const LeagueBadge &badge, bool you, int mx, int my)
+// A leaderboard's name, with the badge of the civilization of the player's highest mastery after their league badge, from Legionario
+// on (everyone who played has a Tiro).
+void PaintName(Painter &p, int x, int y, int w, int h, const std::string &name, uint64_t id, const LeagueBadge &badge, bool you, int mx, int my,
+	const std::string &masteryCiv = std::string(), const LeagueMastery &mastery = LeagueMastery())
 {
 	const PatronInfo patron = id ? PatronOf(id) : PatronInfo();
 	const int laurel = patron.tier != PatronTier::None ? 20 : 0;
 	const int nameX = x + (laurel ? laurel + 4 : 0);
 	const int youW = you ? 40 : 0;
-	const int nameW = std::max(20, w - (nameX - x) - LeagueBadgeRoom(badge) - (youW ? youW + 8 : 0));
+	const int masterySize = mastery.present && mastery.level >= 1 && !masteryCiv.empty() ? 18 : 0, masteryRoom = masterySize ? masterySize + 6 : 0;
+	const int nameW = std::max(20, w - (nameX - x) - LeagueBadgeRoom(badge) - masteryRoom - (youW ? youW + 8 : 0));
 	p.Font(0);
 	p.raw = true;
 	const int textW = std::min(nameW, p.TextWidth(name));
@@ -193,7 +193,12 @@ void PaintName(Painter &p, int x, int y, int w, int h, const std::string &name, 
 	SteamProfileHotspot(p, nameX, y, nameW, h, name, id, mx, my);
 	DrawBadgeAfterName(p, nameX, y, nameW, h, name, badge, mx, my, id);
 	p.raw = false;
-	if (you) Chip(p, nameX + textW + LeagueBadgeRoom(badge) + 8, y + (h - 20) / 2, youW, 20, "You", pal::textDim, pal::hairline);
+	if (masterySize) {
+		const int bx = nameX + textW + LeagueBadgeRoom(badge) + 6, by = y + (h - masterySize) / 2;
+		DrawMasteryBadge(p, bx, by, masterySize, mastery.level);
+		HoverMastery(p, bx, by, masterySize, masteryCiv, mastery, mx, my);
+	}
+	if (you) Chip(p, nameX + textW + LeagueBadgeRoom(badge) + masteryRoom + 8, y + (h - 20) / 2, youW, 20, "You", pal::textDim, pal::hairline);
 }
 
 // "Season peak: Centurion I · 1012 Glory · 42 games", the rank in its colour; before there is a peak, the season and its games.
@@ -737,23 +742,95 @@ void PaintGameRow(Painter &p, const LeagueHistoryGame &g, int x, int ry, int w, 
 	RawText(p, x + w - rightW, ry, rightW, rowH, AgoText(g.playedAt, now), pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 }
 
-void PaintRecent(Painter &p, const State &st, const HubLayout &h, int y, int cardH)
+// The summary's mastery: every civilization the player rated a game with, the highest first, with its level, its bar to the next one
+// (this season's wins in the lighter shade) and what the next level asks for.
+void PaintMasteryList(Painter &p, const State &st, const LeagueMeView &me, int x, int y, int w, int cardH)
+{
+	const int mx = st.mouseX, my = st.mouseY, ix = x + 24, iw = w - 48;
+	const std::vector<LeagueCivMastery> &list = me.me.mastery;
+	const int rows = std::min<int>(static_cast<int>(list.size()), (cardH - kRecentTop - 4) / (kRecentRowH + 1));
+	if (!rows) {
+		p.Font(0);
+		const char *text = !me.loaded ? "Reading your games..."
+			: !me.me.masteryKnown	  ? "The league server does not count the mastery yet."
+									  : "Win ranked games with a civilization to climb its mastery, from Tiro to Master.";
+		p.TextWrapped(ix, y + 68, iw, 60, text, pal::caption);
+		return;
+	}
+	for (int i = 0; i < rows; i++) {
+		const LeagueCivMastery &c = list[i];
+		const LeagueMastery &m = c.mastery;
+		const COLORREF ink = LeagueMasteryInk(m.level);
+		const int ry = y + kRecentTop + i * (kRecentRowH + 1), badge = 32, by = ry + (kRecentRowH - badge) / 2;
+		DrawMasteryBadge(p, ix, by, badge, m.level);
+		HoverMastery(p, ix, by, badge, c.civ, m, mx, my);
+		const int tx = ix + badge + 14, tw = iw - badge - 14;
+		// The civilization and its level on the first line, this season's wins at its end; the bar and the next level under them.
+		const std::string season = c.seasonWins > 0 ? TrFmt("+%s this season", {std::to_string(c.seasonWins)}) : std::string();
+		p.Font(3);
+		p.raw = true;
+		const int seasonW = season.empty() ? 0 : std::min(tw / 3, p.TextWidth(season) + 4);
+		p.raw = false;
+		p.Font(1);
+		const std::string civ = LeagueCivName(c.civ);
+		p.raw = true;
+		const int civW = std::min(tw - seasonW - 12, p.TextWidth(civ) + 2);
+		p.raw = false;
+		RawText(p, tx, ry + 4, civW, 22, civ, pal::text);
+		Caps(p, tx + civW + 10, ry + 4, std::max(0, tw - seasonW - civW - 22), 22, LeagueMasteryName(m.level), ink);
+		if (seasonW) {
+			p.Font(3);
+			RawText(p, tx + tw - seasonW, ry + 4, seasonW, 22, season, pal::ok, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		}
+		const std::string next = LeagueMasteryNextText(m);
+		p.Font(3);
+		p.raw = true;
+		const int nextW = std::min(tw / 2, p.TextWidth(next) + 4);
+		p.raw = false;
+		PaintMasteryBar(p, tx, ry + 34, tw - nextW - 12, 6, m, c.seasonWins);
+		RawText(p, tx + tw - nextW, ry + 26, nextW, 22, next, m.Top() ? ink : pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Fill(x + 1, ry + kRecentRowH, w - 2, 1, pal::hairline);
+	}
+	const int noteY = y + kRecentTop + rows * (kRecentRowH + 1) + 10;
+	if (noteY + 40 <= y + cardH - 8) {
+		p.Font(3);
+		p.TextWrapped(ix, noteY, iw, 40, "The mastery counts your ranked wins with each civilization, in every season and queue.", pal::caption);
+	}
+}
+
+void PaintRecent(Painter &p, const State &st, const HubLayout &h, const LeagueMeView &me, int y, int cardH)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const LeagueRankedView &v = st.ranked.view;
 	const int x = h.midX, w = h.midW, ix = x + 24, iw = w - 48;
 	PaintGlassCard(p, x, y, w, cardH);
-	Caps(p, ix, y + 16, iw / 2, 22, "Recent games", pal::redText);
-	{
-		// "Full history →", a link on the title's line.
+	// The card's two views under two titles, the one shown in red: the recent games, and the mastery of the civilizations.
+	const bool mastery = st.ranked.hubMastery;
+	p.Font(4);
+	const int recentW = p.CapsWidth("Recent games", 2) + 4, masteryW = p.CapsWidth("Mastery", 2) + 4;
+	auto title = [&](int tx, int tw, const char *label, bool on, int arg) {
+		const bool hot = !on && p.Hover(tx - 6, y + 10, tw + 12, 34, mx, my);
+		Caps(p, tx, y + 16, tw, 22, label, on ? pal::redText : hot ? pal::text : pal::caption);
+		if (!on) p.AddHit(tx - 6, y + 10, tw + 12, 34, kRankedAct, arg);
+	};
+	title(ix, recentW, "Recent games", !mastery, kRkHubRecent);
+	title(ix + recentW + 24, masteryW, "Mastery", mastery, kRkHubMastery);
+	if (!mastery) {
+		// "Full history →", a link on the title's line; only its arrow when the two titles leave no room for its words.
 		p.Font(4);
-		const int lw = p.CapsWidth("Full history", 1) + 26, lx = ix + iw - lw;
+		const int room = iw - recentW - 24 - masteryW - 16;
+		const bool words = p.CapsWidth("Full history", 1) + 26 <= room;
+		const int lw = words ? p.CapsWidth("Full history", 1) + 26 : 26, lx = ix + iw - lw;
 		const bool hot = p.Hover(lx, y + 10, lw, 34, mx, my);
-		p.TextCaps(lx, y + 16, lw - 20, 22, "Full history", hot ? pal::text : pal::redText, DT_RIGHT | DT_VCENTER | DT_SINGLELINE, 1);
+		if (words) p.TextCaps(lx, y + 16, lw - 20, 22, "Full history", hot ? pal::text : pal::redText, DT_RIGHT | DT_VCENTER | DT_SINGLELINE, 1);
 		p.ArrowRight(lx + lw - 12, y + 21, 8, 12, hot ? pal::text : pal::redText);
 		p.AddHit(lx, y + 10, lw, 34, kRankedAct, kRkHistory);
 	}
 	p.Fill(x + 1, y + 50, w - 2, 1, pal::hairline);
+	if (mastery) {
+		PaintMasteryList(p, st, me, x, y, w, cardH);
+		return;
+	}
 	const int rows = std::min<int>({static_cast<int>(v.recent.size()), kLeagueRecentGames, (cardH - kRecentTop - 4) / (kRecentRowH + 1)});
 	if (!rows) {
 		p.Font(0);
@@ -916,7 +993,7 @@ void PaintMiniBoard(Painter &p, const State &st, const HubLayout &h, int y, int 
 		p.Font(you || r.position <= 3 ? 1 : 0);
 		RawText(p, ix, ry, 40, rowH, std::to_string(r.position), you || r.position <= 3 ? pal::text : pal::caption);
 		const uint64_t id = _strtoui64(r.steamId.c_str(), nullptr, 10);
-		PaintName(p, ix + 40, ry, nameW, rowH, r.name.empty() ? Tr("Player") : r.name, id, RankBadge(r.tier, r.division), you, mx, my);
+		PaintName(p, ix + 40, ry, nameW, rowH, r.name.empty() ? Tr("Player") : r.name, id, RankBadge(r.tier, r.division), you, mx, my, r.masteryCiv, r.mastery);
 		p.Font(1);
 		RawText(p, ix + 40 + nameW + 16, ry, glW, rowH, std::to_string(r.glory), pal::text);
 		p.Font(0);
@@ -975,7 +1052,7 @@ void PaintHub(Painter &p, const State &st)
 	const int recentMax = kRecentTop + kLeagueRecentGames * (kRecentRowH + 1) + 8;
 	const int rewardsH = std::min(h.cardH - kGap - 120, std::max(h.cardH - kGap - recentMax, kRewardsMinH));
 	const int recentH = h.cardH - kGap - rewardsH;
-	PaintRecent(p, st, h, h.cardY, recentH);
+	PaintRecent(p, st, h, me, h.cardY, recentH);
 	PaintSeasonRewards(p, st, h, me, h.cardY + recentH + kGap, rewardsH);
 	if (!team) {
 		PaintMiniBoard(p, st, h, h.cardY, h.cardH);
@@ -1123,22 +1200,60 @@ void PaintPlayerCard(Painter &p, const State &st, const std::string &seasonText,
 	Tile(p, ix + 3 * (tileW + tileGap), ty, tileW, tileH, c.avgDurationMs >= 60000 ? TrFmt("%s min", {std::to_string(c.avgDurationMs / 60000)}) : std::string("\xE2\x80\x94"),
 		"Average");
 
-	// The three civilizations played most, as a share of the games.
+	// The three civilizations played most: the badge of each one's mastery (of every season and queue), its level over the bar to the
+	// next one, and the games and win rate of this season with it. The season being played puts its wins in the lighter part of the bar.
+	// From a server before the mastery, the share of the games whose civilization is known (not of all of them: the reports of some
+	// games may name none).
 	const int civY = ty + tileH + (tight ? 12 : 18), civStep = tight ? 28 : 32;
 	Caps(p, ix, civY, iw, 20, "Civilizations", pal::caption);
 	if (c.civs.empty()) {
 		p.Font(3);
 		p.Text(ix, civY + 26, iw, 24, "No games in this season yet.", pal::caption);
 	}
+	const bool liveSeason = st.ranked.boardSeason < 0 || (v.seasonLoaded && v.season.active && c.season == v.season.number);
 	for (size_t i = 0; i < c.civs.size(); i++) {
 		const LeagueCivShare &civ = c.civs[i];
-		const int ry = civY + 24 + static_cast<int>(i) * civStep, share = c.games > 0 ? civ.games * 100 / c.games : 0;
+		const LeagueMastery &m = civ.mastery;
+		const int ry = civY + 24 + static_cast<int>(i) * civStep, rowH = civStep - 4, badge = tight ? 18 : 20, by = ry + (rowH - badge) / 2;
+		const int nameX = ix + badge + 8, nameW = tight ? 100 : 116;
+		if (m.present) {
+			DrawMasteryBadge(p, ix, by, badge, m.level);
+			HoverMastery(p, ix, by, badge, civ.civ, m, mx, my);
+		}
 		p.Font(0);
-		RawText(p, ix, ry, 130, civStep - 4, CivText(civ.civ), pal::body);
-		const int barX = ix + 140, barW = iw - 140 - 60;
-		p.Fill(barX, ry + (civStep - 4) / 2 - 4, barW, 8, pal::bg);
-		p.Fill(barX, ry + (civStep - 4) / 2 - 4, barW * std::min(100, share) / 100, 8, pal::textDim);
-		RawText(p, ix + iw - 52, ry, 52, civStep - 4, std::to_string(share) + " %", pal::text, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+		RawText(p, m.present ? nameX : ix, ry, m.present ? nameW : nameW + badge + 8, rowH, CivText(civ.civ), pal::body);
+		const std::string figures = (civ.games == 1 ? Tr("1 game") : TrFmt("%s games", {std::to_string(civ.games)})) + "  \xC2\xB7  " +
+			std::to_string(LeagueWinRate(civ.wins, civ.games - civ.wins)) + " %";
+		p.Font(3);
+		p.raw = true;
+		const int figW = std::min(iw / 3, p.TextWidth(figures) + 4);
+		p.raw = false;
+		RawText(p, ix + iw - figW, ry, figW, rowH, figures, pal::text, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		const int barX = nameX + nameW + 8, barW = std::max(24, ix + iw - figW - 12 - barX);
+		if (m.present) {
+			const COLORREF ink = LeagueMasteryInk(m.level);
+			const std::string level = LeagueMasteryLabel(m.level), count = m.Top() ? std::string() : std::to_string(m.wins) + " / " + std::to_string(m.nextWins);
+			p.Font(4);
+			p.raw = true;
+			const int levelW = p.CapsWidth(level, 1);
+			p.Font(3);
+			const int countW = count.empty() ? 0 : p.TextWidth(count);
+			// On a narrow card the wins give way to the level.
+			const bool counted = countW && levelW + 8 + countW <= barW;
+			p.Font(4);
+			p.TextCaps(barX, ry - 1, counted ? barW - countW - 8 : barW, rowH - 9, level, ink, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
+			p.raw = false;
+			if (counted) {
+				p.Font(3);
+				RawText(p, barX + barW - countW, ry - 1, countW, rowH - 9, count, pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+			}
+			PaintMasteryBar(p, barX, ry + rowH - 7, barW, 5, m, liveSeason ? civ.wins : 0);
+		}
+		else {
+			const int share = c.civGames > 0 ? civ.games * 100 / c.civGames : 0;
+			p.Fill(barX, ry + rowH / 2 - 4, barW, 8, pal::bg);
+			p.Fill(barX, ry + rowH / 2 - 4, barW * std::min(100, share) / 100, 8, pal::textDim);
+		}
 	}
 
 	// The last ten games, the newest first: a win, a loss, or a dash for one that did not count.
@@ -1281,7 +1396,8 @@ void PaintBoard(Painter &p, const State &st)
 		const uint64_t id = _strtoui64(r.steamId.c_str(), nullptr, 10);
 		const int av = 32;
 		if (!PaintAvatar(p, m + cols[kName].x, ry + (rh - av) / 2, av, id)) p.Fill(m + cols[kName].x, ry + (rh - av) / 2, av, av, pal::hairline);
-		PaintName(p, m + cols[kName].x + av + 12, ry, cols[kName].w - av - 12, rh, r.name.empty() ? Tr("Player") : r.name, id, LeagueBadge(), you, mx, my);
+		PaintName(p, m + cols[kName].x + av + 12, ry, cols[kName].w - av - 12, rh, r.name.empty() ? Tr("Player") : r.name, id, LeagueBadge(), you, mx, my,
+			r.masteryCiv, r.mastery);
 		DrawLeagueBadge(p, m + cols[3].x, ry + (rh - kLeagueBadgeSize) / 2, kLeagueBadgeSize, RankBadge(r.tier, r.division));
 		Display(p, 22);
 		p.raw = true;

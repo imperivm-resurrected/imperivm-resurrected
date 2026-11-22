@@ -18,6 +18,7 @@
 #include "net/leagueclient.h"
 #include "net/steamnet.h"
 #include "ui/leaguemapthumb.h"
+#include "ui/leaguemastery.h"
 #include "ui/leagueui.h"
 
 #include "ui/mpui_internal.h"
@@ -358,10 +359,33 @@ void PaintStatsGrid(Painter &p, const LeagueRankedGame &g, int x, int y, int w, 
 std::string CivOfPlayer(const LeagueRankedGame &g, const std::string &steamId)
 {
 	for (const auto &c : g.civs) {
-		if (c.first != steamId) continue;
-		if (const Civ *civ = CivByName(c.second)) return CivDisplayName(*civ);
+		if (c.first == steamId) return LeagueCivName(c.second);
 	}
 	return std::string();
+}
+
+// The notice of a level of mastery won with the game: the badge, Maestro's in its laurel and the band framed in gold, and the next level.
+// Returns its height, 0 without one.
+int PaintMasteryUp(Painter &p, const LeagueMasteryChange &mc, int x, int y, int w)
+{
+	if (!mc.Up()) return 0;
+	const LeagueMastery &m = mc.mastery;
+	const COLORREF ink = LeagueMasteryInk(m.level);
+	const int h = 72, badge = 56;
+	p.Fill(x, y, w, h, pal::raised);
+	p.Frame(x, y, w, h, m.Top() ? ink : pal::hairline);
+	p.Fill(x, y, 3, h, ink);
+	DrawMasteryBadge(p, x + 14, y + (h - badge) / 2, badge, m.level);
+	const int tx = x + 14 + badge + 14, tw = w - (tx - x) - 14;
+	Caps(p, tx, y + 8, tw, 18, m.Top() ? "Mastery: the highest level" : "New level of mastery", pal::redText);
+	Display(p, 26);
+	p.raw = true;
+	p.TextCaps(tx, y + 26, tw, 26, TrFmt("%s with %s", {LeagueMasteryLabel(m.level), LeagueCivName(mc.civ)}), ink, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
+	p.raw = false;
+	p.Font(3);
+	const std::string line = m.Top() ? Tr("The laurel of the civilization is yours.") : LeagueMasteryNextText(m);
+	RawText(p, tx, y + 50, tw, 18, line, pal::caption);
+	return h;
 }
 
 void PaintSummary(Painter &p, const State &st, const LeagueMeView &me, int x, int y, int w, int h)
@@ -446,8 +470,11 @@ void PaintSummary(Painter &p, const State &st, const LeagueMeView &me, int x, in
 
 	// The verdict and, under it, the game's number in the season and "Report a problem", all at the foot of the card.
 	const int footY = y + h - 66, lineY = footY + 30;
-	if (g.stats) PaintStatsGrid(p, g, ix, gridY, iw, footY - 8 - gridY);
-	else {
+	// A level of mastery won with the game goes before its figures, which give way to it when the card is short.
+	const int up = VerdictOf(v.result) == Verdict::Rated ? PaintMasteryUp(p, v.result.answer.ranked.mastery, ix, gridY, iw) : 0;
+	if (up) gridY += up + 12;
+	if (g.stats && (!up || footY - 8 - gridY >= 100)) PaintStatsGrid(p, g, ix, gridY, iw, footY - 8 - gridY);
+	else if (!up) {
 		p.Font(3);
 		p.TextWrapped(ix, gridY + 2, iw, std::max(20, footY - 8 - (gridY + 2)),
 			team ? "The league checks that the reports describe the same game before it gives any Glory."

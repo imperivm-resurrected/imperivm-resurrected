@@ -41,7 +41,9 @@ bool LeagueParseHall(const Json &j, LeagueHall &out);
 // GET /v1/league/players/:steamid: a player's season, as the card of the full leaderboard shows it.
 struct LeagueCivShare {
 	std::string civ;
+	// The season's games and wins with it, and its mastery of every season and queue.
 	int games = 0, wins = 0;
+	LeagueMastery mastery;
 };
 struct LeaguePlayerProfile {
 	std::string steamId, name;
@@ -52,8 +54,10 @@ struct LeaguePlayerProfile {
 	LeaguePeak peak;
 	int games = 0, wins = 0, losses = 0, streak = 0;
 	uint32_t avgDurationMs = 0;
-	// The three civilizations played most, and the last ten games from the player's side.
+	// The three civilizations played most, and the last ten games from the player's side. `civGames` counts the season's games
+	// whose civilization is known, the base of each one's share (`games` also has those no report named a civilization for).
 	std::vector<LeagueCivShare> civs;
+	int civGames = 0;
 	std::vector<LeagueHistoryGame> recent;
 	LeagueFrame frame, title;
 };

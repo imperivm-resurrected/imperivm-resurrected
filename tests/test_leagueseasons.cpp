@@ -323,11 +323,85 @@ void RewardsToday()
 	CHECK(!f.founder);
 }
 
+// The mastery as the league's test/mastery.spec.ts gets it from the server: in /me, the leaderboard, the card and a match's result.
+void Mastery()
+{
+	LeagueMe me;
+	CHECK(LeagueParseMe(Parse(R"({"steamId":"7","mastery":[
+		{"civ":"Carthage","games":3,"level":1,"wins":3,"levelWins":3,"nextWins":10,"season":{"games":3,"wins":3}},
+		{"civ":"Gaul","games":60,"level":4,"wins":51,"levelWins":50,"nextWins":null,"season":{"games":0,"wins":0}},
+		{"civ":"","games":1},{"bogus":true}]})"),
+		me));
+	CHECK(me.masteryKnown);
+	CHECK_EQ(me.mastery.size(), static_cast<size_t>(2));
+	CHECK_EQ(me.mastery[0].civ, std::string("Carthage"));
+	CHECK_EQ(me.mastery[0].games, 3);
+	CHECK_EQ(me.mastery[0].mastery.level, 1);
+	CHECK_EQ(me.mastery[0].mastery.nextWins, 10);
+	CHECK_EQ(me.mastery[0].seasonWins, 3);
+	CHECK_EQ(LeagueMasteryWinsLeft(me.mastery[0].mastery), 7);
+	CHECK(me.mastery[1].mastery.Top());
+	CHECK_EQ(me.mastery[1].mastery.nextWins, -1);
+	CHECK_EQ(LeagueMasteryWinsLeft(me.mastery[1].mastery), 0);
+	CHECK(LeagueMasteryProgress(me.mastery[1].mastery) == 1.0f);
+	LeagueMe old;
+	CHECK(LeagueParseMe(Parse(R"({"steamId":"7"})"), old));
+	CHECK(!old.masteryKnown);
+
+	// Six wins between Legionario (3) and Veterano (10): three of the seven.
+	LeagueMastery m;
+	m.level = 1;
+	m.wins = 6;
+	m.levelWins = 3;
+	m.nextWins = 10;
+	CHECK(LeagueMasteryProgress(m) > 0.42f && LeagueMasteryProgress(m) < 0.43f);
+	CHECK_EQ(std::string(LeagueMasteryName(0)), std::string("Tiro"));
+	CHECK_EQ(std::string(LeagueMasteryName(4)), std::string("Master"));
+	CHECK_EQ(std::string(LeagueMasteryName(9)), std::string("Master"));
+
+	LeagueBoard b;
+	CHECK(LeagueParseBoard(Parse(R"({"season":0,"total":2,"offset":0,"rows":[
+		{"position":1,"steamId":"76561198000000801","glory":1300,"mastery":{"civ":"Gaul","level":1,"wins":3,"levelWins":3,"nextWins":10}},
+		{"position":2,"steamId":"76561198000000802","glory":1200,"mastery":null}]})"),
+		b));
+	CHECK_EQ(b.rows[0].masteryCiv, std::string("Gaul"));
+	CHECK_EQ(b.rows[0].mastery.level, 1);
+	CHECK(b.rows[1].masteryCiv.empty());
+	CHECK(!b.rows[1].mastery.present);
+
+	// The staging card of the 3 % bug: 26 games on the ratings row, one of them with its civilization known.
+	LeaguePlayerProfile p;
+	CHECK(LeagueParsePlayerProfile(Parse(R"({"steamId":"76561198000000801","season":0,"games":26,"wins":16,"losses":10,"civGames":1,
+		"civs":[{"civ":"Gaul","games":1,"wins":1,"mastery":{"level":0,"wins":1,"levelWins":0,"nextWins":3}}]})"),
+		p));
+	CHECK_EQ(p.games, 26);
+	CHECK_EQ(p.civGames, 1);
+	CHECK(p.civs[0].mastery.present);
+	CHECK_EQ(p.civs[0].mastery.wins, 1);
+	LeaguePlayerProfile before;
+	CHECK(LeagueParsePlayerProfile(Parse(R"({"steamId":"9","games":26,"civs":[{"civ":"rome","games":2,"wins":1},{"civ":"gaul","games":1,"wins":0}]})"), before));
+	CHECK_EQ(before.civGames, 3);
+	CHECK(!before.civs[0].mastery.present);
+
+	const Json up = Parse(R"({"gloryBefore":0,"gloryAfter":0,"mastery":{"civ":"Gaul","level":1,"levelBefore":0,"wins":3,"levelWins":3,"nextWins":10}})");
+	const LeagueRankedResult r = LeagueParseRankedResult(&up);
+	CHECK(r.mastery.Up());
+	CHECK_EQ(r.mastery.civ, std::string("Gaul"));
+	CHECK_EQ(r.mastery.levelBefore, 0);
+	CHECK_EQ(r.mastery.mastery.level, 1);
+	const Json same = Parse(R"({"mastery":{"civ":"Egypt","level":0,"levelBefore":0,"wins":0,"levelWins":0,"nextWins":3}})");
+	CHECK(!LeagueParseRankedResult(&same).mastery.Up());
+	CHECK(LeagueParseRankedResult(&same).mastery.present);
+	const Json none = Parse(R"({"gloryBefore":3})");
+	CHECK(!LeagueParseRankedResult(&none).mastery.present);
+}
+
 }
 
 int main()
 {
 	TrSetLanguageSource(&TestLanguage);
+	Mastery();
 	MeAdditions();
 	LookupFrames();
 	BoardRows();

@@ -311,6 +311,7 @@ LeagueRankedResult LeagueParseRankedResult(const Json *v)
 	r.shield = v->GetInt("shield");
 	r.placementLeft = v->GetInt("placementLeft");
 	r.placed = v->GetBool("placed");
+	r.mastery = LeagueMasteryChangeFromJson(v->Get("mastery"));
 	return r;
 }
 
@@ -406,6 +407,10 @@ bool LeagueParseBoard(const Json &j, LeagueBoard &out)
 		row.hasDelta7 = delta7 && delta7->type == Json::Number;
 		row.delta7 = row.hasDelta7 ? static_cast<int>(delta7->num) : 0;
 		row.streak = r.GetInt("streak");
+		if (const LeagueMasteryChange top = LeagueMasteryChangeFromJson(r.Get("mastery")); top.present) {
+			row.masteryCiv = top.civ;
+			row.mastery = top.mastery;
+		}
 		if (row.position > 0) out.rows.push_back(row);
 	}
 	return true;

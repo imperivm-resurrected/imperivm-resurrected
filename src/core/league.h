@@ -168,6 +168,40 @@ struct LeagueCup {
 	int placement = 0, entries = 0;
 };
 
+// The mastery of a civilization as the league counts it (its src/mastery.ts keeps the thresholds): the level, 0 (Tiro) to 4
+// (Maestro), climbed with the rated wins won with it in any season and queue, and the wins the level and the next one ask for.
+constexpr int kLeagueMasteryTop = 4;
+struct LeagueMastery {
+	bool present = false;
+	int level = 0, wins = 0, levelWins = 0;
+	// -1 at Maestro.
+	int nextWins = -1;
+	bool Top() const { return level >= kLeagueMasteryTop; }
+};
+LeagueMastery LeagueMasteryFromJson(const Json *v);
+// The level's name for Tr(): "Tiro", "Legionary", "Veteran", "Evocatus" and "Master".
+const char *LeagueMasteryName(int level);
+// How far the wins have gone from the level to the next one, 0 to 1; 1 at Maestro.
+float LeagueMasteryProgress(const LeagueMastery &m);
+// The wins still missing for the next level; 0 at Maestro.
+int LeagueMasteryWinsLeft(const LeagueMastery &m);
+// One civilization in the summary: its games and mastery of every season, and the games and wins of the season being played.
+struct LeagueCivMastery {
+	std::string civ;
+	int games = 0;
+	LeagueMastery mastery;
+	int seasonGames = 0, seasonWins = 0;
+};
+// What a rated match did to the mastery of the civilization played in it (`mastery` of its result).
+struct LeagueMasteryChange {
+	bool present = false;
+	std::string civ;
+	int levelBefore = 0;
+	LeagueMastery mastery;
+	bool Up() const { return present && mastery.level > levelBefore; }
+};
+LeagueMasteryChange LeagueMasteryChangeFromJson(const Json *v);
+
 // GET /v1/league/me.
 struct LeagueMe {
 	std::string steamId, name;
@@ -189,6 +223,9 @@ struct LeagueMe {
 	// The last finished cups, newest first; `cupsKnown` is false for a server before the list.
 	bool cupsKnown = false;
 	std::vector<LeagueCup> cups;
+	// Every civilization rated with, the highest mastery first; `masteryKnown` is false for a server before the mastery.
+	bool masteryKnown = false;
+	std::vector<LeagueCivMastery> mastery;
 };
 bool LeagueParseMe(const Json &j, LeagueMe &out);
 
