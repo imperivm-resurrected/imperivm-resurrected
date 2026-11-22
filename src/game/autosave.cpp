@@ -186,13 +186,6 @@ void __cdecl HookRequestQuit()
 	g_origRequestQuit();
 }
 
-void AutosaveQuitWithoutSaving()
-{
-	g_quitPending = false;
-	if (g_origRequestQuit) g_origRequestQuit();
-	else reinterpret_cast<void(__cdecl *)()>(addr::kRequestQuitToMenu)();
-}
-
 bool AutosaveOnExit()
 {
 	if (!GetConfig().autosave || !GetConfig().autosaveOnExit || !CanAutosaveNow()) return false;
