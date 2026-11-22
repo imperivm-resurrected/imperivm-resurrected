@@ -278,6 +278,15 @@ void RewardsToday()
 	CHECK_EQ(TierNumber(p.nextTier), TierNumber(LeagueTier::Tribune));
 	CHECK_EQ(p.gloryToNext, 236);
 
+	// Games are not enough: 12 games with 3 wins still need the vexillum's 5 wins.
+	p = LeagueRewardsToday(Standing(LeagueTier::Centurion, 2, 964, 3, 9), false);
+	CHECK(!p.vexillum);
+	CHECK_EQ(p.goal, 10);
+	CHECK_EQ(p.goalWins, 5);
+	p = LeagueRewardsToday(Standing(LeagueTier::Centurion, 2, 964, 11, 20), false);
+	CHECK(p.vexillum && !p.frame);
+	CHECK_EQ(p.goalWins, 12);
+
 	// The highest rank reached counts, not the one held now.
 	LeagueRanked fell = Standing(LeagueTier::Centurion, 1, 1134, 8, 6);
 	fell.peak.present = true;

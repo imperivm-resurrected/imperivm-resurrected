@@ -912,7 +912,8 @@ void PaintSeasonRewards(Painter &p, const State &st, const HubLayout &h, const L
 	const int season = v.seasonLoaded ? v.season.number : rk.season;
 	const int x = h.midX, w = h.midW, ix = x + 24, iw = w - 48;
 	PaintGlassCard(p, x, y, w, cardH);
-	const std::string count = today.goal ? TrFmt("%s of %s games", {std::to_string(today.games), std::to_string(today.goal)})
+	const std::string count = today.goal ? TrFmt("%s of %s games", {std::to_string(today.games), std::to_string(today.goal)}) + "  ·  " +
+											 TrFmt("%s of %s wins", {std::to_string(today.wins), std::to_string(today.goalWins)})
 										 : TrFmt("%s games: everything won", {std::to_string(today.games)});
 	p.Font(3);
 	p.raw = true;
@@ -920,7 +921,7 @@ void PaintSeasonRewards(Painter &p, const State &st, const HubLayout &h, const L
 	p.raw = false;
 	Caps(p, ix, y + 16, iw - countW - 12, 22, "Season rewards", pal::redText);
 	RawText(p, ix + iw - countW, y + 16, countW, 22, count, today.goal ? pal::caption : pal::ok, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
-	const char *about = today.founder ? "This test season gives the Founder emblem to everyone who plays 10 games in it."
+	const char *about = today.founder ? "This test season gives the Founder emblem to everyone who plays 10 games and wins 5 in it."
 									   : "At the close you keep the rewards of the highest rank you reach.";
 	// The line takes the smaller type before it would be cut.
 	p.Font(0);
@@ -949,7 +950,7 @@ void PaintSeasonRewards(Painter &p, const State &st, const HubLayout &h, const L
 			0);
 	}
 
-	// What today's standing gives: from 10 games the vexillum, from 25 the frame and the title too.
+	// What today's standing gives: from 10 games and 5 wins the vexillum, from 25 games and 12 wins the frame and the title too.
 	const int boxY = y + 156, boxH = 122, slotW = (iw - 16) / 3;
 	p.Fill(ix, boxY, iw, boxH, pal::raised);
 	p.Frame(ix, boxY, iw, boxH, pal::hairline);
@@ -963,11 +964,11 @@ void PaintSeasonRewards(Painter &p, const State &st, const HubLayout &h, const L
 	DrawLeagueBadge(p, ix + (slotW - 60) / 2, sy, 60, LeagueVexillumBadge(today.tier, today.founder, season));
 	const bool vexillum = today.vexillum && !today.placing;
 	PaintRewardSlot(p, ix, sy, slotW, today.founder ? Tr("The Founder's vexillum") : Tr("Vexillum"),
-		vexillum ? Tr("next to your name") : TrFmt("from %s games", {std::to_string(kLeagueVexillumGames)}), vexillum);
+		vexillum ? Tr("next to your name") : TrFmt("from %s games and %s wins", {std::to_string(kLeagueVexillumGames), std::to_string(kLeagueVexillumWins)}), vexillum);
 	const int fx = ix + slotW + 8;
 	PaintFramedAvatar(p, fx + (slotW - 56) / 2, sy, 56, SteamOwnId(), st.player, frame);
 	const bool framed = today.frame && !today.placing;
-	PaintRewardSlot(p, fx, sy, slotW, Tr("Avatar frame"), framed ? Tr("around your avatar") : TrFmt("from %s games", {std::to_string(kLeagueFrameGames)}),
+	PaintRewardSlot(p, fx, sy, slotW, Tr("Avatar frame"), framed ? Tr("around your avatar") : TrFmt("from %s games and %s wins", {std::to_string(kLeagueFrameGames), std::to_string(kLeagueFrameWins)}),
 		framed);
 	const int tx = fx + slotW + 8;
 	// The name over its title; a title too long for one line takes the name's place, on two lines.
@@ -983,7 +984,7 @@ void PaintSeasonRewards(Painter &p, const State &st, const HubLayout &h, const L
 		p.Font(3);
 		RawText(p, tx + 6, sy + 32, slotW - 12, 20, title, LeagueFrameInk(frame), DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
-	PaintRewardSlot(p, tx, sy, slotW, Tr("Season title"), framed ? Tr("under your name") : TrFmt("from %s games", {std::to_string(kLeagueFrameGames)}), framed);
+	PaintRewardSlot(p, tx, sy, slotW, Tr("Season title"), framed ? Tr("under your name") : TrFmt("from %s games and %s wins", {std::to_string(kLeagueFrameGames), std::to_string(kLeagueFrameWins)}), framed);
 	p.Fill(ix + slotW + 4, boxY + 12, 1, boxH - 24, pal::hairline);
 	p.Fill(tx - 4, boxY + 12, 1, boxH - 24, pal::hairline);
 

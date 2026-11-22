@@ -175,9 +175,11 @@ LeagueRewardPreview LeagueRewardsToday(const LeagueRanked &rk, bool testSeason)
 	LeagueRewardPreview p;
 	p.games = std::max(0, rk.wins + rk.losses);
 	p.founder = testSeason;
-	p.vexillum = p.games >= kLeagueVexillumGames;
-	p.frame = p.games >= kLeagueFrameGames;
+	p.wins = std::max(0, rk.wins);
+	p.vexillum = p.games >= kLeagueVexillumGames && p.wins >= kLeagueVexillumWins;
+	p.frame = p.games >= kLeagueFrameGames && p.wins >= kLeagueFrameWins;
 	p.goal = !p.vexillum ? kLeagueVexillumGames : !p.frame ? kLeagueFrameGames : 0;
+	p.goalWins = !p.vexillum ? kLeagueVexillumWins : !p.frame ? kLeagueFrameWins : 0;
 	p.placing = !rk.present || rk.tier == LeagueTier::None || rk.placementLeft > 0;
 	if (p.placing) return p;
 	LeagueTier best = rk.tier;

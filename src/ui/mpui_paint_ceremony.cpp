@@ -154,7 +154,8 @@ void PaintRewards(Painter &p, const State &st, const LeagueCeremony &c, const Lo
 	const int fx = x + boxW + gap;
 	PaintFramedAvatar(p, fx + (boxW - k.frame) / 2, y + k.frameY, k.frame, own, me, frame ? cosmetic : LeagueFrame());
 	if (!frame) PaintTint(p, fx + 1, y + 1, boxW - 2, k.pictureH + 2, pal::raised, 150);
-	const std::string missing = TrFmt("It asked for %s games: you played %s.", {std::to_string(kLeagueFrameGames), std::to_string(r.games)});
+	const std::string missing = TrFmt("It asked for %s games and %s wins: you played %s and won %s.",
+		{std::to_string(kLeagueFrameGames), std::to_string(kLeagueFrameWins), std::to_string(r.games), std::to_string(c.wins)});
 	PaintRewardText(p, k, fx, y, boxW, LeagueFrameLabel(cosmetic), frame ? Tr("Around your avatar in the profile and on your card in the leaderboard.") : missing,
 		frame);
 

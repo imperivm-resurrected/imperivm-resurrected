@@ -72,14 +72,15 @@ std::string LeagueSeasonTitle(LeagueTier tier, bool founder, const std::string &
 // "W3" for three wins in a row, "L2" for two losses ("V3" and "D2" in Spanish); a dash without a streak.
 std::string LeagueStreakText(int streak);
 
-// The games a season asks for its vexillum, and for the frame and the title as well.
-constexpr int kLeagueVexillumGames = 10, kLeagueFrameGames = 25;
+// The games and the wins a season asks for its vexillum, and for the frame and the title as well.
+constexpr int kLeagueVexillumGames = 10, kLeagueFrameGames = 25, kLeagueVexillumWins = 5, kLeagueFrameWins = 12;
 
 // What the season being played would leave the player if it closed now.
 struct LeagueRewardPreview {
-	int games = 0;
-	// The games the next reward asks for: 10 for the vexillum, then 25 for the frame and the title; 0 once everything is won.
-	int goal = kLeagueVexillumGames;
+	int games = 0, wins = 0;
+	// The games and wins the next reward asks for: 10 and 5 for the vexillum, then 25 and 12 for the frame and the title; 0 once
+	// everything is won.
+	int goal = kLeagueVexillumGames, goalWins = kLeagueVexillumWins;
 	bool vexillum = false, frame = false;
 	// The test season gives the Founder's vexillum in place of the rank's.
 	bool founder = false;

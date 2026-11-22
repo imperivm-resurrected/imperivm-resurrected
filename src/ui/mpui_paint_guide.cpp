@@ -101,13 +101,13 @@ int PaintKeepsBody(Painter &p, const State &st, const LeagueRanked &rk, int ix, 
 	frame.seasonName = v.seasonLoaded ? LeagueSeasonName(v.season, v.lang) : std::string();
 	const int pic = 64, tx = ix + pic + 20, tw = iw - pic - 20;
 	DrawLeagueBadge(p, ix, ty, pic, LeagueVexillumBadge(tier, false, season));
-	ty += std::max(pic, PaintKeep(p, tx, ty, tw, "Vexillum", "Next to your name, wherever it shows. From 10 games in the season.")) + 18;
+	ty += std::max(pic, PaintKeep(p, tx, ty, tw, "Vexillum", "Next to your name, wherever it shows. From 10 games and 5 wins in the season.")) + 18;
 	PaintFramedAvatar(p, ix + 4, ty, pic - 8, SteamOwnId(), st.player, frame);
-	ty += std::max(pic, PaintKeep(p, tx, ty, tw, "Avatar frame", "The metal of your rank around your avatar. From 25 games.")) + 18;
+	ty += std::max(pic, PaintKeep(p, tx, ty, tw, "Avatar frame", "The metal of your rank around your avatar. From 25 games and 12 wins.")) + 18;
 	p.Fill(ix, ty + 8, pic, pic - 16, pal::raised);
 	p.Font(3);
 	RawText(p, ix, ty + 8, pic, pic - 16, LeagueFramePlate(Tr(LeagueTierName(tier)), season), LeagueFrameInk(frame), DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-	const int titleH = PaintKeep(p, tx, ty, tw, "Season title", "Your rank and the season under your name, as in the leaderboard. From 25 games.");
+	const int titleH = PaintKeep(p, tx, ty, tw, "Season title", "Your rank and the season under your name, as in the leaderboard. From 25 games and 12 wins.");
 	p.Font(3);
 	p.raw = true;
 	p.Text(tx, ty + titleH + 2, tw, 20, LeagueTitleLabel(frame), LeagueFrameInk(frame), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
