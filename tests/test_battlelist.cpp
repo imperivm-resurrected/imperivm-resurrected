@@ -191,6 +191,50 @@ void CampaignPacksPreferTheActiveOne()
 	CHECK(BattlePicturePath("adventures/galia.bmp").empty());
 }
 
+void CampaignsHaveTheModsCovers()
+{
+	CHECK_EQ(BattleCampaignCovers(kBattleGameImperivm1).size(), static_cast<size_t>(1));
+	CHECK_EQ(BattleCampaignCovers(kBattleGameImperivm2).size(), static_cast<size_t>(3));
+	CHECK(BattleCampaignCovers(kBattleGameOther).empty());
+	// The game's list gives the path without the extension; a pack lists its file with it, in any case.
+	CHECK_EQ(BattleCampaignCoverOf("Adventures\\Imperivm I - La guerra de las Galias"), std::string("imperivm1-the-gallic-war.jpg"));
+	CHECK_EQ(BattleCampaignCoverOf("adventures/imperivm ii - hannibal's campaigns.bfhp"), std::string("imperivm2-hannibals-campaigns.jpg"));
+	CHECK_EQ(BattleCampaignCoverOf("Imperivm II - Numantia"), std::string("imperivm2-numantia.jpg"));
+	CHECK_EQ(BattleCampaignCoverOf("adventures/Imperivm II - The Punic Wars.BFHP"), std::string("imperivm2-the-punic-wars.jpg"));
+	CHECK(BattleCampaignCoverOf("adventures/Imperivm II - Tutorial").empty());
+	CHECK(BattleCampaignCoverOf("adventures/GreatBattles/1_Great_Battles_Zama").empty());
+	CHECK(BattleCampaignCoverOf("").empty());
+}
+
+void LaurelsKeepTheHardestVictory()
+{
+	const std::string zama = "adventures/GreatBattles/1_Great_Battles_Zama", title = "Desembarco en \xC3\x81" "frica - 204 a.C.";
+	std::vector<BattleLaurel> l;
+	CHECK(BattleLaurelOf(l, zama, title) == 0);
+	// A game loaded from a save gives only the title; the adventure screen gives the path too.
+	CHECK(BattleLaurelsAdd(l, "", title, 1));
+	CHECK(BattleLaurelsAdd(l, zama, title, 3));
+	CHECK_EQ(l.size(), static_cast<size_t>(1));
+	CHECK_EQ(l[0].path, zama);
+	CHECK(!BattleLaurelsAdd(l, zama, title, 2));
+	CHECK_EQ(BattleLaurelOf(l, zama, title), 3);
+	CHECK_EQ(BattleLaurelOf(l, "ADVENTURES/GREATBATTLES/1_GREAT_BATTLES_ZAMA", "Landing in Africa"), 3);
+	CHECK_EQ(BattleLaurelOf(l, "", title), 3);
+	CHECK_EQ(BattleLaurelOf(l, "adventures/GreatBattles/2_Great_Battles_Numantia", "El asedio de Numancia"), 0);
+	CHECK(!BattleLaurelsAdd(l, zama, title, 0));
+	CHECK(!BattleLaurelsAdd(l, zama, title, 4));
+	CHECK(!BattleLaurelsAdd(l, "", "  ", 2));
+	// Tabs and line breaks never reach the file.
+	CHECK(BattleLaurelsAdd(l, "", "Alesia\t52\na.C.", 2));
+	const std::string text = BattleLaurelsEncode(l);
+	CHECK_EQ(text, "3\t" + zama + "\t" + title + "\n2\t\tAlesia 52 a.C.\n");
+	const std::vector<BattleLaurel> back = BattleLaurelsDecode(text + "junk\n9\tx\ty\n2\tno title\r\n");
+	CHECK_EQ(back.size(), static_cast<size_t>(2));
+	CHECK_EQ(back[0].level, 3);
+	CHECK_EQ(back[1].title, std::string("Alesia 52 a.C."));
+	CHECK(BattleLaurelsDecode("").empty());
+}
+
 }
 
 int main()
@@ -205,5 +249,7 @@ int main()
 	DescriptionsGetRealLineBreaks();
 	SavesBelongToTheLongestTitleAfterADash();
 	CampaignPacksPreferTheActiveOne();
+	CampaignsHaveTheModsCovers();
+	LaurelsKeepTheHardestVictory();
 	return test::Summary("battlelist");
 }

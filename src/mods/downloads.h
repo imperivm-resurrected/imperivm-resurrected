@@ -56,6 +56,12 @@ void DlStartUpdateCheck();
 
 void DlInstallEntry(const CatalogEntry &e);
 void DlInstallArchive(const std::string &path);
+// Downloads an archive with several content packs (one folder with a mod.json each) and installs each one by its id.
+void DlInstallBundle(const CatalogEntry &e);
+// Whether the bundle of that GameBanana file is being installed or waits in the queue.
+bool DlBundleQueued(uint64_t fileId);
+// Whether the update of a content pack's folder waits for the game to restart, because the pack was in use.
+bool DlPendingFor(const std::string &folder);
 std::string DlPickArchive();
 DownloadStatus DlStatus();
 void DlCancel();

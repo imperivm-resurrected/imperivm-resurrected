@@ -45,6 +45,7 @@ inline constexpr uintptr_t kGameUpdate = 0x0051e940;
 inline constexpr uintptr_t kShowPausedMenu = 0x0051ee80;
 inline constexpr uintptr_t kRandomDrawSite = 0x005223b5;
 inline constexpr uintptr_t kDeclareDefeated = 0x00522f90;
+inline constexpr uintptr_t kDeclareTeamVictory = 0x00523260;
 inline constexpr uintptr_t kCreateWorldCore = 0x00526200;
 inline constexpr uintptr_t kGhostDamageCallback = 0x0052b550;
 inline constexpr uintptr_t kCalcArmyExpBonus = 0x0052d7a0;

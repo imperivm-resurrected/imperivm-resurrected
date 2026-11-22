@@ -1126,8 +1126,7 @@ void DrawCupCrown(Painter &p, int x, int y, int size, bool official)
 		return;
 	}
 	const COLORREF gold = RGB(0xe0, 0xb5, 0x4a);
-	PaintOrnament(p, kOrnamentLaurel, x, y, size / 2, size, gold);
-	PaintOrnament(p, kOrnamentLaurel, x + size / 2, y, size / 2, size, gold, true);
+	PaintWreath(p, x, y, size, gold);
 	UseDisplay(p, size * 45 / 100);
 	const bool raw = p.raw;
 	p.raw = true;

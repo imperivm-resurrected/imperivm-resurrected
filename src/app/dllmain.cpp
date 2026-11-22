@@ -21,6 +21,7 @@
 #include "game/civs.h"
 #include "hooks/diag.h"
 #include "game/scriptevents.h"
+#include "game/adventureresult.h"
 #include "game/i1engine.h"
 #include "mods/modvars.h"
 #include "game/specials.h"
@@ -208,6 +209,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 		ScriptErrorsInit(knownExe);
 		InstallScriptApi(knownExe);
 		InstallScriptEvents(knownExe);
+		InstallAdventureResult(knownExe);
 		InstallI1Engine(knownExe);
 			InstallModVars(knownExe);
 			InstallSpecials(knownExe);

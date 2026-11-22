@@ -163,11 +163,13 @@ std::vector<CatalogEntry> g_catalog;
 bool g_catalogBusy = false;
 
 struct Job {
-	enum Kind { Entry, Archive, RoomPack } kind;
+	enum Kind { Entry, Archive, RoomPack, Bundle } kind;
 	CatalogEntry entry;
 	std::string text;
 };
 std::deque<Job> g_jobs;
+// The GameBanana file of the bundle being installed now, under g_lock; 0 when none.
+uint64_t g_runningBundle = 0;
 std::condition_variable g_cv;
 bool g_workerStarted = false;
 
@@ -1017,31 +1019,35 @@ bool AcceptMapOnlyPack(const std::string &root, std::string &why)
 	return true;
 }
 
-bool InstallArchiveNow(const std::string &archive, const CatalogEntry &info, const Json &sources, std::string &msg,
-	const std::function<bool(const std::string &, std::string &)> &accept = nullptr)
+typedef std::function<bool(const std::string &, std::string &)> AcceptPack;
+
+// Unpacks an archive into a new work folder (tmp), which the caller deletes. The error, or empty.
+std::string UnpackToWork(const std::string &archive, std::string &tmp)
 {
-	const std::string tmp = WorkDir() + "\\tmp-" + Timestamp();
+	tmp = WorkDir() + "\\tmp-" + Timestamp();
 	MakeDirs(tmp);
-	msg = Extract(archive, tmp, [](uint64_t done, uint64_t total) {
+	const std::string err = Extract(archive, tmp, [](uint64_t done, uint64_t total) {
 		SetUnpack(true, done, total);
 		return !g_cancel.load();
 	});
 	SetUnpack(false, 0, 0);
-	if (!msg.empty()) {
-		DeleteTree(tmp);
-		return false;
-	}
-	const std::string root = FindModRoot(tmp);
+	return err;
+}
+
+// Installs one content pack unpacked at root, inside a work folder that the caller deletes. A pack without mod.json is named after
+// the archive.
+// `later` (optional) is set when the pack goes in only when the game restarts, because it was in use.
+bool PlaceModRoot(const std::string &root, const std::string &archive, const CatalogEntry &info, const Json &sources, std::string &msg,
+	const AcceptPack &accept, bool *later = nullptr)
+{
 	std::string bad;
 	unsigned count = 0;
 	CheckFiles(root, "", bad, count);
 	if (count == 0) {
-		DeleteTree(tmp);
 		msg = "the file is empty";
 		return false;
 	}
 	if (!bad.empty()) {
-		DeleteTree(tmp);
 		msg = Tr("not installed: it contains a disallowed file (") + bad + ")";
 		return false;
 	}
@@ -1050,7 +1056,6 @@ bool InstallArchiveNow(const std::string &archive, const CatalogEntry &info, con
 	if (accept) {
 		std::string why;
 		if (!accept(root, why)) {
-			DeleteTree(tmp);
 			msg = why;
 			return false;
 		}
@@ -1092,7 +1097,6 @@ bool InstallArchiveNow(const std::string &archive, const CatalogEntry &info, con
 		if (!sameMod) continue;
 		if (info.aside) {
 			if (m.version == version && !info.otherCopy) {
-				DeleteTree(tmp);
 				msg = name + " " + version + Tr(" is already installed");
 				return true;
 			}
@@ -1122,7 +1126,6 @@ bool InstallArchiveNow(const std::string &archive, const CatalogEntry &info, con
 		MakeDirs(WorkDir() + "\\pending");
 		DeleteTree(pend);
 		if (!MoveFileExA(root.c_str(), pend.c_str(), 0)) {
-			DeleteTree(tmp);
 			msg = Tr("could not prepare the update for ") + name;
 			return false;
 		}
@@ -1130,14 +1133,12 @@ bool InstallArchiveNow(const std::string &archive, const CatalogEntry &info, con
 	}
 	else if (swap != FolderSwap::kMoved) {
 		if (swap == FolderSwap::kStranded) LogW("download", "could not put back the previous version of %s: it is in %s", folder.c_str(), backup.c_str());
-		DeleteTree(tmp);
 		msg = Tr("could not copy to the content folder (error ") + std::to_string(error) + ")";
 		return false;
 	}
 	else if (replacing) {
 		LogI("download", "previous version of %s saved in %s", folder.c_str(), backup.c_str());
 	}
-	DeleteTree(tmp);
 	ModsCancelUninstall(folder);
 	SaveInstalledSource(folder, info);
 	ModsScan();
@@ -1146,7 +1147,90 @@ bool InstallArchiveNow(const std::string &archive, const CatalogEntry &info, con
 	for (const std::string &f : ModsMountedProfile().mods) inUse = inUse || _stricmp(f.c_str(), folder.c_str()) == 0;
 	inUse = inUse && !ModsLoadsWithoutRestart(folder);
 	msg = pending ? TrFmt("%s downloaded (applied on restart)", {label}) : inUse ? TrFmt("%s installed (applied on restart)", {label}) : TrFmt("%s installed", {label});
+	if (later) *later = pending || inUse;
 	return true;
+}
+
+bool InstallArchiveNow(const std::string &archive, const CatalogEntry &info, const Json &sources, std::string &msg, const AcceptPack &accept = nullptr)
+{
+	std::string tmp;
+	msg = UnpackToWork(archive, tmp);
+	const bool ok = msg.empty() && PlaceModRoot(FindModRoot(tmp), archive, info, sources, msg, accept);
+	DeleteTree(tmp);
+	return ok;
+}
+
+// The content packs of a bundle: the folders with a mod.json under the archive's wrapping folders.
+std::vector<std::string> BundleRoots(const std::string &tmp)
+{
+	const std::string dir = FindModRoot(tmp);
+	if (GetFileAttributesA((dir + "\\mod.json").c_str()) != INVALID_FILE_ATTRIBUTES) return {dir};
+	std::vector<std::string> roots;
+	WIN32_FIND_DATAA fd;
+	HANDLE h = FindFirstFileA((dir + "\\*").c_str(), &fd);
+	if (h == INVALID_HANDLE_VALUE) return roots;
+	do {
+		const std::string n = fd.cFileName;
+		if (n == "." || n == ".." || !(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) continue;
+		if (GetFileAttributesA((dir + "\\" + n + "\\mod.json").c_str()) != INVALID_FILE_ATTRIBUTES) roots.push_back(dir + "\\" + n);
+	} while (FindNextFileA(h, &fd));
+	FindClose(h);
+	// The data packs go first: an adventure installed without the classes it needs would start broken if a later one failed.
+	const auto data = [](const std::string &p) { return p.size() > 5 && _stricmp(p.c_str() + p.size() - 5, "-data") == 0; };
+	std::sort(roots.begin(), roots.end(), [&](const std::string &a, const std::string &b) { return data(a) != data(b) ? data(a) : a < b; });
+	return roots;
+}
+
+// A bundle (an official campaign) is one archive with several content packs, each installed as its own pack by its mod.json id. They
+// are not GameBanana packs of their own: the bundle's page and file are kept by whoever asked for it.
+bool PlaceBundle(const std::vector<std::string> &roots, const std::string &archive, const CatalogEntry &info, const std::string &label, std::string &msg)
+{
+	if (roots.empty()) {
+		msg = "the file has no content packs";
+		return false;
+	}
+	CatalogEntry one;
+	one.version = info.version;
+	one.authors = info.authors;
+	bool later = false;
+	for (const std::string &root : roots) {
+		std::string part;
+		bool partLater = false;
+		if (!PlaceModRoot(root, archive, one, Json(), part, nullptr, &partLater)) {
+			msg = part;
+			return false;
+		}
+		later = later || partLater;
+		LogI("download", "bundle %s: %s", label.c_str(), TrSource(part).c_str());
+	}
+	msg = later ? TrFmt("%s downloaded (applied on restart)", {label}) : TrFmt("%s installed", {label});
+	return true;
+}
+
+bool InstallBundleNow(const std::string &archive, const CatalogEntry &info, std::string &msg)
+{
+	std::string tmp;
+	msg = UnpackToWork(archive, tmp);
+	const bool ok = msg.empty() && PlaceBundle(BundleRoots(tmp), archive, info, info.name, msg);
+	DeleteTree(tmp);
+	return ok;
+}
+
+// An archive the player picked: several content packs with their mod.json are installed each on its own (an official campaign
+// downloaded by hand); anything else as one pack.
+bool InstallPickedNow(const std::string &archive, std::string &msg)
+{
+	std::string tmp;
+	msg = UnpackToWork(archive, tmp);
+	bool ok = false;
+	if (msg.empty()) {
+		const std::vector<std::string> roots = BundleRoots(tmp);
+		std::string base = archive.substr(archive.find_last_of('\\') + 1);
+		base = base.substr(0, base.find_last_of('.'));
+		ok = roots.size() > 1 ? PlaceBundle(roots, archive, CatalogEntry(), base, msg) : PlaceModRoot(FindModRoot(tmp), archive, CatalogEntry(), Json(), msg, nullptr);
+	}
+	DeleteTree(tmp);
+	return ok;
 }
 
 std::string DownloadToTemp(const std::string &url, uint64_t expectedBytes, const std::string &nameHint, bool allowOtherServers, std::string &file,
@@ -1164,7 +1248,7 @@ std::string DownloadToTemp(const std::string &url, uint64_t expectedBytes, const
 	return DownloadFile(url, expectedBytes, file, GameDir() + "\\imperivm-resurrected\\_cache", allowOtherServers, hooks, usedOtherServers);
 }
 
-void RunInstall(const CatalogEntry &e, const Json &sources)
+void RunInstall(const CatalogEntry &e, const Json &sources, bool bundle = false)
 {
 	std::string file;
 	bool usedOtherServers = false;
@@ -1190,7 +1274,7 @@ void RunInstall(const CatalogEntry &e, const Json &sources)
 		return;
 	}
 	std::string msg;
-	const bool ok = InstallArchiveNow(file, e, sources, msg);
+	const bool ok = bundle ? InstallBundleNow(file, e, msg) : InstallArchiveNow(file, e, sources, msg);
 	DeleteFileA(file.c_str());
 	Finish(ok, ok ? msg : Tr("Could not install ") + (e.name.empty() ? e.url : e.name) + ": " + msg);
 }
@@ -1209,6 +1293,7 @@ void Worker()
 			g_status.unpacking = false;
 			g_status.unpacked = g_status.unpackTotal = 0;
 			g_status.queued = static_cast<int>(g_jobs.size());
+			g_runningBundle = job.kind == Job::Bundle ? job.entry.fileId : 0;
 			g_status.what = job.kind != Job::Archive
 				? job.entry.name + (job.entry.version.empty() || job.entry.name.find(job.entry.version) != std::string::npos ? "" : " " + job.entry.version)
 				: job.text;
@@ -1226,6 +1311,9 @@ void Worker()
 			}
 			RunInstall(job.entry, sources);
 		}
+		else if (job.kind == Job::Bundle) {
+			RunInstall(job.entry, Json(), true);
+		}
 		else if (job.kind == Job::RoomPack) {
 			Json sources = Json::MakeObject();
 			GbKeyToJson(sources, job.entry.gbId);
@@ -1237,11 +1325,12 @@ void Worker()
 		}
 		else if (job.kind == Job::Archive) {
 			std::string msg;
-			const bool ok = InstallArchiveNow(job.text, CatalogEntry(), Json(), msg);
+			const bool ok = InstallPickedNow(job.text, msg);
 			Finish(ok, ok ? msg : Tr("Could not install ") + job.text + ": " + msg);
 		}
 		std::lock_guard<std::mutex> lock(g_lock);
 		g_status.active = false;
+		g_runningBundle = 0;
 		g_status.queued = static_cast<int>(g_jobs.size());
 	}
 }
@@ -1336,6 +1425,32 @@ void DlInstallEntry(const CatalogEntry &e)
 {
 	Job j{Job::Entry, e, ""};
 	Enqueue(j);
+}
+
+void DlInstallBundle(const CatalogEntry &e)
+{
+	if (DlBundleQueued(e.fileId)) {
+		LogI("download", "%s is already on its way", e.name.c_str());
+		return;
+	}
+	Job j{Job::Bundle, e, ""};
+	Enqueue(j);
+}
+
+bool DlBundleQueued(uint64_t fileId)
+{
+	if (!fileId) return false;
+	std::lock_guard<std::mutex> lock(g_lock);
+	if (g_runningBundle == fileId) return true;
+	for (const Job &j : g_jobs) {
+		if (j.kind == Job::Bundle && j.entry.fileId == fileId) return true;
+	}
+	return false;
+}
+
+bool DlPendingFor(const std::string &folder)
+{
+	return !folder.empty() && IsDir(WorkDir() + "\\pending\\" + folder);
 }
 
 void DlInstallArchive(const std::string &path)

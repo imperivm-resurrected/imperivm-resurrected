@@ -252,6 +252,7 @@
 {"en":"the server responded %s","es":"el servidor respondió %s","it":"il server ha risposto %s"},
 {"en":"could not create %s","es":"no se pudo crear %s","it":"impossibile creare %s"},
 {"en":"GameBanana sent %s instead of the %s file. If it was uploaded a moment ago, try again in a few minutes.","es":"GameBanana ha enviado %s en lugar del archivo de %s. Si se acaba de subir, prueba de nuevo dentro de unos minutos.","it":"GameBanana ha inviato %s invece del file da %s. Se è stato appena caricato, riprova tra qualche minuto."},
+{"en":"GameBanana did not give the file: it is private, was removed or was uploaded a moment ago.","es":"GameBanana no ha dado el archivo: es privado, se ha retirado o se acaba de subir.","it":"GameBanana non ha dato il file: è privato, è stato rimosso o è appena stato caricato."},
 {"en":"Could not install ","es":"No se pudo instalar ","it":"Impossibile installare "},
 {"en":"Updates available:","es":"Actualizaciones disponibles:","it":"Aggiornamenti disponibili:"},
 {"en":"Update available: %s","es":"Actualización disponible: %s","it":"Aggiornamento disponibile: %s"},
@@ -3511,5 +3512,18 @@
 {"en":"New level of mastery","es":"Nuevo nivel de maestría","it":"Nuovo livello di maestria"},
 {"en":"The laurel of the civilization is yours.","es":"El laurel de la civilización es tuyo.","it":"L'alloro della civiltà è tuo."},
 {"en":"This copy of Imperivm Resurrected is not an official version. Install the official one to play the league and tournaments.","es":"Esta copia de Imperivm Resurrected no es una versión oficial. Instala la oficial para jugar la liga y los torneos.","it":"Questa copia di Imperivm Resurrected non è una versione ufficiale. Installa quella ufficiale per giocare la lega e i tornei."},
-{"en":"This game could not read its own mod DLL, so it cannot join rooms that check the build. Reinstall Imperivm Resurrected.","es":"Este juego no ha podido leer su propia DLL del mod, así que no puede entrar en salas que comprueban la build. Reinstala Imperivm Resurrected.","it":"Questo gioco non è riuscito a leggere la propria DLL della mod, quindi non può entrare nelle stanze che controllano la build. Reinstalla Imperivm Resurrected."}
+{"en":"This game could not read its own mod DLL, so it cannot join rooms that check the build. Reinstall Imperivm Resurrected.","es":"Este juego no ha podido leer su propia DLL del mod, así que no puede entrar en salas que comprueban la build. Reinstala Imperivm Resurrected.","it":"Questo gioco non è riuscito a leggere la propria DLL della mod, quindi non può entrare nelle stanze che controllano la build. Reinstalla Imperivm Resurrected."},
+{"en":"The Gallic War","es":"La guerra de las Galias","it":"La guerra gallica"},
+{"en":"The Conquest of Hispania","es":"La conquista de Hispania","it":"La conquista dell'Hispania"},
+{"en":"Unpacking","es":"Descomprimiendo","it":"Estrazione"},
+{"en":"Downloading","es":"Descargando","it":"Download in corso"},
+{"en":"Download","es":"Descargar","it":"Scarica"},
+{"en":"Update","es":"Actualizar","it":"Aggiorna"},
+{"en":"This campaign is not on GameBanana yet. It will be soon.","es":"Esta campaña aún no está en GameBanana. Lo estará pronto.","it":"Questa campagna non è ancora su GameBanana. Lo sarà presto."},
+{"en":"Imperivm I: La guerra de las Galias","es":"=","it":"="},
+{"en":"Imperivm II: the campaigns","es":"Imperivm II: las campañas","it":"Imperivm II: le campagne"},
+{"en":"Hannibal's Campaigns","es":"Las campañas de Aníbal","it":"Le campagne di Annibale"},
+{"en":"Numantia","es":"Numancia","it":"Numanzia"},
+{"en":"The Punic Wars","es":"Las guerras púnicas","it":"Le guerre puniche"},
+{"en":"%s% done","es":"%s % completado","it":"%s% completato"}
 ]

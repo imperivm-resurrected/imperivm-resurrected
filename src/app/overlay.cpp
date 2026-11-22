@@ -4,6 +4,7 @@
 #include "net/spectator.h"
 #include "net/nettune.h"
 #include "game/gamelayout.h"
+#include "game/adventureresult.h"
 #include "game/healthbars.h"
 #include "game/mapfog.h"
 #include "game/quickicons.h"
@@ -695,6 +696,7 @@ int __fastcall HookGameUpdate(void *game)
 	g_updateTicks += ZoomFogGameThreadTick();
 	QuickIconsGameThreadTick();
 	HealthBarsGameTick();
+	AdventureResultGameTick(); // STAGING TEST TOOL: the instant-victory key, remove before a release
 	NoteIconsGameTick();
 	ZoomViewGameTick();
 	ControlsGameTick();

@@ -15,11 +15,14 @@
 
 #include "core/log.h"
 #include "core/uiport.h"
+#include "game/adventureresult.h"
 #include "game/battlelist.h"
 #include "game/greatbattles.h"
+#include "mods/campaignpacks.h"
 #include "mods/mods.h"
 #include "mods/savelib.h"
 #include "ui/battlesui_view.h"
+#include "ui/brandart.h"
 #include "ui/fullscreen.h"
 #include "ui/modui.h"
 #include "ui/savesui.h"
@@ -65,6 +68,8 @@ struct SavesCache {
 	uint64_t packsSerial = 0;
 	BattleCampaignPack packs[kBattlesTabCount];
 	std::shared_ptr<const BattleImage> packCovers[kBattlesTabCount];
+	CampaignPackView offers[kBattlesTabCount];
+	std::vector<BattleLaurel> laurels;
 };
 SavesCache g_saves;
 bool g_savesWasOpen = false, g_modsWasOpen = false;
@@ -164,6 +169,59 @@ std::shared_ptr<const BattleImage> PackPicture(const BattleCampaignPack &pack)
 	return nullptr;
 }
 
+// The mod's cover of a campaign of Imperivm I or II, read once: the same picture keeps its blurred backdrop between frames. Null when
+// the file is missing.
+std::shared_ptr<const BattleImage> CampaignCover(const std::string &file)
+{
+	static std::map<std::string, std::shared_ptr<const BattleImage>> covers;
+	const auto known = covers.find(file);
+	if (known != covers.end()) return known->second;
+	std::shared_ptr<const BattleImage> &slot = covers[file];
+	Picture pic;
+	if (!LoadPicture(ModArtFile(L"campaigns", std::wstring(file.begin(), file.end()).c_str()), pic)) {
+		LogW("ui", "adventure screen: the cover campaigns/%s is missing or unreadable", file.c_str());
+		return nullptr;
+	}
+	auto img = std::make_shared<BattleImage>();
+	img->w = pic.w;
+	img->h = pic.h;
+	img->bgra = std::move(pic.px);
+	slot = img;
+	return slot;
+}
+
+// The campaigns of Imperivm I and II show the mod's covers instead of the pictures of their packs: on their cards, before the packs are
+// installed or while they are not active too, and next to the chosen adventure.
+void UseCampaignCovers(BattlesSnapshot &s)
+{
+	for (int tab : {kBattlesTabImperivm1, kBattlesTabImperivm2}) {
+		std::vector<BattlesSnapshot::Cover> gallery;
+		bool listed = false;
+		for (int list = 0; list < kBattlesListCount; list++) {
+			for (const BattlesEntry &e : s.lists[list]) {
+				if (!BattlesInTab(tab, list, e.path)) continue;
+				listed = true;
+				const std::string file = BattleCampaignCoverOf(e.path);
+				std::shared_ptr<const BattleImage> img = file.empty() ? nullptr : CampaignCover(file);
+				if (!img) img = BattlesAdventureImage(e.path);
+				if (img) gallery.push_back({img, e.title});
+			}
+		}
+		// A campaign the game does not list yet shows all of its covers, with the names its adventures will have.
+		if (!listed) {
+			for (const BattleCampaignCover &c : BattleCampaignCovers(tab == kBattlesTabImperivm1 ? kBattleGameImperivm1 : kBattleGameImperivm2)) {
+				if (std::shared_ptr<const BattleImage> img = CampaignCover(c.file)) gallery.push_back({img, Tr(c.title)});
+			}
+		}
+		s.gallery[tab] = std::move(gallery);
+		s.covers[tab] = s.gallery[tab].empty() ? nullptr : s.gallery[tab][0].image;
+	}
+	if (s.selList >= 0 && s.selIndex >= 0) {
+		const std::string file = BattleCampaignCoverOf(s.lists[s.selList][s.selIndex].path);
+		if (std::shared_ptr<const BattleImage> img = file.empty() ? nullptr : CampaignCover(file)) s.image = img;
+	}
+}
+
 // Whether the campaigns of Imperivm I and II are in a content pack, and whether the game mounted it: a pack left out of the profile
 // in use keeps its adventures out of the game's list.
 void ReadPacks(View &v)
@@ -189,9 +247,14 @@ void ReadPacks(View &v)
 			g_saves.packs[tab] = found;
 			if (found.installed && !found.active) LogI("ui", "adventure screen: the pack %s has the campaign of tab %d but is not active", found.folder.c_str(), tab);
 		}
+		g_saves.offers[kBattlesTabImperivm1] = CampaignPackViewOf(1);
+		g_saves.offers[kBattlesTabImperivm2] = CampaignPackViewOf(2);
 	}
 	std::copy(std::begin(g_saves.packs), std::end(g_saves.packs), std::begin(v.packs));
 	std::copy(std::begin(g_saves.packCovers), std::end(g_saves.packCovers), std::begin(v.packCovers));
+	std::copy(std::begin(g_saves.offers), std::end(g_saves.offers), std::begin(v.offers));
+	CampaignPackProgress(1, v.offers[kBattlesTabImperivm1]);
+	CampaignPackProgress(2, v.offers[kBattlesTabImperivm2]);
 }
 
 // Which adventure of the screen each game belongs to (by the title the game puts at the end of its name), the newest one of each, and
@@ -210,7 +273,9 @@ void ReadSaves(const BattlesSnapshot &s, View &v)
 		for (SaveRec &r : SaveLibScan()) {
 			if (r.kind == kSaveAdventure && !r.online) g_saves.recs.push_back(std::move(r));
 		}
+		g_saves.laurels = AdventureLaurels();
 	}
+	v.laurels = g_saves.laurels;
 	std::vector<std::string> titles;
 	std::vector<std::pair<int, int>> where;
 	for (int list = 0; list < kBattlesListCount; list++) {
@@ -257,9 +322,26 @@ void ReadSaves(const BattlesSnapshot &s, View &v)
 	v.latest.picture = g_saves.thumb ? g_saves.thumb : BattlesAdventureImage(s.lists[v.latest.list][v.latest.index].path);
 }
 
+// How much of each campaign the active profile has done: the laurels of its adventures against three for each.
+void CountLaurels(View &v)
+{
+	for (int tab : {kBattlesTabGreat, kBattlesTabImperivm1, kBattlesTabImperivm2}) {
+		int count = 0, levels = 0;
+		for (int list = 0; list < kBattlesListCount; list++) {
+			for (const BattlesEntry &e : v.snap.lists[list]) {
+				if (!BattlesInTab(tab, list, e.path)) continue;
+				count++;
+				levels += BattleLaurelOf(v.laurels, e.path, e.title);
+			}
+		}
+		v.done[tab] = count ? levels * 100 / (3 * count) : -1;
+	}
+}
+
 void Refresh()
 {
 	BattlesSnapshot snap = BattlesRead();
+	if (snap.open) UseCampaignCovers(snap);
 	View saves;
 	ReadSaves(snap, saves);
 	if (snap.open) ReadPacks(saves);
@@ -275,10 +357,13 @@ void Refresh()
 	v.hasLatest = saves.hasLatest;
 	v.latest = std::move(saves.latest);
 	v.lastByRow = std::move(saves.lastByRow);
+	v.laurels = std::move(saves.laurels);
+	CountLaurels(v);
 	std::copy(std::begin(saves.savedInTab), std::end(saves.savedInTab), std::begin(v.savedInTab));
 	if (snap.open) {
 		std::copy(std::begin(saves.packs), std::end(saves.packs), std::begin(v.packs));
 		std::copy(std::begin(saves.packCovers), std::end(saves.packCovers), std::begin(v.packCovers));
+		std::copy(std::begin(saves.offers), std::end(saves.offers), std::begin(v.offers));
 	}
 	if (v.loading && GetTickCount() - g_s.loadingAt > kLoadingMs) v.loading = false;
 	g_s.active = true;
@@ -336,6 +421,11 @@ void Execute(const Command &cmd)
 	}
 	case kActAllSaves: SavesUiOpen(); return;
 	case kActContent: ModUiOpen(); return;
+	case kActDownload: {
+		const int game = cmd.arg == kBattlesTabImperivm1 ? 1 : cmd.arg == kBattlesTabImperivm2 ? 2 : 0;
+		if (!CampaignPackDownload(game)) UiToast(Tr("This campaign is not on GameBanana yet. It will be soon."), true);
+		return;
+	}
 	case kActPage: {
 		std::lock_guard<std::mutex> lock(g_lock);
 		g_s.view.diary = cmd.arg == 1;
@@ -421,6 +511,8 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, Command &cmd)
 		cmd.action = HitActionAt(g_s.hits, at, arg, kActNone);
 		cmd.arg = arg;
 		cmd.start = msg == WM_LBUTTONDBLCLK && cmd.action == kActRow;
+		// The second click of a double click on a button is not a second press.
+		if (msg == WM_LBUTTONDBLCLK && cmd.action != kActRow) cmd.action = kActNone;
 		return true;
 	}
 	case WM_LBUTTONUP:
