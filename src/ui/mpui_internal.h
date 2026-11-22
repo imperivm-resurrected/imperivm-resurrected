@@ -3,6 +3,7 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #pragma once
 #include "ui/fullscreen.h"
+#include "ui/scrollpane.h"
 #include "ui/widgets.h"
 #include "core/transferrate.h"
 #include "mods/downloads.h"
@@ -370,6 +371,11 @@ struct State {
 	uint64_t swapPendingTo = 0;
 	std::string swapPendingName;
 	DWORD swapPendingTime = 0;
+	// The parts that scroll when they are taller than their space (ui::ScrollPane), and where they were in the last frame.
+	ui::PaneScrolls scrolls;
+	std::vector<PaneArea> paneAreas;
+	// The arrows moved the selected room: the list scrolls to show it on the next frame.
+	bool lobbyReveal = false;
 	int sortCol = 2, sortDesc = 1;
 	int colW[5] = {170, 110, 80, 110, 0};
 	int resizeCol = -1, resizeStartX = 0, resizeStartW = 0;
@@ -453,6 +459,13 @@ void ChatBarMove(POINT pt);
 extern RECT g_optRect;
 extern ListGeom g_optGeomOut;
 const int kDropRows = 12;
+// Every pane of the multiplayer screens, one id each: their scrolls share State::scrolls. Clear of the tournament bars (kBarList and up).
+constexpr int kPaneLobbyRooms = ui::kPaneIdBase + 0x20, kPaneRoomTable = ui::kPaneIdBase + 0x21, kPaneLeagueCard = ui::kPaneIdBase + 0x22,
+			  kPaneTourneyAccount = ui::kPaneIdBase + 0x30;
+constexpr int kPaneGuideKeeps = ui::kPaneIdBase + 0x40, kPaneGuideWay = ui::kPaneIdBase + 0x41, kPaneGuideGlory = ui::kPaneIdBase + 0x42,
+			  kPaneGuideFair = ui::kPaneIdBase + 0x43;
+// Where the lobby's list of rooms was scrolled to in the frame just painted: the arrows' selection moves it.
+extern int g_lobbyScrollOut;
 
 const COLORREF kSpecial = pal::text;
 

@@ -776,7 +776,8 @@ void PaintSlotRow(Painter &p, const State &st, const TableCtx &t, int i, const A
 		PaintKick(p, st, c.kick, cy, kGSlotType, i);
 }
 
-// The rows are as tall as the mockup's while they fit in `maxH`, and no shorter than the controls in them.
+// The rows are as tall as the mockup's while they fit in `maxH`, and no shorter than the controls in them; when even that is too tall
+// (a tournament's map choice over the table on a short screen) the rows scroll under the table's head.
 void PaintPlayerTable(Painter &p, const State &st, const RoomFacts &f, int x, int y, int w, int maxH)
 {
 	const GameRoomSnapshot &g = st.game;
@@ -785,7 +786,8 @@ void PaintPlayerTable(Painter &p, const State &st, const RoomFacts &f, int x, in
 	// Always the eight positions, those the map lacks greyed: the table keeps its size whatever the map, and shows where there is room.
 	const int rows = 8;
 	const int rowH = std::max(kMinRowH, std::min(kMaxRowH, (maxH - kTableHeadH) / rows));
-	PaintGlassCard(p, x, y, w, kTableHeadH + rows * rowH);
+	const int bodyH = std::max(2 * rowH, std::min(rows * rowH, maxH - kTableHeadH));
+	PaintGlassCard(p, x, y, w, kTableHeadH + bodyH);
 	TableCtx t;
 	t.f = f;
 	t.x = x;
@@ -803,7 +805,19 @@ void PaintPlayerTable(Painter &p, const State &st, const RoomFacts &f, int x, in
 	p.TextCaps(c.bonus, hy, c.bonusW, hh, "Bonus", pal::caption, head, 2);
 	if (c.statusOn) p.TextCaps(c.status, hy, c.statusW, hh, "Status", pal::caption, head, 2);
 
-	int rowY = y + kTableHeadH, hovered = -1;
+	PaneSpec spec;
+	spec.id = kPaneRoomTable;
+	spec.x = x + 1;
+	spec.y = y + kTableHeadH;
+	spec.w = w - 2;
+	spec.h = bodyH;
+	spec.contentH = rows * rowH;
+	spec.barX = x + w - 10;
+	spec.drag = &st.dropBar;
+	spec.mx = st.mouseX;
+	spec.my = st.mouseY;
+	ScrollPane pane(p, spec, st.scrolls.Of(kPaneRoomTable));
+	int rowY = pane.Top(), hovered = -1;
 	for (int i = 0; i < 8; i++) {
 		const GameRoomSlot &s = g.slots[i];
 		const bool available = s.exists || s.used || !arriving[i].Empty();
@@ -939,12 +953,6 @@ void PaintSummary(Painter &p, const State &st, int cardX, int cardY, int cardW, 
 	const std::string notice = RoomNotice(st, noticeColor);
 	const int noticeH = notice.empty() ? 0 : 40;
 	const int top = y + 34, bottom = y + h - (noticeH ? noticeH + 6 : 0);
-	const int thumb = std::max(0, std::min({156, bottom - top, w / 3}));
-	if (thumb >= 48) {
-		PaintMapThumb(p, st, x, top, thumb, false);
-		if (hot) p.Frame(x, top, thumb, thumb, pal::edgeHot);
-	}
-	const int gx = thumb >= 48 ? x + thumb + 24 : x, gw = x + w - gx;
 	struct Line {
 		const char *label;
 		int id;
@@ -952,7 +960,21 @@ void PaintSummary(Painter &p, const State &st, int cardX, int cardY, int cardW, 
 	};
 	static const Line kLines[] = {{"Map", 0, nullptr}, {"Mode", 0x1002, "Game type"}, {"Size", 0x01000008, "Map size"}, {"Population", 0x1004, "Population"},
 		{"Starting gold", 0x1005, "Starting gold"}, {"Limit", 0x1003, "Limit"}};
-	const int columns = gw >= 420 ? 3 : 2, colGap = 20, colW = (gw - (columns - 1) * colGap) / columns, cellH = 52;
+	const int lineCount = static_cast<int>(sizeof(kLines) / sizeof(kLines[0])), colGap = 20, cellMaxH = 52, cellMinH = 46;
+	auto columnsFor = [](int width) { return width >= 420 ? 3 : 2; };
+	auto linesFit = [&](int width) {
+		const int columns = columnsFor(width), rows = (lineCount + columns - 1) / columns;
+		return rows * cellMinH - 2 <= bottom - top;
+	};
+	int thumb = std::max(0, std::min({156, bottom - top, w / 3}));
+	if (thumb >= 48 && !linesFit(w - thumb - 24) && linesFit(w)) thumb = 0;
+	if (thumb >= 48) {
+		PaintMapThumb(p, st, x, top, thumb, false);
+		if (hot) p.Frame(x, top, thumb, thumb, pal::edgeHot);
+	}
+	const int gx = thumb >= 48 ? x + thumb + 24 : x, gw = x + w - gx;
+	const int columns = columnsFor(gw), colW = (gw - (columns - 1) * colGap) / columns;
+	const int cellH = FitRowHeight(bottom - top + 2, 0, (lineCount + columns - 1) / columns, cellMaxH, cellMinH);
 	const UINT line = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS;
 	int shown = 0;
 	for (const Line &l : kLines) {

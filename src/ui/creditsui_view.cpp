@@ -490,7 +490,7 @@ void PaintRail(Painter &p, const Layout &L, const RollFrame &f, int current, con
 float ScreenScale(int frameW, int frameH)
 {
 	(void)frameW;
-	return std::max(0.6f, std::min(1.6f, frameH / static_cast<float>(kScreenH)));
+	return std::max(kMinScale, frameH / static_cast<float>(kScreenH));
 }
 
 int CurrentEntry(const std::vector<double> &entries, double scroll, double period, int viewport)

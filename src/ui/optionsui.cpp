@@ -44,6 +44,7 @@ struct State {
 	View view;
 	Values baseline;
 	std::vector<Hit> hits;
+	std::vector<PaneArea> panes;
 	float scale = 1.0f;
 	bool mouseDown = false, escArmed = false, enterArmed = false;
 	DWORD lastRead = 0, closedAt = 0;
@@ -502,6 +503,7 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, Command &cmd)
 	ScrollTo to;
 	const bool onBar = ScrollbarMouse(v.dropBar, g_s.hits, msg, wp, at, to);
 	if (to.id == kDropMenuBar) v.dropScroll = to.pos;
+	else v.scroll.Apply(g_s.panes, to);
 	switch (msg) {
 	case WM_MOUSEMOVE:
 		v.mouseX = at.x;
@@ -523,6 +525,7 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, Command &cmd)
 		case kActPage:
 			v.page = arg;
 			v.dropId = 0;
+			v.scroll.Reset();
 			break;
 		case kActCombo:
 			v.dropId = v.dropId == arg ? 0 : arg;
@@ -566,6 +569,8 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, Command &cmd)
 			const int max = DropMaxScroll(count, std::min(count, kMenuMaxRows));
 			v.dropScroll = std::max(0, std::min(max, v.dropScroll - GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA));
 		}
+		// The wheel's message carries where the mouse is on the screen, not in the window.
+		else if (!v.dragId) v.scroll.Wheel(g_s.panes, {v.mouseX, v.mouseY}, GET_WHEEL_DELTA_WPARAM(wp));
 		return true;
 	case WM_KEYDOWN:
 		if (wp == VK_ESCAPE) {
@@ -659,6 +664,7 @@ void OptionsUiDraw(uint32_t *buf, int w, int h)
 	r.End();
 	std::lock_guard<std::mutex> lock(g_lock);
 	g_s.hits = std::move(r.hits);
+	g_s.panes = std::move(r.panes);
 	g_s.scale = r.s;
 }
 

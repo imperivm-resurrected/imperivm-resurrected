@@ -373,16 +373,18 @@ void UpdateUiDrawPanel(uint32_t *buf, int w, int h)
 	}
 	notes = NotesForPlayer(notes);
 	const int x = 28, w2 = kPanelW - 56;
-	const float sw = std::max(0.6f, std::min(1.6f, (w - 24) / static_cast<float>(kPanelW)));
-	EnsureFonts(sw);
-	int lineH, notesH = 0, viewH = 0, contentH = 0;
+	const float sw = std::max(kMinScale, std::min(MaxWindowScale(w, h), (w - 24) / static_cast<float>(kPanelW)));
+	int lineH = 0, notesH = 0, viewH = 0, contentH = 0;
 	NotesLayout layout;
-	{
+	// The text wraps by the pixels of its fonts, so it is measured at the scale it will be drawn at.
+	auto measureAt = [&](float scale) {
+		EnsureFonts(scale);
 		HDC measure = CreateCompatibleDC(nullptr);
-		Painter pm{measure, sw, 0, 0, nullptr};
+		Painter pm{measure, scale, 0, 0, nullptr};
 		std::copy(std::begin(g_fonts), std::end(g_fonts), std::begin(pm.fonts));
 		pm.Font(3);
 		lineH = pm.Measure(w2, line) + 6;
+		notesH = viewH = contentH = 0;
 		if (!notes.empty()) {
 			const std::vector<NoteBlock> blocks = ParseNotes(notes);
 			layout = LayoutNotes(pm, blocks, w2);
@@ -392,6 +394,15 @@ void UpdateUiDrawPanel(uint32_t *buf, int w, int h)
 			notesH = 30 + viewH + 8;
 		}
 		DeleteDC(measure);
+	};
+	measureAt(sw);
+	const int barH = info.state == UpdaterInfo::kDownloading ? 34 : 0;
+	int H = 24 + 40 + lineH + notesH + barH + 80;
+	float s = std::max(kMinScale, std::min(sw, (h - 24) / static_cast<float>(H)));
+	if (s < sw) {
+		measureAt(s);
+		H = 24 + 40 + lineH + notesH + barH + 80;
+		s = std::max(kMinScale, std::min(s, (h - 24) / static_cast<float>(H)));
 	}
 	float scroll = 0;
 	{
@@ -404,9 +415,6 @@ void UpdateUiDrawPanel(uint32_t *buf, int w, int h)
 		ScrollNotesTo(g_notes.scroll);
 		scroll = g_notes.scroll;
 	}
-	const int barH = info.state == UpdaterInfo::kDownloading ? 34 : 0;
-	const int H = 24 + 40 + lineH + notesH + barH + 80;
-	const float s = std::max(0.6f, std::min(sw, (h - 24) / static_cast<float>(H)));
 	PanelRender r(g_panelCanvas, buf, w, h);
 	if (!BeginWindow(r, kPanelW, H, 24, s)) return;
 	r.Focus(g_tabAction, 0);

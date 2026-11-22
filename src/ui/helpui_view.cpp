@@ -221,6 +221,36 @@ struct Card {
 	std::string label, sub, image;
 };
 
+constexpr int kRecruitRowH = 24;
+
+struct LinkSpot {
+	int x, row, w;
+};
+
+// The "Recruited at" links after their label, from `left` to `right`: the ones that don't fit go on rows under it.
+std::vector<LinkSpot> PlaceLinks(Painter &p, const std::vector<Card> &cards, int left, int right)
+{
+	SelectObject(p.dc, LinkFont(p.s));
+	std::vector<LinkSpot> spots;
+	int lx = left, row = 0;
+	for (const Card &cd : cards) {
+		const int w = std::min(std::max(1, right - left), static_cast<int>(PixelWidth(p, W(cd.label), 0) / p.s + 1));
+		if (lx > left && lx + w > right) {
+			lx = left;
+			row++;
+		}
+		spots.push_back({lx, row, w});
+		lx += w + 22;
+	}
+	return spots;
+}
+
+int RecruitLabelW(Painter &p)
+{
+	p.Font(3);
+	return p.TextWidth(Tr("Recruited at"));
+}
+
 enum Kind { kKindHeading, kKindText, kKindIconText, kKindLink, kKindGrid, kKindImage, kKindKey, kKindStats, kKindMatchups, kKindResult, kKindNote, kKindLinks, kKindControl };
 
 struct Block {
@@ -499,7 +529,8 @@ struct Builder {
 		}
 		for (int at : s.recruitedAt) b.cards.push_back({Target({at, -1, std::string()}), c.index.titles[at], std::string(), std::string()});
 		const int rows = (static_cast<int>(b.cells.size()) + 2) / 3;
-		b.h = 16 + std::max(kIconH + 4, rows * kCellH) + (b.cards.empty() ? 0 : 34) + 14;
+		const int linkRows = b.cards.empty() ? 0 : PlaceLinks(p, b.cards, 18 + RecruitLabelW(p) + 14, kContentW - 14).back().row + 1;
+		b.h = 16 + std::max(kIconH + 4, rows * kCellH) + (linkRows ? 34 + (linkRows - 1) * kRecruitRowH : 0) + 14;
 		Add(b);
 		const HelpMatchups m = HelpMatchupsFor(c.counters, s.classId);
 		Block mb;
@@ -842,20 +873,16 @@ struct Pane {
 		const int rows = (static_cast<int>(b.cells.size()) + 2) / 3;
 		const int ry = y + 16 + std::max(kIconH + 4, rows * kCellH) + 6;
 		p.Fill(x + 14, ry, kContentW - 28, 1, pal::hairline);
-		p.Font(3);
-		const std::string label = Tr("Recruited at");
-		const int lw = p.TextWidth(label);
-		p.Text(x + 18, ry + 8, lw + 4, 22, label, pal::textDim);
-		int lx = x + 18 + lw + 14;
-		SelectObject(p.dc, LinkFont(p.s));
-		for (const helpui::Card &cd : b.cards) {
-			const int w = static_cast<int>(PixelWidth(p, W(cd.label), 0) / p.s + 1);
-			if (lx + w > x + kContentW - 14) break;
-			const bool hot = Hot(lx, ry + 8, w, 22);
+		const int lw = RecruitLabelW(p);
+		p.Text(x + 18, ry + 8, lw + 4, 22, "Recruited at", pal::textDim);
+		const std::vector<LinkSpot> spots = PlaceLinks(p, b.cards, x + 18 + lw + 14, x + kContentW - 14);
+		for (size_t i = 0; i < b.cards.size(); i++) {
+			const helpui::Card &cd = b.cards[i];
+			const int lx = spots[i].x, ly = ry + 8 + spots[i].row * kRecruitRowH, w = spots[i].w;
+			const bool hot = Hot(lx, ly, w, 22);
 			SelectObject(p.dc, LinkFont(p.s));
-			p.LineW(lx, ry + 10, w + 4, 22, W(cd.label), hot ? kLinkHot : kLink);
-			Hit(lx, ry + 8, w, 22, kActGo, cd.target);
-			lx += w + 22;
+			p.LineW(lx, ly + 2, w + 4, 22, W(cd.label), hot ? kLinkHot : kLink);
+			Hit(lx, ly, w, 22, kActGo, cd.target);
 		}
 	}
 

@@ -22,6 +22,7 @@
 #include "ui/modui.h"
 
 #include "ui/mpui_internal.h"
+#include "ui/mpui_ranked_kit.h"
 
 using namespace mpui_impl;
 
@@ -142,7 +143,7 @@ int RankedBoardRowsFor(int viewW, int viewH)
 {
 	// Under the tool bar: the heading, the rows, the Imperator line and the player's own row pinned at the bottom.
 	const ScreenLayout l = ScreenLayoutFor(viewW, viewH, false);
-	const int h = l.h - l.margin - (l.top + 72);
+	const int h = l.h - l.margin - (l.top + 72 + RankedBoardFrameFor(viewW, viewH).secondRow);
 	return std::max(5, std::min(kRankedBoardRows, (h - 44 - 28 - 53) / 46));
 }
 

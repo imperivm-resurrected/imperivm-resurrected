@@ -18,17 +18,6 @@
 
 namespace ui {
 
-ScreenView ScreenViewFor(int screenW, int screenH)
-{
-	ScreenView v;
-	// Below 0.8 the captions would shrink past reading at 720p: shorter screens get fewer design units instead, and the layout tightens.
-	v.s = std::max(0.8f, std::min(1.6f, screenH / 1080.0f));
-	v.s = std::max(0.6f, std::min(v.s, screenW / 1200.0f));
-	v.w = static_cast<int>(std::ceil(screenW / v.s - 0.01f));
-	v.h = static_cast<int>(std::ceil(screenH / v.s - 0.01f));
-	return v;
-}
-
 namespace {
 struct Backdrop {
 	Picture map;
@@ -286,22 +275,6 @@ void UseSharedFonts(Painter &p)
 	std::copy(std::begin(g_fonts), std::end(g_fonts), std::begin(p.fonts));
 }
 
-ScreenLayout ScreenLayoutFor(int w, int h, bool info)
-{
-	ScreenLayout l;
-	l.w = w;
-	l.h = h;
-	l.margin = std::max(32, std::min(64, std::min(l.w * 64 / 1920, l.h * 64 / 1080)));
-	l.roomy = l.h >= 1000;
-	l.titleSize = l.roomy ? 84 : 68;
-	l.titleH = l.titleSize + 20;
-	l.titleY = l.margin - 14;
-	l.infoY = l.titleY + l.titleH;
-	if (!info) l.infoH = 0;
-	l.top = l.infoY + l.infoH + (info ? (l.roomy ? 36 : 24) : (l.roomy ? 28 : 20));
-	return l;
-}
-
 void PaintBackArrow(Painter &p, int x, int cy, COLORREF ink)
 {
 	const int size = 14;
@@ -348,14 +321,35 @@ int PaintHeaderActions(Painter &p, const ScreenLayout &l, const std::vector<Ghos
 
 int PaintScreenTitle(Painter &p, const ScreenLayout &l, const std::string &title, const std::vector<TabSpec> &tabs, int right, int mx, int my)
 {
-	const int m = l.margin, tabGap = 48, tabH = 52;
+	const int m = l.margin, tabH = 52, room = right - 32 - m;
 	p.Font(2);
-	int tabW = 0;
-	for (const TabSpec &t : tabs) tabW = std::max(tabW, p.CapsWidth(t.label, 2) + 44);
-	const int count = static_cast<int>(tabs.size()), tabsW = count ? count * tabW + (count - 1) * 6 + tabGap : 0;
-	SelectObject(p.dc, BrandFont(BrandFace::Display, l.titleSize, p.s));
-	const int titleMax = std::max(160, right - 32 - tabsW - m);
-	const int titleW = std::min(titleMax, p.CapsWidth(title, 1) + 4);
+	int labelW = 0;
+	for (const TabSpec &t : tabs) labelW = std::max(labelW, p.CapsWidth(t.label, 2));
+	const int count = static_cast<int>(tabs.size());
+	int tabPad = 44, tabGap = 48;
+	auto tabsWidth = [&] { return count ? count * (labelW + tabPad) + (count - 1) * 6 + tabGap : 0; };
+	int titleSize = l.titleSize;
+	SelectObject(p.dc, BrandFont(BrandFace::Display, titleSize, p.s));
+	int titleNeed = p.CapsWidth(title, 1) + 4;
+	// On a narrow screen the tabs close up first, then the title gets smaller, and only then is it shortened.
+	if (titleNeed + tabsWidth() > room) {
+		tabPad = 24;
+		tabGap = 28;
+	}
+	while (titleNeed + tabsWidth() > room && titleSize > l.titleSize * 3 / 4) {
+		titleSize -= 4;
+		SelectObject(p.dc, BrandFont(BrandFace::Display, titleSize, p.s));
+		titleNeed = p.CapsWidth(title, 1) + 4;
+	}
+	int tabW = labelW + tabPad;
+	// Still too many: the tabs share what is left after the shortest title, and their labels end in an ellipsis.
+	if (count && std::min(160, titleNeed) + tabsWidth() > room) {
+		tabW = std::max(48, (room - std::min(160, titleNeed) - tabGap - (count - 1) * 6) / count);
+		labelW = tabW - tabPad;
+	}
+	const int tabsW = tabsWidth();
+	const int titleMax = std::max(std::min(160, titleNeed), room - tabsW);
+	const int titleW = std::min(titleMax, titleNeed);
 	p.TextCaps(m, l.titleY, titleW, l.titleH, title, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
 	if (count) PaintTabs(p, m + titleW + tabGap, l.titleY + l.titleH - tabH - 4, tabs, mx, my, tabW, tabH, 2);
 	return m + titleW + tabsW;

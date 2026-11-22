@@ -721,7 +721,7 @@ SpectatorBarState g_spec;
 void ModUiDrawHoverCard(uint32_t *buf, int w, int h, const std::string &text, COLORREF accent, int atX, int centerY, const std::vector<ControlKey> &keys)
 {
 	static Canvas canvas;
-	const float s = std::max(0.6f, std::min(1.6f, h / 1080.0f * 1.2f));
+	const float s = std::max(kMinScale, std::min(MaxWindowScale(w, h), h / 1080.0f * 1.2f));
 	Card card;
 	card.text = text;
 	card.accent = accent;

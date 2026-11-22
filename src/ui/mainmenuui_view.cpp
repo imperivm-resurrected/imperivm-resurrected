@@ -13,6 +13,7 @@
 
 #include "core/log.h"
 #include "ui/brandart.h"
+#include "ui/screenscale.h"
 
 using namespace ui;
 
@@ -302,7 +303,7 @@ bool LoadBrandArt()
 void Paint(uint32_t *buf, int w, int h, const View &v, std::vector<Hit> &hits)
 {
 	if (g_artState.load() <= 0 || w <= 0 || h <= 0 || v.main.empty()) return;
-	const float s = std::max(0.5f, std::min(1.6f, std::min(h / 1080.0f, w / 1440.0f)));
+	const float s = std::max(0.5f, std::min(h / 1080.0f, w / 1440.0f));
 	EnsureMenuFonts(s);
 	const unsigned since = v.subChangedAt ? MenuClockMs() - v.subChangedAt : 0x40000000u;
 	const float subShown = v.subOpen ? EaseOut(Clamp01(static_cast<float>(since) / kOpenMs)) : 1.0f - Clamp01(static_cast<float>(since) / kCloseMs);

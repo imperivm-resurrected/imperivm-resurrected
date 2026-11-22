@@ -71,12 +71,16 @@ COLORREF LineColor(COLORREF c)
 	return RGB(std::min(255, GetRValue(c) + lift), std::min(255, GetGValue(c) + lift), std::min(255, GetBValue(c) + lift));
 }
 
+constexpr size_t kMaxListedPlayers = 8;
+
 std::vector<const StatsPlayerInfo *> ListedPlayers(const View &v)
 {
 	std::vector<const StatsPlayerInfo *> players;
 	if (!v.statsData) return players;
 	for (const StatsPlayerInfo &info : v.statsData->players) {
 		if (v.statsPlayers.empty() || std::find(v.statsPlayers.begin(), v.statsPlayers.end(), info.index) != v.statsPlayers.end()) players.push_back(&info);
+		// The rail and the table hold the 8 players of a match, as many as the game's own statistics list.
+		if (players.size() == kMaxListedPlayers) break;
 	}
 	return players;
 }
@@ -576,9 +580,27 @@ void PaintSummary(Painter &p, const View &v, const std::vector<const StatsPlayer
 }
 }
 
+namespace {
+// How tall a note is: the game's end messages can run longer than the two lines kNoteH holds, and the window grows with them.
+int NoteHeight(const std::string &note)
+{
+	HDC dc = CreateCompatibleDC(nullptr);
+	if (!dc) return kNoteH;
+	// The window's small type at scale 1, without touching the shared fonts the frame is being painted with.
+	HGDIOBJ old = SelectObject(dc, BrandFont(BrandFace::Ui, 13, 1.0f));
+	const std::wstring wide = W(Tr(note));
+	RECT r = {0, 0, kMenuW - (kMarginX - 10) * 2, 0};
+	DrawTextW(dc, wide.c_str(), -1, &r, DT_CENTER | DT_WORDBREAK | DT_NOPREFIX | DT_CALCRECT);
+	SelectObject(dc, old);
+	DeleteDC(dc);
+	return std::max(kNoteH, static_cast<int>(r.bottom - r.top) + 10);
+}
+}
+
 int MenuHeight(const View &v)
 {
-	int h = kWindowHeaderH + kBottomPad - kButtonGap + static_cast<int>(v.notes.size()) * kNoteH;
+	int h = kWindowHeaderH + kBottomPad - kButtonGap;
+	for (const std::string &note : v.notes) h += NoteHeight(note);
 	for (const Row &r : v.rows) h += kButtonH + kButtonGap + (r.startsGroup ? kGroupGap : 0);
 	return h;
 }
@@ -589,8 +611,9 @@ void PaintMenu(Painter &p, const View &v)
 	int y = PaintWindowHeading(p, kMenuW, v.title, std::string(), {}, 0, v.mouseX, v.mouseY, kWindowHeaderH, v.titleSpacing);
 	for (const std::string &note : v.notes) {
 		p.Font(3);
-		DrawCentered(p, p.R(kMarginX - 10, y, kMenuW - (kMarginX - 10) * 2, kNoteH - 6), note, pal::text);
-		y += kNoteH;
+		const int noteH = NoteHeight(note);
+		DrawCentered(p, p.R(kMarginX - 10, y, kMenuW - (kMarginX - 10) * 2, noteH - 6), note, pal::text);
+		y += noteH;
 	}
 	for (const Row &r : v.rows) {
 		if (r.startsGroup) y += kGroupGap;

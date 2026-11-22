@@ -14,6 +14,7 @@
 #include "ui/fullscreen.h"
 #include "ui/leagueui.h"
 #include "ui/mpui_tourney_internal.h"
+#include "ui/scrollpane.h"
 
 namespace mpui_tourney_impl {
 namespace {
@@ -217,8 +218,8 @@ void PaintFeatured(Painter &p, const State &st, const TourneySummary *t, const T
 	p.Button(rx + rightW - viewW, by, viewW, 40, "View", kTourney, ArgOf(kSubOpen, t->id), mx, my);
 }
 
-// "Create a cup" and "Join with a code" at the right of the list's tabs; returns where they start.
-int PaintCupButtons(Painter &p, const TourneyMineView &mine, int right, int y, int h, int mx, int my)
+// "Create a cup" and "Join with a code" ending at `right`; returns where they start. With `measure` nothing is painted.
+int PaintCupButtons(Painter &p, const TourneyMineView &mine, int right, int y, int h, int mx, int my, bool measure = false)
 {
 	const TourneyOrganize &o = mine.mine.organize;
 	std::string label = Tr("Create a cup");
@@ -232,16 +233,18 @@ int PaintCupButtons(Painter &p, const TourneyMineView &mine, int right, int y, i
 	p.Font(1);
 	p.raw = true;
 	const int cw = p.CapsWidth(label, 1) + 48;
-	p.Button(right - cw, y, cw, h, label, kTourney, ArgOf(kSubCreate, 0), mx, my, enabled, true);
+	if (!measure) p.Button(right - cw, y, cw, h, label, kTourney, ArgOf(kSubCreate, 0), mx, my, enabled, true);
 	p.raw = false;
 	const std::string join = Tr("Join with a code");
 	const int jw = SecondButtonWidth(p, join);
-	PaintSecondButton(p, right - cw - 12 - jw, y, jw, h, join, ArgOf(kSubJoin, 0), true, mx, my);
+	if (!measure) PaintSecondButton(p, right - cw - 12 - jw, y, jw, h, join, ArgOf(kSubJoin, 0), true, mx, my);
 	return right - cw - 12 - jw;
 }
 
-void PaintSubTabs(Painter &p, const Ui &u, const TourneyListsView &lists, int x, int y, int h, int mx, int my)
+// The list's tabs from x; returns where the last one ends.
+int PaintSubTabs(Painter &p, const Ui &u, const TourneyListsView &lists, int x, int y, int h, int mx, int my)
 {
+	int end = x;
 	struct Tab {
 		const char *label;
 		size_t count;
@@ -263,9 +266,13 @@ void PaintSubTabs(Painter &p, const Ui &u, const TourneyListsView &lists, int x,
 		}
 		if (on) p.Fill(x, y + h - 2, w, 2, pal::red);
 		else p.AddHit(x, y, w, h, kTourney, ArgOf(kSubFilter, i));
+		end = x + w;
 		x += w + 28;
 	}
+	return end;
 }
+
+// The account card of the list's side column, when the league is not linked yet.
 
 // Whether the list's filters let a cup through.
 bool Shown(const TourneySummary &t, const Ui &u, const TourneyMineView &mine)
@@ -349,7 +356,8 @@ void PaintTable(Painter &p, const State &st, const Ui &u, const TourneyListsView
 		p.TextWrapped(x + 24, top + 20, w - 48, 80, empty, pal::textDim);
 		return;
 	}
-	p.Clip(x + 1, top, w - 2, viewH);
+	// The rows' buttons stay clickable only where they show.
+	ClipArea view(p, x + 1, top, w - 2, viewH);
 	for (size_t i = 0; i < rows.size(); i++) {
 		const TourneySummary &t = *rows[i];
 		const int ry = top + static_cast<int>(i) * rowH - scroll;
@@ -418,7 +426,7 @@ void PaintTable(Painter &p, const State &st, const Ui &u, const TourneyListsView
 		p.raw = false;
 		PaintAct(p, ActionFor(t, mine), cx[5], ry + (rowH - 38) / 2, colW[5], 38, mx, my);
 	}
-	p.Unclip();
+	view.End();
 	if (maxScroll > 0) PaintScrollbar(p, kBarList, x + w - 10, top, viewH, {scroll, maxScroll, viewH}, st.dropBar, mx, my);
 }
 
@@ -673,20 +681,42 @@ void PaintListScreen(Painter &p, const State &st, const Ui &u, PaintOut &out)
 	const int featH = l.roomy ? 232 : 200;
 	PaintFeatured(p, st, Featured(lists), mine, m, top, mainW, featH);
 	const int tabsY = top + featH + (l.roomy ? 24 : 16);
-	PaintSubTabs(p, u, lists, m, tabsY, 40, mx, my);
-	PaintCupButtons(p, mine, m + mainW, tabsY - 2, 40, mx, my);
-	const int tableY = tabsY + 40 + 14;
+	const int tabsEnd = PaintSubTabs(p, u, lists, m, tabsY, 40, mx, my);
+	int tableY = tabsY + 40 + 14;
+	// The cup buttons share the tabs' row while they fit beside them, and go on a row of their own when they don't.
+	if (PaintCupButtons(p, mine, m + mainW, tabsY - 2, 40, mx, my, true) >= tabsEnd + 24) PaintCupButtons(p, mine, m + mainW, tabsY - 2, 40, mx, my);
+	else {
+		PaintCupButtons(p, mine, m + mainW, tableY - 4, 40, mx, my);
+		tableY += 40 + 10;
+	}
 	PaintTable(p, st, u, lists, mine, m, tableY, mainW, bottom - tableY, out);
 
 	std::vector<uint64_t> ids;
 	int y = top;
 	if (!LeagueLinked()) {
 		const LeagueLinkView link = LeagueLinkState();
-		const int h = link.phase == LeagueLinkPhase::Waiting || link.phase == LeagueLinkPhase::Starting ? 330 : 270;
+		const LeagueLinkActions actions = {kLeagueLink, kLeagueOpen, kLeagueCancel, kLeagueUnlink};
+		// The card grows with what the account shows (a wrapped line, an error), leaving room for the live card under it, and scrolls
+		// what still doesn't fit.
+		const int pad = 22, need = MeasuredHeight(p, [&] { return PaintLeagueAccount(p, sx + 24, 0, sideW - 48, actions, mx, my); });
+		const int base = link.phase == LeagueLinkPhase::Waiting || link.phase == LeagueLinkPhase::Starting ? 330 : 270;
+		const int h = std::min(std::max(base, need + 2 * pad), std::max(base, bottom - y - 124));
 		PaintGlassCard(p, sx, y, sideW, h);
-		p.Clip(sx, y, sideW, h);
-		PaintLeagueAccount(p, sx + 24, y + 22, sideW - 48, {kLeagueLink, kLeagueOpen, kLeagueCancel, kLeagueUnlink}, mx, my);
-		p.Unclip();
+		PaneSpec spec;
+		spec.id = kPaneTourneyAccount;
+		spec.x = sx + 1;
+		spec.y = y + pad;
+		spec.w = sideW - 2;
+		spec.h = h - 2 * pad;
+		spec.contentH = need;
+		spec.barX = sx + sideW - 10;
+		spec.drag = &st.dropBar;
+		spec.mx = mx;
+		spec.my = my;
+		{
+			ScrollPane pane(p, spec, st.scrolls.Of(kPaneTourneyAccount));
+			PaintLeagueAccount(p, sx + 24, pane.Top(), sideW - 48, actions, mx, my);
+		}
 		y += h + 20;
 	}
 	y += PaintLiveCard(p, st, lists, sx, y, sideW, ids) + 20;

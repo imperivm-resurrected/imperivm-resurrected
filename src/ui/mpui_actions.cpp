@@ -440,6 +440,7 @@ void DoAction(int action, int arg)
 		g_s.filter = arg;
 		SelectRoom(0);
 		g_s.detail.scroll = 0;
+		g_s.scrolls.pos.erase(kPaneLobbyRooms);
 		break;
 	case kGTeamColors:
 		g_s.teamColors = !g_s.teamColors;

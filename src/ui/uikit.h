@@ -77,6 +77,14 @@ struct Hit {
 	int thumbTop = 0, thumbLen = 0;
 };
 
+// A part of a screen whose content scrolls (ScrollPane): where it showed in the last frame, in the screen's pixels, and how far it goes,
+// in design units. The screen keeps them with its hits, so the wheel and the bar know which pane is under the mouse.
+struct PaneArea {
+	RECT r = {};
+	int id = -1;
+	int max = 0, page = 0;
+};
+
 inline std::wstring W(const std::string &s)
 {
 	if (s.empty()) return L"";
@@ -175,6 +183,11 @@ struct Painter {
 	bool noHover = false;
 	// Names of players and texts the game already translated are drawn as they are: a player called "Spartacus" stays so.
 	bool raw = false;
+	// Inside a scroll pane, the canvas pixels the painting is kept to: Clip only narrows it, Unclip goes back to it, and the mouse is not
+	// over anything outside it.
+	bool bounded = false;
+	RECT bounds = {};
+	std::vector<PaneArea> *panes = nullptr;
 
 	int S(int v) const { return static_cast<int>(v * s + 0.5f); }
 	RECT R(int x, int y, int w, int h) const { return {S(x), S(y), S(x + w), S(y + h)}; }
@@ -488,17 +501,29 @@ struct Painter {
 		SetTextColor(dc, c);
 		DrawTextW(dc, ws.c_str(), static_cast<int>(ws.size()), &r, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX | DT_NOCLIP);
 	}
-	void Clip(int x, int y, int w, int h)
+	// Keeps the painting inside `r` (canvas pixels), or inside the pane's bounds without one.
+	void ClipPixels(const RECT *r)
 	{
-		const RECT r = R(x, y, w, h);
-		HRGN g = CreateRectRgn(r.left, r.top, r.right, r.bottom);
+		if (!r && !bounded) {
+			SelectClipRgn(dc, nullptr);
+			return;
+		}
+		RECT c = r ? *r : bounds;
+		if (r && bounded && !IntersectRect(&c, r, &bounds)) c = {0, 0, 0, 0};
+		HRGN g = CreateRectRgn(c.left, c.top, c.right, c.bottom);
 		SelectClipRgn(dc, g);
 		DeleteObject(g);
 	}
-	void Unclip() { SelectClipRgn(dc, nullptr); }
+	void Clip(int x, int y, int w, int h)
+	{
+		const RECT r = R(x, y, w, h);
+		ClipPixels(&r);
+	}
+	void Unclip() { ClipPixels(nullptr); }
 	void AddHit(int x, int y, int w, int h, int action, int arg = 0)
 	{
 		RECT r = R(x, y, w, h);
+		if (bounded && !IntersectRect(&r, &r, &bounds)) return;
 		OffsetRect(&r, ox, oy);
 		hits->push_back({r, action, arg});
 		if (action >= 0 && action == focusAction && arg == focusArg) {
@@ -509,10 +534,10 @@ struct Painter {
 	bool Hover(int x, int y, int w, int h, int mx, int my) const
 	{
 		if (noHover) return false;
-		RECT r = R(x, y, w, h);
-		OffsetRect(&r, ox, oy);
-		POINT p = {mx, my};
-		return PtInRect(&r, p) != 0;
+		const POINT inCanvas = {mx - ox, my - oy};
+		if (bounded && !PtInRect(&bounds, inCanvas)) return false;
+		const RECT r = R(x, y, w, h);
+		return PtInRect(&r, inCanvas) != 0;
 	}
 	static const int kToggleW = 26, kToggleH = 13;
 	void Toggle(int x, int y, bool on, bool enabled, bool hover)
@@ -521,6 +546,12 @@ struct Painter {
 		Frame(x, y, kToggleW, kToggleH, !enabled ? pal::hairline : on ? (hover ? pal::redPressed : pal::red) : hover ? pal::edgeHot : pal::edge);
 		const int kx = on ? x + kToggleW - kToggleH + 2 : x + 2, knob = kToggleH - 4;
 		Fill(kx, y + 2, knob, knob, !enabled ? pal::disabled : on ? pal::onRed : pal::caption);
+	}
+	// How wide a Button must be for its label to show whole in `font`, and never narrower than `minW`.
+	int ButtonWidth(const std::string &label, int minW, int font = 4)
+	{
+		Font(font);
+		return std::max(minW, CapsWidth(label, 1) + 24);
 	}
 	void Button(int x, int y, int w, int h, const std::string &label, int action, int arg, int mx, int my,
 		bool enabled = true, bool strong = false, int font = 1)
@@ -531,7 +562,7 @@ struct Painter {
 		Fill(x, y, w, h, fill);
 		Font(font);
 		// A label too long for a narrow button takes the small type before it is shortened.
-		if (font == 1 && CapsWidth(label, 1) > w - 16) Font(4);
+		if ((font == 0 || font == 1) && CapsWidth(label, 1) > w - 16) Font(4);
 		TextCaps(x, y, w, h, label, !enabled ? pal::disabled : strong ? pal::onRed : pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
 		if (enabled) AddHit(x, y, w, h, action, arg);
 	}
@@ -606,7 +637,11 @@ inline ThumbSpan PaintScrollbar(Painter &p, int id, int x, int y, int h, const S
 {
 	const ThumbSpan t = DrawScrollbar(p, x, y, h, span, id >= 0 && drag.id == id, mx, my, look);
 	if (span.max <= 0 || h <= 0 || !p.hits) return t;
-	p.AddHit(x - look.grip, y, look.width + 2 * look.grip, h, kHitScrollbar, id);
+	// Whole, not cut to a pane around it: the drag maps the mouse along the full track.
+	RECT r = p.R(x - look.grip, y, look.width + 2 * look.grip, h), shown;
+	if (p.bounded && !IntersectRect(&shown, &r, &p.bounds)) return t;
+	OffsetRect(&r, p.ox, p.oy);
+	p.hits->push_back({r, kHitScrollbar, id});
 	Hit &hit = p.hits->back();
 	hit.span = {ScrollClamp(span.pos, span.max), span.max, std::max(1, span.page)};
 	hit.thumbTop = p.oy + p.S(y + t.top);

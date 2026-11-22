@@ -65,7 +65,7 @@ inline int ArgOf(int sub, int64_t value)
 }
 
 // The tab's scroll bars, as their hits name them.
-enum Bar { kBarList = 0x7100, kBarBracketY, kBarSide, kBarForm, kBarChooser, kBarFriends };
+enum Bar { kBarList = 0x7100, kBarBracketY, kBarSide, kBarForm, kBarChooser, kBarFriends, kBarPageSide, kBarSummary, kBarMatchRules };
 
 // Where something scrolls, in the canvas' pixels, and how far it can go.
 struct ScrollArea {
@@ -136,6 +136,12 @@ struct Ui {
 	int pageTab = 0;
 	int listScroll = 0, bracketX = 0, bracketY = 0, sideScroll = 0;
 	ScrollArea listArea, bracketArea, sideArea;
+	// The page's side column (organizer, status, maps...) when it is taller than the screen, and how tall it was last painted.
+	int pageSideScroll = 0, pageSideH = 0;
+	ScrollArea pageSideArea;
+	// The rows of the cup form's summary, and of the match screen's rules card, when they don't fit.
+	int summaryScroll = 0, summaryH = 0, matchRulesScroll = 0, matchRulesH = 0;
+	ScrollArea summaryArea, matchRulesArea;
 	RoomFlow room;
 	PendingJoin join;
 	RoomLock lock;
@@ -187,7 +193,9 @@ extern Ui g_tourney;
 
 // What a frame painted that the input needs: the scrolling areas.
 struct PaintOut {
-	ScrollArea listArea, bracketArea, sideArea, formArea, chooserArea, teamArea;
+	ScrollArea listArea, bracketArea, sideArea, formArea, chooserArea, teamArea, pageSideArea, summaryArea, matchRulesArea;
+	// How tall the scrolled blocks came out, for the next frame's limits: -1 when this frame did not paint them.
+	int pageSideH = -1, summaryH = -1, matchRulesH = -1;
 	std::vector<SteamFriendInfo> teamRows;
 	int sectionTop[3] = {};
 	bool form = false;
@@ -196,7 +204,7 @@ struct PaintOut {
 // The screens; `u` is a copy of g_tourney taken for the frame.
 void PaintListScreen(Painter &p, const State &st, const Ui &u, PaintOut &out);
 void PaintPageScreen(Painter &p, const State &st, const Ui &u, PaintOut &out);
-void PaintMatchScreen(Painter &p, const State &st, const Ui &u);
+void PaintMatchScreen(Painter &p, const State &st, const Ui &u, PaintOut &out);
 void PaintChampionScreen(Painter &p, const State &st, const Ui &u);
 void PaintDisputeDialog(Painter &p, const State &st, const Ui &u);
 void PaintCreateScreen(Painter &p, const State &st, const Ui &u, PaintOut &out);

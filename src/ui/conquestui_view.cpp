@@ -375,11 +375,15 @@ void PaintPath(Layer &l, const View &v)
 		const int standing = g.territories[g.selected].standing;
 		if (g.choosing ? standing == kStandingOwned && g.path.empty() : standing == kStandingConquerable) candidate = g.selected;
 	}
-	const int slots = std::max(1, std::min(kMaxSlots, std::max(total, done + (candidate >= 0 ? 1 : 0))));
-	const int span = slots * kSlotW + (slots - 1) * kSlotGap, x0 = (kPathW - span) / 2, top = 26;
-	for (int i = 0; i < slots; i++) {
-		const int sx = x0 + i * (kSlotW + kSlotGap), shieldX = sx + (kSlotW - kSlotShieldW) / 2;
-		if (i > 0) p.ArrowRight(sx - kSlotGap / 2 - 3, top + 18, 7, 11, i < done ? pal::redText : i == done && candidate >= 0 ? pal::caption : pal::hairline);
+	const int steps = done + (candidate >= 0 ? 1 : 0);
+	const int slots = std::max(1, std::min(kMaxSlots, std::max(total, steps)));
+	// The slots close up to fit the strip, and a path longer than them shows its newest steps.
+	const int gap = slots > 1 ? std::max(8, std::min(kSlotGap, (kPathW - 24 - slots * kSlotW) / (slots - 1))) : 0;
+	const int span = slots * kSlotW + (slots - 1) * gap, x0 = (kPathW - span) / 2, top = 26, first = std::max(0, steps - slots);
+	for (int slot = 0; slot < slots; slot++) {
+		const int i = first + slot;
+		const int sx = x0 + slot * (kSlotW + gap), shieldX = sx + (kSlotW - kSlotShieldW) / 2;
+		if (slot > 0) p.ArrowRight(sx - gap / 2 - 3, top + 18, 7, 11, i < done ? pal::redText : i == done && candidate >= 0 ? pal::caption : pal::hairline);
 		const int index = i < done && i < static_cast<int>(g.path.size()) ? g.path[i] : i == done ? candidate : -1;
 		if (index < 0) {
 			ShieldShape(p, shieldX + 4, top + 3, kSlotShieldW - 8, kSlotShieldH - 6, pal::bg, pal::hairline, true);
@@ -417,6 +421,15 @@ void PaintVictory(Layer &l, const View &v)
 	const std::vector<std::wstring> lines = Wrap(p, text, kVictoryW - 60);
 	const int top = kWindowHeaderH - 2, count = std::min(2, static_cast<int>(lines.size()));
 	for (int i = 0; i < count; i++) {
+		// A longer text ends its last line in an ellipsis: the box keeps the game's size so OK stays over the game's button.
+		if (i == count - 1 && static_cast<int>(lines.size()) > count) {
+			std::wstring rest = lines[i];
+			for (size_t k = i + 1; k < lines.size(); k++) rest += L" " + lines[k];
+			RECT r = p.R(30, top + i * kLineH, kVictoryW - 60, kLineH);
+			SetTextColor(p.dc, pal::text);
+			DrawTextW(p.dc, rest.c_str(), static_cast<int>(rest.size()), &r, DT_CENTER | DT_TOP | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
+			break;
+		}
 		SIZE sz = {};
 		GetTextExtentPoint32W(p.dc, lines[i].c_str(), static_cast<int>(lines[i].size()), &sz);
 		p.LineW((kVictoryW - sz.cx) / 2, top + i * kLineH, kVictoryW, kLineH, lines[i], pal::text);

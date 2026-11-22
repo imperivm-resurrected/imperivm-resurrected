@@ -828,7 +828,7 @@ int RowTop(const BattlesSnapshot &s, int list, int index)
 float ScreenScale(int frameW, int frameH)
 {
 	(void)frameW;
-	return std::max(0.6f, std::min(1.6f, frameH / static_cast<float>(kScreenH)));
+	return std::max(kMinScale, frameH / static_cast<float>(kScreenH));
 }
 
 int ScreenWidth(int frameW, int frameH)

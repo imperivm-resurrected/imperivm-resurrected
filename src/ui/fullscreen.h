@@ -6,16 +6,10 @@
 #include <utility>
 #include <vector>
 
+#include "ui/screenscale.h"
 #include "ui/widgets.h"
 
 namespace ui {
-
-// The screens that fill the whole screen are laid out in pixels of a 1920x1080 one: the scale follows the height.
-struct ScreenView {
-	float s = 1.0f;
-	int w = 1920, h = 1080;
-};
-ScreenView ScreenViewFor(int screenW, int screenH);
 
 // The engraved map of the brand under the full screens, cover-scaled to the canvas; false when the file is missing.
 bool PaintBackdrop(Canvas &canvas);
@@ -42,17 +36,6 @@ void PaintIsotype(Painter &p, int cx, int cy, int h, int alpha);
 // for the dialogs and menus over the screen, whose boxes are sized for it.
 void UseScreenFonts(Painter &p);
 void UseSharedFonts(Painter &p);
-
-// Where the header of a full screen goes, in the units of ScreenView: the mockup's sizes on a 1920x1080 screen, tighter on a shorter one.
-struct ScreenLayout {
-	int w = 1920, h = 1080, margin = 64;
-	bool roomy = true;
-	int titleY = 0, titleH = 0, titleSize = 84, infoY = 0, infoH = 26;
-	// Where the content starts under the header.
-	int top = 0;
-};
-// Without `info` the screen has no line under its title, and its content starts right under the title and its tabs.
-ScreenLayout ScreenLayoutFor(int w, int h, bool info = true);
 
 constexpr int kHeaderButtonH = 44;
 

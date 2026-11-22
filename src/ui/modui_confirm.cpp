@@ -22,32 +22,10 @@ std::vector<ListLine> ConfirmLines(const State &st)
 	}
 	return lines;
 }
-}
-}
 
-namespace modui_impl {
-void ConfirmSize(const State &st, int &cw, int &ch)
+// What the question says: its title, its text and the word of its yes.
+void ConfirmTexts(const State &st, std::string &title, std::string &text, std::string &yes)
 {
-	cw = kConfirmW;
-	ch = kConfirmH;
-	if (st.confirmKind == kConfirmAction && !st.actionAlt.empty()) {
-		cw = 600;
-		ch = kConfirmH + 24;
-	}
-	if (st.confirmItems.empty()) return;
-	const int rows = std::min<int>(kConfirmListRows, static_cast<int>(ConfirmLines(st).size()));
-	cw = 600;
-	ch = kConfirmH + rows * kConfirmRowH + 8;
-}
-
-void PaintConfirm(Painter &p, const State &st)
-{
-	const int mx = st.mouseX, my = st.mouseY;
-	g_confirmGeomOut = ListGeom();
-	if (!st.confirm) return;
-	int cw, ch;
-	ConfirmSize(st, cw, ch);
-	std::string title, text, yes;
 	if (st.confirmKind == kConfirmNotice || st.confirmKind == kConfirmAction) {
 		title = st.noticeTitle;
 		text = Tr(st.noticeText);
@@ -86,9 +64,65 @@ void PaintConfirm(Painter &p, const State &st)
 		text = why + (inMatch ? Tr(" Anything you have not saved will be lost.") : std::string());
 		yes = "Restart now";
 	}
+}
+
+// How tall the text of the question is in the shared body type, and the room the dialog gives it before growing.
+constexpr int kConfirmTextMost = 330;
+
+int ConfirmTextRoom(const State &st) { return !st.confirmItems.empty() ? 62 : st.confirmKind == kConfirmAction && !st.actionAlt.empty() ? 94 : 70; }
+
+int ConfirmTextHeight(const State &st, int width)
+{
+	std::string title, text, yes;
+	ConfirmTexts(st, title, text, yes);
+	HDC dc = CreateCompatibleDC(nullptr);
+	Painter pm{dc, 1.0f, 0, 0, nullptr};
+	pm.fonts[0] = BrandFont(BrandFace::Body, 15, 1.0f);
+	pm.Font(0);
+	const int h = pm.Measure(width, text);
+	DeleteDC(dc);
+	return h;
+}
+}
+}
+
+namespace modui_impl {
+void ConfirmBaseSize(const State &st, int &cw, int &ch);
+
+void ConfirmSize(const State &st, int &cw, int &ch)
+{
+	ConfirmBaseSize(st, cw, ch);
+	// A long question makes the dialog taller rather than losing its last lines.
+	const int textH = std::min(kConfirmTextMost, ConfirmTextHeight(st, cw - 48) + 4);
+	ch += std::max(0, textH - ConfirmTextRoom(st));
+}
+
+void ConfirmBaseSize(const State &st, int &cw, int &ch)
+{
+	cw = kConfirmW;
+	ch = kConfirmH;
+	if (st.confirmKind == kConfirmAction && !st.actionAlt.empty()) {
+		cw = 600;
+		ch = kConfirmH + 24;
+	}
+	if (st.confirmItems.empty()) return;
+	const int rows = std::min<int>(kConfirmListRows, static_cast<int>(ConfirmLines(st).size()));
+	cw = 600;
+	ch = kConfirmH + rows * kConfirmRowH + 8;
+}
+
+void PaintConfirm(Painter &p, const State &st)
+{
+	const int mx = st.mouseX, my = st.mouseY;
+	g_confirmGeomOut = ListGeom();
+	if (!st.confirm) return;
+	int cw, ch;
+	ConfirmSize(st, cw, ch);
+	std::string title, text, yes;
+	ConfirmTexts(st, title, text, yes);
 	const Dialog d = DialogBegin(p, st.confirmOnly ? cw : st.viewW, st.confirmOnly ? ch : st.viewH, cw, ch, title);
 	p.Font(0);
-	const int textH = !st.confirmItems.empty() ? 62 : st.confirmKind == kConfirmAction && !st.actionAlt.empty() ? 94 : 70;
+	const int textH = std::max(ConfirmTextRoom(st), std::min(kConfirmTextMost, p.Measure(d.BodyW(), text)));
 	p.TextWrapped(d.BodyX(), d.BodyTop(), d.BodyW(), textH, text, pal::text);
 	if (!st.confirmItems.empty()) {
 		const std::vector<ListLine> lines = ConfirmLines(st);

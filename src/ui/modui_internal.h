@@ -19,6 +19,7 @@
 #include "ui/keycaps.h"
 #include "ui/modui.h"
 #include "ui/richtext.h"
+#include "ui/scrollpane.h"
 #include "mods/modorder.h"
 #include "mods/mods.h"
 
@@ -129,6 +130,10 @@ struct State {
 	ListGeom listGeom;
 	int dropScroll = 0;
 	ScrollDrag dropBar;
+	// The parts of the screen that scroll (ScrollPane) and where they were in the last frame.
+	PaneScrolls scroll;
+	std::vector<PaneArea> panes;
+	static constexpr int kPaneImport = kPaneIdBase;
 	bool mouseDown = false;
 	bool busy = false;
 	int mouseX = -1, mouseY = -1;
@@ -205,6 +210,9 @@ struct PanelLayout : ScreenLayout {
 	// The tools over the list and the card, and where the list and the card start: they reach the foot of the screen, which only
 	// Browse content keeps for its pages.
 	int toolsY = 0, cardTop = 0;
+	// On a narrow screen the search, the filters and the order go on a second row under the profile.
+	bool toolsWrap = false;
+	int searchY = 0;
 	int footY = 0, cardBottom = 0;
 	int listW = 0, detailX = 0, detailW = 0;
 };

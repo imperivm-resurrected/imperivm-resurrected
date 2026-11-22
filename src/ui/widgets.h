@@ -14,15 +14,11 @@
 
 #include "ui/listbox.h"
 #include "ui/ornaments.h"
+#include "ui/screenscale.h"
 #include "ui/textedit.h"
 #include "ui/uikit.h"
 
 namespace ui {
-
-inline float FitScale(int w, int h, int designW, int designH, int margin = 24)
-{
-	return std::max(0.6f, std::min(1.6f, std::min((w - margin) / static_cast<float>(designW), (h - margin) / static_cast<float>(designH))));
-}
 
 inline void DimBackdrop(uint32_t *buf, int w, int h)
 {
@@ -36,6 +32,7 @@ struct PanelRender {
 	float s = 1.0f;
 	int ox = 0, oy = 0, pw = 0, ph = 0;
 	std::vector<Hit> hits;
+	std::vector<PaneArea> panes;
 	Painter p{};
 
 	PanelRender(Canvas &c, uint32_t *b, int bw, int bh) : canvas(c), buf(b), w(bw), h(bh) {}
@@ -54,6 +51,7 @@ struct PanelRender {
 		EnsureFonts(s);
 		FieldsBeginFrame();
 		p = Painter{canvas.dc, s, ox, oy, &hits};
+		p.panes = &panes;
 		std::copy(std::begin(g_fonts), std::end(g_fonts), std::begin(p.fonts));
 		return true;
 	}
@@ -246,6 +244,8 @@ inline DropLayout PaintDropMenu(Painter &p, const RECT &anchor, const std::vecto
 	const DropLayout d = DropMenuLayout(anchor, count, scroll, canvasW, canvasH, minW);
 	if (!count) return d;
 	p.hits->clear();
+	// The menu takes the wheel and every click until it closes.
+	if (p.panes) p.panes->clear();
 	p.AddHit(0, 0, canvasW, canvasH, closeAction, 0);
 	p.Fill(d.x + 4, d.y + 4, d.w, d.h, pal::shadow);
 	p.Fill(d.x, d.y, d.w, d.h, pal::panel);
@@ -340,6 +340,7 @@ inline Dialog DialogBegin(Painter &p, int canvasW, int canvasH, int w, int h, co
 	d.x = (canvasW - w) / 2;
 	d.y = (canvasH - h) / 2;
 	p.hits->clear();
+	if (p.panes) p.panes->clear();
 	p.noHover = false;
 	p.Fill(d.x + 6, d.y + 6, w, h, pal::shadow);
 	p.Fill(d.x, d.y, w, h, pal::panel);
@@ -367,18 +368,26 @@ struct DialogButton {
 
 inline void DialogButtons(Painter &p, const Dialog &d, const std::vector<DialogButton> &buttons, int mx, int my, bool center = false)
 {
-	constexpr int gap = 12, minW = 120;
-	p.Font(1);
+	constexpr int gap = 12;
+	// Long labels in a narrow dialog: the buttons first lose their spare width, then take the small type.
+	const int room = d.w - 2 * d.pad;
 	std::vector<int> widths;
-	int total = -gap;
-	for (const DialogButton &b : buttons) {
-		widths.push_back(std::max(minW, p.CapsWidth(b.label, 1) + 44));
-		total += widths.back() + gap;
+	int total = 0, font = 1;
+	for (const auto &look : {std::make_tuple(1, 120, 44), std::make_tuple(1, 0, 28), std::make_tuple(4, 0, 24)}) {
+		font = std::get<0>(look);
+		p.Font(font);
+		widths.clear();
+		total = -gap;
+		for (const DialogButton &b : buttons) {
+			widths.push_back(std::max(std::get<1>(look), p.CapsWidth(b.label, 1) + std::get<2>(look)));
+			total += widths.back() + gap;
+		}
+		if (total <= room) break;
 	}
 	int x = center ? d.x + (d.w - total) / 2 : d.x + d.w - d.pad - total;
 	for (size_t i = 0; i < buttons.size(); i++) {
 		const DialogButton &b = buttons[i];
-		p.Button(x, d.FooterTop(), widths[i], kDialogBtnH, b.label, b.action, b.arg, mx, my, b.enabled, b.strong);
+		p.Button(x, d.FooterTop(), widths[i], kDialogBtnH, b.label, b.action, b.arg, mx, my, b.enabled, b.strong, font);
 		x += widths[i] + gap;
 	}
 }

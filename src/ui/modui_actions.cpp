@@ -254,6 +254,7 @@ void DoAction(int action, int arg)
 		break;
 	case kTabOrder:
 		g_s.tab = kTabListOrder;
+		g_s.scroll.Reset();
 		g_s.catOpen = false;
 		g_s.ioFilterOpen = false;
 		break;
@@ -392,11 +393,13 @@ void DoAction(int action, int arg)
 		break;
 	case kTabInstalled:
 		g_s.tab = 0;
+		g_s.scroll.Reset();
 		g_s.catOpen = false;
 		g_s.ioFilterOpen = false;
 		break;
 	case kTabExplore:
 		g_s.catOpen = false;
+		g_s.scroll.Reset();
 		if (g_s.tab != 2) {
 			g_s.tab = 2;
 			IoSearch();

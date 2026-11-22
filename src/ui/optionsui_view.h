@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "ui/scrollpane.h"
 #include "ui/uikit.h"
 
 namespace optionsui {
@@ -75,6 +76,8 @@ struct View {
 	int dropId = 0, dropScroll = 0;
 	ui::ScrollDrag dropBar;
 	int dragId = 0;
+	// The page's columns, when they are taller than their space.
+	ui::PaneScrolls scroll;
 	bool dirty = false;
 	Values values;
 	// Out of a game the screen fills the whole screen, laid out in these units (ScreenView); over a game it stays a window.
@@ -83,6 +86,7 @@ struct View {
 };
 
 constexpr int kScreenW = 1100, kScreenH = 680;
+constexpr int kPaneColumns = ui::kPaneIdBase;
 constexpr int kSliderMargin = 10;
 
 void PaintOptionsScreen(ui::Painter &p, const View &v);

@@ -68,8 +68,7 @@ void ModUiDraw(uint32_t *buf, int w, int h)
 		}
 		st = g_s;
 	}
-	const float s = std::max(0.6f, std::min(1.6f, std::min((w - 24) / static_cast<float>(kDesignW),
-														  (h - 24) / static_cast<float>(kDesignH))));
+	const float s = FitScale(w, h, kDesignW, kDesignH, 24);
 	if (st.open) {
 		int confirmW = kConfirmW, confirmH = kConfirmH;
 		ConfirmSize(st, confirmW, confirmH);
@@ -88,6 +87,7 @@ void ModUiDraw(uint32_t *buf, int w, int h)
 			r.End(255);
 			std::lock_guard<std::mutex> lock(g_lock);
 			g_s.hits = std::move(r.hits);
+			g_s.panes = std::move(r.panes);
 			g_s.confirmGeom = g_confirmGeomOut;
 			g_s.listGeom = g_listGeomOut;
 			g_s.orderGeom = g_orderGeomOut;

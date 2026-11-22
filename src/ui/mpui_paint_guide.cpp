@@ -27,7 +27,29 @@ using namespace mpui_impl;
 namespace mpui_impl {
 namespace {
 
-const int kGap = 24, kPad = 24;
+const int kGap = 24, kPad = 24, kCardBodyY = 48;
+
+// A card of the guide with its title, whose body scrolls when it is taller than the card. `body(x, top, w)` paints from `top` and
+// returns how tall it came out.
+template <class Body> void PaneCard(Painter &p, const State &st, int id, int x, int y, int w, int h, const char *title, Body body)
+{
+	PaintGlassCard(p, x, y, w, h);
+	const int ix = x + kPad, iw = w - 2 * kPad;
+	PaintSectionLabel(p, ix, y + 16, iw, 22, title);
+	PaneSpec spec;
+	spec.id = id;
+	spec.x = x + 1;
+	spec.y = y + kCardBodyY;
+	spec.w = w - 2;
+	spec.h = h - kCardBodyY - 10;
+	spec.contentH = MeasuredHeight(p, [&] { return body(ix, 0, iw); });
+	spec.barX = x + w - 10;
+	spec.drag = &st.dropBar;
+	spec.mx = st.mouseX;
+	spec.my = st.mouseY;
+	ScrollPane pane(p, spec, st.scrolls.Of(id));
+	body(ix, pane.Top(), iw);
+}
 
 // Wrapped text at `y`, translated; the height it took.
 int Para(Painter &p, int x, int y, int w, const char *text, COLORREF c)
@@ -64,14 +86,11 @@ int PaintKeep(Painter &p, int x, int y, int w, const char *name, const char *tex
 	return 30 + Para(p, x, y + 30, w, text, pal::textDim);
 }
 
-void PaintKeeps(Painter &p, const State &st, const LeagueRanked &rk, int x, int y, int w, int h)
+int PaintKeepsBody(Painter &p, const State &st, const LeagueRanked &rk, int ix, int top, int iw)
 {
 	const LeagueRankedView &v = st.ranked.view;
-	PaintGlassCard(p, x, y, w, h);
-	const int ix = x + kPad, iw = w - 2 * kPad;
-	PaintSectionLabel(p, ix, y + 16, iw, 22, "When the season closes");
 	p.Font(3);
-	int ty = y + 50;
+	int ty = top + 2;
 	ty += Para(p, ix, ty, iw, "You keep the rewards of the highest rank you reached, with the season's number, for good.", pal::textDim) + 18;
 	// The pictures show the player's own rank, or Centurion before they have one.
 	const LeagueTier tier = rk.present && rk.tier != LeagueTier::None ? rk.tier : LeagueTier::Centurion;
@@ -95,7 +114,6 @@ void PaintKeeps(Painter &p, const State &st, const LeagueRanked &rk, int x, int 
 	p.raw = false;
 	ty += std::max(pic, titleH + 24) + 22;
 	// The small print of the elite and of the Glory lost by not playing.
-	if (ty + 60 > y + h) return;
 	p.Fill(ix, ty, iw, 1, pal::hairline);
 	ty += 14;
 	p.Font(3);
@@ -104,7 +122,8 @@ void PaintKeeps(Painter &p, const State &st, const LeagueRanked &rk, int x, int 
 			  "10 days.",
 			  pal::caption) +
 		10;
-	if (ty + 40 <= y + h) Para(p, ix, ty, iw, "From 1500 Glory up, every day after 10 without playing costs 25 Glory, never below 1500.", pal::caption);
+	ty += Para(p, ix, ty, iw, "From 1500 Glory up, every day after 10 without playing costs 25 Glory, never below 1500.", pal::caption);
+	return ty - top;
 }
 
 // One step of the way, with its numeral.
@@ -120,11 +139,8 @@ int PaintStep(Painter &p, int x, int y, int w, const char *numeral, const char *
 	return std::max(40, 26 + Para(p, tx, y + 26, tw, text, pal::textDim));
 }
 
-void PaintWay(Painter &p, int x, int y, int w, int h)
+int PaintWayBody(Painter &p, int ix, int top, int iw, int gap)
 {
-	PaintGlassCard(p, x, y, w, h);
-	const int ix = x + kPad, iw = w - 2 * kPad;
-	PaintSectionLabel(p, ix, y + 16, iw, 22, "From the queue to the result");
 	struct Step {
 		const char *numeral, *name, *text;
 	};
@@ -135,12 +151,9 @@ void PaintWay(Painter &p, int x, int y, int w, int h)
 		{"IV", "Play", "If someone leaves before minute 3 the game is void: no Glory for anyone, but whoever left is still locked out of the queue. Later, leaving is a loss."},
 		{"V", "Result", "Both games report the result and the league checks that they agree. If they don't, nothing counts until the team reviews the game."},
 	};
-	int ty = y + 54;
-	const int gap = std::max(10, std::min(22, (y + h - ty - 5 * 80) / 5));
-	for (const Step &s : kSteps) {
-		if (ty + 40 > y + h - 8) break;
-		ty += PaintStep(p, ix, ty, iw, s.numeral, s.name, s.text) + gap;
-	}
+	int ty = top + 6;
+	for (const Step &s : kSteps) ty += PaintStep(p, ix, ty, iw, s.numeral, s.name, s.text) + gap;
+	return ty - gap - top;
 }
 
 // A rule: its name on the left, what it does on the right.
@@ -153,12 +166,9 @@ int PaintRule(Painter &p, int x, int y, int w, const char *name, const char *tex
 	return std::max(nh, th);
 }
 
-void PaintGlory(Painter &p, const LeagueRanked &rk, int x, int y, int w, int h)
+int PaintGloryBody(Painter &p, const LeagueRanked &rk, int ix, int top, int iw)
 {
-	PaintGlassCard(p, x, y, w, h);
-	const int ix = x + kPad, iw = w - 2 * kPad;
-	PaintSectionLabel(p, ix, y + 16, iw, 22, "Glory");
-	int ty = y + 52;
+	int ty = top + 4;
 	struct Rule {
 		const char *name, *text;
 	};
@@ -169,26 +179,21 @@ void PaintGlory(Painter &p, const LeagueRanked &rk, int x, int y, int w, int h)
 		{"Placement", "Your first 5 games of a season. You start on the cautious side of your level, at most Centurion I, and climb faster from there."},
 		{"Same rivals", "Within a day, the 3rd and 4th games against the same players count half, and from the 5th on nothing."},
 	};
-	for (const Rule &r : kRules) {
-		if (ty + 20 > y + h - 8) break;
-		ty += PaintRule(p, ix, ty, iw, r.name, r.text) + 12;
-	}
+	for (const Rule &r : kRules) ty += PaintRule(p, ix, ty, iw, r.name, r.text) + 12;
 	// Where the player stands, when they have a rank.
-	if (rk.present && rk.placementLeft <= 0 && rk.tier != LeagueTier::None && ty + 30 <= y + h - 8) {
+	if (rk.present && rk.placementLeft <= 0 && rk.tier != LeagueTier::None) {
 		p.Fill(ix, ty, iw, 1, pal::hairline);
 		p.Font(3);
 		const std::string own = TrFmt("You: %s with %s Glory.", {LeagueRankLabel(rk.tier, rk.division), std::to_string(rk.glory)}) +
 			(rk.shield > 0 ? " " + TrFmt("Shield for %s more games.", {std::to_string(rk.shield)}) : std::string());
-		ParaRaw(p, ix, ty + 10, iw, own, LeagueTierInk(rk.tier));
+		ty += 10 + ParaRaw(p, ix, ty + 10, iw, own, LeagueTierInk(rk.tier)) + 12;
 	}
+	return ty - 12 - top;
 }
 
-void PaintFairPlay(Painter &p, int x, int y, int w, int h)
+int PaintFairPlayBody(Painter &p, int ix, int top, int iw)
 {
-	PaintGlassCard(p, x, y, w, h);
-	const int ix = x + kPad, iw = w - 2 * kPad;
-	PaintSectionLabel(p, ix, y + 16, iw, 22, "Fair play");
-	int ty = y + 52;
+	int ty = top + 4;
 	struct Rule {
 		const char *name, *text;
 	};
@@ -197,10 +202,8 @@ void PaintFairPlay(Painter &p, int x, int y, int w, int h)
 		{"Leaving a game", "A loss (or a void game before minute 3), and 10 minutes, 30 minutes, 2 hours and then a day out of the queue, by your abandons of the last 30 days."},
 		{"Reports that disagree", "No Glory for anyone until the league's team reviews the game. You can report a problem from the result."},
 	};
-	for (const Rule &r : kRules) {
-		if (ty + 20 > y + h - 8) break;
-		ty += PaintRule(p, ix, ty, iw, r.name, r.text) + 12;
-	}
+	for (const Rule &r : kRules) ty += PaintRule(p, ix, ty, iw, r.name, r.text) + 12;
+	return ty - 12 - top;
 }
 
 }
@@ -261,14 +264,17 @@ void PaintRankedGuide(Painter &p, const State &st)
 	if (st.ranked.guideTab == 0) {
 		const int leftW = (inner - kGap) * 56 / 100;
 		PaintRankLadder(p, m, y0, leftW, h, rk.present && rk.placementLeft <= 0 ? rk.tier : LeagueTier::None);
-		PaintKeeps(p, st, rk, m + leftW + kGap, y0, inner - leftW - kGap, h);
+		PaneCard(p, st, kPaneGuideKeeps, m + leftW + kGap, y0, inner - leftW - kGap, h, "When the season closes",
+			[&](int x, int top, int w) { return PaintKeepsBody(p, st, rk, x, top, w); });
 		return;
 	}
 	const int leftW = (inner - kGap) / 2, rx = m + leftW + kGap, rw = inner - leftW - kGap;
-	PaintWay(p, m, y0, leftW, h);
+	// The steps spread out when there is room, as far as 22 apart.
+	const int wayGap = std::max(10, std::min(22, (h - kCardBodyY - 16 - 5 * 80) / 5));
+	PaneCard(p, st, kPaneGuideWay, m, y0, leftW, h, "From the queue to the result", [&](int x, int top, int w) { return PaintWayBody(p, x, top, w, wayGap); });
 	const int gloryH = (h - kGap) * 60 / 100;
-	PaintGlory(p, rk, rx, y0, rw, gloryH);
-	PaintFairPlay(p, rx, y0 + gloryH + kGap, rw, h - gloryH - kGap);
+	PaneCard(p, st, kPaneGuideGlory, rx, y0, rw, gloryH, "Glory", [&](int x, int top, int w) { return PaintGloryBody(p, rk, x, top, w); });
+	PaneCard(p, st, kPaneGuideFair, rx, y0 + gloryH + kGap, rw, h - gloryH - kGap, "Fair play", [&](int x, int top, int w) { return PaintFairPlayBody(p, x, top, w); });
 }
 
 }

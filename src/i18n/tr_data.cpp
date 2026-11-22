@@ -2435,7 +2435,6 @@ extern const TrRow kTrRows[] = {
 	{"General", "General", "Generale"},
 	{"Not played this season", "No se juega esta temporada", "Non si gioca in questa stagione"},
 	{"This queue is not part of the season being played.", "Esta cola no forma parte de la temporada en juego.", "Questa coda non fa parte della stagione in corso."},
-	{"+%s more", "+%s más", "+%s altri"},
 	{"Season peak", "Máximo de la temporada", "Massimo della stagione"},
 	{"Community cup", "Copa de la comunidad", "Coppa della comunità"},
 	{"You have not played any cup yet. The podium of the official cups wins gold, silver and bronze phalerae; anyone can make a community cup in Multiplayer, Tournaments.", "Aún no has jugado ninguna copa. El podio de las copas oficiales gana fáleras de oro, plata y bronce; cualquiera puede crear una copa de la comunidad en Multijugador, Torneos.", "Non hai ancora giocato nessuna coppa. Il podio delle coppe ufficiali vince falere d'oro, d'argento e di bronzo; chiunque può creare una coppa della comunità in Multigiocatore, Tornei."},

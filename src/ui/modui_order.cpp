@@ -105,29 +105,51 @@ void PaintOrderList(Painter &p, const State &st, const PanelLayout &l)
 	PaintGlassCard(p, x, y0, w, h);
 	const int stripH = 48;
 	p.Font(4);
-	p.TextCaps(x + 22, y0, w / 2, stripH, TrFmt("%s active packs · from top to bottom", {std::to_string(st.order.size())}), pal::text,
-		DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1);
+	const std::string title = TrFmt("%s active packs · from top to bottom", {std::to_string(st.order.size())});
+	const int titleW = std::min(w - 44, p.CapsWidth(title, 1) + 4);
+	p.TextCaps(x + 22, y0, titleW, stripH, title, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1);
 	{
+		// The legend takes what the title leaves, shortened down to a readable part, and goes when not even that fits.
 		p.Font(3);
 		const std::string legend = Tr("Higher up wins when two packs bring the same file");
-		const int lw = p.TextWidth(legend);
-		p.Text(x + w - 22 - lw, y0, lw, stripH, legend, pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
-		p.ArrowUp(x + w - 22 - lw - 22, y0 + stripH / 2 - 7, 11, 7, pal::text);
-		p.Fill(x + w - 22 - lw - 18, y0 + stripH / 2, 3, 7, pal::text);
+		const int room = w - 22 - (22 + titleW + 24) - 22;
+		const int lw = std::min(p.TextWidth(legend), room);
+		if (lw >= 160) {
+			p.Text(x + w - 22 - lw, y0, lw, stripH, legend, pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			p.ArrowUp(x + w - 22 - lw - 22, y0 + stripH / 2 - 7, 11, 7, pal::text);
+			p.Fill(x + w - 22 - lw - 18, y0 + stripH / 2, 3, 7, pal::text);
+		}
 	}
-	const int posX = x + 10, posW = 44, nameX = x + 66, nameW = std::min(320, w / 4), typeX = nameX + nameW + 12, typeW = 150;
-	const int clashW = 200, clashX = x + w - 26 - clashW, whyX = typeX + typeW + 12, whyW = clashX - 16 - whyX;
+	const int posX = x + 10, posW = 44, nameX = x + 66, nameW = std::min(320, w / 4);
+	constexpr int kWhyRoomy = 200, kWhyLeast = 160;
+	int typeW = 150, clashW = 200;
+	auto whyRoom = [&] { return (x + w - 26 - clashW - 16) - (nameX + nameW + 12 + (typeW ? typeW + 12 : 0)); };
+	if (whyRoom() < kWhyRoomy) {
+		typeW = 110;
+		clashW = 160;
+	}
+	if (whyRoom() < kWhyLeast) typeW = 0;
+	const int typeX = nameX + nameW + 12, clashX = x + w - 26 - clashW, whyX = typeW ? typeX + typeW + 12 : typeX, whyW = clashX - 16 - whyX;
 	const int headY = y0 + stripH, headH = 36;
 	p.Fill(x + 1, headY, w - 2, 1, pal::hairline);
 	p.Fill(x + 1, headY + headH - 1, w - 2, 1, pal::lineStrong);
 	p.Font(4);
 	p.TextCaps(posX, headY, posW, headH, "#", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
 	p.TextCaps(nameX, headY, nameW, headH, "Content", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1);
-	p.TextCaps(typeX, headY, typeW, headH, "Type", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1);
+	if (typeW) p.TextCaps(typeX, headY, typeW, headH, "Type", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1);
 	p.TextCaps(whyX, headY, whyW, headH, "Why it is here", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1);
 	p.TextCaps(clashX, headY, clashW, headH, "When they clash", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1);
 
-	const int rulesH = 112, rulesY = y0 + h - rulesH;
+	const char *rules[] = {"Cosmetic first, then maps and campaigns, and gameplay at the end.", "What a pack needs stays below it.",
+		"What its author asks for: to load before or after another one.", "When nothing else decides, by name."};
+	constexpr int kRuleGapX = 20, kRuleNumW = 34, kRuleTop = 46, kRuleGapY = 10, kRuleColLeast = 240;
+	const int ruleCols = (w - 44 - 3 * kRuleGapX) / 4 >= kRuleColLeast ? 4 : 2;
+	const int colW = (w - 44 - (ruleCols - 1) * kRuleGapX) / ruleCols;
+	int ruleRowH = 22;
+	p.Font(3);
+	for (const char *rule : rules) ruleRowH = std::max(ruleRowH, p.Measure(colW - kRuleNumW, rule));
+	const int ruleRows = 4 / ruleCols;
+	const int rulesH = kRuleTop + ruleRows * ruleRowH + (ruleRows - 1) * kRuleGapY + 14, rulesY = y0 + h - rulesH;
 	const int listY = headY + headH, listH = rulesY - listY;
 	int groupCount[3] = {0, 0, 0};
 	for (const ModOrderEntry &e : st.order) groupCount[std::max(0, std::min(2, e.kind))]++;
@@ -158,7 +180,7 @@ void PaintOrderList(Painter &p, const State &st, const PanelLayout &l)
 		p.Font(1);
 		p.Text(nameX, y, nameW, kModRowH, m ? m->name : e.folder, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.Font(3);
-		if (m) {
+		if (m && typeW) {
 			const int cat = ModMainCategory(*m);
 			const int cg = CatalogCategoryGroup(cat);
 			p.Text(typeX, y, typeW, kModRowH, Tr(CatalogCategoryLabel(cat)), cg == 0 ? pal::redText : cg == 1 ? kTeal : pal::textDim,
@@ -167,13 +189,13 @@ void PaintOrderList(Painter &p, const State &st, const PanelLayout &l)
 		{
 			const std::string tag = Tr(ReasonTag(e.reason));
 			p.Font(4);
-			const int tw = p.CapsWidth(tag, 1) + 16, th = 22, ty = y + (kModRowH - th) / 2;
+			const int tw = std::min(whyW, p.CapsWidth(tag, 1) + 16), th = 22, ty = y + (kModRowH - th) / 2;
 			const COLORREF c = ReasonColor(e.reason);
 			p.Frame(whyX, ty, tw, th, c == pal::caption ? pal::edge : c);
 			p.TextCaps(whyX, ty, tw, th, tag, c == pal::caption ? pal::textDim : c, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
 			p.Font(3);
 			const std::string why = OrderReasonText(st, e);
-			p.Text(whyX + tw + 10, y, whyW - tw - 10, kModRowH, why, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			if (whyW - tw - 10 >= 40) p.Text(whyX + tw + 10, y, whyW - tw - 10, kModRowH, why, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 			if (p.Hover(whyX, y, whyW, kModRowH, mx, my)) SetTipText(why, whyX, y + kModRowH);
 		}
 		Row r;
@@ -191,17 +213,14 @@ void PaintOrderList(Painter &p, const State &st, const PanelLayout &l)
 	p.Fill(x + 1, rulesY, w - 2, 1, pal::hairline);
 	p.Font(4);
 	p.TextCaps(x + 22, rulesY + 14, w - 44, 20, "How it is decided, in this order", pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1);
-	const char *rules[] = {"Cosmetic first, then maps and campaigns, and gameplay at the end.", "What a pack needs stays below it.",
-		"What its author asks for: to load before or after another one.", "When nothing else decides, by name."};
 	const COLORREF colors[] = {pal::caption, kTeal, pal::warn, pal::caption};
-	const int colW = (w - 44 - 3 * 20) / 4;
 	for (int k = 0; k < 4; k++) {
-		const int cx = x + 22 + k * (colW + 20), cy = rulesY + 46;
+		const int cx = x + 22 + (k % ruleCols) * (colW + kRuleGapX), cy = rulesY + kRuleTop + (k / ruleCols) * (ruleRowH + kRuleGapY);
 		p.Frame(cx, cy, 24, 22, colors[k] == pal::caption ? pal::edge : colors[k]);
 		p.Font(4);
 		p.Text(cx, cy, 24, 22, std::to_string(k + 1), colors[k] == pal::caption ? pal::textDim : colors[k], DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		p.Font(3);
-		p.TextWrapped(cx + 34, cy + 1, colW - 34, 48, rules[k], pal::textDim);
+		p.TextWrapped(cx + kRuleNumW, cy + 1, colW - kRuleNumW, ruleRowH + 2, rules[k], pal::textDim);
 	}
 }
 
@@ -289,28 +308,56 @@ void PaintShareCard(Painter &p, const State &st, const PanelLayout &l)
 	p.Font(3);
 	p.Text(dx + boxPad, by, iw, 24, TrFmt("%s packs", {std::to_string(pv.profile.mods.size())}), pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 	by += 34;
-	const auto line = [&](int kind, const std::string &text, COLORREF c, const std::vector<const ModsSharedMod *> &mods) {
-		if (by + 26 > boxBottom - 40) return;
-		const int cy = by + 13;
-		if (kind == 0) PaintCheck(p, dx + boxPad, cy, c);
-		else if (kind == 1) PaintDownArrow(p, dx + boxPad, cy, c);
-		else PaintCross(p, dx + boxPad, cy, c);
-		p.Font(0);
-		p.Text(dx + boxPad + 24, by, iw - 24, 26, text, c, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		by += 28;
-		if (kind != 0 && !mods.empty()) {
-			p.Font(3);
-			by += p.TextWrapped(dx + boxPad + 24, by, iw - 24, 40, NamesOf(mods), pal::textDim) + 6;
-		}
+	// The groups scroll between the name and the foot of the box when they are more than it holds.
+	struct Group {
+		int kind;
+		std::string text;
+		COLORREF color;
+		const std::vector<const ModsSharedMod *> *mods;
 	};
-	if (!have.empty()) line(0, TrFmt("%s are already installed", {std::to_string(have.size())}), pal::ok, have);
-	if (!download.empty()) line(1, TrFmt("%s download from GameBanana", {std::to_string(download.size())}), pal::text, download);
-	if (!missing.empty()) {
-		line(2, TrFmt("%s are not on GameBanana", {std::to_string(missing.size())}), pal::bad, missing);
-		if (by + 22 < boxBottom - 40) {
+	std::vector<Group> groups;
+	if (!have.empty()) groups.push_back({0, TrFmt("%s are already installed", {std::to_string(have.size())}), pal::ok, &have});
+	if (!download.empty()) groups.push_back({1, TrFmt("%s download from GameBanana", {std::to_string(download.size())}), pal::text, &download});
+	if (!missing.empty()) groups.push_back({2, TrFmt("%s are not on GameBanana", {std::to_string(missing.size())}), pal::bad, &missing});
+	const int namesW = iw - 24 - 12;
+	auto namesH = [&](const Group &g) {
+		if (g.kind == 0 || g.mods->empty()) return 0;
+		p.Font(3);
+		return p.Measure(namesW, NamesOf(*g.mods)) + 6;
+	};
+	int contentH = missing.empty() ? 0 : 24;
+	for (const Group &g : groups) contentH += 28 + namesH(g);
+	PaneSpec spec;
+	spec.id = State::kPaneImport;
+	spec.x = dx + boxPad;
+	spec.y = by;
+	spec.w = dw - boxPad - 4;
+	spec.h = std::max(0, boxBottom - 44 - by);
+	spec.contentH = contentH;
+	spec.drag = &st.dropBar;
+	spec.mx = mx;
+	spec.my = my;
+	{
+		ScrollPane pane(p, spec, st.scroll.Of(State::kPaneImport));
+		by = pane.Top();
+		for (const Group &g : groups) {
+			const int cy = by + 13;
+			if (g.kind == 0) PaintCheck(p, dx + boxPad, cy, g.color);
+			else if (g.kind == 1) PaintDownArrow(p, dx + boxPad, cy, g.color);
+			else PaintCross(p, dx + boxPad, cy, g.color);
+			p.Font(0);
+			p.Text(dx + boxPad + 24, by, namesW, 26, g.text, g.color, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			by += 28;
+			const int nh = namesH(g);
+			if (nh) {
+				p.Font(3);
+				p.TextWrapped(dx + boxPad + 24, by, namesW, nh, NamesOf(*g.mods), pal::textDim);
+				by += nh;
+			}
+		}
+		if (!missing.empty()) {
 			p.Font(3);
-			p.Text(dx + boxPad + 24, by, iw - 24, 20, "Ask whoever shared the code for them.", pal::caption);
-			by += 24;
+			p.Text(dx + boxPad + 24, by, namesW, 20, "Ask whoever shared the code for them.", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		}
 	}
 	p.Fill(dx + boxPad, boxBottom - 40, iw, 1, pal::hairline);
