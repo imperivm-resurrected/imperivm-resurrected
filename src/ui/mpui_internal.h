@@ -120,7 +120,8 @@ inline int DropArg(int kind, int index)
 enum RankedArg {
 	kRkSearch = 1, kRkCancel, kRkAccept, kRkDecline, kRkBoard, kRkHub, kRkBoardPrev, kRkBoardNext, kRkBoardMe, kRkRoom,
 	kRkResultClose, kRkAgain, kRkResultBoard, kRkSkip, kRkSteam, kRkAbandon, kRkHistory, kRkHistoryPrev, kRkHistoryNext,
-	kRkHistoryNewest, kRkDisputeResult, kRkDisputeSend, kRkDisputeCancel, kRkGuide, kRkGuideRanks, kRkGuideRules, kRkRow = 0x100, kRkDisputeHistory = 0x300,
+	kRkHistoryNewest, kRkDisputeResult, kRkDisputeSend, kRkDisputeCancel, kRkGuide, kRkGuideRanks, kRkGuideRules, kRkHubRecent, kRkHubMastery,
+	kRkRow = 0x100, kRkDisputeHistory = 0x300,
 	kRkArgEnd = 0x400, kRkContentSwitch, kRkContentClose,
 };
 // The full leaderboard's filters and the player's card, and the end of season ceremony (mpui_ranked_seasons.cpp), after kRkArgEnd. The
@@ -143,6 +144,8 @@ struct RankedScreen {
 	int sub = kRankedHub;
 	// "How it works": its tab, the ranks (0) or the rules (1).
 	int guideTab = 0;
+	// The summary's middle card shows the mastery of the civilizations instead of the recent games.
+	bool hubMastery = false;
 	// The result screen is open while resultOpen; resultAt is when it opened, for the animation.
 	bool resultOpen = false;
 	int64_t resultMatch = 0;

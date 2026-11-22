@@ -13,6 +13,7 @@
 #include "addr/state.h"
 
 #include "game/mappreview.h"
+#include "ui/leaguemastery.h"
 #include "ui/leagueui.h"
 #include "ui/mpui_internal.h"
 #include "ui/mpui_tourney.h"
@@ -327,6 +328,7 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 	LeagueBadgeClicksEnd();
 	PaintPatronTip(r.p, st.viewW, st.viewH);
 	PaintLeagueBadgeTip(r.p, st.viewW, st.viewH);
+	PaintMasteryTip(r.p, st.viewW, st.viewH);
 	WakeGameThread();
 	r.End(255);
 	// Asked before the lock: it takes it.

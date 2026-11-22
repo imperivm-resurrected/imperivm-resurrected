@@ -117,6 +117,11 @@ void BlitLaurel(ui::Painter &p, int x, int y, int size, COLORREF color)
 
 }
 
+void PaintWreath(ui::Painter &p, int x, int y, int size, COLORREF color)
+{
+	if (size > 0) BlitLaurel(p, x, y, size, color);
+}
+
 bool PatronShines(PatronTier tier)
 {
 	return tier == PatronTier::Gold || tier == PatronTier::Silver || tier == PatronTier::Bronze || tier == PatronTier::Dev;

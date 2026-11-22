@@ -709,6 +709,8 @@ void RankedAction(int arg)
 	case kRkGuide: r.sub = kRankedGuide; break;
 	case kRkGuideRanks: r.guideTab = 0; break;
 	case kRkGuideRules: r.guideTab = 1; break;
+	case kRkHubRecent: r.hubMastery = false; break;
+	case kRkHubMastery: r.hubMastery = true; break;
 	case kRkBoardPrev:
 	case kRkBoardNext: {
 		const int total = r.view.page.total;

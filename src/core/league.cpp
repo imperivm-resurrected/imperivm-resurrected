@@ -403,6 +403,50 @@ bool LeagueParsePlayersLookup(const Json &j, std::map<uint64_t, LeagueLookupEntr
 	return true;
 }
 
+LeagueMastery LeagueMasteryFromJson(const Json *v)
+{
+	LeagueMastery m;
+	if (!v || v->type != Json::Object) return m;
+	m.present = true;
+	m.level = std::max(0, std::min(kLeagueMasteryTop, v->GetInt("level")));
+	m.wins = std::max(0, v->GetInt("wins"));
+	m.levelWins = std::max(0, v->GetInt("levelWins"));
+	const Json *next = v->Get("nextWins");
+	m.nextWins = m.Top() || !next || next->type != Json::Number ? -1 : std::max(m.levelWins, static_cast<int>(next->num));
+	return m;
+}
+
+const char *LeagueMasteryName(int level)
+{
+	static const char *const kNames[kLeagueMasteryTop + 1] = {"Tiro", "Legionary", "Veteran", "Evocatus", "Master"};
+	return kNames[std::max(0, std::min(kLeagueMasteryTop, level))];
+}
+
+float LeagueMasteryProgress(const LeagueMastery &m)
+{
+	if (m.Top() || m.nextWins < 0) return 1.0f;
+	const int span = m.nextWins - m.levelWins;
+	if (span <= 0) return 0.0f;
+	return std::max(0.0f, std::min(1.0f, static_cast<float>(m.wins - m.levelWins) / static_cast<float>(span)));
+}
+
+int LeagueMasteryWinsLeft(const LeagueMastery &m)
+{
+	return m.Top() || m.nextWins < 0 ? 0 : std::max(0, m.nextWins - m.wins);
+}
+
+LeagueMasteryChange LeagueMasteryChangeFromJson(const Json *v)
+{
+	LeagueMasteryChange c;
+	if (!v || v->type != Json::Object) return c;
+	c.civ = Trim(v->GetString("civ"));
+	if (c.civ.empty()) return c;
+	c.present = true;
+	c.mastery = LeagueMasteryFromJson(v);
+	c.levelBefore = std::max(0, std::min(c.mastery.level, v->GetInt("levelBefore", c.mastery.level)));
+	return c;
+}
+
 bool LeagueParseMe(const Json &j, LeagueMe &out)
 {
 	if (j.type != Json::Object) return false;
@@ -452,6 +496,21 @@ bool LeagueParseMe(const Json &j, LeagueMe &out)
 		for (const Json &b : list->arr) {
 			const LeagueBadge badge = LeagueBadgeFromJson(&b);
 			if (badge.Shown()) out.badges.push_back(badge);
+		}
+	}
+	if (const Json *list = j.Get("mastery"); list && list->type == Json::Array) {
+		out.masteryKnown = true;
+		for (const Json &c : list->arr) {
+			if (c.type != Json::Object || Trim(c.GetString("civ")).empty()) continue;
+			LeagueCivMastery m;
+			m.civ = Trim(c.GetString("civ"));
+			m.games = std::max(0, c.GetInt("games"));
+			m.mastery = LeagueMasteryFromJson(&c);
+			if (const Json *s = c.Get("season"); s && s->type == Json::Object) {
+				m.seasonGames = std::max(0, s->GetInt("games"));
+				m.seasonWins = std::max(0, std::min(m.seasonGames, s->GetInt("wins")));
+			}
+			out.mastery.push_back(m);
 		}
 	}
 	if (const Json *list = j.Get("cups"); list && list->type == Json::Array) {

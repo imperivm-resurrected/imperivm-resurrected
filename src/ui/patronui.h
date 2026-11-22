@@ -20,6 +20,8 @@ COLORREF PatronBlend(COLORREF from, COLORREF to, int percent);
 void DrawPatron(ui::Painter &p, int x, int y, int size, int nameX, int nameY, int nameW, int nameH, const std::string &name,
 	PatronTier tier, UINT fmt);
 int PatronLaurelSize(PatronTier tier);
+// The laurel wreath of the honour roll, whole, in a square of `size` at (x, y): also the frame of a civilization mastered in the league.
+void PaintWreath(ui::Painter &p, int x, int y, int size, COLORREF color);
 // Behind the row of a top-three patron.
 void DrawPatronRowGlow(ui::Painter &p, int x, int y, int w, int h, PatronTier tier);
 // Click area and tooltip of a laurel. The tooltip is drawn by PaintPatronTip after everything else, so nothing covers it.

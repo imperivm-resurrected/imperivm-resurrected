@@ -102,11 +102,19 @@ bool LeagueParsePlayerProfile(const Json &j, LeaguePlayerProfile &out)
 	if (const Json *civs = j.Get("civs"); civs && civs->type == Json::Array) {
 		for (const Json &c : civs->arr) {
 			if (c.type != Json::Object || c.GetString("civ").empty()) continue;
-			out.civs.push_back({c.GetString("civ"), std::max(0, c.GetInt("games")), std::max(0, c.GetInt("wins"))});
+			LeagueCivShare share;
+			share.civ = c.GetString("civ");
+			share.games = std::max(0, c.GetInt("games"));
+			share.wins = std::max(0, std::min(share.games, c.GetInt("wins")));
+			share.mastery = LeagueMasteryFromJson(c.Get("mastery"));
+			out.civGames += share.games;
+			out.civs.push_back(share);
 		}
 		std::stable_sort(out.civs.begin(), out.civs.end(), [](const LeagueCivShare &a, const LeagueCivShare &b) { return a.games > b.games; });
 		if (out.civs.size() > 3) out.civs.resize(3);
 	}
+	// A server before `civGames` sends only the three played most: their sum is the closest base it gives.
+	out.civGames = std::max(out.civGames, j.GetInt("civGames"));
 	if (const Json *recent = j.Get("recent"); recent && recent->type == Json::Array) {
 		for (const Json &m : recent->arr) {
 			LeagueHistoryGame g;
