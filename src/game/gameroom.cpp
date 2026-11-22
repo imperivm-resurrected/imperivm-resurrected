@@ -741,6 +741,7 @@ void TakeSnapshot()
 			s.optionsText += std::string("Free unit attachment: ") + ((s.rules & kRuleFreeAttach) ? "yes" : "no") + "\n";
 			s.optionsText += std::string("Diplomacy locked: ") + ((s.rules & kRuleLockDiplomacy) ? "yes" : "no") + "\n";
 			s.optionsText += std::string("Cheats: ") + ((s.rules & kRuleCheats) ? "yes" : "no") + "\n";
+			s.optionsText += std::string("Respawn timers: ") + ((s.rules & kRuleNoTimers) ? "no" : "yes") + "\n";
 			for (const ModOption &o : ModOptions()) {
 				if (o.id == kSeasonOptionId && !s.randomMap) continue;
 				const int v = ModOptionGet(o, s.rules);
@@ -1120,8 +1121,50 @@ void *__fastcall HookCreateWorldCore(void *game, void *edx, void *helper, unsign
 typedef void(__fastcall *BuildSettings_t)(void *dlg, void *edx, void *settings);
 BuildSettings_t g_origBuildSettings = nullptr;
 
+// The first profile the room offers for an AI (FillAIProfileCombo skips "_..." and "default"), or -1.
+int FirstOfferedAiProfile(const char *begin, int count)
+{
+	for (int i = 0; i < count && i < 127; ++i) {
+		const char *s = begin + i * 0x1c;
+		const unsigned size = *reinterpret_cast<const unsigned *>(s + 0x14), capacity = *reinterpret_cast<const unsigned *>(s + 0x18);
+		const char *name = capacity < 16 ? s + 4 : *reinterpret_cast<const char *const *>(s + 4);
+		if (!name || !size || size > 64 || name[0] == '_' || (size == 7 && _strnicmp(name, "default", 7) == 0)) continue;
+		return i;
+	}
+	return -1;
+}
+
+// BuildGameSettings copies, for every AI row, the name of the profile its index points to in g_aiProfileList; an index outside the
+// list reads freed memory and crashes the start. Seen after the room's options were applied again in a scenario room (8 positions).
+void GuardAiProfiles(void *dlg)
+{
+	__try {
+		const char *begin = *reinterpret_cast<const char *const *>(addr::kAiProfilesBegin);
+		const char *end = *reinterpret_cast<const char *const *>(addr::kAiProfilesEnd);
+		const int count = begin && end > begin ? static_cast<int>((end - begin) / 0x1c) : 0;
+		// CVXUIMultiplayerGame +0xd8: per row, char[8], the index of its AI profile.
+		signed char *profiles = static_cast<signed char *>(dlg) + 0xd8;
+		LogD("room", "start: AI profile per row %d %d %d %d %d %d %d %d of %d", profiles[0], profiles[1], profiles[2], profiles[3], profiles[4], profiles[5], profiles[6], profiles[7], count);
+		int fallback = -2;
+		for (int row = 0; row < 8; ++row) {
+			if (profiles[row] >= 0 && profiles[row] < count) continue;
+			if (fallback == -2) fallback = FirstOfferedAiProfile(begin, count);
+			if (fallback < 0) {
+				LogE("room", "start: row %d has AI profile %d but the game lists %d profiles, and none can stand in for it", row, profiles[row], count);
+				continue;
+			}
+			LogW("room", "start: row %d had AI profile %d, outside the %d profiles of the game; it plays with profile %d", row, profiles[row], count, fallback);
+			profiles[row] = static_cast<signed char>(fallback);
+		}
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		LogE("room", "start: the AI profiles of the rows could not be read");
+	}
+}
+
 void __fastcall HookBuildSettings(void *dlg, void *edx, void *settings)
 {
+	GuardAiProfiles(dlg);
 	CivsBuildBegin();
 	g_origBuildSettings(dlg, edx, settings);
 	CivsBuildEnd(settings);

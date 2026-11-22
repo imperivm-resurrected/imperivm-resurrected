@@ -494,7 +494,8 @@ int RulesLeft(Form &c, int x, int y, int w)
 	at += Switch(c, x, at, w, r.hideCivs, Tr("Hide the civilizations until the game starts"), kCupHideCivs) + 4;
 	at += Switch(c, x, at, w, !r.fog, Tr("No fog of war"), kCupFog) + 4;
 	at += Switch(c, x, at, w, r.explored, Tr("Map explored from the start"), kCupExplored) + 4;
-	at += Switch(c, x, at, w, r.lockedDiplomacy, Tr("Diplomacy locked"), kCupDiplomacy);
+	at += Switch(c, x, at, w, r.lockedDiplomacy, Tr("Diplomacy locked"), kCupDiplomacy) + 4;
+	at += Switch(c, x, at, w, r.timers, Tr("Respawn timers"), kCupTimers);
 	at += Problem(c, x, at, w, {TourneyCupProblem::Settings});
 	return at - y;
 }
@@ -1286,6 +1287,7 @@ void ApplyCupSetting(TourneyCupForm &f, int setting, int choice, int64_t nowMs)
 		TourneySettings fresh;
 		fresh.preset = TourneyPresetId(preset);
 		fresh.hideCivs = s.hideCivs;
+		fresh.timers = s.timers;
 		fresh.specDelay = TourneySpecDelay(s);
 		s = TourneyExplicitSettings(fresh);
 		break;
@@ -1294,6 +1296,7 @@ void ApplyCupSetting(TourneyCupForm &f, int setting, int choice, int64_t nowMs)
 	case kCupFog: s.fog = choice ? 0 : 1; break;
 	case kCupExplored: s.explored = choice ? 1 : 0; break;
 	case kCupDiplomacy: s.diplomacy = choice ? "locked" : "free"; break;
+	case kCupTimers: s.timers = choice ? 1 : 0; break;
 	case kCupSpectators:
 		if (TourneySpecDelayValid(choice)) s.specDelay = choice;
 		break;
@@ -1466,6 +1469,7 @@ std::string RulesText(const TourneySettings &s)
 	const int delay = TourneySpecDelay(s);
 	return Tr(preset) + " \xC2\xB7 " + Tr(r.hideCivs ? "civilizations hidden" : "civilizations visible") + " \xC2\xB7 " + Tr(r.fog ? "fog" : "no fog") + " \xC2\xB7 " +
 		Tr(r.explored ? "map explored" : "map unexplored") + " \xC2\xB7 " + Tr(r.lockedDiplomacy ? "diplomacy locked" : "free diplomacy") + " \xC2\xB7 " +
+		Tr(r.timers ? "respawn timers" : "no respawn timers") + " \xC2\xB7 " +
 		(delay ? TrFmt("spectators %s s behind", {std::to_string(delay)}) : Tr("no spectators"));
 }
 

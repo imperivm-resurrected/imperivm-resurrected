@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <vector>
 
 #include "addr/state.h"
 #include "addr/ui.h"
@@ -19,6 +20,7 @@
 #include "game/gamelayout.h"
 #include "game/mapfog.h"
 #include "game/quickicons.h"
+#include "game/respawnsites.h"
 #include "game/zoomview.h"
 #include "game/gamehook.h"
 #include "hooks/displaymode.h"
@@ -174,6 +176,65 @@ void CaptureGeometry(void *self, void *surface)
 
 void PreviewBox(int x0, int y0, int x1, int y1, bool force);
 
+// The times of the respawn timers drawn on the last picture of the big map, in its screen coordinates; the overlay writes them.
+std::vector<ZoomMapTimer> g_timers;
+
+void MarkBlock(void *surface, int left, int top, int right, int bottom, unsigned color)
+{
+	left = std::max(left, g_geo.left);
+	top = std::max(top, g_geo.top);
+	right = std::min(right, g_geo.right);
+	bottom = std::min(bottom, g_geo.bottom);
+	if (left <= right && top <= bottom) FillEdge(surface, left, top, right, bottom, color);
+}
+
+// Four corners around the site, so that its own icon stays visible inside the mark.
+void DrawSiteMark(void *surface, int x, int y, int radius, unsigned color)
+{
+	const unsigned shade = 0x0421;
+	const int arm = std::max(5, radius / 2);
+	for (int dy : {-1, 1}) {
+		for (int dx : {-1, 1}) {
+			const int cx = x + dx * radius, cy = y + dy * radius, hx = cx - dx * arm, hy = cy - dy * arm;
+			MarkBlock(surface, std::min(cx, hx) - 2, cy - 2, std::max(cx, hx) + 2, cy + 2, shade);
+			MarkBlock(surface, cx - 2, std::min(cy, hy) - 2, cx + 2, std::max(cy, hy) + 2, shade);
+			MarkBlock(surface, std::min(cx, hx), cy - 1, std::max(cx, hx), cy + 1, color);
+			MarkBlock(surface, cx - 1, std::min(cy, hy), cx + 1, std::max(cy, hy), color);
+		}
+	}
+}
+
+void DrawRespawnMarks(void *surface)
+{
+	g_timers.clear();
+	const std::vector<RespawnMark> &marks = RespawnMarks();
+	if (marks.empty() || OtherUiOpen()) return;
+	void *map = *reinterpret_cast<void **>(addr::kMap);
+	int w = 0, h = 0;
+	if (!map || !ZoomBitmapSize(&w, &h)) return;
+	const int radius = std::clamp((g_geo.bottom - g_geo.top) / 64, 11, 22);
+	const unsigned clock = RespawnClock();
+	for (const RespawnMark &mark : marks) {
+		unsigned position[] = {static_cast<unsigned>(mark.x), static_cast<unsigned>(mark.y)};
+		const unsigned height = reinterpret_cast<Height_t>(addr::kGetHeightAt)(map, nullptr, position);
+		// The isometric projection the big map's bitmap is drawn with: y squashed to 0xb5/256, minus the terrain's height.
+		const int projectedY = ((mark.y * 0xb5) >> 8) - static_cast<int>(height);
+		int pixel[2] = {};
+		if (!ZoomProjectedToPixel(mark.x, projectedY, pixel)) continue;
+		int x = 0, y = 0;
+		if (!RespawnProjectAxis(pixel[0], 0, w - 1, g_geo.left, g_geo.right, x) || !RespawnProjectAxis(pixel[1], 0, h - 1, g_geo.top, g_geo.bottom, y)) continue;
+		DrawSiteMark(surface, x, y, radius, RespawnMarkColor(mark.kind, mark.stocked));
+		const unsigned left = mark.stocked ? 0 : RespawnSecondsUntil(mark.due, clock);
+		if (!left) continue;
+		ZoomMapTimer t;
+		t.x = x;
+		t.y = y - radius - 4 >= g_geo.top + 30 ? y - radius - 4 : y + radius + 32;
+		t.seconds = left;
+		t.approximate = mark.approximate;
+		g_timers.push_back(t);
+	}
+}
+
 void __fastcall HookZoomDraw(void *self, void *edx, void *surface, int unused)
 {
 	g_origDraw(self, edx, surface, unused);
@@ -181,6 +242,7 @@ void __fastcall HookZoomDraw(void *self, void *edx, void *surface, int unused)
 	__try {
 		// The chat's map ping reads the geometry too, so it is kept with the extras turned off.
 		CaptureGeometry(self, surface);
+		DrawRespawnMarks(surface);
 		if (!ExtrasEnabled()) return;
 		QuickIconsDraw(surface, g_geo.winX, g_geo.winY);
 		if (g_drag.dragging) PreviewBox(g_drag.startX, g_drag.startY, g_drag.curX, g_drag.curY, false);
@@ -362,6 +424,91 @@ bool ZoomViewHandleMouse(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 }
 
 bool ZoomViewOpen() { return !g_failed && ZoomOpen(); }
+
+std::vector<ZoomMapTimer> ZoomViewTimers()
+{
+	if (g_failed || !ZoomOpen()) return {};
+	return g_timers;
+}
+
+void ZoomViewDrawTimers(uint32_t *buf, int w, int h, const std::vector<ZoomMapTimer> &timers)
+{
+	if (!buf || w <= 0 || h <= 0 || timers.empty()) return;
+	// One small GDI bitmap for every label, kept between frames; only the render thread draws them.
+	static HDC dc = nullptr;
+	static HBITMAP bmp = nullptr;
+	static uint32_t *bits = nullptr;
+	static HFONT font = nullptr;
+	static int fontPx = 0;
+	constexpr int kCanvasW = 128, kCanvasH = 48;
+	if (!dc) {
+		dc = CreateCompatibleDC(nullptr);
+		if (!dc) return;
+		BITMAPINFO bi = {};
+		bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
+		bi.bmiHeader.biWidth = kCanvasW;
+		bi.bmiHeader.biHeight = -kCanvasH;
+		bi.bmiHeader.biPlanes = 1;
+		bi.bmiHeader.biBitCount = 32;
+		bmp = CreateDIBSection(dc, &bi, DIB_RGB_COLORS, reinterpret_cast<void **>(&bits), nullptr, 0);
+		if (!bmp || !bits) {
+			DeleteDC(dc);
+			dc = nullptr;
+			bits = nullptr;
+			return;
+		}
+		SelectObject(dc, bmp);
+		SetBkMode(dc, TRANSPARENT);
+	}
+	const int px = std::clamp(h / 54, 12, 22);
+	if (!font || px != fontPx) {
+		SelectObject(dc, GetStockObject(DEFAULT_GUI_FONT));
+		if (font) DeleteObject(font);
+		font = CreateFontW(-px, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+			ANTIALIASED_QUALITY, DEFAULT_PITCH, L"Segoe UI");
+		fontPx = px;
+		if (!font) return;
+	}
+	SelectObject(dc, font);
+	// The game's colours: parchment on dark bronze, a thin warm border.
+	const COLORREF face = RGB(25, 20, 16), edge = RGB(120, 96, 58), ink = RGB(252, 229, 169);
+	constexpr int kAlpha = 235;
+	for (const ZoomMapTimer &t : timers) {
+		char text[16];
+		RespawnTimeText(t.seconds, t.approximate, text);
+		const int length = static_cast<int>(strlen(text));
+		SIZE size = {};
+		if (!GetTextExtentPoint32A(dc, text, length, &size)) continue;
+		const int bw = std::min(kCanvasW, static_cast<int>(size.cx) + 10), bh = std::min(kCanvasH, static_cast<int>(size.cy) + 2);
+		const int left = t.x - bw / 2, top = t.y - bh;
+		if (left + bw <= 0 || top + bh <= 0 || left >= w || top >= h) continue;
+		GdiFlush();
+		for (int y = 0; y < bh; ++y) {
+			for (int x = 0; x < bw; ++x) {
+				const bool border = x == 0 || y == 0 || x == bw - 1 || y == bh - 1;
+				const COLORREF c = border ? edge : face;
+				bits[y * kCanvasW + x] = (GetRValue(c) << 16) | (GetGValue(c) << 8) | GetBValue(c);
+			}
+		}
+		SetTextColor(dc, ink);
+		RECT r = {0, 0, bw, bh};
+		DrawTextA(dc, text, length, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+		GdiFlush();
+		for (int y = 0; y < bh; ++y) {
+			const int ty = top + y;
+			if (ty < 0 || ty >= h) continue;
+			for (int x = 0; x < bw; ++x) {
+				const int tx = left + x;
+				if (tx < 0 || tx >= w) continue;
+				const uint32_t src = bits[y * kCanvasW + x];
+				uint32_t &dst = buf[static_cast<size_t>(ty) * w + tx];
+				const uint32_t rb = ((src & 0xff00ff) * kAlpha + (dst & 0xff00ff) * (255 - kAlpha)) >> 8;
+				const uint32_t g = ((src & 0x00ff00) * kAlpha + (dst & 0x00ff00) * (255 - kAlpha)) >> 8;
+				dst = 0xff000000u | (rb & 0xff00ff) | (g & 0x00ff00);
+			}
+		}
+	}
+}
 
 bool ZoomViewContains(int x, int y) { return ZoomViewOpen() && InsideBitmap(x, y); }
 

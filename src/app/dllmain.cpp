@@ -70,6 +70,7 @@
 #include "game/quickicons.h"
 #include "game/noteicons.h"
 #include "game/objectives.h"
+#include "game/respawnsites.h"
 #include "game/zoomview.h"
 #include "game/viewgrid.h"
 #include "game/healthbars.h"
@@ -246,6 +247,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 		InstallNoteIcons(knownExe);
 		InstallObjectives(knownExe);
 		InstallZoomView(knownExe);
+		InstallRespawnSites(knownExe);
 		InstallViewGrid(knownExe);
 		InstallHealthBars(knownExe);
 		InstallLoadCurtain(knownExe);

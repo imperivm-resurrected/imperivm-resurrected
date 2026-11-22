@@ -47,6 +47,7 @@
 #include "game/cheats.h"
 #include "game/loadcurtain.h"
 #include "game/mapfog.h"
+#include "game/zoomview.h"
 #include "app/render.h"
 #include "hooks/tweaks.h"
 
@@ -63,6 +64,8 @@ typedef int(WINAPI *SetDIBitsToDevice_t)(HDC, int, int, DWORD, DWORD, int, int, 
 SetDIBitsToDevice_t g_origSetDIBitsToDevice = nullptr;
 
 std::mutex g_frameLock;
+// The respawn timers of the big map on g_frame, taken with it (game/zoomview.h).
+std::vector<ZoomMapTimer> g_frameTimers;
 std::vector<uint32_t> g_frame;
 int g_frameW = 0, g_frameH = 0;
 bool g_frameDirty = false;
@@ -415,12 +418,15 @@ void DrawImage(Gpu &g)
 
 void CopyGameFrame(std::vector<uint32_t> &image, int &fw, int &fh)
 {
+	std::vector<ZoomMapTimer> timers;
 	{
 		std::lock_guard<std::mutex> lock(g_frameLock);
 		fw = g_frameW;
 		fh = g_frameH;
 		image = g_frame;
+		timers = g_frameTimers;
 	}
+	ZoomViewDrawTimers(image.data(), fw, fh, timers);
 	ControlsDrawBarKeys(image.data(), fw, fh);
 }
 
@@ -436,12 +442,14 @@ bool TakeNewFrame(bool video, bool wasVideo, std::vector<uint32_t> &image, int &
 		return true;
 	}
 	bool taken = false;
+	std::vector<ZoomMapTimer> timers;
 	{
 		std::lock_guard<std::mutex> lock(g_frameLock);
 		if (g_frameDirty || wasVideo) {
 			fw = g_frameW;
 			fh = g_frameH;
 			image = g_frame;
+			timers = g_frameTimers;
 			g_frameDirty = false;
 			taken = true;
 		}
@@ -452,10 +460,14 @@ bool TakeNewFrame(bool video, bool wasVideo, std::vector<uint32_t> &image, int &
 			fw = g_frameW;
 			fh = g_frameH;
 			image = g_frame;
+			timers = g_frameTimers;
 			taken = true;
 		}
 	}
-	if (taken) ControlsDrawBarKeys(image.data(), fw, fh);
+	if (taken) {
+		ZoomViewDrawTimers(image.data(), fw, fh, timers);
+		ControlsDrawBarKeys(image.data(), fw, fh);
+	}
 	return taken;
 }
 
@@ -677,6 +689,8 @@ int WINAPI HookSetDIBitsToDevice(HDC hdc, int xDest, int yDest, DWORD w, DWORD h
 	}
 
 	DisplayAttachWindow(hwnd);
+	// Read on the game thread, which drew the big map; outside the lock, as it takes the game's state.
+	std::vector<ZoomMapTimer> timers = ZoomViewTimers();
 	int cw = 0, ch = 0;
 	DisplayGetLogicalSize(hwnd, cw, ch);
 	{
@@ -687,7 +701,10 @@ int WINAPI HookSetDIBitsToDevice(HDC hdc, int xDest, int yDest, DWORD w, DWORD h
 			g_frame.assign(static_cast<size_t>(cw) * ch, 0xff000000u);
 		}
 		const bool frozen = FrameFrozen();
-		if (!frozen) BlitToFrame(bmi, bits, xDest, yDest, static_cast<int>(w), static_cast<int>(h), xSrc, ySrc);
+		if (!frozen) {
+			BlitToFrame(bmi, bits, xDest, yDest, static_cast<int>(w), static_cast<int>(h), xSrc, ySrc);
+			g_frameTimers.swap(timers);
+		}
 		g_frameDirty = true;
 	}
 	OverlayNoteFrame();

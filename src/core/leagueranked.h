@@ -18,6 +18,8 @@
 struct LeagueRoomSettings {
 	std::string preset;
 	int hideCivs = -1, fog = -1, explored = -1, cheats = -1;
+	// The respawn timers of the big map: 0 forbidden, 1 allowed, -1 not said (allowed).
+	int timers = -1;
 	std::string diplomacy;
 	// Seconds of delay for spectators; 0 without them, -1 when not said.
 	int specDelay = -1;

@@ -110,6 +110,8 @@ struct TourneySettings {
 	bool hideCivs = false;
 	// 1 on, 0 off, -1 when the tournament does not say: the preset's.
 	int fog = -1, explored = -1;
+	// The respawn timers of the big map: 0 forbidden, 1 allowed, -1 not said (allowed).
+	int timers = -1;
 	// "locked", "free", or empty: the preset's.
 	std::string diplomacy;
 	// Seconds behind the game; 0 without spectators; -1 when the tournament does not say.
@@ -121,6 +123,8 @@ Json TourneySettingsJson(const TourneySettings &s);
 struct TourneyRoomRules {
 	TourneyPreset preset = TourneyPreset::Competitive;
 	bool hideCivs = false, fog = true, explored = false, lockedDiplomacy = true;
+	// The respawn timers of the big map; a cup that says nothing allows them.
+	bool timers = true;
 };
 // A preset's own fog, map and diplomacy: competitive with fog, unexplored and locked; classic the same but free; various without fog,
 // explored and free.

@@ -7,3 +7,5 @@ long long ZoomFogGameThreadTick();
 void ZoomFogNoteImage();
 bool ZoomPixelToWorld(int px, int py, int *world);
 bool ZoomBitmapSize(int *width, int *height);
+// A terrain point, already projected to the isometric view, as a pixel of the big map's bitmap.
+bool ZoomProjectedToPixel(int x, int y, int *pixel);

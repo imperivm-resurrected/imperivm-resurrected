@@ -216,6 +216,7 @@ void LoadConfig()
 		for (int i = 0; i < 3; i++) g_config.allyRgb[i] = static_cast<uint32_t>(ini.Clamped("Game", kKeys[i], static_cast<int>(preset[i]), 0, 0xffffff));
 	}
 	g_config.pauseInBackground = ini.Flag("Game", "PauseInBackground", false);
+	g_config.respawnTimers = ini.Flag("Game", "RespawnTimers", true);
 	g_config.zoomExtras = ini.Flag("Map", "ZoomExtras", true);
 	g_config.zoomFog = ini.Flag("Map", "FogVisible", true);
 	g_config.zoomRefreshMs = ini.Clamped("Map", "RefreshMs", 16, 0, 1000);
@@ -311,6 +312,7 @@ void SaveConfig()
 	ini.WriteNumber("Game", "AllyAllies", static_cast<int>(g_config.allyRgb[1]));
 	ini.WriteNumber("Game", "AllyEnemies", static_cast<int>(g_config.allyRgb[2]));
 	ini.WriteFlag("Game", "PauseInBackground", g_config.pauseInBackground);
+	ini.WriteFlag("Game", "RespawnTimers", g_config.respawnTimers);
 	ini.WriteFlag("Game", "CrashFix", g_config.crashFix);
 	ini.WriteFlag("Mods", "Override", g_config.modOverrides);
 	ini.WriteFlag("Display", "ShowPerformance", g_config.showPerf);

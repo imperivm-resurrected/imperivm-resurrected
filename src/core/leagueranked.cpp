@@ -189,6 +189,7 @@ LeagueRoomSettings LeagueParseRoomSettings(const Json *v)
 	s.fog = v->GetFlag("fog");
 	s.explored = v->GetFlag("explored");
 	s.cheats = v->GetFlag("cheats");
+	s.timers = v->GetFlag("timers");
 	s.diplomacy = Lower(v->GetString("diplomacy"));
 	if (const Json *d = v->Get("specDelay"); d && d->type == Json::Number) s.specDelay = std::max(0, static_cast<int>(d->num));
 	else if (const Json *off = v->Get("spectators"); off && off->type == Json::Bool && !off->b) s.specDelay = 0;

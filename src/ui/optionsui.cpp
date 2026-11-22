@@ -169,6 +169,7 @@ void SetExtras(Values &v, const Config &c)
 	v.combos[kAllyAllies] = static_cast<int>(c.allyRgb[1]);
 	v.combos[kAllyEnemies] = static_cast<int>(c.allyRgb[2]);
 	v.checks[kHealthBarHeroes] = c.healthBarHeroesOnly;
+	v.checks[kRespawnTimers] = c.respawnTimers;
 	v.checks[kPauseInBackground] = c.pauseInBackground;
 	v.checks[kChatBadges] = c.chatBadges;
 	v.checks[kMatchFoundSound] = c.matchFoundSound;
@@ -222,7 +223,7 @@ void SetUpdateStatus(Values &v)
 void CopyExtras(Values &to, const Values &from)
 {
 	CopySystemExtras(to, from);
-	for (int id : {kSmoothCamera, kPauseInBackground, kHealthBarHeroes, kChatBadges, kMatchFoundSound, kAllyColors}) CopyId(to.checks, from.checks, id);
+	for (int id : {kSmoothCamera, kPauseInBackground, kHealthBarHeroes, kChatBadges, kMatchFoundSound, kAllyColors, kRespawnTimers}) CopyId(to.checks, from.checks, id);
 	CopyId(to.combos, from.combos, kHealthBars);
 	CopyId(to.combos, from.combos, kAllyPalette);
 	for (int id : {kAllySelf, kAllyAllies, kAllyEnemies}) CopyId(to.combos, from.combos, id);
@@ -316,6 +317,7 @@ void CommitExtras(const Values &v)
 		}
 	}
 	c.healthBarHeroesOnly = CheckOr(v, kHealthBarHeroes, c.healthBarHeroesOnly);
+	c.respawnTimers = CheckOr(v, kRespawnTimers, c.respawnTimers);
 	c.pauseInBackground = CheckOr(v, kPauseInBackground, c.pauseInBackground);
 	c.chatBadges = CheckOr(v, kChatBadges, c.chatBadges);
 	c.matchFoundSound = CheckOr(v, kMatchFoundSound, c.matchFoundSound);

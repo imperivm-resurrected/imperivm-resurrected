@@ -61,6 +61,8 @@ inline constexpr uintptr_t kRemoveFromMap = 0x0053d6a0;
 inline constexpr uintptr_t kStopAnimation = 0x0053d730;
 inline constexpr uintptr_t kGetInterpolatedPosition = 0x0053d830;
 inline constexpr uintptr_t kVisionRun = 0x0053e910;
+// CVXMapObj::IsVisibleToPlayer (__thiscall, player): whether the object is in sight of that player now.
+inline constexpr uintptr_t kMapObjectVisibleToPlayer = 0x0053e970;
 inline constexpr uintptr_t kGetHeightAt = 0x0053eaa0;
 inline constexpr uintptr_t kSetPosition = 0x0053f000;
 inline constexpr uintptr_t kHasProjectileClass = 0x0053f5b0;
@@ -213,6 +215,9 @@ inline constexpr uintptr_t kScrollStepAlign = 0x008246a0;
 inline constexpr uintptr_t kGameSpecialNames = 0x00824bf0;
 inline constexpr uintptr_t kUnitClassName = 0x00824d10;
 inline constexpr uintptr_t kVisibleObjClassName = 0x008250f8;
+// g_aiProfileList, the vector of the AI profiles (the folders of data/ai): its first and last strings.
+inline constexpr uintptr_t kAiProfilesBegin = 0x008c8dec;
+inline constexpr uintptr_t kAiProfilesEnd = 0x008c8df0;
 inline constexpr uintptr_t kAiInitted = 0x008c8e58;
 inline constexpr uintptr_t kScrollToken = 0x009bdb78;
 inline constexpr uintptr_t kScrollBits = 0x009bdb84;

@@ -68,6 +68,8 @@ struct Config {
 	int allyPalette = 0;
 	uint32_t allyRgb[3] = {0x0000ff, 0xffff00, 0xff0000};
 	bool pauseInBackground = false;
+	// [Game] RespawnTimers: the big map marks the item sites seen and the time until their item is back (game/respawnsites.h).
+	bool respawnTimers = true;
 	bool zoomExtras = true;
 	bool zoomFog = true;
 	int zoomRefreshMs = 16;
