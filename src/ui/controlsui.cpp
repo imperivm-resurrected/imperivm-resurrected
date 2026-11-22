@@ -842,7 +842,8 @@ void DrawKeyboardView(Painter &p, const State &st, const Layout &l, int mx, int 
 	const int x0 = l.kbX, w0 = l.kbW, y0 = l.top, ctlH = m.controlH;
 	const char *layers[] = {"No modifier", "Ctrl", "Shift", "Alt"};
 	const int layerMods[] = {0, kKeyCtrl, kKeyShift, kKeyAlt};
-	const int grow = l.full ? 20 : 0, lw[] = {150 + grow, 70 + grow, 80 + grow, 70 + grow};
+	const int grow = l.full ? 20 : 0;
+	const int lw[] = {p.ButtonWidth(layers[0], 150 + grow), p.ButtonWidth(layers[1], 70 + grow), p.ButtonWidth(layers[2], 80 + grow), p.ButtonWidth(layers[3], 70 + grow)};
 	int lx = x0 + w0 - 10 - (lw[0] + lw[1] + lw[2] + lw[3]);
 	for (int i = 0; i < 4; i++) {
 		p.Button(lx, y0, lw[i], ctlH, layers[i], kKbLayer, layerMods[i], mx, my, true, st.layer == layerMods[i], 4);
@@ -1094,9 +1095,23 @@ void PaintHeader(Painter &p, const State &st, const Layout &l, int mx, int my)
 // Where the banners over the list go: over the backdrop each one is a card as wide as the list's; in the window, a card inside its column.
 struct Banner {
 	int x, w, h, gap, segY, textY, textH;
+	// From the top of one banner to what follows it.
+	int stride;
 };
 
-Banner BannerFor(const Layout &l, const Metrics &m)
+const char *const kBoxText = "Hold the key and drag over the big map to select the troops and heroes inside the box; hold the other one of Shift and Ctrl to add to your "
+							 "selection. Without the key, a click takes you to that place, as in the original game.";
+const char *const kPingText = "Hold the key and click the map to mark that point for your allies. Ctrl and Shift only mark on the big map; with the box key, a "
+							  "click marks and a drag selects.";
+const char *const kLetterText = "Each command has its own letter (M move, A attack…): the game's or the one you set here. They change depending on the unit or building.";
+const char *const kPositionText = "The key follows the button's position: Q for the first, W for the second… The same for any unit or building.";
+// The example keys at the right of the command banner, and the room its text leaves them.
+constexpr int kExampleKeyW = 36, kExampleKeyGap = 8, kExampleW = 5 * kExampleKeyW + 4 * kExampleKeyGap, kOrdersTextY = 46, kOrdersToggleH = 32;
+
+int OrdersTextW(int bw) { return bw - 18 - kExampleW - 20 - 14; }
+
+// The banners grow with their text, which is longer in some languages and wraps more on a narrow screen.
+Banner BannerFor(Painter &p, const Layout &l, const Metrics &m, const State &st, bool box)
 {
 	Banner b;
 	b.x = l.full ? l.listX - l.pad : l.listX + 8;
@@ -1105,7 +1120,11 @@ Banner BannerFor(const Layout &l, const Metrics &m)
 	b.h = m.bannerH - (l.full ? b.gap : 10);
 	b.segY = 46;
 	b.textY = b.segY + m.controlH + 8;
+	p.Font(3);
+	if (box) b.h = std::max(b.h, b.textY + std::max(p.Measure(b.w - 28, kBoxText), p.Measure(b.w - 28, kPingText)) + 8);
+	else b.h = std::max(b.h, kOrdersTextY + p.Measure(OrdersTextW(b.w), st.grid ? kPositionText : kLetterText) + 6 + kOrdersToggleH);
 	b.textH = b.h - b.textY - 6;
+	b.stride = b.h + (l.full ? b.gap : 10);
 	return b;
 }
 
@@ -1117,28 +1136,26 @@ void PaintBoxBanners(Painter &p, const State &st, const Layout &l, const Banner 
 	p.Font(1);
 	p.Text(bx + 14, by + 8, bw - 28, 28, "Box selection on the big map (M)", pal::text);
 	static const char *const kBoxLabels[kZoomBoxModes] = {"Ctrl + drag", "Alt + drag", "Shift + drag", "Off"};
-	const int segW = l.full ? 150 : 120, segX = bx + 14;
+	static const char *const kPingLabels[kPingClickModes] = {"Alt + click", "Ctrl + click", "Shift + click", "Off"};
+	int segW = l.full ? 150 : 120;
+	for (int i = 0; i < kZoomBoxModes; i++) segW = p.ButtonWidth(kBoxLabels[i], segW);
+	for (int i = 0; i < kPingClickModes; i++) segW = p.ButtonWidth(kPingLabels[i], segW);
+	segW = std::min(segW, (bw - 28) / std::max<int>(kZoomBoxModes, kPingClickModes));
+	const int segX = bx + 14;
 	for (int i = 0; i < kZoomBoxModes; i++) {
 		p.Button(segX + i * segW, by + b.segY, segW, m.controlH, kBoxLabels[i], kBoxMode, i, mx, my, true, st.boxMode == i, 4);
 	}
 	p.Font(3);
-	p.TextWrapped(bx + 14, by + b.textY, bw - 28, b.textH,
-		"Hold the key and drag over the big map to select the troops and heroes inside the box; hold the other one of Shift and Ctrl to add to your "
-		"selection. Without the key, a click takes you to that place, as in the original game.",
-		pal::textDim);
+	p.TextWrapped(bx + 14, by + b.textY, bw - 28, b.textH, kBoxText, pal::textDim);
 	const int py = by + bh + b.gap;
 	PaintGlassCard(p, bx, py, bw, bh);
 	p.Font(1);
 	p.Text(bx + 14, py + 8, bw - 28, 28, "Mark position with the mouse", pal::text);
-	static const char *const kPingLabels[kPingClickModes] = {"Alt + click", "Ctrl + click", "Shift + click", "Off"};
 	for (int i = 0; i < kPingClickModes; i++) {
 		p.Button(segX + i * segW, py + b.segY, segW, m.controlH, kPingLabels[i], kPingMode, i, mx, my, true, st.pingMode == i, 4);
 	}
 	p.Font(3);
-	p.TextWrapped(bx + 14, py + b.textY, bw - 28, b.textH,
-		"Hold the key and click the map to mark that point for your allies. Ctrl and Shift only mark on the big map; with the box key, a "
-		"click marks and a drag selects.",
-		pal::textDim);
+	p.TextWrapped(bx + 14, py + b.textY, bw - 28, b.textH, kPingText, pal::textDim);
 }
 
 void PaintOrdersBanner(Painter &p, const State &st, const Layout &l, const Banner &b, int mx, int my)
@@ -1148,10 +1165,11 @@ void PaintOrdersBanner(Painter &p, const State &st, const Layout &l, const Banne
 	PaintGlassCard(p, bx, by, bw, bh);
 	p.Font(1);
 	p.Text(bx + 14, by + 8, 220, 28, "Command keys", pal::text);
-	const int seg1 = l.full ? 150 : 110, seg2 = l.full ? 260 : 190, segX = bx + bw - 14 - seg1 - seg2;
+	const int seg1 = p.ButtonWidth("By letter", l.full ? 150 : 110), seg2 = p.ButtonWidth("By position on the bar", l.full ? 260 : 190);
+	const int segX = bx + bw - 14 - seg1 - seg2;
 	p.Button(segX, by + 8, seg1, m.controlH, "By letter", kModeLetter, 0, mx, my, true, !st.grid, 4);
 	p.Button(segX + seg1, by + 8, seg2, m.controlH, "By position on the bar", kModePosition, 0, mx, my, true, st.grid, 4);
-	const int bs = 36, gap = 8, exW = 5 * bs + 4 * gap, exX = bx + bw - 18 - exW, exY = by + 50;
+	const int bs = kExampleKeyW, gap = kExampleKeyGap, exX = bx + bw - 18 - kExampleW, exY = by + 50;
 	const char *letters = st.grid ? "QWERT" : "SMAPD";
 	for (int i = 0; i < 5; i++) {
 		const int x = exX + i * (bs + gap);
@@ -1169,12 +1187,8 @@ void PaintOrdersBanner(Painter &p, const State &st, const Layout &l, const Banne
 			p.Text(exX + i * (bs + gap), exY + bs + 4, bs, 18, std::to_string(i + 1) + ".º", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		}
 	}
-	const int tx = bx + 14, tw = exX - 20 - tx;
-	p.TextWrapped(tx, by + 46, tw, 42,
-		st.grid ? "The key follows the button's position: Q for the first, W for the second… The same for any unit or building."
-				: "Each command has its own letter (M move, A attack…): the game's or the one you set here. They change depending on the unit or building.",
-		pal::textDim);
-	const int tgY = by + bh - 32, tgW = 240;
+	const int tx = bx + 14, tw = OrdersTextW(bw), tgY = by + bh - kOrdersToggleH, tgW = 240;
+	p.TextWrapped(tx, by + kOrdersTextY, tw, tgY - 6 - (by + kOrdersTextY), st.grid ? kPositionText : kLetterText, pal::textDim);
 	const bool tgHov = p.Hover(tx, tgY, tgW, 22, mx, my);
 	const int sw = Painter::kToggleW, swY = tgY + (22 - Painter::kToggleH) / 2;
 	p.Toggle(tx, swY, st.barLetters, true, tgHov);
@@ -1242,14 +1256,14 @@ ListOut PaintListView(Painter &p, const State &st, const Layout &l, int mx, int 
 	const bool ordersBanner = st.search.empty() && ControlsPageIsOrders(st.page);
 	const bool boxBanner = st.search.empty() && st.page == kPageMod;
 	const bool banner = ordersBanner || boxBanner;
-	const Banner b = BannerFor(l, m);
+	const Banner b = BannerFor(p, l, m, st, boxBanner);
 	if (boxBanner) PaintBoxBanners(p, st, l, b, mx, my);
 	if (ordersBanner) PaintOrdersBanner(p, st, l, b, mx, my);
 
 	const Columns cols = Cols(l);
-	int colsY = l.top + (boxBanner ? 2 * m.bannerH - 2 : banner ? m.bannerH : 0);
+	int colsY = l.top + (boxBanner ? 2 * b.stride - 2 : banner ? b.stride : 0);
 	if (l.full) {
-		const int cardTop = l.top + (boxBanner ? 2 * m.bannerH : banner ? m.bannerH : 0);
+		const int cardTop = l.top + (boxBanner ? 2 * b.stride : banner ? b.stride : 0);
 		PaintGlassCard(p, l.listX - l.pad, cardTop, l.listW + 2 * l.pad, listBottom + l.pad - cardTop);
 		colsY = cardTop + 8;
 	}
@@ -1310,9 +1324,10 @@ void PaintFooter(Painter &p, const State &st, const Layout &l, int mx, int my)
 		p.Fill(16, fy + 2, kW - 32, 1, pal::hairline);
 		p.Button(24, by, 96, bh, "Export", kCopyConfig, 0, mx, my, true, false, 4);
 		p.Button(24 + 96 + 8, by, 96, bh, "Import", kPasteConfig, 0, mx, my, true, false, 4);
-		p.Button(24 + (96 + 8) * 2, by, 110, bh, "Reset all", kResetAll, 0, mx, my, true, false, 4);
+		p.Button(24 + (96 + 8) * 2, by, p.ButtonWidth("Reset all", 110), bh, "Reset all", kResetAll, 0, mx, my, true, false, 4);
 		p.Button(kW - 24 - 130, by, 130, bh, "Close", kClose, 0, mx, my, true, true);
-		if (canUndo) p.Button(kW - 24 - 130 - 12 - 110, by, 110, bh, "Undo", kUndo, 0, mx, my, true, false, 4);
+		const int undoW = p.ButtonWidth("Undo", 110);
+		if (canUndo) p.Button(kW - 24 - 130 - 12 - undoW, by, undoW, bh, "Undo", kUndo, 0, mx, my, true, false, 4);
 	}
 }
 
@@ -1438,9 +1453,13 @@ void ControlsUiDraw(uint32_t *buf, int w, int h)
 	COLORREF statusColor = pal::text;
 	std::string status = HoverStatus(st, hits, mx, my, statusColor);
 	if (st.confirmResetAll) {
-		const int cw = 560;
-		PaintAskCard(p, (l.w - cw) / 2, l.footerY - kAskCardH - 8, cw, "Put every key back as in the original game?",
-			"Your keys and command modes go back to the game's. You can undo it for a few seconds.", {{"Reset all", kResetAllYes, true}}, mx, my);
+		const char *question = "Put every key back as in the original game?", *detail = "Your keys and command modes go back to the game's. You can undo it for a few seconds.";
+		p.Font(0);
+		int need = p.TextWidth(question);
+		p.Font(3);
+		need = std::max(need, p.TextWidth(detail));
+		const int cw = std::min(l.w - 32, std::max(560, need + 32));
+		PaintAskCard(p, (l.w - cw) / 2, l.footerY - kAskCardH - 8, cw, question, detail, {{"Reset all", kResetAllYes, true}}, mx, my);
 	}
 	PaintStatus(p, st, l);
 	if (!HoverSettled(hits, mx, my)) status.clear();

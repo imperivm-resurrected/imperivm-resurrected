@@ -457,7 +457,7 @@ void PaintFacetPanel(Painter &p, const PanelLayout &l, const CatalogFilter &f, c
 		int y;
 		const char *empty;
 	};
-	const int x = l.x, y = l.top + kBarH + 12, w = l.inner, labelW = 260, chipH = 36, rowStep = 44;
+	const int x = l.x, y = l.cardTop - 4, w = l.inner, labelW = 260, chipH = 36, rowStep = 44;
 	std::vector<Chip> chips;
 	std::vector<Line> lines;
 	int cy = y + 24;
@@ -617,6 +617,18 @@ void PaintExplore(Painter &p, const State &st)
 }
 
 const int kProfileComboW = 260, kProfileNameW = 300, kProfileButtonW = 130, kProfileGap = 8;
+
+int ProfileExtraWidth(Painter &p, const State &st);
+
+// How wide PaintProfileBar comes out.
+int ProfileBarWidth(Painter &p, const State &st)
+{
+	p.Font(3);
+	const int labelW = p.TextWidth("Profile") + 14;
+	if (st.nameMode != kNameNone) return labelW + kProfileNameW + kProfileGap + 2 * kProfileButtonW + kProfileGap;
+	const int extraW = ProfileExtraWidth(p, st);
+	return labelW + kProfileComboW + (extraW ? kProfileGap + extraW : 0);
+}
 
 int ProfileExtraWidth(Painter &p, const State &st)
 {
@@ -817,7 +829,12 @@ void PaintCardConflicts(Painter &p, const State &st, const ModInfo &m, bool acti
 	}
 	p.Font(3);
 	y += p.TextWrapped(dx, y, dw, 60, "What changes the game is settled by the load order; what is cosmetic, you choose.", pal::textDim) + 8;
-	const int footH = 40, limit = bottom - footH - 12, pad = 12, inner = dw - 2 * pad;
+	// The foot: its note as tall as it wraps beside the button, which keeps its label whole.
+	const char *footNote = "What you choose only changes what you see; it doesn't affect online games.";
+	const int resetW = std::min(dw / 2, p.ButtonWidth("Back to the order", 160, 0));
+	p.Font(3);
+	const int footH = std::max(40, p.Measure(dw - resetW - 12, footNote));
+	const int limit = bottom - footH - 12, pad = 12, inner = dw - 2 * pad, moreH = 26;
 	std::vector<size_t> order;
 	for (int pass = 0; pass < 3; pass++) {
 		for (size_t k = 0; k < is->overlaps.size(); k++) {
@@ -863,7 +880,8 @@ void PaintCardConflicts(Painter &p, const State &st, const ModInfo &m, bool acti
 		}
 		const bool moreFiles = static_cast<int>(files.size()) > fitFiles;
 		const int boxH = fixedH + fitFiles * fileH + (choose && moreFiles ? 26 : 0);
-		if (y + boxH > limit) break;
+		// Room is kept for the line that says how many packs were left out, unless this is the last one.
+		if (y + boxH + (shown + 1 < order.size() ? moreH : 0) > limit) break;
 		const COLORREF frame = ov.problem ? RGB(0x6e, 0x20, 0x24) : pal::hairline;
 		p.Fill(dx, y, dw, boxH, ov.problem ? RGB(0x21, 0x15, 0x16) : pal::raised);
 		p.Frame(dx, y, dw, boxH, frame);
@@ -936,14 +954,17 @@ void PaintCardConflicts(Painter &p, const State &st, const ModInfo &m, bool acti
 	}
 	if (shown < order.size()) {
 		p.Font(3);
-		p.Text(dx, y, dw, 22, TrFmt("And %s more packs: free up room by disabling some.", {std::to_string(order.size() - shown)}), pal::caption);
-		y += 26;
+		p.Text(dx, y, dw, 22, TrFmt("And %s more packs: free up room by disabling some.", {std::to_string(order.size() - shown)}), pal::caption,
+			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		y += moreH;
 	}
-	if (!is->values.empty() && y + 70 < limit) {
+	const std::string valuesNote = is->notices.empty() ? std::string() : is->notices[0];
+	p.Font(3);
+	const int valuesNoteH = valuesNote.empty() ? 0 : std::min(40, p.Measure(inner, valuesNote));
+	if (!is->values.empty() && y + pad + 24 + valuesNoteH + pad <= limit) {
 		const std::string head = TrFmt("Shared values (%s)", {std::to_string(is->values.size())});
-		const std::string note = is->notices.empty() ? std::string() : is->notices[0];
-		p.Font(3);
-		const int noteH = note.empty() ? 0 : std::min(40, p.Measure(inner, note));
+		const std::string &note = valuesNote;
+		const int noteH = valuesNoteH;
 		const int boxH = pad + 24 + noteH + pad;
 		p.Fill(dx, y, dw, boxH, pal::raised);
 		p.Frame(dx, y, dw, boxH, pal::hairline);
@@ -955,10 +976,9 @@ void PaintCardConflicts(Painter &p, const State &st, const ModInfo &m, bool acti
 	}
 	const int fy = bottom - footH;
 	p.Fill(dx, fy - 8, dw, 1, pal::hairline);
-	const int resetW = 220;
 	p.Font(3);
-	p.TextWrapped(dx, fy, dw - resetW - 12, footH, "What you choose only changes what you see; it doesn't affect online games.", pal::caption);
-	p.Button(dx + dw - resetW, fy + 2, resetW, 36, "Back to the order", kClearChoices, 0, mx, my, anyChosen && !st.busy, false, 0);
+	p.TextWrapped(dx, fy, dw - resetW - 12, footH, footNote, pal::caption);
+	p.Button(dx + dw - resetW, fy + (footH - 36) / 2, resetW, 36, "Back to the order", kClearChoices, 0, mx, my, anyChosen && !st.busy, false, 0);
 }
 
 // The Files tab: the files the pack shares with others and whose copy is used.
@@ -1010,6 +1030,10 @@ void PaintCardFiles(Painter &p, const State &st, const ModInfo &m, const ModIssu
 }
 
 namespace modui_impl {
+// Whether the Installed tools didn't fit one row in this frame: PaintPanel measures it before anything asks for the layout.
+bool g_toolsWrap = false;
+constexpr int kToolsRowGap = 8, kSearchLeast = 200, kFiltersW = 150, kSortW = 240;
+
 PanelLayout PanelLayoutFor(const State &st)
 {
 	PanelLayout l;
@@ -1017,7 +1041,9 @@ PanelLayout PanelLayoutFor(const State &st)
 	l.x = l.margin;
 	l.inner = l.w - 2 * l.margin;
 	l.toolsY = l.top;
-	l.cardTop = l.top + kBarH + 16;
+	l.toolsWrap = st.tab == kTabListInstalled && g_toolsWrap;
+	l.searchY = l.toolsWrap ? l.toolsY + kBarH + kToolsRowGap : l.toolsY;
+	l.cardTop = l.searchY + kBarH + 16;
 	l.footY = l.h - l.margin - kFootH;
 	l.cardBottom = st.tab == kTabListExplore ? l.footY - 24 : l.h - l.margin;
 	l.detailW = std::max(480, std::min(640, l.inner * 8 / 25));
@@ -1104,18 +1130,19 @@ namespace {
 void PaintTools(Painter &p, const State &st, const PanelLayout &l)
 {
 	const int mx = st.mouseX, my = st.mouseY, y = l.toolsY, gap = 12;
-	const int x = PaintProfileBar(p, st, l.x, y, kBarH) + 16;
+	const int barEnd = PaintProfileBar(p, st, l.x, y, kBarH) + 16;
 	const int listRight = l.x + l.listW;
 	if (st.tab == kTabListInstalled) {
-		const int filtersW = 150, sortW = 240;
-		const int sortX = listRight - sortW, filtersX = sortX - gap - filtersW;
-		const int searchW = std::max(120, filtersX - gap - x);
-		PaintField(p, st, x, y, searchW, kBarH, st.searchText, "Search your content...", st.focus == kSearchField, false, kFocusSearch, mx, my);
+		const int x = l.toolsWrap ? l.x : barEnd, sy = l.searchY;
+		const int sortX = listRight - kSortW, filtersX = sortX - gap - kFiltersW;
+		const int searchW = std::max(0, filtersX - gap - x);
+		PaintField(p, st, x, sy, searchW, kBarH, st.searchText, "Search your content...", st.focus == kSearchField, false, kFocusSearch, mx, my);
 		const int n = CatalogFilterSize(st.catFilter);
-		p.Button(filtersX, y, filtersW, kBarH, n ? Tr("Filters") + " (" + std::to_string(n) + ")" : Tr("Filters"), kCatPanel, 0, mx, my, true, n > 0 || st.catOpen, 0);
-		Combo(p, st, sortX, y, sortW, kBarH, Tr("Order: ") + Tr(kSortNames[st.sort]), kDropSort);
+		p.Button(filtersX, sy, kFiltersW, kBarH, n ? Tr("Filters") + " (" + std::to_string(n) + ")" : Tr("Filters"), kCatPanel, 0, mx, my, true, n > 0 || st.catOpen, 0);
+		Combo(p, st, sortX, sy, kSortW, kBarH, Tr("Order: ") + Tr(kSortNames[st.sort]), kDropSort);
 	}
 	else {
+		const int x = barEnd;
 		PaintPadlock(p, x, y + (kBarH - 17) / 2, 17, pal::caption);
 		p.Font(3);
 		p.Text(x + 26, y, listRight - x - 26, kBarH, "The order is worked out on its own and is the same on every PC, so online games match.", pal::body,
@@ -1144,25 +1171,32 @@ void PaintModCard(Painter &p, const State &st, const PanelLayout &l)
 		p.Text(dx, y, dw, 40, TrFmt("%s content packs selected", {std::to_string(st.marked.size())}), pal::redText);
 		y += 48;
 		int problems = 0;
-		p.Font(0);
-		const int listEnd = bottom - 90;
 		for (const std::string &folder : st.marked) {
+			const auto it = std::find_if(st.rows.begin(), st.rows.end(), [&](const Row &r) { return r.folder == folder; });
+			if (it != st.rows.end() && RowHasProblems(st, *it)) problems++;
+		}
+		const std::string note = problems
+			? TrFmt("%s of them have problems. Use the bar at the foot of the list to enable, disable or uninstall them all.", {std::to_string(problems)})
+			: std::string("Use the bar at the foot of the list to enable, disable or uninstall them all.");
+		p.Font(3);
+		const int noteH = p.Measure(dw, note), noteY = bottom - noteH;
+		// As many rows as fit above the note; when some are left out, the last line says so.
+		const int rowH = 28, room = std::max(0, (noteY - 8 - y) / rowH);
+		const int total = static_cast<int>(st.marked.size()), shown = total > room ? std::max(0, room - 1) : total;
+		p.Font(0);
+		for (int k = 0; k < shown; k++) {
+			const std::string &folder = st.marked[static_cast<size_t>(k)];
 			const ModInfo *mm = FindModIn(st.mods, folder);
 			const auto it = std::find_if(st.rows.begin(), st.rows.end(), [&](const Row &r) { return r.folder == folder; });
 			const bool bad = it != st.rows.end() && RowHasProblems(st, *it);
-			if (bad) problems++;
-			if (y > listEnd) continue;
 			const bool on = it != st.rows.end() && it->active;
-			p.Text(dx, y, dw, 28, std::string(on ? "\xE2\x97\x8F  " : "\xE2\x97\x8B  ") + (mm ? mm->name : folder), bad ? pal::bad : on ? pal::text : pal::textDim,
+			p.Text(dx, y, dw, rowH, std::string(on ? "\xE2\x97\x8F  " : "\xE2\x97\x8B  ") + (mm ? mm->name : folder), bad ? pal::bad : on ? pal::text : pal::textDim,
 				DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-			y += 28;
+			y += rowH;
 		}
-		if (y > listEnd) p.Text(dx, y, dw, 28, "...", pal::textDim);
+		if (shown < total && room > 0) p.Text(dx, y, dw, rowH, "...", pal::textDim);
 		p.Font(3);
-		p.TextWrapped(dx, bottom - 56, dw, 56,
-			problems ? TrFmt("%s of them have problems. Use the bar at the foot of the list to enable, disable or uninstall them all.", {std::to_string(problems)})
-					 : std::string("Use the bar at the foot of the list to enable, disable or uninstall them all."),
-			problems ? pal::bad : pal::textDim);
+		p.TextWrapped(dx, noteY, dw, noteH, note, problems ? pal::bad : pal::textDim);
 		return;
 	}
 	const Row *sel = SelectedRow(st);
@@ -1283,27 +1317,59 @@ void PaintModCard(Painter &p, const State &st, const PanelLayout &l)
 }
 }
 
+// The title, the three tabs, Back and, when something waits for a restart, the button that restarts. The tabs are long in some
+// languages, so on a narrow screen the restart button takes its short label and the tabs a smaller type before the title is shortened.
+void PaintPanelHeader(Painter &p, const State &st, const PanelLayout &l)
+{
+	const int mx = st.mouseX, my = st.mouseY;
+	const std::vector<TabSpec> tabs = {{Tr("Installed") + " (" + std::to_string(st.mods.size()) + ")", kTabInstalled, 0, st.tab == kTabListInstalled, true},
+		{"Browse content", kTabExplore, 0, st.tab == kTabListExplore, true}};
+	const int backLeft = PaintHeaderActions(p, l, {{"Back", kClose, true, true}}, mx, my);
+	const HFONT tabFont = p.fonts[2];
+	// What PaintScreenTitle needs at the least: its shortest title, and the tabs closed up.
+	constexpr int kTabsLargest = 30, kTabsSmallest = 22, kTitleLeast = 160, kTabPad = 24, kTabGap = 28;
+	auto tabsW = [&](int size) {
+		p.fonts[2] = BrandFont(BrandFace::Display, size, p.s);
+		p.Font(2);
+		int labelW = 0;
+		for (const TabSpec &t : tabs) labelW = std::max(labelW, p.CapsWidth(t.label, 2));
+		return static_cast<int>(tabs.size()) * (labelW + kTabPad) + (static_cast<int>(tabs.size()) - 1) * 6 + kTabGap;
+	};
+	const std::string longLabel = Tr("Apply and restart"), shortLabel = Tr("Restart");
+	const std::string *label = st.restartNeeded ? &longLabel : nullptr;
+	auto buttonW = [&](const std::string &text) {
+		p.Font(1);
+		return p.CapsWidth(text, 1) + 48;
+	};
+	auto fits = [&](int size) {
+		const int right = label ? backLeft - 12 - buttonW(*label) : backLeft;
+		return kTitleLeast + tabsW(size) <= right - 16 - 32 - l.margin;
+	};
+	int size = kTabsLargest;
+	if (label && !fits(size)) label = &shortLabel;
+	while (!fits(size) && size > kTabsSmallest) size -= 2;
+	int right = backLeft;
+	if (label) {
+		const int w = buttonW(*label);
+		right -= 12 + w;
+		p.Button(right, l.margin, w, kHeaderButtonH, *label, kApply, 0, mx, my, true, true);
+		if (p.Hover(right, l.margin, w, kHeaderButtonH, mx, my)) SetTip("The content changes apply when the game restarts", right, l.margin + kHeaderButtonH);
+	}
+	p.fonts[2] = BrandFont(BrandFace::Display, size, p.s);
+	PaintScreenTitle(p, l, "Content", tabs, right - 16, mx, my);
+	p.fonts[2] = tabFont;
+}
+
 void PaintPanel(Painter &p, const State &st)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	UseScreenFonts(p);
+	g_toolsWrap = ProfileBarWidth(p, st) + 16 + kSearchLeast + 12 + kFiltersW + 12 + kSortW > PanelLayoutFor(st).listW;
 	const PanelLayout l = PanelLayoutFor(st);
 	const bool overlay = st.drop != kDropNone || st.confirm || (st.tab == kTabListExplore && (st.ioFilterOpen || st.ioShot >= 0)) ||
 		(st.tab == kTabListInstalled && st.catOpen);
 	p.noHover = overlay;
-	int right = PaintHeaderActions(p, l, {{"Back", kClose, true, true}}, mx, my);
-	if (st.restartNeeded) {
-		p.Font(1);
-		const std::string label = Tr("Apply and restart");
-		const int w = p.CapsWidth(label, 1) + 48;
-		right -= 12 + w;
-		p.Button(right, l.margin, w, kHeaderButtonH, label, kApply, 0, mx, my, true, true);
-		if (p.Hover(right, l.margin, w, kHeaderButtonH, mx, my)) SetTip("The content changes apply when the game restarts", right, l.margin + kHeaderButtonH);
-	}
-	PaintScreenTitle(p, l, "Content",
-		{{Tr("Installed") + " (" + std::to_string(st.mods.size()) + ")", kTabInstalled, 0, st.tab == kTabListInstalled, true},
-			{"Browse content", kTabExplore, 0, st.tab == kTabListExplore, true}},
-		right - 16, mx, my);
+	PaintPanelHeader(p, st, l);
 	if (st.tab == kTabListExplore) {
 		PaintExplore(p, st);
 	}
@@ -1336,21 +1402,38 @@ void PaintInstalled(Painter &p, const State &st)
 		int counts[kStateCount];
 		CountStates(st, st.catFilter, counts);
 		const char *names[] = {"All", "Active", "Disabled", "With conflicts", "With problems"};
+		auto shows = [&](int k) { return !((k == kStateProblems || k == kStateConflicts) && counts[k] == 0 && st.stateFilter != k); };
+		auto iconOf = [](int k) { return k == kStateProblems || k == kStateConflicts ? 24 : 0; };
+		auto labelOf = [&](int k, bool brief) { return brief && iconOf(k) ? std::to_string(counts[k]) : Tr(names[k]) + " " + std::to_string(counts[k]); };
+		// The tabs close up on a narrow list, and then the conflicts and problems tabs keep only their icon and count.
+		int padX = 28;
+		bool brief = false;
+		p.Font(4);
+		for (int fit = 0; fit < 3; fit++) {
+			padX = fit ? 16 : 28;
+			brief = fit == 2;
+			int total = 0;
+			for (int k = 0; k < kStateCount; k++) {
+				if (shows(k)) total += p.CapsWidth(labelOf(k, brief), 1) + padX + iconOf(k);
+			}
+			if (total <= listW - 20) break;
+		}
+		ClipArea strip(p, listX, cardY, listW, stripH);
 		int tx = listX + 10;
 		for (int k = 0; k < kStateCount; k++) {
-			const int count = counts[k];
-			if ((k == kStateProblems || k == kStateConflicts) && count == 0 && st.stateFilter != k) continue;
+			if (!shows(k)) continue;
 			const bool on = st.stateFilter == k;
-			const std::string label = Tr(names[k]) + " " + std::to_string(count);
+			const std::string label = labelOf(k, brief);
 			p.Font(4);
-			const int icon = k == kStateProblems || k == kStateConflicts ? 24 : 0;
-			const int w = p.CapsWidth(label, 1) + 28 + icon;
+			const int icon = iconOf(k), half = padX / 2;
+			const int w = p.CapsWidth(label, 1) + padX + icon;
 			const bool hov = p.Hover(tx, cardY, w, stripH, mx, my);
 			const COLORREF c = k == kStateProblems ? pal::bad : on || hov ? pal::text : pal::caption;
-			if (k == kStateProblems) PaintAlertIcon(p, tx + 14, cardY + (stripH - 16) / 2, true, 16);
-			if (k == kStateConflicts) PaintBolt(p, tx + 16, cardY + (stripH - 16) / 2, 16, pal::warn);
-			p.TextCaps(tx + 14 + icon, cardY, w - 14 - icon, stripH, label, c, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1);
-			if (on) p.Fill(tx + 8, cardY + stripH - 3, w - 16, 3, pal::red);
+			if (k == kStateProblems) PaintAlertIcon(p, tx + half, cardY + (stripH - 16) / 2, true, 16);
+			if (k == kStateConflicts) PaintBolt(p, tx + half + 2, cardY + (stripH - 16) / 2, 16, pal::warn);
+			p.TextCaps(tx + half + icon, cardY, w - half - icon, stripH, label, c, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1);
+			if (on) p.Fill(tx + half - 6, cardY + stripH - 3, w - padX + 12, 3, pal::red);
+			if (brief && icon && p.Hover(tx, cardY, w, stripH, mx, my)) SetTip(names[k], tx, cardY + stripH);
 			p.AddHit(tx, cardY, w, stripH, kStateFilter, k);
 			tx += w;
 		}
@@ -1358,15 +1441,22 @@ void PaintInstalled(Painter &p, const State &st)
 
 	const int switchX = listX + listW - 28 - kBigToggleW, switchHitW = kBigToggleW + 12;
 	const int posX = listX + 10, posW = 40, boxX = listX + 60, thumbX = listX + 92, thumbW = 56, thumbH = 32;
-	const int clashW = 210, clashX = switchX - 24 - clashW, catW = 160, catX = clashX - 16 - catW;
-	const int nameX = thumbX + thumbW + 14, nameW = catX - 16 - nameX;
+	const int nameX = thumbX + thumbW + 14, span = switchX - 24 - nameX;
+	constexpr int kNameRoomy = 260, kNameLeast = 220;
+	int clashW = 210, catW = 160;
+	if (span - clashW - catW - 32 < kNameRoomy) {
+		clashW = 160;
+		catW = 120;
+	}
+	if (span - clashW - catW - 32 < kNameLeast) catW = 0;
+	const int clashX = switchX - 24 - clashW, catX = catW ? clashX - 16 - catW : clashX, nameW = catX - 16 - nameX;
 	const int headY = cardY + stripH, headH = 36;
 	p.Fill(listX + 1, headY, listW - 2, 1, pal::hairline);
 	p.Fill(listX + 1, headY + headH - 1, listW - 2, 1, pal::lineStrong);
 	p.Font(4);
 	p.TextCaps(posX, headY, posW, headH, "#", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
 	p.TextCaps(thumbX, headY, nameW, headH, "Content", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1);
-	p.TextCaps(catX, headY, catW, headH, "Type", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1);
+	if (catW) p.TextCaps(catX, headY, catW, headH, "Type", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1);
 	p.TextCaps(clashX, headY, clashW, headH, "Conflicts", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1);
 	p.TextCaps(switchX - 30, headY, kBigToggleW + 30, headH, "Active", pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE, 1);
 
@@ -1481,8 +1571,10 @@ void PaintInstalled(Painter &p, const State &st)
 		if (m) {
 			const int cat = ModMainCategory(*m);
 			const int group = CatalogCategoryGroup(cat);
-			p.Text(catX, y, catW, kModRowH, Tr(CatalogCategoryLabel(cat)), group == 0 ? pal::redText : group == 1 ? RGB(140, 196, 176) : pal::textDim,
-				DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			if (catW) {
+				p.Text(catX, y, catW, kModRowH, Tr(CatalogCategoryLabel(cat)), group == 0 ? pal::redText : group == 1 ? RGB(140, 196, 176) : pal::textDim,
+					DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			}
 			if (!pending) PaintClashCell(p, st, r, clashX, y, clashW, kModRowH);
 		}
 		if (pending) {

@@ -30,6 +30,14 @@ void Chip(Painter &p, int x, int y, int w, int h, const std::string &text, COLOR
 void Segment(Painter &p, int x, int y, int w, int h, const std::string &label, bool on, int arg, int mx, int my, int spacing = 2);
 // "Summary", the tool bar's button back to the hub, 44 tall: only its arrow when it is narrower than 100.
 void SummaryButton(Painter &p, int x, int y, int w, int mx, int my, UINT align = DT_LEFT);
+// Where the full leaderboard's table goes: right of it the player's card, and above it the tool bar, which takes a second row when its
+// controls don't fit beside each other. The page size of the leaderboard follows it, so the paint and the request agree.
+struct RankedBoardFrame {
+	int tableW = 0, detailW = 0;
+	// 0, or the height of the tool bar's second row.
+	int secondRow = 0;
+};
+RankedBoardFrame RankedBoardFrameFor(int viewW, int viewH);
 // The avatar, or the first letters of the name on a plain square.
 void Avatar(Painter &p, int x, int y, int size, uint64_t id, const std::string &name);
 

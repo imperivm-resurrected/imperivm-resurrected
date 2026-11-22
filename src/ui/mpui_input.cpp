@@ -78,7 +78,7 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 			ScrollTo to;
 			if (ScrollbarMouse(g_s.dropBar, g_s.hits, msg, wp, at, to)) {
 				if (to.id == kDropMenuBar) g_s.dropScroll = to.pos;
-				else TourneyScrollTo(to.id, to.pos);
+				else if (!g_s.scrolls.Apply(g_s.paneAreas, to)) TourneyScrollTo(to.id, to.pos);
 			}
 			if (g_s.view == kViewTournaments) TourneyPanMove(at, wp);
 		}
@@ -113,7 +113,7 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 			ScrollTo to;
 			if (ScrollbarMouse(g_s.dropBar, g_s.hits, msg, wp, pt, to)) {
 				if (to.id == kDropMenuBar) g_s.dropScroll = to.pos;
-				else TourneyScrollTo(to.id, to.pos);
+				else if (!g_s.scrolls.Apply(g_s.paneAreas, to)) TourneyScrollTo(to.id, to.pos);
 				return true;
 			}
 		}
@@ -178,6 +178,7 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		{
 			std::lock_guard<std::mutex> lock(g_chat.mx);
 			const POINT pt = {g_s.mouseX, g_s.mouseY};
+			if (!g_s.dropOpen && g_s.scrolls.Wheel(g_s.paneAreas, pt, GET_WHEEL_DELTA_WPARAM(wp))) return true;
 			if (!g_s.dropOpen && g_chat.rectValid && PtInRect(&g_chat.rect, pt)) {
 				g_chat.scroll = std::max(0, g_chat.scroll + GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA * 40);
 				return true;
@@ -197,8 +198,10 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 			g_s.dropScroll = ClampDropScroll(g_s.dropScroll - GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA * 3, count);
 		}
 		else if (g_s.game.picker && !SaveMapPicking(g_s)) {
+			// The rows the search left, as the picker paints them.
 			const int count = static_cast<int>(PickView(g_s).size());
-			g_s.pick.scroll = std::max(0, std::min(g_s.pick.scroll - GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA * 3, count - PickRowsShown()));
+			const int top = std::max(0, std::min(g_s.pick.scroll, count - PickRowsShown()));
+			g_s.pick.scroll = std::max(0, std::min(top - GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA * 3, count - PickRowsShown()));
 		}
 		return true;
 	case WM_LBUTTONUP:
@@ -289,6 +292,7 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		}
 		else if (wp == VK_UP || wp == VK_DOWN) {
 			SelectRoom(g_s.selected + (wp == VK_UP ? -1 : 1));
+			g_s.lobbyReveal = true;
 		}
 		return true;
 	}

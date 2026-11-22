@@ -239,10 +239,19 @@ HubLayout HubFor(const State &st)
 	h.inner = l.w - 2 * l.margin;
 	h.cardY = h.top + kBandH + kGap;
 	h.cardH = h.bottom - h.cardY;
-	h.leftW = std::max(440, h.inner * 520 / 1792);
-	h.rightW = std::max(420, h.inner * 600 / 1792);
+	// The columns keep the mockup's shares of the width (520, 624 and 600 of 1744); on a narrow screen the side ones give up width
+	// before the middle one goes under what its rows need.
+	const int avail = h.inner - 2 * kGap, minSide = 400, minMid = 340;
+	h.leftW = std::max(minSide, avail * 520 / 1744);
+	h.rightW = std::max(minSide, avail * 600 / 1744);
+	int missing = minMid - (avail - h.leftW - h.rightW);
+	if (missing > 0) {
+		const int fromRight = std::min(missing, std::max(0, h.rightW - minSide + 40));
+		h.rightW -= fromRight;
+		h.leftW -= std::min(missing - fromRight, std::max(0, h.leftW - minSide + 40));
+	}
 	h.midX = h.m + h.leftW + kGap;
-	h.midW = h.inner - h.leftW - h.rightW - 2 * kGap;
+	h.midW = avail - h.leftW - h.rightW;
 	h.rightX = h.midX + h.midW + kGap;
 	return h;
 }
@@ -737,7 +746,17 @@ void PaintGameRow(Painter &p, const LeagueHistoryGame &g, int x, int ry, int w, 
 	const int chipW = PaintResultChip(p, g.result, x, ry, rowH, 84, 24);
 	const int deltaX = x + chipW + 12, deltaW = g.placed ? 90 : 56;
 	PaintDelta(p, g, deltaX, ry, deltaW, rowH);
-	const int tx = deltaX + deltaW + 8, tw = std::max(40, x + w - rightW - tx);
+	// "When" takes its own width, and in a narrow row it moves down to the facts line so the name keeps the top one.
+	const std::string ago = AgoText(g.playedAt, now);
+	p.Font(3);
+	p.raw = true;
+	const int agoW = std::min(rightW, p.TextWidth(ago) + 12);
+	p.raw = false;
+	const int tx = deltaX + deltaW + 8, factsW = std::max(40, x + w - agoW - tx);
+	// A narrow row has no room for "when" at its right: it leads the facts line instead.
+	const bool stacked = factsW < 140;
+	const int tw = stacked ? std::max(40, x + w - tx) : factsW;
+	auto withAgo = [&](const std::string &facts) { return stacked ? (facts.empty() ? ago : ago + "  \xC2\xB7  " + facts) : facts; };
 	if (g.opponents.size() >= 2) {
 		p.Font(0);
 		RawText(p, tx, ry + 3, tw, 26, OpponentsText(g), pal::text);
@@ -745,16 +764,17 @@ void PaintGameRow(Painter &p, const LeagueHistoryGame &g, int x, int ry, int w, 
 		const std::string rest = GameFacts(g);
 		if (!rest.empty()) facts += "  \xC2\xB7  " + rest;
 		p.Font(3);
-		RawText(p, tx, ry + 27, tw, 20, facts, pal::caption);
+		RawText(p, tx, ry + 27, tw, 20, withAgo(facts), pal::caption);
 	}
 	else {
 		const uint64_t id = _strtoui64(g.opponent.steamId.c_str(), nullptr, 10);
 		PaintName(p, tx, ry + 3, tw, 26, g.opponent.name.empty() ? Tr("Opponent") : g.opponent.name, id, RankBadge(g.opponent.tier, g.opponent.division), false,
 			mx, my);
 		p.Font(3);
-		RawText(p, tx, ry + 27, tw, 20, GameFacts(g), pal::caption);
+		RawText(p, tx, ry + 27, tw, 20, withAgo(GameFacts(g)), pal::caption);
 	}
-	RawText(p, x + w - rightW, ry, rightW, rowH, AgoText(g.playedAt, now), pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+	p.Font(3);
+	if (!stacked) RawText(p, x + w - agoW, ry, agoW, rowH, ago, pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 }
 
 // The summary's mastery: every civilization the player rated a game with, the highest first, with its level, its bar to the next one
@@ -909,18 +929,23 @@ void PaintSeasonRewards(Painter &p, const State &st, const HubLayout &h, const L
 
 	// The ranks, lit up to the one of the rewards.
 	const LeagueTier mine = today.tier;
-	const int n = kLeagueTierCount, step = iw / n, track = y + 120;
+	const int n = kLeagueTierCount, step = iw / n, track = y + 120, emblem = std::min(36, step - 4);
+	// Too narrow for every rank's name: only the one of the rewards is written, wider, under its emblem.
+	const bool allNames = step >= 56;
+	const LeagueTier named = today.tier != LeagueTier::None ? today.tier : static_cast<LeagueTier>(1);
 	p.Fill(ix + step / 2, track, step * (n - 1), 2, pal::lineStrong);
 	if (mine != LeagueTier::None) p.Fill(ix + step / 2, track, step * (static_cast<int>(mine) - 1), 2, Ink(mine));
 	for (int i = 0; i < n; i++) {
 		const LeagueTier t = static_cast<LeagueTier>(i + 1);
 		const int cx = ix + step * i + step / 2;
 		const bool lit = mine != LeagueTier::None && static_cast<int>(t) <= static_cast<int>(mine);
-		DrawLeagueEmblem(p, cx - 18, y + 74, 36, t, lit ? 255 : 110);
+		DrawLeagueEmblem(p, cx - emblem / 2, y + 74 + (36 - emblem) / 2, emblem, t, lit ? 255 : 110);
 		p.Fill(cx - 6, track - 5, 12, 12, t == mine ? pal::bg : lit ? Ink(t) : pal::hairline);
 		if (t == mine) p.Frame(cx - 6, track - 5, 12, 12, Ink(t));
 		Display(p, step >= 70 ? 16 : 14);
-		p.TextCaps(cx - step / 2, y + 130, step, 18, LeagueTierName(t), lit || t == mine ? Ink(t) : pal::disabled, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS,
+		if (!allNames && t != named) continue;
+		const int nameW = allNames ? step : std::min(iw, 4 * step), nameX = std::max(ix, std::min(ix + iw - nameW, cx - nameW / 2));
+		p.TextCaps(nameX, y + 130, nameW, 18, LeagueTierName(t), lit || t == mine ? Ink(t) : pal::disabled, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS,
 			0);
 	}
 
@@ -1306,21 +1331,25 @@ void PaintBoard(Painter &p, const State &st)
 	const LeagueRankedView &v = st.ranked.view;
 	const ScreenLayout l = ScreenLayoutFor(st.viewW, st.viewH, false);
 	const int m = l.margin, top = l.top, inner = l.w - 2 * m;
-	const int detailW = std::min(537, std::max(400, inner * 537 / 1792)), tableW = inner - detailW - 32;
+	const RankedBoardFrame frame = RankedBoardFrameFor(st.viewW, st.viewH);
+	const int detailW = frame.detailW, tableW = frame.tableW;
 	const LeagueBoard &b = v.page;
 	const int rows = RankedBoardRowsFor(st.viewW, st.viewH);
 	const int pages = std::max(1, (b.total + rows - 1) / rows), page = b.offset / rows + 1;
 	const bool defaultView = DefaultBoard(st);
 
 	// The tool bar: back to the summary, the queue, the season, everyone or the friends, the own place and the pages. When the table is
-	// narrow (1280x720 with both queues), "Summary" keeps only its arrow and the season's menu narrows before the own place goes.
+	// narrow, "Summary" keeps only its arrow and the season's menu narrows; if that is not enough, everyone or the friends, the own
+	// place and the pages go to a second row, so the pages can always be turned.
 	const int queueW = QueueSegmentsWidth(p, st);
 	const int segW = std::max(ChipWidth(p, "All", 96), ChipWidth(p, "Friends", 96));
 	const int meW = ChipWidth(p, "My place", 130), pagerW = 2 * 48 + 8;
+	const bool twoRows = frame.secondRow > 0;
 	int summaryW = 150, seasonW = std::max(220, std::min(300, tableW * 22 / 100));
-	const auto need = [&] { return summaryW + 16 + queueW + 16 + seasonW + 16 + 2 * segW + 16 + meW + 12 + pagerW; };
+	const auto need = [&] { return summaryW + 16 + queueW + 16 + seasonW + (twoRows ? 0 : 16 + 2 * segW + 16 + meW + 12 + pagerW); };
 	if (need() > tableW) summaryW = 56;
 	if (need() > tableW) seasonW = std::max(170, seasonW - (need() - tableW));
+	if (twoRows) seasonW = std::max(seasonW, std::min(300, tableW - (summaryW + 16 + queueW + 16)));
 	SummaryButton(p, m, top, summaryW, mx, my);
 	int tx = m + summaryW + 16;
 	QueueSegments(p, st, tx + queueW, top, 44);
@@ -1332,22 +1361,24 @@ void PaintBoard(Painter &p, const State &st)
 	p.raw = false;
 	UseScreenFonts(p);
 	tx += seasonW + 16;
-	Segment(p, tx, top, segW, 44, "All", !st.ranked.boardFriends, kRkBoardAll, mx, my);
-	Segment(p, tx + segW - 1, top, segW, 44, "Friends", st.ranked.boardFriends, kRkBoardFriends, mx, my);
+	const int barY = twoRows ? top + frame.secondRow : top;
+	if (twoRows) tx = m;
+	Segment(p, tx, barY, segW, 44, "All", !st.ranked.boardFriends, kRkBoardAll, mx, my);
+	Segment(p, tx + segW - 1, barY, segW, 44, "Friends", st.ranked.boardFriends, kRkBoardFriends, mx, my);
 	tx += 2 * segW + 16;
 	const int right = m + tableW;
 	if (tx + meW + 12 + pagerW <= right) {
-		Ghost(p, tx, top, meW, 44, "My place", kRkBoardMe, v.around.me > 0, mx, my);
+		Ghost(p, tx, barY, meW, 44, "My place", kRkBoardMe, v.around.me > 0, mx, my);
 		tx += meW + 12;
 	}
-	if (tx + pagerW <= right) {
-		Ghost(p, tx, top, 48, 44, "\xE2\x80\xB9", kRkBoardPrev, v.pageLoaded && b.offset > 0, mx, my);
-		Ghost(p, tx + 56, top, 48, 44, "\xE2\x80\xBA", kRkBoardNext, v.pageLoaded && page < pages, mx, my);
-		tx += pagerW + 12;
-	}
+	// The pages go last and never leave: at worst they take the own place's room.
+	tx = std::min(tx, right - pagerW);
+	Ghost(p, tx, barY, 48, 44, "\xE2\x80\xB9", kRkBoardPrev, v.pageLoaded && b.offset > 0, mx, my);
+	Ghost(p, tx + 56, barY, 48, 44, "\xE2\x80\xBA", kRkBoardNext, v.pageLoaded && page < pages, mx, my);
+	tx += pagerW + 12;
 	if (v.pageLoaded && right - tx >= 90) {
 		p.Font(3);
-		RawText(p, tx, top, right - tx, 44, TrFmt("Page %s of %s", {std::to_string(page), std::to_string(pages)}), pal::caption);
+		RawText(p, tx, barY, right - tx, 44, TrFmt("Page %s of %s", {std::to_string(page), std::to_string(pages)}), pal::caption);
 	}
 	// The name to look for, over the player's card.
 	const int dx = m + tableW + 32;
@@ -1365,7 +1396,7 @@ void PaintBoard(Painter &p, const State &st)
 		}
 	}
 
-	const int y0 = top + 72, h = l.h - m - y0;
+	const int y0 = top + 72 + frame.secondRow, h = l.h - m - y0;
 	PaintGlassCard(p, m, y0, tableW, h);
 	// #, the Glory of the last 7 days, the player, the rank, the Glory, the games, the record, the share won and the streak; on a narrow
 	// table the games and the share give their room to the name first.
@@ -1386,7 +1417,11 @@ void PaintBoard(Painter &p, const State &st)
 	};
 	if (layout() < 240) cols[kGames].shown = false;
 	if (layout() < 240) cols[kRate].shown = false;
-	cols[kName].w = std::max(140, layout());
+	// Still narrow: the rank's name gives up some width (it ends in an ellipsis), then the week's Glory goes, before the name is cut short.
+	constexpr int kRank = 3, kWeek = 1, kNameMin = 140;
+	if (layout() < kNameMin) cols[kRank].w = std::max(130, cols[kRank].w - (kNameMin - layout()));
+	if (layout() < kNameMin) cols[kWeek].shown = false;
+	cols[kName].w = std::max(80, layout());
 	int cx = 20;
 	for (Col &c : cols) {
 		if (!c.shown) continue;
@@ -1408,7 +1443,8 @@ void PaintBoard(Painter &p, const State &st)
 		p.Font(r.position <= 10 || you ? 1 : 0);
 		RawText(p, m + cols[0].x, ry, cols[0].w, rh, std::to_string(r.position), r.position <= 10 || you ? pal::text : pal::caption);
 		p.Font(4);
-		if (r.hasDelta7) {
+		if (!cols[1].shown) {}
+		else if (r.hasDelta7) {
 			RawText(p, m + cols[1].x, ry, cols[1].w, rh, SignedText(r.delta7), r.delta7 > 0 ? pal::ok : r.delta7 < 0 ? pal::bad : pal::caption);
 		}
 		else RawText(p, m + cols[1].x, ry, cols[1].w, rh, "\xE2\x80\x93", pal::disabled);
@@ -1676,13 +1712,27 @@ void PaintHistory(Painter &p, const State &st)
 		const char *label;
 		int x, w;
 	};
-	// The columns as wide as a 1920 screen gives them, narrower together on a smaller one.
-	const float fit = std::min(1.0f, (inner - 48 - 6 * 16 - 200) / 1250.0f);
-	auto scaled = [fit](int w) { return static_cast<int>(w * fit); };
-	// The length and the report button keep room for their Spanish and Italian labels on a 1600 screen.
-	const int reportW = std::max(220, scaled(230)), playedW = scaled(170), durationW = std::max(100, scaled(90)), civsW = scaled(300), mapW = scaled(230),
-			  resultW = scaled(200);
-	const int opponentW = std::max(200, inner - 48 - resultW - mapW - civsW - durationW - playedW - reportW - 6 * 16);
+	// The columns as wide as a 1920 screen gives them; on a narrower one each closes towards the least its content needs (measured in
+	// this language), all in the same share, and the opponent takes what is left.
+	p.Font(3);
+	const int reportMin = std::max(GhostButtonWidth(p, "Report", false), p.TextWidth("Problem reported") + 8);
+	p.Font(0);
+	const int lengthMin = std::max(70, p.TextWidth(TrFmt("%s min", {"999"})) + 8);
+	struct Fit {
+		int min, pref;
+	};
+	const Fit fits[] = {{150, 200}, {120, 230}, {150, 300}, {lengthMin, std::max(90, lengthMin)}, {110, 170}, {reportMin, std::max(230, reportMin)}};
+	const int opponentMin = 160, room = inner - 48 - 6 * 16;
+	int sumMin = 0, sumPref = 0;
+	for (const Fit &f : fits) {
+		sumMin += f.min;
+		sumPref += f.pref;
+	}
+	const float share = sumPref > sumMin ? std::max(0.0f, std::min(1.0f, (room - 200 - sumMin) / static_cast<float>(sumPref - sumMin))) : 1.0f;
+	auto fitted = [share](const Fit &f) { return f.min + static_cast<int>((f.pref - f.min) * share); };
+	const int resultW = fitted(fits[0]), mapW = fitted(fits[1]), civsW = fitted(fits[2]), durationW = fitted(fits[3]), playedW = fitted(fits[4]),
+			  reportW = fitted(fits[5]);
+	const int opponentW = std::max(opponentMin, room - resultW - mapW - civsW - durationW - playedW - reportW);
 	int cx = 24;
 	auto col = [&cx](const char *label, int w) {
 		const Col c = {label, cx, w};

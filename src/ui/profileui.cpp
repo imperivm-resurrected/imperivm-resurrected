@@ -49,6 +49,7 @@ struct State {
 	std::vector<RankStep> ranks;
 	std::map<std::string, CachedCard> cache;
 	std::vector<Hit> hits;
+	std::vector<PaneArea> panes;
 	bool mouseDown = false;
 	DWORD lastRead = 0, closedAt = 0;
 	// The game window may not send double clicks, so they are told apart here.
@@ -279,10 +280,14 @@ void Act(View &v, int action, int arg, Command &cmd)
 		break;
 	case kActLeague:
 		v.leagueOpen = true;
+		v.panes.Reset();
 		cmd.action = action;
 		break;
 	case kActLeagueClose: v.leagueOpen = false; break;
-	case kActTab: v.tab = arg == kTabLeague ? kTabLeague : kTabGeneral; break;
+	case kActTab:
+		v.tab = arg == kTabLeague ? kTabLeague : kTabGeneral;
+		v.panes.Reset();
+		break;
 	case kActMetric: v.metric = std::max(0, std::min(arg, kMetricCount - 1)); break;
 	case kActChartMode: v.chartMode = arg; break;
 	case kActChartRange: v.chartRange = arg; break;
@@ -349,6 +354,7 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, Command &cmd)
 	const bool onBar = ScrollbarMouse(v.bar, g_s.hits, msg, wp, at, to);
 	if (to.id == kBarList) v.scroll = to.pos;
 	else if (to.id == kBarHistory) v.historyScroll = to.pos;
+	else v.panes.Apply(g_s.panes, to);
 	switch (msg) {
 	case WM_MOUSEMOVE:
 		v.mouseX = at.x;
@@ -372,8 +378,8 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, Command &cmd)
 		g_s.mouseDown = false;
 		return true;
 	case WM_MOUSEWHEEL: {
-		if (v.leagueOpen) return true;
 		// The wheel's position comes in screen coordinates; the last move tells where the mouse is over the screen.
+		if (v.panes.Wheel(g_s.panes, {v.mouseX, v.mouseY}, GET_WHEEL_DELTA_WPARAM(wp)) || v.leagueOpen) return true;
 		const int steps = WheelSteps(g_s.wheelRest, GET_WHEEL_DELTA_WPARAM(wp));
 		if (OverHistory(g_s, {v.mouseX, v.mouseY})) {
 			v.historyScroll = std::max(0, std::min(v.historyScroll - steps * 3, HistoryMaxScroll(v)));
@@ -466,6 +472,7 @@ void ProfileUiDraw(uint32_t *buf, int w, int h)
 	r.End();
 	std::lock_guard<std::mutex> lock(g_lock);
 	g_s.hits = std::move(r.hits);
+	g_s.panes = std::move(r.panes);
 	View &v = g_s.view;
 	if (v.screenW != screen.w || v.screenH != screen.h) {
 		v.screenW = screen.w;

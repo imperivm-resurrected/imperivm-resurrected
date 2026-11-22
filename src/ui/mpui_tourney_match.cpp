@@ -19,6 +19,7 @@
 #include "ui/leagueui.h"
 #include "ui/mpui_tourney_internal.h"
 #include "ui/patronui.h"
+#include "ui/scrollpane.h"
 #include "ui/textedit.h"
 
 namespace mpui_tourney_impl {
@@ -89,7 +90,8 @@ void PaintCivMenu(Painter &p, const State &st, const Ui &u, int x, int y, int w)
 	}
 }
 
-int PaintPlayerColumn(Painter &p, int cx, int y, int h, uint64_t id, const std::string &name, bool me, int seed, const std::string &before,
+// The name is bound to the column (`w`): a long one takes a smaller type before it is shortened.
+int PaintPlayerColumn(Painter &p, int cx, int y, int h, int w, uint64_t id, const std::string &name, bool me, int seed, const std::string &before,
 	const std::string &state, bool stateOk, int extraH = 0)
 {
 	const int disc = h >= 400 ? 132 : 108;
@@ -98,15 +100,20 @@ int PaintPlayerColumn(Painter &p, int cx, int y, int h, uint64_t id, const std::
 	cy += disc + 22;
 	PaintCaps(p, cx - 150, cy, 300, 20, me ? "You" : "Opponent", me ? pal::redText : pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 	cy += 24;
-	UseDisplay(p, h >= 400 ? 64 : 52);
-	p.raw = true;
-	const int nameW = std::min(560, p.CapsWidth(name, 1) + 4);
 	const LeagueBadge badge = id ? PlayerBadgeOf(id) : LeagueBadge();
 	// A patron's laurel before the name, and the name in their tier's colour, as in the rooms.
 	const PatronInfo patron = id ? PatronOf(id) : PatronInfo();
 	// The laurel about as tall as the capitals and level with them; the name in the tier's colour with its sweep of light.
 	const int laurel = patron.tier != PatronTier::None ? (h >= 400 ? 52 : 44) : 0, laurelRoom = laurel ? laurel + 8 : 0;
-	const int room = LeagueBadgeRoom(badge), left = cx - (laurelRoom + nameW + room) / 2;
+	const int room = LeagueBadgeRoom(badge), most = std::max(40, std::min(560, w - room - laurelRoom));
+	int size = h >= 400 ? 64 : 52;
+	UseDisplay(p, size);
+	p.raw = true;
+	while (size > 32 && p.CapsWidth(name, 1) + 4 > most) {
+		size -= 4;
+		UseDisplay(p, size);
+	}
+	const int nameW = std::min(most, p.CapsWidth(name, 1) + 4), left = cx - (laurelRoom + nameW + room) / 2;
 	if (laurel) {
 		// In capitals, as the other names of the page.
 		std::wstring wide = W(name);
@@ -622,8 +629,8 @@ void PaintReadyCard(Painter &p, const State &st, const Ui &u, const TourneyNext 
 	}
 }
 
-void PaintMatchRules(Painter &p, const TourneyNext &n, const TourneyPageView &page, const TourneyMap &map, bool teams, bool byRounds, int x2, int ry, int cw, int rh,
-	int pad)
+void PaintMatchRules(Painter &p, const State &st, const Ui &u, PaintOut &out, const TourneyNext &n, const TourneyPageView &page, const TourneyMap &map, bool teams,
+	bool byRounds, int x2, int ry, int cw, int rh, int pad)
 {
 	PaintGlassCard(p, x2, ry, cw, rh);
 	PaintCaps(p, x2 + pad, ry + 20, cw - 2 * pad, 20, "Rules of this match", pal::caption);
@@ -652,15 +659,25 @@ void PaintMatchRules(Painter &p, const TourneyNext &n, const TourneyPageView &pa
 	const TourneyRoomRules room = TourneyRulesOf(n.settings);
 	rules.push_back({Tr("Map view"), Tr(room.explored ? (room.fog ? "Explored, with fog of war" : "Explored, no fog of war") : room.fog ? "Unexplored, with fog of war" : "Unexplored, no fog of war")});
 	rules.push_back({Tr("Diplomacy"), Tr(room.lockedDiplomacy ? "Locked" : "Free")});
-	int ly = ry + 54;
-	for (const auto &r : rules) {
-		if (ly + 26 > ry + rh || r.second.empty()) continue;
-		p.Font(0);
-		p.raw = true;
-		p.Text(x2 + pad, ly, 140, 24, r.first, pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-		p.Text(x2 + pad + 150, ly, cw - 2 * pad - 150, 24, r.second, pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		p.raw = false;
-		ly += 30;
+	// The rows scroll in the card when it is too short for all of them; its height is last frame's, as the rows count while they paint.
+	const int top = ry + 54, viewH = std::max(0, rh - 54 - 12), max = std::max(0, u.matchRulesH - viewH), scroll = std::min(u.matchRulesScroll, max);
+	int ly = top - scroll;
+	{
+		ClipArea view(p, x2 + 1, top, cw - 2, viewH);
+		for (const auto &r : rules) {
+			if (r.second.empty()) continue;
+			p.Font(0);
+			p.raw = true;
+			p.Text(x2 + pad, ly, 140, 24, r.first, pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+			p.Text(x2 + pad + 150, ly, cw - 2 * pad - 150 - (max > 0 ? 10 : 0), 24, r.second, pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			p.raw = false;
+			ly += 30;
+		}
+	}
+	out.matchRulesH = ly + scroll - top - 6;
+	if (max > 0) {
+		PaintScrollbar(p, kBarMatchRules, x2 + cw - 12, top, viewH, {scroll, max, viewH}, st.dropBar, st.mouseX, st.mouseY);
+		SetScrollArea(p, out.matchRulesArea, x2, top, cw, viewH, max);
 	}
 }
 
@@ -687,7 +704,7 @@ void PaintTroubleCard(Painter &p, const TourneyNext &n, int x3, int ry, int cw, 
 
 }
 
-void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
+void PaintMatchScreen(Painter &p, const State &st, const Ui &u, PaintOut &out)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const ScreenLayout l = ScreenLayoutFor(st.viewW, st.viewH);
@@ -716,7 +733,15 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 	PatronsWatch(TourneyMatchPlayers(n, SteamOwnId()));
 	PaintRing(p, l.w / 2, l.top + 300, 380, pal::hairline);
 
-	const int cardH = l.roomy ? 430 : 360, cy = l.top - (l.roomy ? 10 : 6), centerW = 420, sideW = (inner - centerW) / 2;
+	const int cy = l.top - (l.roomy ? 10 : 6), centerW = 420, sideW = (inner - centerW) / 2;
+	// A short screen trims the top card toward what its columns and the series need, and the button and gaps under it, so the three cards
+	// under them keep room for their rows.
+	const int wantLower = 250, prefCard = l.roomy ? 430 : 360, prefButton = l.roomy ? 72 : 60, prefGap = l.roomy ? 24 : 16, prefLine = 44;
+	const int short_ = std::max(0, wantLower - (bottom - (cy + prefCard + prefGap + prefButton + prefLine)));
+	const int minCard = std::max(326, n.bestOf > 1 ? 190 + n.bestOf * 24 : 0);
+	const int cardH = std::max(std::min(prefCard, minCard), prefCard - short_);
+	const int squeezed = std::min(short_ - (prefCard - cardH), 20);
+	const int bh = prefButton - std::max(0, squeezed / 2), gap = prefGap - std::max(0, (squeezed + 1) / 4), lineGap = prefLine - std::max(0, (squeezed + 1) / 4);
 	PaintGlassCard(p, m, cy, inner, cardH);
 	p.Fill(m + sideW, cy + 1, 1, cardH - 2, pal::hairline);
 	p.Fill(m + sideW + centerW, cy + 1, 1, cardH - 2, pal::hairline);
@@ -737,10 +762,11 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 		// In the room and ready as the room has them, at once (as the game's own room shows it); the league's word when not in it.
 		const int meRoom = MemberRoomState(st, n.match, SteamOwnId()), themRoom = MemberRoomState(st, n.match, n.opponent.steamId);
 		const bool meIn = meRoom < 0 ? n.me.inRoom : meRoom > 0, themIn = themRoom < 0 ? n.opponent.inRoom : themRoom > 0;
-		PaintPlayerColumn(p, m + sideW / 2, cy, cardH, SteamOwnId(), st.player, true, n.me.seed, meE ? PreviousText(page.detail, meE->entryId, n.round) : std::string(),
+		PaintPlayerColumn(p, m + sideW / 2, cy, cardH, sideW - 40, SteamOwnId(), st.player, true, n.me.seed,
+			meE ? PreviousText(page.detail, meE->entryId, n.round) : std::string(),
 			live ? std::string() : Tr(meRoom == 2 ? "Ready" : meIn ? "In the room" : "You're not in the room yet"), meIn);
 		if (n.hasOpponent) {
-			PaintPlayerColumn(p, m + sideW + centerW + sideW / 2, cy, cardH, n.opponent.steamId, n.opponent.name, false, n.opponent.seed,
+			PaintPlayerColumn(p, m + sideW + centerW + sideW / 2, cy, cardH, sideW - 40, n.opponent.steamId, n.opponent.name, false, n.opponent.seed,
 				themE ? PreviousText(page.detail, themE->entryId, n.round) : std::string(),
 				live ? std::string() : Tr(themRoom == 2 ? "Ready" : themIn ? "In the room" : "Not in the room yet"), themIn);
 		}
@@ -830,7 +856,7 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 		lineInk = pal::warn;
 	}
 	// With the by-rounds pace the players agree on a time: the rival's Steam chat goes beside the button.
-	const int bw = 460, bh = l.roomy ? 72 : 60, by = cy + cardH + (l.roomy ? 24 : 16);
+	const int bw = 460, by = cy + cardH + gap;
 	const bool chat = byRounds && n.hasOpponent && n.opponent.steamId;
 	const int chatW = chat ? ChatButtonWidth(p) : 0, groupW = bw + (chat ? 16 + chatW : 0), bx = (l.w - groupW) / 2;
 	p.Button(bx, by, bw, bh, label, kTourney, ArgOf(action, n.match), mx, my, enabled, true, 2);
@@ -848,7 +874,7 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 	p.raw = false;
 
 	// While the next game's map is being chosen, the choice takes the place of the three cards.
-	const int ry = by + bh + 44, rh = bottom - ry, cw = (inner - 2 * kCardGap) / 3, pad = 26;
+	const int ry = by + bh + lineGap, rh = bottom - ry, cw = (inner - 2 * kCardGap) / 3, pad = 26;
 	if (rh < 120) return;
 	if (n.pick.present) {
 		PaintPickPanel(p, st, n, m, ry, inner, rh);
@@ -857,7 +883,7 @@ void PaintMatchScreen(Painter &p, const State &st, const Ui &u)
 	// Three cards: what is checked, the rules and what to do if something fails.
 	PaintReadyCard(p, st, u, n, mine, map, m, ry, cw, rh, pad);
 	const int x2 = m + cw + kCardGap;
-	PaintMatchRules(p, n, page, map, teams, byRounds, x2, ry, cw, rh, pad);
+	PaintMatchRules(p, st, u, out, n, page, map, teams, byRounds, x2, ry, cw, rh, pad);
 	const int x3 = x2 + cw + kCardGap;
 	PaintTroubleCard(p, n, x3, ry, cw, rh, pad, mx, my);
 }
@@ -960,10 +986,15 @@ void PaintTitlePath(Painter &p, const TourneyDetail &d, const TourneyEntrant *ch
 		const int stepH = std::max(52, std::min(84, room / std::max<int>(1, static_cast<int>(path.size()))));
 		int sy = top + 66;
 		if (earlier) {
+			const std::string count = earlier == 1 ? Tr("+ 1 match before") : TrFmt("+ %s matches before", {std::to_string(earlier)});
+			UseFace(p, BrandFace::UiStrong, 13);
+			const int captionW = p.CapsWidth("Path to the title", 2);
 			p.Font(3);
 			p.raw = true;
-			p.Text(pathX + 62, top + 22, pathW - 62 - 28, 24, earlier == 1 ? Tr("+ 1 match before") : TrFmt("+ %s matches before", {std::to_string(earlier)}), pal::caption,
-				DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+			// Beside the caption while both fit, else under it, before the first match.
+			const bool beside = captionW + 16 + p.TextWidth(count) <= pathW - 56;
+			p.Text(beside ? pathX + 62 : pathX + 28, beside ? top + 22 : top + 42, beside ? pathW - 62 - 28 : pathW - 56, beside ? 24 : 20, count, pal::caption,
+				(beside ? DT_RIGHT : DT_LEFT) | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 			p.raw = false;
 		}
 		p.Fill(pathX + 35, sy + 12, 2, std::max(0, stepH * (static_cast<int>(path.size()) - 1)), pal::lineStrong);

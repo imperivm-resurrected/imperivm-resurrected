@@ -5,6 +5,7 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <climits>
 #include <map>
 #include <mutex>
 #include <set>
@@ -22,6 +23,7 @@
 #include "mods/savelib.h"
 #include "ui/savesui.h"
 #include "ui/fullscreen.h"
+#include "ui/scrollpane.h"
 #include "ui/textedit.h"
 #include "ui/widgets.h"
 #include "i18n/tr.h"
@@ -52,6 +54,7 @@ struct Layout {
 };
 
 const int kScreenTabH = 52;
+const int kPaneDetail = kPaneIdBase;
 
 Layout LayoutFor(bool full, int w, int h)
 {
@@ -184,6 +187,13 @@ struct State {
 	std::string modListKey;
 	// The layout of the last frame: the rows and the list's height depend on it.
 	Layout lay;
+	// The detail card scrolls when the save has more to show than the card holds; it starts at the top for each save.
+	PaneScrolls detailScroll;
+	std::string detailKey;
+	ScrollDrag paneDrag;
+	std::vector<PaneArea> panes;
+	// The selection was chosen before a full-screen frame laid the list out: the first frame scrolls to it again with its own rows.
+	bool revealSelection = false;
 };
 
 std::mutex g_lock;
@@ -1179,7 +1189,8 @@ void PaintList(Painter &p, State &st, const View &v)
 	st.list.scroll = std::max(0, std::min(st.list.scroll, maxScroll));
 	const bool bar = maxScroll > 0;
 	const int rx = lx + 1, rw = lw - 2 - (bar ? 14 : 0);
-	p.Clip(lx + 1, ly + 1, lw - 2, innerH);
+	// The rename field clips itself and adds its own hit: inside the area both stay within the list when its row is half scrolled out.
+	ClipArea area(p, lx + 1, ly + 1, lw - 2, innerH);
 	for (const Row &r : v.rows) {
 		const int ry = ly + 1 + r.y - st.list.scroll;
 		if (ry + r.h < ly + 1 || ry > ly + lh - 1) continue;
@@ -1209,7 +1220,6 @@ void PaintList(Painter &p, State &st, const View &v)
 			}
 			if (editing) {
 				PaintEditField(p, rx + 26, ry + 3, rw - 34, r.h - 6, st.renameText, "Game name", st.focus == kFocusRename, false, st.edit, kRenameField);
-				p.Clip(lx + 1, ly + 1, lw - 2, innerH);
 			}
 			continue;
 		}
@@ -1226,10 +1236,9 @@ void PaintList(Painter &p, State &st, const View &v)
 		if (editing) {
 			const int fx = r.kind == 2 ? rx + 26 : rx + 8, fw = r.kind == 2 ? rw - 26 - (l.full ? 210 : 170) : rw - 8 - (l.full ? 160 : 130);
 			PaintEditField(p, fx, ry + 3, fw, r.kind == 2 ? r.h - 6 : l.full ? 32 : 24, st.renameText, "Name", st.focus == kFocusRename, false, st.edit, kRenameField);
-			p.Clip(lx + 1, ly + 1, lw - 2, innerH);
 		}
 	}
-	p.Unclip();
+	area.End();
 	ScrollbarPaint(p, lx + lw - 10, ly + 3, lh - 6, v.total, innerH, st.list, st.listGeom, mx, my);
 }
 
@@ -1265,7 +1274,8 @@ std::string MapLabel(const MpSaveInfo &info, const SaveRec &rec)
 	return dim.empty() ? name : name + " (" + dim + ")";
 }
 
-int PaintPlayers(Painter &p, const MpSaveInfo &info, const std::vector<int> &states, int x, int y, int w, int maxH, int rowH)
+// The players of the save in rows `w` wide, up to `maxH`; returns the height they take. Without `draw` it only measures them.
+int PaintPlayers(Painter &p, const MpSaveInfo &info, const std::vector<int> &states, int x, int y, int w, int maxH, int rowH, bool draw)
 {
 	p.Font(3);
 	int cx = x, cy = y;
@@ -1279,17 +1289,50 @@ int PaintPlayers(Painter &p, const MpSaveInfo &info, const std::vector<int> &sta
 			cy += rowH;
 		}
 		if (cy + rowH > y + maxH) break;
+		cx += 15 + tw + 16;
+		any = true;
+		if (!draw) continue;
+		const int px = cx - (15 + tw + 16);
 		const int c = pl.color555;
 		const bool defeated = i < states.size() && states[i] == 2;
 		const int r = ((c >> 10) & 31) * 255 / 31, g = ((c >> 5) & 31) * 255 / 31, b = (c & 31) * 255 / 31;
-		p.Fill(cx, cy + (rowH - 10) / 2, 10, 10, defeated ? RGB(r / 3 + 30, g / 3 + 30, b / 3 + 30) : RGB(r, g, b));
-		p.Frame(cx, cy + (rowH - 10) / 2, 10, 10, pal::panel);
-		p.Text(cx + 15, cy, tw + 4, rowH, pl.name, defeated ? pal::textDim : pal::text);
-		if (defeated) p.Fill(cx + 13, cy + rowH / 2, tw + 4, 1, pal::textDim);
-		cx += 15 + tw + 16;
-		any = true;
+		p.Fill(px, cy + (rowH - 10) / 2, 10, 10, defeated ? RGB(r / 3 + 30, g / 3 + 30, b / 3 + 30) : RGB(r, g, b));
+		p.Frame(px, cy + (rowH - 10) / 2, 10, 10, pal::panel);
+		p.Text(px + 15, cy, tw + 4, rowH, pl.name, defeated ? pal::textDim : pal::text);
+		if (defeated) p.Fill(px + 13, cy + rowH / 2, tw + 4, 1, pal::textDim);
 	}
 	return any ? cy + rowH - y : 0;
+}
+
+// What a single save's detail lists, worked out before it is painted so the card can fit it.
+struct DetailLines {
+	std::vector<std::pair<std::string, COLORREF>> info;
+	std::vector<ListLine> mods;
+};
+
+DetailLines DetailLinesOf(State &st, const SaveRec &rec)
+{
+	DetailLines d;
+	const bool group = !st.selGroup.empty();
+	d.info.push_back({(group ? Tr("Last saved: ") : "") + TimeText(rec.time) + "  ·  " + HumanBytes(rec.size), pal::textDim});
+	if (const std::string camp = CampaignOf(st, rec); !camp.empty()) d.info.push_back({(rec.kind == kSaveAdventure ? Tr("Adventure: ") : Tr("Conquest: ")) + camp, pal::text});
+	if (const std::string map = MapLabel(st.info, rec); !map.empty()) d.info.push_back({Tr("Map: ") + map, pal::text});
+	if (rec.playSeconds >= 0) d.info.push_back({Tr("Play time: ") + PlayTimeText(rec.playSeconds), pal::text});
+	if (rec.online) d.info.push_back({Tr("Online game"), pal::ok});
+	if (st.mode != 0) return d;
+	const ModCheck mc = CheckFor(st, rec);
+	auto add = [&](const std::string &title, const std::vector<std::string> &names, COLORREF col) {
+		if (names.empty()) return;
+		d.mods.push_back({title, col, true});
+		for (const std::string &n : names) d.mods.push_back({"\xE2\x80\xA2  " + n, col, false});
+	};
+	const std::string many = std::to_string(mc.missing.size());
+	add(mc.missing.size() == 1 ? "You are missing 1 content pack (it cannot be loaded):" : Tr("You are missing ") + many + Tr(" content packs (they cannot be loaded):"), mc.missing, pal::bad);
+	add(mc.inactive.size() == 1 ? "You need to enable 1 content pack:" : Tr("You need to enable ") + std::to_string(mc.inactive.size()) + Tr(" content packs:"), mc.inactive, pal::redText);
+	add("Another version or different files:", mc.other, pal::redText);
+	add(rec.mods.empty() ? "It was saved without additional content. You have enabled:" : "It was saved without this content you have enabled:", mc.extra, pal::redText);
+	if (d.mods.empty() && mc.warn) d.mods.push_back({"The content of this game does not match the one you have enabled.", pal::redText, false});
+	return d;
 }
 
 void PaintDetailBody(Painter &p, State &st, const View &v)
@@ -1297,6 +1340,7 @@ void PaintDetailBody(Painter &p, State &st, const View &v)
 	const Layout &l = st.lay;
 	const int dx = l.dx, dy = l.dy, dw = l.dw, dh = l.dh, titleH = l.full ? 28 : 24;
 	PaintGlassCard(p, dx, dy, dw, dh);
+	ClipArea card(p, dx, dy, dw, dh);
 	if (st.sel.size() > 1) {
 		const DelPlan plan = PlanDelete(st, v);
 		uint64_t bytes = 0;
@@ -1314,7 +1358,37 @@ void PaintDetailBody(Painter &p, State &st, const View &v)
 		p.Text(dx + 10, dy + 10, dw - 20, 24, "Select a game", pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		return;
 	}
-	const int tw = l.thumbW, th = tw * 3 / 4, tx = dx + (dw - tw) / 2, ty = dy + 12;
+	if (st.detailKey != rec->vfsPath) {
+		st.detailKey = rec->vfsPath;
+		st.detailScroll.Reset();
+	}
+	if (st.modListKey != rec->vfsPath) {
+		st.modListKey = rec->vfsPath;
+		st.modList = ListState();
+	}
+	st.modGeom = ListGeom();
+	const DetailLines lines = DetailLinesOf(st, *rec);
+	const int x = dx + 12, w = dw - 24, playerRowH = l.full ? 24 : 20, modRowH = l.line;
+	const int playersH = st.info.valid ? PaintPlayers(p, st.info, rec->playerStates, x, 0, w, INT_MAX, playerRowH, false) : 0;
+	// Everything under the thumbnail, then the thumbnail: on a short card it gives up height (down to about a quarter of the card) before
+	// the rest has to scroll.
+	const int below = 10 + titleH + 2 + static_cast<int>(lines.info.size()) * l.line + (playersH ? playersH + 4 : 0) +
+		(lines.mods.empty() ? 0 : 8 + static_cast<int>(lines.mods.size()) * modRowH + 4) + 8;
+	const int fullTh = l.thumbW * 3 / 4, minTh = std::min(fullTh, std::max(l.full ? 120 : 90, dh * 28 / 100));
+	const int th = std::max(minTh, std::min(fullTh, dh - 12 - below)), tw = th * 4 / 3;
+	PaneSpec spec;
+	spec.id = kPaneDetail;
+	spec.x = dx;
+	spec.y = dy;
+	spec.w = dw;
+	spec.h = dh;
+	spec.contentH = 12 + th + below;
+	spec.barX = dx + dw - 8;
+	spec.drag = &st.paneDrag;
+	spec.mx = st.mouseX;
+	spec.my = st.mouseY;
+	ScrollPane pane(p, spec, st.detailScroll.Of(kPaneDetail));
+	const int tx = dx + (dw - tw) / 2, ty = pane.Top() + 12;
 	p.Fill(tx, ty, tw, th, pal::bg);
 	if (g_thumb.path != st.selPath || g_thumb.time != rec->time) {
 		g_thumb.path = st.selPath;
@@ -1332,70 +1406,28 @@ void PaintDetailBody(Painter &p, State &st, const View &v)
 	}
 	p.Frame(tx, ty, tw, th, pal::lineStrong);
 	int y = ty + th + 10;
-	const int x = dx + 12, w = dw - 24;
 	const bool group = !st.selGroup.empty();
-	const std::string key = SaveLibGroupKey(*rec);
-	const std::string title = PartidaTitle(st, key, rec->kind);
 	p.Font(1);
-	p.Text(x, y, w, titleH, group ? title : rec->name, pal::redText);
+	p.Text(x, y, w, titleH, group ? PartidaTitle(st, SaveLibGroupKey(*rec), rec->kind) : rec->name, pal::redText);
 	y += titleH + 2;
 	p.Font(3);
-	std::string line = (group ? Tr("Last saved: ") : "") + TimeText(rec->time) + "  ·  " + HumanBytes(rec->size);
-	p.Text(x, y, w, l.lineH, line, pal::textDim);
-	y += l.line;
-	if (const std::string camp = CampaignOf(st, *rec); !camp.empty()) {
-		p.Text(x, y, w, l.lineH, (rec->kind == kSaveAdventure ? Tr("Adventure: ") : Tr("Conquest: ")) + camp, pal::text);
+	p.raw = true;
+	for (const auto &line : lines.info) {
+		p.Text(x, y, w, l.lineH, line.first, line.second);
 		y += l.line;
 	}
-	const std::string map = MapLabel(st.info, *rec);
-	if (!map.empty()) {
-		p.Text(x, y, w, l.lineH, Tr("Map: ") + map, pal::text);
-		y += l.line;
-	}
-	if (rec->playSeconds >= 0) {
-		p.Text(x, y, w, l.lineH, Tr("Play time: ") + PlayTimeText(rec->playSeconds), pal::text);
-		y += l.line;
-	}
-	if (rec->online) {
-		p.Text(x, y, w, l.lineH, "Online game", pal::ok);
-		y += l.line;
-	}
-	if (st.info.valid) y += PaintPlayers(p, st.info, rec->playerStates, x, y + 2, w, dy + dh - 70 - y, l.full ? 24 : 20) + 2;
-	const int bottom = dy + dh - 8;
-	if (st.mode == 0 && y + 30 <= bottom) {
-		const ModCheck mc = CheckFor(st, *rec);
-		std::vector<ListLine> lines;
-		auto group = [&](const std::string &title, const std::vector<std::string> &names, COLORREF col) {
-			if (names.empty()) return;
-			lines.push_back({title, col, true});
-			for (const std::string &n : names) lines.push_back({"\xE2\x80\xA2  " + n, col, false});
-		};
-		const std::string many = std::to_string(mc.missing.size());
-		group(mc.missing.size() == 1 ? "You are missing 1 content pack (it cannot be loaded):" : Tr("You are missing ") + many + Tr(" content packs (they cannot be loaded):"), mc.missing, pal::bad);
-		group(mc.inactive.size() == 1 ? "You need to enable 1 content pack:" : Tr("You need to enable ") + std::to_string(mc.inactive.size()) + Tr(" content packs:"), mc.inactive, pal::redText);
-		group("Another version or different files:", mc.other, pal::redText);
-		group(rec->mods.empty() ? "It was saved without additional content. You have enabled:" : "It was saved without this content you have enabled:", mc.extra, pal::redText);
-		if (lines.empty() && mc.warn) lines.push_back({"The content of this game does not match the one you have enabled.", pal::redText, false});
-		if (st.modListKey != rec->vfsPath) {
-			st.modListKey = rec->vfsPath;
-			st.modList = ListState();
-		}
-		st.modGeom = ListGeom();
-		if (!lines.empty()) {
-			p.Fill(x, y + 2, w, 1, pal::hairline);
-			y += 8;
-			const int rowH = l.line;
-			const int h = std::min(bottom - y, static_cast<int>(lines.size()) * rowH + 8);
-			if (h >= rowH + 8) ListPaint(p, x, y, w, h, lines, st.modList, st.modGeom, 3, rowH);
-		}
+	p.raw = false;
+	if (playersH) y += PaintPlayers(p, st.info, rec->playerStates, x, y + 2, w, playersH, playerRowH, true) + 4;
+	if (!lines.mods.empty()) {
+		p.Fill(x, y + 2, w, 1, pal::hairline);
+		y += 8;
+		ListPaint(p, x, y, w, static_cast<int>(lines.mods.size()) * modRowH + 4, lines.mods, st.modList, st.modGeom, 3, modRowH);
 	}
 }
 
 void PaintDetail(Painter &p, State &st, const View &v)
 {
-	p.Clip(st.lay.dx, st.lay.dy, st.lay.dw, st.lay.dh);
 	PaintDetailBody(p, st, v);
-	p.Unclip();
 }
 
 void PaintConfirm(Painter &p, State &st)
@@ -1506,12 +1538,25 @@ void PaintPanel(Painter &p, State &st)
 		p.Font(3);
 	}
 	else {
-		std::vector<TabSpec> tabs;
+		const int room = kDesignW - 32;
+		std::vector<std::string> labels;
+		std::vector<int> widths;
+		int total = 0;
+		p.Font(1);
 		for (int t = 0; t < kTabCount; t++) {
-			const std::string label = Tr(kTabNames[t]) + (v.counts[t] ? " (" + std::to_string(v.counts[t]) + ")" : "");
-			tabs.push_back({label, kTab, t, st.tab == t, true});
+			labels.push_back(Tr(kTabNames[t]) + (v.counts[t] ? " (" + std::to_string(v.counts[t]) + ")" : ""));
+			widths.push_back(std::max(120, p.CapsWidth(labels.back(), 1) + 28));
+			total += widths.back() + 6;
 		}
-		PaintTabBar(p, kDesignW, tabs, mx, my, 150);
+		if (total - 6 > room) widths.assign(kTabCount, (room + 6) / kTabCount - 6);
+		p.Fill(16, kTabsY + kTabsH - 1, kDesignW - 32, 1, pal::hairline);
+		int tx = 16;
+		for (int t = 0; t < kTabCount; t++) {
+			p.Font(1);
+			const int font = p.CapsWidth(labels[t], 1) > widths[t] - 8 ? 4 : 1;
+			PaintTabs(p, tx, kTabsY, {{labels[t], kTab, t, st.tab == t, true}}, mx, my, widths[t], kTabsH, font);
+			tx += widths[t] + 6;
+		}
 	}
 
 	if (save) {
@@ -1588,6 +1633,7 @@ void LoadSaveImpl(const std::string &vfsPath)
 		Select(st, rec->vfsPath);
 		FixSelection(st);
 		ScrollToSelection(st);
+		st.revealSelection = true;
 		if (st.selPath != want || st.sel.size() != 1 || !st.selGroup.empty()) {
 			LogW("saves", "\"%s\" to continue could not be selected", vfsPath.c_str());
 			return;
@@ -1800,6 +1846,8 @@ bool HandleImpl(UINT msg, WPARAM wp, LPARAM lp)
 			const POINT at = {st.mouseX, st.mouseY};
 			ListMove(st.list, st.listGeom, at);
 			ListMove(st.modList, st.modGeom, at);
+			ScrollTo to;
+			if (ScrollbarMouse(st.paneDrag, st.hits, msg, wp, at, to)) st.detailScroll.Apply(st.panes, to);
 		}
 		if (st.edit.dragging && st.focus != kFocusNone) {
 			FieldGeom geom;
@@ -1814,6 +1862,13 @@ bool HandleImpl(UINT msg, WPARAM wp, LPARAM lp)
 		st.tabAction = -1;
 		const POINT pt = {st.mouseX, st.mouseY};
 		if (!st.confirm && (ListDown(st.modList, st.modGeom, pt) || ListDown(st.list, st.listGeom, pt))) break;
+		if (!st.confirm) {
+			ScrollTo to;
+			if (ScrollbarMouse(st.paneDrag, st.hits, msg, wp, pt, to)) {
+				st.detailScroll.Apply(st.panes, to);
+				break;
+			}
+		}
 		bool hitSomething = false;
 		for (auto it = st.hits.rbegin(); it != st.hits.rend(); ++it) {
 			if (!PtInRect(&it->r, pt)) continue;
@@ -1841,6 +1896,7 @@ bool HandleImpl(UINT msg, WPARAM wp, LPARAM lp)
 		st.mouseDown = false;
 		ListUp(st.list);
 		ListUp(st.modList);
+		st.paneDrag = ScrollDrag();
 		st.edit.dragging = false;
 		break;
 	case WM_RBUTTONDOWN:
@@ -1850,7 +1906,8 @@ bool HandleImpl(UINT msg, WPARAM wp, LPARAM lp)
 	case WM_MBUTTONUP:
 		break;
 	case WM_MOUSEWHEEL:
-		if (!st.confirm && !ListWheel(st.modList, st.modGeom, POINT{st.mouseX, st.mouseY}, GET_WHEEL_DELTA_WPARAM(wp))) {
+		if (!st.confirm && !st.detailScroll.Wheel(st.panes, POINT{st.mouseX, st.mouseY}, GET_WHEEL_DELTA_WPARAM(wp)) &&
+			!ListWheel(st.modList, st.modGeom, POINT{st.mouseX, st.mouseY}, GET_WHEEL_DELTA_WPARAM(wp))) {
 			st.list.scroll -= GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA * 60;
 			st.list.scroll = std::max(0, std::min(st.list.scroll, st.listGeom.maxScroll));
 		}
@@ -2007,11 +2064,22 @@ void DrawImpl(uint32_t *buf, int w, int h)
 	r.Focus(st.tabAction, st.tabArg);
 	r.Press(st.hits, st.mouseDown, POINT{st.mouseX, st.mouseY});
 	st.modGeom = ListGeom();
+	const bool reveal = st.revealSelection;
+	if (reveal) ScrollToSelection(st);
 	PaintPanel(r.p, st);
 	r.End();
 	std::lock_guard<std::mutex> lock(g_lock);
 	if (!g_s.open) return;
 	g_s.hits = std::move(r.hits);
+	g_s.panes = std::move(r.panes);
+	if (reveal && g_s.revealSelection) {
+		g_s.revealSelection = false;
+		g_s.list.scroll = st.list.scroll;
+	}
+	if (g_s.detailKey != st.detailKey) {
+		g_s.detailKey = st.detailKey;
+		g_s.detailScroll.Reset();
+	}
 	g_s.rowPaths = std::move(st.rowPaths);
 	g_s.hdrKeys = std::move(st.hdrKeys);
 	g_s.hdrPaths = std::move(st.hdrPaths);

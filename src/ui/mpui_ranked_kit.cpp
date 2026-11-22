@@ -87,6 +87,31 @@ void SummaryButton(Painter &p, int x, int y, int w, int mx, int my, UINT align)
 	p.AddHit(x, y, w, 44, kRankedAct, kRkHub);
 }
 
+RankedBoardFrame RankedBoardFrameFor(int viewW, int viewH)
+{
+	const ScreenLayout l = ScreenLayoutFor(viewW, viewH, false);
+	const int inner = l.w - 2 * l.margin;
+	RankedBoardFrame f;
+	f.detailW = std::min(537, std::max(400, inner * 537 / 1792));
+	f.tableW = inner - f.detailW - 32;
+	// Measured in the screen's type at scale 1, with both queues shown: the widest the bar gets in this language, with "Summary" down
+	// to its arrow and the season's menu at its narrowest.
+	HDC dc = CreateCompatibleDC(nullptr);
+	if (!dc) return f;
+	Painter p{dc, 1.0f, 0, 0, nullptr};
+	UseScreenFonts(p);
+	p.Font(4);
+	auto chip = [&p](const std::string &text, int minW) { return std::max(minW, p.CapsWidth(text, 1) + 28); };
+	p.raw = true;
+	const int queue = 2 * std::max(chip(RankedQueueLabel(kLeagueQueueDuel), 96), chip(RankedQueueLabel(kLeagueQueueTeam), 96)) - 1;
+	p.raw = false;
+	const int seg = std::max(chip("All", 96), chip("Friends", 96));
+	const int need = 56 + 16 + queue + 16 + 170 + 16 + 2 * seg + 16 + chip("My place", 130) + 12 + 2 * 48 + 8;
+	DeleteDC(dc);
+	if (need > f.tableW) f.secondRow = 52;
+	return f;
+}
+
 void Avatar(Painter &p, int x, int y, int size, uint64_t id, const std::string &name)
 {
 	if (PaintAvatar(p, x, y, size, id)) return;

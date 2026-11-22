@@ -186,8 +186,10 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis, 
 	const int viewTop = dy + 1, viewH = dh - 80 - returnRoom;
 	const int x = dx + 24, w = dw - 52;
 	const int startY = viewTop + 16;
-	int y = startY - st.detail.scroll;
-	p.Clip(dx + 1, viewTop, dw - 2, viewH);
+	// The last frame's end of the content: a room whose content shrank does not stay scrolled past it.
+	const int scrolled = st.detailGeom.visible > 0 ? std::min(st.detail.scroll, st.detailGeom.maxScroll) : st.detail.scroll;
+	int y = startY - scrolled;
+	ClipArea view(p, dx + 1, viewTop, dw - 2, viewH);
 
 	auto section = [&](const std::string &title) {
 		y += 8;
@@ -427,9 +429,9 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis, 
 			}
 		}
 	}
-	p.Unclip();
+	view.End();
 
-	const int total = (y + st.detail.scroll) - startY + 12;
+	const int total = (y + scrolled) - startY + 12;
 	{
 		ListState view = st.detail;
 		view.scroll = std::min(st.detail.scroll, std::max(0, total - viewH + 12));
@@ -519,53 +521,78 @@ std::string RoomSubline(const OnlineLobby &g, const std::vector<uint64_t> &frien
 void PaintList(Painter &p, const State &st)
 {
 	const int mx = st.mouseX, my = st.mouseY;
-	const LobbyLayout l = LobbyLayoutFor(st.viewW, st.viewH);
+	LobbyLayout l = LobbyLayoutFor(st.viewW, st.viewH);
 	const int m = l.margin, toolY = l.toolY;
 	// The filters as tabs with their counts: every room, those that can be joined, the games that can be watched and the friends'.
 	const int refreshW = std::max(GhostButtonWidth(p, "Refresh", false), GhostButtonWidth(p, "Searching...", false));
 	const int refreshX = m + l.tableW - refreshW;
-	int fx = m;
-	{
-		static const struct {
-			int filter;
-			const char *label;
-		} kTabs[] = {{0, "Every room"}, {6, "Open to join"}, {7, "Live"}, {1, "Friends'"}};
-		const int kTabCount = static_cast<int>(sizeof(kTabs) / sizeof(kTabs[0]));
-		int counts[kTabCount] = {};
-		for (const OnlineLobby &g : st.lobbies) {
-			if (!RoomMatchesSearch(st, g)) continue;
-			for (int t = 0; t < kTabCount; t++) counts[t] += RoomInFilter(g, kTabs[t].filter) ? 1 : 0;
-		}
-		for (const auto &tab : kTabs) {
-			const int count = counts[&tab - kTabs];
-			const bool on = st.filter == tab.filter;
-			SelectObject(p.dc, BrandFont(BrandFace::UiStrong, 13, p.s));
-			const int textW = p.CapsWidth(tab.label, 2);
-			const std::string n = std::to_string(count);
-			p.raw = true;
-			SelectObject(p.dc, BrandFont(BrandFace::Ui, 13, p.s));
-			const int countW = p.TextWidth(n) + 14;
-			p.raw = false;
-			const int w = 18 + textW + 8 + countW + 12;
-			const bool hot = !on && p.Hover(fx, toolY, w, kToolH, mx, my);
-			if (on) p.Fill(fx, toolY, w, kToolH, pal::selected);
-			p.Frame(fx, toolY, w, kToolH, on ? pal::edgeHot : hot ? pal::edgeHot : pal::edge);
-			if (on) p.Fill(fx, toolY + kToolH - 2, w, 2, pal::red);
-			SelectObject(p.dc, BrandFont(BrandFace::UiStrong, 13, p.s));
-			p.TextCaps(fx + 18, toolY, textW + 2, kToolH, tab.label, on || hot ? pal::text : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
-			const int cx = fx + 18 + textW + 8;
-			p.Fill(cx, toolY + (kToolH - 22) / 2, countW, 22, count && on ? pal::red : pal::button);
-			SelectObject(p.dc, BrandFont(BrandFace::Ui, 13, p.s));
-			p.raw = true;
-			p.Text(cx, toolY + (kToolH - 22) / 2, countW, 22, n, count ? pal::text : pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-			p.raw = false;
-			if (!on) p.AddHit(fx, toolY, w, kToolH, kRoomFilter, tab.filter);
-			fx += w - 1;
-		}
+	static const struct {
+		int filter;
+		const char *label;
+	} kTabs[] = {{0, "Every room"}, {6, "Open to join"}, {7, "Live"}, {1, "Friends'"}};
+	const int kTabCount = static_cast<int>(sizeof(kTabs) / sizeof(kTabs[0]));
+	int counts[kTabCount] = {};
+	for (const OnlineLobby &g : st.lobbies) {
+		if (!RoomMatchesSearch(st, g)) continue;
+		for (int t = 0; t < kTabCount; t++) counts[t] += RoomInFilter(g, kTabs[t].filter) ? 1 : 0;
 	}
-	const int searchX = fx + 12, searchW = std::min(420, refreshX - 12 - searchX);
-	if (searchW >= 160) {
+	// A tab's parts: its padding, the letter spacing of its label and the gap before its count.
+	struct TabLook {
+		int pad, spacing, gap, countPad, end;
+	};
+	const TabLook roomy = {18, 2, 8, 14, 12}, tight = {12, 1, 6, 10, 8};
+	auto tabWidth = [&](int t, const TabLook &k, int &textW, int &countW) {
+		SelectObject(p.dc, BrandFont(BrandFace::UiStrong, 13, p.s));
+		textW = p.CapsWidth(kTabs[t].label, k.spacing);
+		p.raw = true;
+		SelectObject(p.dc, BrandFont(BrandFace::Ui, 13, p.s));
+		countW = p.TextWidth(std::to_string(counts[t])) + k.countPad;
+		p.raw = false;
+		return k.pad + textW + k.gap + countW + k.end;
+	};
+	auto tabsWidth = [&](const TabLook &k) {
+		int total = 0, textW = 0, countW = 0;
+		for (int t = 0; t < kTabCount; t++) total += tabWidth(t, k, textW, countW) - 1;
+		return total;
+	};
+	// On a narrow table the tabs close up first; when the search still has no room beside them it goes to a row of its own under them.
+	constexpr int kMinSearchW = 160, kToolGap = 12;
+	const int roomyW = tabsWidth(roomy), tightW = tabsWidth(tight);
+	const bool searchBeside = roomyW + 2 * kToolGap + kMinSearchW + refreshW <= l.tableW || tightW + 2 * kToolGap + kMinSearchW + refreshW <= l.tableW;
+	const TabLook &look = roomyW + kToolGap + (searchBeside ? kToolGap + kMinSearchW : 0) + refreshW <= l.tableW ? roomy : tight;
+	if (!searchBeside) {
+		l.bodyY += kToolH + kToolGap;
+		l.bodyH -= kToolH + kToolGap;
+	}
+	int fx = m;
+	for (int t = 0; t < kTabCount; t++) {
+		const int count = counts[t];
+		const bool on = st.filter == kTabs[t].filter;
+		int textW = 0, countW = 0;
+		const int w = tabWidth(t, look, textW, countW);
+		const std::string n = std::to_string(count);
+		const bool hot = !on && p.Hover(fx, toolY, w, kToolH, mx, my);
+		if (on) p.Fill(fx, toolY, w, kToolH, pal::selected);
+		p.Frame(fx, toolY, w, kToolH, on ? pal::edgeHot : hot ? pal::edgeHot : pal::edge);
+		if (on) p.Fill(fx, toolY + kToolH - 2, w, 2, pal::red);
+		SelectObject(p.dc, BrandFont(BrandFace::UiStrong, 13, p.s));
+		p.TextCaps(fx + look.pad, toolY, textW + 2, kToolH, kTabs[t].label, on || hot ? pal::text : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE, look.spacing);
+		const int cx = fx + look.pad + textW + look.gap;
+		p.Fill(cx, toolY + (kToolH - 22) / 2, countW, 22, count && on ? pal::red : pal::button);
+		SelectObject(p.dc, BrandFont(BrandFace::Ui, 13, p.s));
+		p.raw = true;
+		p.Text(cx, toolY + (kToolH - 22) / 2, countW, 22, n, count ? pal::text : pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.raw = false;
+		if (!on) p.AddHit(fx, toolY, w, kToolH, kRoomFilter, kTabs[t].filter);
+		fx += w - 1;
+	}
+	if (searchBeside) {
+		const int searchX = fx + kToolGap, searchW = std::min(420, refreshX - kToolGap - searchX);
 		PaintField(p, st, searchX, toolY, searchW, kToolH, st.searchInput, "Search room, host or map...", st.focus == kSearchField, kFieldSearch);
+	}
+	else {
+		PaintField(p, st, m, toolY + kToolH + kToolGap, std::min(420, l.tableW), kToolH, st.searchInput, "Search room, host or map...", st.focus == kSearchField,
+			kFieldSearch);
 	}
 	PaintGhostButton(p, refreshX, toolY, refreshW, kToolH, st.loading ? "Searching..." : "Refresh", kRefresh, false, st.ready && !st.loading, mx, my);
 	// Over the room's card, the main action: making a room.
@@ -575,9 +602,18 @@ void PaintList(Painter &p, const State &st)
 	PaintGlassCard(p, tx, ty, tw, th);
 	static const char *const kCols[] = {"Room", "Host", "Players", "Map", "Content"};
 	const float unit = static_cast<float>(tw) / kColumnBaseW;
+	// The columns the player sized, narrowed together when they would leave the content less than its shortest text.
+	p.Font(0);
+	const int contentMin = p.TextWidth("Original game") + 58;
+	int widths[4], sized = 0;
+	for (int c = 0; c < 4; c++) sized += widths[c] = static_cast<int>(st.colW[c] * unit + 0.5f);
+	const int room = tw - 40 - contentMin;
+	if (sized > room && sized > 0) {
+		for (int c = 0; c < 4; c++) widths[c] = widths[c] * std::max(0, room) / sized;
+	}
 	int cx[6];
 	cx[0] = tx + 20;
-	for (int c = 0; c < 4; c++) cx[c + 1] = cx[c] + static_cast<int>(st.colW[c] * unit + 0.5f);
+	for (int c = 0; c < 4; c++) cx[c + 1] = cx[c] + widths[c];
 	cx[5] = tx + tw - 20;
 	// Where a column's text starts: clear of the separator drawn at its left edge.
 	auto textX = [&](int c) { return cx[c] + (c > 0 ? 14 : 2); };
@@ -621,109 +657,124 @@ void PaintList(Painter &p, const State &st)
 		p.Font(0);
 		p.TextWrapped(tx + 24, rowsTop + 24, tw - 48, 120, !st.ready ? st.status : std::string("There are no rooms with this filter."), pal::textDim);
 	}
-	// The rooms in their groups, each under its heading with its count. The table has no scroll of its own: when the arrows take the
-	// selection past the rows that fit, the rows follow it.
+	// The rooms in their groups, each under its heading with its count. The list scrolls when it is longer than the table, and the arrows
+	// scroll it to the room they select.
 	const int count = static_cast<int>(vis.size()), groupH = 30, bodyH = th - headH - 1;
 	auto groupOf = [&](int r) { return RoomGroup(st.lobbies[vis[r]]); };
+	auto startsGroup = [&](int r) { return r == 0 || groupOf(r) != groupOf(r - 1); };
 	int groupCount[3] = {};
 	for (int r = 0; r < count; r++) groupCount[groupOf(r)]++;
-	// The first row shown is the earliest from which the rows down to the selected one fit, each group under its heading. A selection past
-	// the end, left by a search or a refresh, counts as the last row.
-	const int selected = std::max(0, std::min(st.selected, count - 1));
-	int first = selected;
-	for (int used = groupH + rowH; first > 0; first--) {
-		used += rowH + (groupOf(first - 1) != groupOf(first) ? groupH : 0);
-		if (used > bodyH) break;
+	std::vector<int> rowTop(count);
+	int contentH = 0;
+	for (int r = 0; r < count; r++) {
+		if (startsGroup(r)) contentH += groupH;
+		rowTop[r] = contentH;
+		contentH += rowH;
 	}
-	int fit = 0;
-	for (int r = first, used = 0; r < count; r++, fit++) {
-		if (r == first || groupOf(r) != groupOf(r - 1)) used += groupH;
-		if (used + rowH > bodyH) break;
-		used += rowH;
+	int scroll = st.scrolls.Of(kPaneLobbyRooms);
+	if (st.lobbyReveal && count > 0) {
+		const int r = std::max(0, std::min(st.selected, count - 1)), top = rowTop[r] - (startsGroup(r) ? groupH : 0);
+		if (top < scroll) scroll = top;
+		else if (rowTop[r] + rowH > scroll + bodyH) scroll = rowTop[r] + rowH - bodyH;
 	}
-	fit = std::max(1, fit);
+	scroll = ScrollClamp(scroll, PaneMax(contentH, bodyH));
+	g_lobbyScrollOut = scroll;
 	// Whose rooms have a Steam friend in them.
 	std::vector<uint64_t> friends = SteamFriendIds();
 	std::sort(friends.begin(), friends.end());
 	const long long nowMs = static_cast<long long>(std::time(nullptr)) * 1000;
 	int cursor = rowsTop;
-	for (int r = first; r < count && r < first + fit; r++) {
-		const OnlineLobby &g = st.lobbies[vis[r]];
-		if (r == first || groupOf(r) != groupOf(r - 1)) {
-			static const char *const kGroups[] = {"Open rooms", "Live \xC2\xB7 you can watch", "Not available"};
-			const int group = groupOf(r);
-			p.Font(4);
-			const int labelW = p.CapsWidth(kGroups[group], 2) + 4;
-			p.TextCaps(tx + 20, cursor, labelW, groupH, kGroups[group], group == 1 ? pal::redText : pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
+	{
+		PaneSpec spec;
+		spec.id = kPaneLobbyRooms;
+		spec.x = tx + 1;
+		spec.y = rowsTop;
+		spec.w = tw - 2;
+		spec.h = bodyH;
+		spec.contentH = contentH;
+		spec.barX = tx + tw - 10;
+		spec.drag = &st.dropBar;
+		spec.mx = mx;
+		spec.my = my;
+		ScrollPane pane(p, spec, scroll);
+		for (int r = 0; r < count; r++) {
+			const OnlineLobby &g = st.lobbies[vis[r]];
+			const int y = pane.Top() + rowTop[r];
+			cursor = y + rowH;
+			if (startsGroup(r) && pane.Shows(y - groupH, groupH)) {
+				static const char *const kGroups[] = {"Open rooms", "Live \xC2\xB7 you can watch", "Not available"};
+				const int group = groupOf(r), gy = y - groupH;
+				p.Font(4);
+				const int labelW = p.CapsWidth(kGroups[group], 2) + 4;
+				p.TextCaps(tx + 20, gy, labelW, groupH, kGroups[group], group == 1 ? pal::redText : pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
+				p.Font(3);
+				p.raw = true;
+				p.Text(tx + 20 + labelW + 8, gy, 60, groupH, std::to_string(groupCount[group]), pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+				p.raw = false;
+				p.Fill(tx + 1, gy + groupH - 1, tw - 2, 1, pal::hairline);
+			}
+			if (!pane.Shows(y, rowH)) continue;
+			if (r == st.selected) {
+				p.Fill(tx + 1, y, tw - 2, rowH, pal::selected);
+				p.Fill(tx + 1, y, 3, rowH, pal::red);
+			}
+			else if (p.Hover(tx, y, tw, rowH, mx, my)) p.Fill(tx + 1, y, tw - 2, rowH, pal::raised);
+			p.Fill(tx + 1, y + rowH - 1, tw - 2, 1, pal::hairline);
+			p.AddHit(tx, y, tw, rowH, kSelect, r);
+			auto cell = [&](int c, const std::string &text, COLORREF color) {
+				p.Text(textX(c), y, cx[c + 1] - textX(c) - 12, rowH, text, color, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			};
+			// The name over a line of what is played and how.
+			const int nameY = y + 3, nameH = rowH / 2;
+			p.Font(1);
+			if (g.password) DrawLock(p, cx[0] + 4, nameY + (nameH - 16) / 2, pal::redText);
+			int lockW = g.password ? 22 : 0;
+			if (TourneyLobby(g)) {
+				PaintBadge(p, cx[0] + 2 + lockW, nameY + (nameH - 22) / 2, 112, 22, "TOURNAMENT", pal::red, pal::onRed);
+				lockW += 120;
+				p.Font(1);
+			}
+			p.Text(cx[0] + 2 + lockW, nameY, cx[1] - cx[0] - 12 - lockW, nameH, g.name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 			p.Font(3);
 			p.raw = true;
-			p.Text(tx + 20 + labelW + 8, cursor, 60, groupH, std::to_string(groupCount[group]), pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+			p.Text(cx[0] + 2, nameY + nameH, cx[1] - cx[0] - 14, rowH - nameH - 7, RoomSubline(g, friends, nowMs), pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 			p.raw = false;
-			p.Fill(tx + 1, cursor + groupH - 1, tw - 2, 1, pal::hairline);
-			cursor += groupH;
-		}
-		const int y = cursor;
-		cursor += rowH;
-		if (r == st.selected) {
-			p.Fill(tx + 1, y, tw - 2, rowH, pal::selected);
-			p.Fill(tx + 1, y, 3, rowH, pal::red);
-		}
-		else if (p.Hover(tx, y, tw, rowH, mx, my)) p.Fill(tx + 1, y, tw - 2, rowH, pal::raised);
-		p.Fill(tx + 1, y + rowH - 1, tw - 2, 1, pal::hairline);
-		p.AddHit(tx, y, tw, rowH, kSelect, r);
-		auto cell = [&](int c, const std::string &text, COLORREF color) {
-			p.Text(textX(c), y, cx[c + 1] - textX(c) - 12, rowH, text, color, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		};
-		// The name over a line of what is played and how.
-		const int nameY = y + 3, nameH = rowH / 2;
-		p.Font(1);
-		if (g.password) DrawLock(p, cx[0] + 4, nameY + (nameH - 16) / 2, pal::redText);
-		int lockW = g.password ? 22 : 0;
-		if (TourneyLobby(g)) {
-			PaintBadge(p, cx[0] + 2 + lockW, nameY + (nameH - 22) / 2, 112, 22, "TOURNAMENT", pal::red, pal::onRed);
-			lockW += 120;
-			p.Font(1);
-		}
-		p.Text(cx[0] + 2 + lockW, nameY, cx[1] - cx[0] - 12 - lockW, nameH, g.name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		p.Font(3);
-		p.raw = true;
-		p.Text(cx[0] + 2, nameY + nameH, cx[1] - cx[0] - 14, rowH - nameH - 7, RoomSubline(g, friends, nowMs), pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		p.raw = false;
-		p.Font(0);
-		const PatronInfo hostPatron = PatronOf(g.owner);
-		const LeagueBadge hostBadge = PlayerBadgeOf(g.owner);
-		const std::string hostText = g.friendHost ? g.host + Tr("  (friend)") : !g.friendIn.empty() ? g.host + "  Â·  " + TrFmt("with %s", {g.friendIn}) : g.host;
-		PaintLaurelName(p, st, textX(1), y, cx[2] - textX(1) - 12, rowH, hostText, g.owner, hostPatron, hostBadge,
-			g.friendHost || !g.friendIn.empty() ? pal::redText : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		cell(2, g.playing ? std::string("In game") : std::to_string(g.players) + " / " + std::to_string(g.maxPlayers),
-			g.players < g.maxPlayers && !g.playing ? pal::text : pal::textDim);
-		cell(3, LobbyMapLabel(g), pal::textDim);
-		// What the room is played with, after a dot that says whether this PC has it: green, amber when the game must restart, red when
-		// the content must be downloaded.
-		{
-			const OnlineMod *main = nullptr;
-			for (const OnlineMod &mod : g.mods) {
-				if (!main || (mod.gameplay && !main->gameplay)) main = &mod;
+			p.Font(0);
+			const PatronInfo hostPatron = PatronOf(g.owner);
+			const LeagueBadge hostBadge = PlayerBadgeOf(g.owner);
+			const std::string hostText = g.friendHost ? g.host + Tr("  (friend)") : !g.friendIn.empty() ? g.host + "  ·  " + TrFmt("with %s", {g.friendIn}) : g.host;
+			PaintLaurelName(p, st, textX(1), y, cx[2] - textX(1) - 12, rowH, hostText, g.owner, hostPatron, hostBadge,
+				g.friendHost || !g.friendIn.empty() ? pal::redText : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			cell(2, g.playing ? std::string("In game") : std::to_string(g.players) + " / " + std::to_string(g.maxPlayers),
+				g.players < g.maxPlayers && !g.playing ? pal::text : pal::textDim);
+			cell(3, LobbyMapLabel(g), pal::textDim);
+			// What the room is played with, after a dot that says whether this PC has it: green, amber when the game must restart, red when
+			// the content must be downloaded.
+			{
+				const OnlineMod *main = nullptr;
+				for (const OnlineMod &mod : g.mods) {
+					if (!main || (mod.gameplay && !main->gameplay)) main = &mod;
+				}
+				std::string content = main ? main->name : Tr("Original game");
+				if (g.mods.size() > 1) content += " +" + std::to_string(g.mods.size() - 1);
+				COLORREF dot = pal::ok;
+				const std::vector<OnlineMod> missing = MissingMods(st, g);
+				if (!missing.empty()) {
+					uint64_t bytes = 0;
+					for (const OnlineMod &mod : missing) bytes += mod.bytes;
+					dot = pal::bad;
+					content += "  \xC2\xB7  " + TrFmt("download %s", {HumanBytes(bytes)});
+				}
+				else if (SteamRoomContent(g, st.ownKey) == RoomContent::kOtherGameplay) {
+					dot = pal::warn;
+					content += "  \xC2\xB7  " + Tr("restart");
+				}
+				const int dx = textX(4);
+				p.Ellipse(dx, y + (rowH - 8) / 2, 8, 8, dot);
+				p.raw = true;
+				p.Text(dx + 16, y, cx[5] - dx - 28, rowH, content, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+				p.raw = false;
 			}
-			std::string content = main ? main->name : Tr("Original game");
-			if (g.mods.size() > 1) content += " +" + std::to_string(g.mods.size() - 1);
-			COLORREF dot = pal::ok;
-			const std::vector<OnlineMod> missing = MissingMods(st, g);
-			if (!missing.empty()) {
-				uint64_t bytes = 0;
-				for (const OnlineMod &mod : missing) bytes += mod.bytes;
-				dot = pal::bad;
-				content += "  \xC2\xB7  " + TrFmt("download %s", {HumanBytes(bytes)});
-			}
-			else if (SteamRoomContent(g, st.ownKey) == RoomContent::kOtherGameplay) {
-				dot = pal::warn;
-				content += "  \xC2\xB7  " + Tr("restart");
-			}
-			const int dx = textX(4);
-			p.Ellipse(dx, y + (rowH - 8) / 2, 8, 8, dot);
-			p.raw = true;
-			p.Text(dx + 16, y, cx[5] - dx - 28, rowH, content, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-			p.raw = false;
 		}
 	}
 	// Under a short list, an invitation to make a room, so the table is not an empty box.
@@ -750,7 +801,23 @@ void PaintRanked(Painter &p, const State &st)
 	LeagueMeRefresh();
 	PatronsWatch({SteamOwnId()});
 	PaintGlassCard(p, m, top, cw, h);
-	PaintLeagueAccount(p, m + pad, top + pad, cw - 2 * pad, {kLeagueLink, kLeagueOpen, kLeagueCancel, kLeagueUnlink}, mx, my);
+	// The account grows with the badges and seasons the player earns: past the card it scrolls.
+	const LeagueLinkActions actions = {kLeagueLink, kLeagueOpen, kLeagueCancel, kLeagueUnlink};
+	PaneSpec spec;
+	spec.id = kPaneLeagueCard;
+	spec.x = m + 1;
+	spec.y = top + pad;
+	spec.w = cw - 2;
+	spec.h = h - 2 * pad;
+	spec.contentH = MeasuredHeight(p, [&] { return PaintLeagueAccount(p, m + pad, 0, cw - 2 * pad, actions, mx, my); });
+	spec.barX = m + cw - 10;
+	spec.drag = &st.dropBar;
+	spec.mx = mx;
+	spec.my = my;
+	{
+		ScrollPane pane(p, spec, st.scrolls.Of(kPaneLeagueCard));
+		PaintLeagueAccount(p, m + pad, pane.Top(), cw - 2 * pad, actions, mx, my);
+	}
 
 	// The ranks of the league, with the emblems players will wear next to their names.
 	const LeagueMeView me = LeagueMeState();
@@ -846,6 +913,7 @@ void PaintCreate(Painter &p, const State &st)
 }
 
 ListGeom g_syncGeomOut;
+int g_lobbyScrollOut = -1;
 
 void PaintSyncConfirm(Painter &p, const State &st)
 {
@@ -857,7 +925,17 @@ void PaintSyncConfirm(Painter &p, const State &st)
 	bool updatable = false;
 	for (const OnlineMod &m : missing) updatable = updatable || OlderInstalled(st, m) != nullptr;
 	const bool watch = st.syncWatch;
-	const Dialog d = DialogBegin(p, st.viewW, st.viewH, updatable ? 760 : 560, updatable ? 400 : 340, watch ? "This game uses other content" : "This room uses other content");
+	const char *separately = watch ? "Download separately and watch" : "Download separately and join";
+	const char *update = watch ? "Update my version and watch" : "Update my version and join";
+	int dialogW = updatable ? 760 : 560;
+	if (updatable) {
+		// The three answers side by side, as DialogButtons lays them out.
+		p.Font(1);
+		int buttonsW = 2 * 12 + 2 * 24;
+		for (const char *label : {separately, update, "Cancel"}) buttonsW += std::max(120, p.CapsWidth(label, 1) + 44);
+		dialogW = std::max(dialogW, std::min(buttonsW, st.viewW - 64));
+	}
+	const Dialog d = DialogBegin(p, st.viewW, st.viewH, dialogW, updatable ? 400 : 340, watch ? "This game uses other content" : "This room uses other content");
 	const std::vector<ListLine> lines = OnlineLobbyLines(st, g, true);
 	g_syncGeomOut = ListGeom();
 	{
@@ -878,8 +956,7 @@ void PaintSyncConfirm(Painter &p, const State &st)
 			"version replaces it on restart (the old one is kept as a backup in mods\\_downloads\\backup).") +
 				(st.syncUsing.empty() ? std::string() : Tr(" Used by your profiles: ") + st.syncUsing + "."),
 			pal::textDim);
-		DialogButtons(p, d, {{watch ? "Download separately and watch" : "Download separately and join", kSyncAccept, 0, true},
-			{watch ? "Update my version and watch" : "Update my version and join", kSyncUpdate}, {"Cancel", kSyncCancel}}, mx, my);
+		DialogButtons(p, d, {{separately, kSyncAccept, 0, true}, {update, kSyncUpdate}, {"Cancel", kSyncCancel}}, mx, my);
 	}
 	else {
 		const char *accept = missing.empty() ? (watch ? "Restart and watch" : "Restart and enter") : (watch ? "Download and watch" : "Download and enter");

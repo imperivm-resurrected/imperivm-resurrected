@@ -148,7 +148,7 @@ void OpenPage(const std::string &slug, int tab)
 	u.slug = slug;
 	u.screen = kScreenPage;
 	u.pageTab = tab;
-	u.bracketX = u.bracketY = u.sideScroll = 0;
+	u.bracketX = u.bracketY = u.sideScroll = u.pageSideScroll = 0;
 }
 
 // The scenarios of a cup, looked for on this computer and downloaded when missing.
@@ -1366,7 +1366,7 @@ void PaintTournaments(Painter &p, const State &st)
 	switch (u.screen) {
 	case kScreenPage: PaintPageScreen(p, st, u, out); break;
 	case kScreenMatch:
-		PaintMatchScreen(p, st, u);
+		PaintMatchScreen(p, st, u, out);
 		if (u.colorOpen) PaintMatchColorMenu(p, st, u);
 		break;
 	case kScreenChampion: PaintChampionScreen(p, st, u); break;
@@ -1391,6 +1391,12 @@ void PaintTournaments(Painter &p, const State &st)
 	g_tourney.formArea = out.formArea;
 	g_tourney.chooserArea = out.chooserArea;
 	g_tourney.teamArea = out.teamArea;
+	g_tourney.pageSideArea = out.pageSideArea;
+	g_tourney.summaryArea = out.summaryArea;
+	g_tourney.matchRulesArea = out.matchRulesArea;
+	if (out.pageSideH >= 0) g_tourney.pageSideH = out.pageSideH;
+	if (out.summaryH >= 0) g_tourney.summaryH = out.summaryH;
+	if (out.matchRulesH >= 0) g_tourney.matchRulesH = out.matchRulesH;
 	if (u.teamCup) g_tourney.teamRows = out.teamRows;
 	if (out.form) std::copy(std::begin(out.sectionTop), std::end(out.sectionTop), std::begin(g_tourney.sectionTop));
 }
@@ -1998,13 +2004,26 @@ bool TourneyWheel(int delta, bool shift, bool ctrl)
 		if (u.teamArea.valid && PtInRect(&u.teamArea.r, at)) u.teamScroll = std::max(0, std::min(u.teamArea.max, u.teamScroll + (delta > 0 ? -1 : 1)));
 		return true;
 	}
+	// A dialog over the screen takes the wheel, so nothing scrolls under it.
+	if (u.disputeMatch || u.joinOpen || !u.shownCode.empty() || u.walkoverMatch) return true;
 	if (u.screen == kScreenCreate) {
 		if (u.chooserRound >= 0) {
 			if (u.chooserArea.valid && PtInRect(&u.chooserArea.r, at)) u.chooserScroll = std::max(0, std::min(u.chooserArea.max, u.chooserScroll + (delta > 0 ? -1 : 1)));
 			return true;
 		}
+		if (u.summaryArea.valid && PtInRect(&u.summaryArea.r, at)) {
+			u.summaryScroll = std::max(0, std::min(u.summaryArea.max, u.summaryScroll + step));
+			return true;
+		}
 		if (u.formArea.valid && PtInRect(&u.formArea.r, at)) {
 			u.formScroll = std::max(0, std::min(u.formArea.max, u.formScroll + step * 2));
+			return true;
+		}
+		return false;
+	}
+	if (u.screen == kScreenMatch) {
+		if (u.matchRulesArea.valid && PtInRect(&u.matchRulesArea.r, at)) {
+			u.matchRulesScroll = std::max(0, std::min(u.matchRulesArea.max, u.matchRulesScroll + step));
 			return true;
 		}
 		return false;
@@ -2020,6 +2039,10 @@ bool TourneyWheel(int delta, bool shift, bool ctrl)
 	}
 	if (u.sideArea.valid && PtInRect(&u.sideArea.r, at)) {
 		u.sideScroll = std::max(0, std::min(u.sideArea.max, u.sideScroll + step));
+		return true;
+	}
+	if (u.pageSideArea.valid && PtInRect(&u.pageSideArea.r, at)) {
+		u.pageSideScroll = std::max(0, std::min(u.pageSideArea.max, u.pageSideScroll + step));
 		return true;
 	}
 	return false;
@@ -2076,6 +2099,9 @@ bool TourneyScrollTo(int bar, int pos)
 	case kBarForm: u.formScroll = std::max(0, std::min(u.formArea.max, pos)); return true;
 	case kBarChooser: u.chooserScroll = std::max(0, std::min(u.chooserArea.max, pos)); return true;
 	case kBarFriends: u.teamScroll = std::max(0, std::min(u.teamArea.max, pos)); return true;
+	case kBarPageSide: u.pageSideScroll = std::max(0, std::min(u.pageSideArea.max, pos)); return true;
+	case kBarSummary: u.summaryScroll = std::max(0, std::min(u.summaryArea.max, pos)); return true;
+	case kBarMatchRules: u.matchRulesScroll = std::max(0, std::min(u.matchRulesArea.max, pos)); return true;
 	default: return false;
 	}
 }

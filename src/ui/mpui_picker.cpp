@@ -184,8 +184,13 @@ void PaintScenarioPicker(Painter &p, const State &st)
 		noteColor = pal::ok;
 	}
 	if (!note.empty()) {
+		p.Font(1);
+		int buttonsW = 12;
+		for (const char *label : {"Use this map", "Cancel"}) buttonsW += std::max(120, p.CapsWidth(label, 1) + 44);
+		const int noteX = listX + 200, noteW = std::max(120, dlg.x + dlg.w - dlg.pad - buttonsW - 16 - noteX);
 		p.Font(3);
-		p.TextWrapped(listX + 200, footer + 2, 360, kDialogBtnH, note, noteColor);
+		const int noteH = std::max(kDialogBtnH, std::min(kDialogBtnH + 20, p.Measure(noteW, note)));
+		p.TextWrapped(noteX, footer + 2 + kDialogBtnH - noteH, noteW, noteH, note, noteColor);
 	}
 	DialogButtons(p, dlg, {{"Use this map", kPickOk, 0, true, has && !confirming}, {"Cancel", kPickCancel}}, mx, my);
 

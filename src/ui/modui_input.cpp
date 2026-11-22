@@ -272,7 +272,10 @@ bool ModUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		}
 		{
 			ScrollTo to;
-			if (ScrollbarMouse(g_s.dropBar, g_s.hits, msg, wp, {g_s.mouseX, g_s.mouseY}, to) && to.id == kDropMenuBar) g_s.dropScroll = to.pos;
+			if (ScrollbarMouse(g_s.dropBar, g_s.hits, msg, wp, {g_s.mouseX, g_s.mouseY}, to)) {
+				if (to.id == kDropMenuBar) g_s.dropScroll = to.pos;
+				else g_s.scroll.Apply(g_s.panes, to);
+			}
 		}
 		return false;
 	case WM_LBUTTONDOWN:
@@ -286,6 +289,7 @@ bool ModUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 			ScrollTo to;
 			if (ScrollbarMouse(g_s.dropBar, g_s.hits, msg, wp, pt, to)) {
 				if (to.id == kDropMenuBar) g_s.dropScroll = to.pos;
+				else g_s.scroll.Apply(g_s.panes, to);
 				return true;
 			}
 		}
@@ -387,6 +391,7 @@ bool ModUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 				return true;
 			}
 		}
+		if (g_s.scroll.Wheel(g_s.panes, {g_s.mouseX, g_s.mouseY}, GET_WHEEL_DELTA_WPARAM(wp))) return true;
 		if (g_s.tab == 2) {
 			if (g_s.ioDetail < 0) DoAction(GET_WHEEL_DELTA_WPARAM(wp) < 0 ? kIoNext : kIoPrev, 0);
 			return true;

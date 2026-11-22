@@ -24,6 +24,7 @@
 #include "ui/fullscreen.h"
 #include "ui/leagueui.h"
 #include "ui/mpui_tourney_internal.h"
+#include "ui/scrollpane.h"
 #include "ui/textedit.h"
 
 namespace mpui_tourney_impl {
@@ -931,7 +932,8 @@ int SummaryRow(Painter &p, int x, int y, int w, const std::string &name, const s
 	return 22 + h + 12;
 }
 
-void PaintSummary(Painter &p, const State &st, const Ui &u, const std::vector<TourneyCupProblem> &problems, bool selfUnmet, int x, int y, int w, int h, int64_t now)
+void PaintSummary(Painter &p, const State &st, const Ui &u, const std::vector<TourneyCupProblem> &problems, bool selfUnmet, int x, int y, int w, int h, int64_t now,
+	PaintOut &out)
 {
 	const int mx = st.mouseX, my = st.mouseY, pad = 26, iw = w - 2 * pad;
 	const TourneyCupForm &f = u.cup;
@@ -1101,7 +1103,23 @@ void PaintSummary(Painter &p, const State &st, const Ui &u, const std::vector<To
 	}
 	p.Fill(x + pad, at, iw, 1, pal::hairline);
 	at += 14;
-	p.Clip(x + pad, at, iw, std::max(0, foot - at));
+	const int viewTop = at, viewH = std::max(0, foot - at);
+	// The short form, a name beside each line of its value, scrolls when even it is taller than the room left.
+	std::vector<std::vector<std::string>> briefLines;
+	int briefNeed = 0;
+	for (const Row &r : rows) {
+		std::vector<std::string> lines;
+		for (size_t a = 0;;) {
+			const size_t b = r.brief.find('\n', a);
+			lines.push_back(r.brief.substr(a, b == std::string::npos ? std::string::npos : b - a));
+			if (b == std::string::npos) break;
+			a = b + 1;
+		}
+		briefNeed += static_cast<int>(lines.size()) * 20 + 4;
+		briefLines.push_back(std::move(lines));
+	}
+	const int max = full ? 0 : std::max(0, briefNeed - 4 - viewH), scroll = std::min(u.summaryScroll, max);
+	ClipArea view(p, x + 1, viewTop, w - 2, viewH);
 	if (full) {
 		for (const Row &r : rows) {
 			const int rh = SummaryRow(p, x + pad, at, iw, r.name, r.full, r.lines, false);
@@ -1115,15 +1133,10 @@ void PaintSummary(Painter &p, const State &st, const Ui &u, const std::vector<To
 		int labelW = 0;
 		for (const Row &r : rows) labelW = std::max(labelW, p.CapsWidth(r.name, 1) + 12);
 		labelW = std::min(labelW, iw / 3);
-		for (const Row &r : rows) {
-			std::vector<std::string> lines;
-			for (size_t a = 0;;) {
-				const size_t b = r.brief.find('\n', a);
-				lines.push_back(r.brief.substr(a, b == std::string::npos ? std::string::npos : b - a));
-				if (b == std::string::npos) break;
-				a = b + 1;
-			}
-			if (at + static_cast<int>(lines.size()) * 20 > foot) break;
+		at -= scroll;
+		for (size_t ri = 0; ri < rows.size(); ri++) {
+			const Row &r = rows[ri];
+			const std::vector<std::string> &lines = briefLines[ri];
 			UseFace(p, BrandFace::UiStrong, 11);
 			p.TextCaps(x + pad, at, labelW - 8, 20, r.name, pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
 			p.Font(3);
@@ -1133,7 +1146,11 @@ void PaintSummary(Painter &p, const State &st, const Ui &u, const std::vector<To
 			at += static_cast<int>(lines.size()) * 20 + 4;
 		}
 	}
-	p.Unclip();
+	view.End();
+	if (max > 0) {
+		PaintScrollbar(p, kBarSummary, x + w - 12, viewTop, viewH, {scroll, max, viewH}, st.dropBar, mx, my);
+		SetScrollArea(p, out.summaryArea, x, viewTop, w, viewH, max);
+	}
 }
 
 }
@@ -1555,7 +1572,7 @@ void PaintCreateScreen(Painter &p, const State &st, const Ui &u, PaintOut &out)
 	out.formArea.valid = true;
 	out.formArea.r = pane;
 	out.formArea.max = maxScroll;
-	PaintSummary(p, st, u, problems, selfUnmet, m + paneW + gap, top, sideW, bottom - top, now);
+	PaintSummary(p, st, u, problems, selfUnmet, m + paneW + gap, top, sideW, bottom - top, now, out);
 	p.raw = false;
 }
 

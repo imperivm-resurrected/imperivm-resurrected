@@ -935,13 +935,16 @@ void PaintRankedPill(Painter &p, const State &st, int right, int left)
 		const std::string clock = LeagueClockText(LeagueServerNowMs() - v.since);
 		SelectObject(p.dc, BrandFont(BrandFace::Display, 26, p.s));
 		p.raw = true;
-		const int clockW = std::max(p.TextWidth("00:00"), p.TextWidth(clock)) + 8;
+		int clockW = std::max(p.TextWidth("00:00"), p.TextWidth(clock)) + 8;
 		p.raw = false;
-		// The spinner, the label, the time and the cross: the label shortens, and goes, before anything overlaps. The partner of a duo has
-		// no cross: only the leader stops the search.
+		// The spinner, the label, the time and the cross: the label shortens and goes, then the time, then the cross, before the pill
+		// would cover the tabs beside it. The partner of a duo has no cross: only the leader stops the search.
 		p.Font(4);
-		const bool team = LeagueQueueIsTeam(v.searchQueue), cross = !v.partnerSearch;
-		const int fixed = 46 + clockW + (cross ? 44 : 16);
+		const bool team = LeagueQueueIsTeam(v.searchQueue);
+		bool cross = !v.partnerSearch;
+		if (46 + clockW + (cross ? 44 : 16) > room) clockW = 0;
+		if (46 + clockW + (cross ? 44 : 16) > room) cross = false;
+		const int fixed = 46 + clockW + (cross ? 44 : clockW ? 16 : 0);
 		const char *label = team ? "Searching 2 vs 2" : "Searching 1 vs 1";
 		int labelW = p.CapsWidth(label, 2) + 14;
 		if (fixed + labelW > room) {
@@ -954,10 +957,12 @@ void PaintRankedPill(Painter &p, const State &st, int right, int left)
 		p.Fill(x, y, 3, h, pal::red);
 		p.Spinner(x + 26, y + h / 2, 9, 4, GetTickCount());
 		if (labelW) p.TextCaps(x + 46, y, labelW, h, label, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
-		SelectObject(p.dc, BrandFont(BrandFace::Display, 26, p.s));
-		p.raw = true;
-		p.Text(x + 46 + labelW, y, clockW, h, clock, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-		p.raw = false;
+		if (clockW) {
+			SelectObject(p.dc, BrandFont(BrandFace::Display, 26, p.s));
+			p.raw = true;
+			p.Text(x + 46 + labelW, y, clockW, h, clock, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+			p.raw = false;
+		}
 		if (!cross) {
 			p.AddHit(x, y, w, h, kRanked, 0);
 			return;
@@ -971,10 +976,13 @@ void PaintRankedPill(Painter &p, const State &st, int right, int left)
 	}
 	const char *label = "Ranked match ready  \xC2\xB7  go to the room";
 	if (p.CapsWidth(label, 2) + 40 > room) label = "Go to the room";
-	const int w = std::min(std::max(160, room), p.CapsWidth(label, 2) + 40), x = right - 12 - w;
+	// Without room for even the short label, the pill keeps only its arrow rather than cover the tabs.
+	const bool arrowOnly = p.CapsWidth(label, 2) + 40 > room;
+	const int w = arrowOnly ? std::max(44, room) : p.CapsWidth(label, 2) + 40, x = right - 12 - w;
 	p.Fill(x, y, w, h, pal::selected);
 	p.Fill(x, y, 3, h, pal::red);
-	p.TextCaps(x + 20, y, w - 30, h, label, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 2);
+	if (arrowOnly) p.ArrowRight(x + (w - 8) / 2 + 1, y + h / 2 - 6, 8, 12, pal::text);
+	else p.TextCaps(x + 20, y, w - 30, h, label, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 2);
 	p.AddHit(x, y, w, h, kRankedAct, kRkRoom);
 }
 

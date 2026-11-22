@@ -3,6 +3,7 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include <algorithm>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -15,6 +16,7 @@
 #include "ui/fullscreen.h"
 #include "ui/leagueui.h"
 #include "ui/mpui_tourney_internal.h"
+#include "ui/scrollpane.h"
 
 namespace mpui_tourney_impl {
 namespace {
@@ -231,6 +233,7 @@ struct Pan {
 	int x = 0, y = 0, w = 0, h = 0, viewW = 0, viewH = 0, contentW = 0, sx = 0, sy = 0, maxX = 0, maxY = 0;
 	bool barX = false, barY = false;
 	float zoom = 1.0f, scale = 1.0f;
+	std::shared_ptr<ClipArea> clip;
 	int ox() const { return static_cast<int>((x - sx) / zoom); }
 	int oy() const { return static_cast<int>((y - sy) / zoom); }
 };
@@ -260,7 +263,7 @@ Pan BeginPan(Painter &p, const Ctx &c, int x, int y, int w, int h, int contentW,
 	out.bracketArea.maxX = v.maxX;
 	out.pan.viewW = v.viewW;
 	out.pan.viewH = v.viewH;
-	p.Clip(x, y, v.viewW, v.viewH);
+	v.clip = std::make_shared<ClipArea>(p, x, y, v.viewW, v.viewH);
 	v.scale = p.s;
 	p.s = v.scale * v.zoom;
 	return v;
@@ -269,7 +272,7 @@ Pan BeginPan(Painter &p, const Ctx &c, int x, int y, int w, int h, int contentW,
 void EndPan(Painter &p, const Ctx &c, const Pan &v, PaintOut &out)
 {
 	p.s = v.scale;
-	p.Unclip();
+	if (v.clip) v.clip->End();
 	if (v.barY) PaintScrollbar(p, kBarBracketY, v.x + v.w - 8, v.y, v.viewH, {v.sy, v.maxY, v.viewH}, c.st.dropBar, c.mx, c.my);
 	if (v.barX) {
 		// A bar along the bottom: its thumb is dragged, the halves either side of it page left and right.
@@ -724,7 +727,7 @@ void PaintStandings(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &ou
 	}
 	const int rows = static_cast<int>(d.standings.size()) * rowH, maxY = std::max(0, rows - viewH), sy = std::min(c.u.bracketY, maxY);
 	SetScrollArea(p, out.bracketArea, x, top, w, viewH, maxY);
-	p.Clip(x, top, w, viewH);
+	ClipArea view(p, x, top, w, viewH);
 	int ry = top - sy;
 	for (const TourneyStanding &s : d.standings) {
 		const bool mine = c.me && s.entryId == c.me;
@@ -791,7 +794,7 @@ void PaintStandings(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &ou
 		p.raw = false;
 		ry += rowH;
 	}
-	p.Unclip();
+	view.End();
 	if (maxY > 0) PaintScrollbar(p, kBarBracketY, x + w + 8, top, viewH, {sy, maxY, viewH}, c.st.dropBar, c.mx, c.my);
 	int ny = y + h - foot + 8;
 	p.Font(3);
@@ -926,13 +929,13 @@ void PaintSwissRound(Painter &p, Ctx &c, int round, int x, int y, int w, int h, 
 	}
 	const int rows = static_cast<int>(list.size()) * rowH - 8, maxY = std::max(0, rows - viewH), sy = std::min(c.u.bracketY, maxY);
 	SetScrollArea(p, out.bracketArea, x, top, w, viewH, maxY);
-	p.Clip(x, top, w, viewH);
+	ClipArea view(p, x, top, w, viewH);
 	int ry = top - sy, table = 0;
 	for (const TourneyMatch *m : list) {
 		PaintPairing(p, c, *m, ++table, x, ry, w, rowH - 8);
 		ry += rowH;
 	}
-	p.Unclip();
+	view.End();
 	if (maxY > 0) PaintScrollbar(p, kBarBracketY, x + w + 8, top, viewH, {sy, maxY, viewH}, c.st.dropBar, c.mx, c.my);
 }
 
@@ -956,7 +959,7 @@ void PaintEntrants(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out
 	const int top = y + 30, rowH = teams ? 54 : 42, viewH = h - 30;
 	const int total = static_cast<int>(d.entrants.size()) * rowH, maxY = std::max(0, total - viewH), sy = std::min(c.u.bracketY, maxY);
 	SetScrollArea(p, out.bracketArea, x, top, w, viewH, maxY);
-	p.Clip(x, top, w, viewH);
+	ClipArea view(p, x, top, w, viewH);
 	int ry = top - sy;
 	for (const TourneyEntrant &e : d.entrants) {
 		p.Fill(x, ry, w, 1, pal::hairline);
@@ -1033,7 +1036,7 @@ void PaintEntrants(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out
 		p.Font(0);
 		p.Text(x, top + 10, w, 30, teams ? "No team has signed up yet." : "Nobody has signed up yet.", pal::textDim);
 	}
-	p.Unclip();
+	view.End();
 	if (maxY > 0) PaintScrollbar(p, kBarBracketY, x + w + 8, top, viewH, {sy, maxY, viewH}, c.st.dropBar, c.mx, c.my);
 }
 
@@ -1043,7 +1046,7 @@ void PaintRules(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out)
 	const bool swiss = TourneyIsSwiss(d), twice = TourneyIsDouble(d), byRounds = TourneyByRounds(d);
 	// The rules scroll when they are longer than the page, which a short screen and a Swiss or double elimination cup reach.
 	const int sy = std::max(0, std::min(c.u.bracketY, c.u.bracketArea.max));
-	p.Clip(x, y, w + 20, h);
+	ClipArea view(p, x, y, w + 20, h);
 	int ry = y - sy;
 	auto row = [&](const std::string &key, const std::string &value) {
 		p.Font(0);
@@ -1128,7 +1131,7 @@ void PaintRules(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out)
 				: "The mod reports the result of every game; if the two reports differ, the organisers decide. If your opponent does not come to the room in "
 				  "time, you can claim the win from your match's screen; if neither comes, both are out.";
 	ry += p.TextWrapped(x, ry, w, 80, fails, pal::body);
-	p.Unclip();
+	view.End();
 	const int maxY = std::max(0, ry + sy - y + 10 - h);
 	SetScrollArea(p, out.bracketArea, x, y, w, h, maxY);
 	if (maxY > 0) PaintScrollbar(p, kBarBracketY, x + w + 8, y, h, {std::min(sy, maxY), maxY, h}, c.st.dropBar, c.mx, c.my);
@@ -1150,7 +1153,7 @@ void PaintLog(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out)
 	const TourneyDetail &d = c.d;
 	const int rowH = 36, total = static_cast<int>(d.log.size()) * rowH, maxY = std::max(0, total - h), sy = std::min(c.u.bracketY, maxY);
 	SetScrollArea(p, out.bracketArea, x, y, w, h, maxY);
-	p.Clip(x, y, w, h);
+	ClipArea view(p, x, y, w, h);
 	int ry = y - sy;
 	for (const TourneyLogLine &l : d.log) {
 		p.Fill(x, ry + rowH - 1, w, 1, pal::hairline);
@@ -1166,7 +1169,7 @@ void PaintLog(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out)
 		p.raw = false;
 		ry += rowH;
 	}
-	p.Unclip();
+	view.End();
 	if (maxY > 0) PaintScrollbar(p, kBarBracketY, x + w + 8, y, h, {sy, maxY, h}, c.st.dropBar, c.mx, c.my);
 }
 
@@ -1411,7 +1414,7 @@ void PaintOrganizer(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &ou
 	// The disputes.
 	const TourneyDisputesView &disputes = c.disputes;
 	PaintSectionLabel(p, rx, y, rw, 22, "Disputes to settle");
-	const int dTop = y + 32, cardH = 168, dViewH = y + h - dTop;
+	const int dTop = y + 32, cardH = 168, dViewH = y + h - dTop, bg = 8, pw = rw - 32;
 	if (disputes.disputes.empty() && !disputes.loaded && !disputes.failed) {
 		for (int k = 0; k < 2 && dTop + k * (cardH + 12) + cardH <= y + h; k++) PaintSkeleton(p, rx, dTop + k * (cardH + 12), rw, cardH);
 		return;
@@ -1423,16 +1426,41 @@ void PaintOrganizer(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &ou
 		p.TextWrapped(rx, dTop + 6, rw, 80, text, pal::textDim);
 		return;
 	}
-	const int dTotal = static_cast<int>(disputes.disputes.size()) * (cardH + 12), dMax = std::max(0, dTotal - dViewH), ds = std::min(c.u.sideScroll, dMax);
-	SetScrollArea(p, out.sideArea, rx, dTop, rw, dViewH, dMax);
-	p.Clip(rx, dTop, rw, dViewH);
-	int cy = dTop - ds;
+	// The four answers to a dispute go on one row when their labels fit it, else two by two, and the card grows by a row.
+	auto answers = [&](const TourneyMatch &m) {
+		return std::vector<std::string>{TrFmt("Game to %s", {m.a.name}), TrFmt("Game to %s", {m.b.name}), Tr("Play it again"), Tr("Walkover")};
+	};
+	std::vector<int> heights;
+	std::vector<bool> stacked;
+	int dTotal = 0;
 	for (const TourneyDispute &q : disputes.disputes) {
 		const TourneyMatch *m = MatchById(d, q.matchId);
-		p.Fill(rx, cy, rw, cardH, pal::raised);
-		p.Frame(rx, cy, rw, cardH, pal::edge);
-		p.Fill(rx, cy, 3, cardH, pal::warn);
-		const int px = rx + 16, pw = rw - 32;
+		int need = 3 * bg;
+		if (m && !OrganizerPlays(d, *m)) {
+			p.raw = true;
+			for (const std::string &label : answers(*m)) need += p.ButtonWidth(label, 0, 3);
+			p.raw = false;
+		}
+		stacked.push_back(need > pw);
+		heights.push_back(cardH + (stacked.back() ? 36 + bg : 0));
+		dTotal += heights.back() + 12;
+	}
+	const int dMax = std::max(0, dTotal - dViewH), ds = std::min(c.u.sideScroll, dMax);
+	SetScrollArea(p, out.sideArea, rx, dTop, rw, dViewH, dMax);
+	ClipArea disputesView(p, rx, dTop, rw, dViewH);
+	int cy = dTop - ds;
+	for (size_t qi = 0; qi < disputes.disputes.size(); qi++) {
+		const TourneyDispute &q = disputes.disputes[qi];
+		const TourneyMatch *m = MatchById(d, q.matchId);
+		const int ch = heights[qi];
+		if (cy >= dTop + dViewH || cy + ch <= dTop) {
+			cy += ch + 12;
+			continue;
+		}
+		p.Fill(rx, cy, rw, ch, pal::raised);
+		p.Frame(rx, cy, rw, ch, pal::edge);
+		p.Fill(rx, cy, 3, ch, pal::warn);
+		const int px = rx + 16;
 		UseFace(p, BrandFace::UiStrong, 16);
 		p.raw = true;
 		const std::string title = m ? MatchStageText(d, *m) + "  \xC2\xB7  " + TrFmt("%s vs %s", {m->a.name, m->b.name}) : TrFmt("Match %s", {std::to_string(q.matchId)});
@@ -1450,25 +1478,40 @@ void PaintOrganizer(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &ou
 		p.Font(0);
 		p.TextWrapped(px, cy + 58, pw, 48, "\xE2\x80\x9C" + q.text + "\xE2\x80\x9D", pal::body);
 		p.raw = false;
-		const int by = cy + cardH - 16 - 36;
+		const int by = cy + ch - 16 - 36 - (stacked[qi] ? 36 + bg : 0);
 		if (!m || OrganizerPlays(d, *m)) {
 			p.Font(3);
 			p.Text(px, by, pw, 36, m ? "You play this match: the league's team settles it." : "This match is not in the bracket any more.", pal::warn,
 				DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		}
-		else if (by >= dTop && by + 36 <= dTop + dViewH) {
+		else {
 			const bool busy = LeagueTourneyBusy(TourneyOp::Resolve, m->id);
-			const int bg = 8, bw = (pw - 3 * bg) / 4;
+			const std::vector<std::string> labels = answers(*m);
+			const int subs[] = {kSubGameA, kSubGameB, kSubReplay, kSubWalkover};
 			p.raw = true;
-			p.Button(px, by, bw, 36, TrFmt("Game to %s", {m->a.name}), kTourney, ArgOf(kSubGameA, m->id), mx, my, !busy, false, 3);
-			p.Button(px + (bw + bg), by, bw, 36, TrFmt("Game to %s", {m->b.name}), kTourney, ArgOf(kSubGameB, m->id), mx, my, !busy, false, 3);
-			p.Button(px + 2 * (bw + bg), by, bw, 36, Tr("Play it again"), kTourney, ArgOf(kSubReplay, m->id), mx, my, !busy, false, 3);
-			p.Button(px + 3 * (bw + bg), by, pw - 3 * (bw + bg), 36, Tr("Walkover"), kTourney, ArgOf(kSubWalkover, m->id), mx, my, !busy, false, 3);
+			if (stacked[qi]) {
+				const int bw = (pw - bg) / 2;
+				for (int i = 0; i < 4; i++) {
+					const int bx = px + (i % 2) * (bw + bg), bw2 = i % 2 ? pw - bw - bg : bw;
+					p.Button(bx, by + (i / 2) * (36 + bg), bw2, 36, labels[i], kTourney, ArgOf(subs[i], m->id), mx, my, !busy, false, 3);
+				}
+			}
+			else {
+				// Each takes its label's width and an equal share of what is left.
+				int widths[4], used = 3 * bg;
+				for (int i = 0; i < 4; i++) used += widths[i] = p.ButtonWidth(labels[i], 0, 3);
+				int bx = px;
+				for (int i = 0; i < 4; i++) {
+					const int bw = i < 3 ? widths[i] + (pw - used) / 4 : px + pw - bx;
+					p.Button(bx, by, bw, 36, labels[i], kTourney, ArgOf(subs[i], m->id), mx, my, !busy, false, 3);
+					bx += bw + bg;
+				}
+			}
 			p.raw = false;
 		}
-		cy += cardH + 12;
+		cy += ch + 12;
 	}
-	p.Unclip();
+	disputesView.End();
 	if (dMax > 0) PaintScrollbar(p, kBarSide, rx + rw + 8, dTop, dViewH, {ds, dMax, dViewH}, c.st.dropBar, mx, my);
 }
 
@@ -1695,6 +1738,8 @@ void PaintPageScreen(Painter &p, const State &st, const Ui &u, PaintOut &out)
 	const bool organizer = IsOrganizer(page.detail), swiss = TourneyIsSwiss(page.detail);
 	if (organizer) c.disputes = LeagueTourneyDisputes(page.detail.id);
 	const bool bracketTab = u.pageTab == 0 || u.pageTab >= kRoundTab;
+	// What scrolls out of the card is not drawn and can't be clicked through the header, the banner or the side column.
+	ClipArea mainClip(p, m, y, mainW, bottom - y);
 	// The players are listed on the bracket's tab (1 was their own tab).
 	int tab = u.pageTab == 1 ? 0 : u.pageTab;
 	(void)bracketTab;
@@ -1725,19 +1770,30 @@ void PaintPageScreen(Painter &p, const State &st, const Ui &u, PaintOut &out)
 		PaintLog(p, c, ix, iy + dh + 24, iw - 20, ih - dh - 24, out);
 	}
 	else PaintLog(p, c, ix, iy, iw - 20, ih, out);
+	mainClip.End();
 
-	int sy = y;
-	p.Clip(sx, y, sideW, bottom - y);
-	if (organizer) sy += PaintOrganizerCard(p, c, sx, sy, sideW) + 12;
-	sy += PaintStatusCard(p, c, sx, sy, sideW) + 12;
-	if (CupHasScenarios(page.detail) && page.detail.status != TourneyStatus::Finished && page.detail.status != TourneyStatus::Cancelled) {
-		int mapsH = 0;
-		PaintCupMapsState(p, st, page.detail, sx, sy, sideW, mapsH);
-		sy += mapsH + 12;
+	// The side column scrolls when its cards are taller than the screen; its height is last frame's, as the cards measure as they paint.
+	const int sideH = bottom - y, sideMax = std::max(0, u.pageSideH - sideH), sideScroll = std::min(u.pageSideScroll, sideMax);
+	int sy = y - sideScroll;
+	{
+		ClipArea sideClip(p, sx, y, sideW, sideH);
+		if (organizer) sy += PaintOrganizerCard(p, c, sx, sy, sideW) + 12;
+		sy += PaintStatusCard(p, c, sx, sy, sideW) + 12;
+		if (CupHasScenarios(page.detail) && page.detail.status != TourneyStatus::Finished && page.detail.status != TourneyStatus::Cancelled) {
+			int mapsH = 0;
+			PaintCupMapsState(p, st, page.detail, sx, sy, sideW, mapsH);
+			sy += mapsH + 12;
+		}
+		// The cards that only add to what is above show when there is room for them, and don't make the column scroll.
+		const int room = bottom - (sy + sideScroll);
+		if (room > (TourneyByRounds(page.detail) ? 174 : 150)) sy += PaintProgressCard(p, c, sx, sy, sideW) + 12;
+		if (page.detail.official && bottom - (sy + sideScroll) > 120) sy += PaintPrizesCard(p, page.detail, sx, sy, sideW) + 12;
 	}
-	if (bottom - sy > (TourneyByRounds(page.detail) ? 174 : 150)) sy += PaintProgressCard(p, c, sx, sy, sideW) + 12;
-	if (page.detail.official && bottom - sy > 120) PaintPrizesCard(p, page.detail, sx, sy, sideW);
-	p.Unclip();
+	out.pageSideH = sy + sideScroll - y - 12;
+	if (sideMax > 0) {
+		PaintScrollbar(p, kBarPageSide, sx + sideW + std::max(4, (m - 6) / 2 - 3), y, sideH, {sideScroll, sideMax, sideH}, st.dropBar, c.mx, c.my);
+		SetScrollArea(p, out.pageSideArea, sx, y, sideW + m, sideH, sideMax);
+	}
 	PatronsWatch(c.ids);
 }
 

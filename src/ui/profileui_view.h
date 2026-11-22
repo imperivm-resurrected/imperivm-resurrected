@@ -13,6 +13,7 @@
 #include "game/playerini.h"
 #include "net/patrons.h"
 #include "net/steamnet.h"
+#include "ui/scrollpane.h"
 #include "ui/uikit.h"
 
 namespace profileui {
@@ -69,6 +70,8 @@ struct View {
 	int todayYear = 0, todayMonth = 0, todayDay = 0;
 	// The size of the screen last painted, in its design units (ScreenViewFor): the layout, and so the scrolls, follow it.
 	int screenW = 1920, screenH = 1080;
+	// The league dialog's body and the league tab's lists, when they hold more than their room.
+	ui::PaneScrolls panes;
 };
 
 enum Action {
@@ -80,6 +83,7 @@ enum Action {
 constexpr int kTabGeneral = 0, kTabLeague = 1;
 
 constexpr int kBarList = 0, kBarHistory = 1;
+constexpr int kPaneLeagueDialog = ui::kPaneIdBase, kPaneTrophies = ui::kPaneIdBase + 1, kPaneSeasons = ui::kPaneIdBase + 2;
 
 // The player goes with the Steam account, so the list is left only for installs that still keep several from before.
 inline bool ShowsList(const View &v) { return v.cards.size() > 1; }

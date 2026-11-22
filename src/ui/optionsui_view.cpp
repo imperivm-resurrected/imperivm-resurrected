@@ -13,6 +13,7 @@
 #include "core/version.h"
 #include "ui/colorwheel.h"
 #include "ui/fullscreen.h"
+#include "ui/scrollpane.h"
 #include "ui/widgets.h"
 
 using namespace ui;
@@ -142,16 +143,17 @@ COLORREF RowText(const Row &r) { return r.enabled || r.kind == kRowToggleSlider 
 constexpr int kContentX = 24, kContentRight = kScreenW - 18, kContentTop = 100;
 constexpr int kFooterTop = 622, kFooterButtonsY = 632, kFooterButtonH = 36;
 
-// The sizes of the cards and their rows: the window's, and the larger ones of the full screen.
+// The sizes of the cards and their rows: the window's, and the larger ones of the full screen. A page with more rows than its space
+// holds shortens them down to minRowH, and scrolls what still doesn't fit.
 struct Metrics {
-	int rowH, cardHead, cardPad, cardGap, comboW, controlH, sliderW, valueW, segW, actionW;
-	// Where the label goes in its row, alone or over its hint, and the hint under it.
-	int labelY, labelH, hintLabelY, hintY, hintH;
+	int rowH, minRowH, cardHead, cardPad, cardGap, comboW, controlH, sliderW, valueW, segW, actionW;
+	// How tall the label is, and the label over its hint: the hint starts hintY below the label's top. Both are centred in the row.
+	int labelH, hintY, hintH;
 	int badgeW, badgeH, titleY, titleH;
 	bool screen;
 };
-constexpr Metrics kWindowMetrics = {40, 30, 14, 12, 180, 28, 150, 44, 128, 130, 8, 22, 2, 22, 16, 54, 16, 7, 18, false};
-constexpr Metrics kScreenMetrics = {56, 46, 24, 24, 260, 38, 240, 64, 160, 170, 16, 24, 6, 30, 20, 76, 22, 16, 22, true};
+constexpr Metrics kWindowMetrics = {40, 36, 30, 14, 12, 180, 28, 150, 44, 128, 130, 22, 20, 16, 54, 16, 7, 18, false};
+constexpr Metrics kScreenMetrics = {56, 46, 46, 24, 24, 260, 38, 240, 64, 160, 170, 24, 24, 20, 76, 22, 16, 22, true};
 // The pages' columns were drawn for this width: a page's leftW is the left one's part of it, and the window and the screen scale it to theirs.
 constexpr int kColumnsW = 822;
 
@@ -189,7 +191,7 @@ void PaintRowLabel(Painter &p, const Metrics &m, const Row &r, int x, int y, int
 {
 	const bool hint = !r.hint.empty();
 	p.Font(0);
-	const int labelY = y + (hint ? m.hintLabelY : m.labelY);
+	const int labelY = y + (m.rowH - (hint ? m.hintY + m.hintH : m.labelH)) / 2;
 	p.Text(x, labelY, w, m.labelH, r.label, RowText(r), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	if (r.restart) {
 		const int used = std::min(w - m.badgeW - 8, p.TextWidth(r.label));
@@ -197,7 +199,7 @@ void PaintRowLabel(Painter &p, const Metrics &m, const Row &r, int x, int y, int
 	}
 	if (hint) {
 		p.Font(3);
-		p.TextWrapped(x, y + m.hintY, w, m.hintH * kHintLines, r.hint, pal::textDim);
+		p.TextWrapped(x, labelY + m.hintY, w, m.hintH * kHintLines, r.hint, pal::textDim);
 	}
 }
 
@@ -294,12 +296,12 @@ void PaintRow(Painter &p, const Metrics &m, const Row &r, const View &v, int x, 
 	}
 	case kRowInfo: {
 		p.Font(0);
-		const int textW = std::min(w / 2, p.TextWidth(r.text) + 4);
+		const int textW = std::min(w / 2, p.TextWidth(r.text) + 4), labelY = y + (m.rowH - m.labelH) / 2;
 		int tx = right - textW;
-		p.Text(tx, y + m.labelY, textW, m.labelH, r.text, pal::text, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+		p.Text(tx, labelY, textW, m.labelH, r.text, pal::text, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 		if (!r.badge.empty()) {
 			tx -= 8 + m.badgeW;
-			PaintBadge(p, tx, y + m.labelY + (m.labelH - m.badgeH) / 2, m.badgeW, m.badgeH, r.badge, pal::hairline, pal::redText);
+			PaintBadge(p, tx, labelY + (m.labelH - m.badgeH) / 2, m.badgeW, m.badgeH, r.badge, pal::hairline, pal::redText);
 		}
 		PaintRowLabel(p, m, r, x, y, tx - x - 8);
 		break;
@@ -331,6 +333,61 @@ int PaintCard(Painter &p, const Metrics &m, const Card &c, const View &v, int x,
 		PaintRow(p, m, c.rows[i], v, x + m.cardPad, ry, w - m.cardPad * 2, dropAnchor, dropItems, dropSel);
 	}
 	return h;
+}
+
+// How tall a column of cards is with rows `rowH` tall.
+int ColumnHeight(const Metrics &m, const std::vector<Card> &cards, int rowH)
+{
+	int h = 0;
+	for (size_t i = 0; i < cards.size(); i++) h += (i ? m.cardGap : 0) + m.cardHead + static_cast<int>(cards[i].rows.size()) * rowH + 4;
+	return h;
+}
+
+int ColumnRows(const std::vector<Card> &cards)
+{
+	int rows = 0;
+	for (const Card &c : cards) rows += static_cast<int>(c.rows.size());
+	return rows;
+}
+
+// The rows as tall as the space lets the taller column be, between the metrics' two heights.
+Metrics FitMetrics(const Metrics &base, const Page &page, int avail)
+{
+	Metrics m = base;
+	for (const std::vector<Card> *column : {&page.left, &page.right}) {
+		const int rows = ColumnRows(*column);
+		m.rowH = std::min(m.rowH, FitRowHeight(avail, ColumnHeight(base, *column, 0), rows, base.rowH, base.minRowH));
+	}
+	return m;
+}
+
+// Both columns of a page in one pane from `top`, `avail` tall, which scrolls them together when they don't fit; its bar goes at barX.
+void PaintColumns(Painter &p, const Metrics &base, const Page &page, const View &v, int x, int top, int contentW, int gap, int avail, int barX,
+	RECT &dropAnchor, std::vector<std::string> &dropItems, int &dropSel)
+{
+	const Metrics m = FitMetrics(base, page, avail);
+	const int leftW = (contentW - gap) * page.leftW / kColumnsW, rightX = x + leftW + gap, rightW = contentW - leftW - gap;
+	PaneSpec spec;
+	spec.id = kPaneColumns;
+	spec.x = x;
+	spec.y = top;
+	spec.w = barX + spec.look.width - x;
+	spec.h = avail;
+	spec.contentH = std::max(ColumnHeight(m, page.left, m.rowH), ColumnHeight(m, page.right, m.rowH));
+	spec.barX = barX;
+	spec.drag = &v.dropBar;
+	spec.mx = v.mouseX;
+	spec.my = v.mouseY;
+	ScrollPane pane(p, spec, v.scroll.Of(kPaneColumns));
+	int y = pane.Top();
+	for (const Card &c : page.left) y += PaintCard(p, m, c, v, x, y, leftW, dropAnchor, dropItems, dropSel) + m.cardGap;
+	y = pane.Top();
+	for (const Card &c : page.right) y += PaintCard(p, m, c, v, rightX, y, rightW, dropAnchor, dropItems, dropSel) + m.cardGap;
+	// A combo half scrolled out opens its menu from the part in view, not over the header or the footer.
+	if (dropAnchor.bottom > dropAnchor.top) {
+		dropAnchor.top = std::max<LONG>(dropAnchor.top, top);
+		dropAnchor.bottom = std::max(dropAnchor.top, std::min<LONG>(dropAnchor.bottom, top + avail));
+	}
 }
 
 }
@@ -474,16 +531,12 @@ void PaintFullScreen(Painter &p, const View &v, const std::vector<Page> &pages, 
 
 	// A row as wide as the screen would put each control far from its label.
 	const int x = l.margin, contentW = std::min(1440, l.w - 2 * l.margin), gap = 32;
-	const int leftW = (contentW - gap) * page.leftW / kColumnsW, rightX = x + leftW + gap, rightW = contentW - leftW - gap;
 	RECT dropAnchor = {};
 	std::vector<std::string> dropItems;
 	int dropSel = -1;
-	int y = l.top;
-	for (const Card &c : page.left) y += PaintCard(p, m, c, v, x, y, leftW, dropAnchor, dropItems, dropSel) + m.cardGap;
-	y = l.top;
-	for (const Card &c : page.right) y += PaintCard(p, m, c, v, rightX, y, rightW, dropAnchor, dropItems, dropSel) + m.cardGap;
-
 	const int buttonH = 48, by = l.h - l.margin - buttonH;
+	PaintColumns(p, m, page, v, x, l.top, contentW, gap, by - 24 - l.top, x + contentW + 12, dropAnchor, dropItems, dropSel);
+
 	p.Button(x, by, 170, buttonH, "Reset", kActReset, 0, mx, my);
 	int bx = l.w - l.margin - 200;
 	p.Button(bx, by, 200, buttonH, "OK", kActOk, 0, mx, my, true, true);
@@ -518,11 +571,7 @@ void PaintOptionsScreen(Painter &p, const View &v)
 	std::vector<std::string> dropItems;
 	int dropSel = -1;
 	const int contentW = kContentRight - kContentX, gap = m.cardGap + 8;
-	const int leftW = (contentW - gap) * page.leftW / kColumnsW, rightX = kContentX + leftW + gap, rightW = contentW - leftW - gap;
-	int y = kContentTop;
-	for (const Card &c : page.left) y += PaintCard(p, m, c, v, kContentX, y, leftW, dropAnchor, dropItems, dropSel) + m.cardGap;
-	y = kContentTop;
-	for (const Card &c : page.right) y += PaintCard(p, m, c, v, rightX, y, rightW, dropAnchor, dropItems, dropSel) + m.cardGap;
+	PaintColumns(p, m, page, v, kContentX, kContentTop, contentW, gap, kFooterTop - 10 - kContentTop, kContentRight + 5, dropAnchor, dropItems, dropSel);
 
 	p.Fill(18, kFooterTop, kScreenW - 36, 1, pal::lineStrong);
 	p.Button(24, kFooterButtonsY, 130, kFooterButtonH, "Reset", kActReset, 0, v.mouseX, v.mouseY);

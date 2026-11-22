@@ -322,6 +322,7 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 	// another view would catch them where it used to be.
 	g_detail.geomOut = ListGeom();
 	g_chat.geomOut = ListGeom();
+	g_lobbyScrollOut = -1;
 	// A player's badge opens their row in the leaderboard, outside a room.
 	if (!st.game.active && !st.room.id) LeagueBadgeClicksBegin(kRankedAct, kRkBadge, kRkBadgeEnd - kRkBadge);
 	PaintScreen(r.p, st);
@@ -335,6 +336,11 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 	const bool hiddenRoom = TourneyRoomHidden(st);
 	std::lock_guard<std::mutex> lock(g_lock);
 	g_s.hits = std::move(r.hits);
+	g_s.paneAreas = OverlayActive(st) ? std::vector<PaneArea>() : std::move(r.panes);
+	if (g_s.lobbyReveal && g_lobbyScrollOut >= 0) {
+		g_s.scrolls.pos[kPaneLobbyRooms] = g_lobbyScrollOut;
+		g_s.lobbyReveal = false;
+	}
 	g_s.syncGeom = g_syncGeomOut;
 	g_s.createModsGeom = g_createModsGeomOut;
 	const bool overlay = OverlayActive(st);

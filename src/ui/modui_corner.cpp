@@ -141,7 +141,7 @@ void DrawDiscordCorner(uint32_t *buf, int w, int h)
 		}
 	}
 	if (hover) {
-		const float s = std::max(0.6f, std::min(1.6f, h / 1080.0f * 1.2f));
+		const float s = std::max(kMinScale, std::min(MaxWindowScale(w, h), h / 1080.0f * 1.2f));
 		Card card;
 		card.text = "Join our Discord";
 		card.accent = RGB(88, 101, 242);
@@ -217,7 +217,7 @@ bool DrawVersionLabel(const std::wstring &ws, float s)
 namespace modui_impl {
 void DrawVersionCorner(uint32_t *buf, int w, int h)
 {
-	const float s = std::max(0.6f, std::min(1.6f, h / 1080.0f * 1.2f));
+	const float s = std::max(kMinScale, std::min(MaxWindowScale(w, h), h / 1080.0f * 1.2f));
 	EnsureFonts(s);
 	if (!DrawVersionLabel(W(std::string("Imperivm Resurrected  ") + ModVersionText()), s)) return;
 	const VersionLabel &v = g_version;
