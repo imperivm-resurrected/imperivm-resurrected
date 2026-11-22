@@ -331,8 +331,12 @@ std::string SizeText(uint64_t bytes)
 	return buf;
 }
 
-std::string NotTheFile(uint64_t got, uint64_t expected)
+const char *const kNotAvailable = "GameBanana did not give the file: it is private, was removed or was uploaded a moment ago.";
+
+// A web page instead of the file is GameBanana saying no: a private or removed file answers 403 with its page.
+std::string NotTheFile(uint64_t got, uint64_t expected, const std::string &contentType)
 {
+	if (contentType.find("text/html") != std::string::npos) return kNotAvailable;
 	return "GameBanana sent " + SizeText(got) + " instead of the " + SizeText(expected) +
 		" file. If it was uploaded a moment ago, try again in a few minutes.";
 }
@@ -355,13 +359,14 @@ std::string DownloadFile(const std::string &url, uint64_t expectedBytes, const s
 	if (file == INVALID_HANDLE_VALUE) return "could not create " + toFile;
 	Connection conn;
 	std::string err = conn.Open(host, port, object, 0, true, kReceiveTimeoutMs);
+	if (err.empty() && (conn.status == 403 || conn.status == 404)) err = kNotAvailable;
 	if (err.empty() && conn.status != 200) err = "the server responded " + std::to_string(conn.status);
 	const uint64_t total = conn.total;
 	if (err.empty() && total > kMaxBytes) err = "the file is too large";
 	if (err.empty() && expectedBytes && total && total != expectedBytes) {
 		LogW("download", "%s answered %lu with %llu bytes (%s) instead of the %llu-byte file", conn.finalHost.c_str(), conn.status,
 			static_cast<unsigned long long>(total), conn.contentType.c_str(), static_cast<unsigned long long>(expectedBytes));
-		err = NotTheFile(total, expectedBytes);
+		err = NotTheFile(total, expectedBytes, conn.contentType);
 	}
 	const std::string assigned = conn.finalHost;
 	const std::wstring path = conn.finalObject;
@@ -519,7 +524,7 @@ std::string DownloadFile(const std::string &url, uint64_t expectedBytes, const s
 	if (err.empty() && expectedBytes && pos != expectedBytes) {
 		LogW("download", "%s sent %llu bytes (%s) instead of the %llu-byte file", current.c_str(), static_cast<unsigned long long>(pos),
 			conn.contentType.c_str(), static_cast<unsigned long long>(expectedBytes));
-		err = NotTheFile(pos, expectedBytes);
+		err = NotTheFile(pos, expectedBytes, conn.contentType);
 	}
 	if (!err.empty()) {
 		DeleteFileA(toFile.c_str());

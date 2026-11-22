@@ -13,12 +13,17 @@
 
 namespace ui {
 
-std::wstring BrandFile(const wchar_t *name)
+std::wstring ModArtFile(const wchar_t *folder, const wchar_t *name)
 {
 	wchar_t exe[MAX_PATH] = {};
 	GetModuleFileNameW(nullptr, exe, MAX_PATH);
 	std::wstring dir(exe);
-	return dir.substr(0, dir.find_last_of(L'\\') + 1) + L"imperivm-resurrected\\brand\\" + name;
+	return dir.substr(0, dir.find_last_of(L'\\') + 1) + L"imperivm-resurrected\\" + folder + L"\\" + name;
+}
+
+std::wstring BrandFile(const wchar_t *name)
+{
+	return ModArtFile(L"brand", name);
 }
 
 bool LoadPicture(const std::wstring &file, Picture &out)

@@ -7,9 +7,11 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <cstdint>
 
 #include "game/battlelist.h"
 #include "ui/fullscreen.h"
+#include "ui/patronui.h"
 #include "ui/widgets.h"
 
 using namespace ui;
@@ -24,7 +26,7 @@ const COLORREF kFrameGold = RGB(214, 170, 84), kFrameGoldDim = RGB(127, 98, 48);
 
 struct Line {
 	bool header = false;
-	std::string text;
+	std::string text, path, title;
 	int list = -1, index = -1, number = 0;
 	int Height(bool first) const { return header ? kHeaderH + (first ? 0 : kHeaderGap) : kListRowH; }
 };
@@ -72,6 +74,51 @@ const char *EmptyText(int tab)
 	}
 }
 
+// The name of a campaign that is not installed yet.
+const char *OfferTitle(int tab)
+{
+	return tab == kBattlesTabImperivm1 ? "The Gallic War" : "The Conquest of Hispania";
+}
+
+// Whether a tab offers the official download of its campaign: it has one, and it is missing, older or on its way.
+bool Offers(const View &v, int tab)
+{
+	const CampaignPackView &o = v.offers[tab];
+	return o.known && (o.downloading || o.queued || o.state != CampaignPackState::kInstalled);
+}
+
+// The download of a tab's campaign: its button, or the bar and the bytes while it downloads and unpacks.
+void PaintOffer(Painter &p, int x, int y, int w, int h, int tab, const View &v, bool enabled, PaintOut &out)
+{
+	const CampaignPackView &o = v.offers[tab];
+	if (o.downloading) {
+		out.turning = true;
+		const int barH = 6, barY = y + h - barH;
+		p.Fill(x, barY, w, barH, pal::button);
+		if (o.total) p.Fill(x, barY, static_cast<int>(static_cast<uint64_t>(w) * std::min(o.done, o.total) / o.total), barH, pal::red);
+		p.Font(3);
+		p.raw = true;
+		const std::string text = o.unpacking ? Tr("Unpacking") + "  \xC2\xB7  " + std::to_string(o.total ? std::min<uint64_t>(100, o.done * 100 / o.total) : 0) + " %"
+						     : Tr("Downloading") + "  \xC2\xB7  " + TransferText(o.done, o.total, 0);
+		p.Text(x, y, w, h - barH - 2, text, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.raw = false;
+		return;
+	}
+	if (o.queued) {
+		p.Font(3);
+		p.Text(x, y, w, h, "Waiting", pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		return;
+	}
+	p.Button(x, y, w, h, o.state == CampaignPackState::kOutdated ? "Update" : "Download", kActDownload, tab, v.mouseX, v.mouseY, enabled, true);
+}
+
+// A campaign with an official download that is not installed yet: its card and its tab do not open until it is.
+bool Locked(const View &v, int tab)
+{
+	const CampaignPackView &o = v.offers[tab];
+	return o.known && o.state == CampaignPackState::kMissing && !v.packs[tab].installed;
+}
+
 std::vector<Line> BuildLines(const BattlesSnapshot &s)
 {
 	std::vector<Line> lines;
@@ -85,6 +132,8 @@ std::vector<Line> BuildLines(const BattlesSnapshot &s)
 			if (!BattlesInTab(s.tab, list, entries[i].path)) continue;
 			Line r;
 			r.text = SplitBattleTitle(BattleTitleWithoutGame(entries[i].title)).name;
+			r.path = entries[i].path;
+			r.title = entries[i].title;
 			r.list = list;
 			r.index = static_cast<int>(i);
 			r.number = numbered ? static_cast<int>(i) + 1 : 0;
@@ -113,7 +162,27 @@ void PaintGroupHeader(Painter &p, int x, int y, int w, const std::string &text)
 	if (x + tw + 10 < x + w) p.Fill(x + tw + 10, y + kHeaderH / 2, w - tw - 10, 1, pal::hairline);
 }
 
-// A two-digit number and the name; the chosen row has a quiet fill and a small red arrow, every row a hairline under it.
+// The medal of an adventure won: a coin of bronze, silver or gold for the hardest difficulty won (1 to 3), with the laurel wreath
+// struck on it. An adventure not won yet shows the wreath alone, faint.
+constexpr int kMedal = 22;
+
+void PaintMedal(Painter &p, int x, int y, int size, int level)
+{
+	static const COLORREF kRim[3] = {RGB(112, 70, 38), RGB(118, 122, 130), RGB(150, 110, 36)};
+	static const COLORREF kFace[3] = {RGB(186, 124, 70), RGB(204, 208, 214), RGB(230, 188, 92)};
+	static const COLORREF kStrike[3] = {RGB(84, 50, 24), RGB(72, 76, 84), RGB(104, 72, 14)};
+	const int wreath = size * 78 / 100;
+	if (level < 1 || level > 3) {
+		PaintWreath(p, x + (size - wreath) / 2, y + (size - wreath) / 2, wreath, pal::hairline);
+		return;
+	}
+	p.Ellipse(x, y, size, size, kRim[level - 1]);
+	p.Ellipse(x + 2, y + 2, size - 4, size - 4, kFace[level - 1]);
+	PaintWreath(p, x + (size - wreath) / 2, y + (size - wreath) / 2, wreath, kStrike[level - 1]);
+}
+
+// A two-digit number and the name; the chosen row has a quiet fill and a tiny red arrow, every row a hairline under it. A great battle
+// shows its medal at the end.
 void PaintRow(Painter &p, const Line &l, bool selected, int x, int y, int w, int clipTop, int clipBottom, const View &v)
 {
 	const int hitTop = std::max(y, clipTop), hitBottom = std::min(y + kListRowH, clipBottom);
@@ -129,8 +198,11 @@ void PaintRow(Painter &p, const Line &l, bool selected, int x, int y, int w, int
 		TextAsIs(p, x + 14, y, 30, kListRowH, num, selected ? pal::redText : pal::disabled);
 		textX = x + 52;
 	}
+	const bool laurels = v.snap.tab == kBattlesTabGreat;
+	const int laurelsX = x + w - 30 - kMedal;
+	if (laurels) PaintMedal(p, laurelsX, y + (kListRowH - kMedal) / 2, kMedal, BattleLaurelOf(v.laurels, l.path, l.title));
 	p.Font(selected ? 1 : 0);
-	const int textRight = x + w - (selected ? 30 : 12);
+	const int textRight = laurels ? laurelsX - 10 : x + w - (selected ? 30 : 12);
 	p.Text(textX, y, textRight - textX, kListRowH, l.text, selected ? pal::text : pal::textDim,
 		DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	if (selected) {
@@ -183,6 +255,8 @@ void PaintSegment(Painter &p, int x, int y, int w, const BattlesSnapshot &s, boo
 	const int n = static_cast<int>(s.difficulties.size());
 	if (n <= 0) return;
 	const int segW = w / n;
+	int won = 0;
+	if (s.tab == kBattlesTabGreat && s.selList >= 0) won = BattleLaurelOf(v.laurels, s.lists[s.selList][s.selIndex].path, s.lists[s.selList][s.selIndex].title);
 	for (int i = 0; i < n; i++) {
 		const int bx = x + i * segW, bw = i == n - 1 ? w - i * segW : segW;
 		const bool on = i == s.difficulty;
@@ -191,6 +265,8 @@ void PaintSegment(Painter &p, int x, int y, int w, const BattlesSnapshot &s, boo
 		p.Frame(bx, y, bw, kSegmentH, on ? pal::text : hot ? pal::edgeHot : pal::edge);
 		p.Font(on ? 1 : 0);
 		p.Text(bx + 2, y, bw - 4, kSegmentH, s.difficulties[i], on ? pal::onLight : enabled ? pal::text : pal::disabled, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		// The difficulties of a great battle are easy, normal and hard, in that order: the medal says which ones were won.
+		if (i < won && i < 3) PaintMedal(p, bx + 8, y + (kSegmentH - 16) / 2, 16, i + 1);
 		if (enabled && !on) p.AddHit(bx, y, bw, kSegmentH, kActDifficulty, i);
 	}
 }
@@ -270,7 +346,7 @@ constexpr int kDiaryIndent = 18, kPagesH = 26;
 struct TextLine {
 	std::wstring text;
 	COLORREF color = kBodyText;
-	// A title of the diary: it starts after a small diamond, and the lines it wraps to keep in line with it.
+	// A title of the diary: it starts after a tiny diamond, and the lines it wraps to keep in line with it.
 	int indent = 0;
 	bool mark = false;
 };
@@ -376,7 +452,7 @@ void PaintButtons(Painter &p, int right, int y, const View &v)
 	}
 }
 
-// The briefing and the diary of the newest game, as small tabs over the text: the same underline as the big tabs.
+// The briefing and the diary of the newest game, as tiny tabs over the text: the same underline as the big tabs.
 void PaintPages(Painter &p, int x, int y, int w, const View &v, const SaveInfo *saved)
 {
 	const bool enabled = !v.snap.starting && !v.loading;
@@ -410,7 +486,12 @@ void PaintDetail(Painter &p, int x, int y, int w, int h, const View &v, PaintOut
 		if (!s.open || !empty) return;
 		if (!v.packs[s.tab].installed) {
 			p.Font(0);
-			p.Text(x, y + h / 2 - 20, w, 40, EmptyText(s.tab), pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			const bool offer = Offers(v, s.tab);
+			p.Text(x, y + h / 2 - (offer ? 44 : 20), w, 40, EmptyText(s.tab), pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			if (offer) {
+				const int bw = std::min(w - 2 * kPad, 360);
+				PaintOffer(p, x + (w - bw) / 2, y + h / 2 + 4, bw, kButtonH, s.tab, v, !s.starting && !v.loading, out);
+			}
 			return;
 		}
 		// The campaign is in the mods folder, but the content profile in use leaves it out.
@@ -469,24 +550,123 @@ void PaintDetail(Painter &p, int x, int y, int w, int h, const View &v, PaintOut
 	PaintButtons(p, innerX + innerW, buttonsY, v);
 }
 
-// A picture kept in shape and centred in its box, or the placeholder when there is none.
+// What fills a box of another shape around a picture: the picture itself, blurred, darkened and cropped to the box's shape, tiny
+// enough to be stretched. Kept for the last pictures and boxes drawn.
+struct Backdrop {
+	const BattleImage *img = nullptr;
+	int boxW = 0, boxH = 0, w = 0, h = 0;
+	std::vector<uint32_t> px;
+};
+
+const Backdrop &BackdropOf(const BattleImage *img, int boxW, int boxH)
+{
+	static std::vector<Backdrop> cache;
+	for (const Backdrop &b : cache) {
+		if (b.img == img && b.boxW == boxW && b.boxH == boxH) return b;
+	}
+	if (cache.size() >= 24) cache.erase(cache.begin());
+	Backdrop b;
+	b.img = img;
+	b.boxW = boxW;
+	b.boxH = boxH;
+	// The part of the picture that covers the box, averaged down to a few dozen pixels.
+	int cw = img->w, ch = img->w * boxH / std::max(1, boxW);
+	if (ch > img->h) {
+		ch = img->h;
+		cw = img->h * boxW / std::max(1, boxH);
+	}
+	const int cx = (img->w - cw) / 2, cy = (img->h - ch) / 2;
+	const int sw = 40, sh = std::max(1, sw * boxH / std::max(1, boxW));
+	std::vector<float> tiny(static_cast<size_t>(sw) * sh * 3, 0.0f);
+	for (int y = 0; y < sh; y++) {
+		for (int x = 0; x < sw; x++) {
+			const int x0 = cx + x * cw / sw, x1 = std::max(x0 + 1, cx + (x + 1) * cw / sw);
+			const int y0 = cy + y * ch / sh, y1 = std::max(y0 + 1, cy + (y + 1) * ch / sh);
+			float r = 0, g = 0, bl = 0;
+			int n = 0;
+			for (int yy = y0; yy < y1; yy += 2) {
+				for (int xx = x0; xx < x1; xx += 2) {
+					const uint32_t c = img->bgra[static_cast<size_t>(yy) * img->w + xx];
+					r += c >> 16 & 255;
+					g += c >> 8 & 255;
+					bl += c & 255;
+					n++;
+				}
+			}
+			float *d = &tiny[(static_cast<size_t>(y) * sw + x) * 3];
+			d[0] = r / n;
+			d[1] = g / n;
+			d[2] = bl / n;
+		}
+	}
+	// Two passes of a 3x3 box blur, then up four times with bilinear filtering, darkened.
+	for (int pass = 0; pass < 2; pass++) {
+		std::vector<float> out(tiny.size());
+		for (int y = 0; y < sh; y++) {
+			for (int x = 0; x < sw; x++) {
+				for (int c = 0; c < 3; c++) {
+					float s = 0;
+					int n = 0;
+					for (int dy = -1; dy <= 1; dy++) {
+						for (int dx = -1; dx <= 1; dx++) {
+							const int nx = x + dx, ny = y + dy;
+							if (nx < 0 || ny < 0 || nx >= sw || ny >= sh) continue;
+							s += tiny[(static_cast<size_t>(ny) * sw + nx) * 3 + c];
+							n++;
+						}
+					}
+					out[(static_cast<size_t>(y) * sw + x) * 3 + c] = s / n;
+				}
+			}
+		}
+		tiny.swap(out);
+	}
+	b.w = sw * 4;
+	b.h = sh * 4;
+	b.px.resize(static_cast<size_t>(b.w) * b.h);
+	for (int y = 0; y < b.h; y++) {
+		const float fy = std::max(0.0f, std::min(sh - 1.0f, (y + 0.5f) / 4 - 0.5f));
+		const int y0 = static_cast<int>(fy), y1 = std::min(sh - 1, y0 + 1);
+		const float ty = fy - y0;
+		for (int x = 0; x < b.w; x++) {
+			const float fx = std::max(0.0f, std::min(sw - 1.0f, (x + 0.5f) / 4 - 0.5f));
+			const int x0 = static_cast<int>(fx), x1 = std::min(sw - 1, x0 + 1);
+			const float tx = fx - x0;
+			uint32_t px = 0xff000000u;
+			for (int c = 0; c < 3; c++) {
+				const auto at = [&](int xx, int yy) { return tiny[(static_cast<size_t>(yy) * sw + xx) * 3 + c]; };
+				const float v = (at(x0, y0) * (1 - tx) + at(x1, y0) * tx) * (1 - ty) + (at(x0, y1) * (1 - tx) + at(x1, y1) * tx) * ty;
+				px |= static_cast<uint32_t>(std::min(255.0f, v * 0.42f)) << (16 - c * 8);
+			}
+			b.px[static_cast<size_t>(y) * b.w + x] = px;
+		}
+	}
+	cache.push_back(std::move(b));
+	return cache.back();
+}
+
+// A picture kept in shape and centred in its box, over its own blurred backdrop where the shapes differ; or the placeholder.
 void PaintFitted(Painter &p, int x, int y, int w, int h, const BattleImage *img)
 {
 	if (!HasPixels(img)) {
 		PaintPlaceholder(p, x, y, w, h);
 		return;
 	}
-	p.Fill(x, y, w, h, pal::bg);
 	int iw = w, ih = w * img->h / img->w;
 	if (ih > h) {
 		ih = h;
 		iw = h * img->w / img->h;
 	}
+	if (iw < w - 2 || ih < h - 2) {
+		const Backdrop &b = BackdropOf(img, w, h);
+		p.Image(x, y, w, h, b.px.data(), b.w, b.h);
+	}
+	else p.Fill(x, y, w, h, pal::bg);
 	p.Image(x + (w - iw) / 2, y + (h - ih) / 2, iw, ih, img->bgra.data(), img->w, img->h);
 	p.Frame(x, y, w, h, pal::hairline);
 }
 
-constexpr int kBannerH = 226, kCampaignsGap = 16, kCampaignsH = 38, kHeaderTabH = 52;
+constexpr int kBannerH = 160, kCampaignsGap = 16, kCampaignsH = 38, kHeaderTabH = 52;
 const int kOverviewTabs[] = {kBattlesTabImperivm1, kBattlesTabImperivm2, kBattlesTabGreat, kBattlesTabCustom};
 
 // Where the content goes under the header, in this screen's units.
@@ -509,28 +689,29 @@ void PaintContinue(Painter &p, int x, int y, int w, int h, const View &v)
 		return;
 	}
 	const SaveInfo &g = v.latest;
-	const int picW = 290, picH = h - 40;
-	PaintFitted(p, x + 20, y + 20, picW, picH, g.picture.get());
-	if (HasPixels(g.picture.get())) p.Frame(x + 17, y + 17, picW + 6, picH + 6, kFrameGold);
-	const int tx = x + 20 + picW + 30, tw = x + w - 24 - tx;
+	// The picture in the shape of the covers (11:9), the texts beside it and the buttons at the right, clear of the texts.
+	const int picH = h - 32, picW = picH * 11 / 9;
+	PaintFitted(p, x + 16, y + 16, picW, picH, g.picture.get());
+	if (HasPixels(g.picture.get())) p.Frame(x + 13, y + 13, picW + 6, picH + 6, kFrameGold);
+	const int tx = x + 16 + picW + 28, tw = x + w - 24 - 2 * bw - 12 - 28 - tx;
 	p.Font(4);
 	SetTextCharacterExtra(p.dc, p.S(1));
-	p.Text(tx, y + 22, tw, 18, Upper("Last game"), pal::redText);
+	p.Text(tx, y + 16, tw, 18, Upper("Last game"), pal::redText);
 	SetTextCharacterExtra(p.dc, 0);
 	p.Font(3);
-	p.Text(tx, y + 44, tw, 18, TabName(g.tab), pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	p.Text(tx, y + 34, tw, 18, TabName(g.tab), pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	p.Font(2);
-	TextAsIs(p, tx, y + 62, tw, 32, Caps(SplitBattleTitle(BattleTitleWithoutGame(g.title)).name), pal::text);
+	TextAsIs(p, tx, y + 52, tw, 30, Caps(SplitBattleTitle(BattleTitleWithoutGame(g.title)).name), pal::text);
 	p.Font(0);
-	TextAsIs(p, tx, y + 100, tw, 22, g.name, pal::text);
+	TextAsIs(p, tx, y + 84, tw, 22, g.name, pal::text);
 	std::string when = TrFmt("Saved %s", {g.when});
 	if (!g.played.empty()) when += "   \xC2\xB7   " + TrFmt("Played %s", {g.played});
 	p.Font(3);
-	TextAsIs(p, tx, y + 124, tw, 20, when, pal::textDim);
+	TextAsIs(p, tx, y + 106, tw, 20, when, pal::textDim);
 	// Where the player was: the objective the game completed last.
 	if (g.diary && !g.diary->empty()) {
 		const ObjectiveNote &n = g.diary->front();
-		TextAsIs(p, tx, y + 144, tw, 20, TrFmt("Last objective: %s", {n.title.empty() ? n.id : n.title}), pal::textDim);
+		TextAsIs(p, tx, y + 126, tw, 20, TrFmt("Last objective: %s", {n.title.empty() ? n.id : n.title}), pal::textDim);
 	}
 	p.Font(1);
 	const char *label = v.loading ? "Loading..." : "Continue";
@@ -561,6 +742,7 @@ std::string CardTitle(const View &v, int tab, int n)
 	const BattlesSnapshot &s = v.snap;
 	if (tab == kBattlesTabGreat) return Tr("Great Battles of Rome");
 	if (tab == kBattlesTabCustom) return Tr("Custom adventures");
+	if (n == 0 && !v.packs[tab].installed && v.offers[tab].known) return Tr(OfferTitle(tab));
 	if (n == 0) return Tr(v.packs[tab].installed ? "Not active" : "Not installed");
 	if (n > 1) return CountText(tab, n);
 	for (const BattlesEntry &e : s.lists[kBattlesOthers]) {
@@ -636,6 +818,10 @@ void PaintFittedBlend(Painter &p, int x, int y, int w, int h, const BattleImage 
 		ih = h;
 		iw = h * img->w / img->h;
 	}
+	if (iw < w - 2 || ih < h - 2) {
+		const Backdrop &b = BackdropOf(img, w, h);
+		p.ImageBlend(x, y, w, h, b.px.data(), b.w, b.h, alpha);
+	}
 	p.ImageBlend(x + (w - iw) / 2, y + (h - ih) / 2, iw, ih, img->bgra.data(), img->w, img->h, alpha);
 }
 
@@ -643,12 +829,13 @@ void PaintCampaignCard(Painter &p, int x, int y, int w, int h, int tab, int slot
 {
 	const BattlesSnapshot &s = v.snap;
 	const bool enabled = s.open && !s.starting && !s.switching && !v.loading;
-	const bool hot = enabled && p.Hover(x, y, w, h, v.mouseX, v.mouseY);
+	const bool locked = Locked(v, tab);
+	const bool hot = enabled && !locked && p.Hover(x, y, w, h, v.mouseX, v.mouseY);
 	const int n = AdventuresIn(s, tab);
 	PaintGlassCard(p, x, y, w, h);
 	if (hot) p.Frame(x, y, w, h, pal::edgeHot);
 	// A shorter card keeps room for its texts by giving the picture less height.
-	const int picH = std::max(90, std::min(150, h - 148));
+	const int picH = std::max(90, std::min((w - 24) * 9 / 11, h - 148));
 	const std::vector<BattlesSnapshot::Cover> &gallery = s.gallery[tab];
 	const CoverStep step = TurnCover(tab, slot, gallery.size(), hot);
 	if (gallery.size() > 1) out.turning = true;
@@ -680,17 +867,26 @@ void PaintCampaignCard(Painter &p, int x, int y, int w, int h, int tab, int slot
 		p.raw = false;
 	}
 	p.Fill(tx, y + h - 42, tw, 1, pal::hairline);
+	// How much of the campaign is done, as a gold stroke over the line.
+	if (v.done[tab] > 0) p.Fill(tx, y + h - 43, tw * std::min(v.done[tab], 100) / 100, 3, kFrameGold);
 	p.Font(3);
-	if (n > 0) TextAsIs(p, tx, y + h - 36, tw, 24, CountText(tab, n), pal::textDim);
+	const bool offer = Offers(v, tab);
+	if (offer) PaintOffer(p, tx, y + h - 36, tw, 28, tab, v, enabled, out);
+	else if (n > 0) {
+		const std::string done = v.done[tab] >= 0 ? "  \xC2\xB7  " + TrFmt("%s% done", {std::to_string(v.done[tab])}) : std::string();
+		TextAsIs(p, tx, y + h - 36, tw, 24, CountText(tab, n) + done, pal::textDim);
+	}
 	else if (v.packs[tab].installed) p.Text(tx, y + h - 36, tw, 24, "Activate it in Additional content", pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-	if (v.savedInTab[tab] > 0) {
+	if (v.savedInTab[tab] > 0 && !offer) {
 		p.Font(4);
 		const std::string badge = Tr("In progress");
 		const int bw = std::min(tw / 2, p.TextWidth(badge) + 20);
 		p.RoundRect(x + w - 16 - bw, y + h - 34, bw, 20, 10, RGB(52, 70, 34));
 		TextAsIs(p, x + w - 16 - bw, y + h - 34, bw, 20, badge, RGB(196, 230, 160), DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
-	if (enabled) p.AddHit(x, y, w, h, kActOpenTab, tab);
+	if (enabled && !locked) p.AddHit(x, y, w, h, kActOpenTab, tab);
+	// The download's button goes over the card's own click.
+	if (offer && !v.offers[tab].downloading && !v.offers[tab].queued && enabled) p.AddHit(tx, y + h - 36, tw, 28, kActDownload, tab);
 }
 
 void PaintOverview(Painter &p, const Body &b, const View &v, PaintOut &out)
@@ -799,7 +995,7 @@ Body PaintHeader(Painter &p, int screenW, const ScreenView &brand, const View &v
 	int top = l.top;
 	if (!overview && !conquests) {
 		std::vector<TabSpec> tabs;
-		for (int tab : kOverviewTabs) tabs.push_back({TabName(tab), kActTab, tab, s.tab == tab, !s.starting && !s.switching});
+		for (int tab : kOverviewTabs) tabs.push_back({TabName(tab), kActTab, tab, s.tab == tab, !s.starting && !s.switching && !Locked(v, tab)});
 		top = PaintHeaderTabs(h, l, title, tabs, right, v.mouseX, v.mouseY);
 	}
 	h.raw = true;

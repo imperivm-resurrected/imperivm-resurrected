@@ -17,6 +17,7 @@
 #include "addr/ui.h"
 #include "core/log.h"
 #include "game/greatbattles.h"
+#include "game/adventureresult.h"
 #include "game/gamehook.h"
 #include "hooks/gamefiles.h"
 #include "hooks/media.h"
@@ -441,7 +442,9 @@ void BattlesStart()
 	SelectionOf(dlg, DialogTab(dlg), list, index);
 	if (list < 0) return;
 	g_startedOn = dlg;
-	LogI("ui", "starting the adventure %s", Entries(List(dlg, list))[index].path.c_str());
+	const BattlesEntry entry = Entries(List(dlg, list))[index];
+	LogI("ui", "starting the adventure %s", entry.path.c_str());
+	AdventureResultNoteStart(entry.path, entry.title);
 	Click(dlg, Child(dlg, kIdStart, addr::kClassNameCUIButton) ? kIdStart : kIdStartConquest);
 }
 

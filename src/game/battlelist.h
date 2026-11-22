@@ -53,6 +53,29 @@ BattleCampaignPack BattleCampaignPackOf(const std::vector<BattlePackFiles> &pack
 // "adventures/imperivm i - galia.bfhp" gives "adventures/imperivm i - galia.bmp"; empty when it is not an adventure.
 std::string BattlePicturePath(const std::string &adventureFile);
 
+// The mod's own covers of the campaigns of Imperivm I and II (files of imperivm-resurrected\campaigns), in the order the packs
+// install them, with the adventure each one belongs to and its English title.
+struct BattleCampaignCover {
+	const char *file, *adventure, *title;
+};
+std::vector<BattleCampaignCover> BattleCampaignCovers(BattleGame game);
+// The cover of an adventure, by its file name with or without its folder and extension; empty for one that has none.
+std::string BattleCampaignCoverOf(const std::string &adventurePath);
+
+// An adventure the player has won, with the hardest difficulty it was won at: 1 easy, 2 normal, 3 hard. `title` is the adventure's
+// name as the game gives it when it is won; `path` its row in the game's list, when it was started from the adventure screen.
+struct BattleLaurel {
+	std::string path, title;
+	int level = 0;
+};
+// One laurel a line: the level, the path and the title, separated by tabs. Lines that do not read are left out.
+std::vector<BattleLaurel> BattleLaurelsDecode(const std::string &text);
+std::string BattleLaurelsEncode(const std::vector<BattleLaurel> &laurels);
+// A victory at `level`: a known adventure keeps its hardest level and learns the path or title it lacked. False when nothing changed.
+bool BattleLaurelsAdd(std::vector<BattleLaurel> &laurels, const std::string &path, const std::string &title, int level);
+// The level won of an adventure of the list, by its path or else its title; 0 when it was never won.
+int BattleLaurelOf(const std::vector<BattleLaurel> &laurels, const std::string &path, const std::string &title);
+
 // The adventure's text keeps the "\n" of its file as two characters.
 std::string BattleDescriptionText(const std::string &raw);
 

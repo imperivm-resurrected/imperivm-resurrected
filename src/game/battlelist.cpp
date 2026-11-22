@@ -3,6 +3,7 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include "game/battlelist.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
@@ -149,6 +150,114 @@ BattleCampaignPack BattleCampaignPackOf(const std::vector<BattlePackFiles> &pack
 		}
 	}
 	return out;
+}
+
+std::vector<BattleCampaignCover> BattleCampaignCovers(BattleGame game)
+{
+	static const BattleCampaignCover kImperivm1[] = {
+		{"imperivm1-the-gallic-war.jpg", "Imperivm I - La guerra de las Galias", "The Gallic War"},
+	};
+	static const BattleCampaignCover kImperivm2[] = {
+		{"imperivm2-hannibals-campaigns.jpg", "Imperivm II - Hannibal's Campaigns", "Hannibal's Campaigns"},
+		{"imperivm2-numantia.jpg", "Imperivm II - Numantia", "Numantia"},
+		{"imperivm2-the-punic-wars.jpg", "Imperivm II - The Punic Wars", "The Punic Wars"},
+	};
+	if (game == kBattleGameImperivm1) return {std::begin(kImperivm1), std::end(kImperivm1)};
+	if (game == kBattleGameImperivm2) return {std::begin(kImperivm2), std::end(kImperivm2)};
+	return {};
+}
+
+std::string BattleCampaignCoverOf(const std::string &adventurePath)
+{
+	const size_t slash = adventurePath.find_last_of("/\\");
+	std::string file = slash == std::string::npos ? adventurePath : adventurePath.substr(slash + 1);
+	if (EndsWithNoCase(file, ".bfhp")) file.resize(file.size() - 5);
+	for (BattleGame game : {kBattleGameImperivm1, kBattleGameImperivm2}) {
+		for (const BattleCampaignCover &c : BattleCampaignCovers(game)) {
+			if (_stricmp(file.c_str(), c.adventure) == 0) return c.file;
+		}
+	}
+	return "";
+}
+
+namespace {
+
+std::string OneLine(const std::string &s)
+{
+	std::string out = Trim(s);
+	for (char &c : out) {
+		if (c == '\t' || c == '\r' || c == '\n') c = ' ';
+	}
+	return out;
+}
+
+bool SameAdventure(const BattleLaurel &l, const std::string &path, const std::string &title)
+{
+	if (!path.empty() && !l.path.empty()) return _stricmp(path.c_str(), l.path.c_str()) == 0;
+	return !title.empty() && l.title == title;
+}
+
+}
+
+std::vector<BattleLaurel> BattleLaurelsDecode(const std::string &text)
+{
+	std::vector<BattleLaurel> out;
+	size_t at = 0;
+	while (at < text.size()) {
+		size_t end = text.find('\n', at);
+		if (end == std::string::npos) end = text.size();
+		std::string line = text.substr(at, end - at);
+		at = end + 1;
+		if (!line.empty() && line.back() == '\r') line.pop_back();
+		const size_t t1 = line.find('\t'), t2 = t1 == std::string::npos ? std::string::npos : line.find('\t', t1 + 1);
+		if (t2 == std::string::npos || t1 != 1 || line[0] < '1' || line[0] > '3') continue;
+		BattleLaurel l;
+		l.level = line[0] - '0';
+		l.path = line.substr(t1 + 1, t2 - t1 - 1);
+		l.title = line.substr(t2 + 1);
+		if (!l.path.empty() || !l.title.empty()) out.push_back(l);
+	}
+	return out;
+}
+
+std::string BattleLaurelsEncode(const std::vector<BattleLaurel> &laurels)
+{
+	std::string out;
+	for (const BattleLaurel &l : laurels) {
+		if (l.level < 1 || l.level > 3) continue;
+		out += std::to_string(l.level) + "\t" + OneLine(l.path) + "\t" + OneLine(l.title) + "\n";
+	}
+	return out;
+}
+
+bool BattleLaurelsAdd(std::vector<BattleLaurel> &laurels, const std::string &pathIn, const std::string &titleIn, int level)
+{
+	const std::string path = OneLine(pathIn), title = OneLine(titleIn);
+	if (level < 1 || level > 3 || (path.empty() && title.empty())) return false;
+	for (BattleLaurel &l : laurels) {
+		if (!SameAdventure(l, path, title)) continue;
+		const BattleLaurel before = l;
+		l.level = std::max(l.level, level);
+		if (l.path.empty()) l.path = path;
+		if (l.title.empty()) l.title = title;
+		return l.level != before.level || l.path != before.path || l.title != before.title;
+	}
+	BattleLaurel l;
+	l.path = path;
+	l.title = title;
+	l.level = level;
+	laurels.push_back(l);
+	return true;
+}
+
+int BattleLaurelOf(const std::vector<BattleLaurel> &laurels, const std::string &pathIn, const std::string &titleIn)
+{
+	const std::string path = OneLine(pathIn), title = OneLine(titleIn);
+	int best = 0;
+	for (const BattleLaurel &l : laurels) {
+		if (SameAdventure(l, path, title) || (!title.empty() && l.title == title)) best = std::max(best, l.level);
+	}
+	return best;
 }
 
 std::string BattlePicturePath(const std::string &adventureFile)

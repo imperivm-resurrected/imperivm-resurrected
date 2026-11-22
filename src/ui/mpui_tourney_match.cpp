@@ -15,6 +15,7 @@
 #include "ui/fullscreen.h"
 #include "ui/leagueui.h"
 #include "ui/mpui_tourney_internal.h"
+#include "ui/patronui.h"
 #include "ui/textedit.h"
 
 namespace mpui_tourney_impl {
@@ -1005,8 +1006,7 @@ void PaintChampionScreen(Painter &p, const State &st, const Ui &u)
 	// Only official cups award phalerae; a community cup crowns its champion with a laurel and no prize.
 	if (d.official) DrawLeaguePhalera(p, px, pcy - size / 2, size, LeagueMetal::Gold);
 	else {
-		PaintOrnament(p, kOrnamentLaurel, px, pcy - size / 2, size / 2, size, kGold);
-		PaintOrnament(p, kOrnamentLaurel, px + size / 2, pcy - size / 2, size / 2, size, kGold, true);
+		PaintWreath(p, px, pcy - size / 2, size, kGold);
 		UseDisplay(p, size * 45 / 100);
 		p.raw = true;
 		p.Text(px, pcy - size / 2, size, size, "1", kGold, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
