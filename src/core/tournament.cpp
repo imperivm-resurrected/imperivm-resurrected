@@ -409,6 +409,7 @@ TourneySettings TourneySettingsFromJson(const Json *v)
 	s.hideCivs = v->GetBool("hideCivs");
 	s.fog = v->GetFlag("fog");
 	s.explored = v->GetFlag("explored");
+	s.timers = v->GetFlag("timers");
 	const std::string diplomacy = Lower(Text(*v, "diplomacy"));
 	if (diplomacy == "locked" || diplomacy == "free") s.diplomacy = diplomacy;
 	if (const Json *delay = v->Get("specDelay"); delay && delay->type == Json::Number) s.specDelay = std::max(0, static_cast<int>(delay->num));
@@ -425,6 +426,7 @@ Json TourneySettingsJson(const TourneySettings &s)
 	j.Set("explored", Json::MakeBool(r.explored));
 	j.Set("diplomacy", Json::MakeString(r.lockedDiplomacy ? "locked" : "free"));
 	j.Set("specDelay", Json::MakeNumber(TourneySpecDelay(s)));
+	if (s.timers >= 0) j.Set("timers", Json::MakeBool(s.timers != 0));
 	return j;
 }
 
@@ -445,6 +447,7 @@ TourneyRoomRules TourneyRulesOf(const TourneySettings &s)
 	if (s.fog >= 0) r.fog = s.fog != 0;
 	if (s.explored >= 0) r.explored = s.explored != 0;
 	if (!s.diplomacy.empty()) r.lockedDiplomacy = s.diplomacy == "locked";
+	if (s.timers >= 0) r.timers = s.timers != 0;
 	return r;
 }
 
@@ -477,6 +480,7 @@ TourneySettings TourneyExplicitSettings(const TourneySettings &s)
 	out.fog = r.fog ? 1 : 0;
 	out.explored = r.explored ? 1 : 0;
 	out.diplomacy = r.lockedDiplomacy ? "locked" : "free";
+	out.timers = r.timers ? 1 : 0;
 	out.specDelay = TourneySpecDelay(s);
 	return out;
 }

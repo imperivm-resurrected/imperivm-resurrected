@@ -8,6 +8,7 @@
 #include "game/mapfog.h"
 #include "game/quickicons.h"
 #include "game/noteicons.h"
+#include "game/respawnsites.h"
 #include "game/zoomview.h"
 #include "core/crashlog.h"
 #include "app/overlay.h"
@@ -697,6 +698,7 @@ int __fastcall HookGameUpdate(void *game)
 	HealthBarsGameTick();
 	NoteIconsGameTick();
 	ZoomViewGameTick();
+	RespawnSitesGameTick();
 	ControlsGameTick();
 	if (g_updateDepth > 0 && g_updateDepth <= kUpdateMaxDepth) g_updateStack[g_updateDepth - 1].nested = true;
 	if (g_updateDepth >= kUpdateMaxDepth) return g_origGameUpdate(game);

@@ -324,6 +324,7 @@ std::vector<Page> BuildPages(const Values &v)
 			Toggle(v, "Save when leaving the game", kSaveOnExit)}});
 		page.right.push_back({"Multiplayer", {Toggle(v, "Show badges in the chat", kChatBadges, "The rank or emblem after each name"),
 			Toggle(v, "Sound when a match is found", kMatchFoundSound, "Ranked: also with the game in the background")}});
+		page.right.push_back({"Big map", {Toggle(v, "Respawn timers", kRespawnTimers, "When the mushrooms, water and ruins you saw have their item again")}});
 		pages.push_back(page);
 	}
 	{

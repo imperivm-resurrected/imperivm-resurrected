@@ -193,6 +193,7 @@ void LoadConfig()
 	g_config.healthBarHeroesOnly = ini.Flag("Game", "HealthBarHeroesOnly", false);
 	g_config.allyColors = ini.Flag("Game", "AllyColors", false);
 	g_config.pauseInBackground = ini.Flag("Game", "PauseInBackground", false);
+	g_config.respawnTimers = ini.Flag("Game", "RespawnTimers", true);
 	g_config.zoomExtras = ini.Flag("Map", "ZoomExtras", true);
 	g_config.zoomFog = ini.Flag("Map", "FogVisible", true);
 	g_config.zoomRefreshMs = ini.Clamped("Map", "RefreshMs", 16, 0, 1000);
@@ -264,6 +265,7 @@ void SaveConfig()
 	ini.WriteFlag("Game", "HealthBarHeroesOnly", g_config.healthBarHeroesOnly);
 	ini.WriteFlag("Game", "AllyColors", g_config.allyColors);
 	ini.WriteFlag("Game", "PauseInBackground", g_config.pauseInBackground);
+	ini.WriteFlag("Game", "RespawnTimers", g_config.respawnTimers);
 	ini.WriteFlag("Game", "CrashFix", g_config.crashFix);
 	ini.WriteFlag("Mods", "Override", g_config.modOverrides);
 	ini.WriteFlag("Display", "ShowPerformance", g_config.showPerf);

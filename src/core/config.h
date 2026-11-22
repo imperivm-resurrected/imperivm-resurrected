@@ -54,6 +54,8 @@ struct Config {
 	// [Game] AllyColors: on this PC, the player blue, allies yellow and enemies red in the game (game/allycolors.h).
 	bool allyColors = false;
 	bool pauseInBackground = false;
+	// [Game] RespawnTimers: the big map marks the item sites seen and the time until their item is back (game/respawnsites.h).
+	bool respawnTimers = true;
 	bool zoomExtras = true;
 	bool zoomFog = true;
 	int zoomRefreshMs = 16;

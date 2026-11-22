@@ -18,7 +18,9 @@ const unsigned kRuleBlindPick = 0x10000;
 const unsigned kRuleFreeAttach = 0x20000;
 const unsigned kRuleLockDiplomacy = 0x40000;
 const unsigned kRuleCheats = 0x8000000;
-const unsigned kRuleBaseMask = kRuleBlindPick | kRuleFreeAttach | kRuleLockDiplomacy | kRuleCheats;
+// The respawn timers of the big map are not allowed (game/respawnsites.h); without it, as in rooms of older builds, they are.
+const unsigned kRuleNoTimers = 0x40000000;
+const unsigned kRuleBaseMask = kRuleBlindPick | kRuleFreeAttach | kRuleLockDiplomacy | kRuleCheats | kRuleNoTimers;
 unsigned GameRuleMask();
 #define kRuleMask (GameRuleMask())
 

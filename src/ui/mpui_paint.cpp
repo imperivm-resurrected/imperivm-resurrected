@@ -353,7 +353,7 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis, 
 			if (yes(site.key)) sites |= site.bit;
 		}
 		const unsigned rules = (yes("Hidden civilizations") ? kRuleBlindPick : 0) | (yes("Free unit attachment") ? kRuleFreeAttach : 0) |
-			(yes("Diplomacy locked") ? kRuleLockDiplomacy : 0) | (yes("Cheats") ? kRuleCheats : 0);
+			(yes("Diplomacy locked") ? kRuleLockDiplomacy : 0) | (yes("Cheats") ? kRuleCheats : 0) | (pub.count("Respawn timers") && !yes("Respawn timers") ? kRuleNoTimers : 0);
 		const std::vector<ModOption> &mods = ModOptions();
 
 		if (!load && pub.count("Starting gold")) {

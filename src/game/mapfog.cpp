@@ -582,6 +582,24 @@ bool ZoomBitmapSize(int *width, int *height)
 	}
 }
 
+bool ZoomProjectedToPixel(int x, int y, int *pixel)
+{
+	void *zoom = g_zoomThis;
+	if (!zoom) return false;
+	__try {
+		const int *vbptr = At<const int *>(zoom, 0);
+		void *base = static_cast<char *>(zoom) + vbptr[3];
+		void **vt = *reinterpret_cast<void ***>(base);
+		// Slot 0x54 is the forward transform; 0x5c (PixelToWorld) is its inverse.
+		int projected[2] = {x, y};
+		reinterpret_cast<ToMap_t>(vt[0x54 / 4])(base, nullptr, pixel, projected);
+		return true;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return false;
+	}
+}
+
 bool ZoomPixelToWorld(int px, int py, int *world)
 {
 	void *zoom = g_zoomThis;

@@ -191,6 +191,7 @@ void ApplySettings(const LeagueMatchTicket &t)
 	else if (s.diplomacy == "free" || s.diplomacy == "open") base &= ~kRuleLockDiplomacy;
 	if (s.hideCivs == 1) base |= kRuleBlindPick;
 	if (s.cheats == 1) base |= kRuleCheats;
+	if (s.timers == 0) base |= kRuleNoTimers;
 	const unsigned rules = (g.rules & ~kRuleBaseMask) | base;
 	if (rules != g.rules && Due(-1)) GameRoomSetRules(rules);
 	if (competitive && (g.siteFlags & kSiteMask) != preset.sites && Due(-2)) GameRoomSetSiteFlags(preset.sites);

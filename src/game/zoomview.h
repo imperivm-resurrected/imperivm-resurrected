@@ -7,7 +7,20 @@
 #endif
 #include <windows.h>
 
+#include <cstdint>
+#include <vector>
+
 void InstallZoomView(bool knownExe);
+// A respawn timer of the big map: its time left, centred on (x, y) of the game's picture (the bottom of the text).
+struct ZoomMapTimer {
+	int x = 0, y = 0;
+	unsigned seconds = 0;
+	bool approximate = false;
+};
+// The timers of the picture of the big map drawn last; on the game thread, when the picture is handed to the screen.
+std::vector<ZoomMapTimer> ZoomViewTimers();
+// Writes the timers on the picture handed to the screen (32-bit, w x h, the game's coordinates); on the render thread.
+void ZoomViewDrawTimers(uint32_t *buf, int w, int h, const std::vector<ZoomMapTimer> &timers);
 bool ZoomViewHandleMouse(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 void ZoomViewGameTick();
 // The point of the open zoom map under (x, y), in the view coordinates the game's location messages carry.

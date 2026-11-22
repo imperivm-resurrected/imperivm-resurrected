@@ -197,7 +197,7 @@ bool ApplyTourneyRoom(const TourneyNext &next, RoomLock &k)
 	const TourneyRoomRules r = TourneyRulesOf(next.settings);
 	bool done = true;
 	// The room's own rules off (cheats, free attachment), the tournament's diplomacy and hidden civilizations on; the content's options kept.
-	const unsigned rules = (g.rules & ~kRuleBaseMask) | (r.lockedDiplomacy ? kRuleLockDiplomacy : 0u) | (r.hideCivs ? kRuleBlindPick : 0u);
+	const unsigned rules = (g.rules & ~kRuleBaseMask) | (r.lockedDiplomacy ? kRuleLockDiplomacy : 0u) | (r.hideCivs ? kRuleBlindPick : 0u) | (r.timers ? 0u : kRuleNoTimers);
 	if (rules != g.rules) {
 		g.rules = rules;
 		GameRoomSetRules(rules);
