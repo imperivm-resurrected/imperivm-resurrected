@@ -2,12 +2,15 @@
 // Copyright (C) 2026 THIONG
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include <mutex>
+#include <algorithm>
 #include <atomic>
 
 #include "ui/textedit.h"
 #include "MinHook.h"
 #include "core/league.h"
 #include "core/names.h"
+#include "mods/lang.h"
+#include "mods/modoptions.h"
 
 #include "ui/mpui_internal.h"
 #include "ui/mpui_tourney.h"
@@ -246,6 +249,47 @@ std::string MapTypeLabel(const std::string &item)
 {
 	const size_t colon = item.find(": ");
 	return colon == std::string::npos ? item : item.substr(colon + 2);
+}
+
+std::map<std::string, std::string> ParsePublishedOptions(const std::string &optionsText, std::vector<std::string> *order)
+{
+	std::map<std::string, std::string> pub;
+	std::vector<std::string> keys;
+	for (size_t from = 0; from < optionsText.size();) {
+		size_t to = optionsText.find('\n', from);
+		if (to == std::string::npos) to = optionsText.size();
+		const std::string line = optionsText.substr(from, to - from);
+		from = to + 1;
+		const size_t colon = line.find(": ");
+		if (colon == std::string::npos) continue;
+		const std::string label = line.substr(0, colon), value = line.substr(colon + 2);
+		const size_t suffix = sizeof(kOptionKeySuffix) - 1;
+		if (label.size() > suffix && label.compare(label.size() - suffix, suffix, kOptionKeySuffix) == 0) {
+			keys.push_back(label.substr(0, label.size() - suffix));
+			keys.push_back(value);
+			continue;
+		}
+		if (order && !pub.count(label)) order->push_back(label);
+		pub[label] = value;
+	}
+	const size_t modPrefix = sizeof(kModOptionKeyPrefix) - 1;
+	for (size_t i = 0; i + 1 < keys.size(); i += 2) {
+		const auto it = pub.find(keys[i]);
+		const std::string &key = keys[i + 1];
+		if (it == pub.end() || key.empty()) continue;
+		if (key.compare(0, modPrefix, kModOptionKeyPrefix) != 0) {
+			it->second = LangGameTextShown(key);
+			continue;
+		}
+		for (const ModOption &mo : ModOptions()) {
+			if (mo.id != key.substr(modPrefix) || mo.name == keys[i]) continue;
+			pub[mo.name] = it->second;
+			pub.erase(keys[i]);
+			if (order) std::replace(order->begin(), order->end(), keys[i], mo.name);
+			break;
+		}
+	}
+	return pub;
 }
 
 // The map chosen in the room, from the options the host publishes: the scenario, or the random map type

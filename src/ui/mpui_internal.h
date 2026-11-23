@@ -459,6 +459,8 @@ void FollowSelectedRoom();
 int RoomGroup(const OnlineLobby &g);
 const ModInfo *OlderInstalled(const State &st, const OnlineMod &m);
 std::string MapTypeLabel(const std::string &item);
+// The options the host published, "label: value" by label, with the choices of its lists in this player's language.
+std::map<std::string, std::string> ParsePublishedOptions(const std::string &optionsText, std::vector<std::string> *order = nullptr);
 std::string LobbyMapLabel(const OnlineLobby &g);
 uint64_t LobbyPlayerId(const OnlineLobby &g, const std::string &name);
 std::vector<ListLine> OnlineLobbyLines(const State &st, const OnlineLobby &g, bool withStatus);

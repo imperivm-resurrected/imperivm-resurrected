@@ -360,7 +360,9 @@ void *OpenMergedLoc(void *original, const char *path, unsigned mode, void *err)
 		base.assign(data.begin(), data.end());
 	}
 	std::string merged;
-	if (LangMergeLoc(base, patches, merged)) {
+	const bool mergedOk = LangMergeLoc(base, patches, merged);
+	LangRememberGameTexts(mergedOk ? merged : base);
+	if (mergedOk) {
 		const std::string out = DiskPath("imperivm-resurrected", "_cache/loc/game.loc.xml");
 		MakeDirsFor(out);
 		FILE *f = nullptr;

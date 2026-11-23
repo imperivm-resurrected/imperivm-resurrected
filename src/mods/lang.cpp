@@ -603,6 +603,90 @@ bool LangMergeLoc(const std::string &base, const std::vector<std::string> &patch
 }
 
 namespace {
+struct GameText {
+	std::string just, context, result;
+};
+
+std::mutex g_gameTextsLock;
+std::vector<GameText> g_gameTexts;
+std::multimap<std::string, size_t> g_gameTextByResult;
+std::map<std::string, size_t> g_gameTextByKey;
+
+std::string Unescaped(const std::string &raw)
+{
+	std::string out;
+	return XmlUnescape(raw, out) ? out : raw;
+}
+}
+
+void LangRememberGameTexts(const std::string &loc)
+{
+	std::vector<GameText> texts;
+	size_t pos = 0;
+	while ((pos = loc.find("<translationtableentry", pos)) != std::string::npos) {
+		const size_t end = loc.find('>', pos);
+		if (end == std::string::npos) break;
+		const std::string tag = loc.substr(pos, end - pos);
+		pos = end;
+		GameText t;
+		const std::string text = Unescaped(RawAttr(tag, "text"));
+		t.just = Unescaped(RawAttr(tag, "justtext"));
+		t.context = Unescaped(RawAttr(tag, "context"));
+		t.result = Unescaped(RawAttr(tag, "result"));
+		if (t.just.empty()) {
+			const size_t at = text.find('@');
+			t.just = text.substr(0, at);
+			if (at != std::string::npos && t.context.empty()) t.context = text.substr(at + 1);
+		}
+		if (!t.just.empty() && !t.result.empty()) texts.push_back(std::move(t));
+	}
+	std::lock_guard<std::mutex> lock(g_gameTextsLock);
+	g_gameTexts.swap(texts);
+	g_gameTextByResult.clear();
+	g_gameTextByKey.clear();
+	for (size_t i = 0; i < g_gameTexts.size(); i++) {
+		const GameText &t = g_gameTexts[i];
+		g_gameTextByResult.emplace(t.result, i);
+		// The later entries are the mods', which replace the game's.
+		g_gameTextByKey[t.context.empty() ? t.just : t.just + "@" + t.context] = i;
+	}
+}
+
+std::string LangGameTextKey(const std::string &shown, const char *context)
+{
+	if (shown.empty()) return shown;
+	const std::string want = context ? context : "";
+	std::lock_guard<std::mutex> lock(g_gameTextsLock);
+	for (const std::string &s : {shown, ValidUtf8(shown) ? std::string() : AnsiToUtf8(shown)}) {
+		if (s.empty()) continue;
+		const auto range = g_gameTextByResult.equal_range(s);
+		const GameText *best = nullptr;
+		int bestRank = -1;
+		for (auto it = range.first; it != range.second; ++it) {
+			const GameText &t = g_gameTexts[it->second];
+			const int rank = t.context == want ? 2 : t.context.empty() ? 1 : 0;
+			if (rank > bestRank) {
+				best = &t;
+				bestRank = rank;
+			}
+		}
+		if (best) return best->context.empty() ? best->just : best->just + "@" + best->context;
+	}
+	// An English game has no table: what it shows is already the key.
+	return want.empty() ? shown : shown + "@" + want;
+}
+
+std::string LangGameTextShown(const std::string &key)
+{
+	const size_t at = key.find('@');
+	const std::string just = key.substr(0, at);
+	std::lock_guard<std::mutex> lock(g_gameTextsLock);
+	auto found = g_gameTextByKey.find(key);
+	if (found == g_gameTextByKey.end()) found = g_gameTextByKey.find(just);
+	return found == g_gameTextByKey.end() ? just : g_gameTexts[found->second].result;
+}
+
+namespace {
 
 void ForgetLooseFiles()
 {

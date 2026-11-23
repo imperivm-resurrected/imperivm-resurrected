@@ -59,6 +59,12 @@ struct GameRoomOption {
 	int sel = -1;
 };
 
+// After the label of a list in GameRoomSnapshot::optionsText, the line with the game's key of the choice (mods/lang.h): the host's
+// text is in its language, the key is shown in each player's.
+inline constexpr char kOptionKeySuffix[] = " (key)";
+// The key of a mod's option is its id after this.
+inline constexpr char kModOptionKeyPrefix[] = "mod:";
+
 struct GameRoomSnapshot {
 	bool active = false;
 	bool host = false;

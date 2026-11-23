@@ -293,19 +293,8 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis, 
 	section("Options");
 	{
 		// Same rows, labels and order as the room's "Game options" panel (mpui_paint_room.cpp), read from the text the host publishes.
-		std::map<std::string, std::string> pub;
 		std::vector<std::string> published;
-		for (size_t from = 0; from < g.optionsText.size();) {
-			size_t to = g.optionsText.find('\n', from);
-			if (to == std::string::npos) to = g.optionsText.size();
-			const std::string line = g.optionsText.substr(from, to - from);
-			from = to + 1;
-			const size_t colon = line.find(": ");
-			if (colon == std::string::npos) continue;
-			const std::string key = line.substr(0, colon);
-			if (!pub.count(key)) published.push_back(key);
-			pub[key] = line.substr(colon + 2);
-		}
+		std::map<std::string, std::string> pub = ParsePublishedOptions(g.optionsText, &published);
 		const bool load = !g.saveName.empty();
 		std::set<std::string> used = {"Shared support", "Scenario"};
 		auto take = [&](const std::string &key, std::string &out) {
@@ -387,8 +376,9 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis, 
 				std::string v;
 				const bool has = take(mo.name, v);
 				if (load) continue;
+				const int chosen = ModOptionGet(mo, g.rules);
 				if (!randomMap) valueRow(mo.name, Tr("Only on random maps"), pal::textDim);
-				else if (has) valueRow(mo.name, v, !mo.values.empty() && v != mo.values[0] ? kSpecial : pal::text);
+				else if (has && chosen >= 0 && chosen < static_cast<int>(mo.values.size())) valueRow(mo.name, mo.values[chosen], chosen != 0 ? kSpecial : pal::text);
 			}
 		}
 		heading("GAME");
@@ -417,8 +407,9 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis, 
 				if (mo.id == kSeasonOptionId) continue;
 				std::string v;
 				if (!take(mo.name, v)) continue;
+				const int chosen = ModOptionGet(mo, g.rules);
 				if (mo.values.empty()) toggleRow(mo.name, v == "yes");
-				else valueRow(mo.name, v, v != mo.values[0] ? kSpecial : pal::text);
+				else valueRow(mo.name, chosen >= 0 && chosen < static_cast<int>(mo.values.size()) ? mo.values[chosen] : v, chosen != 0 ? kSpecial : pal::text);
 			}
 			// Options of mods this PC doesn't have, as the host wrote them.
 			for (const std::string &key : published) {

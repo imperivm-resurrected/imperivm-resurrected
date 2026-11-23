@@ -17,17 +17,7 @@ using namespace mpui_impl;
 namespace mpui_impl {
 std::map<std::string, std::string> PublishedOptions(const State &st)
 {
-	std::map<std::string, std::string> pub;
-	const std::string &text = st.room.info.optionsText;
-	for (size_t a = 0; a < text.size();) {
-		size_t b = text.find('\n', a);
-		if (b == std::string::npos) b = text.size();
-		const std::string lineText = text.substr(a, b - a);
-		const size_t colon = lineText.find(": ");
-		if (colon != std::string::npos) pub[lineText.substr(0, colon)] = lineText.substr(colon + 2);
-		a = b + 1;
-	}
-	return pub;
+	return ParsePublishedOptions(st.room.info.optionsText);
 }
 
 std::string RoomOptionText(const State &st, int id, const char *published)

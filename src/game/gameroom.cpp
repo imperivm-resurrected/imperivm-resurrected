@@ -19,6 +19,7 @@
 #include "game/gamemodes.h"
 #include "hooks/gamefiles.h"
 #include "mods/mods.h"
+#include "mods/lang.h"
 #include "mods/modoptions.h"
 #include "mods/modvars.h"
 #include "game/netlink.h"
@@ -338,6 +339,15 @@ const OptionDef kOptions[] = {
 	{0x1007, "No fog", true}, {0x1008, "Map pre-explored", true}, {0x1009, "Shared support", true},
 	{0x100a, "Shared control", true}, {0x10a7, "Disable bonuses", true},
 };
+
+// The choice of a list as the game's key of its text, which each player shows in their own language (mods/lang.h). The random map
+// types are "Random map: Continent"; only the type travels.
+std::string OptionKey(int id, const std::string &item)
+{
+	const char *context = id == 0x1005 ? "gold" : id == 0x1004 ? "population" : id == kMapSizeCombo ? "mapsize" : "";
+	const size_t colon = id == 0x1000 ? item.find(": ") : std::string::npos;
+	return LangGameTextKey(colon == std::string::npos ? item : item.substr(colon + 2), context);
+}
 
 int AlternativeItem(const std::vector<std::string> &items)
 {
@@ -686,6 +696,7 @@ void TakeSnapshot()
 					if (o.sel < 0 && d.id == 0x1002 && realSel == 0 && AlternativeItem(real) > 0) o.sel = 0;
 					if (o.sel >= 0 && o.sel < static_cast<int>(o.items.size())) {
 						s.optionsText += std::string(d.label) + ": " + o.items[o.sel] + "\n";
+						s.optionsText += std::string(d.label) + kOptionKeySuffix + ": " + OptionKey(d.id, o.items[o.sel]) + "\n";
 					}
 					if (d.id == 0x1000 || d.id == kMapSizeCombo) o.keys = MapKeys(opts, c, d.id, order);
 				}
@@ -749,6 +760,7 @@ void TakeSnapshot()
 					s.optionsText += o.name + (v ? ": yes\n" : ": no\n");
 				}
 				else s.optionsText += o.name + ": " + o.values[v < static_cast<int>(o.values.size()) ? v : 0] + "\n";
+				s.optionsText += o.name + kOptionKeySuffix + ": " + kModOptionKeyPrefix + o.id + "\n";
 			}
 		}
 		if (*reinterpret_cast<int *>(static_cast<char *>(g_dlg) + 0x9c) == 0) {
