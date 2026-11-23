@@ -462,6 +462,28 @@ void Run(TourneyOp op, int64_t id, std::string method, std::string path, std::st
 		v->detail = found;
 		p.view = std::move(v);
 	}
+	// A sign-up the league took is the player's at once: the read of their tournaments that follows can be refused for its pace
+	// (one each 5 s) and would leave the cup offering "Sign up" again until the next one.
+	// "Already signed up" says the same, when this computer had not read it yet.
+	if ((out.ok || out.error == "already_signed") && op == TourneyOp::SignUp && !TourneyMyEntryOf(g_mine.view->mine, id)) {
+		const TourneySummary *cup = nullptr;
+		for (const std::vector<TourneySummary> *list : {&g_lists.open, &g_lists.live}) {
+			for (const TourneySummary &t : *list) cup = t.id == id ? &t : cup;
+		}
+		TourneyMyEntry e;
+		e.tournamentId = id;
+		e.status = out.waitlist ? TourneyEntryStatus::Waitlist : out.pendingPartner ? TourneyEntryStatus::PendingPartner : TourneyEntryStatus::Signed;
+		if (cup) {
+			e.slug = cup->slug;
+			e.name = cup->name;
+			e.tournamentStatus = cup->status;
+			e.startsAt = cup->startsAt;
+		}
+		ChangeView(g_mine.view, [&e](TourneyMineView &v) {
+			v.loaded = true;
+			v.mine.entries.push_back(e);
+		});
+	}
 	if (op != TourneyOp::Presence) g_results.push_back(out);
 	// What the player did changes their tournaments and the pages: they are read again.
 	if (op != TourneyOp::Presence && op != TourneyOp::Claim && op != TourneyOp::Register && op != TourneyOp::FindCode) {

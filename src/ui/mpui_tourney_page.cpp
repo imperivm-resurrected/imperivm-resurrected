@@ -390,9 +390,11 @@ TourneyBracketMetrics BoxMetrics(const TourneyDetail &d)
 {
 	TourneyBracketMetrics bm;
 	bm.top = 46;
+	// Room over each box for its state ("Live · 3 min", "Room open"), which is written 21 px above it: never on the box before.
+	bm.rowPitch = bm.boxH + 26;
 	if (d.Teams()) {
 		bm.boxH = 82;
-		bm.rowPitch = 100;
+		bm.rowPitch = bm.boxH + 26;
 	}
 	return bm;
 }

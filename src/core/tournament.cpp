@@ -455,7 +455,7 @@ int TourneySpecDelay(const TourneySettings &s)
 {
 	if (s.specDelay < 0) return 120;
 	if (s.specDelay == 0) return 0;
-	return std::max(60, std::min(600, s.specDelay));
+	return std::max(30, std::min(600, s.specDelay));
 }
 
 bool TourneySpecDelayValid(int seconds)

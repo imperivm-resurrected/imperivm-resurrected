@@ -601,13 +601,13 @@ void StepInRoom(const TourneyNext &next)
 		const bool ready = LocalReady(g_s.game);
 		const int race = MatchCiv(g_tourney);
 		const int item = race >= 0 ? CivsRoomItemOfRace(race) : -1;
-		const bool raceWanted = item >= 0 && item < static_cast<int>(s.raceNames.size()) && s.race != item;
+		const bool raceWanted = item >= 0 && item < static_cast<int>(s.raceNames.size()) && s.race != item && (k.raceSent != item || k.raceTries < 2);
 		const int color = MatchColor(g_tourney);
 		bool taken = false;
 		for (int i = 0; i < 8; i++) taken = taken || (i != slot && g_s.game.slots[i].used && g_s.game.slots[i].color == color);
 		const uint32_t own = CustomColorOf(g_s, g_s.game, slot);
 		const bool ownWanted = color == kOwnColor && g_tourney.colorRgb && own != g_tourney.colorRgb && k.ownTried != g_tourney.colorRgb;
-		const bool presetWanted = color >= 0 && color < 12 && !taken && (s.color != color || own != 0);
+		const bool presetWanted = color >= 0 && color < 12 && !taken && (s.color != color || own != 0) && (k.colorSent != color || k.colorTries < 2);
 		const bool want = (raceWanted || ownWanted || presetWanted) && k.setTries < 12;
 		if (want && ready) {
 			if (!k.unreadied) {
@@ -621,6 +621,11 @@ void StepInRoom(const TourneyNext &next)
 			k.setAt = now;
 			k.setTries++;
 			if (raceWanted) {
+				if (k.raceSent != item) {
+					k.raceSent = item;
+					k.raceTries = 0;
+				}
+				k.raceTries++;
 				s.race = item;
 				Predict(kPredRace, slot, item);
 				GameRoomSetRace(slot, item);
@@ -632,6 +637,11 @@ void StepInRoom(const TourneyNext &next)
 					LogI("league", "tournament match %lld: the own colour is too close to another player's; the room's stays", static_cast<long long>(match));
 			}
 			else if (presetWanted) {
+				if (k.colorSent != color) {
+					k.colorSent = color;
+					k.colorTries = 0;
+				}
+				k.colorTries++;
 				ClearCustomColor(g_s, slot);
 				s.color = color;
 				Predict(kPredColor, slot, color);
@@ -1672,6 +1682,11 @@ void TourneyAction(int arg)
 		SetZoom(u, zoom, u.pan.viewW / 2, u.pan.viewH / 2);
 		break;
 	}
+	case kSubRefresh:
+		// The list, the player's own cups and the pages open, read again now.
+		LeagueTourneyListsRefresh(true);
+		LeagueTourneyMineRefresh();
+		break;
 	case kSubCreate: {
 		if (!LeagueLinked()) {
 			Toast("Link your league account first.");

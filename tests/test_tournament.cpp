@@ -270,7 +270,7 @@ void Claim()
 	TourneySettings none;
 	CHECK_EQ(TourneySpecDelay(none), 120);
 	none.specDelay = 20;
-	CHECK_EQ(TourneySpecDelay(none), 60);
+	CHECK_EQ(TourneySpecDelay(none), 30);
 }
 
 void Tags()

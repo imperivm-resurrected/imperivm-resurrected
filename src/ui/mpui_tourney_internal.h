@@ -25,7 +25,7 @@ enum Sub {
 	kSubShow = 1, kSubFilter, kSubOpen, kSubPageTab, kSubSignUp, kSubWithdraw, kSubCheckIn, kSubMatch, kSubGo, kSubWatch, kSubNoShow,
 	kSubDispute, kSubDisputeSend, kSubDisputeCancel, kSubChampion, kSubPan, kSubZoom,
 	// The community cups: the form, the code, and the organizer's page (kSubManage opens it on its tab).
-	kSubCreate, kSubCupSet, kSubCupMenu, kSubCupSubmit, kSubCupOpenActive, kSubJoin, kSubJoinSend, kSubJoinCancel, kSubCopyCode, kSubCodeClose,
+	kSubCreate, kSubCupSet, kSubCupMenu, kSubCupSubmit, kSubCupOpenActive, kSubJoin, kSubJoinSend, kSubJoinCancel, kSubCopyCode, kSubCodeClose, kSubRefresh,
 	kSubManage, kSubCancelCup, kSubCheckinNow, kSubStartNow, kSubRemove, kSubGameA, kSubGameB, kSubReplay, kSubWalkover, kSubWalkoverA,
 	kSubWalkoverB, kSubWalkoverNobody, kSubWalkoverCancel,
 	// The full form: a section of it brought into view, the map chooser of a round, changing a cup, and its maps tried again.
@@ -135,6 +135,9 @@ struct RoomLock {
 	// ready to change the slot (the game keeps a ready row as it is).
 	DWORD setAt = 0;
 	int setTries = 0;
+	// The race and colour last sent and how many times each: a room that keeps its own (a scenario fixes the civilizations) is not
+	// asked again and again, which made the player not ready each time and restarted the countdown.
+	int raceSent = -1, raceTries = 0, colorSent = -1, colorTries = 0;
 	uint32_t ownTried = 0;
 	bool unreadied = false;
 	// The game's AI put in a test bot's seat.

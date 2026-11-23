@@ -73,7 +73,11 @@ Act ActionFor(const TourneySummary &t, const TourneyMineView &mine)
 			a.strong = true;
 			a.enabled = !busy;
 		}
-		else a.done = e->checkedIn ? "Checked in" : e->status == TourneyEntryStatus::Waitlist ? "Waiting list" : "Signed up";
+		else {
+			// Signed up: the row opens the cup, where the player sees the bracket, the rules and who else is in.
+			a.label = "View";
+			a.arg = ArgOf(kSubOpen, t.id);
+		}
 		break;
 	case TourneyStatus::Running:
 		if (mine.mine.next.present && mine.mine.next.tournamentId == t.id) {
@@ -238,7 +242,10 @@ int PaintCupButtons(Painter &p, const TourneyMineView &mine, int right, int y, i
 	const std::string join = Tr("Join with a code");
 	const int jw = SecondButtonWidth(p, join);
 	if (!measure) PaintSecondButton(p, right - cw - 12 - jw, y, jw, h, join, ArgOf(kSubJoin, 0), true, mx, my);
-	return right - cw - 12 - jw;
+	const std::string refresh = Tr("Refresh");
+	const int fw = SecondButtonWidth(p, refresh), fx = right - cw - 12 - jw - 12 - fw;
+	if (!measure) PaintSecondButton(p, fx, y, fw, h, refresh, ArgOf(kSubRefresh, 0), true, mx, my);
+	return fx;
 }
 
 // The list's tabs from x; returns where the last one ends.
