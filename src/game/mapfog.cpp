@@ -205,8 +205,20 @@ int DarkenLocked(const FogPass &pass)
 		nextSlice = 0;
 	}
 	static std::vector<int> fogA, seenS, blurA, blurB;
+	// The source bitmap as the fog was last made from it.
+	static std::vector<unsigned short> srcUsed;
+	const auto srcChanged = [&] {
+		if (srcUsed.size() != static_cast<size_t>(w) * h) return true;
+		for (int y = 0; y < h; y++) {
+			const unsigned short *srow = RowPtr(src, y);
+			if (srow && memcmp(srow, &srcUsed[static_cast<size_t>(y) * w], static_cast<size_t>(w) * 2) != 0) return true;
+		}
+		return false;
+	};
 	bool gridsUpdated = false;
-	if (nextSlice == 0 || fogA.size() != explored.size()) {
+	// A full round of slices that found the same cells explored and in view, over the same source bitmap, gives the same fog: the
+	// picture is only made again when one of them changed (or the colour or the cache did, below).
+	if (fogA.size() != explored.size() || (nextSlice == 0 && (nextExplored != explored || nextSeen != seen || srcChanged()))) {
 		gridsUpdated = true;
 		explored = nextExplored;
 		seen = nextSeen;
@@ -251,6 +263,7 @@ int DarkenLocked(const FogPass &pass)
 	if (dirty) {
 		const size_t total = static_cast<size_t>(w) * h;
 		g_cache.next.resize(total);
+		srcUsed.resize(total);
 		for (int y = 0; y < h; y++) {
 			const unsigned short *srow = RowPtr(src, y);
 			unsigned short *out = &g_cache.next[static_cast<size_t>(y) * w];
@@ -258,6 +271,7 @@ int DarkenLocked(const FogPass &pass)
 				std::fill(out, out + w, fogColor);
 				continue;
 			}
+			std::copy(srow, srow + w, &srcUsed[static_cast<size_t>(y) * w]);
 			const int gy = y / step, fy = (y % step) * 256 / step;
 			for (int gx = 0; gx < gw - 1; gx++) {
 				const size_t idx = static_cast<size_t>(gy) * gw + gx;

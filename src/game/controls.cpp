@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <map>
 #include <mutex>
 #include <cstring>
 #include <string>
@@ -1686,63 +1687,77 @@ void ControlsDrawBarKeys(uint32_t *buf, int w, int h)
 	static int bw = 0, bh = 0;
 	static HFONT font = nullptr;
 	static int fontPx = 0;
+	// Each badge drawn once by GDI and kept by its label and size (which set its box and font), and drawn again only when the language
+	// changes its text; every image then only blends it. Only the render thread draws them.
+	struct Badge {
+		std::string text;
+		std::vector<uint32_t> pixels;
+	};
+	static std::map<std::pair<std::string, int>, Badge> badges;
 	for (const BarKey &k : keys) {
 		const int side = std::max(12, std::min(26, static_cast<int>((k.r.bottom - k.r.top) * 0.36f)));
 		const int tw = std::max(side, static_cast<int>(side * (0.5f + 0.42f * k.label.size()))), th = side;
-		if (!dc || tw > bw || th > bh) {
-			if (!dc) {
-				dc = CreateCompatibleDC(nullptr);
-				if (!dc) return;
-			}
-			SelectObject(dc, GetStockObject(DEFAULT_GUI_FONT));
-			fontPx = 0;
-			if (bmp) {
-				SelectObject(dc, CreateCompatibleBitmap(dc, 1, 1));
-				DeleteObject(bmp);
-				bmp = nullptr;
-			}
-			bits = nullptr;
-			bw = bh = 0;
-			BITMAPINFO bi = {};
-			bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
-			bi.bmiHeader.biWidth = std::max(tw, 64);
-			bi.bmiHeader.biHeight = -std::max(th, 32);
-			bi.bmiHeader.biPlanes = 1;
-			bi.bmiHeader.biBitCount = 32;
-			bmp = CreateDIBSection(dc, &bi, DIB_RGB_COLORS, reinterpret_cast<void **>(&bits), nullptr, 0);
-			if (!bmp || !bits) {
-				bits = nullptr;
-				return;
-			}
-			HGDIOBJ old = SelectObject(dc, bmp);
-			if (old && old != bmp) DeleteObject(old);
-			SetBkMode(dc, TRANSPARENT);
-			bw = std::max(tw, 64);
-			bh = std::max(th, 32);
-		}
-		const int px = std::max(9, static_cast<int>(side * 0.78f));
-		if (!font || px != fontPx) {
-			SelectObject(dc, GetStockObject(DEFAULT_GUI_FONT));
-			if (font) DeleteObject(font);
-			font = CreateFontW(-px, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-				ANTIALIASED_QUALITY, DEFAULT_PITCH, L"Segoe UI");
-			fontPx = px;
-		}
-		RECT r = {0, 0, tw, th};
-		HBRUSH edge = CreateSolidBrush(RGB(90, 85, 80)), face = CreateSolidBrush(RGB(24, 21, 19));
-		FillRect(dc, &r, edge);
-		RECT in = {1, 1, tw - 1, th - 1};
-		FillRect(dc, &in, face);
-		DeleteObject(edge);
-		DeleteObject(face);
-		SelectObject(dc, font);
-		SetTextColor(dc, RGB(241, 238, 232));
 		const std::string label = Tr(k.label);
-		int wl = MultiByteToWideChar(CP_UTF8, 0, label.c_str(), -1, nullptr, 0);
-		std::wstring wtext(wl > 0 ? wl - 1 : 0, L'\0');
-		if (wl > 1) MultiByteToWideChar(CP_UTF8, 0, label.c_str(), -1, &wtext[0], wl);
-		DrawTextW(dc, wtext.c_str(), static_cast<int>(wtext.size()), &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-		GdiFlush();
+		if (badges.size() > 256) badges.clear();
+		Badge &badge = badges[std::make_pair(k.label, side)];
+		if (badge.pixels.size() != static_cast<size_t>(tw) * th || badge.text != label) {
+			if (!dc || tw > bw || th > bh) {
+				if (!dc) {
+					dc = CreateCompatibleDC(nullptr);
+					if (!dc) return;
+				}
+				SelectObject(dc, GetStockObject(DEFAULT_GUI_FONT));
+				fontPx = 0;
+				if (bmp) {
+					SelectObject(dc, CreateCompatibleBitmap(dc, 1, 1));
+					DeleteObject(bmp);
+					bmp = nullptr;
+				}
+				bits = nullptr;
+				bw = bh = 0;
+				BITMAPINFO bi = {};
+				bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
+				bi.bmiHeader.biWidth = std::max(tw, 64);
+				bi.bmiHeader.biHeight = -std::max(th, 32);
+				bi.bmiHeader.biPlanes = 1;
+				bi.bmiHeader.biBitCount = 32;
+				bmp = CreateDIBSection(dc, &bi, DIB_RGB_COLORS, reinterpret_cast<void **>(&bits), nullptr, 0);
+				if (!bmp || !bits) {
+					bits = nullptr;
+					return;
+				}
+				HGDIOBJ old = SelectObject(dc, bmp);
+				if (old && old != bmp) DeleteObject(old);
+				SetBkMode(dc, TRANSPARENT);
+				bw = std::max(tw, 64);
+				bh = std::max(th, 32);
+			}
+			const int px = std::max(9, static_cast<int>(side * 0.78f));
+			if (!font || px != fontPx) {
+				SelectObject(dc, GetStockObject(DEFAULT_GUI_FONT));
+				if (font) DeleteObject(font);
+				font = CreateFontW(-px, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+					ANTIALIASED_QUALITY, DEFAULT_PITCH, L"Segoe UI");
+				fontPx = px;
+			}
+			RECT r = {0, 0, tw, th};
+			HBRUSH edge = CreateSolidBrush(RGB(90, 85, 80)), face = CreateSolidBrush(RGB(24, 21, 19));
+			FillRect(dc, &r, edge);
+			RECT in = {1, 1, tw - 1, th - 1};
+			FillRect(dc, &in, face);
+			DeleteObject(edge);
+			DeleteObject(face);
+			SelectObject(dc, font);
+			SetTextColor(dc, RGB(241, 238, 232));
+			int wl = MultiByteToWideChar(CP_UTF8, 0, label.c_str(), -1, nullptr, 0);
+			std::wstring wtext(wl > 0 ? wl - 1 : 0, L'\0');
+			if (wl > 1) MultiByteToWideChar(CP_UTF8, 0, label.c_str(), -1, &wtext[0], wl);
+			DrawTextW(dc, wtext.c_str(), static_cast<int>(wtext.size()), &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+			GdiFlush();
+			badge.text = label;
+			badge.pixels.resize(static_cast<size_t>(tw) * th);
+			for (int y = 0; y < th; y++) memcpy(&badge.pixels[static_cast<size_t>(y) * tw], bits + static_cast<size_t>(y) * bw, static_cast<size_t>(tw) * 4);
+		}
 		const int ox = k.r.left + 2, oy = k.r.top + 2;
 		for (int y = 0; y < th; y++) {
 			const int ty = oy + y;
@@ -1750,7 +1765,7 @@ void ControlsDrawBarKeys(uint32_t *buf, int w, int h)
 			for (int x = 0; x < tw; x++) {
 				const int tx = ox + x;
 				if (tx < 0 || tx >= w) continue;
-				const uint32_t src = bits[static_cast<size_t>(y) * bw + x];
+				const uint32_t src = badge.pixels[static_cast<size_t>(y) * tw + x];
 				uint32_t &dst = buf[static_cast<size_t>(ty) * w + tx];
 				const uint32_t a = 225;
 				const uint32_t rb = ((src & 0xff00ff) * a + (dst & 0xff00ff) * (255 - a)) >> 8;

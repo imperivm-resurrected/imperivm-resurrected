@@ -69,6 +69,42 @@ std::vector<ZoomMapTimer> g_frameTimers;
 std::vector<uint32_t> g_frame;
 int g_frameW = 0, g_frameH = 0;
 bool g_frameDirty = false;
+// The part of g_frame written since the render thread last brought g_clean up to date, so the copy made under g_frameLock is only that.
+RECT g_frameChanged = {};
+// The render thread's copy of g_frame: synced under the lock, then copied to the image to draw on outside it.
+std::vector<uint32_t> g_clean;
+int g_cleanW = 0, g_cleanH = 0;
+
+void AddFrameChange(const RECT &r)
+{
+	if (r.right <= r.left || r.bottom <= r.top) return;
+	if (g_frameChanged.right <= g_frameChanged.left || g_frameChanged.bottom <= g_frameChanged.top) {
+		g_frameChanged = r;
+		return;
+	}
+	g_frameChanged.left = (std::min)(g_frameChanged.left, r.left);
+	g_frameChanged.top = (std::min)(g_frameChanged.top, r.top);
+	g_frameChanged.right = (std::max)(g_frameChanged.right, r.right);
+	g_frameChanged.bottom = (std::max)(g_frameChanged.bottom, r.bottom);
+}
+
+// With g_frameLock held.
+void SyncCleanLocked()
+{
+	if (g_cleanW != g_frameW || g_cleanH != g_frameH || g_clean.size() != g_frame.size()) {
+		g_clean = g_frame;
+		g_cleanW = g_frameW;
+		g_cleanH = g_frameH;
+	}
+	else if (g_frameChanged.right > g_frameChanged.left && g_frameChanged.bottom > g_frameChanged.top) {
+		const size_t bytes = static_cast<size_t>(g_frameChanged.right - g_frameChanged.left) * 4;
+		for (int y = g_frameChanged.top; y < g_frameChanged.bottom; y++) {
+			const size_t at = static_cast<size_t>(y) * g_frameW + g_frameChanged.left;
+			memcpy(&g_clean[at], &g_frame[at], bytes);
+		}
+	}
+	g_frameChanged = {};
+}
 
 HWND g_hwnd = nullptr;
 HANDLE g_wake = nullptr;
@@ -114,7 +150,8 @@ void BuildLut(uint32_t r, uint32_t g, uint32_t b)
 	LogD("render", "color format R=%04x G=%04x B=%04x", r, g, b);
 }
 
-void BlitToFrame(const BITMAPINFO *bmi, const void *bits, int xDst, int yDst, int w, int h,
+// Returns the part of g_frame it wrote.
+RECT BlitToFrame(const BITMAPINFO *bmi, const void *bits, int xDst, int yDst, int w, int h,
 	int xSrc, int ySrc)
 {
 	const BITMAPINFOHEADER &hdr = bmi->bmiHeader;
@@ -133,25 +170,19 @@ void BlitToFrame(const BITMAPINFO *bmi, const void *bits, int xDst, int yDst, in
 	BuildLut(rMask, gMask, bMask);
 
 	const int topRow = dibH - ySrc - h;
-	for (int y = 0; y < h; y++) {
-		const int dy = yDst + y;
+	// The rows and columns where both the frame and the DIB have the pixel, worked out once instead of for each one.
+	const int y0 = (std::max)({0, -yDst, -topRow}), y1 = (std::min)({h, g_frameH - yDst, dibH - topRow});
+	const int x0 = (std::max)({0, -xDst, -xSrc}), x1 = (std::min)({w, g_frameW - xDst, dibW - xSrc});
+	if (y0 >= y1 || x0 >= x1) return RECT{};
+	for (int y = y0; y < y1; y++) {
 		const int sy = topRow + y;
-		if (dy < 0 || dy >= g_frameH || sy < 0 || sy >= dibH) {
-			continue;
-		}
 		const int memRow = topDown ? sy : (dibH - 1 - sy);
 		const uint16_t *src = reinterpret_cast<const uint16_t *>(
 			static_cast<const uint8_t *>(bits) + static_cast<size_t>(memRow) * stride);
-		uint32_t *dst = &g_frame[static_cast<size_t>(dy) * g_frameW];
-		for (int x = 0; x < w; x++) {
-			const int dx = xDst + x;
-			const int sx = xSrc + x;
-			if (dx < 0 || dx >= g_frameW || sx < 0 || sx >= dibW) {
-				continue;
-			}
-			dst[dx] = g_lut[src[sx]];
-		}
+		uint32_t *dst = &g_frame[static_cast<size_t>(yDst + y) * g_frameW];
+		for (int x = x0; x < x1; x++) dst[xDst + x] = g_lut[src[xSrc + x]];
 	}
+	return RECT{xDst + x0, yDst + y0, xDst + x1, yDst + y1};
 }
 
 const char kShader[] = R"(
@@ -423,9 +454,10 @@ void CopyGameFrame(std::vector<uint32_t> &image, int &fw, int &fh)
 		std::lock_guard<std::mutex> lock(g_frameLock);
 		fw = g_frameW;
 		fh = g_frameH;
-		image = g_frame;
+		SyncCleanLocked();
 		timers = g_frameTimers;
 	}
+	image = g_clean;
 	ZoomViewDrawTimers(image.data(), fw, fh, timers);
 	ControlsDrawBarKeys(image.data(), fw, fh);
 }
@@ -448,7 +480,7 @@ bool TakeNewFrame(bool video, bool wasVideo, std::vector<uint32_t> &image, int &
 		if (g_frameDirty || wasVideo) {
 			fw = g_frameW;
 			fh = g_frameH;
-			image = g_frame;
+			SyncCleanLocked();
 			timers = g_frameTimers;
 			g_frameDirty = false;
 			taken = true;
@@ -459,12 +491,14 @@ bool TakeNewFrame(bool video, bool wasVideo, std::vector<uint32_t> &image, int &
 		if (g_frameW > 0 && !g_frame.empty()) {
 			fw = g_frameW;
 			fh = g_frameH;
-			image = g_frame;
+			SyncCleanLocked();
 			timers = g_frameTimers;
 			taken = true;
 		}
 	}
 	if (taken) {
+		// Outside the lock: only the changed part was copied under it, and the game thread doesn't wait for the whole image.
+		image = g_clean;
 		ZoomViewDrawTimers(image.data(), fw, fh, timers);
 		ControlsDrawBarKeys(image.data(), fw, fh);
 	}
@@ -555,96 +589,101 @@ DWORD WINAPI RenderThread(LPVOID)
 	DWORD lastUiDraw = 0;
 	bool movieBlack = false;
 	bool wasVideo = false;
-	while (g_running) {
-		const bool vsync = GetConfig().vsync;
-		if (!vsync) {
-			WaitForSingleObject(g_wake, 16);
-		}
-		if (!g_running) {
-			break;
-		}
-		const bool video = MediaVideoActive();
-		bool newFrame = TakeNewFrame(video, wasVideo, local, fw, fh);
-		wasVideo = video;
-		if (MediaMovieShowing()) {
-			if (!movieBlack) {
-				// A movie can already be on screen on the first pass, before the target exists.
-				FitBackBuffer(gpu);
-				if (gpu.rtv) {
-					const float black[4] = {0, 0, 0, 1};
-					gpu.ctx->ClearRenderTargetView(gpu.rtv, black);
-					gpu.swap->Present(0, 0);
+	const auto loop = [&] {
+		while (g_running) {
+			const bool vsync = GetConfig().vsync;
+			if (!vsync) {
+				WaitForSingleObject(g_wake, 16);
+			}
+			if (!g_running) {
+				break;
+			}
+			const bool video = MediaVideoActive();
+			bool newFrame = TakeNewFrame(video, wasVideo, local, fw, fh);
+			wasVideo = video;
+			if (MediaMovieShowing()) {
+				if (!movieBlack) {
+					// A movie can already be on screen on the first pass, before the target exists.
+					FitBackBuffer(gpu);
+					if (gpu.rtv) {
+						const float black[4] = {0, 0, 0, 1};
+						gpu.ctx->ClearRenderTargetView(gpu.rtv, black);
+						gpu.swap->Present(0, 0);
+					}
+					movieBlack = true;
 				}
-				movieBlack = true;
+				Sleep(15);
+				continue;
 			}
-			Sleep(15);
-			continue;
-		}
-		movieBlack = false;
-		if (!video && LoadCurtainUp()) {
-			Sleep(5);
-			continue;
-		}
-		if (!newFrame && !haveFrame) {
-			Sleep(5);
-			continue;
-		}
-		haveFrame = true;
+			movieBlack = false;
+			if (!video && LoadCurtainUp()) {
+				Sleep(5);
+				continue;
+			}
+			if (!newFrame && !haveFrame) {
+				Sleep(5);
+				continue;
+			}
+			haveFrame = true;
 
-		if (newFrame) {
-			framesThisSecond++;
-		}
-		DWORD now = GetTickCount();
-		bool overlayTick = false;
-		if (now - secondStart >= 1000) {
-			fps = framesThisSecond;
-			framesThisSecond = 0;
-			secondStart = now;
-			overlayTick = true;
-		}
-		const bool overlay = GetConfig().showPerf || GetConfig().showNet;
-		const UiNeeds needs = QueryUiNeeds();
-		if (newFrame && !needs.mp) MpUiObserveFrame(local.data(), fw, fh);
-		const bool ui = !video && needs.Any();
-		// The credits and the sliding submenu move on their own: they are drawn on every pass, at the pace of the screen.
-		if (ui && (newFrame || needs.credits || needs.animating || now - lastUiDraw >= 33)) {
-			if (!newFrame) CopyGameFrame(local, fw, fh);
-			DrawUi(needs, local.data(), fw, fh);
-			if (overlay) {
+			if (newFrame) {
+				framesThisSecond++;
+			}
+			DWORD now = GetTickCount();
+			bool overlayTick = false;
+			if (now - secondStart >= 1000) {
+				fps = framesThisSecond;
+				framesThisSecond = 0;
+				secondStart = now;
+				overlayTick = true;
+			}
+			const bool overlay = GetConfig().showPerf || GetConfig().showNet;
+			const UiNeeds needs = QueryUiNeeds();
+			if (newFrame && !needs.mp) MpUiObserveFrame(local.data(), fw, fh);
+			const bool ui = !video && needs.Any();
+			// The credits and the sliding submenu move on their own: they are drawn on every pass, at the pace of the screen.
+			if (ui && (newFrame || needs.credits || needs.animating || now - lastUiDraw >= 33)) {
+				if (!newFrame) CopyGameFrame(local, fw, fh);
+				DrawUi(needs, local.data(), fw, fh);
+				if (overlay) {
+					DrawPerfOverlay(local.data(), fw, fh, fps, gpu.bbW, gpu.bbH);
+				}
+				lastUiDraw = now;
+				newFrame = true;
+			}
+			else if (!video && !ui && overlay && (newFrame || overlayTick || uiWasOn || OverlayNeedsRedraw())) {
+				if (!newFrame) CopyGameFrame(local, fw, fh);
 				DrawPerfOverlay(local.data(), fw, fh, fps, gpu.bbW, gpu.bbH);
+				newFrame = true;
 			}
-			lastUiDraw = now;
-			newFrame = true;
-		}
-		else if (!video && !ui && overlay && (newFrame || overlayTick || uiWasOn || OverlayNeedsRedraw())) {
-			if (!newFrame) CopyGameFrame(local, fw, fh);
-			DrawPerfOverlay(local.data(), fw, fh, fps, gpu.bbW, gpu.bbH);
-			newFrame = true;
-		}
-		else if (!video && !ui && ((!overlay && overlayWasOn) || uiWasOn)) {
-			CopyGameFrame(local, fw, fh);
-			newFrame = true;
-		}
-		overlayWasOn = overlay;
-		uiWasOn = ui;
+			else if (!video && !ui && ((!overlay && overlayWasOn) || uiWasOn)) {
+				CopyGameFrame(local, fw, fh);
+				newFrame = true;
+			}
+			overlayWasOn = overlay;
+			uiWasOn = ui;
 
-		FitBackBuffer(gpu);
-		FitTexture(gpu, fw, fh);
-		if (newFrame) UploadImage(gpu, local, fw, fh);
-		PlaceImage(gpu, fw, fh);
-		DrawImage(gpu);
-		// With vertical sync the monitor sets the pace and the limit is left out.
-		const int limit = vsync ? 0 : GetConfig().fpsLimit;
-		if (limit > 0) {
-			LARGE_INTEGER now;
-			QueryPerformanceCounter(&now);
-			WaitTicks(FramePaceWait(paceDeadline, now.QuadPart, FrameInterval(paceFreq.QuadPart, limit)), paceFreq.QuadPart, paceTimer);
+			FitBackBuffer(gpu);
+			FitTexture(gpu, fw, fh);
+			if (newFrame) UploadImage(gpu, local, fw, fh);
+			PlaceImage(gpu, fw, fh);
+			DrawImage(gpu);
+			// With vertical sync the monitor sets the pace and the limit is left out.
+			const int limit = vsync ? 0 : GetConfig().fpsLimit;
+			if (limit > 0) {
+				LARGE_INTEGER now;
+				QueryPerformanceCounter(&now);
+				WaitTicks(FramePaceWait(paceDeadline, now.QuadPart, FrameInterval(paceFreq.QuadPart, limit)), paceFreq.QuadPart, paceTimer);
+			}
+			else {
+				paceDeadline = 0;
+			}
+			// Minimized or with the screen locked, Present returns at once instead of waiting for the screen, and the thread would spin.
+			if (gpu.swap->Present(vsync ? 1 : 0, 0) == DXGI_STATUS_OCCLUDED) Sleep(50);
 		}
-		else {
-			paceDeadline = 0;
-		}
-		gpu.swap->Present(vsync ? 1 : 0, 0);
-	}
+	};
+	// An exception (out of memory copying a frame, say) would end the process from this thread: it is logged and the loop carries on.
+	while (!Guard("render thread", loop) && g_running) Sleep(100);
 	if (paceTimer) CloseHandle(paceTimer);
 	return 0;
 }
@@ -678,7 +717,7 @@ void GameThreadTicks()
 int WINAPI HookSetDIBitsToDevice(HDC hdc, int xDest, int yDest, DWORD w, DWORD h, int xSrc, int ySrc,
 	UINT startScan, UINT cLines, const VOID *bits, const BITMAPINFO *bmi, UINT colorUse)
 {
-	GameThreadTicks();
+	Guard("game thread ticks", [] { GameThreadTicks(); });
 	HWND hwnd = WindowFromDC(hdc);
 	const BITMAPINFOHEADER &hdr = bmi->bmiHeader;
 	bool usable = !g_failed && hwnd && hdr.biBitCount == 16 &&
@@ -699,10 +738,11 @@ int WINAPI HookSetDIBitsToDevice(HDC hdc, int xDest, int yDest, DWORD w, DWORD h
 			g_frameW = cw;
 			g_frameH = ch;
 			g_frame.assign(static_cast<size_t>(cw) * ch, 0xff000000u);
+			AddFrameChange(RECT{0, 0, cw, ch});
 		}
 		const bool frozen = FrameFrozen();
 		if (!frozen) {
-			BlitToFrame(bmi, bits, xDest, yDest, static_cast<int>(w), static_cast<int>(h), xSrc, ySrc);
+			AddFrameChange(BlitToFrame(bmi, bits, xDest, yDest, static_cast<int>(w), static_cast<int>(h), xSrc, ySrc));
 			g_frameTimers.swap(timers);
 		}
 		g_frameDirty = true;

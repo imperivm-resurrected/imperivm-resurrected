@@ -69,7 +69,14 @@ void ModUiDraw(uint32_t *buf, int w, int h)
 				if (!g_s.io.loading) g_s.ioRefreshing = false;
 			}
 		}
-		st = g_s;
+		// Closed, only the toast is drawn from the state: the mod list and the catalogue it keeps are not copied on every pass.
+		if (g_s.open) st = g_s;
+		else {
+			st.toast = g_s.toast;
+			st.toastUntil = g_s.toastUntil;
+			st.toastLen = g_s.toastLen;
+			st.toastErr = g_s.toastErr;
+		}
 	}
 	const float s = FitScale(w, h, kDesignW, kDesignH, 24);
 	if (st.open) {

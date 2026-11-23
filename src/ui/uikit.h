@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include <emmintrin.h>
 #include <map>
 #include <mutex>
 #include <string>
@@ -199,9 +200,19 @@ struct Painter {
 		// Below scale 1 a thin line can round to no width at all, and frames lose a side.
 		if (w > 0 && r.right <= r.left) r.right = r.left + 1;
 		if (h > 0 && r.bottom <= r.top) r.bottom = r.top + 1;
-		HBRUSH b = CreateSolidBrush(c);
-		FillRect(dc, &r, b);
-		DeleteObject(b);
+		// The DC's own brush, recoloured: the same fill without a brush made and deleted in the kernel each time.
+		SetDCBrushColor(dc, c);
+		FillRect(dc, &r, static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
+	}
+	// A shape outlined and filled in one colour with the DC's own pen and brush, which draw as a 1 px CreatePen and a CreateSolidBrush would.
+	template <class Draw> void Solid(COLORREF c, const Draw &draw)
+	{
+		const HGDIOBJ ob = SelectObject(dc, GetStockObject(DC_BRUSH)), op = SelectObject(dc, GetStockObject(DC_PEN));
+		SetDCBrushColor(dc, c);
+		SetDCPenColor(dc, c);
+		draw();
+		SelectObject(dc, ob);
+		SelectObject(dc, op);
 	}
 	// A shape over a box in pixels, with smooth edges.
 	bool ShapeAt(const RECT &r, bool (*inside)(double, double), COLORREF c)
@@ -214,53 +225,25 @@ struct Painter {
 		const int x = S(cx), y = S(cy), r = S(radius);
 		if (ShapeAt({x - r, y - r, x + r + 1, y + r + 1}, InUnitDiamond, c)) return;
 		POINT pts[4] = {{x, y - r}, {x + r, y}, {x, y + r}, {x - r, y}};
-		HBRUSH b = CreateSolidBrush(c);
-		HPEN pen = CreatePen(PS_SOLID, 1, c);
-		HGDIOBJ ob = SelectObject(dc, b), op = SelectObject(dc, pen);
-		Polygon(dc, pts, 4);
-		SelectObject(dc, ob);
-		SelectObject(dc, op);
-		DeleteObject(b);
-		DeleteObject(pen);
+		Solid(c, [&] { Polygon(dc, pts, 4); });
 	}
 	void ArrowUp(int x, int y, int w, int h, COLORREF c)
 	{
 		const RECT r = R(x, y, w, h);
 		POINT pts[3] = {{r.left, r.bottom}, {r.right, r.bottom}, {(r.left + r.right) / 2, r.top}};
-		HBRUSH b = CreateSolidBrush(c);
-		HPEN pen = CreatePen(PS_SOLID, 1, c);
-		HGDIOBJ ob = SelectObject(dc, b), op = SelectObject(dc, pen);
-		Polygon(dc, pts, 3);
-		SelectObject(dc, ob);
-		SelectObject(dc, op);
-		DeleteObject(b);
-		DeleteObject(pen);
+		Solid(c, [&] { Polygon(dc, pts, 3); });
 	}
 	void ArrowRight(int x, int y, int w, int h, COLORREF c)
 	{
 		const RECT r = R(x, y, w, h);
 		POINT pts[3] = {{r.left, r.top}, {r.left, r.bottom}, {r.right, (r.top + r.bottom) / 2}};
-		HBRUSH b = CreateSolidBrush(c);
-		HPEN pen = CreatePen(PS_SOLID, 1, c);
-		HGDIOBJ ob = SelectObject(dc, b), op = SelectObject(dc, pen);
-		Polygon(dc, pts, 3);
-		SelectObject(dc, ob);
-		SelectObject(dc, op);
-		DeleteObject(b);
-		DeleteObject(pen);
+		Solid(c, [&] { Polygon(dc, pts, 3); });
 	}
 	void ArrowLeft(int x, int y, int w, int h, COLORREF c)
 	{
 		const RECT r = R(x, y, w, h);
 		POINT pts[3] = {{r.right, r.top}, {r.right, r.bottom}, {r.left, (r.top + r.bottom) / 2}};
-		HBRUSH b = CreateSolidBrush(c);
-		HPEN pen = CreatePen(PS_SOLID, 1, c);
-		HGDIOBJ ob = SelectObject(dc, b), op = SelectObject(dc, pen);
-		Polygon(dc, pts, 3);
-		SelectObject(dc, ob);
-		SelectObject(dc, op);
-		DeleteObject(b);
-		DeleteObject(pen);
+		Solid(c, [&] { Polygon(dc, pts, 3); });
 	}
 	void Spinner(int cx, int cy, int radius, int dot, DWORD tick)
 	{
@@ -277,14 +260,7 @@ struct Painter {
 	{
 		const RECT r = R(x, y, w, h);
 		POINT pts[3] = {{r.left, r.top}, {r.right, r.top}, {(r.left + r.right) / 2, r.bottom}};
-		HBRUSH b = CreateSolidBrush(c);
-		HPEN pen = CreatePen(PS_SOLID, 1, c);
-		HGDIOBJ ob = SelectObject(dc, b), op = SelectObject(dc, pen);
-		Polygon(dc, pts, 3);
-		SelectObject(dc, ob);
-		SelectObject(dc, op);
-		DeleteObject(b);
-		DeleteObject(pen);
+		Solid(c, [&] { Polygon(dc, pts, 3); });
 	}
 	void Line(int x1, int y1, int x2, int y2, COLORREF c, int width = 1)
 	{
@@ -299,27 +275,13 @@ struct Painter {
 	void Ellipse(int x, int y, int w, int h, COLORREF c)
 	{
 		if (ShapeAt(R(x, y, w, h), InUnitEllipse, c)) return;
-		HBRUSH b = CreateSolidBrush(c);
-		HPEN pen = CreatePen(PS_SOLID, 1, c);
-		HGDIOBJ ob = SelectObject(dc, b), op = SelectObject(dc, pen);
 		const RECT r = R(x, y, w, h);
-		::Ellipse(dc, r.left, r.top, r.right, r.bottom);
-		SelectObject(dc, ob);
-		SelectObject(dc, op);
-		DeleteObject(b);
-		DeleteObject(pen);
+		Solid(c, [&] { ::Ellipse(dc, r.left, r.top, r.right, r.bottom); });
 	}
 	void RoundRect(int x, int y, int w, int h, int radius, COLORREF c)
 	{
-		HBRUSH b = CreateSolidBrush(c);
-		HPEN pen = CreatePen(PS_SOLID, 1, c);
-		HGDIOBJ ob = SelectObject(dc, b), op = SelectObject(dc, pen);
 		const RECT r = R(x, y, w, h);
-		::RoundRect(dc, r.left, r.top, r.right, r.bottom, S(radius), S(radius));
-		SelectObject(dc, ob);
-		SelectObject(dc, op);
-		DeleteObject(b);
-		DeleteObject(pen);
+		Solid(c, [&] { ::RoundRect(dc, r.left, r.top, r.right, r.bottom, S(radius), S(radius)); });
 	}
 	void Frame(int x, int y, int w, int h, COLORREF c)
 	{
@@ -846,13 +808,31 @@ inline void EnsureFonts(float s)
 
 inline void Blend(uint32_t *buf, int w, int h, const Canvas &c, int ox, int oy, int alpha)
 {
-	for (int y = 0; y < c.h; y++) {
-		const int ty = oy + y;
-		if (ty < 0 || ty >= h) continue;
-		for (int x = 0; x < c.w; x++) {
-			const int tx = ox + x;
-			if (tx < 0 || tx >= w) continue;
-			uint32_t src = c.bits[static_cast<size_t>(y) * c.w + x], &dst = buf[static_cast<size_t>(ty) * w + tx];
+	// The rows and columns of the canvas that land on the frame, worked out once instead of for each pixel.
+	const int x0 = std::max(0, -ox), x1 = std::min(c.w, w - ox), y0 = std::max(0, -oy), y1 = std::min(c.h, h - oy);
+	if (x0 >= x1 || y0 >= y1) return;
+	for (int y = y0; y < y1; y++) {
+		const uint32_t *srow = c.bits + static_cast<size_t>(y) * c.w;
+		uint32_t *drow = buf + static_cast<size_t>(oy + y) * w;
+		if (alpha == 255) {
+			// Opaque: the frame under it drops out, and (v * 255) >> 8 is v - 1 with 0 kept at 0 for every channel, which is a saturating
+			// subtraction of 1 per byte, 4 pixels at a time. Same pixels as the general formula below.
+			const __m128i one = _mm_set1_epi32(0x00010101), opaque = _mm_set1_epi32(static_cast<int>(0xff000000u));
+			int x = x0;
+			for (; x + 4 <= x1; x += 4) {
+				const __m128i s = _mm_loadu_si128(reinterpret_cast<const __m128i *>(srow + x));
+				_mm_storeu_si128(reinterpret_cast<__m128i *>(drow + (ox + x)), _mm_or_si128(_mm_subs_epu8(s, one), opaque));
+			}
+			for (; x < x1; x++) {
+				const uint32_t src = srow[x];
+				const uint32_t rb = ((src & 0xff00ff) * 255) >> 8, g = ((src & 0x00ff00) * 255) >> 8;
+				drow[ox + x] = 0xff000000u | (rb & 0xff00ff) | (g & 0x00ff00);
+			}
+			continue;
+		}
+		for (int x = x0; x < x1; x++) {
+			const uint32_t src = srow[x];
+			uint32_t &dst = drow[ox + x];
 			uint32_t rb = ((src & 0xff00ff) * alpha + (dst & 0xff00ff) * (255 - alpha)) >> 8;
 			uint32_t g = ((src & 0x00ff00) * alpha + (dst & 0x00ff00) * (255 - alpha)) >> 8;
 			dst = 0xff000000u | (rb & 0xff00ff) | (g & 0x00ff00);
