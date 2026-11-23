@@ -486,6 +486,11 @@ void JoinThread(unsigned gen, std::string contentKey, std::string queue)
 				g_q.banReason = a.error.reason;
 				SetNotice(g_q, BanNotice(a.error.kind, a.error.reason), true);
 			}
+			else if (code == "new_account") {
+				// A Steam account made to start over waits before the ranked queue (two weeks by default).
+				const int64_t left = std::max<int64_t>(1, (a.error.until - LeagueServerNowMs() + 86399999) / 86400000);
+				SetNotice(g_q, TrFmt("Your Steam account is new: the ranked queue opens for it in %s days.", {std::to_string(left)}), true);
+			}
 			else if (code == "wrong_content") {
 				SetNotice(g_q, "This season is played with other gameplay content. Change your content profile to search.", true);
 				g_q.contentKey = a.error.contentKey;
