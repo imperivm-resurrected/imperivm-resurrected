@@ -496,7 +496,7 @@ const int kDropRows = 12;
 constexpr int kPaneLobbyRooms = ui::kPaneIdBase + 0x20, kPaneRoomTable = ui::kPaneIdBase + 0x21, kPaneLeagueCard = ui::kPaneIdBase + 0x22,
 			  kPaneTourneyAccount = ui::kPaneIdBase + 0x30;
 constexpr int kPaneGuideKeeps = ui::kPaneIdBase + 0x40, kPaneGuideWay = ui::kPaneIdBase + 0x41, kPaneGuideGlory = ui::kPaneIdBase + 0x42,
-			  kPaneGuideFair = ui::kPaneIdBase + 0x43;
+			  kPaneGuideFair = ui::kPaneIdBase + 0x43, kPaneGuideSeasons = ui::kPaneIdBase + 0x44;
 // Where the lobby's list of rooms was scrolled to in the frame just painted: the arrows' selection moves it.
 extern int g_lobbyScrollOut;
 

@@ -201,6 +201,25 @@ int PaintFairPlayBody(Painter &p, int ix, int top, int iw)
 		{"Declining a match", "Or letting the 20 seconds go by: 5 minutes out of the queue, twice as long for each other time that day."},
 		{"Leaving a game", "A loss (or a void game before minute 3), and 10 minutes, 30 minutes, 2 hours and then a day out of the queue, by your abandons of the last 30 days."},
 		{"Reports that disagree", "No Glory for anyone until the league's team reviews the game. You can report a problem from the result."},
+		{"Disputes", "You have 24 hours from the end of a game to report a problem with its result."},
+	};
+	for (const Rule &r : kRules) ty += PaintRule(p, ix, ty, iw, r.name, r.text) + 12;
+	return ty - 12 - top;
+}
+
+int PaintSeasonsBody(Painter &p, int ix, int top, int iw)
+{
+	int ty = top + 4;
+	struct Rule {
+		const char *name, *text;
+	};
+	static const Rule kRules[] = {
+		{"2 vs 2", "Search alone and the league finds you a partner and rivals, or invite a friend to your duo: the leader searches for both, and the two can be at most 600 Glory apart."},
+		{"Seasons", "Three months each, and the next one starts on its own. Your level moves 30 % back towards the middle and you play your placement games again."},
+		{"Maps", "Each season keeps one map of the last one and brings two new ones."},
+		{"Gameplay mods", "A season can be played with the base game or with some mods: if yours don't match, Prepare mods gets them and restarts the game."},
+		{"New accounts", "A Steam account younger than 14 days waits before the ranked queue."},
+		{"Your profile", "Anyone can open your profile from the leaderboard, a room or a cup: it shows your league and cup games, never your skirmishes."},
 	};
 	for (const Rule &r : kRules) ty += PaintRule(p, ix, ty, iw, r.name, r.text) + 12;
 	return ty - 12 - top;
@@ -269,9 +288,11 @@ void PaintRankedGuide(Painter &p, const State &st)
 		return;
 	}
 	const int leftW = (inner - kGap) / 2, rx = m + leftW + kGap, rw = inner - leftW - kGap;
-	// The steps spread out when there is room, as far as 22 apart.
-	const int wayGap = std::max(10, std::min(22, (h - kCardBodyY - 16 - 5 * 80) / 5));
-	PaneCard(p, st, kPaneGuideWay, m, y0, leftW, h, "From the queue to the result", [&](int x, int top, int w) { return PaintWayBody(p, x, top, w, wayGap); });
+	// The steps on top, the duo and the seasons under them; each card scrolls when its text does not fit.
+	const int wayH = (h - kGap) * 55 / 100;
+	const int wayGap = std::max(10, std::min(22, (wayH - kCardBodyY - 16 - 5 * 80) / 5));
+	PaneCard(p, st, kPaneGuideWay, m, y0, leftW, wayH, "From the queue to the result", [&](int x, int top, int w) { return PaintWayBody(p, x, top, w, wayGap); });
+	PaneCard(p, st, kPaneGuideSeasons, m, y0 + wayH + kGap, leftW, h - wayH - kGap, "Duo and seasons", [&](int x, int top, int w) { return PaintSeasonsBody(p, x, top, w); });
 	const int gloryH = (h - kGap) * 60 / 100;
 	PaneCard(p, st, kPaneGuideGlory, rx, y0, rw, gloryH, "Glory", [&](int x, int top, int w) { return PaintGloryBody(p, rk, x, top, w); });
 	PaneCard(p, st, kPaneGuideFair, rx, y0 + gloryH + kGap, rw, h - gloryH - kGap, "Fair play", [&](int x, int top, int w) { return PaintFairPlayBody(p, x, top, w); });
