@@ -607,10 +607,11 @@ LRESULT CALLBACK GameWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
 	if (msg == WM_LBUTTONDOWN) LogClick(lp);
 	if (msg == WM_DESTROY) DisplayRestoreMonitor();
-	if (msg == WM_SIZE || msg == WM_DISPLAYCHANGE || msg == WM_DPICHANGED) {
-		LogGeometry("window changed");
-		// The game clips the cursor to the window it has when it starts; the mod resizes the window
-		// right after, and the clip would keep the old size until the game clips again.
+	if (msg == WM_SIZE || msg == WM_MOVE || msg == WM_DISPLAYCHANGE || msg == WM_DPICHANGED) {
+		if (msg != WM_MOVE) LogGeometry("window changed");
+		// The game clips the cursor to the window it has when it starts; the mod resizes the window right after, or moves it to the
+		// monitor chosen in the settings at the same size, and the clip would keep the old place (the cursor stuck on the other
+		// monitor) until the game clips again.
 		if (g_gameClips && GetForegroundWindow() == hwnd) {
 			RECT r;
 			g_origGetClientRect(hwnd, &r);
