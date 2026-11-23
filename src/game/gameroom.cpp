@@ -65,6 +65,62 @@ typedef void(__fastcall *UpdateRow_t)(void *, void *, unsigned);
 unsigned g_siteFlags = 0;
 unsigned g_ruleFlags = 0;
 
+// A ranked or cup room (GameRoomKeepPlayerPrefs, GameRoomLockOptions): asked by the interface, done on the game thread.
+std::atomic<bool> g_keepAsked{false};
+bool g_prefsKept = false;
+bool g_lockOn = false;
+unsigned g_lockRules = 0, g_lockSites = 0;
+// CPlayerProfile +0xc8: the last room's TVXMultiGameOptions (0xec bytes of ints and char arrays), which the next room starts from.
+// SaveLocalPlayerPrefs (006dabc0) overwrites it with the room's, and saves player.ini, when the game starts and when the player leaves.
+const size_t kProfileRoomOffset = 0xc8, kProfileRoomSize = 0xec;
+const size_t kOptGameSpeed = 0x5c;
+char g_keptProfileRoom[kProfileRoomSize];
+void *g_keptProfileOf = nullptr;
+typedef void *(__fastcall *ProfileSave_t)(void *profile, void *edx, const char *path);
+
+void KeepProfileRoom()
+{
+	void *profile = *reinterpret_cast<void **>(addr::kPlayerProfile);
+	if (!profile || g_keptProfileOf) return;
+	__try {
+		memcpy(g_keptProfileRoom, static_cast<char *>(profile) + kProfileRoomOffset, kProfileRoomSize);
+		g_keptProfileOf = profile;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		g_keptProfileOf = nullptr;
+	}
+}
+
+// 1 put back and saved, 0 nothing had changed, -1 the profile could not be read.
+int PutBackProfileRoom(void *profile)
+{
+	__try {
+		char *block = static_cast<char *>(profile) + kProfileRoomOffset;
+		if (memcmp(block, g_keptProfileRoom, kProfileRoomSize) == 0) return 0;
+		memcpy(block, g_keptProfileRoom, kProfileRoomSize);
+		reinterpret_cast<ProfileSave_t>(addr::kProfileSave)(profile, nullptr, nullptr);
+		return 1;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return -1;
+	}
+}
+
+void RestoreProfileRoom()
+{
+	void *kept = g_keptProfileOf;
+	g_keptProfileOf = nullptr;
+	if (!kept) return;
+	void *profile = *reinterpret_cast<void **>(addr::kPlayerProfile);
+	if (profile != kept) {
+		LogW("room", "another profile is in use: its options for normal rooms are left as they are");
+		return;
+	}
+	const int r = PutBackProfileRoom(profile);
+	if (r > 0) LogI("room", "the profile's options for normal rooms are put back as they were before the ranked or cup room, and saved");
+	else if (r < 0) LogE("room", "the profile's options for normal rooms could not be put back");
+}
+
 std::string RoomIniPath()
 {
 	return winpath::GameDir() + "\\imperivm-mod.ini";
@@ -731,6 +787,8 @@ void TakeSnapshot()
 			const unsigned bits = ro ? *reinterpret_cast<const unsigned *>(ro + 0x34) : 0;
 			s.siteFlags = bits & kSiteMask;
 			s.rules = (s.host ? g_ruleFlags : bits) & kRuleMask;
+			s.gameSpeed = ro ? *reinterpret_cast<const int *>(ro + kOptGameSpeed) : -1;
+			s.optionsLocked = g_lockOn;
 			s.randomMap = ro ? *reinterpret_cast<const int *>(ro + 0x18) != 0 : *reinterpret_cast<int *>(static_cast<char *>(g_dlg) + 0x9c) != 0;
 			if (ro) s.mode.assign(ro + 0x60, strnlen(ro + 0x60, 0x20));
 			if (const GameMode *mode = GameModeFor(s.mode.c_str())) {
@@ -953,12 +1011,20 @@ void __fastcall HookOnShow(void *dlg)
 	g_scenarioCheckedFor = nullptr;
 	g_siteFlags = LoadRoomFlags("Sites", 0) & kSiteMask;
 	g_ruleFlags = LoadRoomRules();
+	g_keepAsked = false;
+	g_prefsKept = false;
+	g_lockOn = false;
 	LogI("room", "open (managed by the mod's interface)");
 }
 
 void __fastcall HookDtor(void *dlg)
 {
+	bool restore = false;
 	if (dlg == g_dlg) {
+		restore = g_prefsKept;
+		g_prefsKept = false;
+		g_lockOn = false;
+		g_keepAsked = false;
 		g_dlg = nullptr;
 		bool host = false;
 		{
@@ -972,6 +1038,7 @@ void __fastcall HookDtor(void *dlg)
 		LogI("room", "closed");
 	}
 	g_origDtor(dlg);
+	if (restore) RestoreProfileRoom();
 }
 
 std::string FileStemOf(const char *path)
@@ -1059,8 +1126,9 @@ void LogApplied(const char *opts)
 	void *sizeCombo = dialog ? Combo(dialog, kMapSizeCombo) : nullptr;
 	const int size = sizeCombo ? ComboSel(sizeCombo) : -1;
 	char line[300];
-	sprintf_s(line, "%s%s, size %d, %u positions, mode \"%s\", flags 0x%x, %u mods loaded", random ? "random map " : "scenario", random ? mapName : "", size, positions, mode,
-		*reinterpret_cast<const unsigned *>(opts + 0x34), static_cast<unsigned>(ModsMountedProfile().mods.size()));
+	sprintf_s(line, "%s%s, size %d, %u positions, mode \"%s\", flags 0x%x, speed %d, %u mods loaded", random ? "random map " : "scenario", random ? mapName : "", size,
+		positions, mode, *reinterpret_cast<const unsigned *>(opts + 0x34), *reinterpret_cast<const int *>(opts + kOptGameSpeed),
+		static_cast<unsigned>(ModsMountedProfile().mods.size()));
 	static std::string last;
 	if (last == line) return;
 	last = line;
@@ -1078,7 +1146,14 @@ int __fastcall HookApplyToGame(void *self, void *edx, char *opts)
 	if (r && opts) {
 		unsigned &flags = *reinterpret_cast<unsigned *>(opts + 0x34);
 		const bool random = *reinterpret_cast<int *>(opts + 0x18) != 0;
-		flags = (flags & ~(kSiteMask | kRuleMask)) | (random ? g_siteFlags : 0) | (g_ruleFlags & (random ? ~0u : ~kSeasonBits));
+		const unsigned rules = g_lockOn ? g_lockRules : g_ruleFlags, sites = g_lockOn ? g_lockSites : g_siteFlags;
+		flags = (flags & ~(kSiteMask | kRuleMask)) | (random ? sites : 0) | (rules & (random ? ~0u : ~kSeasonBits));
+		// OnApply (006f6320) publishes this block after ApplyToGame; its +0x5c becomes the game's speed (TVXGameSettings +0xd98).
+		int &speed = *reinterpret_cast<int *>(opts + kOptGameSpeed);
+		if (g_lockOn && speed != -1) {
+			LogI("room", "the room had the game speed %d of the host's profile; it is played at the normal speed", speed);
+			speed = -1;
+		}
 		if (!NetMultiplayerSaveLoading()) GameModeApplyOptions(opts);
 		LogApplied(opts);
 	}
@@ -1354,7 +1429,7 @@ void SaveRoomOption(void *opts, const OptionDef &d)
 void RoomOptionsTick()
 {
 	void *opts = *reinterpret_cast<void **>(addr::kGameOptionsDialog);
-	if (!g_dlg || !opts || !reinterpret_cast<IntThis_t>(addr::kIsHostOrOffline)(g_dlg) || NetMultiplayerSaveLoading() || NetRejoinLoading()) return;
+	if (!g_dlg || !opts || g_prefsKept || !reinterpret_cast<IntThis_t>(addr::kIsHostOrOffline)(g_dlg) || NetMultiplayerSaveLoading() || NetRejoinLoading()) return;
 	if (g_optionsSeenFor != g_dlg) {
 		g_optionsSeenFor = g_dlg;
 		return;
@@ -1891,8 +1966,12 @@ void GameRoomSaveSetting(const char *key, int value)
 void GameRoomSetSiteFlags(unsigned bits)
 {
 	Queue([bits] {
+		if (g_lockOn) {
+			LogD("room", "neutral sites 0x%x not taken: the league's are locked in this room", bits & kSiteMask);
+			return;
+		}
 		g_siteFlags = bits & kSiteMask;
-		SaveRoomFlags("Sites", g_siteFlags);
+		if (!g_prefsKept) SaveRoomFlags("Sites", g_siteFlags);
 		void *opts = *reinterpret_cast<void **>(addr::kGameOptionsDialog);
 		typedef void(__fastcall *OnApply_t)(void *opts);
 		if (opts) reinterpret_cast<OnApply_t>(addr::kOnApplyOptions)(opts);
@@ -1903,12 +1982,52 @@ void GameRoomSetSiteFlags(unsigned bits)
 void GameRoomSetRules(unsigned bits)
 {
 	Queue([bits] {
+		if (g_lockOn) {
+			LogD("room", "rules 0x%x not taken: the league's are locked in this room", bits & kRuleMask);
+			return;
+		}
 		g_ruleFlags = bits & kRuleMask;
-		if (!NetMultiplayerSaveLoading()) SaveRoomRules(g_ruleFlags);
+		if (!NetMultiplayerSaveLoading() && !g_prefsKept) SaveRoomRules(g_ruleFlags);
 		void *opts = *reinterpret_cast<void **>(addr::kGameOptionsDialog);
 		typedef void(__fastcall *OnApply_t)(void *opts);
 		if (opts) reinterpret_cast<OnApply_t>(addr::kOnApplyOptions)(opts);
 		LogI("room", "rules 0x%x", g_ruleFlags);
+	});
+}
+
+namespace {
+void KeepPrefsNow()
+{
+	if (!g_dlg || g_prefsKept) return;
+	g_prefsKept = true;
+	KeepProfileRoom();
+	LogI("room", "a ranked or cup room: the player's options for normal rooms are kept aside%s", g_keptProfileOf ? "" : " (the profile could not be read)");
+}
+}
+
+void GameRoomKeepPlayerPrefs()
+{
+	if (g_keepAsked.exchange(true)) return;
+	Queue([] { KeepPrefsNow(); });
+}
+
+void GameRoomLockOptions(unsigned rules, unsigned sites)
+{
+	Queue([rules, sites] {
+		KeepPrefsNow();
+		if (!reinterpret_cast<IntThis_t>(addr::kIsHostOrOffline)(g_dlg)) return;
+		const unsigned r = rules & kRuleMask, s = sites & kSiteMask;
+		const char *ro = reinterpret_cast<const char *>(reinterpret_cast<GetGameOptions_t>(addr::kGetGameOptions)(g_dlg));
+		const int speed = ro ? *reinterpret_cast<const int *>(ro + kOptGameSpeed) : -1;
+		const bool same = g_lockOn && g_lockRules == r && g_lockSites == s && speed == -1;
+		g_lockOn = true;
+		g_lockRules = g_ruleFlags = r;
+		g_lockSites = g_siteFlags = s;
+		if (same) return;
+		void *opts = *reinterpret_cast<void **>(addr::kGameOptionsDialog);
+		typedef void(__fastcall *OnApply_t)(void *opts);
+		if (opts) reinterpret_cast<OnApply_t>(addr::kOnApplyOptions)(opts);
+		LogI("room", "the league's rules 0x%x and removed sites 0x%x are locked in the room", r, s);
 	});
 }
 

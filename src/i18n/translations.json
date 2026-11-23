@@ -3629,5 +3629,21 @@
 {"en":"Only on the test server: the bots take the free places; the game's AI plays against you.","es":"Solo en el servidor de pruebas: los bots ocupan las plazas libres; contra ti juega la IA.","it":"Solo sul server di prova: i bot occupano i posti liberi; contro di te gioca l'IA."},
 {"en":"A test bot took the free place.","es":"Un bot de prueba ocupa la plaza libre.","it":"Un bot di prova occupa il posto libero."},
 {"en":"%s test bots took the free places.","es":"%s bots de prueba ocupan las plazas libres.","it":"%s bot di prova occupano i posti liberi."},
-{"en":"No place was free: the cup is full.","es":"No quedaba ninguna plaza libre: la copa está llena.","it":"Non c'era nessun posto libero: la coppa è piena."}
+{"en":"No place was free: the cup is full.","es":"No quedaba ninguna plaza libre: la copa está llena.","it":"Non c'era nessun posto libero: la coppa è piena."},
+{"en":"For %s","es":"Para %s","it":"Per %s"},
+{"en":"Not for this cup","es":"No vale para esta copa","it":"Non adatto a questa coppa"},
+{"en":"It has %s places; this cup needs %s.","es":"Tiene %s plazas; esta copa necesita %s.","it":"Ha %s posti; questa coppa ne richiede %s."},
+{"en":"Its name says %s against %s: it is not made for even sides.","es":"Su nombre dice %s contra %s: no está hecho para bandos iguales.","it":"Il suo nome dice %s contro %s: non è fatto per schieramenti pari."},
+{"en":"Its name says it is made for %s: the places past those players are not made to play.","es":"Su nombre dice que está hecho para %s: las plazas de más no están hechas para jugar.","it":"Il suo nome dice che è fatto per %s: i posti in più non sono fatti per giocare."},
+{"en":"Some of the first %s places start with nothing or with far less than the others: they are not made to play.","es":"Alguna de las %s primeras plazas empieza sin nada o con mucho menos que las demás: no está hecha para jugar.","it":"Alcuni dei primi %s posti iniziano senza nulla o con molto meno degli altri: non sono fatti per giocare."},
+{"en":"Its scripts end the game on their own: it is not made for a cup match.","es":"Sus scripts terminan la partida por su cuenta: no está hecho para una partida de copa.","it":"I suoi script terminano la partita da soli: non è fatto per una partita di coppa."},
+{"en":"Its scripts set the alliances on their own: it is not made for a cup match.","es":"Sus scripts fijan las alianzas por su cuenta: no está hecho para una partida de copa.","it":"I suoi script fissano le alleanze da soli: non è fatto per una partita di coppa."},
+{"en":"Made for %s: every place is played.","es":"Hecho para %s: se juegan todas sus plazas.","it":"Fatto per %s: si giocano tutti i suoi posti."},
+{"en":"Made for %s. It has %s places: the match plays the first %s and the other %s stay closed, with no AI.","es":"Hecho para %s. Tiene %s plazas: la partida usa las %s primeras y las otras %s quedan cerradas, sin IA.","it":"Fatto per %s. Ha %s posti: la partita usa i primi %s e gli altri %s restano chiusi, senza IA."},
+{"en":"For %s players: the match plays the first %s places and the other %s stay closed, with no AI.","es":"Para %s jugadores: la partida usa las %s primeras plazas y las otras %s quedan cerradas, sin IA.","it":"Per %s giocatori: la partita usa i primi %s posti e gli altri %s restano chiusi, senza IA."},
+{"en":"The two places played start close together.","es":"Las dos plazas que se juegan empiezan cerca la una de la otra.","it":"I due posti giocati iniziano vicini."},
+{"en":"The scenario's own %s players of the computer play in it too.","es":"También juegan los %s jugadores del ordenador del propio escenario.","it":"Giocano anche i %s giocatori del computer dello scenario."},
+{"en":"Its scripts bring units or the computer into the game.","es":"Sus scripts meten unidades o al ordenador en la partida.","it":"I suoi script portano unità o il computer nella partita."},
+{"en":"%s places closed","es":"%s plazas cerradas","it":"%s posti chiusi"},
+{"en":"The league's options are being set in the room.","es":"Se están poniendo en la sala las opciones de la liga.","it":"Si stanno impostando nella sala le opzioni della lega."}
 ]

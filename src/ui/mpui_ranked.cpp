@@ -20,6 +20,7 @@
 #include "core/leaguemaps.h"
 #include "core/leagueplay.h"
 #include "core/leagueranked.h"
+#include "core/leagueroomoptions.h"
 #include "core/leagueteam.h"
 #include "core/log.h"
 #include "hooks/dmshim.h"
@@ -35,6 +36,7 @@
 #include "ui/profileui.h"
 
 #include "ui/mpui_internal.h"
+#include "ui/mpui_league_room.h"
 #include "ui/mpui_ranked_kit.h"
 
 using namespace mpui_impl;
@@ -42,9 +44,7 @@ using namespace mpui_impl;
 namespace mpui_impl {
 namespace {
 
-const int kOptMapType = 0x1000, kOptMapSize = 0x01000008, kOptPopulation = 0x1004, kOptGold = 0x1005, kOptNoFog = 0x1007, kOptExplored = 0x1008,
-		  kOptNoBonuses = 0x10a7;
-const int kCompetitive = 1;
+const int kOptMapType = 0x1000, kOptMapSize = 0x01000008;
 
 // What the game thread does for a ranked match: the room it made or tried to join, and when.
 struct RoomAuto {
@@ -95,11 +95,6 @@ std::string Plain(const std::string &s)
 	return out;
 }
 
-bool Contains(const std::string &haystack, const std::string &needle)
-{
-	return !needle.empty() && haystack.find(needle) != std::string::npos;
-}
-
 // Under g_lock, on the game thread: one change of the room at most every 3 s per option, so the host never fights the game.
 bool Due(int id)
 {
@@ -108,31 +103,6 @@ bool Due(int id)
 	if (it != g_auto.setAt.end() && now - it->second < 3000) return false;
 	g_auto.setAt[id] = now;
 	return true;
-}
-
-int FindItem(const GameRoomOption &o, const std::vector<std::string> &words, bool exact)
-{
-	for (size_t k = 0; k < o.items.size(); k++) {
-		if (k < o.itemDisabled.size() && o.itemDisabled[k]) continue;
-		const std::string item = Plain(o.items[k]);
-		for (const std::string &w : words) {
-			if (exact ? item == w : Contains(item, w)) return static_cast<int>(k);
-		}
-	}
-	return -1;
-}
-
-void SetCombo(const GameRoomSnapshot &g, int id, const std::vector<std::string> &words, bool exact)
-{
-	for (const GameRoomOption &o : g.options) {
-		if (o.id != id || o.checkbox) continue;
-		const int want = FindItem(o, words, exact);
-		if (want >= 0 && o.sel != want && Due(id)) {
-			GameRoomSetOption(id, want);
-			Predict(kPredOptSel, id, want);
-		}
-		return;
-	}
 }
 
 // The ticket's map type or size, by the game's id behind each item (core/leaguemaps.h); by the item's text only when the ids can't
@@ -164,52 +134,20 @@ void SetMapItem(const GameRoomSnapshot &g, int id, const std::string &want)
 	}
 }
 
-void SetCheck(const GameRoomSnapshot &g, int id, bool value)
-{
-	for (const GameRoomOption &o : g.options) {
-		if (o.id != id || !o.checkbox) continue;
-		if (o.value != value && Due(id)) {
-			GameRoomToggleOption(id);
-			Predict(kPredOptVal, id, value);
-		}
-		return;
-	}
-}
-
-// The host keeps the room as the server's ticket says: map, size, preset and the options of the season. The other player cannot change
-// anything (RankedRoomAction), so this only puts the room right once and keeps it so.
+// The host keeps the room as the server's ticket says: map and size, and every other option from the season's settings and the
+// league's defaults (core/leagueroomoptions.h), whatever the host's last room had. Put back every second, until the game starts.
 void ApplySettings(const LeagueMatchTicket &t)
 {
-	const GameRoomSnapshot g = GameRoomGet();
+	GameRoomSnapshot g = GameRoomGet();
 	if (!g.active || !g.host || !g.online || g.busy) return;
-	const LeagueRoomSettings &s = t.settings;
-	const bool competitive = s.preset.empty() || s.preset == "competitive";
-	const Preset &preset = kPresets[kCompetitive];
+	LeagueRoomApply(LeagueRoomOptionsFor(LeagueRoomRequestOf(t.settings)), g, g_s.room.id, "ranked");
 	// The type first: the sizes the game offers depend on it.
 	if (!t.map.name.empty()) SetMapItem(g, kOptMapType, t.map.name);
 	if (!t.map.size.empty()) SetMapItem(g, kOptMapSize, t.map.size);
-	unsigned base = competitive ? preset.rules : 0;
-	if (s.diplomacy == "locked") base |= kRuleLockDiplomacy;
-	else if (s.diplomacy == "free" || s.diplomacy == "open") base &= ~kRuleLockDiplomacy;
-	if (s.hideCivs == 1) base |= kRuleBlindPick;
-	if (s.cheats == 1) base |= kRuleCheats;
-	if (s.timers == 0) base |= kRuleNoTimers;
-	const unsigned rules = (g.rules & ~kRuleBaseMask) | base;
-	if (rules != g.rules && Due(-1)) GameRoomSetRules(rules);
-	if (competitive && (g.siteFlags & kSiteMask) != preset.sites && Due(-2)) GameRoomSetSiteFlags(preset.sites);
-	if (competitive) {
-		SetCombo(g, kOptGold, {Plain(PresetChoice(preset.gold))}, true);
-		SetCombo(g, kOptPopulation, {Plain(PresetChoice(preset.pop))}, true);
-		SetCheck(g, kOptNoBonuses, !preset.bonuses);
-	}
-	const bool fog = s.fog >= 0 ? s.fog == 1 : competitive ? preset.fog : true;
-	const bool explored = s.explored >= 0 ? s.explored == 1 : competitive ? preset.explored : false;
-	SetCheck(g, kOptNoFog, !fog);
-	SetCheck(g, kOptExplored, explored);
 	if (!g_auto.settingsLogged) {
 		g_auto.settingsLogged = true;
 		LogI("league", "ranked: the room takes the league's options (map %s %s, preset %s)", t.map.name.c_str(), t.map.size.c_str(),
-			competitive ? "competitive" : s.preset.c_str());
+			t.settings.preset.empty() ? "competitive" : t.settings.preset.c_str());
 	}
 }
 
@@ -358,6 +296,7 @@ void RoomStep(const LeagueRankedView &v, DWORD now)
 			g_auto.teamAt = now;
 			SetOwnTeam(v);
 		}
+		if (GameRoomActive()) GameRoomKeepPlayerPrefs();
 		if (!v.host || !OwnsRoom()) return;
 		LeagueRankedRoomOpened(g_s.room.id);
 		if (g_auto.invitedLobby != g_s.room.id) {
@@ -1180,7 +1119,9 @@ int PaintRankedMark(Painter &p, const State &st, int x, int y, int h)
 
 StartBlock RankedStartBlocker(const State &st, const GameRoomSnapshot &g)
 {
-	if (!RankedRoomLocked(st) || st.room.info.mode != kLeagueTeamRoomMode) return {};
+	if (!RankedRoomLocked(st)) return {};
+	if (!LeagueRoomHeld(g, st.room.id)) return {Tr("Preparing the room..."), Tr("The league's options are being set in the room.")};
+	if (st.room.info.mode != kLeagueTeamRoomMode) return {};
 	const LeagueRankedView &v = st.ranked.view;
 	int humans = 0;
 	for (const GameRoomSlot &s : g.slots) humans += s.used && s.type == 3 ? 1 : 0;

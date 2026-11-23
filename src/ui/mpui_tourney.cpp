@@ -36,6 +36,7 @@
 #include "ui/leaguemodsprep.h"
 #include "ui/leagueui.h"
 #include "ui/modui.h"
+#include "ui/mpui_league_room.h"
 #include "ui/mpui_tourney_internal.h"
 #include "ui/patronui.h"
 #include "ui/textedit.h"
@@ -570,6 +571,7 @@ void StepInRoom(const TourneyNext &next)
 	}
 	const DWORD now = GetTickCount();
 	const bool mine = next.present && next.match == match;
+	if (g_s.game.active) GameRoomKeepPlayerPrefs();
 	if (mine) k.wasMine = true;
 	else if (k.wasMine && !g_s.inOnlineGame && !g_s.game.busy && LeagueTourneyMine()->loaded) {
 		// Settled while the player waited here (a no-show claimed or given): out of the room and back to the tournaments.
@@ -754,6 +756,12 @@ void StepInRoom(const TourneyNext &next)
 			const std::string warning = map == CupMapStatus::Downloading ? std::string() : CupMapWarning(gameMap);
 			if (!warning.empty()) Toast(warning, true);
 		}
+	}
+	// Whatever changed the room after (the host's own choices) is put back before the game starts.
+	if (mine && k.applied && !g_s.inOnlineGame && g_s.game.active && g_s.game.host && !g_s.game.busy && !LeagueRoomHeld(g_s.game, g_s.room.id)) {
+		LogI("league", "the room no longer has the tournament's options; they are set again");
+		k.applied = false;
+		k.tries = 0;
 	}
 	if (!mine || next.pick.present || !g_s.game.active || !g_s.game.host || g_s.game.busy || k.applied || k.tries >= 24 || now - k.at < 800) return;
 	k.at = now;

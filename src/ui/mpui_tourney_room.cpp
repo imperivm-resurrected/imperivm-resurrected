@@ -10,43 +10,19 @@
 #include <vector>
 
 #include "core/leaguemaps.h"
+#include "core/leagueroomoptions.h"
 #include "core/log.h"
 #include "core/tournament.h"
 #include "game/cupmaps.h"
 #include "game/gameroom.h"
 #include "ui/modui.h"
+#include "ui/mpui_league_room.h"
 #include "ui/mpui_tourney_internal.h"
 
 namespace mpui_tourney_impl {
 namespace {
 
-const int kOptMapType = 0x1000, kOptMapSize = 0x01000008, kOptPopulation = 0x1004, kOptGold = 0x1005, kOptNoFog = 0x1007, kOptExplored = 0x1008,
-		  kOptNoBonuses = 0x10a7;
-
-// Lower-case letters and digits, the accents of Spanish and Italian taken off: the room's items in the game's language.
-std::string Plain(const std::string &s)
-{
-	static const std::pair<const char *, char> kAccents[] = {{"\xC3\xA1", 'a'}, {"\xC3\xA9", 'e'}, {"\xC3\xAD", 'i'}, {"\xC3\xB3", 'o'}, {"\xC3\xBA", 'u'},
-		{"\xC3\xB1", 'n'}, {"\xC3\xA0", 'a'}, {"\xC3\xA8", 'e'}, {"\xC3\xAC", 'i'}, {"\xC3\xB2", 'o'}, {"\xC3\xB9", 'u'}};
-	std::string out;
-	for (size_t i = 0; i < s.size();) {
-		bool done = false;
-		for (const auto &a : kAccents) {
-			if (s.compare(i, 2, a.first) == 0) {
-				out += a.second;
-				i += 2;
-				done = true;
-				break;
-			}
-		}
-		if (done) continue;
-		const unsigned char c = static_cast<unsigned char>(s[i++]);
-		if (isalnum(c)) out += static_cast<char>(tolower(c));
-		else if (!out.empty() && out.back() != ' ') out += ' ';
-	}
-	while (!out.empty() && out.back() == ' ') out.pop_back();
-	return out;
-}
+const int kOptMapType = 0x1000, kOptMapSize = 0x01000008;
 
 // "scenarios/torneo_1vs1_egypt": a scenario's path as the room's selector and the room name it, compared.
 std::string MapKey(std::string p)
@@ -68,36 +44,6 @@ GameRoomOption *FindOption(GameRoomSnapshot &g, int id)
 		if (o.id == id) return &o;
 	}
 	return nullptr;
-}
-
-// Each of these is true once the room holds what the tournament wants, or the game has nothing to set it with.
-bool SetCombo(GameRoomSnapshot &g, int id, const std::vector<std::string> &words)
-{
-	GameRoomOption *o = FindOption(g, id);
-	if (!o || o->checkbox) return true;
-	int want = -1;
-	for (size_t k = 0; k < o->items.size() && want < 0; k++) {
-		if (k < o->itemDisabled.size() && o->itemDisabled[k]) continue;
-		const std::string item = Plain(o->items[k]);
-		for (const std::string &w : words) {
-			if (item == w) want = static_cast<int>(k);
-		}
-	}
-	if (want < 0 || o->sel == want) return true;
-	o->sel = want;
-	Predict(kPredOptSel, id, want);
-	GameRoomSetOption(id, want);
-	return false;
-}
-
-bool SetCheck(GameRoomSnapshot &g, int id, bool value)
-{
-	GameRoomOption *o = FindOption(g, id);
-	if (!o || !o->checkbox || o->value == value) return true;
-	o->value = value;
-	Predict(kPredOptVal, id, value);
-	GameRoomToggleOption(id);
-	return false;
 }
 
 // A random map's type or size, by the game's id behind each item; a size waits for its type, which decides the sizes the game offers.
@@ -199,40 +145,8 @@ bool ApplyTourneyTeam(RoomLock &k)
 bool ApplyTourneyRoom(const TourneyNext &next, RoomLock &k)
 {
 	GameRoomSnapshot &g = g_s.game;
-	const TourneyRoomRules r = TourneyRulesOf(next.settings);
-	bool done = true;
-	// The room's own rules off (cheats, free attachment), the tournament's diplomacy and hidden civilizations on; the content's options kept.
-	const unsigned rules = (g.rules & ~kRuleBaseMask) | (r.lockedDiplomacy ? kRuleLockDiplomacy : 0u) | (r.hideCivs ? kRuleBlindPick : 0u) | (r.timers ? 0u : kRuleNoTimers);
-	if (rules != g.rules) {
-		g.rules = rules;
-		GameRoomSetRules(rules);
-		done = false;
-	}
-	// Every preset keeps the ruins, caves, item holders and strongholds.
-	if (g.siteFlags & kSiteMask) {
-		g.siteFlags &= ~kSiteMask;
-		GameRoomSetSiteFlags(g.siteFlags);
-		done = false;
-	}
-	switch (r.preset) {
-	case TourneyPreset::Classic:
-		done = SetCombo(g, kOptGold, {"por defecto", "default", "predefinito", "predefinita"}) && done;
-		done = SetCombo(g, kOptPopulation, {"normal", "normale"}) && done;
-		done = SetCheck(g, kOptNoBonuses, false) && done;
-		break;
-	case TourneyPreset::Various:
-		done = SetCombo(g, kOptGold, {"10000"}) && done;
-		done = SetCombo(g, kOptPopulation, {"alta", "high", "elevata"}) && done;
-		done = SetCheck(g, kOptNoBonuses, false) && done;
-		break;
-	default:
-		done = SetCombo(g, kOptGold, {"5000"}) && done;
-		done = SetCombo(g, kOptPopulation, {"normal", "normale"}) && done;
-		done = SetCheck(g, kOptNoBonuses, true) && done;
-		break;
-	}
-	done = SetCheck(g, kOptNoFog, !r.fog) && done;
-	done = SetCheck(g, kOptExplored, r.explored) && done;
+	// Every option but the map: the cup's preset and switches, and the league's defaults for the rest (core/leagueroomoptions.h).
+	bool done = LeagueRoomApply(LeagueRoomOptionsFor(LeagueRoomRequestOf(next.settings)), g, g_s.room.id, "cup");
 	const TourneyMap map = TourneyGameMap(next);
 	if (map.Scenario()) done = (k.mapAllowed || PickScenario(g, map, k)) && done;
 	else if (map.Known() && !k.mapAllowed) {

@@ -13,6 +13,7 @@
 #include "mods/savelib.h"
 
 #include "ui/mpui_internal.h"
+#include "ui/mpui_league_room.h"
 #include "ui/mpui_tourney.h"
 #include "game/civs.h"
 #include "core/log.h"
@@ -98,7 +99,9 @@ StartBlock StartBlocker(const State &st, const GameRoomSnapshot &g)
 	if (const int needed = TourneyRoomPlayers(st); needed && humans < needed) {
 		return {Tr("Waiting for your opponent..."), Tr("A cup match starts when all its players are in the room.")};
 	}
-	if (TourneyRoomApplying(st)) return {Tr("Preparing the room..."), Tr("The tournament's map and rules are being set in the room.")};
+	if (TourneyRoomApplying(st) || (TourneyRoomPlayers(st) && !LeagueRoomHeld(g, st.room.id))) {
+		return {Tr("Preparing the room..."), Tr("The tournament's map and rules are being set in the room.")};
+	}
 	const bool missing = humans < static_cast<int>(st.room.members.size());
 	for (const OnlineMember &m : st.room.members) {
 		if (!missing || m.me || inRoom(m.name)) continue;

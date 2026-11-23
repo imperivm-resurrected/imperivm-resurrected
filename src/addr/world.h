@@ -78,6 +78,8 @@ constexpr uintptr_t kCrashFixSites[] = {0x0055f500, 0x0057177c, 0x005717f6, 0x00
 // CVXPlayer::Serialize (__thiscall, the archive): the "Player" section of a save, its colour among it.
 inline constexpr uintptr_t kPlayerSerialize = 0x00564780;
 inline constexpr uintptr_t kComputePlayerTotals = 0x0056a6e0;
+// CPlayerProfile::Save (__thiscall, the path or null): writes profiles/<dir>/player.ini, the last room's options among it.
+inline constexpr uintptr_t kProfileSave = 0x0056b7d0;
 inline constexpr uintptr_t kGenerateRandomMap = 0x00587e60;
 inline constexpr uintptr_t kRandomMapRacePrefixes = 0x0058988d;
 inline constexpr uintptr_t kFindTemplateByPrefix = 0x0058dfc0;

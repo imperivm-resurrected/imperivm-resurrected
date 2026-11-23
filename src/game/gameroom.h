@@ -93,6 +93,10 @@ struct GameRoomSnapshot {
 	// The last scenario offered to the selector that the game refused (not for multiplayer, or unreadable): its path.
 	std::string pickerRefused;
 	std::vector<BonusDef> bonuses;
+	// The game's speed in the room's options (+0x5c, from the profile's gamespeed): -1 is the normal speed.
+	int gameSpeed = -1;
+	// GameRoomLockOptions holds the room.
+	bool optionsLocked = false;
 };
 
 void GameRoomInstall(bool knownExe);
@@ -108,6 +112,14 @@ void GameRoomKick(int slot);
 void GameRoomPlayerLeft(const std::string &name);
 void GameRoomSetSiteFlags(unsigned bits);
 void GameRoomSetRules(unsigned bits);
+// A ranked or cup room, host or guest, until it closes: the player's own options for normal games are kept aside. Nothing of the room
+// is written to imperivm-mod.ini or read from it, and the profile's last room (player.ini), which the game overwrites when the game
+// starts or the player leaves, is put back and saved when the room closes.
+void GameRoomKeepPlayerPrefs();
+// The host of a ranked or cup room, until it closes (GameRoomKeepPlayerPrefs included): every time the room's options are applied
+// they carry these rules (kRuleMask) and removed sites (kSiteMask), and the normal game speed. GameRoomSetRules and
+// GameRoomSetSiteFlags change nothing meanwhile.
+void GameRoomLockOptions(unsigned rules, unsigned sites);
 int GameRoomLoadSetting(const char *key, int def);
 void GameRoomSaveSetting(const char *key, int value);
 void GameRoomRefreshChoices();
