@@ -844,6 +844,14 @@ void ProfileUiDraw(uint32_t *buf, int w, int h)
 
 bool ProfileUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 {
+	// A press that closed the public profile (its Back) keeps its release: the multiplayer screen under it acts on releases, and
+	// its own Back sits in the same corner.
+	static bool swallowRelease = false;
+	if (msg == WM_LBUTTONUP && swallowRelease) {
+		swallowRelease = false;
+		return true;
+	}
+	if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK) swallowRelease = false;
 	if (ModUiIsOpen()) return false;
 	if (PublicOpen()) {
 		if (!MpUiNeedsDraw()) return false;
@@ -856,6 +864,7 @@ bool ProfileUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		}
 		if (pub) {
 			if (cmd.action != kActNone) ExecutePublic(cmd);
+			if ((msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK) && !PublicOpen()) swallowRelease = true;
 			return consumed;
 		}
 	}
