@@ -139,6 +139,11 @@ void LoadConfig()
 	g_config.trapMouse = ini.Flag("Display", "TrapMouse", true);
 	g_config.monitor = ini.Clamped("Display", "Monitor", 0, 0, 15);
 	int resW = 0, resH = 0;
+	if (sscanf_s(ini.Text("Display", "WindowClient", "", kShortText).c_str(), "%dx%d", &resW, &resH) == 2 &&
+		resW > 0 && resH > 0 && resW <= 32767 && resH <= 32767) {
+		g_config.windowClientW = resW;
+		g_config.windowClientH = resH;
+	}
 	if (sscanf_s(ini.Text("Display", "Resolution", "", kShortText).c_str(), "%dx%d", &resW, &resH) == 2 && resW >= 640 && resH >= 480 && resW <= 8192 &&
 		resH <= 8192) {
 		g_config.resolutionW = resW;
@@ -269,6 +274,14 @@ void ConfigSetSavedSize(Config &c, bool windowed, const SavedSize &s)
 Config &MutableConfig()
 {
 	return g_config;
+}
+
+void SaveWindowClient(int width, int height)
+{
+	if (width <= 0 || height <= 0 || (g_config.windowClientW == width && g_config.windowClientH == height)) return;
+	g_config.windowClientW = width;
+	g_config.windowClientH = height;
+	Ini().Write("Display", "WindowClient", SizeText(width, height));
 }
 
 void SaveConfig()

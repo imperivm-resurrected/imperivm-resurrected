@@ -115,7 +115,7 @@ ChangeDisplayModeTo_t g_origChangeDisplayModeTo = nullptr;
 
 void *__cdecl HookChangeDisplayModeTo(DWORD w, DWORD h, unsigned freq, int testOnly)
 {
-	if (!testOnly && DisplayFakeMode(static_cast<int>(w), static_cast<int>(h), 16, false)) {
+	if (DisplayFakeMode(static_cast<int>(w), static_cast<int>(h), 16, testOnly != 0)) {
 		return nullptr;
 	}
 	return g_origChangeDisplayModeTo(w, h, freq, testOnly);
@@ -164,6 +164,50 @@ ResSize ScreenSize()
 bool g_previewing = false;
 ResolutionChoice g_preview;
 ResSize g_heldSize;
+int g_customWindowSlot = -1;
+
+bool ResizeGameClient(int w, int h)
+{
+	if (g_previewing || !ResolutionCount() || !FrameSizeSupported({w, h})) return false;
+	auto &begin = *reinterpret_cast<POINT **>(addr::kResolutionList + 4);
+	auto &end = *reinterpret_cast<POINT **>(addr::kResolutionList + 8);
+	auto &current = *reinterpret_cast<int *>(addr::kCurrentResolutionIndex);
+	const int previous = current;
+	int index = ResolutionIndexOf(w, h);
+	const int count = ResolutionCount();
+	const bool replace = index < 0 && g_customWindowSlot >= 0 && g_customWindowSlot == count - 1;
+	const bool append = index < 0 && !replace;
+	const POINT size = {w, h};
+	POINT old = {};
+	if (replace) {
+		index = g_customWindowSlot;
+		old = begin[index];
+		begin[index] = size;
+	} else if (append) {
+		index = count;
+		reinterpret_cast<PushBack_t>(addr::kVectorPointPushBack)(reinterpret_cast<void *>(addr::kResolutionList), nullptr, &size);
+	}
+
+	// Use the same operation as the native Options dialog so the map, camera and UI surfaces resize together.
+	current = index;
+	const uintptr_t resize = addr::kApplyResolutionIndex;
+	int error;
+	__asm {
+		mov eax, index
+		call resize
+		mov error, eax
+	}
+	if (error) {
+		if (replace) begin[index] = old;
+		if (append) end = begin + count;
+		current = previous;
+		LogW("display", "the game could not resize its canvas to %dx%d", w, h);
+		return false;
+	}
+	if (append) g_customWindowSlot = index;
+	g_sizeAtStart = size;
+	return true;
+}
 
 void SetResolutionIndex(int index)
 {
@@ -176,8 +220,16 @@ void SetResolutionIndex(int index)
 // Where the size saved for a mode is in the list: that size, else the screen's own, else the first.
 ResPick SavedPick(bool windowed)
 {
-	const SavedSize s = ConfigSavedSize(GetConfig(), windowed);
-	return PickStartResolution(ResolutionSizes(), {s.w, s.h}, {s.screenW, s.screenH}, ScreenSize(), DisplayMonitorHasMode(s.w, s.h));
+	const Config &c = GetConfig();
+	const SavedSize s = ConfigSavedSize(c, windowed);
+	const ResSize screen = ScreenSize();
+	if (windowed && DisplayFakesModeChange() && c.windowClientW > 0 && c.windowClientH > 0) {
+		ResSize area;
+		DisplayWindowArea(-1, area.w, area.h);
+		const ResSize canvas = WindowFrameForClient({(std::min)(area.w, c.windowClientW), (std::min)(area.h, c.windowClientH)});
+		if (canvas.w > 0) return PickStartResolution(ResolutionSizes(), canvas, screen, screen);
+	}
+	return PickStartResolution(ResolutionSizes(), {s.w, s.h}, {s.screenW, s.screenH}, screen, DisplayMonitorHasMode(s.w, s.h));
 }
 
 void UseSavedResolution()
@@ -309,7 +361,10 @@ void __fastcall HookSaveOptions(unsigned *block)
 			const std::vector<ResSize> list = ResolutionSizes();
 			// The size this mode had (after a change of mode in the options) needs no question; a window is seen as it changes.
 			if (!windowed && back.index >= 0 && back.index != index && !OthersInMatch()) StartTrial({size.x, size.y}, list[back.index]);
-			else SaveSize(windowed, {size.x, size.y});
+			else {
+				SaveSize(windowed, {size.x, size.y});
+				if (windowed) SaveWindowClient(size.x, size.y);
+			}
 			g_sizeAtStart = size;
 		}
 	}
@@ -329,10 +384,17 @@ void ReplaceResolutionList()
 	ResSize screen;
 	DisplayMonitorSize(choice.monitor, screen.w, screen.h);
 	std::vector<ResSize> sizes;
+	g_customWindowSlot = -1;
 	if (DisplayFakesModeChange() && choice.windowed) {
 		ResSize area;
 		DisplayWindowArea(choice.monitor, area.w, area.h);
 		sizes = BuildWindowResolutionList(windows, screen, area);
+		const Config &c = GetConfig();
+		const ResSize saved = WindowFrameForClient({(std::min)(area.w, c.windowClientW), (std::min)(area.h, c.windowClientH)});
+		if (saved.w > 0 && std::none_of(sizes.begin(), sizes.end(), [&](ResSize s) { return s.w == saved.w && s.h == saved.h; })) {
+			g_customWindowSlot = static_cast<int>(sizes.size());
+			sizes.push_back(saved);
+		}
 	}
 	else {
 		sizes = BuildResolutionList(windows, screen, extended, DisplayFakesModeChange());
@@ -810,7 +872,9 @@ void InstallTweaks(bool knownExe)
 	HookAt(addr::kRequestUnpause, &HookRequestUnpause, &g_origRequestUnpause, "CVXGameMultiplayer::RequestUnpause");
 	HookAt(addr::kRequestPauseOnline, &HookRequestToggle, &g_origRequestToggle, "CVXGameMultiplayer::RequestPauseOnline");
 	HookAt(addr::kChangeDisplayModeTo, &HookChangeDisplayModeTo, &g_origChangeDisplayModeTo, "ChangeDisplayModeTo");
-	HookAt(addr::kInitResolutionList, &HookInitResolutionList, &g_origInitResolutionList, "InitResolutionList");
+	if (HookAt(addr::kInitResolutionList, &HookInitResolutionList, &g_origInitResolutionList, "InitResolutionList")) {
+		DisplaySetResizeHandler(&ResizeGameClient);
+	}
 	HookAt(addr::kSaveGameOptionsToIni, &HookSaveOptions, &g_origSaveOptions, "SaveGameOptionsToIni");
 	HookAt(addr::kLoadScrollSettings, &HookLoadScrollSettings, &g_origLoadScroll, "LoadScrollSettings");
 	HookAt(addr::kLoadConfigIni, &HookLoadConfigIni, &g_origLoadConfigIni, "LoadConfigIni");

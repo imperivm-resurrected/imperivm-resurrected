@@ -28,6 +28,7 @@
 #include "hooks/tweaks.h"
 #include "core/config.h"
 #include "game/controls.h"
+#include "hooks/displaymode.h"
 #include "core/log.h"
 #include "net/steamnet.h"
 #include "ui/uikit.h"
@@ -704,6 +705,7 @@ int __fastcall HookGameUpdate(void *game)
 		ZoomViewGameTick();
 		RespawnSitesGameTick();
 		ControlsGameTick();
+		DisplayRefreshWindowCursor();
 	});
 	if (g_updateDepth > 0 && g_updateDepth <= kUpdateMaxDepth) g_updateStack[g_updateDepth - 1].nested = true;
 	if (g_updateDepth >= kUpdateMaxDepth) return g_origGameUpdate(game);
@@ -727,6 +729,7 @@ int __fastcall HookGameUpdate(void *game)
 void OverlayInstall(bool knownExe)
 {
 	if (!knownExe) return;
+	DisplaySetWindowCursorCheck(&ControlsMapHasFocus);
 	if (HookInstall(addr::kGameUpdate, &HookGameUpdate, &g_origGameUpdate)) {
 		LogD("perf", "panel: game load measured in CVXGame::Update");
 	}

@@ -4,6 +4,7 @@
 #include "hooks/respick.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace {
 
@@ -49,18 +50,35 @@ ResPick PickStartResolution(const std::vector<ResSize> &list, ResSize saved, Res
 //   screen (the conquest map is 1024x768, the other menus are 768 high), so a smaller image cuts them;
 //   1024x768 is also the size the game itself falls back to. The screen's own size is offered anyway, so
 //   a smaller screen still has one.
-// - above 4096x2304: the largest image the mod has ever let the game draw, in every version; the game
-//   paints each frame in software and a larger one was never tried.
+// - beyond the software frame's pixel budget, regardless of its aspect ratio.
 // - above the size Windows uses for the monitor, unless allowed: in full screen the mod switches the
 //   monitor to that mode; a window cannot, and in a window the list is the one of BuildWindowResolutionList.
-const int kMinW = 1024, kMinH = 768, kMaxW = 4096, kMaxH = 2304;
+constexpr int kMinW = 1024, kMinH = 768, kFramePixels = 4096 * 2304;
+
+bool FrameSizeSupported(ResSize size)
+{
+	return size.w > 0 && size.h > 0 && size.w <= kMaxFrameSide && size.h <= kMaxFrameSide && size.w <= kFramePixels / size.h;
+}
+
+ResSize WindowFrameForClient(ResSize client)
+{
+	if (client.w <= 0 || client.h <= 0) return {};
+	if (client.w >= kMinW && client.h >= kMinH && FrameSizeSupported(client)) return client;
+	// The menus need 1024x768. Fit larger or smaller clients uniformly and let the presenter scale back.
+	const double minScale = std::max(double(kMinW) / client.w, double(kMinH) / client.h);
+	const double maxScale = std::min({double(kMaxFrameSide) / client.w, double(kMaxFrameSide) / client.h,
+		std::sqrt(double(kFramePixels) / client.w / client.h)});
+	const double scale = std::min(maxScale, std::max(1.0, minScale));
+	const ResSize frame = {std::max(kMinW, int(client.w * scale)), std::max(kMinH, int(client.h * scale))};
+	return FrameSizeSupported(frame) ? frame : ResSize{};
+}
 
 std::vector<ResSize> BuildResolutionList(const std::vector<ResSize> &windows, ResSize screen, const std::vector<ResSize> &extended, bool monitorModesBeyondScreen)
 {
 	std::vector<ResSize> out;
 	auto add = [&](ResSize s, bool beyondScreen) {
 		const bool isScreen = s.w == screen.w && s.h == screen.h;
-		if (s.w <= 0 || s.h <= 0 || s.w > kMaxW || s.h > kMaxH) return;
+		if (!FrameSizeSupported(s)) return;
 		if (!isScreen && (s.w < kMinW || s.h < kMinH)) return;
 		if (!beyondScreen && (s.w > screen.w || s.h > screen.h)) return;
 		if (IndexOf(out, s) < 0) out.push_back(s);

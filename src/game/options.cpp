@@ -210,12 +210,16 @@ PopulateControls_t g_origDtor = nullptr;
 void __fastcall HookDtor(void *dlg)
 {
 	void *expected = dlg;
-	if (g_openDialog.compare_exchange_strong(expected, nullptr)) TweaksPreviewResolutions(nullptr);
+	if (g_openDialog.compare_exchange_strong(expected, nullptr)) {
+		TweaksPreviewResolutions(nullptr);
+		DisplayHoldResize(false);
+	}
 	g_origDtor(dlg);
 }
 
 void __fastcall HookPopulateControls(void *dlg)
 {
+	DisplayHoldResize(true);
 	g_origPopulate(dlg);
 	g_openDialog = dlg;
 	if (!g_useDefaults) FixSpeedSlider(dlg);

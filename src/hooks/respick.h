@@ -4,9 +4,14 @@
 #pragma once
 #include <vector>
 
+#include "core/imagefit.h"
+
 struct ResSize {
 	int w = 0, h = 0;
 };
+
+bool FrameSizeSupported(ResSize size);
+ResSize WindowFrameForClient(ResSize client);
 
 enum class ResChoice { kSaved, kScreen, kFirst, kNone };
 

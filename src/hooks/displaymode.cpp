@@ -2,19 +2,23 @@
 // Copyright (C) 2026 THIONG
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include <windows.h>
+#include <intrin.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <map>
 #include <mutex>
 #include <string>
 #include <vector>
 
 #include "addr/media.h"
+#include "addr/engine.h"
 #include "hooks/hookcount.h"
 #include "hooks/audio.h"
 #include "core/config.h"
 #include "core/imagefit.h"
 #include "hooks/displaymode.h"
+#include "hooks/respick.h"
 #include "core/log.h"
 #include "i18n/tr.h"
 
@@ -39,6 +43,9 @@ GetClientRect_t g_origGetClientRect = nullptr;
 GetCursorPos_t g_origGetCursorPos = nullptr;
 ClipCursor_t g_origClipCursor = nullptr;
 bool g_gameClips = false;
+bool (*g_windowCursorActive)() = nullptr;
+bool g_windowCursorClipped = false;
+RECT g_windowCursorArea = {};
 SetWindowLongA_t g_origSetWindowLong = nullptr;
 
 bool g_faking = false;
@@ -51,6 +58,9 @@ DisplayWindowHandler g_windowHandler = nullptr;
 std::string g_lastGeometry;
 int g_clicksLogged = 0;
 const int kClicksLogged = 5;
+bool (*g_resizeCanvas)(int, int) = nullptr;
+bool g_dragging = false, g_holdResize = false, g_syncing = false, g_placing = false, g_firstWindow = true;
+constexpr UINT_PTR kResizeTimer = 0x42415736;
 
 const LONG kWindowedStyle = WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_CLIPCHILDREN | WS_CLIPSIBLINGS;
 
@@ -263,31 +273,62 @@ void LogClick(LPARAM lp)
 		cr.right - cr.left, cr.bottom - cr.top, cursor.x, cursor.y, gx, gy, g_logW, g_logH);
 }
 
+RECT WindowFrame(const MonitorEntry &monitor)
+{
+	RECT frame = {};
+	using GetDpi = HRESULT(WINAPI *)(HMONITOR, int, UINT *, UINT *);
+	using Adjust = BOOL(WINAPI *)(LPRECT, DWORD, BOOL, DWORD, UINT);
+	static HMODULE shcore = LoadLibraryExW(L"shcore.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+	static auto getDpi = shcore ? reinterpret_cast<GetDpi>(GetProcAddress(shcore, "GetDpiForMonitor")) : nullptr;
+	static auto adjust = reinterpret_cast<Adjust>(GetProcAddress(GetModuleHandleW(L"user32.dll"), "AdjustWindowRectExForDpi"));
+	const DWORD ex = g_gameWnd ? GetWindowLongW(g_gameWnd, GWL_EXSTYLE) : 0;
+	UINT x = 0, y = 0;
+	if (!getDpi || !adjust || FAILED(getDpi(MonitorFromRect(&monitor.rect, MONITOR_DEFAULTTONEAREST), 0, &x, &y)) ||
+		!adjust(&frame, kWindowedStyle, FALSE, ex, x)) AdjustWindowRectEx(&frame, kWindowedStyle, FALSE, ex);
+	return frame;
+}
+
+void QueueResize(HWND hwnd)
+{
+	if (hwnd && Windowed() && g_resizeCanvas && g_faking && !g_dragging && !g_holdResize && !g_syncing && !g_placing && !IsIconic(hwnd))
+		SetTimer(hwnd, kResizeTimer, 140, nullptr);
+}
+
 void PlaceWindow()
 {
-	if (!g_gameWnd || !g_faking) {
+	if (!g_gameWnd || !g_faking || g_syncing || g_placing) {
 		return;
 	}
+	g_placing = true;
 	if (Windowed() && IsZoomed(g_gameWnd)) {
 		g_origSetWindowLong(g_gameWnd, GWL_STYLE, kWindowedStyle | WS_MAXIMIZE);
 	}
 	else if (Windowed()) {
 		g_origSetWindowLong(g_gameWnd, GWL_STYLE, kWindowedStyle);
-		// In a window the resolution is the window's inner size, so the image is not scaled. The player may
-		// still drag the frame (the image follows); the next mode change puts the window back to the resolution.
-		RECT r = {0, 0, g_logW, g_logH};
-		AdjustWindowRectEx(&r, kWindowedStyle, FALSE, 0);
+		// Restore the physical client size even when the canvas has to use a different size.
+		const MonitorEntry monitor = MonitorAt(-1);
+		const RECT frame = WindowFrame(monitor);
+		const ResSize saved = {GetConfig().windowClientW, GetConfig().windowClientH};
+		const int clientW = g_firstWindow && saved.w > 0 ? saved.w : g_logW;
+		const int clientH = g_firstWindow && saved.h > 0 ? saved.h : g_logH;
+		g_firstWindow = false;
 		// Centred in the part of the monitor the taskbar leaves, and never larger than it.
-		const RECT wa = MonitorAt(-1).work;
-		const int w = static_cast<int>((std::min)(r.right - r.left, wa.right - wa.left));
-		const int h = static_cast<int>((std::min)(r.bottom - r.top, wa.bottom - wa.top));
+		const RECT wa = monitor.work;
+		const int w = (std::min)(clientW + frame.right - frame.left, wa.right - wa.left);
+		const int h = (std::min)(clientH + frame.bottom - frame.top, wa.bottom - wa.top);
 		g_origSetWindowPos(g_gameWnd, HWND_NOTOPMOST, wa.left + (wa.right - wa.left - w) / 2, wa.top + (wa.bottom - wa.top - h) / 2, w, h,
 			SWP_NOACTIVATE | SWP_FRAMECHANGED);
 	}
 	else {
 		const RECT mr = TargetMonitor();
-		g_origSetWindowPos(g_gameWnd, nullptr, mr.left, mr.top, mr.right - mr.left, mr.bottom - mr.top, SWP_NOZORDER | SWP_NOACTIVATE);
+		const LONG style = GetWindowLongA(g_gameWnd, GWL_STYLE);
+		const LONG fullscreen = (style & ~(WS_OVERLAPPEDWINDOW | WS_MAXIMIZE)) | WS_POPUP;
+		if (style != fullscreen) g_origSetWindowLong(g_gameWnd, GWL_STYLE, fullscreen);
+		g_origSetWindowPos(g_gameWnd, nullptr, mr.left, mr.top, mr.right - mr.left, mr.bottom - mr.top,
+			SWP_NOZORDER | SWP_NOACTIVATE | (style != fullscreen ? SWP_FRAMECHANGED : 0));
 	}
+	g_placing = false;
+	QueueResize(g_gameWnd);
 	LogGeometry(Windowed() ? "windowed" : "full screen");
 }
 
@@ -296,7 +337,7 @@ bool SwitchMonitorTo(int w, int h);
 
 bool FakeMode(int w, int h, DWORD bpp, bool testOnly)
 {
-	if (!Enabled()) {
+	if (!Enabled() || !FrameSizeSupported({w, h})) {
 		return false;
 	}
 	int homeW = 0, homeH = 0;
@@ -312,7 +353,7 @@ bool FakeMode(int w, int h, DWORD bpp, bool testOnly)
 		}
 	}
 	else {
-		if (!DisplayModeAllowed(w, h)) {
+		if (!g_syncing && !DisplayModeAllowed(w, h)) {
 			return false;
 		}
 		if (testOnly) {
@@ -321,13 +362,14 @@ bool FakeMode(int w, int h, DWORD bpp, bool testOnly)
 		DisplayRestoreMonitor();
 	}
 	// A new resolution chosen with the window maximized gives the window that size.
-	if (g_gameWnd && Windowed() && IsZoomed(g_gameWnd) && (w != g_logW || h != g_logH)) ShowWindow(g_gameWnd, SW_RESTORE);
+	const bool changed = !g_faking || w != g_logW || h != g_logH;
+	if (!g_syncing && changed && g_gameWnd && Windowed() && IsZoomed(g_gameWnd)) ShowWindow(g_gameWnd, SW_RESTORE);
 	g_faking = true;
 	g_logW = w;
 	g_logH = h;
 	g_logBpp = bpp ? bpp : 16;
 	LogD("display", "the game requests %dx%d %lubpp -> drawn at that size on the monitor at %dx%d", w, h, g_logBpp, DesktopW(), DesktopH());
-	PlaceWindow();
+	if (changed) PlaceWindow();
 	return true;
 }
 
@@ -349,6 +391,7 @@ bool RealHas16()
 LONG WINAPI HookChangeDisplaySettingsA(DEVMODEA *mode, DWORD flags)
 {
 	if (!mode) {
+		if (g_syncing) return DISP_CHANGE_SUCCESSFUL;
 		g_faking = false;
 		DisplayRestoreMonitor();
 		if (!Enabled()) return g_origChange(nullptr, flags);
@@ -359,6 +402,7 @@ LONG WINAPI HookChangeDisplaySettingsA(DEVMODEA *mode, DWORD flags)
 	if (FakeMode(w, h, mode->dmBitsPerPel, (flags & CDS_TEST) != 0)) {
 		return DISP_CHANGE_SUCCESSFUL;
 	}
+	if (Enabled() && (!FrameSizeSupported({w, h}) || Windowed())) return DISP_CHANGE_BADMODE;
 	LogD("display", "%dx%d -> real change", w, h);
 	g_faking = false;
 	PrepareModes();
@@ -412,7 +456,7 @@ bool g_monitorSwitched = false;
 
 bool MonitorHasMode(int w, int h)
 {
-	if (w > 4096 || h > 2304) return false;
+	if (!FrameSizeSupported({w, h})) return false;
 	PrepareModes();
 	std::lock_guard<std::mutex> lock(g_modesMx);
 	for (const DEVMODEA &m : g_modes) {
@@ -489,10 +533,16 @@ BOOL WINAPI HookEnumDisplaySettingsA(LPCSTR device, DWORD modeNum, DEVMODEA *mod
 		if (modeNum < n) {
 			return CopyMode(modeNum, mode, false);
 		}
-		if (has16 || modeNum >= 2 * n) {
-			return FALSE;
-		}
-		return CopyMode(modeNum - n, mode, true);
+		if (!has16 && modeNum < 2 * n) return CopyMode(modeNum - n, mode, true);
+		if (!g_faking || modeNum != (has16 ? n : 2 * n) || !mode || mode->dmSize != sizeof(*mode) || mode->dmDriverExtra) return FALSE;
+		DEVMODEA canvas = {};
+		canvas.dmSize = sizeof(canvas);
+		canvas.dmFields = DM_BITSPERPEL | DM_PELSWIDTH | DM_PELSHEIGHT;
+		canvas.dmBitsPerPel = g_logBpp;
+		canvas.dmPelsWidth = g_logW;
+		canvas.dmPelsHeight = g_logH;
+		*mode = canvas;
+		return TRUE;
 	}
 	const std::string target = device ? std::string() : TargetDevice();
 	BOOL ok = g_origEnum(device ? device : target.empty() ? nullptr : target.c_str(), modeNum, mode);
@@ -510,17 +560,9 @@ CurrentModeIndex_t g_origCurrentModeIndex = nullptr;
 int __fastcall HookCurrentModeIndex(void *os, void *edx)
 {
 	if (!g_faking) return g_origCurrentModeIndex(os, edx);
-	DEVMODEA dm = {};
-	for (DWORD i = 0;; i++) {
-		dm.dmSize = sizeof(dm);
-		dm.dmDriverExtra = 0;
-		if (!HookEnumDisplaySettingsA(nullptr, i, &dm)) break;
-		if (static_cast<int>(dm.dmPelsWidth) == g_logW && static_cast<int>(dm.dmPelsHeight) == g_logH && dm.dmBitsPerPel == g_logBpp) {
-			return static_cast<int>(i) + 1;
-		}
-	}
-	LogD("display", "current mode %dx%d %lubpp is not in the list; the game reads the monitor", g_logW, g_logH, g_logBpp);
-	return g_origCurrentModeIndex(os, edx);
+	PrepareModes();
+	std::lock_guard<std::mutex> lock(g_modesMx);
+	return static_cast<int>(g_modes.size()) * (g_realHas16 ? 1 : 2) + 1;
 }
 
 int WINAPI HookGetSystemMetrics(int index)
@@ -534,8 +576,8 @@ int WINAPI HookGetSystemMetrics(int index)
 
 BOOL WINAPI HookSetWindowPos(HWND hwnd, HWND after, int x, int y, int cx, int cy, UINT flags)
 {
-	if (g_faking && hwnd == g_gameWnd && !(flags & SWP_NOSIZE)) {
-		PlaceWindow();
+	const auto caller = reinterpret_cast<uintptr_t>(_ReturnAddress());
+	if (g_faking && hwnd == g_gameWnd && !(flags & SWP_NOSIZE) && caller >= addr::kGameTextBegin && caller < addr::kGameTextEnd) {
 		return TRUE;
 	}
 	if (Windowed() && hwnd == g_gameWnd && after == HWND_TOPMOST) {
@@ -546,8 +588,8 @@ BOOL WINAPI HookSetWindowPos(HWND hwnd, HWND after, int x, int y, int cx, int cy
 
 BOOL WINAPI HookMoveWindow(HWND hwnd, int x, int y, int w, int h, BOOL repaint)
 {
-	if (g_faking && hwnd == g_gameWnd) {
-		PlaceWindow();
+	const auto caller = reinterpret_cast<uintptr_t>(_ReturnAddress());
+	if (g_faking && hwnd == g_gameWnd && caller >= addr::kGameTextBegin && caller < addr::kGameTextEnd) {
 		return TRUE;
 	}
 	return g_origMoveWindow(hwnd, x, y, w, h, repaint);
@@ -578,10 +620,21 @@ BOOL WINAPI HookGetCursorPos(LPPOINT pt)
 	return ok;
 }
 
+void ReleaseWindowCursor()
+{
+	if (!g_windowCursorClipped) return;
+	g_origClipCursor(nullptr);
+	g_windowCursorClipped = false;
+}
+
 BOOL WINAPI HookClipCursor(const RECT *rc)
 {
 	g_gameClips = rc != nullptr;
-	if (rc && (Windowed() || !GetConfig().trapMouse)) {
+	if (Windowed()) {
+		DisplayRefreshWindowCursor();
+		return TRUE;
+	}
+	if (rc && !GetConfig().trapMouse) {
 		return g_origClipCursor(nullptr);
 	}
 	if (rc && Scaling()) {
@@ -605,14 +658,54 @@ BOOL WINAPI HookClipCursor(const RECT *rc)
 
 LRESULT CALLBACK GameWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
+	if (msg == WM_TIMER && wp == kResizeTimer) {
+		KillTimer(hwnd, kResizeTimer);
+		if (Windowed() && g_resizeCanvas && g_faking && !g_dragging && !g_holdResize && !g_syncing && !g_placing && !IsIconic(hwnd)) {
+			const RECT rc = PhysClient();
+			const ResSize canvas = WindowFrameForClient({rc.right, rc.bottom});
+			bool ok = canvas.w > 0;
+			if (ok && (canvas.w != g_logW || canvas.h != g_logH)) {
+				const int oldW = g_logW, oldH = g_logH;
+				const DWORD oldBpp = g_logBpp;
+				g_syncing = true;
+				ok = g_resizeCanvas(canvas.w, canvas.h);
+				g_syncing = false;
+				if (!ok) {
+					g_logW = oldW;
+					g_logH = oldH;
+					g_logBpp = oldBpp;
+				} else {
+					LogGeometry("resized client");
+				}
+			}
+			if (ok) SaveWindowClient(rc.right, rc.bottom);
+		}
+		return 0;
+	}
+	if (msg == WM_ENTERSIZEMOVE) {
+		g_dragging = true;
+		ReleaseWindowCursor();
+		KillTimer(hwnd, kResizeTimer);
+	}
+	if (msg == WM_EXITSIZEMOVE) g_dragging = false;
+	if (msg == WM_DPICHANGED && g_faking && Windowed() && lp && !g_placing) {
+		const RECT &r = *reinterpret_cast<const RECT *>(lp);
+		g_origSetWindowPos(hwnd, nullptr, r.left, r.top, r.right - r.left, r.bottom - r.top, SWP_NOZORDER | SWP_NOACTIVATE);
+	}
+	if (msg == WM_EXITSIZEMOVE || msg == WM_SIZE || msg == WM_DPICHANGED) QueueResize(hwnd);
 	if (msg == WM_LBUTTONDOWN) LogClick(lp);
-	if (msg == WM_DESTROY) DisplayRestoreMonitor();
+	if ((msg == WM_ACTIVATEAPP && !wp) || (msg == WM_ACTIVATE && LOWORD(wp) == WA_INACTIVE) || msg == WM_DESTROY)
+		ReleaseWindowCursor();
+	if (msg == WM_DESTROY) {
+		KillTimer(hwnd, kResizeTimer);
+		DisplayRestoreMonitor();
+	}
 	if (msg == WM_SIZE || msg == WM_MOVE || msg == WM_DISPLAYCHANGE || msg == WM_DPICHANGED) {
-		if (msg != WM_MOVE) LogGeometry("window changed");
+		if (!g_dragging && msg != WM_MOVE) LogGeometry("window changed");
 		// The game clips the cursor to the window it has when it starts; the mod resizes the window right after, or moves it to the
 		// monitor chosen in the settings at the same size, and the clip would keep the old place (the cursor stuck on the other
 		// monitor) until the game clips again.
-		if (g_gameClips && GetForegroundWindow() == hwnd) {
+		if (!Windowed() && g_gameClips && GetForegroundWindow() == hwnd) {
 			RECT r;
 			g_origGetClientRect(hwnd, &r);
 			MapWindowPoints(hwnd, nullptr, reinterpret_cast<POINT *>(&r), 2);
@@ -630,8 +723,10 @@ LRESULT CALLBACK GameWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 		PhysToLog(x, y);
 		lp = MAKELPARAM(x, y);
 	}
-	if (g_windowHandler) return g_windowHandler(hwnd, msg, wp, lp);
-	return CallWindowProcA(g_gameWndProc, hwnd, msg, wp, lp);
+	const LRESULT result = g_windowHandler ? g_windowHandler(hwnd, msg, wp, lp) : CallWindowProcA(g_gameWndProc, hwnd, msg, wp, lp);
+	if (msg == WM_MOUSEMOVE || msg == WM_KEYUP || msg == WM_EXITSIZEMOVE || msg == WM_SIZE || msg == WM_MOVE || msg == WM_DPICHANGED)
+		DisplayRefreshWindowCursor();
+	return result;
 }
 
 LONG WINAPI HookSetWindowLongA(HWND hwnd, int index, LONG value)
@@ -756,15 +851,18 @@ void DisplayApplySettings(bool windowModeChanged)
 		}
 		// The size the game is at is set again for the new mode or monitor: it may need that monitor switched,
 		// or no longer fit and be shrunk.
-		if (!g_faking || !FakeMode(g_logW, g_logH, g_logBpp, false)) {
-			DisplayRestoreMonitor();
-			PlaceWindow();
-		}
+		if (!g_faking || !FakeMode(g_logW, g_logH, g_logBpp, false)) DisplayRestoreMonitor();
+		PlaceWindow();
 	}
-	if (Windowed() || !GetConfig().trapMouse) {
+	if (Windowed()) {
+		DisplayRefreshWindowCursor();
+	}
+	else if (!GetConfig().trapMouse) {
+		ReleaseWindowCursor();
 		g_origClipCursor(nullptr);
 	}
 	else {
+		ReleaseWindowCursor();
 		RECT r;
 		g_origGetClientRect(g_gameWnd, &r);
 		MapWindowPoints(g_gameWnd, nullptr, reinterpret_cast<POINT *>(&r), 2);
@@ -775,6 +873,45 @@ void DisplayApplySettings(bool windowModeChanged)
 void DisplaySetWindowHandler(DisplayWindowHandler handler)
 {
 	g_windowHandler = handler;
+}
+
+void DisplaySetResizeHandler(bool (*apply)(int, int))
+{
+	g_resizeCanvas = apply;
+}
+
+void DisplayHoldResize(bool hold)
+{
+	g_holdResize = hold;
+	if (hold) ReleaseWindowCursor();
+	else QueueResize(g_gameWnd);
+}
+
+void DisplaySetWindowCursorCheck(bool (*active)())
+{
+	g_windowCursorActive = active;
+}
+
+void DisplayRefreshWindowCursor()
+{
+	if (!Windowed() || !g_gameWnd || !GetConfig().trapMouse || g_dragging || g_holdResize || IsIconic(g_gameWnd) ||
+		GetForegroundWindow() != g_gameWnd || !g_windowCursorActive || !g_windowCursorActive()) {
+		ReleaseWindowCursor();
+		return;
+	}
+	RECT area = PhysClient();
+	if (IsRectEmpty(&area)) {
+		ReleaseWindowCursor();
+		return;
+	}
+	MapWindowPoints(g_gameWnd, nullptr, reinterpret_cast<POINT *>(&area), 2);
+	if (g_windowCursorClipped && EqualRect(&area, &g_windowCursorArea)) return;
+	POINT cursor;
+	if (!g_windowCursorClipped && (!g_origGetCursorPos(&cursor) || !PtInRect(&area, cursor))) return;
+	if (g_origClipCursor(&area)) {
+		g_windowCursorArea = area;
+		g_windowCursorClipped = true;
+	}
 }
 
 LRESULT DisplayForwardMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
@@ -797,10 +934,10 @@ bool DisplayModeAllowed(int w, int h)
 	if (!Enabled()) return true;
 	int monitorW = 0, monitorH = 0;
 	DisplayTargetSize(monitorW, monitorH);
-	if (w <= 0 || h <= 0) return false;
+	if (!FrameSizeSupported({w, h})) return false;
 	if (w <= monitorW && h <= monitorH) return true;
 	if (!GetConfig().extendedView) return false;
-	return w <= (2 * monitorW < 4096 ? 2 * monitorW : 4096) && h <= (2 * monitorH < 2304 ? 2 * monitorH : 2304);
+	return w <= 2ll * monitorW && h <= 2ll * monitorH;
 }
 
 std::vector<POINT> DisplayExtendedSizes(int monitor)
@@ -810,7 +947,7 @@ std::vector<POINT> DisplayExtendedSizes(int monitor)
 	std::vector<POINT> sizes;
 	for (float factor : {1.25f, 1.5f, 2.0f}) {
 		const int w = static_cast<int>(monitorW * factor) / 8 * 8, h = static_cast<int>(monitorH * factor) / 8 * 8;
-		if (w <= 4096 && h <= 2304) sizes.push_back({w, h});
+		if (FrameSizeSupported({w, h})) sizes.push_back({w, h});
 	}
 	return sizes;
 }
@@ -849,9 +986,8 @@ std::vector<POINT> DisplayWindowsSizes(int monitor)
 
 void DisplayWindowArea(int monitor, int &w, int &h)
 {
-	const RECT wa = MonitorAt(monitor).work;
-	RECT frame = {0, 0, 0, 0};
-	AdjustWindowRectEx(&frame, kWindowedStyle, FALSE, 0);
+	const MonitorEntry target = MonitorAt(monitor);
+	const RECT wa = target.work, frame = WindowFrame(target);
 	w = (wa.right - wa.left) - (frame.right - frame.left);
 	h = (wa.bottom - wa.top) - (frame.bottom - frame.top);
 }

@@ -25,6 +25,8 @@ struct Config {
 	bool windowed = false;
 	bool trapMouse = true;
 	int monitor = 0;
+	int windowClientW = 0;
+	int windowClientH = 0;
 	int resolutionW = 0;
 	int resolutionH = 0;
 	int resolutionScreenW = 0;
@@ -108,6 +110,7 @@ SavedSize ConfigSavedSize(const Config &c, bool windowed);
 void ConfigSetSavedSize(Config &c, bool windowed, const SavedSize &s);
 Config &MutableConfig();
 void SaveConfig();
+void SaveWindowClient(int width, int height);
 void LoadConfig();
 // Writes only the league account ([League] Token, SteamId and Name), or removes it when the token is empty.
 void SaveLeagueAccount();

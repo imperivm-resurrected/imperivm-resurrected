@@ -13,6 +13,7 @@ inline constexpr uintptr_t kSoundEnableType = 0x006af960;
 inline constexpr uintptr_t kUpdateChannelVolumes = 0x006b0810;
 inline constexpr uintptr_t kApplySoundOptions = 0x006e7210;
 inline constexpr uintptr_t kSaveGameOptionsToIni = 0x006e73e0;
+inline constexpr uintptr_t kApplyResolutionIndex = 0x006e7e30;
 inline constexpr uintptr_t kInitResolutionList = 0x006e8420;
 inline constexpr uintptr_t kChangeDisplayModeTo = 0x00747220;
 inline constexpr uintptr_t kWindowHandler = 0x00747a80;
