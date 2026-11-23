@@ -20,8 +20,9 @@ namespace battlesui {
 // kActOverview: back from a campaign to the overview; kActOpenTab: a campaign's card (arg: its tab); kActContinue: arg 0 the newest
 // game of all, 1 the newest of the chosen adventure; kActAllSaves: the load screen; kActPage: the adventure's briefing (0) or its
 // diary (1); kActContent: the content packs screen; kActDownload: downloads the
-// official campaign of a tab (arg).
-enum Action { kActNone = 0, kActTab, kActRow, kActDifficulty, kActStart, kActIntro, kActBack, kActOverview, kActOpenTab, kActContinue, kActAllSaves, kActPage, kActContent, kActDownload };
+// official campaign of a tab (arg); kActPureSwitch, kActPureCancel: the answers to the dialog of a campaign that is played without other
+// gameplay mods.
+enum Action { kActNone = 0, kActTab, kActRow, kActDifficulty, kActStart, kActIntro, kActBack, kActOverview, kActOpenTab, kActContinue, kActAllSaves, kActPage, kActContent, kActDownload, kActPureSwitch, kActPureCancel };
 
 inline int RowArg(int list, int index) { return list << 16 | index; }
 
@@ -61,6 +62,9 @@ struct View {
 	std::vector<BattleLaurel> laurels;
 	// How much of each tab's campaign is done: its laurels against three for each adventure, in percent; -1 when it has no adventures.
 	int done[kBattlesTabCount] = {-1, -1, -1, -1, -1};
+	// The tab of Imperivm I or II whose start was held back because other gameplay mods are active, and their names; -1 when none.
+	int pureTab = -1;
+	std::string pureMods;
 };
 
 inline bool ShowsOverview(const View &v) { return v.overview && v.snap.tab != kBattlesTabConquests; }

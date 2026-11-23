@@ -18,6 +18,7 @@
 #include "game/adventureresult.h"
 #include "game/battlelist.h"
 #include "game/greatbattles.h"
+#include "mods/campaignmods.h"
 #include "mods/campaignpacks.h"
 #include "mods/mods.h"
 #include "mods/savelib.h"
@@ -376,15 +377,87 @@ struct Command {
 	bool start = false;
 };
 
-// The newest game of all (0) or of the chosen adventure (1); empty when there is none.
-std::string ContinuePath(int which)
+// The newest game of all (0) or of the chosen adventure (1), and the tab of its adventure; empty when there is none.
+std::string ContinuePath(int which, int &tab)
 {
 	std::lock_guard<std::mutex> lock(g_lock);
 	const View &v = g_s.view;
+	tab = -1;
 	if (v.loading || v.snap.starting) return "";
-	if (which == 0) return v.hasLatest ? v.latest.vfsPath : "";
+	if (which == 0) {
+		if (!v.hasLatest) return "";
+		tab = v.latest.tab;
+		return v.latest.vfsPath;
+	}
 	const auto it = v.lastByRow.find(RowArg(v.snap.selList, v.snap.selIndex));
-	return v.snap.selList >= 0 && it != v.lastByRow.end() ? it->second.vfsPath : "";
+	if (v.snap.selList < 0 || it == v.lastByRow.end()) return "";
+	tab = it->second.tab;
+	return it->second.vfsPath;
+}
+
+int GameOfTab(int tab) { return tab == kBattlesTabImperivm1 ? 1 : tab == kBattlesTabImperivm2 ? 2 : 0; }
+
+std::vector<CampaignModEntry> InstalledMods()
+{
+	std::vector<CampaignModEntry> out;
+	for (const ModInfo &m : ModsList()) {
+		CampaignModEntry e;
+		e.folder = m.folder;
+		e.id = m.id;
+		e.name = m.name;
+		e.version = m.version;
+		e.gameplay = m.gameplay;
+		e.cosmetic = !m.gameplay && m.forbidden.empty();
+		out.push_back(std::move(e));
+	}
+	return out;
+}
+
+// The campaigns of Imperivm I and II are only played with their own packs: with other gameplay mods mounted, the dialog asks first.
+bool HoldForPureCampaign(int tab)
+{
+	const CampaignPack *pack = CampaignPackFor(GameOfTab(tab));
+	if (!pack) return false;
+	const std::vector<std::string> foreign = CampaignForeignMods(pack->ids, ModsMountedProfile().mods, InstalledMods());
+	if (foreign.empty()) return false;
+	std::string names;
+	for (const std::string &name : foreign) names += (names.empty() ? "" : ", ") + name;
+	LogI("ui", "adventure screen: the start of tab %d is held back, other gameplay mods are active: %s", tab, names.c_str());
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		g_s.view.pureTab = tab;
+		g_s.view.pureMods = names;
+	}
+	// With the menu still the game draws no frame of its own.
+	UiWakeGameThread();
+	return true;
+}
+
+void PlayPureCampaign(int tab)
+{
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		g_s.view.pureTab = -1;
+		g_s.view.pureMods.clear();
+	}
+	const CampaignPack *pack = CampaignPackFor(GameOfTab(tab));
+	if (!pack) return;
+	std::vector<std::string> folders;
+	if (!CampaignProfileFolders(pack->ids, ModsMountedProfile().mods, InstalledMods(), folders)) {
+		LogI("content", "campaign %s: not every pack is installed, the profile stays as it is", pack->name.c_str());
+		UiToast(Tr("This campaign is not fully installed: download it from its card first."), true);
+		return;
+	}
+	ModProfile p = ModsLooseProfileWith(folders);
+	p.mods = folders;
+	if (!ModsSaveProfile(p)) {
+		LogW("content", "campaign %s: the profile \"%s\" could not be saved", pack->name.c_str(), p.name.c_str());
+		UiToast(Tr("The profile with the mods could not be saved."), true);
+		return;
+	}
+	ModsSetActiveProfileName(p.name);
+	LogI("content", "campaign %s: restarting with \"%s\" (%u mods, no other gameplay mods)", pack->name.c_str(), p.name.c_str(), static_cast<unsigned>(p.mods.size()));
+	ModsRestartGame();
 }
 
 void Execute(const Command &cmd)
@@ -406,9 +479,20 @@ void Execute(const Command &cmd)
 		g_s.view.listScroll = g_s.view.descScroll = 0;
 		break;
 	}
+	case kActPureSwitch: PlayPureCampaign(cmd.arg); return;
+	case kActPureCancel: {
+		{
+			std::lock_guard<std::mutex> lock(g_lock);
+			g_s.view.pureTab = -1;
+			g_s.view.pureMods.clear();
+		}
+		UiWakeGameThread();
+		return;
+	}
 	case kActContinue: {
-		const std::string path = ContinuePath(cmd.arg);
-		if (path.empty()) return;
+		int tab = -1;
+		const std::string path = ContinuePath(cmd.arg, tab);
+		if (path.empty() || HoldForPureCampaign(tab)) return;
 		LogI("ui", "adventure screen: continuing \"%s\"", path.c_str());
 		SavesUiLoadSave(path);
 		// The load screen closes once the game is loading; it stays open when its checks stopped the load.
@@ -436,16 +520,27 @@ void Execute(const Command &cmd)
 	case kActRow: {
 		const int list = cmd.arg >> 16, index = cmd.arg & 0xffff;
 		bool same = false;
+		int tab = -1;
 		{
 			std::lock_guard<std::mutex> lock(g_lock);
 			same = g_s.view.snap.selList == list && g_s.view.snap.selIndex == index;
+			tab = g_s.view.snap.tab;
 		}
 		if (!same) BattlesSelect(list, index);
-		if (cmd.start) BattlesStart();
+		if (cmd.start && !HoldForPureCampaign(tab)) BattlesStart();
 		break;
 	}
 	case kActDifficulty: BattlesSetDifficulty(cmd.arg); break;
-	case kActStart: BattlesStart(); break;
+	case kActStart: {
+		int tab = -1;
+		{
+			std::lock_guard<std::mutex> lock(g_lock);
+			const BattlesSnapshot &s = g_s.view.snap;
+			if (s.selList >= 0 && !s.starting) tab = s.tab;
+		}
+		if (!HoldForPureCampaign(tab)) BattlesStart();
+		break;
+	}
 	case kActIntro: BattlesPlayIntro(); break;
 	case kActBack: BattlesBack(); break;
 	default: return;
@@ -486,6 +581,35 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, Command &cmd)
 	std::lock_guard<std::mutex> lock(g_lock);
 	View &v = g_s.view;
 	const POINT at = {static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))};
+	// The dialog of a campaign held back: the lists behind it do not scroll and Escape closes it.
+	if (v.pureTab >= 0) {
+		switch (msg) {
+		case WM_MOUSEMOVE:
+			v.mouseX = at.x;
+			v.mouseY = at.y;
+			return false;
+		case WM_LBUTTONDOWN: {
+			g_s.mouseDown = true;
+			int arg = 0;
+			cmd.action = HitActionAt(g_s.hits, at, arg, kActNone);
+			cmd.arg = arg;
+			// Until the dialog's first frame the hits are still the screen's.
+			if (cmd.action != kActPureSwitch && cmd.action != kActPureCancel) cmd.action = kActNone;
+			return true;
+		}
+		case WM_LBUTTONUP:
+			g_s.mouseDown = false;
+			ListUp(g_s.listDrag);
+			ListUp(g_s.descDrag);
+			return true;
+		case WM_KEYDOWN:
+			if (wp == VK_ESCAPE) cmd.action = kActPureCancel;
+			return true;
+		case WM_KEYUP:
+		case WM_CHAR: return true;
+		default: return msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST;
+		}
+	}
 	switch (msg) {
 	case WM_MOUSEMOVE:
 		v.mouseX = at.x;

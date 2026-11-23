@@ -1008,6 +1008,40 @@ Body PaintHeader(Painter &p, int screenW, const ScreenView &brand, const View &v
 	return b;
 }
 
+void PaintScreen(Painter &p, int screenW, const ScreenView &brand, const View &v, PaintOut &out)
+{
+	const Body b = PaintHeader(p, screenW, brand, v);
+	// The overview: the game to go on with and a card per campaign.
+	if (ShowsOverview(v)) {
+		out = PaintOut();
+		PaintOverview(p, b, v, out);
+		return;
+	}
+	const int listW = std::max(320, std::min(420, screenW * 30 / 100));
+	PaintList(p, b.x, b.top, listW, b.bottom - b.top, v, out);
+	const int detailX = b.x + listW + kGap;
+	PaintDetail(p, detailX, b.top, b.x + b.w - detailX, b.bottom - b.top, v, out);
+}
+
+// Over the screen, which stays still behind it: only the dialog's buttons answer.
+void PaintPureDialog(Painter &p, int screenW, const View &v)
+{
+	static const uint32_t kVeil = 0xff000000u;
+	p.ImageBlend(0, 0, screenW, kScreenH, &kVeil, 1, 1, 150);
+	const std::string text = TrFmt("The Imperivm I and II campaigns are played without other gameplay mods, so that they are faithful to the original. You now have active: %s.",
+		{v.pureMods});
+	const int w = 640;
+	p.Font(0);
+	p.raw = true;
+	const int textH = p.Measure(w - 48, text);
+	p.raw = false;
+	const Dialog d = DialogBegin(p, screenW, kScreenH, w, std::max(220, 60 + 16 + textH + 24 + kDialogBtnH + 16), "Original campaign");
+	p.raw = true;
+	DialogText(p, d, 76, text, pal::text, 0);
+	p.raw = false;
+	DialogButtons(p, d, {{"Play without them (restarts the game)", kActPureSwitch, v.pureTab, true}, {"Cancel", kActPureCancel}}, v.mouseX, v.mouseY);
+}
+
 }
 
 int RowTop(const BattlesSnapshot &s, int list, int index)
@@ -1034,17 +1068,14 @@ int ScreenWidth(int frameW, int frameH)
 
 void PaintBattlesScreen(Painter &p, int screenW, const ScreenView &brand, const View &v, PaintOut &out)
 {
-	const Body b = PaintHeader(p, screenW, brand, v);
-	// The overview: the game to go on with and a card per campaign.
-	if (ShowsOverview(v)) {
-		out = PaintOut();
-		PaintOverview(p, b, v, out);
+	if (v.pureTab < 0) {
+		PaintScreen(p, screenW, brand, v, out);
 		return;
 	}
-	const int listW = std::max(320, std::min(420, screenW * 30 / 100));
-	PaintList(p, b.x, b.top, listW, b.bottom - b.top, v, out);
-	const int detailX = b.x + listW + kGap;
-	PaintDetail(p, detailX, b.top, b.x + b.w - detailX, b.bottom - b.top, v, out);
+	View behind = v;
+	behind.mouseX = behind.mouseY = -10000;
+	PaintScreen(p, screenW, brand, behind, out);
+	PaintPureDialog(p, screenW, v);
 }
 
 }
