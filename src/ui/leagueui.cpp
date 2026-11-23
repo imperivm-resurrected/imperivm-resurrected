@@ -288,6 +288,9 @@ COLORREF LeagueMetalInk(LeagueMetal metal)
 
 void DrawLeagueEmblem(Painter &p, int x, int y, int size, LeagueTier tier, int alpha)
 {
+	// The unranked card sits low in its square (its box spans 51.5 to 140.5 of the 160 units): raised by those 16 units it is centred,
+	// as the ranks' shields are, in the search ring and wherever it stands in for one.
+	if (tier == LeagueTier::None) y -= size * 16 / 160;
 	const RECT r = p.R(x, y, size, size);
 	const int px = std::max(8, static_cast<int>(r.right - r.left));
 	HBITMAP rank = Bitmap(kArtRank, static_cast<int>(tier), px);
