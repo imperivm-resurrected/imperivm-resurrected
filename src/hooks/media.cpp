@@ -358,6 +358,7 @@ bool g_muted = false;
 std::vector<void *> g_pausedPaths;
 bool g_musicMuted = false;
 std::vector<void *> g_pausedMusic;
+bool g_knownExe = false;
 
 }
 
@@ -372,7 +373,7 @@ void MediaInstall(bool knownExe)
 	else {
 		LogE("video", "could not intercept CoCreateInstance (no videos or modern audio)");
 	}
-	(void)knownExe;
+	g_knownExe = knownExe;
 }
 
 void MediaSetModDirs(const std::vector<std::string> &dirs)
@@ -391,6 +392,7 @@ void MediaSetModDirs(const std::vector<std::string> &dirs)
 
 void MediaFrameTick()
 {
+	if (!g_knownExe) return;
 	char *mgr = *reinterpret_cast<char **>(addr::kSoundManager);
 	void *game = *reinterpret_cast<void **>(addr::kGame);
 	if (!mgr) return;
@@ -426,6 +428,7 @@ void MediaFrameTick()
 
 void MediaPauseMusic(bool pause)
 {
+	if (!g_knownExe) return;
 	char *mgr = *reinterpret_cast<char **>(addr::kSoundManager);
 	if (!mgr || pause == g_musicMuted) return;
 	if (pause) {

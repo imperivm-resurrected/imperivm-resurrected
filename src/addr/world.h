@@ -218,6 +218,8 @@ inline constexpr uintptr_t kVisibleObjClassName = 0x008250f8;
 // g_aiProfileList, the vector of the AI profiles (the folders of data/ai): its first and last strings.
 inline constexpr uintptr_t kAiProfilesBegin = 0x008c8dec;
 inline constexpr uintptr_t kAiProfilesEnd = 0x008c8df0;
+// g_bAIEnabled, Config.ini [system] AIEnabled: InitGlobalAI starts no AI without it (the RE used to give this name to kAiInitted).
+inline constexpr uintptr_t kAiEnabled = 0x008c8e50;
 inline constexpr uintptr_t kAiInitted = 0x008c8e58;
 inline constexpr uintptr_t kScrollToken = 0x009bdb78;
 inline constexpr uintptr_t kScrollBits = 0x009bdb84;

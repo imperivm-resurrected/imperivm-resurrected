@@ -221,7 +221,8 @@ bool BmpAverageColor(const unsigned char *data, size_t size, uint32_t &rgb)
 	const uint32_t height = rawHeight < 0 ? static_cast<uint32_t>(-rawHeight) : static_cast<uint32_t>(rawHeight);
 	if (bits != 24 || compression != 0 || width < 1 || height < 1 || width > 4096 || height > 4096) return false;
 	const size_t stride = (static_cast<size_t>(width) * 3 + 3) & ~static_cast<size_t>(3);
-	if (offset + stride * height > size) return false;
+	// Apart, so that a bad offset near 4 GB cannot wrap the sum round on 32 bits.
+	if (offset > size || stride * height > size - offset) return false;
 	uint64_t sum[3] = {};
 	for (uint32_t y = 0; y < height; y++) {
 		const unsigned char *row = data + offset + stride * y;

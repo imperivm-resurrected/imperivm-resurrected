@@ -12,6 +12,7 @@
 #include "game/respawnsites.h"
 #include "game/zoomview.h"
 #include "core/crashlog.h"
+#include "core/guard.h"
 #include "app/overlay.h"
 #include "i18n/tr.h"
 
@@ -694,13 +695,16 @@ void SaveSnapped(int ox, int oy)
 int __fastcall HookGameUpdate(void *game)
 {
 	CrashLogLoadingEnd();
-	g_updateTicks += ZoomFogGameThreadTick();
-	QuickIconsGameThreadTick();
-	HealthBarsGameTick();
-	NoteIconsGameTick();
-	ZoomViewGameTick();
-	RespawnSitesGameTick();
-	ControlsGameTick();
+	// A C++ exception must not unwind through the game's frames.
+	Guard("game update ticks", [] {
+		g_updateTicks += ZoomFogGameThreadTick();
+		QuickIconsGameThreadTick();
+		HealthBarsGameTick();
+		NoteIconsGameTick();
+		ZoomViewGameTick();
+		RespawnSitesGameTick();
+		ControlsGameTick();
+	});
 	if (g_updateDepth > 0 && g_updateDepth <= kUpdateMaxDepth) g_updateStack[g_updateDepth - 1].nested = true;
 	if (g_updateDepth >= kUpdateMaxDepth) return g_origGameUpdate(game);
 	const int d = g_updateDepth++;

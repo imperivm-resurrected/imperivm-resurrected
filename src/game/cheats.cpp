@@ -26,6 +26,7 @@
 #include "game/gametext.h"
 #include "game/techplan.h"
 #include "game/unitcatalog.h"
+#include "hooks/tweaks.h"
 #include "addr/engine.h"
 #include "addr/state.h"
 #include "addr/net.h"
@@ -441,13 +442,21 @@ bool QueueCheat(const std::string &text)
 
 std::atomic<bool> g_panelOpen{false};
 std::atomic<bool> g_panelKeyOpened{false};
+// Worked out on the game thread each frame: the render thread draws the panel and must not read the match, which may be ending.
+std::atomic<bool> g_available{false};
+
+bool ReadAvailable()
+{
+	if (!TweaksKnownExe()) return false;
+	char *game = static_cast<char *>(Game());
+	return game && Field<unsigned>(game, layout::kGameClock) > 0 && !GameRoomActive() && !reinterpret_cast<IsDemo_t>(addr::kIsDemoPlayback)() && Allowed();
+}
 
 }
 
 bool CheatsPanelAvailable()
 {
-	char *game = static_cast<char *>(Game());
-	return game && Field<unsigned>(game, layout::kGameClock) > 0 && !GameRoomActive() && !reinterpret_cast<IsDemo_t>(addr::kIsDemoPlayback)() && Allowed();
+	return g_available;
 }
 
 bool CheatsPanelOpen() { return g_panelOpen; }
@@ -465,8 +474,9 @@ typedef int(__fastcall *IsKindOfName_t)(void *self, void *edx, const char *name)
 
 const int kClassId = 4, kClassEntity = 0x74, kClassDisplayName = 0x8d4, kClassEditTree = 0x928, kClassRace = 0xb48;
 
+// Built once on the game thread (it reads the class registry and the game's texts), then only read: the names handed out stay valid.
 UnitCatalog g_catalog;
-bool g_catalogReady = false;
+std::atomic<bool> g_catalogReady{false};
 
 void CollectClasses(char *node, char *head, std::vector<char *> &out, int depth)
 {
@@ -513,13 +523,14 @@ bool BuildCatalog()
 	g_catalog = BuildUnitCatalog(input);
 	LogI("cheats", "troops for spawning: %u units in %u groups, from the %u classes the game loaded", static_cast<unsigned>(g_catalog.units.size()),
 		static_cast<unsigned>(g_catalog.groups.size()), static_cast<unsigned>(classes.size()));
+	g_catalogReady.store(true, std::memory_order_release);
 	return true;
 }
 
 const UnitCatalog &Catalog()
 {
-	if (!g_catalogReady) g_catalogReady = BuildCatalog();
-	return g_catalog;
+	static const UnitCatalog empty;
+	return g_catalogReady.load(std::memory_order_acquire) ? g_catalog : empty;
 }
 
 }
@@ -604,6 +615,9 @@ void CheatsRun(int verb, int amount)
 
 void CheatsFrameTick()
 {
+	const bool available = ReadAvailable();
+	g_available = available;
+	if (available && g_panelOpen && !g_catalogReady.load(std::memory_order_acquire)) BuildCatalog();
 	if (g_cheatQueue.empty()) return;
 	const DWORD now = GetTickCount();
 	if (now - g_cheatLastSend < 130) return;

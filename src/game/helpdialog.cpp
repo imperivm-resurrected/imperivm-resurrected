@@ -47,7 +47,8 @@ const int kDescClass = 0x60, kDescTrain = 0x1b4, kDescIndex = 0x1e4, kDescGold =
 const size_t kMaxClasses = 20000, kMaxCommands = 20000, kMaxListNodes = 4000;
 
 typedef bool(__fastcall *HasFlags_t)(void *window, void *edx, unsigned flags);
-typedef void(__fastcall *OnKey_t)(void *dlg, void *edx, int msg, short key);
+// CHelpDlg::OnKey (006b90a0) ends in ret 0xc on both paths: a third stack argument, which the Escape path does not read.
+typedef void(__fastcall *OnKey_t)(void *dlg, void *edx, int msg, short key, int extra);
 
 using strutil::Lower;
 
@@ -157,7 +158,7 @@ bool HelpDialogClose(void *dlg)
 	else {
 		// A help.ini without the button: Escape closes the dialog all the same.
 		LogW("ui", "the game's help has no Close button; closing it as Escape does");
-		reinterpret_cast<OnKey_t>(addr::kHelpDlgOnKey)(dlg, nullptr, kKeyUp, static_cast<short>(kKeyEscape));
+		reinterpret_cast<OnKey_t>(addr::kHelpDlgOnKey)(dlg, nullptr, kKeyUp, static_cast<short>(kKeyEscape), 0);
 	}
 	LogI("ui", "the help screen closes");
 	return true;

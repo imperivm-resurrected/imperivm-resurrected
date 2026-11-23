@@ -663,6 +663,13 @@ template <class Fn> bool Hook(const char *name, Fn *detour, Fn **orig)
 	return false;
 }
 
+// The real function for a hook that failed or was not tried: the mod calls its g_orig* pointers directly.
+template <class Fn> void RealIfMissing(const char *name, Fn **orig)
+{
+	HMODULE m = GetModuleHandleW(L"user32.dll");
+	if (!*orig && m) *orig = reinterpret_cast<Fn *>(GetProcAddress(m, name));
+}
+
 }
 
 bool DisplayFakeMode(int w, int h, DWORD bpp, bool testOnly)
@@ -670,7 +677,7 @@ bool DisplayFakeMode(int w, int h, DWORD bpp, bool testOnly)
 	return FakeMode(w, h, bpp, testOnly);
 }
 
-bool InstallDisplayModeHooks()
+bool InstallDisplayModeHooks(bool knownExe)
 {
 	bool ok = Hook("GetSystemMetrics", &HookGetSystemMetrics, &g_origMetrics) && Hook("GetClientRect", &HookGetClientRect, &g_origGetClientRect);
 	if (ok && GetConfig().renderEnabled) {
@@ -680,11 +687,20 @@ bool InstallDisplayModeHooks()
 	if (ok && Enabled()) {
 		ok = Hook("SetWindowPos", &HookSetWindowPos, &g_origSetWindowPos) && Hook("MoveWindow", &HookMoveWindow, &g_origMoveWindow) &&
 			Hook("GetCursorPos", &HookGetCursorPos, &g_origGetCursorPos) && Hook("ClipCursor", &HookClipCursor, &g_origClipCursor);
-		if (ok && !HookInstall(addr::kCurrentDisplayModeIndex, &HookCurrentModeIndex, &g_origCurrentModeIndex)) {
+		if (ok && knownExe && !HookInstall(addr::kCurrentDisplayModeIndex, &HookCurrentModeIndex, &g_origCurrentModeIndex)) {
 			LogE("display", "could not intercept the game's current display mode");
 			ok = false;
 		}
 	}
+	RealIfMissing("GetSystemMetrics", &g_origMetrics);
+	RealIfMissing("GetClientRect", &g_origGetClientRect);
+	RealIfMissing("ChangeDisplaySettingsA", &g_origChange);
+	RealIfMissing("EnumDisplaySettingsA", &g_origEnum);
+	RealIfMissing("SetWindowLongA", &g_origSetWindowLong);
+	RealIfMissing("SetWindowPos", &g_origSetWindowPos);
+	RealIfMissing("MoveWindow", &g_origMoveWindow);
+	RealIfMissing("GetCursorPos", &g_origGetCursorPos);
+	RealIfMissing("ClipCursor", &g_origClipCursor);
 	LogAt(ok ? kLogInfo : kLogError, "display", "hooks %s (FakeModeChange=%d, mode %s)", ok ? "installed" : "with errors",
 		GetConfig().fakeModeChange, GetConfig().windowed ? "windowed" : "full screen");
 	return ok;

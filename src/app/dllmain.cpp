@@ -200,7 +200,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 		}
 		HookBatchBegin();
 		InstallRenderHooks();
-		InstallDisplayModeHooks();
+		InstallDisplayModeHooks(knownExe);
 		InstallTweaks(knownExe);
 		// Before the updater can move this DLL aside: the build this game announces is the one it loaded.
 		BuildPin();

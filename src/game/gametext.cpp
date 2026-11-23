@@ -17,13 +17,14 @@ const char *const kRaceEnglish[8] = {"Gaul", "Republican Rome", "Carthage", "Ibe
 
 typedef char *(__cdecl *LocFormat_t)(void *db, char *out, const char *key, ...);
 
-bool LocalizeKey(void *db, const char *key, char *out, size_t size)
+// CLocalizationDB::Format (006897a0) sprintfs the text with no size limit: a buffer far larger than any text, for long translations.
+const size_t kLocBuffer = 8192;
+
+bool LocalizeKey(void *db, const char *key, char (&out)[kLocBuffer])
 {
 	out[0] = 0;
 	__try {
-		char buf[512] = {};
-		reinterpret_cast<LocFormat_t>(addr::kLocFormat)(db, buf, key);
-		strncpy_s(out, size, buf, _TRUNCATE);
+		reinterpret_cast<LocFormat_t>(addr::kLocFormat)(db, out, key);
 		return true;
 	}
 	__except (EXCEPTION_EXECUTE_HANDLER) {
@@ -37,12 +38,12 @@ std::string GameText(const std::string &text, const std::string &context)
 {
 	void *db = *reinterpret_cast<void **>(addr::kUiLocalization);
 	if (!db || text.empty() || text.find('%') != std::string::npos) return text;
-	char out[512];
+	char out[kLocBuffer];
 	if (!context.empty()) {
 		const std::string key = text + "@" + context;
-		if (LocalizeKey(db, key.c_str(), out, sizeof(out)) && out[0] && key != out) return out;
+		if (LocalizeKey(db, key.c_str(), out) && out[0] && key != out) return out;
 	}
-	if (LocalizeKey(db, text.c_str(), out, sizeof(out)) && out[0]) return out;
+	if (LocalizeKey(db, text.c_str(), out) && out[0]) return out;
 	return text;
 }
 

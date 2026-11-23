@@ -5,6 +5,8 @@
 #include <windows.h>
 #include <cstdint>
 #include <cstring>
+#include <mutex>
+#include <string>
 
 #include "game/autosave.h"
 #include "game/gamelayout.h"
@@ -35,6 +37,17 @@ BuildPath_t g_origBuildPath = nullptr;
 int g_inSession = 0;
 DWORD g_lastTick = 0;
 DWORD g_playedMs = 0;
+// The file of the last autosave asked of the game, lowercase with forward slashes: the save written there is an autosave whatever
+// its name, which the player's language decides.
+std::mutex g_autosavePathLock;
+std::string g_autosavePath;
+
+std::string SavePathKey(const std::string &path)
+{
+	std::string key = path;
+	for (char &c : key) c = c == '\\' ? '/' : static_cast<char>(tolower(static_cast<unsigned char>(c)));
+	return key;
+}
 
 void *__cdecl HookProcessRequests()
 {
@@ -137,6 +150,10 @@ void RequestAutosave()
 		}
 	}
 	const std::string path = dir + name + suffix;
+	{
+		std::lock_guard<std::mutex> lock(g_autosavePathLock);
+		g_autosavePath = SavePathKey(path);
+	}
 	RequestSave(path);
 	LogI("autosave", "saving to %s", path.c_str());
 }
@@ -151,6 +168,18 @@ std::string AutosaveRequestNamed(const std::string &name)
 	RequestSave(path);
 	LogI("saves", "quick save requested: %s", path.c_str());
 	return path;
+}
+
+bool AutosaveIsAutosaveFile(const std::string &gamePath)
+{
+	const std::string key = SavePathKey(gamePath);
+	std::lock_guard<std::mutex> lock(g_autosavePathLock);
+	const std::string &own = g_autosavePath;
+	if (key.empty() || own.empty()) return false;
+	// One of the two may carry a folder prefix the other lacks: the shorter must be the tail of the longer, at a folder boundary.
+	const std::string &longer = key.size() >= own.size() ? key : own, &shorter = key.size() >= own.size() ? own : key;
+	const size_t at = longer.size() - shorter.size();
+	return longer.compare(at, std::string::npos, shorter) == 0 && (at == 0 || longer[at - 1] == '/' || shorter[0] == '/');
 }
 
 bool AutosavePending()
@@ -201,6 +230,11 @@ void AutosaveQuitIfReady()
 	const bool timeout = GetTickCount() - g_quitSince > 15000;
 	if (AutosavePending() && !timeout) return;
 	g_quitPending = false;
+	// RequestQuitToMenu (006cebf0) calls through g_pGame without checking it: the game may have ended during the wait.
+	if (g_inSession <= 0 || !*reinterpret_cast<void **>(addr::kGame)) {
+		LogI("autosave", "exit: the game ended while it was saving; nothing to quit");
+		return;
+	}
 	if (timeout) LogW("autosave", "exit: the save did not finish in 15 s; exiting anyway");
 	g_origRequestQuit();
 }

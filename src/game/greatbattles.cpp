@@ -101,16 +101,23 @@ int Current(void *list)
 	return at < Count(list) ? static_cast<int>(at) : -1;
 }
 
+bool EntryAt(void *list, int index, BattlesEntry &out)
+{
+	const char *items = list ? *reinterpret_cast<char *const *>(static_cast<char *>(list) + 0x94) : nullptr;
+	if (!items || index < 0 || static_cast<unsigned>(index) >= Count(list)) return false;
+	// An AdventureListItem of 0x14 bytes: the title, two flags, the path without its extension and the picture.
+	const char *title = *reinterpret_cast<const char *const *>(items + index * 0x14);
+	const char *path = *reinterpret_cast<const char *const *>(items + index * 0x14 + 0xc);
+	out = {title ? title : "", path ? path : ""};
+	return true;
+}
+
+// The screen's copy stops at 512; a choice past it is still started from the game's list.
 std::vector<BattlesEntry> Entries(void *list)
 {
 	std::vector<BattlesEntry> out;
-	const char *items = list ? *reinterpret_cast<char *const *>(static_cast<char *>(list) + 0x94) : nullptr;
-	for (unsigned i = 0, n = Count(list); items && i < n && i < 512; i++) {
-		// An AdventureListItem of 0x14 bytes: the title, two flags, the path without its extension and the picture.
-		const char *title = *reinterpret_cast<const char *const *>(items + i * 0x14);
-		const char *path = *reinterpret_cast<const char *const *>(items + i * 0x14 + 0xc);
-		out.push_back({title ? title : "", path ? path : ""});
-	}
+	BattlesEntry e;
+	for (int i = 0; i < 512 && EntryAt(list, i, e); i++) out.push_back(e);
 	return out;
 }
 
@@ -368,6 +375,7 @@ BattlesSnapshot BattlesRead()
 		s.difficulty = reinterpret_cast<ComboGetSelected_t>(addr::kComboGetSelected)(combo);
 		s.difficultyShown = reinterpret_cast<HasFlags_t>(addr::kWindowHasFlags)(combo, nullptr, kFlagVisible) != 0 && !s.difficulties.empty();
 	}
+	if (s.selList >= 0 && s.selIndex >= static_cast<int>(s.lists[s.selList].size())) s.selList = s.selIndex = -1;
 	if (s.selList >= 0) {
 		const BattlesEntry &e = s.lists[s.selList][s.selIndex];
 		void *text = Child(dlg, kIdDescription, addr::kClassNameCUITextW);
@@ -441,8 +449,9 @@ void BattlesStart()
 	int list = -1, index = -1;
 	SelectionOf(dlg, DialogTab(dlg), list, index);
 	if (list < 0) return;
+	BattlesEntry entry;
+	if (!EntryAt(List(dlg, list), index, entry)) return;
 	g_startedOn = dlg;
-	const BattlesEntry entry = Entries(List(dlg, list))[index];
 	LogI("ui", "starting the adventure %s", entry.path.c_str());
 	AdventureResultNoteStart(entry.path, entry.title);
 	Click(dlg, Child(dlg, kIdStart, addr::kClassNameCUIButton) ? kIdStart : kIdStartConquest);
@@ -461,7 +470,9 @@ void BattlesPlayIntro()
 	int list = -1, index = -1;
 	SelectionOf(dlg, kBattlesTabGreat, list, index);
 	if (list < 0) return;
-	g_introFile = IntroFile(Entries(List(dlg, list))[index].path);
+	BattlesEntry entry;
+	if (!EntryAt(List(dlg, list), index, entry)) return;
+	g_introFile = IntroFile(entry.path);
 	if (g_introFile.empty()) return;
 	reinterpret_cast<PostMessage_t>(addr::kWindowPostMessage)(dlg, nullptr, dlg, kMsgPlayIntro, 0, 0, 0);
 }

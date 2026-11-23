@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-bool InstallDisplayModeHooks();
+bool InstallDisplayModeHooks(bool knownExe);
 
 bool DisplayFakeMode(int w, int h, DWORD bpp, bool testOnly);
 

@@ -187,6 +187,11 @@ void Colors()
 	CHECK(BmpAverageColor(reinterpret_cast<const unsigned char *>(bmp.data()), bmp.size(), rgb));
 	CHECK_EQ(rgb, static_cast<uint32_t>((60 << 16) | (50 << 8) | 40));
 	CHECK(!BmpAverageColor(reinterpret_cast<const unsigned char *>(bmp.data()), 60, rgb));
+	// An offset near 4 GB: offset + 16 bytes of pixels wraps round to 0 on 32 bits.
+	std::string wrap = bmp;
+	wrap[10] = static_cast<char>(0xf0);
+	wrap[11] = wrap[12] = wrap[13] = static_cast<char>(0xff);
+	CHECK(!BmpAverageColor(reinterpret_cast<const unsigned char *>(wrap.data()), wrap.size(), rgb));
 	bmp[28] = 8;
 	CHECK(!BmpAverageColor(reinterpret_cast<const unsigned char *>(bmp.data()), bmp.size(), rgb));
 }

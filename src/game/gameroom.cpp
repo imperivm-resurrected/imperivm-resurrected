@@ -1801,14 +1801,23 @@ void GameRoomSetBonus(int slot, int index)
 		typedef void(__fastcall * UpdateSlotRow_t)(void *, void *, unsigned);
 		if (!g_dlg || slot < 0 || slot > 7 || LockedByMode(0x10a7)) return;
 		if (index < 0 || index >= static_cast<int>(RoomBonuses(g_dlg).size())) return;
+		const char *name = nullptr;
+		int type = 0, color = 0, ready = 0, race = 0, current = 0, extra = 0;
+		if (!reinterpret_cast<GetSlotInfo_t>(addr::kGetSlotInfo)(g_dlg, nullptr, slot, &name, &type, &color, &ready, &race, &current, &extra) ||
+			(type != 1 && type != 3) || SlotHandshaking(slot)) {
+			LogD("room", "bonus of slot %d not changed: the slot is empty or a player is joining it", slot + 1);
+			return;
+		}
 		char *d = static_cast<char *>(g_dlg);
 		const int player = static_cast<int>(*reinterpret_cast<signed char *>(d + 0xa0 + slot));
+		if (player < 0 || player > 7) return;
 		char *shell = *reinterpret_cast<char **>(d + 0x8228);
 		if (!shell) {
 			*reinterpret_cast<int *>(player * 0x34 + *reinterpret_cast<char **>(d + 0x174) + 0x30) = index;
 		}
 		else {
 			char *rec = *reinterpret_cast<char **>(shell + 8) + player * 0x21;
+			if (!*reinterpret_cast<int *>(rec + 4) || !*reinterpret_cast<char **>(rec)) return;
 			*reinterpret_cast<int *>(rec + 8) = 1;
 			*reinterpret_cast<int *>(*reinterpret_cast<char **>(rec) + 0x6c) = index;
 			reinterpret_cast<SendPlayerInfo_t>(addr::kSendPlayerInfo)(shell, nullptr, player, 0xffff, 0);
@@ -1955,8 +1964,10 @@ static void ApplyColor(int slot, int start)
 		typedef unsigned(__fastcall * FindFreeColor_t)(void *, void *, unsigned, int);
 		typedef void(__fastcall * SendPlayerInfo_t)(void *, void *, int, unsigned, int);
 		typedef void(__fastcall * UpdateSlotRow_t)(void *, void *, unsigned);
+		if (slot < 0 || slot > 7) return;
 		char *d = static_cast<char *>(g_dlg);
 		const int player = static_cast<int>(*reinterpret_cast<signed char *>(d + 0xa0 + slot));
+		if (player < 0 || player > 7) return;
 		char *shell = *reinterpret_cast<char **>(d + 0x8228);
 		unsigned color = 0;
 		if (!shell) {
@@ -1964,7 +1975,7 @@ static void ApplyColor(int slot, int start)
 		}
 		else {
 			char *rec = *reinterpret_cast<char **>(shell + 8) + player * 0x21;
-			if (!*reinterpret_cast<int *>(rec + 4)) return;
+			if (!*reinterpret_cast<int *>(rec + 4) || !*reinterpret_cast<char **>(rec)) return;
 			color = *reinterpret_cast<unsigned *>(*reinterpret_cast<char **>(rec) + 0x60);
 		}
 		const unsigned from = static_cast<unsigned>(start) % 12;
@@ -2057,8 +2068,9 @@ void GameRoomPickerOffer(const std::string &scenarioPath, bool accept)
 {
 	Queue([scenarioPath, accept] {
 		if (!g_picker) return;
+		// Through the hook: only with g_filling set does HookLoadGameInfo refuse the other files, so row 0 is the one offered.
 		g_fillOnly = FileStemOf(scenarioPath.c_str());
-		g_origPickerFill(g_picker);
+		HookPickerFill(g_picker);
 		g_fillOnly.clear();
 		void *list = Child(g_picker, 0xa105, addr::kClassNameCUISList);
 		const unsigned count = list ? *reinterpret_cast<const unsigned *>(static_cast<const char *>(list) + 0x58) : 0;
@@ -2068,6 +2080,7 @@ void GameRoomPickerOffer(const std::string &scenarioPath, bool accept)
 			return;
 		}
 		g_pickerRefused.clear();
+		if (count > 1) LogW("room", "scenario selector: %u files are named like \"%s\"; the first is offered", count, scenarioPath.c_str());
 		reinterpret_cast<SelectExclusive_t>(addr::kListSelectExclusive)(list, nullptr, 0, 1, 1);
 		g_acceptOffer = accept;
 		LogI("room", "scenario selector: \"%s\" offered%s", scenarioPath.c_str(), accept ? " and taken" : "");

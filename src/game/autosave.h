@@ -10,3 +10,5 @@ bool AutosaveOnExit();
 void AutosaveQuitIfReady();
 std::string AutosaveRequestNamed(const std::string &name);
 bool AutosavePending();
+// The save file at gamePath (any separators, with or without the folders before it) is the last autosave this mod asked for.
+bool AutosaveIsAutosaveFile(const std::string &gamePath);

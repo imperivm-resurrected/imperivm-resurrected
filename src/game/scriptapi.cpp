@@ -99,6 +99,7 @@ int __cdecl Mod_IsActive(int *pSP)
 {
 	static std::mutex lock;
 	static std::set<std::string> active;
+	static std::vector<std::string> builtFrom;
 	static bool loaded = false;
 	const int text = PopText(pSP);
 	std::string id = TextOf(text);
@@ -107,14 +108,18 @@ int __cdecl Mod_IsActive(int *pSP)
 	bool found = false;
 	{
 		std::lock_guard<std::mutex> guard(lock);
-		if (!loaded) {
-			for (const std::string &folder : ModsMountedProfile().mods) {
+		// Rebuilt when the mounted mods change: map-only mods come and go without a restart (ModsApplyWithoutRestart).
+		std::vector<std::string> mounted = ModsMountedProfile().mods;
+		if (!loaded || mounted != builtFrom) {
+			active.clear();
+			for (const std::string &folder : mounted) {
 				ModInfo m;
 				if (!ModsFind(folder, m)) continue;
 				std::string mid = m.id;
 				for (char &c : mid) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
 				active.insert(mid);
 			}
+			builtFrom = std::move(mounted);
 			loaded = true;
 		}
 		found = active.count(id) != 0;
