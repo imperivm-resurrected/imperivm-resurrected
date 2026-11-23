@@ -5,6 +5,7 @@
 #include <algorithm>
 #include "MinHook.h"
 #include "i18n/tr.h"
+#include "hooks/movemark.h"
 #include "hooks/movestart.h"
 #include "mods/mappack.h"
 #include "mods/profilehash.h"
@@ -193,6 +194,6 @@ std::string ModsProfileGameplayHash(const ModProfile &p)
 std::string ModsRulesLevel()
 {
 	// The movement patch is a simulation of its own: a room of it and one without it must not meet.
-	return std::string(kGameId) + "/sim" + std::to_string(kSimLevel) + (MoveStartActive() ? "/mfs1" : "") + "/esq" + std::to_string(kRulesSchema) + "/api" +
+	return std::string(kGameId) + "/sim" + std::to_string(kSimLevel) + MoveMarkFor(MoveStartActive()).rules + "/esq" + std::to_string(kRulesSchema) + "/api" +
 		std::to_string(kScriptApiVersion);
 }

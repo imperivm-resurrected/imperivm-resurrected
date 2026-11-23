@@ -11,6 +11,7 @@
 
 #include "mods/netmods.h"
 #include "MinHook.h"
+#include "hooks/movemark.h"
 #include "hooks/movestart.h"
 #include "hooks/hookcount.h"
 #include "core/json.h"
@@ -179,14 +180,14 @@ void StartServer()
 // in the room the host publishes and in the check of whoever joins (HookVersionHash), or nobody can join anybody.
 int HashMarks()
 {
-	return static_cast<int>(ProfileKey() << 16) ^ (MoveStartActive() ? 0xc000 : 0);
+	return static_cast<int>(ProfileKey() << 16 ^ MoveMarkFor(MoveStartActive()).hash);
 }
 
 int __cdecl HookVersionHash(int options)
 {
 	StartServer();
 	const unsigned key = ProfileKey();
-	// The movement patch marks the low word as Classic Modern does (0xc000), so a game without it refuses the room.
+	// The movement patch marks the low word (movemark.h), so a game without it, or with an older one, refuses the room.
 	const int plain = g_origHash(options);
 	const int out = plain ^ HashMarks();
 	// What the game compares to join a room ("different protocol version"): logged when it changes, to tell two computers apart.
@@ -312,7 +313,7 @@ int __fastcall HookAddFoundGame(void *self, void *edx, unsigned char *desc, void
 			}
 		}
 		// While this computer's own key is still unknown every room differs: nothing to explain yet.
-		if ((diff & 0xffff) == (MoveStartActive() ? 0xc000u : 0u) && (diff >> 16) != ProfileKey() && !KeyPending()) {
+		if ((diff & 0xffff) == MoveMarkFor(MoveStartActive()).hash && (diff >> 16) != ProfileKey() && !KeyPending()) {
 			const unsigned hostKey = diff >> 16;
 			const unsigned ip = AddrIp(addr);
 			char key[48];
