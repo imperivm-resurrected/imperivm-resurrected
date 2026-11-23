@@ -313,6 +313,46 @@ void ReportAndErrors()
 	CHECK_EQ(LeagueParseError(Parse(R"({"retryAfter":-3})")).retryAfter, 0);
 }
 
+void Backoff()
+{
+	CHECK(LeagueRetriable(0));
+	CHECK(LeagueRetriable(200));
+	CHECK(LeagueRetriable(408));
+	CHECK(LeagueRetriable(429));
+	CHECK(LeagueRetriable(503));
+	CHECK(!LeagueRetriable(400));
+	CHECK(!LeagueRetriable(404));
+	CHECK(!LeagueRetriable(426));
+	CHECK_EQ(LeagueParseRetryAfter("120"), 120);
+	CHECK_EQ(LeagueParseRetryAfter(" 7\r\n"), 7);
+	CHECK_EQ(LeagueParseRetryAfter("Wed, 21 Oct 2026 07:28:00 GMT"), 0);
+	CHECK_EQ(LeagueParseRetryAfter(""), 0);
+	CHECK_EQ(LeagueParseRetryAfter("-5"), 0);
+	auto ms = [](int status, int fails, int retryAfter, int64_t normal, int64_t first, int64_t cap) {
+		return static_cast<int>(LeagueBackoffMs(status, fails, retryAfter, normal, first, cap));
+	};
+	// A success keeps the pace; a failure that may pass doubles from the first wait, never below the pace, up to the cap.
+	CHECK_EQ(ms(200, 0, 0, 120000, 30000, 1800000), 120000);
+	CHECK_EQ(ms(0, 1, 0, 120000, 30000, 1800000), 120000);
+	CHECK_EQ(ms(0, 3, 0, 120000, 30000, 1800000), 120000);
+	CHECK_EQ(ms(503, 4, 0, 120000, 30000, 1800000), 240000);
+	CHECK_EQ(ms(503, 30, 0, 120000, 30000, 1800000), 1800000);
+	CHECK_EQ(ms(0, 1, 0, 5000, 6000, 60000), 6000);
+	CHECK_EQ(ms(0, 2, 0, 5000, 6000, 60000), 12000);
+	CHECK_EQ(ms(0, 5, 0, 5000, 6000, 60000), 60000);
+	// A 429 waits what the server asks, even past the cap; Cloudflare's own, which says nothing, minutes.
+	CHECK_EQ(ms(429, 1, 30, 5000, 6000, 60000), 30000);
+	CHECK_EQ(ms(429, 1, 600, 5000, 6000, 60000), 600000);
+	CHECK_EQ(ms(429, 1, 2, 5000, 6000, 60000), 5000);
+	CHECK_EQ(ms(429, 1, 0, 5000, 6000, 1800000), 300000);
+	CHECK_EQ(ms(429, 2, 0, 5000, 6000, 1800000), 600000);
+	CHECK_EQ(ms(429, 9, 0, 5000, 6000, 1800000), 1800000);
+	CHECK_EQ(ms(429, 1, 0, 5000, 6000, 60000), 60000);
+	// A refusal that stays (an unofficial build, a page that does not exist) waits the cap at once.
+	CHECK_EQ(ms(426, 1, 0, 120000, 30000, 1800000), 1800000);
+	CHECK_EQ(ms(404, 1, 0, 0, 3000, 600000), 600000);
+}
+
 void MeBadgeTeamRank()
 {
 	LeagueMe me;
@@ -805,6 +845,7 @@ int main()
 	AbandonCost();
 	Board();
 	ReportAndErrors();
+	Backoff();
 	MeBadges();
 	MeBadgeTeamRank();
 	Glory();

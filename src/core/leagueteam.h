@@ -56,6 +56,14 @@ enum class LeagueDuoRole { Solo, Waiting, Leader, Member };
 LeagueDuoRole LeagueDuoRoleOf(const LeagueParty &p, const std::string &me);
 // The invitations not in `seen` (their ids), for the notice of a new one.
 std::vector<LeaguePartyInvite> LeagueNewInvites(const std::vector<LeaguePartyInvite> &now, const std::vector<std::string> &seen);
+// How often to ask for the duo (GET /v1/league/party), which every linked player does in every menu: every 5 s while the 2v2 is on
+// screen or an invitation waits for an answer, every minute in a duo and every 2 alone (an invitation lasts 5); while the player is
+// `away`, every minute with an invitation waiting, 5 in a duo and 10 alone; every 10 from a server without the duo (`missing`).
+int LeaguePartyPollMs(bool missing, bool waiting, bool screen, bool inDuo, bool away);
+// How often the partner of a duo, not searching, asks the queue whether the leader started (the server's party does not say): the
+// match found then has 20 s to be accepted. Every 5 s with the 2v2 on screen, 10 in the other menus, 15 with the game behind other
+// windows (a match found flashes it).
+int LeagueDuoQueuePollMs(bool screen, bool inFront);
 
 // The requests whose path says the queue. The duel's are the ones a server before the 2v2 knows (only the leaderboard names its queue);
 // the 2v2's add queue=2v2. Values that need it come URL-encoded.

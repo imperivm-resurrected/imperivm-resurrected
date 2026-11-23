@@ -1250,8 +1250,10 @@ bool TourneyHasActiveEntry(const TourneyMine &m)
 	return m.next.present || !m.invites.empty();
 }
 
-int TourneyPollEveryMs(bool activeEntry, bool tabOpen)
+int TourneyPollEveryMs(bool activeEntry, bool tabOpen, bool away)
 {
+	// Whatever came meanwhile is read as soon as the player is back; in a cup of their own a match ready flashes the game, so not then.
+	if (away && !activeEntry) return kTourneyAwayPollMs;
 	// In a cup with its tab open the next match, its room and the start come in at once (the league takes a read every 5 s).
 	if (activeEntry) return tabOpen ? 5000 : 30000;
 	return tabOpen ? 60000 : kTourneyIdlePollMs;

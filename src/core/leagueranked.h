@@ -239,6 +239,16 @@ LeagueError LeagueParseError(const Json &j);
 // How long to wait before the next poll: after a 429, what the server asks (at least 1 s, 5 s when it does not say), and never
 // less than `normalMs`; after anything else, `normalMs`.
 int64_t LeagueRetryAfterMs(int httpStatus, const LeagueError &e, int64_t normalMs);
+// A failure that asking again may change: no answer (0, or an answer cut short), a timeout (408), too many requests (429) or the
+// server's own (5xx). Any other refusal (426 of an unofficial build, 403, 404...) stays.
+bool LeagueRetriable(int httpStatus);
+// The Retry-After header in whole seconds; 0 when there is none or it is a date.
+int LeagueParseRetryAfter(const std::string &header);
+// How long to wait before a request that repeats is sent again, after `fails` failures in a row (0: the last one worked, `normalMs`).
+// Never less than `normalMs`: a failure that may pass waits `firstMs`, twice as long with each one, up to `capMs`; a 429 waits what the
+// server asks (`retryAfterSec`, as LeagueRetryAfterMs), or, when it does not say (Cloudflare's own limit of the day), 5 minutes doubled
+// up to `capMs`; any other refusal waits `capMs`.
+int64_t LeagueBackoffMs(int httpStatus, int fails, int retryAfterSec, int64_t normalMs, int64_t firstMs, int64_t capMs);
 // Why the queue is locked, as the English text to translate: a match declined or let go (also when the server does not say), a game
 // left, or too many games out of sync.
 const char *LeagueBanText(const std::string &kind);

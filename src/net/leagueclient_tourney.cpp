@@ -33,7 +33,12 @@ namespace {
 const DWORD kListsKeepMs = 30000, kMineRetryMs = 60000, kWatchMs = 3000;
 const size_t kPagesKept = 16;
 // After a 429 the reads wait what the server asks, at least this long and at most an hour.
-const DWORD kQuietMinMs = 5000, kQuietMaxMs = 3600000;
+const DWORD kQuietMinMs = 5000, kQuietMaxMs = 3600000, kQuietUnsaidMs = 5 * 60 * 1000;
+// After reads of the player's tournaments that failed in a row: from this long, twice as long each time, up to the cap, never sooner
+// than the poll's pace.
+const DWORD kMineFirstRetryMs = 30000, kMineRetryCapMs = 30 * 60 * 1000;
+// The same for a page of a cup, which a screen asks for every frame.
+const DWORD kPageFirstRetryMs = 15000, kPageRetryCapMs = 10 * 60 * 1000;
 
 struct Lists {
 	bool loaded = false, loading = false, failed = false;
@@ -45,6 +50,9 @@ struct Lists {
 
 struct Page {
 	DWORD at = 0, used = 0;
+	// Reads that failed in a row, and how long the next waits at least after the last.
+	int fails = 0;
+	DWORD wait = 0;
 	// What the screens are given: never changed once given, only replaced (ChangeView).
 	std::shared_ptr<const TourneyPageView> view = std::make_shared<const TourneyPageView>();
 };
@@ -53,8 +61,9 @@ struct Mine {
 	bool tried = false;
 	// `gameAt`: the last tick seen during a game, after which a series' pick opens.
 	DWORD at = 0, watched = 0, gameAt = 0;
-	// Reads that failed in a row: the next one comes soon (3 s, then twice as long each time) instead of at the poll's pace.
+	// Reads that failed in a row, and how long after the last one the next waits at least.
 	int fails = 0;
+	DWORD retryWait = 0;
 	// Asked for again while a read was on its way (a result came in meanwhile, say): read once more when it lands.
 	bool again = false;
 	std::string steamId;
@@ -122,6 +131,12 @@ const char *OpName(TourneyOp op)
 	}
 }
 
+// Under g_mx: nobody looks and no cup of the player's is on, so the screens' reads wait for them to come back.
+bool Idle()
+{
+	return PlayerAway() && !(g_mine.view->loaded && TourneyHasActiveEntry(g_mine.view->mine));
+}
+
 // Under g_mx.
 bool Quiet()
 {
@@ -132,9 +147,9 @@ bool Quiet()
 void WaitAfter(const HttpReply &r)
 {
 	if (r.status != 429) return;
-	Json j;
-	const int seconds = !r.body.empty() && Json::Parse(r.body, j) ? TourneyParseRefusal(j).retryAfter : 0;
-	const DWORD wait = static_cast<DWORD>(std::max<int64_t>(kQuietMinMs, std::min<int64_t>(kQuietMaxMs, static_cast<int64_t>(seconds) * 1000)));
+	// A 429 that does not say how long is Cloudflare's own, the limit of the day: minutes, not seconds.
+	const int64_t asked = r.retryAfterSec > 0 ? static_cast<int64_t>(r.retryAfterSec) * 1000 : kQuietUnsaidMs;
+	const DWORD wait = static_cast<DWORD>(std::max<int64_t>(kQuietMinMs, std::min<int64_t>(kQuietMaxMs, asked)));
 	LogI("league", "the league asked to wait %u s before reading the tournaments again", static_cast<unsigned>(wait / 1000));
 	std::lock_guard<std::mutex> lock(g_mx);
 	g_quietUntil = GetTickCount() + wait;
@@ -195,6 +210,8 @@ void FetchPage(std::string slug, std::string code)
 	std::lock_guard<std::mutex> lock(g_mx);
 	Page &p = g_pages[slug];
 	p.at = GetTickCount();
+	p.fails = ok ? 0 : p.fails + 1;
+	p.wait = RetryDelayMs(r, p.fails, 0, kPageFirstRetryMs, kPageRetryCapMs);
 	if (!ok) {
 		ChangeView(p.view, [&r](TourneyPageView &v) {
 			v.loading = false;
@@ -238,10 +255,11 @@ void FetchMine()
 	g_mine.at = GetTickCount();
 	const bool again = g_mine.again;
 	g_mine.again = false;
-	g_mine.fails = ok || r.status == 401 || r.failure == "not linked" ? 0 : std::min(g_mine.fails + 1, 4);
+	g_mine.fails = ok || r.status == 401 || r.failure == "not linked" ? 0 : g_mine.fails + 1;
+	g_mine.retryWait = RetryDelayMs(r, g_mine.fails, 0, kMineFirstRetryMs, kMineRetryCapMs);
 	if (!ok) {
+		// Asked for again meanwhile or not, the next read waits for the retry.
 		ChangeView(g_mine.view, [](TourneyMineView &v) { v.loading = false; });
-		if (again) StartMine();
 		return;
 	}
 	if (g_mine.steamId != steamId) {
@@ -497,19 +515,19 @@ void UploadFailed(TourneyOp op, int64_t id, const TourneyMap &m, const HttpReply
 	g_results.push_back(out);
 }
 
+// An organizer's scenario to go up, as read on the game thread (the game's file system is not made for two threads).
+struct Upload {
+	TourneyMap map;
+	bool read = false;
+	std::string bytes;
+};
+
 // The organizer's scenarios go up one by one, each once, and then the cup.
-void Publish(TourneyOp op, int64_t id, TourneyCupForm form, bool descriptionOnly)
+void Publish(TourneyOp op, int64_t id, TourneyCupForm form, bool descriptionOnly, std::vector<Upload> uploads)
 {
-	std::vector<TourneyMap> uploads, all = form.maps;
-	if (TourneyCupHasSeries(form)) all.insert(all.end(), form.seriesPool.begin(), form.seriesPool.end());
-	for (const TourneyMap &m : all) {
-		if (descriptionOnly || m.kind != TourneyMapKind::Upload) continue;
-		bool seen = false;
-		for (const TourneyMap &u : uploads) seen = seen || u.hash == m.hash;
-		if (!seen) uploads.push_back(m);
-	}
 	for (size_t i = 0; i < uploads.size(); i++) {
-		const TourneyMap &m = uploads[i];
+		const TourneyMap &m = uploads[i].map;
+		const std::string &bytes = uploads[i].bytes;
 		{
 			std::lock_guard<std::mutex> lock(g_mx);
 			g_upload.active = true;
@@ -519,8 +537,7 @@ void Publish(TourneyOp op, int64_t id, TourneyCupForm form, bool descriptionOnly
 			g_upload.total = static_cast<uint64_t>(m.bytes);
 			g_upload.title = m.title;
 		}
-		std::string bytes;
-		if (!CupScenarioRead(m.file, bytes)) {
+		if (!uploads[i].read) {
 			UploadFailed(op, id, m, HttpReply(), "map_unreadable");
 			return;
 		}
@@ -561,7 +578,20 @@ void StartPublish(TourneyOp op, int64_t id, const TourneyCupForm &form, bool des
 		std::lock_guard<std::mutex> lock(g_mx);
 		if (!g_busy.insert({static_cast<int>(op), id}).second) return;
 	}
-	SafeThread(Publish, op, id, form, descriptionOnly).detach();
+	std::vector<Upload> uploads;
+	std::vector<TourneyMap> all = form.maps;
+	if (TourneyCupHasSeries(form)) all.insert(all.end(), form.seriesPool.begin(), form.seriesPool.end());
+	for (const TourneyMap &m : all) {
+		if (descriptionOnly || m.kind != TourneyMapKind::Upload) continue;
+		bool seen = false;
+		for (const Upload &u : uploads) seen = seen || u.map.hash == m.hash;
+		if (seen) continue;
+		Upload u;
+		u.map = m;
+		u.read = CupScenarioRead(m.file, u.bytes);
+		uploads.push_back(std::move(u));
+	}
+	SafeThread(Publish, op, id, form, descriptionOnly, std::move(uploads)).detach();
 }
 
 }
@@ -587,15 +617,13 @@ void TourneyTick()
 		return;
 	}
 	const bool active = v->loaded && TourneyHasActiveEntry(v->mine);
-	DWORD every = static_cast<DWORD>(TourneyPollEveryMs(active, tab));
+	DWORD every = static_cast<DWORD>(TourneyPollEveryMs(active, tab, PlayerAway()));
 	if (!v->loaded && !every) every = kMineRetryMs;
 	const int64_t sinceGame = g_mine.gameAt ? static_cast<int64_t>(now - g_mine.gameAt) : -1;
 	const DWORD series = v->loaded ? static_cast<DWORD>(TourneySeriesPollMs(v->mine.next, sinceGame)) : 0;
 	if (series && (!every || series < every)) every = series;
-	if (g_mine.fails && now - g_mine.at >= (3000u << (g_mine.fails - 1))) {
-		StartMine();
-		return;
-	}
+	// After failures the reads slow down, never sooner than the pace.
+	if (g_mine.fails) every = std::max(every, g_mine.retryWait);
 	if (every && now - g_mine.at >= every) StartMine();
 }
 
@@ -618,7 +646,7 @@ void LeagueTourneyListsRefresh(bool force)
 {
 	std::lock_guard<std::mutex> lock(g_mx);
 	if (g_lists.loading || Quiet()) return;
-	if (!force && g_lists.at && GetTickCount() - g_lists.at < kListsKeepMs) return;
+	if (!force && g_lists.at && (GetTickCount() - g_lists.at < kListsKeepMs || Idle())) return;
 	g_lists.loading = true;
 	SafeThread(FetchLists).detach();
 }
@@ -638,7 +666,7 @@ std::shared_ptr<const TourneyPageView> LeagueTourneyPage(const std::string &slug
 	}
 	Page &p = g_pages[slug];
 	p.used = now;
-	if (!p.view->loading && !Quiet() && (!p.at || now - p.at >= static_cast<DWORD>(maxAgeMs))) {
+	if (!p.view->loading && !Quiet() && (!p.at || (now - p.at >= std::max(static_cast<DWORD>(maxAgeMs), p.wait) && !Idle()))) {
 		ChangeView(p.view, [](TourneyPageView &v) { v.loading = true; });
 		const auto code = g_codes.find(slug);
 		SafeThread(FetchPage, slug, code == g_codes.end() ? std::string() : code->second).detach();
@@ -856,7 +884,7 @@ TourneyDisputesView LeagueTourneyDisputes(int64_t tournament, int maxAgeMs)
 	std::lock_guard<std::mutex> lock(g_mx);
 	Disputes &d = g_disputes[tournament];
 	const DWORD now = GetTickCount();
-	if (!d.loading && !Quiet() && (!d.at || now - d.at >= static_cast<DWORD>(maxAgeMs))) {
+	if (!d.loading && !Quiet() && (!d.at || (now - d.at >= static_cast<DWORD>(maxAgeMs) && !Idle()))) {
 		d.loading = true;
 		SafeThread(FetchDisputes, tournament).detach();
 	}

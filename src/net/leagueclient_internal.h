@@ -23,6 +23,8 @@ struct HttpReply {
 	std::string body;
 	// Why there was no answer.
 	std::string failure;
+	// The whole seconds a 429 or a 503 asks to wait, from the Retry-After header or the body's retryAfter; 0 when not said.
+	int retryAfterSec = 0;
 	bool Ok() const { return failure.empty() && status >= 200 && status < 300; }
 	// For the log: "network error 12029", or "403 forbidden: <message>".
 	std::string Describe() const;
@@ -68,6 +70,14 @@ std::string OwnId();
 std::string LangCode();
 // A game is on, played or watched.
 bool InGame();
+// The game's window is the one in front.
+bool GameInFront();
+// Nobody looks at the game: it is behind other windows, or the mouse and the keyboard were not touched for 10 minutes. The reads that
+// only keep a screen fresh wait, and the polls for what can wait slow down, until the player is back.
+bool PlayerAway();
+// The wait before a request that repeats is sent again, after `r` and `fails` failures in a row (0 after a success): LeagueBackoffMs
+// with what the server asked.
+unsigned RetryDelayMs(const HttpReply &r, int fails, unsigned normalMs, unsigned firstMs, unsigned capMs);
 // A request that got no answer, or a refusal: the English text to translate that tells the player.
 const char *FailureText(const HttpReply &r);
 
@@ -97,6 +107,8 @@ bool RankedTicketOf(int64_t matchId, LeagueMatchTicket &out);
 
 // The duo, run from RankedTick: polled at its pace while the account is linked.
 void PartyTick(bool linked);
+// The 2v2 is on screen (LeagueDuoWatch).
+bool PartyScreenOpen();
 
 // The humans of the ranked 2v2 being played, as the game shows them now: their alliance, whether the lockstep still gets them (a
 // player who dropped is played by the AI), whether they left for good (they quit, or their 5 minutes are over) and when they left.

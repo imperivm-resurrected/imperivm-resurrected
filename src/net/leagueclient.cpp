@@ -37,7 +37,7 @@ namespace {
 
 const DWORD kResolveMs = 5000, kConnectMs = 5000, kSendMs = 10000, kReceiveMs = 15000;
 const size_t kMaxBody = 512 * 1024;
-const DWORD kPollEveryMs = 3000, kPollRetryMs = 6000, kMeKeepMs = 60 * 1000;
+const DWORD kPollEveryMs = 3000, kPollRetryMs = 6000, kMeKeepMs = 60 * 1000, kMeRestMs = 30 * 60 * 1000, kAwayAfterMs = 10 * 60 * 1000;
 
 struct Account {
 	bool loaded = false;
@@ -55,7 +55,9 @@ struct Link {
 };
 
 struct Me {
-	DWORD at = 0;
+	// `wait`: until the next read, longer after reads that failed in a row (`fails`).
+	DWORD at = 0, wait = kMeKeepMs;
+	int fails = 0;
 	// What LeagueMeShared gives: never changed once given, only replaced (ChangeView).
 	std::shared_ptr<const LeagueMeView> view = std::make_shared<const LeagueMeView>();
 };
@@ -116,11 +118,12 @@ std::wstring UserAgent()
 	return winpath::Widen(std::string("ImperivmResurrected/") + ModVersionText() + " (league)", CP_UTF8);
 }
 
-void Forget(const char *why)
+// `token`: the one the request that was refused carried; a request of an account unlinked meanwhile does not forget the new one.
+void Forget(const char *why, const std::string &token)
 {
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
-		if (g_account.token.empty()) return;
+		if (g_account.token.empty() || g_account.token != token) return;
 		StoreAccount("", "", "");
 		g_me = Me();
 		g_link.error = "The league no longer recognises this computer. Link your account again.";
@@ -208,7 +211,7 @@ void PollLink(unsigned serial, std::string pollToken)
 			g_me = Me();
 			linked = true;
 			break;
-		default: g_link.nextPoll = GetTickCount() + kPollRetryMs; break;
+		default: g_link.nextPoll = GetTickCount() + std::max<DWORD>(kPollRetryMs, static_cast<DWORD>(std::min(r.retryAfterSec, 300)) * 1000); break;
 		}
 	}
 	if (linked) {
@@ -238,13 +241,19 @@ void Unlink(unsigned serial)
 // In the game's language: the seasons' names of the rewards come translated.
 void FetchMe(std::string lang)
 {
+	std::string token, steamId;
+	AccountFor(token, steamId);
 	const HttpReply r = Http("GET", "/v1/league/me?lang=" + lang, "", true);
 	Json j;
 	LeagueMe me;
 	const bool ok = r.Ok() && Json::Parse(r.body, j) && LeagueParseMe(j, me);
 	if (!ok && r.status != 401) LogW("league", "could not read the player's standing (%s)", r.Describe().c_str());
 	std::lock_guard<std::mutex> lock(g_mx);
+	// The account was unlinked or linked again meanwhile: this answer is of the one before, and the new one is read on its own.
+	if (g_account.token != token) return;
 	g_me.at = GetTickCount();
+	g_me.fails = ok ? 0 : g_me.fails + 1;
+	g_me.wait = RetryDelayMs(r, g_me.fails, kMeKeepMs, kMeKeepMs, kMeRestMs);
 	if (!ok) {
 		const bool failed = r.status != 401;
 		ChangeView(g_me.view, [failed](LeagueMeView &v) {
@@ -303,6 +312,25 @@ std::string LangCode()
 bool InGame()
 {
 	return *reinterpret_cast<void **>(addr::kGame) != nullptr;
+}
+
+bool GameInFront()
+{
+	DWORD pid = 0;
+	const HWND front = GetForegroundWindow();
+	return front && GetWindowThreadProcessId(front, &pid) && pid == GetCurrentProcessId();
+}
+
+bool PlayerAway()
+{
+	if (!GameInFront()) return true;
+	LASTINPUTINFO input = {sizeof(input)};
+	return GetLastInputInfo(&input) && GetTickCount() - input.dwTime > kAwayAfterMs;
+}
+
+unsigned RetryDelayMs(const HttpReply &r, int fails, unsigned normalMs, unsigned firstMs, unsigned capMs)
+{
+	return static_cast<unsigned>(LeagueBackoffMs(r.status, fails, r.retryAfterSec, normalMs, firstMs, capMs));
 }
 
 const char *FailureText(const HttpReply &r)
@@ -430,8 +458,21 @@ HttpReply HttpWith(const char *method, const std::string &path, const std::strin
 		out.body.append(buf, n);
 		if (options.progress && !pieces) options.progress(out.body.size(), length);
 	}
+	if (out.status == 429 || out.status == 503) {
+		wchar_t wait[64] = {};
+		DWORD waitSize = sizeof(wait);
+		if (WinHttpQueryHeaders(r, WINHTTP_QUERY_RETRY_AFTER, WINHTTP_HEADER_NAME_BY_INDEX, wait, &waitSize, WINHTTP_NO_HEADER_INDEX)) {
+			std::string text;
+			for (const wchar_t *w = wait; *w; w++) text += *w < 128 ? static_cast<char>(*w) : '?';
+			out.retryAfterSec = LeagueParseRetryAfter(text);
+		}
+	}
 	close();
-	if (auth && out.status == 401) Forget("the server answered 401 to the token");
+	if (out.status == 429) {
+		Json j;
+		if (!out.body.empty() && Json::Parse(out.body, j)) out.retryAfterSec = std::max(out.retryAfterSec, LeagueParseError(j).retryAfter);
+	}
+	if (auth && out.status == 401) Forget("the server answered 401 to the token", token);
 	return out;
 }
 
@@ -574,7 +615,7 @@ void LeagueMeRefresh(bool force)
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
 		if (!AccountValid() || g_me.view->loading) return;
-		if (!force && g_me.at && GetTickCount() - g_me.at < kMeKeepMs) return;
+		if (!force && g_me.at && (GetTickCount() - g_me.at < g_me.wait || PlayerAway())) return;
 		ChangeView(g_me.view, [](LeagueMeView &v) { v.loading = true; });
 		lang = g_lang;
 	}

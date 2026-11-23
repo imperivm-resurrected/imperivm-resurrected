@@ -494,9 +494,10 @@ const TourneyInvite *TourneyInviteOf(const TourneyMine &m, int64_t tournamentId)
 // yet: it is what makes the mod ask every 30 s.
 bool TourneyHasActiveEntry(const TourneyMine &m);
 // How often to ask for the player's tournaments: 30 s with one of their own on, 60 s while the Tournaments tab is open, otherwise every
-// 2 minutes, which is how long an invitation to a team can take to show in another menu.
-constexpr int kTourneyIdlePollMs = 120000;
-int TourneyPollEveryMs(bool activeEntry, bool tabOpen);
+// 2 minutes, which is how long an invitation to a team can take to show in another menu. While the player is `away` (the game is not
+// in front, or untouched for a while) and has no cup on, every 10.
+constexpr int kTourneyIdlePollMs = 120000, kTourneyAwayPollMs = 600000;
+int TourneyPollEveryMs(bool activeEntry, bool tabOpen, bool away = false);
 // Sooner while a series waits for its next map, which has a minute to be chosen: every 5 s while the choice is open, and in the two
 // minutes after a game of a series (`msSinceGame`, negative when no game ended), when it opens; 0 otherwise.
 int TourneySeriesPollMs(const TourneyNext &n, int64_t msSinceGame);

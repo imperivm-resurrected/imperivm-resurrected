@@ -10,6 +10,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "core/guard.h"
@@ -34,6 +35,8 @@ struct Entry {
 	CupMapState state;
 	bool running = false;
 	DWORD at = 0;
+	// A download checked against its SHA-256, waiting for the game thread to keep it.
+	std::string downloaded;
 };
 
 std::mutex g_mx;
@@ -45,6 +48,13 @@ std::string KeyOf(const TourneyMap &m)
 	std::string file = m.file;
 	for (char &c : file) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
 	return file + "|" + m.hash;
+}
+
+std::string HashOf(const std::string &bytes)
+{
+	Sha256 h;
+	h.Add(bytes);
+	return h.Hex();
 }
 
 // Returns what the map was before.
@@ -59,27 +69,27 @@ CupMapStatus Set(const std::string &key, const CupMapState &state, bool running)
 	return before;
 }
 
-// The content pack whose copy of the file the game loads instead of the one in Scenarios, if any.
+// The content pack whose copy of the file the game loads instead of the one in Scenarios, if any. On the game thread, as everything
+// here that reads the game's files or its packs: its file system is not made for two threads.
 std::string PackOf(const std::string &file)
 {
 	const MapOrigin origin = ModsMapOrigin(CupScenarioPath(file));
 	return origin.kind == kMapMod ? (origin.modName.empty() ? origin.modFolder : origin.modName) : std::string();
 }
 
-void Check(std::string key, TourneyMap m)
+// `have`/`local`: the copy the game loads now, read on the game thread; `pack`, whose it is for a map of the game. Here only the hash
+// and the download, off the game thread.
+void Check(std::string key, TourneyMap m, bool have, std::string local, std::string pack)
 {
 	CupMapState st;
-	std::string sha;
-	uint64_t bytes = 0;
-	const bool have = CupScenarioLocal(m.file, sha, bytes);
-	if (have && sha == m.hash) {
+	if (have && HashOf(local) == m.hash) {
 		st.status = CupMapStatus::Ready;
 		Set(key, st, false);
 		return;
 	}
 	if (m.kind == TourneyMapKind::Game) {
 		st.status = have ? CupMapStatus::Different : CupMapStatus::Missing;
-		st.pack = have ? PackOf(m.file) : std::string();
+		st.pack = pack;
 		if (Set(key, st, false) != st.status) LogW("league", "the cup's scenario %s is the game's, and this computer's copy is %s", m.file.c_str(), have ? "another one" : "missing");
 		return;
 	}
@@ -103,7 +113,7 @@ void Check(std::string key, TourneyMap m)
 		e.state.got = done;
 		if (total) e.state.total = total;
 	};
-	const HttpReply r = HttpWith("GET", "/v1/maps/" + m.hash, std::string(), false, o);
+	HttpReply r = HttpWith("GET", "/v1/maps/" + m.hash, std::string(), false, o);
 	st = CupMapState();
 	st.status = CupMapStatus::Failed;
 	if (!r.Ok()) {
@@ -112,23 +122,33 @@ void Check(std::string key, TourneyMap m)
 		Set(key, st, false);
 		return;
 	}
-	Sha256 h;
-	h.Add(r.body);
-	if (h.Hex() != m.hash) {
+	if (HashOf(r.body) != m.hash) {
 		st.reason = "hash";
 		LogW("league", "the cup's scenario %s that came is not the file its SHA-256 names (%u bytes)", m.file.c_str(), static_cast<unsigned>(r.body.size()));
 		Set(key, st, false);
 		return;
 	}
+	std::lock_guard<std::mutex> lock(g_mx);
+	Entry &e = g_maps[key];
+	e.downloaded = std::move(r.body);
+	e.running = false;
+}
+
+// On the game thread: a download that came is kept in Scenarios, and what the game loads is read back.
+void Keep(const std::string &key, const TourneyMap &m, const std::string &bytes)
+{
+	CupMapState st;
+	st.status = CupMapStatus::Failed;
 	std::string error;
-	if (!CupScenarioStore(m.file, r.body, error)) {
+	if (!CupScenarioStore(m.file, bytes, error)) {
 		st.reason = "save";
 		LogE("league", "could not keep the cup's scenario %s: %s", m.file.c_str(), error.c_str());
 		Set(key, st, false);
 		return;
 	}
 	// A content pack with a scenario of the same name wins over the file in Scenarios.
-	if (!CupScenarioLocal(m.file, sha, bytes) || sha != m.hash) {
+	std::string loaded;
+	if (!CupScenarioRead(m.file, loaded) || loaded != bytes) {
 		st.reason = "pack";
 		st.pack = PackOf(m.file);
 		LogW("league", "the cup's scenario %s is saved, but the game loads another copy (%s)", m.file.c_str(), st.pack.c_str());
@@ -155,21 +175,38 @@ CupMapState LeagueCupMap(const TourneyMap &m)
 		return out;
 	}
 	const std::string key = KeyOf(m);
-	std::lock_guard<std::mutex> lock(g_mx);
-	auto it = g_maps.find(key);
-	const DWORD now = GetTickCount();
-	const bool due = it == g_maps.end() ||
-		(!it->second.running && it->second.state.status != CupMapStatus::Failed &&
-			now - it->second.at >= (it->second.state.status == CupMapStatus::Ready ? kRecheckReadyMs : kRecheckWrongMs));
-	if (due) {
-		Entry &e = g_maps[key];
-		e.running = true;
-		e.at = now;
-		if (it == g_maps.end()) e.state = CupMapState();
-		SafeThread(Check, key, m).detach();
-		it = g_maps.find(key);
+	std::string downloaded;
+	bool due = false;
+	{
+		std::lock_guard<std::mutex> lock(g_mx);
+		auto it = g_maps.find(key);
+		const DWORD now = GetTickCount();
+		if (it != g_maps.end() && !it->second.downloaded.empty()) {
+			downloaded.swap(it->second.downloaded);
+			it->second.running = true;
+		}
+		else {
+			due = it == g_maps.end() ||
+				(!it->second.running && it->second.state.status != CupMapStatus::Failed &&
+					now - it->second.at >= (it->second.state.status == CupMapStatus::Ready ? kRecheckReadyMs : kRecheckWrongMs));
+			if (due) {
+				Entry &e = g_maps[key];
+				e.running = true;
+				e.at = now;
+				if (it == g_maps.end()) e.state = CupMapState();
+			}
+		}
 	}
-	return it->second.state;
+	if (!downloaded.empty()) Keep(key, m, downloaded);
+	else if (due) {
+		// The game's files are read here, on its thread; the hash and the download go on another.
+		std::string local;
+		const bool have = CupScenarioRead(m.file, local);
+		const std::string pack = have && m.kind == TourneyMapKind::Game ? PackOf(m.file) : std::string();
+		SafeThread(Check, key, m, have, std::move(local), pack).detach();
+	}
+	std::lock_guard<std::mutex> lock(g_mx);
+	return g_maps[key].state;
 }
 
 void LeagueCupMapsRetry(const std::vector<TourneyMap> &maps)
@@ -178,7 +215,7 @@ void LeagueCupMapsRetry(const std::vector<TourneyMap> &maps)
 	for (const TourneyMap &m : maps) {
 		if (!m.Scenario()) continue;
 		const auto it = g_maps.find(KeyOf(m));
-		if (it == g_maps.end() || it->second.running) continue;
+		if (it == g_maps.end() || it->second.running || !it->second.downloaded.empty()) continue;
 		if (it->second.state.status == CupMapStatus::Failed || it->second.state.status == CupMapStatus::Missing || it->second.state.status == CupMapStatus::Different) {
 			LogI("league", "trying the cup's scenario %s again", m.file.c_str());
 			g_maps.erase(it);

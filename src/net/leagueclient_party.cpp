@@ -24,13 +24,16 @@ using namespace leagueclient_impl;
 
 namespace {
 
-// Closely while the 2v2 is on screen or an invitation waits for an answer, now and then in the other menus (so an invitation is seen
-// anywhere), never during a game.
-const DWORD kCloseMs = 5000, kIdleMs = 20000, kAloneMs = 120000, kRetryMs = 15000, kMissingMs = 10 * 60 * 1000, kWatchMs = 3000;
+// The pace is LeaguePartyPollMs, never during a game. After a failure the next poll waits longer each time from kRetryMs, never less
+// than the pace.
+const DWORD kRetryMs = 15000, kRetryCapMs = 30 * 60 * 1000, kWatchMs = 3000;
 
 struct Duo {
 	bool loaded = false, polling = false, busy = false, missing = false;
-	DWORD nextPoll = 0, watchUntil = 0;
+	// `at`: the last poll; `askNow`: asked again at once after a request of the player; `retryAt`: the next try after `fails` in a row.
+	DWORD at = 0, retryAt = 0, watchUntil = 0;
+	bool askNow = false;
+	int fails = 0;
 	// Changes with every request of the player, so a poll that left before it does not undo what it did.
 	unsigned gen = 1;
 	LeaguePartyState state;
@@ -48,15 +51,18 @@ void Notice(const std::string &text, bool bad)
 	g_duo.notices.push_back({text, bad});
 }
 
-// Under g_mx: the next poll, closer while the player looks at the duo or something waits for an answer.
-DWORD PollDelay()
+// Under g_mx.
+bool ScreenOpen()
 {
-	if (g_duo.missing) return kMissingMs;
-	const DWORD now = GetTickCount();
+	return static_cast<int>(g_duo.watchUntil - GetTickCount()) > 0;
+}
+
+// Under g_mx: the pace of the polls, closer while the player looks at the duo or something waits for an answer. Every linked player
+// polls this in every menu, which is why someone in no duo is only asked now and then (for an invitation), and less while away.
+DWORD PollDelay(bool away)
+{
 	const bool waiting = !g_duo.state.invites.empty() || LeagueDuoRoleOf(g_duo.state.party, OwnId()) == LeagueDuoRole::Waiting;
-	if (waiting || static_cast<int>(g_duo.watchUntil - now) > 0) return kCloseMs;
-	// Someone in no duo is only asked now and then, for an invitation: every linked player polls this, in every menu.
-	return g_duo.state.party.present ? kIdleMs : kAloneMs;
+	return static_cast<DWORD>(LeaguePartyPollMs(g_duo.missing, waiting, ScreenOpen(), g_duo.state.party.present, away));
 }
 
 std::string NameOr(const std::string &name, const char *fallback)
@@ -83,7 +89,7 @@ std::string RefusalText(const HttpReply &r, const LeagueError &e, const std::str
 	return Tr(FailureText(r));
 }
 
-void PollThread(unsigned gen)
+void PollThread(unsigned gen, bool away)
 {
 	const HttpReply r = Http("GET", "/v1/league/party", "", true);
 	Json j;
@@ -92,16 +98,19 @@ void PollThread(unsigned gen)
 	const std::string me = OwnId();
 	std::lock_guard<std::mutex> lock(g_mx);
 	g_duo.polling = false;
+	g_duo.at = GetTickCount();
 	if (!ok) {
 		// A server before the duo has no such page: it is asked again much later.
 		g_duo.missing = r.status == 404;
-		g_duo.nextPoll = GetTickCount() + (g_duo.missing ? kMissingMs : kRetryMs);
+		g_duo.fails = g_duo.missing ? 0 : g_duo.fails + 1;
+		if (g_duo.fails) g_duo.retryAt = g_duo.at + RetryDelayMs(r, g_duo.fails, PollDelay(away), kRetryMs, kRetryCapMs);
 		if (!g_duo.missing && r.status != 401 && r.failure != "not linked") LogD("league", "duo: no answer (%s)", r.Describe().c_str());
 		return;
 	}
 	g_duo.missing = false;
+	g_duo.fails = 0;
 	if (gen != g_duo.gen) {
-		g_duo.nextPoll = GetTickCount();
+		g_duo.askNow = true;
 		return;
 	}
 	const LeagueDuoRole before = g_duo.loaded ? LeagueDuoRoleOf(g_duo.state.party, me) : LeagueDuoRole::Solo;
@@ -127,15 +136,14 @@ void PollThread(unsigned gen)
 	if (g_duo.seenInvites.size() > 64) g_duo.seenInvites.erase(g_duo.seenInvites.begin(), g_duo.seenInvites.begin() + 32);
 	g_duo.state = s;
 	g_duo.loaded = true;
-	g_duo.nextPoll = GetTickCount() + PollDelay();
 }
 
-// After a request of the player: the duo is asked again at once.
+// After a request of the player: the duo is asked again at once, unless the polls are failing.
 void AfterRequest()
 {
 	g_duo.busy = false;
 	g_duo.gen++;
-	g_duo.nextPoll = GetTickCount();
+	g_duo.askNow = true;
 }
 
 void InviteThread(std::string steamId, std::string name)
@@ -212,11 +220,24 @@ void PartyTick(bool linked)
 			g_duo.state = LeaguePartyState();
 			g_duo.gen++;
 		}
+		g_duo.at = 0;
+		g_duo.fails = 0;
 		return;
 	}
-	if (g_duo.polling || g_duo.busy || InGame() || !SteamOwnId() || static_cast<int>(now - g_duo.nextPoll) < 0) return;
+	if (g_duo.polling || g_duo.busy || InGame() || !SteamOwnId()) return;
+	const bool away = PlayerAway();
+	// The pace is worked out now, so a player back from elsewhere, or on the 2v2, is asked at once when the last poll is older.
+	const bool due = g_duo.fails ? static_cast<int>(now - g_duo.retryAt) >= 0 : g_duo.askNow || !g_duo.at || now - g_duo.at >= PollDelay(away);
+	if (!due) return;
 	g_duo.polling = true;
-	SafeThread(PollThread, g_duo.gen).detach();
+	g_duo.askNow = false;
+	SafeThread(PollThread, g_duo.gen, away).detach();
+}
+
+bool PartyScreenOpen()
+{
+	std::lock_guard<std::mutex> lock(g_mx);
+	return ScreenOpen();
 }
 
 }
@@ -245,12 +266,8 @@ LeagueDuoRole LeagueDuoOwnRole()
 
 void LeagueDuoWatch()
 {
-	const DWORD now = GetTickCount();
 	std::lock_guard<std::mutex> lock(g_mx);
-	const bool idle = static_cast<int>(g_duo.watchUntil - now) <= 0;
-	g_duo.watchUntil = now + kWatchMs;
-	// Coming to the 2v2 from elsewhere asks at once instead of waiting for the slow pace.
-	if (idle && !g_duo.missing && static_cast<int>(g_duo.nextPoll - now) > static_cast<int>(kCloseMs)) g_duo.nextPoll = now;
+	g_duo.watchUntil = GetTickCount() + kWatchMs;
 }
 
 void LeagueDuoInvite(const std::string &steamId, const std::string &name)

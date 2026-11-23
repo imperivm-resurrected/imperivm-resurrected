@@ -503,6 +503,45 @@ int64_t LeagueRetryAfterMs(int httpStatus, const LeagueError &e, int64_t normalM
 	return std::max(asked, normalMs);
 }
 
+bool LeagueRetriable(int httpStatus)
+{
+	return httpStatus < 300 || httpStatus == 408 || httpStatus == 429 || httpStatus >= 500;
+}
+
+int LeagueParseRetryAfter(const std::string &header)
+{
+	size_t i = 0;
+	while (i < header.size() && (header[i] == ' ' || header[i] == '\t')) i++;
+	long long seconds = 0;
+	size_t digits = 0;
+	for (; i < header.size() && header[i] >= '0' && header[i] <= '9'; i++, digits++) {
+		if (seconds < 100000000) seconds = seconds * 10 + (header[i] - '0');
+	}
+	while (i < header.size() && (header[i] == ' ' || header[i] == '\t' || header[i] == '\r' || header[i] == '\n')) i++;
+	if (!digits || i != header.size()) return 0;
+	return static_cast<int>(std::min<long long>(seconds, 100000000));
+}
+
+int64_t LeagueBackoffMs(int httpStatus, int fails, int retryAfterSec, int64_t normalMs, int64_t firstMs, int64_t capMs)
+{
+	if (fails <= 0) return normalMs;
+	const auto doubled = [fails, capMs](int64_t first) {
+		int64_t wait = std::max<int64_t>(1, first);
+		for (int i = 1; i < fails && wait < capMs; i++) wait *= 2;
+		return std::min(wait, capMs);
+	};
+	int64_t wait = 0;
+	if (httpStatus == 429 && retryAfterSec > 0) {
+		LeagueError e;
+		e.retryAfter = retryAfterSec;
+		wait = LeagueRetryAfterMs(429, e, 0);
+	}
+	else if (httpStatus == 429) wait = doubled(5 * 60 * 1000);
+	else if (LeagueRetriable(httpStatus)) wait = doubled(firstMs);
+	else wait = capMs;
+	return std::max(wait, normalMs);
+}
+
 const char *LeagueBanText(const std::string &kind)
 {
 	const std::string k = Lower(kind);

@@ -8,9 +8,11 @@
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
+#include <map>
 #include <mutex>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "net/leagueclient.h"
@@ -33,6 +35,9 @@ namespace {
 const DWORD kQueuePollMs = 5000, kMatchPollMs = 3000, kPlayingPollMs = 10000, kResultPollMs = 10000, kRetryMs = 6000, kPresenceMs = 30000;
 const DWORD kSeasonKeepMs = 10 * 60 * 1000, kSeasonRetryMs = 60 * 1000, kBoardKeepMs = 60 * 1000, kRecoverAfterMs = 3000;
 const DWORD kRecentKeepMs = 60 * 1000, kRecentRetryMs = 20 * 1000, kStatsKeepMs = 15 * 1000;
+// The most the queue and the match wait between polls after failures in a row; the start of a game and the room are told again up to
+// these; the record of two players, after a failure, is asked again from a minute up to this.
+const DWORD kPollCapMs = 60 * 1000, kResultCapMs = 5 * 60 * 1000, kStartedCapMs = 5 * 60 * 1000, kRegisterCapMs = 60 * 1000, kHeadToHeadCapMs = 30 * 60 * 1000;
 const int kHubRows = 10, kAroundRows = 5;
 // A game only one side reported is settled by the server 15 minutes after the report; the screen stops asking a little later.
 const int64_t kAwaitMaxMs = 20 * 60 * 1000;
@@ -48,6 +53,9 @@ struct Queue {
 	bool busy = false;
 	bool recovered = false;
 	DWORD startedAt = 0, nextPoll = 0;
+	// Polls of the queue or the match that failed in a row; when the partner of a duo last asked whether the leader searches.
+	int fails = 0;
+	DWORD idleAt = 0;
 	// Changes whenever the player starts or drops a search or a match: answers to an older one are dropped.
 	unsigned gen = 1;
 	int64_t since = 0;
@@ -63,6 +71,9 @@ struct Queue {
 	uint64_t wantLobby = 0, roomLobby = 0;
 	bool roomRegistered = false, registering = false;
 	DWORD registerAt = 0;
+	// Tries that failed in a row; a refusal that will not change stops them until the room is opened or retried again.
+	int registerFails = 0;
+	bool registerStopped = false;
 	int64_t banUntil = 0;
 	std::string banKind, banReason;
 	std::string notice;
@@ -75,9 +86,14 @@ struct Queue {
 	bool rejoined = false;
 	bool abandoning = false;
 	int64_t calledOff = 0;
-	// The last "I am in the room", and the match whose start the server was told of.
-	DWORD presenceAt = 0;
-	int64_t startedSent = 0;
+	// When the next "I am in the room" is due.
+	DWORD presenceNext = 0;
+	// The match whose start the server is told of: told (or given up on a refusal that will not change), on its way, the failures in a
+	// row and when to try again.
+	int64_t startedId = 0;
+	bool startedDone = false, startedBusy = false;
+	int startedFails = 0;
+	DWORD startedRetryAt = 0;
 	// The match's game is being played here: presence said it started, and the match is not polled until it ends.
 	bool inGame = false;
 };
@@ -108,6 +124,7 @@ struct Result {
 	DWORD nextPoll = 0;
 	int64_t since = 0;
 	bool polling = false;
+	int fails = 0;
 };
 
 // The player's ranked games as the server lists them: the hub's latest and a page of the full history.
@@ -176,6 +193,7 @@ Answer Call(const char *method, const std::string &path, const std::string &body
 	const int64_t received = NowMs();
 	a.parsed = !a.r.body.empty() && Json::Parse(a.r.body, a.j);
 	if (!a.r.Ok() && a.parsed) a.error = LeagueParseError(a.j);
+	a.error.retryAfter = std::max(a.error.retryAfter, a.r.retryAfterSec);
 	// The queue, the match and the stats say the server's time: the countdowns follow its clock, not this computer's.
 	if (a.parsed && a.j.type == Json::Object) {
 		const int64_t serverNow = a.j.GetInt64("serverNow");
@@ -201,10 +219,11 @@ std::string FailureNotice(const Answer &a)
 	return FailureText(a.r);
 }
 
-// After a poll the server did not answer: the usual retry, or as long as the server asks when polled too often (429), quietly.
-DWORD RetryIn(const Answer &a, DWORD normalMs)
+// After `fails` polls in a row the server did not answer: longer each time from the usual retry, or as long as the server asks when
+// polled too often (429), quietly.
+DWORD RetryIn(const Answer &a, int fails, DWORD normalMs)
 {
-	return static_cast<DWORD>(LeagueRetryAfterMs(a.r.status, a.error, a.r.status == 429 ? normalMs : kRetryMs));
+	return RetryDelayMs(a.r, fails, normalMs, kRetryMs, kPollCapMs);
 }
 
 // Why the queue is locked, in the player's language: a lock of the league's team says the team's reason.
@@ -226,7 +245,9 @@ void ToIdle(Queue &q)
 	q.abandoning = false;
 	q.wantLobby = q.roomLobby = 0;
 	q.roomRegistered = q.registering = false;
-	q.presenceAt = 0;
+	q.registerFails = 0;
+	q.registerStopped = false;
+	q.presenceNext = 0;
 	q.inGame = false;
 	q.window = LeagueSearchWindow();
 	q.partnerSearch = false;
@@ -535,7 +556,8 @@ void PollQueueThread(unsigned gen, bool recovering, bool watching)
 		std::lock_guard<std::mutex> lock(g_mx);
 		g_q.busy = false;
 		if (gen != g_q.gen) return;
-		g_q.nextPoll = GetTickCount() + (ok ? kQueuePollMs : RetryIn(a, kQueuePollMs));
+		g_q.fails = ok ? 0 : g_q.fails + 1;
+		g_q.nextPoll = GetTickCount() + (ok ? kQueuePollMs : RetryIn(a, g_q.fails, kQueuePollMs));
 		if (!ok) {
 			if (a.r.status == 401 || a.r.failure == "not linked") {
 				ToIdle(g_q);
@@ -690,7 +712,8 @@ void PollMatchThread(unsigned gen, int64_t id)
 		std::lock_guard<std::mutex> lock(g_mx);
 		g_q.busy = false;
 		if (gen != g_q.gen || id != g_q.matchId) return;
-		g_q.nextPoll = GetTickCount() + (ok ? kMatchPollMs : RetryIn(a, kMatchPollMs));
+		g_q.fails = ok ? 0 : g_q.fails + 1;
+		g_q.nextPoll = GetTickCount() + (ok ? kMatchPollMs : RetryIn(a, g_q.fails, kMatchPollMs));
 		if (!ok) {
 			if (a.r.status == 404 || a.r.status == 401) {
 				ToIdle(g_q);
@@ -777,10 +800,14 @@ void RegisterThread(unsigned gen, int64_t id, uint64_t lobby)
 	g_q.registering = false;
 	if (gen != g_q.gen || id != g_q.matchId || lobby != g_q.wantLobby) return;
 	if (!a.r.Ok()) {
-		LogW("league", "ranked: the server did not take the room (%s)", a.r.Describe().c_str());
-		g_q.registerAt = GetTickCount() + (a.r.status == 403 || a.r.status == 409 ? 30000 : 3000);
+		g_q.registerFails++;
+		// Not the host, or a match no longer ready: the match's poll tells what became of it.
+		g_q.registerStopped = !LeagueRetriable(a.r.status);
+		g_q.registerAt = GetTickCount() + RetryDelayMs(a.r, g_q.registerFails, 0, 3000, kRegisterCapMs);
+		LogW("league", "ranked: the server did not take the room (%s)%s", a.r.Describe().c_str(), g_q.registerStopped ? "; not asked again" : "");
 		return;
 	}
+	g_q.registerFails = 0;
 	g_q.roomRegistered = true;
 	g_q.roomLobby = lobby;
 	LeagueMatchTicket t;
@@ -828,14 +855,29 @@ void PresenceThread(int64_t id, bool started)
 	Json body = Json::MakeObject();
 	if (started) body.Set("started", Json::MakeBool(true));
 	const Answer a = Call("POST", MatchPath(id, "/presence"), body.Dump(), true);
-	if (a.r.Ok()) {
-		if (started) LogI("league", "ranked: the server knows the game of match %lld started", static_cast<long long>(id));
+	const bool ok = a.r.Ok();
+	if (ok && started) LogI("league", "ranked: the server knows the game of match %lld started", static_cast<long long>(id));
+	if (!ok) LogD("league", "ranked: the presence in match %lld was not taken (%s)", static_cast<long long>(id), a.r.Describe().c_str());
+	std::lock_guard<std::mutex> lock(g_mx);
+	const DWORD now = GetTickCount();
+	if (!started) {
+		// Too many requests: the next "I am in the room" waits what the server asks.
+		if (a.r.status == 429 && id == g_q.matchId && g_q.presenceNext) {
+			const DWORD next = now + RetryDelayMs(a.r, 1, kPresenceMs, kPresenceMs, kPresenceMs);
+			if (static_cast<int>(next - g_q.presenceNext) > 0) g_q.presenceNext = next;
+		}
 		return;
 	}
-	LogD("league", "ranked: the presence in match %lld was not taken (%s)", static_cast<long long>(id), a.r.Describe().c_str());
-	std::lock_guard<std::mutex> lock(g_mx);
-	// The start is told again on the next try.
-	if (started && g_q.startedSent == id) g_q.startedSent = 0;
+	if (g_q.startedId != id) return;
+	g_q.startedBusy = false;
+	// A refusal that will not change (not this player's match, an unofficial build) is not told again.
+	if (ok || !LeagueRetriable(a.r.status) || a.r.failure == "not linked") {
+		g_q.startedDone = true;
+		if (!ok) LogW("league", "ranked: the start of match %lld was refused (%s); not told again", static_cast<long long>(id), a.r.Describe().c_str());
+		return;
+	}
+	g_q.startedFails++;
+	g_q.startedRetryAt = now + RetryDelayMs(a.r, g_q.startedFails, 0, 5000, kStartedCapMs);
 }
 
 void PollResultThread(int64_t id)
@@ -847,7 +889,8 @@ void PollResultThread(int64_t id)
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
 		g_result.polling = false;
-		g_result.nextPoll = GetTickCount() + (a.r.status == 429 ? RetryIn(a, kResultPollMs) : kResultPollMs);
+		g_result.fails = a.r.Ok() ? 0 : g_result.fails + 1;
+		g_result.nextPoll = GetTickCount() + RetryDelayMs(a.r, g_result.fails, kResultPollMs, kResultPollMs, kResultCapMs);
 		LeagueRankedOutcome &v = g_result.view;
 		if (!ok || v.state != LeagueResultState::Awaiting || v.game.matchId != id || t.status != LeagueMatchStatus::Done) return;
 		LeagueReportAnswer answer = v.answer;
@@ -903,6 +946,7 @@ void RankedTick()
 	}
 	PartyTick(linked);
 	const bool member = linked && LeagueDuoOwnRole() == LeagueDuoRole::Member;
+	const DWORD memberEvery = member ? static_cast<DWORD>(LeagueDuoQueuePollMs(PartyScreenOpen(), GameInFront())) : 0;
 	const bool inGame = InGame();
 	std::lock_guard<std::mutex> lock(g_mx);
 	if (!g_q.startedAt) g_q.startedAt = now;
@@ -923,9 +967,9 @@ void RankedTick()
 		switch (g_q.phase) {
 		case LeagueRankedPhase::Idle:
 			// The partner of a duo follows the leader's search, which they did not start.
-			if (member && g_q.recovered && !inGame) {
+			if (member && g_q.recovered && !inGame && now - g_q.idleAt >= memberEvery) {
 				g_q.busy = true;
-				g_q.nextPoll = now + kQueuePollMs;
+				g_q.idleAt = now;
 				SafeThread(PollQueueThread, g_q.gen, false, true).detach();
 			}
 			break;
@@ -947,7 +991,7 @@ void RankedTick()
 		}
 	}
 	const bool host = g_q.ticketLoaded && g_q.ticket.host == OwnId();
-	if (host && g_q.wantLobby && (!g_q.roomRegistered || g_q.roomLobby != g_q.wantLobby) && !g_q.registering &&
+	if (host && g_q.wantLobby && (!g_q.roomRegistered || g_q.roomLobby != g_q.wantLobby) && !g_q.registering && !g_q.registerStopped &&
 		static_cast<int>(now - g_q.registerAt) >= 0 && (g_q.phase == LeagueRankedPhase::Ready || g_q.phase == LeagueRankedPhase::Playing)) {
 		g_q.registering = true;
 		SafeThread(RegisterThread, g_q.gen, g_q.matchId, g_q.wantLobby).detach();
@@ -1070,8 +1114,14 @@ void RankedGameStarted(int64_t matchId)
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
 		if (g_q.matchId == matchId) g_q.inGame = true;
-		if (g_q.startedSent == matchId) return;
-		g_q.startedSent = matchId;
+		if (g_q.startedId != matchId) {
+			g_q.startedId = matchId;
+			g_q.startedDone = g_q.startedBusy = false;
+			g_q.startedFails = 0;
+			g_q.startedRetryAt = 0;
+		}
+		if (g_q.startedDone || g_q.startedBusy || (g_q.startedFails && static_cast<int>(GetTickCount() - g_q.startedRetryAt) < 0)) return;
+		g_q.startedBusy = true;
 	}
 	SafeThread(PresenceThread, matchId, true).detach();
 }
@@ -1169,7 +1219,7 @@ void LeagueRecentRefresh(bool force)
 		std::lock_guard<std::mutex> lock(g_mx);
 		if (g_history.recentLoading) return;
 		const DWORD keep = g_history.recentFailed ? kRecentRetryMs : kRecentKeepMs;
-		if (!force && g_history.recentAt && GetTickCount() - g_history.recentAt < keep) return;
+		if (!force && g_history.recentAt && (GetTickCount() - g_history.recentAt < keep || PlayerAway())) return;
 		g_history.recentLoading = true;
 		queue = g_sel;
 	}
@@ -1191,32 +1241,76 @@ void LeagueHistoryRequest(int64_t before)
 }
 
 namespace {
+
+const DWORD kHeadToHeadKeepMs = 15 * 60 * 1000, kHeadToHeadRetryMs = 60 * 1000;
+const size_t kHeadToHeadKept = 32;
+
+// The record of a pair, asked once while it is kept (the cards ask every frame): a failure waits longer each time, a pair the server
+// does not know is a record with no games.
+struct HeadToHead {
+	LeagueHeadToHeadView view;
+	DWORD at = 0, used = 0, wait = 0;
+	int fails = 0;
+};
+
 std::mutex g_h2hMx;
-LeagueHeadToHeadView g_h2h;
+std::map<std::pair<std::string, std::string>, HeadToHead> g_h2h;
+std::pair<std::string, std::string> g_h2hShown;
+
+// The server's route takes SteamIDs only: anything else would be a 404 asked for nothing.
+bool SteamIdText(const std::string &s)
+{
+	if (s.size() != 17 || s.compare(0, 4, "7656") != 0) return false;
+	for (char c : s) {
+		if (c < '0' || c > '9') return false;
+	}
+	return true;
+}
 
 void FetchHeadToHead(std::string a, std::string b)
 {
 	const Answer r = Call("GET", "/v1/league/players/" + a + "/vs/" + b, "", false);
 	LeagueHeadToHead h;
 	const bool ok = r.r.Ok() && r.parsed && LeagueParseHeadToHead(r.j, h);
+	const bool unknown = r.r.status == 404 || r.r.status == 400;
+	if (!ok && !unknown) LogD("league", "could not read the record of two players (%s)", r.r.Describe().c_str());
 	std::lock_guard<std::mutex> lock(g_h2hMx);
-	if (g_h2h.a != a || g_h2h.b != b) return;
-	g_h2h.loading = false;
-	g_h2h.loaded = ok;
-	if (ok) g_h2h.h2h = h;
+	const auto it = g_h2h.find({a, b});
+	if (it == g_h2h.end()) return;
+	HeadToHead &e = it->second;
+	e.at = GetTickCount();
+	e.view.loading = false;
+	// A failure keeps the record read before, if any.
+	if (ok || unknown) e.view.h2h = ok ? h : LeagueHeadToHead();
+	e.view.loaded = e.view.loaded || ok || unknown;
+	e.fails = ok ? 0 : e.fails + 1;
+	e.wait = ok ? kHeadToHeadKeepMs : RetryDelayMs(r.r, e.fails, 0, kHeadToHeadRetryMs, kHeadToHeadCapMs);
 }
+
 }
 
 void LeagueHeadToHeadRequest(const std::string &a, const std::string &b)
 {
-	if (a.empty() || b.empty() || a == b) return;
+	if (a.empty() || b.empty() || a == b || !SteamIdText(a) || !SteamIdText(b)) return;
 	{
 		std::lock_guard<std::mutex> lock(g_h2hMx);
-		if (g_h2h.a == a && g_h2h.b == b && (g_h2h.loaded || g_h2h.loading)) return;
-		g_h2h = LeagueHeadToHeadView();
-		g_h2h.a = a;
-		g_h2h.b = b;
-		g_h2h.loading = true;
+		const DWORD now = GetTickCount();
+		const auto key = std::make_pair(a, b);
+		g_h2hShown = key;
+		auto it = g_h2h.find(key);
+		if (it == g_h2h.end() && g_h2h.size() >= kHeadToHeadKept) {
+			auto oldest = g_h2h.end();
+			for (auto i = g_h2h.begin(); i != g_h2h.end(); ++i) {
+				if (!i->second.view.loading && (oldest == g_h2h.end() || static_cast<int>(i->second.used - oldest->second.used) < 0)) oldest = i;
+			}
+			if (oldest != g_h2h.end()) g_h2h.erase(oldest);
+		}
+		HeadToHead &e = g_h2h[key];
+		e.used = now;
+		if (e.view.loading || (e.at && now - e.at < e.wait)) return;
+		e.view.a = a;
+		e.view.b = b;
+		e.view.loading = true;
 	}
 	SafeThread(FetchHeadToHead, a, b).detach();
 }
@@ -1224,7 +1318,12 @@ void LeagueHeadToHeadRequest(const std::string &a, const std::string &b)
 LeagueHeadToHeadView LeagueHeadToHeadState()
 {
 	std::lock_guard<std::mutex> lock(g_h2hMx);
-	return g_h2h;
+	const auto it = g_h2h.find(g_h2hShown);
+	if (it == g_h2h.end()) return LeagueHeadToHeadView();
+	LeagueHeadToHeadView v = it->second.view;
+	v.a = g_h2hShown.first;
+	v.b = g_h2hShown.second;
+	return v;
 }
 
 void LeagueMatchDetailRequest(int64_t matchId)
@@ -1245,7 +1344,7 @@ void LeagueStatsRefresh()
 {
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
-		if (g_stats.loading || (g_stats.at && GetTickCount() - g_stats.at < kStatsKeepMs)) return;
+		if (g_stats.loading || (g_stats.at && (GetTickCount() - g_stats.at < kStatsKeepMs || PlayerAway()))) return;
 		g_stats.loading = true;
 	}
 	SafeThread(FetchStats).detach();
@@ -1294,7 +1393,7 @@ void LeagueBoardRefresh(bool force)
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
 		if (g_board.loading) return;
-		if (!force && g_board.at && GetTickCount() - g_board.at < kBoardKeepMs) return;
+		if (!force && g_board.at && (GetTickCount() - g_board.at < kBoardKeepMs || PlayerAway())) return;
 		g_board.loading = true;
 		queue = g_sel;
 	}
@@ -1411,6 +1510,8 @@ void LeagueRankedRoomOpened(uint64_t lobby)
 	if (!lobby || g_q.wantLobby == lobby) return;
 	g_q.wantLobby = lobby;
 	g_q.registerAt = 0;
+	g_q.registerFails = 0;
+	g_q.registerStopped = false;
 	LogI("room", "ranked: room %llu opened for match %lld", lobby, static_cast<long long>(g_q.matchId));
 }
 
@@ -1419,6 +1520,7 @@ void LeagueRankedRetryRoom()
 	std::lock_guard<std::mutex> lock(g_mx);
 	g_q.nextPoll = 0;
 	g_q.registerAt = 0;
+	g_q.registerStopped = false;
 }
 
 void LeagueMatchAbandon(bool automatic)
@@ -1436,8 +1538,8 @@ void LeagueRankedInRoom()
 	std::lock_guard<std::mutex> lock(g_mx);
 	if ((g_q.phase != LeagueRankedPhase::Ready && g_q.phase != LeagueRankedPhase::Playing) || !g_q.matchId) return;
 	const DWORD now = GetTickCount();
-	if (g_q.presenceAt && now - g_q.presenceAt < kPresenceMs) return;
-	g_q.presenceAt = now;
+	if (g_q.presenceNext && static_cast<int>(now - g_q.presenceNext) < 0) return;
+	g_q.presenceNext = now + kPresenceMs;
 	SafeThread(PresenceThread, g_q.matchId, false).detach();
 }
 

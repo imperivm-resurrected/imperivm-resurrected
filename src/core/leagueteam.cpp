@@ -108,6 +108,20 @@ std::vector<LeaguePartyInvite> LeagueNewInvites(const std::vector<LeaguePartyInv
 	return out;
 }
 
+int LeaguePartyPollMs(bool missing, bool waiting, bool screen, bool inDuo, bool away)
+{
+	if (missing) return 600000;
+	if (away) return waiting ? 60000 : inDuo ? 300000 : 600000;
+	if (waiting || screen) return 5000;
+	return inDuo ? 60000 : 120000;
+}
+
+int LeagueDuoQueuePollMs(bool screen, bool inFront)
+{
+	if (!inFront) return 15000;
+	return screen ? 5000 : 10000;
+}
+
 std::string LeagueBoardPath(const std::string &queue)
 {
 	return "/v1/league/leaderboard?queue=" + LeagueQueueId(queue);

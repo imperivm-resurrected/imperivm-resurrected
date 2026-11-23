@@ -247,6 +247,9 @@ void Mine()
 	CHECK_EQ(TourneyPollEveryMs(true, true), 5000);
 	CHECK_EQ(TourneyPollEveryMs(false, true), 60000);
 	CHECK_EQ(TourneyPollEveryMs(false, false), kTourneyIdlePollMs);
+	CHECK_EQ(TourneyPollEveryMs(true, true, true), 5000);
+	CHECK_EQ(TourneyPollEveryMs(true, false, true), 30000);
+	CHECK_EQ(TourneyPollEveryMs(false, true, true), kTourneyAwayPollMs);
 }
 
 void Claim()

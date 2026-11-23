@@ -179,6 +179,22 @@ void StatsHistoryErrors()
 	CHECK_EQ(duo.steamId, std::string("76561198000000002"));
 }
 
+void PollPace()
+{
+	CHECK_EQ(LeaguePartyPollMs(true, true, true, true, false), 600000);
+	CHECK_EQ(LeaguePartyPollMs(false, true, false, false, false), 5000);
+	CHECK_EQ(LeaguePartyPollMs(false, false, true, true, false), 5000);
+	CHECK_EQ(LeaguePartyPollMs(false, false, false, true, false), 60000);
+	CHECK_EQ(LeaguePartyPollMs(false, false, false, false, false), 120000);
+	CHECK_EQ(LeaguePartyPollMs(false, true, true, false, true), 60000);
+	CHECK_EQ(LeaguePartyPollMs(false, false, true, true, true), 300000);
+	CHECK_EQ(LeaguePartyPollMs(false, false, false, false, true), 600000);
+	// Under the 20 s a found match has to be accepted, wherever the partner is.
+	CHECK_EQ(LeagueDuoQueuePollMs(true, true), 5000);
+	CHECK_EQ(LeagueDuoQueuePollMs(false, true), 10000);
+	CHECK_EQ(LeagueDuoQueuePollMs(true, false), 15000);
+}
+
 void Party()
 {
 	LeaguePartyState p;
@@ -312,6 +328,7 @@ int main()
 	Ticket();
 	StatsHistoryErrors();
 	Party();
+	PollPace();
 	Paths();
 	DropWait();
 	Vote();
