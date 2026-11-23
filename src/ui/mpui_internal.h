@@ -122,9 +122,9 @@ enum RankedArg {
 	kRkSearch = 1, kRkCancel, kRkAccept, kRkDecline, kRkBoard, kRkHub, kRkBoardPrev, kRkBoardNext, kRkBoardMe, kRkRoom,
 	kRkResultClose, kRkAgain, kRkResultBoard, kRkSkip, kRkSteam, kRkAbandon, kRkHistory, kRkHistoryPrev, kRkHistoryNext,
 	kRkHistoryNewest, kRkDisputeResult, kRkDisputeSend, kRkDisputeCancel, kRkGuide, kRkGuideRanks, kRkGuideRules, kRkHubRecent, kRkHubMastery,
-	kRkPrepareMods,
+	kRkPrepareMods, kRkContentSwitch, kRkContentClose,
 	kRkRow = 0x100, kRkDisputeHistory = 0x300,
-	kRkArgEnd = 0x400, kRkContentSwitch, kRkContentClose,
+	kRkArgEnd = 0x400,
 };
 // The full leaderboard's filters and the player's card, and the end of season ceremony (mpui_ranked_seasons.cpp), after kRkArgEnd. The
 // clicks on the players' badges of the multiplayer screens come from kRkBadge (LeagueBadgeClicksBegin).
