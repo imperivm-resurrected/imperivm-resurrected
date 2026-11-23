@@ -163,6 +163,7 @@ int PaintLeagueShowcase(Painter &p, int x, int y, int w, int cell, const LeagueM
 		p.Frame(cx, y, cell, cell, c.chosen ? pal::redText : hot ? pal::edgeHot : pal::hairline);
 		const int art = cell - 16;
 		DrawLeagueBadge(p, cx + 8, y + 8, art, c.look);
+		DrawLeagueBadgeCount(p, cx + 8, y + 8, art, c.look);
 		if (c.chosen) p.Fill(cx + 1, y + cell - 4, cell - 2, 3, pal::red);
 		HoverLeagueBadge(p, cx, y, cell, c.look, mx, my);
 		if (!busy && !c.chosen) p.AddHit(cx, y, cell, cell, action, static_cast<int>(i));

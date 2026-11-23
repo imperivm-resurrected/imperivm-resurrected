@@ -370,6 +370,22 @@ void MeBadges()
 	choices = LeagueBadgeChoices(me);
 	CHECK(choices[1].chosen);
 	CHECK(!choices[0].chosen);
+
+	// The cups are one choice per metal, with how many; wearing any of them marks its metal.
+	CHECK(LeagueParseMe(Parse(R"({"steamId":"1","badge":{"kind":"trophy","id":8},"badges":[{"kind":"trophy","id":7,"tier":"gold","title":"A"},
+		{"kind":"trophy","id":8,"tier":"gold","title":"B"},{"kind":"trophy","id":9,"tier":"silver","title":"C"},{"kind":"trophy","id":10,"tier":"gold","title":"D"}]})"),
+		me));
+	choices = LeagueBadgeChoices(me);
+	CHECK_EQ(static_cast<int>(choices.size()), 4);
+	CHECK_EQ(choices[1].kind, std::string("trophy"));
+	CHECK_EQ(choices[1].id, std::string("7"));
+	CHECK(choices[1].look.metal == LeagueMetal::Gold);
+	CHECK_EQ(choices[1].look.count, 3);
+	CHECK(choices[1].chosen);
+	CHECK(choices[2].look.metal == LeagueMetal::Silver);
+	CHECK_EQ(choices[2].look.count, 1);
+	CHECK(!choices[2].chosen);
+	CHECK_EQ(choices[3].kind, std::string("none"));
 }
 
 void Glory()

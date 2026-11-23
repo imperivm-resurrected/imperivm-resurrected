@@ -4,6 +4,7 @@
 #include "core/leagueranked.h"
 
 #include <algorithm>
+#include <map>
 #include <cctype>
 #include <cmath>
 #include <cstdio>
@@ -711,13 +712,29 @@ std::vector<LeagueBadgeChoice> LeagueBadgeChoices(const LeagueMe &me)
 		duo.chosen = team;
 		out.push_back(duo);
 	}
+	// The trophies are one choice per metal: next to the name they all look the same, the phalera of that metal with how many the
+	// player holds; the cups' names are on the profile's tournaments card.
+	std::map<LeagueMetal, size_t> metals;
 	for (const LeagueBadge &b : me.badges) {
 		if (b.kind != LeagueBadgeKind::Season && b.kind != LeagueBadgeKind::Trophy) continue;
+		const bool trophy = b.kind == LeagueBadgeKind::Trophy;
+		const bool worn = chosen == (trophy ? "trophy" : "season") && me.badgeId == b.id;
+		if (trophy) {
+			const auto it = metals.find(b.metal);
+			if (it != metals.end()) {
+				LeagueBadgeChoice &group = out[it->second];
+				group.look.count++;
+				group.chosen = group.chosen || worn;
+				continue;
+			}
+			metals[b.metal] = out.size();
+		}
 		LeagueBadgeChoice c;
-		c.kind = b.kind == LeagueBadgeKind::Season ? "season" : "trophy";
+		c.kind = trophy ? "trophy" : "season";
 		c.id = b.id;
 		c.look = b;
-		c.chosen = chosen == c.kind && me.badgeId == b.id;
+		if (trophy) c.look.count = 1;
+		c.chosen = worn;
 		out.push_back(c);
 	}
 	LeagueBadgeChoice none;

@@ -15,6 +15,8 @@ constexpr int kLeagueBadgeSize = 20, kLeagueBadgeGap = 6;
 
 // The badge in a square of `size`. It is a pixel drawing, so it is drawn at the whole scale nearest the screen's and centred.
 void DrawLeagueBadge(ui::Painter &p, int x, int y, int size, const LeagueBadge &badge);
+// How many phalerae of its metal the player holds, on the corner of a trophy worn, when two or more.
+void DrawLeagueBadgeCount(ui::Painter &p, int x, int y, int size, const LeagueBadge &badge);
 // The emblem of a rank drawn from its shapes, for 48 px and up; None is the unranked outline with its question mark. `alpha` (0-255)
 // fades it, for the result's animation.
 void DrawLeagueEmblem(ui::Painter &p, int x, int y, int size, LeagueTier tier, int alpha = 255);
