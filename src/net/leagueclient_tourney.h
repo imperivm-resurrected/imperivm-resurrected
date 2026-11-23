@@ -54,6 +54,8 @@ enum class TourneyOp {
 	Accept, Decline, CancelTeam,
 	// A staging cup's game against a test bot given up: it closed with the game.
 	Concede,
+	// A staging cup filled with test bots before it starts, by the cup.
+	Bots,
 };
 
 // The answer to something the player did.
@@ -89,6 +91,8 @@ struct TourneyOpResult {
 	TourneyMap map;
 	// A win claimed too early by rounds: from when the no-show counts.
 	int64_t noshowFrom = 0;
+	// The test bots that took a place.
+	int added = 0;
 };
 // In a private cup the code the player found it with goes along.
 void LeagueTourneySignUp(int64_t tournament);
@@ -110,6 +114,8 @@ void LeagueTourneyPresence(int64_t match, bool started);
 void LeagueTourneyClaimNoShow(int64_t match);
 // A staging cup's game against a test bot, left behind when the game closed in it: it is given up (the bot was this computer's AI).
 void LeagueTourneyConcede(int64_t match);
+// The staging server only (the cup's `testBots`): its free places are taken by test bots, checked in. The Bots op, with `added`.
+void LeagueTourneyFillBots(int64_t tournament);
 void LeagueTourneyDispute(int64_t match, const std::string &text);
 // The map of the next game of the player's series, by its place among the pick's options; once the league takes it, the player's next
 // match has no pick any more and that game has its map.

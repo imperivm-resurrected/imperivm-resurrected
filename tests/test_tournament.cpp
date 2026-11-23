@@ -169,6 +169,11 @@ void Detail()
 	CHECK_EQ(static_cast<int>(TourneyPlaced(d, 5).size()), 1);
 	CHECK_EQ(static_cast<int>(d.log.size()), 1);
 	CHECK_EQ(d.log[0].action, std::string("seeded"));
+	// Only the staging server sends testBots, and only before the cup starts.
+	CHECK(!d.testBots);
+	TourneyDetail staging;
+	CHECK(TourneyParseDetail(Parse(R"({"id":2,"slug":"pruebas","status":"signup","testBots":true})"), staging));
+	CHECK(staging.testBots);
 }
 
 void Champion()

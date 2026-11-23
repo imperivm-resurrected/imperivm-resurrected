@@ -47,6 +47,8 @@ enum Sub {
 	kSubColorOpen, kSubColorUse, kSubColorClose,
 	// The cup's gameplay mods prepared (by its id): found or downloaded, and the game restarted with them.
 	kSubPrepareMods,
+	// The staging server only: the cup's free places filled with test bots (by its id).
+	kSubFillBots,
 };
 
 // What kSubCupSet changes in the form: the high bits of its value; the low 16 are the choice.

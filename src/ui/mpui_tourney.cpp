@@ -1007,6 +1007,9 @@ std::string ResultText(const TourneyOpResult &r)
 		case TourneyOp::Accept: return Tr("You are in the team. We'll tell you when the check-in opens: either of you can do it.");
 		case TourneyOp::Decline: return Tr("Invitation declined.");
 		case TourneyOp::CancelTeam: return Tr("Invitation cancelled: your team is not signed up.");
+		case TourneyOp::Bots:
+			if (r.added == 1) return Tr("A test bot took the free place.");
+			return r.added > 0 ? TrFmt("%s test bots took the free places.", {std::to_string(r.added)}) : Tr("No place was free: the cup is full.");
 		default: return std::string();
 		}
 	}
@@ -1045,6 +1048,7 @@ std::string ResultText(const TourneyOpResult &r)
 	if (e == "not_enough") return TrFmt("%s players have checked in and the cup needs %s to start.", {std::to_string(r.checkedIn), std::to_string(r.needed)});
 	if (e == "own_match") return Tr("You play this match: the league's team settles it.");
 	if (e == "not_organizer") return Tr("Only the organiser of the cup can do that.");
+	if (e == "started" && r.op == TourneyOp::Bots) return Tr("The cup has moved on: that cannot be done at this stage any more.");
 	if (e == "wrong_status") return Tr("The cup has moved on: that cannot be done at this stage any more.");
 	if (e == "removed") return Tr("The organiser took you off this cup: you cannot sign up again.");
 	if (e == "requirement") {
@@ -1555,6 +1559,9 @@ void TourneyAction(int arg)
 		LeagueTourneyCheckIn(value);
 		break;
 	}
+	case kSubFillBots:
+		if (!LeagueTourneyBusy(TourneyOp::Bots, value)) LeagueTourneyFillBots(value);
+		break;
 	case kSubPrepareMods: {
 		const LeagueModsRule rule = CupMods(value);
 		if (rule.set) LeagueModsPrepStart(rule, "tourney:" + std::to_string(value));

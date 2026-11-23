@@ -3630,5 +3630,11 @@ extern const TrRow kTrRows[] = {
 	{"Prepare mods", "Preparar mods", "Prepara le mod"},
 	{"Gameplay mods", "Mods de juego", "Mod di gioco"},
 	{"None: the base game", "Ninguno: el juego base", "Nessuna: il gioco base"},
+	{"Fill with bots (test)", "Rellenar con bots (prueba)", "Riempi con bot (prova)"},
+	{"Filling with bots...", "Rellenando con bots...", "Riempimento con bot..."},
+	{"Only on the test server: the bots take the free places; the game's AI plays against you.", "Solo en el servidor de pruebas: los bots ocupan las plazas libres; contra ti juega la IA.", "Solo sul server di prova: i bot occupano i posti liberi; contro di te gioca l'IA."},
+	{"A test bot took the free place.", "Un bot de prueba ocupa la plaza libre.", "Un bot di prova occupa il posto libero."},
+	{"%s test bots took the free places.", "%s bots de prueba ocupan las plazas libres.", "%s bot di prova occupano i posti liberi."},
+	{"No place was free: the cup is full.", "No quedaba ninguna plaza libre: la copa está llena.", "Non c'era nessun posto libero: la coppa è piena."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

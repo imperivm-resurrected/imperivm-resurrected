@@ -117,6 +117,7 @@ const char *OpName(TourneyOp op)
 	case TourneyOp::Decline: return "team invitation refusal";
 	case TourneyOp::CancelTeam: return "team cancellation";
 	case TourneyOp::Concede: return "game given up";
+	case TourneyOp::Bots: return "fill with test bots";
 	default: return "resolution";
 	}
 }
@@ -368,6 +369,10 @@ void Run(TourneyOp op, int64_t id, std::string method, std::string path, std::st
 		const TourneyEntryStatus status = entry ? TourneyEntryStatusFromId(entry->GetString("status")) : TourneyEntryStatus::Unknown;
 		out.waitlist = status == TourneyEntryStatus::Waitlist;
 		out.pendingPartner = status == TourneyEntryStatus::PendingPartner;
+	}
+	else if (op == TourneyOp::Bots && parsed) {
+		out.added = j.GetInt("added");
+		LogI("league", "%d test bots joined the cup %lld", out.added, static_cast<long long>(id));
 	}
 	else if (op == TourneyOp::Pick && parsed) {
 		out.map = TourneyMapFromJson(j.Get("map"));
@@ -764,6 +769,11 @@ void LeagueTourneyClaimNoShow(int64_t match)
 void LeagueTourneyConcede(int64_t match)
 {
 	Start(TourneyOp::Concede, match, "POST", MatchPath(match, "/concede"));
+}
+
+void LeagueTourneyFillBots(int64_t tournament)
+{
+	Start(TourneyOp::Bots, tournament, "POST", TourneyPath(tournament, "/bots"), "{}");
 }
 
 void LeagueTourneyDispute(int64_t match, const std::string &text)

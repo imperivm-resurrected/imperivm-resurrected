@@ -3622,5 +3622,11 @@
 {"en":"Preparing them restarts the game.","es":"Al prepararlos se reinicia el juego.","it":"Prepararle riavvia il gioco."},
 {"en":"Prepare mods","es":"Preparar mods","it":"Prepara le mod"},
 {"en":"Gameplay mods","es":"Mods de juego","it":"Mod di gioco"},
-{"en":"None: the base game","es":"Ninguno: el juego base","it":"Nessuna: il gioco base"}
+{"en":"None: the base game","es":"Ninguno: el juego base","it":"Nessuna: il gioco base"},
+{"en":"Fill with bots (test)","es":"Rellenar con bots (prueba)","it":"Riempi con bot (prova)"},
+{"en":"Filling with bots...","es":"Rellenando con bots...","it":"Riempimento con bot..."},
+{"en":"Only on the test server: the bots take the free places; the game's AI plays against you.","es":"Solo en el servidor de pruebas: los bots ocupan las plazas libres; contra ti juega la IA.","it":"Solo sul server di prova: i bot occupano i posti liberi; contro di te gioca l'IA."},
+{"en":"A test bot took the free place.","es":"Un bot de prueba ocupa la plaza libre.","it":"Un bot di prova occupa il posto libero."},
+{"en":"%s test bots took the free places.","es":"%s bots de prueba ocupan las plazas libres.","it":"%s bot di prova occupano i posti liberi."},
+{"en":"No place was free: the cup is full.","es":"No quedaba ninguna plaza libre: la copa está llena.","it":"Non c'era nessun posto libero: la coppa è piena."}
 ]

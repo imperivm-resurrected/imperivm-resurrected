@@ -331,6 +331,8 @@ struct TourneyDetail : TourneySummary {
 	std::vector<TourneyLogLine> log;
 	// A Swiss tournament's standings, by place.
 	std::vector<TourneyStanding> standings;
+	// The staging server lets any player fill the cup with test bots before it starts.
+	bool testBots = false;
 };
 bool TourneyParseDetail(const Json &j, TourneyDetail &out);
 // The match at a round and a position (both counted within its part of the tournament).

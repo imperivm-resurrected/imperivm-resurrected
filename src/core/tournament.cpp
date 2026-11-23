@@ -709,6 +709,7 @@ bool TourneyParseDetail(const Json &j, TourneyDetail &out)
 	out = TourneyDetail();
 	if (!TourneyParseSummary(j, out)) return false;
 	out.rounds = j.GetInt("rounds");
+	out.testBots = j.GetBool("testBots");
 	const int sentRounds = out.rounds;
 	int counted = 0;
 	if (const Json *list = j.Get("entries"); list && list->type == Json::Array) {

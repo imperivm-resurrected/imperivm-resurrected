@@ -1306,7 +1306,14 @@ int PaintStatusCard(Painter &p, Ctx &c, int x, int y, int w)
 		}
 		p.Font(3);
 		const int sh = std::min(88, p.Measure(w - 2 * pad, status));
-		const int h = (reqs ? 262 : 236) + (d.mods.set ? 26 : 0) + std::max(0, sh - 44);
+		// The staging server only: the cup filled with test bots, to try it alone or with a friend. A second button under the card's own.
+		const bool bots = d.testBots && LeagueLinked();
+		const std::string botsNote = bots ? Tr("Only on the test server: the bots take the free places; the game's AI plays against you.") : std::string();
+		p.raw = true;
+		const int bh = bots ? std::min(44, p.Measure(w - 2 * pad, botsNote)) : 0;
+		p.raw = false;
+		const int extra = bots ? 12 + bh + 8 + 40 : 0;
+		const int h = (reqs ? 262 : 236) + (d.mods.set ? 26 : 0) + std::max(0, sh - 44) + extra;
 		PaintGlassCard(p, x, y, w, h);
 		PaintCaps(p, x + pad, y + 20, w - 2 * pad, 20, d.status == TourneyStatus::Checkin ? "Check-in" : "Sign-up", pal::caption);
 		UseFace(p, BrandFace::UiStrong, 18);
@@ -1336,7 +1343,7 @@ int PaintStatusCard(Painter &p, Ctx &c, int x, int y, int w)
 		p.raw = true;
 		p.TextWrapped(x + pad, ly, w - 2 * pad, sh + 2, status, ink);
 		p.raw = false;
-		const int by = y + h - 22 - 44, bw = w - 2 * pad;
+		const int by = y + h - 22 - 44 - extra, bw = w - 2 * pad;
 		if (!LeagueLinked()) p.Button(x + pad, by, bw, 44, "Link to sign up", kLeagueLink, 0, mx, my, true, true);
 		else if (invite) {
 			const int half = (bw - 10) / 2;
@@ -1368,6 +1375,15 @@ int PaintStatusCard(Painter &p, Ctx &c, int x, int y, int w)
 			p.Button(x + pad + half + 10, by, bw - half - 10, 44, "Withdraw", kTourney, ArgOf(kSubWithdraw, d.id), mx, my);
 		}
 		else p.Button(x + pad, by, bw, 44, "Withdraw", kTourney, ArgOf(kSubWithdraw, d.id), mx, my, !LeagueTourneyBusy(TourneyOp::Withdraw, d.id));
+		if (bots) {
+			const int ty = by + 44 + 12;
+			p.Font(3);
+			p.raw = true;
+			p.TextWrapped(x + pad, ty, bw, bh + 2, botsNote, pal::textDim);
+			p.raw = false;
+			const bool busy = LeagueTourneyBusy(TourneyOp::Bots, d.id);
+			p.Button(x + pad, ty + bh + 8, bw, 40, busy ? "Filling with bots..." : "Fill with bots (test)", kTourney, ArgOf(kSubFillBots, d.id), mx, my, !busy);
+		}
 		return h;
 	}
 	if (d.status == TourneyStatus::Finished) {
