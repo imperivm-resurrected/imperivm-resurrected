@@ -23,9 +23,9 @@
 #include "core/league.h"
 #include "core/leaguestats.h"
 #include "core/leagueranked.h"
+#include "core/leagueseats.h"
 #include "core/leagueteam.h"
 #include "core/log.h"
-#include "core/names.h"
 #include "core/tournament.h"
 #include "game/civs.h"
 #include "game/gamestats.h"
@@ -88,6 +88,11 @@ struct Match {
 	// The game's record of this player as last read, for the result screen: the game is gone when it is shown.
 	GameRecordFacts facts;
 	bool factsRead = false;
+	// Who is who: each seat's room number (the k of its address 127.77.0.k), the room's members with their numbers as seen while the game
+	// lasts, and the SteamIDs of a ranked match's ticket.
+	std::map<int, int> seatNumbers;
+	std::vector<SeatMember> roomMembers;
+	std::vector<uint64_t> ticketIds;
 };
 
 struct Outbox {
@@ -220,9 +225,10 @@ void LoadOutbox()
 	if (!g_out.items.empty() || old) LogI("league", "%u game reports waiting to be sent (%u too old dropped)", static_cast<unsigned>(g_out.items.size()), static_cast<unsigned>(old));
 }
 
-bool Retriable(int status)
+// An answer cut halfway after a 200 is tried again: the server keeps one report per key.
+bool Retriable(const HttpReply &r)
 {
-	return status == 0 || status == 401 || status == 408 || status == 429 || status >= 500;
+	return !r.Ok() && LeagueReportRetry(r.status, !r.failure.empty());
 }
 
 void SendDue()
@@ -257,20 +263,26 @@ void SendDue()
 			RankedReportAnswered(item.body, r.body);
 			if (item.body.GetString("kind") == "tournament") LeagueTourneyGameReported();
 		}
-		else if (Retriable(r.status)) LogW("league", "game report not sent (%s); trying again later", r.Describe().c_str());
-		else LogE("league", "the server refused a game report (%s); it is dropped", r.Describe().c_str());
+		else if (Retriable(r)) LogW("league", "game report not sent (%s); trying again later", r.Describe().c_str());
+		else {
+			LogE("league", "the server refused a game report (%s); it is dropped", r.Describe().c_str());
+			// The result screen of a ranked game waits for this answer: it goes on to follow the match on the server instead, which says
+			// how the game ended whatever happened to this report.
+			if (item.body.GetString("kind") == "ranked") RankedReportAnswered(item.body, "{\"status\":\"awaiting_other\"}");
+		}
+		const bool retry = Retriable(r);
 		std::lock_guard<std::mutex> lock(g_mx);
 		auto it = std::find_if(g_out.items.begin(), g_out.items.end(),
 			[&](const LeagueQueuedReport &q) { return q.steamId == item.steamId && q.body.GetString("key") == key; });
 		if (it != g_out.items.end()) {
-			if (r.Ok() || !Retriable(r.status)) g_out.items.erase(it);
+			if (!retry) g_out.items.erase(it);
 			else {
 				it->tries++;
 				it->nextAt = NowMs() + LeagueRetryDelayMs(it->tries);
 			}
 		}
 		SaveOutbox();
-		if (!r.Ok() && Retriable(r.status)) {
+		if (retry) {
 			g_out.sending = false;
 			return;
 		}
@@ -296,16 +308,54 @@ std::string CivOf(int index)
 	return name && *name ? std::string(name) : std::to_string(race);
 }
 
+// The room number of the game settings' slot: TVXGameMultiSettings keeps each slot's address at +0xdc8.
+int SeatNumberAt(int slot)
+{
+	__try {
+		const char *gs = *reinterpret_cast<const char *const *>(addr::kGameSettings);
+		return gs ? RoomNumberOfAddress(*reinterpret_cast<const uint32_t *>(gs + 0xdc8 + slot * 4)) : 0;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return 0;
+	}
+}
+
+// Under g_mx: the room's members and the seats' numbers as they are now, kept for the whole game (who drops leaves the room), and the
+// ticket's players once the ranked queue knows them.
+void NoteWhoIsWho(Match &m)
+{
+	for (int i = 0; i < 8; i++) {
+		const int k = SeatNumberAt(i);
+		if (k && !m.seatNumbers.count(i)) m.seatNumbers[i] = k;
+	}
+	for (const OnlineMember &member : SteamCurrentRoom().members) {
+		auto it = std::find_if(m.roomMembers.begin(), m.roomMembers.end(), [&](const SeatMember &x) { return x.id == member.id; });
+		if (it == m.roomMembers.end()) m.roomMembers.push_back({member.id, member.name, member.number});
+		else if (member.number) it->number = member.number;
+	}
+	LeagueMatchTicket ticket;
+	if (m.ranked && m.ticketIds.empty() && RankedTicketOf(m.rankedId, ticket)) {
+		for (const LeaguePlayerCard &p : ticket.players) {
+			const uint64_t id = _strtoui64(p.steamId.c_str(), nullptr, 10);
+			if (id) m.ticketIds.push_back(id);
+		}
+	}
+}
+
+// By the seat's room number first, then by name; never this player's id nor another seat's, and only the ticket's players in a ranked game.
 uint64_t SteamIdOf(const Match &m, const Seat &s)
 {
 	if (s.local) return SteamOwnId();
-	for (const auto &member : m.info.members) {
-		if (SamePlayerName(member.second, s.name)) return member.first;
+	std::vector<uint64_t> taken;
+	for (const auto &kv : m.seats) {
+		if (kv.first != s.index && kv.second.steamId) taken.push_back(kv.second.steamId);
 	}
+	std::vector<SeatMember> members = m.roomMembers;
 	for (const auto &member : m.info.members) {
-		if (PlayerNameMatches(member.second, s.name)) return member.first;
+		if (std::none_of(members.begin(), members.end(), [&](const SeatMember &x) { return x.id == member.first; })) members.push_back({member.first, member.second, 0});
 	}
-	return 0;
+	const auto number = m.seatNumbers.find(s.index);
+	return PickSeatSteamId(number != m.seatNumbers.end() ? number->second : 0, s.name, members, SteamOwnId(), taken, m.ticketIds);
 }
 
 // The players whose ticks the lockstep still gets; -1 outside a network game.
@@ -334,6 +384,7 @@ void Poll(Match &m)
 	int localIndex = -1;
 	const int mask = ConnectedMask(localIndex);
 	m.clockMs = clock;
+	NoteWhoIsWho(m);
 	for (const StatsLivePlayer &p : live) {
 		if (!p.playable || p.info.index >= 8) continue;
 		const bool fresh = m.seats.find(p.info.index) == m.seats.end();
@@ -460,7 +511,16 @@ bool BuildReport(const Match &m, LeagueReport &r, std::string &why)
 	}
 	// The ticket of a ranked match knows both accounts: a report must go, or the server keeps the queue locked for hours.
 	LeagueMatchTicket ticket;
-	if (m.ranked && RankedTicketOf(m.rankedId, ticket)) LeagueSeatsFromTicket(seats, ticket, SteamOwnId());
+	if (m.ranked && RankedTicketOf(m.rankedId, ticket)) {
+		// A seat told by a name that is not one of the ticket's players is not trusted: the ticket fills it.
+		for (LeagueSeat &s : seats) {
+			if (!s.human || s.local || !s.steamId || m.ticketIds.empty()) continue;
+			if (std::find(m.ticketIds.begin(), m.ticketIds.end(), s.steamId) != m.ticketIds.end()) continue;
+			LogW("league", "seat %d had an account that is not in the ranked match; the match's own is used", s.index);
+			s.steamId = 0;
+		}
+		LeagueSeatsFromTicket(seats, ticket, SteamOwnId());
+	}
 	int unknown = 0;
 	for (const LeagueSeat &s : seats) {
 		if (s.human && !s.steamId) unknown++;

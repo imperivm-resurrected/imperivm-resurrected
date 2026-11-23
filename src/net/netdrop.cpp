@@ -4,6 +4,7 @@
 #define NOMINMAX
 #include <windows.h>
 
+#include <atomic>
 #include <mutex>
 #include <set>
 #include <string>
@@ -74,12 +75,16 @@ std::set<int> g_dropped;
 // The players of a ranked 2v2 the AI plays for since they dropped: they may come back, and then it goes.
 std::set<int> g_dropAi;
 
-// The league's drop rules (a ranked or a cup game) hold for the game played or watched: its players know it from their room's tag, a
-// spectator of the broadcast from the spectator room, which copies the game room's "drop". Whatever changes the game under them must be
-// the same in all those copies.
+std::atomic<bool> g_dropRules{false};
+bool g_hooksReady = false;
+
+// The league's drop rules (a ranked or a cup game) hold for the game played or watched: its players read them once when its network starts
+// (NetDropNetworkStarted), a spectator of the broadcast from the spectator room, which copies the game room's "drop". Whatever changes the
+// game under them must be the same in all those copies.
 bool TeamRules(bool demo)
 {
-	if (!demo) return LeagueMatchDropRules();
+	// Only while an online game's network runs: the value of the last one stays behind after it.
+	if (!demo) return g_dropRules && *reinterpret_cast<void **>(addr::kTransport) != nullptr;
 	return SpectatorViewing() && SteamCurrentRoom().info.dropAi;
 }
 
@@ -105,12 +110,27 @@ std::string StripAiSuffix(char *s)
 	return clean;
 }
 
+// The players still in the lockstep (the gate's mask) and the tick: each computer decides a drop alone, so a notice on one computer only, or
+// at another tick, is what to look for next to a desync.
+int LockstepMask(int &tick)
+{
+	const char *t = *reinterpret_cast<const char *const *>(addr::kTransport);
+	const char *gate = t ? *reinterpret_cast<const char *const *>(t + 0x50) : nullptr;
+	tick = t ? *reinterpret_cast<const int *>(t + 0x54) : -1;
+	return gate ? *reinterpret_cast<const uint8_t *>(gate + 0x108) : -1;
+}
+
 void __fastcall HookSplit(void *cmd)
 {
-	LogI("match", "online game: drop notice (players %02x)", *reinterpret_cast<unsigned *>(static_cast<char *>(cmd) + 0xc));
+	int tick = -1;
+	const int before = LockstepMask(tick);
 	g_inSplit++;
 	g_origSplit(cmd);
 	g_inSplit--;
+	int tickAfter = -1;
+	const int after = LockstepMask(tickAfter);
+	LogI("match", "online game: drop notice at tick %d (players %02x; the lockstep had %02x, now %02x)", tick,
+		*reinterpret_cast<unsigned *>(static_cast<char *>(cmd) + 0xc), static_cast<unsigned>(before) & 0xff, static_cast<unsigned>(after) & 0xff);
 }
 
 void __fastcall HookWantsToQuit(void *cmd)
@@ -194,7 +214,7 @@ char *__cdecl HookLocFormat(void *db, char *out, const char *key, ...)
 		if (name.empty()) name = "A player";
 		// Under the drop rules the AI plays for whoever drops while they come back; nobody takes the place of who leaves a 1v1, the AI keeps
 		// the army of who leaves a ranked 2v2.
-		const bool rules = LeagueMatchDropRules();
+		const bool rules = TeamRules(false);
 		std::string text;
 		if (g_inQuit > 0) text = name + Tr(rules && !LeagueMatchRankedTeam() ? " has left the game." : " has left the game; their army is controlled by the AI.");
 		else if (rules) text = TrFmt("%s has dropped: the AI controls them. They have %s to come back.", {name, LeagueClockText(kLeagueTeamDropWaitMs)});
@@ -270,6 +290,19 @@ void __cdecl HookCreateAI(int player, char *profile, short difficulty)
 
 }
 
+void NetDropNetworkStarted()
+{
+	const OnlineRoom room = SteamCurrentRoom();
+	const bool rules = room.id && room.info.dropAi;
+	g_dropRules = rules;
+	if (room.id) LogI("match", "online game: drop rules of the league %s (the room's data, read once)", rules ? "on" : "off");
+}
+
+bool NetDropHooksReady()
+{
+	return g_hooksReady;
+}
+
 void NetDropReset()
 {
 	std::lock_guard<std::mutex> lock(g_lock);
@@ -328,6 +361,7 @@ void InstallNetDrop(bool knownExe)
 	if (HookCreate(split, reinterpret_cast<void *>(&HookSplit), reinterpret_cast<void **>(&g_origSplit)) == MH_OK &&
 		HookCreate(create, reinterpret_cast<void *>(&HookCreateAI), reinterpret_cast<void **>(&g_origCreateAI)) == MH_OK &&
 		HookEnable(split) == MH_OK && HookEnable(create) == MH_OK) {
+		g_hooksReady = true;
 		LogI("match", "online game: drops are no longer replaced by the AI (only whoever leaves on purpose)");
 	}
 	else {

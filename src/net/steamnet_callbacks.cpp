@@ -13,6 +13,7 @@
 #include "mods/mods.h"
 #include "hooks/dmshim.h"
 #include "net/modlist.h"
+#include "net/nettune.h"
 #include "net/vnet.h"
 #include "i18n/tr.h"
 
@@ -136,7 +137,7 @@ void OnCallback(int id, const void *data)
 		set("key", OwnKey());
 		PublishMods("");
 		set("irver", ModVersionText());
-		set("irlvl", ModsRulesLevel());
+		set("irlvl", NetRulesLevel());
 		set("irbuild", BuildSha256());
 		AnnounceOwnBuild();
 		set(("k:" + std::to_string(g_steam.me)).c_str(), "1");
@@ -210,6 +211,7 @@ void OnCallback(int id, const void *data)
 			Notice("Couldn't join the room (full, closed, or it no longer exists)");
 			return;
 		}
+		const bool rejoining = g_signal.rejoinJoining;
 		g_signal.rejoinJoining = false;
 		const uint64 lobby = r->m_ulSteamIDLobby;
 		if (lobby == g_lobby) return;
@@ -255,6 +257,17 @@ void OnCallback(int id, const void *data)
 				if (!info.spectate) StoreLobbyEntry(lobby);
 				S.SteamAPI_ISteamMatchmaking_LeaveLobby(g_steam.mm, lobby);
 				RefuseForContent(lobby, info, content);
+				return;
+			}
+			// A key still being worked out (this game's or the room's) is not the same content: an invite or a join from Steam came here
+			// without the game list's own check.
+			if (RoomContentBlocksEntry(content)) {
+				S.SteamAPI_ISteamMatchmaking_LeaveLobby(g_steam.mm, lobby);
+				LogW("steam", "not entering room %llu: the content keys are not ready yet (room \"%s\", here \"%s\")", lobby, info.gameplayKey.c_str(),
+					OwnKey().c_str());
+				// A return to a game tries again on its own: the key is ready a few seconds after the game starts.
+				if (rejoining) g_signal.joinFailCode = 1;
+				else Notice("Your content is still being checked: try again in a few seconds.");
 				return;
 			}
 		}

@@ -16,16 +16,29 @@
 
 #include "MinHook.h"
 #include "hooks/hookcount.h"
+#include "hooks/tweaks.h"
 #include "core/log.h"
+#include "core/syncdiag.h"
+#include "mods/mods.h"
 #include "net/nettune.h"
+#include "net/netdrop.h"
+#include "net/rejoin.h"
 #include "net/steamnet.h"
 #include "addr/net.h"
 #include "addr/state.h"
+#include "addr/world.h"
 
 namespace {
 const unsigned kMinTickMs = 120;
 const unsigned kMaxTickMs = 500;
 const unsigned kTickPercent = 70;
+// The rest of [Network] comes from each computer's Config.ini as well. LambdaPercent decides with TickPercent how fast the turn grows, so
+// how far each turn moves the game; the delay's two only move the real-time window and BoundPercent is never read. All of them get the
+// values the game installs, on every computer.
+const int kLambdaPercent = 50;
+const int kDelayPercent = 20;
+const int kLambdaDelayPercent = 50;
+const int kBoundPercent = 80;
 
 const size_t kOffTick = 0x54;
 const size_t kOffSuggested = 0x70;
@@ -36,6 +49,33 @@ const size_t kOffMaxTick = 0x3f4;
 typedef void *(__fastcall *Ctor_t)(void *self, void *edx, unsigned long a, int b, unsigned c, unsigned d);
 Ctor_t g_origCtor = nullptr;
 bool g_patched = false;
+// The transport's constructor is hooked: every online game gets the values above, whether or not the delay's patch went in.
+bool g_forced = false;
+
+// Config.ini [system] as the game read it at startup: the game changes none of them later (AIEnabled only from a saved game's AI).
+struct ConfigSim {
+	bool read = false;
+	int newPf = -1, aiEnabled = -1, invalidTerrains = -1;
+};
+std::mutex g_configMx;
+ConfigSim g_configSim;
+
+void NoteConfigLoaded()
+{
+	ConfigSim c;
+	c.read = true;
+	c.newPf = *reinterpret_cast<const int *>(addr::kConfigNewPf);
+	c.aiEnabled = *reinterpret_cast<const int *>(addr::kAiEnabled);
+	c.invalidTerrains = *reinterpret_cast<const int *>(addr::kConfigInvalidTerrains);
+	{
+		std::lock_guard<std::mutex> lock(g_configMx);
+		g_configSim = c;
+	}
+	LogI("net", "Config.ini: NewPF %d, AIEnabled %d, InvalidTerrains %d (they decide the simulation: rooms compare them)", c.newPf, c.aiEnabled,
+		c.invalidTerrains);
+}
+
+unsigned g_badLines = 0;
 
 template <typename T>
 T &At(void *base, size_t off)
@@ -77,15 +117,29 @@ bool PatchDelaySite()
 void *__fastcall HookCtor(void *self, void *edx, unsigned long a, int b, unsigned c, unsigned d)
 {
 	void *r = g_origCtor(self, edx, a, b, c, d);
-	if (self && g_patched) {
+	if (self) {
+		int &tickPercent = *reinterpret_cast<int *>(addr::kTickPercentAddr);
+		int &lambda = *reinterpret_cast<int *>(addr::kNetLambdaPercent);
+		int &delay = *reinterpret_cast<int *>(addr::kDelayMultiplier);
+		int &lambdaDelay = *reinterpret_cast<int *>(addr::kNetLambdaDelayPercent);
+		int &bound = *reinterpret_cast<int *>(addr::kNetBoundPercent);
 		const unsigned oldMin = At<unsigned>(self, kOffMinTick), oldMax = At<unsigned>(self, kOffMaxTick);
-		const unsigned oldPercent = *reinterpret_cast<unsigned *>(addr::kTickPercentAddr);
+		const int oldPercent = tickPercent, oldLambda = lambda, oldDelay = delay, oldLambdaDelay = lambdaDelay, oldBound = bound;
 		At<unsigned>(self, kOffMinTick) = kMinTickMs;
 		At<unsigned>(self, kOffMaxTick) = kMaxTickMs;
-		*reinterpret_cast<unsigned *>(addr::kTickPercentAddr) = kTickPercent;
-		LogI("net", "game network: network turns adjusted (minimum %u ms, maximum %u ms, margin %u %%; the game had %u, %u and %u %%)", kMinTickMs,
-			kMaxTickMs, kTickPercent, oldMin, oldMax, oldPercent);
+		tickPercent = static_cast<int>(kTickPercent);
+		lambda = kLambdaPercent;
+		delay = kDelayPercent;
+		lambdaDelay = kLambdaDelayPercent;
+		bound = kBoundPercent;
+		LogI("net", "game network: network turns set (minimum %u ms, maximum %u ms, margin %u %%, smoothing %d %%, delay %d %%/%d %%, bound %d %%; "
+			"Config.ini had %u, %u, %d, %d, %d/%d and %d)%s", kMinTickMs, kMaxTickMs, kTickPercent, kLambdaPercent, kDelayPercent, kLambdaDelayPercent,
+			kBoundPercent, oldMin, oldMax, oldPercent, oldLambda, oldDelay, oldLambdaDelay, oldBound, g_patched ? "" : "; the delay's fix is not in");
+		LogI("net", "game network: AIEnabled %d at the start (Config.ini said %d)", *reinterpret_cast<const int *>(addr::kAiEnabled), g_configSim.aiEnabled);
 	}
+	g_badLines = 0;
+	NetDropNetworkStarted();
+	RejoinNetworkStarted();
 	return r;
 }
 
@@ -100,8 +154,40 @@ unsigned g_resends = 0;
 typedef void(__cdecl *TransportLog_t)(const char *fmt, ...);
 TransportLog_t g_origLog = nullptr;
 
+const size_t kRecentLines = 600;
+std::vector<std::string> g_recent;
+size_t g_recentNext = 0;
+
+int CurrentTick()
+{
+	const char *t = *reinterpret_cast<const char *const *>(addr::kTransport);
+	return t ? *reinterpret_cast<const int *>(t + kOffTick) : -1;
+}
+
+// The game's own warnings that a tick ran out of turn or a player's commands could not be read: either is a desync coming, and with the
+// game's log off they went nowhere.
+void NoteGameWarning(const std::string &line)
+{
+	if (line.find("WRONG TIME") == std::string::npos && line.find("BAD COMMAND") == std::string::npos) return;
+	const unsigned n = ++g_badLines;
+	if (n <= 20) LogE("match", "game network: \"%s\" at tick %d", line.c_str(), CurrentTick());
+	else if (n == 21) LogE("match", "game network: more warnings of the game in this game, not logged");
+}
+
 void NoteTransportLine(const char *text)
 {
+	{
+		std::string line = text;
+		for (char &ch : line) {
+			if (ch == '\n' || ch == '\r') ch = ' ';
+		}
+		while (!line.empty() && line.back() == ' ') line.pop_back();
+		NoteGameWarning(line);
+		std::lock_guard<std::mutex> lock(g_arrivalMx);
+		if (g_recent.size() < kRecentLines) g_recent.push_back(line);
+		else g_recent[g_recentNext] = line;
+		g_recentNext = (g_recentNext + 1) % kRecentLines;
+	}
 	unsigned tick = 0, a = 0, b = 0, c = 0, d = 0, delay = 0;
 	if (strstr(text, "PEER DELAY") && sscanf_s(text, "%*d - PEER DELAY - tick %u - %u.%u.%u.%u - realtime delay %u", &tick, &a, &b, &c, &d, &delay) == 6) {
 		if (delay > 100000) return;
@@ -206,6 +292,54 @@ void InstallNetTune(bool knownExe)
 	if (g_origLog) HookEnable(reinterpret_cast<void *>(addr::kTransportLog));
 	LogAt(g_patched && hooked ? kLogInfo : kLogError, "net", "game network: turn adjustment %s", g_patched && hooked ? "ready" : "NOT available");
 	if (!hooked) g_patched = false;
+	g_forced = hooked;
+	TweaksOnConfigLoaded(&NoteConfigLoaded);
+}
+
+std::string NetSimSignature()
+{
+	SimInputs in;
+	in.turnsForced = g_forced;
+	in.minTick = kMinTickMs;
+	in.maxTick = kMaxTickMs;
+	in.tickPercent = kTickPercent;
+	in.lambda = kLambdaPercent;
+	{
+		std::lock_guard<std::mutex> lock(g_configMx);
+		in.newPf = g_configSim.newPf;
+		in.aiEnabled = g_configSim.aiEnabled;
+		in.invalidTerrains = g_configSim.invalidTerrains;
+	}
+	in.crashFixSites = TweaksCrashFixSites();
+	in.rejoinHooks = RejoinHooksReady();
+	in.dropHooks = NetDropHooksReady();
+	return SimSignatureText(in);
+}
+
+std::string NetRulesLevel()
+{
+	return RulesLevelWithSim(ModsRulesLevel(), NetSimSignature());
+}
+
+std::string NetTuneDescribe()
+{
+	const char *t = *reinterpret_cast<const char *const *>(addr::kTransport);
+	char text[256];
+	sprintf_s(text, "MinTickSize %d, MaxTickSize %d, TickPercent %d, LambdaPercent %d, DelayPercent %d, LambdaDelayPercent %d, BoundPercent %d (%s)",
+		t ? At<int>(const_cast<char *>(t), kOffMinTick) : -1, t ? At<int>(const_cast<char *>(t), kOffMaxTick) : -1,
+		*reinterpret_cast<const int *>(addr::kTickPercentAddr), *reinterpret_cast<const int *>(addr::kNetLambdaPercent),
+		*reinterpret_cast<const int *>(addr::kDelayMultiplier), *reinterpret_cast<const int *>(addr::kNetLambdaDelayPercent),
+		*reinterpret_cast<const int *>(addr::kNetBoundPercent), g_forced ? "set by the mod" : "Config.ini's");
+	return text;
+}
+
+std::vector<std::string> NetTuneRecentLines()
+{
+	std::lock_guard<std::mutex> lock(g_arrivalMx);
+	if (g_recent.size() < kRecentLines) return g_recent;
+	std::vector<std::string> out(g_recent.begin() + static_cast<std::ptrdiff_t>(g_recentNext), g_recent.end());
+	out.insert(out.end(), g_recent.begin(), g_recent.begin() + static_cast<std::ptrdiff_t>(g_recentNext));
+	return out;
 }
 
 NetTurnSecond NetTuneTakeSecond()

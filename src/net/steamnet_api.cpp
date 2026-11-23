@@ -12,9 +12,11 @@
 #pragma warning(pop)
 #include "core/buildid.h"
 #include "core/guard.h"
+#include "core/syncdiag.h"
 #include "mods/mods.h"
 #include "i18n/tr.h"
 
+#include "net/nettune.h"
 #include "net/patrons.h"
 #include "net/steamnet_internal.h"
 #include "core/version.h"
@@ -848,8 +850,17 @@ std::string SteamVersionMismatch(const std::string &roomVersion, const std::stri
 			LogW("steam", "the room runs the build %s and this game %s", BuildShortId(roomBuild).c_str(), BuildShortId(BuildSha256()).c_str());
 			return TrFmt("That room uses another build of Imperivm Resurrected %s. Both must install the same build.", {mine});
 		}
-		if (roomRulesLevel.empty() || roomRulesLevel == ModsRulesLevel()) return "";
-		LogW("steam", "the room uses %s %s and this build %s", mine.c_str(), roomRulesLevel.c_str(), ModsRulesLevel().c_str());
+		const std::string ownLevel = NetRulesLevel();
+		if (roomRulesLevel.empty() || roomRulesLevel == ownLevel) return "";
+		std::string roomRules, roomSim, ownRules, ownSim;
+		SplitRulesLevel(roomRulesLevel, roomRules, roomSim);
+		SplitRulesLevel(ownLevel, ownRules, ownSim);
+		if (roomRules == ownRules) {
+			LogW("steam", "the room's simulation differs from this game's: %s (room %s, here %s)", SimSignatureDiff(roomSim, ownSim).c_str(), roomSim.c_str(),
+				ownSim.c_str());
+			return Tr("That room's host plays with other settings that change the game (Config.ini, or CrashFix in imperivm-mod.ini). Both must use the same ones.");
+		}
+		LogW("steam", "the room uses %s %s and this build %s", mine.c_str(), roomRulesLevel.c_str(), ownLevel.c_str());
 		return TrFmt("That room uses another build of Imperivm Resurrected %s. Both must install the same build.", {mine});
 	}
 	if (roomVersion.empty()) {

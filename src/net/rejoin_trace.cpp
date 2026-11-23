@@ -278,6 +278,7 @@ int __fastcall HookRandomRange(void *rng, void *edx, int lo, int hi)
 	const int r = g_orig.randomRange(rng, edx, lo, hi);
 	int tick;
 	char *game = static_cast<char *>(Game());
+	if (game && rng == game + 0x12a0) NoteLocalTimerTouch("drew from the shared random generator", _ReturnAddress());
 	if (game && rng == game + 0x12a0 && Tracing(tick)) {
 		char *mgr = ThreadManager(0);
 		TracePush({tick, 'A', 0, mgr ? *reinterpret_cast<uint32_t *>(mgr) : 0, static_cast<uint32_t>(hi), static_cast<uint32_t>(r),

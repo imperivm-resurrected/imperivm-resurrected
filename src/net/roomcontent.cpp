@@ -15,3 +15,8 @@ bool RoomContentDiffers(RoomContent content)
 {
 	return content == RoomContent::kOtherGameplay || content == RoomContent::kOtherMap;
 }
+
+bool RoomContentBlocksEntry(RoomContent content)
+{
+	return content != RoomContent::kSame;
+}

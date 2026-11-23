@@ -7,6 +7,11 @@
 #include "hooks/respick.h"
 
 void InstallTweaks(bool knownExe);
+// The executable is the one the addresses are for (as InstallTweaks was told): code that reads or calls gbr.exe checks it.
+bool TweaksKnownExe();
+// The game's sites the crash protection patched (0 when it is off): it changes what scripts of the simulation decide, so it goes in what
+// rooms compare.
+int TweaksCrashFixSites();
 
 bool TweaksIntendedResolution(int &w, int &h);
 

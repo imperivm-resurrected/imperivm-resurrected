@@ -50,6 +50,8 @@ const uint8_t kCrashFixStub[] = {
 	0xc3,
 };
 
+int g_crashFixSites = 0;
+
 void InstallCrashFix()
 {
 	void *stub = VirtualAlloc(nullptr, 64, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
@@ -71,6 +73,7 @@ void InstallCrashFix()
 		if (WriteCode(at, call, sizeof(call))) done++;
 	}
 	LogI("boot", "crash protection: %d of %d sites protected", done, static_cast<int>(sizeof(addr::kCrashFixSites) / sizeof(addr::kCrashFixSites[0])));
+	g_crashFixSites = done;
 }
 
 // The room's Leave (button 0x9007 of CVXUIMultiplayerGame::OnMessage) leaves the GameSpy staging room whenever the online service
@@ -269,6 +272,7 @@ Trial g_trial;
 enum Answer { kNoAnswer, kKeep, kBack };
 std::atomic<int> g_answer{kNoAnswer};
 bool g_modeSwitched = false;
+bool g_knownExe = false;
 
 void AnswerKeep()
 {
@@ -776,10 +780,21 @@ int __cdecl HookObjPlayer(int *sp)
 }
 }
 
+bool TweaksKnownExe()
+{
+	return g_knownExe;
+}
+
+int TweaksCrashFixSites()
+{
+	return g_crashFixSites;
+}
+
 void InstallTweaks(bool knownExe)
 {
-	HookAt(addr::kScriptFnGateInside, &HookGateInside, &g_origGateInside, "Gate::Inside");
+	g_knownExe = knownExe;
 	if (knownExe) {
+		HookAt(addr::kScriptFnGateInside, &HookGateInside, &g_origGateInside, "Gate::Inside");
 		HookAt(addr::kMapSettlementSite, reinterpret_cast<void *>(&HookTownhallSettlement), &g_townhallCont, "map settlements");
 		HookAt(addr::kScriptFnObjPlayer, &HookObjPlayer, &g_origObjPlayer, "Obj::player");
 	}
@@ -847,6 +862,7 @@ void TweaksModeSwitched()
 
 void TweaksResolutionTick()
 {
+	if (!g_knownExe) return;
 	if (g_modeSwitched && !*reinterpret_cast<void **>(addr::kOptionsDialog)) {
 		g_modeSwitched = false;
 		// The trial of a full screen's size ends with the mode it was tried in.
@@ -879,6 +895,7 @@ void TweaksResolutionTick()
 
 void TweaksFrameTick()
 {
+	if (!g_knownExe) return;
 	// The size changes between frames, where the game reads its window's messages, as it does from its options: never inside a frame.
 	if ((g_modeSwitched && !*reinterpret_cast<void **>(addr::kOptionsDialog)) || g_answer != kNoAnswer) UiWakeGameThread();
 	static LARGE_INTEGER freq = {}, last = {}, start = {};

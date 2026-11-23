@@ -2,6 +2,8 @@
 // Copyright (C) 2026 THIONG
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #pragma once
+#include <string>
+#include <vector>
 
 void InstallNetTune(bool knownExe);
 
@@ -14,3 +16,13 @@ struct NetTurnSecond {
 };
 
 NetTurnSecond NetTuneTakeSecond();
+
+// What decides the simulation besides the build and the rules (the forced network turns, Config.ini's pathfinder and AI, the crash
+// protection, the mod's patches of the simulation): rooms compare it before a game starts.
+std::string NetSimSignature();
+// The rules level a Steam room announces and compares ("irlvl"): the mods' one with the signature.
+std::string NetRulesLevel();
+// The [Network] values the game uses now, for the log of a desync.
+std::string NetTuneDescribe();
+// The game's last lines of its network transport (NACK, PEER DELAY, AdvanceTick...), oldest first, for the log of a desync.
+std::vector<std::string> NetTuneRecentLines();

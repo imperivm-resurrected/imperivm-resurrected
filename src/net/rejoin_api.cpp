@@ -6,6 +6,7 @@
 #include "MinHook.h"
 #include "core/config.h"
 #include "core/log.h"
+#include "core/syncdiag.h"
 #include "mods/modvars.h"
 #include "net/steamnet.h"
 #include "i18n/tr.h"
@@ -17,6 +18,10 @@
 #include "core/uiport.h"
 
 using namespace rejoin_impl;
+
+namespace {
+bool g_hooksReady = false;
+}
 
 void InstallRejoin(bool knownExe)
 {
@@ -47,12 +52,21 @@ void InstallRejoin(bool knownExe)
 	else {
 		ok = false;
 	}
+	g_hooksReady = ok;
 	LogAt(ok ? kLogInfo : kLogError, "rejoin", "hooks: %s", ok ? "ready" : "NOT available");
+	if (!InstallDesyncSnapshots()) LogE("match", "desync: could not hook the game's sync hash; a desync will not say which counter split");
+}
+
+bool RejoinHooksReady()
+{
+	return g_hooksReady;
 }
 
 void RejoinOnSteamMessage(uint64_t peer, uint8_t type, const std::string &data)
 {
 	if (type == kRjReport) return;
+	// Here on the Steam thread: the computer that sent it, and maybe this one, has the game thread held by the game's desync box.
+	if (type == kRjDesync) return DesyncOnPeerMessage(peer, data);
 	std::string extra;
 	if (type == kRjReq) extra = std::to_string(SteamLobbyNumberOf(peer));
 	std::lock_guard<std::mutex> lock(g_mx);
@@ -345,17 +359,22 @@ void RejoinAfterLoad(void *gameIn, bool loaded)
 	}
 	*reinterpret_cast<int *>(addr::kGameEndTick) = g_blobs.wire.gameEnd;
 	uint32_t *sync = reinterpret_cast<uint32_t *>(addr::kSyncState + 8);
-	std::string diff;
-	static const char *const names[8] = {"slots", "threads", "pathfinder", "exploration", "scriptstate", "netcmds", "extra", "ai"};
-	for (int i = 0; i < 8; i++) {
-		if (sync[i] != g_blobs.wire.sync[i]) {
-			char b[96];
-			sprintf_s(b, " %s %08x/%08x", names[i], sync[i], g_blobs.wire.sync[i]);
-			diff += b;
+	// The host's counters replace this computer's, twice: after loading and after the fixes. Whatever they hid is logged first, so a desync
+	// some minutes after a return can be told from the return itself.
+	auto takeHostCounters = [&](const char *when) {
+		std::string diff;
+		for (int i = 0; i < 8; i++) {
+			if (sync[i] != g_blobs.wire.sync[i]) {
+				char b[96];
+				sprintf_s(b, " %s %08x/%08x", SyncCounterName(i), sync[i], g_blobs.wire.sync[i]);
+				diff += b;
+			}
+			sync[i] = g_blobs.wire.sync[i];
 		}
-		sync[i] = g_blobs.wire.sync[i];
-	}
-	LogD("rejoin", "fingerprints after loading %s", diff.empty() ? "equal to the host's" : ("different (mine/host):" + diff).c_str());
+		if (diff.empty()) LogI("rejoin", "fingerprints %s equal to the host's", when);
+		else LogW("rejoin", "fingerprints %s different (mine/host):%s; the host's are taken", when, diff.c_str());
+	};
+	takeHostCounters("after loading");
 	DumpGameState(kDumpBackBefore);
 	if (!g_blobs.hostDump.empty()) DumpObjectsBinary(g_blobs.hostDump, kObjectsBack);
 	if (!g_blobs.threads.empty()) FixThreads();
@@ -371,7 +390,7 @@ void RejoinAfterLoad(void *gameIn, bool loaded)
 	if (!g_blobs.queries.empty()) ApplyQueries();
 	if (!g_blobs.ai.empty()) ApplyAi();
 	if (!g_blobs.squads.empty()) ApplySquads();
-	for (int i = 0; i < 8; i++) sync[i] = g_blobs.wire.sync[i];
+	takeHostCounters("after the fixes");
 	TraceStart(g_blobs.wire.tick);
 	if (!g_blobs.hostDump.empty()) {
 		std::string mine;

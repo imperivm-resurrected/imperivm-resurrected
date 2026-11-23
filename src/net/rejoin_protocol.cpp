@@ -199,6 +199,7 @@ std::string BuildState(const std::string &saveData)
 	ws.rng[0] = *reinterpret_cast<uint32_t *>(game + 0x12a0 + 4);
 	ws.rng[1] = *reinterpret_cast<uint32_t *>(game + 0x12b4 + 4);
 	ws.gameEnd = *reinterpret_cast<int *>(addr::kGameEndTick);
+	ws.rules = CurrentRules();
 	for (int i = 0; i < 8; i++) ws.sync[i] = *reinterpret_cast<uint32_t *>(addr::kSyncState + 8 + i * 4);
 	ws.hostIndex = *reinterpret_cast<int *>(t + 0x4c);
 	char *gate = *reinterpret_cast<char **>(t + 0x50);
@@ -438,10 +439,12 @@ void BackTick()
 			return BackFail("corrupted state");
 		}
 		if (g_blobs.save.size() != g_blobs.wire.saveSize) return BackFail("incomplete save");
-		const std::string settings = g_blobs.wireRaw.substr(sizeof(WireState) + blobs, g_blobs.wire.settingsSize);
+		const std::string settings = g_blobs.wireRaw.substr(sizeof(WireState) + static_cast<size_t>(blobs), g_blobs.wire.settingsSize);
 		if (!WriteFileAll(DiskPath(kBackSave), g_blobs.save) || !WriteFileAll(DiskPath(kBackSettings), settings)) {
 			return BackFail("could not write the game");
 		}
+		// Nothing writes rules beside this save, so one found here is stale and would win over the room's when the game loads.
+		DeleteFileA((DiskPath(kBackSave) + ".mods.json").c_str());
 		if (!LoadSettings(kBackSettings, g_blobs.wire.slot)) return BackFail("could not read the game settings");
 		MpSaveSetPendingLoad(kBackSave);
 		g_session.pendingLoad = true;

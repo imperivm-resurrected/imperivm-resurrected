@@ -63,6 +63,16 @@ void OnlyTheTwoDifferencesDiffer()
 	CHECK(!RoomContentDiffers(RoomContent::kChecking));
 }
 
+void AKeyNotReadyNeverLetsAPlayerIn()
+{
+	CHECK(RoomContentBlocksEntry(CompareRoomContent(Facts("685eb718eafca4a3", ""))));
+	CHECK(RoomContentBlocksEntry(CompareRoomContent(Facts("", "685eb718eafca4a3"))));
+	CHECK(RoomContentBlocksEntry(CompareRoomContent(Facts("", ""))));
+	CHECK(RoomContentBlocksEntry(RoomContent::kOtherGameplay));
+	CHECK(RoomContentBlocksEntry(RoomContent::kOtherMap));
+	CHECK(!RoomContentBlocksEntry(CompareRoomContent(Facts("685eb718eafca4a3", "685eb718eafca4a3"))));
+}
+
 }
 
 int main()
@@ -74,5 +84,6 @@ int main()
 	AMapOnlyPackIsNotNeededToJoin();
 	AMissingMapModIsKnownBeforeTheKeys();
 	OnlyTheTwoDifferencesDiffer();
+	AKeyNotReadyNeverLetsAPlayerIn();
 	return test::Summary("roomcontent");
 }

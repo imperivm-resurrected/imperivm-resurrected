@@ -8,6 +8,10 @@
 #include <vector>
 
 void InstallRejoin(bool knownExe);
+// The hooks of the rejoin are in: some of them change the simulation (the paths' limits), so rooms compare it.
+bool RejoinHooksReady();
+// An online game's network starts (its transport is built): the sync snapshots of the game before are forgotten.
+void RejoinNetworkStarted();
 
 void RejoinGameThreadTick();
 bool RejoinWantsWake();

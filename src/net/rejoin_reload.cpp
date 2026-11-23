@@ -22,6 +22,12 @@ using namespace rejoin_impl;
 namespace rejoin_impl {
 ReloadState g_reload;
 
+unsigned CurrentRules()
+{
+	const unsigned active = ModRulesActive();
+	return active ? active : SteamCurrentRoom().info.rules;
+}
+
 namespace {
 const char kReloadSave[] = "SaveOnline/reload.snr";
 const char kReloadSettings[] = "SaveOnline/reload.usr";
@@ -83,12 +89,6 @@ bool FromRoomOwner(uint64_t peer)
 		if (m.id == peer) return m.owner;
 	}
 	return false;
-}
-
-unsigned CurrentRules()
-{
-	const unsigned active = ModRulesActive();
-	return active ? active : SteamCurrentRoom().info.rules;
 }
 
 int MyNumber()
@@ -172,11 +172,12 @@ void StartTick()
 	if (!WriteFileAll(DiskPath(kReloadSave), g_reload.save) || !WriteFileAll(DiskPath(kReloadSettings), settings)) {
 		return ReloadCancel("could not write the game", false);
 	}
-	if (g_reload.rules) {
-		Json side = Json::MakeObject();
-		side.Set("rules", Json::MakeNumber(static_cast<double>(g_reload.rules)));
-		WriteJsonFile(DiskPath(kReloadSave) + ".mods.json", side);
-	}
+	// Always written, with the host's rules even when they are none: a file left by an earlier reload would give this computer its old rules
+	// and the others their new ones (the saved game's rules win over the room's when it loads).
+	Json side = Json::MakeObject();
+	side.Set("rules", Json::MakeNumber(static_cast<double>(g_reload.rules)));
+	if (!WriteJsonFile(DiskPath(kReloadSave) + ".mods.json", side)) return ReloadCancel("could not write the game", false);
+	LogI("rejoin", "reload: the game's rules %x (the host's)", g_reload.rules);
 	g_blobs.wire = g_reload.wire;
 	if (!LoadSettings(kReloadSettings, slot)) return ReloadCancel("could not read the game settings", false);
 	MpSaveSetPendingLoad(kReloadSave);
@@ -247,7 +248,7 @@ void ReloadBroadcast(const std::string &save, const std::string &cams, const std
 	memcpy(&g_reload.wire, state.data(), sizeof(WireState));
 	g_reload.save = save;
 	g_reload.cams = cams;
-	g_reload.rules = CurrentRules();
+	g_reload.rules = g_reload.wire.rules;
 	Arm(kRWaitAcks, kAcksMs);
 	LogI("rejoin", "reload: the game (%u bytes) was sent to %u players; waiting for each one to confirm it", static_cast<unsigned>(save.size()),
 		static_cast<unsigned>(g_reload.peers.size()));
@@ -285,7 +286,6 @@ void ReloadOnMessage(const Msg &m)
 		g_reload = ReloadState();
 		g_reload.from = m.peer;
 		g_reload.mine = g_session.role == kBack;
-		g_reload.rules = CurrentRules();
 		g_reload.wireRaw = m.data;
 		if (g_session.role == kBack || g_session.role == kOther) g_session.deadline = 0;
 		if (g_reload.mine) SetStatus("Receiving the game...");
@@ -302,6 +302,7 @@ void ReloadOnMessage(const Msg &m)
 		g_reload.cams = m.data;
 		const std::string bad = CheckReceived();
 		if (!bad.empty()) return ReloadCancel(bad, true);
+		g_reload.rules = g_reload.wire.rules;
 		Arm(kRWaitSlot, kSlotMs);
 		return;
 	}

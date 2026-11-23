@@ -43,7 +43,8 @@ const unsigned kSlotSetPaused = 16;
 // the local player.
 const unsigned kSlotExitToMenu = 26;
 
-enum : uint8_t { kRjReq = 20, kRjAccept, kRjDeny, kRjState, kRjFile, kRjFileEnd, kRjReady, kRjGo, kRjCancel, kRjWait, kRjThreads, kRjDump, kRjObjects, kRjRawUnused, kRjReport, kRjQueries, kRjAi, kRjSquads, kRjModVars, kRjHandles };
+// kRjDesync took the place of a message no build sends any more: a computer whose game desynced sends the others its sync snapshots.
+enum : uint8_t { kRjReq = 20, kRjAccept, kRjDeny, kRjState, kRjFile, kRjFileEnd, kRjReady, kRjGo, kRjCancel, kRjWait, kRjThreads, kRjDump, kRjObjects, kRjDesync, kRjReport, kRjQueries, kRjAi, kRjSquads, kRjModVars, kRjHandles };
 static_assert(kRejoinMessages.Has(kRjReq) && kRejoinMessages.Has(kRjHandles), "rejoin messages out of their range");
 
 enum : uint8_t { kRjReload = kReloadMessages.first, kRjReloadFile, kRjReloadEnd, kRjReloadAck, kRjReloadGo };
@@ -113,10 +114,12 @@ struct WireState {
 	uint32_t saveSize;
 	uint32_t multi[13];
 	uint32_t rng[2];
+	// The host's rules of the game (ModRulesActive): everyone loads it again with these, never with what their own computer kept.
+	uint32_t rules;
 };
 #pragma pack(pop)
 
-const uint32_t kWireMagic = 0x334e4a52;
+const uint32_t kWireMagic = 0x344e4a52;
 
 struct Msg {
 	uint64_t peer;
@@ -302,6 +305,8 @@ struct ReloadState {
 	DWORD deadline = 0;
 };
 extern ReloadState g_reload;
+// The rules of the game being played here (ModRulesActive, or the room's when none are active): the host's go to everyone in WireState.
+unsigned CurrentRules();
 void ReloadBroadcast(const std::string &save, const std::string &cams, const std::string &returning, uint64_t returningId);
 void ReloadOnMessage(const Msg &m);
 bool ReloadOnCancel(const Msg &m);
@@ -346,6 +351,15 @@ void SendOwnTickData(char *t);
 void *__fastcall HookAdvanceTick(void *tp);
 void __fastcall HookAddCommand(void *pump, void *edx, int *cmd);
 void __stdcall HookDesync(unsigned tick, unsigned hash, unsigned compared);
+// The sync snapshots (rejoin_desync.cpp): the hook of the game's hash, what a desync logs and sends, and the others' answers, on the Steam
+// thread (the game's own desync box stops the game thread).
+bool InstallDesyncSnapshots();
+void DesyncSnapshotsReset();
+void DesyncReport(unsigned tick, unsigned hash, unsigned compared);
+void DesyncOnPeerMessage(uint64_t peer, const std::string &data);
+// While a shared timer of a local object (handle 40000 or more) runs: its handle and class, for the checks of what it touches.
+bool LocalTimerRunning(uint16_t &handle, uint32_t &vtable);
+void NoteLocalTimerTouch(const char *what, void *from);
 void __fastcall HookMsgExecute(void *cmd);
 typedef void(__fastcall *SetPosition_t)(void *self, void *edx, uint32_t *pt, int a, int b);
 

@@ -16,3 +16,6 @@ struct RoomContentFacts {
 
 RoomContent CompareRoomContent(const RoomContentFacts &facts);
 bool RoomContentDiffers(RoomContent content);
+// Whether a player may go into the room: only with both keys known and equal. A key not ready yet (empty) is never taken for the game
+// without mods: the two computers could be playing different content.
+bool RoomContentBlocksEntry(RoomContent content);

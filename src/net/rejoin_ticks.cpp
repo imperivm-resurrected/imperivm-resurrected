@@ -173,11 +173,8 @@ void LogAiTrace(int from)
 namespace rejoin_impl {
 void __stdcall HookDesync(unsigned tick, unsigned hash, unsigned compared)
 {
-	uint32_t h[8];
-	for (int i = 0; i < 8; i++) h[i] = *reinterpret_cast<uint32_t *>(addr::kSyncState + 8 + i * 4);
-	LogE("match", "DESYNC at tick %u: my fingerprint %08x, the other's %08x. Fingerprints: slots %08x threads %08x "
-		"pathfinder %08x exploration %08x scriptstate %08x netcmds %08x extra %08x ai %08x",
-		tick, hash, compared, h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7]);
+	// Before the game's own report: it shows a box that holds the game thread until the player closes it.
+	DesyncReport(tick, hash, compared);
 	LeagueMatchDesync();
 	if (WriteMoves(static_cast<int>(tick) - kMovesTicksWritten)) {
 		LogI("match", "object moves of the last %d ticks in %s (send the problem report of every player)", kMovesTicksWritten, kMovesFile);
@@ -234,6 +231,7 @@ void __fastcall HookMsgExecute(void *cmd)
 
 void __fastcall HookSetPosition(void *self, void *edx, uint32_t *pt, int a, int b)
 {
+	if (self && *reinterpret_cast<uint16_t *>(static_cast<char *>(self) + 8) < kFirstLocalHandle) NoteLocalTimerTouch("moved a shared object", _ReturnAddress());
 	const uint32_t before = PositionsHash();
 	g_orig.setPosition(self, edx, pt, a, b);
 	if (!KeepLocalOutOfPositionsHash(self, before)) MovePush('M', self, before, _ReturnAddress());
@@ -247,6 +245,7 @@ void __fastcall HookSetPosition(void *self, void *edx, uint32_t *pt, int a, int 
 
 void __fastcall HookRemoveFromMap(void *self)
 {
+	if (self && *reinterpret_cast<uint16_t *>(static_cast<char *>(self) + 8) < kFirstLocalHandle) NoteLocalTimerTouch("took a shared object off the map", _ReturnAddress());
 	const uint32_t before = PositionsHash();
 	g_orig.removeFromMap(self);
 	if (!KeepLocalOutOfPositionsHash(self, before)) MovePush('R', self, before, _ReturnAddress());
