@@ -24,7 +24,7 @@ struct GameRow {
 	bool won = false, multi = false;
 	// MatchLeague: a league or a cup game.
 	int league = 0;
-	// The civilization's number (-1 unknown, 10 or higher from a mod) and its name.
+	// The civilization's number (10 or higher from a mod; MatchCivKey: kCivUnknown for every one without a name) and its name.
 	int race = -1;
 	std::string civ, bestUnit;
 	uint32_t durationMs = 0, kills = 0, losses = 0, produced = 0, armyMax = 0, gold = 0, food = 0, bestLevel = 0;
@@ -71,6 +71,8 @@ struct View {
 	int outcome = kOutcomeAll, historyScroll = 0;
 	// The civilization of the civilizations tab (kCivAll for every one), and the queue of the league tab's chart of Glory (0 the duel).
 	int civ = kCivAll, gloryQueue = 0;
+	// The civilization was just chosen, or the tab opened: its chip is scrolled into view once the row is painted.
+	bool revealCiv = false;
 	// The position in the selected card's games of the one opened in the history, or -1.
 	int expanded = -1;
 	int todayYear = 0, todayMonth = 0, todayDay = 0;
@@ -83,13 +85,15 @@ struct View {
 enum Action {
 	kActNone = 0, kActPick, kActUse, kActBack, kActPatron, kActMetric, kActChartMode, kActChartRange, kActOutcome, kActBar, kActGame,
 	kActHistory, kActLeague, kActLeagueClose, kActLeagueLink, kActLeagueOpen, kActLeagueCancel, kActLeagueUnlink, kActLeagueBadge,
-	kActLeagueFrame, kActLeagueTitle, kActTab, kActCiv, kActGloryQueue,
+	kActLeagueFrame, kActLeagueTitle, kActTab, kActCiv, kActGloryQueue, kActCivScroll,
 };
 
 constexpr int kTabGeneral = 0, kTabLeague = 1, kTabCivs = 2;
 
 constexpr int kBarList = 0, kBarHistory = 1;
 constexpr int kPaneLeagueDialog = ui::kPaneIdBase, kPaneTrophies = ui::kPaneIdBase + 1, kPaneSeasons = ui::kPaneIdBase + 2, kPaneCivs = ui::kPaneIdBase + 3;
+// The row of the civilizations' chips, which scrolls sideways when they don't fit: its offset is kept with the panes'.
+constexpr int kPaneCivChips = ui::kPaneIdBase + 4;
 
 // The player goes with the Steam account, so the list is left only for installs that still keep several from before.
 inline bool ShowsList(const View &v) { return v.cards.size() > 1; }
@@ -109,6 +113,9 @@ std::vector<size_t> HistoryGames(const View &v);
 int HistoryMaxScroll(const View &v);
 // Opens a game in the history and scrolls to it, showing every game if the filter hid it.
 void HistoryReveal(View &v, int game);
+// Where the chip of the civilization shown is along the row of chips, from the row's start, with the fonts of the screen just painted;
+// false when the civilizations tab isn't shown.
+bool CivChipSpan(ui::Painter &p, const View &v, int &left, int &width);
 
 void PaintProfileScreen(ui::Painter &p, const View &v);
 

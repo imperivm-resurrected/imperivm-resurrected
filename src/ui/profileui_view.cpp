@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <ctime>
 #include <string>
 #include <initializer_list>
@@ -896,6 +897,14 @@ std::vector<MatchFacts> FactsOfCard(const Card &c)
 	return out;
 }
 
+// The civilization whose games the chart and the history show: the one chosen in the civilizations tab, every one elsewhere.
+int ShownCiv(const View &v)
+{
+	const Card *c = SelectedCard(v);
+	if (ShownTab(v) != kTabCivs || !c || v.civ == kCivAll) return kCivAll;
+	return std::any_of(c->games.begin(), c->games.end(), [&](const GameRow &g) { return g.race == v.civ; }) ? v.civ : kCivAll;
+}
+
 int SegmentsWidth(Painter &p, const std::vector<std::string> &labels)
 {
 	p.Font(3);
@@ -991,7 +1000,7 @@ void PaintEvolution(Painter &p, const View &v, const Card &c, const Box &b, Tip 
 
 	const std::vector<MatchFacts> facts = FactsOfCard(c);
 	const size_t limit = v.chartRange == kRange20 ? 20 : v.chartRange == kRange50 ? 50 : 0;
-	const std::vector<size_t> shown = MatchSelect(facts, static_cast<MatchMode>(v.chartMode), kOutcomeAll, limit);
+	const std::vector<size_t> shown = MatchSelect(facts, static_cast<MatchMode>(v.chartMode), kOutcomeAll, limit, ShownCiv(v));
 	const int plotTop = cy + kSegH + 30, bottom = footY - 10, plotH = bottom - plotTop;
 	if (shown.empty() || plotH < 20) {
 		p.Font(3);
@@ -1283,8 +1292,15 @@ void PaintHistory(Painter &p, const View &v, const Card &c, const Box &b, Tip &t
 }
 
 // The civilizations tab: the player's games with one civilization, or with all of them, so that a hard one does not hide how the
-// others go. The chips choose it and the table compares them all.
-constexpr int kCivRowH = 40, kChipGap = 6;
+// others go. The chips choose it and the table compares them all; the chart and the history are those of the general tab, of its
+// games alone.
+constexpr int kCivRowH = 36, kCivTableHead = 28, kChipGap = 6, kChipArrowW = 30;
+// Under this the tiles leave their room to the chart and the history: the table's row of the civilization has their figures.
+constexpr int kCivsMinLowH = 480;
+// The chart's controls take about 150 units: under this its plot would be too short to read.
+constexpr int kCivMinChartH = 230;
+// The figures sit in rows of label and value, two to a row; the best unit has a row of its own.
+constexpr int kCivFigureRows = 6, kCivFigureRowH = 26, kCivFigureMinRowH = 22, kCivFigurePad = 14;
 
 std::string CivNameOf(const Card &c, int race)
 {
@@ -1297,35 +1313,97 @@ std::string CivNameOf(const Card &c, int race)
 
 std::string Rounded(double value) { return Grouped(static_cast<uint64_t>(std::max(0.0, value) + 0.5)); }
 
-// "All" first and then every civilization played, with its games when there is room for them, or shrunk to fit.
-void PaintCivChips(Painter &p, const View &v, const Card &c, const std::vector<MatchFacts> &facts, const std::vector<int> &civs, int shown, int x, int y, int w)
+// On the left the figures over the chart; on the right the table, as tall as its rows up to a few, over the history.
+struct CivsLayout {
+	int chipsY = 0, tilesY = 0;
+	bool tiles = true;
+	Box left, table, history;
+};
+
+CivsLayout CivsLayoutOf(const Area &a, const Frame &f, int civCount)
 {
-	std::vector<int> races = {kCivAll};
-	races.insert(races.end(), civs.begin(), civs.end());
-	std::vector<std::string> names, counted;
-	for (int race : races) {
-		names.push_back(CivNameOf(c, race));
-		counted.push_back(names.back() + " \xC2\xB7 " + Grouped(MatchCivRecordOf(facts, race).games));
-	}
+	CivsLayout l;
+	l.chipsY = f.tilesY;
+	l.tilesY = f.tilesY + kSegH + 12;
+	int lowY = l.tilesY + f.tileH + kGap;
+	l.tiles = f.bottom - lowY >= kCivsMinLowH;
+	if (!l.tiles) lowY = l.tilesY;
+	const int leftW = a.wide ? kWideLeftW : kNarrowChartW, rightX = a.x + leftW + kGap, rightW = a.w - leftW - kGap;
+	const int rows = civCount ? std::min(civCount, f.head.roomy ? 4 : 3) : 2;
+	const int tableH = kCardHead + kCivTableHead + rows * kCivRowH + 12;
+	l.left = {a.x, lowY, leftW, f.bottom - lowY};
+	l.table = {rightX, lowY, rightW, tableH};
+	l.history = {rightX, lowY + tableH + kGap, rightW, f.bottom - lowY - tableH - kGap};
+	return l;
+}
+
+// "All" first and then every civilization played, each chip as wide as its name. When they don't all fit, the row scrolls sideways
+// between two arrows.
+struct ChipStrip {
+	std::vector<int> races;
+	std::vector<std::string> labels;
+	// Along the row, from its start.
+	std::vector<int> lefts, widths;
+	int contentW = 0;
+	int x = 0, y = 0, w = 0, viewX = 0, viewW = 0;
+	bool scrolls = false;
+};
+
+ChipStrip ChipStripOf(Painter &p, const Card &c, const std::vector<int> &civs, int x, int y, int w)
+{
+	ChipStrip s;
+	s.races = {kCivAll};
+	s.races.insert(s.races.end(), civs.begin(), civs.end());
 	p.Font(3);
-	auto natural = [&](const std::vector<std::string> &labels) {
-		int total = 0;
-		for (const std::string &l : labels) total += RawWidth(p, l) + 2 * kSegPad + kChipGap;
-		return total - kChipGap;
-	};
-	const std::vector<std::string> &labels = natural(counted) <= w ? counted : names;
-	const bool fits = natural(labels) <= w;
-	const int n = static_cast<int>(races.size());
-	int bx = x;
-	for (int i = 0; i < n; i++) {
-		const int bw = fits ? RawWidth(p, labels[i]) + 2 * kSegPad : (x + w - bx - (n - 1 - i) * kChipGap) / (n - i);
-		const bool on = races[i] == shown;
-		const bool hot = !on && p.Hover(bx, y, bw, kSegH, v.mouseX, v.mouseY);
-		p.Fill(bx, y, bw, kSegH, on ? pal::text : hot ? pal::buttonHover : pal::field);
-		p.Frame(bx, y, bw, kSegH, on ? pal::text : hot ? pal::edgeHot : pal::edge);
-		TextAsIs(p, bx + 4, y, bw - 8, kSegH, labels[i], on ? pal::onLight : pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		if (!on) p.AddHit(bx, y, bw, kSegH, kActCiv, races[i]);
-		bx += bw + kChipGap;
+	int at = 0;
+	for (int race : s.races) {
+		s.labels.push_back(CivNameOf(c, race));
+		s.lefts.push_back(at);
+		s.widths.push_back(RawWidth(p, s.labels.back()) + 2 * kSegPad);
+		at += s.widths.back() + kChipGap;
+	}
+	s.contentW = at - kChipGap;
+	s.x = x;
+	s.y = y;
+	s.w = w;
+	s.scrolls = s.contentW > w;
+	s.viewX = s.scrolls ? x + kChipArrowW + kChipGap : x;
+	s.viewW = s.scrolls ? w - 2 * (kChipArrowW + kChipGap) : w;
+	return s;
+}
+
+void PaintChipArrow(Painter &p, const View &v, int x, int y, int dir, bool enabled)
+{
+	const bool hot = enabled && p.Hover(x, y, kChipArrowW, kSegH, v.mouseX, v.mouseY);
+	p.Fill(x, y, kChipArrowW, kSegH, hot ? pal::buttonHover : pal::field);
+	p.Frame(x, y, kChipArrowW, kSegH, hot ? pal::edgeHot : pal::edge);
+	const COLORREF ink = enabled ? pal::text : pal::disabled;
+	const int ax = x + (kChipArrowW - 7) / 2, ay = y + (kSegH - 11) / 2;
+	if (dir < 0) p.ArrowLeft(ax, ay, 7, 11, ink);
+	else p.ArrowRight(ax, ay, 7, 11, ink);
+	if (enabled) p.AddHit(x, y, kChipArrowW, kSegH, kActCivScroll, dir);
+}
+
+void PaintCivChips(Painter &p, const View &v, const ChipStrip &s, int shown)
+{
+	const int max = std::max(0, s.contentW - s.viewW), pos = ScrollClamp(v.panes.Of(kPaneCivChips), max);
+	if (s.scrolls) {
+		PaintChipArrow(p, v, s.x, s.y, -1, pos > 0);
+		PaintChipArrow(p, v, s.x + s.w - kChipArrowW, s.y, 1, pos < max);
+	}
+	ClipArea clip(p, s.viewX, s.y, s.viewW, kSegH);
+	// Published as a pane, the row takes the wheel; the controller drags it.
+	if (p.panes && max > 0) p.panes->push_back({clip.OnScreen(), kPaneCivChips, max, s.viewW});
+	p.Font(3);
+	for (size_t i = 0; i < s.races.size(); i++) {
+		const int bx = s.viewX - pos + s.lefts[i], bw = s.widths[i];
+		if (bx + bw <= s.viewX || bx >= s.viewX + s.viewW) continue;
+		const bool on = s.races[i] == shown;
+		const bool hot = !on && p.Hover(bx, s.y, bw, kSegH, v.mouseX, v.mouseY);
+		p.Fill(bx, s.y, bw, kSegH, on ? pal::text : hot ? pal::buttonHover : pal::field);
+		p.Frame(bx, s.y, bw, kSegH, on ? pal::text : hot ? pal::edgeHot : pal::edge);
+		TextAsIs(p, bx + 4, s.y, bw - 8, kSegH, s.labels[i], on ? pal::onLight : pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		if (!on) p.AddHit(bx, s.y, bw, kSegH, kActCiv, s.races[i]);
 	}
 }
 
@@ -1345,11 +1423,30 @@ void PaintCivTiles(Painter &p, const MatchCivRecord &r, const Area &a, int y, in
 	}
 }
 
-// What a game with the civilization averages, and under it what the averages leave out.
-void PaintCivFigures(Painter &p, const Card &c, const MatchCivRecord &r, int x, int y, int w, int h)
+std::string CivFiguresNote(const MatchCivRecord &r)
 {
-	PaintGlassCard(p, x, y, w, h);
-	PaintCardTitle(p, x, y, w, "Per game");
+	std::string note = Tr("The averages leave out the abandoned games.");
+	if (r.scriptGames) {
+		note += " " + (r.scriptGames == 1 ? Tr("In 1 game the map's script counted the kills and deaths.")
+										  : TrFmt("In %s games the map's script counted the kills and deaths.", {Grouped(r.scriptGames)}));
+	}
+	return note;
+}
+
+int CivFiguresNoteHeight(Painter &p, const MatchCivRecord &r, int w)
+{
+	p.Font(3);
+	p.raw = true;
+	const int h = p.Measure(w - kCardPad * 2, CivFiguresNote(r));
+	p.raw = false;
+	return h;
+}
+
+// What a game with the civilization averages, as tall as its rows, and under them what the averages leave out when there is room.
+void PaintCivFigures(Painter &p, const Card &c, const MatchCivRecord &r, const Box &b, int rowH, int noteH)
+{
+	PaintGlassCard(p, b.x, b.y, b.w, b.h);
+	PaintCardTitle(p, b.x, b.y, b.w, "Per game");
 	auto average = [&](double value) { return r.ran ? Rounded(value) : std::string(kDash); };
 	std::string spent = kDash;
 	if (r.goldSpentGames) {
@@ -1375,55 +1472,48 @@ void PaintCivFigures(Painter &p, const Card &c, const MatchCivRecord &r, int x, 
 		{"Duration", r.ran ? Duration(static_cast<uint32_t>(r.minutes * 60000 + 0.5)) : std::string(kDash)},
 		{"Best unit", best},
 	};
-	constexpr int count = sizeof(rows) / sizeof(rows[0]), columns = 2, colGap = 20, rowH = 46;
-	const int inner = w - kCardPad * 2, colW = (inner - colGap) / columns;
+	constexpr int count = sizeof(rows) / sizeof(rows[0]), columns = 2, colGap = 24;
+	const int inner = b.w - kCardPad * 2, colW = (inner - colGap) / columns;
 	for (int i = 0; i < count; i++) {
-		const int cx = x + kCardPad + (i % columns) * (colW + colGap), ry = y + kCardHead + (i / columns) * rowH;
+		const int cx = b.x + kCardPad + (i % columns) * (colW + colGap), ry = b.y + kCardHead + (i / columns) * rowH;
 		// The last one alone in its row has the whole width.
 		const int cw = i == count - 1 && i % columns == 0 ? inner : colW;
 		if (i >= columns) p.Fill(cx, ry, cw, 1, pal::hairline);
-		p.Font(3);
-		p.Text(cx, ry + 3, cw, 21, rows[i].first, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.Font(4);
-		TextAsIs(p, cx, ry + 24, cw, 20, rows[i].second, pal::text);
-	}
-	std::string note = Tr("The averages leave out the abandoned games.");
-	if (r.scriptGames) {
-		note += " " + (r.scriptGames == 1 ? Tr("In 1 game the map's script counted the kills and deaths.")
-										  : TrFmt("In %s games the map's script counted the kills and deaths.", {Grouped(r.scriptGames)}));
-	}
-	const int noteY = y + kCardHead + ((count + columns - 1) / columns) * rowH + 8;
-	if (noteY + 22 <= y + h - 8) {
+		const int vw = std::min(cw * 2 / 3, RawWidth(p, rows[i].second));
+		TextAsIs(p, cx + cw - vw, ry, vw, rowH, rows[i].second, pal::text, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.Font(3);
-		p.raw = true;
-		p.TextWrapped(x + kCardPad, noteY, inner, y + h - 8 - noteY, note, kMuted);
-		p.raw = false;
+		p.Text(cx, ry, cw - vw - 10, rowH, rows[i].first, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
+	if (noteH <= 0) return;
+	const int noteY = b.y + kCardHead + kCivFigureRows * rowH + 4;
+	p.Font(3);
+	p.raw = true;
+	p.TextWrapped(b.x + kCardPad, noteY, inner, std::max(0, b.y + b.h - 6 - noteY), CivFiguresNote(r), kMuted);
+	p.raw = false;
 }
 
 // Every civilization played side by side; a row chooses it.
-void PaintCivTable(Painter &p, const View &v, const Card &c, const std::vector<MatchFacts> &facts, const std::vector<int> &civs, int shown, int x, int y, int w, int h)
+void PaintCivTable(Painter &p, const View &v, const Card &c, const std::vector<MatchFacts> &facts, const std::vector<int> &civs, int shown, const Box &b)
 {
-	PaintGlassCard(p, x, y, w, h);
-	PaintCardTitle(p, x, y, w, "By civilization");
-	const int x0 = x + kCardPad, inner = w - kCardPad * 2, right = x0 + inner;
+	PaintGlassCard(p, b.x, b.y, b.w, b.h);
+	PaintCardTitle(p, b.x, b.y, b.w, "By civilization");
+	const int x0 = b.x + kCardPad, inner = b.w - kCardPad * 2, right = x0 + inner;
 	if (civs.empty()) {
-		p.Font(0);
-		p.Text(x0, y + h / 2 - 34, inner, 26, c.readable ? "No games recorded yet." : kDash, pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		p.Font(3);
-		p.Text(x0 + 20, y + h / 2, inner - 40, 66, "Finish a skirmish or a multiplayer game and it will show here.", pal::textDim, DT_CENTER | DT_TOP | DT_WORDBREAK);
+		p.Text(x0, b.y + kCardHead, inner, b.h - kCardHead - 12, c.readable ? "No games recorded yet." : kDash, kMuted, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		return;
 	}
 	const int count = static_cast<int>(civs.size());
-	const int listTop = y + kCardHead + 28, listBottom = y + h - 12;
+	const int listTop = b.y + kCardHead + kCivTableHead, listBottom = b.y + b.h - 12;
 	const bool scrolls = count * kCivRowH > listBottom - listTop;
 	const int listRight = scrolls ? right - 12 : right;
 	const int colW = std::max(70, std::min(140, (listRight - x0 - 180) / 5));
 	const char *heads[5] = {"Games", "Wins", "K/D", "Average damage", "Average duration"};
 	p.Font(3);
-	p.Text(x0, y + kCardHead, listRight - 5 * colW - x0 - 8, 22, "Civilization", kHead);
+	p.Text(x0, b.y + kCardHead, listRight - 5 * colW - x0 - 8, 22, "Civilization", kHead);
 	for (int k = 0; k < 5; k++) {
-		p.Text(listRight - (5 - k) * colW, y + kCardHead, colW, 22, heads[k], kHead, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(listRight - (5 - k) * colW, b.y + kCardHead, colW, 22, heads[k], kHead, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
 	PaneSpec spec;
 	spec.id = kPaneCivs;
@@ -1462,19 +1552,26 @@ void PaintCivTable(Painter &p, const View &v, const Card &c, const std::vector<M
 	}
 }
 
-void PaintCivsTab(Painter &p, const View &v, const Card &c, const Area &a, const Frame &f, Tip &)
+void PaintCivsTab(Painter &p, const View &v, const Card &c, const Area &a, const Frame &f, Tip &tip)
 {
 	const std::vector<MatchFacts> facts = FactsOfCard(c);
 	const std::vector<int> civs = MatchCivsPlayed(facts);
-	const int shown = v.civ == kCivAll || std::find(civs.begin(), civs.end(), v.civ) != civs.end() ? v.civ : kCivAll;
+	const int shown = ShownCiv(v);
 	const MatchCivRecord r = MatchCivRecordOf(facts, shown);
-	PaintCivChips(p, v, c, facts, civs, shown, a.x, f.tilesY, a.w);
-	const int tilesY = f.tilesY + kSegH + 14;
-	PaintCivTiles(p, r, a, tilesY, f.tileH);
-	const int lowY = tilesY + f.tileH + kGap, lowH = f.bottom - lowY;
-	const int leftW = std::min(600, a.w * 42 / 100);
-	PaintCivFigures(p, c, r, a.x, lowY, leftW, lowH);
-	PaintCivTable(p, v, c, facts, civs, shown, a.x + leftW + kGap, lowY, a.w - leftW - kGap, lowH);
+	const CivsLayout l = CivsLayoutOf(a, f, static_cast<int>(civs.size()));
+	PaintCivChips(p, v, ChipStripOf(p, c, civs, a.x, l.chipsY, a.w), shown);
+	if (l.tiles) PaintCivTiles(p, r, a, l.tilesY, f.tileH);
+	// The figures line up with the table when they come out close to it, and never leave the chart too short.
+	int noteH = CivFiguresNoteHeight(p, r, l.left.w);
+	int figH = kCardHead + kCivFigureRows * kCivFigureRowH + noteH + kCivFigurePad;
+	if (std::abs(figH - l.table.h) <= 30 && l.table.h - kCardHead - kCivFigurePad - noteH >= kCivFigureRows * (kCivFigureRowH - 2)) figH = l.table.h;
+	figH = std::max(kCardHead + kCivFigureRows * kCivFigureMinRowH + kCivFigurePad, std::min(figH, l.left.h - kGap - kCivMinChartH));
+	if (figH - kCardHead - kCivFigurePad - noteH < kCivFigureRows * kCivFigureMinRowH) noteH = 0;
+	const int rowH = std::min(30, (figH - kCardHead - kCivFigurePad - noteH) / kCivFigureRows);
+	PaintCivFigures(p, c, r, {l.left.x, l.left.y, l.left.w, figH}, rowH, noteH);
+	PaintEvolution(p, v, c, {l.left.x, l.left.y + figH + kGap, l.left.w, l.left.h - figH - kGap}, tip);
+	PaintCivTable(p, v, c, facts, civs, shown, l.table);
+	PaintHistory(p, v, c, l.history, tip);
 }
 
 std::string DayText(int64_t atMs)
@@ -1660,14 +1757,27 @@ std::vector<size_t> HistoryGames(const View &v)
 {
 	const Card *c = SelectedCard(v);
 	if (!c) return {};
-	return MatchSelect(FactsOfCard(*c), kModeAll, static_cast<MatchOutcome>(v.outcome), 0);
+	return MatchSelect(FactsOfCard(*c), kModeAll, static_cast<MatchOutcome>(v.outcome), 0, ShownCiv(v));
+}
+
+namespace {
+
+Box HistoryBox(const View &v)
+{
+	const Area a = DetailArea(v);
+	const Frame f = FrameOf(v);
+	if (ShownTab(v) != kTabCivs) return LowerLayout(a, f).history;
+	const Card *c = SelectedCard(v);
+	return CivsLayoutOf(a, f, c ? static_cast<int>(MatchCivsPlayed(FactsOfCard(*c)).size()) : 0).history;
+}
+
 }
 
 int HistoryMaxScroll(const View &v)
 {
 	const Card *c = SelectedCard(v);
 	if (!c) return 0;
-	const HistoryGeom gm = GeomOf(LowerLayout(DetailArea(v), FrameOf(v)).history);
+	const HistoryGeom gm = GeomOf(HistoryBox(v));
 	const std::vector<size_t> rows = HistoryGames(v);
 	int extra = 0;
 	if (v.expanded >= 0 && std::find(rows.begin(), rows.end(), static_cast<size_t>(v.expanded)) != rows.end()) {
@@ -1692,10 +1802,25 @@ void HistoryReveal(View &v, int game)
 	}
 	const int at = it == rows.end() ? 0 : static_cast<int>(it - rows.begin());
 	// The game before it stays in sight when the detail leaves room for it.
-	const HistoryGeom gm = GeomOf(LowerLayout(DetailArea(v), FrameOf(v)).history);
+	const HistoryGeom gm = GeomOf(HistoryBox(v));
 	const int needed = gm.rowH * 2 + DetailHeight(DetailCells(c->games[game], FactsOfCard(*c), !gm.wide).size(), gm.columns);
 	const int first = needed <= gm.listBottom - gm.listTop ? at - 1 : at;
 	v.historyScroll = std::max(0, std::min(first, HistoryMaxScroll(v)));
+}
+
+bool CivChipSpan(Painter &p, const View &v, int &left, int &width)
+{
+	const Card *c = SelectedCard(v);
+	if (!c || ShownTab(v) != kTabCivs) return false;
+	const Area a = DetailArea(v);
+	const Frame f = FrameOf(v);
+	const std::vector<int> civs = MatchCivsPlayed(FactsOfCard(*c));
+	const ChipStrip s = ChipStripOf(p, *c, civs, a.x, CivsLayoutOf(a, f, static_cast<int>(civs.size())).chipsY, a.w);
+	const auto it = std::find(s.races.begin(), s.races.end(), ShownCiv(v));
+	const size_t i = it == s.races.end() ? 0 : static_cast<size_t>(it - s.races.begin());
+	left = s.lefts[i];
+	width = s.widths[i];
+	return true;
 }
 
 int ListRows(const View &v)

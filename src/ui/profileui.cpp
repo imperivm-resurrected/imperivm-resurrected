@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <ctime>
 #include <map>
@@ -57,6 +58,9 @@ struct State {
 	DWORD lastClick = 0;
 	int lastClickRow = -1;
 	int wheelRest = 0;
+	// A press on the row of chips when it scrolls: a drag moves the row, a click without one chooses the chip on release.
+	bool chipPress = false, chipDragged = false;
+	int chipStartX = 0, chipStartPos = 0, chipAction = kActNone, chipArg = 0;
 };
 
 std::mutex g_lock;
@@ -127,8 +131,8 @@ Card BuildCard(const ProfileSlot &slot, const std::vector<RankStep> &ranks)
 				}
 			}
 		}
-		r.race = g.race;
 		r.civ = ProfileCivName(g.race);
+		r.race = MatchCivKey(g.race, !r.civ.empty());
 		if (!g.levelMaxUnit.empty()) r.bestUnit = ProfileUnitName(g.levelMaxUnit);
 		r.bestLevel = g.levelMax;
 		r.durationMs = g.durationMs;
@@ -254,6 +258,21 @@ struct Command {
 	int arg = 0;
 };
 
+const PaneArea *ChipRow(const State &st)
+{
+	for (const PaneArea &pane : st.panes) {
+		if (pane.id == kPaneCivChips && pane.max > 0) return &pane;
+	}
+	return nullptr;
+}
+
+// Design units of the row per pixel of the screen.
+int ChipRowPos(const PaneArea &row, int startPos, int dx)
+{
+	const int px = std::max(1, static_cast<int>(row.r.right - row.r.left));
+	return startPos - static_cast<int>(static_cast<long long>(dx) * row.page / px);
+}
+
 bool OverHistory(const State &st, POINT at)
 {
 	for (const Hit &h : st.hits) {
@@ -303,8 +322,14 @@ void Act(View &v, int action, int arg, Command &cmd)
 	case kActTab:
 		v.tab = arg == kTabLeague || arg == kTabCivs ? arg : kTabGeneral;
 		v.panes.Reset();
+		v.historyScroll = 0;
+		v.revealCiv = true;
 		break;
-	case kActCiv: v.civ = arg == v.civ ? kCivAll : arg; break;
+	case kActCiv:
+		v.civ = arg == v.civ ? kCivAll : arg;
+		v.historyScroll = 0;
+		v.revealCiv = true;
+		break;
 	case kActGloryQueue: v.gloryQueue = arg ? 1 : 0; break;
 	case kActMetric: v.metric = std::max(0, std::min(arg, kMetricCount - 1)); break;
 	case kActChartMode: v.chartMode = arg; break;
@@ -377,6 +402,13 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, Command &cmd)
 	case WM_MOUSEMOVE:
 		v.mouseX = at.x;
 		v.mouseY = at.y;
+		if (g_s.chipPress && !(wp & MK_LBUTTON)) g_s.chipPress = false;
+		if (g_s.chipPress) {
+			const int dx = at.x - g_s.chipStartX;
+			if (!g_s.chipDragged && std::abs(dx) >= GetSystemMetrics(SM_CXDRAG)) g_s.chipDragged = true;
+			const PaneArea *row = ChipRow(g_s);
+			if (g_s.chipDragged && row) v.panes.Set(kPaneCivChips, ChipRowPos(*row, g_s.chipStartPos, dx), row->max);
+		}
 		return false;
 	case WM_LBUTTONDOWN:
 	case WM_LBUTTONDBLCLK: {
@@ -384,6 +416,21 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, Command &cmd)
 		g_s.mouseDown = true;
 		int arg = 0;
 		const int action = HitActionAt(g_s.hits, at, arg, kActNone);
+		if (action == kActCivScroll) {
+			if (const PaneArea *row = ChipRow(g_s)) v.panes.Set(kPaneCivChips, v.panes.Of(kPaneCivChips) + arg * row->page * 2 / 3, row->max);
+			return true;
+		}
+		if (const PaneArea *row = v.leagueOpen ? nullptr : ChipRow(g_s)) {
+			if (PtInRect(&row->r, at)) {
+				g_s.chipPress = true;
+				g_s.chipDragged = false;
+				g_s.chipStartX = at.x;
+				g_s.chipStartPos = v.panes.Of(kPaneCivChips);
+				g_s.chipAction = action;
+				g_s.chipArg = arg;
+				return true;
+			}
+		}
 		const DWORD now = GetTickCount();
 		const bool twice = action == kActPick && arg == g_s.lastClickRow && now - g_s.lastClick <= GetDoubleClickTime();
 		g_s.lastClickRow = action == kActPick && !twice ? arg : -1;
@@ -394,6 +441,8 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, Command &cmd)
 	}
 	case WM_LBUTTONUP:
 		g_s.mouseDown = false;
+		if (g_s.chipPress && !g_s.chipDragged) Act(v, g_s.chipAction, g_s.chipArg, cmd);
+		g_s.chipPress = false;
 		return true;
 	case WM_MOUSEWHEEL: {
 		// The wheel's position comes in screen coordinates; the last move tells where the mouse is over the screen.
@@ -487,8 +536,16 @@ void ProfileUiDraw(uint32_t *buf, int w, int h)
 	if (!BeginFullScreen(r, screen)) return;
 	r.Press(previous, mouseDown, {view.mouseX, view.mouseY});
 	PaintProfileScreen(r.p, view);
+	int chipLeft = 0, chipW = 0;
+	const bool reveal = view.revealCiv && CivChipSpan(r.p, view, chipLeft, chipW);
 	r.End();
 	std::lock_guard<std::mutex> lock(g_lock);
+	if (reveal && g_s.view.civ == view.civ) {
+		g_s.view.panes.Reveal(r.panes, kPaneCivChips, chipLeft - 24, chipW + 48);
+		g_s.view.revealCiv = false;
+	}
+	// Kept where it was painted, so the arrows, the wheel and a drag start from what shows after a resize or a change of player.
+	for (const PaneArea &pane : r.panes) g_s.view.panes.Set(pane.id, g_s.view.panes.Of(pane.id), pane.max);
 	g_s.hits = std::move(r.hits);
 	g_s.panes = std::move(r.panes);
 	View &v = g_s.view;

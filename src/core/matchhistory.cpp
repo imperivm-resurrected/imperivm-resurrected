@@ -45,11 +45,17 @@ int MatchLeagueOf(const std::vector<MatchTag> &tags, int64_t recordedSec, uint32
 	return league;
 }
 
-std::vector<size_t> MatchSelect(const std::vector<MatchFacts> &games, MatchMode mode, MatchOutcome outcome, size_t limit)
+int MatchCivKey(int race, bool named)
+{
+	return named && race >= 0 ? race : kCivUnknown;
+}
+
+std::vector<size_t> MatchSelect(const std::vector<MatchFacts> &games, MatchMode mode, MatchOutcome outcome, size_t limit, int race)
 {
 	std::vector<size_t> out;
 	for (size_t i = 0; i < games.size() && (!limit || out.size() < limit); i++) {
 		const MatchFacts &m = games[i];
+		if (race != kCivAll && m.race != race) continue;
 		if (mode == kModeSkirmish && m.multi) continue;
 		if (mode == kModeMultiplayer && !m.multi) continue;
 		if (mode == kModeLeague && m.league != kMatchLeague) continue;

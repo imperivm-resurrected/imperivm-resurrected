@@ -169,6 +169,27 @@ void Civs()
 	CHECK(MatchCivsPlayed(games) == std::vector<int>({2, 5, 7, -1}));
 	CHECK(MatchCivsPlayed({}).empty());
 
+	// Every civilization without a name is the one unknown civilization, wherever its number came from.
+	CHECK_EQ(MatchCivKey(3, true), 3);
+	CHECK_EQ(MatchCivKey(12, true), 12);
+	CHECK_EQ(MatchCivKey(8, false), kCivUnknown);
+	CHECK_EQ(MatchCivKey(14, false), kCivUnknown);
+	CHECK_EQ(MatchCivKey(-1, false), kCivUnknown);
+	CHECK_EQ(MatchCivKey(-1, true), kCivUnknown);
+	std::vector<MatchFacts> unnamed = {CivGame(MatchCivKey(8, false), 20, false, 1, 1, 0), CivGame(MatchCivKey(2, true), 20, false, 1, 1, 0),
+		CivGame(MatchCivKey(14, false), 20, true, 1, 1, 0), CivGame(MatchCivKey(-1, false), 20, false, 1, 1, 0)};
+	CHECK(MatchCivsPlayed(unnamed) == std::vector<int>({2, kCivUnknown}));
+	CHECK_EQ(MatchCivRecordOf(unnamed, kCivUnknown).games, 3);
+
+	// The games of one civilization, with the other filters and the limit counted on them alone.
+	CHECK(MatchSelect(games, kModeAll, kOutcomeAll, 0, 2) == std::vector<size_t>({0, 2, 3}));
+	CHECK(MatchSelect(games, kModeAll, kOutcomeAll, 2, 2) == std::vector<size_t>({0, 2}));
+	CHECK(MatchSelect(games, kModeAll, kOutcomeVictories, 0, 2) == std::vector<size_t>({0}));
+	CHECK(MatchSelect(games, kModeAll, kOutcomeDefeats, 0, 5) == std::vector<size_t>({1}));
+	CHECK(MatchSelect(games, kModeAll, kOutcomeAll, 0, kCivUnknown) == std::vector<size_t>({4}));
+	CHECK(MatchSelect(games, kModeAll, kOutcomeAll, 0, 3).empty());
+	CHECK_EQ(MatchSelect(games, kModeAll, kOutcomeAll, 0, kCivAll).size(), games.size());
+
 	// Every game counts for the games and the wins, as in the profile's summary; the abandoned one stays out of the averages.
 	const MatchCivRecord romans = MatchCivRecordOf(games, 2);
 	CHECK_EQ(romans.games, 3);

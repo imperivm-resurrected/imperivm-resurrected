@@ -62,9 +62,13 @@ double MatchMetricValue(const MatchFacts &m, MatchMetric metric);
 // League and cup games are multiplayer games too: "Multiplayer" keeps them.
 enum MatchMode { kModeAll, kModeSkirmish, kModeMultiplayer, kModeLeague, kModeCup };
 enum MatchOutcome { kOutcomeAll, kOutcomeVictories, kOutcomeDefeats };
-// The positions in `games` (newest first) that pass both filters, newest first, at most `limit` of them (0: all). Victories
+// Every civilization, and the one of the games whose civilization has no name: none recorded, or one of a mod not installed.
+constexpr int kCivAll = -2, kCivUnknown = -1;
+// The civilization a game counts for: its number when it has a name, kCivUnknown otherwise, so the unknown ones are all one.
+int MatchCivKey(int race, bool named);
+// The positions in `games` (newest first) that pass the filters, newest first, at most `limit` of them (0: all). Victories
 // and defeats leave the abandoned games out; "all" keeps them.
-std::vector<size_t> MatchSelect(const std::vector<MatchFacts> &games, MatchMode mode, MatchOutcome outcome, size_t limit);
+std::vector<size_t> MatchSelect(const std::vector<MatchFacts> &games, MatchMode mode, MatchOutcome outcome, size_t limit, int race = kCivAll);
 
 // The value at a fraction of the way up the sorted values, taking the rank below: never a blend with a huge value above it.
 // Zero without values.
@@ -81,7 +85,6 @@ uint32_t MatchDeathsOf(const MatchFacts &m);
 // Kills per death over many games: the totals divided, no deaths counting as one.
 double MatchKillRatio(uint64_t kills, uint64_t deaths);
 
-constexpr int kCivAll = -2;
 // A player's games with one civilization, or with all of them (kCivAll). The games and the wins count every recorded game, as the
 // profile's summary does. The averages count the games that really ran, and those of the noted figures only the games noted.
 struct MatchCivRecord {
@@ -98,7 +101,7 @@ struct MatchCivRecord {
 	int bestGame = -1;
 };
 MatchCivRecord MatchCivRecordOf(const std::vector<MatchFacts> &games, int race);
-// The civilizations played, most games first and then by number, an unknown one (-1) last.
+// The civilizations played, most games first and then by number, the unknown one (kCivUnknown) last.
 std::vector<int> MatchCivsPlayed(const std::vector<MatchFacts> &games);
 
 enum MatchAgeUnit { kAgeToday, kAgeYesterday, kAgeDays, kAgeWeeks, kAgeMonths, kAgeYears };
