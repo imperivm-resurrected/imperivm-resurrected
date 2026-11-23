@@ -125,6 +125,16 @@ bool LeagueParsePlayerProfile(const Json &j, LeaguePlayerProfile &out)
 	out.frame = LeagueFrameFromJson(j.Get("frame"));
 	out.title = LeagueFrameFromJson(j.Get("title"));
 	out.cupTitles = LeagueParseCupTitles(j.Get("cupTitles"));
+	if (const Json *vs = j.Get("vsCivs"); vs && vs->type == Json::Array) {
+		for (const Json &c : vs->arr) {
+			if (c.type != Json::Object || c.GetString("civ").empty()) continue;
+			LeagueCivShare share;
+			share.civ = c.GetString("civ");
+			share.games = std::max(0, c.GetInt("games"));
+			share.wins = std::max(0, std::min(share.games, c.GetInt("wins")));
+			out.vsCivs.push_back(share);
+		}
+	}
 	// A frame or a title of the season shown takes its rank from the card when the server only gives the season.
 	for (LeagueFrame *f : {&out.frame, &out.title}) {
 		if (f->Shown() && f->tier == LeagueTier::None && !f->founder && f->season == out.season) f->tier = out.tier;
@@ -224,4 +234,30 @@ LeagueFrame LeagueFrameOfReward(const LeagueReward &r)
 	f.founder = r.founder && r.tier == LeagueTier::None;
 	f.seasonName = r.seasonName;
 	return f;
+}
+
+bool LeagueVsCivExtremes(const LeaguePlayerProfile &p, LeagueCivShare &best, LeagueCivShare &worst)
+{
+	const LeagueCivShare *hi = nullptr, *lo = nullptr;
+	// Win rates compared without dividing: a/b against c/d as a*d against c*b.
+	auto above = [](const LeagueCivShare &x, const LeagueCivShare &y) { return x.wins * y.games > y.wins * x.games || (x.wins * y.games == y.wins * x.games && x.games > y.games); };
+	for (const LeagueCivShare &c : p.vsCivs) {
+		if (c.games < 3) continue;
+		if (!hi || above(c, *hi)) hi = &c;
+		if (!lo || above(*lo, c)) lo = &c;
+	}
+	if (!hi) return false;
+	best = *hi;
+	worst = *lo;
+	return true;
+}
+
+bool LeagueParseHeadToHead(const Json &j, LeagueHeadToHead &out)
+{
+	out = LeagueHeadToHead();
+	if (j.type != Json::Object || !j.Get("games")) return false;
+	out.games = std::max(0, j.GetInt("games"));
+	out.wins = std::max(0, std::min(out.games, j.GetInt("wins")));
+	out.losses = std::max(0, std::min(out.games - out.wins, j.GetInt("losses")));
+	return true;
 }

@@ -1181,6 +1181,43 @@ void LeagueHistoryRequest(int64_t before)
 	SafeThread(FetchHistory, gen, std::max<int64_t>(0, before), queue).detach();
 }
 
+namespace {
+std::mutex g_h2hMx;
+LeagueHeadToHeadView g_h2h;
+
+void FetchHeadToHead(std::string a, std::string b)
+{
+	const Answer r = Call("GET", "/v1/league/players/" + a + "/vs/" + b, "", false);
+	LeagueHeadToHead h;
+	const bool ok = r.r.Ok() && r.parsed && LeagueParseHeadToHead(r.j, h);
+	std::lock_guard<std::mutex> lock(g_h2hMx);
+	if (g_h2h.a != a || g_h2h.b != b) return;
+	g_h2h.loading = false;
+	g_h2h.loaded = ok;
+	if (ok) g_h2h.h2h = h;
+}
+}
+
+void LeagueHeadToHeadRequest(const std::string &a, const std::string &b)
+{
+	if (a.empty() || b.empty() || a == b) return;
+	{
+		std::lock_guard<std::mutex> lock(g_h2hMx);
+		if (g_h2h.a == a && g_h2h.b == b && (g_h2h.loaded || g_h2h.loading)) return;
+		g_h2h = LeagueHeadToHeadView();
+		g_h2h.a = a;
+		g_h2h.b = b;
+		g_h2h.loading = true;
+	}
+	SafeThread(FetchHeadToHead, a, b).detach();
+}
+
+LeagueHeadToHeadView LeagueHeadToHeadState()
+{
+	std::lock_guard<std::mutex> lock(g_h2hMx);
+	return g_h2h;
+}
+
 void LeagueMatchDetailRequest(int64_t matchId)
 {
 	unsigned gen = 0;

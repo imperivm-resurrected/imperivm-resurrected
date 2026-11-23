@@ -11,6 +11,7 @@
 #include "core/json.h"
 #include "core/league.h"
 #include "core/leagueranked.h"
+#include "core/leagueseasons.h"
 #include "core/leaguestats.h"
 #include "core/leagueteam.h"
 #include "core/matchhistory.h"
@@ -286,6 +287,14 @@ void LeagueRecentRefresh(bool force = false);
 void LeagueHistoryRequest(int64_t before);
 // The page of a finished ranked game, for anyone: who played and every player's numbers through it.
 void LeagueMatchDetailRequest(int64_t matchId);
+// The 1v1 record of `a` against `b` (GET /v1/league/players/:a/vs/:b): asked once a pair, kept until another pair is asked.
+struct LeagueHeadToHeadView {
+	bool loaded = false, loading = false;
+	std::string a, b;
+	LeagueHeadToHead h2h;
+};
+void LeagueHeadToHeadRequest(const std::string &a, const std::string &b);
+LeagueHeadToHeadView LeagueHeadToHeadState();
 // GET /v1/league/stats, at most every 15 s.
 void LeagueStatsRefresh();
 // "Report a problem" with a ranked game (POST /v1/league/matches/:id/dispute): the result stays, and the league reviews it.

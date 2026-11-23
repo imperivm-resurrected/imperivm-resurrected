@@ -1332,6 +1332,27 @@ void PaintPlayerCard(Painter &p, const State &st, const std::string &seasonText,
 		p.Font(3);
 		p.Text(ix, lastY + 26 + chipH + 6, iw, 22, "No games in this season yet.", pal::caption);
 	}
+
+	// Under the games, where the card has room: the record against the player looking at it, and the civilizations this player beats
+	// most and least (from 3 games each).
+	int ly = lastY + 26 + chipH + (c.recent.empty() ? 32 : 12);
+	if (!you && own != "0") {
+		LeagueHeadToHeadRequest(pick, own);
+		const LeagueHeadToHeadView hv = LeagueHeadToHeadState();
+		if (hv.loaded && hv.a == pick && hv.b == own && hv.h2h.games > 0 && ly + 22 <= bottom - 8) {
+			p.Font(3);
+			RawText(p, ix, ly, iw, 22, TrFmt("Against you: %s wins, %s losses", {std::to_string(hv.h2h.wins), std::to_string(hv.h2h.losses)}), pal::body);
+			ly += 24;
+		}
+	}
+	LeagueCivShare best, worst;
+	if (LeagueVsCivExtremes(c, best, worst) && ly + 22 <= bottom - 8) {
+		auto record = [](const LeagueCivShare &s) { return std::to_string(s.wins) + "\xE2\x80\x93" + std::to_string(s.games - s.wins); };
+		std::string line = TrFmt("Best against %s (%s)", {CivText(best.civ), record(best)});
+		if (worst.civ != best.civ) line += "  \xC2\xB7  " + TrFmt("worst against %s (%s)", {CivText(worst.civ), record(worst)});
+		p.Font(3);
+		RawText(p, ix, ly, iw, 22, line, pal::caption);
+	}
 }
 
 // The full leaderboard: the season, everyone or the Steam friends and a name to look for; a page of the table, the player's row pinned

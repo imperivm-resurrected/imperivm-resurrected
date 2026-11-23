@@ -62,8 +62,18 @@ struct LeaguePlayerProfile {
 	LeagueFrame frame, title;
 	// The titles of calendar cups the player holds now.
 	std::vector<LeagueCupTitle> cupTitles;
+	// The season's 1v1 record against each civilization the opponents played (games and wins), the most met first.
+	std::vector<LeagueCivShare> vsCivs;
 };
 bool LeagueParsePlayerProfile(const Json &j, LeaguePlayerProfile &out);
+// The best and the worst record against a civilization, from 3 games; false when no civilization was met that often.
+bool LeagueVsCivExtremes(const LeaguePlayerProfile &p, LeagueCivShare &best, LeagueCivShare &worst);
+
+// GET /v1/league/players/:a/vs/:b: the 1v1 rated games of `a` against `b` in every season.
+struct LeagueHeadToHead {
+	int games = 0, wins = 0, losses = 0;
+};
+bool LeagueParseHeadToHead(const Json &j, LeagueHeadToHead &out);
 
 // "I", "IV", "XII"; the test season is "0".
 std::string LeagueRoman(int n);

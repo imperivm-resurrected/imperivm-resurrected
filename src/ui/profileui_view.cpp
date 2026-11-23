@@ -268,8 +268,17 @@ void PaintShowcase(Painter &p, const View &v, int x, int y, int w)
 	const int shown = PaintLeagueShowcase(p, x, y + 44, w, 56, v.me, kActLeagueBadge, v.mouseX, v.mouseY);
 	p.Font(3);
 	if (!shown) {
-		const char *text = "What you win in each season stays here. Play 10 ranked games in a season to win its vexillum.";
+		const char *text = "What you win in each season stays here. Play 10 ranked games in a season and win 5 to earn its vexillum.";
 		p.TextWrapped(x, y + 46, w, 58, text, kMuted);
+		return;
+	}
+	// The titles of calendar cups held now (the Crown of the month, Champion of a season) take the hint's line, in gold.
+	if (!v.me.cupTitles.empty()) {
+		std::string titles;
+		for (const LeagueCupTitle &t : v.me.cupTitles) titles += (titles.empty() ? "" : "  ·  ") + t.name;
+		p.raw = true;
+		p.Text(x, y + 104, w, 18, titles, RGB(0xd8, 0xae, 0x46), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.raw = false;
 		return;
 	}
 	p.Text(x, y + 104, w, 18, "Click one to wear it next to your name.", kMuted, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);

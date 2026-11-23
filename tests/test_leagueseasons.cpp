@@ -407,8 +407,29 @@ void Mastery()
 
 }
 
+void Rivals()
+{
+	LeaguePlayerProfile p;
+	CHECK(LeagueParsePlayerProfile(Parse(R"({"steamId":"76561198000000401","vsCivs":[{"civ":"gaul","games":5,"wins":4},{"civ":"iberia","games":4,"wins":1},{"civ":"egypt","games":2,"wins":0}]})"), p));
+	CHECK(p.vsCivs.size() == 3);
+	LeagueCivShare best, worst;
+	CHECK(LeagueVsCivExtremes(p, best, worst));
+	CHECK_EQ(best.civ, std::string("gaul"));
+	// Under 3 games a civilization does not count, however it went.
+	CHECK_EQ(worst.civ, std::string("iberia"));
+	LeaguePlayerProfile few;
+	CHECK(LeagueParsePlayerProfile(Parse(R"({"steamId":"76561198000000401","vsCivs":[{"civ":"gaul","games":2,"wins":2}]})"), few));
+	CHECK(!LeagueVsCivExtremes(few, best, worst));
+	LeagueHeadToHead h;
+	CHECK(LeagueParseHeadToHead(Parse(R"({"games":5,"wins":3,"losses":2,"last":[]})"), h));
+	CHECK_EQ(h.wins, 3);
+	CHECK_EQ(h.losses, 2);
+	CHECK(!LeagueParseHeadToHead(Parse(R"({"error":"not_found"})"), h));
+}
+
 int main()
 {
+	Rivals();
 	TrSetLanguageSource(&TestLanguage);
 	Mastery();
 	MeAdditions();
