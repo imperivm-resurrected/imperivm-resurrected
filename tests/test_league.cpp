@@ -240,6 +240,22 @@ void Me()
 	CHECK(!both.ranked2v2.peak.present);
 	CHECK_EQ(static_cast<unsigned>(both.ranked2v2.placement.size()), 2u);
 	CHECK(both.ranked2v2.placement[0] == LeaguePlacementMark::Loss);
+	// A server before the Glory history sends none: unknown, not an empty season.
+	CHECK(!both.ranked.gloryKnown);
+	CHECK(both.ranked.gloryHistory.empty());
+
+	LeagueMe glory;
+	CHECK(LeagueParseMe(Parse(R"({"steamId":"1","ranked":{"glory":530,"gloryHistory":[{"at":1700000000000,"glory":500},{"at":1700000100000,"glory":-4},
+		{"at":1700000200000},"x",{"at":1700000300000,"glory":530}]},"ranked2v2":{"queue":"2v2","gloryHistory":[]}})"),
+		glory));
+	CHECK(glory.ranked.gloryKnown);
+	CHECK_EQ(static_cast<unsigned>(glory.ranked.gloryHistory.size()), 3u);
+	CHECK_EQ(static_cast<unsigned long long>(glory.ranked.gloryHistory[0].at), 1700000000000ULL);
+	CHECK_EQ(glory.ranked.gloryHistory[0].glory, 500);
+	CHECK_EQ(glory.ranked.gloryHistory[1].glory, 0);
+	CHECK_EQ(glory.ranked.gloryHistory[2].glory, 530);
+	CHECK(glory.ranked2v2.gloryKnown);
+	CHECK(glory.ranked2v2.gloryHistory.empty());
 
 	// The lock out of the queue and why; an older server says only until when.
 	LeagueMe banned;
@@ -252,6 +268,43 @@ void Me()
 	CHECK(LeagueParseMe(Parse("{\"steamId\": \"1\", \"ban\": {\"until\": 77, \"kind\": \"desync\"}}"), banned));
 	CHECK_EQ(static_cast<int>(banned.queueBanUntil), 77);
 	CHECK_EQ(banned.ban.kind, std::string("desync"));
+}
+
+void GloryChart()
+{
+	// Round steps, at most five of them, with room over and under the line.
+	LeagueGloryAxis a = LeagueGloryAxisOf({{1, 1000}, {2, 1180}, {3, 1090}});
+	CHECK_EQ(a.step, 50);
+	CHECK_EQ(a.low, 950);
+	CHECK_EQ(a.high, 1200);
+	a = LeagueGloryAxisOf({{1, 1050}});
+	CHECK_EQ(a.step, 10);
+	CHECK_EQ(a.low, 1040);
+	CHECK_EQ(a.high, 1070);
+	a = LeagueGloryAxisOf({{1, 0}, {2, 4}});
+	CHECK_EQ(a.low, 0);
+	CHECK_EQ(a.high, 20);
+	a = LeagueGloryAxisOf({{1, 200}, {2, 2600}});
+	CHECK_EQ(a.step, 1000);
+	CHECK_EQ(a.low, 0);
+	CHECK_EQ(a.high, 3000);
+	a = LeagueGloryAxisOf({});
+	CHECK(a.high > a.low);
+
+	// The games spread over the width, the Glory up from the bottom.
+	const LeagueGloryAxis axis{1000, 1200, 50};
+	std::vector<LeagueChartDot> dots = LeagueGloryDots({{1, 1000}, {2, 1100}, {3, 1200}}, axis, 10, 20, 200, 100);
+	CHECK_EQ(static_cast<unsigned>(dots.size()), 3u);
+	CHECK_EQ(dots[0].x, 10);
+	CHECK_EQ(dots[0].y, 120);
+	CHECK_EQ(dots[1].x, 110);
+	CHECK_EQ(dots[1].y, 70);
+	CHECK_EQ(dots[2].x, 210);
+	CHECK_EQ(dots[2].y, 20);
+	dots = LeagueGloryDots({{1, 900}}, axis, 10, 20, 200, 100);
+	CHECK_EQ(dots[0].x, 110);
+	CHECK_EQ(dots[0].y, 120);
+	CHECK(LeagueGloryDots({}, axis, 0, 0, 10, 10).empty());
 }
 
 void Link()
@@ -732,6 +785,7 @@ int main()
 	Badges();
 	Lookup();
 	Me();
+	GloryChart();
 	Link();
 	SteamLink();
 	LinkOffer();

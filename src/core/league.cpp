@@ -171,6 +171,14 @@ LeagueRanked RankedOf(const Json &j, const char *key, const char *queue, bool be
 			else if (mark == "void") k.placement.push_back(LeaguePlacementMark::Void);
 		}
 	}
+	if (const Json *list = inside ? r->Get("gloryHistory") : nullptr; list && list->type == Json::Array) {
+		k.gloryKnown = true;
+		for (const Json &p : list->arr) {
+			const Json *glory = p.type == Json::Object ? p.Get("glory") : nullptr;
+			if (!glory || glory->type != Json::Number) continue;
+			k.gloryHistory.push_back({p.GetInt64("at"), std::max(0, static_cast<int>(glory->num))});
+		}
+	}
 	return k;
 }
 
@@ -382,6 +390,45 @@ LeaguePeak LeaguePeakFromJson(const Json *v)
 	p.tier = LeagueTierFromJson(v->Get("tier"));
 	p.division = LeagueDivisionOf(p.tier, v->Get("division"));
 	return p;
+}
+
+LeagueGloryAxis LeagueGloryAxisOf(const std::vector<LeagueGloryPoint> &points)
+{
+	LeagueGloryAxis a;
+	if (points.empty()) return a;
+	int lo = points[0].glory, hi = points[0].glory;
+	for (const LeagueGloryPoint &p : points) {
+		lo = std::min(lo, p.glory);
+		hi = std::max(hi, p.glory);
+	}
+	// A little room around the line, so that a flat season does not lie on the axis.
+	lo = std::max(0, lo - 10);
+	hi += 10;
+	static const int steps[] = {10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 2500, 5000};
+	a.step = steps[sizeof(steps) / sizeof(steps[0]) - 1];
+	for (int s : steps) {
+		if (((hi / s + 1) * s - lo / s * s) / s <= 5) {
+			a.step = s;
+			break;
+		}
+	}
+	a.low = lo / a.step * a.step;
+	a.high = (hi / a.step + 1) * a.step;
+	return a;
+}
+
+std::vector<LeagueChartDot> LeagueGloryDots(const std::vector<LeagueGloryPoint> &points, const LeagueGloryAxis &axis, int x, int y, int w, int h)
+{
+	std::vector<LeagueChartDot> out;
+	const int n = static_cast<int>(points.size()), span = std::max(1, axis.high - axis.low);
+	for (int i = 0; i < n; i++) {
+		LeagueChartDot d;
+		d.x = n == 1 ? x + w / 2 : x + static_cast<int>(static_cast<int64_t>(w) * i / (n - 1));
+		const int v = std::max(axis.low, std::min(axis.high, points[i].glory));
+		d.y = y + h - static_cast<int>(static_cast<int64_t>(h) * (v - axis.low) / span);
+		out.push_back(d);
+	}
+	return out;
 }
 
 bool LeagueParsePlayersLookup(const Json &j, std::map<uint64_t, LeagueLookupEntry> &out)

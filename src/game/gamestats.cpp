@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <cstdio>
+#include <ctime>
 
 #include "addr/state.h"
 #include "addr/world.h"
@@ -15,6 +16,7 @@
 #include "game/gamelayout.h"
 #include "hooks/gameload.h"
 #include "core/winpath.h"
+#include "mods/modvars.h"
 
 namespace {
 const size_t kGameStats = 0x258, kStatsRecordSize = 0xd0;
@@ -39,6 +41,12 @@ std::shared_ptr<const StatsSnapshot> g_snapshot;
 bool g_dirty = true;
 bool g_loadPending = false;
 std::string g_loadData;
+// The note of the game for the profile (MatchNote): when it started on this computer's clock, whether the local player was seen
+// playing, and whether it was taken already.
+int64_t g_startSec = 0;
+bool g_sawPlaying = false, g_noted = false;
+const size_t kNotesKept = 500;
+typedef int(__cdecl *IsDemo_t)();
 
 bool ReadClock(const char *game, uint32_t &clock)
 {
@@ -255,6 +263,90 @@ std::string DiskPath(const std::string &gamePath)
 	return file;
 }
 
+std::string NotesPath()
+{
+	return winpath::GameDir() + "\\imperivm-resurrected\\stats\\games.txt";
+}
+
+std::vector<MatchNote> ReadNotes()
+{
+	std::vector<MatchNote> out;
+	const std::string text = ReadWholeFile(NotesPath());
+	for (size_t a = 0; a < text.size();) {
+		size_t b = text.find('\n', a);
+		if (b == std::string::npos) b = text.size();
+		MatchNote n;
+		if (MatchNoteParse(text.substr(a, b - a), n)) out.push_back(n);
+		a = b + 1;
+	}
+	return out;
+}
+
+// The local player's state, and once it has won or lost its seat and the gold it spent. False when it cannot be read.
+bool ReadLocalEnd(const char *game, int &state, int &index, int &goldSpent)
+{
+	__try {
+		const char *local = layout::LocalPlayer(game);
+		if (!local) return false;
+		state = Field<int>(local, layout::kPlayerState);
+		if (state != 2 && state != 3) return true;
+		index = -1;
+		for (int i = 0; i < layout::kPlayerCount && i < kStatMaxPlayers; i++) {
+			if (layout::PlayerAt(game, i) == local) index = i;
+		}
+		if (index < 0) return false;
+		goldSpent = Field<int>(game + kGameStats + (index + 1) * kStatsRecordSize, 0x38);
+		return true;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return false;
+	}
+}
+
+void WriteNote(const MatchNote &note)
+{
+	std::vector<MatchNote> notes = ReadNotes();
+	notes.push_back(note);
+	if (notes.size() > kNotesKept) notes.erase(notes.begin(), notes.end() - kNotesKept);
+	const std::string path = NotesPath();
+	CreateDirectoryA(path.substr(0, path.find_last_of('\\')).c_str(), nullptr);
+	FILE *f = nullptr;
+	if (fopen_s(&f, path.c_str(), "wb") != 0 || !f) {
+		LogW("profile", "could not note the game in %s", path.c_str());
+		return;
+	}
+	for (const MatchNote &n : notes) fprintf(f, "%s\n", MatchNoteLine(n).c_str());
+	fclose(f);
+}
+
+// The first time the local player has won or lost the game it played in: what the game will not keep in its record of it. The kills
+// and deaths a script counts are the mod variables EEE_kills<n> and EEE_deaths<n>, n being the player's number in the scripts.
+void NoteEnd(const char *game)
+{
+	if (g_noted) return;
+	int state = 0, index = -1, goldSpent = 0;
+	if (!ReadLocalEnd(game, state, index, goldSpent)) return;
+	if (state == layout::kStatePlaying) {
+		g_sawPlaying = true;
+		return;
+	}
+	if (!g_sawPlaying || index < 0) return;
+	g_noted = true;
+	if (reinterpret_cast<IsDemo_t>(addr::kIsDemoPlayback)()) return;
+	MatchNote note;
+	note.endSec = static_cast<int64_t>(time(nullptr));
+	note.startSec = g_startSec && g_startSec < note.endSec ? g_startSec : note.endSec;
+	note.goldSpent = goldSpent >= 0 ? goldSpent : -1;
+	const std::string n = std::to_string(index + 1);
+	if (ModVarsHas("EEE_kills" + n) && ModVarsHas("EEE_deaths" + n)) {
+		const int kills = ModVarsGet("EEE_kills" + n), deaths = ModVarsGet("EEE_deaths" + n);
+		note.scriptKills = kills > 0 ? kills : 0;
+		note.scriptDeaths = deaths > 0 ? deaths : 0;
+	}
+	WriteNote(note);
+	LogI("profile", "game noted for the profile (%s)", state == 3 ? "won" : "lost");
+}
+
 void AfterGameLoad(const char *path, int result)
 {
 	if (result != 0 || !path) return;
@@ -271,6 +363,9 @@ void Reset(char *game)
 	g_lastSample = 0;
 	g_sampled = false;
 	g_dirty = true;
+	g_startSec = 0;
+	g_sawPlaying = false;
+	g_noted = false;
 }
 }
 
@@ -307,6 +402,9 @@ void GameStatsTick()
 	const bool advanced = clock != g_lastClock;
 	const bool firstTick = g_lastClock == 0;
 	g_lastClock = clock;
+	if (advanced && !firstTick && !g_startSec) g_startSec = static_cast<int64_t>(time(nullptr));
+	// The clock may stop once the game is won: the end is looked for at every tick of a game that ran.
+	if (g_startSec) NoteEnd(game);
 	if (!advanced || firstTick) return;
 	if (g_sampled && clock - g_lastSample < g_history.IntervalMs()) return;
 	Sample(game, clock);
@@ -344,6 +442,11 @@ void InstallGameStats(bool knownExe)
 {
 	if (!InstallGameLoadHook(knownExe)) return;
 	OnGameLoadedFrom(&AfterGameLoad);
+}
+
+std::vector<MatchNote> GameStatsNotes()
+{
+	return ReadNotes();
 }
 
 void GameStatsWriteFile(const std::string &saveFile)

@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <ctime>
 #include <string>
 #include <initializer_list>
 #include <utility>
@@ -746,7 +747,9 @@ void PaintLeagueSeasons(Painter &p, const View &v, int x, int y, int w, int h)
 	}
 }
 
-void PaintLeagueTab(Painter &p, const View &v, const Area &a, const Frame &f)
+void PaintGloryChart(Painter &p, const View &v, int x, int y, int w, int h, Tip &tip);
+
+void PaintLeagueTab(Painter &p, const View &v, const Area &a, const Frame &f, Tip &tip)
 {
 	const int top = f.tilesY, bottom = f.bottom;
 	if (!v.linked) {
@@ -768,9 +771,13 @@ void PaintLeagueTab(Painter &p, const View &v, const Area &a, const Frame &f)
 	const int rankH = std::max(200, std::min(300, (bottom - top - kGap) * 48 / 100));
 	PaintLeagueRank(p, v, "Ranked 1 vs 1", v.me.ranked, plays1, a.x, top, half, rankH);
 	PaintLeagueRank(p, v, "Ranked 2 vs 2", v.me.ranked2v2, plays2, rightX, top, rightW, rankH);
-	const int lowY = top + rankH + kGap;
-	PaintLeagueTrophies(p, v, a.x, lowY, half, bottom - lowY);
-	PaintLeagueSeasons(p, v, rightX, lowY, rightW, bottom - lowY);
+	// Under the ranks, the season's Glory beside the tournaments and the seasons.
+	const int lowY = top + rankH + kGap, lowH = bottom - lowY;
+	const int chartW = (a.w - 2 * kGap) * 40 / 100, listW = (a.w - 2 * kGap - chartW) / 2;
+	const int trophiesX = a.x + chartW + kGap, seasonsX = trophiesX + listW + kGap;
+	PaintGloryChart(p, v, a.x, lowY, chartW, lowH, tip);
+	PaintLeagueTrophies(p, v, trophiesX, lowY, listW, lowH);
+	PaintLeagueSeasons(p, v, seasonsX, lowY, a.x + a.w - seasonsX, lowH);
 }
 
 void PaintCardTitle(Painter &p, int x, int y, int w, const std::string &title)
@@ -1105,6 +1112,7 @@ std::vector<DetailCell> DetailCells(const GameRow &g, const std::vector<MatchFac
 	cells.push_back({Tr("Largest army"), Grouped(g.armyMax)});
 	if (g.damageDealt) cells.push_back({Tr("Damage dealt"), Grouped(g.damageDealt)});
 	if (g.damageTaken) cells.push_back({Tr("Damage taken"), Grouped(g.damageTaken)});
+	if (g.goldSpent >= 0) cells.push_back({Tr("Gold spent"), Grouped(static_cast<uint64_t>(g.goldSpent))});
 	if (!g.bestUnit.empty()) cells.push_back({Tr("Best unit"), TrFmt("%s \xC2\xB7 level %s", {g.bestUnit, std::to_string(g.bestLevel)})});
 	return cells;
 }
@@ -1274,12 +1282,319 @@ void PaintHistory(Painter &p, const View &v, const Card &c, const Box &b, Tip &t
 	}
 }
 
+// The civilizations tab: the player's games with one civilization, or with all of them, so that a hard one does not hide how the
+// others go. The chips choose it and the table compares them all.
+constexpr int kCivRowH = 40, kChipGap = 6;
+
+std::string CivNameOf(const Card &c, int race)
+{
+	if (race == kCivAll) return Tr("All civilizations");
+	for (const GameRow &g : c.games) {
+		if (g.race == race && !g.civ.empty()) return g.civ;
+	}
+	return Tr("Unknown");
+}
+
+std::string Rounded(double value) { return Grouped(static_cast<uint64_t>(std::max(0.0, value) + 0.5)); }
+
+// "All" first and then every civilization played, with its games when there is room for them, or shrunk to fit.
+void PaintCivChips(Painter &p, const View &v, const Card &c, const std::vector<MatchFacts> &facts, const std::vector<int> &civs, int shown, int x, int y, int w)
+{
+	std::vector<int> races = {kCivAll};
+	races.insert(races.end(), civs.begin(), civs.end());
+	std::vector<std::string> names, counted;
+	for (int race : races) {
+		names.push_back(CivNameOf(c, race));
+		counted.push_back(names.back() + " \xC2\xB7 " + Grouped(MatchCivRecordOf(facts, race).games));
+	}
+	p.Font(3);
+	auto natural = [&](const std::vector<std::string> &labels) {
+		int total = 0;
+		for (const std::string &l : labels) total += RawWidth(p, l) + 2 * kSegPad + kChipGap;
+		return total - kChipGap;
+	};
+	const std::vector<std::string> &labels = natural(counted) <= w ? counted : names;
+	const bool fits = natural(labels) <= w;
+	const int n = static_cast<int>(races.size());
+	int bx = x;
+	for (int i = 0; i < n; i++) {
+		const int bw = fits ? RawWidth(p, labels[i]) + 2 * kSegPad : (x + w - bx - (n - 1 - i) * kChipGap) / (n - i);
+		const bool on = races[i] == shown;
+		const bool hot = !on && p.Hover(bx, y, bw, kSegH, v.mouseX, v.mouseY);
+		p.Fill(bx, y, bw, kSegH, on ? pal::text : hot ? pal::buttonHover : pal::field);
+		p.Frame(bx, y, bw, kSegH, on ? pal::text : hot ? pal::edgeHot : pal::edge);
+		TextAsIs(p, bx + 4, y, bw - 8, kSegH, labels[i], on ? pal::onLight : pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		if (!on) p.AddHit(bx, y, bw, kSegH, kActCiv, races[i]);
+		bx += bw + kChipGap;
+	}
+}
+
+void PaintCivTiles(Painter &p, const MatchCivRecord &r, const Area &a, int y, int h)
+{
+	const int tileW = (a.w - 3 * kTileGap) / 4;
+	const std::string values[4] = {r.games ? Grouped(r.games) : std::string(kDash), r.games ? Percent(r.winPercent) : std::string(kDash),
+		r.games ? OneDecimal(r.killRatio) : std::string(kDash), r.ran ? Rounded(r.damageDealt) : std::string(kDash)};
+	const char *labels[4] = {"Games", "Wins", "K/D", "Average damage"};
+	for (int i = 0; i < 4; i++) {
+		const int x = a.x + i * (tileW + kTileGap), w = i == 3 ? a.x + a.w - x : tileW;
+		PaintGlassCard(p, x, y, w, h);
+		p.Font(5);
+		TextAsIs(p, x, y + 6, w, h - 38, values[i], pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.Font(3);
+		p.Text(x + 6, y + h - 32, w - 12, 22, labels[i], pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	}
+}
+
+// What a game with the civilization averages, and under it what the averages leave out.
+void PaintCivFigures(Painter &p, const Card &c, const MatchCivRecord &r, int x, int y, int w, int h)
+{
+	PaintGlassCard(p, x, y, w, h);
+	PaintCardTitle(p, x, y, w, "Per game");
+	auto average = [&](double value) { return r.ran ? Rounded(value) : std::string(kDash); };
+	std::string spent = kDash;
+	if (r.goldSpentGames) {
+		spent = Rounded(r.goldSpent);
+		if (r.goldSpentGames < r.ran) {
+			spent += " \xC2\xB7 " + (r.goldSpentGames == 1 ? Tr("in 1 game") : TrFmt("in %s games", {Grouped(r.goldSpentGames)}));
+		}
+	}
+	std::string best = kDash;
+	if (r.bestGame >= 0 && !c.games[r.bestGame].bestUnit.empty()) {
+		best = TrFmt("%s \xC2\xB7 level %s", {c.games[r.bestGame].bestUnit, std::to_string(r.bestLevel)});
+	}
+	const std::pair<const char *, std::string> rows[] = {
+		{"Kills", average(r.kills1)},
+		{"Losses", average(r.deaths1)},
+		{"Damage dealt", average(r.damageDealt)},
+		{"Damage taken", average(r.damageTaken)},
+		{"Gold gathered", average(r.gold)},
+		{"Gold spent", spent},
+		{"Food", average(r.food)},
+		{"Units produced", average(r.produced)},
+		{"Largest army", average(r.army)},
+		{"Duration", r.ran ? Duration(static_cast<uint32_t>(r.minutes * 60000 + 0.5)) : std::string(kDash)},
+		{"Best unit", best},
+	};
+	constexpr int count = sizeof(rows) / sizeof(rows[0]), columns = 2, colGap = 20, rowH = 46;
+	const int inner = w - kCardPad * 2, colW = (inner - colGap) / columns;
+	for (int i = 0; i < count; i++) {
+		const int cx = x + kCardPad + (i % columns) * (colW + colGap), ry = y + kCardHead + (i / columns) * rowH;
+		// The last one alone in its row has the whole width.
+		const int cw = i == count - 1 && i % columns == 0 ? inner : colW;
+		if (i >= columns) p.Fill(cx, ry, cw, 1, pal::hairline);
+		p.Font(3);
+		p.Text(cx, ry + 3, cw, 21, rows[i].first, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Font(4);
+		TextAsIs(p, cx, ry + 24, cw, 20, rows[i].second, pal::text);
+	}
+	std::string note = Tr("The averages leave out the abandoned games.");
+	if (r.scriptGames) {
+		note += " " + (r.scriptGames == 1 ? Tr("In 1 game the map's script counted the kills and deaths.")
+										  : TrFmt("In %s games the map's script counted the kills and deaths.", {Grouped(r.scriptGames)}));
+	}
+	const int noteY = y + kCardHead + ((count + columns - 1) / columns) * rowH + 8;
+	if (noteY + 22 <= y + h - 8) {
+		p.Font(3);
+		p.raw = true;
+		p.TextWrapped(x + kCardPad, noteY, inner, y + h - 8 - noteY, note, kMuted);
+		p.raw = false;
+	}
+}
+
+// Every civilization played side by side; a row chooses it.
+void PaintCivTable(Painter &p, const View &v, const Card &c, const std::vector<MatchFacts> &facts, const std::vector<int> &civs, int shown, int x, int y, int w, int h)
+{
+	PaintGlassCard(p, x, y, w, h);
+	PaintCardTitle(p, x, y, w, "By civilization");
+	const int x0 = x + kCardPad, inner = w - kCardPad * 2, right = x0 + inner;
+	if (civs.empty()) {
+		p.Font(0);
+		p.Text(x0, y + h / 2 - 34, inner, 26, c.readable ? "No games recorded yet." : kDash, pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.Font(3);
+		p.Text(x0 + 20, y + h / 2, inner - 40, 66, "Finish a skirmish or a multiplayer game and it will show here.", pal::textDim, DT_CENTER | DT_TOP | DT_WORDBREAK);
+		return;
+	}
+	const int count = static_cast<int>(civs.size());
+	const int listTop = y + kCardHead + 28, listBottom = y + h - 12;
+	const bool scrolls = count * kCivRowH > listBottom - listTop;
+	const int listRight = scrolls ? right - 12 : right;
+	const int colW = std::max(70, std::min(140, (listRight - x0 - 180) / 5));
+	const char *heads[5] = {"Games", "Wins", "K/D", "Average damage", "Average duration"};
+	p.Font(3);
+	p.Text(x0, y + kCardHead, listRight - 5 * colW - x0 - 8, 22, "Civilization", kHead);
+	for (int k = 0; k < 5; k++) {
+		p.Text(listRight - (5 - k) * colW, y + kCardHead, colW, 22, heads[k], kHead, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	}
+	PaneSpec spec;
+	spec.id = kPaneCivs;
+	spec.x = x0;
+	spec.y = listTop;
+	spec.w = inner + 8;
+	spec.h = std::max(0, listBottom - listTop);
+	spec.contentH = count * kCivRowH;
+	spec.barX = right - 6;
+	spec.drag = &v.bar;
+	spec.mx = v.mouseX;
+	spec.my = v.mouseY;
+	ScrollPane pane(p, spec, v.panes.Of(kPaneCivs));
+	for (int i = 0; i < count; i++) {
+		const int ry = pane.Top() + i * kCivRowH, rw = listRight - x0;
+		if (!pane.Shows(ry, kCivRowH)) continue;
+		const int race = civs[i];
+		const MatchCivRecord r = MatchCivRecordOf(facts, race);
+		const bool on = race == shown;
+		const bool hot = !on && p.Hover(x0, ry, rw, kCivRowH, v.mouseX, v.mouseY);
+		if (on) {
+			p.Fill(x0, ry, rw, kCivRowH, kSelectedTop);
+			p.Fill(x0, ry, 3, kCivRowH, pal::red);
+		}
+		else if (hot) p.Fill(x0, ry, rw, kCivRowH, kRowHot);
+		else if (i) p.Fill(x0, ry, rw, 1, kRule);
+		p.Font(4);
+		TextAsIs(p, x0 + 12, ry, listRight - 5 * colW - x0 - 20, kCivRowH, CivNameOf(c, race), race >= 0 ? pal::text : kMuted);
+		const std::string cells[5] = {Grouped(r.games), Percent(r.winPercent), OneDecimal(r.killRatio), r.ran ? Rounded(r.damageDealt) : std::string(kDash),
+			r.ran ? Duration(static_cast<uint32_t>(r.minutes * 60000 + 0.5)) : std::string(kDash)};
+		for (int k = 0; k < 5; k++) {
+			p.Font(k == 2 ? 4 : 3);
+			TextAsIs(p, listRight - (5 - k) * colW, ry, colW, kCivRowH, cells[k], k == 2 ? pal::text : pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		}
+		p.AddHit(x0, ry, rw, kCivRowH, kActCiv, race);
+	}
+}
+
+void PaintCivsTab(Painter &p, const View &v, const Card &c, const Area &a, const Frame &f, Tip &)
+{
+	const std::vector<MatchFacts> facts = FactsOfCard(c);
+	const std::vector<int> civs = MatchCivsPlayed(facts);
+	const int shown = v.civ == kCivAll || std::find(civs.begin(), civs.end(), v.civ) != civs.end() ? v.civ : kCivAll;
+	const MatchCivRecord r = MatchCivRecordOf(facts, shown);
+	PaintCivChips(p, v, c, facts, civs, shown, a.x, f.tilesY, a.w);
+	const int tilesY = f.tilesY + kSegH + 14;
+	PaintCivTiles(p, r, a, tilesY, f.tileH);
+	const int lowY = tilesY + f.tileH + kGap, lowH = f.bottom - lowY;
+	const int leftW = std::min(600, a.w * 42 / 100);
+	PaintCivFigures(p, c, r, a.x, lowY, leftW, lowH);
+	PaintCivTable(p, v, c, facts, civs, shown, a.x + leftW + kGap, lowY, a.w - leftW - kGap, lowH);
+}
+
+std::string DayText(int64_t atMs)
+{
+	const time_t t = static_cast<time_t>(atMs / 1000);
+	tm local = {};
+	if (atMs <= 0 || localtime_s(&local, &t) != 0) return std::string();
+	char buf[32];
+	sprintf_s(buf, "%02d/%02d/%04d", local.tm_mday, local.tm_mon + 1, local.tm_year + 1900);
+	return buf;
+}
+
+std::string SignedText(int value) { return (value > 0 ? "+" : value < 0 ? "\xE2\x88\x92" : "") + Grouped(static_cast<uint64_t>(value < 0 ? -value : value)); }
+
+// The Glory after each game of the season once placed, as a line over round steps of Glory; the queue is chosen when both were played.
+void PaintGloryChart(Painter &p, const View &v, int x, int y, int w, int h, Tip &tip)
+{
+	PaintGlassCard(p, x, y, w, h);
+	const int ix = x + kLeaguePad, iw = w - 2 * kLeaguePad;
+	PaintSectionLabel(p, ix, y + 16, iw * 3 / 5, 22, "Glory over time");
+	if (!v.meLoaded) {
+		PaintSkeleton(p, ix, y + 64, iw, std::max(0, h - 110));
+		return;
+	}
+	const bool has1 = !v.me.ranked.gloryHistory.empty(), has2 = !v.me.ranked2v2.gloryHistory.empty();
+	const bool second = has2 && (!has1 || v.gloryQueue == 1);
+	if (has1 && has2) {
+		const std::vector<std::string> queues = Translated({"1 vs 1", "2 vs 2"});
+		const int segW = SegmentsWidth(p, queues);
+		PaintSegments(p, ix + iw - segW, y + 12, segW, queues, second ? 1 : 0, kActGloryQueue, v.mouseX, v.mouseY);
+	}
+	else if (has1 || has2) {
+		p.Font(3);
+		p.Text(ix + iw / 2, y + 16, iw - iw / 2, 22, second ? "2 vs 2" : "1 vs 1", pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	}
+	const LeagueRanked &rk = second ? v.me.ranked2v2 : v.me.ranked;
+	const std::vector<LeagueGloryPoint> &points = rk.gloryHistory;
+	if (points.empty()) {
+		// A server before the history sends nothing to tell.
+		if (!rk.gloryKnown) {
+			p.Font(1);
+			p.Text(ix, y + 52, iw, std::max(0, h - 76), kDash, kMuted, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			return;
+		}
+		const bool placing = !rk.present || rk.placementLeft > 0;
+		p.Font(3);
+		p.TextWrapped(ix, y + 60, iw, std::max(0, h - 76),
+			placing ? "Once your placement games are over, your Glory after each ranked game of the season shows here." : "No ranked games this season yet.", kMuted);
+		return;
+	}
+	const LeagueGloryAxis axis = LeagueGloryAxisOf(points);
+	p.Font(3);
+	const int labelW = RawWidth(p, Grouped(static_cast<uint64_t>(axis.high))) + 12;
+	const int px = ix + labelW, pw = ix + iw - px - 6, py = y + 66, ph = y + h - 46 - py;
+	if (ph < 40 || pw < 40) return;
+	const int span = std::max(1, axis.high - axis.low);
+	for (int g = axis.low; g <= axis.high; g += std::max(1, axis.step)) {
+		const int gy = py + ph - static_cast<int>(static_cast<int64_t>(ph) * (g - axis.low) / span);
+		if (g == axis.low) p.Fill(px, gy, pw, 1, pal::lineStrong);
+		else DashedH(p, px, gy, pw, kRule);
+		TextAsIs(p, ix, gy - 10, labelW - 10, 20, Grouped(static_cast<uint64_t>(g)), pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+	}
+	const std::vector<LeagueChartDot> dots = LeagueGloryDots(points, axis, px, py, pw, ph);
+	const int n = static_cast<int>(dots.size());
+	const COLORREF ink = rk.tier != LeagueTier::None ? LeagueTierInk(rk.tier) : pal::redText;
+	const int mx = MouseX(p, v), my = MouseY(p, v);
+	int hovered = -1;
+	if (!p.noHover && mx >= px - 10 && mx <= px + pw + 10 && my >= py - 10 && my <= py + ph + 10) {
+		for (int i = 0; i < n; i++) {
+			if (hovered < 0 || std::abs(dots[i].x - mx) < std::abs(dots[hovered].x - mx)) hovered = i;
+		}
+	}
+	if (hovered >= 0) p.Fill(dots[hovered].x, py, 1, ph, pal::hairline);
+	for (int i = 1; i < n; i++) p.Line(dots[i - 1].x, dots[i - 1].y, dots[i].x, dots[i].y, ink, 2);
+	// Every game gets its dot while they stay apart; the last one, where the player stands, always.
+	const bool every = n <= 1 || pw / (n - 1) >= 8;
+	for (int i = 0; i < n; i++) {
+		const bool big = i == n - 1 || i == hovered;
+		if (!every && !big) continue;
+		const int d = big ? 11 : 7;
+		if (i == hovered) p.Ellipse(dots[i].x - d / 2 - 2, dots[i].y - d / 2 - 2, d + 4, d + 4, pal::text);
+		p.Ellipse(dots[i].x - d / 2, dots[i].y - d / 2, d, d, ink);
+	}
+	p.Font(3);
+	const int footY = y + h - 36;
+	TextAsIs(p, ix, footY, iw / 2, 22, GamesText(n), kMuted);
+	const int change = points.back().glory - points.front().glory;
+	if (n > 1) {
+		TextAsIs(p, ix + iw / 2, footY, iw - iw / 2, 22, TrFmt("%s since placement", {SignedText(change)}), change > 0 ? pal::ok : change < 0 ? pal::bad : kMuted,
+			DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	}
+	if (hovered >= 0) {
+		const LeagueGloryPoint &pt = points[hovered];
+		std::string head = TrFmt("Game %s", {std::to_string(hovered + 1)});
+		const std::string day = DayText(pt.at);
+		if (!day.empty()) head += "  \xC2\xB7  " + day;
+		tip.lines.push_back({head, pal::text});
+		std::string line = TrFmt("%s Glory", {Grouped(static_cast<uint64_t>(pt.glory))});
+		COLORREF lineInk = pal::text;
+		if (hovered > 0) {
+			const int delta = pt.glory - points[hovered - 1].glory;
+			line += "  (" + SignedText(delta) + ")";
+			lineInk = delta > 0 ? pal::ok : delta < 0 ? pal::bad : pal::text;
+		}
+		tip.lines.push_back({line, lineInk});
+		tip.x = dots[hovered].x + 14;
+		tip.y = dots[hovered].y - 30;
+	}
+}
+
 void PaintDetail(Painter &p, const View &v, const Card &c, const Frame &f, Tip &tip)
 {
 	const Area a = DetailArea(v);
 	PaintIdentity(p, v, c, a, f);
 	if (ShownTab(v) == kTabLeague) {
-		PaintLeagueTab(p, v, a, f);
+		PaintLeagueTab(p, v, a, f, tip);
+		return;
+	}
+	if (ShownTab(v) == kTabCivs) {
+		PaintCivsTab(p, v, c, a, f, tip);
 		return;
 	}
 	PaintTiles(p, c, a, f);
@@ -1302,7 +1617,9 @@ void PaintHeader(Painter &p, const View &v, const Frame &f)
 		p.Button(right, f.head.margin, bw, kHeaderButtonH, "Use this player", kActUse, 0, v.mouseX, v.mouseY, true, true);
 	}
 	const int tab = ShownTab(v);
-	PaintScreenTitle(p, f.head, "STATISTICS", {{"General", kActTab, kTabGeneral, tab == kTabGeneral, true}, {"League", kActTab, kTabLeague, tab == kTabLeague, SelectedIsActive(v)}},
+	PaintScreenTitle(p, f.head, "STATISTICS",
+		{{"General", kActTab, kTabGeneral, tab == kTabGeneral, true}, {"Civilizations", kActTab, kTabCivs, tab == kTabCivs, true},
+			{"League", kActTab, kTabLeague, tab == kTabLeague, SelectedIsActive(v)}},
 		right, v.mouseX, v.mouseY);
 }
 
@@ -1322,6 +1639,15 @@ MatchFacts FactsOf(const GameRow &g)
 	m.losses = g.losses;
 	m.armyMax = g.armyMax;
 	m.gold = g.gold;
+	m.race = g.race;
+	m.food = g.food;
+	m.produced = g.produced;
+	m.damageDealt = g.damageDealt;
+	m.damageTaken = g.damageTaken;
+	m.bestLevel = g.bestLevel;
+	m.goldSpent = g.goldSpent;
+	m.scriptKills = g.scriptKills;
+	m.scriptDeaths = g.scriptDeaths;
 	return m;
 }
 

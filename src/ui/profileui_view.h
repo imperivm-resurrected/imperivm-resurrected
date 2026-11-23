@@ -24,9 +24,13 @@ struct GameRow {
 	bool won = false, multi = false;
 	// MatchLeague: a league or a cup game.
 	int league = 0;
+	// The civilization's number (-1 unknown, 10 or higher from a mod) and its name.
+	int race = -1;
 	std::string civ, bestUnit;
 	uint32_t durationMs = 0, kills = 0, losses = 0, produced = 0, armyMax = 0, gold = 0, food = 0, bestLevel = 0;
 	uint32_t damageDealt = 0, damageTaken = 0;
+	// From this computer's note of the game (MatchNote): -1 when it has none.
+	int64_t goldSpent = -1, scriptKills = -1, scriptDeaths = -1;
 };
 
 MatchFacts FactsOf(const GameRow &g);
@@ -65,6 +69,8 @@ struct View {
 	int rankCount = 0;
 	int metric = kMetricKills, chartMode = kModeAll, chartRange = kRange20;
 	int outcome = kOutcomeAll, historyScroll = 0;
+	// The civilization of the civilizations tab (kCivAll for every one), and the queue of the league tab's chart of Glory (0 the duel).
+	int civ = kCivAll, gloryQueue = 0;
 	// The position in the selected card's games of the one opened in the history, or -1.
 	int expanded = -1;
 	int todayYear = 0, todayMonth = 0, todayDay = 0;
@@ -77,18 +83,22 @@ struct View {
 enum Action {
 	kActNone = 0, kActPick, kActUse, kActBack, kActPatron, kActMetric, kActChartMode, kActChartRange, kActOutcome, kActBar, kActGame,
 	kActHistory, kActLeague, kActLeagueClose, kActLeagueLink, kActLeagueOpen, kActLeagueCancel, kActLeagueUnlink, kActLeagueBadge,
-	kActLeagueFrame, kActLeagueTitle, kActTab,
+	kActLeagueFrame, kActLeagueTitle, kActTab, kActCiv, kActGloryQueue,
 };
 
-constexpr int kTabGeneral = 0, kTabLeague = 1;
+constexpr int kTabGeneral = 0, kTabLeague = 1, kTabCivs = 2;
 
 constexpr int kBarList = 0, kBarHistory = 1;
-constexpr int kPaneLeagueDialog = ui::kPaneIdBase, kPaneTrophies = ui::kPaneIdBase + 1, kPaneSeasons = ui::kPaneIdBase + 2;
+constexpr int kPaneLeagueDialog = ui::kPaneIdBase, kPaneTrophies = ui::kPaneIdBase + 1, kPaneSeasons = ui::kPaneIdBase + 2, kPaneCivs = ui::kPaneIdBase + 3;
 
 // The player goes with the Steam account, so the list is left only for installs that still keep several from before.
 inline bool ShowsList(const View &v) { return v.cards.size() > 1; }
 inline bool SelectedIsActive(const View &v) { return v.selected >= 0 && v.selected < static_cast<int>(v.cards.size()) && v.cards[v.selected].active; }
-inline int ShownTab(const View &v) { return v.tab == kTabLeague && SelectedIsActive(v) ? kTabLeague : kTabGeneral; }
+inline int ShownTab(const View &v)
+{
+	if (v.tab == kTabCivs) return kTabCivs;
+	return v.tab == kTabLeague && SelectedIsActive(v) ? kTabLeague : kTabGeneral;
+}
 const Card *SelectedCard(const View &v);
 // How many rows of the list fit; the controller scrolls by rows.
 int ListRows(const View &v);

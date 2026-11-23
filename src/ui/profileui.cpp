@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "core/log.h"
+#include "game/gamestats.h"
 #include "game/playerini.h"
 #include "game/profiles.h"
 #include "net/leagueclient.h"
@@ -97,6 +98,7 @@ Card BuildCard(const ProfileSlot &slot, const std::vector<RankStep> &ranks)
 	if (!ini.favoriteUnit.empty()) c.favoriteUnit = ProfileUnitName(ini.favoriteUnit);
 	if (!c.summary.bestUnit.empty()) c.bestUnit = ProfileUnitName(c.summary.bestUnit);
 	const std::vector<MatchTag> tags = LeagueGameTags();
+	const std::vector<MatchNote> notes = GameStatsNotes();
 	for (const PlayedGame &g : RecentGames(ini, ini.played.size())) {
 		GameRow r;
 		r.day = g.day;
@@ -106,7 +108,7 @@ Card BuildCard(const ProfileSlot &slot, const std::vector<RankStep> &ranks)
 		r.minute = g.minute;
 		r.won = !g.lost;
 		r.multi = g.multi;
-		if (g.multi && !tags.empty()) {
+		if (!tags.empty() || !notes.empty()) {
 			// The game records its local time; the notes are in seconds since 1970.
 			tm local = {};
 			local.tm_year = g.year - 1900;
@@ -116,8 +118,16 @@ Card BuildCard(const ProfileSlot &slot, const std::vector<RankStep> &ranks)
 			local.tm_min = g.minute;
 			local.tm_isdst = -1;
 			const time_t at = mktime(&local);
-			if (at != static_cast<time_t>(-1)) r.league = MatchLeagueOf(tags, static_cast<int64_t>(at), g.durationMs);
+			if (at != static_cast<time_t>(-1)) {
+				if (g.multi) r.league = MatchLeagueOf(tags, static_cast<int64_t>(at), g.durationMs);
+				if (const MatchNote *n = MatchNoteOf(notes, static_cast<int64_t>(at))) {
+					r.goldSpent = n->goldSpent;
+					r.scriptKills = n->scriptKills;
+					r.scriptDeaths = n->scriptDeaths;
+				}
+			}
 		}
+		r.race = g.race;
 		r.civ = ProfileCivName(g.race);
 		if (!g.levelMaxUnit.empty()) r.bestUnit = ProfileUnitName(g.levelMaxUnit);
 		r.bestLevel = g.levelMax;
@@ -210,6 +220,7 @@ void Refresh()
 	if (v.selected != native.selected) {
 		v.expanded = -1;
 		v.historyScroll = 0;
+		v.civ = kCivAll;
 	}
 	v.cards = std::move(cards);
 	v.selected = native.selected;
@@ -226,6 +237,11 @@ void Refresh()
 	v.todayMonth = now.wMonth;
 	v.todayDay = now.wDay;
 	if (v.expanded >= 0 && (!SelectedCard(v) || v.expanded >= static_cast<int>(SelectedCard(v)->games.size()))) v.expanded = -1;
+	if (v.civ != kCivAll) {
+		const Card *c = SelectedCard(v);
+		const bool played = c && std::any_of(c->games.begin(), c->games.end(), [&](const GameRow &g) { return g.race == v.civ; });
+		if (!played) v.civ = kCivAll;
+	}
 	v.historyScroll = std::max(0, std::min(v.historyScroll, HistoryMaxScroll(v)));
 	if (moved) KeepVisible(v);
 	g_s.dirs = std::move(dirs);
@@ -285,9 +301,11 @@ void Act(View &v, int action, int arg, Command &cmd)
 		break;
 	case kActLeagueClose: v.leagueOpen = false; break;
 	case kActTab:
-		v.tab = arg == kTabLeague ? kTabLeague : kTabGeneral;
+		v.tab = arg == kTabLeague || arg == kTabCivs ? arg : kTabGeneral;
 		v.panes.Reset();
 		break;
+	case kActCiv: v.civ = arg == v.civ ? kCivAll : arg; break;
+	case kActGloryQueue: v.gloryQueue = arg ? 1 : 0; break;
 	case kActMetric: v.metric = std::max(0, std::min(arg, kMetricCount - 1)); break;
 	case kActChartMode: v.chartMode = arg; break;
 	case kActChartRange: v.chartRange = arg; break;

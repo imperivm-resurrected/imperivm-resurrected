@@ -150,6 +150,116 @@ void Ages()
 	CHECK_EQ(age(2023, 11, 1).count, 3);
 }
 
+MatchFacts CivGame(int race, uint32_t minutes, bool lost, uint32_t kills, uint32_t losses, uint32_t damage)
+{
+	MatchFacts m = Game(minutes, false, lost, kills, losses);
+	m.race = race;
+	m.damageDealt = damage;
+	m.gold = 1000;
+	return m;
+}
+
+void Civs()
+{
+	std::vector<MatchFacts> games = {CivGame(2, 20, false, 30, 10, 9000), CivGame(5, 30, true, 6, 24, 3000), CivGame(2, 10, true, 10, 10, 1000),
+		CivGame(2, 1, false, 0, 0, 0), CivGame(-1, 15, false, 4, 1, 500), CivGame(5, 25, false, 20, 4, 6000), CivGame(7, 40, true, 1, 1, 100)};
+	games[2].bestLevel = 4;
+	games[5].bestLevel = 6;
+	// Most games first, the same count by number, the unknown civilization last.
+	CHECK(MatchCivsPlayed(games) == std::vector<int>({2, 5, 7, -1}));
+	CHECK(MatchCivsPlayed({}).empty());
+
+	// Every game counts for the games and the wins, as in the profile's summary; the abandoned one stays out of the averages.
+	const MatchCivRecord romans = MatchCivRecordOf(games, 2);
+	CHECK_EQ(romans.games, 3);
+	CHECK_EQ(romans.wins, 2);
+	CHECK_EQ(romans.winPercent, 66);
+	CHECK_EQ(romans.ran, 2);
+	CHECK_EQ(static_cast<unsigned long long>(romans.kills), 40ULL);
+	CHECK_EQ(static_cast<unsigned long long>(romans.deaths), 20ULL);
+	CHECK(Near(romans.killRatio, 2));
+	CHECK(Near(romans.kills1, 20));
+	CHECK(Near(romans.damageDealt, 5000));
+	CHECK(Near(romans.minutes, 15));
+	CHECK(Near(romans.gold, 1000));
+	CHECK_EQ(romans.bestLevel, 4u);
+	CHECK_EQ(romans.bestGame, 2);
+	CHECK_EQ(romans.goldSpentGames, 0);
+
+	// The ratio is of the totals, not an average of each game's.
+	const MatchCivRecord gauls = MatchCivRecordOf(games, 5);
+	CHECK(Near(gauls.killRatio, 26.0 / 28.0));
+	CHECK_EQ(gauls.winPercent, 50);
+	CHECK_EQ(gauls.bestGame, 5);
+
+	const MatchCivRecord all = MatchCivRecordOf(games, kCivAll);
+	CHECK_EQ(all.games, 7);
+	CHECK_EQ(all.wins, 4);
+	CHECK_EQ(all.winPercent, 57);
+	CHECK_EQ(all.ran, 6);
+	CHECK_EQ(static_cast<unsigned long long>(all.kills), 71ULL);
+	CHECK_EQ(all.bestLevel, 6u);
+
+	const MatchCivRecord none = MatchCivRecordOf(games, 3);
+	CHECK_EQ(none.games, 0);
+	CHECK_EQ(none.winPercent, 0);
+	CHECK_EQ(none.bestGame, -1);
+	CHECK(Near(none.killRatio, 0));
+	CHECK(Near(MatchKillRatio(7, 0), 7));
+
+	// A script's count replaces the game's for the ratio, only with both kills and deaths; the gold spent averages its own games.
+	games[0].scriptKills = 50;
+	games[0].scriptDeaths = 5;
+	games[0].goldSpent = 4000;
+	games[2].scriptKills = 99;
+	games[2].goldSpent = 2000;
+	const MatchCivRecord counted = MatchCivRecordOf(games, 2);
+	CHECK_EQ(counted.scriptGames, 1);
+	CHECK_EQ(static_cast<unsigned long long>(counted.kills), 60ULL);
+	CHECK_EQ(static_cast<unsigned long long>(counted.deaths), 15ULL);
+	CHECK(Near(counted.killRatio, 4));
+	CHECK_EQ(counted.goldSpentGames, 2);
+	CHECK(Near(counted.goldSpent, 3000));
+	CHECK_EQ(MatchKillsOf(games[2]), 10u);
+	CHECK_EQ(MatchDeathsOf(games[0]), 5u);
+}
+
+void Notes()
+{
+	MatchNote n;
+	n.startSec = 1763650000;
+	n.endSec = 1763651800;
+	n.goldSpent = 12345;
+	CHECK_EQ(MatchNoteLine(n), std::string("1763650000 1763651800 12345 -1 -1"));
+	MatchNote back;
+	CHECK(MatchNoteParse(MatchNoteLine(n), back));
+	CHECK((back.startSec) == 1763650000);
+	CHECK((back.endSec) == 1763651800);
+	CHECK((back.goldSpent) == 12345);
+	CHECK((back.scriptKills) == -1);
+	CHECK(MatchNoteParse("1763650000 1763651800 -1 40 12\n", back));
+	CHECK((back.scriptKills) == 40);
+	CHECK((back.scriptDeaths) == 12);
+	// Half a count is none.
+	CHECK(MatchNoteParse("1763650000 1763651800 -1 40 -1", back));
+	CHECK((back.scriptKills) == -1);
+	CHECK(!MatchNoteParse("1763650000 1763651800 5", back));
+	CHECK(!MatchNoteParse("garbage", back));
+	CHECK(!MatchNoteParse("1763651800 1763650000 1 1 1", back));
+
+	// The game stamps its record with the start or the end, to the minute; a later game that started inside the window wins.
+	const std::vector<MatchNote> notes = {{1763640000, 1763643000, 10, -1, -1}, {1763650000, 1763651800, 20, -1, -1}, {1763651900, 1763652000, 30, -1, -1}};
+	CHECK((MatchNoteOf(notes, 1763650000 - 50)->goldSpent) == 20);
+	CHECK((MatchNoteOf(notes, 1763651800 + 60)->goldSpent) == 30);
+	CHECK((MatchNoteOf(notes, 1763641000)->goldSpent) == 10);
+	CHECK(MatchNoteOf(notes, 1763645000) == nullptr);
+	CHECK(MatchNoteOf({}, 1763650000) == nullptr);
+	MatchFacts m;
+	MatchApplyNote(m, notes[1]);
+	CHECK((m.goldSpent) == 20);
+	CHECK((m.scriptKills) == -1);
+}
+
 }
 
 int main()
@@ -157,6 +267,8 @@ int main()
 	Results();
 	Metrics();
 	Select();
+	Civs();
+	Notes();
 	Leagues();
 	Scale();
 	Ages();

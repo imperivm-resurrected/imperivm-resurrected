@@ -6,6 +6,7 @@ The SDK version and which mods you can make with each one. The script API versio
 
 - **Credits:** the credits screen lays out `currentlang\credits.txt` in sections, roles and columns. See [Credits](languages.md#credits) for the format a mod's own file should follow.
 - **Help:** the help screen (F1) builds its side bar, its grids of units and its unit cards from `currentlang\help.xml` and the classes the game loaded. See [Help](languages.md#help) for what a mod's own file should follow.
+- **Statistics:** scripts that count kills and deaths in the mod variables `EEE_kills<n>` and `EEE_deaths<n>` replace the game's count in the player's statistics. See [Kill and death counters](scripts.md#kill-and-death-counters-for-the-statistics).
 
 ## 1.0
 

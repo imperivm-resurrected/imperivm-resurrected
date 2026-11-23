@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "core/matchhistory.h"
 #include "core/statshistory.h"
 
 struct StatsSnapshot {
@@ -43,5 +44,8 @@ struct GameRecordFacts {
 	std::string bestUnit;
 };
 bool GameStatsRecordOf(int player, GameRecordFacts &out);
+// What this computer noted of its last games (MatchNote), oldest first: one is taken the first time the local player wins or loses a
+// game that ran on this computer.
+std::vector<MatchNote> GameStatsNotes();
 // Writes the history next to a save just made, as <save>.stats.
 void GameStatsWriteFile(const std::string &saveFile);

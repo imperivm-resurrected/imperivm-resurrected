@@ -110,6 +110,20 @@ if (Mod_GetInt("captures") >= 3) ...
 - They belong to the whole game, not to a player. For a per-player one, add the player to the name (`"oro1"`, `"oro2"`).
 - They're shared among all active mods: use a prefix of your own (`"mymod_captures"`).
 
+### Kill and death counters for the statistics
+
+The game's own count of kills and losses can miss some deaths. If your scripts keep a better one, name it like this and the player's statistics (Statistics, Civilizations tab) use it for the kills, the deaths and the K/D of that game:
+
+| Variable | What it holds |
+|---|---|
+| `EEE_kills<n>` | Enemy units player `n` killed. |
+| `EEE_deaths<n>` | Units player `n` lost. |
+
+- `n` is the player's number as `Mod_PlayerCiv` takes it: `EEE_kills1`, `EEE_deaths1` for the first player. The names are case-sensitive.
+- Set them with `Mod_SetInt` or `Mod_AddInt`. Only mod variables are read, not variables declared in a script.
+- Both must exist for a player, or the game's own count is used.
+- They're read once, when the local player wins or loses the game. A game that's quit before that keeps the game's count.
+
 ## Multiplayer
 
 Scripts are part of the simulation: they run on all PCs, at the same moment, and must do the same thing on all of them.

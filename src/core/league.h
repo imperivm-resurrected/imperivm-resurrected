@@ -116,6 +116,23 @@ LeaguePeak LeaguePeakFromJson(const Json *v);
 
 enum class LeaguePlacementMark { Win, Loss, Void };
 
+// The Glory a game of the season left the player with, once placed: when it was played (ms since 1970).
+struct LeagueGloryPoint {
+	int64_t at = 0;
+	int glory = 0;
+};
+// The value axis of a chart of Glory: round steps, about four of them, from under the lowest point to over the highest.
+struct LeagueGloryAxis {
+	int low = 0, high = 100, step = 25;
+};
+LeagueGloryAxis LeagueGloryAxisOf(const std::vector<LeagueGloryPoint> &points);
+// Where each point goes in a box: the games evenly spread from its left edge to its right one (a single game in the middle), the
+// axis from its bottom to its top.
+struct LeagueChartDot {
+	int x = 0, y = 0;
+};
+std::vector<LeagueChartDot> LeagueGloryDots(const std::vector<LeagueGloryPoint> &points, const LeagueGloryAxis &axis, int x, int y, int w, int h);
+
 struct LeagueRanked {
 	bool present = false;
 	std::string queue;
@@ -128,6 +145,9 @@ struct LeagueRanked {
 	int streak = 0;
 	// The placement games played, in order.
 	std::vector<LeaguePlacementMark> placement;
+	// The Glory after each game of the season once placed, oldest first; `gloryKnown` is false for a server before it.
+	bool gloryKnown = false;
+	std::vector<LeagueGloryPoint> gloryHistory;
 };
 
 // What a closed season left the player: the vexillum of the highest rank reached (the Founder's in the test season) from 10 games,

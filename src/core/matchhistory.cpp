@@ -6,6 +6,9 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
+#include <string>
+#include <utility>
 #include <vector>
 
 MatchResult MatchResultOf(const MatchFacts &m)
@@ -90,6 +93,118 @@ double MatchMetricAverage(const std::vector<MatchFacts> &games, MatchMetric metr
 		if (MatchResultOf(m) != kMatchAbandoned) values.push_back(MatchMetricValue(m, metric));
 	}
 	return MatchAverage(values);
+}
+
+std::string MatchNoteLine(const MatchNote &n)
+{
+	char buf[160];
+	snprintf(buf, sizeof(buf), "%lld %lld %lld %lld %lld", static_cast<long long>(n.startSec), static_cast<long long>(n.endSec),
+		static_cast<long long>(n.goldSpent), static_cast<long long>(n.scriptKills), static_cast<long long>(n.scriptDeaths));
+	return buf;
+}
+
+bool MatchNoteParse(const std::string &line, MatchNote &out)
+{
+	long long v[5] = {};
+	if (sscanf_s(line.c_str(), "%lld %lld %lld %lld %lld", &v[0], &v[1], &v[2], &v[3], &v[4]) != 5) return false;
+	if (v[0] <= 0 || v[1] < v[0]) return false;
+	MatchNote n;
+	n.startSec = v[0];
+	n.endSec = v[1];
+	n.goldSpent = std::max(-1LL, v[2]);
+	// Counts the game cannot have taken from a script are no counts.
+	n.scriptKills = v[3] >= 0 && v[4] >= 0 ? v[3] : -1;
+	n.scriptDeaths = v[3] >= 0 && v[4] >= 0 ? v[4] : -1;
+	out = n;
+	return true;
+}
+
+const MatchNote *MatchNoteOf(const std::vector<MatchNote> &notes, int64_t recordedSec)
+{
+	const int64_t slack = 120;
+	const MatchNote *best = nullptr;
+	for (const MatchNote &n : notes) {
+		if (recordedSec < n.startSec - slack || recordedSec > n.endSec + slack) continue;
+		if (!best || n.startSec > best->startSec) best = &n;
+	}
+	return best;
+}
+
+void MatchApplyNote(MatchFacts &m, const MatchNote &n)
+{
+	m.goldSpent = n.goldSpent;
+	m.scriptKills = n.scriptKills;
+	m.scriptDeaths = n.scriptDeaths;
+}
+
+uint32_t MatchKillsOf(const MatchFacts &m)
+{
+	return m.scriptKills >= 0 && m.scriptDeaths >= 0 ? static_cast<uint32_t>(std::min<int64_t>(m.scriptKills, UINT32_MAX)) : m.kills;
+}
+
+uint32_t MatchDeathsOf(const MatchFacts &m)
+{
+	return m.scriptKills >= 0 && m.scriptDeaths >= 0 ? static_cast<uint32_t>(std::min<int64_t>(m.scriptDeaths, UINT32_MAX)) : m.losses;
+}
+
+double MatchKillRatio(uint64_t kills, uint64_t deaths)
+{
+	return static_cast<double>(kills) / std::max<uint64_t>(1, deaths);
+}
+
+MatchCivRecord MatchCivRecordOf(const std::vector<MatchFacts> &games, int race)
+{
+	MatchCivRecord r;
+	r.race = race;
+	double sums[9] = {}, goldSpent = 0;
+	for (size_t i = 0; i < games.size(); i++) {
+		const MatchFacts &m = games[i];
+		if (race != kCivAll && m.race != race) continue;
+		r.games++;
+		if (!m.lost) r.wins++;
+		const uint32_t kills = MatchKillsOf(m), deaths = MatchDeathsOf(m);
+		r.kills += kills;
+		r.deaths += deaths;
+		if (m.scriptKills >= 0 && m.scriptDeaths >= 0) r.scriptGames++;
+		if (m.bestLevel > r.bestLevel) {
+			r.bestLevel = m.bestLevel;
+			r.bestGame = static_cast<int>(i);
+		}
+		if (MatchResultOf(m) == kMatchAbandoned) continue;
+		r.ran++;
+		const double values[9] = {static_cast<double>(kills), static_cast<double>(deaths), static_cast<double>(m.damageDealt), static_cast<double>(m.damageTaken),
+			static_cast<double>(m.gold), static_cast<double>(m.food), static_cast<double>(m.produced), static_cast<double>(m.armyMax), m.durationMs / 60000.0};
+		for (int k = 0; k < 9; k++) sums[k] += values[k];
+		if (m.goldSpent >= 0) {
+			r.goldSpentGames++;
+			goldSpent += static_cast<double>(m.goldSpent);
+		}
+	}
+	r.winPercent = r.games > 0 ? static_cast<int>(static_cast<int64_t>(r.wins) * 100 / r.games) : 0;
+	r.killRatio = MatchKillRatio(r.kills, r.deaths);
+	if (r.ran) {
+		double *averages[9] = {&r.kills1, &r.deaths1, &r.damageDealt, &r.damageTaken, &r.gold, &r.food, &r.produced, &r.army, &r.minutes};
+		for (int k = 0; k < 9; k++) *averages[k] = sums[k] / r.ran;
+	}
+	if (r.goldSpentGames) r.goldSpent = goldSpent / r.goldSpentGames;
+	return r;
+}
+
+std::vector<int> MatchCivsPlayed(const std::vector<MatchFacts> &games)
+{
+	std::vector<std::pair<int, int>> counts;
+	for (const MatchFacts &m : games) {
+		auto it = std::find_if(counts.begin(), counts.end(), [&](const std::pair<int, int> &c) { return c.first == m.race; });
+		if (it == counts.end()) counts.push_back({m.race, 1});
+		else it->second++;
+	}
+	std::sort(counts.begin(), counts.end(), [](const std::pair<int, int> &a, const std::pair<int, int> &b) {
+		if ((a.first < 0) != (b.first < 0)) return b.first < 0;
+		return a.second != b.second ? a.second > b.second : a.first < b.first;
+	});
+	std::vector<int> out;
+	for (const auto &c : counts) out.push_back(c.first);
+	return out;
 }
 
 int64_t MatchDayNumber(int year, int month, int day)
