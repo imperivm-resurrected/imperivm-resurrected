@@ -87,13 +87,22 @@ void MpUiGameThreadTick()
 			if (!pending.empty()) {
 				std::string cams = g_s.room.info.cams;
 				if (owner) {
-					cams.clear();
-					FILE *f = nullptr;
-					if (fopen_s(&f, (g_s.hostSave.file + ".cameras").c_str(), "rb") == 0 && f) {
-						char buf[1024] = {};
-						cams.assign(buf, fread(buf, 1, sizeof(buf) - 1, f));
-						fclose(f);
+					// Read once a second, not on every image of the game: nothing saves the game while its room is open.
+					static std::string readPath, readCams;
+					static DWORD readAt = 0;
+					const std::string path = g_s.hostSave.file + ".cameras";
+					if (path != readPath || GetTickCount() - readAt >= 1000) {
+						readCams.clear();
+						FILE *f = nullptr;
+						if (fopen_s(&f, path.c_str(), "rb") == 0 && f) {
+							char buf[1024] = {};
+							readCams.assign(buf, fread(buf, 1, sizeof(buf) - 1, f));
+							fclose(f);
+						}
+						readPath = path;
+						readAt = GetTickCount();
 					}
+					cams = readCams;
 				}
 				MpSaveSetPendingCameras(cams);
 			}

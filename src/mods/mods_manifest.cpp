@@ -4,6 +4,7 @@
 #include <windows.h>
 #include <algorithm>
 #include <atomic>
+#include <mutex>
 #include <set>
 #include <thread>
 #include "MinHook.h"
@@ -20,15 +21,36 @@
 
 using namespace mods_impl;
 
+namespace {
+// Read by Tr() from every thread: each value is a string of its own that is never changed or freed, so a reference handed out stays
+// valid when the game's language arrives later (it changes once or twice per session at most).
+std::atomic<const std::string *> g_languageNow{nullptr};
+std::mutex g_languageLock;
+}
+
 namespace mods_impl {
+void SetLanguage(const std::string &lowered)
+{
+	std::lock_guard<std::mutex> lock(g_languageLock);
+	const std::string *now = g_languageNow.load();
+	if (!now || *now != lowered) g_languageNow.store(new std::string(lowered));
+}
+
+const std::string &LanguageRef()
+{
+	if (const std::string *now = g_languageNow.load()) return *now;
+	char buf[64] = {};
+	GetPrivateProfileStringA("Language", "Default", "English", buf, sizeof(buf), (GameDir() + "\\Settings.ini").c_str());
+	{
+		std::lock_guard<std::mutex> lock(g_languageLock);
+		if (!g_languageNow.load()) g_languageNow.store(new std::string(Lower(buf)));
+	}
+	return *g_languageNow.load();
+}
+
 std::string LanguageLower()
 {
-	if (g_language.empty()) {
-		char buf[64] = {};
-		GetPrivateProfileStringA("Language", "Default", "English", buf, sizeof(buf), (GameDir() + "\\Settings.ini").c_str());
-		g_language = Lower(buf);
-	}
-	return g_language;
+	return LanguageRef();
 }
 
 std::string LocalizedText(const Json &j, const char *key, const std::string &def)

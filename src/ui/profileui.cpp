@@ -887,5 +887,9 @@ bool ProfileUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		consumed = Handle(g_s, msg, wp, lp, cmd);
 	}
 	if (cmd.action != kActNone) Execute(cmd);
+	if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK) {
+		std::lock_guard<std::mutex> lock(g_lock);
+		if (g_s.closedAt) swallowRelease = true;
+	}
 	return consumed;
 }

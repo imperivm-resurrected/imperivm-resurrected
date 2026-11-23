@@ -119,7 +119,8 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		}
 		if (g_s.view == kViewTournaments && !g_s.dropOpen && !g_s.room.id && TourneyPanDown(pt, g_s.hits)) return true;
 		if (g_s.syncConfirm && ListDown(g_s.syncList, g_s.syncGeom, pt)) return true;
-		if (!g_s.syncConfirm && g_s.view == kViewCreate && ListDown(g_s.createModsList, g_s.createModsGeom, pt)) return true;
+		// The Content dropdown opens over the mods list: its items take the click, not the list's bar under them.
+		if (!g_s.syncConfirm && g_s.view == kViewCreate && !g_s.dropOpen && ListDown(g_s.createModsList, g_s.createModsGeom, pt)) return true;
 		if (g_s.game.picker && !SaveMapPicking(g_s)) {
 			if (ListDown(g_s.pick, g_s.pickGeom, pt)) return true;
 		}
@@ -229,6 +230,13 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		if (g_s.focus != kNoField) FieldKey(msg, wp);
 		return true;
 	case WM_KEYDOWN:
+		// The button the keyboard was on may have left the screen (the cup published, a dialog closed) or be disabled now: Enter must not
+		// run it again from memory.
+		if (g_s.tabAction >= 0 && (wp == VK_RETURN || wp == VK_SPACE)) {
+			bool shown = false;
+			for (const Hit &h : g_s.hits) shown = shown || (h.action == g_s.tabAction && h.arg == g_s.tabArg);
+			if (!shown) g_s.tabAction = -1;
+		}
 		if (wp == VK_TAB) {
 			TabStep((GetKeyState(VK_SHIFT) & 0x8000) != 0);
 		}

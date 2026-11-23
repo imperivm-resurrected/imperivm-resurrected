@@ -1877,6 +1877,8 @@ void TourneyAction(int arg)
 		break;
 	}
 	case kSubCupSubmit: {
+		// Only from the form: a late Enter after it closed would publish the cup again, or an edited one as a new cup.
+		if (u.screen != kScreenCreate) break;
 		const bool editing = u.cupEditId != 0;
 		if (LeagueTourneyBusy(editing ? TourneyOp::Edit : TourneyOp::Create, editing ? u.cupEditId : 0)) break;
 		if (!editing) OwnCupContent(u.cup.contentKey, u.cup.contentName);
@@ -2028,10 +2030,37 @@ bool TourneyBack()
 	return true;
 }
 
+bool OverlayActive(const mpui_impl::State &st);
+
+namespace {
+// The screen's overlays (a search, a dropdown, the link offer) lie over the tab: its areas are those of the last frame under them.
+bool CoveredByScreen()
+{
+	return OverlayActive(g_s) || LinkOfferShown(g_s) || g_s.ranked.resultOpen || g_s.ranked.ceremonyOpen;
+}
+
+// A dialog of the tab over the screen: nothing under it scrolls or pans.
+bool TourneyDialogOver(const Ui &u)
+{
+	return u.disputeMatch || u.joinOpen || !u.shownCode.empty() || u.walkoverMatch || u.teamCup || u.colorOpen ||
+		(u.screen == kScreenCreate && u.chooserRound >= 0);
+}
+}
+
 bool TourneyWheel(int delta, bool shift, bool ctrl)
 {
 	Ui &u = g_tourney;
 	const POINT at = {g_s.mouseX, g_s.mouseY};
+	if (CoveredByScreen()) return false;
+	// A touchpad sends small deltas: each one still moves a little.
+	int step = -delta * 60 / WHEEL_DELTA;
+	if (!step && delta) step = delta > 0 ? -1 : 1;
+	if (u.teamCup) {
+		if (u.teamArea.valid && PtInRect(&u.teamArea.r, at)) u.teamScroll = std::max(0, std::min(u.teamArea.max, u.teamScroll + (delta > 0 ? -1 : 1)));
+		return true;
+	}
+	// A dialog over the screen takes the wheel, so nothing scrolls under it.
+	if (u.disputeMatch || u.joinOpen || !u.shownCode.empty() || u.walkoverMatch || u.colorOpen) return true;
 	// Ctrl and the wheel over the bracket zoom it about the pointer.
 	if (ctrl && u.screen == kScreenPage && u.bracketArea.valid && PtInRect(&u.bracketArea.r, at) && u.pan.contentW > 0) {
 		const float scale = std::max(0.1f, g_s.uiScale);
@@ -2039,13 +2068,6 @@ bool TourneyWheel(int delta, bool shift, bool ctrl)
 			static_cast<int>((at.y - u.bracketArea.r.top) / scale));
 		return true;
 	}
-	const int step = -delta / WHEEL_DELTA * 60;
-	if (u.teamCup) {
-		if (u.teamArea.valid && PtInRect(&u.teamArea.r, at)) u.teamScroll = std::max(0, std::min(u.teamArea.max, u.teamScroll + (delta > 0 ? -1 : 1)));
-		return true;
-	}
-	// A dialog over the screen takes the wheel, so nothing scrolls under it.
-	if (u.disputeMatch || u.joinOpen || !u.shownCode.empty() || u.walkoverMatch) return true;
 	if (u.screen == kScreenCreate) {
 		if (u.chooserRound >= 0) {
 			if (u.chooserArea.valid && PtInRect(&u.chooserArea.r, at)) u.chooserScroll = std::max(0, std::min(u.chooserArea.max, u.chooserScroll + (delta > 0 ? -1 : 1)));
@@ -2091,9 +2113,9 @@ bool TourneyWheel(int delta, bool shift, bool ctrl)
 bool TourneyPanDown(POINT at, const std::vector<ui::Hit> &hits)
 {
 	Ui &u = g_tourney;
-	if (u.screen != kScreenPage) return false;
+	if (u.screen != kScreenPage || TourneyDialogOver(u) || CoveredByScreen()) return false;
 	int mode = -1;
-	if (u.pan.valid && PtInRect(&u.pan.thumb, at)) mode = 1;
+	if (u.pan.valid && PtInRect(&u.pan.thumb, at) && !ui::TopHitAt(hits, at)) mode = 1;
 	else if (u.bracketArea.valid && PtInRect(&u.bracketArea.r, at) && (u.bracketArea.max > 0 || u.bracketArea.maxX > 0) && !ui::TopHitAt(hits, at)) mode = 0;
 	if (mode < 0) return false;
 	u.panning = true;
@@ -2152,6 +2174,11 @@ bool TourneyOwnsField(int field)
 {
 	return field == kTourneyField || field == kCupNameField || field == kCupDescriptionField || field == kCupCodeField || field == kTeamNameField ||
 		field == kTeamSearchField || field == kCupTimeField;
+}
+
+bool TourneyChooserOpen()
+{
+	return g_s.view == kViewTournaments && g_tourney.screen == kScreenCreate && g_tourney.chooserRound >= 0;
 }
 
 std::string &TourneyFieldText(int field)

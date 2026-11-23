@@ -1827,6 +1827,8 @@ bool ControlsUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 	}
 	case WM_MOUSEWHEEL:
 		if (st.view == 1) {
+			// The "Reset all" question lies over the list.
+			if (Asking(st)) return true;
 			st.kbList.scroll -= GET_WHEEL_DELTA_WPARAM(wp) * 52 / WHEEL_DELTA;
 			st.kbList.scroll = std::max(0, std::min(st.kbList.scroll, st.kbGeom.maxScroll));
 			return true;

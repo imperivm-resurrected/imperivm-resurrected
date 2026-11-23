@@ -222,12 +222,16 @@ void DoAction(int action, int arg)
 	}
 	case kUseFile: {
 		const ModIssues *is = SelectedIssues(g_s);
-		const bool mine = arg % 2 == 1;
-		const size_t k = static_cast<size_t>(arg / 2 / 4096), file = static_cast<size_t>(arg / 2 % 4096);
-		if (!is || arg < 0 || k >= is->overlaps.size() || file >= is->files.size()) break;
+		int k = 0, file = 0;
+		bool mine = false;
+		if (!is || !UseFileFromArg(arg, static_cast<int>(is->overlaps.size()), k, file, mine) || file >= static_cast<int>(is->files.size())) break;
+		const ModOverlapFile &f = is->files[static_cast<size_t>(file)];
+		const std::string other = is->overlaps[static_cast<size_t>(k)].folder;
+		// Painted from another list (the packs were read again): the file must still be one the two packs share.
+		if (std::none_of(f.folders.begin(), f.folders.end(), [&](const std::string &d) { return _stricmp(d.c_str(), other.c_str()) == 0; })) break;
 		const std::string self = g_s.rows[g_s.selected].folder;
-		const std::string use = mine ? self : is->overlaps[k].folder;
-		const std::string path = is->files[file].path;
+		const std::string use = mine ? self : other;
+		const std::string path = f.path;
 		ModsChooseFile(g_s.profile, path, use);
 		CommitProfile();
 		const ModInfo *u = FindMod(use);

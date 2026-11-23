@@ -927,9 +927,10 @@ void PaintCardConflicts(Painter &p, const State &st, const ModInfo &m, bool acti
 				const int sx = dx + pad + inner - segW, sh = 24, sy = by + (fileH - sh) / 2;
 				if (f.choosable) {
 					const bool mineUsed = _stricmp(f.used.c_str(), m.folder.c_str()) == 0;
-					PaintSeg(p, sx, sy, segW / 2, sh, ov.name, !mineUsed, !st.busy, kUseFile, UseFileArg(static_cast<int>(k), static_cast<int>(fi), false), mx, my);
+					const int pairs = static_cast<int>(is->overlaps.size());
+					PaintSeg(p, sx, sy, segW / 2, sh, ov.name, !mineUsed, !st.busy, kUseFile, UseFileArg(static_cast<int>(k), pairs, static_cast<int>(fi), false), mx, my);
 					PaintSeg(p, sx + segW / 2, sy, segW - segW / 2, sh, "This one", mineUsed, !st.busy, kUseFile,
-						UseFileArg(static_cast<int>(k), static_cast<int>(fi), true), mx, my);
+						UseFileArg(static_cast<int>(k), pairs, static_cast<int>(fi), true), mx, my);
 				}
 				else {
 					p.Text(sx, by, segW, fileH, "inside a .pak", pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);

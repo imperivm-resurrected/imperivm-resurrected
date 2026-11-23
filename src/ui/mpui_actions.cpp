@@ -901,10 +901,12 @@ void FieldKey(UINT msg, WPARAM wp)
 		if (typed && TourneyOwnsField(field)) TourneyFieldEdited(field);
 	}
 	else if (g_s.focus == kPickSearchField && (wp == VK_UP || wp == VK_DOWN || wp == VK_PRIOR || wp == VK_NEXT)) {
-		PickMove(wp);
+		// The cup's map chooser shares the field: the room selector's list is not on screen.
+		if (!TourneyChooserOpen()) PickMove(wp);
 	}
 	else if (wp == VK_RETURN) {
-		if (g_s.focus == kPickSearchField) DoAction(kPickOk, 0);
+		if (g_s.focus == kPickSearchField && TourneyChooserOpen()) g_s.focus = kNoField;
+		else if (g_s.focus == kPickSearchField) DoAction(kPickOk, 0);
 		else if (g_s.focus == kChatField) DoAction(kChatSend, 0);
 		else if (g_s.focus == kJoinPassField) DoAction(kPassOk, 0);
 		else if (TourneyOwnsField(g_s.focus)) TourneyFieldEnter(g_s.focus);

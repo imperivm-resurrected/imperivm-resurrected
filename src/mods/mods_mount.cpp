@@ -285,7 +285,8 @@ bool ModsApplyWithoutRestart()
 		if (!ContainsFolder(active.mods, f)) removed.push_back(f);
 	}
 	if (added.empty() && removed.empty()) return false;
-	if ((!active.choices.empty() || !active.files.empty()) && ChosenFolders(active, ModsList()) != chosen) return false;
+	// Also when the new profile chooses nothing: the files chosen at start keep being served until a restart.
+	if (ChosenFolders(active, ModsList()) != chosen) return false;
 	std::vector<ModInfo> addedInfo;
 	for (const std::string &f : added) {
 		ModInfo m;
@@ -325,7 +326,8 @@ bool ModsApplyWithoutRestart()
 			std::lock_guard<std::mutex> lock(g_lock);
 			g_mount.looseLayers[Lower("mods/" + m.folder + "/")] = layer;
 			g_mount.signatures[Lower(m.folder)] = ModSignature(m);
-			g_mount.dirs.push_back(ModsDir() + "\\" + m.folder);
+			// First, as its layer went to the front of the game's list: the media folders and the VFS rank the dirs in that order.
+			g_mount.dirs.insert(g_mount.dirs.begin(), ModsDir() + "\\" + m.folder);
 		}
 		LogI("content", "loaded %s %s without restarting", m.name.c_str(), m.version.c_str());
 	}
@@ -370,7 +372,7 @@ bool ModsSwitchesWithoutRestart(const std::string &profile)
 		ModInfo m;
 		return !ModsFind(f, m);
 	}), target.mods.end());
-	if (!target.choices.empty() && ChosenFolders(target, ModsList()) != chosen) return false;
+	if (ChosenFolders(target, ModsList()) != chosen) return false;
 	for (const std::string &f : target.mods) {
 		ModInfo m;
 		if (!ContainsFolder(mounted.mods, f) && (!ModsLoadsWithoutRestart(f) || !ModsFind(f, m) || !m.hasLoose)) return false;
@@ -392,7 +394,7 @@ void __cdecl HookMountPakFilesInDir(const char *dir, void *list, const char *lan
 		done = true;
 		std::string gameLang = ReadGameLanguage();
 		if (!gameLang.empty()) {
-			g_language = gameLang;
+			SetLanguage(gameLang);
 		}
 		MountProfileLayers(list);
 	}

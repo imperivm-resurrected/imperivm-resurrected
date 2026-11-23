@@ -22,7 +22,6 @@ std::vector<ModInfo> g_mods;
 }
 
 namespace mods_impl {
-std::string g_language;
 MountedState g_mount;
 std::atomic<bool> g_hashing{false};
 

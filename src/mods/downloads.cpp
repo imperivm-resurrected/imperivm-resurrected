@@ -166,8 +166,14 @@ struct Job {
 	enum Kind { Entry, Archive, RoomPack, Bundle } kind;
 	CatalogEntry entry;
 	std::string text;
+	uint64_t id = 0;
+	// Queued by the room's downloads: a cancel of the room takes it out of the queue or stops it.
+	bool room = false;
 };
 std::deque<Job> g_jobs;
+// Under g_lock. One worker takes the jobs in order, so a job is over when the last one done has its id or a later one.
+uint64_t g_nextJobId = 0, g_doneJobId = 0, g_runningJobId = 0;
+bool g_runningRoomJob = false;
 // The GameBanana file of the bundle being installed now, under g_lock; 0 when none.
 uint64_t g_runningBundle = 0;
 std::condition_variable g_cv;
@@ -1294,11 +1300,13 @@ void Worker()
 			g_status.unpacked = g_status.unpackTotal = 0;
 			g_status.queued = static_cast<int>(g_jobs.size());
 			g_runningBundle = job.kind == Job::Bundle ? job.entry.fileId : 0;
+			g_runningJobId = job.id;
+			g_runningRoomJob = job.room;
+			g_cancel = false;
 			g_status.what = job.kind != Job::Archive
 				? job.entry.name + (job.entry.version.empty() || job.entry.name.find(job.entry.version) != std::string::npos ? "" : " " + job.entry.version)
 				: job.text;
 		}
-		g_cancel = false;
 		LogI("download", "starting %s", g_status.what.c_str());
 		if (job.kind == Job::Entry) {
 			Json sources = Json::MakeObject();
@@ -1331,20 +1339,31 @@ void Worker()
 		std::lock_guard<std::mutex> lock(g_lock);
 		g_status.active = false;
 		g_runningBundle = 0;
+		g_doneJobId = job.id;
+		g_runningJobId = 0;
+		g_runningRoomJob = false;
 		g_status.queued = static_cast<int>(g_jobs.size());
 	}
 }
 
-void Enqueue(const Job &job)
+// Under g_lock.
+uint64_t EnqueueLocked(Job job)
 {
-	std::lock_guard<std::mutex> lock(g_lock);
 	if (!g_workerStarted) {
 		g_workerStarted = true;
 		SafeThread(Worker).detach();
 	}
+	job.id = ++g_nextJobId;
 	g_jobs.push_back(job);
 	g_status.queued = static_cast<int>(g_jobs.size());
 	g_cv.notify_one();
+	return job.id;
+}
+
+uint64_t Enqueue(const Job &job)
+{
+	std::lock_guard<std::mutex> lock(g_lock);
+	return EnqueueLocked(job);
 }
 
 }
@@ -1504,15 +1523,24 @@ void DlApplyPendingInstalls()
 		std::string n = fd.cFileName;
 		if (n == "." || n == ".." || !(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) continue;
 		const std::string target = ModsDir() + "\\" + n;
+		std::string backup;
 		if (IsDir(target)) {
 			MakeDirs(WorkDir() + "\\backup");
-			MoveFileExA(target.c_str(), (WorkDir() + "\\backup\\" + n + "-" + Timestamp()).c_str(), 0);
+			backup = WorkDir() + "\\backup\\" + n + "-" + Timestamp();
+			if (!MoveFileExA(target.c_str(), backup.c_str(), 0)) {
+				LogW("download", "could not apply the pending update of %s: the installed copy is in use (error %lu); kept it", n.c_str(),
+					GetLastError());
+				continue;
+			}
 		}
 		if (MoveFileExA((pendDir + "\\" + n).c_str(), target.c_str(), 0)) {
 			LogI("download", "applied the pending update of %s", n.c_str());
+			continue;
 		}
-		else {
-			LogW("download", "could not apply the pending update of %s (error %lu)", n.c_str(), GetLastError());
+		LogW("download", "could not apply the pending update of %s (error %lu)", n.c_str(), GetLastError());
+		// Without the old copy back, ModsPruneMissing would drop the pack from every profile at this start.
+		if (!backup.empty() && !MoveFileExA(backup.c_str(), target.c_str(), 0)) {
+			LogE("download", "could not restore %s from %s (error %lu)", n.c_str(), backup.c_str(), GetLastError());
 		}
 	} while (FindNextFileA(h, &fd));
 	FindClose(h);
@@ -2076,7 +2104,14 @@ std::shared_ptr<const GbMod> GbInfo(uint64_t id)
 namespace {
 std::mutex g_roomLock;
 RoomModStatus g_room;
-std::atomic<bool> g_roomCancel{false};
+// Each request of the room's mods has its own number: a thread of an older request (still in a network call when it was cancelled or
+// replaced) sees it changed, stops and leaves g_room alone.
+std::atomic<unsigned> g_roomGen{0};
+
+bool RoomStale(unsigned gen)
+{
+	return g_roomGen.load() != gen;
+}
 
 bool IsRoomVersion(const ModInfo &m, const RoomModRequest &r)
 {
@@ -2100,28 +2135,35 @@ bool FindInstalledCopy(const RoomModRequest &r, std::string &folder, const std::
 	return false;
 }
 
-void RoomFail(const std::string &id, const std::string &why)
+void RoomFail(unsigned gen, const std::string &id, const std::string &why)
 {
-	LogW("content-share", "room mods: %s could not be downloaded from GameBanana (%s); it will be requested from the host", id.c_str(), why.c_str());
 	std::lock_guard<std::mutex> lock(g_roomLock);
+	if (RoomStale(gen)) return;
+	LogW("content-share", "room mods: %s could not be downloaded from GameBanana (%s); it will be requested from the host", id.c_str(), why.c_str());
 	g_room.failed.push_back(id);
 	g_room.note = why;
 }
 
-void RoomModsThread(std::vector<RoomModRequest> reqs)
+void RoomInstalled(unsigned gen, const std::string &id, const std::string &folder)
+{
+	std::lock_guard<std::mutex> lock(g_roomLock);
+	if (!RoomStale(gen)) g_room.installed[id] = folder;
+}
+
+void RoomModsThread(unsigned gen, std::vector<RoomModRequest> reqs)
 {
 	uint64_t doneBytes = 0;
-	for (size_t i = 0; i < reqs.size() && !g_roomCancel; i++) {
+	for (size_t i = 0; i < reqs.size() && !RoomStale(gen); i++) {
 		const RoomModRequest &r = reqs[i];
 		{
 			std::lock_guard<std::mutex> lock(g_roomLock);
+			if (RoomStale(gen)) break;
 			g_room.index = static_cast<int>(i) + 1;
 			g_room.what = r.id;
 		}
 		std::string folder;
 		if (FindInstalledCopy(r, folder)) {
-			std::lock_guard<std::mutex> lock(g_roomLock);
-			g_room.installed[r.id] = folder;
+			RoomInstalled(gen, r.id, folder);
 			continue;
 		}
 		std::set<std::string> otherCopies;
@@ -2129,7 +2171,7 @@ void RoomModsThread(std::vector<RoomModRequest> reqs)
 			if (r.exactFile ? r.gbId && m.gbId == r.gbId : IsRoomVersion(m, r)) otherCopies.insert(m.folder);
 		}
 		if (!r.gbId) {
-			RoomFail(r.id, "not installed from GameBanana");
+			RoomFail(gen, r.id, "not installed from GameBanana");
 			continue;
 		}
 		const GbFiles files = [&] {
@@ -2145,13 +2187,13 @@ void RoomModsThread(std::vector<RoomModRequest> reqs)
 			if (!file && !r.exactFile && CompareVersions(f.version, r.version) == 0) file = &f;
 		}
 		if (!file) {
-			RoomFail(r.id, !files.error.empty() ? files.error : r.exactFile ? std::string(kRoomModFileGone) : "GameBanana does not have version " + r.version);
+			RoomFail(gen, r.id, !files.error.empty() ? files.error : r.exactFile ? std::string(kRoomModFileGone) : "GameBanana does not have version " + r.version);
 			continue;
 		}
 		bool haveThatFile = false;
 		for (const ModInfo &m : ModsList()) haveThatFile = haveThatFile || (!r.exactFile && otherCopies.count(m.folder) && DlInstalledGbFile(m) == file->id);
 		if (haveThatFile) {
-			RoomFail(r.id, "the file of GameBanana is the copy already installed, not the host's");
+			RoomFail(gen, r.id, "the file of GameBanana is the copy already installed, not the host's");
 			continue;
 		}
 		GbMod mod;
@@ -2171,55 +2213,59 @@ void RoomModsThread(std::vector<RoomModRequest> reqs)
 		// An exact file always goes in a folder of its own: a copy by hand with the same id and version is not that file.
 		e.otherCopy = r.exactFile || !otherCopies.empty();
 		const uint64_t bytes = file->bytes;
-		uint64_t before;
-		{
-			std::lock_guard<std::mutex> lock(g_lock);
-			before = g_status.finished;
-		}
 		LogI("content-share", "room mods: %s %s is downloaded from GameBanana (%.1f MB)", e.name.c_str(), r.version.c_str(), bytes / 1048576.0);
-		DlInstallEntry(e);
+		uint64_t job = 0;
+		{
+			Job j{Job::Entry, e, ""};
+			j.room = true;
+			// Checked under the queue's lock: RoomModsCancel changes the number before it empties the queue under that lock, so a
+			// cancel during the network calls above leaves nothing queued for a room left behind.
+			std::lock_guard<std::mutex> lock(g_lock);
+			if (!RoomStale(gen)) job = EnqueueLocked(j);
+		}
+		if (!job) break;
 		const DWORD t0 = GetTickCount();
 		for (;;) {
 			Sleep(120);
 			bool finished;
 			{
+				// The queue is shared with the player's own installs: only this job's end and progress count.
 				std::lock_guard<std::mutex> lock(g_lock);
-				finished = g_status.finished > before;
+				finished = g_doneJobId >= job;
+				const bool running = g_runningJobId == job;
 				std::lock_guard<std::mutex> lock2(g_roomLock);
-				g_room.got = doneBytes + g_status.done;
-				g_room.total = std::max(doneBytes + (g_status.total ? g_status.total : bytes), g_room.got);
-				g_room.unpacking = g_status.unpacking;
-				g_room.unpacked = g_status.unpacked;
-				g_room.unpackTotal = g_status.unpackTotal;
+				if (RoomStale(gen)) break;
+				g_room.got = doneBytes + (running ? g_status.done : 0);
+				g_room.total = std::max(doneBytes + (running && g_status.total ? g_status.total : bytes), g_room.got);
+				g_room.unpacking = running && g_status.unpacking;
+				g_room.unpacked = running ? g_status.unpacked : 0;
+				g_room.unpackTotal = running ? g_status.unpackTotal : 0;
 			}
-			if (finished || g_roomCancel || GetTickCount() - t0 > 20 * 60 * 1000) break;
+			if (finished || RoomStale(gen) || GetTickCount() - t0 > 20 * 60 * 1000) break;
 		}
 		doneBytes += bytes;
-		if (g_roomCancel) break;
-		if (FindInstalledCopy(r, folder, otherCopies)) {
-			std::lock_guard<std::mutex> lock(g_roomLock);
-			g_room.installed[r.id] = folder;
-		}
-		else {
-			RoomFail(r.id, "installation failed for version " + r.version);
-		}
+		if (RoomStale(gen)) break;
+		if (FindInstalledCopy(r, folder, otherCopies)) RoomInstalled(gen, r.id, folder);
+		else RoomFail(gen, r.id, "installation failed for version " + r.version);
 	}
 	std::lock_guard<std::mutex> lock(g_roomLock);
+	if (RoomStale(gen)) return;
 	g_room.active = false;
-	g_room.done = !g_roomCancel;
+	g_room.done = true;
 }
 }
 
 void RoomModsFromGb(const std::vector<RoomModRequest> &mods)
 {
-	g_roomCancel = false;
+	unsigned gen;
 	{
 		std::lock_guard<std::mutex> lock(g_roomLock);
+		gen = ++g_roomGen;
 		g_room = RoomModStatus();
 		g_room.active = true;
 		g_room.count = static_cast<int>(mods.size());
 	}
-	SafeThread(RoomModsThread, mods).detach();
+	SafeThread(RoomModsThread, gen, mods).detach();
 }
 
 RoomModStatus RoomModsStatus()
@@ -2230,10 +2276,17 @@ RoomModStatus RoomModsStatus()
 
 void RoomModsCancel()
 {
-	g_roomCancel = true;
-	DlCancel();
-	std::lock_guard<std::mutex> lock(g_roomLock);
-	g_room.active = false;
+	{
+		std::lock_guard<std::mutex> lock(g_roomLock);
+		++g_roomGen;
+		g_room.active = false;
+	}
+	// Only the room's own downloads: an install the player started stays in the queue and goes on. Under the lock, so the worker cannot
+	// move on to the player's next job before the cancel lands.
+	std::lock_guard<std::mutex> lock(g_lock);
+	g_jobs.erase(std::remove_if(g_jobs.begin(), g_jobs.end(), [](const Job &j) { return j.room; }), g_jobs.end());
+	g_status.queued = static_cast<int>(g_jobs.size());
+	if (g_runningRoomJob) g_cancel = true;
 }
 
 std::string DlHttpGet(const std::string &url, std::string *toMemory, const std::string &toFile)

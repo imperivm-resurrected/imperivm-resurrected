@@ -69,8 +69,17 @@ enum Action {
 	kShareOpen, kShareClose, kCardTab, kUseFile, kDisableOther, kClearChoices, kCopyCode, kPasteCode, kFocusImport, kImportCode, kImportClear,
 };
 
-// kUseFile packs which shared pair, which file of the card and whose copy into one number.
-inline int UseFileArg(int overlap, int file, bool mine) { return (overlap * 4096 + file) * 2 + (mine ? 1 : 0); }
+// kUseFile packs which shared pair, which file of the card and whose copy into one number. The pairs set the stride, so any number of
+// files fits (two packs can share many thousands).
+inline int UseFileArg(int overlap, int overlaps, int file, bool mine) { return (file * (overlaps > 0 ? overlaps : 1) + overlap) * 2 + (mine ? 1 : 0); }
+inline bool UseFileFromArg(int arg, int overlaps, int &overlap, int &file, bool &mine)
+{
+	if (arg < 0 || overlaps <= 0) return false;
+	mine = arg % 2 == 1;
+	overlap = arg / 2 % overlaps;
+	file = arg / 2 / overlaps;
+	return true;
+}
 
 enum Field { kNoField, kSearchField, kNameField, kIoSearchField, kImportField };
 

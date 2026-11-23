@@ -859,6 +859,11 @@ bool PatchIniText(std::string &data, const std::string &patch, std::vector<std::
 		const char op = t[0] == '-' || t[0] == '+' ? t[0] : '=';
 		if (op == '-') {
 			const std::string key = Trim(t.substr(1));
+			// A bare "-" would match every blank and comment line of the section.
+			if (key.empty()) {
+				errors.push_back(where + TrFmt("there is no \"%s\" in [%s]", {key, section}));
+				continue;
+			}
 			bool gone = false;
 			if (exists) {
 				for (size_t i = from; i < to;) {

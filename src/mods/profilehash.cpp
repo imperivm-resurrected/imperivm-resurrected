@@ -3,6 +3,8 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include "mods/profilehash.h"
 
+#include <string.h>
+
 #include "mods/modrules.h"
 
 std::string ProfileGameplayHash(const ModProfile &p, const std::vector<ModInfo> &mods)
@@ -10,7 +12,8 @@ std::string ProfileGameplayHash(const ModProfile &p, const std::vector<ModInfo> 
 	std::vector<mods_impl::RulesPart> parts;
 	for (const std::string &folder : p.mods) {
 		for (const ModInfo &m : mods) {
-			if (m.folder == folder && m.gameplay) {
+			// Mounting finds the folder ignoring case (ModsFind): a profile that says "mymod" for "MyMod" still plays its rules.
+			if (m.gameplay && _stricmp(m.folder.c_str(), folder.c_str()) == 0) {
 				parts.push_back({m.id, m.gameplayHash});
 			}
 		}

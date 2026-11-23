@@ -20,9 +20,14 @@ namespace mods_impl {
 namespace {
 std::vector<std::string> PendingUninstalls()
 {
-	char buf[4096] = {};
-	GetPrivateProfileStringA("Mods", "UninstallOnStart", "", buf, sizeof(buf), IniPath().c_str());
-	return ParseFolderList(buf);
+	// A list cut at the buffer's end would be written back cut (with half a name): the buffer grows until the whole list fits.
+	std::vector<char> buf(4096);
+	for (;;) {
+		const DWORD n = GetPrivateProfileStringA("Mods", "UninstallOnStart", "", buf.data(), static_cast<DWORD>(buf.size()), IniPath().c_str());
+		if (n + 1 < buf.size() || buf.size() >= (1u << 20)) break;
+		buf.assign(buf.size() * 2, '\0');
+	}
+	return ParseFolderList(buf.data());
 }
 
 void SetPendingUninstalls(const std::vector<std::string> &list)
@@ -424,6 +429,13 @@ std::string ModsUninstall(const std::string &folder)
 		std::vector<std::string> maps;
 		CollectMapNames(path, maps);
 		RemoveReceivedMaps(maps);
+	}
+	// An update of it waiting for the restart (DlApplyPendingInstalls) would put the pack back on the next start.
+	const std::string pendingUpdate = RemovedRoot() + "\\pending\\" + folder;
+	if (IsDir(pendingUpdate)) {
+		const std::string to = RemovedRoot() + "\\" + kRemovedPrefix + std::to_string(GetTickCount()) + "-pending-" + folder;
+		if (MoveFileExA(pendingUpdate.c_str(), to.c_str(), 0)) LogI("content", "the pending update of %s is dropped too", folder.c_str());
+		else LogW("content", "could not drop the pending update of %s (error %lu)", folder.c_str(), GetLastError());
 	}
 	if (!mounted && MoveToRemoved(folder)) {
 		LogI("content", "%s uninstalled (its files are deleted in the background)", folder.c_str());

@@ -258,6 +258,8 @@ bool GameMenuUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		FinishChartDrag(g_s.view, static_cast<short>(LOWORD(lp)));
 		return true;
 	}
+	// A release another screen took leaves the flag up: it must not eat the release of a later click.
+	if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK) g_swallowUp = false;
 	void *dlg = nullptr;
 	const Screen screen = CurrentScreen(dlg);
 	if (screen == kScreenNone) {

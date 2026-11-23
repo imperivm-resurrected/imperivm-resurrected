@@ -48,6 +48,14 @@ void NotHashedYet()
 	CHECK_EQ(ProfileGameplayHash(Profile({"Rules"}), pending), std::string(""));
 }
 
+void FolderCaseDoesNotHideRules()
+{
+	const std::string rules = ProfileGameplayHash(Profile({"Rules"}), kInstalled);
+	CHECK_EQ(ProfileGameplayHash(Profile({"rules"}), kInstalled), rules);
+	CHECK_EQ(ProfileGameplayHash(Profile({"MORE RULES", "Rules"}), kInstalled), ProfileGameplayHash(Profile({"Rules", "More Rules"}), kInstalled));
+	CHECK(ProfileGameplayHash(Profile({"rules"}), kInstalled) != ProfileGameplayHash(Profile({}), kInstalled));
+}
+
 void ChoicesDoNotChangeIt()
 {
 	const ModProfile plain = Profile({"Rules", "Skin", "Other Skin"});
@@ -78,6 +86,7 @@ int main()
 {
 	OnlyGameplayCounts();
 	NotHashedYet();
+	FolderCaseDoesNotHideRules();
 	ChoicesDoNotChangeIt();
 	FileChoicesDoNotChangeIt();
 	return test::Summary("profilehash");

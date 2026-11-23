@@ -188,9 +188,7 @@ std::string ModsLocalizedText(const Json &j, const char *key, const std::string 
 
 const std::string &ModsLanguage()
 {
-	static std::string lang;
-	lang = LanguageLower();
-	return lang;
+	return LanguageRef();
 }
 
 void InstallModsHooks(bool knownExe)

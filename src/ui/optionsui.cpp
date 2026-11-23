@@ -616,7 +616,7 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, Command &cmd)
 			v.dropScroll = std::max(0, std::min(max, v.dropScroll - GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA));
 		}
 		// The wheel's message carries where the mouse is on the screen, not in the window.
-		else if (!v.dragId) v.scroll.Wheel(g_s.panes, {v.mouseX, v.mouseY}, GET_WHEEL_DELTA_WPARAM(wp));
+		else if (!v.dragId && !v.colorId) v.scroll.Wheel(g_s.panes, {v.mouseX, v.mouseY}, GET_WHEEL_DELTA_WPARAM(wp));
 		return true;
 	case WM_KEYDOWN:
 		if (wp == VK_ESCAPE) {
@@ -717,6 +717,13 @@ void OptionsUiDraw(uint32_t *buf, int w, int h)
 
 bool OptionsUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 {
+	// OK/Cancel/Apply close on the press: its release would reach the game's main menu under them, which acts on releases.
+	static bool swallowRelease = false;
+	if (msg == WM_LBUTTONUP && swallowRelease) {
+		swallowRelease = false;
+		return true;
+	}
+	if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK) swallowRelease = false;
 	void *dlg = OptionsDialogOpen();
 	if (!dlg || ModUiIsOpen()) return false;
 	{
@@ -731,5 +738,9 @@ bool OptionsUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 	Command cmd;
 	const bool consumed = Handle(msg, wp, lp, cmd);
 	if (cmd.action != kActNone) Execute(cmd);
+	if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK) {
+		std::lock_guard<std::mutex> lock(g_lock);
+		if (g_s.closedAt) swallowRelease = true;
+	}
 	return consumed;
 }

@@ -186,6 +186,10 @@ bool LeagueDropUiHandleMessage(UINT msg, WPARAM, LPARAM lp)
 			return true;
 		}
 	}
+	if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK) {
+		std::lock_guard<std::mutex> lock(g_lock);
+		g_s.swallowUp = false;
+	}
 	if (!LeagueDropUiNeedsDraw()) return false;
 	const POINT at = {static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))};
 	return TeamHandleMessage(msg, at);

@@ -381,7 +381,8 @@ bool ModUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 			g_s.dropScroll = std::max(0, std::min(g_s.dropScroll - GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA * 3, DropMaxScroll(g_drop.count, g_drop.rows)));
 			return true;
 		}
-		if (g_s.ioFilterOpen || g_s.catOpen) return true;
+		// The screenshot viewer covers the screen but leaves its panes: nothing under it scrolls.
+		if (g_s.ioFilterOpen || g_s.catOpen || g_s.ioShot >= 0) return true;
 		{
 			std::lock_guard<std::mutex> lock(g_rich.mx);
 			const POINT pt = {g_s.mouseX, g_s.mouseY};

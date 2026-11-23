@@ -171,6 +171,114 @@ bool CollectFiles(const std::string &base, const std::string &rel, std::vector<s
 	return true;
 }
 
+// The files of the version being replaced (all but winmm.dll, which keeps its own winmm.dll.previous), so a version that does not start
+// goes back whole. Not named update-*: DlCleanLeftovers removes those at every start.
+std::string BackupDir()
+{
+	return GameDir() + "\\mods\\_downloads\\previous-version";
+}
+
+std::string ManifestPath()
+{
+	return BackupDir() + "\\files.txt";
+}
+
+// The manifest is written last: without it nothing is restored but winmm.dll. "=" a file copied into the backup, "+" one the update adds.
+bool BackupFiles(const std::string &version, const std::vector<std::string> &files, std::string &failed)
+{
+	const std::string game = GameDir(), dir = BackupDir();
+	DeleteTree(dir);
+	MakeDirs(dir);
+	std::string manifest = "version=" + version + "\n";
+	for (const std::string &f : files) {
+		if (_stricmp(f.c_str(), "winmm.dll") == 0) continue;
+		const std::string src = game + "\\" + f;
+		if (!IsFile(src)) {
+			manifest += "+" + f + "\n";
+			continue;
+		}
+		const std::string dst = dir + "\\" + f;
+		MakeDirs(dst.substr(0, dst.find_last_of('\\')));
+		if (!CopyFileA(src.c_str(), dst.c_str(), FALSE)) {
+			failed = f;
+			return false;
+		}
+		manifest += "=" + f + "\n";
+	}
+	HANDLE h = CreateFileA(ManifestPath().c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+	if (h == INVALID_HANDLE_VALUE) {
+		failed = "files.txt";
+		return false;
+	}
+	DWORD written = 0;
+	const bool ok = WriteFile(h, manifest.data(), static_cast<DWORD>(manifest.size()), &written, nullptr) && written == manifest.size();
+	CloseHandle(h);
+	if (!ok) failed = "files.txt";
+	return ok;
+}
+
+// A file in use (steam_api.dll is loaded) cannot be overwritten or deleted, but it can be renamed.
+bool PutBackFile(const std::string &from, const std::string &dest)
+{
+	SetFileAttributesA(dest.c_str(), FILE_ATTRIBUTE_NORMAL);
+	if (CopyFileA(from.c_str(), dest.c_str(), FALSE)) return true;
+	const std::string aside = dest + ".failed";
+	SetFileAttributesA(aside.c_str(), FILE_ATTRIBUTE_NORMAL);
+	DeleteFileA(aside.c_str());
+	return MoveFileExA(dest.c_str(), aside.c_str(), MOVEFILE_REPLACE_EXISTING) && CopyFileA(from.c_str(), dest.c_str(), FALSE);
+}
+
+bool DropAddedFile(const std::string &dest)
+{
+	SetFileAttributesA(dest.c_str(), FILE_ATTRIBUTE_NORMAL);
+	if (DeleteFileA(dest.c_str()) || GetFileAttributesA(dest.c_str()) == INVALID_FILE_ATTRIBUTES) return true;
+	const std::string aside = dest + ".failed";
+	DeleteFileA(aside.c_str());
+	return MoveFileExA(dest.c_str(), aside.c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
+}
+
+// Puts back the files of the backup of `version` (the one being replaced or rolled back from); false when there is none of it.
+bool RestoreFiles(const std::string &version)
+{
+	std::string text;
+	HANDLE h = CreateFileA(ManifestPath().c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+	if (h == INVALID_HANDLE_VALUE) return false;
+	char buf[4096];
+	DWORD got = 0;
+	while (ReadFile(h, buf, sizeof(buf), &got, nullptr) && got) text.append(buf, got);
+	CloseHandle(h);
+	size_t at = 0;
+	const std::string game = GameDir(), dir = BackupDir();
+	int restored = 0, failed = 0;
+	bool first = true;
+	while (at < text.size()) {
+		size_t end = text.find('\n', at);
+		if (end == std::string::npos) end = text.size();
+		const std::string line = text.substr(at, end - at);
+		at = end + 1;
+		if (first) {
+			first = false;
+			if (line != "version=" + version) {
+				LogW("update", "the backup of the previous files is not of %s (%s): not used", version.c_str(), line.c_str());
+				return false;
+			}
+			continue;
+		}
+		if (line.size() < 2) continue;
+		const std::string rel = line.substr(1);
+		// The manifest is ours, but a path that leaves the game's folder is never followed.
+		if (rel.find("..") != std::string::npos || rel.find(':') != std::string::npos || rel[0] == '\\' || rel[0] == '/') continue;
+		const bool ok = line[0] == '=' ? PutBackFile(dir + "\\" + rel, game + "\\" + rel) : line[0] == '+' ? DropAddedFile(game + "\\" + rel) : true;
+		if (ok) restored++;
+		else {
+			failed++;
+			LogW("update", "could not put back %s (error %lu)", rel.c_str(), GetLastError());
+		}
+	}
+	LogI("update", "previous files put back: %d%s", restored, failed ? (" (" + std::to_string(failed) + " failed)").c_str() : "");
+	return true;
+}
+
 void DownloadAndInstall()
 {
 	std::string version, url, sha;
@@ -219,6 +327,30 @@ void DownloadAndInstall()
 		if (!GetFileAttributesExA(path.c_str(), GetFileExInfoStandard, &data)) return static_cast<unsigned long long>(-1);
 		return (static_cast<unsigned long long>(data.nFileSizeHigh) << 32) | data.nFileSizeLow;
 	};
+	// Staged first, so a disk that cannot take it fails before anything of the installed version is touched.
+	const std::string staged = dll + ".new", source = work + "\\winmm.dll";
+	SetFileAttributesA(staged.c_str(), FILE_ATTRIBUTE_NORMAL);
+	DeleteFileA(staged.c_str());
+	if (!CopyFileA(source.c_str(), staged.c_str(), FALSE) || sizeOf(staged) != sizeOf(source)) {
+		const DWORD e = GetLastError();
+		DeleteFileA(staged.c_str());
+		DeleteTree(work);
+		return Fail(TrFmt("could not prepare the new winmm.dll (error %s)", {std::to_string(e)}));
+	}
+	std::string notSaved;
+	if (!BackupFiles(version, files, notSaved)) {
+		const DWORD e = GetLastError();
+		DeleteFileA(staged.c_str());
+		DeleteTree(BackupDir());
+		DeleteTree(work);
+		return Fail(TrFmt("could not copy %s (error %s)", {notSaved, std::to_string(e)}));
+	}
+	auto undo = [&] {
+		DeleteFileA(staged.c_str());
+		RestoreFiles(version);
+		DeleteTree(BackupDir());
+		DeleteTree(work);
+	};
 	int copied = 1;
 	for (const std::string &f : files) {
 		if (_stricmp(f.c_str(), "winmm.dll") == 0) continue;
@@ -234,33 +366,22 @@ void DownloadAndInstall()
 		if (!CopyFileA((work + "\\" + f).c_str(), dest.c_str(), FALSE)) {
 			const DWORD e = GetLastError();
 			if (loaded) MoveFileExA(aside.c_str(), dest.c_str(), MOVEFILE_REPLACE_EXISTING);
-			DeleteTree(work);
+			undo();
 			return Fail(TrFmt("could not copy %s (error %s)", {f, std::to_string(e)}));
 		}
 		copied++;
-	}
-	const std::string staged = dll + ".new", source = work + "\\winmm.dll";
-	SetFileAttributesA(staged.c_str(), FILE_ATTRIBUTE_NORMAL);
-	DeleteFileA(staged.c_str());
-	if (!CopyFileA(source.c_str(), staged.c_str(), FALSE) || sizeOf(staged) != sizeOf(source)) {
-		const DWORD e = GetLastError();
-		DeleteFileA(staged.c_str());
-		DeleteTree(work);
-		return Fail(TrFmt("could not prepare the new winmm.dll (error %s)", {std::to_string(e)}));
 	}
 	SetFileAttributesA(previous.c_str(), FILE_ATTRIBUTE_NORMAL);
 	DeleteFileA(previous.c_str());
 	if (!MoveFileExA(dll.c_str(), previous.c_str(), MOVEFILE_REPLACE_EXISTING)) {
 		const DWORD e = GetLastError();
-		DeleteFileA(staged.c_str());
-		DeleteTree(work);
+		undo();
 		return Fail(TrFmt("could not move winmm.dll aside (error %s)", {std::to_string(e)}));
 	}
 	if (!MoveFileExA(staged.c_str(), dll.c_str(), 0)) {
 		const DWORD e = GetLastError();
 		MoveFileExA(previous.c_str(), dll.c_str(), MOVEFILE_REPLACE_EXISTING);
-		DeleteFileA(staged.c_str());
-		DeleteTree(work);
+		undo();
 		return Fail(TrFmt("could not install the new winmm.dll (error %s)", {std::to_string(e)}));
 	}
 	DeleteTree(work);
@@ -316,6 +437,8 @@ void CheckNow(State before)
 		EndCheck(kNone, UpdaterInfo::kUpToDate);
 		return;
 	}
+	// Not on its own while the installed build is still on trial: installing would replace the backup of the last one known to start.
+	const bool autoInstall = _stricmp(IniGet("Mode", "notify").c_str(), "auto") == 0 && IniGet("Testing").empty();
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
 		g_newVersion = version;
@@ -323,11 +446,12 @@ void CheckNow(State before)
 		g_zipUrl = url;
 		g_zipSha = sha;
 		g_zipBytes = bytes;
-		g_state = kAvailable;
+		// Taken in the same lock, so UpdaterStartInstall cannot start a second install of it on the same folder.
+		g_state = autoInstall ? kDownloading : kAvailable;
 		g_check = UpdaterInfo::kNewer;
 	}
 	LogI("update", "there is a new version, %s (you have %s)", version.c_str(), ModVersionText());
-	if (_stricmp(IniGet("Mode", "notify").c_str(), "auto") == 0) DownloadAndInstall();
+	if (autoInstall) DownloadAndInstall();
 }
 
 }
@@ -352,7 +476,17 @@ void InstallUpdater()
 		const std::string dll = GameDir() + "\\winmm.dll", previous = dll + ".previous", failed = dll + ".failed";
 		if (starts >= kMaxBadStarts && IsFile(previous)) {
 			DeleteFileA(failed.c_str());
-			if (MoveFileExA(dll.c_str(), failed.c_str(), MOVEFILE_REPLACE_EXISTING) && MoveFileExA(previous.c_str(), dll.c_str(), MOVEFILE_REPLACE_EXISTING)) {
+			bool swapped = false;
+			if (MoveFileExA(dll.c_str(), failed.c_str(), MOVEFILE_REPLACE_EXISTING)) {
+				swapped = MoveFileExA(previous.c_str(), dll.c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
+				// Never left without a winmm.dll: the failing one is better than none.
+				if (!swapped && !MoveFileExA(failed.c_str(), dll.c_str(), MOVEFILE_REPLACE_EXISTING)) {
+					LogE("update", "could not put winmm.dll back (error %lu)", GetLastError());
+				}
+			}
+			if (swapped) {
+				if (!RestoreFiles(testing)) LogW("update", "no backup of the previous version's other files: only winmm.dll goes back");
+				DeleteTree(BackupDir());
 				g_rolledBack = testing;
 				IniSet("Testing", "");
 				IniSet("Starts", "");
@@ -382,6 +516,15 @@ void UpdaterMenuReached()
 		IniSet("Testing", "");
 		IniSet("Starts", "");
 		LogI("update", "%s started fine", ModVersionText());
+		SafeThread([] {
+			// Renamed under the lock, so an install started meanwhile keeps the backup it is making.
+			const std::string done = BackupDir() + "-done-" + std::to_string(GetTickCount());
+			{
+				std::lock_guard<std::mutex> lock(g_mx);
+				if (g_state == kDownloading || !MoveFileExA(BackupDir().c_str(), done.c_str(), 0)) return;
+			}
+			DeleteTree(done);
+		}).detach();
 	}
 	if (!g_rolledBack.empty()) {
 		UiToast(TrFmt("Version %s of Imperivm Resurrected failed to start: the previous one has been restored. Restart the game.", {g_rolledBack}), true);

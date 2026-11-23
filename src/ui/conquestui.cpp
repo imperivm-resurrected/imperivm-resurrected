@@ -116,6 +116,8 @@ bool ConquestUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		g_s.view.bar = ui::ScrollDrag();
 		return true;
 	}
+	// A release another screen took leaves the flag up: it must not eat the release of a later click.
+	if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK) g_swallowUp = false;
 	const POINT at = {static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))};
 	int action = kActNone, arg = 0;
 	const bool other = msg != WM_MOUSEMOVE && OtherScreenOwnsInput();

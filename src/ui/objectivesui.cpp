@@ -273,6 +273,8 @@ bool ObjectivesUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		g_s.view.bar = ScrollDrag();
 		return true;
 	}
+	// A release another screen took leaves the flag up: it must not eat the release of a later click.
+	if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK) g_swallowUp = false;
 	void *dlg = NotesDialogOpen();
 	if (!dlg || ModUiIsOpen()) return false;
 	{

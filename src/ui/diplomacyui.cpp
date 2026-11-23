@@ -209,6 +209,8 @@ bool DiplomacyUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		g_s.view.bar = ScrollDrag();
 		return true;
 	}
+	// A release another screen took leaves the flag up: it must not eat the release of a later click.
+	if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK) g_swallowUp = false;
 	void *dlg = OpenDialog();
 	if (!dlg) {
 		// The screen went away with the key still down: its release is not for the game.

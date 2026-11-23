@@ -37,6 +37,8 @@ void TourneyPanUp();
 bool TourneyScrollTo(int bar, int pos);
 // The text fields of the tab: the dispute's, the cup's name and description, the invitation code.
 bool TourneyOwnsField(int field);
+// Locked. The cup's map chooser is open: the scenario search field is its, not the room selector's.
+bool TourneyChooserOpen();
 // Locked. The text of one of the tab's fields, while it has the focus.
 std::string &TourneyFieldText(int field);
 // The bytes a field takes as it is typed; TourneyFieldEdited cuts it to its characters.

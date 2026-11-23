@@ -40,7 +40,9 @@ extern std::mutex g_lock;
 extern std::vector<ModInfo> g_mods;
 void ModsNoteScan(std::vector<ModInfo> &mods);
 void ModsBumpSerial();
-extern std::string g_language;
+// The game's language in lower case, safe from any thread.
+void SetLanguage(const std::string &lowered);
+const std::string &LanguageRef();
 struct MountedState {
 	ModProfile profile;
 	bool known = false;

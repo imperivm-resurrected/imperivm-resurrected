@@ -408,11 +408,12 @@ std::string DownloadFile(const std::string &url, uint64_t expectedBytes, const s
 		windowStart = 0;
 		windowBytes = 0;
 		std::string e = conn.Open(target, serverPort, path, pos, false, kReceiveTimeoutMs);
-		if (!e.empty()) return e;
-		if (conn.status != 206 && !(pos == 0 && conn.status == 200)) return "the server responded " + std::to_string(conn.status);
-		if (conn.total != total) return "the server has a different file (" + std::to_string(conn.total) + " bytes)";
-		if (target != assigned && LacksTheFile(conn.RawHeaders(), target)) return "it does not have the file yet";
-		return "";
+		if (e.empty() && conn.status != 206 && !(pos == 0 && conn.status == 200)) e = "the server responded " + std::to_string(conn.status);
+		if (e.empty() && conn.total != total) e = "the server has a different file (" + std::to_string(conn.total) + " bytes)";
+		if (e.empty() && target != assigned && LacksTheFile(conn.RawHeaders(), target)) e = "it does not have the file yet";
+		// A refused resume must not be read: its body (the whole file from byte 0, or an error page) would land at pos.
+		if (!e.empty()) conn.Close();
+		return e;
 	};
 	auto follow = [&](ServerPicker::Step step, double rate, const char *why) {
 		LogI("download", "gamebanana: %s at %s (%s); %s %s", current.c_str(), Mb(rate).c_str(), why, StepText(step), picker.Current().c_str());

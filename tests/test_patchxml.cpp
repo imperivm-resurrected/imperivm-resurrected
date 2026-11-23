@@ -285,6 +285,12 @@ static void IniBasics()
 	CHECK(Ini(data, "[Brand New]\nA = 1\nB = 2\n", errors));
 	CHECK(Contains(data, "[Brand New]\r\nA = 1\r\n"));
 	CHECK(data.find("B = 2") > data.find("A = 1"));
+
+	// A bare "-" names no key: the section's blank lines stay.
+	data = kIni;
+	Ini(data, "[GamePlay]\n-\n", errors);
+	CHECK(!errors.empty());
+	CHECK_EQ(data, std::string(kIni));
 }
 
 static void IniRemoveAdd()

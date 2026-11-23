@@ -40,6 +40,25 @@ std::string g_profileHash;
 bool g_serverStarted = false;
 std::map<std::string, DWORD> g_warned;
 
+bool g_pendingLogged = false;
+
+// While the gameplay fingerprints are still being computed the content is unknown: 0 would mean "no content" and let a modded player
+// into plain rooms. A key of this process alone matches nobody (not even another player who is still hashing) until it is known.
+unsigned PendingKey()
+{
+	static const unsigned key = [] {
+		unsigned k = (GetTickCount() * 2654435761u ^ GetCurrentProcessId() * 40503u) & 0xffff;
+		return k ? k : 0xbeef;
+	}();
+	return key;
+}
+
+bool KeyPending()
+{
+	std::lock_guard<std::mutex> lock(g_lock);
+	return !g_keyReady;
+}
+
 unsigned ProfileKey()
 {
 	{
@@ -48,16 +67,23 @@ unsigned ProfileKey()
 			return g_key;
 		}
 	}
+	// Called from the game's hooks: never waits for the hashing thread, asks again on the next call instead.
 	const ModProfile mounted = ModsMountedProfile();
+	const std::string h = ModsProfileGameplayHash(mounted);
+	if (h.empty()) {
+		std::lock_guard<std::mutex> lock(g_lock);
+		if (!g_pendingLogged) {
+			g_pendingLogged = true;
+			LogI("net", "online: profile \"%s\" still being fingerprinted; version key %04x matches no room until it is done", mounted.name.c_str(),
+				PendingKey());
+		}
+		return PendingKey();
+	}
 	ModProfile original;
 	original.name = "Original";
 	const std::string base = ModsProfileGameplayHash(original);
-	std::string h;
-	for (int i = 0; i < 300 && (h = ModsProfileGameplayHash(mounted)).empty(); i++) {
-		Sleep(100);
-	}
 	unsigned key = 0;
-	if (!h.empty() && h != base) {
+	if (h != base) {
 		key = strtoul(h.substr(0, 4).c_str(), nullptr, 16) & 0xffff;
 		if (key == 0) key = 1;
 	}
@@ -66,10 +92,16 @@ unsigned ProfileKey()
 		g_key = key;
 		g_profileHash = h;
 		g_keyReady = true;
-		LogI("net", "online: profile \"%s\", gameplay fingerprint %s -> version key %04x%s", mounted.name.c_str(),
-			h.empty() ? "(not available)" : h.substr(0, 16).c_str(), key, key ? "" : " (compatible without content)");
+		LogI("net", "online: profile \"%s\", gameplay fingerprint %s -> version key %04x%s", mounted.name.c_str(), h.substr(0, 16).c_str(), key,
+			key ? "" : " (compatible without content)");
 	}
 	return g_key;
+}
+
+std::string ProfileFingerprint()
+{
+	std::lock_guard<std::mutex> lock(g_lock);
+	return g_profileHash;
 }
 
 std::string BuildReply()
@@ -79,7 +111,7 @@ std::string BuildReply()
 	j.Set("v", Json::MakeNumber(1));
 	j.Set("profile", Json::MakeString(p.name));
 	j.Set("key", Json::MakeNumber(ProfileKey()));
-	j.Set("fingerprint", Json::MakeString(g_profileHash));
+	j.Set("fingerprint", Json::MakeString(ProfileFingerprint()));
 	Json mods = Json::MakeArray();
 	for (const std::string &folder : p.mods) {
 		ModInfo m;
@@ -279,7 +311,8 @@ int __fastcall HookAddFoundGame(void *self, void *edx, unsigned char *desc, void
 				LogI("net", "online: a game found publishes version hash %08x; the game's own for its options %08x", stored, plain);
 			}
 		}
-		if ((diff & 0xffff) == (MoveStartActive() ? 0xc000u : 0u) && (diff >> 16) != ProfileKey()) {
+		// While this computer's own key is still unknown every room differs: nothing to explain yet.
+		if ((diff & 0xffff) == (MoveStartActive() ? 0xc000u : 0u) && (diff >> 16) != ProfileKey() && !KeyPending()) {
 			const unsigned hostKey = diff >> 16;
 			const unsigned ip = AddrIp(addr);
 			char key[48];
