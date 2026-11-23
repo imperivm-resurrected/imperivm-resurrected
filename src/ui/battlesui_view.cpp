@@ -162,6 +162,12 @@ void PaintGroupHeader(Painter &p, int x, int y, int w, const std::string &text)
 	if (x + tw + 10 < x + w) p.Fill(x + tw + 10, y + kHeaderH / 2, w - tw - 10, 1, pal::hairline);
 }
 
+// The tabs whose adventures earn a coin for the hardest difficulty won: the great battles and the campaigns of Imperivm I and II.
+bool MedalTab(int tab)
+{
+	return tab == kBattlesTabGreat || tab == kBattlesTabImperivm1 || tab == kBattlesTabImperivm2;
+}
+
 // The medal of an adventure won: a coin of bronze, silver or gold for the hardest difficulty won (1 to 3), with the laurel wreath
 // struck on it. An adventure not won yet shows the wreath alone, faint.
 constexpr int kMedal = 22;
@@ -198,7 +204,7 @@ void PaintRow(Painter &p, const Line &l, bool selected, int x, int y, int w, int
 		TextAsIs(p, x + 14, y, 30, kListRowH, num, selected ? pal::redText : pal::disabled);
 		textX = x + 52;
 	}
-	const bool laurels = v.snap.tab == kBattlesTabGreat;
+	const bool laurels = MedalTab(v.snap.tab);
 	const int laurelsX = x + w - 30 - kMedal;
 	if (laurels) PaintMedal(p, laurelsX, y + (kListRowH - kMedal) / 2, kMedal, BattleLaurelOf(v.laurels, l.path, l.title));
 	p.Font(selected ? 1 : 0);
@@ -256,7 +262,7 @@ void PaintSegment(Painter &p, int x, int y, int w, const BattlesSnapshot &s, boo
 	if (n <= 0) return;
 	const int segW = w / n;
 	int won = 0;
-	if (s.tab == kBattlesTabGreat && s.selList >= 0) won = BattleLaurelOf(v.laurels, s.lists[s.selList][s.selIndex].path, s.lists[s.selList][s.selIndex].title);
+	if (MedalTab(s.tab) && s.selList >= 0) won = BattleLaurelOf(v.laurels, s.lists[s.selList][s.selIndex].path, s.lists[s.selList][s.selIndex].title);
 	for (int i = 0; i < n; i++) {
 		const int bx = x + i * segW, bw = i == n - 1 ? w - i * segW : segW;
 		const bool on = i == s.difficulty;

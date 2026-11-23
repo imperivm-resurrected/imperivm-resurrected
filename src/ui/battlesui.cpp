@@ -48,6 +48,8 @@ struct State {
 	DWORD lastRead = 0;
 	DWORD loadingAt = 0;
 	bool active = false;
+	// Normal difficulty was picked for this visit of the screen; the player's own choice stands until it closes.
+	bool mediumSet = false;
 };
 
 std::mutex g_lock;
@@ -342,6 +344,19 @@ void CountLaurels(View &v)
 void Refresh()
 {
 	BattlesSnapshot snap = BattlesRead();
+	// Every visit starts at normal, the middle of easy, normal and hard.
+	bool setMedium = false;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		if (snap.open && snap.difficultyShown && snap.difficulties.size() >= 3 && !g_s.mediumSet) {
+			g_s.mediumSet = true;
+			setMedium = snap.difficulty != 1;
+		}
+	}
+	if (setMedium) {
+		BattlesSetDifficulty(1);
+		snap = BattlesRead();
+	}
 	if (snap.open) UseCampaignCovers(snap);
 	View saves;
 	ReadSaves(snap, saves);
