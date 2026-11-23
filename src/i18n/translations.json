@@ -3546,5 +3546,6 @@
 {"en":"Hannibal's Campaigns","es":"Las campañas de Aníbal","it":"Le campagne di Annibale"},
 {"en":"Numantia","es":"Numancia","it":"Numanzia"},
 {"en":"The Punic Wars","es":"Las guerras púnicas","it":"Le guerre puniche"},
-{"en":"%s% done","es":"%s % completado","it":"%s% completato"}
+{"en":"%s% done","es":"%s % completado","it":"%s% completato"},
+{"en":"%s wins","es":"%s victorias","it":"%s vittorie"}
 ]

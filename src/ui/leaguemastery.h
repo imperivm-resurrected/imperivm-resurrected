@@ -22,7 +22,7 @@ void DrawMasteryBadge(ui::Painter &p, int x, int y, int size, int level);
 // The bar from the level to the next one, full at Maestro; the last `seasonWins` of the way, those of this season, in the lighter
 // shade.
 void PaintMasteryBar(ui::Painter &p, int x, int y, int w, int h, const LeagueMastery &m, int seasonWins = 0);
-// "3 more wins for Veteran", or "Top mastery" at Maestro.
+// "3 more wins for Veteran"; at Maestro, the wins so far ("73 ranked wins"), which keep counting.
 std::string LeagueMasteryNextText(const LeagueMastery &m);
 // The tooltip of a civilization's mastery drawn in a square of `size`, when the mouse is over it; drawn by PaintMasteryTip after
 // everything else.

@@ -3554,5 +3554,6 @@ extern const TrRow kTrRows[] = {
 	{"Numantia", "Numancia", "Numanzia"},
 	{"The Punic Wars", "Las guerras púnicas", "Le guerre puniche"},
 	{"%s% done", "%s % completado", "%s% completato"},
+	{"%s wins", "%s victorias", "%s vittorie"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

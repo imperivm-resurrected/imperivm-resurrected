@@ -1287,7 +1287,9 @@ void PaintPlayerCard(Painter &p, const State &st, const std::string &seasonText,
 		const int barX = nameX + nameW + 8, barW = std::max(24, ix + iw - figW - 12 - barX);
 		if (m.present) {
 			const COLORREF ink = LeagueMasteryInk(m.level);
-			const std::string level = LeagueMasteryLabel(m.level), count = m.Top() ? std::string() : std::to_string(m.wins) + " / " + std::to_string(m.nextWins);
+			// Towards the next level, its wins; at Maestro, all the wins, which keep counting.
+			const std::string level = LeagueMasteryLabel(m.level),
+							  count = m.Top() ? TrFmt("%s wins", {std::to_string(m.wins)}) : std::to_string(m.wins) + " / " + std::to_string(m.nextWins);
 			p.Font(4);
 			p.raw = true;
 			const int levelW = p.CapsWidth(level, 1);

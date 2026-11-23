@@ -93,7 +93,8 @@ void PaintMasteryBar(Painter &p, int x, int y, int w, int h, const LeagueMastery
 
 std::string LeagueMasteryNextText(const LeagueMastery &m)
 {
-	if (m.Top()) return Tr("Top mastery");
+	// From Maestro on there is no level left: the wins keep counting.
+	if (m.Top()) return m.wins == 1 ? Tr("1 ranked win") : TrFmt("%s ranked wins", {std::to_string(m.wins)});
 	const int left = LeagueMasteryWinsLeft(m);
 	const std::string next = LeagueMasteryLabel(m.level + 1);
 	return left == 1 ? TrFmt("1 more win for %s", {next}) : TrFmt("%s more wins for %s", {std::to_string(left), next});
@@ -117,7 +118,7 @@ void PaintMasteryTip(Painter &p, int screenW, int screenH)
 	const COLORREF ink = LeagueMasteryInk(m.level);
 	const std::string title = TrFmt("%s with %s", {LeagueMasteryLabel(m.level), LeagueCivName(g_tip.civ)});
 	const std::string wins = m.wins == 1 ? Tr("1 ranked win") : TrFmt("%s ranked wins", {std::to_string(m.wins)});
-	const std::string line = wins + "  \xC2\xB7  " + LeagueMasteryNextText(m);
+	const std::string line = wins + "  \xC2\xB7  " + (m.Top() ? Tr("Top mastery") : LeagueMasteryNextText(m));
 	p.raw = true;
 	p.Font(1);
 	int w = p.TextWidth(title);
