@@ -45,6 +45,8 @@ enum Sub {
 	kSubCivMenu, kSubColorPick, kSubReady,
 	// The colour's menu on the match page: opened (1: the wheel), the wheel's colour taken, closed.
 	kSubColorOpen, kSubColorUse, kSubColorClose,
+	// The cup's gameplay mods prepared (by its id): found or downloaded, and the game restarted with them.
+	kSubPrepareMods,
 };
 
 // What kSubCupSet changes in the form: the high bits of its value; the low 16 are the choice.

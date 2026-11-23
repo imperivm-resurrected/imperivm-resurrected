@@ -33,6 +33,7 @@
 #include "net/steamnet.h"
 #include "core/version.h"
 #include "mods/mods.h"
+#include "ui/leaguemodsprep.h"
 #include "ui/leagueui.h"
 #include "ui/modui.h"
 #include "ui/mpui_tourney_internal.h"
@@ -86,6 +87,19 @@ const TourneySummary *SummaryOf(const TourneyListsView &lists, int64_t tournamen
 	return nullptr;
 }
 
+// Under g_lock: the gameplay mods of a cup, by what the page on screen, the lists or the player's next match say of it.
+LeagueModsRule CupMods(int64_t tournament)
+{
+	const auto page = LeagueTourneyPage(g_tourney.slug, 60000);
+	if (page->loaded && page->detail.id == tournament) return page->detail.mods;
+	const TourneyListsView lists = LeagueTourneyLists();
+	if (const TourneySummary *t = SummaryOf(lists, tournament)) return t->mods;
+	const auto mine = LeagueTourneyMine();
+	const TourneyNext &next = mine->mine.next;
+	if (next.present && next.tournamentId == tournament) return next.mods;
+	return LeagueModsRule();
+}
+
 // Under g_lock: a cup of teams, by what the lists, the page on screen or the player's next match say of it.
 // A cup of teams whose players sign up with their partner (not one whose teams are drawn).
 bool TeamsCup(int64_t tournament)
@@ -126,6 +140,22 @@ void Toast(const std::string &text, bool error = false)
 std::string OtherContentText(const std::string &contentName)
 {
 	return TrFmt("This tournament is played with %s: switch to that content profile first.", {contentName.empty() ? Tr("other content") : contentName});
+}
+
+// The tournament asks for other gameplay mods than this computer's: told, and true. The page offers to prepare them.
+bool ModsBlocked(const LeagueModsRule &rule)
+{
+	const LeagueModsCheck fit = LeagueModsFitNow(rule);
+	if (fit.fit == LeagueModsFit::Ok) return false;
+	Toast(LeagueModsProblemText(rule, fit), true);
+	return true;
+}
+
+std::string WrongModsText(const LeagueModsRule &rule)
+{
+	if (!rule.set) return Tr("This tournament is played with other gameplay mods: prepare your mods first.");
+	if (rule.BaseGame()) return Tr("This tournament is played without gameplay mods: prepare your mods first.");
+	return TrFmt("This tournament is played with %s: prepare your mods first.", {LeagueModsNames(rule.mods)});
 }
 
 void Flash()
@@ -234,6 +264,10 @@ void CreateRoom(const TourneyClaim &claim)
 	const TourneyNext &n = mine->mine.next;
 	if (!claim.contentKey.empty() && claim.contentKey != SteamOwnGameplayKey()) {
 		Toast(OtherContentText(n.contentName), true);
+		f = RoomFlow();
+		return;
+	}
+	if (ModsBlocked(claim.mods.set ? claim.mods : n.mods)) {
 		f = RoomFlow();
 		return;
 	}
@@ -997,6 +1031,7 @@ std::string ResultText(const TourneyOpResult &r)
 	if (e == "already_signed") return Tr("You are already signed up.");
 	if (e == "checkin_closed") return Tr("The check-in is not open.");
 	if (e == "wrong_content") return OtherContentText(r.contentName);
+	if (e == "wrong_mods") return WrongModsText(r.mods);
 	if (e == "not_ready") return Tr("The match is not waiting for players.");
 	if (e == "too_early") return r.noshowFrom > 0 ? TrFmt("It is too early to claim the win: the no-show counts %s.", {FromText(r.noshowFrom)}) : Tr("The waiting time is not over yet.");
 	if (e == "not_in_room") return Tr("You have to be in the room to claim the win.");
@@ -1465,6 +1500,7 @@ void TourneyAction(int arg)
 	case kSubSignUp:
 	case kSubTeamOpen:
 		if (!LeagueLinked()) Toast("Link your league account first.");
+		else if (ModsBlocked(CupMods(value))) break;
 		else if (sub == kSubTeamOpen || TeamsCup(value)) OpenTeamDialog(u, value);
 		else LeagueTourneySignUp(value);
 		break;
@@ -1515,7 +1551,13 @@ void TourneyAction(int arg)
 			Toast(OtherContentText(t->contentName), true);
 			break;
 		}
+		if (ModsBlocked(CupMods(value))) break;
 		LeagueTourneyCheckIn(value);
+		break;
+	}
+	case kSubPrepareMods: {
+		const LeagueModsRule rule = CupMods(value);
+		if (rule.set) LeagueModsPrepStart(rule, "tourney:" + std::to_string(value));
 		break;
 	}
 	case kSubMatch:
@@ -1542,6 +1584,7 @@ void TourneyAction(int arg)
 			Toast(OtherContentText(next.contentName), true);
 			break;
 		}
+		if (ModsBlocked(next.mods)) break;
 		if (u.room.phase != RoomFlow::kIdle && u.room.match == value) break;
 		u.room = RoomFlow();
 		u.room.phase = RoomFlow::kClaiming;

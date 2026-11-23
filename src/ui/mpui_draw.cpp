@@ -10,10 +10,12 @@
 #include "ui/modui.h"
 #include "net/rejoin.h"
 #include "net/spectator.h"
+#include "net/leagueclient_tourney.h"
 #include "addr/state.h"
 
 #include "game/mappreview.h"
 #include "ui/leaguemastery.h"
+#include "ui/leaguemodsprep.h"
 #include "ui/leagueui.h"
 #include "ui/mpui_internal.h"
 #include "ui/mpui_tourney.h"
@@ -172,6 +174,14 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 		if (g_s.view == kViewList && !g_s.game.active) FollowSelectedRoom();
 		g_s.room = SteamCurrentRoom();
 		SyncTick();
+		if (LeagueModsPrepReady()) {
+			// The game restarts for the league's mods only when that cuts nothing off: no room, search, match or tournament game on.
+			const auto tourney = LeagueTourneyMine();
+			const TourneyNext &next = tourney->mine.next;
+			const bool tourneyOn = next.present && (next.status == TourneyMatchStatus::Ready || next.status == TourneyMatchStatus::Live);
+			LeagueModsPrepTick(!g_s.room.id && !g_s.connecting && !g_s.game.active && g_s.syncPhase == 0 && g_s.ranked.view.phase == LeagueRankedPhase::Idle &&
+				!tourneyOn);
+		}
 		g_s.map = SteamMapStatus();
 		if (g_s.map.state == 1) {
 			static DWORD lastUnready = 0;

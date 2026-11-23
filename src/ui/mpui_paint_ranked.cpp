@@ -21,6 +21,7 @@
 #include "net/patrons.h"
 #include "net/steamnet.h"
 #include "ui/leaguemastery.h"
+#include "ui/leaguemodsprep.h"
 #include "ui/leaguerewards.h"
 #include "ui/leagueui.h"
 #include "ui/patronui.h"
@@ -724,8 +725,14 @@ bool PaintRankCard(Painter &p, const State &st, const HubLayout &h, const League
 	// In 2v2, alone or as the leader of a ready duo; the season has to play the queue.
 	const LeagueDuoRole role = team ? duo.role : LeagueDuoRole::Solo;
 	const bool queueOpen = !team || (v.seasonLoaded && LeagueSeasonHasQueue(v.season, kLeagueQueueTeam));
+	// The gameplay mods the season is played with (a wrong_mods answer of the queue reads the season again).
+	const LeagueModsRule &modsRule = v.season.mods;
+	const bool modsRuled = v.seasonLoaded && v.season.active && modsRule.set;
+	const LeagueModsCheck modsFit = modsRuled ? LeagueModsFitNow(modsRule) : LeagueModsCheck();
+	const bool modsOk = modsFit.fit == LeagueModsFit::Ok;
+	const LeagueModsPrepView prep = LeagueModsPrepState("ranked");
 	const bool canSearch = v.linked && v.seasonLoaded && v.season.active && ban.until <= now && v.phase == LeagueRankedPhase::Idle && queueOpen &&
-		(role == LeagueDuoRole::Solo || role == LeagueDuoRole::Leader);
+		(role == LeagueDuoRole::Solo || role == LeagueDuoRole::Leader) && modsOk;
 	// In 2v2 the duo sits over the button, where the player looks before searching, if it fits under the figures.
 	const int buttonY = y + cardH - 108, freeY = peakY + 30;
 	bool duoHere = false;
@@ -739,13 +746,41 @@ bool PaintRankCard(Painter &p, const State &st, const HubLayout &h, const League
 			popY = duoY - 30;
 		}
 	}
+	// The season's mods take the line over the button, and who is around goes over them when there is room.
+	bool modsShown = false;
+	if (modsRuled) {
+		const int modsY = popY;
+		popY -= 26;
+		if (modsY >= freeY - 8 && modsY + 22 <= buttonY - 4) {
+			modsShown = true;
+			std::string line = prep.line;
+			COLORREF ink = prep.failed ? pal::bad : pal::ok;
+			if (line.empty()) {
+				line = modsOk ? LeagueModsRuleText(modsRule) : LeagueModsProblemText(modsRule, modsFit);
+				ink = modsOk ? pal::body : pal::bad;
+			}
+			p.Font(3);
+			RawText(p, ix, modsY, iw, 22, line, ink, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		}
+	}
 	// Who is around, before searching.
 	if (v.seasonLoaded && v.season.active && popY >= freeY - 8 && popY + 22 <= buttonY - 4) PaintPopulation(p, v, ban, ix, popY, iw);
-	p.fonts[5] = BrandFont(BrandFace::Display, 34, p.s);
-	p.Button(ix, y + cardH - 108, iw, 64, team ? "Search for a match  2 vs 2" : "Search for a match  1 vs 1", kRankedAct, kRkSearch, mx, my, canSearch, true, 5);
+	if (modsRuled && !modsOk) {
+		// Gameplay mods are only mounted when the game starts: getting them right always restarts it.
+		p.Button(ix, y + cardH - 108, iw, 64, "Prepare mods (restarts the game)", kRankedAct, kRkPrepareMods, mx, my, !prep.busy && v.phase == LeagueRankedPhase::Idle, true);
+	}
+	else {
+		p.fonts[5] = BrandFont(BrandFace::Display, 34, p.s);
+		p.Button(ix, y + cardH - 108, iw, 64, team ? "Search for a match  2 vs 2" : "Search for a match  1 vs 1", kRankedAct, kRkSearch, mx, my, canSearch, true, 5);
+	}
 	if (v.seasonLoaded && !v.season.active) {
 		p.Font(3);
 		p.Text(ix, y + cardH - 38, iw, 22, "The season is not being played now.", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	}
+	else if (modsRuled && !modsShown && !prep.line.empty()) {
+		// No room over the button (a short screen with the duo): the preparation's progress goes under it.
+		p.Font(3);
+		RawText(p, ix, y + cardH - 38, iw, 22, prep.line, prep.failed ? pal::bad : pal::ok, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
 	else PaintQueueLine(p, v, duo, ban.until, ix, y + cardH - 38, iw);
 	return duoHere;

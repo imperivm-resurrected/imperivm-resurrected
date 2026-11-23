@@ -232,6 +232,7 @@ bool LeagueParseSeason(const Json &j, LeagueSeason &out)
 			if (m.type == Json::String && !m.str.empty()) out.newMaps.push_back(m.str);
 		}
 	}
+	out.mods = LeagueParseModsRule(j.Get("mods"));
 	return true;
 }
 
@@ -480,6 +481,7 @@ LeagueError LeagueParseError(const Json &j)
 	e.message = j.GetString("message");
 	e.contentKey = j.GetString("contentKey");
 	e.contentName = j.GetString("contentName");
+	e.mods = LeagueParseModsRule(j.Get("mods"));
 	e.kind = Lower(j.GetString("kind"));
 	e.reason = j.GetString("reason");
 	e.until = j.GetInt64("until");

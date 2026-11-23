@@ -122,6 +122,7 @@ enum RankedArg {
 	kRkSearch = 1, kRkCancel, kRkAccept, kRkDecline, kRkBoard, kRkHub, kRkBoardPrev, kRkBoardNext, kRkBoardMe, kRkRoom,
 	kRkResultClose, kRkAgain, kRkResultBoard, kRkSkip, kRkSteam, kRkAbandon, kRkHistory, kRkHistoryPrev, kRkHistoryNext,
 	kRkHistoryNewest, kRkDisputeResult, kRkDisputeSend, kRkDisputeCancel, kRkGuide, kRkGuideRanks, kRkGuideRules, kRkHubRecent, kRkHubMastery,
+	kRkPrepareMods,
 	kRkRow = 0x100, kRkDisputeHistory = 0x300,
 	kRkArgEnd = 0x400, kRkContentSwitch, kRkContentClose,
 };

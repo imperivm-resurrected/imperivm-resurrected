@@ -29,6 +29,7 @@
 #include "net/leagueclient.h"
 #include "net/steamnet.h"
 #include "ui/leaguemapthumb.h"
+#include "ui/leaguemodsprep.h"
 #include "ui/leagueui.h"
 #include "ui/modui.h"
 
@@ -776,6 +777,13 @@ void RankedAction(int arg)
 		if (_strtoui64(r.boardPick.c_str(), nullptr, 10)) SteamOpenWebPage("https://steamcommunity.com/profiles/" + r.boardPick);
 		break;
 	case kRkContentClose: r.contentOpen = false; break;
+	case kRkPrepareMods: {
+		const LeagueModsRule &rule = r.view.season.mods;
+		if (r.view.phase != LeagueRankedPhase::Idle || !rule.set) break;
+		LeagueRankedClearNotice();
+		LeagueModsPrepStart(rule, "ranked");
+		break;
+	}
 	case kRkContentSwitch: {
 		r.contentOpen = false;
 		if (!r.contentSwitchable || r.contentProfile.empty()) break;

@@ -71,6 +71,8 @@ struct TourneyOpResult {
 	// Until when a suspended player cannot sign up, and the content a tournament asks for.
 	int64_t until = 0;
 	std::string contentName;
+	// wrong_mods: the gameplay mods the tournament is played with.
+	LeagueModsRule mods;
 	TourneyClaim claim;
 	// What the other refusals add: the games played and needed to organise, the players checked in and needed to start, the seconds to
 	// wait after too many requests.

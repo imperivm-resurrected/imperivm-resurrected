@@ -21,6 +21,7 @@
 #include "core/leagueteam.h"
 #include "core/log.h"
 #include "i18n/tr.h"
+#include "mods/modsleague.h"
 #include "net/leagueclient_internal.h"
 #include "net/patrons.h"
 #include "net/steamnet.h"
@@ -454,10 +455,11 @@ void JoinThread(unsigned gen, std::string contentKey, std::string queue)
 	Json body = Json::MakeObject();
 	body.Set("queue", Json::MakeString(queue));
 	body.Set("contentKey", Json::MakeString(contentKey));
+	body.Set("mods", LeagueModsOwnJson(ModsOwnLeagueMods()));
 	const Answer a = Call("POST", "/v1/league/queue", body.Dump(), true);
 	LeagueQueueAnswer q;
 	const bool ok = a.r.Ok() && a.parsed && LeagueParseQueue(a.j, q);
-	bool leave = false;
+	bool leave = false, refreshSeason = false;
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
 		g_q.busy = false;
@@ -497,6 +499,12 @@ void JoinThread(unsigned gen, std::string contentKey, std::string queue)
 				g_q.contentName = a.error.contentName;
 				g_q.wrongContent++;
 			}
+			else if (code == "wrong_mods") {
+				SetNotice(g_q, a.error.mods.BaseGame() ? "This season is played without gameplay mods: prepare your mods to search."
+													 : "This season is played with other gameplay mods: prepare your mods to search.",
+					true);
+				refreshSeason = true;
+			}
 			else if (code == "no_season") SetNotice(g_q, "No ranked season is being played now.", true);
 			else if (code == "queue_closed") SetNotice(g_q, "This season does not play that queue.", true);
 			else if (code == "not_leader") SetNotice(g_q, "The leader of your duo searches for both of you.", true);
@@ -512,6 +520,7 @@ void JoinThread(unsigned gen, std::string contentKey, std::string queue)
 		}
 	}
 	if (leave) LeaveThread();
+	if (refreshSeason) LeagueSeasonRefresh(true);
 }
 
 // `watching`: this player is the partner of a duo and follows the leader's search, which is theirs too.

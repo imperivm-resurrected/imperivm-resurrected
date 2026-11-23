@@ -22,6 +22,7 @@
 #include "core/sha256.h"
 #include "core/tournament.h"
 #include "game/cupmaps.h"
+#include "mods/modsleague.h"
 #include "net/leagueclient_internal.h"
 #include "net/steamnet.h"
 
@@ -331,6 +332,7 @@ void Run(TourneyOp op, int64_t id, std::string method, std::string path, std::st
 		out.message = parsed ? no.message : r.failure;
 		out.until = no.until;
 		out.contentName = no.contentName;
+		out.mods = no.mods;
 		out.gamesPlayed = no.gamesPlayed;
 		out.gamesNeeded = no.gamesNeeded;
 		out.checkedIn = no.checkedIn;
@@ -679,6 +681,7 @@ void LeagueTourneySignUp(int64_t tournament)
 		const auto code = g_codeIds.find(tournament);
 		if (code != g_codeIds.end()) body.Set("code", Json::MakeString(code->second));
 	}
+	body.Set("mods", LeagueModsOwnJson(ModsOwnLeagueMods()));
 	Start(TourneyOp::SignUp, tournament, "POST", TourneyPath(tournament, "/entries"), body.Dump());
 }
 
@@ -690,7 +693,9 @@ void LeagueTourneySignUpTeam(int64_t tournament, uint64_t partner, const std::st
 		const auto found = g_codeIds.find(tournament);
 		if (found != g_codeIds.end()) code = found->second;
 	}
-	Start(TourneyOp::SignUp, tournament, "POST", TourneyPath(tournament, "/entries"), TourneyTeamEntryJson(partner, teamName, code).Dump());
+	Json body = TourneyTeamEntryJson(partner, teamName, code);
+	body.Set("mods", LeagueModsOwnJson(ModsOwnLeagueMods()));
+	Start(TourneyOp::SignUp, tournament, "POST", TourneyPath(tournament, "/entries"), body.Dump());
 }
 
 void LeagueTourneyAnswerInvite(int64_t tournament, int64_t entry, bool accept)
@@ -725,6 +730,7 @@ void LeagueTourneyCheckIn(int64_t tournament)
 {
 	Json body = Json::MakeObject();
 	body.Set("contentKey", Json::MakeString(SteamOwnGameplayKey()));
+	body.Set("mods", LeagueModsOwnJson(ModsOwnLeagueMods()));
 	Start(TourneyOp::CheckIn, tournament, "POST", "/v1/tournaments/" + std::to_string(tournament) + "/checkin", body.Dump());
 }
 

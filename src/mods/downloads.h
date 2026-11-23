@@ -139,7 +139,12 @@ struct RoomModRequest {
 	std::string version;
 	uint64_t gbFile = 0;
 	std::string copyKey;
+	// Only the GameBanana file `gbFile` will do (what the league asks for): a copy counts when it was installed from it, whatever its
+	// version says, and no other file of the mod is taken instead.
+	bool exactFile = false;
 };
+// The note of a RoomModStatus when the exact file asked for is not on GameBanana any more.
+constexpr const char *kRoomModFileGone = "that file is no longer on GameBanana";
 struct RoomModStatus {
 	bool active = false, done = false;
 	int index = 0, count = 0;

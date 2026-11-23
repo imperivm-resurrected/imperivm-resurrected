@@ -14,6 +14,7 @@
 #include "net/patrons.h"
 #include "net/steamnet.h"
 #include "ui/fullscreen.h"
+#include "ui/leaguemodsprep.h"
 #include "ui/leagueui.h"
 #include "ui/mpui_tourney_internal.h"
 #include "ui/scrollpane.h"
@@ -1111,6 +1112,7 @@ void PaintRules(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out)
 		row(Tr("Next games of a series"), TrFmt("the loser of the last game picks: %s", {pool}));
 	}
 	row(Tr("Content"), ContentText(d));
+	if (d.mods.set) row(Tr("Gameplay mods"), d.mods.BaseGame() ? Tr("None: the base game") : LeagueModsNames(d.mods.mods));
 	const TourneyRoomRules rules = TourneyRulesOf(d.settings);
 	row(Tr("Settings"), PresetText(d.settings) + " (" + PresetSummary(rules.preset) + ")");
 	row(Tr("Civilizations"), Tr(rules.hideCivs ? "Hidden until the game starts" : "Visible in the room"));
@@ -1265,6 +1267,11 @@ int PaintStatusCard(Painter &p, Ctx &c, int x, int y, int w)
 		const TourneyInvite *invite = !in && teams ? TourneyInviteOf(c.mine.mine, d.id) : nullptr;
 		const bool pending = !in && !invite && e && e->Pending();
 		const TourneyUnmet unmet = in || invite || pending || (IsOrganizer(d) && !teams) ? TourneyUnmet::None : CupUnmet(d.requirements, c.mine);
+		// The cup's gameplay mods: they count to sign up and, once in, until the check-in is done.
+		const LeagueModsCheck modsFit = LeagueModsFitNow(d.mods);
+		const LeagueModsPrepView prep = LeagueModsPrepState("tourney:" + std::to_string(d.id));
+		const bool modsNeeded = modsFit.fit != LeagueModsFit::Ok && !invite && !pending && unmet == TourneyUnmet::None &&
+			(!in || (d.status == TourneyStatus::Checkin && !e->checkedIn));
 		// What the player's state is in the cup, which can take a few lines: the card grows with it.
 		std::string status;
 		COLORREF ink = pal::ok;
@@ -1293,9 +1300,13 @@ int PaintStatusCard(Painter &p, Ctx &c, int x, int y, int w)
 			status = UnmetText(d.requirements, unmet, c.mine);
 			ink = pal::bad;
 		}
+		if (modsNeeded) {
+			status = LeagueModsProblemText(d.mods, modsFit) + " " + Tr("Preparing them restarts the game.");
+			ink = pal::bad;
+		}
 		p.Font(3);
 		const int sh = std::min(88, p.Measure(w - 2 * pad, status));
-		const int h = (reqs ? 262 : 236) + std::max(0, sh - 44);
+		const int h = (reqs ? 262 : 236) + (d.mods.set ? 26 : 0) + std::max(0, sh - 44);
 		PaintGlassCard(p, x, y, w, h);
 		PaintCaps(p, x + pad, y + 20, w - 2 * pad, 20, d.status == TourneyStatus::Checkin ? "Check-in" : "Sign-up", pal::caption);
 		UseFace(p, BrandFace::UiStrong, 18);
@@ -1315,6 +1326,12 @@ int PaintStatusCard(Painter &p, Ctx &c, int x, int y, int w)
 			p.Text(x + pad, ly, w - 2 * pad, 22, Tr("Requirements") + ": " + RequirementsText(d.requirements) + both, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 			ly += 26;
 		}
+		if (d.mods.set) {
+			const bool progress = !prep.line.empty();
+			const COLORREF modsInk = progress ? (prep.failed ? pal::bad : pal::ok) : modsFit.fit == LeagueModsFit::Ok ? pal::textDim : pal::bad;
+			p.Text(x + pad, ly, w - 2 * pad, 22, progress ? prep.line : LeagueModsRuleText(d.mods), modsInk, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			ly += 26;
+		}
 		p.Font(3);
 		p.raw = true;
 		p.TextWrapped(x + pad, ly, w - 2 * pad, sh + 2, status, ink);
@@ -1330,6 +1347,14 @@ int PaintStatusCard(Painter &p, Ctx &c, int x, int y, int w)
 		else if (pending) {
 			const bool busy = LeagueTourneyBusy(TourneyOp::CancelTeam, d.id);
 			p.Button(x + pad, by, bw, 44, busy ? "Cancelling..." : "Cancel", kTourney, ArgOf(kSubTeamWithdraw, d.id), mx, my, !busy);
+		}
+		else if (modsNeeded && !in) {
+			p.Button(x + pad, by, bw, 44, "Prepare mods (restarts the game)", kTourney, ArgOf(kSubPrepareMods, d.id), mx, my, !prep.busy, true);
+		}
+		else if (modsNeeded) {
+			const int half = (bw - 10) / 2;
+			p.Button(x + pad, by, half, 44, "Prepare mods", kTourney, ArgOf(kSubPrepareMods, d.id), mx, my, !prep.busy, true);
+			p.Button(x + pad + half + 10, by, bw - half - 10, 44, "Withdraw", kTourney, ArgOf(kSubWithdraw, d.id), mx, my);
 		}
 		else if (!in) {
 			const bool busy = LeagueTourneyBusy(TourneyOp::SignUp, d.id);

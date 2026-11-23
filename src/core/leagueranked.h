@@ -9,6 +9,7 @@
 
 #include "core/json.h"
 #include "core/league.h"
+#include "core/leaguemods.h"
 
 // The ranked queues of the league server (1v1 and 2v2), as the mod reads them: the season, the queue, the match ticket, the ladder and
 // what a report gave, plus the maths of the screens (the Glory bar, the countdown and the result's animation). Nothing here talks to the
@@ -42,6 +43,8 @@ struct LeagueSeason {
 	std::vector<LeagueMapFacts> maps2v2;
 	// The 1v1 maps the season before did not play, by name in the asked language: the season's news.
 	std::vector<std::string> newMaps;
+	// The gameplay mods the season is played with; not set when it does not say.
+	LeagueModsRule mods;
 };
 bool LeagueParseSeason(const Json &j, LeagueSeason &out);
 bool LeagueSeasonHasQueue(const LeagueSeason &s, const std::string &queue);
@@ -218,6 +221,8 @@ struct LeagueError {
 	std::string code, message, contentKey;
 	// wrong_content: the name of the content the season is played with.
 	std::string contentName;
+	// wrong_mods: the gameplay mods the season is played with (set and empty for the base game).
+	LeagueModsRule mods;
 	// Why a player is locked out of the queue (409 banned): "declined", "abandoned", "desync" or "staff", and the team's reason for a
 	// staff lock.
 	std::string kind, reason;

@@ -591,6 +591,7 @@ bool TourneyParseSummary(const Json &j, TourneySummary &out)
 	out.seeding = Text(j, "seeding");
 	out.contentKey = Text(j, "contentKey");
 	out.contentName = Text(j, "contentName");
+	out.mods = LeagueParseModsRule(j.Get("mods"));
 	out.settings = TourneySettingsFromJson(j.Get("settings"));
 	out.requirements = TourneyRequirementsFromJson(j.Get("requirements"));
 	out.maps = MapsFromJson(j.Get("maps"));
@@ -1054,6 +1055,7 @@ bool TourneyParseNext(const Json &j, TourneyNext &out)
 	out.map = TourneyMapFromJson(j.Get("map"));
 	out.contentKey = Text(j, "contentKey");
 	out.contentName = Text(j, "contentName");
+	out.mods = LeagueParseModsRule(j.Get("mods"));
 	out.settings = TourneySettingsFromJson(j.Get("settings"));
 	out.lobby = Id64(j.Get("lobby"));
 	out.specLobby = Id64(j.Get("specLobby"));
@@ -1271,6 +1273,7 @@ bool TourneyParseClaim(const Json &j, TourneyClaim &out)
 		out.map = TourneyMapFromJson(j.Get("map"));
 		out.settings = TourneySettingsFromJson(j.Get("settings"));
 		out.contentKey = Text(j, "contentKey");
+		out.mods = LeagueParseModsRule(j.Get("mods"));
 	}
 	else if (const uint64_t lobby = Id64(j.Get("join"))) {
 		out.kind = TourneyClaim::Join;
@@ -1434,6 +1437,7 @@ TourneyRefusal TourneyParseRefusal(const Json &j)
 	r.code = Text(j, "error");
 	r.message = Text(j, "message");
 	r.contentName = Text(j, "contentName");
+	r.mods = LeagueParseModsRule(j.Get("mods"));
 	r.slug = Text(j, "slug");
 	r.until = Int64(j, "until");
 	r.gamesPlayed = j.GetInt("gamesPlayed");

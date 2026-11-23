@@ -11,6 +11,7 @@
 
 #include "core/json.h"
 #include "core/league.h"
+#include "core/leaguemods.h"
 
 // The league's official tournaments (imperivm-league, src/tournaments.ts): the shapes of the server's answers, the decisions that only
 // depend on them and the geometry of the bracket on screen. Nothing here talks to the network or draws.
@@ -187,6 +188,8 @@ TourneyOrganizer TourneyOrganizerFromJson(const Json *v);
 struct TourneySummary {
 	int64_t id = 0;
 	std::string slug, name, description, format, seeding, contentKey, contentName;
+	// The gameplay mods it is played with; not set when it does not say.
+	LeagueModsRule mods;
 	bool official = false;
 	// A community cup that only its code opens (GET /v1/tournaments/code/:code); the list never has them.
 	bool isPrivate = false;
@@ -384,6 +387,7 @@ struct TourneyNext {
 	bool present = false;
 	int64_t tournamentId = 0, match = 0;
 	std::string slug, name, contentKey, contentName, lobbyKey;
+	LeagueModsRule mods;
 	bool official = false, isPrivate = false;
 	TourneyOrganizer organizer;
 	int round = 0, rounds = 0, bestOf = 1, game = 1, scoreMe = 0, scoreThem = 0;
@@ -500,6 +504,7 @@ struct TourneyClaim {
 	enum Kind { None, Create, Join, Wait } kind = None;
 	uint64_t lobby = 0, by = 0;
 	std::string lobbyKey, contentKey;
+	LeagueModsRule mods;
 	TourneyMap map;
 	TourneySettings settings;
 	// Wait while the map of a series' next game is being chosen: the room opens once it is.
@@ -559,6 +564,8 @@ bool TourneyParseDisputes(const Json &j, std::vector<TourneyDispute> &out);
 // The body of a refusal, {error, message}, with what each error adds.
 struct TourneyRefusal {
 	std::string code, message, contentName;
+	// wrong_mods: the gameplay mods the tournament is played with.
+	LeagueModsRule mods;
 	// already_organizing: the cup the player organises now.
 	std::string slug;
 	int64_t until = 0;

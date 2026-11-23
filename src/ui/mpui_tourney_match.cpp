@@ -16,6 +16,7 @@
 #include "net/steamnet.h"
 #include "ui/colorwheel.h"
 #include "ui/fullscreen.h"
+#include "ui/leaguemodsprep.h"
 #include "ui/leagueui.h"
 #include "ui/mpui_tourney_internal.h"
 #include "ui/patronui.h"
@@ -600,14 +601,17 @@ void PaintReadyCard(Painter &p, const State &st, const Ui &u, const TourneyNext 
 	const bool choose = n.status == TourneyMatchStatus::Ready;
 	PaintCaps(p, m + pad, ry + 20, cw - 2 * pad, 20, choose ? "Your side" : "Ready to enter", pal::caption);
 	const bool sameContent = n.contentKey.empty() || n.contentKey == SteamOwnGameplayKey();
+	const LeagueModsCheck modsFit = LeagueModsFitNow(n.mods);
+	const bool modsOk = modsFit.fit == LeagueModsFit::Ok;
 	const CupMapState mapState = LeagueCupMap(map);
 	const TourneyMyEntry *entry = MyEntry(mine, n.tournamentId);
 	struct Check {
 		bool ok;
 		std::string text;
 	} checks[] = {
-		{sameContent, sameContent ? TrFmt("%s active, the same content as the room", {n.contentName.empty() ? Tr("The mod's rules") : n.contentName})
-								  : TrFmt("This tournament needs %s: switch your content profile", {n.contentName.empty() ? Tr("other content") : n.contentName})},
+		n.mods.set ? Check{modsOk, modsOk ? LeagueModsRuleText(n.mods) : LeagueModsProblemText(n.mods, modsFit) + " " + Tr("Prepare them from the cup's page.")}
+				   : Check{sameContent, sameContent ? TrFmt("%s active, the same content as the room", {n.contentName.empty() ? Tr("The mod's rules") : n.contentName})
+												   : TrFmt("This tournament needs %s: switch your content profile", {n.contentName.empty() ? Tr("other content") : n.contentName})},
 		{mapState.status == CupMapStatus::Ready, MapCheckText(map, mapState)},
 		{st.ready, st.ready ? Tr("Steam is ready") : Tr("Steam is not available. Open Steam and try again.")},
 		{!entry || entry->checkedIn, Tr(!entry || entry->checkedIn ? "Check-in done" : "Check-in missing")},

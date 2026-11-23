@@ -2083,10 +2083,16 @@ bool IsRoomVersion(const ModInfo &m, const RoomModRequest &r)
 	return ((r.gbId && m.gbId == r.gbId) || _stricmp(m.id.c_str(), r.id.c_str()) == 0) && m.version == r.version;
 }
 
+bool IsExactFile(const ModInfo &m, const RoomModRequest &r)
+{
+	return r.gbId && r.gbFile && m.gbId == r.gbId && DlInstalledGbFile(m) == r.gbFile;
+}
+
 bool FindInstalledCopy(const RoomModRequest &r, std::string &folder, const std::set<std::string> &skip = {})
 {
 	for (const ModInfo &m : ModsList()) {
-		if (IsRoomVersion(m, r) && !skip.count(m.folder) && ModsCompareRoomCopy(m, r.copyKey) != RoomCopy::kOther) {
+		const bool same = r.exactFile ? IsExactFile(m, r) : IsRoomVersion(m, r) && ModsCompareRoomCopy(m, r.copyKey) != RoomCopy::kOther;
+		if (same && !skip.count(m.folder)) {
 			folder = m.folder;
 			return true;
 		}
@@ -2120,7 +2126,7 @@ void RoomModsThread(std::vector<RoomModRequest> reqs)
 		}
 		std::set<std::string> otherCopies;
 		for (const ModInfo &m : ModsList()) {
-			if (IsRoomVersion(m, r)) otherCopies.insert(m.folder);
+			if (r.exactFile ? r.gbId && m.gbId == r.gbId : IsRoomVersion(m, r)) otherCopies.insert(m.folder);
 		}
 		if (!r.gbId) {
 			RoomFail(r.id, "not installed from GameBanana");
@@ -2136,14 +2142,14 @@ void RoomModsThread(std::vector<RoomModRequest> reqs)
 			if (r.gbFile && f.id == r.gbFile) file = &f;
 		}
 		for (const GbFile &f : files.files) {
-			if (!file && CompareVersions(f.version, r.version) == 0) file = &f;
+			if (!file && !r.exactFile && CompareVersions(f.version, r.version) == 0) file = &f;
 		}
 		if (!file) {
-			RoomFail(r.id, !files.error.empty() ? files.error : "GameBanana does not have version " + r.version);
+			RoomFail(r.id, !files.error.empty() ? files.error : r.exactFile ? std::string(kRoomModFileGone) : "GameBanana does not have version " + r.version);
 			continue;
 		}
 		bool haveThatFile = false;
-		for (const ModInfo &m : ModsList()) haveThatFile = haveThatFile || (otherCopies.count(m.folder) && DlInstalledGbFile(m) == file->id);
+		for (const ModInfo &m : ModsList()) haveThatFile = haveThatFile || (!r.exactFile && otherCopies.count(m.folder) && DlInstalledGbFile(m) == file->id);
 		if (haveThatFile) {
 			RoomFail(r.id, "the file of GameBanana is the copy already installed, not the host's");
 			continue;
@@ -2155,14 +2161,15 @@ void RoomModsThread(std::vector<RoomModRequest> reqs)
 		e.gbId = r.gbId;
 		e.id = r.id;
 		if (e.name.empty()) e.name = r.id;
-		e.version = r.version;
+		e.version = r.exactFile && !file->version.empty() ? file->version : r.version;
 		e.bytes = file->bytes;
 		e.url = "https://gamebanana.com/dl/" + std::to_string(file->id);
 		e.md5 = file->md5;
 		e.fileId = file->id;
 		e.fileDate = file->date;
 		e.aside = true;
-		e.otherCopy = !otherCopies.empty();
+		// An exact file always goes in a folder of its own: a copy by hand with the same id and version is not that file.
+		e.otherCopy = r.exactFile || !otherCopies.empty();
 		const uint64_t bytes = file->bytes;
 		uint64_t before;
 		{
