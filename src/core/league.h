@@ -70,6 +70,8 @@ struct LeagueBadge {
 	LeagueMetal metal = LeagueMetal::None;
 	// The emblem of the test season (its tier is "founder"), which everyone who played it keeps instead of a rank's.
 	bool founder = false;
+	// A trophy worn next to the name: how many of that metal the player holds (the cups won). Not part of the comparison.
+	int count = 0;
 	bool Shown() const { return kind != LeagueBadgeKind::None; }
 	bool operator==(const LeagueBadge &o) const
 	{

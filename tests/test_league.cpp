@@ -133,6 +133,9 @@ void Badges()
 	CHECK(LeagueBadgeFromJson(&trophy).kind == LeagueBadgeKind::Trophy);
 	// Without its metal a trophy is the champion's gold; the lookup sends the metal as the tier.
 	CHECK(LeagueBadgeFromJson(&trophy).metal == LeagueMetal::Gold);
+	CHECK_EQ(LeagueBadgeFromJson(&trophy).count, 0);
+	const Json three = Parse("{\"kind\": \"trophy\", \"id\": 9, \"tier\": \"gold\", \"count\": 3}");
+	CHECK_EQ(LeagueBadgeFromJson(&three).count, 3);
 	const Json bronze = Parse("{\"kind\": \"trophy\", \"id\": 7, \"tier\": \"bronze\"}");
 	b = LeagueBadgeFromJson(&bronze);
 	CHECK(b.metal == LeagueMetal::Bronze);

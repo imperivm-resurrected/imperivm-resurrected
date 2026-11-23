@@ -340,6 +340,7 @@ LeagueBadge LeagueBadgeFromJson(const Json *v)
 		b.metal = metal && metal->type == Json::String ? LeagueMetalFromId(metal->str) : LeagueMetal::None;
 		if (b.metal == LeagueMetal::None) b.metal = LeagueMetal::Gold;
 		b.tier = LeagueTier::None;
+		b.count = std::max(0, v->GetInt("count"));
 	}
 	b.season = v->GetInt("season");
 	b.title = v->GetString("title");

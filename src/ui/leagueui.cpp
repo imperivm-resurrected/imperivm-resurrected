@@ -357,6 +357,19 @@ void DrawBadgeAfterName(Painter &p, int nameX, int y, int nameW, int h, const st
 	const int textW = std::min(std::max(0, nameW), p.TextWidth(name));
 	const int bx = nameX + textW + kLeagueBadgeGap, by = y + (h - kLeagueBadgeSize) / 2;
 	DrawLeagueBadge(p, bx, by, kLeagueBadgeSize, badge);
+	// How many of that phalera the player holds, on its corner: the cups won.
+	if (badge.kind == LeagueBadgeKind::Trophy && badge.count >= 2) {
+		const std::string n = std::to_string(std::min(badge.count, 99));
+		const COLORREF ink = LeagueMetalInk(badge.metal);
+		HGDIOBJ old = SelectObject(p.dc, BrandFont(BrandFace::Ui, 10, p.s));
+		p.raw = true;
+		const int tw = p.TextWidth(n) + 5, th = 12, cx = bx + kLeagueBadgeSize - tw + 4, cy = by + kLeagueBadgeSize - th + 4;
+		p.Fill(cx, cy, tw, th, pal::bg);
+		p.Frame(cx, cy, tw, th, ink);
+		p.Text(cx, cy, tw, th, n, ink, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
+		p.raw = false;
+		SelectObject(p.dc, old);
+	}
 	const bool clickable = BadgeClick(p, bx, by, kLeagueBadgeSize, id);
 	if (!p.Hover(bx, by, kLeagueBadgeSize, kLeagueBadgeSize, mx, my)) return;
 	g_tip.show = true;
@@ -450,6 +463,7 @@ void PaintLeagueBadgeTip(Painter &p, int screenW, int screenH)
 												 : "Champion of an official tournament");
 		break;
 	}
+	if (b.kind == LeagueBadgeKind::Trophy && b.count >= 2) title += "  Ã" + std::to_string(b.count);
 	const std::string click = g_tip.clickable ? Tr("Click: see their row in the leaderboard") : std::string();
 	p.raw = true;
 	p.Font(1);
