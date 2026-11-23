@@ -35,6 +35,7 @@ struct Entry {
 	PatronInfo info;
 	LeagueBadge badge;
 	LeagueFrame frame;
+	bool linked = false;
 	DWORD at = 0;
 	bool known = false;
 };
@@ -176,11 +177,13 @@ void Lookup(std::vector<uint64_t> ids)
 			Entry &e = g_cache[id];
 			const LeagueBadge badge = e.badge;
 			const LeagueFrame frame = e.frame;
+			const bool linked = e.linked;
 			e = Entry();
 			e.at = now;
 			e.known = true;
 			e.badge = badges ? LeagueBadge() : badge;
 			e.frame = badges ? LeagueFrame() : frame;
+			e.linked = !badges && linked;
 			auto p = found.find(id);
 			if (p != found.end()) {
 				e.info.place = p->second.patronPlace;
@@ -188,6 +191,7 @@ void Lookup(std::vector<uint64_t> ids)
 				if (badges) {
 					e.badge = p->second.badge;
 					e.frame = p->second.frame;
+					e.linked = p->second.linked;
 				}
 			}
 			auto a = g_announce.find(id);
@@ -222,6 +226,13 @@ LeagueFrame PlayerFrameOf(uint64_t id)
 	std::lock_guard<std::mutex> lock(g_mx);
 	auto it = g_cache.find(id);
 	return it == g_cache.end() ? LeagueFrame() : it->second.frame;
+}
+
+bool PlayerLinkedOf(uint64_t id)
+{
+	std::lock_guard<std::mutex> lock(g_mx);
+	const auto it = g_cache.find(id);
+	return it != g_cache.end() && it->second.linked;
 }
 
 void PatronsWatch(const std::vector<uint64_t> &ids)

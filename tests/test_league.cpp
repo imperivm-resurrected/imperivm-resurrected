@@ -162,7 +162,7 @@ void Badges()
 void Lookup()
 {
 	const Json j = Parse("{\"76561198000000001\": {\"patron\": {\"tier\": \"gold\", \"place\": 1}, \"badge\": {\"kind\": \"rank\", \"id\": \"1v1\", "
-						 "\"tier\": \"legado\", \"division\": 3}}, \"76561198000000002\": {\"patron\": null, \"badge\": null}, \"x\": {}}");
+						 "\"tier\": \"legado\", \"division\": 3}, \"linked\": true}, \"76561198000000002\": {\"patron\": null, \"badge\": null}, \"x\": {}}");
 	std::map<uint64_t, LeagueLookupEntry> out;
 	CHECK(LeagueParsePlayersLookup(j, out));
 	CHECK_EQ(static_cast<unsigned>(out.size()), 2u);
@@ -171,9 +171,11 @@ void Lookup()
 	CHECK_EQ(a.patronPlace, 1);
 	CHECK(a.badge.tier == LeagueTier::Legate);
 	CHECK_EQ(a.badge.division, 3);
+	CHECK(a.linked);
 	const LeagueLookupEntry &b = out[76561198000000002ULL];
 	CHECK(b.patronTier.empty());
 	CHECK(!b.badge.Shown());
+	CHECK(!b.linked);
 	std::map<uint64_t, LeagueLookupEntry> none;
 	CHECK(!LeagueParsePlayersLookup(Parse("[]"), none));
 }

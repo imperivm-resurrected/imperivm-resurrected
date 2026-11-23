@@ -100,6 +100,8 @@ struct LeagueLookupEntry {
 	int patronPlace = 0;
 	LeagueBadge badge;
 	LeagueFrame frame;
+	// The player has linked the game to the league: a friend can invite them to a duo.
+	bool linked = false;
 };
 // {"<steamId>": {patron: {tier, place}|null, badge: {...}|null}}. False when it is not an object.
 bool LeagueParsePlayersLookup(const Json &j, std::map<uint64_t, LeagueLookupEntry> &out);

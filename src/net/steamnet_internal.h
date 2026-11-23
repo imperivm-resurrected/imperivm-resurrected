@@ -45,6 +45,7 @@
 	X(SteamAPI_ISteamMatchmaking_GetLobbyMemberData)                                                       \
 	X(SteamAPI_ISteamFriends_GetFriendCount) X(SteamAPI_ISteamFriends_GetFriendByIndex)                    \
 	X(SteamAPI_ISteamFriends_GetFriendGamePlayed) X(SteamAPI_ISteamFriends_HasFriend)                      \
+	X(SteamAPI_ISteamFriends_GetFriendPersonaState)                                                        \
 	X(SteamAPI_SteamNetworkingUtils_SteamAPI_v004) X(SteamAPI_ISteamNetworkingUtils_InitRelayNetworkAccess) \
 	X(SteamAPI_ISteamNetworkingUtils_SetGlobalConfigValueInt32)                                            \
 	X(SteamAPI_SteamNetworkingMessages_SteamAPI_v002) X(SteamAPI_ISteamNetworkingMessages_SendMessageToUser) \

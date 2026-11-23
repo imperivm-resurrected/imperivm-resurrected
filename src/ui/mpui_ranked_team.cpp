@@ -18,6 +18,7 @@
 #include "core/leagueteam.h"
 #include "i18n/tr.h"
 #include "net/leagueclient.h"
+#include "net/patrons.h"
 #include "net/steamnet.h"
 #include "ui/leaguemapthumb.h"
 #include "ui/leagueui.h"
@@ -100,7 +101,7 @@ std::string Lower(std::string s)
 	return s;
 }
 
-// The friends the invitation dialog lists: the ones with the name looked for, playing the game now first.
+// The friends the invitation dialog lists: the ones with the name looked for, in the order SteamFriendsInfo gives them.
 std::vector<SteamFriendInfo> FriendsShown(const State &st)
 {
 	std::vector<SteamFriendInfo> out;
@@ -109,6 +110,22 @@ std::vector<SteamFriendInfo> FriendsShown(const State &st)
 		if (want.empty() || Lower(f.name).find(want) != std::string::npos) out.push_back(f);
 	}
 	return out;
+}
+
+struct PresenceLook {
+	std::string label;
+	COLORREF dot, ink;
+};
+
+PresenceLook PresenceLookOf(FriendPresence presence)
+{
+	switch (presence) {
+	case FriendPresence::Playing: return {Tr("Playing Imperivm"), pal::ok, pal::ok};
+	case FriendPresence::Online: return {Tr("Connected"), pal::ok, pal::textDim};
+	case FriendPresence::Away: return {Tr("Away"), pal::warn, pal::caption};
+	case FriendPresence::Busy: return {Tr("Busy"), pal::warn, pal::caption};
+	default: return {Tr("Offline"), pal::disabled, pal::disabled};
+	}
 }
 
 struct InviteLayout {
@@ -126,6 +143,16 @@ InviteLayout InviteFor(int viewW, int viewH)
 	l.listY = l.d.y + 168;
 	l.rows = std::max(3, (l.d.FooterTop() - 16 - l.listY) / kInviteRowH);
 	return l;
+}
+
+int InvitePages(size_t count, int rows)
+{
+	return std::max(1, (static_cast<int>(count) + rows - 1) / rows);
+}
+
+int InvitePageOf(int page, size_t count, int rows)
+{
+	return std::max(0, std::min(page, InvitePages(count, rows) - 1));
 }
 
 // "4:12" left of something the server ends at `until` (its clock).
@@ -296,8 +323,8 @@ void PaintRankedInvite(Painter &p, const State &st)
 	PaintEditField(p, d.BodyX(), d.y + 112, d.BodyW(), 40, st.ranked.inviteSearch, Tr("Look for a friend by name..."), st.focus == kRankedField, false, st.edit,
 		kFieldRanked);
 	const std::vector<SteamFriendInfo> friends = FriendsShown(st);
-	const int pages = std::max(1, (static_cast<int>(friends.size()) + l.rows - 1) / l.rows);
-	const int page = std::min(st.ranked.invitePage, pages - 1);
+	const int pages = InvitePages(friends.size(), l.rows);
+	const int page = InvitePageOf(st.ranked.invitePage, friends.size(), l.rows);
 	const int ix = d.BodyX(), iw = d.BodyW();
 	if (friends.empty()) {
 		p.Font(0);
@@ -309,21 +336,30 @@ void PaintRankedInvite(Painter &p, const State &st)
 	}
 	const std::string invite = Tr("Invite");
 	const int bw = std::max(110, CapsWidth(p, invite, 1) + 36);
+	const size_t first = static_cast<size_t>(page * l.rows);
+	std::vector<uint64_t> visible;
+	for (size_t k = first; k < friends.size() && k < first + static_cast<size_t>(l.rows); k++) visible.push_back(friends[k].id);
+	PatronsWatch(visible);
+	const std::string league = Tr("League");
 	for (int i = 0; i < l.rows; i++) {
-		const size_t k = static_cast<size_t>(page * l.rows + i);
+		const size_t k = first + static_cast<size_t>(i);
 		if (k >= friends.size()) break;
 		const SteamFriendInfo &f = friends[k];
 		const int ry = l.listY + i * kInviteRowH;
 		if (p.Hover(ix, ry, iw, kInviteRowH, mx, my)) p.Fill(ix, ry, iw, kInviteRowH, pal::raised);
 		Avatar(p, ix + 8, ry + 8, 36, f.id, f.name);
 		int chipW = 0;
-		if (f.inGame) {
-			const std::string playing = Tr("Playing now");
-			chipW = ChipWidth(p, playing, 90);
-			FitChip(p, ix + iw - bw - 12 - chipW, ry + 15, chipW, 22, playing, pal::ok, RGB(0x2a, 0x36, 0x24));
+		if (PlayerLinkedOf(f.id) || PlayerBadgeOf(f.id).kind != LeagueBadgeKind::None || PlayerFrameOf(f.id).Shown()) {
+			chipW = ChipWidth(p, league, 60);
+			FitChip(p, ix + iw - bw - 12 - chipW, ry + 15, chipW, 22, league, pal::redText, RGB(0x30, 0x1a, 0x1a));
 		}
+		const PresenceLook look = PresenceLookOf(f.presence);
+		const int tw = iw - 56 - bw - 24 - chipW;
 		p.Font(0);
-		RawText(p, ix + 56, ry, iw - 56 - bw - 24 - chipW, kInviteRowH, f.name, pal::text);
+		RawText(p, ix + 56, ry + 5, tw, 24, f.name, pal::text);
+		p.Ellipse(ix + 57, ry + 34, 8, 8, look.dot);
+		p.Font(3);
+		RawText(p, ix + 71, ry + 28, tw - 15, 20, look.label, look.ink);
 		p.Button(ix + iw - bw, ry + 8, bw, 36, invite, kRankedAct, kRkDuoFriend + i, mx, my, true, false);
 		p.Fill(ix, ry + kInviteRowH - 1, iw, 1, pal::hairline);
 	}
@@ -455,7 +491,7 @@ void RankedTeamAction(int arg)
 	if (arg >= kRkDuoFriend && arg < kRkTeamArgEnd) {
 		const InviteLayout l = InviteFor(g_s.viewW, g_s.viewH);
 		const std::vector<SteamFriendInfo> friends = FriendsShown(g_s);
-		const size_t k = static_cast<size_t>(r.invitePage * l.rows + (arg - kRkDuoFriend));
+		const size_t k = static_cast<size_t>(InvitePageOf(r.invitePage, friends.size(), l.rows) * l.rows + (arg - kRkDuoFriend));
 		if (k >= friends.size()) return;
 		LeagueDuoInvite(std::to_string(friends[k].id), friends[k].name);
 		r.inviteOpen = false;
@@ -498,8 +534,14 @@ void RankedTeamAction(int arg)
 		if (g_s.focus == kRankedField) g_s.focus = kNoField;
 		break;
 	case kRkDuoLeave: LeagueDuoLeave(); break;
-	case kRkDuoFriendsPrev: r.invitePage = std::max(0, r.invitePage - 1); break;
-	case kRkDuoFriendsNext: r.invitePage++; break;
+	case kRkDuoFriendsPrev:
+	case kRkDuoFriendsNext: {
+		// From the page on screen: a search that shortens the list leaves invitePage past its end.
+		const InviteLayout l = InviteFor(g_s.viewW, g_s.viewH);
+		const int page = InvitePageOf(r.invitePage, FriendsShown(g_s).size(), l.rows);
+		r.invitePage = arg == kRkDuoFriendsPrev ? std::max(0, page - 1) : page + 1;
+		break;
+	}
 	default: break;
 	}
 }

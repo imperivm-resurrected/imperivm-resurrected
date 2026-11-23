@@ -446,6 +446,7 @@ bool LeagueParsePlayersLookup(const Json &j, std::map<uint64_t, LeagueLookupEntr
 		}
 		e.badge = LeagueBadgeFromJson(kv.second.Get("badge"));
 		e.frame = LeagueFrameFromJson(kv.second.Get("frame"));
+		e.linked = kv.second.GetBool("linked");
 		out[id] = e;
 	}
 	return true;

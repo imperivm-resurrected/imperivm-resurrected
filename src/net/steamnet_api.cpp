@@ -367,11 +367,11 @@ std::vector<SteamFriendInfo> SteamFriendsInfo()
 				x.name = Name(f);
 				FriendGameInfo_t gi = {};
 				x.inGame = S.SteamAPI_ISteamFriends_GetFriendGamePlayed(g_steam.friends, f, &gi) && gi.m_gameID.AppID() == app;
+				x.presence = FriendPresenceOf(static_cast<int>(S.SteamAPI_ISteamFriends_GetFriendPersonaState(g_steam.friends, f)), x.inGame);
 				list.push_back(x);
 			}
 			std::sort(list.begin(), list.end(), [](const SteamFriendInfo &a, const SteamFriendInfo &b) {
-				if (a.inGame != b.inGame) return a.inGame;
-				return _stricmp(a.name.c_str(), b.name.c_str()) < 0;
+				return FriendListBefore(a.presence, a.name, b.presence, b.name);
 			});
 			std::lock_guard<std::mutex> done(mx);
 			friends = std::move(list);

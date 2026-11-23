@@ -23,6 +23,8 @@ PatronInfo PatronOf(uint64_t id);
 LeagueBadge PlayerBadgeOf(uint64_t id);
 // The season's frame the player wears around their avatar, from the same lookup.
 LeagueFrame PlayerFrameOf(uint64_t id);
+// Whether the player has linked the game to the league, from the same lookup.
+bool PlayerLinkedOf(uint64_t id);
 // Looks up the ids that are not known yet, or were looked up too long ago, in the background: the league server's players lookup,
 // or the honour roll's own when that one fails.
 void PatronsWatch(const std::vector<uint64_t> &ids);
