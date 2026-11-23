@@ -1517,10 +1517,133 @@ std::vector<std::string> TourneySizesFor(const std::vector<TourneyMapType> &type
 	return out;
 }
 
+namespace {
+
+// A name that says no sides, or even ones of at least `side` players: a 2 vs 2 map can hold a 1 vs 1 on its first two places.
+bool NameFits(const std::pair<int, int> &named, int side) { return !named.first || (named.first == named.second && named.first >= side); }
+
+bool StartsWithNoCase(const std::string &s, size_t at, const char *word)
+{
+	for (size_t i = 0; word[i]; i++) {
+		if (at + i >= s.size() || tolower(static_cast<unsigned char>(s[at + i])) != word[i]) return false;
+	}
+	return true;
+}
+
+}
+
 bool TourneyMapFits(const TourneyMap &m, TourneyMode mode, const std::vector<TourneyMapType> &types)
 {
-	if (m.Scenario()) return m.players >= 2 * TourneySidePlayers(mode);
+	if (m.Scenario()) return m.players >= 2 * TourneySidePlayers(mode) && NameFits(TourneyScenarioNameSides(m.title, m.file), TourneySidePlayers(mode));
 	return Contains(TourneySizesFor(types, m.name, mode), m.size);
+}
+
+std::pair<int, int> TourneyScenarioNameSides(const std::string &title, const std::string &file)
+{
+	const std::string s = Lower(title + " " + file);
+	const auto separator = [](char c) { return c == ' ' || c == '_' || c == '-' || c == '.'; };
+	const auto side = [](char c) { return c >= '1' && c <= '8'; };
+	for (size_t i = 0; i < s.size(); i++) {
+		if (!side(s[i]) || (i && isdigit(static_cast<unsigned char>(s[i - 1])))) continue;
+		size_t at = i + 1;
+		while (at < s.size() && separator(s[at])) at++;
+		size_t word = 0;
+		for (const char *w : {"contra", "vs", "on", "v", "x"}) {
+			if (StartsWithNoCase(s, at, w)) {
+				word = strlen(w);
+				break;
+			}
+		}
+		if (!word) continue;
+		at += word;
+		while (at < s.size() && separator(s[at])) at++;
+		if (at >= s.size() || !side(s[at]) || (at + 1 < s.size() && isdigit(static_cast<unsigned char>(s[at + 1])))) continue;
+		return {s[i] - '0', s[at] - '0'};
+	}
+	return {0, 0};
+}
+
+unsigned TourneyScriptFlagsOf(const std::string &script)
+{
+	unsigned flags = 0;
+	const auto ident = [](char c) { return isalnum(static_cast<unsigned char>(c)) || c == '_'; };
+	for (size_t i = 0; i < script.size();) {
+		if (script[i] == '/' && i + 1 < script.size() && script[i + 1] == '/') {
+			while (i < script.size() && script[i] != '\n') i++;
+			continue;
+		}
+		if (script[i] == '"') {
+			for (i++; i < script.size() && script[i] != '"' && script[i] != '\n'; i++) {}
+			i++;
+			continue;
+		}
+		if (!ident(script[i]) || isdigit(static_cast<unsigned char>(script[i]))) {
+			i++;
+			continue;
+		}
+		const size_t start = i;
+		while (i < script.size() && ident(script[i])) i++;
+		size_t after = i;
+		while (after < script.size() && (script[after] == ' ' || script[after] == '\t')) after++;
+		if (after >= script.size() || script[after] != '(') continue;
+		const std::string name = Lower(script.substr(start, i - start));
+		if (name == "endgame") flags |= kScriptEndsGame;
+		else if (name.size() > 4 && name.compare(0, 4, "dipl") == 0) flags |= kScriptAlliances;
+		else if (name == "aistart" || name == "runaihelper") flags |= kScriptComputer;
+		else if (name == "spawngroup" || name == "spawngroupinholder" || name == "spawnnamed") flags |= kScriptSpawns;
+	}
+	return flags;
+}
+
+TourneyScenarioCheck TourneyScenarioFor(const std::vector<TourneyPlace> &places, unsigned scripts, const std::string &title, const std::string &file, TourneyMode mode)
+{
+	TourneyScenarioCheck c;
+	const int side = TourneySidePlayers(mode);
+	c.need = 2 * side;
+	c.places = static_cast<int>(places.size());
+	c.named = TourneyScenarioNameSides(title, file);
+	c.scripts = scripts;
+	if (c.places < c.need) {
+		c.fit = TourneyScenarioFit::Few;
+		return c;
+	}
+	if (!NameFits(c.named, side)) {
+		c.fit = TourneyScenarioFit::OtherMode;
+		return c;
+	}
+	if (scripts & (kScriptEndsGame | kScriptAlliances)) {
+		c.fit = TourneyScenarioFit::Scripted;
+		return c;
+	}
+	// The places played: one that starts with nothing, or with an eighth of another's, is a place left for show (the official 1 vs 1 maps
+	// have six more with a lone building and its keeper), not one made to play. A map whose first player gets a few more is still played.
+	int most = 0;
+	for (int i = 0; i < c.need; i++) most = std::max(most, places[static_cast<size_t>(i)].objects);
+	for (int i = 0; i < c.need && most > 0; i++) {
+		if (places[static_cast<size_t>(i)].objects * 8 < most) {
+			c.fit = TourneyScenarioFit::Uneven;
+			return c;
+		}
+	}
+	c.fit = c.places == c.need || c.named.first == side ? TourneyScenarioFit::Made : TourneyScenarioFit::More;
+	if (c.need == 2 && c.places > 2 && places[0].hasStart && places[1].hasStart) {
+		const auto far2 = [](const TourneyPlace &a, const TourneyPlace &b) {
+			const int64_t dx = a.x - b.x, dy = a.y - b.y;
+			return dx * dx + dy * dy;
+		};
+		// Among the places made to play: those for show often sit in a corner, or at 0,0.
+		int all = 0;
+		for (const TourneyPlace &pl : places) all = std::max(all, pl.objects);
+		const auto real = [all](const TourneyPlace &pl) { return pl.hasStart && pl.objects * 8 >= all; };
+		int64_t farthest = 0;
+		for (size_t a = 0; a < places.size(); a++) {
+			for (size_t b = a + 1; b < places.size(); b++) {
+				if (real(places[a]) && real(places[b])) farthest = std::max(farthest, far2(places[a], places[b]));
+			}
+		}
+		c.closeStarts = far2(places[0], places[1]) * 4 < farthest;
+	}
+	return c;
 }
 
 TourneyMap TourneyMapForMode(const TourneyMap &m, TourneyMode mode, const std::vector<TourneyMapType> &types)

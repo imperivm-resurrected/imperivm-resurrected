@@ -335,8 +335,20 @@ void Maps()
 	scenario.players = 2;
 	CHECK(TourneyMapFits(scenario, TourneyMode::Solo, types));
 	CHECK(!TourneyMapFits(scenario, TourneyMode::Teams, types));
+	// Its name says 1 vs 1: the official map has eight places, six of them a lone building, and does not hold a match of teams.
+	scenario.players = 8;
+	CHECK(TourneyMapFits(scenario, TourneyMode::Solo, types));
+	CHECK(!TourneyMapFits(scenario, TourneyMode::Teams, types));
+	scenario.file = "Island War.BFHP";
 	scenario.players = 4;
 	CHECK(TourneyMapFits(scenario, TourneyMode::Teams, types));
+	scenario.title = "Torneo 2on2 Egyps";
+	CHECK(TourneyMapFits(scenario, TourneyMode::Teams, types));
+	CHECK(TourneyMapFits(scenario, TourneyMode::Solo, types));
+	scenario.title = "2vs6 IAs";
+	CHECK(!TourneyMapFits(scenario, TourneyMode::Solo, types));
+	scenario.file = "Torneo_1vs1_Egypt.BFHP";
+	scenario.title.clear();
 
 	// A small map grows to the next size that has room for four; a scenario for two becomes the default map.
 	TourneyMap fitted = TourneyMapForMode(tiny, TourneyMode::Teams, types);

@@ -244,6 +244,34 @@ void PlayerNames()
 	CHECK(MapPlayerLines("Texto\n\nJugador 1: Galos\nOtra cosa: x").empty());
 }
 
+void ObjectsAndScripts()
+{
+	// Each player's settlements and objects: units outside a settlement count, a tag without a player does not.
+	std::string objects = Objects();
+	objects.insert(objects.rfind("</objects>"), "<unit class=\"IHero\" player=\"1\" x=\"5\" y=\"5\"/>\n<unit class=\"Sheep\" x=\"1\"/>\n<unit class=\"X\" ownerplayer=\"2\"/>\n");
+	const std::vector<unsigned char> bytes = Map(false, objects);
+	MapInfo info;
+	CHECK(MapInfoParse(bytes.data(), bytes.size(), info));
+	CHECK_EQ(info.players[0].objects, 2);
+	CHECK_EQ(info.players[0].settlements, 1);
+	CHECK_EQ(info.players[1].objects, 1);
+	CHECK_EQ(info.players[2].settlements, 2);
+	CHECK_EQ(info.players[3].objects, 2);
+	CHECK_EQ(info.players[4].objects, 0);
+	CHECK(MapSequenceScripts(bytes.data(), bytes.size()).empty());
+
+	HpfsBuilder b;
+	const std::vector<unsigned char> scripted = b.Build({
+		HpfsBuilder::File("game.xml", "<game><properties name=\"S\"/></game>"),
+		HpfsBuilder::File("notes.vs", "EndGame(1);"),
+		HpfsBuilder::Dir("Maps", {HpfsBuilder::Dir("1", {HpfsBuilder::Dir("Sequences", {HpfsBuilder::File("seq0.vs", "Sleep(1);"),
+			HpfsBuilder::File("seq1.vs", "EndGame(2);"), HpfsBuilder::File("sequences.xml", "<x/>")})})}),
+	});
+	const std::vector<std::string> scripts = MapSequenceScripts(scripted.data(), scripted.size());
+	CHECK_EQ(scripts.size(), static_cast<size_t>(2));
+	if (scripts.size() == 2) CHECK_EQ(scripts[1], std::string("EndGame(2);"));
+}
+
 int main()
 {
 	ParsesTheMap();
@@ -254,5 +282,6 @@ int main()
 	Description();
 	PlayerNames();
 	CameraOnlyWithoutSettlements();
+	ObjectsAndScripts();
 	return test::Summary("mapinfo");
 }

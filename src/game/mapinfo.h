@@ -16,6 +16,9 @@ struct MapPlayer {
 	int x = 0;
 	int y = 0;
 	uint32_t color = 0;
+	// Its settlements and its objects on the start map (units, buildings and settlements), to tell a place made to play from one for show.
+	int settlements = 0;
+	int objects = 0;
 };
 
 struct MapInfo {
@@ -65,5 +68,7 @@ bool BmpAverageColor(const unsigned char *data, size_t size, uint32_t &rgb);
 MapImage MapRender(const MapInfo &info, const std::vector<MapLayerColor> &layers, int maxSide);
 const char *MapSizeName(int units);
 int MapHumanSlots(const MapInfo &info);
+// The text of every sequence script of the scenario (Maps/N/Sequences/*.vs), at most 4 MB in all.
+std::vector<std::string> MapSequenceScripts(const unsigned char *data, size_t size);
 std::vector<std::pair<int, std::string>> MapPlayerLines(const std::string &gameText);
 std::string MapDescriptionBody(const std::string &gameText, bool dropPlayerLines);

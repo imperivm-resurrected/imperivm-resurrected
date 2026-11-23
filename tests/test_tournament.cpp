@@ -4,7 +4,9 @@
 #include "check.h"
 
 #include <cstdint>
+#include <initializer_list>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "core/basescenarios.h"
@@ -1241,6 +1243,87 @@ void BaseScenarios()
 	CHECK(BaseScenarioSha256("") == nullptr);
 }
 
+// The human places of a scenario as {objects, start x, start y}, settlements one each.
+std::vector<TourneyPlace> Places(std::initializer_list<std::initializer_list<int>> list)
+{
+	std::vector<TourneyPlace> out;
+	for (const auto &p : list) {
+		const int *v = p.begin();
+		TourneyPlace x;
+		x.objects = v[0];
+		x.settlements = v[0] ? 1 : 0;
+		x.hasStart = p.size() > 1;
+		x.x = p.size() > 1 ? v[1] : 0;
+		x.y = p.size() > 2 ? v[2] : 0;
+		out.push_back(x);
+	}
+	return out;
+}
+
+void ScenarioFit()
+{
+	using F = TourneyScenarioFit;
+	const auto sides = [](const char *title, const char *file) { return TourneyScenarioNameSides(title, file); };
+	CHECK(sides("", "Torneo_1vs1_Egypt.BFHP") == std::make_pair(1, 1));
+	CHECK(sides("Torneo 2on2 Egyps", "x.bfhp") == std::make_pair(2, 2));
+	CHECK(sides("", "Map 1_vs_1_varios_by_LukkyFrost.BFHP") == std::make_pair(1, 1));
+	CHECK(sides("", "MapaFinal1vs1.BFHP") == std::make_pair(1, 1));
+	CHECK(sides("3 x 3 en el Nilo", "") == std::make_pair(3, 3));
+	CHECK(sides("", "2vs6_ias_normal_lowresources5.bfhp") == std::make_pair(2, 6));
+	CHECK(sides("Roma contra los barbaros", "roma_v_egipto_2_.BFHP") == std::make_pair(0, 0));
+	CHECK(sides("Torneo_2on2_AnyCiv_v01", "") == std::make_pair(2, 2));
+	CHECK(sides("Mapa 128x128", "1vs10.bfhp") == std::make_pair(0, 0));
+
+	CHECK_EQ(TourneyScriptFlagsOf("EndGame(1, true);"), static_cast<unsigned>(kScriptEndsGame));
+	CHECK_EQ(TourneyScriptFlagsOf("DiplCeaseFire (1, 2);\nDiplShareView(1,2);"), static_cast<unsigned>(kScriptAlliances));
+	CHECK_EQ(TourneyScriptFlagsOf("AIStart(3); SpawnGroup(\"x\");"), static_cast<unsigned>(kScriptComputer | kScriptSpawns));
+	CHECK_EQ(TourneyScriptFlagsOf("// EndGame(1);\nSetPos(u, p); str s = \"EndGame(\";"), 0u);
+	CHECK_EQ(TourneyScriptFlagsOf("int EndGameSoon; Diplomacy = 1;"), 0u);
+
+	// Torneo_2on2_Egyps: four places of 50 objects, then four for show.
+	const std::vector<TourneyPlace> twoOnTwo = Places({{50, 5399, 4411}, {50, 5463, 7590}, {50, 10923, 4405}, {50, 10987, 7540}, {5}, {39}, {4}, {45}});
+	TourneyScenarioCheck c = TourneyScenarioFor(twoOnTwo, 0, "Torneo_2on2_Egyps", "Torneo_2on2_Egyps.BFHP", TourneyMode::Teams);
+	CHECK(c.fit == F::Made && c.Usable() && c.Rank() == 0);
+	CHECK_EQ(c.need, 4);
+	CHECK_EQ(c.places, 8);
+	// In 1 vs 1 it holds on its first two places, which are on the same side of the map.
+	c = TourneyScenarioFor(twoOnTwo, 0, "Torneo_2on2_Egyps", "Torneo_2on2_Egyps.BFHP", TourneyMode::Solo);
+	CHECK(c.fit == F::More && c.Usable() && c.Rank() == 1);
+	CHECK(c.closeStarts);
+	CHECK(c.named == std::make_pair(2, 2));
+
+	// Torneo_1vs1_Egypt: eight places, two to play; in 1 vs 1 it is made for it, in 2 vs 2 its name rules it out.
+	const std::vector<TourneyPlace> oneOnOne = Places({{50, 5623, 3497}, {50, 9767, 7676}, {2, 0, 0}, {2, 0, 0}, {2, 0, 0}, {2, 0, 0}, {2, 0, 0}, {2, 0, 0}});
+	c = TourneyScenarioFor(oneOnOne, 0, "Torneo 1vs1 Egypt", "Torneo_1vs1_Egypt.BFHP", TourneyMode::Solo);
+	CHECK(c.fit == F::Made);
+	CHECK(!c.closeStarts);
+	CHECK(TourneyScenarioFor(oneOnOne, 0, "Torneo 1vs1 Egypt", "Torneo_1vs1_Egypt.BFHP", TourneyMode::Teams).fit == F::OtherMode);
+	// Without the name, its places for show give it away.
+	c = TourneyScenarioFor(oneOnOne, 0, "Egypt", "Egypt.BFHP", TourneyMode::Teams);
+	CHECK(c.fit == F::Uneven && !c.Usable() && c.Rank() == 2);
+	CHECK(TourneyScenarioFor(oneOnOne, 0, "Egypt", "Egypt.BFHP", TourneyMode::Solo).fit == F::More);
+
+	// Too few places, scripted ends or alliances, a place with nothing.
+	const std::vector<TourneyPlace> duel = Places({{56, 6836, 973}, {50, 1522, 4508}});
+	CHECK(TourneyScenarioFor(duel, 0, "mapa_duelos_egipto", "", TourneyMode::Solo).fit == F::Made);
+	c = TourneyScenarioFor(duel, 0, "mapa_duelos_egipto", "", TourneyMode::Teams);
+	CHECK(c.fit == F::Few && c.places == 2 && c.need == 4);
+	CHECK(TourneyScenarioFor(duel, kScriptEndsGame, "x", "", TourneyMode::Solo).fit == F::Scripted);
+	CHECK(TourneyScenarioFor(duel, kScriptAlliances | kScriptSpawns, "x", "", TourneyMode::Solo).fit == F::Scripted);
+	c = TourneyScenarioFor(duel, kScriptSpawns | kScriptComputer, "x", "", TourneyMode::Solo);
+	CHECK(c.fit == F::Made && c.scripts == (kScriptSpawns | kScriptComputer));
+	CHECK(TourneyScenarioFor(Places({{0, 7967, 5487}, {53, 1671, 10354}, {50, 13743, 1287}}), 0, "x", "", TourneyMode::Solo).fit == F::Uneven);
+	CHECK(TourneyScenarioFor(Places({{4, 0, 0}, {4, 100, 100}, {2, 50, 50}, {4, 90, 0}}), 0, "Balcans", "", TourneyMode::Teams).fit == F::Made);
+	// Hispania of Numida: its first player starts with more, and it is still played.
+	CHECK(TourneyScenarioFor(Places({{38, 7735, 11025}, {6, 13871, 9029}, {7, 13035, 3555}, {8, 20831, 8022}}), 0, "x", "", TourneyMode::Teams).fit == F::Made);
+	// No objects at all: nothing to compare.
+	CHECK(TourneyScenarioFor(Places({{0}, {0}}), 0, "x", "", TourneyMode::Solo).fit == F::Made);
+	CHECK(TourneyScenarioFor(duel, 0, "", "2vs6_ias.bfhp", TourneyMode::Solo).fit == F::OtherMode);
+	// Eight even places in 1 vs 1: far apart, no warning.
+	c = TourneyScenarioFor(Places({{4, 0, 0}, {4, 1000, 1000}, {4, 500, 0}, {4, 0, 500}, {4, 1, 1}, {4, 2, 2}, {4, 3, 3}, {4, 900, 900}}), 0, "x", "", TourneyMode::Solo);
+	CHECK(c.fit == F::More && !c.closeStarts);
+}
+
 void Clock()
 {
 	CHECK_EQ(TourneyClock(552000), std::string("09:12"));
@@ -1311,6 +1394,7 @@ int main()
 	Estimate();
 	Calendar();
 	BaseScenarios();
+	ScenarioFit();
 	Clock();
 	Bracket();
 	return test::Summary("tournament");

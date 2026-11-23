@@ -662,7 +662,8 @@ void PaintScenarioThumb(Painter &p, const std::string &path, int x, int y, int s
 std::vector<int> ScenarioOrder(const std::vector<CupScenario> &list, const std::vector<int> &rows, const std::string &search, int sort);
 // The search field and the order menu over the list; both screens keep them in pickSearch and pickSort.
 void PaintScenarioToolbar(Painter &p, const State &st, int x, int y, int w, int h);
-void PaintScenarioRow(Painter &p, const CupScenario &s, int x, int y, int w, int h, bool on, bool hot, const std::string &tag, COLORREF tagInk, bool warn);
+void PaintScenarioRow(Painter &p, const CupScenario &s, int x, int y, int w, int h, bool on, bool hot, const std::string &tag, COLORREF tagInk, bool warn,
+	COLORREF tagBack = RGB(40, 80, 44));
 // A seat's player name after its civilization, empty for none.
 typedef std::function<std::string(const MapPlayer &)> ScenarioSeatName;
 // Each seat of a scenario with its colour and civilization, in columns, down to bottom; the y under the last line.

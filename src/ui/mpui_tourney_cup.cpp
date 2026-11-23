@@ -658,6 +658,9 @@ int MapsBlock(Form &c, int x, int y, int w)
 				title = m.title;
 				sub = TrFmt("Your scenario \xC2\xB7 %s players \xC2\xB7 %s, uploaded when you publish", {std::to_string(m.players), HumanBytes(static_cast<uint64_t>(m.bytes))});
 			}
+			// The places past the match's players stay closed in the room, with no AI.
+			const int closed = m.Scenario() ? m.players - 2 * TourneySidePlayers(f.mode) : 0;
+			if (closed > 0) sub += " \xC2\xB7 " + TrFmt("%s places closed", {std::to_string(closed)});
 			UseFace(p, BrandFace::UiStrong, 16);
 			p.Text(tx, at + rowH / 2 - 23, tw, 22, title, pal::text, DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_END_ELLIPSIS);
 			p.Font(3);
@@ -1278,6 +1281,7 @@ void ApplyCupSetting(TourneyCupForm &f, int setting, int choice, int64_t nowMs)
 		// The maps follow: a small map grows to the next size with room for four, and a scenario for two gives way to a random map.
 		f.mode = choice ? TourneyMode::Teams : TourneyMode::Solo;
 		TourneyFitCupToMode(f, LeagueTourneyMapTypes());
+		CupDropUnsuitable(f);
 		break;
 	case kCupTeamDraw: f.teamDraw = choice != 0; break;
 	case kCupRoundDays:

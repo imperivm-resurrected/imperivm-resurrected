@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "core/tournament.h"
 #include "mods/mods.h"
 
 // The scenarios of the community cups on this computer: the ones a cup can be played on, the file the game loads for a cup's round,
@@ -23,6 +24,11 @@ struct CupScenario {
 	std::string sha256;
 	uint64_t bytes = 0;
 	int humans = 0;
+	// Its human places in the order the room gives them out, the players of the computer the scenario plays, and what its scripts do
+	// (TourneyScriptFlags): what TourneyScenarioFor needs to tell whether it suits a cup.
+	std::vector<TourneyPlace> places;
+	int computers = 0;
+	unsigned scripts = 0;
 	// The game's own, untouched: every player has it, and it is not uploaded.
 	bool game = false;
 	MapOrigin origin;

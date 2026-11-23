@@ -608,8 +608,48 @@ bool TourneyParseMapTypes(const Json &j, std::vector<TourneyMapType> &out);
 // The sizes a random map type is played on: one against one, the league's list (core/leaguemaps.h); two against two, the league's sizes4
 // when it sent them, otherwise every size of that list but the small one, which no template opens to more than two players.
 std::vector<std::string> TourneySizesFor(const std::vector<TourneyMapType> &types, const std::string &type, TourneyMode mode);
-// A round's map is playable in the mode: a random map in one of those sizes, a scenario with a human seat for each player of a match.
+// A round's map is playable in the mode: a random map in one of those sizes, a scenario with a human seat for each player of a match
+// whose name does not say it is made for fewer ("Torneo_1vs1_Egypt" in 2 vs 2) or for uneven sides ("2vs6").
 bool TourneyMapFits(const TourneyMap &m, TourneyMode mode, const std::vector<TourneyMapType> &types);
+
+// The sides a scenario's name says it is made for: "Torneo_1vs1_Egypt", "Torneo_2on2", "Map 1_vs_1" or "3 x 3". {0, 0} when it says none.
+std::pair<int, int> TourneyScenarioNameSides(const std::string &title, const std::string &file);
+
+// A human place of a scenario, in the order the room gives them out (the first ones are played, the others closed): what it starts with.
+struct TourneyPlace {
+	int settlements = 0;
+	// The map's objects of that player: its units and buildings.
+	int objects = 0;
+	bool hasStart = false;
+	int x = 0, y = 0;
+};
+// What the scenario's sequence scripts (Maps\N\Sequences\*.vs) call.
+enum TourneyScriptFlags : unsigned {
+	kScriptEndsGame = 1,
+	kScriptAlliances = 2,
+	kScriptComputer = 4,
+	kScriptSpawns = 8,
+};
+// The flags of one script's text: EndGame, the Dipl* alliances, the computer's AI started, units spawned.
+unsigned TourneyScriptFlagsOf(const std::string &script);
+
+// How a scenario suits a cup: made for its mode, with more places than it needs (the others stay closed, with no AI), or not suitable:
+// fewer places, a name made for another mode, places that start with nothing or far less, or scripts that end the game or set alliances.
+enum class TourneyScenarioFit { Made, More, Few, OtherMode, Uneven, Scripted };
+struct TourneyScenarioCheck {
+	TourneyScenarioFit fit = TourneyScenarioFit::Few;
+	// The places a match takes (2, or 4 in 2 vs 2) and the scenario's.
+	int need = 2, places = 0;
+	// The sides its name says, {0, 0} for none.
+	std::pair<int, int> named;
+	unsigned scripts = 0;
+	// 1 vs 1 on a map of more places: the two places played start close together, next to the farthest two.
+	bool closeStarts = false;
+	bool Usable() const { return fit == TourneyScenarioFit::Made || fit == TourneyScenarioFit::More; }
+	// The chooser lists them in this order: made for the mode, then with more places, then the rest.
+	int Rank() const { return fit == TourneyScenarioFit::Made ? 0 : fit == TourneyScenarioFit::More ? 1 : 2; }
+};
+TourneyScenarioCheck TourneyScenarioFor(const std::vector<TourneyPlace> &places, unsigned scripts, const std::string &title, const std::string &file, TourneyMode mode);
 // A map turned into one that fits the mode: a random map to the nearest size it has for it, anything else to a normal Mediterranean.
 TourneyMap TourneyMapForMode(const TourneyMap &m, TourneyMode mode, const std::vector<TourneyMapType> &types);
 

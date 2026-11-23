@@ -361,6 +361,9 @@ void PaintMapPicture(Painter &p, const TourneyMap &m, int x, int y, int size);
 TourneyMap ChooserMap(const Ui &u);
 // The sizes a random map type is offered in for the form's mode: those with room for four players in a cup of teams.
 std::vector<std::string> CupSizesOf(const TourneyCupForm &f, const std::string &type);
+// After the mode changed: the scenarios of this computer that the new mode cannot use, by what the file says (places for show, scripts),
+// give way as TourneyFitCupToMode does: a round's to the normal Mediterranean, one of the series out.
+void CupDropUnsuitable(TourneyCupForm &f);
 void PaintMapChooser(Painter &p, const State &st, const Ui &u, PaintOut &out);
 // A round's map in the form and the Summary: "Random · Mediterranean · medium", "Island War · the game's", "My map · yours".
 std::string CupMapLine(const TourneyMap &m);

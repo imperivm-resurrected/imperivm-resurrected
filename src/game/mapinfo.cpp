@@ -139,8 +139,24 @@ bool SettlementPosition(const std::string &objects, int player, int &x, int &y)
 	return bestRank > 0;
 }
 
+// The objects of each player in map.obj.xml, by their player="N" (1 to 8), and how many of them are settlements.
+void CountObjects(const std::string &objects, int counts[kPlayerSlots], int settlements[kPlayerSlots])
+{
+	static const char kKey[] = "player=\"";
+	for (size_t at = objects.find(kKey); at != std::string::npos; at = objects.find(kKey, at + 1)) {
+		if (at == 0 || !IsSpace(objects[at - 1])) continue;
+		const int player = atoi(objects.c_str() + at + sizeof(kKey) - 1) - 1;
+		if (player < 0 || player >= kPlayerSlots) continue;
+		counts[player]++;
+		const size_t open = objects.rfind('<', at);
+		if (open != std::string::npos && objects.compare(open, 11, "<settlement") == 0) settlements[player]++;
+	}
+}
+
 void ReadPlayers(const HpfsFile &file, const std::string &mapObjects, MapInfo &out)
 {
+	int counts[kPlayerSlots] = {}, settlements[kPlayerSlots] = {};
+	CountObjects(mapObjects, counts, settlements);
 	bool anySettlement = false;
 	std::vector<std::array<int, 3>> cameras;
 	for (int slot = 0; slot < kPlayerSlots; slot++) {
@@ -158,6 +174,8 @@ void ReadPlayers(const HpfsFile &file, const std::string &mapObjects, MapInfo &o
 		p.race = Attr(tag, "race");
 		p.human = _stricmp(control.c_str(), "Computer") != 0;
 		p.color = MapRgb555(static_cast<unsigned>(ToInt(Attr(tag, "color"))));
+		p.objects = counts[slot];
+		p.settlements = settlements[slot];
 		if (SettlementPosition(mapObjects, slot, p.x, p.y)) {
 			p.hasStart = true;
 			anySettlement = true;
@@ -351,6 +369,25 @@ int MapHumanSlots(const MapInfo &info)
 	int n = 0;
 	for (const MapPlayer &p : info.players) n += p.human ? 1 : 0;
 	return n;
+}
+
+std::vector<std::string> MapSequenceScripts(const unsigned char *data, size_t size)
+{
+	std::vector<std::string> out;
+	HpfsFile file;
+	if (!file.Open(data, size)) return out;
+	const uint32_t kMost = 4u << 20;
+	uint32_t total = 0;
+	std::vector<unsigned char> bytes;
+	for (const HpfsEntry &e : file.Entries()) {
+		if (e.directory || e.path.size() < 3 || _stricmp(e.path.c_str() + e.path.size() - 3, ".vs") != 0) continue;
+		if (e.path.compare(0, 5, "Maps/") != 0 && e.path.compare(0, 5, "maps/") != 0) continue;
+		if (!ContainsNoCase(e.path, "/sequences/") || e.size > kMost - total) continue;
+		if (!file.Read(e, bytes, kMost - total)) continue;
+		total += static_cast<uint32_t>(bytes.size());
+		out.push_back(Text(bytes));
+	}
+	return out;
 }
 
 namespace {

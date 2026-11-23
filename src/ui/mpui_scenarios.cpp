@@ -168,7 +168,8 @@ void PaintScenarioToolbar(Painter &p, const State &st, int x, int y, int w, int 
 	PaintPickCombo(p, st, x + w - sortW, y, sortW, h, Tr("Sort: ") + Tr(kSortNames[st.pickSort % 3]));
 }
 
-void PaintScenarioRow(Painter &p, const CupScenario &s, int x, int y, int w, int h, bool on, bool hot, const std::string &tag, COLORREF tagInk, bool warn)
+void PaintScenarioRow(Painter &p, const CupScenario &s, int x, int y, int w, int h, bool on, bool hot, const std::string &tag, COLORREF tagInk, bool warn,
+	COLORREF tagBack)
 {
 	if (on) p.Fill(x, y, w, h, pal::selected);
 	else if (hot) p.Fill(x, y, w, h, pal::raised);
@@ -180,7 +181,7 @@ void PaintScenarioRow(Painter &p, const CupScenario &s, int x, int y, int w, int
 		p.Font(3);
 		const int tw = p.TextWidth(tag) + 14;
 		right -= tw;
-		PaintBadge(p, right, y + 8, tw, 18, tag, RGB(40, 80, 44), tagInk);
+		PaintBadge(p, right, y + 8, tw, 18, tag, tagBack, tagInk);
 		right -= 8;
 	}
 	p.Font(0);
@@ -244,7 +245,7 @@ void PaintScenarioCard(Painter &p, const CupScenario &s, int x, int y, int w, in
 		p.Fill(x + pad, by, bw, 1, pal::hairline);
 		p.Font(3);
 		by += 10;
-		by += p.TextWrapped(x + pad, by, bw, std::min(60, bottom - by), note, noteInk) + 8;
+		by += p.TextWrapped(x + pad, by, bw, std::min(100, bottom - by), note, noteInk) + 8;
 	}
 	const std::string body = MapDescriptionBody(text, d && !d->failed && !d->info.players.empty());
 	if (!body.empty() && by + 30 < bottom) {

@@ -125,6 +125,21 @@ void Scan(unsigned serial)
 		// Adventures and conquests kept in Scenarios are not in the room's selector.
 		s.humans = MapHumanSlots(info);
 		if (info.gameType != 0 || s.humans < 2 || info.singleOnly) continue;
+		for (const MapPlayer &pl : info.players) {
+			// A player of the computer with nothing on the map plays nothing.
+			if (!pl.human) {
+				s.computers += pl.objects > 0 ? 1 : 0;
+				continue;
+			}
+			TourneyPlace place;
+			place.settlements = pl.settlements;
+			place.objects = pl.objects;
+			place.hasStart = pl.hasStart;
+			place.x = pl.x;
+			place.y = pl.y;
+			s.places.push_back(place);
+		}
+		for (const std::string &script : MapSequenceScripts(reinterpret_cast<const unsigned char *>(bytes.data()), bytes.size())) s.scripts |= TourneyScriptFlagsOf(script);
 		s.bytes = bytes.size();
 		s.sha256 = Sha256Of(bytes);
 		s.title = ShortTitle(info.name.empty() ? TourneyScenarioStem(file) : info.name);

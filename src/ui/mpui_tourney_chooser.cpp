@@ -30,15 +30,84 @@ std::string Lower(std::string s)
 	return s;
 }
 
-// The scenarios of a tab of the chooser: the game's (1) or the player's (2), as indexes into the whole list; in a cup of teams, only those
-// with a human seat for each of the four players.
-std::vector<int> TabRows(const CupScenariosView &v, int tab, TourneyMode mode)
+// The scenarios of a tab of the chooser: the game's (1) or the player's (2), as indexes into the whole list. Those that do not suit the
+// cup are listed too, last, with the reason.
+std::vector<int> TabRows(const CupScenariosView &v, int tab)
 {
 	std::vector<int> out;
 	for (size_t i = 0; i < v.list.size(); i++) {
-		if (v.list[i].game == (tab == 1) && v.list[i].humans >= 2 * TourneySidePlayers(mode)) out.push_back(static_cast<int>(i));
+		if (v.list[i].game == (tab == 1)) out.push_back(static_cast<int>(i));
 	}
 	return out;
+}
+
+TourneyScenarioCheck FitOf(const CupScenario &s, TourneyMode mode) { return TourneyScenarioFor(s.places, s.scripts, s.title, s.file, mode); }
+
+// The rows in the order chosen, those made for the cup's mode first, then those with more places, then those it cannot use.
+std::vector<int> ByFit(const CupScenariosView &v, const std::vector<int> &rows, TourneyMode mode)
+{
+	std::vector<int> out;
+	for (int rank = 0; rank < 3; rank++) {
+		for (int i : rows) {
+			if (FitOf(v.list[static_cast<size_t>(i)], mode).Rank() == rank) out.push_back(i);
+		}
+	}
+	return out;
+}
+
+int UsableCount(const CupScenariosView &v, const std::vector<int> &rows, TourneyMode mode)
+{
+	int n = 0;
+	for (int i : rows) n += FitOf(v.list[static_cast<size_t>(i)], mode).Usable() ? 1 : 0;
+	return n;
+}
+
+std::string ModeName(int side) { return side == 2 ? Tr("2 vs 2") : side == 1 ? Tr("1 vs 1") : TrFmt("%s vs %s", {std::to_string(side), std::to_string(side)}); }
+
+// The row's badge: made for the mode, its places when it has more, or not for this cup.
+std::string FitTag(const TourneyScenarioCheck &c, COLORREF &ink, COLORREF &back)
+{
+	ink = pal::ok;
+	back = RGB(40, 80, 44);
+	if (c.fit == TourneyScenarioFit::Made) return TrFmt("For %s", {ModeName(c.need / 2)});
+	if (c.fit == TourneyScenarioFit::More) {
+		ink = pal::body;
+		back = pal::button;
+		return TrFmt("%s places", {std::to_string(c.places)});
+	}
+	ink = pal::bad;
+	back = RGB(70, 30, 30);
+	return Tr("Not for this cup");
+}
+
+// What the card says about the scenario in this cup: why it cannot be used, or what happens to the places it has over the cup's.
+std::string FitNote(const TourneyScenarioCheck &c, int computers)
+{
+	const std::string need = std::to_string(c.need), extra = std::to_string(c.places - c.need);
+	switch (c.fit) {
+	case TourneyScenarioFit::Few: return TrFmt("It has %s places; this cup needs %s.", {std::to_string(c.places), need});
+	case TourneyScenarioFit::OtherMode:
+		if (c.named.first != c.named.second)
+			return TrFmt("Its name says %s against %s: it is not made for even sides.", {std::to_string(c.named.first), std::to_string(c.named.second)});
+		return TrFmt("Its name says it is made for %s: the places past those players are not made to play.", {ModeName(c.named.first)});
+	case TourneyScenarioFit::Uneven:
+		return TrFmt("Some of the first %s places start with nothing or with far less than the others: they are not made to play.", {need});
+	case TourneyScenarioFit::Scripted:
+		return Tr(c.scripts & kScriptEndsGame ? "Its scripts end the game on their own: it is not made for a cup match."
+											  : "Its scripts set the alliances on their own: it is not made for a cup match.");
+	default: break;
+	}
+	std::string note;
+	if (c.places == c.need) note = TrFmt("Made for %s: every place is played.", {ModeName(c.need / 2)});
+	else if (c.fit == TourneyScenarioFit::Made)
+		note = TrFmt("Made for %s. It has %s places: the match plays the first %s and the other %s stay closed, with no AI.",
+			{ModeName(c.need / 2), std::to_string(c.places), need, extra});
+	else
+		note = TrFmt("For %s players: the match plays the first %s places and the other %s stay closed, with no AI.", {std::to_string(c.places), need, extra});
+	if (c.closeStarts) note += " " + Tr("The two places played start close together.");
+	if (computers > 0) note += " " + TrFmt("The scenario's own %s players of the computer play in it too.", {std::to_string(computers)});
+	if (c.scripts & (kScriptComputer | kScriptSpawns)) note += " " + Tr("Its scripts bring units or the computer into the game.");
+	return note;
 }
 
 void Preview(Painter &p, const std::string &path, int x, int y, int size, bool starts = true) { PaintScenarioThumb(p, path, x, y, size, starts); }
@@ -70,6 +139,22 @@ void OpenOn(Ui &u, const TourneyMap &m)
 std::vector<std::string> CupSizesOf(const TourneyCupForm &f, const std::string &type)
 {
 	return TourneySizesFor(LeagueTourneyMapTypes(), type, f.mode);
+}
+
+void CupDropUnsuitable(TourneyCupForm &f)
+{
+	const CupScenariosView v = CupScenarios();
+	const auto unsuitable = [&](const TourneyMap &m) {
+		if (!m.Scenario()) return false;
+		for (const CupScenario &s : v.list) {
+			if (Lower(s.file) == Lower(m.file) && Lower(s.sha256) == Lower(m.hash)) return !FitOf(s, f.mode).Usable();
+		}
+		return false;
+	};
+	for (TourneyMap &m : f.maps) {
+		if (unsuitable(m)) m = TourneyMapForMode(TourneyMap(), f.mode, LeagueTourneyMapTypes());
+	}
+	f.seriesPool.erase(std::remove_if(f.seriesPool.begin(), f.seriesPool.end(), unsuitable), f.seriesPool.end());
 }
 
 void OpenMapChooser(Ui &u, int round)
@@ -150,6 +235,8 @@ TourneyMap ChooserMap(const Ui &u)
 	const CupScenariosView v = CupScenarios();
 	for (const CupScenario &s : v.list) {
 		if (Lower(s.file) != u.chooserFile || s.game != (u.chooserTab == 1)) continue;
+		// One the cup cannot use is shown with the reason, and not taken.
+		if (!FitOf(s, u.cup.mode).Usable()) break;
 		m.kind = s.game ? TourneyMapKind::Game : TourneyMapKind::Upload;
 		m.title = s.title;
 		m.file = s.file;
@@ -175,8 +262,10 @@ void PaintMapChooser(Painter &p, const State &st, const Ui &u, PaintOut &out)
 	const std::string title = u.chooserPool ? Tr("Choose a map of the series") : Tr("Choose the map") + " \xC2\xB7 " + CupRoundName(u.cup, u.chooserRound);
 	const Dialog d = DialogBegin(p, st.viewW, st.viewH, w, h, title, pal::text);
 	const CupScenariosView v = CupScenarios();
-	const std::vector<int> game = TabRows(v, 1, u.cup.mode), mine = TabRows(v, 2, u.cup.mode);
-	const std::string counts[] = {std::string(), v.loaded ? " (" + std::to_string(game.size()) + ")" : std::string(), v.loaded ? " (" + std::to_string(mine.size()) + ")" : std::string()};
+	const std::vector<int> game = TabRows(v, 1), mine = TabRows(v, 2);
+	// The counts are of the scenarios this cup can use.
+	const std::string counts[] = {std::string(), v.loaded ? " (" + std::to_string(UsableCount(v, game, u.cup.mode)) + ")" : std::string(),
+		v.loaded ? " (" + std::to_string(UsableCount(v, mine, u.cup.mode)) + ")" : std::string()};
 	const std::vector<TabSpec> tabs = {{Tr("Random map"), kTourney, ArgOf(kSubChooserTab, 0), u.chooserTab == 0},
 		{Tr("Scenarios of the game") + counts[1], kTourney, ArgOf(kSubChooserTab, 1), u.chooserTab == 1}, {Tr("Own maps") + counts[2], kTourney, ArgOf(kSubChooserTab, 2), u.chooserTab == 2}};
 	const int tabsY = d.y + 62, tabW = (d.BodyW() - 12) / 3;
@@ -250,7 +339,7 @@ void PaintMapChooser(Painter &p, const State &st, const Ui &u, PaintOut &out)
 		// The same search and order as the room's selector, over the tab's scenarios.
 		PaintScenarioToolbar(p, st, listX, listY, listW, 36);
 		const int tabRows = static_cast<int>((u.chooserTab == 1 ? game : mine).size());
-		const std::vector<int> rows = ScenarioOrder(v.list, u.chooserTab == 1 ? game : mine, st.pickSearch, st.pickSort);
+		const std::vector<int> rows = ByFit(v, ScenarioOrder(v.list, u.chooserTab == 1 ? game : mine, st.pickSearch, st.pickSort), u.cup.mode);
 		const int listY = listYTop + 50, listH = listHTop - 50;
 		p.Fill(listX, listY, listW, listH, pal::bg);
 		p.Frame(listX, listY, listW, listH, pal::lineStrong);
@@ -261,7 +350,11 @@ void PaintMapChooser(Painter &p, const State &st, const Ui &u, PaintOut &out)
 			const int i = rows[static_cast<size_t>(scroll + r)], ry = listY + 2 + r * rowH;
 			const CupScenario &s = v.list[static_cast<size_t>(i)];
 			const bool on = Lower(s.file) == u.chooserFile, hot = !on && p.Hover(listX + 2, ry, listW - 16, rowH, mx, my);
-			PaintScenarioRow(p, s, listX + 2, ry, listW - 16, rowH, on, hot, std::string(), pal::ok, s.bytes > static_cast<uint64_t>(kTourneyScenarioMaxBytes) && !s.game);
+			const TourneyScenarioCheck fit = FitOf(s, u.cup.mode);
+			COLORREF tagInk = pal::ok, tagBack = pal::button;
+			const std::string tag = FitTag(fit, tagInk, tagBack);
+			PaintScenarioRow(p, s, listX + 2, ry, listW - 16, rowH, on, hot, tag, tagInk,
+				!fit.Usable() || (s.bytes > static_cast<uint64_t>(kTourneyScenarioMaxBytes) && !s.game), tagBack);
 			if (!on) p.AddHit(listX + 2, ry, listW - 16, rowH, kTourney, ArgOf(kSubChooserRow, i));
 		}
 		if (rows.empty() && tabRows > 0) {
@@ -270,15 +363,11 @@ void PaintMapChooser(Painter &p, const State &st, const Ui &u, PaintOut &out)
 		}
 		else if (rows.empty()) {
 			p.Font(0);
-			const bool teams = u.cup.mode == TourneyMode::Teams;
+			// Every scenario for two or more is listed, those this cup cannot use with the reason.
 			std::string empty = Tr("Looking for the scenarios...");
-			if (v.loaded && u.chooserTab == 1) {
-				empty = Tr(teams ? "No scenario of the game for four players or more was found. Check the game's files in Steam."
-								 : "No scenario of the game for two players or more was found. Check the game's files in Steam.");
-			}
+			if (v.loaded && u.chooserTab == 1) empty = Tr("No scenario of the game for two players or more was found. Check the game's files in Steam.");
 			else if (v.loaded) {
-				empty = Tr(teams ? "You have no scenarios of your own for four players or more. Put them in the game's Scenarios folder, or install a content pack of maps."
-								 : "You have no scenarios of your own for two players or more. Put them in the game's Scenarios folder, or install a content pack of maps.");
+				empty = Tr("You have no scenarios of your own for two players or more. Put them in the game's Scenarios folder, or install a content pack of maps.");
 			}
 			p.TextWrapped(listX + 16, listY + 16, listW - 32, listH - 32, empty, pal::textDim);
 		}
@@ -302,11 +391,14 @@ void PaintMapChooser(Painter &p, const State &st, const Ui &u, PaintOut &out)
 		}
 		else {
 			const bool large = !s->game && s->bytes > static_cast<uint64_t>(kTourneyScenarioMaxBytes);
-			usable = usable && !large;
+			const TourneyScenarioCheck fit = FitOf(*s, u.cup.mode);
+			usable = usable && !large && fit.Usable();
 			std::string note = s->game ? Tr("Every player has it as it is: nothing goes up or down.")
 				: large				  ? Tr("It is larger than 16 MB: the league does not keep files that large.")
 									  : Tr("It goes up to the league when you publish the cup, and each player downloads it on their own when they sign up or open the cup.");
-			PaintScenarioCard(p, *s, dx, listYTop, dw, listHTop, {HumanBytes(s->bytes)}, note, large ? pal::bad : pal::body, ScenarioSeat());
+			// Whether it suits the cup goes first: it is what decides whether it can be chosen.
+			note = FitNote(fit, s->computers) + "\n" + note;
+			PaintScenarioCard(p, *s, dx, listYTop, dw, listHTop, {HumanBytes(s->bytes)}, note, large || !fit.Usable() ? pal::bad : pal::body, ScenarioSeat());
 		}
 	}
 	DialogButtons(p, d, {{Tr("Use this map"), kTourney, ArgOf(kSubChooserOk, 0), true, usable}, {Tr("Cancel"), kTourney, ArgOf(kSubChooserCancel, 0)}}, mx, my);
