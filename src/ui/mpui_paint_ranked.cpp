@@ -354,10 +354,7 @@ void PaintPopulation(Painter &p, const LeagueRankedView &v, const LeagueBan &ban
 	}
 	if (!v.statsLoaded) return;
 	const LeagueQueueStats s = LeagueStatsOf(v.stats, v.queue);
-	if (s.searching == 0) {
-		p.Text(x, y, w, 22, "Nobody is searching now: search and we will call you.", pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		return;
-	}
+	if (s.searching == 0) return;
 	const std::string line = (s.searching == 1 ? Tr("1 searching") : TrFmt("%s searching", {std::to_string(s.searching)})) + "  \xC2\xB7  " +
 		(s.playing == 1 ? Tr("1 game being played") : TrFmt("%s games being played", {std::to_string(s.playing)})) + "  \xC2\xB7  " +
 		(s.gamesToday == 1 ? Tr("1 game today") : TrFmt("%s games today", {std::to_string(s.gamesToday)}));
@@ -379,7 +376,8 @@ void PaintQueueLine(Painter &p, const LeagueRankedView &v, const LeagueDuoView &
 	}
 	if (LeagueQueueIsTeam(v.queue)) {
 		const std::string name = !duo.partner.name.empty() ? duo.partner.name : Tr("your friend");
-		std::string line = Tr("Alone, the league finds you a partner of your level.");
+		if (duo.role == LeagueDuoRole::Solo) return;
+		std::string line;
 		COLORREF ink = pal::caption;
 		if (duo.role == LeagueDuoRole::Waiting) {
 			line = TrFmt("Waiting for %s to accept your invitation.", {name});
@@ -509,7 +507,8 @@ int PaintSearchContent(Painter &p, int x, int y, int w)
 	return ry + rh;
 }
 
-void PaintRankCard(Painter &p, const State &st, const HubLayout &h, const LeagueMeView &me, const LeagueDuoView &duo)
+// The player's card on the left. In 2v2 the duo goes in it too, over the search button, when it fits there; returns whether it did.
+bool PaintRankCard(Painter &p, const State &st, const HubLayout &h, const LeagueMeView &me, const LeagueDuoView &duo)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const LeagueRankedView &v = st.ranked.view;
@@ -559,7 +558,7 @@ void PaintRankCard(Painter &p, const State &st, const HubLayout &h, const League
 		else Ghost(p, ix, cancelY, iw, 48, "Cancel search", kRkCancel, v.phase == LeagueRankedPhase::Searching, mx, my);
 		p.Font(3);
 		p.TextWrapped(ix, cardH + y - 62, iw, 44, "You can keep looking at rooms: a sound plays and the window flashes when a match is found.", pal::caption);
-		return;
+		return false;
 	}
 
 	if (matched) {
@@ -617,14 +616,15 @@ void PaintRankCard(Painter &p, const State &st, const HubLayout &h, const League
 					  : "If the room won't open, press it again or cancel the match: that doesn't count against you.",
 				pal::caption);
 		}
-		return;
+		return false;
 	}
 
 	Caps(p, ix, y + 20, iw / 3, 20, "Your rank", pal::redText);
 	QueueSegments(p, st, x + w - 24, y + 14, 32);
 	const bool placing = !rk.present || rk.placementLeft > 0;
 	// Where the parts go: the mockup's places on a 1080 screen, closer together on a shorter one, so the button keeps its room.
-	const bool tight = cardH < 640;
+	// In 2v2 the duo needs room over the button: the emblem is the small one, as on a short screen.
+	const bool tight = cardH < 640 || team;
 	const int emblem = tight ? 104 : 160, emblemY = y + (tight ? 50 : 54), nameY = emblemY + emblem + 2, nameH = tight ? 52 : 62;
 	const int lineY = nameY + nameH, barY = lineY + 40, labelsY = barY + 16, tileH = tight ? 60 : 72;
 	int tilesY = labelsY + (tight ? 32 : 40);
@@ -726,9 +726,21 @@ void PaintRankCard(Painter &p, const State &st, const HubLayout &h, const League
 	const bool queueOpen = !team || (v.seasonLoaded && LeagueSeasonHasQueue(v.season, kLeagueQueueTeam));
 	const bool canSearch = v.linked && v.seasonLoaded && v.season.active && ban.until <= now && v.phase == LeagueRankedPhase::Idle && queueOpen &&
 		(role == LeagueDuoRole::Solo || role == LeagueDuoRole::Leader);
-	// Who is around, before searching: with nobody searching the player still knows a search will call them.
-	const int popY = std::max(peakY + 30, y + cardH - 138);
-	if (v.seasonLoaded && v.season.active && popY + 22 <= y + cardH - 112) PaintPopulation(p, v, ban, ix, popY, iw);
+	// In 2v2 the duo sits over the button, where the player looks before searching, if it fits under the figures.
+	const int buttonY = y + cardH - 108, freeY = peakY + 30;
+	bool duoHere = false;
+	int popY = std::max(freeY, y + cardH - 138);
+	if (team) {
+		const int duoH = RankedDuoHeight(duo, buttonY - 12 - freeY);
+		if (freeY + duoH <= buttonY - 12) {
+			duoHere = true;
+			const int duoY = buttonY - 12 - duoH;
+			PaintRankedDuo(p, st, duo, x, duoY, w, duoH, true);
+			popY = duoY - 30;
+		}
+	}
+	// Who is around, before searching.
+	if (v.seasonLoaded && v.season.active && popY >= freeY - 8 && popY + 22 <= buttonY - 4) PaintPopulation(p, v, ban, ix, popY, iw);
 	p.fonts[5] = BrandFont(BrandFace::Display, 34, p.s);
 	p.Button(ix, y + cardH - 108, iw, 64, team ? "Search for a match  2 vs 2" : "Search for a match  1 vs 1", kRankedAct, kRkSearch, mx, my, canSearch, true, 5);
 	if (v.seasonLoaded && !v.season.active) {
@@ -736,6 +748,7 @@ void PaintRankCard(Painter &p, const State &st, const HubLayout &h, const League
 		p.Text(ix, y + cardH - 38, iw, 22, "The season is not being played now.", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 	}
 	else PaintQueueLine(p, v, duo, ban.until, ix, y + cardH - 38, iw);
+	return duoHere;
 }
 
 const int kRecentRowH = 50, kRecentTop = 51;
@@ -1092,19 +1105,20 @@ void PaintHub(Painter &p, const State &st)
 	const bool team = LeagueQueueIsTeam(st.ranked.view.queue);
 	const LeagueDuoView duo = team ? LeagueDuoState() : LeagueDuoView();
 	PaintSeasonBand(p, st, h);
-	PaintRankCard(p, st, h, me, duo);
+	const bool duoInCard = PaintRankCard(p, st, h, me, duo);
 	// The rewards keep their room; the recent games take the rest, five at most.
 	const int recentMax = kRecentTop + kLeagueRecentGames * (kRecentRowH + 1) + 8;
 	const int rewardsH = std::min(h.cardH - kGap - 120, std::max(h.cardH - kGap - recentMax, kRewardsMinH));
 	const int recentH = h.cardH - kGap - rewardsH;
 	PaintRecent(p, st, h, me, h.cardY, recentH);
 	PaintSeasonRewards(p, st, h, me, h.cardY + recentH + kGap, rewardsH);
-	if (!team) {
+	if (team) LeagueDuoWatch();
+	if (!team || duoInCard) {
 		PaintMiniBoard(p, st, h, h.cardY, h.cardH);
 		return;
 	}
-	// The duo over the leaderboard, which keeps room for a few rows and the player's own.
-	LeagueDuoWatch();
+	// While searching, or on a screen too short for it in the card, the duo goes over the leaderboard, which keeps room for a few rows
+	// and the player's own.
 	const int duoH = RankedDuoHeight(duo, h.cardH - kGap - kMiniBoardMinH);
 	PaintRankedDuo(p, st, duo, h.rightX, h.cardY, h.rightW, duoH);
 	PaintMiniBoard(p, st, h, h.cardY + duoH + kGap, h.cardH - duoH - kGap);

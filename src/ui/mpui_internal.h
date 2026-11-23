@@ -730,7 +730,7 @@ int PaintRankedMark(Painter &p, const State &st, int x, int y, int h);
 // RankedDuoHeight says, no more than `maxH`), its dialog to invite a friend, what their buttons do, and the duo's notices in any menu.
 std::string RankedQueueLabel(const std::string &queue);
 int RankedDuoHeight(const LeagueDuoView &duo, int maxH);
-void PaintRankedDuo(Painter &p, const State &st, const LeagueDuoView &duo, int x, int y, int w, int h);
+void PaintRankedDuo(Painter &p, const State &st, const LeagueDuoView &duo, int x, int y, int w, int h, bool inCard = false);
 void PaintRankedInvite(Painter &p, const State &st);
 void RankedTeamAction(int arg);
 void RankedTeamGameThreadTick();

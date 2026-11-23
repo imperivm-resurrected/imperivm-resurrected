@@ -207,19 +207,22 @@ int RankedDuoHeight(const LeagueDuoView &duo, int maxH)
 	return kDuoHeadH + kDuoRowH + shown * kDuoInviteH + (count > shown ? kDuoMoreH : 0) + 14;
 }
 
-void PaintRankedDuo(Painter &p, const State &st, const LeagueDuoView &duo, int x, int y, int w, int h)
+void PaintRankedDuo(Painter &p, const State &st, const LeagueDuoView &duo, int x, int y, int w, int h, bool inCard)
 {
 	const int mx = st.mouseX, my = st.mouseY;
 	const LeagueRankedView &v = st.ranked.view;
 	const int ix = x + 24, iw = w - 48;
-	PaintGlassCard(p, x, y, w, h);
+	// A card of its own, or a part of the rank card under a line.
+	if (inCard) p.Fill(ix, y, iw, 1, pal::hairline);
+	else PaintGlassCard(p, x, y, w, h);
+	const int lineX = inCard ? ix : x + 1, lineW = inCard ? iw : w - 2;
 	// The title, and how the duo stands on the right.
 	const char *state = duo.role == LeagueDuoRole::Solo ? "Alone" : duo.role == LeagueDuoRole::Waiting ? "Invitation sent" : "Ready";
 	const COLORREF stateInk = duo.role == LeagueDuoRole::Solo ? pal::caption : duo.role == LeagueDuoRole::Waiting ? pal::warn : pal::ok;
 	const int stateW = std::min(iw / 2, CapsWidth(p, Tr(state), 2) + 4);
 	FitCaps(p, ix, y + 14, iw - stateW - 12, 22, Tr("Your duo"), pal::redText);
 	FitCaps(p, ix + iw - stateW, y + 14, stateW, 22, Tr(state), stateInk, DT_RIGHT);
-	p.Fill(x + 1, y + kDuoHeadH - 4, w - 2, 1, pal::hairline);
+	p.Fill(lineX, y + kDuoHeadH - 4, lineW, 1, pal::hairline);
 	int ry = y + kDuoHeadH;
 	const bool searching = v.phase != LeagueRankedPhase::Idle;
 	if (duo.role == LeagueDuoRole::Solo) {
@@ -260,7 +263,7 @@ void PaintRankedDuo(Painter &p, const State &st, const LeagueDuoView &duo, int x
 	const int shown = InvitesShown(static_cast<int>(duo.invites.size()), h);
 	for (size_t i = 0; i < duo.invites.size() && static_cast<int>(i) < shown; i++) {
 		const LeaguePartyInvite &inv = duo.invites[i];
-		p.Fill(x + 1, ry, w - 2, 1, pal::hairline);
+		p.Fill(lineX, ry, lineW, 1, pal::hairline);
 		const std::string from = !inv.fromName.empty() ? inv.fromName : Tr("A friend");
 		Avatar(p, ix, ry + 9, 32, IdOf(inv.fromId), from);
 		const std::string accept = Tr("Accept"), decline = Tr("Decline");
