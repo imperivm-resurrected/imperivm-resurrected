@@ -24,17 +24,18 @@
 #include "net/steamnet.h"
 #include "ui/fullscreen.h"
 #include "ui/leagueemblem.h"
+#include "ui/leaguerankart.h"
 
 using namespace ui;
 
 namespace {
 
-enum Art { kArtBadge, kArtVexillum, kArtTrophy, kArtEmblem, kArtPhalera, kArtFounder };
+enum Art { kArtBadge, kArtVexillum, kArtTrophy, kArtEmblem, kArtPhalera, kArtFounder, kArtRank };
 
 std::mutex g_cacheMx;
 
 // Premultiplied 32-bit bitmaps for AlphaBlend, one per picture and size; there are only a handful. `variant` is the tier, or the metal of
-// a phalera.
+// a phalera. kArtRank (the PNG emblem of a rank) is null for the unranked and when its PNG cannot be read.
 HBITMAP Bitmap(Art art, int variant, int size)
 {
 	std::lock_guard<std::mutex> lock(g_cacheMx);
@@ -51,6 +52,7 @@ HBITMAP Bitmap(Art art, int variant, int size)
 	case kArtTrophy: img = LeagueTrophyImage(metal, size); break;
 	case kArtPhalera: img = LeaguePhaleraImage(metal, size); break;
 	case kArtFounder: img = LeagueFounderPixels(size); break;
+	case kArtRank: img = LeagueRankArt(tier, size); break;
 	default: img = LeagueEmblemImage(tier, size); break;
 	}
 	BITMAPINFO bi = {};
@@ -259,6 +261,12 @@ void DrawLeagueBadge(Painter &p, int x, int y, int size, const LeagueBadge &badg
 	const Art art = badge.kind == LeagueBadgeKind::Trophy ? kArtTrophy
 		: badge.kind == LeagueBadgeKind::Season		  ? (badge.founder ? kArtFounder : kArtVexillum)
 													  : kArtBadge;
+	if (art == kArtBadge) {
+		if (HBITMAP rank = Bitmap(kArtRank, static_cast<int>(badge.tier), px)) {
+			Blit(p, rank, r.left, r.top + (static_cast<int>(r.bottom - r.top) - px) / 2, px, px);
+			return;
+		}
+	}
 	const int side = kLeagueBadgeGrid * scale;
 	// The phalera is drawn from its shapes at the size it is shown; the shields are pixels repeated `scale` times.
 	const int variant = art == kArtTrophy ? static_cast<int>(badge.metal) : static_cast<int>(badge.tier);
@@ -282,7 +290,8 @@ void DrawLeagueEmblem(Painter &p, int x, int y, int size, LeagueTier tier, int a
 {
 	const RECT r = p.R(x, y, size, size);
 	const int px = std::max(8, static_cast<int>(r.right - r.left));
-	Blit(p, Bitmap(kArtEmblem, static_cast<int>(tier), px), r.left, r.top, px, px, alpha);
+	HBITMAP rank = Bitmap(kArtRank, static_cast<int>(tier), px);
+	Blit(p, rank ? rank : Bitmap(kArtEmblem, static_cast<int>(tier), px), r.left, r.top, px, px, alpha);
 	if (tier != LeagueTier::None || alpha < 128) return;
 	// The unranked card carries a question mark, as on the website, centred on the card: its box spans 51.5 to 140.5 of the 160 units, so
 	// its middle is 16 below the square's; 14 makes up for the room the font keeps above its capitals, for accents.

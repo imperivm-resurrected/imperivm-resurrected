@@ -29,3 +29,22 @@ BEGIN
 		VALUE "Translation", 0x0409, 1200
 	END
 END
+
+// The rank emblems of the league, baked by tools/rank-emblems/bake.js and decoded by src/ui/leaguerankart.cpp. The paths are relative to
+// this file.
+LEAGUE_RECRUIT_256 RCDATA "../../assets/league/recruit-256.png"
+LEAGUE_RECRUIT_64 RCDATA "../../assets/league/recruit-64.png"
+LEAGUE_LEGIONARY_256 RCDATA "../../assets/league/legionary-256.png"
+LEAGUE_LEGIONARY_64 RCDATA "../../assets/league/legionary-64.png"
+LEAGUE_SIGNIFER_256 RCDATA "../../assets/league/signifer-256.png"
+LEAGUE_SIGNIFER_64 RCDATA "../../assets/league/signifer-64.png"
+LEAGUE_CENTURION_256 RCDATA "../../assets/league/centurion-256.png"
+LEAGUE_CENTURION_64 RCDATA "../../assets/league/centurion-64.png"
+LEAGUE_TRIBUNE_256 RCDATA "../../assets/league/tribune-256.png"
+LEAGUE_TRIBUNE_64 RCDATA "../../assets/league/tribune-64.png"
+LEAGUE_LEGATE_256 RCDATA "../../assets/league/legate-256.png"
+LEAGUE_LEGATE_64 RCDATA "../../assets/league/legate-64.png"
+LEAGUE_PRAETORIAN_256 RCDATA "../../assets/league/praetorian-256.png"
+LEAGUE_PRAETORIAN_64 RCDATA "../../assets/league/praetorian-64.png"
+LEAGUE_IMPERATOR_256 RCDATA "../../assets/league/imperator-256.png"
+LEAGUE_IMPERATOR_64 RCDATA "../../assets/league/imperator-64.png"
