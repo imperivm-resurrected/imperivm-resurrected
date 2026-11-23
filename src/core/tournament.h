@@ -407,8 +407,6 @@ struct TourneyNext {
 	// A cup of teams: the player's own team (its name, its captain in `steamId` and its two players); `opponent` is the other team.
 	TourneyMode mode = TourneyMode::Solo;
 	TourneyNextSide team;
-	// STAGING TEST TOOL: the league is its staging worker, where the match page has buttons to win or lose the game without playing it.
-	bool staging = false;
 	// The map of the next game is this player's to choose.
 	bool MyPick() const { return pick.present && !me.side.empty() && pick.by == me.side; }
 	bool Teams() const { return mode == TourneyMode::Teams; }

@@ -697,7 +697,6 @@ int __fastcall HookGameUpdate(void *game)
 	g_updateTicks += ZoomFogGameThreadTick();
 	QuickIconsGameThreadTick();
 	HealthBarsGameTick();
-	AdventureResultGameTick(); // STAGING TEST TOOL: the instant-victory key, remove before a release
 	NoteIconsGameTick();
 	ZoomViewGameTick();
 	RespawnSitesGameTick();

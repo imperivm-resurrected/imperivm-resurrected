@@ -11,10 +11,6 @@
 // difficulty it was won at, goes into the active profile.
 void InstallAdventureResult(bool knownExe);
 
-// STAGING TEST TOOL, remove before a release: Ctrl+Shift+F12 in a single-player game gives the local player's team the victory, through the game's own end of game
-// (CVXBasicGame::OnPlayerGameOver). On the game thread, once per frame.
-void AdventureResultGameTick();
-
 // The adventure the adventure screen has just started (its path and title in the game's list): its victory is kept by its path,
 // until a saved game is loaded.
 void AdventureResultNoteStart(const std::string &adventurePath, const std::string &title);

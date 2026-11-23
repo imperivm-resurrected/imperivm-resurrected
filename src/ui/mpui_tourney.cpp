@@ -317,13 +317,6 @@ void TakeResults()
 		case TourneyOp::Concede:
 			if (r.ok) Toast("Your cup game against the bot closed with the game: it counts as lost.");
 			break;
-		case TourneyOp::TestResult:
-			Toast(r.ok ? Tr("Test result sent.") : ResultText(r), !r.ok);
-			if (r.ok) {
-				LeagueTourneyMineRefresh();
-				LeagueTourneyListsRefresh(true);
-			}
-			break;
 		case TourneyOp::Create: CupMade(r); break;
 		case TourneyOp::Edit: CupEdited(r); break;
 		case TourneyOp::FindCode: CodeFound(r); break;
@@ -1606,9 +1599,6 @@ void TourneyAction(int arg)
 		u.disputeText.clear();
 		g_s.focus = kNoField;
 		break;
-	// STAGING TEST TOOL: the match page's test buttons.
-	case kSubTestWin:
-	case kSubTestLose: LeagueTourneyTestResult(value, sub == kSubTestWin); break;
 	case kSubChampion: {
 		const std::string slug = SlugOf(value);
 		if (slug.empty()) break;

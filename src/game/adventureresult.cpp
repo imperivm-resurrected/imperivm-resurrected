@@ -121,26 +121,6 @@ void InstallAdventureResult(bool knownExe)
 	if (InstallGameLoadHook(knownExe)) OnGameLoadedFrom(&AfterGameLoad);
 }
 
-void AdventureResultGameTick()
-{
-	// CVXBasicGame vtable slot 18: OnPlayerGameOver(int *player, int defeated).
-	typedef void(__fastcall *OnPlayerGameOver_t)(void *game, void *edx, int *player, int defeated);
-	static bool held = false;
-	const bool down = (GetAsyncKeyState(VK_CONTROL) & 0x8000) && (GetAsyncKeyState(VK_SHIFT) & 0x8000) && (GetAsyncKeyState(VK_F12) & 0x8000);
-	const bool pressed = down && !held;
-	held = down;
-	if (!pressed) return;
-	DWORD pid = 0;
-	GetWindowThreadProcessId(GetForegroundWindow(), &pid);
-	char *game = *reinterpret_cast<char **>(addr::kGame);
-	if (pid != GetCurrentProcessId() || !game || GameIsMultiplayer()) return;
-	char *local = layout::LocalPlayer(game);
-	if (!local || Field<int>(local, layout::kPlayerState) != layout::kStatePlaying) return;
-	int index = Field<int>(local, layout::kPlayerId);
-	LogI("game", "test key: giving player %d the victory", index);
-	reinterpret_cast<OnPlayerGameOver_t>((*reinterpret_cast<void ***>(game))[18])(game, nullptr, &index, 0);
-}
-
 void AdventureResultNoteStart(const std::string &adventurePath, const std::string &title)
 {
 	std::lock_guard<std::mutex> lock(g_lock);

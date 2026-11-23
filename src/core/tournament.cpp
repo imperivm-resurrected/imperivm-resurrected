@@ -1060,7 +1060,6 @@ bool TourneyParseNext(const Json &j, TourneyNext &out)
 	out.lobbyKey = Text(j, "lobbyKey");
 	out.roomClaimBy = Id64(j.Get("roomClaimBy"));
 	out.canClaimNoShow = j.GetBool("canClaimNoShow");
-	out.staging = j.GetBool("staging");
 	out.games = TourneyGamesFromJson(j.Get("games"));
 	out.pick = TourneyPickFromJson(j.Get("pick"));
 	out.noshowFrom = Int64(j, "noshowFrom");
