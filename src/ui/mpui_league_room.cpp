@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "core/log.h"
+#include "game/civs.h"
 #include "game/gamemodes.h"
 #include "mods/lang.h"
 #include "mods/modoptions.h"
@@ -207,6 +208,54 @@ bool LeagueRoomHeld(const GameRoomSnapshot &g, uint64_t room)
 	std::lock_guard<std::mutex> lock(g_mx);
 	if (!g_applied.have || g_applied.room != room || !g.active || !g.host) return true;
 	return Needed(g_applied.want, g, false).empty();
+}
+
+LeagueSlotStep LeagueSlotKeepStep(LeagueSlotKeep &k, int race, int color, uint32_t rgb, DWORD now, const char *what, int64_t match)
+{
+	const int slot = g_s.game.localSlot;
+	if (slot < 0 || slot > 7) return LeagueSlotStep::Done;
+	GameRoomSlot &s = g_s.game.slots[static_cast<size_t>(slot)];
+	const int item = race >= 0 ? CivsRoomItemOfRace(race) : -1;
+	LeagueSlotHave have;
+	have.raceItem = s.race;
+	have.raceItems = static_cast<int>(s.raceNames.size());
+	have.color = s.color;
+	have.own = CustomColorOf(g_s, g_s.game, slot);
+	for (int i = 0; i < 8; i++) have.colorTaken = have.colorTaken || (i != slot && g_s.game.slots[i].used && g_s.game.slots[i].color == color);
+	const LeagueSlotWanted want = LeagueSlotWants(k.tries, item, color, rgb, have);
+	if (!want.Any()) {
+		k.unreadied = false;
+		return LeagueSlotStep::Done;
+	}
+	if (LocalReady(g_s.game)) {
+		if (k.unreadied) return LeagueSlotStep::Working;
+		k.unreadied = true;
+		Predict(kPredReady, slot, 0);
+		GameRoomToggleReady();
+		return LeagueSlotStep::Unreadied;
+	}
+	if (now - k.setAt < 600) return LeagueSlotStep::Working;
+	k.setAt = now;
+	k.tries.sets++;
+	if (want.race) {
+		LeagueSlotRaceSent(k.tries, item);
+		s.race = item;
+		Predict(kPredRace, slot, item);
+		GameRoomSetRace(slot, item);
+		LogI("league", "%s match %lld: race %d in the player's slot", what, static_cast<long long>(match), race);
+	}
+	if (want.own) {
+		k.tries.ownTried = rgb;
+		if (!UseCustomColor(g_s, slot, rgb)) LogI("league", "%s match %lld: the own colour is too close to another player's; the room's stays", what, static_cast<long long>(match));
+	}
+	else if (want.preset) {
+		LeagueSlotColorSent(k.tries, color);
+		ClearCustomColor(g_s, slot);
+		s.color = color;
+		Predict(kPredColor, slot, color);
+		GameRoomSetColor(slot, color);
+	}
+	return LeagueSlotStep::Working;
 }
 
 }

@@ -13,6 +13,8 @@ bool InstallDisplayModeHooks(bool knownExe);
 bool DisplayFakeMode(int w, int h, DWORD bpp, bool testOnly);
 
 void DisplayAttachWindow(HWND hwnd);
+// The game's main window once attached; null before.
+HWND DisplayGameWindow();
 
 void DisplayGetLogicalSize(HWND hwnd, int &w, int &h);
 

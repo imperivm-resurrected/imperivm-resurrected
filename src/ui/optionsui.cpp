@@ -174,6 +174,7 @@ void SetExtras(Values &v, const Config &c)
 	v.checks[kPauseInBackground] = c.pauseInBackground;
 	v.checks[kChatBadges] = c.chatBadges;
 	v.checks[kMatchFoundSound] = c.matchFoundSound;
+	v.checks[kAlertFront] = c.alertFront;
 	v.checks[kAllyColors] = c.allyColors;
 	v.scrolls[kMasterVolume] = c.masterVolume;
 	v.scrolls[kNatureVolume] = c.natureVolume;
@@ -224,7 +225,7 @@ void SetUpdateStatus(Values &v)
 void CopyExtras(Values &to, const Values &from)
 {
 	CopySystemExtras(to, from);
-	for (int id : {kSmoothCamera, kPauseInBackground, kHealthBarHeroes, kChatBadges, kMatchFoundSound, kAllyColors, kRespawnTimers}) CopyId(to.checks, from.checks, id);
+	for (int id : {kSmoothCamera, kPauseInBackground, kHealthBarHeroes, kChatBadges, kMatchFoundSound, kAlertFront, kAllyColors, kRespawnTimers}) CopyId(to.checks, from.checks, id);
 	CopyId(to.combos, from.combos, kHealthBars);
 	CopyId(to.combos, from.combos, kAllyPalette);
 	for (int id : {kAllySelf, kAllyAllies, kAllyEnemies}) CopyId(to.combos, from.combos, id);
@@ -322,6 +323,7 @@ void CommitExtras(const Values &v)
 	c.pauseInBackground = CheckOr(v, kPauseInBackground, c.pauseInBackground);
 	c.chatBadges = CheckOr(v, kChatBadges, c.chatBadges);
 	c.matchFoundSound = CheckOr(v, kMatchFoundSound, c.matchFoundSound);
+	c.alertFront = CheckOr(v, kAlertFront, c.alertFront);
 	c.allyColors = CheckOr(v, kAllyColors, c.allyColors);
 	CommitDisplayExtras(c, v);
 	ApplySoundLive(v);

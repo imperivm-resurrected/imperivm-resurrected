@@ -25,6 +25,7 @@
 #include "game/netlink.h"
 #include "game/roomprefs.h"
 #include "game/roomcountdown.h"
+#include "hooks/alerts.h"
 #include "game/roomname.h"
 #include "game/gamehook.h"
 #include "game/mappreview.h"
@@ -982,6 +983,7 @@ void CountdownTick()
 	case CountdownEvent::Start:
 		LogI("room", "countdown: everyone is ready; the game starts in %d s", kRoomCountdownMs / 1000);
 		CountdownSend(seq, kRoomCountdownMs);
+		AlertPlayerCountdown(reinterpret_cast<uintptr_t>(g_dlg));
 		break;
 	case CountdownEvent::Cancel:
 		LogI("room", "countdown cancelled: %s", CountdownReasonText(step).c_str());
@@ -1750,7 +1752,10 @@ void GameRoomCountdownReceived(unsigned seq, int ms)
 		changed = ms >= 0 ? g_countdown.clock.RemoteStart(seq, ms, now) : g_countdown.clock.RemoteCancel(seq);
 	}
 	if (!changed) return;
-	if (ms >= 0) LogI("room", "countdown from the host: the game starts in %d ms", ms);
+	if (ms >= 0) {
+		LogI("room", "countdown from the host: the game starts in %d ms", ms);
+		AlertPlayerCountdown(reinterpret_cast<uintptr_t>(g_dlg));
+	}
 	else LogI("room", "countdown cancelled by the host");
 }
 

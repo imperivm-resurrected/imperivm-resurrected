@@ -331,6 +331,10 @@ void OnCallback(int id, const void *data)
 	}
 	case LobbyInvite_t::k_iCallback: {
 		auto *r = static_cast<const LobbyInvite_t *>(data);
+		if (QuietInviter(r->m_ulSteamIDUser)) {
+			LogI("steam", "invitation received from %s, of the ranked match: its room is entered without it", Name(r->m_ulSteamIDUser).c_str());
+			break;
+		}
 		LogI("steam", "invitation received from %s", Name(r->m_ulSteamIDUser).c_str());
 		Notice(Name(r->m_ulSteamIDUser) + Tr(" invited you to a game"));
 		UiSoundPlay(1);

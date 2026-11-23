@@ -13,8 +13,6 @@
 #include <vector>
 
 #include "addr/state.h"
-#include "core/config.h"
-#include "core/guard.h"
 #include "core/league.h"
 #include "core/leagueseasons.h"
 #include "core/leaguemaps.h"
@@ -23,6 +21,9 @@
 #include "core/leagueroomoptions.h"
 #include "core/leagueteam.h"
 #include "core/log.h"
+#include "core/names.h"
+#include "game/roomcountdown.h"
+#include "hooks/alerts.h"
 #include "hooks/dmshim.h"
 #include "i18n/tr.h"
 #include "mods/modoptions.h"
@@ -38,6 +39,7 @@
 #include "ui/mpui_internal.h"
 #include "ui/mpui_league_room.h"
 #include "ui/mpui_ranked_kit.h"
+#include "ui/mpui_tourney.h"
 
 using namespace mpui_impl;
 
@@ -62,6 +64,16 @@ struct RoomAuto {
 	// The match whose room the player left by hand: no room is made or joined for it again until they ask (Go to the room).
 	int64_t userLeft = 0;
 	std::map<int, DWORD> setAt;
+	// The room under the panel (RankedRoomHidden): which one and since when, the slot kept as the panel chose, the player made ready (once;
+	// again, a few times, after their team's change made them not ready), the host's room holding the league's options and map, and the
+	// panel's last Ready.
+	uint64_t panelRoom = 0;
+	DWORD shownAt = 0, readyAt = 0;
+	LeagueSlotKeep slot;
+	bool readySent = false, roomHeld = false;
+	int rearms = 0;
+	// The players whose Steam invitation is not told (SteamQuietInvitesFrom).
+	std::vector<uint64_t> quiet;
 };
 RoomAuto g_auto;
 
@@ -107,7 +119,7 @@ bool Due(int id)
 
 // The ticket's map type or size, by the game's id behind each item (core/leaguemaps.h); by the item's text only when the ids can't
 // be read, which is logged. A size the chosen type does not offer waits until the type is right.
-void SetMapItem(const GameRoomSnapshot &g, int id, const std::string &want)
+bool SetMapItem(const GameRoomSnapshot &g, int id, const std::string &want)
 {
 	for (const GameRoomOption &o : g.options) {
 		if (o.id != id || o.checkbox) continue;
@@ -120,7 +132,7 @@ void SetMapItem(const GameRoomSnapshot &g, int id, const std::string &want)
 				for (size_t i = 0; i < o.items.size(); i++) items += (i ? ", " : "") + o.items[i] + (i < o.keys.size() && !o.keys[i].empty() ? "=" + o.keys[i] : "");
 				LogW("league", "ranked: the season's map \"%s\" is not among the room's map types (%s)", want.c_str(), items.c_str());
 			}
-			return;
+			return true;
 		}
 		if (byText && !g_auto.textWarned) {
 			g_auto.textWarned = true;
@@ -130,25 +142,28 @@ void SetMapItem(const GameRoomSnapshot &g, int id, const std::string &want)
 			GameRoomSetOption(id, k);
 			Predict(kPredOptSel, id, k);
 		}
-		return;
+		return o.sel == k;
 	}
+	return true;
 }
 
 // The host keeps the room as the server's ticket says: map and size, and every other option from the season's settings and the
-// league's defaults (core/leagueroomoptions.h), whatever the host's last room had. Put back every second, until the game starts.
-void ApplySettings(const LeagueMatchTicket &t)
+// league's defaults (core/leagueroomoptions.h), whatever the host's last room had. Put back every second, until the game starts. True
+// once the room has all of it.
+bool ApplySettings(const LeagueMatchTicket &t)
 {
 	GameRoomSnapshot g = GameRoomGet();
-	if (!g.active || !g.host || !g.online || g.busy) return;
-	LeagueRoomApply(LeagueRoomOptionsFor(LeagueRoomRequestOf(t.settings)), g, g_s.room.id, "ranked");
+	if (!g.active || !g.host || !g.online || g.busy) return false;
+	bool held = LeagueRoomApply(LeagueRoomOptionsFor(LeagueRoomRequestOf(t.settings)), g, g_s.room.id, "ranked");
 	// The type first: the sizes the game offers depend on it.
-	if (!t.map.name.empty()) SetMapItem(g, kOptMapType, t.map.name);
-	if (!t.map.size.empty()) SetMapItem(g, kOptMapSize, t.map.size);
+	if (!t.map.name.empty()) held = SetMapItem(g, kOptMapType, t.map.name) && held;
+	if (!t.map.size.empty()) held = SetMapItem(g, kOptMapSize, t.map.size) && held;
 	if (!g_auto.settingsLogged) {
 		g_auto.settingsLogged = true;
 		LogI("league", "ranked: the room takes the league's options (map %s %s, preset %s)", t.map.name.c_str(), t.map.size.c_str(),
 			t.settings.preset.empty() ? "competitive" : t.settings.preset.c_str());
 	}
+	return held;
 }
 
 // The ticket is of a 2v2: its queue, or its two sides.
@@ -211,7 +226,14 @@ void SetOwnTeam(const LeagueRankedView &v)
 	const GameRoomSlot &slot = g.slots[g.localSlot];
 	if (slot.team == side) return;
 	if (LocalReady(g)) {
-		if (Due(-3)) GameRoomToggleReady();
+		if (Due(-3)) {
+			GameRoomToggleReady();
+			// The panel makes the player ready again once they are in their team; a few times at most, or a team the game won't keep loops.
+			if (g_auto.rearms < 6) {
+				g_auto.rearms++;
+				g_auto.readySent = false;
+			}
+		}
 		return;
 	}
 	if (!Due(-4)) return;
@@ -234,10 +256,12 @@ void ResetRoom()
 	const unsigned serial = g_auto.foundSerial;
 	const bool init = g_auto.init;
 	const int64_t left = g_auto.leftCalledOff;
+	std::vector<uint64_t> quiet = std::move(g_auto.quiet);
 	g_auto = RoomAuto();
 	g_auto.foundSerial = serial;
 	g_auto.init = init;
 	g_auto.leftCalledOff = left;
+	g_auto.quiet = std::move(quiet);
 }
 
 bool OwnsRoom()
@@ -267,11 +291,58 @@ bool GiveUpRoom(const LeagueRankedView &v)
 	return true;
 }
 
+// The others of the match invite this player to the host's room, which this computer enters by itself: their invitation is not told.
+void QuietInvites(const LeagueRankedView &v, bool live)
+{
+	std::vector<uint64_t> quiet;
+	if (live) {
+		const std::string own = std::to_string(SteamOwnId());
+		for (const LeaguePlayerCard &pl : v.ticket.players) {
+			if (pl.steamId != own) quiet.push_back(_strtoui64(pl.steamId.c_str(), nullptr, 10));
+		}
+	}
+	if (quiet == g_auto.quiet) return;
+	g_auto.quiet = quiet;
+	SteamQuietInvitesFrom(quiet);
+}
+
+// The room under the panel (as a cup's room under its match page): what the panel chose goes into the player's slot, and the player is made
+// ready once the slot has it, they are in their team (2v2) and the host's room has the league's options and map.
+void PanelStep(const LeagueRankedView &v, DWORD now)
+{
+	if (!RankedRoomHidden(g_s)) return;
+	if (g_auto.panelRoom != g_s.room.id) {
+		g_auto.panelRoom = g_s.room.id;
+		g_auto.shownAt = now;
+		g_auto.slot = LeagueSlotKeep();
+		g_auto.readySent = false;
+		g_auto.rearms = 0;
+		LogI("league", "ranked: the room of match %lld waits under its panel", static_cast<long long>(v.matchId));
+	}
+	const int slot = g_s.game.localSlot;
+	if (g_s.game.busy || g_s.inOnlineGame || slot < 0 || slot > 7 || !g_s.game.slots[static_cast<size_t>(slot)].used || now - g_auto.shownAt < 800) return;
+	int race = -1, color = -1;
+	uint32_t rgb = 0;
+	LeagueSideChoice(race, color, rgb);
+	const LeagueSlotStep step = LeagueSlotKeepStep(g_auto.slot, race, color, rgb, now, "ranked", v.matchId);
+	if (step == LeagueSlotStep::Unreadied) g_auto.readySent = false;
+	if (step != LeagueSlotStep::Done || g_auto.readySent || now - g_auto.shownAt < 1600) return;
+	const int side = TeamTicket(v.ticket) ? MySide(v) : 0;
+	if (side > 0 && side < g_s.game.teamChoices && g_s.game.slots[static_cast<size_t>(slot)].team != side) return;
+	if (g_s.game.host && !g_auto.roomHeld) return;
+	g_auto.readySent = true;
+	if (LocalReady(g_s.game)) return;
+	Predict(kPredReady, slot, 1);
+	GameRoomToggleReady();
+	LogI("league", "ranked match %lld: the player is made ready", static_cast<long long>(v.matchId));
+}
+
 // Both accepted: the host makes the room, the other one joins it as soon as the server knows it. When that fails every time,
 // the match is called off.
 void RoomStep(const LeagueRankedView &v, DWORD now)
 {
 	const bool live = (v.phase == LeagueRankedPhase::Ready || v.phase == LeagueRankedPhase::Playing) && v.ticketLoaded && v.matchId;
+	QuietInvites(v, live && !v.host);
 	if (!live) {
 		if (g_auto.match) ResetRoom();
 		// A match called off while this computer waited in its room: the room is of no use any more.
@@ -286,6 +357,8 @@ void RoomStep(const LeagueRankedView &v, DWORD now)
 	if (g_auto.match != v.matchId) {
 		ResetRoom();
 		g_auto.match = v.matchId;
+		// The panel of the match found stays up over the Ranked tab while the room is made and waits under it.
+		if (g_s.open && !g_s.game.active && !g_s.room.id) g_s.view = kViewRanked;
 	}
 	if (InGame()) return;
 	const std::string tag = LeagueRankedRoomTag(v.matchId);
@@ -297,6 +370,7 @@ void RoomStep(const LeagueRankedView &v, DWORD now)
 			SetOwnTeam(v);
 		}
 		if (GameRoomActive()) GameRoomKeepPlayerPrefs();
+		PanelStep(v, now);
 		if (!v.host || !OwnsRoom()) return;
 		LeagueRankedRoomOpened(g_s.room.id);
 		if (g_auto.invitedLobby != g_s.room.id) {
@@ -317,7 +391,7 @@ void RoomStep(const LeagueRankedView &v, DWORD now)
 		}
 		if (now - g_auto.settingsAt > 1000) {
 			g_auto.settingsAt = now;
-			ApplySettings(v.ticket);
+			g_auto.roomHeld = ApplySettings(v.ticket);
 		}
 		return;
 	}
@@ -368,15 +442,7 @@ void RoomStep(const LeagueRankedView &v, DWORD now)
 // A match was found: the taskbar flashes and a sound plays even when the game is in the background, and the menu shows the answer.
 void CallPlayer()
 {
-	// This runs under the screen's lock, and flashing the window sends it messages at once (WM_NCACTIVATE) that come back into
-	// the screen's handlers on this thread: the flash goes from another thread, so they wait for the lock.
-	if (const HWND wnd = g_wakeWnd.load()) {
-		SafeThread([](HWND w) {
-			FLASHWINFO fi = {sizeof(fi), w, FLASHW_ALL | FLASHW_TIMERNOFG, 0, 0};
-			FlashWindowEx(&fi);
-		}, wnd).detach();
-	}
-	if (GetConfig().matchFoundSound) UiSoundPlay(1);
+	AlertPlayer(PlayerAlert::MatchFound);
 	if (!g_s.open && !InGame() && MainMenuOnTop()) OpenRankedTab();
 	else if (!g_s.open) ModUiToast("Ranked match found! Open Multiplayer to accept it.");
 }
@@ -397,7 +463,7 @@ void TakeStanding(LeaguePlayerCard &into, const LeaguePlayerCard &from)
 }
 
 // One side of the match found: avatar, name, record, emblem, rank, Glory and place, and whether they accepted.
-void PaintSide(Painter &p, int x, int y, int w, int h, uint64_t id, const std::string &name, const LeaguePlayerCard &card, bool you, bool accepted)
+void PaintSide(Painter &p, int x, int y, int w, int h, uint64_t id, const std::string &name, const LeaguePlayerCard &card, bool you, const char *chip, bool ok)
 {
 	const LeagueTier tier = card.tier;
 	p.Fill(x, y, w, h, pal::raised);
@@ -429,9 +495,15 @@ void PaintSide(Painter &p, int x, int y, int w, int h, uint64_t id, const std::s
 		RawText(p, x + 112, y + 154, w - 136, 24, StandingText(card), pal::body);
 	}
 	p.Fill(x + 24, y + h - 80, w - 48, 1, pal::hairline);
-	const int cw = accepted ? 150 : 110;
-	Chip(p, x + w - 24 - cw, y + h - 58, cw, 28, accepted ? "Accepted" : "Pending", accepted ? pal::ok : pal::textDim,
-		accepted ? RGB(0x2a, 0x36, 0x24) : pal::hairline);
+	p.Font(4);
+	const int cw = std::min(w - 48, std::max(110, p.CapsWidth(chip, 1) + 36));
+	Chip(p, x + w - 24 - cw, y + h - 58, cw, 28, chip, ok ? pal::ok : pal::textDim, ok ? RGB(0x2a, 0x36, 0x24) : pal::hairline);
+}
+
+// A player's chip on the panel while the match's room is made and played from it.
+const char *RoomChip(int state)
+{
+	return state == 2 ? "Ready" : state == 1 ? "In the room" : "Not in the room yet";
 }
 
 // A label over a value, as the room's summary shows its options.
@@ -443,6 +515,87 @@ void Fact(Painter &p, int x, int y, int w, const std::string &label, const std::
 	p.Text(x, y + 20, w, 26, value, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }
 
+}
+
+bool RankedPanelOpen(const State &st)
+{
+	const LeagueRankedView &v = st.ranked.view;
+	if ((v.phase != LeagueRankedPhase::Ready && v.phase != LeagueRankedPhase::Playing) || !v.matchId) return false;
+	if (st.view != kViewRanked || st.ranked.panelOff == v.matchId || st.inOnlineGame || st.ranked.resultOpen) return false;
+	if (!st.room.id) return !st.game.active;
+	if (st.room.info.spectate) return false;
+	return st.room.info.leagueTag == LeagueRankedRoomTag(v.matchId) || (v.ticketLoaded && st.room.id == LeagueTicketLobby(v.ticket));
+}
+
+bool RankedRoomHidden(const State &st)
+{
+	return st.game.active && RankedPanelOpen(st);
+}
+
+int RankedRoomStateOf(const State &st, uint64_t id)
+{
+	if (!st.room.id || !id) return 0;
+	for (const OnlineMember &m : st.room.members) {
+		if (m.id != id) continue;
+		if (!st.game.active) return 1;
+		for (const GameRoomSlot &s : st.game.slots) {
+			if (s.used && s.ready && (m.me ? s.local : PlayerNameMatches(s.name, m.name))) return 2;
+		}
+		return 1;
+	}
+	return 0;
+}
+
+std::string RankedPanelStatus(const State &st)
+{
+	const LeagueRankedView &v = st.ranked.view;
+	if (v.abandoning) return Tr("Cancelling the match...");
+	if (st.startingCover || (st.gameClosedAt && st.room.id)) return Tr("Starting...");
+	if (!st.room.id || !st.game.active) {
+		if (v.host) return Tr("Opening the room...");
+		return v.ticketLoaded && LeagueTicketLobby(v.ticket) ? Tr("Entering the room...") : Tr("Waiting for the host's room...");
+	}
+	const int left = GameRoomCountdownLeftMs();
+	if (left > 0) return TrFmt("Starting in %s...", {std::to_string((left + 999) / 1000)});
+	if (left == 0) return Tr("Starting...");
+	if (!LocalReady(st.game)) return Tr("Not ready: press Ready when you have chosen.");
+	// Some of the room's labels are translated already; the others are English keys.
+	const std::string waits = StartBlocker(st, st.game).label;
+	if (!waits.empty()) return Tr(waits);
+	return Tr(v.ticketLoaded && TeamTicket(v.ticket) ? "Waiting for the other players..." : "Waiting for the other player...");
+}
+
+void PaintRankedPanelFoot(Painter &p, const State &st, int dx, int dw, int by)
+{
+	const int mx = st.mouseX, my = st.mouseY;
+	const LeagueRankedView &v = st.ranked.view;
+	const int mid = dx + dw / 2;
+	// The civilization and colour the player takes into the room: one choice with the cups', kept for the next matches.
+	UseScreenFonts(p);
+	PaintLeagueSidePicker(p, st, dx + 32, by, 320);
+	UseSharedFonts(p);
+	const bool inRoom = st.room.id && st.game.active;
+	const bool starting = st.startingCover || st.inOnlineGame || GameRoomCountdownLeftMs() == 0;
+	if (inRoom && LocalReady(st.game)) Ghost(p, mid - 170, by, 340, 56, "Not ready", kRkReady, !starting && !v.abandoning, mx, my);
+	else {
+		p.fonts[5] = BrandFont(BrandFace::Display, 32, p.s);
+		p.Button(mid - 170, by, 340, 56, "Ready", kRankedAct, kRkReady, mx, my, inRoom && !starting && !v.abandoning, true, 5);
+		UseSharedFonts(p);
+	}
+	// Calling the match off, with the server's rules; and the room's own screen, for a player who wants it.
+	const int rw = 260, rx = dx + dw - 32 - rw;
+	const bool canCallOff = v.ticketLoaded && LeagueTicketAbandonable(v.ticket) && !v.abandoning;
+	Ghost(p, rx, by, rw, 44, v.abandoning ? "Cancelling..." : "Cancel match", kRkAbandon, canCallOff && !starting, mx, my);
+	// Before the room is in, the hub's Go to the room: the room made or looked for again.
+	if (inRoom) Ghost(p, rx, by + 52, rw, 28, "Show the room", kRkShowRoom, !starting, mx, my);
+	else Ghost(p, rx, by + 52, rw, 28, "Try again", kRkRoom, !st.connecting && !v.abandoning, mx, my);
+	const bool costs = v.ticketLoaded && LeagueAbandonCosts(v.ticket, v.me.steamId, LeagueServerNowMs());
+	p.Font(3);
+	p.Text(dx + 24, by + 90, dw - 48, 22,
+		costs ? "Cancelling now counts as declining: you couldn't search for a few minutes."
+		: !inRoom ? "If the room won't open, press it again or cancel the match: that doesn't count against you."
+				  : "Your civilization and colour go into the room, and you are made ready: the game starts when everyone is.",
+		pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }
 
 std::string RankedFoundCaption(const LeagueRankedView &v, const char *queue)
@@ -459,6 +612,7 @@ void RankedRoomLeftByUser()
 {
 	if (!g_auto.match) return;
 	g_auto.userLeft = g_auto.match;
+	g_s.ranked.panelOff = g_auto.match;
 	LogI("league", "ranked: the player left the room of match %lld; it is not made again until they ask", static_cast<long long>(g_auto.match));
 	ModUiToast("You left your ranked match's room. Go back to it, or cancel the match, from Ranked.");
 }
@@ -721,6 +875,24 @@ void RankedAction(int arg)
 	case kRkRoom:
 		ResetRoom();
 		LeagueRankedRetryRoom();
+		r.panelOff = 0;
+		g_s.view = kViewRanked;
+		break;
+	case kRkReady: {
+		if (!RankedRoomHidden(g_s)) break;
+		const DWORD now = GetTickCount();
+		if (g_auto.readyAt && now - g_auto.readyAt < 1500) break;
+		g_auto.readyAt = now;
+		// From now on ready or not is the player's own choice: the panel does not make them ready again.
+		g_auto.readySent = true;
+		Predict(kPredReady, g_s.game.localSlot, LocalReady(g_s.game) ? 0 : 1);
+		GameRoomToggleReady();
+		break;
+	}
+	case kRkShowRoom:
+		r.panelOff = r.view.matchId;
+		LeagueSideMenuClose();
+		LogI("league", "ranked: the player shows the room of match %lld instead of its panel", static_cast<long long>(r.view.matchId));
 		break;
 	case kRkAbandon: LeagueMatchAbandon(false); break;
 	case kRkResultClose:
@@ -808,8 +980,16 @@ void RankedFrame()
 		r.disputeMatch = 0;
 		if (g_s.focus == kRankedField) g_s.focus = kNoField;
 	}
+	// Once its game started, a match's panel never comes back: the menu may open again before the league says the match is over.
+	if (g_s.inOnlineGame && v.matchId) r.panelOff = v.matchId;
+	// After Accept the panel stays, over the Ranked tab, while the match's room is made and waits under it.
+	static int64_t panelMatch = 0;
+	if ((v.phase == LeagueRankedPhase::Ready || v.phase == LeagueRankedPhase::Playing) && v.matchId && v.matchId != panelMatch) {
+		panelMatch = v.matchId;
+		if (!g_s.game.active && !g_s.room.id && !InGame()) g_s.view = kViewRanked;
+	}
 	// The match found is answered in a dialog over any tab; the room's own screen hides it.
-	g_s.searching = !g_s.game.active && (v.phase == LeagueRankedPhase::Found || v.phase == LeagueRankedPhase::Accepted);
+	g_s.searching =(!g_s.game.active && (v.phase == LeagueRankedPhase::Found || v.phase == LeagueRankedPhase::Accepted)) || RankedPanelOpen(g_s);
 	g_s.found = g_s.searching;
 	if (r.resultOpen && v.result.state == LeagueResultState::None) r.resultOpen = false;
 	// The animation starts when the server's verdict arrives, not when the screen opened on "sending".
@@ -1004,6 +1184,8 @@ void PaintSearch(Painter &p, const State &st)
 		return;
 	}
 	const bool accepted = v.phase == LeagueRankedPhase::Accepted;
+	// Both accepted: the panel stays, with the room made and played under it.
+	const bool live = v.phase == LeagueRankedPhase::Ready || v.phase == LeagueRankedPhase::Playing;
 	const FoundBox box = PaintFoundBox(p, st, 1240, 720);
 	const int dx = box.x, dy = box.y, dw = box.w;
 	SelectObject(p.dc, BrandFont(BrandFace::Display, 58, p.s));
@@ -1037,12 +1219,20 @@ void PaintSearch(Painter &p, const State &st)
 			mine.streak = me.me.ranked.streak;
 		}
 	}
-	PaintSide(p, dx + 32, cy, cardW, cardH, SteamOwnId(), st.player, mine, true, accepted);
 	LeaguePlayerCard o = v.ticketLoaded ? v.opponent : v.found.opponent;
 	if (v.ticketLoaded) TakeStanding(o, v.ticket.opponent);
 	TakeStanding(o, v.found.opponent);
 	const std::string otherName = !o.name.empty() ? o.name : Tr("Opponent");
-	PaintSide(p, dx + dw - 32 - cardW, cy, cardW, cardH, _strtoui64(o.steamId.c_str(), nullptr, 10), otherName, o, false, otherAccepted);
+	const uint64_t otherId = _strtoui64(o.steamId.c_str(), nullptr, 10);
+	if (live) {
+		const int meIn = RankedRoomStateOf(st, SteamOwnId()), otherIn = RankedRoomStateOf(st, otherId);
+		PaintSide(p, dx + 32, cy, cardW, cardH, SteamOwnId(), st.player, mine, true, RoomChip(meIn), meIn > 0);
+		PaintSide(p, dx + dw - 32 - cardW, cy, cardW, cardH, otherId, otherName, o, false, RoomChip(otherIn), otherIn > 0);
+	}
+	else {
+		PaintSide(p, dx + 32, cy, cardW, cardH, SteamOwnId(), st.player, mine, true, accepted ? "Accepted" : "Pending", accepted);
+		PaintSide(p, dx + dw - 32 - cardW, cy, cardW, cardH, otherId, otherName, o, false, otherAccepted ? "Accepted" : "Pending", otherAccepted);
+	}
 
 	// The countdown to answer, in the middle, on the server's clock.
 	const int64_t now = LeagueServerNowMs();
@@ -1052,16 +1242,28 @@ void PaintSearch(Painter &p, const State &st)
 	p.TextCaps(mid - 148, cy + 8, 296, 34, "VS", pal::disabled, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
 	const int ringY = cy + 54 + 74;
 	PaintArc(p, mid, ringY, 66, 8, pal::hairline, 1.0f);
-	PaintArc(p, mid, ringY, 66, 8, accepted ? pal::ok : pal::red, LeagueCountdownFraction(acceptBy, now));
-	SelectObject(p.dc, BrandFont(BrandFace::Display, 66, p.s));
-	p.raw = true;
-	p.Text(mid - 74, ringY - 40, 148, 66, std::to_string(LeagueCountdownSeconds(acceptBy, now)), pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-	p.raw = false;
-	p.Font(4);
-	p.TextCaps(mid - 74, ringY + 22, 148, 16, "seconds", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 2);
+	// While the room is played from the panel the ring is its start countdown, a spinner before.
+	const int left = live ? GameRoomCountdownLeftMs() : 0;
+	if (!live || left > 0) {
+		PaintArc(p, mid, ringY, 66, 8, live || !accepted ? pal::red : pal::ok,
+			live ? static_cast<float>(left) / kRoomCountdownMs : LeagueCountdownFraction(acceptBy, now));
+		SelectObject(p.dc, BrandFont(BrandFace::Display, 66, p.s));
+		p.raw = true;
+		p.Text(mid - 74, ringY - 40, 148, 66, std::to_string(live ? (left + 999) / 1000 : LeagueCountdownSeconds(acceptBy, now)), pal::text,
+			DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.raw = false;
+		p.Font(4);
+		p.TextCaps(mid - 74, ringY + 22, 148, 16, "seconds", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 2);
+	}
+	else p.Spinner(mid, ringY, 24, 6, GetTickCount());
 	PaintEvenness(p, v, false, mid - 140, cy + 200, 280);
 	p.Font(3);
-	p.TextWrapped(mid - 140, cy + 230, 280, 44, accepted ? TrFmt("Waiting for %s to accept", {otherName}) : Tr("Accept before the countdown ends"), pal::caption);
+	if (live) {
+		p.raw = true;
+		p.TextWrapped(mid - 140, cy + 230, 280, 44, RankedPanelStatus(st), pal::text);
+		p.raw = false;
+	}
+	else p.TextWrapped(mid - 140, cy + 230, 280, 44, accepted ? TrFmt("Waiting for %s to accept", {otherName}) : Tr("Accept before the countdown ends"), pal::caption);
 
 	// The map and the options of the season.
 	const int my2 = cy + cardH + 20, mw = dw - 64, mh = 128;
@@ -1088,6 +1290,10 @@ void PaintSearch(Painter &p, const State &st)
 	for (int i = 0; i < 6; i++) Fact(p, fx + i % 3 * fw, my2 + 16 + i / 3 * 52, fw - 16, facts[i].label, facts[i].value);
 
 	const int by = my2 + mh + 28;
+	if (live) {
+		PaintRankedPanelFoot(p, st, dx, dw, by);
+		return;
+	}
 	UseSharedFonts(p);
 	if (accepted) {
 		p.Spinner(mid - 150, by + 32, 11, 4, GetTickCount());
@@ -1121,10 +1327,13 @@ StartBlock RankedStartBlocker(const State &st, const GameRoomSnapshot &g)
 {
 	if (!RankedRoomLocked(st)) return {};
 	if (!LeagueRoomHeld(g, st.room.id)) return {Tr("Preparing the room..."), Tr("The league's options are being set in the room.")};
-	if (st.room.info.mode != kLeagueTeamRoomMode) return {};
+	const bool team = st.room.info.mode == kLeagueTeamRoomMode;
 	const LeagueRankedView &v = st.ranked.view;
 	int humans = 0;
 	for (const GameRoomSlot &s : g.slots) humans += s.used && s.type == 3 ? 1 : 0;
+	// Its players get ready by themselves under the panel: the host alone must not start the game.
+	if (!team && humans < 2) return {Tr("Waiting for your opponent..."), Tr("The game starts when your opponent is in the room.")};
+	if (!team) return {};
 	if (humans < 4) return {"Waiting for the four players...", Tr("The game starts when the four players of the match are in the room.")};
 	if (!v.ticketLoaded) return {};
 	// Each player's slot in the side the league gave them.

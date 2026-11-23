@@ -18,6 +18,8 @@
 namespace {
 
 std::atomic<bool> g_background{false}, g_cover{false};
+// Calls to the player sounding now (hooks/alerts.h): the background mute lets them through.
+std::atomic<int> g_alerting{0};
 
 // Game sound types (CSoundManager +0xc of a channel): 2 and 8 ambient, 9 the spoken lines of the conversations.
 const unsigned short kTypeAmbient = 2, kTypeAmbient2 = 8, kTypeConversation = 9;
@@ -60,7 +62,7 @@ void __cdecl HookApplySoundOptions(int *options)
 // The modern audio can play on a device that is not the default one: the session of the process is muted on all of them.
 void ApplyMute()
 {
-	const bool mute = g_background || g_cover;
+	const bool mute = g_cover || (g_background && g_alerting.load() <= 0);
 	HRESULT init = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 	IMMDeviceEnumerator *enumerator = nullptr;
 	IMMDeviceCollection *devices = nullptr;
@@ -112,6 +114,14 @@ void AudioSetBackgroundMute(bool mute)
 {
 	g_background = mute;
 	ApplyMute();
+}
+
+void AudioAlertHold(bool on)
+{
+	const int before = on ? g_alerting.fetch_add(1) : g_alerting.fetch_sub(1);
+	const int after = before + (on ? 1 : -1);
+	// Only the first call and the last one change what is heard, and only while the background mute is on.
+	if (g_background && ((on && before == 0) || (!on && after == 0))) ApplyMute();
 }
 
 void AudioSetCoverMute(bool mute)

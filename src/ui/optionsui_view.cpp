@@ -467,7 +467,8 @@ std::vector<Page> BuildPages(const Values &v)
 		page.right.push_back({"Autosave", {Toggle(v, "Autosave", kAutosave), Combo(v, "Every", kAutosaveEvery, "", false, autosave), Combo(v, "Copies", kAutosaveCopies, "", false, autosave),
 			Toggle(v, "Save when leaving the game", kSaveOnExit)}});
 		page.right.push_back({"Multiplayer", {Toggle(v, "Show badges in the chat", kChatBadges, "The rank or emblem after each name"),
-			Toggle(v, "Sound when a match is found", kMatchFoundSound, "Ranked: also with the game in the background")}});
+			Toggle(v, "Sound when a match is found", kMatchFoundSound, "Ranked and cups: a horn, also with the game in the background"),
+			Toggle(v, "Bring the game to the front", kAlertFront, "When a match is found or a room starts its countdown")}});
 		page.right.push_back({"Big map", {Toggle(v, "Respawn timers", kRespawnTimers, "When the mushrooms, water and ruins you saw have their item again")}});
 		pages.push_back(page);
 	}

@@ -13,6 +13,7 @@
 #include "core/tournament.h"
 #include "net/leagueclient_tourney.h"
 #include "ui/mpui_internal.h"
+#include "ui/mpui_league_room.h"
 #include "ui/mpui_tourney.h"
 
 namespace mpui_tourney_impl {
@@ -131,15 +132,8 @@ struct RoomLock {
 	// The civilization of the match page put in the player's slot, and the player made ready, once each; since when the room is shown.
 	bool civSet = false, readySent = false;
 	DWORD shownAt = 0;
-	// What the page chose, put in the slot: when it was last sent and how many times, the own colour last tried, and the player made not
-	// ready to change the slot (the game keeps a ready row as it is).
-	DWORD setAt = 0;
-	int setTries = 0;
-	// The race and colour last sent and how many times each: a room that keeps its own (a scenario fixes the civilizations) is not
-	// asked again and again, which made the player not ready each time and restarted the countdown.
-	int raceSent = -1, raceTries = 0, colorSent = -1, colorTries = 0;
-	uint32_t ownTried = 0;
-	bool unreadied = false;
+	// What the page chose, kept in the slot (mpui_league_room.h).
+	LeagueSlotKeep slot;
 	// The game's AI put in a test bot's seat.
 	bool aiSet = false;
 	// The room's seats the game's AI plays for the staging test bots.
@@ -325,7 +319,7 @@ std::vector<std::pair<int, std::string>> MatchCivChoices();
 int MatchCiv(Ui &u);
 int MatchColor(Ui &u);
 // colorPick for the player's own colour, from the wheel.
-constexpr int kOwnColor = 100;
+constexpr int kOwnColor = kLeagueOwnColor;
 // The colour chosen as it looks, or CLR_INVALID for the room's own.
 COLORREF MatchColorRef(const Ui &u);
 // The colour's menu over the match page, under its button.

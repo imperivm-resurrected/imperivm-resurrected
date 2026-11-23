@@ -3645,5 +3645,16 @@
 {"en":"The scenario's own %s players of the computer play in it too.","es":"También juegan los %s jugadores del ordenador del propio escenario.","it":"Giocano anche i %s giocatori del computer dello scenario."},
 {"en":"Its scripts bring units or the computer into the game.","es":"Sus scripts meten unidades o al ordenador en la partida.","it":"I suoi script portano unità o il computer nella partita."},
 {"en":"%s places closed","es":"%s plazas cerradas","it":"%s posti chiusi"},
-{"en":"The league's options are being set in the room.","es":"Se están poniendo en la sala las opciones de la liga.","it":"Si stanno impostando nella sala le opzioni della lega."}
+{"en":"The league's options are being set in the room.","es":"Se están poniendo en la sala las opciones de la liga.","it":"Si stanno impostando nella sala le opzioni della lega."},
+{"en":"Cancelling the match...","es":"Cancelando la partida...","it":"Annullamento della partita..."},
+{"en":"Starting in %s...","es":"Empieza en %s...","it":"Inizia tra %s..."},
+{"en":"Not ready: press Ready when you have chosen.","es":"No estás listo: pulsa Listo cuando hayas elegido.","it":"Non sei pronto: premi Pronto quando hai scelto."},
+{"en":"Waiting for the other players...","es":"Esperando a los demás jugadores...","it":"In attesa degli altri giocatori..."},
+{"en":"Waiting for the other player...","es":"Esperando al otro jugador...","it":"In attesa dell'altro giocatore..."},
+{"en":"Show the room","es":"Ver la sala","it":"Mostra la stanza"},
+{"en":"Your civilization and colour go into the room, and you are made ready: the game starts when everyone is.","es":"Tu civilización y tu color pasan a la sala y quedas listo: la partida empieza cuando lo estén todos.","it":"La tua civiltà e il tuo colore passano nella stanza e sei pronto: la partita inizia quando lo sono tutti."},
+{"en":"The game starts when your opponent is in the room.","es":"La partida empieza cuando tu rival esté en la sala.","it":"La partita inizia quando il tuo avversario è nella stanza."},
+{"en":"Ranked and cups: a horn, also with the game in the background","es":"Liga y copas: un cuerno, también con el juego en segundo plano","it":"Classificata e coppe: un corno, anche con il gioco in secondo piano"},
+{"en":"Bring the game to the front","es":"Traer el juego al frente","it":"Porta il gioco in primo piano"},
+{"en":"When a match is found or a room starts its countdown","es":"Al encontrar partida o al empezar la cuenta atrás de una sala","it":"Quando si trova una partita o una stanza avvia il conto alla rovescia"}
 ]

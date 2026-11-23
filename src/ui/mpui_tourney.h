@@ -3,6 +3,7 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #pragma once
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -76,6 +77,17 @@ int PaintTourneyRoomPick(ui::Painter &p, const mpui_impl::State &st, int x, int 
 bool TourneyLobby(const OnlineLobby &g);
 // A room of a tournament match that is not this player's: they can only watch it.
 bool TourneyLobbyWatchOnly(const OnlineLobby &g);
+// The civilization and colour the player takes into a league match, chosen on a cup's match page or on the panel of a ranked match (one
+// choice for both, kept with the game's settings): two menus `w` wide at `y`, kLeagueSidePickerH high. Their menus are the tab's (kTourney).
+constexpr int kLeagueSidePickerH = 76;
+void PaintLeagueSidePicker(ui::Painter &p, const mpui_impl::State &st, int x, int y, int w);
+// The colour's menu of that picker, over everything, while it is open.
+void PaintLeagueSideMenu(ui::Painter &p, const mpui_impl::State &st);
+// Locked. Closes the colour's menu of the picker: true when it was open.
+bool LeagueSideMenuClose();
+// Locked. The civilization chosen (a race of the game, the random one included) and the colour: one of the game's twelve, or
+// kLeagueOwnColor (core/leagueslot.h) with `rgb`.
+void LeagueSideChoice(int &race, int &color, uint32_t &rgb);
 // Every frame on the game thread: the notices in any menu, the answers of the server and the room of the player's match.
 void TourneyGameThreadTick();
 bool CupReturnPending();

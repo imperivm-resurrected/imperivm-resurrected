@@ -6,6 +6,7 @@
 #include "core/json.h"
 #include "core/log.h"
 #include "core/names.h"
+#include "hooks/alerts.h"
 #include "ui/modui.h"
 #include "mods/modoptions.h"
 #include "net/netdrop.h"
@@ -328,6 +329,8 @@ void MpUiGameThreadTick()
 					LeagueMatchPlaying(LeagueInfoOfRoom(SteamCurrentRoom()));
 					g_s.leagueTick = GetTickCount();
 					NetDropReset();
+					// The game is loaded while the player is somewhere else: called back to it.
+					AlertPlayer(PlayerAlert::GameStarts);
 				}
 				if (g_s.hostSavePublished) {
 					SteamPublishSave("", "");

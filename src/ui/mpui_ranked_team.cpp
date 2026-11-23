@@ -16,6 +16,8 @@
 #include "core/leagueplay.h"
 #include "core/leagueranked.h"
 #include "core/leagueteam.h"
+#include "game/gameroom.h"
+#include "game/roomcountdown.h"
 #include "i18n/tr.h"
 #include "net/leagueclient.h"
 #include "net/patrons.h"
@@ -162,8 +164,8 @@ std::string LeftText(int64_t until)
 }
 
 // A player of a 2v2 match found: avatar, name and who they are to this player, their record, and their rank with the Glory, and whether
-// they accepted.
-void PaintTeamCard(Painter &p, int x, int y, int w, int h, const LeaguePlayerCard &c, bool you, bool partner, bool accepted)
+// they accepted (or `state`, as the room has them, once the match is played from the panel; `accepted` is then whether it is good).
+void PaintTeamCard(Painter &p, int x, int y, int w, int h, const LeaguePlayerCard &c, bool you, bool partner, bool accepted, const char *state = nullptr)
 {
 	p.Fill(x, y, w, h, pal::raised);
 	p.Frame(x, y, w, h, you ? pal::edgeHot : pal::hairline);
@@ -196,7 +198,7 @@ void PaintTeamCard(Painter &p, int x, int y, int w, int h, const LeaguePlayerCar
 	RawText(p, nx, y + 40, nw, 22, record, pal::caption);
 	p.Fill(x + 16, y + 70, w - 32, 1, pal::hairline);
 	// The rank and its Glory on the left, the answer on the right.
-	const std::string answer = Tr(accepted ? "Accepted" : "Pending");
+	const std::string answer = Tr(state ? state : accepted ? "Accepted" : "Pending");
 	const int chipW = ChipWidth(p, answer, accepted ? 104 : 96), chipH = 26;
 	const int emblem = 40, ry = y + 78;
 	DrawLeagueEmblem(p, x + 14, ry + (h - 78 - emblem) / 2 - 2, emblem, c.tier);
@@ -379,6 +381,8 @@ void PaintSearchTeam(Painter &p, const State &st)
 	const int mx = st.mouseX, my = st.mouseY;
 	const LeagueRankedView &v = st.ranked.view;
 	const bool accepted = v.phase == LeagueRankedPhase::Accepted;
+	// Both teams accepted: the panel stays, with the room made and played under it.
+	const bool live = v.phase == LeagueRankedPhase::Ready || v.phase == LeagueRankedPhase::Playing;
 	const FoundBox box = PaintFoundBox(p, st, 1240, 700);
 	const int dx = box.x, dy = box.y, dw = box.w;
 	Display(p, 54);
@@ -416,7 +420,11 @@ void PaintSearchTeam(Painter &p, const State &st)
 			}
 			players++;
 			acceptedCount += ok ? 1 : 0;
-			PaintTeamCard(p, x, y, colW, cardH, c, you, t == mine && !you, ok);
+			if (live) {
+				const int in = RankedRoomStateOf(st, IdOf(c.steamId));
+				PaintTeamCard(p, x, y, colW, cardH, c, you, t == mine && !you, in > 0, in == 2 ? "Ready" : in == 1 ? "In the room" : "Not in the room yet");
+			}
+			else PaintTeamCard(p, x, y, colW, cardH, c, you, t == mine && !you, ok);
 		}
 	};
 	column(mine, dx + 32);
@@ -430,16 +438,30 @@ void PaintSearchTeam(Painter &p, const State &st)
 	p.TextCaps(mid - 132, cy - 4, 264, 34, "VS", pal::disabled, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
 	const int ringY = cy + 112;
 	PaintArc(p, mid, ringY, 62, 8, pal::hairline, 1.0f);
-	PaintArc(p, mid, ringY, 62, 8, accepted ? pal::ok : pal::red, LeagueCountdownFraction(acceptBy, now));
-	Display(p, 62);
-	p.raw = true;
-	p.Text(mid - 70, ringY - 38, 140, 62, std::to_string(LeagueCountdownSeconds(acceptBy, now)), pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-	p.raw = false;
-	FitCaps(p, mid - 70, ringY + 22, 140, 16, Tr("seconds"), pal::caption, DT_CENTER);
+	// While the room is played from the panel the ring is its start countdown, a spinner before.
+	const int left = live ? GameRoomCountdownLeftMs() : 0;
+	if (!live || left > 0) {
+		PaintArc(p, mid, ringY, 62, 8, live || !accepted ? pal::red : pal::ok,
+			live ? static_cast<float>(left) / kRoomCountdownMs : LeagueCountdownFraction(acceptBy, now));
+		Display(p, 62);
+		p.raw = true;
+		p.Text(mid - 70, ringY - 38, 140, 62, std::to_string(live ? (left + 999) / 1000 : LeagueCountdownSeconds(acceptBy, now)), pal::text,
+			DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.raw = false;
+		FitCaps(p, mid - 70, ringY + 22, 140, 16, Tr("seconds"), pal::caption, DT_CENTER);
+	}
+	else p.Spinner(mid, ringY, 22, 6, GetTickCount());
 	PaintEvenness(p, v, true, mid - 128, ringY + 82, 256);
 	p.Font(3);
-	RawText(p, mid - 128, ringY + 108, 256, 22, TrFmt("%s of %s accepted", {std::to_string(acceptedCount), std::to_string(std::max(4, players))}),
-		acceptedCount >= 4 ? pal::ok : pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	if (live) {
+		p.raw = true;
+		p.TextWrapped(mid - 128, ringY + 104, 256, 44, RankedPanelStatus(st), pal::text);
+		p.raw = false;
+	}
+	else {
+		RawText(p, mid - 128, ringY + 108, 256, 22, TrFmt("%s of %s accepted", {std::to_string(acceptedCount), std::to_string(std::max(4, players))}),
+			acceptedCount >= 4 ? pal::ok : pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	}
 
 	// The map and the options of the season.
 	const int my2 = cy + 2 * cardH + gap + 20, mw = dw - 64, mh = 124;
@@ -464,6 +486,10 @@ void PaintSearchTeam(Painter &p, const State &st)
 	for (int i = 0; i < 6; i++) Fact(p, fx + i % 3 * fw, my2 + 14 + i / 3 * 52, fw - 16, Tr(facts[i].label), facts[i].value);
 
 	const int by = my2 + mh + 22;
+	if (live) {
+		PaintRankedPanelFoot(p, st, dx, dw, by);
+		return;
+	}
 	UseSharedFonts(p);
 	if (accepted) {
 		p.Spinner(mid - 170, by + 30, 11, 4, GetTickCount());

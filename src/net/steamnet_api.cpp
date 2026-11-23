@@ -274,6 +274,25 @@ void SteamSendChat(const std::string &text)
 }
 
 namespace {
+std::mutex g_quietMx;
+std::vector<uint64_t> g_quiet;
+}
+
+void SteamQuietInvitesFrom(const std::vector<uint64_t> &players)
+{
+	std::lock_guard<std::mutex> lock(g_quietMx);
+	g_quiet = players;
+}
+
+namespace steamnet_impl {
+bool QuietInviter(uint64_t who)
+{
+	std::lock_guard<std::mutex> lock(g_quietMx);
+	return std::find(g_quiet.begin(), g_quiet.end(), who) != g_quiet.end();
+}
+}
+
+namespace {
 void OpenProfileInClient(uint64_t id)
 {
 	const std::string url = "steam://url/SteamIDPage/" + std::to_string(id);

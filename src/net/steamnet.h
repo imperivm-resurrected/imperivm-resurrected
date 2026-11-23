@@ -195,6 +195,9 @@ void SteamSendChat(const std::string &text);
 void SteamInviteFriends();
 // The owner of the room invites one player to it, as the Steam overlay would: a private room is entered by invitation.
 void SteamInviteToRoom(uint64_t user);
+// The players whose invitation needs no answer: the others of the player's ranked match, whose room this computer enters by itself. Their
+// invitation is neither told nor sounded. Empty to stop.
+void SteamQuietInvitesFrom(const std::vector<uint64_t> &players);
 // In the Steam overlay, or in the Steam client when the overlay is off.
 void SteamOpenProfile(uint64_t id);
 // The Steam chat with a player, in the overlay or in the Steam client when the overlay is off.

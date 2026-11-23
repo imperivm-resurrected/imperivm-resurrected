@@ -727,6 +727,11 @@ void DisplayAttachWindow(HWND hwnd)
 	}
 }
 
+HWND DisplayGameWindow()
+{
+	return g_gameWnd;
+}
+
 void DisplayGetLogicalSize(HWND hwnd, int &w, int &h)
 {
 	if (g_faking && g_logW > 0) {

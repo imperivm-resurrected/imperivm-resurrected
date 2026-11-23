@@ -94,9 +94,11 @@ struct Config {
 	std::string leagueToken, leagueSteamId, leagueName;
 	// [League] OfferLink: Ranked and Tournaments offer to link the account until the player says "Not now".
 	bool leagueOfferLink = true;
-	// [League] ChatBadges: the league badge after each name in the chat; MatchFoundSound: the sound when a ranked match is found.
+	// [League] ChatBadges: the league badge after each name in the chat; MatchFoundSound: the horn when a ranked match is found or a cup
+	// match is ready; AlertFront: the game's window brought to the front then, and when a room's countdown starts (core/playeralert.h).
 	bool chatBadges = true;
 	bool matchFoundSound = true;
+	bool alertFront = true;
 };
 
 const Config &GetConfig();

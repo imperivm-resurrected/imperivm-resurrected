@@ -3653,5 +3653,16 @@ extern const TrRow kTrRows[] = {
 	{"Its scripts bring units or the computer into the game.", "Sus scripts meten unidades o al ordenador en la partida.", "I suoi script portano unità o il computer nella partita."},
 	{"%s places closed", "%s plazas cerradas", "%s posti chiusi"},
 	{"The league's options are being set in the room.", "Se están poniendo en la sala las opciones de la liga.", "Si stanno impostando nella sala le opzioni della lega."},
+	{"Cancelling the match...", "Cancelando la partida...", "Annullamento della partita..."},
+	{"Starting in %s...", "Empieza en %s...", "Inizia tra %s..."},
+	{"Not ready: press Ready when you have chosen.", "No estás listo: pulsa Listo cuando hayas elegido.", "Non sei pronto: premi Pronto quando hai scelto."},
+	{"Waiting for the other players...", "Esperando a los demás jugadores...", "In attesa degli altri giocatori..."},
+	{"Waiting for the other player...", "Esperando al otro jugador...", "In attesa dell'altro giocatore..."},
+	{"Show the room", "Ver la sala", "Mostra la stanza"},
+	{"Your civilization and colour go into the room, and you are made ready: the game starts when everyone is.", "Tu civilización y tu color pasan a la sala y quedas listo: la partida empieza cuando lo estén todos.", "La tua civiltà e il tuo colore passano nella stanza e sei pronto: la partita inizia quando lo sono tutti."},
+	{"The game starts when your opponent is in the room.", "La partida empieza cuando tu rival esté en la sala.", "La partita inizia quando il tuo avversario è nella stanza."},
+	{"Ranked and cups: a horn, also with the game in the background", "Liga y copas: un cuerno, también con el juego en segundo plano", "Classificata e coppe: un corno, anche con il gioco in secondo piano"},
+	{"Bring the game to the front", "Traer el juego al frente", "Porta il gioco in primo piano"},
+	{"When a match is found or a room starts its countdown", "Al encontrar partida o al empezar la cuenta atrás de una sala", "Quando si trova una partita o una stanza avvia il conto alla rovescia"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

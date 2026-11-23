@@ -14,6 +14,7 @@
 
 #include "miniaudio.h"
 #include "core/config.h"
+#include "core/playeralert.h"
 #include "hooks/dmshim.h"
 #include "core/log.h"
 #include "hooks/gamefiles.h"
@@ -711,7 +712,9 @@ struct UiTone {
 	ma_sound snd;
 	bool ready = false;
 };
-constexpr int kUiTones = 8;
+constexpr int kUiTones = 9;
+// The Roman horn that calls the player (core/playeralert.h); the tones before it are short synthesized beeps.
+constexpr int kUiHorn = 8;
 UiTone g_uiTones[kUiTones];
 std::mutex g_uiMx;
 
@@ -729,35 +732,48 @@ void UiSoundPlay(int kind)
 			int notes;
 			float noteSecs;
 			float volume;
-		} kSpec[kUiTones] = {{{988.0f, 0, 0, 0}, 1, 0.10f, 0.45f}, {{784.0f, 1047.0f, 1319.0f, 0}, 3, 0.09f, 0.5f}, {{740.0f, 0, 0, 0}, 1, 0.10f, 0.4f},
+		} kSpec[kUiHorn] = {{{988.0f, 0, 0, 0}, 1, 0.10f, 0.45f}, {{784.0f, 1047.0f, 1319.0f, 0}, 3, 0.09f, 0.5f}, {{740.0f, 0, 0, 0}, 1, 0.10f, 0.4f},
 			// A patron joins: a short fanfare, G C E G.
 			{{784.0f, 1047.0f, 1319.0f, 1568.0f}, 4, 0.12f, 0.55f},
 			// A ranked game won (C E G) or lost (G E flat), a new rank (C G C E, slower) and a rank lost (D A, low).
 			{{523.0f, 659.0f, 784.0f, 0}, 3, 0.11f, 0.5f}, {{392.0f, 311.0f, 0, 0}, 2, 0.16f, 0.4f}, {{523.0f, 784.0f, 1047.0f, 1319.0f}, 4, 0.14f, 0.55f},
 			{{294.0f, 220.0f, 0, 0}, 2, 0.22f, 0.45f}};
-		const auto &s = kSpec[kind];
 		const ma_uint32 rate = ma_engine_get_sample_rate(&g_engine);
-		const ma_uint32 step = static_cast<ma_uint32>(rate * s.noteSecs), tail = static_cast<ma_uint32>(rate * 0.14f);
-		const ma_uint32 total = step * (s.notes - 1) + step + tail;
-		std::vector<float> data(static_cast<size_t>(total) * 2, 0.0f);
-		const float twoPi = 6.2831853f;
-		for (int n = 0; n < s.notes; n++) {
-			for (ma_uint32 j = 0; j < step + tail && n * step + j < total; j++) {
-				const float sec = j / static_cast<float>(rate);
-				const float attack = j < rate / 250 ? j / (rate / 250.0f) : 1.0f;
-				const float env = attack * expf(-sec * 16.0f);
-				const float v = (sinf(twoPi * s.freq[n] * sec) + 0.3f * sinf(2 * twoPi * s.freq[n] * sec)) * env * 0.4f;
-				data[static_cast<size_t>(n * step + j) * 2] += v;
-				data[static_cast<size_t>(n * step + j) * 2 + 1] += v;
+		std::vector<float> data;
+		ma_uint32 total = 0;
+		float volume = 0.8f;
+		if (kind == kUiHorn) {
+			const std::vector<float> horn = PlayerAlertCornu(rate);
+			total = static_cast<ma_uint32>(horn.size());
+			data.resize(horn.size() * 2);
+			for (size_t i = 0; i < horn.size(); i++) data[i * 2] = data[i * 2 + 1] = horn[i];
+		}
+		else {
+			const auto &s = kSpec[kind];
+			volume = s.volume;
+			const ma_uint32 step = static_cast<ma_uint32>(rate * s.noteSecs), tail = static_cast<ma_uint32>(rate * 0.14f);
+			total = step * (s.notes - 1) + step + tail;
+			data.assign(static_cast<size_t>(total) * 2, 0.0f);
+			const float twoPi = 6.2831853f;
+			for (int n = 0; n < s.notes; n++) {
+				for (ma_uint32 j = 0; j < step + tail && n * step + j < total; j++) {
+					const float sec = j / static_cast<float>(rate);
+					const float attack = j < rate / 250 ? j / (rate / 250.0f) : 1.0f;
+					const float env = attack * expf(-sec * 16.0f);
+					const float v = (sinf(twoPi * s.freq[n] * sec) + 0.3f * sinf(2 * twoPi * s.freq[n] * sec)) * env * 0.4f;
+					data[static_cast<size_t>(n * step + j) * 2] += v;
+					data[static_cast<size_t>(n * step + j) * 2 + 1] += v;
+				}
 			}
 		}
+		if (!total) return;
 		ma_audio_buffer_config cfg = ma_audio_buffer_config_init(ma_format_f32, 2, total, data.data(), nullptr);
 		if (ma_audio_buffer_init_copy(&cfg, &t.buf) != MA_SUCCESS) return;
 		if (ma_sound_init_from_data_source(&g_engine, &t.buf, MA_SOUND_FLAG_NO_SPATIALIZATION, nullptr, &t.snd) != MA_SUCCESS) {
 			ma_audio_buffer_uninit(&t.buf);
 			return;
 		}
-		ma_sound_set_volume(&t.snd, s.volume);
+		ma_sound_set_volume(&t.snd, volume);
 		t.ready = true;
 	}
 	ma_sound_stop(&t.snd);

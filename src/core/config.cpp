@@ -236,6 +236,7 @@ void LoadConfig()
 	g_config.leagueOfferLink = ini.Flag("League", "OfferLink", true);
 	g_config.chatBadges = ini.Flag("League", "ChatBadges", true);
 	g_config.matchFoundSound = ini.Flag("League", "MatchFoundSound", true);
+	g_config.alertFront = ini.Flag("League", "AlertFront", true);
 	if (g_config.leagueToken.empty() && !storedToken.empty()) {
 		LogW("boot", "config: the league token can't be read on this Windows user; the account has to be linked again");
 	}
@@ -333,6 +334,7 @@ void SaveConfig()
 	ini.Write("Sound", "OutputDevice", g_config.outputDevice);
 	ini.WriteFlag("League", "ChatBadges", g_config.chatBadges);
 	ini.WriteFlag("League", "MatchFoundSound", g_config.matchFoundSound);
+	ini.WriteFlag("League", "AlertFront", g_config.alertFront);
 	ini.Write("Debug", "LogLevel", LogLevelName(g_config.logLevel));
 }
 

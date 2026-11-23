@@ -63,6 +63,9 @@ namespace steamnet_impl {
 
 const char kProtocol[] = "1";
 
+// SteamQuietInvitesFrom has this player.
+bool QuietInviter(uint64_t who);
+
 struct SteamFns {
 #define DECLARE(name) decltype(&::name) name = nullptr;
 	STEAM_FUNCS(DECLARE)

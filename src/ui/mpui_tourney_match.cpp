@@ -3,6 +3,7 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include <algorithm>
 #include <cstdint>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -1305,4 +1306,46 @@ int PaintTourneyRoomPick(Painter &p, const State &st, int x, int y, int w)
 	const int h = 140;
 	PaintPickPanel(p, st, n, x, y, w, h);
 	return h + 16;
+}
+
+namespace {
+
+// The picker's part of the tab's state, copied under the lock for a frame.
+Ui SideOfTab()
+{
+	Ui u;
+	std::lock_guard<std::mutex> lock(g_lock);
+	u.civRace = MatchCiv(g_tourney);
+	u.colorPick = MatchColor(g_tourney);
+	u.colorRgb = g_tourney.colorRgb;
+	u.colorOpen = g_tourney.colorOpen;
+	u.colorWheel = g_tourney.colorWheel;
+	return u;
+}
+
+}
+
+void PaintLeagueSidePicker(Painter &p, const State &st, int x, int y, int w)
+{
+	PaintCivMenu(p, st, SideOfTab(), x, y, w);
+}
+
+void PaintLeagueSideMenu(Painter &p, const State &st)
+{
+	const Ui u = SideOfTab();
+	if (u.colorOpen) PaintMatchColorMenu(p, st, u);
+}
+
+bool LeagueSideMenuClose()
+{
+	if (!g_tourney.colorOpen) return false;
+	g_tourney.colorOpen = g_tourney.colorWheel = false;
+	return true;
+}
+
+void LeagueSideChoice(int &race, int &color, uint32_t &rgb)
+{
+	race = MatchCiv(g_tourney);
+	color = MatchColor(g_tourney);
+	rgb = g_tourney.colorRgb;
 }

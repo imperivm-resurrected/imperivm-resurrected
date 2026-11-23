@@ -123,6 +123,8 @@ enum RankedArg {
 	kRkResultClose, kRkAgain, kRkResultBoard, kRkSkip, kRkSteam, kRkAbandon, kRkHistory, kRkHistoryPrev, kRkHistoryNext,
 	kRkHistoryNewest, kRkDisputeResult, kRkDisputeSend, kRkDisputeCancel, kRkGuide, kRkGuideRanks, kRkGuideRules, kRkHubRecent, kRkHubMastery,
 	kRkPrepareMods, kRkContentSwitch, kRkContentClose,
+	// The panel of the match being played: ready or not in the room under it, and that room's own screen shown instead.
+	kRkReady, kRkShowRoom,
 	kRkRow = 0x100, kRkDisputeHistory = 0x300,
 	kRkArgEnd = 0x400,
 };
@@ -194,6 +196,8 @@ struct RankedScreen {
 	bool inviteOpen = false;
 	int invitePage = 0;
 	std::string inviteSearch;
+	// The match whose panel the player put away (its room's own screen, or the room left by hand): the panel shows again with Go to the room.
+	int64_t panelOff = 0;
 	LeagueRankedView view;
 };
 
@@ -746,8 +750,21 @@ void RankedTeamGameThreadTick();
 void PaintSearchTeam(Painter &p, const State &st);
 // The line under "Match found": the queue, the season and the content it is played with, translated.
 std::string RankedFoundCaption(const LeagueRankedView &v, const char *queue);
-// A ranked 2v2's room starts only with its four players, each in the side of the ticket.
+// A ranked room starts only with all the players of the match, and a 2v2's with each in the side of the ticket.
 StartBlock RankedStartBlocker(const State &st, const GameRoomSnapshot &g);
+// After Accept, the panel of the match found stays up while its room is made or entered and waits under it (as a cup's match page): the
+// player chooses their civilization and colour there, is made ready, and sees the start. Off once the game starts, outside the Ranked tab,
+// and for a match whose panel the player put away (RankedScreen::panelOff).
+bool RankedPanelOpen(const State &st);
+// The room of the ranked match is under its panel: its own screen is not shown.
+bool RankedRoomHidden(const State &st);
+// The bottom of the panel while the match's room is made and played from it: the civilization and colour, Ready, Cancel match and the room's
+// own screen; `by` is its top, about 120 high.
+void PaintRankedPanelFoot(Painter &p, const State &st, int dx, int dw, int by);
+// What the room under the panel waits for, in a line ("Waiting for the other player...", "Starting in 3...").
+std::string RankedPanelStatus(const State &st);
+// A player of the match as the room has them: 2 ready, 1 in the room, 0 not in it yet.
+int RankedRoomStateOf(const State &st, uint64_t id);
 extern std::atomic<bool> g_menuRefresh;
 extern std::atomic<HWND> g_wakeWnd;
 void RunMenuRefresh(void *dlg);

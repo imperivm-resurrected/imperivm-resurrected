@@ -26,6 +26,7 @@
 #include "game/civs.h"
 #include "game/cupmaps.h"
 #include "game/gameroom.h"
+#include "hooks/alerts.h"
 #include "i18n/tr.h"
 #include "net/leagueclient.h"
 #include "net/leagueclient_tourney.h"
@@ -397,7 +398,7 @@ void TakeNotices()
 		case TourneyNotice::MatchReady:
 			Toast(TrFmt("%s, %s: your match against %s is ready. Enter the room before %s.", {n.name, StageOf(n), n.opponent.empty() ? Tr("your opponent") : n.opponent,
 				HourText(n.deadlineAt)}));
-			Flash();
+			AlertPlayer(PlayerAlert::CupMatchReady);
 			break;
 		case TourneyNotice::CheckinOpen:
 			Toast(TrFmt("The check-in of %s is open until %s.", {n.name, HourText(n.deadlineAt)}));
@@ -599,61 +600,11 @@ void StepInRoom(const TourneyNext &next)
 	const bool slotOk = mine && g_s.game.active && !g_s.game.busy && !g_s.inOnlineGame && slot >= 0 && slot < 8 && g_s.game.slots[static_cast<size_t>(slot)].used;
 	bool slotDone = false;
 	if (slotOk && k.shownAt && now - k.shownAt >= 800) {
-		GameRoomSlot &s = g_s.game.slots[static_cast<size_t>(slot)];
-		const bool ready = LocalReady(g_s.game);
-		const int race = MatchCiv(g_tourney);
-		const int item = race >= 0 ? CivsRoomItemOfRace(race) : -1;
-		const bool raceWanted = item >= 0 && item < static_cast<int>(s.raceNames.size()) && s.race != item && (k.raceSent != item || k.raceTries < 2);
-		const int color = MatchColor(g_tourney);
-		bool taken = false;
-		for (int i = 0; i < 8; i++) taken = taken || (i != slot && g_s.game.slots[i].used && g_s.game.slots[i].color == color);
-		const uint32_t own = CustomColorOf(g_s, g_s.game, slot);
-		const bool ownWanted = color == kOwnColor && g_tourney.colorRgb && own != g_tourney.colorRgb && k.ownTried != g_tourney.colorRgb;
-		const bool presetWanted = color >= 0 && color < 12 && !taken && (s.color != color || own != 0) && (k.colorSent != color || k.colorTries < 2);
-		const bool want = (raceWanted || ownWanted || presetWanted) && k.setTries < 12;
-		if (want && ready) {
-			if (!k.unreadied) {
-				k.unreadied = true;
-				k.readySent = false;
-				Predict(kPredReady, slot, 0);
-				GameRoomToggleReady();
-			}
-		}
-		else if (want && now - k.setAt >= 600) {
-			k.setAt = now;
-			k.setTries++;
-			if (raceWanted) {
-				if (k.raceSent != item) {
-					k.raceSent = item;
-					k.raceTries = 0;
-				}
-				k.raceTries++;
-				s.race = item;
-				Predict(kPredRace, slot, item);
-				GameRoomSetRace(slot, item);
-				LogI("league", "tournament match %lld: race %d in the player's slot", static_cast<long long>(match), race);
-			}
-			if (ownWanted) {
-				k.ownTried = g_tourney.colorRgb;
-				if (!UseCustomColor(g_s, slot, g_tourney.colorRgb))
-					LogI("league", "tournament match %lld: the own colour is too close to another player's; the room's stays", static_cast<long long>(match));
-			}
-			else if (presetWanted) {
-				if (k.colorSent != color) {
-					k.colorSent = color;
-					k.colorTries = 0;
-				}
-				k.colorTries++;
-				ClearCustomColor(g_s, slot);
-				s.color = color;
-				Predict(kPredColor, slot, color);
-				GameRoomSetColor(slot, color);
-			}
-		}
-		else if (!want) {
+		const LeagueSlotStep step = LeagueSlotKeepStep(k.slot, MatchCiv(g_tourney), MatchColor(g_tourney), g_tourney.colorRgb, now, "tournament", match);
+		if (step == LeagueSlotStep::Unreadied) k.readySent = false;
+		else if (step == LeagueSlotStep::Done) {
 			slotDone = true;
 			k.civSet = true;
-			k.unreadied = false;
 		}
 	}
 	// Against staging test bots the host puts the game's AI in an open seat for each of them (two against a team), in the other side's team:

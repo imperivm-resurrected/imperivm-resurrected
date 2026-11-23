@@ -8,5 +8,8 @@ void InstallSoundLevels(bool knownExe);
 // Applies the sound settings again after they change. Game thread.
 void SoundLevelsApply();
 void AudioSetBackgroundMute(bool mute);
+// While a call to the player sounds: the background mute does not silence it. Every true is followed by a false. Not on the window's
+// thread: it goes through the process' audio sessions.
+void AudioAlertHold(bool on);
 // While the game runs under something drawn over it, like a spectator catching up with the live game.
 void AudioSetCoverMute(bool mute);
