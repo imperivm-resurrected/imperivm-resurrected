@@ -872,7 +872,12 @@ void SeasonNotices(const LeagueRankedView &v)
 	GameRoomSaveSetting("LeagueSeasonWeekLeftTold", told.weekLeft);
 	GameRoomSaveSetting("LeagueSeasonLastDayTold", told.lastDay);
 	const std::string name = LeagueSeasonName(v.season, v.lang);
-	if (n == LeagueSeasonNotice::Started) ModUiToast(TrFmt("The ranked season %s has started. Good luck in the queue!", {name}));
+	if (n == LeagueSeasonNotice::Started) {
+		std::string fresh;
+		for (const std::string &m : v.season.newMaps) fresh += (fresh.empty() ? "" : ", ") + m;
+		if (fresh.empty()) ModUiToast(TrFmt("The ranked season %s has started. Good luck in the queue!", {name}));
+		else ModUiToast(TrFmt("The ranked season %s has started with new maps: %s. Good luck in the queue!", {name, fresh}));
+	}
 	else if (n == LeagueSeasonNotice::WeekLeft) {
 		ModUiToast(TrFmt("The ranked season %s ends in %s days: play your last games to earn its rewards.", {name, std::to_string(LeagueDaysLeft(v.season.endsAt, now))}));
 	}

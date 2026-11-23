@@ -31,9 +31,10 @@ void Season()
 		"theme":"beta","startsAt":1000,"endsAt":86401000,"beta":true,"active":true,"queues":["1v1"],"contentKey":null,
 		"maps":[{"name":"mediterranean","type":"random","size":"small"},{"name":"continent","type":"random","size":"small"}],
 		"settings":{"preset":"competitive","hideCivs":true,"specDelay":120,"fog":true,"explored":false,"diplomacy":"locked","cheats":false,
-		"pauses":{"count":3,"totalSec":180}},"tiers":[{"id":"recruit","name":"Recruit","from":0}]})"),
+		"pauses":{"count":3,"totalSec":180}},"tiers":[{"id":"recruit","name":"Recruit","from":0}],"newMaps":["Coastal","Island"]})"),
 		s));
 	CHECK_EQ(s.number, 0);
+	CHECK(s.newMaps.size() == 2 && s.newMaps[1] == "Island");
 	CHECK(s.beta);
 	CHECK(s.active);
 	CHECK_EQ(s.theme, std::string("beta"));

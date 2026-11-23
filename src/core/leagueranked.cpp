@@ -227,6 +227,11 @@ bool LeagueParseSeason(const Json &j, LeagueSeason &out)
 		}
 	}
 	if (out.queues.empty()) out.queues.push_back("1v1");
+	if (const Json *fresh = j.Get("newMaps"); fresh && fresh->type == Json::Array) {
+		for (const Json &m : fresh->arr) {
+			if (m.type == Json::String && !m.str.empty()) out.newMaps.push_back(m.str);
+		}
+	}
 	return true;
 }
 

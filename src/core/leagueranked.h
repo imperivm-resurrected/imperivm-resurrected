@@ -40,6 +40,8 @@ struct LeagueSeason {
 	// The queues the season plays ("1v1", "2v2"; only the duel from a server that does not say) and the 2v2 queue's maps for 4 players.
 	std::vector<std::string> queues;
 	std::vector<LeagueMapFacts> maps2v2;
+	// The 1v1 maps the season before did not play, by name in the asked language: the season's news.
+	std::vector<std::string> newMaps;
 };
 bool LeagueParseSeason(const Json &j, LeagueSeason &out);
 bool LeagueSeasonHasQueue(const LeagueSeason &s, const std::string &queue);
