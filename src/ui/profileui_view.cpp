@@ -260,7 +260,7 @@ void PaintFrameLink(Painter &p, const View &v, int right, int y, int maxW)
 void PaintShowcase(Painter &p, const View &v, int x, int y, int w)
 {
 	p.Fill(x - 20, y + 16, 1, kIdentityH - 32, pal::hairline);
-	PaintSectionLabel(p, x, y + 14, w / 2, 22, "Season showcase");
+	PaintSectionLabel(p, x, y + 14, w / 2, 22, "Showcase");
 	PaintFrameLink(p, v, x + w, y + 14, w / 2);
 	if (!v.meLoaded) {
 		// The row of vexilla and phalerae the showcase will hold.

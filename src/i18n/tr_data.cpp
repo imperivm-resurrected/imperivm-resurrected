@@ -2752,7 +2752,7 @@ extern const TrRow kTrRows[] = {
 	{"Saving...", "Guardando...", "Salvataggio..."},
 	{"Others see it in rooms, in the list of games and in the chat.", "Los demás la ven en las salas, en la lista de partidas y en el chat.", "Gli altri la vedono nelle stanze, nell'elenco delle partite e nella chat."},
 	{"Click: see their row in the leaderboard", "Clic: ver su fila en la clasificación", "Clic: vedi la sua riga in classifica"},
-	{"Season showcase", "Vitrina de temporadas", "Vetrina delle stagioni"},
+	{"Showcase", "Vitrina", "Vetrina"},
 	{"Frame and title", "Marco y título", "Cornice e titolo"},
 	{"Reading your season rewards...", "Leyendo tus recompensas de temporada...", "Lettura delle tue ricompense di stagione..."},
 	{"What you win in each season stays here. Play 10 ranked games in a season and win 5 to earn its vexillum.", "Lo que ganas en cada temporada se queda aquí. Juega 10 partidas de liga en una temporada y gana 5 para conseguir su Vexillum.", "Ciò che vinci in ogni stagione resta qui. Gioca 10 partite classificate in una stagione e vincine 5 per ottenere il suo Vexillum."},
