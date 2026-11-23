@@ -43,6 +43,7 @@ inline constexpr uintptr_t kNotificationOnKey = 0x006b6f10;
 inline constexpr uintptr_t kHelpDlgOnKey = 0x006b90a0;
 inline constexpr uintptr_t kConfirmSetup = 0x006c8ba0;
 inline constexpr uintptr_t kShowConquestGameDialog = 0x006c9080;
+inline constexpr uintptr_t kConquestMapOnMouse = 0x006ca6b0;
 inline constexpr uintptr_t kCreditsOnShow = 0x006cb330;
 inline constexpr uintptr_t kEndMenuOnShow = 0x006cd7f0;
 inline constexpr uintptr_t kMenuDeletingDtor = 0x006ce940;

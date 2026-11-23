@@ -28,12 +28,18 @@ const size_t kTerritorySize = 0xe8, kMaxTerritories = 64, kMaxPath = 32;
 // CConquestMapData
 const size_t kDataTerritories = 0x04, kDataPathBegin = 0x4c, kDataPathEnd = 0x50, kDataChoosing = 0x70;
 // CConquestTerritory: std::string objects (MSVC: buffer or pointer at +4, size at +0x14, capacity at +0x18).
-const size_t kTerId = 0x00, kTerState = 0x20, kTerName = 0x28, kTerDescription = 0x60, kTerBonus = 0x98, kTerShield = 0xd0;
-// CVXUIConquestMap: the territory clicked last (a double click activates it).
-const size_t kMapSelected = 0x58;
+// +0x1c: the colour of the territory in territories.bmp (FindTerritoryByIndex 00500fd0).
+const size_t kTerId = 0x00, kTerPaletteIndex = 0x1c, kTerState = 0x20, kTerName = 0x28, kTerDescription = 0x60, kTerBonus = 0x98, kTerShield = 0xd0;
+// CVXUIConquestMap: its rectangle (shorts, inclusive), the territory clicked last (a double click activates it), OnMouse in the vtable
+// and the renderer, whose territories.bmp (8 bits) and tinted copy of global.bmp are what Paint 006ca830 draws.
+const size_t kCtlRect = 0x10, kMapSelected = 0x58, kMapRenderer = 0x64, kSlotOnMouse = 0x58;
+const size_t kRendererAreas = 0x1c, kRendererTinted = 0x20;
 // CBitmap
 const size_t kBmpHandle = 4, kBmpW = 8, kBmpH = 0xc, kBmpBits = 0x10, kBmpType = 0x1c;
 const short kBmpType555 = 3, kBmpType565 = 6;
+const int kMaxShieldSide = 512, kMaxMapSide = 4096;
+// RebuildTintedBitmap rewrites the same bitmap in place: besides a change of territories, it is read again now and then.
+const DWORD kMapRereadMs = 3000;
 // A land of middle brightness, in the byte order TintColor reads (blue, green, red).
 const uint8_t kLandSample[4] = {150, 170, 190, 0};
 
@@ -47,9 +53,20 @@ typedef void(__fastcall *TintColor_t)(void *data, void *edx, uint32_t *out, cons
 typedef void *(__fastcall *PixelPtr_t)(void *bitmap, void *edx, int x, int y);
 typedef int(__cdecl *MemLock_t)(unsigned handle);
 typedef void(__cdecl *MemUnlock_t)(unsigned handle);
+typedef void(__fastcall *MapOnMouse_t)(void *map, void *edx, int event, short *at);
 
 std::map<const void *, std::shared_ptr<const ConquestImage>> g_shields;
 const void *g_shieldsOf = nullptr;
+
+struct MapCache {
+	const void *data = nullptr, *tinted = nullptr, *areas = nullptr;
+	uint32_t tint = 0;
+	DWORD readAt = 0;
+	bool warned = false;
+	std::shared_ptr<const ConquestImage> map;
+	std::shared_ptr<const ConquestRegions> regions;
+};
+MapCache g_map;
 
 bool Copy(void *to, const void *from, size_t n)
 {
@@ -111,20 +128,47 @@ ConquestButton Button(void *dlg, int id)
 	return b;
 }
 
-bool CopyRows(void *bmp, uint16_t *out, int w, int h)
+bool CopyRows(void *bmp, uint8_t *out, size_t rowBytes, int h)
 {
 	__try {
 		const PixelPtr_t row = reinterpret_cast<PixelPtr_t>(addr::kBitmapGetPixelPtr);
 		for (int y = 0; y < h; y++) {
 			const void *from = row(bmp, nullptr, 0, y);
 			if (!from) return false;
-			memcpy(out + static_cast<size_t>(y) * w, from, static_cast<size_t>(w) * 2);
+			memcpy(out + static_cast<size_t>(y) * rowBytes, from, rowBytes);
 		}
 		return true;
 	}
 	__except (EXCEPTION_EXECUTE_HANDLER) {
 		return false;
 	}
+}
+
+struct RawBitmap {
+	int w = 0, h = 0;
+	short bits = 0, type = 0;
+	std::vector<uint8_t> px;
+};
+
+// The rows of one of the game's CBitmaps, without padding; false unless it has `bits` bits a pixel and fits in `maxSide`.
+bool ReadBitmap(void *bmp, short bits, int maxSide, RawBitmap &out)
+{
+	if (!bmp) return false;
+	void **vt = At<void **>(bmp, 0);
+	out.w = At<int>(bmp, kBmpW);
+	out.h = At<int>(bmp, kBmpH);
+	out.bits = At<short>(bmp, kBmpBits);
+	out.type = At<short>(bmp, kBmpType);
+	const unsigned handle = At<unsigned>(bmp, kBmpHandle);
+	if (!vt || At<uintptr_t>(vt, 0x10) != addr::kBitmapGetPixelPtr || out.bits != bits || !handle || out.w < 4 || out.h < 4 || out.w > maxSide ||
+		out.h > maxSide)
+		return false;
+	const size_t rowBytes = static_cast<size_t>(out.w) * (bits / 8);
+	out.px.resize(rowBytes * out.h);
+	reinterpret_cast<MemLock_t>(addr::kMemLock)(handle);
+	const bool ok = CopyRows(bmp, out.px.data(), rowBytes, out.h);
+	reinterpret_cast<MemUnlock_t>(addr::kMemUnlock)(handle);
+	return ok;
 }
 
 uint32_t Expand(uint16_t v, short type)
@@ -134,35 +178,86 @@ uint32_t Expand(uint16_t v, short type)
 	return 0xff000000u | ((r << 3 | r >> 2) << 16) | ((g << 3 | g >> 2) << 8) | (b << 3 | b >> 2);
 }
 
+// A 16-bit picture; with `keyed`, the colour of its pixel at (0, 0) turns transparent.
+std::shared_ptr<const ConquestImage> ReadPicture(void *bmp, int maxSide, bool keyed, RawBitmap &raw)
+{
+	if (!ReadBitmap(bmp, 16, maxSide, raw) || (raw.type != kBmpType555 && raw.type != kBmpType565)) return nullptr;
+	auto img = std::make_shared<ConquestImage>();
+	img->w = raw.w;
+	img->h = raw.h;
+	img->argb.resize(static_cast<size_t>(raw.w) * raw.h);
+	const uint16_t *px = reinterpret_cast<const uint16_t *>(raw.px.data());
+	for (size_t i = 0; i < img->argb.size(); i++) img->argb[i] = keyed && px[i] == px[0] ? 0 : Expand(px[i], raw.type);
+	return img;
+}
+
 // The shields are CBitmaps of 16 bits; their buttons take the pixel at (0, 0) as the transparent colour (CUIButton::SetImage).
 std::shared_ptr<const ConquestImage> ReadShield(void *bmp)
 {
 	if (!bmp) return nullptr;
 	const auto cached = g_shields.find(bmp);
 	if (cached != g_shields.end()) return cached->second;
-	std::shared_ptr<const ConquestImage> result;
-	void **vt = At<void **>(bmp, 0);
-	const int w = At<int>(bmp, kBmpW), h = At<int>(bmp, kBmpH);
-	const short bits = At<short>(bmp, kBmpBits), type = At<short>(bmp, kBmpType);
-	const unsigned handle = At<unsigned>(bmp, kBmpHandle);
-	if (vt && At<uintptr_t>(vt, 0x10) == addr::kBitmapGetPixelPtr && bits == 16 && (type == kBmpType555 || type == kBmpType565) && handle && w >= 4 && h >= 4 &&
-		w <= 512 && h <= 512) {
-		std::vector<uint16_t> raw(static_cast<size_t>(w) * h);
-		reinterpret_cast<MemLock_t>(addr::kMemLock)(handle);
-		const bool ok = CopyRows(bmp, raw.data(), w, h);
-		reinterpret_cast<MemUnlock_t>(addr::kMemUnlock)(handle);
-		if (ok) {
-			auto img = std::make_shared<ConquestImage>();
-			img->w = w;
-			img->h = h;
-			img->argb.resize(raw.size());
-			for (size_t i = 0; i < raw.size(); i++) img->argb[i] = raw[i] == raw[0] ? 0 : Expand(raw[i], type);
-			result = img;
-		}
-	}
-	if (!result) LogW("ui", "conquest: a shield could not be read (bitmap %dx%d, %d bits, type %d)", w, h, bits, type);
+	RawBitmap raw;
+	std::shared_ptr<const ConquestImage> result = ReadPicture(bmp, kMaxShieldSide, true, raw);
+	if (!result) LogW("ui", "conquest: a shield could not be read (bitmap %dx%d, %d bits, type %d)", raw.w, raw.h, raw.bits, raw.type);
 	g_shields[bmp] = result;
 	return result;
+}
+
+// territories.bmp has one colour per territory: each pixel becomes the number of its territory.
+std::shared_ptr<const ConquestRegions> ReadRegions(void *bmp, const char *territories, size_t count)
+{
+	RawBitmap raw;
+	if (!ReadBitmap(bmp, 8, kMaxMapSide, raw)) {
+		LogW("ui", "conquest: the territories of the map could not be read (bitmap %dx%d, %d bits)", raw.w, raw.h, raw.bits);
+		return nullptr;
+	}
+	uint8_t owner[256];
+	std::fill(std::begin(owner), std::end(owner), kConquestNoTerritory);
+	for (size_t i = 0; i < count; i++) {
+		const int index = At<int>(territories + i * kTerritorySize, kTerPaletteIndex);
+		if (index >= 0 && index < 256 && owner[index] == kConquestNoTerritory) owner[index] = static_cast<uint8_t>(i);
+	}
+	auto regions = std::make_shared<ConquestRegions>();
+	regions->w = raw.w;
+	regions->h = raw.h;
+	regions->territory.resize(raw.px.size());
+	for (size_t i = 0; i < raw.px.size(); i++) regions->territory[i] = owner[raw.px[i]];
+	return regions;
+}
+
+uint32_t TintKey(const ConquestSnapshot &s)
+{
+	uint32_t key = 2166136261u;
+	for (const ConquestTerritory &t : s.territories) key = (key ^ static_cast<uint32_t>(t.standing * 2 + (t.disabled ? 1 : 0))) * 16777619u;
+	return key;
+}
+
+void ReadMap(void *mapCtl, const void *data, const char *territories, size_t count, ConquestSnapshot &s)
+{
+	const char *renderer = static_cast<const char *>(mapCtl) + kMapRenderer;
+	void *tinted = At<void *>(renderer, kRendererTinted), *areas = At<void *>(renderer, kRendererAreas);
+	MapCache &c = g_map;
+	if (data != c.data || areas != c.areas) {
+		c = MapCache();
+		c.data = data;
+		c.areas = areas;
+		c.regions = ReadRegions(areas, territories, count);
+	}
+	const uint32_t key = TintKey(s);
+	if (tinted != c.tinted || key != c.tint || GetTickCount() - c.readAt >= kMapRereadMs) {
+		RawBitmap raw;
+		std::shared_ptr<const ConquestImage> fresh = ReadPicture(tinted, kMaxMapSide, false, raw);
+		// The same pixels keep the same picture, so the screen does not build its copy again.
+		if (!fresh || !c.map || fresh->w != c.map->w || fresh->h != c.map->h || fresh->argb != c.map->argb) c.map = fresh;
+		if (!c.map && !c.warned) LogW("ui", "conquest: the map could not be read (bitmap %dx%d, %d bits, type %d)", raw.w, raw.h, raw.bits, raw.type);
+		c.warned = !c.map;
+		c.tinted = tinted;
+		c.tint = key;
+		c.readAt = GetTickCount();
+	}
+	s.map = c.map;
+	if (c.map && c.regions && c.regions->w == c.map->w && c.regions->h == c.map->h) s.regions = c.regions;
 }
 
 void ReadColors(void *data, ConquestSnapshot &s)
@@ -240,6 +335,7 @@ ConquestSnapshot ConquestRead()
 	if (void *map = Child(dlg, kIdMap, addr::kClassNameCVXUIConquestMap)) {
 		const int selected = At<int>(map, kMapSelected);
 		if (selected >= 0 && static_cast<size_t>(selected) < count) s.selected = selected;
+		ReadMap(map, data, begin, count, s);
 	}
 	ReadDifficulties(dlg, s);
 	ReadColors(data, s);
@@ -270,4 +366,23 @@ void ConquestSetDifficulty(int index)
 	if (!combo) return;
 	LogI("ui", "conquest: difficulty %d", index);
 	reinterpret_cast<ComboSetSelected_t>(addr::kComboSetSelected)(combo, nullptr, index, 1);
+}
+
+// OnMouse 006ca6b0 takes the point in the dialog's coordinates and hit-tests territories.bmp at it minus the control's corner; in mode 1
+// (the only one the game sets) a press selects and notifies 0x1700ff23, a double click notifies 0x1700d2ed: the dialog does the rest.
+void ConquestMapMouse(int event, int x, int y)
+{
+	void *dlg = OpenDialog();
+	void *map = dlg ? Child(dlg, kIdMap, addr::kClassNameCVXUIConquestMap) : nullptr;
+	if (!map) return;
+	void **vt = At<void **>(map, 0);
+	if (!vt || At<uintptr_t>(vt, kSlotOnMouse) != addr::kConquestMapOnMouse) {
+		LogW("ui", "conquest: the map control is not the game's, its click is left out");
+		return;
+	}
+	const short left = At<short>(map, kCtlRect), top = At<short>(map, kCtlRect + 2), right = At<short>(map, kCtlRect + 4), bottom = At<short>(map, kCtlRect + 6);
+	if (x < 0 || y < 0 || x > right - left || y > bottom - top) return;
+	short at[2] = {static_cast<short>(left + x), static_cast<short>(top + y)};
+	if (event != kConquestMouseUp) LogD("ui", "conquest: map event %#x at %d,%d of the picture", event, x, y);
+	reinterpret_cast<MapOnMouse_t>(addr::kConquestMapOnMouse)(map, nullptr, event, at);
 }

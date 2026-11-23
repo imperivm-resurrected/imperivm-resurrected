@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "i18n/tr.h"
+#include "ui/fullscreen.h"
 #include "ui/ornaments.h"
 #include "ui/widgets.h"
 
@@ -19,23 +20,27 @@ using namespace ui;
 namespace conquestui {
 namespace {
 
-// The game's dialog is laid out from the centre of the screen (ConquestGame.ini): the map is 1024x768 around it, the panel
-// of the territory to the right (x +138..+480, y -346..+326) and the shields above the map (x -479..+113, y -346..-256).
-const int kPanelX = 134, kPanelY = -350, kPanelW = 352, kPanelH = 684;
-const int kPathX = -482, kPathY = -350, kPathW = 598, kPathH = 96;
-const int kLegendW = 206, kLegendH = 80, kLegendMargin = 12, kMapHalfW = 512, kMapHalfH = 384;
 // CONQUESTVICTORY.INI: a 390x180 box centred on the screen, OK at (135, 115) and 121x30. Ours is larger and keeps that button where
 // the game has it, so the click goes to the game's.
 const int kVictoryW = 440, kVictoryH = 200, kNativeVictoryW = 390, kNativeVictoryH = 180, kOkX = 135, kOkY = 115, kOkW = 121, kOkH = 30;
-
-const int kPad = 20, kCardW = kPanelW - 2 * kPad;
-const int kShieldW = 74, kShieldH = 79, kTerritoryH = 92;
-const int kButtonsY = kPanelH - kPad - 34, kMainY = kButtonsY - 10 - 46, kDifficultyY = kMainY - 14 - 52, kBonusY = kDifficultyY - 14 - 96, kBonusH = 96;
 const int kLineH = 19;
-const int kSlotW = 64, kSlotGap = 18, kSlotShieldW = 44, kSlotShieldH = 47, kMaxSlots = 8;
 
+const int kCardPad = 20, kLabelY = 16, kDescLineH = 23, kBonusLineH = 20, kSegmentH = 34;
+const int kShieldW = 74, kShieldH = 79;
+const int kPathLabelW = 230, kSlotW = 86, kSlotGapMax = 28, kSlotGapMin = 8, kSlotShieldW = 46, kSlotShieldH = 49, kMaxSlots = 8;
+const int kSwatch = 16, kLegendRow = 30;
+
+// The game's map pictures have a gold border of their own, left out of ours: 10 to 14 pixels a side in global.bmp, thicker at the bottom.
+const int kBorderLeft = 12, kBorderTop = 15, kBorderRight = 12, kBorderBottom = 16;
+// And the IMPERIVM RTC plate at the bottom left of the 1024x768 ones, over desert: it is covered with the desert above it, mirrored, when
+// no territory reaches there (a mod's map may have land in that corner). The sides fade into the picture over kPlateFeather pixels; the
+// bottom is the end of what is shown.
+const int kPlateX0 = 26, kPlateX1 = 526, kPlateY0 = 662, kPlateY1 = 768 - kBorderBottom, kPlateFeather = 16;
+
+const COLORREF kFrameGoldDim = RGB(127, 98, 48), kProgressGold = RGB(214, 170, 84);
 const COLORREF kConquerText = pal::redText;
 
+// A shield in the units of its painter, drawn into the canvas after the GDI work.
 struct Pending {
 	std::shared_ptr<const ConquestImage> img;
 	int x, y, w, h, alpha;
@@ -57,6 +62,15 @@ void Raw(Painter &p, int x, int y, int w, int h, const std::string &s, COLORREF 
 	DrawTextW(p.dc, ws.c_str(), static_cast<int>(ws.size()), &r, fmt | DT_NOPREFIX);
 }
 
+void RawCaps(Painter &p, int x, int y, int w, int h, const std::string &s, COLORREF c)
+{
+	std::wstring ws = W(s);
+	if (!ws.empty()) CharUpperBuffW(&ws[0], static_cast<DWORD>(ws.size()));
+	RECT r = p.R(x, y, w, h);
+	SetTextColor(p.dc, c);
+	DrawTextW(p.dc, ws.c_str(), static_cast<int>(ws.size()), &r, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+}
+
 std::vector<std::wstring> Wrap(Painter &p, const std::string &text, int width)
 {
 	std::vector<std::wstring> out;
@@ -71,18 +85,6 @@ std::vector<std::wstring> Wrap(Painter &p, const std::string &text, int width)
 	}
 	while (!out.empty() && out.back().empty()) out.pop_back();
 	return out;
-}
-
-void SectionLabel(Painter &p, int x, int y, int w, const std::string &label, COLORREF c = pal::redText)
-{
-	p.Font(4);
-	std::wstring ws = W(Tr(label));
-	CharUpperBuffW(&ws[0], static_cast<DWORD>(ws.size()));
-	SetTextCharacterExtra(p.dc, p.S(1));
-	RECT r = p.R(x, y, w, 18);
-	SetTextColor(p.dc, c);
-	DrawTextW(p.dc, ws.c_str(), static_cast<int>(ws.size()), &r, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
-	SetTextCharacterExtra(p.dc, 0);
 }
 
 // A heater shield: flat top, straight sides down to the middle, curving to a point.
@@ -122,6 +124,7 @@ void Shield(Layer &l, const ConquestSnapshot &g, int index, int x, int y, int w,
 	ShieldShape(l.p, x + 2, y + 1, w - 4, h - 2, alpha == 255 ? c : RGB(GetRValue(c) / 2, GetGValue(c) / 2, GetBValue(c) / 2), pal::redText, true);
 }
 
+// `d` in canvas pixels.
 void DrawImage(Canvas &c, const Pending &d)
 {
 	const ConquestImage &img = *d.img;
@@ -155,9 +158,19 @@ void DrawImage(Canvas &c, const Pending &d)
 	}
 }
 
+void FlushImages(Canvas &c, const Layer &l)
+{
+	GdiFlush();
+	const Painter &p = l.p;
+	for (const Pending &d : l.images) {
+		const int x = p.S(d.x), y = p.S(d.y);
+		DrawImage(c, {d.img, x, y, p.S(d.x + d.w) - x, p.S(d.y + d.h) - y, d.alpha});
+	}
+}
+
 // One region of the screen: the game's pixels are copied in first, so whatever is not painted keeps showing the game.
 template <typename F>
-void Render(Canvas &c, uint32_t *buf, int w, int h, const RECT &r, int pressAction, int pressArg, std::vector<Hit> &hits, int glass, F paint)
+void Render(Canvas &c, uint32_t *buf, int w, int h, const RECT &r, int pressAction, int pressArg, std::vector<Hit> &hits, F paint)
 {
 	const int rw = r.right - r.left, rh = r.bottom - r.top;
 	if (rw <= 0 || rh <= 0 || !c.Ensure(rw, rh)) return;
@@ -169,14 +182,6 @@ void Render(Canvas &c, uint32_t *buf, int w, int h, const RECT &r, int pressActi
 			row[x] = sy >= 0 && sy < h && sx >= 0 && sx < w ? buf[static_cast<size_t>(sy) * w + sx] & 0xffffff : 0;
 		}
 	}
-	if (glass) {
-		const uint32_t tr = GetRValue(pal::panel), tg = GetGValue(pal::panel), tb = GetBValue(pal::panel);
-		for (size_t i = 0, n = static_cast<size_t>(rw) * rh; i < n; i++) {
-			const uint32_t px = c.bits[i];
-			c.bits[i] = (((px >> 16) & 255) * (255 - glass) + tr * glass) / 255 << 16 | (((px >> 8) & 255) * (255 - glass) + tg * glass) / 255 << 8 |
-				((px & 255) * (255 - glass) + tb * glass) / 255;
-		}
-	}
 	EnsureFonts(1.0f);
 	Painter p{c.dc, 1.0f, r.left, r.top, &hits};
 	std::copy(std::begin(g_fonts), std::end(g_fonts), std::begin(p.fonts));
@@ -184,8 +189,7 @@ void Render(Canvas &c, uint32_t *buf, int w, int h, const RECT &r, int pressActi
 	p.pressArg = pressArg;
 	Layer layer{p, {}};
 	paint(layer);
-	GdiFlush();
-	for (const Pending &d : layer.images) DrawImage(c, d);
+	FlushImages(c, layer);
 	for (int y = 0; y < rh; y++) {
 		const int ty = r.top + y;
 		if (ty < 0 || ty >= h) continue;
@@ -215,175 +219,235 @@ Standing Describe(const ConquestSnapshot &g, const ConquestTerritory &t)
 	return {"Out of reach", "Conquer a neighbouring territory first.", pal::textDim};
 }
 
-void PaintTerritoryCard(Layer &l, const View &v, int y)
+RECT CropOf(const ConquestImage &m)
+{
+	if (m.w < 400 || m.h < 300) return {0, 0, m.w, m.h};
+	return {kBorderLeft, kBorderTop, m.w - kBorderRight, m.h - kBorderBottom};
+}
+
+bool CoversPlate(const ConquestImage &m, const ConquestRegions *r)
+{
+	if (m.w != 1024 || m.h != 768 || !r || r->w != m.w || r->h != m.h) return false;
+	for (int y = 2 * kPlateY0 - kPlateY1; y < kPlateY1; y++) {
+		for (int x = kPlateX0; x < kPlateX1; x++) {
+			if (r->territory[static_cast<size_t>(y) * r->w + x] != kConquestNoTerritory) return false;
+		}
+	}
+	return true;
+}
+
+uint32_t Mix(uint32_t a, uint32_t b, int t)
+{
+	const auto one = [t](uint32_t x, uint32_t y) { return (x * (255 - t) + y * t) / 255; };
+	return 0xff000000u | one((a >> 16) & 255, (b >> 16) & 255) << 16 | one((a >> 8) & 255, (b >> 8) & 255) << 8 | one(a & 255, b & 255);
+}
+
+void CoverPlate(std::vector<uint32_t> &px, int w)
+{
+	for (int y = kPlateY0; y < kPlateY1; y++) {
+		const int from = 2 * kPlateY0 - 1 - y;
+		for (int x = kPlateX0; x < kPlateX1; x++) {
+			const int edge = std::min(x - kPlateX0, kPlateX1 - 1 - x);
+			const int t = edge >= kPlateFeather ? 255 : edge * 255 / kPlateFeather;
+			uint32_t &dst = px[static_cast<size_t>(y) * w + x];
+			dst = Mix(dst, px[static_cast<size_t>(from) * w + x], t);
+		}
+	}
+}
+
+// The game outlines the chosen territory in white where a 2x2 block of territories.bmp has more than one colour (BuildTerritoryBitmaps
+// 005045e0); the same blocks here, blended at `alpha`.
+void Outline(std::vector<uint32_t> &px, const ConquestRegions &r, int territory, int alpha)
+{
+	const uint8_t t = static_cast<uint8_t>(territory);
+	const int w = r.w, h = r.h;
+	std::vector<uint8_t> mark(static_cast<size_t>(w) * h, 0);
+	const uint8_t *a = r.territory.data();
+	for (int y = 0; y + 1 < h; y++) {
+		const uint8_t *row = a + static_cast<size_t>(y) * w, *next = row + w;
+		for (int x = 0; x + 1 < w; x++) {
+			const uint8_t v = row[x];
+			if (v == row[x + 1] && v == next[x] && v == next[x + 1]) continue;
+			if (v != t && row[x + 1] != t && next[x] != t && next[x + 1] != t) continue;
+			uint8_t *m = mark.data() + static_cast<size_t>(y) * w + x;
+			m[0] = m[1] = m[w] = m[w + 1] = 1;
+		}
+	}
+	for (size_t i = 0; i < mark.size(); i++) {
+		if (mark[i]) px[i] = Mix(px[i], 0xffffffu, alpha);
+	}
+}
+
+void Lighten(std::vector<uint32_t> &px, const ConquestRegions &r, int territory, int amount)
+{
+	const uint8_t t = static_cast<uint8_t>(territory);
+	for (size_t i = 0; i < px.size(); i++) {
+		if (r.territory[i] == t) px[i] = Mix(px[i], 0xffffffu, amount);
+	}
+}
+
+// The picture as the screen shows it: without its border and plate, with the chosen territory outlined and the one under the mouse lit.
+std::vector<uint32_t> Compose(const ConquestSnapshot &g, int hovered, const RECT &crop)
+{
+	const ConquestImage &m = *g.map;
+	const ConquestRegions *r = g.regions.get();
+	std::vector<uint32_t> px(m.argb);
+	if (CoversPlate(m, r)) CoverPlate(px, m.w);
+	if (r) {
+		if (hovered >= 0) {
+			Lighten(px, *r, hovered, 36);
+			if (hovered != g.selected) Outline(px, *r, hovered, 150);
+		}
+		if (Valid(g, g.selected)) Outline(px, *r, g.selected, 255);
+	}
+	const int cw = crop.right - crop.left, ch = crop.bottom - crop.top;
+	std::vector<uint32_t> out(static_cast<size_t>(cw) * ch);
+	for (int y = 0; y < ch; y++) {
+		const uint32_t *from = px.data() + static_cast<size_t>(y + crop.top) * m.w + crop.left;
+		std::copy(from, from + cw, out.begin() + static_cast<size_t>(y) * cw);
+	}
+	return out;
+}
+
+// Scaled once to its size on the screen with GDI's halftone, so each frame only copies it.
+bool Scale(const std::vector<uint32_t> &src, int sw, int sh, int dw, int dh, std::vector<uint32_t> &out)
+{
+	BITMAPINFO bi = {};
+	bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
+	bi.bmiHeader.biWidth = dw;
+	bi.bmiHeader.biHeight = -dh;
+	bi.bmiHeader.biPlanes = 1;
+	bi.bmiHeader.biBitCount = 32;
+	bi.bmiHeader.biCompression = BI_RGB;
+	void *bits = nullptr;
+	HDC dc = CreateCompatibleDC(nullptr);
+	HBITMAP bmp = dc ? CreateDIBSection(dc, &bi, DIB_RGB_COLORS, &bits, nullptr, 0) : nullptr;
+	bool ok = false;
+	if (bmp && bits) {
+		HGDIOBJ old = SelectObject(dc, bmp);
+		SetStretchBltMode(dc, HALFTONE);
+		SetBrushOrgEx(dc, 0, 0, nullptr);
+		BITMAPINFO si = bi;
+		si.bmiHeader.biWidth = sw;
+		si.bmiHeader.biHeight = -sh;
+		ok = StretchDIBits(dc, 0, 0, dw, dh, 0, 0, sw, sh, src.data(), &si, DIB_RGB_COLORS, SRCCOPY) != 0;
+		GdiFlush();
+		if (ok) out.assign(static_cast<uint32_t *>(bits), static_cast<uint32_t *>(bits) + static_cast<size_t>(dw) * dh);
+		SelectObject(dc, old);
+	}
+	if (bmp) DeleteObject(bmp);
+	if (dc) DeleteDC(dc);
+	return ok;
+}
+
+// The map as last shown: built again when the map, the choice, the territory under the mouse or the size changes.
+struct Picture {
+	std::shared_ptr<const ConquestImage> map;
+	std::shared_ptr<const ConquestRegions> regions;
+	int selected = -2, hovered = -2, w = 0, h = 0;
+	std::vector<uint32_t> px;
+	int pw = 0, ph = 0;
+};
+Picture g_picture;
+
+void PaintMap(Layer &l, const Layout &L, const View &v, const RECT &crop, int hovered)
 {
 	Painter &p = l.p;
 	const ConquestSnapshot &g = v.game;
-	const int x = kPad;
-	if (!Valid(g, g.selected)) {
-		ShieldShape(p, x + 4, y + 2, kShieldW - 8, kShieldH - 4, pal::bg, pal::hairline, true);
-		p.Font(1);
-		p.Text(x + 88, y + 10, kCardW - 88, 22, "Choose a territory", pal::text);
-		p.Font(3);
-		p.TextWrapped(x + 88, y + 36, kCardW - 88, 40, g.choosing ? "Click a territory on the map to see where you can begin." : "Click a territory on the map to see it here.", pal::textDim);
+	PaintGlassCard(p, L.mapCard.x, L.mapCard.y, L.mapCard.w, L.mapCard.h);
+	const Box &b = L.map;
+	if (!g.map) {
+		p.Fill(b.x, b.y, b.w, b.h, pal::bg);
+		PaintIsotype(p, b.x + b.w / 2, b.y + b.h / 2, b.h * 35 / 100, 46);
 		return;
 	}
-	const ConquestTerritory &t = g.territories[g.selected];
-	Shield(l, g, g.selected, x, y, kShieldW, kShieldH, 255);
-	p.Font(2);
-	Raw(p, x + 88, y + 2, kCardW - 88, 30, t.name, pal::text);
+	const RECT r = p.R(b.x, b.y, b.w, b.h);
+	const int dw = r.right - r.left, dh = r.bottom - r.top;
+	Picture &pic = g_picture;
+	if (pic.map != g.map || pic.regions != g.regions || pic.selected != g.selected || pic.hovered != hovered || pic.w != dw || pic.h != dh) {
+		std::vector<uint32_t> composed = Compose(g, hovered, crop);
+		const int cw = crop.right - crop.left, ch = crop.bottom - crop.top;
+		if (dw > 0 && dh > 0 && Scale(composed, cw, ch, dw, dh, pic.px)) {
+			pic.pw = dw;
+			pic.ph = dh;
+		}
+		else {
+			pic.px = std::move(composed);
+			pic.pw = cw;
+			pic.ph = ch;
+		}
+		pic.map = g.map;
+		pic.regions = g.regions;
+		pic.selected = g.selected;
+		pic.hovered = hovered;
+		pic.w = dw;
+		pic.h = dh;
+	}
+	p.Image(b.x, b.y, b.w, b.h, pic.px.data(), pic.pw, pic.ph);
+	p.Frame(b.x - 1, b.y - 1, b.w + 2, b.h + 2, kFrameGoldDim);
+}
+
+// The name of the territory under the mouse, beside it and inside the map.
+void PaintMapTag(Painter &p, const Layout &L, const View &v, int hovered)
+{
+	const ConquestSnapshot &g = v.game;
+	const ConquestTerritory &t = g.territories[hovered];
 	const Standing s = Describe(g, t);
-	p.Diamond(x + 94, y + 43, 5, pal::panel);
-	p.Diamond(x + 94, y + 43, 4, ToColorRef(g.colors[t.standing]));
-	p.Font(4);
-	p.Text(x + 106, y + 34, kCardW - 106, 18, s.line, s.color);
+	p.Font(1);
+	std::wstring name = W(t.name);
+	if (!name.empty()) CharUpperBuffW(&name[0], static_cast<DWORD>(name.size()));
+	SIZE nameSz = {};
+	GetTextExtentPoint32W(p.dc, name.c_str(), static_cast<int>(name.size()), &nameSz);
 	p.Font(3);
-	p.TextWrapped(x + 88, y + 55, kCardW - 88, 34, s.detail, pal::textDim);
-}
-
-void PaintDescription(Layer &l, const View &v, int top, int bottom, int &maxScroll)
-{
-	Painter &p = l.p;
-	const ConquestSnapshot &g = v.game;
-	const int x = kPad, w = kCardW - 14;
-	p.Font(0);
-	const std::string text = Valid(g, g.selected) ? g.territories[g.selected].description : std::string();
-	if (text.empty()) {
-		if (Valid(g, g.selected)) p.Text(x, top, kCardW, kLineH, "No description.", pal::textDim);
-		maxScroll = 0;
-		return;
-	}
-	const std::vector<std::wstring> lines = Wrap(p, text, w);
-	const int visible = std::max(1, (bottom - top) / kLineH);
-	maxScroll = std::max(0, static_cast<int>(lines.size()) - visible);
-	const int first = std::min(std::max(0, v.scroll), maxScroll);
-	p.Clip(x, top, kCardW, bottom - top);
-	for (int i = 0; i < visible && first + i < static_cast<int>(lines.size()); i++) p.LineW(x, top + i * kLineH, w, kLineH, lines[first + i], pal::text);
-	p.Unclip();
-	if (maxScroll > 0) {
-		ScrollbarLook look;
-		look.width = 4;
-		look.minThumb = 18;
-		look.grip = 6;
-		look.track = pal::bg;
-		PaintScrollbar(p, kBarDescription, x + kCardW - 5, top, bottom - top, {first, maxScroll, visible}, v.bar, v.mouseX, v.mouseY, look);
-	}
-}
-
-void PaintBonus(Layer &l, const View &v)
-{
-	Painter &p = l.p;
-	const ConquestSnapshot &g = v.game;
-	const int x = kPad, y = kBonusY;
-	PaintCard(p, x, y, kCardW, kBonusH);
-	const bool owned = Valid(g, g.selected) && g.territories[g.selected].standing == kStandingOwned;
-	SectionLabel(p, x + 12, y + 8, kCardW - 24, owned ? "Bonus of this territory" : "Bonus when conquered");
-	const std::string bonus = Valid(g, g.selected) ? g.territories[g.selected].bonus : std::string();
+	const int lineW = p.TextWidth(s.line);
+	const int w = std::min(L.map.w - 16, std::max(static_cast<int>(nameSz.cx / p.s) + 2, lineW + 18) + 28), h = 52;
+	const int mx = static_cast<int>((v.mouseX - p.ox) / p.s), my = static_cast<int>((v.mouseY - p.oy) / p.s);
+	int x = mx + 18, y = my + 20;
+	if (x + w > L.map.Right() - 8) x = mx - 14 - w;
+	if (y + h > L.map.Bottom() - 8) y = my - 14 - h;
+	x = std::max(L.map.x + 8, x);
+	y = std::max(L.map.y + 8, y);
+	p.Fill(x, y, w, h, pal::panel);
+	p.Frame(x, y, w, h, pal::edge);
+	p.Font(1);
+	RawCaps(p, x + 14, y + 6, w - 28, 22, t.name, pal::text);
+	p.Diamond(x + 18, y + 37, 4, ToColorRef(g.colors[t.standing]));
 	p.Font(3);
-	if (bonus.empty()) {
-		p.Text(x + 12, y + 30, kCardW - 24, 18, Valid(g, g.selected) ? "No bonus" : "Choose a territory to see its bonus.", pal::textDim);
-		return;
-	}
-	const std::vector<std::wstring> lines = Wrap(p, bonus, kCardW - 24);
-	const int lineH = 16, maxLines = (kBonusH - 34) / lineH;
-	for (int i = 0; i < maxLines && i < static_cast<int>(lines.size()); i++) {
-		std::wstring line = lines[i];
-		if (i == maxLines - 1 && static_cast<int>(lines.size()) > maxLines) line += L"…";
-		p.LineW(x + 12, y + 30 + i * lineH, kCardW - 24, lineH, line, pal::text);
-	}
+	p.Text(x + 28, y + 27, w - 42, 20, s.line, s.color, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }
 
-void PaintDifficulty(Layer &l, const View &v)
+void PaintPath(Layer &l, const Box &b, const View &v)
 {
 	Painter &p = l.p;
 	const ConquestSnapshot &g = v.game;
-	const int x = kPad, y = kDifficultyY;
-	SectionLabel(p, x, y, kCardW, "Difficulty", pal::textDim);
-	const int count = static_cast<int>(g.difficulties.size());
-	if (!count) return;
-	const int segY = y + 22, segH = 30;
-	for (int i = 0; i < count; i++) {
-		const int sx = x + kCardW * i / count, sw = x + kCardW * (i + 1) / count - sx;
-		const bool on = i == g.difficulty;
-		const bool hot = !on && p.Hover(sx, segY, sw, segH, v.mouseX, v.mouseY);
-		if (on) p.Fill(sx, segY, sw, segH, pal::text);
-		else p.Fill(sx, segY, sw, segH, hot ? pal::button : pal::bg);
-		p.Frame(sx, segY, sw, segH, on ? pal::text : pal::edge);
-		p.Font(on ? 1 : 0);
-		Raw(p, sx, segY, sw, segH, g.difficulties[i], on ? pal::onLight : pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		if (!on) p.AddHit(sx, segY, sw, segH, kActDifficulty, i);
-	}
-}
-
-void PaintButtons(Layer &l, const View &v)
-{
-	Painter &p = l.p;
-	const ConquestSnapshot &g = v.game;
-	const int x = kPad;
-	const bool choose = g.choosing || (g.select.visible && !g.start.visible);
-	const ConquestButton main = choose ? g.select : g.start;
-	p.Button(x, kMainY, kCardW, 46, choose ? "Select" : "Attack", kActNative, choose ? kConquestSelect : kConquestStart, v.mouseX, v.mouseY, main.enabled, true, 2);
-	const int half = (kCardW - 10) / 2;
-	if (g.save.visible) {
-		p.Button(x, kButtonsY, half, 34, "Save", kActNative, kConquestSave, v.mouseX, v.mouseY, g.save.enabled);
-		p.Button(x + kCardW - half, kButtonsY, half, 34, "Quit", kActNative, kConquestQuit, v.mouseX, v.mouseY, g.quit.enabled);
-	}
-	else {
-		p.Button(x, kButtonsY, kCardW, 34, "Quit", kActNative, kConquestQuit, v.mouseX, v.mouseY, g.quit.enabled);
-	}
-}
-
-void PaintPanel(Layer &l, const View &v, int &maxScroll)
-{
-	Painter &p = l.p;
-	const ConquestSnapshot &g = v.game;
-	PaintWindowFrame(p, kPanelW, kPanelH);
-	int y = 22;
-	if (g.choosing) {
-		PaintCard(p, kPad, y, kCardW, 86);
-		SectionLabel(p, kPad + 12, y + 9, kCardW - 24, "Select starting area");
-		p.Font(3);
-		p.TextWrapped(kPad + 12, y + 30, kCardW - 24, 52, "Click one of your territories on the map and press Select, or double-click it.", pal::text);
-		y += 98;
-	}
-	PaintTerritoryCard(l, v, y);
-	y += kTerritoryH;
-	PaintRule(p, y + 4, kPanelW);
-	y += 16;
-	PaintDescription(l, v, y, kBonusY - 12, maxScroll);
-	PaintBonus(l, v);
-	PaintDifficulty(l, v);
-	PaintButtons(l, v);
-}
-
-void PaintPath(Layer &l, const View &v)
-{
-	Painter &p = l.p;
-	const ConquestSnapshot &g = v.game;
-	p.Fill(0, 0, kPathW, kPathH, pal::panel);
-	p.Frame(0, 0, kPathW, kPathH, pal::lineStrong);
-	p.Frame(4, 4, kPathW - 8, kPathH - 8, pal::hairline);
-	SectionLabel(p, 22, 7, 240, "Your path");
+	PaintGlassCard(p, b.x, b.y, b.w, b.h);
+	PaintSectionLabel(p, b.x + 24, b.y + 22, kPathLabelW - 32, 18, "Your path");
 	int total = 0;
 	for (const ConquestTerritory &t : g.territories) total += t.disabled ? 0 : 1;
 	const int done = static_cast<int>(g.path.size());
 	total = std::max(total, done);
 	p.Font(3);
-	Raw(p, kPathW - 22 - 240, 7, 240, 18, TrFmt("%s of %s conquered", {std::to_string(done), std::to_string(total)}), pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+	Raw(p, b.x + 24, b.y + 44, kPathLabelW - 32, 22, TrFmt("%s of %s conquered", {std::to_string(done), std::to_string(total)}), pal::textDim);
+	const int barW = kPathLabelW - 56;
+	p.Fill(b.x + 24, b.y + 76, barW, 3, pal::hairline);
+	if (total > 0 && done > 0) p.Fill(b.x + 24, b.y + 76, barW * std::min(done, total) / total, 3, kProgressGold);
+	p.Fill(b.x + kPathLabelW, b.y + 16, 1, b.h - 32, pal::hairline);
 	int candidate = -1;
 	if (Valid(g, g.selected) && std::find(g.path.begin(), g.path.end(), g.selected) == g.path.end()) {
 		const int standing = g.territories[g.selected].standing;
 		if (g.choosing ? standing == kStandingOwned && g.path.empty() : standing == kStandingConquerable) candidate = g.selected;
 	}
 	const int steps = done + (candidate >= 0 ? 1 : 0);
-	const int slots = std::max(1, std::min(kMaxSlots, std::max(total, steps)));
+	const int roomX = b.x + kPathLabelW + 16, roomW = b.Right() - 16 - roomX;
+	const int fits = std::max(1, (roomW + kSlotGapMin) / (kSlotW + kSlotGapMin));
+	const int slots = std::max(1, std::min({kMaxSlots, fits, std::max(total, steps)}));
 	// The slots close up to fit the strip, and a path longer than them shows its newest steps.
-	const int gap = slots > 1 ? std::max(8, std::min(kSlotGap, (kPathW - 24 - slots * kSlotW) / (slots - 1))) : 0;
-	const int span = slots * kSlotW + (slots - 1) * gap, x0 = (kPathW - span) / 2, top = 26, first = std::max(0, steps - slots);
+	const int gap = slots > 1 ? std::max(kSlotGapMin, std::min(kSlotGapMax, (roomW - slots * kSlotW) / (slots - 1))) : 0;
+	const int span = slots * kSlotW + (slots - 1) * gap, x0 = roomX + (roomW - span) / 2, top = b.y + 14, first = std::max(0, steps - slots);
 	for (int slot = 0; slot < slots; slot++) {
 		const int i = first + slot;
 		const int sx = x0 + slot * (kSlotW + gap), shieldX = sx + (kSlotW - kSlotShieldW) / 2;
-		if (slot > 0) p.ArrowRight(sx - gap / 2 - 3, top + 18, 7, 11, i < done ? pal::redText : i == done && candidate >= 0 ? pal::caption : pal::hairline);
+		if (slot > 0) p.ArrowRight(sx - gap / 2 - 3, top + 19, 7, 11, i < done ? pal::redText : i == done && candidate >= 0 ? pal::caption : pal::hairline);
 		const int index = i < done && i < static_cast<int>(g.path.size()) ? g.path[i] : i == done ? candidate : -1;
 		if (index < 0) {
 			ShieldShape(p, shieldX + 4, top + 3, kSlotShieldW - 8, kSlotShieldH - 6, pal::bg, pal::hairline, true);
@@ -393,21 +457,173 @@ void PaintPath(Layer &l, const View &v)
 		if (next) p.Frame(shieldX - 3, top - 2, kSlotShieldW + 6, kSlotShieldH + 4, pal::edgeHot);
 		Shield(l, g, index, shieldX, top, kSlotShieldW, kSlotShieldH, next ? 120 : 255);
 		p.Font(3);
-		Raw(p, sx - 6, top + kSlotShieldH + 2, kSlotW + 12, 15, g.territories[index].name, next ? pal::redText : pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		Raw(p, sx - 6, top + kSlotShieldH + 6, kSlotW + 12, 20, g.territories[index].name, next ? pal::redText : pal::text,
+			DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
 }
 
-void PaintLegend(Layer &l, const View &v)
+const char *const kLegendLabels[kStandingCount] = {"Your territory", "You can conquer it", "Out of reach"};
+
+void PaintSwatch(Painter &p, int x, int y, const View &v, int standing)
+{
+	p.Fill(x, y, kSwatch, kSwatch, ToColorRef(v.game.colors[standing]));
+	p.Frame(x, y, kSwatch, kSwatch, pal::lineStrong);
+}
+
+void PaintLegend(Painter &p, const Layout &L, const View &v)
+{
+	const Box &b = L.legend;
+	PaintGlassCard(p, b.x, b.y, b.w, b.h);
+	p.Font(3);
+	if (!L.legendBeside) {
+		const int cell = (b.w - 2 * kCardPad) / kStandingCount;
+		for (int i = 0; i < kStandingCount; i++) {
+			const int x = b.x + kCardPad + i * cell;
+			PaintSwatch(p, x, b.y + (b.h - kSwatch) / 2, v, i);
+			p.Text(x + kSwatch + 10, b.y, cell - kSwatch - 16, b.h, kLegendLabels[i], pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		}
+		return;
+	}
+	PaintSectionLabel(p, b.x + kCardPad, b.y + kLabelY, b.w - 2 * kCardPad, 18, "Legend");
+	p.Font(3);
+	for (int i = 0; i < kStandingCount; i++) {
+		const int y = b.y + 48 + i * kLegendRow;
+		PaintSwatch(p, b.x + kCardPad, y + 3, v, i);
+		p.Text(b.x + kCardPad + kSwatch + 12, y, b.w - 2 * kCardPad - kSwatch - 12, 22, kLegendLabels[i], pal::text,
+			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	}
+}
+
+void PaintHint(Painter &p, const Box &b, const View &v)
+{
+	if (b.h < 80 || b.w <= 2 * kCardPad) return;
+	const char *text = v.game.choosing ? "Click one of your territories on the map and press Select, or double-click it."
+									   : "Click a territory that borders yours and press Attack, or double-click it.";
+	p.Font(3);
+	const int textW = b.w - 2 * kCardPad, h = std::min(b.h, 46 + p.Measure(textW, text) + kCardPad);
+	PaintGlassCard(p, b.x, b.y, b.w, h);
+	PaintSectionLabel(p, b.x + kCardPad, b.y + kLabelY, textW, 18, "Next step");
+	p.Font(3);
+	p.TextWrapped(b.x + kCardPad, b.y + 46, textW, h - 46 - kCardPad / 2, text, pal::textDim);
+}
+
+void PaintTerritoryCard(Layer &l, const Box &b, const View &v)
 {
 	Painter &p = l.p;
-	p.Frame(0, 0, kLegendW, kLegendH, pal::hairline);
-	static const char *const kLabels[kStandingCount] = {"Your territory", "You can conquer it", "Out of reach"};
-	for (int i = 0; i < kStandingCount; i++) {
-		const int y = 10 + i * 21;
-		p.Fill(14, y + 3, 14, 14, ToColorRef(v.game.colors[i]));
-		p.Frame(14, y + 3, 14, 14, pal::bg);
+	const ConquestSnapshot &g = v.game;
+	PaintGlassCard(p, b.x, b.y, b.w, b.h);
+	PaintSectionLabel(p, b.x + kCardPad, b.y + kLabelY, b.w - 2 * kCardPad, 18, g.choosing ? "Select starting area" : "Territory");
+	const int sx = b.x + kCardPad, sy = b.y + 48, tx = sx + kShieldW + 20, tw = b.Right() - kCardPad - tx;
+	if (!Valid(g, g.selected)) {
+		ShieldShape(p, sx + 4, sy + 2, kShieldW - 8, kShieldH - 4, pal::bg, pal::hairline, true);
+		p.Font(2);
+		p.Text(tx, sy - 4, tw, 36, "Choose a territory", pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.Font(3);
-		p.Text(36, y, kLegendW - 46, 20, kLabels[i], pal::text);
+		p.TextWrapped(tx, sy + 38, tw, 52, g.choosing ? "Click a territory on the map to see where you can begin." : "Click a territory on the map to see it here.",
+			pal::textDim);
+		return;
+	}
+	const ConquestTerritory &t = g.territories[g.selected];
+	Shield(l, g, g.selected, sx, sy, kShieldW, kShieldH, 255);
+	p.Font(2);
+	RawCaps(p, tx, sy - 4, tw, 36, t.name, pal::text);
+	const Standing s = Describe(g, t);
+	p.Diamond(tx + 6, sy + 45, 5, pal::panel);
+	p.Diamond(tx + 6, sy + 45, 4, ToColorRef(g.colors[t.standing]));
+	p.Font(4);
+	p.Text(tx + 18, sy + 35, tw - 18, 20, s.line, s.color, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	p.Font(3);
+	p.TextWrapped(tx, sy + 58, tw, b.Bottom() - 4 - (sy + 58), s.detail, pal::textDim);
+}
+
+void PaintDescription(Painter &p, const Box &b, const View &v, Painted &out)
+{
+	const ConquestSnapshot &g = v.game;
+	PaintGlassCard(p, b.x, b.y, b.w, b.h);
+	PaintSectionLabel(p, b.x + kCardPad, b.y + kLabelY, b.w - 2 * kCardPad, 18, "Description");
+	const int x = b.x + kCardPad, w = b.w - 2 * kCardPad, top = b.y + 46, bottom = b.Bottom() - 14;
+	p.Font(0);
+	const std::string text = Valid(g, g.selected) ? g.territories[g.selected].description : std::string();
+	if (text.empty()) {
+		out.maxScroll = 0;
+		if (Valid(g, g.selected)) p.Text(x, top, w, kDescLineH, "No description.", pal::textDim);
+		return;
+	}
+	const std::vector<std::wstring> lines = Wrap(p, text, w - 14);
+	const int visible = std::max(1, (bottom - top) / kDescLineH);
+	out.maxScroll = std::max(0, static_cast<int>(lines.size()) - visible);
+	const int first = std::min(std::max(0, v.scroll), out.maxScroll);
+	p.Clip(x, top, w, bottom - top);
+	for (int i = 0; i < visible && first + i < static_cast<int>(lines.size()); i++) p.LineW(x, top + i * kDescLineH, w - 14, kDescLineH, lines[first + i], pal::body);
+	p.Unclip();
+	if (out.maxScroll > 0) {
+		ScrollbarLook look;
+		look.width = 4;
+		look.minThumb = 18;
+		look.grip = 6;
+		look.track = pal::bg;
+		PaintScrollbar(p, kBarDescription, x + w - 5, top, bottom - top, {first, out.maxScroll, visible}, v.bar, v.mouseX, v.mouseY, look);
+	}
+}
+
+void PaintBonus(Painter &p, const Box &b, const View &v)
+{
+	const ConquestSnapshot &g = v.game;
+	PaintGlassCard(p, b.x, b.y, b.w, b.h);
+	const bool owned = Valid(g, g.selected) && g.territories[g.selected].standing == kStandingOwned;
+	PaintSectionLabel(p, b.x + kCardPad, b.y + kLabelY, b.w - 2 * kCardPad, 18, owned ? "Bonus of this territory" : "Bonus when conquered");
+	const int x = b.x + kCardPad, w = b.w - 2 * kCardPad, top = b.y + 44;
+	const std::string bonus = Valid(g, g.selected) ? g.territories[g.selected].bonus : std::string();
+	p.Font(3);
+	if (bonus.empty()) {
+		p.Text(x, top, w, kBonusLineH, Valid(g, g.selected) ? "No bonus" : "Choose a territory to see its bonus.", pal::textDim,
+			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		return;
+	}
+	const std::vector<std::wstring> lines = Wrap(p, bonus, w);
+	const int maxLines = std::max(1, (b.Bottom() - 10 - top) / kBonusLineH);
+	for (int i = 0; i < maxLines && i < static_cast<int>(lines.size()); i++) {
+		std::wstring line = lines[i];
+		if (i == maxLines - 1 && static_cast<int>(lines.size()) > maxLines) line += L"\x2026";
+		p.LineW(x, top + i * kBonusLineH, w, kBonusLineH, line, pal::text);
+	}
+}
+
+void PaintDifficulty(Painter &p, const Box &b, const View &v)
+{
+	const ConquestSnapshot &g = v.game;
+	p.Font(4);
+	p.TextCaps(b.x, b.y, b.w, 18, "Difficulty", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1);
+	const int count = static_cast<int>(g.difficulties.size());
+	if (!count) return;
+	const int y = b.y + 22;
+	for (int i = 0; i < count; i++) {
+		const int sx = b.x + b.w * i / count, sw = b.x + b.w * (i + 1) / count - sx;
+		const bool on = i == g.difficulty;
+		const bool hot = !on && p.Hover(sx, y, sw, kSegmentH, v.mouseX, v.mouseY);
+		p.Fill(sx, y, sw, kSegmentH, on ? pal::text : hot ? pal::button : pal::field);
+		p.Frame(sx, y, sw, kSegmentH, on ? pal::text : hot ? pal::edgeHot : pal::edge);
+		p.Font(on ? 1 : 0);
+		Raw(p, sx + 2, y, sw - 4, kSegmentH, g.difficulties[i], on ? pal::onLight : pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		if (!on) p.AddHit(sx, y, sw, kSegmentH, kActDifficulty, i);
+	}
+}
+
+void PaintButtons(Painter &p, const Layout &L, const View &v)
+{
+	const ConquestSnapshot &g = v.game;
+	const bool choose = g.choosing || (g.select.visible && !g.start.visible);
+	const ConquestButton main = choose ? g.select : g.start;
+	p.Button(L.main.x, L.main.y, L.main.w, L.main.h, choose ? "Select" : "Attack", kActNative, choose ? kConquestSelect : kConquestStart, v.mouseX, v.mouseY,
+		main.enabled, true);
+	const Box &b = L.second;
+	if (g.save.visible) {
+		const int half = (b.w - 12) / 2;
+		p.Button(b.x, b.y, half, b.h, "Save", kActNative, kConquestSave, v.mouseX, v.mouseY, g.save.enabled);
+		PaintGhostButton(p, b.Right() - half, b.y, half, b.h, "Quit", kActNative, false, g.quit.enabled, v.mouseX, v.mouseY, kConquestQuit);
+	}
+	else {
+		PaintGhostButton(p, b.x, b.y, b.w, b.h, "Quit", kActNative, false, g.quit.enabled, v.mouseX, v.mouseY, kConquestQuit);
 	}
 }
 
@@ -440,38 +656,81 @@ void PaintVictory(Layer &l, const View &v)
 
 RECT At(int x, int y, int w, int h) { return {x, y, x + w, y + h}; }
 
-Canvas g_panel, g_path, g_legend, g_victory;
+RECT ScreenRect(const Painter &p, const Box &b)
+{
+	RECT r = p.R(b.x, b.y, b.w, b.h);
+	OffsetRect(&r, p.ox, p.oy);
+	return r;
+}
+
+Canvas g_screen, g_victory;
+
+void PaintScreen(uint32_t *buf, int w, int h, const View &v, int pressAction, int pressArg, Painted &out)
+{
+	const ConquestSnapshot &g = v.game;
+	// The game's question (quit?) opens over the screen: its pixels are put back on top, over the screen dimmed.
+	RECT hole = {};
+	std::vector<uint32_t> saved;
+	if (g.confirm) {
+		hole = {std::max(0, g.confirmRect[0]), std::max(0, g.confirmRect[1]), std::min(w, g.confirmRect[2] + 1), std::min(h, g.confirmRect[3] + 1)};
+		for (int y = hole.top; y < hole.bottom; y++) saved.insert(saved.end(), buf + static_cast<size_t>(y) * w + hole.left, buf + static_cast<size_t>(y) * w + hole.right);
+	}
+	const ScreenView screen = ScreenViewFor(w, h);
+	PanelRender r(g_screen, buf, w, h);
+	if (!BeginFullScreen(r, screen)) return;
+	Painter &p = r.p;
+	p.pressAction = pressAction;
+	p.pressArg = pressArg;
+	p.noHover = g.confirm || v.victory;
+	UseScreenFonts(p);
+	const RECT crop = g.map ? CropOf(*g.map) : RECT{0, 0, 4, 3};
+	const Layout L = LayoutFor(screen.w, screen.h, crop.right - crop.left, crop.bottom - crop.top);
+	if (g.map) {
+		out.map = ScreenRect(p, L.map);
+		out.crop = crop;
+	}
+	out.desc = ScreenRect(p, L.desc);
+	int hovered = -1;
+	POINT pixel = {};
+	if (!p.noHover && g.regions && MapPixelAt(out, {v.mouseX, v.mouseY}, pixel)) {
+		const uint8_t t = g.regions->territory[static_cast<size_t>(pixel.y) * g.regions->w + pixel.x];
+		if (t != kConquestNoTerritory && Valid(g, t)) hovered = t;
+	}
+	Layer layer{p, {}};
+	const int right = PaintHeaderActions(p, L.head, {{"Back", kActBack, true, g.quit.enabled}}, v.mouseX, v.mouseY);
+	PaintScreenTitle(p, L.head, "Conquest", {}, right, v.mouseX, v.mouseY);
+	PaintPath(layer, L.path, v);
+	PaintMap(layer, L, v, crop, hovered);
+	PaintLegend(p, L, v);
+	if (L.legendBeside) PaintHint(p, L.hint, v);
+	PaintTerritoryCard(layer, L.territory, v);
+	PaintDescription(p, L.desc, v, out);
+	PaintBonus(p, L.bonus, v);
+	PaintDifficulty(p, L.difficulty, v);
+	PaintButtons(p, L, v);
+	if (hovered >= 0) PaintMapTag(p, L, v, hovered);
+	FlushImages(r.canvas, layer);
+	r.End();
+	out.hits = std::move(r.hits);
+	if (!saved.empty()) {
+		DimBackdrop(buf, w, h);
+		size_t i = 0;
+		for (int y = hole.top; y < hole.bottom; y++, i += hole.right - hole.left) std::copy(saved.begin() + i, saved.begin() + i + (hole.right - hole.left), buf + static_cast<size_t>(y) * w + hole.left);
+	}
+}
 }
 
 void PaintConquest(uint32_t *buf, int w, int h, const View &v, int pressAction, int pressArg, Painted &out)
 {
 	out = Painted();
-	const int cx = w / 2, cy = h / 2;
-	const ConquestSnapshot &g = v.game;
-	if (g.open) {
-		out.panel = At(cx + kPanelX, cy + kPanelY, kPanelW, kPanelH);
-		out.path = At(cx + kPathX, cy + kPathY, kPathW, kPathH);
-		out.legend = At(cx - kMapHalfW + kLegendMargin, cy + kMapHalfH - kLegendMargin - kLegendH, kLegendW, kLegendH);
-		// The game's question (quit?) opens over the panel: its pixels are put back on top.
-		RECT hole = {};
-		std::vector<uint32_t> saved;
-		if (g.confirm) {
-			hole = {std::max(0, g.confirmRect[0]), std::max(0, g.confirmRect[1]), std::min(w, g.confirmRect[2] + 1), std::min(h, g.confirmRect[3] + 1)};
-			for (int y = hole.top; y < hole.bottom; y++) saved.insert(saved.end(), buf + static_cast<size_t>(y) * w + hole.left, buf + static_cast<size_t>(y) * w + hole.right);
-		}
-		Render(g_path, buf, w, h, out.path, pressAction, pressArg, out.hits, 0, [&](Layer &l) { PaintPath(l, v); });
-		Render(g_legend, buf, w, h, out.legend, pressAction, pressArg, out.hits, 200, [&](Layer &l) { PaintLegend(l, v); });
-		Render(g_panel, buf, w, h, out.panel, pressAction, pressArg, out.hits, 0, [&](Layer &l) { PaintPanel(l, v, out.maxScroll); });
-		if (!saved.empty()) {
-			size_t i = 0;
-			for (int y = hole.top; y < hole.bottom; y++, i += hole.right - hole.left) std::copy(saved.begin() + i, saved.begin() + i + (hole.right - hole.left), buf + static_cast<size_t>(y) * w + hole.left);
-		}
-	}
+	// Without the map's picture the game's own dialog stays in view and takes the input.
+	if (v.game.open && v.game.map) PaintScreen(buf, w, h, v, pressAction, pressArg, out);
 	if (v.victory) {
 		DimBackdrop(buf, w, h);
 		out.hits.clear();
+		const int cx = w / 2, cy = h / 2;
 		const RECT box = At(cx - kVictoryW / 2, cy - kVictoryH / 2, kVictoryW, kVictoryH);
-		Render(g_victory, buf, w, h, box, pressAction, pressArg, out.hits, 0, [&](Layer &l) { PaintVictory(l, v); });
+		Render(g_victory, buf, w, h, box, pressAction, pressArg, out.hits, [&](Layer &l) { PaintVictory(l, v); });
 		const int nx = (w - kNativeVictoryW) / 2, ny = (h - kNativeVictoryH) / 2;
 		out.ok = At(nx + kOkX, ny + kOkY, kOkW, kOkH);
 	}

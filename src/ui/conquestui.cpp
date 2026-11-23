@@ -4,6 +4,7 @@
 #include "ui/conquestui.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -20,6 +21,8 @@ using namespace conquestui;
 namespace {
 const DWORD kReadEveryMs = 60;
 const int kWheelLines = 3;
+// The difficulties are easy, normal and hard: each visit of the map starts at normal.
+const int kNormal = 1;
 
 struct State {
 	View view;
@@ -27,6 +30,14 @@ struct State {
 	bool mouseDown = false;
 	DWORD lastRead = 0;
 	int wheelRest = 0;
+	// Normal was picked for this visit of the map; the player's own choice stands until it closes.
+	bool mediumSet = false;
+	// A press on the map: its release goes to the map too, at the same pixel. The time and place of the last one tell a double click
+	// when the window gets two presses instead of WM_LBUTTONDBLCLK.
+	bool mapDown = false;
+	POINT mapAt = {};
+	DWORD mapDownAt = 0;
+	POINT mapDownScreen = {-1000, -1000};
 };
 
 std::mutex g_lock;
@@ -64,6 +75,23 @@ bool HandleVictory(UINT msg, POINT at, const RECT &ok)
 	default: return msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST;
 	}
 }
+
+bool SecondClick(POINT at)
+{
+	return GetTickCount() - g_s.mapDownAt <= GetDoubleClickTime() && std::abs(at.x - g_s.mapDownScreen.x) <= GetSystemMetrics(SM_CXDOUBLECLK) / 2 &&
+		std::abs(at.y - g_s.mapDownScreen.y) <= GetSystemMetrics(SM_CYDOUBLECLK) / 2;
+}
+
+// A press on the map goes to the map's own handler: the game picks the territory, or plays it on a double click.
+int MapPress(UINT msg, POINT at, POINT pixel)
+{
+	const bool twice = msg == WM_LBUTTONDBLCLK || SecondClick(at);
+	g_s.mapDown = true;
+	g_s.mapAt = pixel;
+	g_s.mapDownAt = twice ? 0 : GetTickCount();
+	g_s.mapDownScreen = at;
+	return twice ? kConquestMouseDouble : kConquestMouseDown;
+}
 }
 
 void ConquestUiGameTick()
@@ -73,13 +101,27 @@ void ConquestUiGameTick()
 		if (g_s.view.game.open && GetTickCount() - g_s.lastRead < kReadEveryMs) return;
 	}
 	ConquestSnapshot fresh = ConquestRead();
+	bool setNormal = false;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		if (fresh.open && !g_s.mediumSet && fresh.difficulties.size() >= 3) {
+			g_s.mediumSet = true;
+			setNormal = fresh.difficulty != kNormal;
+		}
+	}
+	if (setNormal) {
+		ConquestSetDifficulty(kNormal);
+		fresh = ConquestRead();
+	}
 	std::lock_guard<std::mutex> lock(g_lock);
 	if (fresh.open != g_s.view.game.open) {
-		LogI("ui", "conquest map %s", fresh.open ? "open: the new panel is drawn over it" : "closed");
+		LogI("ui", "conquest map %s", fresh.open ? "open: the mod's screen covers the game's dialog" : "closed");
 		g_s.painted = Painted();
 		g_s.mouseDown = false;
+		g_s.mapDown = false;
 		g_s.view.scroll = 0;
 	}
+	if (!fresh.open) g_s.mediumSet = false;
 	if (fresh.selected != g_s.view.game.selected) g_s.view.scroll = 0;
 	g_s.view.game = std::move(fresh);
 	g_s.lastRead = GetTickCount();
@@ -111,55 +153,73 @@ bool ConquestUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 {
 	if (msg == WM_LBUTTONUP && g_swallowUp) {
 		g_swallowUp = false;
-		std::lock_guard<std::mutex> lock(g_lock);
-		g_s.mouseDown = false;
-		g_s.view.bar = ui::ScrollDrag();
+		bool mapUp = false;
+		POINT pixel = {};
+		{
+			std::lock_guard<std::mutex> lock(g_lock);
+			g_s.mouseDown = false;
+			g_s.view.bar = ui::ScrollDrag();
+			mapUp = g_s.mapDown;
+			pixel = g_s.mapAt;
+			g_s.mapDown = false;
+		}
+		if (mapUp) ConquestMapMouse(kConquestMouseUp, pixel.x, pixel.y);
 		return true;
 	}
 	// A release another screen took leaves the flag up: it must not eat the release of a later click.
 	if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK) g_swallowUp = false;
 	const POINT at = {static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))};
-	int action = kActNone, arg = 0;
-	const bool other = msg != WM_MOUSEMOVE && OtherScreenOwnsInput();
+	const bool mouse = msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST;
+	const bool other = mouse && OtherScreenOwnsInput();
+	int action = kActNone, arg = 0, mapEvent = 0;
+	POINT pixel = {};
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
 		const View &v = g_s.view;
 		if (!v.game.open && !v.victory) return false;
+		// Without the map's picture nothing covers the game's dialog (PaintConquest): it keeps its own input.
+		if (!v.victory && !v.game.map) return false;
 		if (msg == WM_MOUSEMOVE) {
 			g_s.view.mouseX = at.x;
 			g_s.view.mouseY = at.y;
 			BarMouse(msg, wp, at);
-			return false;
+			// The game's controls are still there under the screen: they get no hover, and so show no tooltips.
+			return !other && !v.victory && !v.game.confirm;
 		}
 		if (other) return false;
 		if (v.victory) return HandleVictory(msg, at, g_s.painted.ok);
-		if (v.game.confirm) return false;
+		// The game's question is drawn and answered by the game; the keys stay the game's too (Esc is its Quit).
+		if (v.game.confirm || !mouse) return false;
 		const Painted &pt = g_s.painted;
-		const POINT mouse = {v.mouseX, v.mouseY};
+		const POINT last = {v.mouseX, v.mouseY};
 		switch (msg) {
 		case WM_LBUTTONDOWN:
 		case WM_LBUTTONDBLCLK:
-			if (!Inside(pt.panel, at) && !Inside(pt.path, at) && !Inside(pt.legend, at)) return false;
 			g_s.mouseDown = true;
 			g_swallowUp = true;
 			if (BarMouse(msg, wp, at)) break;
+			if (MapPixelAt(pt, at, pixel)) {
+				mapEvent = MapPress(msg, at, pixel);
+				break;
+			}
 			action = ui::HitActionAt(pt.hits, at, arg, kActNone);
 			break;
 		case WM_MOUSEWHEEL:
 			// The wheel carries screen coordinates: the last position of the mouse is the one inside the game.
-			if (Inside(pt.panel, mouse)) ScrollBy(-ui::WheelSteps(g_s.wheelRest, GET_WHEEL_DELTA_WPARAM(wp)) * kWheelLines);
-			return Inside(pt.panel, mouse) || Inside(pt.path, mouse) || Inside(pt.legend, mouse);
-		case WM_LBUTTONUP:
-			g_s.view.bar = ui::ScrollDrag();
-			return false;
-		default:
-			if (msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST) return Inside(pt.panel, at) || Inside(pt.path, at) || Inside(pt.legend, at);
-			return false;
+			if (Inside(pt.desc, last)) ScrollBy(-ui::WheelSteps(g_s.wheelRest, GET_WHEEL_DELTA_WPARAM(wp)) * kWheelLines);
+			break;
+		default: break;
 		}
 	}
 	// The game's dialog can open others and call back into the mod: no lock here.
-	if (action == kActNative) ConquestPress(arg);
+	if (mapEvent) ConquestMapMouse(mapEvent, pixel.x, pixel.y);
+	else if (action == kActNative) ConquestPress(arg);
+	else if (action == kActBack) ConquestPress(kConquestQuit);
 	else if (action == kActDifficulty) ConquestSetDifficulty(arg);
+	if (mapEvent || action != kActNone) {
+		std::lock_guard<std::mutex> lock(g_lock);
+		g_s.lastRead = 0;
+	}
 	return true;
 }
 
