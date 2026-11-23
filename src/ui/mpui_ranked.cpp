@@ -196,8 +196,8 @@ void ApplySettings(const LeagueMatchTicket &t)
 	if (rules != g.rules && Due(-1)) GameRoomSetRules(rules);
 	if (competitive && (g.siteFlags & kSiteMask) != preset.sites && Due(-2)) GameRoomSetSiteFlags(preset.sites);
 	if (competitive) {
-		SetCombo(g, kOptGold, {Plain(preset.gold)}, true);
-		SetCombo(g, kOptPopulation, {Plain(preset.pop)}, true);
+		SetCombo(g, kOptGold, {Plain(PresetChoice(preset.gold))}, true);
+		SetCombo(g, kOptPopulation, {Plain(PresetChoice(preset.pop))}, true);
 		SetCheck(g, kOptNoBonuses, !preset.bonuses);
 	}
 	const bool fog = s.fog >= 0 ? s.fog == 1 : competitive ? preset.fog : true;

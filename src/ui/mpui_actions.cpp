@@ -338,7 +338,7 @@ void DoAction(int action, int arg)
 				GameRoomSetSiteFlags(pr.sites);
 				GameRoomSetRules(g_s.game.rules);
 				if (pr.game) {
-					auto setCombo = [&](int id, const char *text) {
+					auto setCombo = [&](int id, const std::string &text) {
 						for (GameRoomOption &o : g_s.game.options) {
 							if (o.id != id) continue;
 							for (size_t k = 0; k < o.items.size(); k++) {
@@ -357,8 +357,8 @@ void DoAction(int action, int arg)
 							GameRoomToggleOption(o.id);
 						}
 					};
-					setCombo(0x1005, pr.gold);
-					setCombo(0x1004, pr.pop);
+					setCombo(0x1005, PresetChoice(pr.gold));
+					setCombo(0x1004, PresetChoice(pr.pop));
 					setCheck(0x1007, !pr.fog);
 					setCheck(0x1008, pr.explored);
 					setCheck(0x10a7, !pr.bonuses);

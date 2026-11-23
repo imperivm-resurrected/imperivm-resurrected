@@ -48,7 +48,7 @@ namespace {
 bool PresetGameMatches(const Preset &pr, const OptionGetter &get)
 {
 	if (!pr.game) return true;
-	return get(0x1005, "Starting gold") == pr.gold && get(0x1004, "Population") == pr.pop &&
+	return get(0x1005, "Starting gold") == PresetChoice(pr.gold) && get(0x1004, "Population") == PresetChoice(pr.pop) &&
 		get(0x1007, "No fog") == (pr.fog ? "no" : "yes") && get(0x1008, "Map pre-explored") == (pr.explored ? "yes" : "no") &&
 		get(0x10a7, "Disable bonuses") == (pr.bonuses ? "no" : "yes");
 }

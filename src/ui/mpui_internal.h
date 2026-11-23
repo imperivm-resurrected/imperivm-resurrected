@@ -507,15 +507,19 @@ struct Preset {
 	const char *name;
 	unsigned sites, rules;
 	bool game;
+	// The game's keys of the choices (game.loc.xml), shown in the player's language by PresetChoice.
 	const char *gold, *pop;
 	bool fog, explored, bonuses;
 };
 
 const Preset kPresets[] = {
 	{"Classic", 0, 0, false, "", "", false, false, false},
-	{"Competitive", 0, kRuleLockDiplomacy, true, "5000", "Normal", true, false, false},
-	{"Various", 0, 0, true, "10000", "Alta", false, true, true},
+	{"Competitive", 0, kRuleLockDiplomacy, true, "5000@gold", "Normal@population", true, false, false},
+	{"Various", 0, 0, true, "10000@gold", "High@population", false, true, true},
 };
+
+// A choice of a preset as the room's list shows it in this player's language.
+std::string PresetChoice(const char *key);
 
 const int kPresetCount = static_cast<int>(sizeof(kPresets) / sizeof(kPresets[0]));
 

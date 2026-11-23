@@ -251,6 +251,11 @@ std::string MapTypeLabel(const std::string &item)
 	return colon == std::string::npos ? item : item.substr(colon + 2);
 }
 
+std::string PresetChoice(const char *key)
+{
+	return LangGameTextShown(key);
+}
+
 std::map<std::string, std::string> ParsePublishedOptions(const std::string &optionsText, std::vector<std::string> *order)
 {
 	std::map<std::string, std::string> pub;
