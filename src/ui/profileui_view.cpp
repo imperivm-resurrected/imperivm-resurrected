@@ -261,15 +261,16 @@ void PaintShowcase(Painter &p, const View &v, int x, int y, int w)
 {
 	p.Fill(x - 20, y + 16, 1, kIdentityH - 32, pal::hairline);
 	PaintSectionLabel(p, x, y + 14, w / 2, 22, "Showcase");
-	PaintFrameLink(p, v, x + w, y + 14, w / 2);
+	if (!v.pub.on) PaintFrameLink(p, v, x + w, y + 14, w / 2);
 	if (!v.meLoaded) {
 		// The row of vexilla and phalerae the showcase will hold.
 		for (int k = 0; k < 6 && k * 66 + 56 <= w; k++) PaintSkeleton(p, x + k * 66, y + 44, 56, 56);
 		return;
 	}
-	const int shown = PaintLeagueShowcase(p, x, y + 44, w, 56, v.me, kActLeagueBadge, v.mouseX, v.mouseY);
+	// Another player's showcase is only looked at.
+	const int shown = PaintLeagueShowcase(p, x, y + 44, w, 56, v.me, v.pub.on ? -1 : kActLeagueBadge, v.mouseX, v.mouseY);
 	p.Font(3);
-	if (!shown) {
+	if (!shown && !v.pub.on) {
 		const char *text = "What you win in each season stays here. Play 10 ranked games in a season and win 5 to earn its vexillum.";
 		p.TextWrapped(x, y + 46, w, 58, text, kMuted);
 		return;
@@ -283,7 +284,41 @@ void PaintShowcase(Painter &p, const View &v, int x, int y, int w)
 		p.raw = false;
 		return;
 	}
-	p.Text(x, y + 104, w, 18, "Click one to wear it next to your name.", kMuted, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	if (!v.pub.on) p.Text(x, y + 104, w, 18, "Click one to wear it next to your name.", kMuted, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+}
+
+bool PublicShowcase(const View &v)
+{
+	return std::any_of(v.me.badges.begin(), v.me.badges.end(), [](const LeagueBadge &b) { return b.kind == LeagueBadgeKind::Trophy; }) ||
+		!v.me.cupTitles.empty();
+}
+
+// Under another player's name, where the player's own military rank goes: their rank in each queue of the season, and what the figures
+// come from.
+void PaintPublicStanding(Painter &p, const View &v, int x, int rankY, int w, int labelY)
+{
+	int cx = x;
+	p.Font(1);
+	for (const LeagueRanked *rk : {&v.me.ranked, &v.me.ranked2v2}) {
+		if (!rk->present || rk->tier == LeagueTier::None || rk->placementLeft > 0) continue;
+		std::string text = LeagueRankLabel(rk->tier, rk->division);
+		const std::string queue = Tr(rk->queue == "2v2" ? "2 vs 2" : "1 vs 1");
+		if (cx > x) {
+			const std::string dot = "  \xC2\xB7  ";
+			TextAsIs(p, cx, rankY, std::max(0, x + w - cx), 26, dot, pal::textDim);
+			cx += RawWidth(p, dot);
+		}
+		const int tw = std::min(std::max(0, x + w - cx), RawWidth(p, text));
+		TextAsIs(p, cx, rankY, tw, 26, text, LeagueTierInk(rk->tier));
+		cx += tw;
+		p.Font(3);
+		const std::string tail = " (" + queue + ")";
+		TextAsIs(p, cx, rankY, std::max(0, x + w - cx), 26, tail, pal::textDim);
+		cx += RawWidth(p, tail);
+		p.Font(1);
+	}
+	p.Font(3);
+	p.Text(x, labelY, w, 22, "League and cup games", kMuted, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }
 
 void PaintIdentity(Painter &p, const View &v, const Card &c, const Area &a, const Frame &f)
@@ -291,11 +326,13 @@ void PaintIdentity(Painter &p, const View &v, const Card &c, const Area &a, cons
 	const int x = a.x, y = f.top, w = a.w;
 	PaintGlassCard(p, x, y, w, kIdentityH);
 	const int ax = x + 16, ay = y + 14;
-	const bool steam = c.active && v.avatar && !v.avatar->bgra.empty();
+	// The Steam user's picture, laurel and badge: on the player in use, or on the player the public profile is of.
+	const bool pub = v.pub.on, own = c.active || pub;
+	const bool steam = own && v.avatar && !v.avatar->bgra.empty();
 	// The season's frame and title go with the league account, which is the Steam user's: only on the player in use.
 	const bool league = c.active && v.linked && v.meLoaded;
-	const LeagueFrame frame = league ? LeagueOwnCosmetic(v.me, v.me.equippedFrame) : LeagueFrame();
-	const LeagueFrame title = league ? LeagueOwnCosmetic(v.me, v.me.equippedTitle) : LeagueFrame();
+	const LeagueFrame frame = pub ? v.pub.frame : league ? LeagueOwnCosmetic(v.me, v.me.equippedFrame) : LeagueFrame();
+	const LeagueFrame title = pub ? v.pub.title : league ? LeagueOwnCosmetic(v.me, v.me.equippedTitle) : LeagueFrame();
 	if (steam) {
 		const int in = frame.Shown() ? kLeagueFrameInset : 0;
 		p.Image(ax + in, ay + in, kAvatar - 2 * in, kAvatar - 2 * in, v.avatar->bgra.data(), v.avatar->width, v.avatar->height);
@@ -309,7 +346,7 @@ void PaintIdentity(Painter &p, const View &v, const Card &c, const Area &a, cons
 	const int tx = ax + kAvatar + 22;
 	int right = x + w - 18;
 	// The showcase takes the right of the card where the screen is wide enough for it.
-	const int showcaseW = a.wide && c.active && v.linked ? std::min(600, w * 36 / 100) : 0;
+	const int showcaseW = a.wide && ((c.active && v.linked) || (pub && PublicShowcase(v))) ? std::min(600, w * 36 / 100) : 0;
 	if (showcaseW >= 300) {
 		PaintShowcase(p, v, x + w - 18 - showcaseW, y, showcaseW);
 		right -= showcaseW + 40;
@@ -325,8 +362,8 @@ void PaintIdentity(Painter &p, const View &v, const Card &c, const Area &a, cons
 		right -= bw + 12;
 	}
 	p.Font(2);
-	const PatronTier tier = c.active ? v.patron.tier : PatronTier::None;
-	const LeagueBadge badge = c.active ? v.badge : LeagueBadge();
+	const PatronTier tier = own ? v.patron.tier : PatronTier::None;
+	const LeagueBadge badge = own ? v.badge : LeagueBadge();
 	const int laurelW = tier != PatronTier::None ? PatronLaurelSize(tier) + 8 : 0;
 	const int nameW = right - tx - laurelW - LeagueBadgeRoom(badge);
 	if (tier != PatronTier::None) {
@@ -347,6 +384,10 @@ void PaintIdentity(Painter &p, const View &v, const Card &c, const Area &a, cons
 		p.raw = true;
 		p.TextCaps(tx, y + 44, right - tx, 20, LeagueTitleLabel(title), LeagueFrameInk(title), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 2);
 		p.raw = false;
+	}
+	if (pub) {
+		PaintPublicStanding(p, v, tx, rankY, right - tx, labelY);
+		return;
 	}
 	if (!c.readable) {
 		p.Font(3);
@@ -474,8 +515,11 @@ void PaintLeagueRank(Painter &p, const View &v, const char *title, const LeagueR
 		TextAsIs(p, ix + iw / 3, y + 16, iw - iw / 3, 22, SeasonText(rk.season), pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
 	const bool strip = loaded && played;
+	// The league keeps no streak of another player's: their place in the leaderboard takes its cell.
+	const bool pub = v.pub.on;
+	const char *const labels4[4] = {kStatLabels[0], kStatLabels[1], pub ? "Position" : kStatLabels[2], kStatLabels[3]};
 	bool twoLines = false;
-	for (int i = 0; i < 4; i++) twoLines = twoLines || StatLabelFit(p, iw / 4, kStatLabels[i]) == 2;
+	for (int i = 0; i < 4; i++) twoLines = twoLines || StatLabelFit(p, iw / 4, labels4[i]) == 2;
 	const int stripH = twoLines ? 62 + kStatLabel2H - kStatLabelH : 62, stripY = y + h - stripH - 12;
 	const int zoneTop = y + 52, zoneBottom = strip ? stripY - 12 : y + h - 20;
 	const int emblem = std::max(48, std::min({128, zoneBottom - zoneTop, iw * 30 / 100}));
@@ -518,7 +562,7 @@ void PaintLeagueRank(Painter &p, const View &v, const char *title, const LeagueR
 	TextAsIs(p, tx, by, tw, 44, headline, played ? ink : pal::textDim);
 	if (!played) {
 		p.Font(3);
-		p.TextWrapped(tx, by + 50, tw, 44, "This queue is not part of the season being played.", pal::caption);
+		p.TextWrapped(tx, by + 50, tw, 44, pub ? "No ranked games in this queue this season." : "This queue is not part of the season being played.", pal::caption);
 		return;
 	}
 	p.Font(0);
@@ -538,7 +582,7 @@ void PaintLeagueRank(Painter &p, const View &v, const char *title, const LeagueR
 				p.Frame(tx + i * (box + gap), by + 84, box, 10, pal::hairline);
 			}
 		}
-		if (labels) PaintRankCaption(p, tx, by + 102, tw, captionRoom, "Your first five games place you, at most in Centurion I.");
+		if (labels && !pub) PaintRankCaption(p, tx, by + 102, tw, captionRoom, "Your first five games place you, at most in Centurion I.");
 	}
 	else {
 		std::string line = TrFmt("%s Glory", {Grouped(static_cast<uint64_t>(std::max(0, rk.glory)))});
@@ -554,7 +598,7 @@ void PaintLeagueRank(Painter &p, const View &v, const char *title, const LeagueR
 		if (labels) {
 			p.Font(3);
 			if (elite || !gp.capped) {
-				PaintRankCaption(p, tx, by + 102, tw, captionRoom,
+				if (!pub) PaintRankCaption(p, tx, by + 102, tw, captionRoom,
 					elite ? "Elite rank: it goes by your place in the leaderboard." : "Top division: climb the leaderboard to the elite.");
 			}
 			else {
@@ -580,12 +624,15 @@ void PaintLeagueRank(Painter &p, const View &v, const char *title, const LeagueR
 	std::string peak = kDash;
 	if (rk.peak.present && rk.peak.tier != LeagueTier::None) peak = LeagueRankLabel(rk.peak.tier, rk.peak.division);
 	else if (rk.peak.present && rk.peak.place > 0) peak = "#" + std::to_string(rk.peak.place);
-	PaintStatCell(p, ix, stripY + 8, cellW, stripH - 8, games ? std::to_string(rk.wins) + "\xE2\x80\x93" + std::to_string(rk.losses) : std::string(kDash), kStatLabels[0],
+	PaintStatCell(p, ix, stripY + 8, cellW, stripH - 8, games ? std::to_string(rk.wins) + "\xE2\x80\x93" + std::to_string(rk.losses) : std::string(kDash), labels4[0],
 		pal::text);
-	PaintStatCell(p, ix + cellW, stripY + 8, cellW, stripH - 8, games ? Percent(LeagueWinRate(rk.wins, rk.losses)) : std::string(kDash), kStatLabels[1], pal::text);
-	PaintStatCell(p, ix + 2 * cellW, stripY + 8, cellW, stripH - 8, games ? LeagueStreakText(rk.streak) : std::string(kDash), kStatLabels[2],
-		rk.streak > 0 ? pal::ok : rk.streak < 0 ? pal::bad : pal::text);
-	PaintStatCell(p, ix + 3 * cellW, stripY + 8, iw - 3 * cellW, stripH - 8, peak, kStatLabels[3],
+	PaintStatCell(p, ix + cellW, stripY + 8, cellW, stripH - 8, games ? Percent(LeagueWinRate(rk.wins, rk.losses)) : std::string(kDash), labels4[1], pal::text);
+	if (pub) PaintStatCell(p, ix + 2 * cellW, stripY + 8, cellW, stripH - 8, rk.position > 0 ? "#" + std::to_string(rk.position) : std::string(kDash), labels4[2], pal::text);
+	else {
+		PaintStatCell(p, ix + 2 * cellW, stripY + 8, cellW, stripH - 8, games ? LeagueStreakText(rk.streak) : std::string(kDash), labels4[2],
+			rk.streak > 0 ? pal::ok : rk.streak < 0 ? pal::bad : pal::text);
+	}
+	PaintStatCell(p, ix + 3 * cellW, stripY + 8, iw - 3 * cellW, stripH - 8, peak, labels4[3],
 		rk.peak.present && rk.peak.tier != LeagueTier::None ? LeagueTierInk(rk.peak.tier) : pal::text);
 	for (int i = 1; i < 4; i++) p.Fill(ix + i * cellW, stripY + 14, 1, stripH - 22, pal::hairline);
 }
@@ -658,6 +705,11 @@ void PaintLeagueTrophies(Painter &p, const View &v, int x, int y, int w, int h)
 	}
 	const int listY = y + 52;
 	const int count = v.me.cupsKnown ? static_cast<int>(v.me.cups.size()) : static_cast<int>(trophies.size());
+	if (!count && v.pub.on) {
+		p.Font(3);
+		p.TextWrapped(ix, listY + 6, iw, 64, "No podium in an official cup yet.", kMuted);
+		return;
+	}
 	if (!count) {
 		p.Font(3);
 		p.TextWrapped(ix, listY + 6, iw, 64,
@@ -753,7 +805,7 @@ void PaintGloryChart(Painter &p, const View &v, int x, int y, int w, int h, Tip 
 void PaintLeagueTab(Painter &p, const View &v, const Area &a, const Frame &f, Tip &tip)
 {
 	const int top = f.tilesY, bottom = f.bottom;
-	if (!v.linked) {
+	if (!v.linked && !v.pub.on) {
 		const int h = std::min(bottom - top, 240);
 		PaintGlassCard(p, a.x, top, a.w, h);
 		const int ix = a.x + kLeaguePad, iw = std::min(a.w - 2 * kLeaguePad, 900);
@@ -766,14 +818,22 @@ void PaintLeagueTab(Painter &p, const View &v, const Area &a, const Frame &f, Ti
 		return;
 	}
 	const std::vector<std::string> &q = v.me.queues;
-	const bool plays1 = q.empty() || std::find(q.begin(), q.end(), "1v1") != q.end() || v.me.ranked.present;
-	const bool plays2 = std::find(q.begin(), q.end(), "2v2") != q.end() || v.me.ranked2v2.present;
+	// Another player's queue they have not played this season is said so, whatever the season plays.
+	const bool plays1 = v.pub.on ? v.me.ranked.present : q.empty() || std::find(q.begin(), q.end(), "1v1") != q.end() || v.me.ranked.present;
+	const bool plays2 = v.pub.on ? v.me.ranked2v2.present : std::find(q.begin(), q.end(), "2v2") != q.end() || v.me.ranked2v2.present;
 	const int half = (a.w - kGap) / 2, rightX = a.x + half + kGap, rightW = a.w - half - kGap;
 	const int rankH = std::max(200, std::min(300, (bottom - top - kGap) * 48 / 100));
 	PaintLeagueRank(p, v, "Ranked 1 vs 1", v.me.ranked, plays1, a.x, top, half, rankH);
 	PaintLeagueRank(p, v, "Ranked 2 vs 2", v.me.ranked2v2, plays2, rightX, top, rightW, rankH);
 	// Under the ranks, the season's Glory beside the tournaments and the seasons.
 	const int lowY = top + rankH + kGap, lowH = bottom - lowY;
+	// The league keeps another player's seasons for themselves: their tournaments take that room.
+	if (v.pub.on) {
+		const int chartW = (a.w - kGap) * 55 / 100, trophiesX = a.x + chartW + kGap;
+		PaintGloryChart(p, v, a.x, lowY, chartW, lowH, tip);
+		PaintLeagueTrophies(p, v, trophiesX, lowY, a.x + a.w - trophiesX, lowH);
+		return;
+	}
 	const int chartW = (a.w - 2 * kGap) * 40 / 100, listW = (a.w - 2 * kGap - chartW) / 2;
 	const int trophiesX = a.x + chartW + kGap, seasonsX = trophiesX + listW + kGap;
 	PaintGloryChart(p, v, a.x, lowY, chartW, lowH, tip);
@@ -787,8 +847,11 @@ void PaintCardTitle(Painter &p, int x, int y, int w, const std::string &title)
 	p.Text(x + kCardPad, y + 11, w - kCardPad * 2, 22, title, pal::redText);
 }
 
+using SummaryRows = std::vector<std::pair<const char *, std::string>>;
+SummaryRows PublicSummaryRows(const View &v);
+
 // Two columns over the evolution at full width, three in a strip beside the list.
-void PaintSummary(Painter &p, const Card &c, int x, int y, int w, int h, int columns)
+void PaintSummary(Painter &p, const View &v, const Card &c, int x, int y, int w, int h, int columns)
 {
 	PaintGlassCard(p, x, y, w, h);
 	PaintCardTitle(p, x, y, w, "Summary");
@@ -798,16 +861,23 @@ void PaintSummary(Painter &p, const Card &c, int x, int y, int w, int h, int col
 	if (ok && s.favoriteRace >= 0) civ = (c.favoriteCiv.empty() ? Tr("Unknown") : c.favoriteCiv) + " \xC2\xB7 " + Percent(s.favoriteRacePercent);
 	const std::string best = ok && !c.bestUnit.empty() ? TrFmt("%s \xC2\xB7 level %s", {c.bestUnit, std::to_string(s.bestLevel)}) : std::string(kDash);
 	const std::string army = ok && s.largestArmy ? TrFmt("%s units", {Grouped(s.largestArmy)}) : std::string(kDash);
-	const std::pair<const char *, std::string> rows[] = {
-		{"Skirmish", ok ? GamesAndWins(s.singleGames, s.singleWins) : std::string(kDash)},
-		{"Multiplayer", ok ? GamesAndWins(s.multiGames, s.multiWins) : std::string(kDash)},
-		{"Favourite civilization", civ},
-		{"Favourite unit", ok && !c.favoriteUnit.empty() ? c.favoriteUnit : std::string(kDash)},
-		{"Best unit", best},
-		{"Largest army", army},
-	};
-	constexpr int count = sizeof(rows) / sizeof(rows[0]), colGap = 20;
-	const int rowH = columns > 1 ? 46 : std::min(54, (h - kCardHead - 10) / count), inner = w - kCardPad * 2, colW = (inner - (columns - 1) * colGap) / columns;
+	const SummaryRows rows = v.pub.on ? PublicSummaryRows(v)
+									  : SummaryRows{
+											{"Skirmish", ok ? GamesAndWins(s.singleGames, s.singleWins) : std::string(kDash)},
+											{"Multiplayer", ok ? GamesAndWins(s.multiGames, s.multiWins) : std::string(kDash)},
+											{"Favourite civilization", civ},
+											{"Favourite unit", ok && !c.favoriteUnit.empty() ? c.favoriteUnit : std::string(kDash)},
+											{"Best unit", best},
+											{"Largest army", army},
+										};
+	const int count = static_cast<int>(rows.size()), colGap = 20;
+	if (!count) {
+		p.Font(3);
+		p.Text(x, y + kCardHead, w, h - kCardHead - 8, "No games yet", kMuted, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		return;
+	}
+	const int rowH = columns > 1 ? 46 : std::min(54, (h - kCardHead - 10) / std::max(1, count)), inner = w - kCardPad * 2,
+			  colW = (inner - (columns - 1) * colGap) / columns;
 	for (int i = 0; i < count; i++) {
 		const int cx = x + kCardPad + (i % columns) * (colW + colGap), ry = y + kCardHead + (i / columns) * rowH;
 		if (i >= columns) p.Fill(cx, ry, colW, 1, pal::hairline);
@@ -900,9 +970,8 @@ std::vector<MatchFacts> FactsOfCard(const Card &c)
 // The civilization whose games the chart and the history show: the one chosen in the civilizations tab, every one elsewhere.
 int ShownCiv(const View &v)
 {
-	const Card *c = SelectedCard(v);
-	if (ShownTab(v) != kTabCivs || !c || v.civ == kCivAll) return kCivAll;
-	return std::any_of(c->games.begin(), c->games.end(), [&](const GameRow &g) { return g.race == v.civ; }) ? v.civ : kCivAll;
+	if (ShownTab(v) != kTabCivs || v.civ == kCivAll) return kCivAll;
+	return CivKnown(v, v.civ) ? v.civ : kCivAll;
 }
 
 int SegmentsWidth(Painter &p, const std::vector<std::string> &labels)
@@ -913,8 +982,10 @@ int SegmentsWidth(Painter &p, const std::vector<std::string> &labels)
 	return w;
 }
 
-// Translated labels side by side in a row as wide as `w`, the room left over shared between them.
-void PaintSegments(Painter &p, int x, int y, int w, const std::vector<std::string> &labels, int selected, int action, int mx, int my)
+// Translated labels side by side in a row as wide as `w`, the room left over shared between them. A click gives the label's position, or
+// its value in `args`.
+void PaintSegments(Painter &p, int x, int y, int w, const std::vector<std::string> &labels, int selected, int action, int mx, int my,
+	const std::vector<int> *args = nullptr)
 {
 	const int n = static_cast<int>(labels.size());
 	if (!n) return;
@@ -935,7 +1006,7 @@ void PaintSegments(Painter &p, int x, int y, int w, const std::vector<std::strin
 		else p.Fill(bx, y, bw, kSegH, hot ? pal::buttonHover : pal::field);
 		p.Frame(bx, y, bw, kSegH, on ? pal::text : hot ? pal::edgeHot : pal::edge);
 		p.Text(bx + 2, y, bw - 4, kSegH, labels[i], on ? pal::onLight : pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		if (!on) p.AddHit(bx, y, bw, kSegH, action, i);
+		if (!on) p.AddHit(bx, y, bw, kSegH, action, args && i < static_cast<int>(args->size()) ? (*args)[i] : i);
 		bx += bw - 1;
 	}
 }
@@ -986,13 +1057,20 @@ void PaintEvolution(Painter &p, const View &v, const Card &c, const Box &b, Tip 
 		return;
 	}
 	// The mode follows the title, the metrics take the row under it and the range goes under the plot.
-	const std::vector<std::string> modes = Translated({"All games", "Skirmish", "Multiplayer", "Ranked", "Tournament"});
+	static const char *const kModeLabels[] = {"All games", "Skirmish", "Multiplayer", "Ranked", "Tournament"};
+	const std::vector<int> modeArgs = ChartModes(v), metricArgs = ChartMetrics(v);
+	std::vector<std::string> modes, metrics;
+	for (int m : modeArgs) modes.push_back(Tr(kModeLabels[m]));
+	for (int m : metricArgs) metrics.push_back(Tr(kMetricShort[m]));
+	const auto at = [](const std::vector<int> &list, int value) {
+		const auto it = std::find(list.begin(), list.end(), value);
+		return it == list.end() ? 0 : static_cast<int>(it - list.begin());
+	};
+	const int modeAt = at(modeArgs, v.chartMode), metricAt = at(metricArgs, v.metric);
 	const int modeW = SegmentsWidth(p, modes);
-	PaintSegments(p, right - modeW, b.y + 8, modeW, modes, v.chartMode, kActChartMode, v.mouseX, v.mouseY);
+	PaintSegments(p, right - modeW, b.y + 8, modeW, modes, modeAt, kActChartMode, v.mouseX, v.mouseY, &modeArgs);
 	const int cy = b.y + kCardHead + 2;
-	std::vector<std::string> metrics;
-	for (const char *m : kMetricShort) metrics.push_back(Tr(m));
-	PaintSegments(p, x0, cy, inner, metrics, v.metric, kActMetric, v.mouseX, v.mouseY);
+	PaintSegments(p, x0, cy, inner, metrics, metricAt, kActMetric, v.mouseX, v.mouseY, &metricArgs);
 	const std::vector<std::string> ranges = Translated({"Last 20", "Last 50", "All games"});
 	const int rangeW = SegmentsWidth(p, ranges);
 	const int footY = b.y + b.h - kSegH - 10;
@@ -1000,14 +1078,14 @@ void PaintEvolution(Painter &p, const View &v, const Card &c, const Box &b, Tip 
 
 	const std::vector<MatchFacts> facts = FactsOfCard(c);
 	const size_t limit = v.chartRange == kRange20 ? 20 : v.chartRange == kRange50 ? 50 : 0;
-	const std::vector<size_t> shown = MatchSelect(facts, static_cast<MatchMode>(v.chartMode), kOutcomeAll, limit, ShownCiv(v));
+	const std::vector<size_t> shown = MatchSelect(facts, static_cast<MatchMode>(modeArgs[modeAt]), kOutcomeAll, limit, ShownCiv(v));
 	const int plotTop = cy + kSegH + 30, bottom = footY - 10, plotH = bottom - plotTop;
 	if (shown.empty() || plotH < 20) {
 		p.Font(3);
 		p.Text(x0, plotTop, inner, std::max(20, plotH), "No games in this filter.", kMuted, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		return;
 	}
-	const MatchMetric metric = static_cast<MatchMetric>(v.metric);
+	const MatchMetric metric = static_cast<MatchMetric>(metricArgs[metricAt]);
 	std::vector<double> values;
 	for (size_t i : shown) values.push_back(MatchMetricValue(facts[i], metric));
 	const double top = MatchChartTop(values, metric == kMetricKillsPerLoss ? 0.5 : 1);
@@ -1108,6 +1186,20 @@ std::vector<DetailCell> DetailCells(const GameRow &g, const std::vector<MatchFac
 		cell.good = (value > avg) == higherIsBetter;
 	};
 	std::vector<DetailCell> cells;
+	if (g.remote) {
+		// What the league keeps of a game.
+		if (!g.opponents.empty()) cells.push_back({Tr(g.opponents.find(", ") == std::string::npos ? "Opponent" : "Opponents"), g.opponents});
+		if (!g.cupName.empty()) cells.push_back({Tr("Tournament"), g.cupName});
+		else if (!g.queue.empty()) cells.push_back({Tr("Queue"), Tr(g.queue == "2v2" ? "2 vs 2" : "1 vs 1")});
+		if (!g.map.empty()) cells.push_back({Tr("Map"), LeagueMapText(g.map)});
+		cells.push_back({Tr("Kills"), Grouped(g.kills)});
+		trend(kMetricKills, true, cells.back());
+		cells.push_back({Tr("Losses"), Grouped(g.losses)});
+		trend(kMetricLosses, false, cells.back());
+		cells.push_back({Tr(narrow ? "K/L ratio" : "Kills per loss"), OneDecimal(MatchMetricValue(f, kMetricKillsPerLoss))});
+		trend(kMetricKillsPerLoss, true, cells.back());
+		return cells;
+	}
 	cells.push_back({Tr("Units produced"), Grouped(g.produced)});
 	cells.push_back({Tr("Kills"), Grouped(g.kills)});
 	trend(kMetricKills, true, cells.back());
@@ -1175,6 +1267,7 @@ void PaintHistory(Painter &p, const View &v, const Card &c, const Box &b, Tip &t
 		const int ty = b.y + b.h / 2 - 34;
 		p.Font(0);
 		p.Text(x0, ty, gm.inner, 26, c.readable ? "No games recorded yet." : kDash, pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		if (v.pub.on) return;
 		p.Font(3);
 		p.Text(x0 + 20, ty + 34, gm.inner - 40, 66, "Finish a skirmish or a multiplayer game and it will show here.", pal::textDim, DT_CENTER | DT_TOP | DT_WORDBREAK);
 		return;
@@ -1299,19 +1392,59 @@ constexpr int kCivRowH = 36, kCivTableHead = 28, kChipGap = 6, kChipArrowW = 30;
 constexpr int kCivsMinLowH = 480;
 // The chart's controls take about 150 units: under this its plot would be too short to read.
 constexpr int kCivMinChartH = 230;
-// The figures sit in rows of label and value, two to a row; the best unit has a row of its own.
-constexpr int kCivFigureRows = 6, kCivFigureRowH = 26, kCivFigureMinRowH = 22, kCivFigurePad = 14;
+// The figures sit in rows of label and value, two to a row; the last one alone has a row of its own.
+constexpr int kCivFigureRowH = 26, kCivFigureMinRowH = 22, kCivFigurePad = 14;
 
-std::string CivNameOf(const Card &c, int race)
+std::string CivNameOf(const View &v, const Card &c, int race)
 {
 	if (race == kCivAll) return Tr("All civilizations");
+	for (const PublicCiv &pc : v.pub.civs) {
+		if (pc.race == race && !pc.name.empty()) return pc.name;
+	}
 	for (const GameRow &g : c.games) {
 		if (g.race == race && !g.civ.empty()) return g.civ;
 	}
 	return Tr("Unknown");
 }
 
+// The civilizations of the tab: those of the player's own games, or those the league has figures of.
+std::vector<int> CivsOf(const View &v, const std::vector<MatchFacts> &facts)
+{
+	if (!v.pub.on) return MatchCivsPlayed(facts);
+	std::vector<int> out;
+	for (const PublicCiv &pc : v.pub.civs) out.push_back(pc.race);
+	return out;
+}
+
+MatchCivRecord RecordOf(const View &v, const std::vector<MatchFacts> &facts, int race)
+{
+	if (!v.pub.on) return MatchCivRecordOf(facts, race);
+	if (race == kCivAll) return v.pub.all;
+	for (const PublicCiv &pc : v.pub.civs) {
+		if (pc.race == race) return pc.record;
+	}
+	return MatchCivRecord();
+}
+
 std::string Rounded(double value) { return Grouped(static_cast<uint64_t>(std::max(0.0, value) + 0.5)); }
+
+SummaryRows PublicSummaryRows(const View &v)
+{
+	const MatchCivRecord &all = v.pub.all;
+	SummaryRows rows;
+	if (!v.pub.civs.empty() && v.pub.civs.front().race >= 0 && all.games > 0) {
+		const PublicCiv &fav = v.pub.civs.front();
+		rows.push_back({"Favourite civilization", fav.name + " \xC2\xB7 " + Percent(PercentOf(fav.record.games, all.games))});
+	}
+	if (all.games > 0) rows.push_back({"Average duration", Duration(static_cast<uint32_t>(all.minutes * 60000 + 0.5))});
+	if (all.ran > 0) {
+		rows.push_back({"K/D", OneDecimal(all.killRatio)});
+		rows.push_back({"Kills per game", Rounded(all.kills1)});
+		rows.push_back({"Average damage", Rounded(all.damageDealt)});
+		rows.push_back({"Gold per game", Rounded(all.gold)});
+	}
+	return rows;
+}
 
 // On the left the figures over the chart; on the right the table, as tall as its rows up to a few, over the history.
 struct CivsLayout {
@@ -1349,7 +1482,7 @@ struct ChipStrip {
 	bool scrolls = false;
 };
 
-ChipStrip ChipStripOf(Painter &p, const Card &c, const std::vector<int> &civs, int x, int y, int w)
+ChipStrip ChipStripOf(Painter &p, const View &v, const Card &c, const std::vector<int> &civs, int x, int y, int w)
 {
 	ChipStrip s;
 	s.races = {kCivAll};
@@ -1357,7 +1490,7 @@ ChipStrip ChipStripOf(Painter &p, const Card &c, const std::vector<int> &civs, i
 	p.Font(3);
 	int at = 0;
 	for (int race : s.races) {
-		s.labels.push_back(CivNameOf(c, race));
+		s.labels.push_back(CivNameOf(v, c, race));
 		s.lefts.push_back(at);
 		s.widths.push_back(RawWidth(p, s.labels.back()) + 2 * kSegPad);
 		at += s.widths.back() + kChipGap;
@@ -1407,11 +1540,12 @@ void PaintCivChips(Painter &p, const View &v, const ChipStrip &s, int shown)
 	}
 }
 
-void PaintCivTiles(Painter &p, const MatchCivRecord &r, const Area &a, int y, int h)
+// The league counts the kills only of the games with figures (when figured).
+void PaintCivTiles(Painter &p, const MatchCivRecord &r, const Area &a, int y, int h, bool figured)
 {
 	const int tileW = (a.w - 3 * kTileGap) / 4;
 	const std::string values[4] = {r.games ? Grouped(r.games) : std::string(kDash), r.games ? Percent(r.winPercent) : std::string(kDash),
-		r.games ? OneDecimal(r.killRatio) : std::string(kDash), r.ran ? Rounded(r.damageDealt) : std::string(kDash)};
+		r.games && (!figured || r.ran) ? OneDecimal(r.killRatio) : std::string(kDash), r.ran ? Rounded(r.damageDealt) : std::string(kDash)};
 	const char *labels[4] = {"Games", "Wins", "K/D", "Average damage"};
 	for (int i = 0; i < 4; i++) {
 		const int x = a.x + i * (tileW + kTileGap), w = i == 3 ? a.x + a.w - x : tileW;
@@ -1423,8 +1557,14 @@ void PaintCivTiles(Painter &p, const MatchCivRecord &r, const Area &a, int y, in
 	}
 }
 
-std::string CivFiguresNote(const MatchCivRecord &r)
+std::string CivFiguresNote(const View &v, const MatchCivRecord &r)
 {
+	// The league's figures come from the games whose report had them.
+	if (v.pub.on) {
+		if (r.ran >= r.games) return std::string();
+		return r.ran == 1 ? TrFmt("The averages come from 1 of the %s games.", {Grouped(r.games)})
+						  : TrFmt("The averages come from %s of the %s games.", {Grouped(r.ran), Grouped(r.games)});
+	}
 	std::string note = Tr("The averages leave out the abandoned games.");
 	if (r.scriptGames) {
 		note += " " + (r.scriptGames == 1 ? Tr("In 1 game the map's script counted the kills and deaths.")
@@ -1433,21 +1573,32 @@ std::string CivFiguresNote(const MatchCivRecord &r)
 	return note;
 }
 
-int CivFiguresNoteHeight(Painter &p, const MatchCivRecord &r, int w)
+int CivFiguresNoteHeight(Painter &p, const View &v, const MatchCivRecord &r, int w)
 {
+	const std::string note = CivFiguresNote(v, r);
+	if (note.empty()) return 0;
 	p.Font(3);
 	p.raw = true;
-	const int h = p.Measure(w - kCardPad * 2, CivFiguresNote(r));
+	const int h = p.Measure(w - kCardPad * 2, note);
 	p.raw = false;
 	return h;
 }
 
-// What a game with the civilization averages, as tall as its rows, and under them what the averages leave out when there is room.
-void PaintCivFigures(Painter &p, const Card &c, const MatchCivRecord &r, const Box &b, int rowH, int noteH)
+// The figures of a game with the civilization. The league keeps neither the food nor the gold spent nor the best unit, and another
+// player's figures that it has none of are left out.
+SummaryRows CivFigureRows(const View &v, const Card &c, const MatchCivRecord &r)
 {
-	PaintGlassCard(p, b.x, b.y, b.w, b.h);
-	PaintCardTitle(p, b.x, b.y, b.w, "Per game");
 	auto average = [&](double value) { return r.ran ? Rounded(value) : std::string(kDash); };
+	if (v.pub.on) {
+		SummaryRows rows;
+		if (r.ran) {
+			rows = {{"Kills", average(r.kills1)}, {"Losses", average(r.deaths1)}, {"Damage dealt", average(r.damageDealt)},
+				{"Damage taken", average(r.damageTaken)}, {"Gold gathered", average(r.gold)}, {"Units produced", average(r.produced)}};
+			if (r.army > 0) rows.push_back({"Largest army", average(r.army)});
+		}
+		if (r.games) rows.push_back({"Duration", Duration(static_cast<uint32_t>(r.minutes * 60000 + 0.5))});
+		return rows;
+	}
 	std::string spent = kDash;
 	if (r.goldSpentGames) {
 		spent = Rounded(r.goldSpent);
@@ -1459,7 +1610,7 @@ void PaintCivFigures(Painter &p, const Card &c, const MatchCivRecord &r, const B
 	if (r.bestGame >= 0 && !c.games[r.bestGame].bestUnit.empty()) {
 		best = TrFmt("%s \xC2\xB7 level %s", {c.games[r.bestGame].bestUnit, std::to_string(r.bestLevel)});
 	}
-	const std::pair<const char *, std::string> rows[] = {
+	return {
 		{"Kills", average(r.kills1)},
 		{"Losses", average(r.deaths1)},
 		{"Damage dealt", average(r.damageDealt)},
@@ -1472,8 +1623,22 @@ void PaintCivFigures(Painter &p, const Card &c, const MatchCivRecord &r, const B
 		{"Duration", r.ran ? Duration(static_cast<uint32_t>(r.minutes * 60000 + 0.5)) : std::string(kDash)},
 		{"Best unit", best},
 	};
-	constexpr int count = sizeof(rows) / sizeof(rows[0]), columns = 2, colGap = 24;
+}
+
+int FigureRowCount(const SummaryRows &rows) { return std::max(1, static_cast<int>(rows.size() + 1) / 2); }
+
+// What a game with the civilization averages, as tall as its rows, and under them what the averages leave out when there is room.
+void PaintCivFigures(Painter &p, const View &v, const SummaryRows &rows, const MatchCivRecord &r, const Box &b, int rowH, int noteH)
+{
+	PaintGlassCard(p, b.x, b.y, b.w, b.h);
+	PaintCardTitle(p, b.x, b.y, b.w, "Per game");
+	constexpr int columns = 2, colGap = 24;
+	const int count = static_cast<int>(rows.size());
 	const int inner = b.w - kCardPad * 2, colW = (inner - colGap) / columns;
+	if (!count) {
+		p.Font(3);
+		p.Text(b.x, b.y + kCardHead, b.w, b.h - kCardHead - 8, kDash, kMuted, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	}
 	for (int i = 0; i < count; i++) {
 		const int cx = b.x + kCardPad + (i % columns) * (colW + colGap), ry = b.y + kCardHead + (i / columns) * rowH;
 		// The last one alone in its row has the whole width.
@@ -1486,10 +1651,10 @@ void PaintCivFigures(Painter &p, const Card &c, const MatchCivRecord &r, const B
 		p.Text(cx, ry, cw - vw - 10, rowH, rows[i].first, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
 	if (noteH <= 0) return;
-	const int noteY = b.y + kCardHead + kCivFigureRows * rowH + 4;
+	const int noteY = b.y + kCardHead + FigureRowCount(rows) * rowH + 4;
 	p.Font(3);
 	p.raw = true;
-	p.TextWrapped(b.x + kCardPad, noteY, inner, std::max(0, b.y + b.h - 6 - noteY), CivFiguresNote(r), kMuted);
+	p.TextWrapped(b.x + kCardPad, noteY, inner, std::max(0, b.y + b.h - 6 - noteY), CivFiguresNote(v, r), kMuted);
 	p.raw = false;
 }
 
@@ -1531,7 +1696,7 @@ void PaintCivTable(Painter &p, const View &v, const Card &c, const std::vector<M
 		const int ry = pane.Top() + i * kCivRowH, rw = listRight - x0;
 		if (!pane.Shows(ry, kCivRowH)) continue;
 		const int race = civs[i];
-		const MatchCivRecord r = MatchCivRecordOf(facts, race);
+		const MatchCivRecord r = RecordOf(v, facts, race);
 		const bool on = race == shown;
 		const bool hot = !on && p.Hover(x0, ry, rw, kCivRowH, v.mouseX, v.mouseY);
 		if (on) {
@@ -1541,9 +1706,11 @@ void PaintCivTable(Painter &p, const View &v, const Card &c, const std::vector<M
 		else if (hot) p.Fill(x0, ry, rw, kCivRowH, kRowHot);
 		else if (i) p.Fill(x0, ry, rw, 1, kRule);
 		p.Font(4);
-		TextAsIs(p, x0 + 12, ry, listRight - 5 * colW - x0 - 20, kCivRowH, CivNameOf(c, race), race >= 0 ? pal::text : kMuted);
-		const std::string cells[5] = {Grouped(r.games), Percent(r.winPercent), OneDecimal(r.killRatio), r.ran ? Rounded(r.damageDealt) : std::string(kDash),
-			r.ran ? Duration(static_cast<uint32_t>(r.minutes * 60000 + 0.5)) : std::string(kDash)};
+		TextAsIs(p, x0 + 12, ry, listRight - 5 * colW - x0 - 20, kCivRowH, CivNameOf(v, c, race), race >= 0 ? pal::text : kMuted);
+		// The league has the duration of every game, and the kills of those with figures.
+		const bool timed = v.pub.on ? r.games > 0 : r.ran > 0;
+		const std::string cells[5] = {Grouped(r.games), Percent(r.winPercent), !v.pub.on || r.ran ? OneDecimal(r.killRatio) : std::string(kDash),
+			r.ran ? Rounded(r.damageDealt) : std::string(kDash), timed ? Duration(static_cast<uint32_t>(r.minutes * 60000 + 0.5)) : std::string(kDash)};
 		for (int k = 0; k < 5; k++) {
 			p.Font(k == 2 ? 4 : 3);
 			TextAsIs(p, listRight - (5 - k) * colW, ry, colW, kCivRowH, cells[k], k == 2 ? pal::text : pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
@@ -1555,20 +1722,22 @@ void PaintCivTable(Painter &p, const View &v, const Card &c, const std::vector<M
 void PaintCivsTab(Painter &p, const View &v, const Card &c, const Area &a, const Frame &f, Tip &tip)
 {
 	const std::vector<MatchFacts> facts = FactsOfCard(c);
-	const std::vector<int> civs = MatchCivsPlayed(facts);
+	const std::vector<int> civs = CivsOf(v, facts);
 	const int shown = ShownCiv(v);
-	const MatchCivRecord r = MatchCivRecordOf(facts, shown);
+	const MatchCivRecord r = RecordOf(v, facts, shown);
 	const CivsLayout l = CivsLayoutOf(a, f, static_cast<int>(civs.size()));
-	PaintCivChips(p, v, ChipStripOf(p, c, civs, a.x, l.chipsY, a.w), shown);
-	if (l.tiles) PaintCivTiles(p, r, a, l.tilesY, f.tileH);
+	PaintCivChips(p, v, ChipStripOf(p, v, c, civs, a.x, l.chipsY, a.w), shown);
+	if (l.tiles) PaintCivTiles(p, r, a, l.tilesY, f.tileH, v.pub.on);
 	// The figures line up with the table when they come out close to it, and never leave the chart too short.
-	int noteH = CivFiguresNoteHeight(p, r, l.left.w);
-	int figH = kCardHead + kCivFigureRows * kCivFigureRowH + noteH + kCivFigurePad;
-	if (std::abs(figH - l.table.h) <= 30 && l.table.h - kCardHead - kCivFigurePad - noteH >= kCivFigureRows * (kCivFigureRowH - 2)) figH = l.table.h;
-	figH = std::max(kCardHead + kCivFigureRows * kCivFigureMinRowH + kCivFigurePad, std::min(figH, l.left.h - kGap - kCivMinChartH));
-	if (figH - kCardHead - kCivFigurePad - noteH < kCivFigureRows * kCivFigureMinRowH) noteH = 0;
-	const int rowH = std::min(30, (figH - kCardHead - kCivFigurePad - noteH) / kCivFigureRows);
-	PaintCivFigures(p, c, r, {l.left.x, l.left.y, l.left.w, figH}, rowH, noteH);
+	const SummaryRows figures = CivFigureRows(v, c, r);
+	const int figRows = FigureRowCount(figures);
+	int noteH = CivFiguresNoteHeight(p, v, r, l.left.w);
+	int figH = kCardHead + figRows * kCivFigureRowH + noteH + kCivFigurePad;
+	if (std::abs(figH - l.table.h) <= 30 && l.table.h - kCardHead - kCivFigurePad - noteH >= figRows * (kCivFigureRowH - 2)) figH = l.table.h;
+	figH = std::max(kCardHead + figRows * kCivFigureMinRowH + kCivFigurePad, std::min(figH, l.left.h - kGap - kCivMinChartH));
+	if (figH - kCardHead - kCivFigurePad - noteH < figRows * kCivFigureMinRowH) noteH = 0;
+	const int rowH = std::min(30, (figH - kCardHead - kCivFigurePad - noteH) / figRows);
+	PaintCivFigures(p, v, figures, r, {l.left.x, l.left.y, l.left.w, figH}, rowH, noteH);
 	PaintEvolution(p, v, c, {l.left.x, l.left.y + figH + kGap, l.left.w, l.left.h - figH - kGap}, tip);
 	PaintCivTable(p, v, c, facts, civs, shown, l.table);
 	PaintHistory(p, v, c, l.history, tip);
@@ -1619,7 +1788,7 @@ void PaintGloryChart(Painter &p, const View &v, int x, int y, int w, int h, Tip 
 		const bool placing = !rk.present || rk.placementLeft > 0;
 		p.Font(3);
 		p.TextWrapped(ix, y + 60, iw, std::max(0, h - 76),
-			placing ? "Once your placement games are over, your Glory after each ranked game of the season shows here." : "No ranked games this season yet.", kMuted);
+			placing && !v.pub.on ? "Once your placement games are over, your Glory after each ranked game of the season shows here." : "No ranked games this season yet.", kMuted);
 		return;
 	}
 	const LeagueGloryAxis axis = LeagueGloryAxisOf(points);
@@ -1696,14 +1865,54 @@ void PaintDetail(Painter &p, const View &v, const Card &c, const Frame &f, Tip &
 	}
 	PaintTiles(p, c, a, f);
 	const Lower l = LowerLayout(a, f);
-	PaintSummary(p, c, l.summary.x, l.summary.y, l.summary.w, l.summary.h, l.summaryColumns);
+	PaintSummary(p, v, c, l.summary.x, l.summary.y, l.summary.w, l.summary.h, l.summaryColumns);
 	PaintEvolution(p, v, c, l.chart, tip);
 	PaintHistory(p, v, c, l.history, tip);
 }
 
-// The title with the way back at the top right and, for another player than the one in use, the button that changes to it.
+// Another player's profile while the league answers, or when it has nothing of them.
+void PaintPublicPending(Painter &p, const View &v, const Card &c, const Frame &f)
+{
+	const Area a = DetailArea(v);
+	PaintIdentity(p, v, c, a, f);
+	const LeagueProfileState state = v.pub.state;
+	if (state == LeagueProfileState::Loading || state == LeagueProfileState::None) {
+		const int tileW = (a.w - 3 * kTileGap) / 4;
+		for (int i = 0; i < 4; i++) {
+			const int x = a.x + i * (tileW + kTileGap);
+			PaintSkeleton(p, x, f.tilesY, i == 3 ? a.x + a.w - x : tileW, f.tileH);
+		}
+		const Lower l = LowerLayout(a, f);
+		PaintSkeleton(p, l.summary.x, l.summary.y, l.summary.w, l.summary.h);
+		PaintSkeleton(p, l.chart.x, l.chart.y, l.chart.w, l.chart.h);
+		PaintSkeleton(p, l.history.x, l.history.y, l.history.w, l.history.h);
+		return;
+	}
+	const int h = std::min(f.bottom - f.tilesY, 160);
+	PaintGlassCard(p, a.x, f.tilesY, a.w, h);
+	p.Font(0);
+	p.TextWrapped(a.x + kLeaguePad, f.tilesY + 40, a.w - 2 * kLeaguePad, h - 60,
+		state == LeagueProfileState::Missing ? "This player has no league games yet." : "Couldn't reach the league server. Check your connection and try again.",
+		pal::textDim);
+}
+
+// The title with the way back at the top right and, for another player than the one in use, the button that changes to it. Another
+// player's profile has only the way back, and says whose it is.
 void PaintHeader(Painter &p, const View &v, const Frame &f)
 {
+	if (v.pub.on) {
+		const int right = PaintHeaderActions(p, f.head, {{"Back", kActBack, true, true}}, v.mouseX, v.mouseY);
+		const Card *c = SelectedCard(v);
+		const bool ready = v.pub.state == LeagueProfileState::Ready;
+		const int tab = ShownTab(v);
+		p.raw = true;
+		PaintScreenTitle(p, f.head, TrFmt("Profile of %s", {c && !c->name.empty() ? c->name : Tr("Player")}),
+			{{Tr("General"), kActTab, kTabGeneral, tab == kTabGeneral, ready}, {Tr("Civilizations"), kActTab, kTabCivs, tab == kTabCivs, ready},
+				{Tr("League"), kActTab, kTabLeague, tab == kTabLeague, ready}},
+			right, v.mouseX, v.mouseY);
+		p.raw = false;
+		return;
+	}
 	const int count = static_cast<int>(v.cards.size());
 	const bool other = v.selected >= 0 && v.selected < count && !v.cards[v.selected].active;
 	int right = PaintHeaderActions(p, f.head, {{"League account", kActLeague, false, true}, {"Back", kActBack, true, true}}, v.mouseX, v.mouseY);
@@ -1768,7 +1977,7 @@ Box HistoryBox(const View &v)
 	const Frame f = FrameOf(v);
 	if (ShownTab(v) != kTabCivs) return LowerLayout(a, f).history;
 	const Card *c = SelectedCard(v);
-	return CivsLayoutOf(a, f, c ? static_cast<int>(MatchCivsPlayed(FactsOfCard(*c)).size()) : 0).history;
+	return CivsLayoutOf(a, f, c ? static_cast<int>(CivsOf(v, FactsOfCard(*c)).size()) : 0).history;
 }
 
 }
@@ -1814,8 +2023,8 @@ bool CivChipSpan(Painter &p, const View &v, int &left, int &width)
 	if (!c || ShownTab(v) != kTabCivs) return false;
 	const Area a = DetailArea(v);
 	const Frame f = FrameOf(v);
-	const std::vector<int> civs = MatchCivsPlayed(FactsOfCard(*c));
-	const ChipStrip s = ChipStripOf(p, *c, civs, a.x, CivsLayoutOf(a, f, static_cast<int>(civs.size())).chipsY, a.w);
+	const std::vector<int> civs = CivsOf(v, FactsOfCard(*c));
+	const ChipStrip s = ChipStripOf(p, v, *c, civs, a.x, CivsLayoutOf(a, f, static_cast<int>(civs.size())).chipsY, a.w);
 	const auto it = std::find(s.races.begin(), s.races.end(), ShownCiv(v));
 	const size_t i = it == s.races.end() ? 0 : static_cast<size_t>(it - s.races.begin());
 	left = s.lefts[i];
@@ -1826,6 +2035,25 @@ bool CivChipSpan(Painter &p, const View &v, int &left, int &width)
 int ListRows(const View &v)
 {
 	return FrameOf(v).rows;
+}
+
+std::vector<int> ChartModes(const View &v)
+{
+	if (v.pub.on) return {kModeAll, kModeLeague, kModeCup};
+	return {kModeAll, kModeSkirmish, kModeMultiplayer, kModeLeague, kModeCup};
+}
+
+std::vector<int> ChartMetrics(const View &v)
+{
+	if (v.pub.on) return {kMetricKills, kMetricLosses, kMetricKillsPerLoss, kMetricDuration};
+	return {kMetricKills, kMetricLosses, kMetricKillsPerLoss, kMetricArmy, kMetricGold, kMetricDuration};
+}
+
+bool CivKnown(const View &v, int race)
+{
+	if (v.pub.on) return std::any_of(v.pub.civs.begin(), v.pub.civs.end(), [&](const PublicCiv &pc) { return pc.race == race; });
+	const Card *c = SelectedCard(v);
+	return c && std::any_of(c->games.begin(), c->games.end(), [&](const GameRow &g) { return g.race == race; });
 }
 
 void PaintProfileScreen(Painter &p, const View &v)
@@ -1839,7 +2067,11 @@ void PaintProfileScreen(Painter &p, const View &v)
 	const bool list = ShowsList(v);
 	if (list) PaintList(p, v, f);
 	Tip tip;
-	if (const Card *c = SelectedCard(v)) {
+	const Card *c = SelectedCard(v);
+	if (c && v.pub.on && v.pub.state != LeagueProfileState::Ready) {
+		PaintPublicPending(p, v, *c, f);
+	}
+	else if (c) {
 		PaintDetail(p, v, *c, f, tip);
 	}
 	else if (list) {

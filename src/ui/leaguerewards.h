@@ -30,7 +30,8 @@ LeagueFrame LeagueOwnCosmetic(const LeagueMe &me, int season);
 LeagueBadge LeagueVexillumBadge(LeagueTier tier, bool founder, int season);
 
 // The profile's showcase: every vexillum and phalera the player won, in squares of `cell` from (x, y) along `w`, the one worn marked.
-// A click wears it next to the name (`action`, with its place in LeagueBadgeChoices). Returns how many fit.
+// A click wears it next to the name (`action`, with its place in LeagueBadgeChoices; negative for another player's, only looked at).
+// Returns how many fit.
 int PaintLeagueShowcase(ui::Painter &p, int x, int y, int w, int cell, const LeagueMe &me, int action, int mx, int my);
 // The frame and the title the player wears, picked among those won: `frameAction` and `titleAction` with the season (-1: none).
 // Returns how tall it came out.

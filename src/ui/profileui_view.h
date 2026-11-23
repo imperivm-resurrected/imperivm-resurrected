@@ -11,6 +11,7 @@
 #include "core/league.h"
 #include "core/matchhistory.h"
 #include "game/playerini.h"
+#include "net/leagueclient_profile.h"
 #include "net/patrons.h"
 #include "net/steamnet.h"
 #include "ui/scrollpane.h"
@@ -31,6 +32,10 @@ struct GameRow {
 	uint32_t damageDealt = 0, damageTaken = 0;
 	// From this computer's note of the game (MatchNote): -1 when it has none.
 	int64_t goldSpent = -1, scriptKills = -1, scriptDeaths = -1;
+	// A game of the public profile, from the league: of the figures it has only the kills, the deaths and the duration. The queue of a
+	// ranked game ("1v1", "2v2"), the cup's name and the opponents' names are already in the player's language.
+	bool remote = false;
+	std::string queue, cupName, map, opponents;
 };
 
 MatchFacts FactsOf(const GameRow &g);
@@ -47,6 +52,23 @@ struct Card {
 };
 
 enum ChartRange { kRange20, kRange50, kRangeAll };
+
+// The public profile: any player's statistics, from the league server, of their league and cup games only. The screen shows them with
+// its own cards: the one card of `cards` holds the name, the totals and the last games, and `me` the standing and the trophies.
+struct PublicCiv {
+	int race = kCivUnknown;
+	std::string name;
+	MatchCivRecord record;
+};
+struct PublicProfile {
+	bool on = false;
+	uint64_t id = 0;
+	LeagueProfileState state = LeagueProfileState::None;
+	LeagueFrame frame, title;
+	// Every civilization, and each one, the most games first.
+	MatchCivRecord all;
+	std::vector<PublicCiv> civs;
+};
 
 struct View {
 	std::vector<Card> cards;
@@ -80,6 +102,7 @@ struct View {
 	int screenW = 1920, screenH = 1080;
 	// The league dialog's body and the league tab's lists, when they hold more than their room.
 	ui::PaneScrolls panes;
+	PublicProfile pub;
 };
 
 enum Action {
@@ -101,8 +124,14 @@ inline bool SelectedIsActive(const View &v) { return v.selected >= 0 && v.select
 inline int ShownTab(const View &v)
 {
 	if (v.tab == kTabCivs) return kTabCivs;
-	return v.tab == kTabLeague && SelectedIsActive(v) ? kTabLeague : kTabGeneral;
+	return v.tab == kTabLeague && (SelectedIsActive(v) || v.pub.on) ? kTabLeague : kTabGeneral;
 }
+// The chart's modes (MatchMode) and metrics (MatchMetric) in the order of their buttons: the public profile has only league and cup
+// games, and of each one only the kills, the deaths and the duration.
+std::vector<int> ChartModes(const View &v);
+std::vector<int> ChartMetrics(const View &v);
+// The civilization shown in the civilizations tab is one the selected card has.
+bool CivKnown(const View &v, int race);
 const Card *SelectedCard(const View &v);
 // How many rows of the list fit; the controller scrolls by rows.
 int ListRows(const View &v);

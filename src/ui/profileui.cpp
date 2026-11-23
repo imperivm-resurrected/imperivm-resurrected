@@ -14,17 +14,22 @@
 #include <string>
 #include <vector>
 
+#include "core/leagueprofile.h"
 #include "core/log.h"
 #include "game/gamestats.h"
 #include "game/playerini.h"
 #include "game/profiles.h"
+#include "i18n/tr.h"
 #include "net/leagueclient.h"
+#include "net/leagueclient_profile.h"
 #include "net/leagueclient_seasons.h"
 #include "net/patrons.h"
 #include "net/steamnet.h"
 #include "ui/fullscreen.h"
+#include "ui/leaguemastery.h"
 #include "ui/leagueui.h"
 #include "ui/modui.h"
+#include "ui/mpui.h"
 #include "ui/patronui.h"
 #include "ui/profileui_view.h"
 #include "ui/widgets.h"
@@ -63,8 +68,23 @@ struct State {
 	int chipStartX = 0, chipStartPos = 0, chipAction = kActNone, chipArg = 0;
 };
 
+// Another player's profile, over the multiplayer screen: whose, the matches found when it opened (one found closes it, so the call to
+// accept it shows), and the answer of the league it was built from.
+struct Public {
+	bool open = false;
+	uint64_t id = 0;
+	std::string steamId, name;
+	bool serialKnown = false;
+	unsigned foundSerial = 0;
+	DWORD checkedAt = 0;
+	LeagueProfileState builtState = LeagueProfileState::None;
+	std::shared_ptr<const LeagueProfile> built;
+	State screen;
+};
+
 std::mutex g_lock;
 State g_s;
+Public g_pub;
 Canvas g_canvas;
 
 std::string LowerDir(std::string s)
@@ -253,6 +273,183 @@ void Refresh()
 	g_s.lastRead = GetTickCount();
 }
 
+// What the screen needs of a profile from the league: its card, its standing and its civilizations. The civilizations take their place
+// in the league's list as their key; a game's civilization the list doesn't have gets one after them.
+struct PublicBuilt {
+	Card card;
+	LeagueMe me;
+	PublicProfile pub;
+};
+
+PublicBuilt BuildPublic(const LeagueProfile &pr, const std::string &fallbackName)
+{
+	PublicBuilt b;
+	std::map<std::string, int> keys;
+	uint64_t armySum = 0;
+	int armyGames = 0;
+	for (size_t i = 0; i < pr.civs.size(); i++) {
+		const LeagueProfileCiv &civ = pr.civs[i];
+		PublicCiv pc;
+		pc.race = civ.civ.empty() ? kCivUnknown : static_cast<int>(i);
+		pc.name = LeagueCivName(civ.civ);
+		pc.record = LeagueProfileRecord(civ.sums, pc.race);
+		if (!civ.civ.empty()) keys[civ.civ] = pc.race;
+		armySum += civ.sums.army;
+		armyGames += civ.sums.statsGames;
+		b.pub.civs.push_back(pc);
+	}
+	b.pub.all = LeagueProfileRecord(pr.totals, kCivAll);
+	// The totals have no army: the civilizations' do.
+	b.pub.all.army = armyGames > 0 ? static_cast<double>(armySum) / armyGames : 0;
+	b.pub.frame = pr.frame;
+	b.pub.title = pr.title;
+
+	Card &c = b.card;
+	c.name = pr.name.empty() ? fallbackName : pr.name;
+	c.readable = true;
+	c.summary.games = pr.totals.games;
+	c.summary.multiGames = pr.totals.games;
+	c.summary.multiWins = pr.totals.wins;
+	c.summary.playedMs = static_cast<uint64_t>(pr.totals.minutes * 60000);
+	c.summary.kills = pr.totals.kills;
+	for (const LeagueProfileGame &g : pr.recent) {
+		GameRow r;
+		const time_t t = static_cast<time_t>(g.at / 1000);
+		tm local = {};
+		if (g.at > 0 && localtime_s(&local, &t) == 0) {
+			r.day = local.tm_mday;
+			r.month = local.tm_mon + 1;
+			r.year = local.tm_year + 1900;
+			r.hour = local.tm_hour;
+			r.minute = local.tm_min;
+		}
+		r.won = g.won;
+		r.multi = true;
+		r.league = g.cup ? kMatchCup : kMatchLeague;
+		r.remote = true;
+		r.civ = LeagueCivName(g.civ);
+		if (g.civ.empty()) r.race = kCivUnknown;
+		else {
+			auto it = keys.find(g.civ);
+			if (it == keys.end()) it = keys.insert({g.civ, static_cast<int>(pr.civs.size() + keys.size())}).first;
+			r.race = it->second;
+		}
+		r.durationMs = g.durationMs;
+		r.kills = g.kills;
+		r.losses = g.deaths;
+		r.queue = g.cup ? std::string() : g.queue;
+		r.cupName = g.cup ? (g.cupName.empty() ? Tr("Tournament") : g.cupName) : std::string();
+		r.map = g.map;
+		for (const auto &o : g.opponents) {
+			if (o.second.empty()) continue;
+			r.opponents += (r.opponents.empty() ? "" : ", ") + o.second;
+		}
+		c.games.push_back(r);
+	}
+
+	LeagueMe &me = b.me;
+	me.steamId = pr.steamId;
+	me.name = c.name;
+	me.ranked = pr.ranked;
+	me.ranked2v2 = pr.ranked2v2;
+	// Nothing of the showcase is marked as worn.
+	me.badgeKind = "none";
+	for (const LeagueProfileTrophy &t : pr.trophies) {
+		LeagueBadge badge;
+		badge.kind = LeagueBadgeKind::Trophy;
+		badge.metal = t.metal;
+		badge.title = t.title;
+		badge.season = t.season;
+		me.badges.push_back(badge);
+	}
+	me.cupTitles = pr.cupTitles;
+	return b;
+}
+
+void ClampPublic(View &v)
+{
+	const std::vector<int> modes = ChartModes(v), metrics = ChartMetrics(v);
+	if (std::find(modes.begin(), modes.end(), v.chartMode) == modes.end()) v.chartMode = kModeAll;
+	if (std::find(metrics.begin(), metrics.end(), v.metric) == metrics.end()) v.metric = kMetricKills;
+	if (v.civ != kCivAll && !CivKnown(v, v.civ)) v.civ = kCivAll;
+	if (v.expanded >= 0 && (!SelectedCard(v) || v.expanded >= static_cast<int>(SelectedCard(v)->games.size()))) v.expanded = -1;
+	v.historyScroll = std::max(0, std::min(v.historyScroll, HistoryMaxScroll(v)));
+}
+
+// On the game thread: asks the league for the profile, and closes it when the multiplayer screen goes or a match is found.
+void PublicTick()
+{
+	std::string steamId, name;
+	uint64_t id = 0;
+	bool check = false, serialKnown = false;
+	unsigned serial = 0;
+	LeagueProfileState builtState = LeagueProfileState::None;
+	std::shared_ptr<const LeagueProfile> built;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		if (!g_pub.open) return;
+		steamId = g_pub.steamId;
+		name = g_pub.name;
+		id = g_pub.id;
+		check = GetTickCount() - g_pub.checkedAt >= kReadEveryMs;
+		if (check) g_pub.checkedAt = GetTickCount();
+		serialKnown = g_pub.serialKnown;
+		serial = g_pub.foundSerial;
+		builtState = g_pub.builtState;
+		built = g_pub.built;
+	}
+	if (!check) return;
+	const unsigned found = LeagueRankedState().foundSerial;
+	if (!MpUiIsOpen() || (serialKnown && found != serial)) {
+		std::lock_guard<std::mutex> lock(g_lock);
+		g_pub = Public();
+		LogI("profile", "the public profile closed with the multiplayer screen or a match found");
+		return;
+	}
+	LeagueProfileRequest(steamId);
+	const LeagueProfileView pv = LeagueProfileOf(steamId);
+	PatronsWatch({id});
+	const std::shared_ptr<const OnlineAvatar> avatar = SteamAvatar(id);
+	const PatronInfo patron = PatronOf(id);
+	const bool rebuild = pv.state != builtState || pv.profile != built;
+	PublicBuilt b;
+	if (rebuild && pv.profile) b = BuildPublic(*pv.profile, name);
+	const LeagueBadge badge = pv.profile && pv.profile->badge.Shown() ? pv.profile->badge : PlayerBadgeOf(id);
+
+	std::lock_guard<std::mutex> lock(g_lock);
+	if (!g_pub.open || g_pub.steamId != steamId) return;
+	if (!g_pub.serialKnown) {
+		g_pub.serialKnown = true;
+		g_pub.foundSerial = found;
+	}
+	View &v = g_pub.screen.view;
+	if (rebuild) {
+		g_pub.builtState = pv.state;
+		g_pub.built = pv.profile;
+		if (pv.profile) {
+			v.cards = {b.card};
+			v.me = b.me;
+			const bool on = v.pub.on;
+			const uint64_t pid = v.pub.id;
+			v.pub = b.pub;
+			v.pub.on = on;
+			v.pub.id = pid;
+		}
+	}
+	v.pub.state = pv.state == LeagueProfileState::None ? LeagueProfileState::Loading : pv.state;
+	if (v.pub.state != LeagueProfileState::Ready) v.cards[0].name = pv.profile && !pv.profile->name.empty() ? pv.profile->name : name;
+	v.meLoaded = v.pub.state == LeagueProfileState::Ready;
+	v.avatar = avatar;
+	v.patron = patron;
+	v.badge = badge;
+	SYSTEMTIME now;
+	GetLocalTime(&now);
+	v.todayYear = now.wYear;
+	v.todayMonth = now.wMonth;
+	v.todayDay = now.wDay;
+	ClampPublic(v);
+}
+
 struct Command {
 	int action = kActNone;
 	int arg = 0;
@@ -284,6 +481,23 @@ bool OverHistory(const State &st, POINT at)
 // Changes of the screen alone happen here, under the lock; whatever touches the game is left in `cmd` for Execute.
 void Act(View &v, int action, int arg, Command &cmd)
 {
+	// Another player's profile only shows: what changes the player in use or their league account is not for it.
+	if (v.pub.on) {
+		switch (action) {
+		case kActBack:
+		case kActPatron:
+		case kActTab:
+		case kActCiv:
+		case kActGloryQueue:
+		case kActMetric:
+		case kActChartMode:
+		case kActChartRange:
+		case kActOutcome:
+		case kActBar:
+		case kActGame: break;
+		default: return;
+		}
+	}
 	switch (action) {
 	case kActPick:
 		if (arg != v.selected) {
@@ -387,68 +601,84 @@ void Execute(const Command &cmd)
 	}
 }
 
-bool Handle(UINT msg, WPARAM wp, LPARAM lp, Command &cmd)
+// Back from another player's profile is the multiplayer screen as it was left.
+void ExecutePublic(const Command &cmd)
 {
-	std::lock_guard<std::mutex> lock(g_lock);
-	if (!g_s.dlg) return false;
-	View &v = g_s.view;
+	switch (cmd.action) {
+	case kActBack: {
+		std::lock_guard<std::mutex> lock(g_lock);
+		g_pub = Public();
+		break;
+	}
+	case kActPatron: OpenPatronPage(); break;
+	default: break;
+	}
+}
+
+// Under the lock, for the screen of `st`.
+bool Handle(State &st, UINT msg, WPARAM wp, LPARAM lp, Command &cmd)
+{
+	View &v = st.view;
 	const POINT at = {static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))};
 	ScrollTo to;
-	const bool onBar = ScrollbarMouse(v.bar, g_s.hits, msg, wp, at, to);
+	const bool onBar = ScrollbarMouse(v.bar, st.hits, msg, wp, at, to);
 	if (to.id == kBarList) v.scroll = to.pos;
 	else if (to.id == kBarHistory) v.historyScroll = to.pos;
-	else v.panes.Apply(g_s.panes, to);
+	else v.panes.Apply(st.panes, to);
 	switch (msg) {
 	case WM_MOUSEMOVE:
 		v.mouseX = at.x;
 		v.mouseY = at.y;
-		if (g_s.chipPress && !(wp & MK_LBUTTON)) g_s.chipPress = false;
-		if (g_s.chipPress) {
-			const int dx = at.x - g_s.chipStartX;
-			if (!g_s.chipDragged && std::abs(dx) >= GetSystemMetrics(SM_CXDRAG)) g_s.chipDragged = true;
-			const PaneArea *row = ChipRow(g_s);
-			if (g_s.chipDragged && row) v.panes.Set(kPaneCivChips, ChipRowPos(*row, g_s.chipStartPos, dx), row->max);
+		if (st.chipPress && !(wp & MK_LBUTTON)) st.chipPress = false;
+		if (st.chipPress) {
+			const int dx = at.x - st.chipStartX;
+			if (!st.chipDragged && std::abs(dx) >= GetSystemMetrics(SM_CXDRAG)) st.chipDragged = true;
+			const PaneArea *row = ChipRow(st);
+			if (st.chipDragged && row) v.panes.Set(kPaneCivChips, ChipRowPos(*row, st.chipStartPos, dx), row->max);
 		}
 		return false;
 	case WM_LBUTTONDOWN:
 	case WM_LBUTTONDBLCLK: {
 		if (onBar) return true;
-		g_s.mouseDown = true;
+		st.mouseDown = true;
 		int arg = 0;
-		const int action = HitActionAt(g_s.hits, at, arg, kActNone);
+		const int action = HitActionAt(st.hits, at, arg, kActNone);
 		if (action == kActCivScroll) {
-			if (const PaneArea *row = ChipRow(g_s)) v.panes.Set(kPaneCivChips, v.panes.Of(kPaneCivChips) + arg * row->page * 2 / 3, row->max);
+			if (const PaneArea *row = ChipRow(st)) v.panes.Set(kPaneCivChips, v.panes.Of(kPaneCivChips) + arg * row->page * 2 / 3, row->max);
 			return true;
 		}
-		if (const PaneArea *row = v.leagueOpen ? nullptr : ChipRow(g_s)) {
+		if (const PaneArea *row = v.leagueOpen ? nullptr : ChipRow(st)) {
 			if (PtInRect(&row->r, at)) {
-				g_s.chipPress = true;
-				g_s.chipDragged = false;
-				g_s.chipStartX = at.x;
-				g_s.chipStartPos = v.panes.Of(kPaneCivChips);
-				g_s.chipAction = action;
-				g_s.chipArg = arg;
+				st.chipPress = true;
+				st.chipDragged = false;
+				st.chipStartX = at.x;
+				st.chipStartPos = v.panes.Of(kPaneCivChips);
+				st.chipAction = action;
+				st.chipArg = arg;
 				return true;
 			}
 		}
 		const DWORD now = GetTickCount();
-		const bool twice = action == kActPick && arg == g_s.lastClickRow && now - g_s.lastClick <= GetDoubleClickTime();
-		g_s.lastClickRow = action == kActPick && !twice ? arg : -1;
-		g_s.lastClick = now;
+		const bool twice = action == kActPick && arg == st.lastClickRow && now - st.lastClick <= GetDoubleClickTime();
+		st.lastClickRow = action == kActPick && !twice ? arg : -1;
+		st.lastClick = now;
 		if (twice && arg == v.selected) Act(v, kActUse, 0, cmd);
 		else Act(v, action, arg, cmd);
 		return true;
 	}
-	case WM_LBUTTONUP:
-		g_s.mouseDown = false;
-		if (g_s.chipPress && !g_s.chipDragged) Act(v, g_s.chipAction, g_s.chipArg, cmd);
-		g_s.chipPress = false;
-		return true;
+	case WM_LBUTTONUP: {
+		// Over the multiplayer screen, the release of a press made there is its own.
+		const bool ours = st.mouseDown;
+		st.mouseDown = false;
+		if (st.chipPress && !st.chipDragged) Act(v, st.chipAction, st.chipArg, cmd);
+		st.chipPress = false;
+		return ours || !v.pub.on;
+	}
 	case WM_MOUSEWHEEL: {
 		// The wheel's position comes in screen coordinates; the last move tells where the mouse is over the screen.
-		if (v.panes.Wheel(g_s.panes, {v.mouseX, v.mouseY}, GET_WHEEL_DELTA_WPARAM(wp)) || v.leagueOpen) return true;
-		const int steps = WheelSteps(g_s.wheelRest, GET_WHEEL_DELTA_WPARAM(wp));
-		if (OverHistory(g_s, {v.mouseX, v.mouseY})) {
+		if (v.panes.Wheel(st.panes, {v.mouseX, v.mouseY}, GET_WHEEL_DELTA_WPARAM(wp)) || v.leagueOpen) return true;
+		const int steps = WheelSteps(st.wheelRest, GET_WHEEL_DELTA_WPARAM(wp));
+		if (OverHistory(st, {v.mouseX, v.mouseY})) {
 			v.historyScroll = std::max(0, std::min(v.historyScroll - steps * 3, HistoryMaxScroll(v)));
 		}
 		else {
@@ -486,8 +716,79 @@ bool Handle(UINT msg, WPARAM wp, LPARAM lp, Command &cmd)
 
 }
 
+namespace {
+
+// Paints the screen of `st` (the player's own, or another player's over the multiplayer screen) and keeps what it painted, unless the
+// screen closed meanwhile (`still`, asked under the lock).
+template <class Still> void DrawScreen(State &st, Still still, uint32_t *buf, int w, int h, View view, std::vector<Hit> previous, bool mouseDown)
+{
+	const ScreenView screen = ScreenViewFor(w, h);
+	view.screenW = screen.w;
+	view.screenH = screen.h;
+	PanelRender r(g_canvas, buf, w, h);
+	if (!BeginFullScreen(r, screen)) return;
+	r.Press(previous, mouseDown, {view.mouseX, view.mouseY});
+	PaintProfileScreen(r.p, view);
+	int chipLeft = 0, chipW = 0;
+	const bool reveal = view.revealCiv && CivChipSpan(r.p, view, chipLeft, chipW);
+	r.End();
+	std::lock_guard<std::mutex> lock(g_lock);
+	if (!still()) return;
+	if (reveal && st.view.civ == view.civ) {
+		st.view.panes.Reveal(r.panes, kPaneCivChips, chipLeft - 24, chipW + 48);
+		st.view.revealCiv = false;
+	}
+	// Kept where it was painted, so the arrows, the wheel and a drag start from what shows after a resize or a change of player.
+	for (const PaneArea &pane : r.panes) st.view.panes.Set(pane.id, st.view.panes.Of(pane.id), pane.max);
+	st.hits = std::move(r.hits);
+	st.panes = std::move(r.panes);
+	View &v = st.view;
+	if (v.screenW != screen.w || v.screenH != screen.h) {
+		v.screenW = screen.w;
+		v.screenH = screen.h;
+		KeepVisible(v);
+		v.historyScroll = std::max(0, std::min(v.historyScroll, HistoryMaxScroll(v)));
+	}
+}
+
+bool PublicOpen()
+{
+	std::lock_guard<std::mutex> lock(g_lock);
+	return g_pub.open;
+}
+
+}
+
+void ProfileUiOpenPublic(uint64_t steamId, const std::string &name)
+{
+	if (!steamId) return;
+	std::lock_guard<std::mutex> lock(g_lock);
+	const std::string sid = std::to_string(steamId);
+	if (g_pub.open && g_pub.steamId == sid) return;
+	g_pub = Public();
+	g_pub.open = true;
+	g_pub.id = steamId;
+	g_pub.steamId = sid;
+	g_pub.name = name;
+	View &v = g_pub.screen.view;
+	v.pub.on = true;
+	v.pub.id = steamId;
+	v.pub.state = LeagueProfileState::Loading;
+	Card c;
+	c.name = name.empty() ? Tr("Player") : name;
+	v.cards = {c};
+	v.selected = 0;
+	LogI("profile", "public profile of a player opened");
+}
+
+void ProfileUiPublicTick()
+{
+	PublicTick();
+}
+
 void ProfileUiGameTick()
 {
+	PublicTick();
 	void *dlg = ProfileDialogOpen();
 	bool due = false;
 	{
@@ -503,6 +804,8 @@ void ProfileUiGameTick()
 
 bool ProfileUiNeedsDraw()
 {
+	// It steps aside with the multiplayer screen while a dialog of the game is over it.
+	if (PublicOpen()) return MpUiNeedsDraw();
 	void *dlg = ProfileDialogOpen();
 	std::lock_guard<std::mutex> lock(g_lock);
 	if (!dlg) return false;
@@ -515,52 +818,49 @@ void ProfileUiDraw(uint32_t *buf, int w, int h)
 {
 	View view;
 	std::vector<Hit> previous;
-	bool mouseDown = false;
+	bool mouseDown = false, pub = false;
+	std::string sid;
+	void *dlg = nullptr;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
-		if (!g_s.dlg || ProfileDialogOpen() != g_s.dlg) {
+		pub = g_pub.open;
+		State &st = pub ? g_pub.screen : g_s;
+		if (pub) sid = g_pub.steamId;
+		else if (!g_s.dlg || ProfileDialogOpen() != g_s.dlg) {
 			if (ProfileDialogOpen()) {
 				PanelRender shell(g_canvas, buf, w, h);
 				if (BeginFullScreen(shell, ScreenViewFor(w, h))) shell.End();
 			}
 			return;
 		}
-		view = g_s.view;
-		previous = g_s.hits;
-		mouseDown = g_s.mouseDown;
+		dlg = g_s.dlg;
+		view = st.view;
+		previous = st.hits;
+		mouseDown = st.mouseDown;
 	}
-	const ScreenView screen = ScreenViewFor(w, h);
-	view.screenW = screen.w;
-	view.screenH = screen.h;
-	PanelRender r(g_canvas, buf, w, h);
-	if (!BeginFullScreen(r, screen)) return;
-	r.Press(previous, mouseDown, {view.mouseX, view.mouseY});
-	PaintProfileScreen(r.p, view);
-	int chipLeft = 0, chipW = 0;
-	const bool reveal = view.revealCiv && CivChipSpan(r.p, view, chipLeft, chipW);
-	r.End();
-	std::lock_guard<std::mutex> lock(g_lock);
-	if (reveal && g_s.view.civ == view.civ) {
-		g_s.view.panes.Reveal(r.panes, kPaneCivChips, chipLeft - 24, chipW + 48);
-		g_s.view.revealCiv = false;
-	}
-	// Kept where it was painted, so the arrows, the wheel and a drag start from what shows after a resize or a change of player.
-	for (const PaneArea &pane : r.panes) g_s.view.panes.Set(pane.id, g_s.view.panes.Of(pane.id), pane.max);
-	g_s.hits = std::move(r.hits);
-	g_s.panes = std::move(r.panes);
-	View &v = g_s.view;
-	if (v.screenW != screen.w || v.screenH != screen.h) {
-		v.screenW = screen.w;
-		v.screenH = screen.h;
-		KeepVisible(v);
-		v.historyScroll = std::max(0, std::min(v.historyScroll, HistoryMaxScroll(v)));
-	}
+	if (pub) DrawScreen(g_pub.screen, [sid] { return g_pub.open && g_pub.steamId == sid; }, buf, w, h, std::move(view), std::move(previous), mouseDown);
+	else DrawScreen(g_s, [dlg] { return g_s.dlg == dlg; }, buf, w, h, std::move(view), std::move(previous), mouseDown);
 }
 
 bool ProfileUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 {
+	if (ModUiIsOpen()) return false;
+	if (PublicOpen()) {
+		if (!MpUiNeedsDraw()) return false;
+		Command cmd;
+		bool consumed = false, pub = false;
+		{
+			std::lock_guard<std::mutex> lock(g_lock);
+			pub = g_pub.open;
+			if (pub) consumed = Handle(g_pub.screen, msg, wp, lp, cmd);
+		}
+		if (pub) {
+			if (cmd.action != kActNone) ExecutePublic(cmd);
+			return consumed;
+		}
+	}
 	void *dlg = ProfileDialogOpen();
-	if (!dlg || ModUiIsOpen()) return false;
+	if (!dlg) return false;
 	{
 		bool fresh = false;
 		{
@@ -571,7 +871,12 @@ bool ProfileUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		if (fresh) Refresh();
 	}
 	Command cmd;
-	const bool consumed = Handle(msg, wp, lp, cmd);
+	bool consumed = false;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		if (!g_s.dlg) return false;
+		consumed = Handle(g_s, msg, wp, lp, cmd);
+	}
 	if (cmd.action != kActNone) Execute(cmd);
 	return consumed;
 }

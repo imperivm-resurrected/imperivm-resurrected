@@ -140,6 +140,12 @@ enum RankedTeamArg {
 };
 // The page of one game of the history: a row opens it (kRkDetailOpen plus the row), back to the history, the number the chart shows.
 enum RankedDetailArg { kRkDetailOpen = kRkTeamArgEnd, kRkDetailClose = kRkDetailOpen + 0x40, kRkDetailMetric, kRkDetailArgEnd = kRkDetailMetric + 0x10 };
+// A player's public profile: of the player whose card is open, of the player's own row of the summary's leaderboard, of a row of its
+// first ten (kRkProfileTop plus the row), and of a badge clicked where badges open the profile (kRkBadgeProfile, LeagueBadgeClicksBegin).
+enum RankedProfileArg {
+	kRkProfile = kRkDetailArgEnd, kRkProfileMe, kRkProfileTop = kRkDetailArgEnd + 0x10, kRkBadgeProfile = kRkProfileTop + 0x20,
+	kRkProfileArgEnd = kRkBadgeProfile + 0x100,
+};
 enum RankedSub { kRankedHub, kRankedBoard, kRankedHistory, kRankedGuide };
 // The rows of a page of the full leaderboard at most; RankedBoardRows says how many fit the screen.
 const int kRankedBoardRows = 13;

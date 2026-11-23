@@ -52,6 +52,7 @@ void RunGameQueue()
 		AutosaveQuitIfReady();
 		TweaksResolutionTick();
 		MpUiGameThreadTick();
+		ProfileUiPublicTick();
 		MainMenuUiGameTick();
 		RejoinMenuTick();
 		SpectatorGameThreadTick();

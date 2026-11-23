@@ -119,6 +119,8 @@ template <class F> void PaintCoverage(Painter &p, int left, int top, int size, C
 
 struct Tip {
 	bool show = false, clickable = false;
+	// What a click on it does, for Tr().
+	const char *hint = nullptr;
 	int x = 0, y = 0;
 	LeagueBadge badge;
 };
@@ -128,6 +130,7 @@ Tip g_tip;
 struct BadgeClicks {
 	std::mutex mx;
 	int action = -1, first = 0, count = 0;
+	const char *hint = nullptr;
 	std::vector<uint64_t> painting, shown;
 	int shownFirst = 0;
 };
@@ -384,6 +387,10 @@ void DrawBadgeAfterName(Painter &p, int nameX, int y, int nameW, int h, const st
 	if (!p.Hover(bx, by, kLeagueBadgeSize, kLeagueBadgeSize, mx, my)) return;
 	g_tip.show = true;
 	g_tip.clickable = clickable;
+	if (clickable) {
+		std::lock_guard<std::mutex> lock(g_clicks.mx);
+		g_tip.hint = g_clicks.hint;
+	}
 	g_tip.x = bx;
 	g_tip.y = by + kLeagueBadgeSize + 6;
 	g_tip.badge = badge;
@@ -399,10 +406,11 @@ void HoverLeagueBadge(Painter &p, int x, int y, int size, const LeagueBadge &bad
 	g_tip.badge = badge;
 }
 
-void LeagueBadgeClicksBegin(int action, int firstArg, int count)
+void LeagueBadgeClicksBegin(int action, int firstArg, int count, const char *hint)
 {
 	std::lock_guard<std::mutex> lock(g_clicks.mx);
 	g_clicks.action = action;
+	g_clicks.hint = hint;
 	g_clicks.first = firstArg;
 	g_clicks.count = count;
 	g_clicks.painting.clear();
@@ -474,7 +482,7 @@ void PaintLeagueBadgeTip(Painter &p, int screenW, int screenH)
 		break;
 	}
 	if (b.kind == LeagueBadgeKind::Trophy && b.count >= 2) title += "  \xC3\x97" + std::to_string(b.count);
-	const std::string click = g_tip.clickable ? Tr("Click: see their row in the leaderboard") : std::string();
+	const std::string click = g_tip.clickable && g_tip.hint ? Tr(g_tip.hint) : std::string();
 	p.raw = true;
 	p.Font(1);
 	int w = p.TextWidth(title);

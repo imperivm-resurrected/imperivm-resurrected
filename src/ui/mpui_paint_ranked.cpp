@@ -1117,6 +1117,9 @@ void PaintMiniBoard(Painter &p, const State &st, const HubLayout &h, int y, int 
 			p.Fill(x + 1, ry, w - 2, rowH, pal::selected);
 			p.Fill(x + 1, ry, 3, rowH, pal::red);
 		}
+		else if (p.Hover(x + 1, ry, w - 2, rowH, mx, my)) p.Fill(x + 1, ry, w - 2, rowH, pal::hairline);
+		// A row opens the player's profile; the name's laurel and badge keep their own clicks, painted over it.
+		p.AddHit(x + 1, ry, w - 2, rowH, kRankedAct, kRkProfileTop + static_cast<int>(i));
 		row(r, ry, you);
 	}
 	// The player's own row stays pinned under the first ten.
@@ -1126,6 +1129,7 @@ void PaintMiniBoard(Painter &p, const State &st, const HubLayout &h, int y, int 
 		p.Text(ix, pinY - 28, iw, 26, "\xC2\xB7 \xC2\xB7 \xC2\xB7", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 		p.Fill(x + 1, pinY, w - 2, 50, pal::selected);
 		p.Fill(x + 1, pinY, 3, 50, pal::red);
+		p.AddHit(x + 1, pinY, w - 2, 50, kRankedAct, kRkProfileMe);
 		row(*mine, pinY + 3, true);
 	}
 	Ghost(p, ix, y + cardH - 52, iw, 36, "Full leaderboard", kRkBoard, true, mx, my);
@@ -1274,7 +1278,10 @@ void PaintPlayerCard(Painter &p, const State &st, const std::string &seasonText,
 	}
 	const int bottom = y + h - (tight ? 76 : 92), buttonH = tight ? 48 : 52;
 	p.Fill(ix, bottom, iw, 1, pal::hairline);
-	PaintSteamButton(p, ix, bottom + (tight ? 12 : 16), iw, buttonH, "Steam profile", kRankedAct, kRkSteam, mx, my, id != 0, false);
+	// The player's profile on the league beside their Steam profile.
+	const int halfW = (iw - 12) / 2, buttonY = bottom + (tight ? 12 : 16);
+	p.Button(ix, buttonY, halfW, buttonH, "View profile", kRankedAct, kRkProfile, mx, my, id != 0, true);
+	PaintSteamButton(p, ix + halfW + 12, buttonY, iw - halfW - 12, buttonH, "Steam profile", kRankedAct, kRkSteam, mx, my, id != 0, false);
 	const int ty = ey + emblem + (tight ? 18 : 16);
 	if (!ready) {
 		p.Font(0);

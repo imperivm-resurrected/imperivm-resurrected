@@ -41,8 +41,9 @@ void HoverLeagueBadge(ui::Painter &p, int x, int y, int size, const LeagueBadge 
 // The tooltip of the badge under the mouse, drawn after everything else.
 void PaintLeagueBadgeTip(ui::Painter &p, int screenW, int screenH);
 // The clicks on the badges of a frame: between Begin and End, every badge drawn with a SteamID takes a click with `action` and an
-// argument from `firstArg` (at most `count` of them); LeagueBadgeClickedId gives the player of an argument of the last frame.
-void LeagueBadgeClicksBegin(int action, int firstArg, int count);
+// argument from `firstArg` (at most `count` of them), and its tooltip says what the click does (`hint`, for Tr()); LeagueBadgeClickedId
+// gives the player of an argument of the last frame.
+void LeagueBadgeClicksBegin(int action, int firstArg, int count, const char *hint = "Click: see their row in the leaderboard");
 void LeagueBadgeClicksEnd();
 uint64_t LeagueBadgeClickedId(int arg);
 // "Centurion II", translated.

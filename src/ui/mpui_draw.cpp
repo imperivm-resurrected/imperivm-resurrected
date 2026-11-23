@@ -333,8 +333,11 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 	g_detail.geomOut = ListGeom();
 	g_chat.geomOut = ListGeom();
 	g_lobbyScrollOut = -1;
-	// A player's badge opens their row in the leaderboard, outside a room.
-	if (!st.game.active && !st.room.id) LeagueBadgeClicksBegin(kRankedAct, kRkBadge, kRkBadgeEnd - kRkBadge);
+	// A player's badge opens their row on the ranked screens, and their profile on the others and in a room.
+	if (!st.game.active) {
+		if (st.view == kViewRanked && !st.room.id) LeagueBadgeClicksBegin(kRankedAct, kRkBadge, kRkBadgeEnd - kRkBadge);
+		else LeagueBadgeClicksBegin(kRankedAct, kRkBadgeProfile, kRkProfileArgEnd - kRkBadgeProfile, "Click: see their profile");
+	}
 	PaintScreen(r.p, st);
 	LeagueBadgeClicksEnd();
 	PaintPatronTip(r.p, st.viewW, st.viewH);

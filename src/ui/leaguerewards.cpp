@@ -150,7 +150,7 @@ LeagueBadge LeagueVexillumBadge(LeagueTier tier, bool founder, int season)
 
 int PaintLeagueShowcase(Painter &p, int x, int y, int w, int cell, const LeagueMe &me, int action, int mx, int my)
 {
-	const bool busy = LeagueRankedState().badgeBusy;
+	const bool busy = action < 0 || LeagueRankedState().badgeBusy;
 	const std::vector<LeagueBadgeChoice> choices = LeagueBadgeChoices(me);
 	const int gap = 8, fit = std::max(0, (w + gap) / (cell + gap));
 	int shown = 0;

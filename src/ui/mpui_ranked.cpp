@@ -32,6 +32,7 @@
 #include "ui/leaguemodsprep.h"
 #include "ui/leagueui.h"
 #include "ui/modui.h"
+#include "ui/profileui.h"
 
 #include "ui/mpui_internal.h"
 #include "ui/mpui_ranked_kit.h"
@@ -641,9 +642,41 @@ void PaintRankedContent(Painter &p, const State &st)
 	else DialogButtons(p, d, {{"Close", kRankedAct, kRkContentClose, true}}, st.mouseX, st.mouseY);
 }
 
+namespace {
+
+// The public profile of a player of the leaderboard, with the name the leaderboard has while the league answers.
+void OpenProfile(const RankedScreen &r, const std::string &steamId)
+{
+	const uint64_t id = _strtoui64(steamId.c_str(), nullptr, 10);
+	if (!id) return;
+	const LeagueBoardRow *row = LeagueBoardFind(r.view.page, steamId);
+	if (!row) row = LeagueBoardFind(r.view.around, steamId);
+	if (!row) row = LeagueBoardFind(r.view.top, steamId);
+	ProfileUiOpenPublic(id, row ? row->name : std::string());
+}
+
+void RankedProfileAction(int arg)
+{
+	const RankedScreen &r = g_s.ranked;
+	const std::string own = std::to_string(SteamOwnId());
+	if (arg == kRkProfile) OpenProfile(r, r.boardPick.empty() ? own : r.boardPick);
+	else if (arg == kRkProfileMe) OpenProfile(r, own);
+	else if (arg >= kRkBadgeProfile) ProfileUiOpenPublic(LeagueBadgeClickedId(arg), std::string());
+	else if (arg >= kRkProfileTop) {
+		const size_t i = static_cast<size_t>(arg - kRkProfileTop);
+		if (i < r.view.top.rows.size()) OpenProfile(r, r.view.top.rows[i].steamId);
+	}
+}
+
+}
+
 void RankedAction(int arg)
 {
 	RankedScreen &r = g_s.ranked;
+	if (arg >= kRkProfile && arg < kRkProfileArgEnd) {
+		RankedProfileAction(arg);
+		return;
+	}
 	if (arg >= kRkDetailOpen && arg < kRkDetailArgEnd) {
 		if (arg == kRkDetailClose) r.detailMatch = 0;
 		else if (arg >= kRkDetailMetric) r.detailMetric = arg - kRkDetailMetric;

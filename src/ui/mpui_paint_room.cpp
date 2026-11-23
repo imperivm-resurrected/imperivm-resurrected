@@ -511,7 +511,7 @@ void PaintWho(Painter &p, const State &st, int x, int cy, int w, uint64_t who, c
 	else {
 		p.Text(tx, nameY, textW, nameH, name, pal::text, fmt);
 	}
-	DrawBadgeAfterName(p, tx, nameY, textW, nameH, name, badge, mx, my);
+	DrawBadgeAfterName(p, tx, nameY, textW, nameH, name, badge, mx, my, who);
 	if (who && profileArg >= 0) {
 		p.AddHit(x, ay, kAvatar, kAvatar, kProfile, profileArg);
 		ProfileHotspot(p, st, tx, nameY, textW, nameH, name, profileArg);
