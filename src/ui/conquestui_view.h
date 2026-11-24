@@ -112,7 +112,14 @@ inline bool MapPixelAt(const Painted &p, POINT at, POINT &pixel)
 	return true;
 }
 
+// What a paint cost: whether the whole screen was painted again or only the map's part, and how long the map took to build (0 when it
+// was already built).
+struct PaintCost {
+	bool full = false;
+	double mapMs = 0;
+};
+
 // The whole screen, opaque, over the game's dialog, which stays open under it for its logic; and the victory box over everything.
-void PaintConquest(uint32_t *buf, int w, int h, const View &v, int pressAction, int pressArg, Painted &out);
+PaintCost PaintConquest(uint32_t *buf, int w, int h, const View &v, int pressAction, int pressArg, Painted &out);
 
 }

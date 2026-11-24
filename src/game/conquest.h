@@ -58,6 +58,8 @@ struct ConquestSnapshot {
 	int laurel = 0;
 	// The map as the game paints it (global.bmp tinted by who holds each territory), without the outline of the chosen one.
 	std::shared_ptr<const ConquestImage> map;
+	// global.bmp before the tint, so a picture of the same map can be tinted alike.
+	std::shared_ptr<const ConquestImage> base;
 	std::shared_ptr<const ConquestRegions> regions;
 };
 

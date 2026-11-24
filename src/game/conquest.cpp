@@ -41,7 +41,7 @@ const size_t kTerId = 0x00, kTerPaletteIndex = 0x1c, kTerState = 0x20, kTerName 
 // CVXUIConquestMap: its rectangle (shorts, inclusive), the territory clicked last (a double click activates it), OnMouse in the vtable
 // and the renderer, whose territories.bmp (8 bits) and tinted copy of global.bmp are what Paint 006ca830 draws.
 const size_t kCtlRect = 0x10, kMapSelected = 0x58, kMapRenderer = 0x64, kSlotOnMouse = 0x58;
-const size_t kRendererAreas = 0x1c, kRendererTinted = 0x20;
+const size_t kRendererGlobal = 0x18, kRendererAreas = 0x1c, kRendererTinted = 0x20;
 // CBitmap
 const size_t kBmpHandle = 4, kBmpW = 8, kBmpH = 0xc, kBmpBits = 0x10, kBmpType = 0x1c;
 const short kBmpType555 = 3, kBmpType565 = 6;
@@ -75,7 +75,7 @@ struct MapCache {
 	DWORD readAt = 0;
 	bool settled = false;
 	bool warned = false;
-	std::shared_ptr<const ConquestImage> map;
+	std::shared_ptr<const ConquestImage> map, base;
 	std::shared_ptr<const ConquestRegions> regions;
 };
 MapCache g_map;
@@ -271,6 +271,8 @@ void ReadMap(void *mapCtl, const void *data, const char *territories, size_t cou
 		c.data = data;
 		c.areas = areas;
 		c.regions = ReadRegions(areas, territories, count);
+		RawBitmap raw;
+		c.base = ReadPicture(At<void *>(renderer, kRendererGlobal), kMaxMapSide, false, raw);
 	}
 	const uint32_t key = TintKey(s);
 	const bool changed = tinted != c.tinted || key != c.tint || (!c.map && !c.warned);
@@ -287,6 +289,7 @@ void ReadMap(void *mapCtl, const void *data, const char *territories, size_t cou
 		c.readAt = GetTickCount();
 	}
 	s.map = c.map;
+	if (c.map && c.base && c.base->w == c.map->w && c.base->h == c.map->h) s.base = c.base;
 	if (c.map && c.regions && c.regions->w == c.map->w && c.regions->h == c.map->h) s.regions = c.regions;
 }
 

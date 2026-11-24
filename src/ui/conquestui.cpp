@@ -25,7 +25,8 @@ const int kWheelLines = 3;
 // The difficulties are easy, normal and hard: each visit of the map starts at normal.
 const int kNormal = 1;
 // A paint slower than this is logged, at most once every kSlowLogMs.
-const DWORD kSlowPaintMs = 20, kSlowLogMs = 5000;
+const DWORD kSlowLogMs = 5000;
+const double kSlowPaintMs = 8, kSlowReadMs = 4;
 
 struct State {
 	View view;
@@ -95,21 +96,26 @@ int MapPress(UINT msg, POINT at, POINT pixel)
 	g_s.mapDownScreen = at;
 	return twice ? kConquestMouseDouble : kConquestMouseDown;
 }
+
+double MsSince(const LARGE_INTEGER &from)
+{
+	LARGE_INTEGER now, freq;
+	QueryPerformanceCounter(&now);
+	QueryPerformanceFrequency(&freq);
+	return (now.QuadPart - from.QuadPart) * 1000.0 / freq.QuadPart;
 }
 
-void ConquestUiGameTick()
+// Game thread: the game's state into the screen's view.
+void Refresh()
 {
-	{
-		std::lock_guard<std::mutex> lock(g_lock);
-		if (g_s.view.game.open && GetTickCount() - g_s.lastRead < kReadEveryMs) return;
-	}
-	const DWORD readFrom = GetTickCount();
+	LARGE_INTEGER from;
+	QueryPerformanceCounter(&from);
 	ConquestSnapshot fresh = ConquestRead();
-	const DWORD readMs = GetTickCount() - readFrom;
+	const double readMs = MsSince(from);
 	static DWORD readLoggedAt = 0;
-	if (readMs >= kSlowPaintMs && GetTickCount() - readLoggedAt >= kSlowLogMs) {
+	if (readMs >= kSlowReadMs && GetTickCount() - readLoggedAt >= kSlowLogMs) {
 		readLoggedAt = GetTickCount();
-		LogD("perf", "conquest screen: reading the game's map took %u ms", static_cast<unsigned>(readMs));
+		LogD("perf", "conquest screen: reading the game's state took %.1f ms", readMs);
 	}
 	bool setNormal = false;
 	{
@@ -136,6 +142,18 @@ void ConquestUiGameTick()
 	g_s.view.game = std::move(fresh);
 	g_s.lastRead = GetTickCount();
 }
+}
+
+// The game thread runs this only when the game draws a frame, which its menus do a few times a second: what the player does on the
+// screen is read again at once (ConquestUiHandleMessage), not on the next of those frames.
+void ConquestUiGameTick()
+{
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		if (g_s.view.game.open && GetTickCount() - g_s.lastRead < kReadEveryMs) return;
+	}
+	Refresh();
+}
 
 bool ConquestUiNeedsDraw()
 {
@@ -154,17 +172,15 @@ void ConquestUiDraw(uint32_t *buf, int w, int h)
 		if (g_s.mouseDown) pressAction = ui::HitActionAt(g_s.painted.hits, {view.mouseX, view.mouseY}, pressArg, kActNone);
 	}
 	view.questionDrawn = view.game.confirm && GameMenuUiNeedsDraw();
-	LARGE_INTEGER freq, from, to;
-	QueryPerformanceFrequency(&freq);
+	LARGE_INTEGER from;
 	QueryPerformanceCounter(&from);
 	Painted painted;
-	PaintConquest(buf, w, h, view, pressAction, pressArg, painted);
-	QueryPerformanceCounter(&to);
-	const DWORD ms = static_cast<DWORD>((to.QuadPart - from.QuadPart) * 1000 / freq.QuadPart);
+	const PaintCost cost = PaintConquest(buf, w, h, view, pressAction, pressArg, painted);
+	const double ms = MsSince(from);
 	static DWORD loggedAt = 0;
 	if (ms >= kSlowPaintMs && GetTickCount() - loggedAt >= kSlowLogMs) {
 		loggedAt = GetTickCount();
-		LogD("perf", "conquest screen: a paint took %u ms at %dx%d", static_cast<unsigned>(ms), w, h);
+		LogD("perf", "conquest screen: a paint took %.1f ms at %dx%d (%s; the map built in %.1f ms)", ms, w, h, cost.full ? "whole screen" : "map only", cost.mapMs);
 	}
 	std::lock_guard<std::mutex> lock(g_lock);
 	g_s.painted = std::move(painted);
@@ -232,15 +248,17 @@ bool ConquestUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		default: break;
 		}
 	}
+	if (!mapEvent && action == kActNone) return true;
 	// The game's dialog can open others and call back into the mod: no lock here.
+	LARGE_INTEGER from;
+	QueryPerformanceCounter(&from);
 	if (mapEvent) ConquestMapMouse(mapEvent, pixel.x, pixel.y);
 	else if (action == kActNative) ConquestPress(arg);
 	else if (action == kActBack) ConquestPress(kConquestQuit);
 	else if (action == kActDifficulty) ConquestSetDifficulty(arg);
-	if (mapEvent || action != kActNone) {
-		std::lock_guard<std::mutex> lock(g_lock);
-		g_s.lastRead = 0;
-	}
+	const double gameMs = MsSince(from);
+	Refresh();
+	LogD("perf", "conquest screen: a click took %.1f ms (the game %.1f ms, reading it back %.1f ms)", MsSince(from), gameMs, MsSince(from) - gameMs);
 	return true;
 }
 
