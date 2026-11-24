@@ -62,11 +62,6 @@ bool Shown(const State &s)
 	return Searching(s) || (Matched(s) && s.matchId != s.hiddenMatch);
 }
 
-const char *QueueLabel(const std::string &q)
-{
-	return LeagueQueueIsTeam(q) ? "Ranked 2 vs 2" : "Ranked 1 vs 1";
-}
-
 // The pill at the top centre: spinner, what is searched, the time, and the cross that ends it (not for the partner of a duo).
 void PaintPill(Painter &p, const State &st, int x, int y)
 {
@@ -103,8 +98,6 @@ void PaintBox(Painter &p, const State &st)
 	p.Fill(0, 0, kBoxW, 3, pal::red);
 	SelectObject(p.dc, BrandFont(BrandFace::Display, 46, p.s));
 	p.TextCaps(0, 26, kBoxW, 52, st.phase == LeagueRankedPhase::Ready ? "Match ready" : "Match found", pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
-	p.Font(4);
-	p.TextCaps(0, 82, kBoxW, 18, QueueLabel(st.queue), pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 2);
 	const int64_t now = LeagueServerNowMs();
 	if (st.phase == LeagueRankedPhase::Ready) {
 		p.Font(1);

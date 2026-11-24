@@ -806,8 +806,6 @@ void PaintStandings(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &ou
 		p.Text(x, ny, w, 22, Tr("Provisional until the last round is over."), pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		ny += 24;
 	}
-	p.Text(x, ny, w, 22, Tr("Ties") + ": " + Tr("Buchholz (the points of the opponents met), then head-to-head, then seed"), pal::caption,
-		DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	p.raw = false;
 }
 
@@ -1464,8 +1462,7 @@ void PaintOrganizer(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &ou
 	}
 	if (disputes.disputes.empty()) {
 		p.Font(0);
-		const char *text = !disputes.loaded ? "Couldn't reach the league server. Check your connection and try again."
-											 : "No result is disputed. When a player disputes one, it shows here with the buttons to settle it.";
+		const char *text = !disputes.loaded ? "No connection to the league." : "No disputes.";
 		p.TextWrapped(rx, dTop + 6, rw, 80, text, pal::textDim);
 		return;
 	}
@@ -1790,9 +1787,7 @@ void PaintPageScreen(Painter &p, const State &st, const Ui &u, PaintOut &out)
 	if (tab == kOrganizerTab) tab = 0;
 	if ((tab == 0 || tab >= kRoundTab) && swiss) {
 		if (page.detail.matches.empty()) {
-			p.Font(3);
-			p.Text(ix, iy, iw, 22, "The first round is paired when the check-in closes. Meanwhile, these are the players signed up.", pal::caption);
-			PaintEntrants(p, c, ix, iy + 34, iw - 20, ih - 34, out);
+			PaintEntrants(p, c, ix, iy, iw - 20, ih, out);
 		}
 		else PaintSwiss(p, c, ix, iy, iw - 20, ih, out);
 	}

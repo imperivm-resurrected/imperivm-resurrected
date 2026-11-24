@@ -3751,5 +3751,12 @@ extern const TrRow kTrRows[] = {
 	{"Reconnect", "Reconectar", "Riconnetti"},
 	{"Connecting...", "Conectando...", "Connessione..."},
 	{"Your last ranked game is waiting for the league's result: you can search once it is settled.", "Tu última partida de liga espera el resultado: podrás buscar cuando se resuelva.", "La tua ultima partita classificata attende il risultato: potrai cercare quando sarà decisa."},
+	{"No connection to the league.", "Sin conexión con la liga.", "Nessuna connessione alla lega."},
+	{"No wins yet.", "Aún sin victorias.", "Ancora nessuna vittoria."},
+	{"No games yet.", "Aún sin partidas.", "Ancora nessuna partita."},
+	{"%s Glory to %s", "%s de Gloria para %s", "%s di Gloria per %s"},
+	{"Nobody ranked yet.", "Aún no hay nadie clasificado.", "Ancora nessuno in classifica."},
+	{"No open tournaments.", "No hay torneos abiertos.", "Nessun torneo aperto."},
+	{"No disputes.", "Sin disputas.", "Nessuna contestazione."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

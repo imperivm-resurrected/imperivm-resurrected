@@ -388,8 +388,6 @@ void PaintSearchTeam(Painter &p, const State &st)
 	Display(p, 54);
 	p.TextCaps(dx, dy + 18, dw, 56, "Match found", pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
 	if (live) Ghost(p, dx + 24, dy + 20, 120, 36, "Back", kRkHidePanel, true, mx, my);
-	const std::string caption = RankedFoundCaption(v, "Ranked 2 vs 2");
-	FitCaps(p, dx + 24, dy + 76, dw - 48, 20, caption, pal::caption, DT_CENTER);
 
 	// Both sides, this player's on the left, from the ticket once it is read (it says who accepted).
 	const std::string own = std::to_string(SteamOwnId());
@@ -499,13 +497,6 @@ void PaintSearchTeam(Painter &p, const State &st)
 		FitGhost(p, mid + 88, by, 240, 60, Tr("Decline"), kRkDecline, !v.answering, mx, my);
 		UseSharedFonts(p);
 	}
-	p.Font(3);
-	const char *penalty = "If you decline or don't answer you can't search for 5 minutes; a duo that does not accept leaves the queue.";
-	p.raw = true;
-	const std::string text = Tr(penalty);
-	if (p.TextWidth(text) > dw - 48) p.Font(4);
-	p.Text(dx + 24, by + 68, dw - 48, 22, text, pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-	p.raw = false;
 }
 
 void RankedTeamAction(int arg)

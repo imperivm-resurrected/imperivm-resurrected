@@ -3743,5 +3743,12 @@
 {"en":"Back to the game","es":"Volver a la partida","it":"Torna alla partita"},
 {"en":"Reconnect","es":"Reconectar","it":"Riconnetti"},
 {"en":"Connecting...","es":"Conectando...","it":"Connessione..."},
-{"en":"Your last ranked game is waiting for the league's result: you can search once it is settled.","es":"Tu última partida de liga espera el resultado: podrás buscar cuando se resuelva.","it":"La tua ultima partita classificata attende il risultato: potrai cercare quando sarà decisa."}
+{"en":"Your last ranked game is waiting for the league's result: you can search once it is settled.","es":"Tu última partida de liga espera el resultado: podrás buscar cuando se resuelva.","it":"La tua ultima partita classificata attende il risultato: potrai cercare quando sarà decisa."},
+{"en":"No connection to the league.","es":"Sin conexión con la liga.","it":"Nessuna connessione alla lega."},
+{"en":"No wins yet.","es":"Aún sin victorias.","it":"Ancora nessuna vittoria."},
+{"en":"No games yet.","es":"Aún sin partidas.","it":"Ancora nessuna partita."},
+{"en":"%s Glory to %s","es":"%s de Gloria para %s","it":"%s di Gloria per %s"},
+{"en":"Nobody ranked yet.","es":"Aún no hay nadie clasificado.","it":"Ancora nessuno in classifica."},
+{"en":"No open tournaments.","es":"No hay torneos abiertos.","it":"Nessun torneo aperto."},
+{"en":"No disputes.","es":"Sin disputas.","it":"Nessuna contestazione."}
 ]

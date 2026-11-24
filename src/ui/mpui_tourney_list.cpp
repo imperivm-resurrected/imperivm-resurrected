@@ -383,9 +383,9 @@ void PaintTable(Painter &p, const State &st, const Ui &u, const TourneyListsView
 	}
 	if (rows.empty()) {
 		p.Font(0);
-		const char *empty = !lists.loaded ? "Couldn't reach the league server. Check your connection and try again."
+		const char *empty = !lists.loaded ? "No connection to the league."
 			: !all.empty()	? "No tournament matches these filters."
-			: u.filter == 0 ? "No tournament is open or being played now. The official cups are announced on Discord."
+			: u.filter == 0 ? "No open tournaments."
 							: "No tournament has finished yet.";
 		p.TextWrapped(x + 24, top + 20, w - 48, 80, empty, pal::textDim);
 		return;
@@ -669,11 +669,6 @@ int PaintMineCard(Painter &p, const State &st, const TourneyMineView &mine, int 
 		}
 		cy += r.Height();
 	}
-	const int noteY = y + h - 82;
-	p.Fill(x + pad, noteY, w - 2 * pad, 66, pal::raised);
-	p.Fill(x + pad, noteY, 3, 66, pal::edgeHot);
-	p.Font(3);
-	p.TextWrapped(x + pad + 14, noteY + 10, w - 2 * pad - 24, 50, "When the check-in opens or your match is ready, we tell you here and in any menu of the game.", pal::body);
 	return h;
 }
 
@@ -716,10 +711,6 @@ void PaintChampionsCard(Painter &p, const State &st, const TourneyListsView &lis
 		p.AddHit(x + pad - 8, cy - 6, w - 2 * pad + 16, 56, kTourney, ArgOf(kSubChampion, t.id));
 		cy += 58;
 		shown++;
-	}
-	if (!shown) {
-		p.Font(0);
-		p.TextWrapped(x + pad, cy, w - 2 * pad, 52, "The champions of the official cups will show here.", pal::textDim);
 	}
 }
 

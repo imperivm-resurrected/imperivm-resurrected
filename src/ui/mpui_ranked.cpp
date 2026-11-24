@@ -645,16 +645,6 @@ void PaintRankedPanelFoot(Painter &p, const State &st, int dx, int dw, int by)
 	if (!inRoom) Ghost(p, rx, by + 52, rw, 28, "Try again", kRkRoom, !st.connecting && !v.abandoning, mx, my);
 }
 
-std::string RankedFoundCaption(const LeagueRankedView &v, const char *queue)
-{
-	std::string caption = Tr(queue);
-	if (!v.seasonLoaded) return caption;
-	caption += "  \xC2\xB7  " + TrFmt("Season %s", {LeagueRoman(v.season.number)}) + "  \xC2\xB7  " + LeagueSeasonName(v.season, v.lang);
-	// A season with its own content was searched with it mounted: the queue checks the key.
-	if (!v.season.contentKey.empty()) caption += "  \xC2\xB7  " + ModsProfileLabel(ModsMountedProfile().name);
-	return caption;
-}
-
 void RankedRoomLeftByUser()
 {
 	if (!g_auto.match) return;
@@ -1273,11 +1263,6 @@ void PaintSearch(Painter &p, const State &st)
 	p.TextCaps(dx, dy + 24, dw, 60, "Match found", pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
 	// Back to the hub, whose card takes the player to the match again.
 	if (live) Ghost(p, dx + 24, dy + 24, 120, 36, "Back", kRkHidePanel, true, mx, my);
-	const std::string caption = RankedFoundCaption(v, "Ranked 1 vs 1");
-	p.Font(4);
-	p.raw = true;
-	p.TextCaps(dx, dy + 88, dw, 20, caption, pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 2);
-	p.raw = false;
 
 	const auto meView = LeagueMeShared();
 	const LeagueMeView &me = *meView;
@@ -1395,9 +1380,6 @@ void PaintSearch(Painter &p, const State &st)
 		Ghost(p, mid + 88, by, 240, 64, "Decline", kRkDecline, !v.answering, mx, my);
 		UseSharedFonts(p);
 	}
-	p.Font(3);
-	p.Text(dx, by + 74, dw, 22, "If you decline or don't answer you can't search for 5 minutes; the wait doubles if you do it again.", pal::caption,
-		DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }
 
 int PaintRankedMark(Painter &p, const State &st, int x, int y, int h)

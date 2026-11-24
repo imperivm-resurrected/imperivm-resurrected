@@ -299,10 +299,6 @@ void PaintStage(Painter &p, const State &st, const LeagueMeView &me, int x, int 
 		if (f.done) RawText(p, x + 20, y + L.footerY, w - 40, 22, StreakLine(r, me, o.game.queue), pal::ok, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		return;
 	}
-	Centered(p, x + 20, y + L.footerY, w - 40, 22,
-		Tr(team ? "If a player leaves before minute 3 the game does not count, and whoever left gets the penalty."
-				: "If your opponent leaves before minute 3 the game does not count, and whoever left gets the penalty."),
-		pal::caption);
 }
 
 std::string Grouped(uint32_t n)
@@ -383,8 +379,7 @@ int PaintMasteryUp(Painter &p, const LeagueMasteryChange &mc, int x, int y, int 
 	p.TextCaps(tx, y + 26, tw, 26, TrFmt("%s with %s", {LeagueMasteryLabel(m.level), LeagueCivName(mc.civ)}), ink, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
 	p.raw = false;
 	p.Font(3);
-	const std::string line = m.Top() ? Tr("The laurel of the civilization is yours.") : LeagueMasteryNextText(m);
-	RawText(p, tx, y + 50, tw, 18, line, pal::caption);
+	if (!m.Top()) RawText(p, tx, y + 50, tw, 18, LeagueMasteryNextText(m), pal::caption);
 	return h;
 }
 
@@ -475,11 +470,7 @@ void PaintSummary(Painter &p, const State &st, const LeagueMeView &me, int x, in
 	if (up) gridY += up + 12;
 	if (g.stats && (!up || footY - 8 - gridY >= 100)) PaintStatsGrid(p, g, ix, gridY, iw, footY - 8 - gridY);
 	else if (!up) {
-		p.Font(3);
-		p.TextWrapped(ix, gridY + 2, iw, std::max(20, footY - 8 - (gridY + 2)),
-			team ? "The league checks that the reports describe the same game before it gives any Glory."
-				 : "The league checks that both reports describe the same game before it gives any Glory.",
-			pal::caption);
+
 	}
 	const Verdict verdict = VerdictOf(v.result);
 	const bool confirmed = verdict == Verdict::Rated && v.result.answer.status == "confirmed";
@@ -539,11 +530,7 @@ void PaintPlace(Painter &p, const State &st, int x, int y, int w, int h)
 		DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 	const std::string own = std::to_string(SteamOwnId());
 	const LeagueBoardRow *mine = LeagueBoardFind(v.around, own);
-	if (!mine) {
-		p.Font(0);
-		p.TextWrapped(x + 24, y + 60, w - 48, 60, "You will be on the leaderboard once your placement games are over.", pal::caption);
-		return;
-	}
+	if (!mine) return;
 	// Three rows: the one above, the player and the one below, as tall as the card lets them be.
 	const int rowH = std::max(40, std::min(56, (h - 64) / 3)), avatar = rowH >= 50 ? 32 : 28;
 	int ry = y + 56;

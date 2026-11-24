@@ -278,7 +278,7 @@ void PaintSeasonBand(Painter &p, const State &st, const HubLayout &h)
 		}
 		p.Font(0);
 		const bool failed = !v.noSeason;
-		p.Text(x + 120, y + 84, w - (failed ? 380 : 160), 22, v.noSeason ? "The first season starts soon." : "Couldn't reach the league server. Check your connection and try again.",
+		p.Text(x + 120, y + 84, w - (failed ? 380 : 160), 22, v.noSeason ? "The first season starts soon." : "No connection to the league.",
 			pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		// The screen asks again by itself; the button asks now, everything of the league at once.
 		if (failed) Ghost(p, x + w - 224, y + (kBandH - 44) / 2, 196, 44, v.seasonLoading ? "Connecting..." : "Reconnect", kRkReconnect, !v.seasonLoading, st.mouseX, st.mouseY);
@@ -392,7 +392,6 @@ void PaintQueueLine(Painter &p, const LeagueRankedView &v, const LeagueDuoView &
 		RawText(p, x, y, w, 22, line, ink, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		return;
 	}
-	p.Text(x, y, w, 22, "The league picks the map and the options of every match.", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }
 
 // Whether the season plays the 2v2 too: then the queues are two segments, otherwise the duel's chip alone.
@@ -549,10 +548,6 @@ bool PaintRankCard(Painter &p, const State &st, const HubLayout &h, const League
 		const int cancelY = y + cardH - 118, bottom = cancelY - 10;
 		if (v.window.present) ly = PaintSearchWindow(p, v.window, LeagueMeRanked(me.me, v.searchQueue), ix, ly + 8, iw, bottom) + 8;
 		p.Font(3);
-		if (ly + 20 <= bottom) {
-			p.Text(ix, ly, iw, 20, "The range widens the longer you wait: after 5 minutes, any rank.", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-			ly += 30;
-		}
 		if (ly + 34 <= bottom) PaintSearchContent(p, ix, ly, iw);
 		// The partner of a duo follows the leader's search: only the leader cancels it.
 		if (v.partnerSearch) {
@@ -562,10 +557,6 @@ bool PaintRankCard(Painter &p, const State &st, const HubLayout &h, const League
 		else Ghost(p, ix, cancelY, iw, 48, "Cancel search", kRkCancel, v.phase == LeagueRankedPhase::Searching, mx, my);
 		// The staging server offers a practice bot, to try a match alone: the game's AI plays it.
 		if (v.practiceBot) Ghost(p, ix, cardH + y - 60, iw, 40, "Play against a bot (test)", kRkPracticeBot, true, mx, my);
-		else {
-			p.Font(3);
-			p.TextWrapped(ix, cardH + y - 62, iw, 44, "You can keep looking at rooms: a sound plays and the window flashes when a match is found.", pal::caption);
-		}
 		return false;
 	}
 
@@ -619,19 +610,10 @@ bool PaintRankCard(Painter &p, const State &st, const HubLayout &h, const League
 			const bool started = v.ticketLoaded && v.ticket.startedAt && !LeagueQueueIsTeam(v.ticket.queue);
 			if (started) {
 				Ghost(p, ix, y + cardH - 128, iw, 44, v.abandoning ? "Giving up..." : "Give up the match", kRkSurrender, !v.abandoning, mx, my);
-				p.Font(3);
-				p.TextWrapped(ix, y + cardH - 72, iw, 44, "If you can't go back to the game, give it up: it counts as a loss and your opponent wins.", pal::caption);
 			}
 			else {
 				const bool canCallOff = v.ticketLoaded && LeagueTicketAbandonable(v.ticket) && !v.abandoning;
 				Ghost(p, ix, y + cardH - 128, iw, 44, v.abandoning ? "Cancelling..." : "Cancel match", kRkAbandon, canCallOff, mx, my);
-				p.Font(3);
-				// The server's rule: whether cancelling now locks this player out of the queue for a while.
-				const bool costs = v.ticketLoaded && LeagueAbandonCosts(v.ticket, v.me.steamId, now);
-				p.TextWrapped(ix, y + cardH - 72, iw, 44,
-					costs ? "Cancelling now counts as declining: you couldn't search for a few minutes."
-						  : "If the room won't open, press it again or cancel the match: that doesn't count against you.",
-					pal::caption);
 			}
 		}
 		return false;
@@ -660,7 +642,7 @@ bool PaintRankCard(Painter &p, const State &st, const HubLayout &h, const League
 	p.Font(0);
 	if (!me.loaded) {
 		if (!waiting) {
-			p.Text(x + 16, lineY, w - 32, 48, me.failed ? "Couldn't reach the league server. Check your connection and try again." : "Your rank will show here.",
+			p.Text(x + 16, lineY, w - 32, 48, me.failed ? "No connection to the league." : "",
 				pal::caption, DT_CENTER | DT_WORDBREAK);
 		}
 	}
@@ -679,11 +661,7 @@ bool PaintRankCard(Painter &p, const State &st, const HubLayout &h, const League
 			p.Fill(bx + i * (box + gap), barY, box, 12, fill);
 			p.Frame(bx + i * (box + gap), barY, box, 12, pal::hairline);
 		}
-		p.Font(3);
-		const char *about = "Your first five games place you, at most in Centurion I.";
-		const int aboutH = p.Measure(iw, about);
-		p.TextWrapped(ix, barY + 22, iw, aboutH + 2, about, pal::caption);
-		tilesY = std::max(tilesY, barY + 22 + aboutH + 10);
+		tilesY = std::max(tilesY, barY + 22);
 	}
 	else {
 		const int total = st.ranked.view.top.total;
@@ -697,11 +675,7 @@ bool PaintRankCard(Painter &p, const State &st, const HubLayout &h, const League
 		const float frac = gp.capped && !elite ? gp.into / 100.0f : 1.0f;
 		p.Fill(ix, barY, static_cast<int>(iw * frac), 10, Ink(tier));
 		p.Font(0);
-		if (elite || !gp.capped) {
-			RawText(p, ix, labelsY, iw, 22, elite ? Tr("Elite rank: it goes by your place in the leaderboard.") : Tr("Top division: climb the leaderboard to the elite."),
-				pal::caption);
-		}
-		else {
+		if (!(elite || !gp.capped)) {
 			// The Glory into the division on the left, and the wins to the next one with the rest of the line.
 			const std::string into = std::to_string(gp.into) + " / 100 " + Tr("Glory");
 			p.raw = true;
@@ -853,7 +827,7 @@ void PaintMasteryList(Painter &p, const State &st, const LeagueMeView &me, int x
 		p.Font(0);
 		const char *text = !me.loaded ? "Reading your games..."
 			: !me.me.masteryKnown	  ? "The league server does not count the mastery yet."
-									  : "Win ranked games with a civilization to climb its mastery, from Tiro to Master.";
+									  : "No wins yet.";
 		p.TextWrapped(ix, y + 68, iw, 60, text, pal::caption);
 		return;
 	}
@@ -892,10 +866,7 @@ void PaintMasteryList(Painter &p, const State &st, const LeagueMeView &me, int x
 		p.Fill(x + 1, ry + kRecentRowH, w - 2, 1, pal::hairline);
 	}
 	const int noteY = y + kRecentTop + rows * (kRecentRowH + 1) + 10;
-	if (noteY + 40 <= y + cardH - 8) {
-		p.Font(3);
-		p.TextWrapped(ix, noteY, iw, 40, "The mastery counts your ranked wins with each civilization, in every season and queue.", pal::caption);
-	}
+	(void)noteY;
 }
 
 void PaintRecent(Painter &p, const State &st, const HubLayout &h, const LeagueMeView &me, int y, int cardH)
@@ -934,9 +905,9 @@ void PaintRecent(Painter &p, const State &st, const HubLayout &h, const LeagueMe
 	const int rows = std::min<int>({static_cast<int>(v.recent.size()), kLeagueRecentGames, (cardH - kRecentTop - 4) / (kRecentRowH + 1)});
 	if (!rows) {
 		p.Font(0);
-		const char *text = !v.recentLoaded && v.recentFailed ? "Couldn't reach the league server. Check your connection and try again."
+		const char *text = !v.recentLoaded && v.recentFailed ? "No connection to the league."
 			: !v.recentLoaded									? "Reading your games..."
-																: "Your ranked games will show here, with the Glory each one gave.";
+																: "No games yet.";
 		p.TextWrapped(ix, y + 68, iw, 60, text, pal::caption);
 		return;
 	}
@@ -986,12 +957,6 @@ void PaintSeasonRewards(Painter &p, const State &st, const HubLayout &h, const L
 	p.raw = false;
 	Caps(p, ix, y + 16, iw - countW - 12, 22, "Season rewards", pal::redText);
 	RawText(p, ix + iw - countW, y + 16, countW, 22, count, today.goal ? pal::caption : pal::ok, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
-	const char *about = today.founder ? "This test season gives the Founder emblem to everyone who plays 10 games and wins 5 in it."
-									   : "At the close you keep the rewards of the highest rank you reach.";
-	// The line takes the smaller type before it would be cut.
-	p.Font(0);
-	if (p.TextWidth(about) > iw) p.Font(3);
-	p.Text(ix, y + 42, iw, 24, about, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 
 	// The ranks, lit up to the one of the rewards.
 	const LeagueTier mine = today.tier;
@@ -1056,14 +1021,13 @@ void PaintSeasonRewards(Painter &p, const State &st, const HubLayout &h, const L
 	// How far the next rank is: the rewards go up with it.
 	std::string next;
 	COLORREF ink = pal::caption;
-	if (today.placing) next = Tr("Your rewards follow your rank: finish your placement first.");
-	else if (today.nextTier == LeagueTier::None) next = Tr("You are at the top: hold your place until the season closes.");
+	if (today.placing || today.nextTier == LeagueTier::None) next.clear();
 	else if (!LeagueTierHasDivisions(today.nextTier)) {
 		next = Tr(today.nextTier == LeagueTier::Imperator ? "Imperator goes to the best 10 when the season closes."
 														   : "Praetorian goes to the best 50 when the season closes.");
 	}
 	else {
-		next = TrFmt("%s Glory to %s: your rewards go up with it.", {std::to_string(today.gloryToNext), Tr(LeagueTierName(today.nextTier))});
+		next = TrFmt("%s Glory to %s", {std::to_string(today.gloryToNext), Tr(LeagueTierName(today.nextTier))});
 		ink = pal::textDim;
 	}
 	p.Font(3);
@@ -1115,7 +1079,7 @@ void PaintMiniBoard(Painter &p, const State &st, const HubLayout &h, int y, int 
 	}
 	else if (v.top.rows.empty()) {
 		p.Font(0);
-		p.TextWrapped(ix, y + 96, iw, 60, "Nobody has finished their placement games yet. Be the first on the leaderboard.", pal::caption);
+		p.TextWrapped(ix, y + 96, iw, 60, "Nobody ranked yet.", pal::caption);
 	}
 	bool listed = false;
 	// The first ten, fewer on a short screen: the player's own row and the button keep their room under them.
@@ -1210,11 +1174,7 @@ void PaintPlayerCard(Painter &p, const State &st, const std::string &seasonText,
 	const int ix = x + 24, iw = w - 48;
 	std::string pick = st.ranked.boardPick;
 	if (pick.empty() && DefaultBoard(st) && LeagueBoardFind(v.around, own)) pick = own;
-	if (pick.empty()) {
-		p.Font(0);
-		p.TextWrapped(ix, y + 24, iw, 80, "Pick a player of the table to see their card.", pal::caption);
-		return;
-	}
+	if (pick.empty()) return;
 	const int season = st.ranked.boardSeason;
 	LeaguePlayerRequest(pick, season, false, v.queue);
 	const LeaguePlayerView pv = LeaguePlayerState(pick, season, v.queue);
