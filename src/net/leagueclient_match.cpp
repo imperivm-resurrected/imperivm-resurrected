@@ -762,8 +762,12 @@ void ReportIfDecided()
 
 }
 
+// Whether the online game that just ended on this computer was over (a winner, a surrender, a decided drop) rather than cut off.
+std::atomic<bool> g_lastGameOver{false};
+
 void LeagueMatchEnded()
 {
+	g_lastGameOver = false;
 	LeagueReport report;
 	std::string why;
 	bool ready = false, ranked = false, factsRead = false;
@@ -780,6 +784,7 @@ void LeagueMatchEnded()
 		else if (g_match.reported) {
 			// Reported when it was decided.
 			g_match = Match();
+			g_lastGameOver = true;
 			return;
 		}
 		else {
@@ -798,7 +803,14 @@ void LeagueMatchEnded()
 		RankedGameEnded(rankedId);
 		return;
 	}
+	// Only a game this computer lost the connection to (no winner, or this player gone) is one to come back to.
+	g_lastGameOver = report.endedBy != "disconnect";
 	QueueReport(report, ranked, rankedId, facts, factsRead);
+}
+
+bool LeagueLastGameOver()
+{
+	return g_lastGameOver.exchange(false);
 }
 
 void LeagueMatchSurrendered(int player)

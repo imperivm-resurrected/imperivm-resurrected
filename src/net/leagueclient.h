@@ -94,6 +94,8 @@ std::vector<MatchTag> LeagueGameTags();
 // The game is over for this computer (it is back in the menu). The report goes to the server in the background when the account is
 // linked; when it cannot be sent, it waits on disk and is tried again.
 void LeagueMatchEnded();
+// After LeagueMatchEnded: the online game reached its end (a winner, a surrender, a decided drop), so it is not one to come back to.
+bool LeagueLastGameOver();
 void LeagueMatchSurrendered(int player);
 void LeagueMatchDesync();
 // The online game being played is a ranked one (its room's tag says so).

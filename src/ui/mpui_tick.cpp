@@ -536,7 +536,10 @@ void MpUiGameThreadTick()
 			LeagueMatchEnded();
 			g_s.inOnlineGame = false;
 			g_s.classicPending = false;
-			if (g_userQuit.tick && GetTickCount() - g_userQuit.tick < 120000) ClearOnlineGame();
+			// A game left on purpose or played to its end is no game to come back to: only one cut off (the connection, a crash) is offered later.
+			const bool over = LeagueLastGameOver();
+			if (over || (g_userQuit.tick && GetTickCount() - g_userQuit.tick < 120000)) ClearOnlineGame();
+			if (over) LogI("lobby", "the online game ended; it is not offered to come back to");
 			g_userQuit.id = 0;
 			g_userQuit.tick = 0;
 			SteamLeaveLobby();
