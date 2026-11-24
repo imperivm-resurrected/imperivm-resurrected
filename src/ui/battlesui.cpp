@@ -188,7 +188,8 @@ int CoverWidthDrawn()
 	return (lines * 1519 + 2159) / 2160 + 16;
 }
 
-std::shared_ptr<const BattleImage> ModCover(const char *folder, const std::string &file)
+// `expected` false: a missing file is no fault (a conquest without a cover of the mod).
+std::shared_ptr<const BattleImage> ModCover(const char *folder, const std::string &file, bool expected = true)
 {
 	std::map<std::string, std::shared_ptr<const BattleImage>> &covers = g_modCovers;
 	const std::string key = std::string(folder) + "/" + file;
@@ -198,7 +199,7 @@ std::shared_ptr<const BattleImage> ModCover(const char *folder, const std::strin
 	Picture pic;
 	const std::string name(folder);
 	if (!LoadPicture(ModArtFile(std::wstring(name.begin(), name.end()).c_str(), std::wstring(file.begin(), file.end()).c_str()), pic)) {
-		LogW("ui", "adventure screen: the cover %s is missing or unreadable", key.c_str());
+		if (expected) LogW("ui", "adventure screen: the cover %s is missing or unreadable", key.c_str());
 		return nullptr;
 	}
 	BattleImage full;
@@ -219,6 +220,18 @@ std::shared_ptr<const BattleImage> ModCoverOf(const std::string &adventurePath)
 	return great.empty() ? nullptr : ModCover("adventures", great);
 }
 
+// The mod's own cover of a conquest: imperivm-resurrected\conquest\<conquest>\cover.jpg (or .png), under the key its painted map is
+// found by. Null without one, and the conquest keeps the game's picture.
+std::shared_ptr<const BattleImage> ConquestCoverOf(const std::string &conquestPath)
+{
+	const std::string key = ConquestKeyOf(conquestPath);
+	if (key.empty()) return nullptr;
+	for (const char *name : {"cover.jpg", "cover.png"}) {
+		if (std::shared_ptr<const BattleImage> img = ModCover("conquest", key + "\\" + name, false)) return img;
+	}
+	return nullptr;
+}
+
 std::shared_ptr<const BattleImage> AdventureCover(const std::string &adventurePath)
 {
 	std::shared_ptr<const BattleImage> img = ModCoverOf(adventurePath);
@@ -227,6 +240,7 @@ std::shared_ptr<const BattleImage> AdventureCover(const std::string &adventurePa
 
 // The campaigns of Imperivm I and II and the great battles show the mod's covers instead of the game's pictures: on their cards
 // (those of Imperivm I and II before their packs are installed or while they are not active too) and next to the chosen adventure.
+// The conquests have no cards nor last game here: only the chosen one's picture.
 void UseModCovers(BattlesSnapshot &s)
 {
 	for (int tab : {kBattlesTabImperivm1, kBattlesTabImperivm2, kBattlesTabGreat}) {
@@ -248,8 +262,9 @@ void UseModCovers(BattlesSnapshot &s)
 		s.gallery[tab] = std::move(gallery);
 		s.covers[tab] = s.gallery[tab].empty() ? nullptr : s.gallery[tab][0].image;
 	}
-	if (s.tab != kBattlesTabConquests && s.selList >= 0 && s.selIndex >= 0) {
-		if (std::shared_ptr<const BattleImage> img = ModCoverOf(s.lists[s.selList][s.selIndex].path)) s.image = img;
+	if (s.selList >= 0 && s.selIndex >= 0) {
+		const std::string &path = s.lists[s.selList][s.selIndex].path;
+		if (std::shared_ptr<const BattleImage> img = s.tab == kBattlesTabConquests ? ConquestCoverOf(path) : ModCoverOf(path)) s.image = img;
 	}
 }
 
