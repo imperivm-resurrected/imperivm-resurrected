@@ -703,9 +703,14 @@ bool HandleDrag(UINT msg, WPARAM wp, LPARAM lp)
 		const bool released = msg == WM_LBUTTONUP || (msg == WM_MOUSEMOVE && !(wp & MK_LBUTTON));
 		if (msg == WM_MOUSEMOVE || msg == WM_LBUTTONUP) g_s.live = {at.x - g_s.grab.x, at.y - g_s.grab.y};
 		if (!released) return msg == WM_MOUSEMOVE ? false : msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST;
+		g_s.dragging = false;
+		// A click on the strip without a drag (one half of a double click) keeps the place: saving it in thousandths moved it a pixel.
+		if (std::abs(at.x - g_s.lastGripAt.x) <= 3 && std::abs(at.y - g_s.lastGripAt.y) <= 3) {
+			if (msg == WM_LBUTTONUP) g_swallowLeftUp = false;
+			return msg == WM_LBUTTONUP;
+		}
 		int maxWidth = 0;
 		end = PlaceOf(g_s, g_frameW, g_frameH, maxWidth);
-		g_s.dragging = false;
 	}
 	Config &c = MutableConfig();
 	c.chatX = ChatToPermille(end.left, g_frameW);
