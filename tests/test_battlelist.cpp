@@ -268,6 +268,23 @@ void ConquestLaurelsKeepTheHardest()
 	CHECK_EQ(ConquestLaurelOf(back, "gbr", "Gaul"), 3);
 }
 
+void CoversShrinkToTheWidthDrawn()
+{
+	BattleImage img;
+	img.w = 4;
+	img.h = 2;
+	img.bgra = {0xff000000u, 0xff0000ffu, 0xff00ff00u, 0xff00ff00u, 0xff000000u, 0xff0000ffu, 0xff00ff00u, 0xff00ff00u};
+	const BattleImage half = ShrinkBattleImage(img, 2);
+	CHECK_EQ(half.w, 2);
+	CHECK_EQ(half.h, 1);
+	CHECK_EQ(half.bgra.size(), static_cast<size_t>(2));
+	CHECK_EQ(half.bgra[0], 0xff000080u);
+	CHECK_EQ(half.bgra[1], 0xff00ff00u);
+	const BattleImage same = ShrinkBattleImage(img, 8);
+	CHECK_EQ(same.w, 4);
+	CHECK_EQ(same.bgra.size(), static_cast<size_t>(8));
+}
+
 }
 
 int main()
@@ -286,5 +303,6 @@ int main()
 	GreatBattlesHaveTheirRemasteredCovers();
 	LaurelsKeepTheHardestVictory();
 	ConquestLaurelsKeepTheHardest();
+	CoversShrinkToTheWidthDrawn();
 	return test::Summary("battlelist");
 }

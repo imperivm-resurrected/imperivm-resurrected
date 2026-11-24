@@ -367,3 +367,35 @@ std::string BattleDescriptionText(const std::string &raw)
 	}
 	return Trim(out);
 }
+
+BattleImage ShrinkBattleImage(BattleImage image, int maxWidth)
+{
+	if (maxWidth <= 0 || image.w <= maxWidth || image.h <= 0 || image.bgra.size() < static_cast<size_t>(image.w) * image.h) return image;
+	const int sw = image.w, sh = image.h;
+	const int dw = maxWidth, dh = std::max(1, static_cast<int>((static_cast<long long>(sh) * dw + sw / 2) / sw));
+	BattleImage out;
+	out.w = dw;
+	out.h = dh;
+	out.bgra.resize(static_cast<size_t>(dw) * dh);
+	for (int y = 0; y < dh; ++y) {
+		const int y0 = static_cast<int>(static_cast<long long>(y) * sh / dh);
+		const int y1 = std::max(y0 + 1, static_cast<int>(static_cast<long long>(y + 1) * sh / dh));
+		for (int x = 0; x < dw; ++x) {
+			const int x0 = static_cast<int>(static_cast<long long>(x) * sw / dw);
+			const int x1 = std::max(x0 + 1, static_cast<int>(static_cast<long long>(x + 1) * sw / dw));
+			uint32_t sum[4] = {0, 0, 0, 0};
+			for (int sy = y0; sy < y1; ++sy) {
+				const uint32_t *row = image.bgra.data() + static_cast<size_t>(sy) * sw;
+				for (int sx = x0; sx < x1; ++sx) {
+					const uint32_t px = row[sx];
+					for (int c = 0; c < 4; ++c) sum[c] += (px >> (c * 8)) & 0xffu;
+				}
+			}
+			const uint32_t n = static_cast<uint32_t>((y1 - y0) * (x1 - x0));
+			uint32_t px = 0;
+			for (int c = 0; c < 4; ++c) px |= ((sum[c] + n / 2) / n) << (c * 8);
+			out.bgra[static_cast<size_t>(y) * dw + x] = px;
+		}
+	}
+	return out;
+}

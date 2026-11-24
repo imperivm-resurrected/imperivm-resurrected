@@ -177,9 +177,20 @@ std::shared_ptr<const BattleImage> PackPicture(const BattleCampaignPack &pack)
 
 // A picture of the mod's folder (imperivm-resurrected\<folder>\<file>), read once: the same picture keeps its blurred backdrop between
 // frames. Null when the file is missing.
+// The covers read while the screen is open; let go when it closes.
+std::map<std::string, std::shared_ptr<const BattleImage>> g_modCovers;
+
+// The widest a cover is drawn: the adventure's picture, about 1519 pixels wide on a 2160-line screen. The covers are kept that wide,
+// not at their file's size (1387x1134, some 6 MB each in memory).
+int CoverWidthDrawn()
+{
+	const int lines = std::max(720, GetSystemMetrics(SM_CYSCREEN));
+	return (lines * 1519 + 2159) / 2160 + 16;
+}
+
 std::shared_ptr<const BattleImage> ModCover(const char *folder, const std::string &file)
 {
-	static std::map<std::string, std::shared_ptr<const BattleImage>> covers;
+	std::map<std::string, std::shared_ptr<const BattleImage>> &covers = g_modCovers;
 	const std::string key = std::string(folder) + "/" + file;
 	const auto known = covers.find(key);
 	if (known != covers.end()) return known->second;
@@ -190,11 +201,11 @@ std::shared_ptr<const BattleImage> ModCover(const char *folder, const std::strin
 		LogW("ui", "adventure screen: the cover %s is missing or unreadable", key.c_str());
 		return nullptr;
 	}
-	auto img = std::make_shared<BattleImage>();
-	img->w = pic.w;
-	img->h = pic.h;
-	img->bgra = std::move(pic.px);
-	slot = img;
+	BattleImage full;
+	full.w = pic.w;
+	full.h = pic.h;
+	full.bgra = std::move(pic.px);
+	slot = std::make_shared<const BattleImage>(ShrinkBattleImage(std::move(full), CoverWidthDrawn()));
 	return slot;
 }
 
@@ -730,6 +741,7 @@ void BattlesUiGameTick()
 	if (BattlesIntroPlaying()) return;
 	if (!BattlesScreenWanted()) {
 		g_saves = SavesCache();
+		g_modCovers.clear();
 		g_savesWasOpen = false;
 		g_modsWasOpen = false;
 		std::lock_guard<std::mutex> lock(g_lock);

@@ -14,6 +14,8 @@ struct BattleImage {
 
 // Uncompressed 8, 16, 24 and 32-bit bitmaps, the kinds the game ships next to its adventures.
 bool DecodeBattleBmp(const unsigned char *data, size_t size, BattleImage &out);
+// The picture made at most `maxWidth` wide, each pixel the average of the ones it covers; a picture already that narrow is kept.
+BattleImage ShrinkBattleImage(BattleImage image, int maxWidth);
 
 struct BattleTitle {
 	std::string name, year;
