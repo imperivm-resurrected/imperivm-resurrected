@@ -461,7 +461,8 @@ void ZoomViewDrawTimers(uint32_t *buf, int w, int h, const std::vector<ZoomMapTi
 		SelectObject(dc, bmp);
 		SetBkMode(dc, TRANSPARENT);
 	}
-	const int px = std::clamp(h / 44, 14, 30);
+	// As the names over the chat's marks (chatui_view.cpp, PaintMarkName): 15 units of its scale, bold, in a black rim of a pixel.
+	const int px = static_cast<int>(15 * std::max(0.85f, std::min(1.3f, h / 880.0f)) + 0.5f);
 	// The face is part of the key: a font made before the brand's were registered is another one, and would stay.
 	if (!font || px != fontPx || fontFace != face) {
 		SelectObject(dc, GetStockObject(DEFAULT_GUI_FONT));
@@ -477,9 +478,9 @@ void ZoomViewDrawTimers(uint32_t *buf, int w, int h, const std::vector<ZoomMapTi
 	SetTextColor(dc, RGB(255, 255, 255));
 	TEXTMETRICW tm = {};
 	GetTextMetricsW(dc, &tm);
-	// No box: white figures in a dark rim, with a soft shadow under it, read on grass, sand and snow alike.
-	const int rim = px >= 22 ? 2 : 1, drop = std::max(1, px / 12), pad = rim + 1;
-	constexpr int kInkR = 0xf1, kInkG = 0xee, kInkB = 0xe8, kRimR = 0x0c, kRimG = 0x0b, kRimB = 0x0a, kRimAlpha = 225, kDropAlpha = 90;
+	// No box: white figures in a black rim of a pixel, as the names over the map's marks, read on grass, sand and snow alike.
+	const int rim = 1, drop = 0, pad = rim + 1;
+	constexpr int kInkR = 0xff, kInkG = 0xff, kInkB = 0xff, kRimR = 0, kRimG = 0, kRimB = 0, kRimAlpha = 255, kDropAlpha = 0;
 	std::vector<uint8_t> ink, edge;
 	for (const ZoomMapTimer &t : timers) {
 		char text[16];
