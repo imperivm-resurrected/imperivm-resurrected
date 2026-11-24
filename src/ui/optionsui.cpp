@@ -171,7 +171,7 @@ void CommitDisplayExtras(Config &c, const Values &v)
 	if (fps >= 0) c.fpsLimit = kFpsLimits[fps];
 }
 
-const int kSoundScrolls[] = {kMasterVolume, kNatureVolume, kConversationVolume};
+const int kSoundScrolls[] = {kMasterVolume, kNatureVolume, kConversationVolume, kAlertVolume};
 const char *const kDefaultDevice = "Default device";
 
 void SetDevices(Values &v, const std::string &wanted)
@@ -227,6 +227,7 @@ void SetExtras(Values &v, const Config &c)
 	v.checks[kAllyColors] = c.allyColors;
 	v.scrolls[kMasterVolume] = c.masterVolume;
 	v.scrolls[kNatureVolume] = c.natureVolume;
+	v.scrolls[kAlertVolume] = c.alertVolume;
 	v.scrolls[kConversationVolume] = c.conversationVolume;
 	SetDevices(v, c.outputDevice);
 }
@@ -303,6 +304,7 @@ void ApplySoundLive(const Values &v)
 	Config &c = MutableConfig();
 	c.masterVolume = SoundMasterPercent(ScrollOr(v, kMasterVolume, c.masterVolume));
 	c.natureVolume = ScrollOr(v, kNatureVolume, c.natureVolume);
+	c.alertVolume = std::max(1, std::min(100, ScrollOr(v, kAlertVolume, c.alertVolume)));
 	c.conversationVolume = SoundTypeVolume(ScrollOr(v, kConversationVolume, c.conversationVolume), c.conversationVolume);
 	DmShimSetMasterVolume(c.masterVolume);
 	SoundLevelsApply();

@@ -60,6 +60,8 @@ struct Config {
 	bool modernAudio = true;
 	bool fixVoices = true;
 	bool onlineAlerts = true;
+	// [Sound] AlertVolume: how loud the online alerts are (the horn, the chat's and the rooms' tones), 1 to 100.
+	int alertVolume = 100;
 
 	float scrollSpeed = 1.0f;
 	bool autosave = true;

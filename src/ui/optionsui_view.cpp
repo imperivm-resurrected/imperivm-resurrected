@@ -441,8 +441,11 @@ std::vector<Page> BuildPages(const Values &v)
 			ToggleSlider(v, "Sound effects", kEffectsOn, kEffectsVolume, 1, 100), nature, ToggleSlider(v, "Unit speech", kSpeechOn, kSpeechVolume, 1, 100),
 			ToggleSlider(v, "Conversations", kConversationsOn, kConversationVolume, 1, 100), ToggleSlider(v, "Cutscenes", kMovieOn, kMovieVolume, 0, 100)}});
 		page.right.push_back({"Output", {Combo(v, "Device", kOutputDevice)}});
+		// The online alerts in one place: whether they sound and how loud, and the horn of a match found among them.
+		Row horn = Toggle(v, "Sound when a match is found", kMatchFoundSound, "Ranked and cups: a horn, also with the game in the background");
+		horn.enabled = Check(v, kAlerts);
 		page.right.push_back({"Behaviour", {Toggle(v, "Mute in the background", kMuteBackground),
-			Toggle(v, "Chat and invitation alerts", kAlerts)}});
+			ToggleSlider(v, "Chat and invitation alerts", kAlerts, kAlertVolume, 1, 100), horn}});
 		pages.push_back(page);
 	}
 	{
@@ -470,7 +473,6 @@ std::vector<Page> BuildPages(const Values &v)
 		page.right.push_back({"Autosave", {Toggle(v, "Autosave", kAutosave), Combo(v, "Every", kAutosaveEvery, "", false, autosave), Combo(v, "Copies", kAutosaveCopies, "", false, autosave),
 			Toggle(v, "Save when leaving the game", kSaveOnExit)}});
 		page.right.push_back({"Multiplayer", {Toggle(v, "Show badges in the chat", kChatBadges, "The rank or emblem after each name"),
-			Toggle(v, "Sound when a match is found", kMatchFoundSound, "Ranked and cups: a horn, also with the game in the background"),
 			Toggle(v, "Bring the game to the front", kAlertFront, "When a match is found or a room starts its countdown")}});
 		page.right.push_back({"Big map", {Toggle(v, "Respawn timers", kRespawnTimers, "When the mushrooms, water and ruins you saw have their item again")}});
 		pages.push_back(page);

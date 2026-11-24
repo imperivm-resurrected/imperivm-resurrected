@@ -195,6 +195,7 @@ void LoadConfig()
 	g_config.modernAudio = ini.Flag("Sound", "ModernAudio", true);
 	g_config.fixVoices = ini.Flag("Sound", "FixVoices", true);
 	g_config.onlineAlerts = ini.Flag("Sound", "OnlineAlerts", true);
+	g_config.alertVolume = ini.Clamped("Sound", "AlertVolume", 100, 1, 100);
 	g_config.masterVolume = ini.Clamped("Sound", "MasterVolume", 100, 0, 100);
 	g_config.natureVolume = ini.Number("Sound", "NatureVolume", -1);
 	if (g_config.natureVolume < 1 || g_config.natureVolume > 100) g_config.natureVolume = -1;
@@ -351,6 +352,7 @@ void SaveConfig()
 	ini.WriteFlag("Sound", "MuteInBackground", g_config.muteInBackground);
 	ini.WriteFlag("Sound", "ModernAudio", g_config.modernAudio);
 	ini.WriteFlag("Sound", "OnlineAlerts", g_config.onlineAlerts);
+	ini.WriteNumber("Sound", "AlertVolume", g_config.alertVolume);
 	ini.WriteNumber("Sound", "MasterVolume", g_config.masterVolume);
 	// Without the key, nature sounds follow the effects volume.
 	ini.WriteNumberOrRemove("Sound", "NatureVolume", g_config.natureVolume, g_config.natureVolume > 0);

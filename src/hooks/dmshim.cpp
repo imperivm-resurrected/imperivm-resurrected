@@ -711,6 +711,8 @@ struct UiTone {
 	ma_audio_buffer buf;
 	ma_sound snd;
 	bool ready = false;
+	// Its loudness before the alerts' volume.
+	float volume = 1.0f;
 };
 constexpr int kUiTones = 9;
 // The Roman horn that calls the player (core/playeralert.h); the tones before it are short synthesized beeps.
@@ -773,9 +775,11 @@ void UiSoundPlay(int kind)
 			ma_audio_buffer_uninit(&t.buf);
 			return;
 		}
-		ma_sound_set_volume(&t.snd, volume);
+		t.volume = volume;
 		t.ready = true;
 	}
+	// The alerts' own volume (Options, Sound), heard at once while its slider is dragged.
+	ma_sound_set_volume(&t.snd, t.volume * GetConfig().alertVolume / 100.0f);
 	ma_sound_stop(&t.snd);
 	ma_sound_seek_to_pcm_frame(&t.snd, 0);
 	ma_sound_start(&t.snd);
