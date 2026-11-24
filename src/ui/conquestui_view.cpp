@@ -5,13 +5,18 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cmath>
 #include <cstring>
+#include <functional>
+#include <map>
 #include <memory>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include "core/log.h"
 #include "i18n/tr.h"
+#include "ui/conquestshield.h"
 #include "ui/fullscreen.h"
 #include "ui/medal.h"
 #include "ui/ornaments.h"
@@ -29,7 +34,7 @@ const int kLineH = 19;
 
 const int kCardPad = 20, kLabelY = 16, kDescLineH = 23, kBonusLineH = 20, kSegmentH = 34;
 const int kShieldW = 74, kShieldH = 79;
-const int kPathLabelW = 230, kSlotW = 86, kSlotGapMax = 28, kSlotGapMin = 8, kSlotShieldW = 46, kSlotShieldH = 49, kMaxSlots = 8;
+const int kPathLabelW = 230, kSlotMin = 70, kSlotMax = 110, kConnectorMin = 26, kConnectorMax = 60, kStepShieldW = 84, kMaxSlots = 8;
 const int kSwatch = 16, kLegendRow = 30, kMedalSmall = 18, kMedalCard = 22;
 const int kQuestionW = 546, kQuestionH = 246;
 
@@ -40,7 +45,7 @@ const int kBorderLeft = 12, kBorderTop = 15, kBorderRight = 12, kBorderBottom = 
 // bottom is the end of what is shown.
 const int kPlateX0 = 26, kPlateX1 = 526, kPlateY0 = 662, kPlateY1 = 768 - kBorderBottom, kPlateFeather = 16;
 
-const COLORREF kFrameGoldDim = RGB(127, 98, 48), kProgressGold = RGB(214, 170, 84);
+const COLORREF kFrameGoldDim = RGB(127, 98, 48), kProgressGold = RGB(214, 170, 84), kConnectorDone = RGB(170, 135, 70);
 const COLORREF kConquerText = pal::redText;
 
 // A shield in the units of its painter, drawn into the canvas after the GDI work.
@@ -49,15 +54,11 @@ struct Pending {
 	int x, y, w, h, alpha;
 };
 
-// A medal over a shield, drawn once the shields are in.
-struct LateMedal {
-	int x, y, size, level;
-};
-
 struct Layer {
 	Painter &p;
 	std::vector<Pending> images;
-	std::vector<LateMedal> medals;
+	// What goes over the shields, drawn once they are in: their numbers and medals.
+	std::vector<std::function<void(Painter &)>> after;
 };
 
 COLORREF ToColorRef(uint32_t rgb) { return RGB((rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255); }
@@ -198,7 +199,7 @@ void FlushImages(Canvas &c, Layer &l)
 		const int x = p.S(d.x), y = p.S(d.y);
 		DrawImage(c, {d.img, x, y, p.S(d.x + d.w) - x, p.S(d.y + d.h) - y, d.alpha});
 	}
-	for (const LateMedal &m : l.medals) PaintMedal(p, m.x, m.y, m.size, m.level);
+	for (const auto &draw : l.after) draw(p);
 }
 
 // The game's name of a difficulty (1 easy to 3 hard), as its list gives it.
@@ -479,53 +480,103 @@ void PaintMapTag(Painter &p, const Layout &L, const View &v, int hovered)
 	p.Text(x + 28, y + 27, w - 42, 20, s.line, s.color, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }
 
+// The steps' empty shields, made once for each size and look.
+std::shared_ptr<const ConquestImage> ShieldArt(int w, int h, int style)
+{
+	static std::map<std::tuple<int, int, int>, std::shared_ptr<const ConquestImage>> cache;
+	const auto key = std::make_tuple(w, h, style);
+	const auto it = cache.find(key);
+	if (it != cache.end()) return it->second;
+	if (cache.size() > 32) cache.clear();
+	auto img = std::make_shared<ConquestImage>();
+	img->w = w;
+	img->h = h;
+	img->argb = ConquestShieldArt(w, h, style);
+	return cache[key] = img;
+}
+
+// A line between two steps with a chevron in its middle, smoothed, in the colour of how far the path has come.
+bool InUnitChevron(double u, double v) { return std::fabs(u - (0.75 - std::fabs(v - 0.5) * 1.3)) < 0.22; }
+
+void PaintConnector(Painter &p, int x0, int x1, int cy, COLORREF c)
+{
+	if (x1 - x0 < 12) return;
+	const int mid = (x0 + x1) / 2;
+	p.Fill(x0, cy - 1, mid - 6 - x0, 2, c);
+	p.Fill(mid + 6, cy - 1, x1 - mid - 6, 2, c);
+	p.Shape(mid - 5, cy - 7, 10, 14, InUnitChevron, c);
+}
+
 void PaintPath(Layer &l, const Box &b, const View &v)
 {
 	Painter &p = l.p;
 	const ConquestSnapshot &g = v.game;
 	PaintGlassCard(p, b.x, b.y, b.w, b.h);
-	// A conquest won whole shows its medal beside the label.
+	// The label, how far the path has come and, once the conquest is won whole, its medal.
 	const int medal = g.laurel > 0 ? kMedalCard + 8 : 0;
-	PaintSectionLabel(p, b.x + 24, b.y + 22, kPathLabelW - 32 - medal, 18, "Your path");
-	if (medal) PaintMedal(p, b.x + kPathLabelW - 16 - kMedalCard, b.y + 20, kMedalCard, g.laurel);
+	const int labelY = b.y + (b.h - 78) / 2;
+	PaintSectionLabel(p, b.x + 24, labelY, kPathLabelW - 32 - medal, 18, "Your path");
+	if (medal) PaintMedal(p, b.x + kPathLabelW - 16 - kMedalCard, labelY - 2, kMedalCard, g.laurel);
 	int total = 0;
 	for (const ConquestTerritory &t : g.territories) total += t.disabled ? 0 : 1;
 	const int done = static_cast<int>(g.path.size());
 	total = std::max(total, done);
 	p.Font(3);
-	Raw(p, b.x + 24, b.y + 44, kPathLabelW - 32, 22, TrFmt("%s of %s conquered", {std::to_string(done), std::to_string(total)}), pal::textDim);
+	Raw(p, b.x + 24, labelY + 24, kPathLabelW - 32, 22, TrFmt("%s of %s conquered", {std::to_string(done), std::to_string(total)}), pal::textDim);
 	const int barW = kPathLabelW - 56;
-	p.Fill(b.x + 24, b.y + 76, barW, 3, pal::hairline);
-	if (total > 0 && done > 0) p.Fill(b.x + 24, b.y + 76, barW * std::min(done, total) / total, 3, kProgressGold);
-	p.Fill(b.x + kPathLabelW, b.y + 16, 1, b.h - 32, pal::hairline);
+	p.Fill(b.x + 24, labelY + 62, barW, 3, pal::hairline);
+	if (total > 0 && done > 0) p.Fill(b.x + 24, labelY + 62, barW * std::min(done, total) / total, 3, kProgressGold);
+	p.Fill(b.x + kPathLabelW, b.y + 20, 1, b.h - 40, pal::hairline);
+	// The territory chosen on the map, when it is the one the path can take next.
 	int candidate = -1;
 	if (Valid(g, g.selected) && std::find(g.path.begin(), g.path.end(), g.selected) == g.path.end()) {
 		const int standing = g.territories[g.selected].standing;
 		if (g.choosing ? standing == kStandingOwned && g.path.empty() : standing == kStandingConquerable) candidate = g.selected;
 	}
 	const int steps = done + (candidate >= 0 ? 1 : 0);
-	const int roomX = b.x + kPathLabelW + 16, roomW = b.Right() - 16 - roomX;
-	const int fits = std::max(1, (roomW + kSlotGapMin) / (kSlotW + kSlotGapMin));
+	// The steps share the strip: as wide as they can be up to kSlotMax, with room for the connectors; a path longer than the strip shows
+	// its newest steps.
+	const int roomX = b.x + kPathLabelW + 20, roomW = b.Right() - 20 - roomX;
+	const int fits = std::max(1, (roomW + kConnectorMin) / (kSlotMin + kConnectorMin));
 	const int slots = std::max(1, std::min({kMaxSlots, fits, std::max(total, steps)}));
-	// The slots close up to fit the strip, and a path longer than them shows its newest steps.
-	const int gap = slots > 1 ? std::max(kSlotGapMin, std::min(kSlotGapMax, (roomW - slots * kSlotW) / (slots - 1))) : 0;
-	const int span = slots * kSlotW + (slots - 1) * gap, x0 = roomX + (roomW - span) / 2, top = b.y + 14, first = std::max(0, steps - slots);
+	const int slotW = std::max(kSlotMin, std::min(kSlotMax, (roomW - (slots - 1) * kConnectorMin) / slots));
+	const int gap = slots > 1 ? std::min(kConnectorMax, (roomW - slots * slotW) / (slots - 1)) : 0;
+	const int sw = std::min(kStepShieldW, slotW - 12), sh = sw * 112 / 100;
+	const int span = slots * slotW + (slots - 1) * gap, x0 = roomX + (roomW - span) / 2, first = std::max(0, steps - slots);
+	const int top = b.y + (b.h - (sh + 34)) / 2, cy = top + sh * 45 / 100, nameY = top + sh + 6;
+	const int artW = p.S(sw), artH = p.S(sh);
 	for (int slot = 0; slot < slots; slot++) {
 		const int i = first + slot;
-		const int sx = x0 + slot * (kSlotW + gap), shieldX = sx + (kSlotW - kSlotShieldW) / 2;
-		if (slot > 0) p.ArrowRight(sx - gap / 2 - 3, top + 19, 7, 11, i < done ? pal::redText : i == done && candidate >= 0 ? pal::caption : pal::hairline);
+		const int sx = x0 + slot * (slotW + gap), shx = sx + (slotW - sw) / 2;
+		if (slot > 0) {
+			const int prevRight = sx - gap - (slotW - sw) / 2;
+			PaintConnector(p, prevRight + 8, shx - 8, cy, i < done ? kConnectorDone : i == done ? pal::caption : pal::lineStrong);
+		}
 		const int index = i < done && i < static_cast<int>(g.path.size()) ? g.path[i] : i == done ? candidate : -1;
+		const bool current = i == done;
+		// The step the path takes now: a short accent bar under its name.
+		if (current) p.Fill(sx + slotW / 2 - 14, nameY + 26, 28, 2, pal::red);
 		if (index < 0) {
-			ShieldShape(p, shieldX + 4, top + 3, kSlotShieldW - 8, kSlotShieldH - 6, pal::bg, pal::hairline, true);
+			l.images.push_back({ShieldArt(artW, artH, current ? kShieldNext : kShieldAhead), shx, top, sw, sh, 255});
+			const std::string number = std::to_string(i + 1);
+			const COLORREF ink = current ? pal::text : pal::caption;
+			l.after.push_back([=](Painter &q) {
+				q.Font(2);
+				q.raw = true;
+				q.Text(shx, top + 2, sw, sh * 80 / 100, number, ink, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+				q.raw = false;
+			});
 			continue;
 		}
-		const bool next = i >= done;
-		if (next) p.Frame(shieldX - 3, top - 2, kSlotShieldW + 6, kSlotShieldH + 4, pal::edgeHot);
-		Shield(l, g, index, shieldX, top, kSlotShieldW, kSlotShieldH, next ? 120 : 255);
-		if (!next && g.territories[index].laurel > 0) l.medals.push_back({shieldX + kSlotShieldW - 12, top + kSlotShieldH - 16, kMedalSmall, g.territories[index].laurel});
+		// A territory's emblem is drawn on its own, with the shape the game gives it.
+		Shield(l, g, index, shx, top, sw, sh, 255);
+		const ConquestTerritory &t = g.territories[index];
+		if (i < done && t.laurel > 0) {
+			const int level = t.laurel;
+			l.after.push_back([=](Painter &q) { PaintMedal(q, shx + sw - 16, top + sh - 20, kMedalCard, level); });
+		}
 		p.Font(3);
-		Raw(p, sx - 6, top + kSlotShieldH + 6, kSlotW + 12, 20, g.territories[index].name, next ? pal::redText : pal::text,
-			DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		Raw(p, sx - 6, nameY, slotW + 12, 22, t.name, current ? pal::text : pal::body, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
 }
 
@@ -596,7 +647,7 @@ void PaintTerritoryCard(Layer &l, const Box &b, const View &v)
 	PaintSectionLabel(p, b.x + kCardPad, b.y + kLabelY, labelW, 18, g.choosing ? "Select starting area" : "Territory");
 	const int sx = b.x + kCardPad, sy = b.y + 48, tx = sx + kShieldW + 20, tw = b.Right() - kCardPad - tx;
 	if (!Valid(g, g.selected)) {
-		ShieldShape(p, sx + 4, sy + 2, kShieldW - 8, kShieldH - 4, pal::bg, pal::hairline, true);
+		l.images.push_back({ShieldArt(p.S(sx + kShieldW) - p.S(sx), p.S(sy + kShieldH) - p.S(sy), kShieldAhead), sx, sy, kShieldW, kShieldH, 255});
 		p.Font(2);
 		p.Text(tx, sy - 4, tw, 36, "Choose a territory", pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.Font(3);

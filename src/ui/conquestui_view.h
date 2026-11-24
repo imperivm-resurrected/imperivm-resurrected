@@ -53,7 +53,7 @@ struct Layout {
 	bool legendBeside = false;
 };
 
-constexpr int kGap = 24, kRowGap = 16, kPathH = 104, kMapPad = 8, kSideMin = 230, kSideMax = 320, kLegendRowH = 44, kLegendH = 150;
+constexpr int kGap = 24, kRowGap = 16, kPathH = 148, kMapPad = 8, kSideMin = 230, kSideMax = 320, kLegendRowH = 44, kLegendH = 150;
 constexpr int kTerritoryH = 150, kBonusH = 118, kDifficultyH = 56, kMainH = 48, kSecondH = 40;
 
 inline Layout LayoutFor(int w, int h, int picW, int picH)

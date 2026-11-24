@@ -46,6 +46,8 @@ const size_t kRendererAreas = 0x1c, kRendererTinted = 0x20;
 const size_t kBmpHandle = 4, kBmpW = 8, kBmpH = 0xc, kBmpBits = 0x10, kBmpType = 0x1c;
 const short kBmpType555 = 3, kBmpType565 = 6;
 const int kMaxShieldSide = 512, kMaxMapSide = 4096;
+// How much greener than red and blue a pixel of an emblem may be before it starts to fade, and when it is gone.
+const int kSpillFrom = 30, kSpillGone = 120;
 // RebuildTintedBitmap rewrites the same bitmap in place when the territories change: it is read then, and once more a moment later in
 // case the game had not finished with it.
 const DWORD kMapSettleMs = 700;
@@ -197,7 +199,23 @@ std::shared_ptr<const ConquestImage> ReadPicture(void *bmp, int maxSide, bool ke
 	img->h = raw.h;
 	img->argb.resize(static_cast<size_t>(raw.w) * raw.h);
 	const uint16_t *px = reinterpret_cast<const uint16_t *>(raw.px.data());
-	for (size_t i = 0; i < img->argb.size(); i++) img->argb[i] = keyed && px[i] == px[0] ? 0 : Expand(px[i], raw.type);
+	const uint32_t key = Expand(px[0], raw.type);
+	// The game's emblems are keyed on pure green, and their edges were smoothed against it: what is mostly green fades out and loses its
+	// green, so no green fringe and no box are left around them.
+	const bool greenKey = keyed && ((key >> 8) & 255) > 200 && ((key >> 16) & 255) < 60 && (key & 255) < 60;
+	for (size_t i = 0; i < img->argb.size(); i++) {
+		if (keyed && px[i] == px[0]) continue;
+		uint32_t c = Expand(px[i], raw.type);
+		if (greenKey) {
+			const int r = (c >> 16) & 255, g = (c >> 8) & 255, b = c & 255, excess = g - (std::max)(r, b);
+			if (excess >= kSpillGone) continue;
+			if (excess > kSpillFrom) {
+				const uint32_t a = 255 - static_cast<uint32_t>((excess - kSpillFrom) * 255 / (kSpillGone - kSpillFrom));
+				c = a << 24 | static_cast<uint32_t>(r) << 16 | static_cast<uint32_t>((std::max)(r, b)) << 8 | static_cast<uint32_t>(b);
+			}
+		}
+		img->argb[i] = c;
+	}
 	return img;
 }
 
