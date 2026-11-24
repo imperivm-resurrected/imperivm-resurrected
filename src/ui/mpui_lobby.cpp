@@ -28,7 +28,7 @@ bool MainMenuOnTop()
 
 bool MpUiCupReturnPending()
 {
-	return CupReturnPending();
+	return CupReturnPending() || RankedReturnPending();
 }
 
 bool MpUiMainMenuVisible()

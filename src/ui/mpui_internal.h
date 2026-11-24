@@ -693,6 +693,8 @@ void RankedFrame();
 // Every frame on the game thread, under g_lock, open screen or not: calls the player when a match is found, makes or joins the room of a
 // ranked match, fixes its options and keeps strangers out.
 void RankedGameThreadTick();
+// A ranked game just ended and its result has not opened yet: the main menu stays hidden meanwhile.
+bool RankedReturnPending();
 // The player left the room of their ranked match by hand: it is not made or joined again by itself.
 void RankedRoomLeftByUser();
 // The room is the Steam room of a ranked match: its options, slots and seats are the server's.

@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cctype>
 #include <map>
 #include <mutex>
@@ -44,6 +45,19 @@
 using namespace mpui_impl;
 
 namespace mpui_impl {
+
+// When a ranked game ended with its result still to be shown; 0 once it is open.
+std::atomic<DWORD> g_rankedReturnAt{0};
+
+bool RankedReturnPending()
+{
+	const DWORD at = g_rankedReturnAt.load();
+	if (!at) return false;
+	if (GetTickCount() - at < 3000) return true;
+	g_rankedReturnAt = 0;
+	return false;
+}
+
 namespace {
 
 const int kOptMapType = 0x1000, kOptMapSize = 0x01000008;
@@ -1098,7 +1112,10 @@ void RankedGameThreadTick()
 	RankedScreen &r = g_s.ranked;
 	if (v.result.state != LeagueResultState::None && v.result.game.matchId != r.resultMatch && !r.resultOpen && !InGame() &&
 		!g_s.game.active && !g_s.room.id) {
+		// Until the result opens, the main menu the game goes back to is not shown (render.cpp, as for a cup game).
+		if (!g_rankedReturnAt.load()) g_rankedReturnAt = now | 1;
 		if (g_s.open || MainMenuOnTop()) {
+			g_rankedReturnAt = 0;
 			OpenRankedTab();
 			r.resultOpen = true;
 			r.resultMatch = v.result.game.matchId;
