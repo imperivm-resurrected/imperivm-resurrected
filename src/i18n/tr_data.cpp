@@ -2313,7 +2313,7 @@ extern const TrRow kTrRows[] = {
 	{"You have no match to play now.", "Ahora no tienes ninguna partida que jugar.", "Ora non hai nessuna partita da giocare."},
 	{"Back to the tournaments", "Volver a los torneos", "Torna ai tornei"},
 	{"You're not in the room yet", "Aún no estás en la sala", "Non sei ancora nella stanza"},
-	{"Not in the room yet", "Aún no está en la sala", "Non è ancora nella stanza"},
+	{"Not in the room yet", "Fuera de la sala", "Fuori dalla stanza"},
 	{"Your opponent is still to be decided.", "Tu rival aún está por decidir.", "Il tuo avversario è ancora da decidere."},
 	{"The other team is still to be decided.", "El otro equipo aún está por decidir.", "L'altra squadra è ancora da decidere."},
 	{"Random map", "Mapa aleatorio", "Mappa casuale"},

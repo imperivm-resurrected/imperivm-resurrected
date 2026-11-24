@@ -387,6 +387,7 @@ void PaintSearchTeam(Painter &p, const State &st)
 	const int dx = box.x, dy = box.y, dw = box.w;
 	Display(p, 54);
 	p.TextCaps(dx, dy + 18, dw, 56, "Match found", pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
+	if (live) Ghost(p, dx + 24, dy + 20, 120, 36, "Back", kRkHidePanel, true, mx, my);
 	const std::string caption = RankedFoundCaption(v, "Ranked 2 vs 2");
 	FitCaps(p, dx + 24, dy + 76, dw - 48, 20, caption, pal::caption, DT_CENTER);
 

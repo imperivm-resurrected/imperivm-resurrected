@@ -2306,7 +2306,7 @@
 {"en":"You have no match to play now.","es":"Ahora no tienes ninguna partida que jugar.","it":"Ora non hai nessuna partita da giocare."},
 {"en":"Back to the tournaments","es":"Volver a los torneos","it":"Torna ai tornei"},
 {"en":"You're not in the room yet","es":"Aún no estás en la sala","it":"Non sei ancora nella stanza"},
-{"en":"Not in the room yet","es":"Aún no está en la sala","it":"Non è ancora nella stanza"},
+{"en":"Not in the room yet","es":"Fuera de la sala","it":"Fuori dalla stanza"},
 {"en":"Your opponent is still to be decided.","es":"Tu rival aún está por decidir.","it":"Il tuo avversario è ancora da decidere."},
 {"en":"The other team is still to be decided.","es":"El otro equipo aún está por decidir.","it":"L'altra squadra è ancora da decidere."},
 {"en":"Random map","es":"Mapa aleatorio","it":"Mappa casuale"},

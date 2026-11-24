@@ -77,7 +77,7 @@ struct RoomAuto {
 	DWORD lastRead = 0;
 	unsigned foundSerial = 0;
 	int64_t match = 0;
-	DWORD createdAt = 0, joinAt = 0, kickAt = 0, settingsAt = 0, teamAt = 0;
+	DWORD createdAt = 0, joinAt = 0, kickAt = 0, settingsAt = 0, teamAt = 0, invitedAt = 0;
 	int createTries = 0, joinTries = 0;
 	uint64_t joinLobby = 0, invitedLobby = 0;
 	bool warned = false, settingsLogged = false, mapWarned = false, textWarned = false;
@@ -389,8 +389,20 @@ void RoomStep(const LeagueRankedView &v, DWORD now)
 		PanelStep(v, now);
 		if (!v.host || !OwnsRoom()) return;
 		LeagueRankedRoomOpened(g_s.room.id);
-		if (g_auto.invitedLobby != g_s.room.id) {
+		// The room is private: only the invited enter. A player who lost the connection or closed the game comes back with a new session, which
+		// the first invitation does not let in, so whoever of the match is missing is invited again every few seconds.
+		bool missing = false;
+		for (const LeaguePlayerCard &pl : v.ticket.players) {
+			const uint64_t id = _strtoui64(pl.steamId.c_str(), nullptr, 10);
+			if (!id || id == SteamOwnId() || TourneyIsTestBot(id)) continue;
+			bool in = false;
+			for (const OnlineMember &m : g_s.room.members) in = in || m.id == id;
+			missing = missing || !in;
+		}
+		if (g_auto.invitedLobby != g_s.room.id || (missing && now - g_auto.invitedAt > 8000)) {
+			if (g_auto.invitedLobby == g_s.room.id) LogI("league", "ranked match %lld: a player of the match is not in the room; invited again", static_cast<long long>(v.matchId));
 			g_auto.invitedLobby = g_s.room.id;
+			g_auto.invitedAt = now;
 			// Every other player of the ticket: in a 2v2 the partner and both opponents.
 			const std::string own = std::to_string(SteamOwnId());
 			for (const LeaguePlayerCard &pl : v.ticket.players) {
@@ -501,7 +513,7 @@ void PaintSide(Painter &p, int x, int y, int w, int h, uint64_t id, const std::s
 	p.Frame(x, y, w, h, pal::hairline);
 	// The state chip in the top corner, so the player and their rank take the rest of the card.
 	p.Font(4);
-	const int cw = std::min(w / 3, std::max(96, p.CapsWidth(chip, 1) + 28));
+	const int cw = std::min(w / 2, std::max(96, p.CapsWidth(chip, 1) + 28));
 	Chip(p, x + w - 20 - cw, y + 20, cw, 26, chip, ok ? pal::ok : pal::textDim, ok ? RGB(0x2a, 0x36, 0x24) : pal::hairline);
 	const int av = 88, tx = x + 24 + av + 18;
 	Avatar(p, x + 24, y + 24, av, id, name);
@@ -524,10 +536,11 @@ void PaintSide(Painter &p, int x, int y, int w, int h, uint64_t id, const std::s
 	const int rx = x + 24 + std::max(av, em) + 18;
 	SelectObject(p.dc, BrandFont(BrandFace::Display, 46, p.s));
 	p.raw = true;
-	p.TextCaps(rx, ey + em / 2 - 40, x + w - 20 - rx, 48, RankOrPlacement(tier, card.division), Ink(tier), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
+	const bool standing = card.standing && tier != LeagueTier::None;
+	p.TextCaps(rx, ey + em / 2 - (standing ? 40 : 24), x + w - 20 - rx, 48, RankOrPlacement(tier, card.division), Ink(tier), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
 	p.raw = false;
 	// Glory and place, once the player has a rank: a player in placement has neither yet.
-	if (card.standing && tier != LeagueTier::None) {
+	if (standing) {
 		p.Font(0);
 		RawText(p, rx, ey + em / 2 + 12, x + w - 20 - rx, 26, StandingText(card), pal::body);
 	}
@@ -592,7 +605,8 @@ std::string RankedPanelStatus(const State &st)
 	if (left == 0) return Tr("Starting...");
 	// The room's minute to start, on the server's clock: whoever is not ready when it ends loses the match.
 	const int64_t startLeft = v.ticketLoaded && v.ticket.startBy ? std::max<int64_t>(0, v.ticket.startBy - LeagueServerNowMs()) : -1;
-	if (!LocalReady(st.game)) return startLeft >= 0 ? TrFmt("Press Ready: %s left", {LeagueClockText(startLeft + 999)}) : "";
+	(void)startLeft;
+	if (!LocalReady(st.game)) return "";
 	// Some of the room's labels are translated already; the others are English keys.
 	const std::string waits = StartBlocker(st, st.game).label;
 	if (!waits.empty()) return Tr(waits);
@@ -918,6 +932,11 @@ void RankedAction(int arg)
 		GameRoomToggleReady();
 		break;
 	}
+	case kRkHidePanel:
+		r.panelOff = r.view.matchId;
+		LeagueSideMenuClose();
+		LogI("league", "ranked: the player goes back to the hub from the panel of match %lld", static_cast<long long>(r.view.matchId));
+		break;
 	case kRkShowRoom:
 		r.panelOff = r.view.matchId;
 		LeagueSideMenuClose();
@@ -1234,6 +1253,8 @@ void PaintSearch(Painter &p, const State &st)
 	const int dx = box.x, dy = box.y, dw = box.w;
 	SelectObject(p.dc, BrandFont(BrandFace::Display, 58, p.s));
 	p.TextCaps(dx, dy + 24, dw, 60, "Match found", pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
+	// Back to the hub, whose card takes the player to the match again.
+	if (live) Ghost(p, dx + 24, dy + 24, 120, 36, "Back", kRkHidePanel, true, mx, my);
 	const std::string caption = RankedFoundCaption(v, "Ranked 1 vs 1");
 	p.Font(4);
 	p.raw = true;
@@ -1305,10 +1326,8 @@ void PaintSearch(Painter &p, const State &st)
 		PaintArc(p, mid, ringY, 66, 8, startLeft < 15000 ? pal::red : pal::warn, static_cast<float>(startLeft) / 60000.0f);
 		SelectObject(p.dc, BrandFont(BrandFace::Display, 66, p.s));
 		p.raw = true;
-		p.Text(mid - 74, ringY - 40, 148, 66, std::to_string((startLeft + 999) / 1000), pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.Text(mid - 74, ringY - 33, 148, 66, std::to_string((startLeft + 999) / 1000), pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		p.raw = false;
-		p.Font(4);
-		p.TextCaps(mid - 74, ringY + 22, 148, 16, "to be ready", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 2);
 	}
 	else p.Spinner(mid, ringY, 24, 6, GetTickCount());
 	PaintEvenness(p, v, false, mid - 140, cy + 200, 280);
@@ -1318,7 +1337,7 @@ void PaintSearch(Painter &p, const State &st)
 		p.TextWrapped(mid - 140, cy + 230, 280, 44, RankedPanelStatus(st), pal::text);
 		p.raw = false;
 	}
-	else p.TextWrapped(mid - 140, cy + 230, 280, 44, accepted ? TrFmt("Waiting for %s to accept", {otherName}) : Tr("Accept before the countdown ends"), pal::caption);
+	else if (accepted) p.TextWrapped(mid - 140, cy + 230, 280, 44, TrFmt("Waiting for %s to accept", {otherName}), pal::caption);
 
 	// The map and the options of the season.
 	const int my2 = cy + cardH + 20, mw = dw - 64, mh = 128;
