@@ -292,7 +292,7 @@ void PaintOptionsCard(Painter &p, const State &st, int x, int y, int w, int h)
 				return gameValue(id, key, index, enabled);
 			});
 			grid.Combo("Preset", preset >= 0 ? kPresets[preset].name : "Custom setup", preset != 0, canEdit, kDropPreset, 0,
-				"Classic: like the original game. Competitive: 5000 gold, normal population, no bonuses, unexplored map with fog and diplomacy locked. Various: 10000 gold, high population, with bonuses, explored map and no fog.");
+				"Classic: like the original game. Competitive: 5000 gold, normal population, no bonuses, unexplored map with fog and diplomacy locked. Various: 10000 gold, high population, with bonuses, explored map and no fog. Competitive and Various also turn on shared control.");
 		}
 		comboRow(0x1000, "Map type", "Map type");
 		comboRow(0x01000008, "Size", "Map size");

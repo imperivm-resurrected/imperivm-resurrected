@@ -1007,10 +1007,12 @@ void PaintSummary(Painter &p, const State &st, int cardX, int cardY, int cardW, 
 		int id;
 		const char *published;
 	};
-	static const Line kLines[] = {{"Map", 0, nullptr}, {"Mode", 0x1002, "Game type"}, {"Size", 0x01000008, "Map size"}, {"Population", 0x1004, "Population"},
-		{"Starting gold", 0x1005, "Starting gold"}, {"Limit", 0x1003, "Limit"}};
+	// In pairs, row by row: map and size, mode and limit, gold and population.
+	static const Line kLines[] = {{"Map", 0, nullptr}, {"Size", 0x01000008, "Map size"}, {"Mode", 0x1002, "Game type"}, {"Limit", 0x1003, "Limit"},
+		{"Starting gold", 0x1005, "Starting gold"}, {"Population", 0x1004, "Population"}};
 	const int lineCount = static_cast<int>(sizeof(kLines) / sizeof(kLines[0])), colGap = 20, cellMaxH = 52, cellMinH = 46;
-	auto columnsFor = [](int width) { return width >= 420 ? 3 : 2; };
+	// Three across only when a notice leaves no height for the three rows of pairs.
+	auto columnsFor = [&](int width) { return width >= 420 && 3 * cellMinH - 2 > bottom - top ? 3 : 2; };
 	auto linesFit = [&](int width) {
 		const int columns = columnsFor(width), rows = (lineCount + columns - 1) / columns;
 		return rows * cellMinH - 2 <= bottom - top;

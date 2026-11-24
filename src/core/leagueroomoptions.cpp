@@ -71,7 +71,7 @@ const char *LeagueRoomClimateName(int climate)
 
 // The presets of the normal room (mpui's kPresets) and of the cups (TourneyPresetRules): competitive 5000 gold, normal population, no
 // bonuses, fog, unexplored, diplomacy locked; classic the game's own gold and population with bonuses, fog, unexplored, diplomacy free;
-// various 10000 gold, high population, bonuses, no fog, explored, diplomacy free.
+// various 10000 gold, high population, bonuses, no fog, explored, diplomacy free. Competitive and various turn shared control on.
 LeagueRoomOptions LeagueRoomOptionsFor(const LeagueRoomRequest &r)
 {
 	LeagueRoomOptions o;
@@ -92,6 +92,7 @@ LeagueRoomOptions LeagueRoomOptionsFor(const LeagueRoomRequest &r)
 		o.fog = false;
 		o.explored = true;
 		o.lockDiplomacy = false;
+		o.sharedControl = true;
 		break;
 	default:
 		o.goldKey = "5000@gold";
@@ -100,6 +101,7 @@ LeagueRoomOptions LeagueRoomOptionsFor(const LeagueRoomRequest &r)
 		o.fog = true;
 		o.explored = false;
 		o.lockDiplomacy = true;
+		o.sharedControl = true;
 		break;
 	}
 	if (r.fog >= 0) o.fog = r.fog != 0;

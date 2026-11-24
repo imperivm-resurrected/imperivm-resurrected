@@ -19,7 +19,7 @@ void NothingSaidIsTheCompetitiveRoomInSpring()
 	CHECK(o.fog);
 	CHECK(!o.explored);
 	CHECK(o.sharedSupport);
-	CHECK(!o.sharedControl);
+	CHECK(o.sharedControl);
 	CHECK(o.lockDiplomacy);
 	CHECK(!o.hideCivs);
 	CHECK(!o.freeAttach);
@@ -43,6 +43,7 @@ void EachPresetHasItsOwnOptions()
 	CHECK(o.fog);
 	CHECK(!o.explored);
 	CHECK(!o.lockDiplomacy);
+	CHECK(!o.sharedControl);
 	r.preset = "various";
 	o = LeagueRoomOptionsFor(r);
 	CHECK(o.preset == LeagueRoomPreset::Various);
@@ -52,6 +53,7 @@ void EachPresetHasItsOwnOptions()
 	CHECK(!o.fog);
 	CHECK(o.explored);
 	CHECK(!o.lockDiplomacy);
+	CHECK(o.sharedControl);
 	r.preset = "something new";
 	CHECK(LeagueRoomOptionsFor(r).preset == LeagueRoomPreset::Competitive);
 	CHECK_EQ(std::string(LeagueRoomPresetId(LeagueRoomPreset::Various)), std::string("various"));
@@ -152,7 +154,7 @@ void TheLogLineNamesEveryOption()
 {
 	const std::string text = LeagueRoomOptionsText(LeagueRoomOptionsFor(LeagueRoomRequest()));
 	for (const char *part : {"preset competitive", "gold 5000@gold", "population Normal@population", "game type item 0", "limit item 0", "bonuses no",
-			 "fog yes", "explored no", "shared support yes", "shared control no", "diplomacy locked", "hidden civilizations no", "free attachment no",
+			 "fog yes", "explored no", "shared support yes", "shared control yes", "diplomacy locked", "hidden civilizations no", "free attachment no",
 			 "cheats no", "respawn timers yes", "neutral sites all", "season spring", "content options default", "game speed -1"}) {
 		CHECK(text.find(part) != std::string::npos);
 	}

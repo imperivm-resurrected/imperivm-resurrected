@@ -362,6 +362,7 @@ void DoAction(int action, int arg)
 					setCheck(0x1007, !pr.fog);
 					setCheck(0x1008, pr.explored);
 					setCheck(0x10a7, !pr.bonuses);
+					setCheck(0x100a, pr.sharedControl);
 				}
 				LogI("room", "preset %s", pr.name);
 			}

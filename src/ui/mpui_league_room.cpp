@@ -136,7 +136,10 @@ std::vector<Step> Needed(const LeagueRoomOptions &want, const GameRoomSnapshot &
 	check(kOptNoFog, !want.fog);
 	check(kOptExplored, want.explored);
 	check(kOptSharedSupport, want.sharedSupport);
-	check(kOptSharedControl, want.sharedControl);
+	// The game turns shared control off in a room without teams (a 1v1): asked for there, it would only be retried and delay the start.
+	bool teams = false;
+	for (const GameRoomSlot &slot : g.slots) teams = teams || slot.team > 0;
+	if (teams || !want.sharedControl) check(kOptSharedControl, want.sharedControl);
 	const unsigned sites = want.allSites ? 0u : kSiteMask;
 	need({kLockStep, false, 0, false}, !g.optionsLocked || (g.rules & kRuleMask) != RulesOf(want, g.rules) ||
 			(g.randomMap && (g.siteFlags & kSiteMask) != sites) || g.gameSpeed != want.gameSpeed);

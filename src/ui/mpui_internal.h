@@ -521,12 +521,14 @@ struct Preset {
 	// The game's keys of the choices (game.loc.xml), shown in the player's language by PresetChoice.
 	const char *gold, *pop;
 	bool fog, explored, bonuses;
+	// Set when the preset is picked but not compared by MatchPreset: the game disables it in a room without teams, where it stays off.
+	bool sharedControl;
 };
 
 const Preset kPresets[] = {
-	{"Classic", 0, 0, false, "", "", false, false, false},
-	{"Competitive", 0, kRuleLockDiplomacy, true, "5000@gold", "Normal@population", true, false, false},
-	{"Various", 0, 0, true, "10000@gold", "High@population", false, true, true},
+	{"Classic", 0, 0, false, "", "", false, false, false, false},
+	{"Competitive", 0, kRuleLockDiplomacy, true, "5000@gold", "Normal@population", true, false, false, true},
+	{"Various", 0, 0, true, "10000@gold", "High@population", false, true, true, true},
 };
 
 // A choice of a preset as the room's list shows it in this player's language.
