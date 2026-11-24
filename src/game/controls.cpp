@@ -1779,6 +1779,24 @@ void ControlsDrawBarKeys(uint32_t *buf, int w, int h, const wchar_t *face)
 			RECT clip = {0, 0, tw, th};
 			ExtTextOutW(dc, textX, textY, ETO_CLIPPED, &clip, wtext.c_str(), static_cast<UINT>(wtext.size()), nullptr);
 			GdiFlush();
+			// The font's metrics leave the ink off centre (side bearings, the cap height of a bold face): the ink itself is centred.
+			int inkL = tw, inkT = th, inkR = -1, inkB = -1;
+			for (int y = 0; y < th; y++) {
+				for (int x = 0; x < tw; x++) {
+					if ((bits[static_cast<size_t>(y) * cw + x] & 0xff) < 64) continue;
+					inkL = std::min(inkL, x);
+					inkR = std::max(inkR, x);
+					inkT = std::min(inkT, y);
+					inkB = std::max(inkB, y);
+				}
+			}
+			const int inkDx = inkR >= 0 ? (tw - 1 - inkR - inkL) / 2 : 0, inkDy = inkB >= 0 ? (th - 1 - inkB - inkT) / 2 : 0;
+			const auto inkAt = [&](int x, int y) -> uint32_t {
+				x -= inkDx;
+				y -= inkDy;
+				if (x < 0 || y < 0 || x >= tw || y >= th) return 0;
+				return bits[static_cast<size_t>(y) * cw + x] & 0xff;
+			};
 			// The interface's plate: its dark panel with a light rim, rounded; the key in its white.
 			constexpr int kFaceR = 0x12, kFaceG = 0x11, kFaceB = 0x10, kFaceAlpha = 230, kRimR = 0x5a, kRimG = 0x55, kRimB = 0x50;
 			constexpr int kInkR = 0xf1, kInkG = 0xee, kInkB = 0xe8;
@@ -1798,7 +1816,7 @@ void ControlsDrawBarKeys(uint32_t *buf, int w, int h, const wchar_t *face)
 				for (int x = 0; x < tw; x++) {
 					const float outer = inside(x + 0.5f, y + 0.5f, 0), inner = inside(x + 0.5f, y + 0.5f, 1);
 					const float fa = outer * kFaceAlpha / 255.0f, ra = std::max(0.0f, outer - inner);
-					const float ta = (bits[static_cast<size_t>(y) * cw + x] & 0xff) / 255.0f * outer;
+					const float ta = inkAt(x, y) / 255.0f * outer;
 					float r = kFaceR * fa, g = kFaceG * fa, b = kFaceB * fa, a = fa;
 					r = kRimR * ra + r * (1 - ra);
 					g = kRimG * ra + g * (1 - ra);
@@ -1813,7 +1831,7 @@ void ControlsDrawBarKeys(uint32_t *buf, int w, int h, const wchar_t *face)
 				}
 			}
 		}
-		const int ox = k.r.left + (bw - plate.w) / 2, oy = k.r.bottom - plate.h - 2;
+		const int ox = k.r.left + (bw - plate.w) / 2, oy = k.r.bottom - plate.h;
 		for (int y = 0; y < plate.h; y++) {
 			const int ty = oy + y;
 			if (ty < 0 || ty >= h) continue;

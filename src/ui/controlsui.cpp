@@ -1176,7 +1176,7 @@ void PaintOrdersBanner(Painter &p, const State &st, const Layout &l, const Banne
 		p.RoundRect(x, exY, bs, bs, 6, pal::lineStrong);
 		p.RoundRect(x + 1, exY + 1, bs - 2, bs - 2, 5, pal::hairline);
 		// As in the game: the icon, and the key on a plate at the bottom centre of the button.
-		const int plateW = 16, plateH = 13, plateX = x + (bs - plateW) / 2, plateY = exY + bs - plateH - 2;
+		const int plateW = 16, plateH = 13, plateX = x + (bs - plateW) / 2, plateY = exY + bs - plateH;
 		p.Fill(x + 10, exY + 5, bs - 20, plateY - exY - 8, pal::lineStrong);
 		p.RoundRect(plateX, plateY, plateW, plateH, 5, pal::edgeHot);
 		p.RoundRect(plateX + 1, plateY + 1, plateW - 2, plateH - 2, 4, pal::bg);
