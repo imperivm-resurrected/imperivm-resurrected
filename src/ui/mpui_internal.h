@@ -773,8 +773,6 @@ bool RankedRoomHidden(const State &st);
 // The bottom of the panel while the match's room is made and played from it: the civilization and colour, Ready, Cancel match and the room's
 // own screen; `by` is its top, about 120 high.
 void PaintRankedPanelFoot(Painter &p, const State &st, int dx, int dw, int by);
-// What the room under the panel waits for, in a line ("Waiting for the other player...", "Starting in 3...").
-std::string RankedPanelStatus(const State &st);
 // A player of the match as the room has them: 2 ready, 1 in the room, 0 not in it yet.
 int RankedRoomStateOf(const State &st, uint64_t id);
 extern std::atomic<bool> g_menuRefresh;

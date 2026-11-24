@@ -454,12 +454,8 @@ void PaintSearchTeam(Painter &p, const State &st)
 	else p.Spinner(mid, ringY, 22, 6, GetTickCount());
 	PaintEvenness(p, v, true, mid - 128, ringY + 82, 256);
 	p.Font(3);
-	if (live) {
-		p.raw = true;
-		p.TextWrapped(mid - 128, ringY + 104, 256, 44, RankedPanelStatus(st), pal::text);
-		p.raw = false;
-	}
-	else {
+	// Once all accepted no line under the ring: its number and the cards say it all.
+	if (!live) {
 		RawText(p, mid - 128, ringY + 108, 256, 22, TrFmt("%s of %s accepted", {std::to_string(acceptedCount), std::to_string(std::max(4, players))}),
 			acceptedCount >= 4 ? pal::ok : pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 	}

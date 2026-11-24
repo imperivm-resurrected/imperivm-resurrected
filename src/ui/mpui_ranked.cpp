@@ -619,26 +619,6 @@ int RankedRoomStateOf(const State &st, uint64_t id)
 	return 0;
 }
 
-std::string RankedPanelStatus(const State &st)
-{
-	const LeagueRankedView &v = st.ranked.view;
-	if (v.abandoning) return Tr("Cancelling the match...");
-	if (st.startingCover || (st.gameClosedAt && st.room.id)) return Tr("Starting...");
-	// The room is made and joined by itself, in a moment: the ring says it, with no line under it.
-	if (!st.room.id || !st.game.active) return "";
-	const int left = GameRoomCountdownLeftMs();
-	if (left > 0) return TrFmt("Starting in %s...", {std::to_string((left + 999) / 1000)});
-	if (left == 0) return Tr("Starting...");
-	// The room's minute to start, on the server's clock: whoever is not ready when it ends loses the match.
-	const int64_t startLeft = v.ticketLoaded && v.ticket.startBy ? std::max<int64_t>(0, v.ticket.startBy - LeagueServerNowMs()) : -1;
-	(void)startLeft;
-	if (!LocalReady(st.game)) return "";
-	// Some of the room's labels are translated already; the others are English keys.
-	const std::string waits = StartBlocker(st, st.game).label;
-	if (!waits.empty()) return Tr(waits);
-	return Tr(v.ticketLoaded && TeamTicket(v.ticket) ? "Waiting for the other players..." : "Waiting for the other player...");
-}
-
 void PaintRankedPanelFoot(Painter &p, const State &st, int dx, int dw, int by)
 {
 	const int mx = st.mouseX, my = st.mouseY;
@@ -661,9 +641,8 @@ void PaintRankedPanelFoot(Painter &p, const State &st, int dx, int dw, int by)
 	const int rw = 260, rx = dx + dw - 32 - rw;
 	const bool canCallOff = v.ticketLoaded && LeagueTicketAbandonable(v.ticket) && !v.abandoning;
 	Ghost(p, rx, by, rw, 44, v.abandoning ? "Cancelling..." : "Cancel match", kRkAbandon, canCallOff && !starting, mx, my);
-	// Before the room is in, the hub's Go to the room: the room made or looked for again.
-	if (inRoom) Ghost(p, rx, by + 52, rw, 28, "Show the room", kRkShowRoom, !starting, mx, my);
-	else Ghost(p, rx, by + 52, rw, 28, "Try again", kRkRoom, !st.connecting && !v.abandoning, mx, my);
+	// Before the room is in, the room made or looked for again.
+	if (!inRoom) Ghost(p, rx, by + 52, rw, 28, "Try again", kRkRoom, !st.connecting && !v.abandoning, mx, my);
 }
 
 std::string RankedFoundCaption(const LeagueRankedView &v, const char *queue)
@@ -1371,12 +1350,8 @@ void PaintSearch(Painter &p, const State &st)
 	else p.Spinner(mid, ringY, 24, 6, GetTickCount());
 	PaintEvenness(p, v, false, mid - 140, cy + 200, 280);
 	p.Font(3);
-	if (live) {
-		p.raw = true;
-		p.TextWrapped(mid - 140, cy + 230, 280, 44, RankedPanelStatus(st), pal::text);
-		p.raw = false;
-	}
-	else if (accepted) p.TextWrapped(mid - 140, cy + 230, 280, 44, TrFmt("Waiting for %s to accept", {otherName}), pal::caption);
+	// Once both accepted the panel shows no line under the ring: its number and the cards say it all.
+	if (!live && accepted) p.TextWrapped(mid - 140, cy + 230, 280, 44, TrFmt("Waiting for %s to accept", {otherName}), pal::caption);
 
 	// The map and the options of the season.
 	const int my2 = cy + cardH + 20, mw = dw - 64, mh = 128;
