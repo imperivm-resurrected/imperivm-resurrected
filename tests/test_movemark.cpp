@@ -7,9 +7,12 @@
 
 #include "hooks/movemark.h"
 
-// The marks of 1.0.3, whose movement also turned walking units mid-stride.
-static const unsigned kTurningHashMark = 0xc000;
-static const std::string kTurningRulesTag = "/mfs1";
+// The marks of the earlier simulations of the movement patch: 1.0.3's, whose turn desynced, and the one without any turn.
+struct OldMark {
+	unsigned hash;
+	const char *rules;
+};
+static const OldMark kOldMarks[] = {{0xc000, "/mfs1"}, {0xa000, "/mfs2"}};
 
 static void Off()
 {
@@ -26,21 +29,23 @@ static void On()
 	CHECK(std::string(m.rules).rfind("/mfs", 0) == 0);
 }
 
-// A room of the turning simulation and one of this must refuse each other: a match of the two desynced.
-static void ApartFromTheTurningOne()
+// A room of an earlier simulation and one of this must refuse each other: a match of the two would desync.
+static void ApartFromTheOldOnes()
 {
 	const MoveMark m = MoveMarkFor(true);
-	CHECK(m.hash != kTurningHashMark);
-	CHECK(std::string(m.rules) != kTurningRulesTag);
 	const unsigned gameHash = 0x14822800;
-	CHECK((gameHash ^ m.hash) != (gameHash ^ kTurningHashMark));
 	CHECK((gameHash ^ m.hash) != gameHash);
+	for (const OldMark &old : kOldMarks) {
+		CHECK(m.hash != old.hash);
+		CHECK(std::string(m.rules) != old.rules);
+		CHECK((gameHash ^ m.hash) != (gameHash ^ old.hash));
+	}
 }
 
 int main()
 {
 	Off();
 	On();
-	ApartFromTheTurningOne();
+	ApartFromTheOldOnes();
 	return test::Summary("movemark");
 }
