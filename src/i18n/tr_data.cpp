@@ -3722,5 +3722,14 @@ extern const TrRow kTrRows[] = {
 	{"Wait", "Espera", "Attesa"},
 	{"max ", "máx. ", "max "},
 	{"Saved: ", "Guardado: ", "Salvato: "},
+	{"Hover it for the gear and more settings", "Pasa el ratón por encima: su engranaje tiene más ajustes", "Passaci sopra con il mouse: l'ingranaggio ha altre impostazioni"},
+	{"Panel corner", "Esquina del panel", "Angolo del pannello"},
+	{"Top left", "Arriba a la izquierda", "In alto a sinistra"},
+	{"Top right", "Arriba a la derecha", "In alto a destra"},
+	{"Bottom left", "Abajo a la izquierda", "In basso a sinistra"},
+	{"Bottom right", "Abajo a la derecha", "In basso a destra"},
+	{"Panel size", "Tamaño del panel", "Dimensione del pannello"},
+	{"Graph time", "Tiempo de las gráficas", "Tempo dei grafici"},
+	{"What the graphs and the lows cover", "Lo que abarcan las gráficas y los mínimos", "Quanto coprono i grafici e i minimi"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

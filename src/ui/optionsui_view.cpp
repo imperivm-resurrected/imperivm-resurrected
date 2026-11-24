@@ -421,9 +421,12 @@ std::vector<Page> BuildPages(const Values &v)
 		const bool vsync = Check(v, kVSync);
 		page.right.push_back({"Image", {Slider(v, "Brightness", kBrightness, 80, 130), Toggle(v, "Vertical sync", kVSync, "Avoids tearing in the image"),
 			Combo(v, "FPS limit", kFpsLimit, vsync ? "Off with vertical sync" : "", false, !vsync)}});
-		Row compact = Toggle(v, "Compact panel", kPanelCompact), opacity = Slider(v, "Panel opacity", kPanelOpacity, 30, 100);
-		compact.enabled = opacity.enabled = Check(v, kShowPerf) || Check(v, kShowNet);
-		page.right.push_back({"Performance panel", {Toggle(v, "Show FPS and memory", kShowPerf), Toggle(v, "Network statistics", kShowNet), compact, opacity}});
+		std::vector<Row> panel = {Toggle(v, "Compact panel", kPanelCompact, "Hover it for the gear and more settings"), Combo(v, "Panel corner", kPanelCorner),
+			Slider(v, "Panel size", kPanelScale, 75, 200), Slider(v, "Panel opacity", kPanelOpacity, 30, 100),
+			Combo(v, "Graph time", kPerfWindow, "What the graphs and the lows cover")};
+		for (Row &r : panel) r.enabled = Check(v, kShowPerf) || Check(v, kShowNet);
+		panel.insert(panel.begin(), {Toggle(v, "Show FPS and memory", kShowPerf), Toggle(v, "Network statistics", kShowNet)});
+		page.right.push_back({"Performance panel", panel});
 		pages.push_back(page);
 	}
 	{

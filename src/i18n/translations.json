@@ -3714,5 +3714,14 @@
 {"en":"Loss","es":"Pérdida","it":"Perdita"},
 {"en":"Wait","es":"Espera","it":"Attesa"},
 {"en":"max ","es":"máx. ","it":"max "},
-{"en":"Saved: ","es":"Guardado: ","it":"Salvato: "}
+{"en":"Saved: ","es":"Guardado: ","it":"Salvato: "},
+{"en":"Hover it for the gear and more settings","es":"Pasa el ratón por encima: su engranaje tiene más ajustes","it":"Passaci sopra con il mouse: l'ingranaggio ha altre impostazioni"},
+{"en":"Panel corner","es":"Esquina del panel","it":"Angolo del pannello"},
+{"en":"Top left","es":"Arriba a la izquierda","it":"In alto a sinistra"},
+{"en":"Top right","es":"Arriba a la derecha","it":"In alto a destra"},
+{"en":"Bottom left","es":"Abajo a la izquierda","it":"In basso a sinistra"},
+{"en":"Bottom right","es":"Abajo a la derecha","it":"In basso a destra"},
+{"en":"Panel size","es":"Tamaño del panel","it":"Dimensione del pannello"},
+{"en":"Graph time","es":"Tiempo de las gráficas","it":"Tempo dei grafici"},
+{"en":"What the graphs and the lows cover","es":"Lo que abarcan las gráficas y los mínimos","it":"Quanto coprono i grafici e i minimi"}
 ]
