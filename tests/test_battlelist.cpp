@@ -235,6 +235,28 @@ void LaurelsKeepTheHardestVictory()
 	CHECK(BattleLaurelsDecode("").empty());
 }
 
+void ConquestLaurelsKeepTheHardest()
+{
+	CHECK_EQ(ConquestKeyOf("Conquests\\GBR Europe.bfhp"), std::string("gbr europe"));
+	CHECK_EQ(ConquestKeyOf("conquests/gbr europe"), std::string("gbr europe"));
+	std::vector<ConquestLaurel> l;
+	CHECK(ConquestLaurelsAdd(l, "gbr", "Gaul", 1));
+	CHECK(ConquestLaurelsAdd(l, "gbr", "gaul", 3));
+	CHECK(!ConquestLaurelsAdd(l, "gbr", "Gaul", 2));
+	CHECK(ConquestLaurelsAdd(l, "gbr", "", 2));
+	CHECK(ConquestLaurelsAdd(l, "caesar", "Gaul", 2));
+	CHECK(!ConquestLaurelsAdd(l, "", "Gaul", 2));
+	CHECK(!ConquestLaurelsAdd(l, "gbr", "Spain", 4));
+	CHECK_EQ(ConquestLaurelOf(l, "gbr", "Gaul"), 3);
+	CHECK_EQ(ConquestLaurelOf(l, "gbr", ""), 2);
+	CHECK_EQ(ConquestLaurelOf(l, "caesar", "Gaul"), 2);
+	CHECK_EQ(ConquestLaurelOf(l, "gbr", "Spain"), 0);
+	const std::vector<ConquestLaurel> back = ConquestLaurelsDecode(ConquestLaurelsEncode(l));
+	CHECK_EQ(back.size(), static_cast<size_t>(3));
+	CHECK_EQ(ConquestLaurelOf(back, "gbr", ""), 2);
+	CHECK_EQ(ConquestLaurelOf(back, "gbr", "Gaul"), 3);
+}
+
 }
 
 int main()
@@ -251,5 +273,6 @@ int main()
 	CampaignPacksPreferTheActiveOne();
 	CampaignsHaveTheModsCovers();
 	LaurelsKeepTheHardestVictory();
+	ConquestLaurelsKeepTheHardest();
 	return test::Summary("battlelist");
 }

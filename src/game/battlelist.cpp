@@ -260,6 +260,55 @@ int BattleLaurelOf(const std::vector<BattleLaurel> &laurels, const std::string &
 	return best;
 }
 
+std::string ConquestKeyOf(const std::string &path)
+{
+	const size_t slash = path.find_last_of("/\\");
+	std::string name = slash == std::string::npos ? path : path.substr(slash + 1);
+	if (EndsWithNoCase(name, ".bfhp")) name.resize(name.size() - 5);
+	name = OneLine(name);
+	for (char &c : name) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+	return name;
+}
+
+std::vector<ConquestLaurel> ConquestLaurelsDecode(const std::string &text)
+{
+	std::vector<ConquestLaurel> out;
+	for (const BattleLaurel &l : BattleLaurelsDecode(text)) {
+		if (!l.path.empty()) out.push_back({l.path, l.title, l.level});
+	}
+	return out;
+}
+
+std::string ConquestLaurelsEncode(const std::vector<ConquestLaurel> &laurels)
+{
+	std::vector<BattleLaurel> lines;
+	for (const ConquestLaurel &l : laurels) lines.push_back({l.conquest, l.territory, l.level});
+	return BattleLaurelsEncode(lines);
+}
+
+bool ConquestLaurelsAdd(std::vector<ConquestLaurel> &laurels, const std::string &conquestIn, const std::string &territoryIn, int level)
+{
+	const std::string conquest = OneLine(conquestIn), territory = OneLine(territoryIn);
+	if (level < 1 || level > 3 || conquest.empty()) return false;
+	for (ConquestLaurel &l : laurels) {
+		if (l.conquest != conquest || _stricmp(l.territory.c_str(), territory.c_str()) != 0) continue;
+		if (l.level >= level) return false;
+		l.level = level;
+		return true;
+	}
+	laurels.push_back({conquest, territory, level});
+	return true;
+}
+
+int ConquestLaurelOf(const std::vector<ConquestLaurel> &laurels, const std::string &conquest, const std::string &territory)
+{
+	int best = 0;
+	for (const ConquestLaurel &l : laurels) {
+		if (l.conquest == conquest && _stricmp(l.territory.c_str(), territory.c_str()) == 0) best = std::max(best, l.level);
+	}
+	return best;
+}
+
 std::string BattlePicturePath(const std::string &adventureFile)
 {
 	if (!EndsWithNoCase(adventureFile, ".bfhp")) return "";

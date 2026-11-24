@@ -18,6 +18,8 @@
 #include "addr/ui.h"
 #include "addr/world.h"
 #include "core/log.h"
+#include "game/adventureresult.h"
+#include "game/battlelist.h"
 
 // CVXUIConquestGame (g_pConquestGameDlg) and CConquestMapData (g_pConquestMapData), read as the game's own functions read them:
 // UpdateTerritoryInfo 006c94d0, UpdateTerritoryButtons 006c9220, GetSelectedTerritory 006c91c0 and RebuildTintedBitmap 00501160.
@@ -26,7 +28,13 @@ const unsigned kMsgButtonClick = 0x12345604, kFlagVisible = 2, kFlagBusy = 0x100
 const int kIdMap = 0x1001, kIdDifficulty = 0x1003;
 const size_t kTerritorySize = 0xe8, kMaxTerritories = 64, kMaxPath = 32;
 // CConquestMapData
-const size_t kDataTerritories = 0x04, kDataPathBegin = 0x4c, kDataPathEnd = 0x50, kDataChoosing = 0x70;
+// CConquestMapData; +0x2c the folder of its map (std::string, SetConquest 00504a80).
+const size_t kDataTerritories = 0x04, kDataFolder = 0x2c, kDataPathBegin = 0x4c, kDataPathEnd = 0x50, kDataChoosing = 0x70;
+// The game settings: +8 the conquest's file, a std::string (LoadConquestMap in CVXGameConq::StartGame 004cd030).
+const size_t kSettingsConquestFile = 8;
+// CVXGameConq: its settings and the territory being played (StartBattle 004ce200, ReturnToConquestMap 004cf060); the settings' +0xda8
+// is the difficulty the map gave the battle.
+const size_t kConqSettings = 0x4534, kConqPlayed = 0x4538, kConqSettingsDifficulty = 0xda8;
 // CConquestTerritory: std::string objects (MSVC: buffer or pointer at +4, size at +0x14, capacity at +0x18).
 // +0x1c: the colour of the territory in territories.bmp (FindTerritoryByIndex 00500fd0).
 const size_t kTerId = 0x00, kTerPaletteIndex = 0x1c, kTerState = 0x20, kTerName = 0x28, kTerDescription = 0x60, kTerBonus = 0x98, kTerShield = 0xd0;
@@ -38,8 +46,9 @@ const size_t kRendererAreas = 0x1c, kRendererTinted = 0x20;
 const size_t kBmpHandle = 4, kBmpW = 8, kBmpH = 0xc, kBmpBits = 0x10, kBmpType = 0x1c;
 const short kBmpType555 = 3, kBmpType565 = 6;
 const int kMaxShieldSide = 512, kMaxMapSide = 4096;
-// RebuildTintedBitmap rewrites the same bitmap in place: besides a change of territories, it is read again now and then.
-const DWORD kMapRereadMs = 3000;
+// RebuildTintedBitmap rewrites the same bitmap in place when the territories change: it is read then, and once more a moment later in
+// case the game had not finished with it.
+const DWORD kMapSettleMs = 700;
 // A land of middle brightness, in the byte order TintColor reads (blue, green, red).
 const uint8_t kLandSample[4] = {150, 170, 190, 0};
 
@@ -62,6 +71,7 @@ struct MapCache {
 	const void *data = nullptr, *tinted = nullptr, *areas = nullptr;
 	uint32_t tint = 0;
 	DWORD readAt = 0;
+	bool settled = false;
 	bool warned = false;
 	std::shared_ptr<const ConquestImage> map;
 	std::shared_ptr<const ConquestRegions> regions;
@@ -245,7 +255,9 @@ void ReadMap(void *mapCtl, const void *data, const char *territories, size_t cou
 		c.regions = ReadRegions(areas, territories, count);
 	}
 	const uint32_t key = TintKey(s);
-	if (tinted != c.tinted || key != c.tint || GetTickCount() - c.readAt >= kMapRereadMs) {
+	const bool changed = tinted != c.tinted || key != c.tint || (!c.map && !c.warned);
+	if (changed || (!c.settled && GetTickCount() - c.readAt >= kMapSettleMs)) {
+		c.settled = !changed;
 		RawBitmap raw;
 		std::shared_ptr<const ConquestImage> fresh = ReadPicture(tinted, kMaxMapSide, false, raw);
 		// The same pixels keep the same picture, so the screen does not build its copy again.
@@ -292,9 +304,36 @@ void ReadDifficulties(void *dlg, ConquestSnapshot &s)
 void ReadConfirm(ConquestSnapshot &s)
 {
 	void *confirm = *reinterpret_cast<void **>(addr::kConfirmDlg);
-	if (!confirm || !HasFlags(confirm, kFlagVisible)) return;
-	s.confirm = true;
-	for (int i = 0; i < 4; i++) s.confirmRect[i] = At<short>(confirm, 0x10 + i * 2);
+	s.confirm = confirm && HasFlags(confirm, kFlagVisible);
+}
+
+std::string ConquestKey(const char *data)
+{
+	const char *settings = *reinterpret_cast<const char *const *>(addr::kGameSettings);
+	std::string path = settings ? ReadString(settings + kSettingsConquestFile) : std::string();
+	if (path.empty() && data) path = ReadString(data + kDataFolder);
+	return ConquestKeyOf(path);
+}
+
+// The laurels are read again when one is saved or another conquest opens.
+struct LaurelCache {
+	unsigned serial = ~0u;
+	const void *data = nullptr;
+	std::vector<ConquestLaurel> laurels;
+};
+LaurelCache g_laurels;
+
+void ReadLaurels(const char *data, ConquestSnapshot &s)
+{
+	const unsigned serial = ConquestLaurelsSerial();
+	if (serial != g_laurels.serial || data != g_laurels.data) {
+		g_laurels.serial = serial;
+		g_laurels.data = data;
+		g_laurels.laurels = ConquestLaurels();
+		LogI("ui", "conquest \"%s\": %u laurels of the profile", s.key.c_str(), static_cast<unsigned>(g_laurels.laurels.size()));
+	}
+	for (ConquestTerritory &t : s.territories) t.laurel = ConquestLaurelOf(g_laurels.laurels, s.key, t.id);
+	s.laurel = ConquestLaurelOf(g_laurels.laurels, s.key, "");
 }
 }
 
@@ -316,8 +355,9 @@ ConquestSnapshot ConquestRead()
 	for (size_t i = 0; i < count; i++) {
 		const char *t = begin + i * kTerritorySize;
 		ConquestTerritory ter;
+		ter.id = ReadString(t + kTerId);
 		ter.name = ReadString(t + kTerName);
-		if (ter.name.empty()) ter.name = ReadString(t + kTerId);
+		if (ter.name.empty()) ter.name = ter.id;
 		ter.description = ReadString(t + kTerDescription);
 		ter.bonus = ReadString(t + kTerBonus);
 		const int state = At<int>(t, kTerState);
@@ -344,6 +384,8 @@ ConquestSnapshot ConquestRead()
 	s.save = Button(dlg, kConquestSave);
 	s.quit = Button(dlg, kConquestQuit);
 	ReadConfirm(s);
+	s.key = ConquestKey(data);
+	ReadLaurels(data, s);
 	return s;
 }
 
@@ -385,4 +427,45 @@ void ConquestMapMouse(int event, int x, int y)
 	short at[2] = {static_cast<short>(left + x), static_cast<short>(top + y)};
 	if (event != kConquestMouseUp) LogD("ui", "conquest: map event %#x at %d,%d of the picture", event, x, y);
 	reinterpret_cast<MapOnMouse_t>(addr::kConquestMapOnMouse)(map, nullptr, event, at);
+}
+
+bool ConquestBattleOf(const char *game, std::string &key, std::string &territory)
+{
+	key.clear();
+	territory.clear();
+	void **vt = At<void **>(game, 0);
+	if (!vt || At<uintptr_t>(vt, 0) != addr::kConquestGameGetClassName) return false;
+	const char *data = *reinterpret_cast<const char *const *>(addr::kConquestMapData);
+	const char *begin = At<const char *>(data, kDataTerritories), *end = At<const char *>(data, kDataTerritories + 4);
+	const size_t count = begin && end > begin ? std::min<size_t>(kMaxTerritories, (end - begin) / kTerritorySize) : 0;
+	const int played = At<int>(game, kConqPlayed);
+	const char *settings = At<const char *>(game, kConqSettings);
+	if (played < 0 || static_cast<size_t>(played) >= count) {
+		LogW("game", "a conquest battle was won, but its territory (%d of %u) is unknown: no laurel", played, static_cast<unsigned>(count));
+		return true;
+	}
+	key = ConquestKey(data);
+	territory = ReadString(begin + played * kTerritorySize + kTerId);
+	LogI("game", "conquest \"%s\": the battle for %s was won (the map gave it difficulty %d)", key.c_str(), territory.c_str(),
+		settings ? At<int>(settings, kConqSettingsDifficulty) : -1);
+	return true;
+}
+
+void ConquestNoteConquestWon()
+{
+	const char *data = *reinterpret_cast<const char *const *>(addr::kConquestMapData);
+	const char *begin = At<const char *>(data, kDataTerritories), *end = At<const char *>(data, kDataTerritories + 4);
+	const size_t count = begin && end > begin ? std::min<size_t>(kMaxTerritories, (end - begin) / kTerritorySize) : 0;
+	const std::string key = ConquestKey(data);
+	const std::vector<ConquestLaurel> laurels = ConquestLaurels();
+	int level = 0;
+	for (size_t i = 0; i < count; i++) {
+		const int won = ConquestLaurelOf(laurels, key, ReadString(begin + i * kTerritorySize + kTerId));
+		if (won > 0) level = level ? (std::min)(level, won) : won;
+	}
+	if (key.empty() || !level) {
+		LogW("game", "conquest \"%s\" won, but none of its territories has a laurel: it gets none", key.c_str());
+		return;
+	}
+	ConquestLaurelNote(key, "", level);
 }

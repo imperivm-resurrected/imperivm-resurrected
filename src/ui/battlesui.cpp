@@ -73,6 +73,9 @@ struct SavesCache {
 	std::shared_ptr<const BattleImage> packCovers[kBattlesTabCount];
 	CampaignPackView offers[kBattlesTabCount];
 	std::vector<BattleLaurel> laurels;
+	// The conquests' laurels, read again when one is saved.
+	unsigned conquestSerial = ~0u;
+	std::vector<ConquestLaurel> conquestLaurels;
 };
 SavesCache g_saves;
 bool g_savesWasOpen = false, g_modsWasOpen = false;
@@ -268,6 +271,14 @@ void ReadSaves(const BattlesSnapshot &s, View &v)
 	v.latest = SaveInfo();
 	v.lastByRow.clear();
 	for (int &n : v.savedInTab) n = 0;
+	if (s.open && s.tab == kBattlesTabConquests) {
+		const unsigned serial = ConquestLaurelsSerial();
+		if (serial != g_saves.conquestSerial) {
+			g_saves.conquestSerial = serial;
+			g_saves.conquestLaurels = ConquestLaurels();
+		}
+		v.conquestLaurels = g_saves.conquestLaurels;
+	}
 	if (!s.open || s.tab == kBattlesTabConquests) return;
 	if (g_saves.rescan) {
 		g_saves.rescan = false;
@@ -374,6 +385,7 @@ void Refresh()
 	v.latest = std::move(saves.latest);
 	v.lastByRow = std::move(saves.lastByRow);
 	v.laurels = std::move(saves.laurels);
+	v.conquestLaurels = std::move(saves.conquestLaurels);
 	CountLaurels(v);
 	std::copy(std::begin(saves.savedInTab), std::end(saves.savedInTab), std::begin(v.savedInTab));
 	if (snap.open) {

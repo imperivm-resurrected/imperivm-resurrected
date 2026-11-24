@@ -10,8 +10,10 @@
 #include <string>
 #include <vector>
 
+#include "core/log.h"
 #include "i18n/tr.h"
 #include "ui/fullscreen.h"
+#include "ui/medal.h"
 #include "ui/ornaments.h"
 #include "ui/widgets.h"
 
@@ -28,7 +30,8 @@ const int kLineH = 19;
 const int kCardPad = 20, kLabelY = 16, kDescLineH = 23, kBonusLineH = 20, kSegmentH = 34;
 const int kShieldW = 74, kShieldH = 79;
 const int kPathLabelW = 230, kSlotW = 86, kSlotGapMax = 28, kSlotGapMin = 8, kSlotShieldW = 46, kSlotShieldH = 49, kMaxSlots = 8;
-const int kSwatch = 16, kLegendRow = 30;
+const int kSwatch = 16, kLegendRow = 30, kMedalSmall = 18, kMedalCard = 22;
+const int kQuestionW = 546, kQuestionH = 246;
 
 // The game's map pictures have a gold border of their own, left out of ours: 10 to 14 pixels a side in global.bmp, thicker at the bottom.
 const int kBorderLeft = 12, kBorderTop = 15, kBorderRight = 12, kBorderBottom = 16;
@@ -46,9 +49,15 @@ struct Pending {
 	int x, y, w, h, alpha;
 };
 
+// A medal over a shield, drawn once the shields are in.
+struct LateMedal {
+	int x, y, size, level;
+};
+
 struct Layer {
 	Painter &p;
 	std::vector<Pending> images;
+	std::vector<LateMedal> medals;
 };
 
 COLORREF ToColorRef(uint32_t rgb) { return RGB((rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255); }
@@ -86,6 +95,29 @@ std::vector<std::wstring> Wrap(Painter &p, const std::string &text, int width)
 	while (!out.empty() && out.back().empty()) out.pop_back();
 	return out;
 }
+
+// The lines of a text as last wrapped: the same text, width and font are not measured again each frame.
+struct Wrapped {
+	std::string text;
+	int width = -1;
+	float s = 0;
+	HFONT font = nullptr;
+	std::vector<std::wstring> lines;
+};
+
+const std::vector<std::wstring> &WrapOnce(Wrapped &cache, Painter &p, int font, const std::string &text, int width)
+{
+	if (cache.width != width || cache.s != p.s || cache.font != p.fonts[font] || cache.text != text) {
+		cache.text = text;
+		cache.width = width;
+		cache.s = p.s;
+		cache.font = p.fonts[font];
+		cache.lines = Wrap(p, text, width);
+	}
+	return cache.lines;
+}
+
+Wrapped g_descLines, g_bonusLines;
 
 // A heater shield: flat top, straight sides down to the middle, curving to a point.
 void ShieldShape(Painter &p, int x, int y, int w, int h, COLORREF fill, COLORREF edge, bool filled)
@@ -158,14 +190,23 @@ void DrawImage(Canvas &c, const Pending &d)
 	}
 }
 
-void FlushImages(Canvas &c, const Layer &l)
+void FlushImages(Canvas &c, Layer &l)
 {
 	GdiFlush();
-	const Painter &p = l.p;
+	Painter &p = l.p;
 	for (const Pending &d : l.images) {
 		const int x = p.S(d.x), y = p.S(d.y);
 		DrawImage(c, {d.img, x, y, p.S(d.x + d.w) - x, p.S(d.y + d.h) - y, d.alpha});
 	}
+	for (const LateMedal &m : l.medals) PaintMedal(p, m.x, m.y, m.size, m.level);
+}
+
+// The game's name of a difficulty (1 easy to 3 hard), as its list gives it.
+std::string DifficultyName(const ConquestSnapshot &g, int level)
+{
+	static const char *const kNames[3] = {"Easy", "Normal", "Hard"};
+	if (level >= 1 && level <= static_cast<int>(g.difficulties.size())) return g.difficulties[level - 1];
+	return level >= 1 && level <= 3 ? Tr(kNames[level - 1]) : std::string();
 }
 
 // One region of the screen: the game's pixels are copied in first, so whatever is not painted keeps showing the game.
@@ -239,7 +280,7 @@ bool CoversPlate(const ConquestImage &m, const ConquestRegions *r)
 uint32_t Mix(uint32_t a, uint32_t b, int t)
 {
 	const auto one = [t](uint32_t x, uint32_t y) { return (x * (255 - t) + y * t) / 255; };
-	return 0xff000000u | one((a >> 16) & 255, (b >> 16) & 255) << 16 | one((a >> 8) & 255, (b >> 8) & 255) << 8 | one(a & 255, b & 255);
+	return one((a >> 16) & 255, (b >> 16) & 255) << 16 | one((a >> 8) & 255, (b >> 8) & 255) << 8 | one(a & 255, b & 255);
 }
 
 void CoverPlate(std::vector<uint32_t> &px, int w)
@@ -255,51 +296,12 @@ void CoverPlate(std::vector<uint32_t> &px, int w)
 	}
 }
 
-// The game outlines the chosen territory in white where a 2x2 block of territories.bmp has more than one colour (BuildTerritoryBitmaps
-// 005045e0); the same blocks here, blended at `alpha`.
-void Outline(std::vector<uint32_t> &px, const ConquestRegions &r, int territory, int alpha)
-{
-	const uint8_t t = static_cast<uint8_t>(territory);
-	const int w = r.w, h = r.h;
-	std::vector<uint8_t> mark(static_cast<size_t>(w) * h, 0);
-	const uint8_t *a = r.territory.data();
-	for (int y = 0; y + 1 < h; y++) {
-		const uint8_t *row = a + static_cast<size_t>(y) * w, *next = row + w;
-		for (int x = 0; x + 1 < w; x++) {
-			const uint8_t v = row[x];
-			if (v == row[x + 1] && v == next[x] && v == next[x + 1]) continue;
-			if (v != t && row[x + 1] != t && next[x] != t && next[x + 1] != t) continue;
-			uint8_t *m = mark.data() + static_cast<size_t>(y) * w + x;
-			m[0] = m[1] = m[w] = m[w + 1] = 1;
-		}
-	}
-	for (size_t i = 0; i < mark.size(); i++) {
-		if (mark[i]) px[i] = Mix(px[i], 0xffffffu, alpha);
-	}
-}
-
-void Lighten(std::vector<uint32_t> &px, const ConquestRegions &r, int territory, int amount)
-{
-	const uint8_t t = static_cast<uint8_t>(territory);
-	for (size_t i = 0; i < px.size(); i++) {
-		if (r.territory[i] == t) px[i] = Mix(px[i], 0xffffffu, amount);
-	}
-}
-
-// The picture as the screen shows it: without its border and plate, with the chosen territory outlined and the one under the mouse lit.
-std::vector<uint32_t> Compose(const ConquestSnapshot &g, int hovered, const RECT &crop)
+// The picture as the screen shows it, without its border and plate.
+std::vector<uint32_t> Compose(const ConquestSnapshot &g, const RECT &crop)
 {
 	const ConquestImage &m = *g.map;
-	const ConquestRegions *r = g.regions.get();
 	std::vector<uint32_t> px(m.argb);
-	if (CoversPlate(m, r)) CoverPlate(px, m.w);
-	if (r) {
-		if (hovered >= 0) {
-			Lighten(px, *r, hovered, 36);
-			if (hovered != g.selected) Outline(px, *r, hovered, 150);
-		}
-		if (Valid(g, g.selected)) Outline(px, *r, g.selected, 255);
-	}
+	if (CoversPlate(m, g.regions.get())) CoverPlate(px, m.w);
 	const int cw = crop.right - crop.left, ch = crop.bottom - crop.top;
 	std::vector<uint32_t> out(static_cast<size_t>(cw) * ch);
 	for (int y = 0; y < ch; y++) {
@@ -340,50 +342,109 @@ bool Scale(const std::vector<uint32_t> &src, int sw, int sh, int dw, int dh, std
 	return ok;
 }
 
-// The map as last shown: built again when the map, the choice, the territory under the mouse or the size changes.
+// The map at its size on the screen, built again only when the map or that size changes: its pixels, the territory under each one and
+// where each territory lies, so that the chosen one and the one under the mouse are drawn over it each frame without building it again.
 struct Picture {
 	std::shared_ptr<const ConquestImage> map;
 	std::shared_ptr<const ConquestRegions> regions;
-	int selected = -2, hovered = -2, w = 0, h = 0;
+	int w = 0, h = 0;
 	std::vector<uint32_t> px;
-	int pw = 0, ph = 0;
+	std::vector<uint8_t> owner;
+	std::vector<RECT> bounds;
 };
 Picture g_picture;
 
-void PaintMap(Layer &l, const Layout &L, const View &v, const RECT &crop, int hovered)
+bool BuildPicture(const ConquestSnapshot &g, const RECT &crop, int dw, int dh)
+{
+	Picture &pic = g_picture;
+	if (pic.map == g.map && pic.regions == g.regions && pic.w == dw && pic.h == dh) return !pic.px.empty();
+	const DWORD started = GetTickCount();
+	pic = Picture();
+	pic.map = g.map;
+	pic.regions = g.regions;
+	pic.w = dw;
+	pic.h = dh;
+	const int cw = crop.right - crop.left, ch = crop.bottom - crop.top;
+	if (dw <= 0 || dh <= 0 || cw <= 0 || ch <= 0 || !Scale(Compose(g, crop), cw, ch, dw, dh, pic.px)) {
+		pic.px.clear();
+		return false;
+	}
+	if (const ConquestRegions *r = g.regions.get()) {
+		pic.owner.resize(static_cast<size_t>(dw) * dh);
+		pic.bounds.assign(256, RECT{dw, dh, -1, -1});
+		for (int y = 0; y < dh; y++) {
+			const int sy = crop.top + y * ch / dh;
+			const uint8_t *row = r->territory.data() + static_cast<size_t>(sy) * r->w + crop.left;
+			uint8_t *out = pic.owner.data() + static_cast<size_t>(y) * dw;
+			for (int x = 0; x < dw; x++) {
+				const uint8_t t = row[x * cw / dw];
+				out[x] = t;
+				if (t == kConquestNoTerritory) continue;
+				RECT &b = pic.bounds[t];
+				b.left = std::min<LONG>(b.left, x);
+				b.top = std::min<LONG>(b.top, y);
+				b.right = std::max<LONG>(b.right, x + 1);
+				b.bottom = std::max<LONG>(b.bottom, y + 1);
+			}
+		}
+	}
+	LogD("ui", "conquest: the map was built at %dx%d in %u ms", dw, dh, static_cast<unsigned>(GetTickCount() - started));
+	return true;
+}
+
+// Over the map already in the canvas at (ox, oy): the territory lit by `light` (0-255 towards white) and its edge, two pixels across
+// the border as the game outlines it, at `edge`. Only the territory's own box is visited.
+void MarkTerritory(Canvas &c, int ox, int oy, int territory, int light, int edge)
+{
+	const Picture &pic = g_picture;
+	if (pic.owner.empty() || territory < 0 || territory >= static_cast<int>(pic.bounds.size())) return;
+	const RECT &b = pic.bounds[territory];
+	if (b.right <= b.left) return;
+	const uint8_t t = static_cast<uint8_t>(territory);
+	const int x0 = std::max<int>(0, b.left - 1), x1 = std::min<int>(pic.w, b.right + 1), y0 = std::max<int>(0, b.top - 1), y1 = std::min<int>(pic.h, b.bottom + 1);
+	for (int y = y0; y < y1; y++) {
+		const int cy = oy + y;
+		if (cy < 0 || cy >= c.h) continue;
+		const uint8_t *row = pic.owner.data() + static_cast<size_t>(y) * pic.w;
+		for (int x = x0; x < x1; x++) {
+			const int cx = ox + x;
+			if (cx < 0 || cx >= c.w) continue;
+			const bool in = row[x] == t;
+			const bool border = (x > 0 && (row[x - 1] == t) != in) || (x + 1 < pic.w && (row[x + 1] == t) != in) ||
+				(y > 0 && (row[x - pic.w] == t) != in) || (y + 1 < pic.h && (row[x + pic.w] == t) != in);
+			if (!in && !border) continue;
+			uint32_t &dst = c.bits[static_cast<size_t>(cy) * c.w + cx];
+			if (border && edge > 0) dst = Mix(dst, 0xffffffu, edge);
+			else if (in && light > 0) dst = Mix(dst, 0xffffffu, light);
+		}
+	}
+}
+
+void PaintMap(Layer &l, Canvas &canvas, const Layout &L, const View &v, const RECT &crop, int hovered)
 {
 	Painter &p = l.p;
 	const ConquestSnapshot &g = v.game;
 	PaintGlassCard(p, L.mapCard.x, L.mapCard.y, L.mapCard.w, L.mapCard.h);
 	const Box &b = L.map;
-	if (!g.map) {
+	const RECT r = p.R(b.x, b.y, b.w, b.h);
+	const int dw = r.right - r.left, dh = r.bottom - r.top;
+	if (!g.map || !BuildPicture(g, crop, dw, dh)) {
 		p.Fill(b.x, b.y, b.w, b.h, pal::bg);
 		PaintIsotype(p, b.x + b.w / 2, b.y + b.h / 2, b.h * 35 / 100, 46);
 		return;
 	}
-	const RECT r = p.R(b.x, b.y, b.w, b.h);
-	const int dw = r.right - r.left, dh = r.bottom - r.top;
-	Picture &pic = g_picture;
-	if (pic.map != g.map || pic.regions != g.regions || pic.selected != g.selected || pic.hovered != hovered || pic.w != dw || pic.h != dh) {
-		std::vector<uint32_t> composed = Compose(g, hovered, crop);
-		const int cw = crop.right - crop.left, ch = crop.bottom - crop.top;
-		if (dw > 0 && dh > 0 && Scale(composed, cw, ch, dw, dh, pic.px)) {
-			pic.pw = dw;
-			pic.ph = dh;
-		}
-		else {
-			pic.px = std::move(composed);
-			pic.pw = cw;
-			pic.ph = ch;
-		}
-		pic.map = g.map;
-		pic.regions = g.regions;
-		pic.selected = g.selected;
-		pic.hovered = hovered;
-		pic.w = dw;
-		pic.h = dh;
+	// Straight into the canvas, which GDI is done with up to here.
+	GdiFlush();
+	const Picture &pic = g_picture;
+	const int x0 = std::max<int>(0, -r.left), x1 = std::min<int>(dw, canvas.w - r.left);
+	for (int y = 0; y < dh && x1 > x0; y++) {
+		const int cy = r.top + y;
+		if (cy < 0 || cy >= canvas.h) continue;
+		const uint32_t *from = pic.px.data() + static_cast<size_t>(y) * dw;
+		std::copy(from + x0, from + x1, canvas.bits + static_cast<size_t>(cy) * canvas.w + r.left + x0);
 	}
-	p.Image(b.x, b.y, b.w, b.h, pic.px.data(), pic.pw, pic.ph);
+	if (hovered >= 0 && hovered != g.selected) MarkTerritory(canvas, r.left, r.top, hovered, 36, 150);
+	if (Valid(g, g.selected)) MarkTerritory(canvas, r.left, r.top, g.selected, hovered == g.selected ? 36 : 0, 255);
 	p.Frame(b.x - 1, b.y - 1, b.w + 2, b.h + 2, kFrameGoldDim);
 }
 
@@ -400,7 +461,8 @@ void PaintMapTag(Painter &p, const Layout &L, const View &v, int hovered)
 	GetTextExtentPoint32W(p.dc, name.c_str(), static_cast<int>(name.size()), &nameSz);
 	p.Font(3);
 	const int lineW = p.TextWidth(s.line);
-	const int w = std::min(L.map.w - 16, std::max(static_cast<int>(nameSz.cx / p.s) + 2, lineW + 18) + 28), h = 52;
+	const int medal = t.laurel > 0 ? kMedalSmall + 10 : 0;
+	const int w = std::min(L.map.w - 16, std::max(static_cast<int>(nameSz.cx / p.s) + 2 + medal, lineW + 18) + 28), h = 52;
 	const int mx = static_cast<int>((v.mouseX - p.ox) / p.s), my = static_cast<int>((v.mouseY - p.oy) / p.s);
 	int x = mx + 18, y = my + 20;
 	if (x + w > L.map.Right() - 8) x = mx - 14 - w;
@@ -410,7 +472,8 @@ void PaintMapTag(Painter &p, const Layout &L, const View &v, int hovered)
 	p.Fill(x, y, w, h, pal::panel);
 	p.Frame(x, y, w, h, pal::edge);
 	p.Font(1);
-	RawCaps(p, x + 14, y + 6, w - 28, 22, t.name, pal::text);
+	RawCaps(p, x + 14, y + 6, w - 28 - medal, 22, t.name, pal::text);
+	if (medal) PaintMedal(p, x + w - 14 - kMedalSmall, y + 8, kMedalSmall, t.laurel);
 	p.Diamond(x + 18, y + 37, 4, ToColorRef(g.colors[t.standing]));
 	p.Font(3);
 	p.Text(x + 28, y + 27, w - 42, 20, s.line, s.color, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
@@ -421,7 +484,10 @@ void PaintPath(Layer &l, const Box &b, const View &v)
 	Painter &p = l.p;
 	const ConquestSnapshot &g = v.game;
 	PaintGlassCard(p, b.x, b.y, b.w, b.h);
-	PaintSectionLabel(p, b.x + 24, b.y + 22, kPathLabelW - 32, 18, "Your path");
+	// A conquest won whole shows its medal beside the label.
+	const int medal = g.laurel > 0 ? kMedalCard + 8 : 0;
+	PaintSectionLabel(p, b.x + 24, b.y + 22, kPathLabelW - 32 - medal, 18, "Your path");
+	if (medal) PaintMedal(p, b.x + kPathLabelW - 16 - kMedalCard, b.y + 20, kMedalCard, g.laurel);
 	int total = 0;
 	for (const ConquestTerritory &t : g.territories) total += t.disabled ? 0 : 1;
 	const int done = static_cast<int>(g.path.size());
@@ -456,6 +522,7 @@ void PaintPath(Layer &l, const Box &b, const View &v)
 		const bool next = i >= done;
 		if (next) p.Frame(shieldX - 3, top - 2, kSlotShieldW + 6, kSlotShieldH + 4, pal::edgeHot);
 		Shield(l, g, index, shieldX, top, kSlotShieldW, kSlotShieldH, next ? 120 : 255);
+		if (!next && g.territories[index].laurel > 0) l.medals.push_back({shieldX + kSlotShieldW - 12, top + kSlotShieldH - 16, kMedalSmall, g.territories[index].laurel});
 		p.Font(3);
 		Raw(p, sx - 6, top + kSlotShieldH + 6, kSlotW + 12, 20, g.territories[index].name, next ? pal::redText : pal::text,
 			DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
@@ -512,7 +579,21 @@ void PaintTerritoryCard(Layer &l, const Box &b, const View &v)
 	Painter &p = l.p;
 	const ConquestSnapshot &g = v.game;
 	PaintGlassCard(p, b.x, b.y, b.w, b.h);
-	PaintSectionLabel(p, b.x + kCardPad, b.y + kLabelY, b.w - 2 * kCardPad, 18, g.choosing ? "Select starting area" : "Territory");
+	// A territory won shows its medal and the difficulty at the right of the label.
+	const int laurel = Valid(g, g.selected) ? g.territories[g.selected].laurel : 0;
+	int labelW = b.w - 2 * kCardPad;
+	if (laurel > 0) {
+		const int mx = b.Right() - kCardPad - kMedalCard;
+		PaintMedal(p, mx, b.y + kLabelY - 2, kMedalCard, laurel);
+		p.Font(4);
+		const std::string won = TrFmt("Won on %s", {DifficultyName(g, laurel)});
+		p.raw = true;
+		const int wonW = std::min(labelW / 2, p.CapsWidth(won, 1) + 4);
+		p.TextCaps(mx - 8 - wonW, b.y + kLabelY, wonW, 18, won, pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE, 1);
+		p.raw = false;
+		labelW -= wonW + kMedalCard + 16;
+	}
+	PaintSectionLabel(p, b.x + kCardPad, b.y + kLabelY, labelW, 18, g.choosing ? "Select starting area" : "Territory");
 	const int sx = b.x + kCardPad, sy = b.y + 48, tx = sx + kShieldW + 20, tw = b.Right() - kCardPad - tx;
 	if (!Valid(g, g.selected)) {
 		ShieldShape(p, sx + 4, sy + 2, kShieldW - 8, kShieldH - 4, pal::bg, pal::hairline, true);
@@ -549,7 +630,7 @@ void PaintDescription(Painter &p, const Box &b, const View &v, Painted &out)
 		if (Valid(g, g.selected)) p.Text(x, top, w, kDescLineH, "No description.", pal::textDim);
 		return;
 	}
-	const std::vector<std::wstring> lines = Wrap(p, text, w - 14);
+	const std::vector<std::wstring> &lines = WrapOnce(g_descLines, p, 0, text, w - 14);
 	const int visible = std::max(1, (bottom - top) / kDescLineH);
 	out.maxScroll = std::max(0, static_cast<int>(lines.size()) - visible);
 	const int first = std::min(std::max(0, v.scroll), out.maxScroll);
@@ -580,7 +661,7 @@ void PaintBonus(Painter &p, const Box &b, const View &v)
 			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		return;
 	}
-	const std::vector<std::wstring> lines = Wrap(p, bonus, w);
+	const std::vector<std::wstring> &lines = WrapOnce(g_bonusLines, p, 3, bonus, w);
 	const int maxLines = std::max(1, (b.Bottom() - 10 - top) / kBonusLineH);
 	for (int i = 0; i < maxLines && i < static_cast<int>(lines.size()); i++) {
 		std::wstring line = lines[i];
@@ -668,11 +749,12 @@ Canvas g_screen, g_victory;
 void PaintScreen(uint32_t *buf, int w, int h, const View &v, int pressAction, int pressArg, Painted &out)
 {
 	const ConquestSnapshot &g = v.game;
-	// The game's question (quit?) opens over the screen: its pixels are put back on top, over the screen dimmed.
+	// The game's question (quit?) is drawn over the screen by the game menu's screen. Without it, the game's own box is let through,
+	// and only the box (CONFIRM.INI: 522x222 with its frame, centred), never the game's dialog around it.
 	RECT hole = {};
 	std::vector<uint32_t> saved;
-	if (g.confirm) {
-		hole = {std::max(0, g.confirmRect[0]), std::max(0, g.confirmRect[1]), std::min(w, g.confirmRect[2] + 1), std::min(h, g.confirmRect[3] + 1)};
+	if (g.confirm && !v.questionDrawn) {
+		hole = {std::max(0, w / 2 - kQuestionW / 2), std::max(0, h / 2 - kQuestionH / 2), std::min(w, w / 2 + kQuestionW / 2), std::min(h, h / 2 + kQuestionH / 2)};
 		for (int y = hole.top; y < hole.bottom; y++) saved.insert(saved.end(), buf + static_cast<size_t>(y) * w + hole.left, buf + static_cast<size_t>(y) * w + hole.right);
 	}
 	const ScreenView screen = ScreenViewFor(w, h);
@@ -700,7 +782,7 @@ void PaintScreen(uint32_t *buf, int w, int h, const View &v, int pressAction, in
 	const int right = PaintHeaderActions(p, L.head, {{"Back", kActBack, true, g.quit.enabled}}, v.mouseX, v.mouseY);
 	PaintScreenTitle(p, L.head, "Conquest", {}, right, v.mouseX, v.mouseY);
 	PaintPath(layer, L.path, v);
-	PaintMap(layer, L, v, crop, hovered);
+	PaintMap(layer, r.canvas, L, v, crop, hovered);
 	PaintLegend(p, L, v);
 	if (L.legendBeside) PaintHint(p, L.hint, v);
 	PaintTerritoryCard(layer, L.territory, v);

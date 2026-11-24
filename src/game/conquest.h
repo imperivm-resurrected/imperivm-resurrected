@@ -28,7 +28,9 @@ struct ConquestRegions {
 };
 
 struct ConquestTerritory {
-	std::string name, description, bonus;
+	std::string id, name, description, bonus;
+	// The hardest difficulty the active profile won it at (1 to 3), 0 never.
+	int laurel = 0;
 	int standing = kStandingOutOfReach;
 	bool disabled = false;
 	std::shared_ptr<const ConquestImage> shield;
@@ -49,9 +51,11 @@ struct ConquestSnapshot {
 	ConquestButton start, select, save, quit;
 	// What the map paints over a mid-tone land for each standing, 0xRRGGBB.
 	uint32_t colors[kStandingCount] = {0xb0a06e, 0xb08280, 0x968c78};
-	// The game's own question (quit?) is drawn over this rectangle, in screen pixels.
+	// The game's own question (quit?) is up; the game menu's screen draws it (gamemenuui).
 	bool confirm = false;
-	int confirmRect[4] = {};
+	// The conquest's key for its laurels (ConquestKeyOf its file) and the hardest difficulty it was won whole at, 0 never.
+	std::string key;
+	int laurel = 0;
 	// The map as the game paints it (global.bmp tinted by who holds each territory), without the outline of the chosen one.
 	std::shared_ptr<const ConquestImage> map;
 	std::shared_ptr<const ConquestRegions> regions;
@@ -61,5 +65,10 @@ struct ConquestSnapshot {
 ConquestSnapshot ConquestRead();
 void ConquestPress(int id);
 void ConquestSetDifficulty(int index);
+// Game thread, from the victory of a battle (DeclareTeamVictory): false unless the game is a conquest's; then the conquest's key and
+// the territory played, both empty when they cannot be read.
+bool ConquestBattleOf(const char *game, std::string &key, std::string &territory);
+// Game thread, when the game shows that the conquest is won: its laurel is the easiest of its territories'.
+void ConquestNoteConquestWon();
 // Hands a mouse event to the map's own handler at a pixel of its picture, as a click on the game's map would.
 void ConquestMapMouse(int event, int x, int y);

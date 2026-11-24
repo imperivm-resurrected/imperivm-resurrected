@@ -12,6 +12,7 @@
 #include "core/log.h"
 #include "game/conquest.h"
 #include "ui/conquestui_view.h"
+#include "ui/gamemenuui.h"
 #include "ui/modui.h"
 #include "ui/mpui.h"
 #include "ui/savesui.h"
@@ -23,6 +24,8 @@ const DWORD kReadEveryMs = 60;
 const int kWheelLines = 3;
 // The difficulties are easy, normal and hard: each visit of the map starts at normal.
 const int kNormal = 1;
+// A paint slower than this is logged, at most once every kSlowLogMs.
+const DWORD kSlowPaintMs = 20, kSlowLogMs = 5000;
 
 struct State {
 	View view;
@@ -100,7 +103,14 @@ void ConquestUiGameTick()
 		std::lock_guard<std::mutex> lock(g_lock);
 		if (g_s.view.game.open && GetTickCount() - g_s.lastRead < kReadEveryMs) return;
 	}
+	const DWORD readFrom = GetTickCount();
 	ConquestSnapshot fresh = ConquestRead();
+	const DWORD readMs = GetTickCount() - readFrom;
+	static DWORD readLoggedAt = 0;
+	if (readMs >= kSlowPaintMs && GetTickCount() - readLoggedAt >= kSlowLogMs) {
+		readLoggedAt = GetTickCount();
+		LogD("perf", "conquest screen: reading the game's map took %u ms", static_cast<unsigned>(readMs));
+	}
 	bool setNormal = false;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
@@ -143,8 +153,19 @@ void ConquestUiDraw(uint32_t *buf, int w, int h)
 		view = g_s.view;
 		if (g_s.mouseDown) pressAction = ui::HitActionAt(g_s.painted.hits, {view.mouseX, view.mouseY}, pressArg, kActNone);
 	}
+	view.questionDrawn = view.game.confirm && GameMenuUiNeedsDraw();
+	LARGE_INTEGER freq, from, to;
+	QueryPerformanceFrequency(&freq);
+	QueryPerformanceCounter(&from);
 	Painted painted;
 	PaintConquest(buf, w, h, view, pressAction, pressArg, painted);
+	QueryPerformanceCounter(&to);
+	const DWORD ms = static_cast<DWORD>((to.QuadPart - from.QuadPart) * 1000 / freq.QuadPart);
+	static DWORD loggedAt = 0;
+	if (ms >= kSlowPaintMs && GetTickCount() - loggedAt >= kSlowLogMs) {
+		loggedAt = GetTickCount();
+		LogD("perf", "conquest screen: a paint took %u ms at %dx%d", static_cast<unsigned>(ms), w, h);
+	}
 	std::lock_guard<std::mutex> lock(g_lock);
 	g_s.painted = std::move(painted);
 }
@@ -226,6 +247,7 @@ bool ConquestUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 void ConquestUiVictoryShown(const char *text)
 {
 	LogI("ui", "conquest won: the victory box is drawn by the mod");
+	ConquestNoteConquestWon();
 	std::lock_guard<std::mutex> lock(g_lock);
 	g_s.view.victory = true;
 	g_s.view.victoryText = text ? text : "";

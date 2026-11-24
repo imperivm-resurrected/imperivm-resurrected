@@ -14,6 +14,7 @@
 #include "addr/world.h"
 #include "core/log.h"
 #include "core/winpath.h"
+#include "game/conquest.h"
 #include "game/gamehook.h"
 #include "game/gamelayout.h"
 #include "hooks/gameload.h"
@@ -27,6 +28,7 @@ DeclareTeamVictory_t g_origDeclareTeamVictory = nullptr;
 
 std::mutex g_lock;
 std::string g_startedPath, g_startedTitle;
+unsigned g_conquestSerial = 0;
 
 // CVXGame: the kind of game (1 for an adventure, from map.xml), its map header and the difficulty (0 easy, 1 normal, 2 hard).
 const size_t kGameType = 0xa0, kGameHeader = 0x98, kGameDifficulty = 0x254;
@@ -35,27 +37,33 @@ const int kGameTypeAdventure = 1;
 const size_t kHeaderName = 0x0c;
 const int kStateWon = 3;
 
-std::string LaurelsFile()
+std::string ProfileFile(const char *name)
 {
 	const std::string profile = SaveLibActiveProfile();
-	return profile.empty() ? std::string() : winpath::GameDir() + "\\Profiles\\" + profile + "\\imperivm-laurels.txt";
+	return profile.empty() ? std::string() : winpath::GameDir() + "\\Profiles\\" + profile + "\\" + name;
 }
 
-std::vector<BattleLaurel> ReadLaurels(const std::string &file)
+std::string LaurelsFile() { return ProfileFile("imperivm-laurels.txt"); }
+
+std::string ConquestLaurelsFile() { return ProfileFile("imperivm-conquest-laurels.txt"); }
+
+std::string ReadText(const std::string &file)
 {
 	std::string text;
 	FILE *f = nullptr;
-	if (file.empty() || fopen_s(&f, file.c_str(), "rb") != 0 || !f) return {};
+	if (file.empty() || fopen_s(&f, file.c_str(), "rb") != 0 || !f) return text;
 	char buf[4096];
 	size_t n;
 	while ((n = fread(buf, 1, sizeof(buf), f)) > 0 && text.size() < (1u << 20)) text.append(buf, n);
 	fclose(f);
-	return BattleLaurelsDecode(text);
+	return text;
 }
 
-bool WriteLaurels(const std::string &file, const std::vector<BattleLaurel> &laurels)
+std::vector<BattleLaurel> ReadLaurels(const std::string &file) { return BattleLaurelsDecode(ReadText(file)); }
+
+bool WriteText(const std::string &file, const std::string &text)
 {
-	const std::string tmp = file + ".tmp", text = BattleLaurelsEncode(laurels);
+	const std::string tmp = file + ".tmp";
 	FILE *f = nullptr;
 	if (fopen_s(&f, tmp.c_str(), "wb") != 0 || !f) return false;
 	const bool ok = fwrite(text.data(), 1, text.size(), f) == text.size();
@@ -63,13 +71,30 @@ bool WriteLaurels(const std::string &file, const std::vector<BattleLaurel> &laur
 	return ok && MoveFileExA(tmp.c_str(), file.c_str(), MOVEFILE_REPLACE_EXISTING);
 }
 
+bool WriteLaurels(const std::string &file, const std::vector<BattleLaurel> &laurels) { return WriteText(file, BattleLaurelsEncode(laurels)); }
+
+// A conquest's battles are played as adventures: their victory is the territory's laurel, not an adventure's.
+bool NoteConquestBattle(const char *game, int difficulty)
+{
+	std::string key, territory;
+	if (!ConquestBattleOf(game, key, territory)) return false;
+	if (key.empty() || territory.empty()) return true;
+	if (difficulty < 0 || difficulty > 2) {
+		LogW("game", "a conquest battle was won at an unknown difficulty (%d): no laurel", difficulty);
+		return true;
+	}
+	ConquestLaurelNote(key, territory, difficulty + 1);
+	return true;
+}
+
 void __cdecl HookDeclareTeamVictory(int player, void *allies)
 {
 	g_origDeclareTeamVictory(player, allies);
 	const char *game = *reinterpret_cast<const char **>(addr::kGame);
 	const char *local = game ? layout::LocalPlayer(game) : nullptr;
-	if (!local || Field<int>(local, layout::kPlayerState) != kStateWon || GameIsMultiplayer() || Field<int>(game, kGameType) != kGameTypeAdventure) return;
+	if (!local || Field<int>(local, layout::kPlayerState) != kStateWon || GameIsMultiplayer()) return;
 	const int difficulty = Field<int>(game, kGameDifficulty);
+	if (NoteConquestBattle(game, difficulty) || Field<int>(game, kGameType) != kGameTypeAdventure) return;
 	if (difficulty < 0 || difficulty > 2) {
 		LogW("game", "an adventure was won at an unknown difficulty (%d): no laurel", difficulty);
 		return;
@@ -131,4 +156,33 @@ void AdventureResultNoteStart(const std::string &adventurePath, const std::strin
 std::vector<BattleLaurel> AdventureLaurels()
 {
 	return ReadLaurels(LaurelsFile());
+}
+
+std::vector<ConquestLaurel> ConquestLaurels()
+{
+	return ConquestLaurelsDecode(ReadText(ConquestLaurelsFile()));
+}
+
+unsigned ConquestLaurelsSerial()
+{
+	std::lock_guard<std::mutex> lock(g_lock);
+	return g_conquestSerial;
+}
+
+void ConquestLaurelNote(const std::string &key, const std::string &territory, int level)
+{
+	const std::string file = ConquestLaurelsFile();
+	std::vector<ConquestLaurel> laurels = ConquestLaurels();
+	const char *what = territory.empty() ? "the whole conquest" : territory.c_str();
+	if (!ConquestLaurelsAdd(laurels, key, territory, level)) {
+		LogI("game", "conquest \"%s\": %s won at level %d; its laurel was already that or better", key.c_str(), what, level);
+		return;
+	}
+	if (file.empty() || !WriteText(file, ConquestLaurelsEncode(laurels))) {
+		LogE("game", "the laurel of the conquest \"%s\" (%s) could not be saved", key.c_str(), what);
+		return;
+	}
+	LogI("game", "conquest \"%s\": %s won at level %d, laurel saved", key.c_str(), what, level);
+	std::lock_guard<std::mutex> lock(g_lock);
+	g_conquestSerial++;
 }

@@ -60,6 +60,8 @@ struct View {
 	CampaignPackView offers[kBattlesTabCount];
 	// The adventures won by the active profile, with the hardest difficulty of each.
 	std::vector<BattleLaurel> laurels;
+	// The conquests' laurels: the conquests tab shows the medal of each one won whole.
+	std::vector<ConquestLaurel> conquestLaurels;
 	// How much of each tab's campaign is done: its laurels against three for each adventure, in percent; -1 when it has no adventures.
 	int done[kBattlesTabCount] = {-1, -1, -1, -1, -1};
 	// The tab of Imperivm I or II whose start was held back because other gameplay mods are active, and their names; -1 when none.

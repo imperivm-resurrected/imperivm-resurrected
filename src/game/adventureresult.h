@@ -17,3 +17,10 @@ void AdventureResultNoteStart(const std::string &adventurePath, const std::strin
 
 // The laurels of the active profile (Profiles/<profile>/imperivm-laurels.txt); empty when it has none.
 std::vector<BattleLaurel> AdventureLaurels();
+
+// The conquests' laurels of the active profile (Profiles/<profile>/imperivm-conquest-laurels.txt), and a count that changes each time
+// one is saved, so a screen knows when to read them again.
+std::vector<ConquestLaurel> ConquestLaurels();
+unsigned ConquestLaurelsSerial();
+// Keeps a victory of the conquest `key` at `level` (1 to 3): of a territory, or of the whole conquest with `territory` empty.
+void ConquestLaurelNote(const std::string &key, const std::string &territory, int level);

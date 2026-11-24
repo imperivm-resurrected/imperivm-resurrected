@@ -76,6 +76,22 @@ bool BattleLaurelsAdd(std::vector<BattleLaurel> &laurels, const std::string &pat
 // The level won of an adventure of the list, by its path or else its title; 0 when it was never won.
 int BattleLaurelOf(const std::vector<BattleLaurel> &laurels, const std::string &path, const std::string &title);
 
+// A conquest's laurels: the hardest difficulty (1 to 3) each territory was won at, and the conquest itself once it is won whole
+// (`territory` empty). `conquest` is ConquestKeyOf its file, so a conquest of a mod gets its own.
+struct ConquestLaurel {
+	std::string conquest, territory;
+	int level = 0;
+};
+// The name of a conquest's file without its folder or extension, in lowercase: the game's list and its settings write the path apart.
+std::string ConquestKeyOf(const std::string &path);
+// One laurel a line: the level, the conquest and the territory, separated by tabs. Lines that do not read are left out.
+std::vector<ConquestLaurel> ConquestLaurelsDecode(const std::string &text);
+std::string ConquestLaurelsEncode(const std::vector<ConquestLaurel> &laurels);
+// A victory at `level` keeps the hardest one. False when nothing changed.
+bool ConquestLaurelsAdd(std::vector<ConquestLaurel> &laurels, const std::string &conquest, const std::string &territory, int level);
+// 0 when it was never won.
+int ConquestLaurelOf(const std::vector<ConquestLaurel> &laurels, const std::string &conquest, const std::string &territory);
+
 // The adventure's text keeps the "\n" of its file as two characters.
 std::string BattleDescriptionText(const std::string &raw);
 

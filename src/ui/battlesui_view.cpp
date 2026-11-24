@@ -11,6 +11,7 @@
 
 #include "game/battlelist.h"
 #include "ui/fullscreen.h"
+#include "ui/medal.h"
 #include "ui/patronui.h"
 #include "ui/widgets.h"
 
@@ -162,29 +163,19 @@ void PaintGroupHeader(Painter &p, int x, int y, int w, const std::string &text)
 	if (x + tw + 10 < x + w) p.Fill(x + tw + 10, y + kHeaderH / 2, w - tw - 10, 1, pal::hairline);
 }
 
-// The tabs whose adventures earn a coin for the hardest difficulty won: the great battles and the campaigns of Imperivm I and II.
+// The tabs whose adventures earn a coin for the hardest difficulty won: the great battles, the campaigns of Imperivm I and II, and the
+// conquests, each one for the hardest difficulty it was won whole at.
 bool MedalTab(int tab)
 {
-	return tab == kBattlesTabGreat || tab == kBattlesTabImperivm1 || tab == kBattlesTabImperivm2;
+	return tab == kBattlesTabGreat || tab == kBattlesTabImperivm1 || tab == kBattlesTabImperivm2 || tab == kBattlesTabConquests;
 }
 
-// The medal of an adventure won: a coin of bronze, silver or gold for the hardest difficulty won (1 to 3), with the laurel wreath
-// struck on it. An adventure not won yet shows the wreath alone, faint.
 constexpr int kMedal = 22;
 
-void PaintMedal(Painter &p, int x, int y, int size, int level)
+int LaurelOf(const View &v, const Line &l)
 {
-	static const COLORREF kRim[3] = {RGB(112, 70, 38), RGB(118, 122, 130), RGB(150, 110, 36)};
-	static const COLORREF kFace[3] = {RGB(186, 124, 70), RGB(204, 208, 214), RGB(230, 188, 92)};
-	static const COLORREF kStrike[3] = {RGB(84, 50, 24), RGB(72, 76, 84), RGB(104, 72, 14)};
-	const int wreath = size * 78 / 100;
-	if (level < 1 || level > 3) {
-		PaintWreath(p, x + (size - wreath) / 2, y + (size - wreath) / 2, wreath, pal::hairline);
-		return;
-	}
-	p.Ellipse(x, y, size, size, kRim[level - 1]);
-	p.Ellipse(x + 2, y + 2, size - 4, size - 4, kFace[level - 1]);
-	PaintWreath(p, x + (size - wreath) / 2, y + (size - wreath) / 2, wreath, kStrike[level - 1]);
+	if (v.snap.tab == kBattlesTabConquests) return ConquestLaurelOf(v.conquestLaurels, ConquestKeyOf(l.path), "");
+	return BattleLaurelOf(v.laurels, l.path, l.title);
 }
 
 // A two-digit number and the name; the chosen row has a quiet fill and a tiny red arrow, every row a hairline under it. A great battle
@@ -206,7 +197,7 @@ void PaintRow(Painter &p, const Line &l, bool selected, int x, int y, int w, int
 	}
 	const bool laurels = MedalTab(v.snap.tab);
 	const int laurelsX = x + w - 30 - kMedal;
-	if (laurels) PaintMedal(p, laurelsX, y + (kListRowH - kMedal) / 2, kMedal, BattleLaurelOf(v.laurels, l.path, l.title));
+	if (laurels) PaintMedal(p, laurelsX, y + (kListRowH - kMedal) / 2, kMedal, LaurelOf(v, l));
 	p.Font(selected ? 1 : 0);
 	const int textRight = laurels ? laurelsX - 10 : x + w - (selected ? 30 : 12);
 	p.Text(textX, y, textRight - textX, kListRowH, l.text, selected ? pal::text : pal::textDim,
@@ -262,7 +253,10 @@ void PaintSegment(Painter &p, int x, int y, int w, const BattlesSnapshot &s, boo
 	if (n <= 0) return;
 	const int segW = w / n;
 	int won = 0;
-	if (MedalTab(s.tab) && s.selList >= 0) won = BattleLaurelOf(v.laurels, s.lists[s.selList][s.selIndex].path, s.lists[s.selList][s.selIndex].title);
+	if (MedalTab(s.tab) && s.selList >= 0) {
+		const BattlesEntry &e = s.lists[s.selList][s.selIndex];
+		won = s.tab == kBattlesTabConquests ? ConquestLaurelOf(v.conquestLaurels, ConquestKeyOf(e.path), "") : BattleLaurelOf(v.laurels, e.path, e.title);
+	}
 	for (int i = 0; i < n; i++) {
 		const int bx = x + i * segW, bw = i == n - 1 ? w - i * segW : segW;
 		const bool on = i == s.difficulty;

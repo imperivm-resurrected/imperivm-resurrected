@@ -28,6 +28,8 @@ struct View {
 	ui::ScrollDrag bar;
 	bool victory = false;
 	std::string victoryText;
+	// The game menu's screen draws the game's question (quit?) over this one.
+	bool questionDrawn = false;
 };
 
 // Where the last paint put things, in screen pixels. `map` shows the part `crop` of the map's picture, in the picture's pixels.
