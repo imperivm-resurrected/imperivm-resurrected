@@ -3731,5 +3731,10 @@ extern const TrRow kTrRows[] = {
 	{"Panel size", "Tamaño del panel", "Dimensione del pannello"},
 	{"Graph time", "Tiempo de las gráficas", "Tempo dei grafici"},
 	{"What the graphs and the lows cover", "Lo que abarcan las gráficas y los mínimos", "Quanto coprono i grafici e i minimi"},
+	{"Match ready", "Partida lista", "Partita pronta"},
+	{"Understood", "Entendido", "Capito"},
+	{"Accepted: waiting for the others...", "Aceptada: esperando a los demás...", "Accettata: in attesa degli altri..."},
+	{"Go back to the main menu to open Multiplayer.", "Vuelve al menú principal para abrir Multijugador.", "Torna al menu principale per aprire Multigiocatore."},
+	{"Go back to the main menu: Multiplayer opens by itself there, to choose your civilization and colour and enter the room.", "Vuelve al menú principal: allí se abre Multijugador solo para elegir civilización y color y entrar en la sala.", "Torna al menu principale: lì Multigiocatore si apre da solo per scegliere civiltà e colore ed entrare nella stanza."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

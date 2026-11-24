@@ -3723,5 +3723,10 @@
 {"en":"Bottom right","es":"Abajo a la derecha","it":"In basso a destra"},
 {"en":"Panel size","es":"Tamaño del panel","it":"Dimensione del pannello"},
 {"en":"Graph time","es":"Tiempo de las gráficas","it":"Tempo dei grafici"},
-{"en":"What the graphs and the lows cover","es":"Lo que abarcan las gráficas y los mínimos","it":"Quanto coprono i grafici e i minimi"}
+{"en":"What the graphs and the lows cover","es":"Lo que abarcan las gráficas y los mínimos","it":"Quanto coprono i grafici e i minimi"},
+{"en":"Match ready","es":"Partida lista","it":"Partita pronta"},
+{"en":"Understood","es":"Entendido","it":"Capito"},
+{"en":"Accepted: waiting for the others...","es":"Aceptada: esperando a los demás...","it":"Accettata: in attesa degli altri..."},
+{"en":"Go back to the main menu to open Multiplayer.","es":"Vuelve al menú principal para abrir Multijugador.","it":"Torna al menu principale per aprire Multigiocatore."},
+{"en":"Go back to the main menu: Multiplayer opens by itself there, to choose your civilization and colour and enter the room.","es":"Vuelve al menú principal: allí se abre Multijugador solo para elegir civilización y color y entrar en la sala.","it":"Torna al menu principale: lì Multigiocatore si apre da solo per scegliere civiltà e colore ed entrare nella stanza."}
 ]

@@ -48,6 +48,8 @@ namespace mpui_impl {
 
 // When a ranked game ended with its result still to be shown; 0 once it is open.
 std::atomic<DWORD> g_rankedReturnAt{0};
+// MpUiOpenRanked, for the next tick of the game thread.
+std::atomic<bool> g_openRankedAsked{false};
 
 bool RankedReturnPending()
 {
@@ -448,8 +450,8 @@ void RoomStep(const LeagueRankedView &v, DWORD now)
 void CallPlayer()
 {
 	AlertPlayer(PlayerAlert::MatchFound);
+	// Elsewhere in the menus the match is answered in the window of leaguesearchui.
 	if (!g_s.open && !InGame() && MainMenuOnTop()) OpenRankedTab();
-	else if (!g_s.open) ModUiToast("Ranked match found! Open Multiplayer to accept it.");
 }
 
 // The record the server sent of the same player elsewhere (the ticket's opponent, the found match), when this card has none.
@@ -1074,6 +1076,18 @@ void RankedGameThreadTick()
 	const LeagueRankedView v = LeagueRankedState();
 	// The screen keeps the room up to date only while it is open.
 	const bool matchLive = v.phase == LeagueRankedPhase::Ready || v.phase == LeagueRankedPhase::Playing;
+	// The league asked for from another screen (its search pill), and the match ready shown as soon as the player is back in the main menu.
+	static int64_t panelShownFor = 0;
+	const bool home = !g_s.open && !InGame() && MainMenuOnTop();
+	if (g_openRankedAsked.exchange(false)) {
+		if (home) OpenRankedTab();
+		else if (!g_s.open) ModUiToast("Go back to the main menu to open Multiplayer.");
+	}
+	if (v.phase == LeagueRankedPhase::Ready && v.matchId && v.matchId != panelShownFor && home) {
+		panelShownFor = v.matchId;
+		OpenRankedTab();
+		LogI("league", "ranked: the match ready opens in the multiplayer screen, back in the main menu");
+	}
 	if (!g_s.open && (matchLive || v.result.state != LeagueResultState::None)) g_s.room = SteamCurrentRoom();
 	if (!g_auto.init) {
 		g_auto.init = true;
@@ -1350,4 +1364,9 @@ StartBlock RankedStartBlocker(const State &st, const GameRoomSnapshot &g)
 	return {};
 }
 
+}
+
+void MpUiOpenRanked()
+{
+	mpui_impl::g_openRankedAsked = true;
 }

@@ -30,6 +30,7 @@
 #include "ui/diplomacyui.h"
 #include "ui/gamemenuui.h"
 #include "ui/leaguedropui.h"
+#include "ui/leaguesearchui.h"
 #include "ui/mainmenuui.h"
 #include "ui/optionsui.h"
 #include "ui/profileui.h"
@@ -514,13 +515,13 @@ bool TakeNewFrame(bool video, bool wasVideo, std::vector<uint32_t> &image, int &
 }
 
 struct UiNeeds {
-	bool saves, mods, mp, controls, options, gameMenu, drop, diplomacy, conquest, profile, battles, credits, chat, help, objectives, mainMenu;
+	bool saves, mods, mp, controls, options, gameMenu, drop, search, diplomacy, conquest, profile, battles, credits, chat, help, objectives, mainMenu;
 	// Something moves on its own and needs every pass, not the 30 a second of a still screen.
 	bool animating = false;
 
 	bool Any() const
 	{
-		return saves || mods || mp || controls || options || gameMenu || drop || diplomacy || conquest || profile || battles || credits || chat ||
+		return saves || mods || mp || controls || options || gameMenu || drop || search || diplomacy || conquest || profile || battles || credits || chat ||
 			help || objectives || mainMenu;
 	}
 };
@@ -535,6 +536,7 @@ UiNeeds QueryUiNeeds()
 	n.options = OptionsUiNeedsDraw();
 	n.gameMenu = GameMenuUiNeedsDraw();
 	n.drop = LeagueDropUiNeedsDraw();
+	n.search = LeagueSearchUiNeedsDraw();
 	n.diplomacy = DiplomacyUiNeedsDraw();
 	n.conquest = ConquestUiNeedsDraw();
 	n.profile = ProfileUiNeedsDraw();
@@ -569,6 +571,7 @@ void DrawUi(const UiNeeds &n, uint32_t *buf, int w, int h)
 		if (n.credits) CreditsUiDraw(buf, w, h);
 		if (n.help) HelpUiDraw(buf, w, h);
 		if (n.objectives) ObjectivesUiDraw(buf, w, h);
+		if (n.search) LeagueSearchUiDraw(buf, w, h);
 		ModUiDraw(buf, w, h);
 		ControlsUiDraw(buf, w, h);
 	});
@@ -706,6 +709,7 @@ void GameThreadTicks()
 	OptionsUiGameTick();
 	GameMenuUiGameTick();
 	LeagueDropUiGameTick();
+	LeagueSearchUiGameTick();
 	MainMenuUiGameTick();
 	AllyColorsGameTick();
 	DiplomacyUiGameTick();
