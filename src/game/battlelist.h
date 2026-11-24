@@ -61,6 +61,9 @@ struct BattleCampaignCover {
 std::vector<BattleCampaignCover> BattleCampaignCovers(BattleGame game);
 // The cover of an adventure, by its file name with or without its folder and extension; empty for one that has none.
 std::string BattleCampaignCoverOf(const std::string &adventurePath);
+// The mod's remastered cover of one of the game's twelve great battles and challenges (a file of imperivm-resurrected\adventures,
+// named after the adventure's own file), by its file name with or without its folder and extension; empty for any other adventure.
+std::string BattleRemasteredCoverOf(const std::string &adventurePath);
 
 // An adventure the player has won, with the hardest difficulty it was won at: 1 easy, 2 normal, 3 hard. `title` is the adventure's
 // name as the game gives it when it is won; `path` its row in the game's list, when it was started from the adventure screen.

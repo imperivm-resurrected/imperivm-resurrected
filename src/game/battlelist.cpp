@@ -26,6 +26,15 @@ std::string Trim(const std::string &s)
 	return s.substr(a, z - a);
 }
 
+// "adventures/GreatBattles/1_Great_Battles_Zama.bfhp" gives "1_Great_Battles_Zama".
+std::string AdventureFileName(const std::string &adventurePath)
+{
+	const size_t slash = adventurePath.find_last_of("/\\");
+	std::string file = slash == std::string::npos ? adventurePath : adventurePath.substr(slash + 1);
+	if (EndsWithNoCase(file, ".bfhp")) file.resize(file.size() - 5);
+	return file;
+}
+
 }
 
 bool DecodeBattleBmp(const unsigned char *data, size_t size, BattleImage &out)
@@ -169,13 +178,25 @@ std::vector<BattleCampaignCover> BattleCampaignCovers(BattleGame game)
 
 std::string BattleCampaignCoverOf(const std::string &adventurePath)
 {
-	const size_t slash = adventurePath.find_last_of("/\\");
-	std::string file = slash == std::string::npos ? adventurePath : adventurePath.substr(slash + 1);
-	if (EndsWithNoCase(file, ".bfhp")) file.resize(file.size() - 5);
+	const std::string file = AdventureFileName(adventurePath);
 	for (BattleGame game : {kBattleGameImperivm1, kBattleGameImperivm2}) {
 		for (const BattleCampaignCover &c : BattleCampaignCovers(game)) {
 			if (_stricmp(file.c_str(), c.adventure) == 0) return c.file;
 		}
+	}
+	return "";
+}
+
+std::string BattleRemasteredCoverOf(const std::string &adventurePath)
+{
+	static const char *const kGreat[] = {
+		"1_Great_Battles_Zama", "2_Great_Battles_Numantia", "3_Great_Battles_Alesia", "4_Great_Battles_Egypt",
+		"5_Great_Battles_Britain", "6_Great_Battles_Danube", "1_Great_Losses_Rome", "2_Great_loses_Spain",
+		"3_Great_Losses_Egypt", "4_Great_Loses_Gaul", "5_Great_Loses_German", "6_Great_loses_Boudicca",
+	};
+	const std::string file = AdventureFileName(adventurePath);
+	for (const char *name : kGreat) {
+		if (_stricmp(file.c_str(), name) == 0) return std::string(name) + ".jpg";
 	}
 	return "";
 }

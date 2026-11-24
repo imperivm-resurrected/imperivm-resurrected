@@ -2,6 +2,7 @@
 *.bat text eol=crlf
 *.rle binary
 *.png binary
+*.jpg binary
 *.ico binary
 *.bmp binary
 *.zip binary

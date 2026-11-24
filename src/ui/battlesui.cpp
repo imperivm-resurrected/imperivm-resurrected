@@ -175,17 +175,19 @@ std::shared_ptr<const BattleImage> PackPicture(const BattleCampaignPack &pack)
 	return nullptr;
 }
 
-// The mod's cover of a campaign of Imperivm I or II, read once: the same picture keeps its blurred backdrop between frames. Null when
-// the file is missing.
-std::shared_ptr<const BattleImage> CampaignCover(const std::string &file)
+// A picture of the mod's folder (imperivm-resurrected\<folder>\<file>), read once: the same picture keeps its blurred backdrop between
+// frames. Null when the file is missing.
+std::shared_ptr<const BattleImage> ModCover(const char *folder, const std::string &file)
 {
 	static std::map<std::string, std::shared_ptr<const BattleImage>> covers;
-	const auto known = covers.find(file);
+	const std::string key = std::string(folder) + "/" + file;
+	const auto known = covers.find(key);
 	if (known != covers.end()) return known->second;
-	std::shared_ptr<const BattleImage> &slot = covers[file];
+	std::shared_ptr<const BattleImage> &slot = covers[key];
 	Picture pic;
-	if (!LoadPicture(ModArtFile(L"campaigns", std::wstring(file.begin(), file.end()).c_str()), pic)) {
-		LogW("ui", "adventure screen: the cover campaigns/%s is missing or unreadable", file.c_str());
+	const std::string name(folder);
+	if (!LoadPicture(ModArtFile(std::wstring(name.begin(), name.end()).c_str(), std::wstring(file.begin(), file.end()).c_str()), pic)) {
+		LogW("ui", "adventure screen: the cover %s is missing or unreadable", key.c_str());
 		return nullptr;
 	}
 	auto img = std::make_shared<BattleImage>();
@@ -196,35 +198,47 @@ std::shared_ptr<const BattleImage> CampaignCover(const std::string &file)
 	return slot;
 }
 
-// The campaigns of Imperivm I and II show the mod's covers instead of the pictures of their packs: on their cards, before the packs are
-// installed or while they are not active too, and next to the chosen adventure.
-void UseCampaignCovers(BattlesSnapshot &s)
+// The mod's own cover of an adventure: the one of its Imperivm I or II campaign, or the remastered one of a great battle or challenge.
+// Null for the others, which keep the game's picture.
+std::shared_ptr<const BattleImage> ModCoverOf(const std::string &adventurePath)
 {
-	for (int tab : {kBattlesTabImperivm1, kBattlesTabImperivm2}) {
+	const std::string campaign = BattleCampaignCoverOf(adventurePath);
+	if (!campaign.empty()) return ModCover("campaigns", campaign);
+	const std::string great = BattleRemasteredCoverOf(adventurePath);
+	return great.empty() ? nullptr : ModCover("adventures", great);
+}
+
+std::shared_ptr<const BattleImage> AdventureCover(const std::string &adventurePath)
+{
+	std::shared_ptr<const BattleImage> img = ModCoverOf(adventurePath);
+	return img ? img : BattlesAdventureImage(adventurePath);
+}
+
+// The campaigns of Imperivm I and II and the great battles show the mod's covers instead of the game's pictures: on their cards
+// (those of Imperivm I and II before their packs are installed or while they are not active too) and next to the chosen adventure.
+void UseModCovers(BattlesSnapshot &s)
+{
+	for (int tab : {kBattlesTabImperivm1, kBattlesTabImperivm2, kBattlesTabGreat}) {
 		std::vector<BattlesSnapshot::Cover> gallery;
 		bool listed = false;
 		for (int list = 0; list < kBattlesListCount; list++) {
 			for (const BattlesEntry &e : s.lists[list]) {
 				if (!BattlesInTab(tab, list, e.path)) continue;
 				listed = true;
-				const std::string file = BattleCampaignCoverOf(e.path);
-				std::shared_ptr<const BattleImage> img = file.empty() ? nullptr : CampaignCover(file);
-				if (!img) img = BattlesAdventureImage(e.path);
-				if (img) gallery.push_back({img, e.title});
+				if (std::shared_ptr<const BattleImage> img = AdventureCover(e.path)) gallery.push_back({img, e.title});
 			}
 		}
 		// A campaign the game does not list yet shows all of its covers, with the names its adventures will have.
-		if (!listed) {
+		if (!listed && tab != kBattlesTabGreat) {
 			for (const BattleCampaignCover &c : BattleCampaignCovers(tab == kBattlesTabImperivm1 ? kBattleGameImperivm1 : kBattleGameImperivm2)) {
-				if (std::shared_ptr<const BattleImage> img = CampaignCover(c.file)) gallery.push_back({img, Tr(c.title)});
+				if (std::shared_ptr<const BattleImage> img = ModCover("campaigns", c.file)) gallery.push_back({img, Tr(c.title)});
 			}
 		}
 		s.gallery[tab] = std::move(gallery);
 		s.covers[tab] = s.gallery[tab].empty() ? nullptr : s.gallery[tab][0].image;
 	}
-	if (s.selList >= 0 && s.selIndex >= 0) {
-		const std::string file = BattleCampaignCoverOf(s.lists[s.selList][s.selIndex].path);
-		if (std::shared_ptr<const BattleImage> img = file.empty() ? nullptr : CampaignCover(file)) s.image = img;
+	if (s.tab != kBattlesTabConquests && s.selList >= 0 && s.selIndex >= 0) {
+		if (std::shared_ptr<const BattleImage> img = ModCoverOf(s.lists[s.selList][s.selIndex].path)) s.image = img;
 	}
 }
 
@@ -333,7 +347,7 @@ void ReadSaves(const BattlesSnapshot &s, View &v)
 		g_saves.thumbOf = latest->vfsPath;
 		g_saves.thumb = ThumbOf(*latest);
 	}
-	v.latest.picture = g_saves.thumb ? g_saves.thumb : BattlesAdventureImage(s.lists[v.latest.list][v.latest.index].path);
+	v.latest.picture = g_saves.thumb ? g_saves.thumb : AdventureCover(s.lists[v.latest.list][v.latest.index].path);
 }
 
 // How much of each campaign the active profile has done: the laurels of its adventures against three for each.
@@ -368,7 +382,7 @@ void Refresh()
 		BattlesSetDifficulty(1);
 		snap = BattlesRead();
 	}
-	if (snap.open) UseCampaignCovers(snap);
+	if (snap.open) UseModCovers(snap);
 	View saves;
 	ReadSaves(snap, saves);
 	if (snap.open) ReadPacks(saves);

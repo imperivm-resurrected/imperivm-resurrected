@@ -206,6 +206,17 @@ void CampaignsHaveTheModsCovers()
 	CHECK(BattleCampaignCoverOf("").empty());
 }
 
+void GreatBattlesHaveTheirRemasteredCovers()
+{
+	CHECK_EQ(BattleRemasteredCoverOf("Adventures/GreatBattles/1_Great_Battles_Zama"), std::string("1_Great_Battles_Zama.jpg"));
+	CHECK_EQ(BattleRemasteredCoverOf("adventures\\greatchallenges\\2_great_loses_spain.BFHP"), std::string("2_Great_loses_Spain.jpg"));
+	CHECK_EQ(BattleRemasteredCoverOf("6_Great_loses_Boudicca"), std::string("6_Great_loses_Boudicca.jpg"));
+	CHECK(BattleRemasteredCoverOf("adventures/GreatBattles/7_Great_Battles_Mine").empty());
+	CHECK(BattleRemasteredCoverOf("adventures/1_Great_Battles_Zama II").empty());
+	CHECK(BattleRemasteredCoverOf("Adventures\\Imperivm I - La guerra de las Galias").empty());
+	CHECK(BattleRemasteredCoverOf("").empty());
+}
+
 void LaurelsKeepTheHardestVictory()
 {
 	const std::string zama = "adventures/GreatBattles/1_Great_Battles_Zama", title = "Desembarco en \xC3\x81" "frica - 204 a.C.";
@@ -272,6 +283,7 @@ int main()
 	SavesBelongToTheLongestTitleAfterADash();
 	CampaignPacksPreferTheActiveOne();
 	CampaignsHaveTheModsCovers();
+	GreatBattlesHaveTheirRemasteredCovers();
 	LaurelsKeepTheHardestVictory();
 	ConquestLaurelsKeepTheHardest();
 	return test::Summary("battlelist");
