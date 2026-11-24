@@ -277,8 +277,11 @@ void PaintSeasonBand(Painter &p, const State &st, const HubLayout &h)
 			return;
 		}
 		p.Font(0);
-		p.Text(x + 120, y + 84, w - 160, 22, v.noSeason ? "The first season starts soon." : "Couldn't reach the league server. Check your connection and try again.",
+		const bool failed = !v.noSeason;
+		p.Text(x + 120, y + 84, w - (failed ? 380 : 160), 22, v.noSeason ? "The first season starts soon." : "Couldn't reach the league server. Check your connection and try again.",
 			pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		// The screen asks again by itself; the button asks now, everything of the league at once.
+		if (failed) Ghost(p, x + w - 224, y + (kBandH - 44) / 2, 196, 44, v.seasonLoading ? "Connecting..." : "Reconnect", kRkReconnect, !v.seasonLoading, st.mouseX, st.mouseY);
 		return;
 	}
 	const LeagueSeason &s = v.season;

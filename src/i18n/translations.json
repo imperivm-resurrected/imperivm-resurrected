@@ -3740,5 +3740,7 @@
 {"en":"If you can't go back to the game, give it up: it counts as a loss and your opponent wins.","es":"Si no puedes volver a la partida, ríndete: cuenta como derrota y tu rival gana.","it":"Se non puoi tornare alla partita, arrenditi: conta come sconfitta e vince il tuo avversario."},
 {"en":"You gave up the match: it counts as a loss and your opponent wins.","es":"Te has rendido: cuenta como derrota y tu rival gana.","it":"Ti sei arreso: conta come sconfitta e vince il tuo avversario."},
 {"en":"Your game is on: go back to it or give it up.","es":"Tu partida sigue en marcha: vuelve a ella o ríndete.","it":"La tua partita è in corso: torna a giocarla o arrenditi."},
-{"en":"Back to the game","es":"Volver a la partida","it":"Torna alla partita"}
+{"en":"Back to the game","es":"Volver a la partida","it":"Torna alla partita"},
+{"en":"Reconnect","es":"Reconectar","it":"Riconnetti"},
+{"en":"Connecting...","es":"Conectando...","it":"Connessione..."}
 ]

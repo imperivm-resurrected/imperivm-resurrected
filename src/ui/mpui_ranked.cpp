@@ -897,6 +897,13 @@ void RankedAction(int arg)
 	case kRkCancel: LeagueQueueLeave(); break;
 	case kRkPracticeBot: LeagueRankedPracticeBot(); break;
 	case kRkSurrender: LeagueRankedSurrender(); break;
+	case kRkReconnect:
+		LogI("league", "ranked: the player asks to reach the league server again");
+		LeagueSeasonRefresh(true);
+		LeagueMeRefresh(true);
+		LeagueBoardRefresh(true);
+		LeagueRecentRefresh(true);
+		break;
 	case kRkAccept: LeagueMatchAnswer(true); break;
 	case kRkDecline: LeagueMatchAnswer(false); break;
 	case kRkBoard:

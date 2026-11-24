@@ -131,6 +131,8 @@ enum RankedArg {
 	kRkHidePanel,
 	// Giving up a 1v1 whose game closed on this player.
 	kRkSurrender,
+	// The league server asked again now, after it could not be reached.
+	kRkReconnect,
 	kRkRow = 0x100, kRkDisputeHistory = 0x300,
 	kRkArgEnd = 0x400,
 };
