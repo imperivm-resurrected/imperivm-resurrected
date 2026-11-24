@@ -374,7 +374,23 @@ void RoomStep(const LeagueRankedView &v, DWORD now)
 		// The panel of the match found stays up over the Ranked tab while the room is made and waits under it.
 		if (g_s.open && !g_s.game.active && !g_s.room.id) g_s.view = kViewRanked;
 	}
-	if (InGame()) return;
+	// During the game the host keeps inviting to its private room whoever of the match is not in it: a player who dropped or whose game
+	// closed comes back through the room (the rejoin), with a new session the first invitation does not let in.
+	if (InGame()) {
+		if (v.host && g_s.room.id && now - g_auto.invitedAt > 8000) {
+			g_auto.invitedAt = now;
+			for (const LeaguePlayerCard &pl : v.ticket.players) {
+				const uint64_t id = _strtoui64(pl.steamId.c_str(), nullptr, 10);
+				if (!id || id == SteamOwnId() || TourneyIsTestBot(id)) continue;
+				bool in = false;
+				for (const OnlineMember &m : g_s.room.members) in = in || m.id == id;
+				if (in) continue;
+				SteamInviteToRoom(id);
+				LogD("league", "ranked match %lld: %s is not in the room during the game; invited again to come back", static_cast<long long>(v.matchId), pl.name.c_str());
+			}
+		}
+		return;
+	}
 	const std::string tag = LeagueRankedRoomTag(v.matchId);
 	// The guest may be in the room before its data says what it is for.
 	if (g_s.room.id && (g_s.room.info.leagueTag == tag || g_s.room.id == LeagueTicketLobby(v.ticket))) {
@@ -568,6 +584,7 @@ bool RankedPanelOpen(const State &st)
 	const LeagueRankedView &v = st.ranked.view;
 	if ((v.phase != LeagueRankedPhase::Ready && v.phase != LeagueRankedPhase::Playing) || !v.matchId) return false;
 	if (st.view != kViewRanked || st.ranked.panelOff == v.matchId || st.inOnlineGame || st.ranked.resultOpen) return false;
+	if (v.ticketLoaded && v.ticket.startedAt && !st.room.id) return false;
 	if (!st.room.id) return !st.game.active;
 	if (st.room.info.spectate) return false;
 	return st.room.info.leagueTag == LeagueRankedRoomTag(v.matchId) || (v.ticketLoaded && st.room.id == LeagueTicketLobby(v.ticket));
@@ -1131,7 +1148,7 @@ void RankedGameThreadTick()
 		if (home) OpenRankedTab();
 		else if (!g_s.open) ModUiToast("Go back to the main menu to open Multiplayer.");
 	}
-	if (v.phase == LeagueRankedPhase::Ready && v.matchId && v.matchId != panelShownFor && home) {
+	if (v.phase == LeagueRankedPhase::Ready && v.matchId && v.matchId != panelShownFor && home && !(v.ticketLoaded && v.ticket.startedAt)) {
 		panelShownFor = v.matchId;
 		OpenRankedTab();
 		LogI("league", "ranked: the match ready opens in the multiplayer screen, back in the main menu");

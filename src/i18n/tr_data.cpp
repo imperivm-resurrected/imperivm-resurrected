@@ -3746,5 +3746,7 @@ extern const TrRow kTrRows[] = {
 	{"Giving up...", "Rindiéndose...", "Resa in corso..."},
 	{"If you can't go back to the game, give it up: it counts as a loss and your opponent wins.", "Si no puedes volver a la partida, ríndete: cuenta como derrota y tu rival gana.", "Se non puoi tornare alla partita, arrenditi: conta come sconfitta e vince il tuo avversario."},
 	{"You gave up the match: it counts as a loss and your opponent wins.", "Te has rendido: cuenta como derrota y tu rival gana.", "Ti sei arreso: conta come sconfitta e vince il tuo avversario."},
+	{"Your game is on: go back to it or give it up.", "Tu partida sigue en marcha: vuelve a ella o ríndete.", "La tua partita è in corso: torna a giocarla o arrenditi."},
+	{"Back to the game", "Volver a la partida", "Torna alla partita"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

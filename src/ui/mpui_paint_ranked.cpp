@@ -599,6 +599,7 @@ bool PaintRankCard(Painter &p, const State &st, const HubLayout &h, const League
 		const bool inRoom = st.room.id != 0;
 		std::string line = v.phase == LeagueRankedPhase::Found || v.phase == LeagueRankedPhase::Accepted
 			? Tr(LeagueQueueIsTeam(v.searchQueue) ? "Waiting for the four players to accept..." : "Waiting for both players to accept...")
+			: v.ticketLoaded && v.ticket.startedAt && !inRoom												   ? Tr("Your game is on: go back to it or give it up.")
 			: inRoom																			   ? Tr("You are in the room: get ready and start.")
 			: v.host																			   ? Tr("Creating the room...")
 																										   : Tr("Waiting for the host's room...");
@@ -610,7 +611,7 @@ bool PaintRankCard(Painter &p, const State &st, const HubLayout &h, const League
 			RawText(p, x + 16, lineY + 28, w - 32, 22, TrFmt("Map: %s", {LeagueMapText(v.ticket.map.name)}), pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		}
 		if ((v.phase == LeagueRankedPhase::Ready || v.phase == LeagueRankedPhase::Playing) && !inRoom) {
-			p.Button(ix, y + cardH - 196, iw, 56, "Go to the room", kRankedAct, kRkRoom, mx, my, !st.connecting, true);
+			p.Button(ix, y + cardH - 196, iw, 56, v.ticketLoaded && v.ticket.startedAt ? "Back to the game" : "Go to the room", kRankedAct, kRkRoom, mx, my, !st.connecting, true);
 			// A 1v1 whose game started and closed on this player: they go back to it, or give it up (a loss, the opponent wins at once).
 			const bool started = v.ticketLoaded && v.ticket.startedAt && !LeagueQueueIsTeam(v.ticket.queue);
 			if (started) {
