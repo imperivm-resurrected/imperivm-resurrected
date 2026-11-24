@@ -150,6 +150,9 @@ struct PeerArrival {
 std::mutex g_arrivalMx;
 std::map<unsigned, PeerArrival> g_arrivals;
 unsigned g_resends = 0;
+// The same for the performance panel, taken by NetTuneTakeSecond: the log's ones are taken every 30 s.
+unsigned g_secResends = 0;
+int g_secLateMax = -1;
 
 typedef void(__cdecl *TransportLog_t)(const char *fmt, ...);
 TransportLog_t g_origLog = nullptr;
@@ -197,10 +200,12 @@ void NoteTransportLine(const char *text)
 		p.sum += delay;
 		p.maxDelay = std::max(p.maxDelay, delay);
 		if (delay > 250) p.late++;
+		g_secLateMax = std::max(g_secLateMax, static_cast<int>(delay));
 	}
 	else if (strstr(text, "NACK SEND")) {
 		std::lock_guard<std::mutex> lock(g_arrivalMx);
 		g_resends++;
+		g_secResends++;
 	}
 }
 
@@ -257,7 +262,7 @@ struct Window {
 Window g_win;
 
 std::mutex g_secMx;
-unsigned g_secCount = 0, g_secSum = 0, g_secMax = 0;
+unsigned g_secCount = 0, g_secSum = 0, g_secMax = 0, g_secSizeSum = 0, g_secDelaySum = 0, g_secWait = 0;
 
 void FlushWindow()
 {
@@ -350,8 +355,18 @@ NetTurnSecond NetTuneTakeSecond()
 	if (g_secCount) {
 		out.avgMs = static_cast<int>((g_secSum + g_secCount / 2) / g_secCount);
 		out.maxMs = static_cast<int>(g_secMax);
+		out.sizeAvgMs = static_cast<int>((g_secSizeSum + g_secCount / 2) / g_secCount);
+		out.delayAvgMs = static_cast<int>((g_secDelaySum + g_secCount / 2) / g_secCount);
+		out.waitMs = static_cast<int>(g_secWait);
 	}
-	g_secCount = g_secSum = g_secMax = 0;
+	g_secCount = g_secSum = g_secMax = g_secSizeSum = g_secDelaySum = g_secWait = 0;
+	{
+		std::lock_guard<std::mutex> arrivals(g_arrivalMx);
+		out.resends = static_cast<int>(g_secResends);
+		out.lateMaxMs = g_secLateMax;
+		g_secResends = 0;
+		g_secLateMax = -1;
+	}
 	return out;
 }
 
@@ -376,6 +391,9 @@ void NetTuneAfterAdvance(void *transport)
 				g_secCount++;
 				g_secSum += interval;
 				g_secMax = std::max(g_secMax, interval);
+				g_secSizeSum += suggested;
+				g_secDelaySum += delay;
+				if (interval > suggested) g_secWait += interval - suggested;
 			}
 			g_win.suggestedSum += suggested;
 			g_win.delaySum += delay;

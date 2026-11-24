@@ -4,3 +4,5 @@
 #pragma once
 // Out of multiplayer, an order runs in the frame it is given instead of up to two 150 ms command turns later.
 void InstallOrderDelay(bool knownExe);
+// How many command turns (CVXCmdPump::Tick) the game has run since it started: the simulation's turn rate for the performance panel.
+unsigned OrderDelayTurns();
