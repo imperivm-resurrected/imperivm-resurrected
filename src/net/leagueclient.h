@@ -221,6 +221,8 @@ struct LeagueRankedView {
 	// While searching: since when (server time, ms since 1970), how many search and the wait the server expects.
 	int64_t since = 0;
 	int searching = 0, estimateSec = 0;
+	// Searching 1 vs 1 on the staging server, which can put its practice bot against the search (LeagueRankedPracticeBot).
+	bool practiceBot = false;
 	// The Glory of the opponents the server takes now (no window from a server without it).
 	LeagueSearchWindow window;
 	// The match found or being played.
@@ -319,6 +321,8 @@ void LeagueMatchAbandon(bool automatic);
 void LeagueRankedInRoom();
 // The player is ready in the match room, or not: told to the server when it changes (the room has a minute to start).
 void LeagueRankedReady(bool ready);
+// The staging server only: a practice bot (the game's AI in its seat) is put against this 1 vs 1 search.
+void LeagueRankedPracticeBot();
 // The player closed the result screen.
 void LeagueRankedResultSeen();
 void LeagueRankedClearNotice();

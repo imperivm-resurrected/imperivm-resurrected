@@ -302,6 +302,7 @@ bool LeagueParseQueue(const Json &j, LeagueQueueAnswer &out)
 	out.since = j.GetInt64("since");
 	out.searching = j.GetInt("searching");
 	out.estimateSec = j.GetInt("estimateSec");
+	out.practiceBot = j.GetBool("practiceBot");
 	out.serverNow = j.GetInt64("serverNow");
 	out.matchId = IdNumber(j, "matchId");
 	out.window = WindowOf(j.Get("window"));

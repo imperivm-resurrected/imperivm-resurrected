@@ -3741,5 +3741,6 @@ extern const TrRow kTrRows[] = {
 	{"The match was called off: not everyone was ready in time. It doesn't count against you.", "Partida cancelada: no todos estaban listos a tiempo. No cuenta en tu contra.", "Partita annullata: non tutti erano pronti in tempo. Non conta contro di te."},
 	{"You weren't ready in time: the match was called off, you lose 10 Glory and can't search for a few minutes.", "No estabas listo a tiempo: partida cancelada, pierdes 10 de Gloria y no puedes buscar durante unos minutos.", "Non eri pronto in tempo: partita annullata, perdi 10 di Gloria e non puoi cercare per qualche minuto."},
 	{"Nobody was ready in time: the match was called off and you can't search for a few minutes.", "Nadie estaba listo a tiempo: partida cancelada y no puedes buscar durante unos minutos.", "Nessuno era pronto in tempo: partita annullata e non puoi cercare per qualche minuto."},
+	{"Play against a bot (test)", "Jugar contra un bot (prueba)", "Gioca contro un bot (prova)"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

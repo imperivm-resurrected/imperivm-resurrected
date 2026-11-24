@@ -23,6 +23,7 @@
 #include "core/leagueteam.h"
 #include "core/log.h"
 #include "core/names.h"
+#include "core/tournament.h"
 #include "game/roomcountdown.h"
 #include "hooks/alerts.h"
 #include "hooks/dmshim.h"
@@ -63,6 +64,12 @@ bool RankedReturnPending()
 namespace {
 
 const int kOptMapType = 0x1000, kOptMapSize = 0x01000008;
+
+// A match against the staging server's practice bot: its seat is the game's AI in the host's room.
+bool BotTicket(const LeagueRankedView &v)
+{
+	return v.ticketLoaded && TourneyIsTestBot(_strtoui64(v.opponent.steamId.c_str(), nullptr, 10));
+}
 
 // What the game thread does for a ranked match: the room it made or tried to join, and when.
 struct RoomAuto {
@@ -387,7 +394,8 @@ void RoomStep(const LeagueRankedView &v, DWORD now)
 			// Every other player of the ticket: in a 2v2 the partner and both opponents.
 			const std::string own = std::to_string(SteamOwnId());
 			for (const LeaguePlayerCard &pl : v.ticket.players) {
-				if (pl.steamId != own) SteamInviteToRoom(_strtoui64(pl.steamId.c_str(), nullptr, 10));
+				const uint64_t id = _strtoui64(pl.steamId.c_str(), nullptr, 10);
+				if (pl.steamId != own && !TourneyIsTestBot(id)) SteamInviteToRoom(id);
 			}
 		}
 		if (now - g_auto.kickAt > 1000) {
@@ -401,6 +409,20 @@ void RoomStep(const LeagueRankedView &v, DWORD now)
 		if (now - g_auto.settingsAt > 1000) {
 			g_auto.settingsAt = now;
 			g_auto.roomHeld = ApplySettings(v.ticket);
+			// Against the staging server's practice bot the game's AI takes its seat, once the room has the league's options.
+			if (g_auto.roomHeld && BotTicket(v) && g_s.game.active && !g_s.game.busy) {
+				bool ai = false;
+				int open = -1;
+				for (int i = 0; i < 8; i++) {
+					const GameRoomSlot &o = g_s.game.slots[static_cast<size_t>(i)];
+					ai = ai || (o.used && o.type == 1);
+					if (open < 0 && i != g_s.game.localSlot && o.type == 0) open = i;
+				}
+				if (!ai && open >= 0) {
+					GameRoomSetSlotType(open, 1);
+					LogI("league", "ranked match %lld: the game's AI takes the practice bot's seat (%d)", static_cast<long long>(v.matchId), open + 1);
+				}
+			}
 		}
 		return;
 	}
@@ -545,6 +567,7 @@ bool RankedRoomHidden(const State &st)
 
 int RankedRoomStateOf(const State &st, uint64_t id)
 {
+	if (TourneyIsTestBot(id)) return st.room.id && st.game.active ? 2 : 0;
 	if (!st.room.id || !id) return 0;
 	for (const OnlineMember &m : st.room.members) {
 		if (m.id != id) continue;
@@ -841,6 +864,7 @@ void RankedAction(int arg)
 		LeagueQueueJoin();
 		break;
 	case kRkCancel: LeagueQueueLeave(); break;
+	case kRkPracticeBot: LeagueRankedPracticeBot(); break;
 	case kRkAccept: LeagueMatchAnswer(true); break;
 	case kRkDecline: LeagueMatchAnswer(false); break;
 	case kRkBoard:
@@ -1361,7 +1385,7 @@ StartBlock RankedStartBlocker(const State &st, const GameRoomSnapshot &g)
 	const bool team = st.room.info.mode == kLeagueTeamRoomMode;
 	const LeagueRankedView &v = st.ranked.view;
 	int humans = 0;
-	for (const GameRoomSlot &s : g.slots) humans += s.used && s.type == 3 ? 1 : 0;
+	for (const GameRoomSlot &s : g.slots) humans += s.used && (s.type == 3 || (s.type == 1 && BotTicket(v))) ? 1 : 0;
 	// Its players get ready by themselves under the panel: the host alone must not start the game.
 	if (!team && humans < 2) return {Tr("Waiting for your opponent..."), Tr("The game starts when your opponent is in the room.")};
 	if (!team) return {};

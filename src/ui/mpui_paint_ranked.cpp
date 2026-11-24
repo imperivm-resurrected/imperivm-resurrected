@@ -557,8 +557,12 @@ bool PaintRankCard(Painter &p, const State &st, const HubLayout &h, const League
 			p.TextWrapped(ix, cancelY, iw, 48, "Only the leader of your duo can cancel the search.", pal::body);
 		}
 		else Ghost(p, ix, cancelY, iw, 48, "Cancel search", kRkCancel, v.phase == LeagueRankedPhase::Searching, mx, my);
-		p.Font(3);
-		p.TextWrapped(ix, cardH + y - 62, iw, 44, "You can keep looking at rooms: a sound plays and the window flashes when a match is found.", pal::caption);
+		// The staging server offers a practice bot, to try a match alone: the game's AI plays it.
+		if (v.practiceBot) Ghost(p, ix, cardH + y - 60, iw, 40, "Play against a bot (test)", kRkPracticeBot, true, mx, my);
+		else {
+			p.Font(3);
+			p.TextWrapped(ix, cardH + y - 62, iw, 44, "You can keep looking at rooms: a sound plays and the window flashes when a match is found.", pal::caption);
+		}
 		return false;
 	}
 

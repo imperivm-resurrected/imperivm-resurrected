@@ -125,6 +125,8 @@ enum RankedArg {
 	kRkPrepareMods, kRkContentSwitch, kRkContentClose,
 	// The panel of the match being played: ready or not in the room under it, and that room's own screen shown instead.
 	kRkReady, kRkShowRoom,
+	// The staging server's practice bot against the search.
+	kRkPracticeBot,
 	kRkRow = 0x100, kRkDisputeHistory = 0x300,
 	kRkArgEnd = 0x400,
 };

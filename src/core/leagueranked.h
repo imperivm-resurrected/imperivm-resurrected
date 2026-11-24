@@ -108,6 +108,8 @@ struct LeagueQueueAnswer {
 	std::string queue;
 	int64_t since = 0;
 	int searching = 0, estimateSec = 0;
+	// The staging server plays a practice bot against this search if asked (POST /v1/league/queue/bot).
+	bool practiceBot = false;
 	// The server's clock when it answered (ms since 1970); 0 when it does not say.
 	int64_t serverNow = 0;
 	// Found: the match waiting for answers. Idle: the match being played, if any (a restarted mod finds it so).

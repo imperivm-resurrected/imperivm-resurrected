@@ -98,6 +98,8 @@ struct Queue {
 	bool inGame = false;
 	// Ready or not as last told to the server for the match readyFor (-1: not told, or to tell again).
 	int readyTold = -1;
+	// The staging server offers its practice bot to this search; one was asked for.
+	bool practiceBot = false, botAsked = false;
 	int64_t readyFor = 0;
 };
 
@@ -240,6 +242,7 @@ std::string BanNotice(const std::string &kind, const std::string &reason)
 void ToIdle(Queue &q)
 {
 	q.phase = LeagueRankedPhase::Idle;
+	q.practiceBot = q.botAsked = false;
 	q.matchId = 0;
 	q.ticketLoaded = false;
 	q.ticket = LeagueMatchTicket();
@@ -589,6 +592,7 @@ void PollQueueThread(unsigned gen, bool recovering, bool watching)
 			g_q.since = q.since ? q.since : g_q.since;
 			g_q.searching = q.searching;
 			g_q.estimate = q.estimateSec;
+			g_q.practiceBot = q.practiceBot;
 			if (q.window.present) g_q.window = q.window;
 			g_q.rejoined = false;
 			break;
@@ -1194,6 +1198,7 @@ LeagueRankedView LeagueRankedState()
 	v.since = g_q.since;
 	v.searching = g_q.searching;
 	v.estimateSec = g_q.estimate;
+	v.practiceBot = g_q.practiceBot && g_q.phase == LeagueRankedPhase::Searching;
 	v.window = g_q.window;
 	v.matchId = g_q.matchId;
 	v.found = g_q.found;
@@ -1586,6 +1591,25 @@ void LeagueRankedReady(bool ready)
 	g_q.readyTold = value;
 	g_q.readyFor = g_q.matchId;
 	SafeThread(PresenceThread, g_q.matchId, false, value).detach();
+}
+
+void BotThread()
+{
+	const Answer a = Call("POST", "/v1/league/queue/bot", "{}", true);
+	if (a.r.Ok()) LogI("league", "ranked: the staging server's practice bot joins the search");
+	else LogW("league", "ranked: the practice bot was refused (%s)", a.r.Describe().c_str());
+	std::lock_guard<std::mutex> lock(g_mx);
+	if (!a.r.Ok()) g_q.botAsked = false;
+	// The next poll pairs the search with it.
+	else g_q.nextPoll = GetTickCount();
+}
+
+void LeagueRankedPracticeBot()
+{
+	std::lock_guard<std::mutex> lock(g_mx);
+	if (g_q.phase != LeagueRankedPhase::Searching || !g_q.practiceBot || g_q.botAsked) return;
+	g_q.botAsked = true;
+	SafeThread(BotThread).detach();
 }
 
 void LeagueRankedResultSeen()
