@@ -187,17 +187,40 @@ void PaintIoImage(Painter &p, int x, int y, int w, int h, const std::string &url
 // picture's side as from its edge.
 const int kIoTagH = 26, kIoTagInset = 8;
 
-void PaintSkeletonCard(Painter &p, int x, int y, int cw, int ch, int imgW, int imgH)
+// A card's picture: in GameBanana's shape, as far from the card's top as from its sides (14, the text's margin, when it is as wide as
+// it can be), with the room of the three lines under it.
+struct IoCardPic {
+	int x = 0, y = 0, w = 0, h = 0;
+};
+
+IoCardPic IoCardPicOf(int x, int y, int cw, int ch)
 {
-	const int imgX = x + (cw - imgW) / 2, imgY = y + 1;
+	const int inset = 14, textH = 92;
+	IoCardPic c;
+	c.w = cw - 2 * inset;
+	c.h = c.w * 152 / 235;
+	const int maxH = std::max(60, ch - textH - inset);
+	if (c.h > maxH) {
+		c.h = maxH;
+		c.w = c.h * 235 / 152;
+	}
+	const int side = (cw - c.w) / 2;
+	c.x = x + side;
+	c.y = y + std::min(side, std::max(inset, ch - textH - c.h));
+	return c;
+}
+
+void PaintSkeletonCard(Painter &p, int x, int y, int cw, int ch)
+{
+	const IoCardPic pic = IoCardPicOf(x, y, cw, ch);
+	const int imgX = pic.x, imgY = pic.y, imgW = pic.w, imgH = pic.h;
 	PaintGlassCard(p, x, y, cw, ch);
-	p.Fill(x + 1, imgY, cw - 2, imgH, pal::panel);
 	PaintSkeleton(p, imgX, imgY, imgW, imgH);
 	p.Fill(imgX + kIoTagInset, imgY + imgH - kIoTagH - kIoTagInset, std::min(imgW - 2 * kIoTagInset, 96), kIoTagH, pal::panel);
 	p.Frame(x, y, cw, ch, pal::hairline);
-	PaintSkeleton(p, x + 14, y + imgH + 16, (cw - 28) * 62 / 100, 18);
-	PaintSkeleton(p, x + 14, y + imgH + 46, (cw - 28) * 38 / 100, 12);
-	PaintSkeleton(p, x + 14, y + imgH + 68, (cw - 28) * 28 / 100, 12);
+	PaintSkeleton(p, x + 14, imgY + imgH + 15, (cw - 28) * 62 / 100, 18);
+	PaintSkeleton(p, x + 14, imgY + imgH + 45, (cw - 28) * 38 / 100, 12);
+	PaintSkeleton(p, x + 14, imgY + imgH + 67, (cw - 28) * 28 / 100, 12);
 }
 
 void PaintRich(Painter &p, const State &st, int x, int y, int w, int h, const std::string &html, const std::string &plain,
@@ -562,11 +585,10 @@ void PaintExplore(Painter &p, const State &st)
 	const int gx = l.x, gy = y0 + kBarH + 16, gw = l.inner, gh = l.cardBottom - gy, cardGap = 16;
 	// A page of kIoPerPage in 4 columns and 2 rows; the pictures keep the shape of GameBanana's cards and the text takes the rest.
 	const int cw = (gw - 3 * cardGap) / 4, ch = (gh - cardGap) / 2;
-	const int imgH = std::max(60, ch - 96), imgW = std::min(cw - 2, imgH * 235 / 152);
 	// A new search, page or filter shows the shape of the cards until they arrive; refreshing keeps the ones on screen meanwhile.
 	if ((io.loading && (!st.ioRefreshing || io.mods.empty())) || (io.mods.empty() && !st.ioRequested)) {
 		for (int i = 0; i < kIoPerPage; i++) {
-			PaintSkeletonCard(p, gx + (i % 4) * (cw + cardGap), gy + (i / 4) * (ch + cardGap), cw, ch, imgW, imgH);
+			PaintSkeletonCard(p, gx + (i % 4) * (cw + cardGap), gy + (i / 4) * (ch + cardGap), cw, ch);
 		}
 		return;
 	}
@@ -586,8 +608,8 @@ void PaintExplore(Painter &p, const State &st)
 		const bool hov = p.Hover(x, y, cw, ch, mx, my);
 		PaintGlassCard(p, x, y, cw, ch);
 		if (hov) p.Fill(x + 1, y + 1, cw - 2, ch - 2, pal::field);
-		const int imgX = x + (cw - imgW) / 2, imgY = y + 1;
-		p.Fill(x + 1, imgY, cw - 2, imgH, pal::panel);
+		const IoCardPic pic = IoCardPicOf(x, y, cw, ch);
+		const int imgX = pic.x, imgY = pic.y, imgW = pic.w, imgH = pic.h;
 		PaintIoImage(p, imgX, imgY, imgW, imgH, m.logoUrl);
 		p.Frame(x, y, cw, ch, hov ? pal::edgeHot : pal::hairline);
 		const std::string catText = m.facts.category >= 0 ? Tr(CatalogCategoryLabel(m.facts.category)) : m.category;
@@ -607,10 +629,10 @@ void PaintExplore(Painter &p, const State &st)
 			p.Text(badgeX, badgeY, badgeW, kIoTagH, badge, state == 1 ? pal::ok : pal::redText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		}
 		p.Font(1);
-		p.Text(x + 14, y + imgH + 12, cw - 28, 26, UpperText(m.name), pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(x + 14, imgY + imgH + 11, cw - 28, 26, UpperText(m.name), pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.Font(3);
-		p.Text(x + 14, y + imgH + 42, cw - 28, 20, Tr("By") + " " + m.author, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-		p.Text(x + 14, y + imgH + 64, cw - 28, 20, Thousands(m.downloads) + " " + Tr(m.downloads == 1 ? "download" : "downloads"), pal::textDim,
+		p.Text(x + 14, imgY + imgH + 41, cw - 28, 20, Tr("By") + " " + m.author, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(x + 14, imgY + imgH + 63, cw - 28, 20, Thousands(m.downloads) + " " + Tr(m.downloads == 1 ? "download" : "downloads"), pal::textDim,
 			DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 		p.AddHit(x, y, cw, ch, kIoOpen, static_cast<int>(i));
 	}
