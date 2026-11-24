@@ -166,3 +166,41 @@ LeagueImage LeagueRankArt(LeagueTier tier, int size)
 	}
 	return img;
 }
+
+LeagueImage LeagueRankArtTight(LeagueTier tier, int size)
+{
+	const int index = static_cast<int>(tier) - 1;
+	if (index < 0 || index >= kLeagueTierCount || size <= 0 || size > 2048) return {};
+	// From the large picture: a few pixels of the small one would be all there is to a badge's shield.
+	if (LeagueRankArt(tier, 256).px.empty()) return {};
+	static Source tight[kLeagueTierCount];
+	std::lock_guard<std::mutex> lock(g_mx);
+	Source &t = tight[index];
+	if (t.px.empty()) {
+		const Source &src = g_sources[index][0];
+		int left = src.w, top = src.h, right = -1, bottom = -1;
+		for (int y = 0; y < src.h; y++) {
+			for (int x = 0; x < src.w; x++) {
+				if ((src.px[static_cast<size_t>(y) * src.w + x] >> 24) < 16) continue;
+				left = std::min(left, x);
+				right = std::max(right, x);
+				top = std::min(top, y);
+				bottom = std::max(bottom, y);
+			}
+		}
+		if (right < 0) return {};
+		// A square around the art, centred on it, so the emblem keeps its shape at any size.
+		const int side = std::max(right - left + 1, bottom - top + 1), cx = (left + right) / 2, cy = (top + bottom) / 2;
+		t.w = t.h = side;
+		t.px.assign(static_cast<size_t>(side) * side, 0);
+		for (int y = 0; y < side; y++) {
+			const int sy = cy - side / 2 + y;
+			if (sy < 0 || sy >= src.h) continue;
+			for (int x = 0; x < side; x++) {
+				const int sx = cx - side / 2 + x;
+				if (sx >= 0 && sx < src.w) t.px[static_cast<size_t>(y) * side + x] = src.px[static_cast<size_t>(sy) * src.w + sx];
+			}
+		}
+	}
+	return Scaled(t, size);
+}

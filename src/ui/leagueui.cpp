@@ -30,7 +30,7 @@ using namespace ui;
 
 namespace {
 
-enum Art { kArtBadge, kArtVexillum, kArtTrophy, kArtEmblem, kArtPhalera, kArtFounder, kArtRank };
+enum Art { kArtBadge, kArtVexillum, kArtTrophy, kArtEmblem, kArtPhalera, kArtFounder, kArtRank, kArtRankTight };
 
 std::mutex g_cacheMx;
 
@@ -53,6 +53,7 @@ HBITMAP Bitmap(Art art, int variant, int size)
 	case kArtPhalera: img = LeaguePhaleraImage(metal, size); break;
 	case kArtFounder: img = LeagueFounderPixels(size); break;
 	case kArtRank: img = LeagueRankArt(tier, size); break;
+	case kArtRankTight: img = LeagueRankArtTight(tier, size); break;
 	default: img = LeagueEmblemImage(tier, size); break;
 	}
 	BITMAPINFO bi = {};
@@ -262,7 +263,7 @@ void DrawLeagueBadge(Painter &p, int x, int y, int size, const LeagueBadge &badg
 		: badge.kind == LeagueBadgeKind::Season		  ? (badge.founder ? kArtFounder : kArtVexillum)
 													  : kArtBadge;
 	if (art == kArtBadge) {
-		if (HBITMAP rank = Bitmap(kArtRank, static_cast<int>(badge.tier), px)) {
+		if (HBITMAP rank = Bitmap(kArtRankTight, static_cast<int>(badge.tier), px)) {
 			Blit(p, rank, r.left, r.top + (static_cast<int>(r.bottom - r.top) - px) / 2, px, px);
 			return;
 		}
