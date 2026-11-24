@@ -173,9 +173,15 @@ int __cdecl HookJoinGameByIP(unsigned ip)
 typedef int(__fastcall *PumpMessages_t)(void *winos);
 PumpMessages_t g_origPumpMessages = nullptr;
 
+// The game's loop peeks at the messages and updates again at once, never waiting: in the menus it spun a whole core for nothing.
+// Outside a game it now waits for a message (input, a repaint, a timer) or a few milliseconds before each turn of the loop; a game
+// keeps the loop as it was, so the simulation and the lockstep are untouched.
+const DWORD kMenuWaitMs = 4;
+
 int __fastcall HookPumpMessages(void *winos)
 {
 	if (g_flow.inJoin && g_flow.joinAbort) return 0;
+	if (!g_flow.inJoin && *reinterpret_cast<void **>(addr::kGame) == nullptr) MsgWaitForMultipleObjects(0, nullptr, FALSE, kMenuWaitMs, QS_ALLINPUT);
 	return g_origPumpMessages(winos);
 }
 
