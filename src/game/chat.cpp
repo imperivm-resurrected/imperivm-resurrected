@@ -316,6 +316,21 @@ bool EndNode(const Mark &m)
 	}
 }
 
+// Whether the game still draws the mark. Its state stays in the group's list after its active time (start + activetime of
+// vxnotifications.xml, at +0x30 on the game clock): the group drops it only at the next notification of its type. The name over it
+// goes with the picture, not with the list.
+bool NodeShown(const Mark &m, uint32_t clock)
+{
+	if (!NodeAlive(m)) return false;
+	__try {
+		const uint32_t end = *reinterpret_cast<const uint32_t *>(m.node + kNodeEnd);
+		return end != 0 && clock < end;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return false;
+	}
+}
+
 bool NewestNode(int type, Mark &m)
 {
 	__try {
@@ -680,7 +695,7 @@ void UpdateMarkLabels()
 		const bool zoomMap = ZoomViewOpen();
 		const int spanX = std::max(1, raw.visible[2] - raw.visible[0]), spanY = std::max(1, raw.visible[3] - raw.visible[1]);
 		for (const Mark &mark : g_marks) {
-			if (mark.sender < 0 || mark.sender >= kSlots || mark.x < 0 || !NodeAlive(mark)) continue;
+			if (mark.sender < 0 || mark.sender >= kSlots || mark.x < 0 || !NodeShown(mark, raw.clock)) continue;
 			const RawPlayer &p = raw.players[mark.sender];
 			if (!p.exists) continue;
 			ChatMarkLabel l;
