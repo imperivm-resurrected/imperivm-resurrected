@@ -26,6 +26,7 @@ enum ModKey {
 	kModKeyPingAttack,
 	kModKeyPingDanger,
 	kModKeyAllyColors,
+	kModKeyPerfCapture,
 };
 bool ControlsModKeyPressed(int id, unsigned vk);
 bool ControlsMouseButton(unsigned msg, unsigned wp, unsigned &vk, bool &down);

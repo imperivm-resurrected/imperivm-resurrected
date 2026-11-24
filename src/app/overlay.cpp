@@ -3,9 +3,10 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include "net/spectator.h"
 #include "net/nettune.h"
+#include "net/rejoin.h"
 #include "game/gamelayout.h"
-#include "game/adventureresult.h"
 #include "game/healthbars.h"
+#include "game/loadcurtain.h"
 #include "game/mapfog.h"
 #include "game/quickicons.h"
 #include "game/noteicons.h"
@@ -13,18 +14,27 @@
 #include "game/zoomview.h"
 #include "core/crashlog.h"
 #include "core/guard.h"
+#include "core/logfiles.h"
+#include "core/perfstats.h"
+#include "core/version.h"
 #include "app/overlay.h"
+#include "app/overlay_view.h"
 #include "i18n/tr.h"
 
+#include <psapi.h>
+
+#include <algorithm>
 #include <atomic>
 #include <cmath>
-#include <deque>
+#include <cstdio>
 #include <map>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "hooks/hookcount.h"
+#include "hooks/orderdelay.h"
 #include "hooks/tweaks.h"
 #include "core/config.h"
 #include "game/controls.h"
@@ -37,105 +47,126 @@
 
 namespace {
 
-using ui::Canvas;
+using overlay::Hit;
+using overlay::View;
 
-const COLORREF kWarn = ui::pal::warn;
-const COLORREF kPanel = ui::pal::panel;
-const COLORREF kGraphBg = ui::pal::bg;
-const COLORREF kGrid = ui::pal::hairline;
-const COLORREF kBorder = ui::pal::edge;
-const int kHist = 120;
-const int kStutterMs = 150;
-const int kStutterWindow = 30;
-
-struct PeerSample {
-	uint64_t id;
-	int ping;
-	float loss;
-};
-struct Sample {
-	int fps = 0;
-	bool playing = false;
-	int load = -1;
-	int worstMs = 0;
-	int stutters = 0;
-	int turnAvg = -1, turnMax = 0;
-	int lagMs = -1;
-	int delaySec = 0;
-	double memUsed = 0, memTotal = 0;
-	std::vector<PeerSample> peers;
-};
-std::deque<Sample> g_hist;
-
+// The game thread's side: every image of the game, and what the game is doing.
 std::mutex g_frameMx;
-LARGE_INTEGER g_qpf = {}, g_lastFrame = {};
-int g_secWorstMs = 0, g_secStutters = 0;
-bool g_secPlaying = false;
+perf::FrameTracker g_tracker(65536);
+struct GameState {
+	bool match = false, paused = false, loading = false, continuous = false;
+	uint32_t clock = 0;
+};
+GameState g_game;
+std::atomic<HANDLE> g_gameThread{nullptr};
+std::atomic<unsigned> g_blits{0}, g_frames{0};
 
 typedef int(__fastcall *GameUpdate_t)(void *game);
 GameUpdate_t g_origGameUpdate = nullptr;
-std::atomic<long long> g_updateTicks{0};
-LARGE_INTEGER g_loadSince = {};
+std::atomic<long long> g_updateTicks{0}, g_updateMaxTicks{0};
+std::atomic<int> g_updateLeafCalls{0};
 int g_updateDepth = 0;
 const int kUpdateMaxDepth = 8;
 struct UpdateCall {
 	LARGE_INTEGER start;
 	bool nested;
 } g_updateStack[kUpdateMaxDepth];
-std::atomic<int> g_updateLeafCalls{0};
-int g_updateMaxDepthSeen = 0;
-int g_loadLogged = 0;
-int g_framesInUpdate = 0, g_framesTotal = 0;
 
+// The window thread's side: where the panel and its menu are, and the mouse over them.
 std::mutex g_uiMx;
-RECT g_panel = {};
+RECT g_panel = {}, g_menu = {};
+std::vector<Hit> g_panelHits, g_menuHits;
 DWORD g_panelTick = 0;
 int g_frameW = 0, g_frameH = 0;
 float g_scale = 1;
-bool g_dragging = false, g_dragMoved = false;
-int g_dragDX = 0, g_dragDY = 0, g_dragX = 0, g_dragY = 0;
-bool g_hover = false;
-bool g_dirty = true;
-bool g_moved = false;
-DWORD g_lastDown = 0;
-POINT g_lastDownPt = {};
+bool g_dragging = false, g_dragMoved = false, g_gearDown = false;
+int g_dragDX = 0, g_dragDY = 0, g_dragX = 0, g_dragY = 0, g_downX = 0, g_downY = 0;
+bool g_hover = false, g_menuOpen = false;
+bool g_dirty = true, g_menuDirty = true, g_moved = false;
 int g_mouseX = -1, g_mouseY = -1;
 bool g_restorePerf = true, g_restoreNet = true;
+bool g_captureWanted = false;
 
-Canvas g_canvas;
-HFONT g_font = nullptr, g_bold = nullptr, g_small = nullptr;
-float g_fontScale = 0;
-DWORD g_built = 0;
+// What the render thread lays over the game: the panel and its menu as the painter left them, and the size it wants them for.
+std::mutex g_frontMx;
+overlay::Baked g_front, g_frontMenu;
+unsigned g_frontSerial = 0, g_blendSerial = 0;
+struct Want {
+	int w = 0, h = 0;
+	float s = 0;
+} g_want;
+std::atomic<bool> g_painterStarted{false};
+
+// The painter's side: its own thread paints a few times a second, so the render thread only blends.
+ui::Canvas g_canvas, g_menuCanvas;
+overlay::Baked g_baked, g_menuBaked;
+View g_view;
+std::vector<perf::FrameRecord> g_window;
+std::vector<perf::PerfEvent> g_events;
+std::vector<float> g_scratch;
+double g_lastRefresh = -1e9, g_lastSecond = -1e9;
+int g_builtW = 0, g_builtH = 0;
 float g_builtScale = 0;
-int g_builtFor[5] = {};
 bool g_empty = true;
 
-void EnsureFonts(float s)
-{
-	if (g_font && g_fontScale == s) return;
-	// DeleteObject refuses a font still selected into a DC, and the canvas keeps the last one it drew with.
-	if (g_canvas.dc) SelectObject(g_canvas.dc, GetStockObject(SYSTEM_FONT));
-	for (HFONT f : {g_font, g_bold, g_small}) {
-		if (f) DeleteObject(f);
+struct History {
+	static const int kSize = 60;
+	float v[kSize] = {};
+	int count = 0, next = 0;
+	void Push(float x)
+	{
+		v[next] = x;
+		next = (next + 1) % kSize;
+		if (count < kSize) count++;
 	}
-	auto make = [s](int size, int weight) {
-		return CreateFontW(-static_cast<int>(size * s + 0.5f), 0, 0, 0, weight, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
-			CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
-	};
-	g_font = make(13, FW_NORMAL);
-	g_bold = make(13, FW_SEMIBOLD);
-	g_small = make(11, FW_NORMAL);
-	g_fontScale = s;
+	void CopyTo(std::vector<float> &out) const
+	{
+		out.clear();
+		for (int i = 0; i < count; i++) out.push_back(v[(next + kSize - count + i) % kSize]);
+	}
+};
+History g_cpuHist, g_memHist;
+std::map<uint64_t, History> g_pingHist;
+
+// The figures taken once a second.
+struct Second {
+	perf::CpuMeter cpu{9000000};
+	int cores = 1;
+	double addrUsed = 0, addrTotal = 0, privateBytes = 0;
+	NetTurnSecond turn;
+	int lagMs = -1, delaySec = 0;
+	float simSpeed = -1, turnsPerSec = -1, updateMs = -1, updateMaxMs = -1;
+	uint32_t lastClock = 0;
+	double lastClockAt = 0;
+	unsigned lastTurns = 0;
+	bool haveClock = false;
+	int matchSeconds = 0;
+	bool logged = false;
+} g_second;
+
+struct Capture {
+	bool on = false;
+	double start = 0, end = 0;
+	std::wstring toast;
+	DWORD toastUntil = 0;
+} g_capture;
+
+std::atomic<DWORD> g_saveAt{0};
+
+void RequestSave()
+{
+	const DWORD at = GetTickCount() + 800;
+	g_saveAt = at ? at : 1;
 }
 
-std::wstring Fmt(const wchar_t *fmt, double v)
+double QpcFreqMs()
 {
-	wchar_t buf[64];
-	swprintf_s(buf, fmt, v);
-	for (wchar_t *p = buf; *p; p++) {
-		if (*p == L'.') *p = L',';
-	}
-	return buf;
+	static const double f = [] {
+		LARGE_INTEGER q;
+		QueryPerformanceFrequency(&q);
+		return static_cast<double>(q.QuadPart) / 1000.0;
+	}();
+	return f;
 }
 
 bool PlayerColorOf(int number, COLORREF &out)
@@ -163,515 +194,282 @@ COLORREF PeerColor(const NetPeerStat &n, size_t index)
 	return kPalette[index % (sizeof(kPalette) / sizeof(kPalette[0]))];
 }
 
-COLORREF FpsColor(int fps) { return fps >= 50 ? ui::pal::ok : fps >= 25 ? kWarn : ui::pal::bad; }
-COLORREF MemColor(double pct) { return pct < 0.7 ? ui::pal::ok : pct < 0.85 ? kWarn : ui::pal::bad; }
-COLORREF PingColor(int ping) { return ping < 120 ? ui::pal::ok : ping < 250 ? kWarn : ui::pal::bad; }
-COLORREF TurnColor(int ms) { return ms < 170 ? ui::pal::ok : ms < 320 ? kWarn : ui::pal::bad; }
-COLORREF LagColor(int ms) { return ms < 3000 ? ui::pal::ok : ms < 6000 ? kWarn : ui::pal::bad; }
-COLORREF LoadColor(int load) { return load < 70 ? ui::pal::ok : load < 90 ? kWarn : ui::pal::bad; }
-
-struct Cell {
-	std::wstring text;
-	COLORREF color = ui::pal::text;
-	bool bold = false;
-};
-struct Row {
-	enum Kind { kLine, kTitle, kPeer, kGraphFps, kGraphCpu, kGraphMem, kGraphPing, kGraphTurn } kind = kLine;
-	std::vector<Cell> cells;
-	COLORREF swatch = 0;
-	bool hasSwatch = false;
-};
-
-int RecentStutters()
+uint64_t FileTime100ns(const FILETIME &f)
 {
-	int n = 0, k = 0;
-	for (auto it = g_hist.rbegin(); it != g_hist.rend() && k < kStutterWindow; ++it, ++k) n += it->stutters;
-	return n;
+	return (static_cast<uint64_t>(f.dwHighDateTime) << 32) | f.dwLowDateTime;
 }
 
-std::vector<Row> BuildRows(bool perf, bool net, bool compact, const std::vector<NetPeerStat> &stats, bool hover)
+int Corner(const Config &c)
 {
-	std::vector<Row> rows;
-	const Sample last = g_hist.empty() ? Sample() : g_hist.back();
-	const double memPct = last.memTotal > 0 ? last.memUsed / last.memTotal : 0;
-	const int stutters = RecentStutters();
-	if (compact) {
-		Row r;
-		r.cells.push_back({L"⋮", ui::pal::textDim});
-		if (perf) {
-			r.cells.push_back({last.playing ? std::to_wstring(last.fps) + L" FPS" : L"— FPS", last.playing ? FpsColor(last.fps) : ui::pal::textDim, true});
-			if (last.load >= 0) r.cells.push_back({L"CPU " + std::to_wstring(last.load) + L" %", LoadColor(last.load), true});
-			r.cells.push_back({Fmt(L"%.1f GB", last.memUsed), MemColor(memPct), true});
-			if (stutters) r.cells.push_back({TrW(L"stutters ") + std::to_wstring(stutters), ui::pal::bad, true});
+	const bool edgeX = c.panelX == 0 || c.panelX == 1000, edgeY = c.panelY == 0 || c.panelY == 1000;
+	if (!edgeX || !edgeY) return -1;
+	return (c.panelX == 1000 ? 1 : 0) + (c.panelY == 1000 ? 2 : 0);
+}
+
+overlay::Settings SettingsOf(const Config &c)
+{
+	overlay::Settings s;
+	s.perf = c.showPerf;
+	s.net = c.showNet;
+	s.compact = c.panelCompact;
+	s.showLows = c.perfShowLows;
+	s.showCpu = c.perfShowCpu;
+	s.showMemory = c.perfShowMemory;
+	s.showSim = c.perfShowSim;
+	s.graphFrame = c.perfGraphFrame;
+	s.graphCpu = c.perfGraphCpu;
+	s.graphMemory = c.perfGraphMemory;
+	s.graphPing = c.perfGraphPing;
+	s.window = c.perfWindow;
+	s.corner = Corner(c);
+	s.scale = c.perfScale;
+	s.opacity = c.panelOpacity;
+	s.refresh = c.perfRefresh;
+	s.captureSeconds = c.perfCapture;
+	return s;
+}
+
+std::string CaptureFileName()
+{
+	SYSTEMTIME t;
+	GetLocalTime(&t);
+	char name[64];
+	sprintf_s(name, "perf-%04u%02u%02u-%02u%02u%02u.csv", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
+	return name;
+}
+
+void StartCapture(double now)
+{
+	g_capture.on = true;
+	g_capture.start = now;
+	g_capture.end = now + GetConfig().perfCapture * 1000.0;
+	perf::NoteEvent(perf::kEventCapture);
+	LogI("perf", "capture: recording %d s of frame times", GetConfig().perfCapture);
+}
+
+void FinishCapture(double now)
+{
+	g_capture.on = false;
+	std::vector<perf::FrameRecord> frames;
+	bool cut = false;
+	{
+		std::lock_guard<std::mutex> lock(g_frameMx);
+		g_tracker.CopySince(g_capture.start, frames);
+		cut = g_tracker.Size() && g_tracker.At(0).t > g_capture.start;
+	}
+	std::vector<perf::PerfEvent> events;
+	perf::EventsSince(g_capture.start, events);
+	std::vector<float> scratch;
+	const perf::FrameSummary s = perf::Summarize(frames, g_capture.start, now, scratch);
+	std::string header = std::string("Imperivm Resurrected ") + ModVersionText() + ", frame times of the game's images (SetDIBitsToDevice)";
+	header += "\nimage " + std::to_string(g_builtW) + "x" + std::to_string(g_builtH) + ", " + std::to_string(g_second.cores) + " cores";
+	if (cut) header += "\nthe start was lost: the game sent more images than the panel keeps";
+	const std::string name = CaptureFileName();
+	const std::string path = MakeLogPaths(LogGameDir()).modDir + "\\" + name;
+	const double start = g_capture.start;
+	// Tens of thousands of lines: written away from the panel's thread.
+	std::thread([path, header, s, start, now, frames = std::move(frames), events = std::move(events)] {
+		const std::string text = perf::CaptureCsv(frames, events, start, now, s, header);
+		const std::string summary = perf::SummaryLine(s);
+		FILE *f = nullptr;
+		if (fopen_s(&f, path.c_str(), "wb") == 0 && f) {
+			fwrite(text.data(), 1, text.size(), f);
+			fclose(f);
+			LogI("perf", "capture: %s in %s", summary.c_str(), path.c_str());
 		}
-		if (net) {
-			int worst = -1;
-			for (const NetPeerStat &n : stats) {
-				if (n.connected) worst = (std::max)(worst, n.ping);
-			}
-			if (worst >= 0) r.cells.push_back({std::to_wstring(worst) + L" ms", PingColor(worst), true});
-			if (last.turnAvg >= 0) r.cells.push_back({TrW(L"turn ") + std::to_wstring(last.turnAvg) + L" ms", TurnColor(last.turnAvg), true});
-			if (last.lagMs >= 0) r.cells.push_back({TrW(L"delay ") + Fmt(L"%.1f s", last.lagMs / 1000.0), LagColor(last.lagMs), true});
+		else {
+			LogE("perf", "capture: could not write %s", path.c_str());
 		}
-		rows.push_back(r);
-		return rows;
+	}).detach();
+	wchar_t line[160];
+	swprintf_s(line, L"%S · %.0f FPS · 1%% %.0f · %d", name.c_str(), s.avgFps, s.low1Fps, s.hitches);
+	g_capture.toast = TrW(L"Saved: ") + line + L" " + TrW(L"hitches");
+	g_capture.toastUntil = GetTickCount() + 10000;
+}
+
+// Once a second: CPU, memory, the network's turns, the simulation, and the small graphs' points.
+void TakeSecond(double now, bool net)
+{
+	Second &sec = g_second;
+	{
+		SYSTEM_INFO si;
+		GetSystemInfo(&si);
+		sec.cores = std::max(1, static_cast<int>(si.dwNumberOfProcessors));
+		FILETIME c, e, k, u, tk = {}, tu = {}, tc, te;
+		GetProcessTimes(GetCurrentProcess(), &c, &e, &k, &u);
+		if (const HANDLE game = g_gameThread.load()) GetThreadTimes(game, &tc, &te, &tk, &tu);
+		sec.cpu.Update(static_cast<uint64_t>(now * 10000.0), FileTime100ns(k) + FileTime100ns(u), FileTime100ns(tk) + FileTime100ns(tu), sec.cores);
 	}
 	{
-		Row t;
-		t.kind = Row::kTitle;
-		t.cells.push_back({perf ? TrW(L"Performance") : TrW(L"Network"), ui::pal::redText, true});
-		rows.push_back(t);
+		MEMORYSTATUSEX ms = {sizeof(ms)};
+		GlobalMemoryStatusEx(&ms);
+		sec.addrTotal = static_cast<double>(ms.ullTotalVirtual) / 1073741824.0;
+		sec.addrUsed = static_cast<double>(ms.ullTotalVirtual - ms.ullAvailVirtual) / 1073741824.0;
+		PROCESS_MEMORY_COUNTERS_EX pm = {};
+		pm.cb = sizeof(pm);
+		if (K32GetProcessMemoryInfo(GetCurrentProcess(), reinterpret_cast<PROCESS_MEMORY_COUNTERS *>(&pm), sizeof(pm))) {
+			sec.privateBytes = static_cast<double>(pm.PrivateUsage) / 1073741824.0;
+		}
 	}
-	if (perf) {
-		int minFps = 0, maxFps = 0, played = 0, sum = 0;
-		for (const Sample &s : g_hist) {
-			if (!s.playing) continue;
-			minFps = played ? (std::min)(minFps, s.fps) : s.fps;
-			maxFps = (std::max)(maxFps, s.fps);
-			sum += s.fps;
-			played++;
-		}
-		auto num = [&](int v) { return played ? std::to_wstring(v) : std::wstring(L"—"); };
-		Row r;
-		r.cells.push_back({L"FPS", ui::pal::textDim});
-		if (last.playing) r.cells.push_back({std::to_wstring(last.fps), FpsColor(last.fps), true});
-		else r.cells.push_back({L"—", ui::pal::textDim, true});
-		r.cells.push_back({TrW(L"min ") + num(minFps), ui::pal::textDim});
-		r.cells.push_back({TrW(L"avg ") + num(played ? (sum + played / 2) / played : 0), ui::pal::textDim});
-		r.cells.push_back({TrW(L"max ") + num(maxFps), ui::pal::textDim});
-		if (stutters) r.cells.push_back({TrW(L"stutters ") + std::to_wstring(stutters), ui::pal::bad, true});
-		rows.push_back(r);
-		Row g;
-		g.kind = Row::kGraphFps;
-		rows.push_back(g);
-		int minLoad = 0, maxLoad = 0, sumLoad = 0, loads = 0;
-		for (const Sample &s : g_hist) {
-			if (s.load < 0) continue;
-			minLoad = loads ? (std::min)(minLoad, s.load) : s.load;
-			maxLoad = (std::max)(maxLoad, s.load);
-			sumLoad += s.load;
-			loads++;
-		}
-		auto pct = [&](int v) { return loads ? std::to_wstring(v) + L" %" : std::wstring(L"—"); };
-		Row l;
-		l.cells.push_back({L"CPU", ui::pal::textDim});
-		l.cells.push_back({last.load >= 0 ? std::to_wstring(last.load) + L" %" : L"—", last.load >= 0 ? LoadColor(last.load) : ui::pal::textDim, true});
-		l.cells.push_back({TrW(L"min ") + pct(minLoad), ui::pal::textDim});
-		l.cells.push_back({TrW(L"avg ") + pct(loads ? (sumLoad + loads / 2) / loads : 0), ui::pal::textDim});
-		l.cells.push_back({TrW(L"max ") + pct(maxLoad), ui::pal::textDim});
-		rows.push_back(l);
-		Row gc;
-		gc.kind = Row::kGraphCpu;
-		rows.push_back(gc);
-		Row m;
-		m.cells.push_back({TrW(L"Memory"), ui::pal::textDim});
-		m.cells.push_back({Fmt(L"%.1f", last.memUsed) + L" / " + Fmt(L"%.1f GB", last.memTotal), MemColor(memPct), true});
-		if (memPct >= 0.85) m.cells.push_back({TrW(L"near the limit!"), ui::pal::bad, true});
-		rows.push_back(m);
-		Row gm;
-		gm.kind = Row::kGraphMem;
-		rows.push_back(gm);
+	sec.turn = NetTuneTakeSecond();
+	sec.lagMs = net && !SpectatorCovering() ? SpectatorLagMs() : -1;
+	sec.delaySec = net && !SpectatorCovering() ? SpectatorDelaySec() : 0;
+	GameState game;
+	{
+		std::lock_guard<std::mutex> lock(g_frameMx);
+		game = g_game;
 	}
-	if (net && !stats.empty()) {
-		if (perf) {
-			Row h;
-			h.kind = Row::kTitle;
-			h.cells.push_back({TrW(L"Network"), ui::pal::redText, true});
-			rows.push_back(h);
+	const unsigned turns = OrderDelayTurns();
+	const long long busy = g_updateTicks.exchange(0), worst = g_updateMaxTicks.exchange(0);
+	const int calls = g_updateLeafCalls.exchange(0);
+	if (game.match && !game.loading) {
+		if (sec.haveClock && now > sec.lastClockAt) {
+			sec.simSpeed = game.clock >= sec.lastClock ? static_cast<float>((game.clock - sec.lastClock) / (now - sec.lastClockAt)) : -1;
+			sec.turnsPerSec = static_cast<float>((turns - sec.lastTurns) * 1000.0 / (now - sec.lastClockAt));
 		}
+		sec.updateMs = calls ? static_cast<float>(busy / QpcFreqMs() / calls) : -1;
+		sec.updateMaxMs = calls ? static_cast<float>(worst / QpcFreqMs()) : -1;
+		sec.haveClock = true;
+		if (++sec.matchSeconds == 10 && !sec.logged) {
+			sec.logged = true;
+			LogD("perf", "panel: %u copies of the game's image a second make %u frames; CVXGame::Update ran %d times; the clock moved x%.2f",
+				g_blits.load(), g_frames.load(), calls, sec.simSpeed);
+		}
+	}
+	else {
+		sec.simSpeed = sec.turnsPerSec = sec.updateMs = sec.updateMaxMs = -1;
+		sec.haveClock = false;
+		sec.matchSeconds = 0;
+	}
+	g_blits = 0;
+	g_frames = 0;
+	sec.lastClock = game.clock;
+	sec.lastClockAt = now;
+	sec.lastTurns = turns;
+	g_cpuHist.Push(sec.cpu.thread);
+	g_memHist.Push(static_cast<float>(sec.addrUsed));
+	if (net) {
+		const std::vector<NetPeerStat> stats = SteamNetStats();
+		for (auto &entry : g_pingHist) {
+			bool seen = false;
+			for (const NetPeerStat &n : stats) seen = seen || n.id == entry.first;
+			if (!seen) entry.second.Push(-1);
+		}
+		for (const NetPeerStat &n : stats) g_pingHist[n.id].Push(n.connected ? static_cast<float>(n.ping) : -1.0f);
+		if (stats.empty()) g_pingHist.clear();
+	}
+}
+
+void BuildView(View &v, double now, float s, bool hover, bool menuOpen, int menuX, int menuY)
+{
+	const Config &c = GetConfig();
+	v.set = SettingsOf(c);
+	v.s = s;
+	const double window = v.set.window * 1000.0;
+	GameState game;
+	perf::ScreenState state;
+	float threshold = 0;
+	{
+		std::lock_guard<std::mutex> lock(g_frameMx);
+		g_tracker.CopySince(now - window, g_window);
+		game = g_game;
+		state = g_tracker.State(now, game.continuous);
+		if (g_tracker.MedianMs() > 0) threshold = g_tracker.HitchThresholdMs();
+	}
+	v.frames = perf::Summarize(g_window, now - window, now, g_scratch);
+	v.drawing = state == perf::ScreenState::kActive;
+	v.hitchLineMs = game.continuous ? threshold : 0;
+	if (game.loading) v.screen = overlay::Screen::kLoading;
+	else if (!game.match) v.screen = overlay::Screen::kMenu;
+	else if (game.paused) v.screen = overlay::Screen::kPaused;
+	else if (state == perf::ScreenState::kStalled) v.screen = overlay::Screen::kStalled;
+	else v.screen = overlay::Screen::kMatch;
+	v.columns.resize(static_cast<size_t>(overlay::GraphColumns(v)));
+	perf::EventsSince(now - window, g_events);
+	perf::BuildColumns(g_window, g_events, now - window, now, static_cast<int>(v.columns.size()), v.columns.data());
+	const Second &sec = g_second;
+	v.cpuThread = sec.cpu.thread;
+	v.cpuProcess = sec.cpu.process;
+	v.cores = sec.cores;
+	v.addrUsedGB = sec.addrUsed;
+	v.addrTotalGB = sec.addrTotal;
+	v.privateGB = sec.privateBytes;
+	v.simSpeed = sec.simSpeed;
+	v.turnsPerSec = sec.turnsPerSec;
+	v.updateMs = sec.updateMs;
+	v.updateMaxMs = sec.updateMaxMs;
+	v.turnAvgMs = sec.turn.avgMs;
+	v.turnMaxMs = sec.turn.maxMs;
+	v.turnSizeMs = sec.turn.sizeAvgMs;
+	v.turnWaitMs = sec.turn.waitMs;
+	v.turnLateMs = sec.turn.lateMaxMs;
+	v.resends = sec.turn.resends;
+	v.lagMs = sec.lagMs;
+	v.delaySec = sec.delaySec;
+	v.cpuSpark.color = ui::pal::warn;
+	g_cpuHist.CopyTo(v.cpuSpark.values);
+	v.memSpark.color = ui::pal::ok;
+	g_memHist.CopyTo(v.memSpark.values);
+	v.peers.clear();
+	v.pingSparks.clear();
+	if (v.set.net) {
+		const std::vector<NetPeerStat> stats = SteamNetStats();
 		for (size_t i = 0; i < stats.size(); i++) {
 			const NetPeerStat &n = stats[i];
-			Row r;
-			r.kind = Row::kPeer;
-			r.swatch = PeerColor(n, i);
-			r.hasSwatch = true;
-			std::wstring name = winpath::WidenLenient(n.name, CP_UTF8);
-			if (name.size() > 16) name = name.substr(0, 15) + L"…";
-			r.cells.push_back({name, ui::pal::text});
-			if (!n.connected) {
-				r.cells.push_back({TrW(L"connecting…"), kWarn});
+			overlay::PeerLine p;
+			p.name = winpath::WidenLenient(n.name, CP_UTF8);
+			p.color = PeerColor(n, i);
+			p.connected = n.connected;
+			p.relay = n.relay;
+			p.ping = n.ping;
+			p.lossPct = n.quality >= 0 ? static_cast<float>((1.0 - n.quality) * 100.0) : -1.0f;
+			p.inKBs = n.inKBs;
+			p.outKBs = n.outKBs;
+			v.peers.push_back(p);
+			const auto hist = g_pingHist.find(n.id);
+			if (hist != g_pingHist.end()) {
+				overlay::Spark spark;
+				spark.color = p.color;
+				hist->second.CopyTo(spark.values);
+				v.pingSparks.push_back(spark);
 			}
-			else {
-				r.cells.push_back({std::to_wstring(n.ping) + L" ms", PingColor(n.ping), true});
-				r.cells.push_back({n.relay ? L"relay" : TrW(L"direct"), ui::pal::textDim});
-				if (n.quality >= 0) {
-					const double loss = (1.0 - n.quality) * 100.0;
-					r.cells.push_back({TrW(L"loss ") + Fmt(loss < 10 ? L"%.1f%%" : L"%.0f%%", loss), loss < 2 ? ui::pal::ok : loss < 8 ? kWarn : ui::pal::bad});
-				}
-				else {
-					r.cells.push_back({L"", ui::pal::textDim});
-				}
-				r.cells.push_back({L"↓" + Fmt(L"%.1f", n.inKBs) + L"  ↑" + Fmt(L"%.1f KB/s", n.outKBs), ui::pal::textDim});
-			}
-			rows.push_back(r);
-		}
-		Row g;
-		g.kind = Row::kGraphPing;
-		rows.push_back(g);
-	}
-	if (net) {
-		int shown = -1, shownMax = 0;
-		for (auto it = g_hist.rbegin(); it != g_hist.rend(); ++it) {
-			if (it->turnAvg < 0) continue;
-			shown = it->turnAvg;
-			shownMax = it->turnMax;
-			break;
-		}
-		if (last.lagMs >= 0) {
-			Row t;
-			t.cells.push_back({TrW(L"Delay"), ui::pal::textDim});
-			t.cells.push_back({Fmt(L"%.1f s", last.lagMs / 1000.0), LagColor(last.lagMs), true});
-			t.cells.push_back({TrW(L"behind live"), ui::pal::textDim});
-			if (last.delaySec > 0) t.cells.push_back({TrW(L"plus " + std::to_wstring(last.delaySec) + L" s set by the host"), ui::pal::textDim});
-			rows.push_back(t);
-		}
-		else if (shown >= 0) {
-			Row t;
-			t.cells.push_back({TrW(L"Turn"), ui::pal::textDim});
-			t.cells.push_back({std::to_wstring(shown) + L" ms", TurnColor(shown), true});
-			t.cells.push_back({TrW(L"max ") + std::to_wstring(shownMax), ui::pal::textDim});
-			t.cells.push_back({TrW(L"order ≈ ") + std::to_wstring(shown * 3 / 2) + L" ms", ui::pal::textDim});
-			rows.push_back(t);
-			Row gt;
-			gt.kind = Row::kGraphTurn;
-			rows.push_back(gt);
 		}
 	}
-	return rows;
-}
-
-void FillRectColor(HDC dc, int x, int y, int w, int h, COLORREF c)
-{
-	RECT r = {x, y, x + w, y + h};
-	HBRUSH b = CreateSolidBrush(c);
-	FillRect(dc, &r, b);
-	DeleteObject(b);
-}
-
-struct Graph {
-	HDC dc;
-	int x, y, w, h;
-	double top;
-	int X(size_t i, size_t n) const { return x + w - 1 - static_cast<int>((n - 1 - i) * (w - 1) / (kHist - 1)); }
-	int Y(double v) const { return y + h - 1 - static_cast<int>((std::min)(1.0, (std::max)(0.0, v / top)) * (h - 2)); }
-	void Back(const std::vector<double> &guides, const std::wstring &label, float s) const
-	{
-		FillRectColor(dc, x, y, w, h, kGraphBg);
-		for (double v : guides) FillRectColor(dc, x, Y(v), w, 1, kGrid);
-		SelectObject(dc, g_small);
-		SetTextColor(dc, ui::pal::textDim);
-		RECT tr = {x, y, x + w - static_cast<int>(3 * s), y + h};
-		DrawTextW(dc, label.c_str(), static_cast<int>(label.size()), &tr, DT_RIGHT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX);
-	}
-	void Line(const std::vector<POINT> &pts, COLORREF c, float s) const
-	{
-		if (pts.size() < 2) return;
-		HPEN pen = CreatePen(PS_SOLID, (std::max)(1, static_cast<int>(1.5f * s + 0.5f)), c);
-		HGDIOBJ old = SelectObject(dc, pen);
-		Polyline(dc, pts.data(), static_cast<int>(pts.size()));
-		SelectObject(dc, old);
-		DeleteObject(pen);
-	}
-};
-
-double NiceTop(double v, double step, double min)
-{
-	return (std::max)(min, std::ceil(v * 1.15 / step) * step);
-}
-
-void Render(const std::vector<Row> &rows, float s, bool compact, const std::map<uint64_t, COLORREF> &colors)
-{
-	EnsureFonts(s);
-	const int pad = static_cast<int>(8 * s), gap = static_cast<int>(12 * s), lineH = static_cast<int>(19 * s);
-	const int swatchW = static_cast<int>(10 * s), swatchGap = static_cast<int>(6 * s);
-	const int graphW = static_cast<int>(300 * s);
-	auto rowH = [&](const Row &r) {
-		switch (r.kind) {
-		case Row::kGraphFps:
-		case Row::kGraphCpu:
-		case Row::kGraphMem:
-		case Row::kGraphPing:
-		case Row::kGraphTurn: return static_cast<int>(44 * s);
-		case Row::kTitle: return static_cast<int>(20 * s);
-		default: return lineH;
-		}
-	};
-	HDC dc = CreateCompatibleDC(nullptr);
-	auto measure = [&](const Cell &c, HFONT f) {
-		SelectObject(dc, f);
-		SIZE sz = {};
-		GetTextExtentPoint32W(dc, c.text.c_str(), static_cast<int>(c.text.size()), &sz);
-		return static_cast<int>(sz.cx);
-	};
-	std::vector<int> cols;
-	int lineW = 0;
-	for (const Row &r : rows) {
-		if (r.kind == Row::kPeer) {
-			for (size_t k = 0; k < r.cells.size(); k++) {
-				if (cols.size() <= k) cols.push_back(0);
-				int w = measure(r.cells[k], r.cells[k].bold ? g_bold : g_font);
-				if (k == 0) w += swatchW + swatchGap;
-				cols[k] = (std::max)(cols[k], w);
-			}
-		}
-		else if (r.kind == Row::kLine || r.kind == Row::kTitle) {
-			int w = 0;
-			for (size_t k = 0; k < r.cells.size(); k++) {
-				w += measure(r.cells[k], r.kind == Row::kTitle && k > 0 ? g_small : r.cells[k].bold ? g_bold : g_font) + (k + 1 < r.cells.size() ? gap : 0);
-			}
-			if (r.kind != Row::kTitle) lineW = (std::max)(lineW, w);
-		}
-	}
-	int netW = 0;
-	for (size_t k = 0; k < cols.size(); k++) netW += cols[k] + (k + 1 < cols.size() ? gap : 0);
-	const int width = (compact ? lineW : (std::max)((std::max)(lineW, netW), graphW)) + pad * 2;
-	int height = pad * 2 - static_cast<int>(2 * s);
-	for (const Row &r : rows) height += rowH(r) + (r.kind >= Row::kGraphFps ? static_cast<int>(4 * s) : 0);
-	DeleteDC(dc);
-	if (!g_canvas.Ensure(width, height)) return;
-	HDC c = g_canvas.dc;
-	FillRectColor(c, 0, 0, width, height, kPanel);
-	{
-		RECT all = {0, 0, width, height};
-		HBRUSH border = CreateSolidBrush(kBorder);
-		FrameRect(c, &all, border);
-		DeleteObject(border);
-	}
-	int y = pad - static_cast<int>(1 * s);
-	for (size_t i = 0; i < rows.size(); i++) {
-		const Row &r = rows[i];
-		const int h = rowH(r);
-		const int inner = width - pad * 2;
-		if (r.kind >= Row::kGraphFps) {
-			Graph g = {c, pad, y + static_cast<int>(1 * s), inner, h - static_cast<int>(2 * s), 1};
-			const size_t n = g_hist.size();
-			if (r.kind == Row::kGraphFps) {
-				int maxFps = 60;
-				for (const Sample &sm : g_hist) maxFps = (std::max)(maxFps, sm.fps);
-				g.top = NiceTop(maxFps, 30, 60);
-				g.Back({30, 60}, std::to_wstring(static_cast<int>(g.top)), s);
-				for (size_t k = 0; k < n; k++) {
-					if (g_hist[k].stutters) FillRectColor(c, g.X(k, n), g.y, (std::max)(1, static_cast<int>(2 * s)), g.h, ui::pal::redPressed);
-				}
-				std::vector<POINT> pts;
-				for (size_t k = 0; k < n; k++) {
-					if (g_hist[k].playing) {
-						pts.push_back({g.X(k, n), g.Y(g_hist[k].fps)});
-					}
-					else {
-						g.Line(pts, ui::pal::ok, s);
-						pts.clear();
-					}
-				}
-				g.Line(pts, ui::pal::ok, s);
-			}
-			else if (r.kind == Row::kGraphCpu) {
-				g.top = 100;
-				g.Back({50, 90}, L"100 %", s);
-				std::vector<POINT> pts;
-				for (size_t k = 0; k < n; k++) {
-					if (g_hist[k].load >= 0) {
-						pts.push_back({g.X(k, n), g.Y(g_hist[k].load)});
-					}
-					else {
-						g.Line(pts, ui::pal::ok, s);
-						pts.clear();
-					}
-				}
-				g.Line(pts, n && g_hist[n - 1].load >= 0 ? LoadColor(g_hist[n - 1].load) : ui::pal::ok, s);
-			}
-			else if (r.kind == Row::kGraphMem) {
-				double total = 0, maxUsed = 0;
-				for (const Sample &sm : g_hist) {
-					total = (std::max)(total, sm.memTotal);
-					maxUsed = (std::max)(maxUsed, sm.memUsed);
-				}
-				const double limit = total * 0.85;
-				g.top = NiceTop(maxUsed, 0.5, 1.0);
-				if (total > 0) g.top = (std::min)(g.top, total);
-				g.Back({g.top / 2}, Fmt(L"%.1f GB", g.top), s);
-				if (total > 0 && limit <= g.top) FillRectColor(c, g.x, g.Y(limit), g.w, 1, ui::pal::red);
-				std::vector<POINT> pts;
-				for (size_t k = 0; k < n; k++) pts.push_back({g.X(k, n), g.Y(g_hist[k].memUsed)});
-				const double pct = total > 0 && n ? g_hist[n - 1].memUsed / total : 0;
-				g.Line(pts, MemColor(pct), s);
-			}
-			else if (r.kind == Row::kGraphTurn) {
-				int maxTurn = 0;
-				for (const Sample &sm : g_hist) maxTurn = (std::max)(maxTurn, sm.turnMax);
-				g.top = NiceTop(maxTurn, 100, 300);
-				g.Back({200}, std::to_wstring(static_cast<int>(g.top)) + L" ms", s);
-				std::vector<POINT> hi, avg;
-				for (size_t k = 0; k < n; k++) {
-					if (g_hist[k].turnAvg >= 0) {
-						hi.push_back({g.X(k, n), g.Y(g_hist[k].turnMax)});
-						avg.push_back({g.X(k, n), g.Y(g_hist[k].turnAvg)});
-					}
-					else {
-						g.Line(hi, ui::pal::caption, s);
-						g.Line(avg, ui::pal::ok, s);
-						hi.clear();
-						avg.clear();
-					}
-				}
-				g.Line(hi, ui::pal::caption, s);
-				int lastAvg = 0;
-				for (size_t k = n; k > 0; k--) {
-					if (g_hist[k - 1].turnAvg >= 0) {
-						lastAvg = g_hist[k - 1].turnAvg;
-						break;
-					}
-				}
-				g.Line(avg, TurnColor(lastAvg), s);
-			}
-			else {
-				int maxPing = 0;
-				for (const Sample &sm : g_hist) {
-					for (const PeerSample &p : sm.peers) maxPing = (std::max)(maxPing, p.ping);
-				}
-				g.top = NiceTop(maxPing, 50, 150);
-				g.Back({100, 200}, std::to_wstring(static_cast<int>(g.top)) + L" ms", s);
-				for (const auto &pc : colors) {
-					std::vector<POINT> pts;
-					for (size_t k = 0; k < n; k++) {
-						for (const PeerSample &p : g_hist[k].peers) {
-							if (p.id != pc.first) continue;
-							if (p.ping >= 0) {
-								pts.push_back({g.X(k, n), g.Y(p.ping)});
-							}
-							else {
-								g.Line(pts, pc.second, s);
-								pts.clear();
-							}
-							if (p.loss > 2) FillRectColor(c, g.X(k, n) - static_cast<int>(1 * s), g.y + g.h - static_cast<int>(4 * s),
-												(std::max)(2, static_cast<int>(3 * s)), (std::max)(2, static_cast<int>(3 * s)), ui::pal::bad);
-						}
-					}
-					g.Line(pts, pc.second, s);
-				}
-			}
-			y += h + static_cast<int>(4 * s);
-			continue;
-		}
-		if (r.kind == Row::kTitle && i > 0) {
-			FillRectColor(c, pad, y - static_cast<int>(2 * s), inner, 1, ui::pal::hairline);
-		}
-		int x = pad;
-		for (size_t k = 0; k < r.cells.size(); k++) {
-			const Cell &cell = r.cells[k];
-			int cx = x;
-			if (r.kind == Row::kPeer && k == 0) {
-				if (r.hasSwatch) FillRectColor(c, x, y + (h - swatchW) / 2, swatchW, swatchW, r.swatch);
-				cx += swatchW + swatchGap;
-			}
-			const bool hint = r.kind == Row::kTitle && k > 0;
-			HFONT f = hint ? g_small : cell.bold ? g_bold : g_font;
-			SelectObject(c, f);
-			SetTextColor(c, cell.color);
-			RECT tr = {cx, y, width - pad, y + h};
-			DrawTextW(c, cell.text.c_str(), static_cast<int>(cell.text.size()), &tr,
-				(hint ? DT_RIGHT : DT_LEFT) | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
-			if (r.kind == Row::kPeer) {
-				x += cols[k] + gap;
-			}
-			else {
-				SIZE sz = {};
-				GetTextExtentPoint32W(c, cell.text.c_str(), static_cast<int>(cell.text.size()), &sz);
-				x += sz.cx + gap;
-			}
-		}
-		y += h;
-	}
-}
-
-void BlendPanel(uint32_t *buf, int w, int h, int ox, int oy, int opacity)
-{
-	const Canvas &cv = g_canvas;
-	const uint32_t bg = 0xff000000u | (GetRValue(kPanel) << 16) | (GetGValue(kPanel) << 8) | GetBValue(kPanel);
-	const uint32_t gbg = 0xff000000u | (GetRValue(kGraphBg) << 16) | (GetGValue(kGraphBg) << 8) | GetBValue(kGraphBg);
-	const int aBack = (std::max)(30, (std::min)(100, opacity)) * 255 / 100;
-	const int aFront = (std::min)(255, aBack + 110);
-	for (int y = 0; y < cv.h; y++) {
-		const int ty = oy + y;
-		if (ty < 0 || ty >= h) continue;
-		for (int x = 0; x < cv.w; x++) {
-			const int tx = ox + x;
-			if (tx < 0 || tx >= w) continue;
-			const uint32_t src = cv.bits[static_cast<size_t>(y) * cv.w + x] | 0xff000000u;
-			const int alpha = src == bg || src == gbg ? aBack : aFront;
-			uint32_t &dst = buf[static_cast<size_t>(ty) * w + tx];
-			const uint32_t rb = ((src & 0xff00ff) * alpha + (dst & 0xff00ff) * (255 - alpha)) >> 8;
-			const uint32_t g = ((src & 0x00ff00) * alpha + (dst & 0x00ff00) * (255 - alpha)) >> 8;
-			dst = 0xff000000u | (rb & 0xff00ff) | (g & 0x00ff00);
-		}
-	}
+	v.hover = hover;
+	v.menuOpen = menuOpen;
+	v.menuMouseX = menuX;
+	v.menuMouseY = menuY;
+	v.recordingLeft = g_capture.on ? std::max(0, static_cast<int>((g_capture.end - now) / 1000.0 + 0.999)) : -1;
+	v.toast = GetTickCount() < g_capture.toastUntil ? g_capture.toast : std::wstring();
+	const ControlKey key = ControlsModKey(kModKeyPerfCapture);
+	v.captureKey = key.vk ? winpath::WidenLenient(ControlsKeyLabel(key), CP_UTF8) : std::wstring();
 }
 
 int Margin(float s) { return static_cast<int>(8 * s); }
 
-std::atomic<DWORD> g_saveAt{0};
-
-void RequestSave()
-{
-	const DWORD at = GetTickCount() + 800;
-	g_saveAt = at ? at : 1;
-}
-
 void PanelOrigin(int w, int h, float s, int &ox, int &oy)
 {
 	const int m = Margin(s);
-	const int freeW = (std::max)(0, w - g_canvas.w - 2 * m), freeH = (std::max)(0, h - g_canvas.h - 2 * m);
+	const int freeW = (std::max)(0, w - g_front.w - 2 * m), freeH = (std::max)(0, h - g_front.h - 2 * m);
 	std::lock_guard<std::mutex> lock(g_uiMx);
-	if (g_dragging) {
-		ox = (std::max)(0, (std::min)(w - g_canvas.w, g_dragX));
-		oy = (std::max)(0, (std::min)(h - g_canvas.h, g_dragY));
+	if (g_dragging && g_dragMoved) {
+		ox = (std::max)(0, (std::min)(w - g_front.w, g_dragX));
+		oy = (std::max)(0, (std::min)(h - g_front.h, g_dragY));
 		return;
 	}
 	ox = m + freeW * (std::max)(0, (std::min)(1000, GetConfig().panelX)) / 1000;
 	oy = m + freeH * (std::max)(0, (std::min)(1000, GetConfig().panelY)) / 1000;
 }
 
-void TakeSample(int fps, bool net)
+// The menu beside the panel, towards the middle of the screen.
+void MenuOrigin(int w, int h, int ox, int oy, float s, int &mx, int &my)
 {
-	Sample sm;
-	sm.fps = fps;
-	{
-		std::lock_guard<std::mutex> lock(g_frameMx);
-		sm.worstMs = g_secWorstMs;
-		sm.stutters = g_secStutters;
-		sm.playing = g_secPlaying;
-		g_secWorstMs = 0;
-		g_secStutters = 0;
-		g_secPlaying = false;
-	}
-	LARGE_INTEGER now;
-	QueryPerformanceCounter(&now);
-	const long long busy = g_updateTicks.exchange(0);
-	const int calls = g_updateLeafCalls.exchange(0);
-	if (g_loadSince.QuadPart && now.QuadPart > g_loadSince.QuadPart && sm.playing) {
-		sm.load = static_cast<int>((std::min)(100LL, (busy * 100 + (now.QuadPart - g_loadSince.QuadPart) / 2) / (now.QuadPart - g_loadSince.QuadPart)));
-		if (g_loadLogged < 3 && ++g_loadLogged == 3) {
-			LogD("perf", "panel: game CPU %d %% (%d Update calls per second that do work, nested up to %d)", sm.load, calls,
-				g_updateMaxDepthSeen);
-		}
-	}
-	g_loadSince = now;
-	MEMORYSTATUSEX ms = {sizeof(ms)};
-	GlobalMemoryStatusEx(&ms);
-	sm.memTotal = static_cast<double>(ms.ullTotalVirtual) / 1073741824.0;
-	sm.memUsed = static_cast<double>(ms.ullTotalVirtual - ms.ullAvailVirtual) / 1073741824.0;
-	if (net) {
-		const NetTurnSecond turn = NetTuneTakeSecond();
-		sm.turnAvg = turn.avgMs;
-		sm.turnMax = turn.maxMs;
-		sm.lagMs = SpectatorCovering() ? -1 : SpectatorLagMs();
-		sm.delaySec = SpectatorCovering() ? 0 : SpectatorDelaySec();
-		for (const NetPeerStat &n : SteamNetStats()) {
-			sm.peers.push_back({n.id, n.connected ? n.ping : -1, n.quality >= 0 ? static_cast<float>((1.0 - n.quality) * 100.0) : -1.0f});
-		}
-	}
-	g_hist.push_back(std::move(sm));
-	while (g_hist.size() > static_cast<size_t>(kHist)) g_hist.pop_front();
+	const int gap = static_cast<int>(4 * s);
+	const bool right = ox + g_front.w / 2 > w / 2, below = oy + g_front.h / 2 < h / 2;
+	mx = right ? ox + g_front.w - g_frontMenu.w : ox;
+	my = below ? oy + g_front.h + gap : oy - g_frontMenu.h - gap;
+	mx = (std::max)(0, (std::min)(w - g_frontMenu.w, mx));
+	my = (std::max)(0, (std::min)(h - g_frontMenu.h, my));
 }
 
 void SaveSnapped(int ox, int oy)
@@ -692,6 +490,82 @@ void SaveSnapped(int ox, int oy)
 	RequestSave();
 }
 
+// A click on the gear's menu; under g_uiMx.
+void ApplyMenuHit(const Hit &hit)
+{
+	Config &c = MutableConfig();
+	switch (hit.kind) {
+	case overlay::kHitMode: c.panelCompact = hit.arg != 0; break;
+	case overlay::kHitSection:
+		// The last section on stays: with none the panel and its menu would go.
+		if (hit.arg == 0 && (!c.showPerf || c.showNet)) c.showPerf = !c.showPerf;
+		if (hit.arg == 1 && (!c.showNet || c.showPerf)) c.showNet = !c.showNet;
+		break;
+	case overlay::kHitData: {
+		bool *flags[] = {&c.perfShowLows, &c.perfShowCpu, &c.perfShowMemory, &c.perfShowSim};
+		if (hit.arg >= 0 && hit.arg < 4) *flags[hit.arg] = !*flags[hit.arg];
+		break;
+	}
+	case overlay::kHitGraph: {
+		bool *flags[] = {&c.perfGraphFrame, &c.perfGraphCpu, &c.perfGraphMemory, &c.perfGraphPing};
+		if (hit.arg >= 0 && hit.arg < 4) *flags[hit.arg] = !*flags[hit.arg];
+		break;
+	}
+	case overlay::kHitWindow: c.perfWindow = overlay::kWindows[std::max(0, std::min(2, hit.arg))]; break;
+	case overlay::kHitCorner:
+		c.panelX = (hit.arg % 2) * 1000;
+		c.panelY = (hit.arg / 2) * 1000;
+		break;
+	case overlay::kHitScale: c.perfScale = overlay::kScales[std::max(0, std::min(3, hit.arg))]; break;
+	case overlay::kHitOpacity: c.panelOpacity = overlay::kOpacities[std::max(0, std::min(3, hit.arg))]; break;
+	case overlay::kHitRefresh: c.perfRefresh = overlay::kRefreshes[std::max(0, std::min(2, hit.arg))]; break;
+	case overlay::kHitCapture: g_captureWanted = true; break;
+	default: return;
+	}
+	if (hit.kind != overlay::kHitCapture) {
+		RequestSave();
+		LogD("perf", "panel: menu setting %d (%d) changed", hit.kind, hit.arg);
+	}
+	g_dirty = g_menuDirty = true;
+}
+
+void CycleMode()
+{
+	Config &c = MutableConfig();
+	const char *now = "compact";
+	if (!c.showPerf && !c.showNet) {
+		c.showPerf = g_restorePerf || !g_restoreNet;
+		c.showNet = g_restoreNet;
+		c.panelCompact = true;
+	}
+	else if (c.panelCompact) {
+		c.panelCompact = false;
+		now = "full";
+	}
+	else {
+		g_restorePerf = c.showPerf;
+		g_restoreNet = c.showNet;
+		c.showPerf = c.showNet = false;
+		now = "hidden";
+		std::lock_guard<std::mutex> lock(g_uiMx);
+		g_menuOpen = false;
+	}
+	SaveConfig();
+	{
+		std::lock_guard<std::mutex> lock(g_uiMx);
+		g_dirty = true;
+	}
+	LogD("perf", "panel %s (keyboard shortcut)", now);
+}
+
+float PanelScale(int w, int h, int outW, int outH)
+{
+	if (outW <= 0 || outH <= 0) return (std::max)(0.8f, (std::min)(2.0f, h / 1080.0f * 1.15f));
+	const float onScreen = (std::max)(0.8f, (std::min)(2.0f, outH / 1080.0f * 1.15f));
+	const float shownH = (std::min)(static_cast<float>(outH), static_cast<float>(outW) * h / w);
+	return (std::max)(0.3f, onScreen * h / shownH);
+}
+
 int __fastcall HookGameUpdate(void *game)
 {
 	CrashLogLoadingEnd();
@@ -708,7 +582,6 @@ int __fastcall HookGameUpdate(void *game)
 	if (g_updateDepth > 0 && g_updateDepth <= kUpdateMaxDepth) g_updateStack[g_updateDepth - 1].nested = true;
 	if (g_updateDepth >= kUpdateMaxDepth) return g_origGameUpdate(game);
 	const int d = g_updateDepth++;
-	g_updateMaxDepthSeen = (std::max)(g_updateMaxDepthSeen, g_updateDepth);
 	g_updateStack[d].nested = false;
 	QueryPerformanceCounter(&g_updateStack[d].start);
 	const int r = g_origGameUpdate(game);
@@ -716,8 +589,10 @@ int __fastcall HookGameUpdate(void *game)
 	QueryPerformanceCounter(&b);
 	g_updateDepth = d;
 	if (!g_updateStack[d].nested) {
-		g_updateTicks += b.QuadPart - g_updateStack[d].start.QuadPart;
+		const long long ticks = b.QuadPart - g_updateStack[d].start.QuadPart;
+		g_updateTicks += ticks;
 		g_updateLeafCalls++;
+		if (ticks > g_updateMaxTicks.load(std::memory_order_relaxed)) g_updateMaxTicks.store(ticks, std::memory_order_relaxed);
 	}
 	return r;
 }
@@ -728,51 +603,57 @@ void OverlayInstall(bool knownExe)
 {
 	if (!knownExe) return;
 	if (HookInstall(addr::kGameUpdate, &HookGameUpdate, &g_origGameUpdate)) {
-		LogD("perf", "panel: game load measured in CVXGame::Update");
+		LogD("perf", "panel: game update time measured in CVXGame::Update");
 	}
 	else {
-		LogE("perf", "panel: could not hook CVXGame::Update (no game load)");
+		LogE("perf", "panel: could not hook CVXGame::Update (no update time)");
 	}
 }
 
 void OverlayNoteFrame()
 {
-	LARGE_INTEGER now;
-	QueryPerformanceCounter(&now);
-	if (!g_qpf.QuadPart) QueryPerformanceFrequency(&g_qpf);
-	bool running = false;
+	const double now = perf::QpcMs();
+	if (!g_gameThread.load()) g_gameThread = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, GetCurrentThreadId());
+	g_blits++;
 	char *game = *reinterpret_cast<char **>(addr::kGame);
 	static char *lastGame = nullptr;
-	static DWORD gameSince = 0;
+	static double gameSince = 0;
 	if (game != lastGame) {
+		if (game && !lastGame) perf::NoteEvent(perf::kEventStart);
+		if (!game && lastGame) perf::NoteEvent(perf::kEventEnd);
 		lastGame = game;
-		gameSince = GetTickCount();
+		gameSince = now;
 	}
-	if (game && GetTickCount() - gameSince > 8000) running = !TweaksGamePaused(game);
+	const bool loading = LoadCurtainUp();
+	static bool wasLoading = false, wasRejoin = false;
+	if (loading && !wasLoading) perf::NoteEvent(perf::kEventLoad);
+	wasLoading = loading;
+	const bool rejoin = RejoinReloading();
+	if (rejoin && !wasRejoin) perf::NoteEvent(perf::kEventRejoin);
+	wasRejoin = rejoin;
+	GameState state;
+	// The first seconds of a match still load its map.
+	state.match = game && now - gameSince > 3000;
+	state.loading = loading || rejoin;
+	state.paused = game && TweaksGamePaused(game);
+	state.continuous = state.match && !state.loading && !state.paused;
+	state.clock = game ? Field<uint32_t>(game, layout::kGameClock) : 0;
 	std::lock_guard<std::mutex> lock(g_frameMx);
-	if (g_lastFrame.QuadPart && running) {
-		const int ms = static_cast<int>((now.QuadPart - g_lastFrame.QuadPart) * 1000 / g_qpf.QuadPart);
-		g_secPlaying = true;
-		if (g_framesTotal < 600) {
-			g_framesTotal++;
-			if (g_updateDepth) g_framesInUpdate++;
-			if (g_framesTotal == 600) LogD("perf", "panel: %d of 600 game images are delivered inside CVXGame::Update", g_framesInUpdate);
-		}
-		if (ms < 3000) {
-			g_secWorstMs = (std::max)(g_secWorstMs, ms);
-			if (ms >= kStutterMs) g_secStutters++;
-		}
-	}
-	g_lastFrame = now;
+	g_game = state;
+	if (g_tracker.AddFrame(now, state.continuous)) g_frames++;
 }
 
 bool OverlayNeedsRedraw()
 {
+	{
+		std::lock_guard<std::mutex> lock(g_frontMx);
+		if (g_frontSerial != g_blendSerial) return true;
+	}
 	std::lock_guard<std::mutex> lock(g_uiMx);
-	return g_moved || g_dirty;
+	return g_moved;
 }
 
-bool OverlayHandleMouse(HWND hwnd, UINT msg, WPARAM wp, LPARAM &lp)
+bool OverlayHandleMouse(HWND hwnd, UINT msg, WPARAM, LPARAM &lp)
 {
 	if (msg < WM_MOUSEFIRST || msg > WM_MOUSELAST) return false;
 	if (!GetConfig().showPerf && !GetConfig().showNet) return false;
@@ -785,13 +666,18 @@ bool OverlayHandleMouse(HWND hwnd, UINT msg, WPARAM wp, LPARAM &lp)
 	}
 	const bool visible = GetTickCount() - g_panelTick < 1500;
 	const POINT pt = {x, y};
-	const bool inside = visible && PtInRect(&g_panel, pt);
+	const bool inPanel = visible && PtInRect(&g_panel, pt);
+	const bool inMenu = visible && g_menuOpen && PtInRect(&g_menu, pt);
 	if (msg == WM_MOUSEMOVE) {
-		g_hover = inside;
+		if (g_hover != (inPanel || inMenu)) {
+			g_hover = inPanel || inMenu;
+			g_dirty = true;
+		}
+		if (inMenu) g_menuDirty = true;
 		if (!g_dragging) return false;
+		if (std::abs(x - g_downX) + std::abs(y - g_downY) > static_cast<int>(4 * g_scale)) g_dragMoved = true;
 		g_dragX = x - g_dragDX;
 		g_dragY = y - g_dragDY;
-		g_dragMoved = true;
 		g_moved = true;
 		const int edge = static_cast<int>(10 * g_scale);
 		const int cx = (std::max)(edge, (std::min)(g_frameW - 1 - edge, x)), cy = (std::max)(edge, (std::min)(g_frameH - 1 - edge, y));
@@ -802,70 +688,78 @@ bool OverlayHandleMouse(HWND hwnd, UINT msg, WPARAM wp, LPARAM &lp)
 		g_dragging = false;
 		ReleaseCapture();
 		if (g_dragMoved) SaveSnapped(g_dragX, g_dragY);
-		g_moved = true;
+		else if (g_gearDown) g_menuOpen = !g_menuOpen;
+		g_gearDown = false;
+		g_dirty = g_menuDirty = g_moved = true;
+		LogD("perf", "panel: %s", g_dragMoved ? "moved" : g_menuOpen ? "menu open" : "menu closed");
 		return true;
 	}
-	if (!inside) return false;
-	switch (msg) {
-	case WM_LBUTTONDOWN:
-	case WM_LBUTTONDBLCLK: {
-		const DWORD now = GetTickCount();
-		const bool dbl = msg == WM_LBUTTONDBLCLK || (now - g_lastDown <= GetDoubleClickTime() &&
-			std::abs(x - g_lastDownPt.x) <= GetSystemMetrics(SM_CXDOUBLECLK) && std::abs(y - g_lastDownPt.y) <= GetSystemMetrics(SM_CYDOUBLECLK));
-		if (dbl) {
-			g_lastDown = 0;
-			Config &c = MutableConfig();
-			c.panelCompact = !c.panelCompact;
-			RequestSave();
-			g_dirty = true;
-			LogD("perf", "panel %s", c.panelCompact ? "compact" : "full");
+	const bool down = msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK;
+	if (inMenu) {
+		if (down) {
+			const POINT local = {x - g_menu.left, y - g_menu.top};
+			for (const Hit &hit : g_menuHits) {
+				if (hit.kind == overlay::kHitMenu || !PtInRect(&hit.r, local)) continue;
+				ApplyMenuHit(hit);
+				break;
+			}
+		}
+		return !wheel;
+	}
+	if (down && inPanel) {
+		const POINT local = {x - g_panel.left, y - g_panel.top};
+		for (const Hit &hit : g_panelHits) {
+			if (hit.kind != overlay::kHitGear || !PtInRect(&hit.r, local)) continue;
+			g_gearDown = true;
+			g_dragging = true;
+			g_dragMoved = false;
+			g_downX = x;
+			g_downY = y;
+			g_dragDX = x - g_panel.left;
+			g_dragDY = y - g_panel.top;
+			g_dragX = g_panel.left;
+			g_dragY = g_panel.top;
+			SetCapture(hwnd);
 			return true;
 		}
-		g_lastDown = now;
-		g_lastDownPt = pt;
-		g_dragging = true;
-		g_dragMoved = false;
-		g_dragDX = x - g_panel.left;
-		g_dragDY = y - g_panel.top;
-		g_dragX = g_panel.left;
-		g_dragY = g_panel.top;
-		SetCapture(hwnd);
+	}
+	// Elsewhere the panel lets the clicks through to the game; with the menu open, a click outside only closes it.
+	if (down && g_menuOpen) {
+		g_menuOpen = false;
+		g_dirty = g_moved = true;
 		return true;
 	}
-	case WM_MOUSEWHEEL: {
-		Config &c = MutableConfig();
-		c.panelOpacity = (std::max)(30, (std::min)(100, c.panelOpacity + (GET_WHEEL_DELTA_WPARAM(wp) > 0 ? 10 : -10)));
-		RequestSave();
-		g_moved = true;
-		return true;
-	}
-	default:
-		return msg == WM_LBUTTONUP || msg == WM_RBUTTONDOWN || msg == WM_RBUTTONUP || msg == WM_RBUTTONDBLCLK ||
-			msg == WM_MBUTTONDOWN || msg == WM_MBUTTONUP;
-	}
+	return false;
 }
 
 bool OverlayHandleKey(UINT msg, WPARAM wp, LPARAM lp)
 {
 	static bool eatChar = false;
 	if (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) eatChar = false;
-	if ((msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) && ControlsModKeyPressed(kModKeyPanel, static_cast<unsigned>(wp))) {
+	const bool keyDown = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
+	if (keyDown && ControlsModKeyPressed(kModKeyPanel, static_cast<unsigned>(wp))) {
+		eatChar = true;
+		if (!(lp & (1 << 30))) CycleMode();
+		return true;
+	}
+	if (keyDown && ControlsModKeyPressed(kModKeyPerfCapture, static_cast<unsigned>(wp))) {
 		eatChar = true;
 		if (!(lp & (1 << 30))) {
-			Config &c = MutableConfig();
-			if (c.showPerf || c.showNet) {
-				g_restorePerf = c.showPerf;
-				g_restoreNet = c.showNet;
-				c.showPerf = c.showNet = false;
-			}
-			else {
-				c.showPerf = g_restorePerf;
-				c.showNet = g_restoreNet;
-			}
-			SaveConfig();
-			LogD("perf", "panel %s (keyboard shortcut)", c.showPerf || c.showNet ? "in view" : "hidden");
+			// The panel shows the recording: hidden, it comes back compact.
+			if (!GetConfig().showPerf && !GetConfig().showNet) CycleMode();
+			std::lock_guard<std::mutex> lock(g_uiMx);
+			g_captureWanted = true;
 		}
 		return true;
+	}
+	if (keyDown && wp == VK_ESCAPE) {
+		std::lock_guard<std::mutex> lock(g_uiMx);
+		if (g_menuOpen) {
+			g_menuOpen = false;
+			g_dirty = g_moved = true;
+			eatChar = true;
+			return true;
+		}
 	}
 	if ((msg == WM_CHAR || msg == WM_SYSCHAR) && eatChar) {
 		eatChar = false;
@@ -874,56 +768,143 @@ bool OverlayHandleKey(UINT msg, WPARAM wp, LPARAM lp)
 	return false;
 }
 
-float PanelScale(int w, int h, int outW, int outH)
-{
-	if (outW <= 0 || outH <= 0) return (std::max)(0.8f, (std::min)(2.0f, h / 1080.0f * 1.15f));
-	const float onScreen = (std::max)(0.8f, (std::min)(2.0f, outH / 1080.0f * 1.15f));
-	const float shownH = (std::min)(static_cast<float>(outH), static_cast<float>(outW) * h / w);
-	return (std::max)(0.3f, onScreen * h / shownH);
-}
+namespace {
 
-void DrawPerfOverlay(uint32_t *buf, int w, int h, int fps, int outW, int outH)
+// One pass of the painter: the second's figures, the capture, and the panel and its menu painted again when due.
+void PaintTick()
 {
-	const float s = PanelScale(w, h, outW, outH);
-	const bool perf = GetConfig().showPerf, net = GetConfig().showNet, compact = GetConfig().panelCompact;
-	const DWORD now = GetTickCount();
-	const bool tick = now - g_built >= 1000;
-	if (const DWORD due = g_saveAt; due && static_cast<int>(now - due) >= 0) {
+	const Config &cfg = GetConfig();
+	const double now = perf::QpcMs();
+	const DWORD tick = GetTickCount();
+	if (const DWORD due = g_saveAt; due && static_cast<int>(tick - due) >= 0) {
 		g_saveAt = 0;
 		SaveConfig();
 	}
-	bool dirty, hover;
+	Want want;
+	{
+		std::lock_guard<std::mutex> lock(g_frontMx);
+		want = g_want;
+	}
+	bool dirty, menuDirty, hover, menuOpen, capture;
+	int menuX = -1, menuY = -1;
 	{
 		std::lock_guard<std::mutex> lock(g_uiMx);
 		dirty = g_dirty;
+		menuDirty = g_menuDirty;
 		hover = g_hover;
-		g_dirty = false;
+		menuOpen = g_menuOpen;
+		capture = g_captureWanted;
+		g_captureWanted = false;
+		menuX = g_mouseX - g_menu.left;
+		menuY = g_mouseY - g_menu.top;
+		g_dirty = g_menuDirty = false;
+	}
+	if (capture) {
+		if (g_capture.on) FinishCapture(now);
+		else StartCapture(now);
+		dirty = true;
+	}
+	if (g_capture.on && now >= g_capture.end) {
+		FinishCapture(now);
+		dirty = true;
+	}
+	if (!cfg.showPerf && !cfg.showNet) return;
+	if (now - g_lastSecond >= 1000) {
+		g_lastSecond = now;
+		TakeSecond(now, cfg.showNet);
+	}
+	if (want.w <= 0 || want.s <= 0) return;
+	bool painted = false;
+	if (now - g_lastRefresh >= cfg.perfRefresh || dirty || g_builtW != want.w || g_builtH != want.h || g_builtScale != want.s) {
+		g_lastRefresh = now;
+		g_builtW = want.w;
+		g_builtH = want.h;
+		g_builtScale = want.s;
+		BuildView(g_view, now, want.s, hover, menuOpen, menuX, menuY);
+		std::vector<Hit> hits;
+		overlay::PaintPanel(g_canvas, g_view, hits);
+		g_empty = !g_canvas.bits || (!g_view.set.perf && g_view.peers.empty() && g_view.lagMs < 0 && g_view.turnAvgMs < 0);
+		if (g_empty) g_baked.w = g_baked.h = 0;
+		else g_baked.Bake(g_canvas, cfg.panelOpacity);
+		{
+			std::lock_guard<std::mutex> lock(g_frontMx);
+			std::swap(g_front, g_baked);
+		}
+		std::lock_guard<std::mutex> lock(g_uiMx);
+		g_panelHits.swap(hits);
+		painted = menuDirty = true;
+	}
+	if (menuOpen && menuDirty) {
+		g_view.menuOpen = true;
+		g_view.menuMouseX = menuX;
+		g_view.menuMouseY = menuY;
+		std::vector<Hit> hits;
+		overlay::PaintMenu(g_menuCanvas, g_view, hits);
+		g_menuBaked.Bake(g_menuCanvas, 100);
+		{
+			std::lock_guard<std::mutex> lock(g_frontMx);
+			std::swap(g_frontMenu, g_menuBaked);
+		}
+		std::lock_guard<std::mutex> lock(g_uiMx);
+		g_menuHits.swap(hits);
+		painted = true;
+	}
+	if (painted) {
+		std::lock_guard<std::mutex> lock(g_frontMx);
+		g_frontSerial++;
+	}
+}
+
+DWORD WINAPI PainterThread(LPVOID)
+{
+	// Painting takes a few milliseconds a few times a second: never at the expense of the game.
+	SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+	for (;;) {
+		// The mouse over the menu and the keys are seen within this; the numbers change at the panel's own rate.
+		Sleep(30);
+		Guard("performance panel", [] { PaintTick(); });
+	}
+}
+
+}
+
+void DrawPerfOverlay(uint32_t *buf, int w, int h, int, int outW, int outH)
+{
+	if (!g_painterStarted.exchange(true)) {
+		HANDLE thread = CreateThread(nullptr, 0, PainterThread, nullptr, 0, nullptr);
+		if (thread) CloseHandle(thread);
+	}
+	// Below 0.8 of its size the captions drop under 8 pixels and can't be read, whatever the size picked.
+	const float s = (std::max)(0.8f, PanelScale(w, h, outW, outH) * GetConfig().perfScale / 100.0f);
+	bool menuOpen;
+	{
+		std::lock_guard<std::mutex> lock(g_uiMx);
+		menuOpen = g_menuOpen;
 		g_moved = false;
 	}
-	if (tick) TakeSample(fps, net);
-	if (tick || dirty || g_builtFor[0] != w || g_builtFor[1] != h || g_builtScale != s || g_builtFor[2] != static_cast<int>(perf) ||
-		g_builtFor[3] != static_cast<int>(net) || g_builtFor[4] != static_cast<int>(compact)) {
-		if (tick) g_built = now;
-		g_builtScale = s;
-		g_builtFor[0] = w;
-		g_builtFor[1] = h;
-		g_builtFor[2] = perf;
-		g_builtFor[3] = net;
-		g_builtFor[4] = compact;
-		const std::vector<NetPeerStat> stats = net ? SteamNetStats() : std::vector<NetPeerStat>();
-		const std::vector<Row> rows = BuildRows(perf, net && !stats.empty(), compact, stats, hover);
-		g_empty = rows.empty() || (!perf && stats.empty());
-		std::map<uint64_t, COLORREF> colors;
-		for (size_t k = 0; k < stats.size(); k++) colors[stats[k].id] = PeerColor(stats[k], k);
-		if (!g_empty) Render(rows, s, compact, colors);
+	std::lock_guard<std::mutex> lock(g_frontMx);
+	g_want.w = w;
+	g_want.h = h;
+	g_want.s = s;
+	g_blendSerial = g_frontSerial;
+	if (g_front.w <= 0) {
+		std::lock_guard<std::mutex> ui(g_uiMx);
+		g_panel = g_menu = {};
+		return;
 	}
-	if (g_empty || !g_canvas.bits) return;
 	int ox = 0, oy = 0;
 	PanelOrigin(w, h, s, ox, oy);
-	BlendPanel(buf, w, h, ox, oy, GetConfig().panelOpacity);
-	std::lock_guard<std::mutex> lock(g_uiMx);
-	g_panel = {ox, oy, ox + g_canvas.w, oy + g_canvas.h};
-	g_panelTick = now;
+	g_front.Blend(buf, w, h, ox, oy);
+	int mx = 0, my = 0;
+	const bool menu = menuOpen && g_frontMenu.w > 0;
+	if (menu) {
+		MenuOrigin(w, h, ox, oy, s, mx, my);
+		g_frontMenu.Blend(buf, w, h, mx, my);
+	}
+	std::lock_guard<std::mutex> ui(g_uiMx);
+	g_panel = {ox, oy, ox + g_front.w, oy + g_front.h};
+	g_menu = menu ? RECT{mx, my, mx + g_frontMenu.w, my + g_frontMenu.h} : RECT{};
+	g_panelTick = GetTickCount();
 	g_frameW = w;
 	g_frameH = h;
 	g_scale = s;

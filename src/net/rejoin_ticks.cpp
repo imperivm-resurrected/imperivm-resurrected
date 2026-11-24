@@ -8,6 +8,7 @@
 #include "hooks/hookcount.h"
 #include "core/config.h"
 #include "core/log.h"
+#include "core/perfstats.h"
 #include "net/leagueclient.h"
 #include "net/netdrop.h"
 #include "net/nettune.h"
@@ -173,6 +174,7 @@ void LogAiTrace(int from)
 namespace rejoin_impl {
 void __stdcall HookDesync(unsigned tick, unsigned hash, unsigned compared)
 {
+	perf::NoteEvent(perf::kEventDesync);
 	// Before the game's own report: it shows a box that holds the game thread until the player closes it.
 	DesyncReport(tick, hash, compared);
 	LeagueMatchDesync();

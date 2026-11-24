@@ -5,6 +5,7 @@
 
 #include <windows.h>
 
+#include <atomic>
 #include <cstdint>
 
 #include "MinHook.h"
@@ -79,6 +80,7 @@ bool Held(const char *game)
 }
 
 unsigned g_rightAway = 0;
+std::atomic<unsigned> g_turns{0};
 
 void RunWaitingOrders(void *game)
 {
@@ -113,6 +115,7 @@ int __fastcall HookAdventure(void *game)
 
 void __fastcall HookTick(void *pump)
 {
+	g_turns.fetch_add(1, std::memory_order_relaxed);
 	// An order given between this frame's update and the turn (by a script, say) still runs on this turn.
 	if (g_solo > 0 && pump && !Replaying()) reinterpret_cast<Pump_t>(addr::kCmdPumpExecuteQueued)(pump);
 	g_origTick(pump);
@@ -145,4 +148,9 @@ void InstallOrderDelay(bool knownExe)
 	bool ok = true;
 	for (uintptr_t t : targets) ok = HookEnable(reinterpret_cast<void *>(t)) == MH_OK && ok;
 	LogAt(ok ? kLogInfo : kLogError, "game", "orders: faster orders out of multiplayer %s", ok ? "ready" : "NOT available (a hook could not be enabled)");
+}
+
+unsigned OrderDelayTurns()
+{
+	return g_turns.load(std::memory_order_relaxed);
 }

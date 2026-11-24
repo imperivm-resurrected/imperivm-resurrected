@@ -9,10 +9,18 @@ void InstallNetTune(bool knownExe);
 
 void NetTuneAfterAdvance(void *transport);
 
+// The network turns since the last call: how long they took, their planned size and added delay (the transport's own), the time the
+// game spent waiting for the other players' data (the turns' time beyond their size), the resend requests, and how late the latest
+// player's data arrived after it was due ("PEER DELAY"; -1 with no report).
 struct NetTurnSecond {
 	int count = 0;
 	int avgMs = -1;
 	int maxMs = 0;
+	int sizeAvgMs = -1;
+	int delayAvgMs = -1;
+	int waitMs = 0;
+	int resends = 0;
+	int lateMaxMs = -1;
 };
 
 NetTurnSecond NetTuneTakeSecond();

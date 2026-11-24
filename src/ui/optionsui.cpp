@@ -97,6 +97,56 @@ int ComboIndex(const Values &v, int id, int count)
 	return it != v.combos.end() && it->second >= 0 && it->second < count ? it->second : -1;
 }
 
+const char *const kCornerLabels[] = {"Top left", "Top right", "Bottom left", "Bottom right"};
+const int kPerfWindows[] = {10, 30, 60};
+const char *const kPerfWindowLabels[] = {"10 s", "30 s", "60 s"};
+
+// The corner the panel is nearest to: one dragged elsewhere keeps its place until another corner is picked.
+int NearestCorner(const Config &c)
+{
+	return (c.panelX >= 500 ? 1 : 0) + (c.panelY >= 500 ? 2 : 0);
+}
+
+int PerfWindowIndex(int seconds)
+{
+	int best = 0;
+	for (int i = 0; i < 3; i++) {
+		if (abs(kPerfWindows[i] - seconds) < abs(kPerfWindows[best] - seconds)) best = i;
+	}
+	return best;
+}
+
+void SetPanelValues(Values &v, const Config &c)
+{
+	v.checks[kPanelCompact] = c.panelCompact;
+	v.scrolls[kPanelOpacity] = c.panelOpacity;
+	v.scrolls[kPanelScale] = c.perfScale;
+	v.combos[kPanelCorner] = NearestCorner(c);
+	v.combos[kPerfWindow] = PerfWindowIndex(c.perfWindow);
+}
+
+void SetPanelExtras(Values &v, const Config &c)
+{
+	v.items[kPanelCorner] = std::vector<std::string>(std::begin(kCornerLabels), std::end(kCornerLabels));
+	v.items[kPerfWindow] = std::vector<std::string>(std::begin(kPerfWindowLabels), std::end(kPerfWindowLabels));
+	SetPanelValues(v, c);
+}
+
+// The panel's settings that its own menu also changes.
+void ApplyPanelSettings(Config &c, const Values &v)
+{
+	c.panelCompact = CheckOr(v, kPanelCompact, c.panelCompact);
+	c.panelOpacity = ScrollOr(v, kPanelOpacity, c.panelOpacity);
+	c.perfScale = ScrollOr(v, kPanelScale, c.perfScale);
+	const int corner = ComboIndex(v, kPanelCorner, 4);
+	if (corner >= 0 && corner != NearestCorner(c)) {
+		c.panelX = (corner % 2) * 1000;
+		c.panelY = (corner / 2) * 1000;
+	}
+	const int window = ComboIndex(v, kPerfWindow, 3);
+	if (window >= 0) c.perfWindow = kPerfWindows[window];
+}
+
 void SetDisplayExtras(Values &v, const Config &c)
 {
 	v.items[kFpsLimit] = std::vector<std::string>(std::begin(kFpsLabels), std::end(kFpsLabels));
@@ -161,9 +211,8 @@ void SetExtras(Values &v, const Config &c)
 {
 	SetSystemExtras(v, c);
 	SetDisplayExtras(v, c);
-	v.checks[kPanelCompact] = c.panelCompact;
+	SetPanelExtras(v, c);
 	v.checks[kSmoothCamera] = c.smoothScroll;
-	v.scrolls[kPanelOpacity] = c.panelOpacity;
 	v.combos[kHealthBars] = c.healthBarOwners;
 	v.combos[kAllyPalette] = c.allyPalette;
 	v.combos[kAllySelf] = static_cast<int>(c.allyRgb[0]);
@@ -234,9 +283,10 @@ void CopyExtras(Values &to, const Values &from)
 	CopyId(to.combos, from.combos, kOutputDevice);
 	CopyId(to.items, from.items, kOutputDevice);
 	CopyId(to.disabled, from.disabled, kOutputDevice);
-	// The panel changes as it is edited, so the setting is the truth; its own mouse controls change it too.
-	to.checks[kPanelCompact] = GetConfig().panelCompact;
-	to.scrolls[kPanelOpacity] = GetConfig().panelOpacity;
+	CopyId(to.items, from.items, kPanelCorner);
+	CopyId(to.items, from.items, kPerfWindow);
+	// The panel changes as it is edited, so the setting is the truth; its own menu and keys change it too.
+	SetPanelValues(to, GetConfig());
 }
 
 void ApplyPanelLive(const Values &v)
@@ -244,8 +294,7 @@ void ApplyPanelLive(const Values &v)
 	Config &c = MutableConfig();
 	c.showPerf = CheckOr(v, kShowPerf, c.showPerf);
 	c.showNet = CheckOr(v, kShowNet, c.showNet);
-	c.panelCompact = CheckOr(v, kPanelCompact, c.panelCompact);
-	c.panelOpacity = ScrollOr(v, kPanelOpacity, c.panelOpacity);
+	ApplyPanelSettings(c, v);
 }
 
 // The volumes are heard while they are dragged; Cancel puts back the ones of the baseline.
@@ -304,9 +353,8 @@ void CommitDevice(const Values &v)
 void CommitExtras(const Values &v)
 {
 	Config &c = MutableConfig();
-	c.panelCompact = CheckOr(v, kPanelCompact, c.panelCompact);
+	ApplyPanelSettings(c, v);
 	c.smoothScroll = CheckOr(v, kSmoothCamera, c.smoothScroll);
-	c.panelOpacity = ScrollOr(v, kPanelOpacity, c.panelOpacity);
 	const auto bars = v.combos.find(kHealthBars);
 	if (bars != v.combos.end()) c.healthBarOwners = bars->second;
 	const auto palette = v.combos.find(kAllyPalette);
@@ -460,6 +508,7 @@ void Execute(const Command &cmd)
 				g_s.view.dirty = !(g_s.view.values == g_s.baseline);
 			}
 			ApplyDisplayLive(ViewValues());
+			ApplyPanelLive(ViewValues());
 			break;
 		}
 		OptionsWriteCombo(cmd.value, cmd.arg);

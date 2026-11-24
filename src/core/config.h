@@ -41,8 +41,16 @@ struct Config {
 	bool showNet = false;
 	int panelX = 1000;
 	int panelY = 0;
-	bool panelCompact = false;
+	bool panelCompact = true;
 	int panelOpacity = 90;
+	// [Perf]: what the performance panel shows (its graphs and its rows), the time its graphs and numbers cover (s), its size (%), how
+	// often its numbers change (ms) and how long a capture of frame times lasts (s).
+	bool perfGraphFrame = true, perfGraphCpu = false, perfGraphMemory = false, perfGraphPing = true;
+	bool perfShowLows = true, perfShowCpu = true, perfShowMemory = true, perfShowSim = true;
+	int perfWindow = 30;
+	int perfScale = 100;
+	int perfRefresh = 500;
+	int perfCapture = 30;
 	// Where the chat sits, in thousandths of the screen: its left edge and its bottom edge. -1 is the default place.
 	int chatX = -1;
 	int chatY = -1;
