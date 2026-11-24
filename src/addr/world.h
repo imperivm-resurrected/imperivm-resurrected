@@ -98,6 +98,8 @@ inline constexpr uintptr_t kSingleSettingsCtor = 0x00597370;
 inline constexpr uintptr_t kPersistMpCheck = 0x00597da9;
 inline constexpr uintptr_t kSaveGameToFile = 0x005983c0;
 inline constexpr uintptr_t kLoadGameFromFile = 0x005984b0;
+// CVXScriptClass::GetEntity (__fastcall cls): the class's graphics, loaded from its .ent.xml and animations the first time it is asked.
+inline constexpr uintptr_t kScriptClassGetEntity = 0x0059a780;
 inline constexpr uintptr_t kScriptObjDamage = 0x005a7720;
 inline constexpr uintptr_t kSetHealth = 0x005a7a00;
 inline constexpr uintptr_t kGetRaceName = 0x005a7b90;

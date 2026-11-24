@@ -9,6 +9,7 @@
 #include "game/loadcurtain.h"
 #include "game/mapfog.h"
 #include "game/quickicons.h"
+#include "game/unitpreload.h"
 #include "game/noteicons.h"
 #include "game/respawnsites.h"
 #include "game/zoomview.h"
@@ -571,6 +572,7 @@ int __fastcall HookGameUpdate(void *game)
 	CrashLogLoadingEnd();
 	// A C++ exception must not unwind through the game's frames.
 	Guard("game update ticks", [] {
+		UnitArtPreload();
 		g_updateTicks += ZoomFogGameThreadTick();
 		QuickIconsGameThreadTick();
 		HealthBarsGameTick();
