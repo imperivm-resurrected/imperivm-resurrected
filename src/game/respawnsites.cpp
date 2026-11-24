@@ -36,7 +36,9 @@ constexpr DWORD kNoticeGatherMs = 4000, kNoticeEveryMs = 60000;
 std::array<RespawnSiteState, kObjectSlots> g_sites;
 std::vector<RespawnMark> g_marks;
 bool g_installed = false;
+// A read of the map that failed (a game torn down under it, as a rejoin's reload does) turns the timers off for that game only.
 bool g_failed = false;
+const void *g_failedGame = nullptr;
 const void *g_game = nullptr, *g_map = nullptr, *g_player = nullptr;
 DWORD g_sampledAt = 0;
 unsigned g_clock = 0;
@@ -195,8 +197,9 @@ void Sample()
 	}
 	__except (EXCEPTION_EXECUTE_HANDLER) {
 		g_failed = true;
-		g_marks.clear();
-		LogE("game", "respawn timers: ERROR reading the map, off until the game restarts");
+		g_failedGame = *reinterpret_cast<const void **>(addr::kGame);
+		Forget();
+		LogE("game", "respawn timers: ERROR reading the map, off until this game ends");
 		return;
 	}
 }
@@ -216,7 +219,13 @@ bool RespawnTimersOn()
 
 void RespawnSitesGameTick()
 {
-	if (!g_installed || g_failed) return;
+	if (!g_installed) return;
+	// The next game (or the same one loaded again by a rejoin) has them back.
+	if (g_failed && *reinterpret_cast<const void **>(addr::kGame) != g_failedGame) {
+		g_failed = false;
+		LogI("game", "respawn timers: on again in the new game");
+	}
+	if (g_failed) return;
 	Sample();
 	const DWORD now = GetTickCount();
 	if (!g_backSince || now - g_backSince < kNoticeGatherMs) return;
