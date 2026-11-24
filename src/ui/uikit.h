@@ -306,6 +306,34 @@ struct Painter {
 		StretchDIBits(dc, r.left, r.top, r.right - r.left, r.bottom - r.top, 0, 0, iw, ih, bgra, &bi, DIB_RGB_COLORS, SRCCOPY);
 		SetStretchBltMode(dc, old);
 	}
+	// The picture filling the box without stretching: what does not fit its shape is cut evenly from both sides (or top and bottom).
+	void ImageCover(int x, int y, int w, int h, const uint32_t *bgra, int iw, int ih)
+	{
+		if (!bgra || iw <= 0 || ih <= 0 || w <= 0 || h <= 0) return;
+		int sx = 0, sy = 0, sw = iw, sh = ih;
+		if (static_cast<int64_t>(iw) * h > static_cast<int64_t>(ih) * w) {
+			sw = std::max(1, static_cast<int>(static_cast<int64_t>(ih) * w / h));
+			sx = (iw - sw) / 2;
+		}
+		else {
+			sh = std::max(1, static_cast<int>(static_cast<int64_t>(iw) * h / w));
+			sy = (ih - sh) / 2;
+		}
+		const RECT r = R(x, y, w, h);
+		BITMAPINFO bi = {};
+		bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
+		bi.bmiHeader.biWidth = iw;
+		// The rows kept start the bitmap: a top-down DIB's source y is not counted from its top by StretchDIBits.
+		bi.bmiHeader.biHeight = -sh;
+		bi.bmiHeader.biPlanes = 1;
+		bi.bmiHeader.biBitCount = 32;
+		bi.bmiHeader.biCompression = BI_RGB;
+		const int old = SetStretchBltMode(dc, HALFTONE);
+		SetBrushOrgEx(dc, 0, 0, nullptr);
+		StretchDIBits(dc, r.left, r.top, r.right - r.left, r.bottom - r.top, sx, 0, sw, sh, bgra + static_cast<size_t>(sy) * iw, &bi, DIB_RGB_COLORS,
+			SRCCOPY);
+		SetStretchBltMode(dc, old);
+	}
 	// The picture over what is already there at `alpha` (0-255), for one picture fading into another.
 	void ImageBlend(int x, int y, int w, int h, const uint32_t *bgra, int iw, int ih, int alpha)
 	{

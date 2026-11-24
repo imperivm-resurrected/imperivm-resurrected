@@ -170,7 +170,7 @@ void PaintIoImage(Painter &p, int x, int y, int w, int h, const std::string &url
 {
 	const std::shared_ptr<const GbImage> img = GbLogo(url);
 	if (img) {
-		p.Image(x, y, w, h, img->bgra.data(), img->width, img->height);
+		p.ImageCover(x, y, w, h, img->bgra.data(), img->width, img->height);
 	}
 	else if (url.empty()) {
 		p.Fill(x, y, w, h, pal::panel);
@@ -187,8 +187,8 @@ void PaintIoImage(Painter &p, int x, int y, int w, int h, const std::string &url
 // picture's side as from its edge.
 const int kIoTagH = 26, kIoTagInset = 8;
 
-// A card's picture: in GameBanana's shape, as far from the card's top as from its sides (14, the text's margin, when it is as wide as
-// it can be), with the room of the three lines under it.
+// A card's picture: the same 14 (the text's margin) from the card's top and sides, in GameBanana's shape or lower when the card is
+// short (the picture is then cut to it, never stretched), with the room of the three lines under it.
 struct IoCardPic {
 	int x = 0, y = 0, w = 0, h = 0;
 };
@@ -197,16 +197,10 @@ IoCardPic IoCardPicOf(int x, int y, int cw, int ch)
 {
 	const int inset = 14, textH = 92;
 	IoCardPic c;
+	c.x = x + inset;
+	c.y = y + inset;
 	c.w = cw - 2 * inset;
-	c.h = c.w * 152 / 235;
-	const int maxH = std::max(60, ch - textH - inset);
-	if (c.h > maxH) {
-		c.h = maxH;
-		c.w = c.h * 235 / 152;
-	}
-	const int side = (cw - c.w) / 2;
-	c.x = x + side;
-	c.y = y + std::min(side, std::max(inset, ch - textH - c.h));
+	c.h = std::max(60, std::min(c.w * 152 / 235, ch - textH - inset));
 	return c;
 }
 
