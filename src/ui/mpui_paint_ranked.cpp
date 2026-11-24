@@ -202,30 +202,6 @@ void PaintName(Painter &p, int x, int y, int w, int h, const std::string &name, 
 	if (you) Chip(p, nameX + textW + LeagueBadgeRoom(badge) + masteryRoom + 8, y + (h - 20) / 2, youW, 20, "You", pal::textDim, pal::hairline);
 }
 
-// "Season peak: Centurion I · 1012 Glory · 42 games", the rank in its colour; before there is a peak, the season and its games.
-void PaintPeakLine(Painter &p, const LeagueRanked &rk, int x, int y, int w)
-{
-	const int games = rk.wins + rk.losses;
-	const std::string count = games == 1 ? Tr("1 game") : TrFmt("%s games", {std::to_string(games)});
-	p.Font(3);
-	if (!rk.peak.present || rk.peak.tier == LeagueTier::None) {
-		RawText(p, x, y, w, 22, TrFmt("Season %s", {LeagueRoman(rk.season)}) + "  \xC2\xB7  " + count, pal::caption);
-		return;
-	}
-	const std::string lead = Tr("Season peak:") + " ", rank = RankName(rk.peak.tier, rk.peak.division);
-	const std::string best = rk.peak.place > 0 && !LeagueTierHasDivisions(rk.peak.tier) ? "#" + std::to_string(rk.peak.place) : TrFmt("%s Glory", {std::to_string(rk.peak.glory)});
-	p.raw = true;
-	const int leadW = std::min(w, p.TextWidth(lead)), rankW = std::min(w - leadW, p.TextWidth(rank));
-	// The games go first, then the Glory, where the line is short.
-	std::string rest = "  \xC2\xB7  " + best + "  \xC2\xB7  " + count;
-	if (leadW + rankW + p.TextWidth(rest) > w) rest = "  \xC2\xB7  " + best;
-	if (leadW + rankW + p.TextWidth(rest) > w) rest.clear();
-	p.raw = false;
-	RawText(p, x, y, leadW, 22, lead, pal::caption);
-	RawText(p, x + leadW, y, rankW, 22, rank, Ink(rk.peak.tier));
-	RawText(p, x + leadW + rankW, y, std::max(0, w - leadW - rankW), 22, rest, pal::caption);
-}
-
 struct HubLayout {
 	int m = 64, top = 0, bottom = 0, cardY = 0, cardH = 0, leftW = 520, midX = 0, midW = 0, rightX = 0, rightW = 600, inner = 0;
 };
@@ -710,7 +686,6 @@ bool PaintRankCard(Painter &p, const State &st, const HubLayout &h, const League
 				pal::ok);
 			peakY += 28;
 		}
-		PaintPeakLine(p, rk, ix, peakY, iw);
 	}
 	const LeagueBan ban = BanOf(v, me.me);
 	// In 2v2, alone or as the leader of a ready duo; the season has to play the queue.
