@@ -874,7 +874,8 @@ void DrawPerfOverlay(uint32_t *buf, int w, int h, int, int outW, int outH)
 		HANDLE thread = CreateThread(nullptr, 0, PainterThread, nullptr, 0, nullptr);
 		if (thread) CloseHandle(thread);
 	}
-	const float s = PanelScale(w, h, outW, outH) * GetConfig().perfScale / 100.0f;
+	// Below 0.8 of its size the captions drop under 8 pixels and can't be read, whatever the size picked.
+	const float s = (std::max)(0.8f, PanelScale(w, h, outW, outH) * GetConfig().perfScale / 100.0f);
 	bool menuOpen;
 	{
 		std::lock_guard<std::mutex> lock(g_uiMx);

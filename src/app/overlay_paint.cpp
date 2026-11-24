@@ -384,7 +384,16 @@ void PaintCompact(ui::Canvas &cv, const View &v, std::vector<Hit> &hits, HDC mea
 	const std::vector<Part> parts = CompactParts(v, f);
 	const int pad = m.S(8), gap = m.S(10), h = m.S(24), dot = m.S(4), gear = m.S(14);
 	const bool showGear = v.hover || v.menuOpen;
-	const int w = pad + dot * 2 + gap + PartsWidth(m, parts, gap) + (showGear ? gap + gear : 0) + pad;
+	// As wide as it has been with these parts: the edge doesn't jump each time a number gains or loses a digit.
+	static int widest = 0;
+	static size_t widestParts = 0;
+	static float widestScale = 0;
+	static bool widestGear = false;
+	if (parts.size() != widestParts || v.s != widestScale || showGear != widestGear) widest = 0;
+	widestParts = parts.size();
+	widestScale = v.s;
+	widestGear = showGear;
+	const int w = widest = std::max(widest, pad + dot * 2 + gap + PartsWidth(m, parts, gap) + (showGear ? gap + gear : 0) + pad);
 	if (!cv.Ensure(w, h)) return;
 	Pen p = {cv.dc, v.s, &cv};
 	p.Fill(0, 0, w, h, kBack);
