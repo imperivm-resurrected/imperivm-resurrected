@@ -565,10 +565,8 @@ std::string RankedPanelStatus(const State &st)
 	const LeagueRankedView &v = st.ranked.view;
 	if (v.abandoning) return Tr("Cancelling the match...");
 	if (st.startingCover || (st.gameClosedAt && st.room.id)) return Tr("Starting...");
-	if (!st.room.id || !st.game.active) {
-		if (v.host) return Tr("Opening the room...");
-		return v.ticketLoaded && LeagueTicketLobby(v.ticket) ? Tr("Entering the room...") : Tr("Waiting for the host's room...");
-	}
+	// The room is made and joined by itself, in a moment: the ring says it, with no line under it.
+	if (!st.room.id || !st.game.active) return "";
 	const int left = GameRoomCountdownLeftMs();
 	if (left > 0) return TrFmt("Starting in %s...", {std::to_string((left + 999) / 1000)});
 	if (left == 0) return Tr("Starting...");
@@ -585,11 +583,12 @@ void PaintRankedPanelFoot(Painter &p, const State &st, int dx, int dw, int by)
 	const LeagueRankedView &v = st.ranked.view;
 	const int mid = dx + dw / 2;
 	// The civilization and colour the player takes into the room: one choice with the cups', kept for the next matches.
-	UseScreenFonts(p);
-	PaintLeagueSidePicker(p, st, dx + 32, by, 320);
-	UseSharedFonts(p);
 	const bool inRoom = st.room.id && st.game.active;
 	const bool starting = st.startingCover || st.inOnlineGame || GameRoomCountdownLeftMs() == 0;
+	// Ready locks the choice: "Not ready" opens it again.
+	UseScreenFonts(p);
+	PaintLeagueSidePicker(p, st, dx + 32, by, 320, !(inRoom && LocalReady(st.game)) && !starting);
+	UseSharedFonts(p);
 	if (inRoom && LocalReady(st.game)) Ghost(p, mid - 170, by, 340, 56, "Not ready", kRkReady, !starting && !v.abandoning, mx, my);
 	else {
 		p.fonts[5] = BrandFont(BrandFace::Display, 32, p.s);

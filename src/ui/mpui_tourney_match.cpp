@@ -67,7 +67,7 @@ RECT g_colorAnchor = {};
 constexpr int kRandomRace = 8;
 
 // The civilization the player takes into the room, as a menu: the mod puts it in their slot there and gets them ready.
-void PaintCivMenu(Painter &p, const State &st, const Ui &u, int x, int y, int w)
+void PaintCivMenu(Painter &p, const State &st, const Ui &u, int x, int y, int w, bool enabled = true)
 {
 	const int race = u.civRace < 0 ? kRandomRace : u.civRace;
 	std::string name = Tr("Random");
@@ -77,13 +77,13 @@ void PaintCivMenu(Painter &p, const State &st, const Ui &u, int x, int y, int w)
 	const bool open = st.dropOpen && st.dropKind == kDropTourney && st.dropIndex == kCupMenuCiv;
 	const bool raw = p.raw;
 	p.raw = true;
-	PaintCombo(p, x, y, w, 34, Tr("Civilization") + ": " + name, open, true, st.mouseX, st.mouseY, kTourney, ArgOf(kSubCivMenu, 0), &g_dropAnchor);
+	PaintCombo(p, x, y, w, 34, Tr("Civilization") + ": " + name, open && enabled, enabled, st.mouseX, st.mouseY, kTourney, ArgOf(kSubCivMenu, 0), &g_dropAnchor);
 	p.raw = raw;
 	// The colour under it, as the room's: the one chosen, and its menu on a click.
 	const COLORREF ink = MatchColorRef(u);
 	const int cy = y + 34 + 8;
 	p.raw = true;
-	PaintCombo(p, x, cy, w, 34, Tr("Colour") + ":", u.colorOpen, true, st.mouseX, st.mouseY, kTourney,
+	PaintCombo(p, x, cy, w, 34, Tr("Colour") + ":", u.colorOpen && enabled, enabled, st.mouseX, st.mouseY, kTourney,
 		ArgOf(kSubColorOpen, 0), &g_colorAnchor);
 	p.raw = raw;
 	if (ink != CLR_INVALID) {
@@ -1325,9 +1325,9 @@ Ui SideOfTab()
 
 }
 
-void PaintLeagueSidePicker(Painter &p, const State &st, int x, int y, int w)
+void PaintLeagueSidePicker(Painter &p, const State &st, int x, int y, int w, bool enabled)
 {
-	PaintCivMenu(p, st, SideOfTab(), x, y, w);
+	PaintCivMenu(p, st, SideOfTab(), x, y, w, enabled);
 }
 
 void PaintLeagueSideMenu(Painter &p, const State &st)

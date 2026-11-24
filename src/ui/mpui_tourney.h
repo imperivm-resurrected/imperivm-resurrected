@@ -80,7 +80,7 @@ bool TourneyLobbyWatchOnly(const OnlineLobby &g);
 // The civilization and colour the player takes into a league match, chosen on a cup's match page or on the panel of a ranked match (one
 // choice for both, kept with the game's settings): two menus `w` wide at `y`, kLeagueSidePickerH high. Their menus are the tab's (kTourney).
 constexpr int kLeagueSidePickerH = 76;
-void PaintLeagueSidePicker(ui::Painter &p, const mpui_impl::State &st, int x, int y, int w);
+void PaintLeagueSidePicker(ui::Painter &p, const mpui_impl::State &st, int x, int y, int w, bool enabled = true);
 // The colour's menu of that picker, over everything, while it is open.
 void PaintLeagueSideMenu(ui::Painter &p, const mpui_impl::State &st);
 // Locked. Closes the colour's menu of the picker: true when it was open.
