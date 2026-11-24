@@ -3558,7 +3558,7 @@ extern const TrRow kTrRows[] = {
 	{"Preparing the room...", "Preparando la sala...", "Preparazione della sala..."},
 	{"The tournament's map and rules are being set in the room.", "Se están poniendo en la sala el mapa y las reglas del torneo.", "Si stanno impostando nella sala la mappa e le regole del torneo."},
 	{"Your side", "Tu bando", "La tua parte"},
-	{"%s did not come back in 5 minutes: the game is yours. You may leave it whenever you like.", "%s no ha vuelto en 5 minutos: la partida es tuya. Puedes salir cuando quieras.", "%s non è tornato in 5 minuti: la partita è tua. Puoi uscire quando vuoi."},
+	{"%s did not come back in 5 minutes: you win the game.", "%s no ha vuelto en 5 minutos: ganas la partida.", "%s non è tornato in 5 minuti: vinci la partita."},
 	{"Your cup game against the bot closed with the game: it counts as lost.", "Tu partida de copa contra el bot se cerró con el juego: cuenta como perdida.", "La tua partita di coppa contro il bot si è chiusa con il gioco: conta come persa."},
 	{"The champions of the official cups will show here.", "Aquí saldrán los campeones de las copas oficiales.", "Qui compariranno i campioni delle coppe ufficiali."},
 	{"drawn teams", "equipos sorteados", "squadre sorteggiate"},
@@ -3750,5 +3750,6 @@ extern const TrRow kTrRows[] = {
 	{"Back to the game", "Volver a la partida", "Torna alla partita"},
 	{"Reconnect", "Reconectar", "Riconnetti"},
 	{"Connecting...", "Conectando...", "Connessione..."},
+	{"Your last ranked game is waiting for the league's result: you can search once it is settled.", "Tu última partida de liga espera el resultado: podrás buscar cuando se resuelva.", "La tua ultima partita classificata attende il risultato: potrai cercare quando sarà decisa."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

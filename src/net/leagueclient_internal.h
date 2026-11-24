@@ -125,6 +125,8 @@ struct TeamGame {
 	bool team = false;
 	uint32_t clockMs = 0;
 	bool decided = false;
+	// The drop rules gave the game to this side: every player of the other side left it for good.
+	bool dropWon = false;
 	std::vector<TeamSeat> seats;
 };
 // False outside a game under the drop rules.

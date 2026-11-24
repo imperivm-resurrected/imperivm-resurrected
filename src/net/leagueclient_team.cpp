@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <map>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -21,6 +22,7 @@
 #include "core/uiport.h"
 #include "i18n/tr.h"
 #include "net/leagueclient_internal.h"
+#include "net/netdrop.h"
 
 using namespace leagueclient_impl;
 
@@ -51,7 +53,12 @@ struct Vote {
 	std::vector<Verb> inbox;
 	// The players whose drop and return were told, and the abandons told.
 	std::vector<int> dropsTold, gonesTold;
+	// The game given to this side by the drop rules: when the defeat of each player gone was last asked of the game (GetTickCount).
+	std::map<int, DWORD> goneAsked;
 };
+
+// The defeat of a player gone is asked again after this while the game has not run it.
+const DWORD kGoneAskAgainMs = 10000;
 
 std::mutex g_mx;
 Vote g_vote;
@@ -103,11 +110,10 @@ std::string NameOf(const TeamSeat *s, const char *fallback)
 }
 
 // A message command of this computer's player, which every computer runs on the same tick.
-bool QueueVote(LeagueVoteVerb verb)
+bool QueueMessage(const std::string &text)
 {
 	char *game = *reinterpret_cast<char **>(addr::kGame);
 	void *player = game ? *reinterpret_cast<void **>(game + kGameCurrentPlayer) : nullptr;
-	const std::string text = LeagueVoteMessage(verb);
 	if (!player || text.empty()) return false;
 	void *cmd = reinterpret_cast<Create_t>(addr::kCmdMessageCreate)();
 	if (!cmd) return false;
@@ -116,6 +122,11 @@ bool QueueVote(LeagueVoteVerb verb)
 	reinterpret_cast<ThisPtr_t>(vt[3])(cmd, nullptr, player);
 	reinterpret_cast<ThisPtr_t>(addr::kQueueCommand)(game, nullptr, cmd);
 	return true;
+}
+
+bool QueueVote(LeagueVoteVerb verb)
+{
+	return QueueMessage(LeagueVoteMessage(verb));
 }
 
 // The team surrenders on this computer: its own player, as the game menu's Surrender does once confirmed.
@@ -165,6 +176,7 @@ void TeamTick()
 	const bool team = MatchTeamGame(g);
 	const int64_t now = GameClock();
 	std::vector<std::string> toasts;
+	std::vector<int> defeats;
 	bool surrender = false;
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
@@ -198,7 +210,17 @@ void TeamTick()
 			if (s.gone && !s.quit && !told(g_vote.gonesTold, s.index)) {
 				// A 1v1's opponent gone for good leaves the game to this player.
 				if (g.team) toasts.push_back(TrFmt("%s did not come back: they left the game, and the AI keeps their army.", {NameOf(&s, "A player")}));
-				else toasts.push_back(TrFmt("%s did not come back in 5 minutes: the game is yours. You may leave it whenever you like.", {NameOf(&s, "Your opponent")}));
+				else toasts.push_back(TrFmt("%s did not come back in 5 minutes: you win the game.", {NameOf(&s, "Your opponent")}));
+			}
+			// The game is this side's: the game itself defeats each player of the other side gone for good, so it ends with this side's
+			// victory and its own end screen, on every computer at the same tick. Asked again while the game has not run it.
+			const DWORD tick = GetTickCount();
+			if (g.dropWon && me && s.team != me->team && s.gone) {
+				auto asked = g_vote.goneAsked.find(s.index);
+				if (asked == g_vote.goneAsked.end() || tick - asked->second >= kGoneAskAgainMs) {
+					g_vote.goneAsked[s.index] = tick;
+					defeats.push_back(s.index);
+				}
 			}
 			if (!s.connected && !s.gone) told(g_vote.dropsTold, s.index);
 			else if (s.connected && !s.gone) {
@@ -211,6 +233,15 @@ void TeamTick()
 		}
 	}
 	for (const std::string &t : toasts) UiToast(t);
+	for (int index : defeats) {
+		// The game's own count of the 5 minutes (from the drop notice, the same everywhere) may end a moment after this computer's.
+		if (!NetDropGoneDue(index)) {
+			std::lock_guard<std::mutex> lock(g_mx);
+			g_vote.goneAsked.erase(index);
+			continue;
+		}
+		if (QueueMessage(LeagueGoneMessage(index))) LogI("league", "player %d left the game for good: the game ends with this side's victory", index);
+	}
 	if (surrender) {
 		LogI("league", "ranked 2v2: surrendering with the partner's yes");
 		SurrenderNow();

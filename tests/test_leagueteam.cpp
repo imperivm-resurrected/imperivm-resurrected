@@ -319,6 +319,26 @@ void Vote()
 	CHECK(LeagueVoteParse(nullptr, 6) == LeagueVoteVerb::None);
 }
 
+// The command that defeats a player gone for good, on every computer at the same tick.
+void Gone()
+{
+	const std::string three = LeagueGoneMessage(3);
+	CHECK_EQ(three, std::string("#IRG:3"));
+	CHECK_EQ(LeagueGoneParse(three.c_str(), static_cast<unsigned>(three.size())), 3);
+	const std::string first = LeagueGoneMessage(0), last = LeagueGoneMessage(7);
+	CHECK_EQ(LeagueGoneParse(first.c_str(), static_cast<unsigned>(first.size())), 0);
+	CHECK_EQ(LeagueGoneParse(last.c_str(), static_cast<unsigned>(last.size())), 7);
+	CHECK(LeagueGoneMessage(-1).empty());
+	CHECK(LeagueGoneMessage(8).empty());
+	const char *vote = "#IRV:p", *outside = "#IRG:8", *longer = "#IRG:33", *letter = "#IRG:x";
+	CHECK_EQ(LeagueGoneParse(vote, static_cast<unsigned>(strlen(vote))), -1);
+	CHECK_EQ(LeagueGoneParse(outside, static_cast<unsigned>(strlen(outside))), -1);
+	CHECK_EQ(LeagueGoneParse(longer, static_cast<unsigned>(strlen(longer))), -1);
+	CHECK_EQ(LeagueGoneParse(letter, static_cast<unsigned>(strlen(letter))), -1);
+	CHECK_EQ(LeagueGoneParse(nullptr, 6), -1);
+	CHECK(LeagueVoteParse(three.c_str(), static_cast<unsigned>(three.size())) == LeagueVoteVerb::None);
+}
+
 }
 
 int main()
@@ -332,5 +352,6 @@ int main()
 	Paths();
 	DropWait();
 	Vote();
+	Gone();
 	return test::Summary("leagueteam");
 }

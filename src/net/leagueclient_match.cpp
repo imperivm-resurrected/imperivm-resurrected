@@ -73,6 +73,9 @@ struct Match {
 	std::set<int> surrendered;
 	uint32_t clockMs = 0, decidedMs = 0;
 	bool decided = false, desync = false;
+	// Decided by the drop rules: the other side left it for good. The game then ends it with this side's victory (TeamTick), and the
+	// players' states stay as they were when it was decided, so its report still says the other side left.
+	bool dropDecided = false;
 	// When the game was decided (GetTickCount), and whether its report went then: the winner may stay in the game for a long time.
 	DWORD decidedTick = 0;
 	bool reported = false;
@@ -407,7 +410,7 @@ void Poll(Match &m)
 		const int before = s.state;
 		// The states only move forward: a reload for a rejoin or the game being torn down never undo a defeat or a victory. A drop may
 		// defeat the player in the same second, so leaving is judged on the state before.
-		if (p.state >= 1 && p.state <= 3 && s.state != 3 && !(s.state == 2 && p.state == 1)) s.state = p.state;
+		if (!m.dropDecided && p.state >= 1 && p.state <= 3 && s.state != 3 && !(s.state == 2 && p.state == 1)) s.state = p.state;
 		if (m.surrendered.count(s.index)) s.surrendered = true;
 		if (m.dropRules && m.quitters.count(s.index) && !s.quit) {
 			s.quit = s.gone = true;
@@ -449,8 +452,8 @@ void Poll(Match &m)
 			break;
 		}
 	}
-	// Under the drop rules, every other side's players gone for good decide it: the one who stayed won, and its report goes now, whether
-	// they play on against the AI or leave.
+	// Under the drop rules, every other side's players gone for good decide it: the side that stayed won, its report goes now, and the game
+	// itself ends with its victory (TeamTick queues the defeat of each player gone, which every computer runs on the same tick).
 	if (m.dropRules && !m.decided && !m.desync) {
 		int ownTeam = -1;
 		std::set<int> sides, standing;
@@ -463,6 +466,7 @@ void Poll(Match &m)
 		}
 		if (ownTeam >= 0 && sides.size() >= 2 && standing.size() == 1 && standing.count(ownTeam)) {
 			m.decided = true;
+			m.dropDecided = true;
 			m.decidedMs = clock;
 			m.decidedTick = GetTickCount();
 			LogI("league", "the other side left the game for good at %u s: the game is this side's", clock / 1000);
@@ -852,6 +856,7 @@ bool MatchTeamGame(TeamGame &out)
 	out.matchId = g_match.rankedId;
 	out.clockMs = g_match.clockMs;
 	out.decided = g_match.decided || g_match.desync;
+	out.dropWon = g_match.dropDecided && !g_match.desync;
 	for (const auto &kv : g_match.seats) {
 		const Seat &s = kv.second;
 		if (!s.human) continue;

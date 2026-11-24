@@ -121,3 +121,9 @@ bool LeagueVoteAnswerCounts(const LeagueVote &v, int64_t atMs);
 enum class LeagueVoteVerb { None, Propose, Yes, No };
 std::string LeagueVoteMessage(LeagueVoteVerb verb);
 LeagueVoteVerb LeagueVoteParse(const char *text, unsigned size);
+
+// The side that stayed ends a game whose other side left it for good (the drop rules decided it) through the game's own defeat of each
+// player gone, in a message command every computer, and a spectator of the broadcast, runs on the same tick: "#IRG:k", k the game's index
+// of the player (0-7). Empty, or -1, for anything else.
+std::string LeagueGoneMessage(int player);
+int LeagueGoneParse(const char *text, unsigned size);

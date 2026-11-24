@@ -233,6 +233,9 @@ struct LeagueRankedView {
 	// This player's side and the other one in the ticket.
 	LeaguePlayerCard me, opponent;
 	bool host = false, roomRegistered = false, answering = false;
+	// The match's game started on this computer (it may have closed since): before the ticket says so too, no room is made or joined for
+	// it again.
+	bool startedHere = false;
 	// Calling off the match is on its way; the last match called off before its game.
 	bool abandoning = false;
 	int64_t calledOff = 0;

@@ -17,3 +17,12 @@ bool NetDropHooksReady();
 // taking the AI of a ranked 2v2's player away, by the game's state alone.
 bool NetDropAiReturnable(int player);
 void NetDropAiRelease(int player);
+
+// Under the drop rules, `player` (0-7) left the game for good by the game's own state at this tick: still in it for the game, they quit, or
+// they dropped 5 minutes of the game's clock ago and did not come back.
+bool NetDropGoneDue(int player);
+// A "#IRG:k" message command (LeagueGoneMessage), sent once NetDropGoneDue(k) and run on every computer and in the broadcast at the same
+// tick: an enemy of its sender whom the AI plays for is defeated there by the game itself, which then declares the victory of the side
+// that stayed. It checks only the game's state, which every copy holds alike, a reloaded one too. True when the text was such a command,
+// whatever came of it (it is never shown as a message).
+bool NetDropGoneCommand(void *cmd, const char *text, unsigned size);

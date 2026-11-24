@@ -11,6 +11,8 @@ namespace {
 
 const char kVotePrefix[] = "#IRV:";
 const size_t kVotePrefixLen = sizeof(kVotePrefix) - 1;
+const char kGonePrefix[] = "#IRG:";
+const size_t kGonePrefixLen = sizeof(kGonePrefix) - 1;
 
 std::string Lower(std::string s)
 {
@@ -276,4 +278,17 @@ LeagueVoteVerb LeagueVoteParse(const char *text, unsigned size)
 	case 'n': return LeagueVoteVerb::No;
 	default: return LeagueVoteVerb::None;
 	}
+}
+
+std::string LeagueGoneMessage(int player)
+{
+	if (player < 0 || player > 7) return std::string();
+	return std::string(kGonePrefix) + static_cast<char>('0' + player);
+}
+
+int LeagueGoneParse(const char *text, unsigned size)
+{
+	if (!text || size != kGonePrefixLen + 1 || memcmp(text, kGonePrefix, kGonePrefixLen) != 0) return -1;
+	const char c = text[kGonePrefixLen];
+	return c >= '0' && c <= '7' ? c - '0' : -1;
 }

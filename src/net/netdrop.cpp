@@ -5,6 +5,7 @@
 #include <windows.h>
 
 #include <atomic>
+#include <map>
 #include <mutex>
 #include <set>
 #include <string>
@@ -27,6 +28,7 @@
 #include "core/leagueranked.h"
 #include "core/leagueteam.h"
 #include "core/uiport.h"
+#include "game/gamelayout.h"
 #include "game/gamestats.h"
 #include "net/steamnet.h"
 
@@ -74,6 +76,9 @@ std::mutex g_lock;
 std::set<int> g_dropped;
 // The players of a ranked 2v2 the AI plays for since they dropped: they may come back, and then it goes.
 std::set<int> g_dropAi;
+// The game's clock when each of those dropped (the drop notice runs on the same tick everywhere): their 5 minutes to come back are counted
+// from it, the same on every computer.
+std::map<int, uint32_t> g_dropClock;
 
 std::atomic<bool> g_dropRules{false};
 bool g_hooksReady = false;
@@ -188,6 +193,19 @@ void SurrenderTeam(int index, bool demo)
 	LogI("match", "ranked 2v2: player %d surrenders with the partner the AI plays for (%d)", index, partner);
 }
 
+// Whether `player` left the game for good, by the game's state and the drop notices alone (the same on every computer at the same tick):
+// still in it for the game, who quit under the drop rules, or who dropped 5 minutes of the game's clock ago or more and did not come back.
+bool GoneForGood(const char *game, int player)
+{
+	if (!game || player < 0 || player >= 8) return false;
+	if (Field<int>(layout::PlayerAt(game, player), layout::kPlayerState) != layout::kStatePlaying) return false;
+	std::lock_guard<std::mutex> lock(g_lock);
+	if (!g_dropped.count(player)) return false;
+	if (!g_dropAi.count(player)) return true;
+	const auto at = g_dropClock.find(player);
+	return at != g_dropClock.end() && LeagueTeamDropOver(at->second, Field<uint32_t>(game, layout::kGameClock));
+}
+
 void __fastcall HookSurrender(void *cmd)
 {
 	char *player = *reinterpret_cast<char **>(static_cast<char *>(cmd) + 4);
@@ -256,8 +274,13 @@ void __cdecl HookCreateAI(int player, char *profile, short difficulty)
 		{
 			std::lock_guard<std::mutex> lock(g_lock);
 			first = g_dropped.insert(player).second;
-			if (g_inSplit > 0) g_dropAi.insert(player);
-			else g_dropAi.erase(player);
+			if (g_inSplit > 0) {
+				if (g_dropAi.insert(player).second) g_dropClock[player] = Field<uint32_t>(game, layout::kGameClock);
+			}
+			else {
+				g_dropAi.erase(player);
+				g_dropClock.erase(player);
+			}
 		}
 		if (g_inQuit > 0 && !demo) LeagueMatchPlayerQuit(player);
 		if (first) {
@@ -308,6 +331,7 @@ void NetDropReset()
 	std::lock_guard<std::mutex> lock(g_lock);
 	g_dropped.clear();
 	g_dropAi.clear();
+	g_dropClock.clear();
 }
 
 bool NetDropAiReturnable(int player)
@@ -324,6 +348,7 @@ void NetDropAiRelease(int player)
 		std::lock_guard<std::mutex> lock(g_lock);
 		g_dropAi.erase(player);
 		g_dropped.erase(player);
+		g_dropClock.erase(player);
 	}
 	char *slot = game + player * 800 + 0x12cc;
 	void **ai = reinterpret_cast<void **>(slot + 0x88);
@@ -335,6 +360,46 @@ void NetDropAiRelease(int player)
 	*ai = nullptr;
 	const std::string name = StripAiSuffix(slot + 0x90);
 	LogI("match", "league game: player %d (%s) is coming back; the AI stops playing for them", player, name.c_str());
+}
+
+bool NetDropGoneDue(int player)
+{
+	const char *game = *reinterpret_cast<char **>(addr::kGame);
+	return TeamRules(false) && GoneForGood(game, player);
+}
+
+bool NetDropGoneCommand(void *cmd, const char *text, unsigned size)
+{
+	const int target = LeagueGoneParse(text, size);
+	if (target < 0) return false;
+	char *game = *reinterpret_cast<char **>(addr::kGame);
+	const char *sender = cmd ? *reinterpret_cast<char *const *>(static_cast<char *>(cmd) + 4) : nullptr;
+	const int from = sender ? Field<int>(sender, layout::kPlayerId) : -1;
+	const bool demo = reinterpret_cast<IsDemo_t>(addr::kIsDemoPlayback)() != 0;
+	// Everything below is the game's state at this tick, the same on every computer that runs the command: they all defeat the player, or
+	// none does. A sender still playing, whose enemy the player is.
+	if (!game || !TeamRules(demo) || from < 0 || from >= 8 || from == target) return true;
+	const char *by = layout::PlayerAt(game, from);
+	if (Field<int>(by, layout::kPlayerState) != layout::kStatePlaying || !(Field<uint32_t>(by, layout::kPlayerEnemies) & (1u << target))) {
+		LogW("match", "league game: player %d asked to end the game of player %d, who is not their enemy; ignored", from, target);
+		return true;
+	}
+	// Only what every copy of the game holds, a reloaded one too (a player who came back, a spectator who joined later): this computer's
+	// record of the drops is not. The sender asked once its own record said they left for good (NetDropGoneDue). Already out (the
+	// other player of the side asked it too): nothing to do.
+	const char *gone = layout::PlayerAt(game, target);
+	if (Field<int>(gone, layout::kPlayerState) != layout::kStatePlaying) return true;
+	if (!Field<void *>(gone, layout::kPlayerAi)) {
+		LogW("match", "league game: player %d asked to end the game of player %d, whom the AI does not play for; ignored", from, target);
+		return true;
+	}
+	// The game's own defeat of a player (CVXBasicGame::OnPlayerGameOver, the slot 0x48 a surrender runs): once the other side has nobody
+	// left, it declares the victory of the side that stayed and opens its end of the game.
+	int who = target;
+	void **vt = *reinterpret_cast<void ***>(game);
+	reinterpret_cast<void(__fastcall *)(void *, void *, int *, int)>(vt[0x48 / 4])(game, nullptr, &who, 1);
+	LogI("match", "league game: player %d left the game for good; player %d's side ends it", target, from);
+	return true;
 }
 
 void InstallNetDrop(bool knownExe)

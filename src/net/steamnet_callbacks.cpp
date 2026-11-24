@@ -166,6 +166,9 @@ void OnCallback(int id, const void *data)
 			if (lobby == g_lobby || lobby == g_spectate.lobby) continue;
 			if (_strtoui64(Data(lobby, "hostid").c_str(), nullptr, 10) == g_steam.me) continue;
 			if (StaleLobby(lobby)) continue;
+			// An unlisted room (a ranked match's) is public for Steam only so its players can come back to it by its id: its game shows
+			// through its spectators' room, if any (MergeSpectateLobbies).
+			if (Data(lobby, "vis") == "2") continue;
 			list.push_back(ReadLobby(lobby));
 		}
 		MergeSpectateLobbies(list);
@@ -284,7 +287,8 @@ void OnCallback(int id, const void *data)
 		const uint64 lobby = r->m_ulSteamIDLobby;
 		if (g_pendingJoin.id && lobby == g_pendingJoin.id && r->m_ulSteamIDMember == lobby) ResolvePendingJoin();
 		if (r->m_bSuccess && r->m_ulSteamIDMember == lobby && lobby != g_lobby && lobby != g_spectate.lobby &&
-			(std::find(g_search.friendLobbies.begin(), g_search.friendLobbies.end(), lobby) != g_search.friendLobbies.end() || ListedLobby(lobby)) &&
+			((std::find(g_search.friendLobbies.begin(), g_search.friendLobbies.end(), lobby) != g_search.friendLobbies.end() && Data(lobby, "vis") != "2") ||
+				ListedLobby(lobby)) &&
 			Data(lobby, "imperivm") == "1" && Data(lobby, "v") == kProtocol && Data(lobby, "spec") != "1" &&
 							_strtoui64(Data(lobby, "hostid").c_str(), nullptr, 10) != g_steam.me && !StaleLobby(lobby)) {
 			StoreLobbyEntry(lobby);

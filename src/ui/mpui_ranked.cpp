@@ -31,6 +31,7 @@
 #include "mods/modoptions.h"
 #include "mods/mods.h"
 #include "net/leagueclient.h"
+#include "net/rejoin.h"
 #include "net/steamnet.h"
 #include "ui/leaguemapthumb.h"
 #include "ui/leaguemodsprep.h"
@@ -202,7 +203,8 @@ int MySide(const LeagueRankedView &v)
 	return LeagueSideOf(LeagueTicketTeams(v.ticket), std::to_string(SteamOwnId()));
 }
 
-// The host's Steam room for a ranked match: private (entered by invitation or by its id), two players (four in a 2v2, whose "mode" tells
+// The host's Steam room for a ranked match: unlisted (entered by its id, which the server gives the match's players, and listed nowhere;
+// whoever is not of the match is put out), so a player who drops comes back to it with the rejoin; two players (four in a 2v2, whose "mode" tells
 // every computer what the game is), the league's tag, and spectators with the season's delay in a room anyone can find.
 void CreateRoom(const LeagueRankedView &v)
 {
@@ -351,6 +353,25 @@ void PanelStep(const LeagueRankedView &v, DWORD now)
 	LeagueSlotKeepStep(g_auto.slot, race, color, rgb, now, "ranked", v.matchId);
 }
 
+// A started match this player is not in the game of (it closed on them, or they dropped): they ask the others of the match to let them
+// back in, its host first; whoever holds the room now opens it to them (SteamRejoinAllow) and the game is reloaded here.
+void RankedRejoin(const LeagueRankedView &v)
+{
+	if (InGame() || RejoinBusy()) return;
+	const std::string own = std::to_string(SteamOwnId());
+	std::vector<std::pair<uint64_t, std::string>> others;
+	for (const LeaguePlayerCard &pl : v.ticket.players) {
+		const uint64_t id = _strtoui64(pl.steamId.c_str(), nullptr, 10);
+		if (pl.steamId == own || !id || TourneyIsTestBot(id)) continue;
+		const std::string name = pl.name.empty() ? Tr("your opponent") : pl.name;
+		if (pl.steamId == v.ticket.host) others.insert(others.begin(), {id, name});
+		else others.push_back({id, name});
+	}
+	if (others.empty()) return;
+	LogI("league", "ranked: going back to the game of match %lld", static_cast<long long>(v.matchId));
+	RejoinRequest(others.front().first, others.front().second, others);
+}
+
 // Both accepted: the host makes the room, the other one joins it as soon as the server knows it. When that fails every time,
 // the match is called off.
 void RoomStep(const LeagueRankedView &v, DWORD now)
@@ -374,23 +395,11 @@ void RoomStep(const LeagueRankedView &v, DWORD now)
 		// The panel of the match found stays up over the Ranked tab while the room is made and waits under it.
 		if (g_s.open && !g_s.game.active && !g_s.room.id) g_s.view = kViewRanked;
 	}
-	// During the game the host keeps inviting to its private room whoever of the match is not in it: a player who dropped or whose game
-	// closed comes back through the room (the rejoin), with a new session the first invitation does not let in.
-	if (InGame()) {
-		if (v.host && g_s.room.id && now - g_auto.invitedAt > 8000) {
-			g_auto.invitedAt = now;
-			for (const LeaguePlayerCard &pl : v.ticket.players) {
-				const uint64_t id = _strtoui64(pl.steamId.c_str(), nullptr, 10);
-				if (!id || id == SteamOwnId() || TourneyIsTestBot(id)) continue;
-				bool in = false;
-				for (const OnlineMember &m : g_s.room.members) in = in || m.id == id;
-				if (in) continue;
-				SteamInviteToRoom(id);
-				LogD("league", "ranked match %lld: %s is not in the room during the game; invited again to come back", static_cast<long long>(v.matchId), pl.name.c_str());
-			}
-		}
-		return;
-	}
+	if (InGame()) return;
+	// A match whose game started is played in that game only: no room is made or joined for it again, or a second game of the same
+	// match would start. A player whose game closed goes back to it with the rejoin (Back to the game, RankedRejoin), which the room's
+	// owner opens to them; one who already reported it is not here (the queue no longer follows it, RankedGameReported).
+	if ((v.ticketLoaded && v.ticket.startedAt) || v.startedHere) return;
 	const std::string tag = LeagueRankedRoomTag(v.matchId);
 	// The guest may be in the room before its data says what it is for.
 	if (g_s.room.id && (g_s.room.info.leagueTag == tag || g_s.room.id == LeagueTicketLobby(v.ticket))) {
@@ -941,6 +950,11 @@ void RankedAction(int arg)
 		break;
 	}
 	case kRkRoom:
+		// Back to the game: a started match is never given a room again.
+		if (r.view.ticketLoaded && r.view.ticket.startedAt) {
+			RankedRejoin(r.view);
+			break;
+		}
 		ResetRoom();
 		LeagueRankedRetryRoom();
 		r.panelOff = 0;

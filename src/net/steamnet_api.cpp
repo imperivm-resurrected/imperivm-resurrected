@@ -154,7 +154,11 @@ void SteamCreateLobby(const OnlineCreateSettings &s)
 		Leave();
 		g_leave.skipRefresh = false;
 		g_creating = s;
-		const ELobbyType type = s.visibility == 1 ? k_ELobbyTypeFriendsOnly : s.visibility == 2 ? k_ELobbyTypePrivate : k_ELobbyTypePublic;
+		// An unlisted room (2) is a public lobby of Steam that this mod lists nowhere ("vis" 2): a Private one is entered only through an
+		// invitation, which no player who comes back to its game has (isteammatchmaking.h), while a public one is entered by its id once
+		// joinable. The host keeps it closed during the game and opens it only to a player of that game it lets back in
+		// (SteamRejoinAllow); anyone else who enters is put out.
+		const ELobbyType type = s.visibility == 1 ? k_ELobbyTypeFriendsOnly : k_ELobbyTypePublic;
 		S.SteamAPI_ISteamMatchmaking_CreateLobby(g_steam.mm, type, std::max(2, std::min(8, s.maxPlayers)));
 	});
 }

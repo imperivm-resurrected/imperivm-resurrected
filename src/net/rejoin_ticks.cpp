@@ -227,6 +227,7 @@ void __fastcall HookMsgExecute(void *cmd)
 	}
 	if (text && size > 7 && CheatsHandleCommand(cmd, text, size)) return;
 	if (text && LeagueVoteCommand(cmd, text, size)) return;
+	if (text && NetDropGoneCommand(cmd, text, size)) return;
 	g_orig.msgExec(cmd);
 }
 

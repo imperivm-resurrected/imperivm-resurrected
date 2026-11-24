@@ -267,6 +267,116 @@ void SetNotice(Queue &q, const std::string &text, bool bad)
 	q.noticeAt = GetTickCount();
 }
 
+// The ranked matches this computer reported the game of (the last 20, kept across restarts): the queue never follows one of them again,
+// even while the server still waits to settle it, so no room nor second game is made for it.
+std::vector<int64_t> g_reported;
+bool g_reportedLoaded = false;
+
+std::string ReportedPath()
+{
+	char path[MAX_PATH];
+	GetModuleFileNameA(nullptr, path, MAX_PATH);
+	std::string p = path;
+	return p.substr(0, p.find_last_of('\\') + 1) + "imperivm-resurrected\\league\\ranked-reported.txt";
+}
+
+// Under g_mx.
+void LoadReported()
+{
+	if (g_reportedLoaded) return;
+	g_reportedLoaded = true;
+	FILE *f = nullptr;
+	if (fopen_s(&f, ReportedPath().c_str(), "rb") != 0 || !f) return;
+	long long id = 0;
+	while (fscanf_s(f, "%lld", &id) == 1) {
+		if (id > 0) g_reported.push_back(id);
+	}
+	fclose(f);
+}
+
+// Under g_mx.
+bool ReportedHere(int64_t matchId)
+{
+	LoadReported();
+	return matchId && std::find(g_reported.begin(), g_reported.end(), matchId) != g_reported.end();
+}
+
+// Under g_mx.
+void NoteReported(int64_t matchId)
+{
+	if (!matchId || ReportedHere(matchId)) return;
+	g_reported.push_back(matchId);
+	if (g_reported.size() > 20) g_reported.erase(g_reported.begin(), g_reported.end() - 20);
+	const std::string path = ReportedPath(), dir = path.substr(0, path.find_last_of('\\'));
+	CreateDirectoryA(dir.substr(0, dir.find_last_of('\\')).c_str(), nullptr);
+	CreateDirectoryA(dir.c_str(), nullptr);
+	FILE *f = nullptr;
+	if (fopen_s(&f, path.c_str(), "wb") != 0 || !f) {
+		LogW("league", "ranked: could not note the reported match %lld", static_cast<long long>(matchId));
+		return;
+	}
+	for (int64_t id : g_reported) fprintf(f, "%lld\n", static_cast<long long>(id));
+	fclose(f);
+}
+
+// Under g_mx: a match whose game started settled without this computer's report (its game closed on the player, who did not go back): the
+// result screen shows it from the ticket, as the league decided it.
+void ResultFromTicket(const LeagueMatchTicket &t)
+{
+	const std::string own = OwnId();
+	const LeaguePlayerCard *mine = LeagueTicketPlayer(t, own, false);
+	const int side = mine ? mine->team : 0;
+	const bool decided = t.outcome == "a" || t.outcome == "b";
+	LeagueRankedGame g;
+	g.matchId = t.id;
+	g.at = NowMs();
+	g.map = t.map.name;
+	const bool team = LeagueQueueIsTeam(t.queue) || !t.teams.empty();
+	g.queue = team ? kLeagueQueueTeam : kLeagueQueueDuel;
+	g.won = decided && side == (t.outcome == "a" ? 1 : 2);
+	// Settled without this player's report: their game closed and the league took them as gone.
+	g.left = !g.won && (decided || t.outcome == "abandoned");
+	if (team) {
+		const std::vector<LeagueMatchTeam> sides = LeagueTicketTeams(t);
+		if (const LeaguePlayerCard *partner = LeagueTeamPartner(sides, own)) {
+			g.partner = partner->name;
+			g.partnerId = partner->steamId;
+		}
+		for (const LeaguePlayerCard &o : LeagueTeamOpponents(sides, own)) g.opponents.push_back({o.steamId, o.name});
+		if (!g.opponents.empty()) {
+			g.opponentId = g.opponents.front().first;
+			g.opponent = g.opponents.front().second;
+		}
+	}
+	else if (const LeaguePlayerCard *other = LeagueTicketPlayer(t, own, true)) {
+		g.opponent = other->name;
+		g.opponentId = other->steamId;
+		g.opponents.push_back({other->steamId, other->name});
+	}
+	if (t.ranked.present) {
+		g.delta = t.ranked.delta;
+		g.tierAfter = t.ranked.tierAfter;
+		g.divisionAfter = t.ranked.divisionAfter;
+	}
+	g.status = t.outcome == "disputed" ? "disputed" : "settled";
+	LeagueRankedOutcome &v = g_result.view;
+	v.game = g;
+	v.answer = LeagueReportAnswer();
+	v.answer.status = g.status;
+	v.answer.outcome = t.outcome;
+	v.answer.ranked = t.ranked;
+	v.state = LeagueResultState::Ready;
+	v.serial++;
+	g_result.since = NowMs();
+	if (g_sel != g.queue) {
+		g_sel = g.queue;
+		g_board.at = 0;
+		g_history.recentAt = 0;
+	}
+	LogI("league", "ranked: match %lld was settled without this computer's report (%s): %s", static_cast<long long>(t.id), t.outcome.c_str(),
+		g.won ? "won" : g.left ? "left" : "not won");
+}
+
 // Under g_mx: what an answer of the server says of the ranked game the result screen shows.
 void ApplyAnswer(int64_t matchId, const LeagueReportAnswer &answer)
 {
@@ -469,6 +579,14 @@ void LeaveThread()
 // Under g_mx: the queue answers that this player is in a match already (a restarted mod, or a match whose room failed).
 void ResumeMatch(int64_t matchId)
 {
+	// This computer reported its game: the match is over here, whatever the server still waits for. Following it again would make its
+	// room, and a second game of it, again.
+	if (ReportedHere(matchId)) {
+		if (g_q.phase != LeagueRankedPhase::Idle) ToIdle(g_q);
+		SetNotice(g_q, "Your last ranked game is waiting for the league's result: you can search once it is settled.", false);
+		LogI("league", "ranked: match %lld was reported from here; the server has not settled it yet, so it is not followed again", static_cast<long long>(matchId));
+		return;
+	}
 	g_q.phase = LeagueRankedPhase::Ready;
 	g_q.matchId = matchId;
 	g_q.ticketLoaded = false;
@@ -768,6 +886,9 @@ void PollMatchThread(unsigned gen, int64_t id)
 			break;
 		case LeagueMatchStatus::Done:
 			LogI("league", "ranked: match %lld is over (%s)", static_cast<long long>(id), t.outcome.c_str());
+			// Its game was played (here or not) and this computer never reported it: the result is shown all the same, and the card of a
+			// game still on goes.
+			if ((t.startedAt || g_q.startedId == id) && !ReportedHere(id) && g_result.view.game.matchId != id) ResultFromTicket(t);
 			ToIdle(g_q);
 			refreshMe = true;
 			break;
@@ -1106,6 +1227,7 @@ void RankedGameReported(const LeagueReport &report, const std::string &ownSteamI
 	g_result.view.serial++;
 	g_result.since = NowMs();
 	g_q.inGame = false;
+	NoteReported(report.matchId);
 	if (g_q.matchId == report.matchId) ToIdle(g_q);
 	LogI("league", "ranked: %s match %lld played (%s); waiting for the server", g.queue.c_str(), static_cast<long long>(report.matchId),
 		g.won ? "won" : g.left ? "left" : "lost");
@@ -1211,6 +1333,7 @@ LeagueRankedView LeagueRankedState()
 	}
 	else v.opponent = g_q.found.opponent;
 	v.roomRegistered = g_q.roomRegistered;
+	v.startedHere = g_q.matchId && g_q.startedId == g_q.matchId;
 	v.answering = g_q.answering;
 	v.abandoning = g_q.abandoning;
 	v.calledOff = g_q.calledOff;
@@ -1576,6 +1699,7 @@ void SurrenderThread(unsigned gen, int64_t id, std::string body)
 		return;
 	}
 	LogI("league", "ranked: this player gave up match %lld; it counts as a loss", static_cast<long long>(id));
+	NoteReported(id);
 	ToIdle(g_q);
 	SetNotice(g_q, "You gave up the match: it counts as a loss and your opponent wins.", true);
 	g_q.nextPoll = 0;

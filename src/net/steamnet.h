@@ -119,6 +119,7 @@ struct OnlineRoom {
 struct OnlineCreateSettings {
 	std::string name, map, mode, password;
 	int maxPlayers = 4;
+	// 0 public, 1 friends only, 2 unlisted: entered by its id only (a ranked match's room), never shown in the list of rooms.
 	int visibility = 0;
 	bool spectators = true;
 	int specDelay = 30;
