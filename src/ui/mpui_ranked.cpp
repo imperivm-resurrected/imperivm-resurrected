@@ -320,8 +320,8 @@ void QuietInvites(const LeagueRankedView &v, bool live)
 	SteamQuietInvitesFrom(quiet);
 }
 
-// The room under the panel (as a cup's room under its match page): what the panel chose goes into the player's slot, and the player is made
-// ready once the slot has it, they are in their team (2v2) and the host's room has the league's options and map.
+// The room under the panel (as a cup's room under its match page): what the panel chose goes into the player's slot; the player presses
+// Ready themselves.
 void PanelStep(const LeagueRankedView &v, DWORD now)
 {
 	if (!RankedRoomHidden(g_s)) return;
@@ -338,17 +338,8 @@ void PanelStep(const LeagueRankedView &v, DWORD now)
 	int race = -1, color = -1;
 	uint32_t rgb = 0;
 	LeagueSideChoice(race, color, rgb);
-	const LeagueSlotStep step = LeagueSlotKeepStep(g_auto.slot, race, color, rgb, now, "ranked", v.matchId);
-	if (step == LeagueSlotStep::Unreadied) g_auto.readySent = false;
-	if (step != LeagueSlotStep::Done || g_auto.readySent || now - g_auto.shownAt < 1600) return;
-	const int side = TeamTicket(v.ticket) ? MySide(v) : 0;
-	if (side > 0 && side < g_s.game.teamChoices && g_s.game.slots[static_cast<size_t>(slot)].team != side) return;
-	if (g_s.game.host && !g_auto.roomHeld) return;
-	g_auto.readySent = true;
-	if (LocalReady(g_s.game)) return;
-	Predict(kPredReady, slot, 1);
-	GameRoomToggleReady();
-	LogI("league", "ranked match %lld: the player is made ready", static_cast<long long>(v.matchId));
+	// Ready is the player's own: the panel only keeps the slot as they chose it.
+	LeagueSlotKeepStep(g_auto.slot, race, color, rgb, now, "ranked", v.matchId);
 }
 
 // Both accepted: the host makes the room, the other one joins it as soon as the server knows it. When that fails every time,
@@ -482,36 +473,38 @@ void PaintSide(Painter &p, int x, int y, int w, int h, uint64_t id, const std::s
 	const LeagueTier tier = card.tier;
 	p.Fill(x, y, w, h, pal::raised);
 	p.Frame(x, y, w, h, pal::hairline);
-	const int av = 72;
+	// The state chip in the top corner, so the player and their rank take the rest of the card.
+	p.Font(4);
+	const int cw = std::min(w / 3, std::max(96, p.CapsWidth(chip, 1) + 28));
+	Chip(p, x + w - 20 - cw, y + 20, cw, 26, chip, ok ? pal::ok : pal::textDim, ok ? RGB(0x2a, 0x36, 0x24) : pal::hairline);
+	const int av = 88, tx = x + 24 + av + 18;
 	Avatar(p, x + 24, y + 24, av, id, name);
 	p.Frame(x + 24, y + 24, av, av, you ? pal::red : pal::edge);
-	SelectObject(p.dc, BrandFont(BrandFace::Body, 22, p.s));
+	SelectObject(p.dc, BrandFont(BrandFace::Body, 24, p.s));
 	p.raw = true;
-	const int nameW = std::min(w - 136 - (you ? 56 : 0), p.TextWidth(name) + 4);
-	p.Text(x + 112, y + 30, nameW, 30, name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	const int nameW = std::max(40, std::min(x + w - 20 - cw - 12 - tx - (you ? 52 : 0), p.TextWidth(name) + 4));
+	p.Text(tx, y + 54, nameW, 32, name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	p.raw = false;
-	if (you) Chip(p, x + 112 + nameW + 10, y + 35, 40, 20, "You", pal::textDim, pal::hairline);
+	if (you) Chip(p, tx + nameW + 10, y + 60, 40, 20, "You", pal::textDim, pal::hairline);
 	p.Font(3);
 	if (card.standing) {
 		p.raw = true;
-		p.Text(x + 112, y + 64, w - 136, 22, RecordText(card), pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(tx, y + 88, x + w - 20 - tx, 22, RecordText(card), pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.raw = false;
 	}
-	else p.Text(x + 112, y + 64, w - 136, 22, tier == LeagueTier::None ? "Placement games" : "Ranked 1 vs 1", pal::caption);
-	DrawLeagueEmblem(p, x + 20, y + 108, 80, tier);
-	SelectObject(p.dc, BrandFont(BrandFace::Display, 36, p.s));
+	else p.Text(tx, y + 88, x + w - 20 - tx, 22, tier == LeagueTier::None ? "Placement games" : "Ranked 1 vs 1", pal::caption);
+	const int em = std::min(120, h - 150), ey = y + h - 20 - em;
+	DrawLeagueEmblem(p, x + 24 + (av - em) / 2, ey, em, tier);
+	const int rx = x + 24 + std::max(av, em) + 18;
+	SelectObject(p.dc, BrandFont(BrandFace::Display, 46, p.s));
 	p.raw = true;
-	p.TextCaps(x + 112, y + 114, w - 136, 38, RankOrPlacement(tier, card.division), Ink(tier), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
+	p.TextCaps(rx, ey + em / 2 - 40, x + w - 20 - rx, 48, RankOrPlacement(tier, card.division), Ink(tier), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
 	p.raw = false;
 	// Glory and place, once the player has a rank: a player in placement has neither yet.
 	if (card.standing && tier != LeagueTier::None) {
 		p.Font(0);
-		RawText(p, x + 112, y + 154, w - 136, 24, StandingText(card), pal::body);
+		RawText(p, rx, ey + em / 2 + 12, x + w - 20 - rx, 26, StandingText(card), pal::body);
 	}
-	p.Fill(x + 24, y + h - 80, w - 48, 1, pal::hairline);
-	p.Font(4);
-	const int cw = std::min(w - 48, std::max(110, p.CapsWidth(chip, 1) + 36));
-	Chip(p, x + w - 24 - cw, y + h - 58, cw, 28, chip, ok ? pal::ok : pal::textDim, ok ? RGB(0x2a, 0x36, 0x24) : pal::hairline);
 }
 
 // A player's chip on the panel while the match's room is made and played from it.
@@ -570,7 +563,7 @@ std::string RankedPanelStatus(const State &st)
 	const int left = GameRoomCountdownLeftMs();
 	if (left > 0) return TrFmt("Starting in %s...", {std::to_string((left + 999) / 1000)});
 	if (left == 0) return Tr("Starting...");
-	if (!LocalReady(st.game)) return Tr("Not ready: press Ready when you have chosen.");
+	if (!LocalReady(st.game)) return "";
 	// Some of the room's labels are translated already; the others are English keys.
 	const std::string waits = StartBlocker(st, st.game).label;
 	if (!waits.empty()) return Tr(waits);
@@ -602,13 +595,6 @@ void PaintRankedPanelFoot(Painter &p, const State &st, int dx, int dw, int by)
 	// Before the room is in, the hub's Go to the room: the room made or looked for again.
 	if (inRoom) Ghost(p, rx, by + 52, rw, 28, "Show the room", kRkShowRoom, !starting, mx, my);
 	else Ghost(p, rx, by + 52, rw, 28, "Try again", kRkRoom, !st.connecting && !v.abandoning, mx, my);
-	const bool costs = v.ticketLoaded && LeagueAbandonCosts(v.ticket, v.me.steamId, LeagueServerNowMs());
-	p.Font(3);
-	p.Text(dx + 24, by + 90, dw - 48, 22,
-		costs ? "Cancelling now counts as declining: you couldn't search for a few minutes."
-		: !inRoom ? "If the room won't open, press it again or cancel the match: that doesn't count against you."
-				  : "Your civilization and colour go into the room, and you are made ready: the game starts when everyone is.",
-		pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }
 
 std::string RankedFoundCaption(const LeagueRankedView &v, const char *queue)
