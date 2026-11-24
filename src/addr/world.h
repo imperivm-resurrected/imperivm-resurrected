@@ -33,6 +33,7 @@ inline constexpr uintptr_t kCatapultByRace = 0x004e3b30;
 inline constexpr uintptr_t kDiplomacyExecute = 0x004e5f80;
 inline constexpr uintptr_t kQueryGetResults = 0x004f9490;
 inline constexpr uintptr_t kConquestTintColor = 0x00500c60;
+inline constexpr uintptr_t kConquestFindTerritory = 0x00500fd0;
 inline constexpr uintptr_t kConquestIsAttackable = 0x00501030;
 inline constexpr uintptr_t kCalcAttackOutcome = 0x0050ff30;
 inline constexpr uintptr_t kResolveAttack = 0x00511550;

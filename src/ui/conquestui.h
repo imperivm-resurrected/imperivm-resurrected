@@ -9,6 +9,8 @@
 
 void ConquestUiGameTick();
 bool ConquestUiNeedsDraw();
+// The mouse is moving over the screen: it is drawn on every pass of the render thread (up to kAnimateHz), not 30 times a second.
+bool ConquestUiAnimating();
 void ConquestUiDraw(uint32_t *buf, int w, int h);
 bool ConquestUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp);
 

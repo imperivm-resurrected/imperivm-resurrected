@@ -5,11 +5,13 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <atomic>
 #include <mutex>
 #include <string>
 #include <vector>
 
 #include "core/log.h"
+#include "hooks/displaymode.h"
 #include "game/conquest.h"
 #include "ui/conquestui_view.h"
 #include "ui/gamemenuui.h"
@@ -27,6 +29,14 @@ const int kNormal = 1;
 // A paint slower than this is logged, at most once every kSlowLogMs.
 const DWORD kSlowLogMs = 5000;
 const double kSlowPaintMs = 8, kSlowReadMs = 4;
+// The mouse counts as moving for this long after its last move; while it does the screen is drawn on every pass, at most this often.
+const DWORD kMovingMs = 150, kAnimateMs = 8;
+// In this menu the game draws a frame only when something of its own changes, a few times a second, and the mod counts every pause of
+// a running game as a stutter: while the screen is open the game window is asked to paint at least this often.
+const DWORD kKeepAliveMs = 33, kRateLogMs = 5000;
+
+std::atomic<DWORD> g_movedAt{0}, g_drawnAt{0}, g_gameFrameAt{0};
+std::atomic<unsigned> g_gameFrames{0}, g_drawn{0};
 
 struct State {
 	View view;
@@ -148,6 +158,8 @@ void Refresh()
 // screen is read again at once (ConquestUiHandleMessage), not on the next of those frames.
 void ConquestUiGameTick()
 {
+	g_gameFrameAt = GetTickCount();
+	g_gameFrames++;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
 		if (g_s.view.game.open && GetTickCount() - g_s.lastRead < kReadEveryMs) return;
@@ -172,6 +184,19 @@ void ConquestUiDraw(uint32_t *buf, int w, int h)
 		if (g_s.mouseDown) pressAction = ui::HitActionAt(g_s.painted.hits, {view.mouseX, view.mouseY}, pressArg, kActNone);
 	}
 	view.questionDrawn = view.game.confirm && GameMenuUiNeedsDraw();
+	const DWORD now = GetTickCount();
+	g_drawnAt = now;
+	g_drawn++;
+	if (view.game.open && now - g_gameFrameAt >= kKeepAliveMs) {
+		if (HWND hwnd = DisplayGameWindow()) InvalidateRect(hwnd, nullptr, FALSE);
+	}
+	static DWORD rateFrom = 0;
+	if (!rateFrom) rateFrom = now;
+	if (now - rateFrom >= kRateLogMs) {
+		LogD("perf", "conquest screen: the game drew %.1f frames a second and the screen was drawn %.1f times a second", g_gameFrames.exchange(0) * 1000.0 / (now - rateFrom),
+			g_drawn.exchange(0) * 1000.0 / (now - rateFrom));
+		rateFrom = now;
+	}
 	LARGE_INTEGER from;
 	QueryPerformanceCounter(&from);
 	Painted painted;
@@ -186,8 +211,15 @@ void ConquestUiDraw(uint32_t *buf, int w, int h)
 	g_s.painted = std::move(painted);
 }
 
+bool ConquestUiAnimating()
+{
+	const DWORD now = GetTickCount();
+	return now - g_movedAt < kMovingMs && now - g_drawnAt >= kAnimateMs;
+}
+
 bool ConquestUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 {
+	if (msg == WM_MOUSEMOVE) g_movedAt = GetTickCount();
 	if (msg == WM_LBUTTONUP && g_swallowUp) {
 		g_swallowUp = false;
 		bool mapUp = false;

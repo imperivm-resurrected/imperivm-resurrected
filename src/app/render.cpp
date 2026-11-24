@@ -536,7 +536,7 @@ UiNeeds QueryUiNeeds()
 	n.help = HelpUiNeedsDraw();
 	n.objectives = ObjectivesUiNeedsDraw();
 	n.mainMenu = MainMenuUiNeedsDraw();
-	n.animating = n.mainMenu && MainMenuUiAnimating();
+	n.animating = (n.mainMenu && MainMenuUiAnimating()) || (n.conquest && ConquestUiAnimating());
 	return n;
 }
 

@@ -36,12 +36,11 @@ const size_t kSettingsConquestFile = 8;
 // is the difficulty the map gave the battle.
 const size_t kConqSettings = 0x4534, kConqPlayed = 0x4538, kConqSettingsDifficulty = 0xda8;
 // CConquestTerritory: std::string objects (MSVC: buffer or pointer at +4, size at +0x14, capacity at +0x18).
-// +0x1c: the colour of the territory in territories.bmp (FindTerritoryByIndex 00500fd0).
-const size_t kTerId = 0x00, kTerPaletteIndex = 0x1c, kTerState = 0x20, kTerName = 0x28, kTerDescription = 0x60, kTerBonus = 0x98, kTerShield = 0xd0;
+const size_t kTerId = 0x00, kTerState = 0x20, kTerName = 0x28, kTerDescription = 0x60, kTerBonus = 0x98, kTerShield = 0xd0;
 // CVXUIConquestMap: its rectangle (shorts, inclusive), the territory clicked last (a double click activates it), OnMouse in the vtable
 // and the renderer, whose territories.bmp (8 bits) and tinted copy of global.bmp are what Paint 006ca830 draws.
 const size_t kCtlRect = 0x10, kMapSelected = 0x58, kMapRenderer = 0x64, kSlotOnMouse = 0x58;
-const size_t kRendererGlobal = 0x18, kRendererAreas = 0x1c, kRendererTinted = 0x20;
+const size_t kRendererData = 0x04, kRendererGlobal = 0x18, kRendererAreas = 0x1c, kRendererTinted = 0x20;
 // CBitmap
 const size_t kBmpHandle = 4, kBmpW = 8, kBmpH = 0xc, kBmpBits = 0x10, kBmpType = 0x1c;
 const short kBmpType555 = 3, kBmpType565 = 6;
@@ -65,6 +64,7 @@ typedef void *(__fastcall *PixelPtr_t)(void *bitmap, void *edx, int x, int y);
 typedef int(__cdecl *MemLock_t)(unsigned handle);
 typedef void(__cdecl *MemUnlock_t)(unsigned handle);
 typedef void(__fastcall *MapOnMouse_t)(void *map, void *edx, int event, short *at);
+typedef int(__fastcall *FindTerritory_t)(void *data, void *edx, int index);
 
 std::map<const void *, std::shared_ptr<const ConquestImage>> g_shields;
 const void *g_shieldsOf = nullptr;
@@ -233,7 +233,9 @@ std::shared_ptr<const ConquestImage> ReadShield(void *bmp)
 }
 
 // territories.bmp has one colour per territory: each pixel becomes the number of its territory.
-std::shared_ptr<const ConquestRegions> ReadRegions(void *bmp, const char *territories, size_t count)
+// Which territory each colour of territories.bmp is, asked of the game as RebuildTintedBitmap asks it: FindTerritoryByIndex on the
+// renderer's own data, for each of the 256 colours.
+std::shared_ptr<const ConquestRegions> ReadRegions(void *bmp, const void *rendererData, size_t count)
 {
 	RawBitmap raw;
 	if (!ReadBitmap(bmp, 8, kMaxMapSide, raw)) {
@@ -242,15 +244,24 @@ std::shared_ptr<const ConquestRegions> ReadRegions(void *bmp, const char *territ
 	}
 	uint8_t owner[256];
 	std::fill(std::begin(owner), std::end(owner), kConquestNoTerritory);
-	for (size_t i = 0; i < count; i++) {
-		const int index = At<int>(territories + i * kTerritorySize, kTerPaletteIndex);
-		if (index >= 0 && index < 256 && owner[index] == kConquestNoTerritory) owner[index] = static_cast<uint8_t>(i);
+	const FindTerritory_t find = reinterpret_cast<FindTerritory_t>(addr::kConquestFindTerritory);
+	for (int index = 0; index < 256 && rendererData; index++) {
+		const int t = find(const_cast<void *>(rendererData), nullptr, index);
+		if (t >= 0 && static_cast<size_t>(t) < count) owner[index] = static_cast<uint8_t>(t);
 	}
 	auto regions = std::make_shared<ConquestRegions>();
 	regions->w = raw.w;
 	regions->h = raw.h;
 	regions->territory.resize(raw.px.size());
-	for (size_t i = 0; i < raw.px.size(); i++) regions->territory[i] = owner[raw.px[i]];
+	std::vector<unsigned> pixels(count, 0);
+	for (size_t i = 0; i < raw.px.size(); i++) {
+		const uint8_t t = owner[raw.px[i]];
+		regions->territory[i] = t;
+		if (t != kConquestNoTerritory) pixels[t]++;
+	}
+	std::string counts;
+	for (size_t t = 0; t < count; t++) counts += (t ? ", " : "") + std::to_string(pixels[t]);
+	LogD("ui", "conquest: territories.bmp %dx%d, pixels of each territory: %s", raw.w, raw.h, counts.c_str());
 	return regions;
 }
 
@@ -270,7 +281,8 @@ void ReadMap(void *mapCtl, const void *data, const char *territories, size_t cou
 		c = MapCache();
 		c.data = data;
 		c.areas = areas;
-		c.regions = ReadRegions(areas, territories, count);
+		c.regions = ReadRegions(areas, At<void *>(renderer, kRendererData), count);
+		(void)territories;
 		RawBitmap raw;
 		c.base = ReadPicture(At<void *>(renderer, kRendererGlobal), kMaxMapSide, false, raw);
 	}
