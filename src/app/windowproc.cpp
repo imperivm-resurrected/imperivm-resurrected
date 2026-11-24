@@ -126,7 +126,11 @@ void NoteWindowState(UINT msg, WPARAM wp)
 	}
 	if (msg == WM_ACTIVATEAPP && !g_closing) Guard("background pause", [&] { TweaksWindowActive(wp != FALSE); });
 	if (msg == WM_CLOSE || msg == WM_DESTROY || (msg == WM_SYSCOMMAND && (wp & 0xfff0) == SC_CLOSE)) {
-		if (!g_closing) LogI("display", "window: closing (message 0x%x)", msg);
+		if (!g_closing) {
+			LogI("display", "window: closing (message 0x%x)", msg);
+			// Out of the ranked queue before the game goes: nobody is matched with a player who left.
+			LeagueQueueLeave();
+		}
 		g_closing = true;
 		AudioSetBackgroundMute(false);
 	}

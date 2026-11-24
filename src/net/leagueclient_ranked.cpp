@@ -568,7 +568,14 @@ void PollQueueThread(unsigned gen, bool recovering, bool watching)
 		}
 		switch (q.status) {
 		case LeagueQueueStatus::Searching:
-			if (recovering) LogI("league", "ranked: still in the queue from before");
+			// A search does not outlive the game: closed while searching, the player is taken out of the queue when the game comes back,
+			// instead of finding it still searching. A match already found or played is still resumed (Found, Playing).
+			if (recovering && !watching) {
+				LogI("league", "ranked: a search left from before the game was closed is cancelled");
+				ToIdle(g_q);
+				SafeThread(LeaveThread).detach();
+				return;
+			}
 			if (watching && g_q.phase == LeagueRankedPhase::Idle) {
 				g_q.partnerSearch = true;
 				g_q.notice.clear();
