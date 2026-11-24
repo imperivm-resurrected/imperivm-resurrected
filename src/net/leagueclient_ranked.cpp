@@ -1562,6 +1562,61 @@ void LeagueRankedRetryRoom()
 	g_q.registerStopped = false;
 }
 
+// The player's own report of a 1v1 they give up after its game closed on them: they left, the other player won. The server takes it at once
+// (ownSurrender in reports.ts): nobody gains from claiming a loss.
+void SurrenderThread(unsigned gen, int64_t id, std::string body)
+{
+	const Answer a = Call("POST", "/v1/league/matches/report", body, true);
+	std::lock_guard<std::mutex> lock(g_mx);
+	g_q.abandoning = false;
+	if (gen != g_q.gen || id != g_q.matchId) return;
+	if (!a.r.Ok()) {
+		LogW("league", "ranked: the surrender of match %lld was not taken (%s)", static_cast<long long>(id), a.r.Describe().c_str());
+		SetNotice(g_q, FailureNotice(a), true);
+		return;
+	}
+	LogI("league", "ranked: this player gave up match %lld; it counts as a loss", static_cast<long long>(id));
+	ToIdle(g_q);
+	SetNotice(g_q, "You gave up the match: it counts as a loss and your opponent wins.", true);
+	g_q.nextPoll = 0;
+	LeagueMeRefresh(true);
+}
+
+void LeagueRankedSurrender()
+{
+	std::lock_guard<std::mutex> lock(g_mx);
+	if ((g_q.phase != LeagueRankedPhase::Ready && g_q.phase != LeagueRankedPhase::Playing) || g_q.abandoning || !g_q.matchId || !g_q.ticketLoaded || !g_q.ticket.startedAt) return;
+	const LeaguePlayerCard *other = LeagueTicketPlayer(g_q.ticket, OwnId(), true);
+	if (LeagueQueueIsTeam(g_q.ticket.queue) || !other || other->steamId.empty()) return;
+	const int64_t played = std::max<int64_t>(0, std::min<int64_t>(NowMs() + g_clockOffset - g_q.ticket.startedAt, 24LL * 3600 * 1000));
+	Json body = Json::MakeObject();
+	body.Set("key", Json::MakeString("surrender:" + std::to_string(g_q.matchId)));
+	body.Set("kind", Json::MakeString("ranked"));
+	body.Set("matchId", Json::MakeNumber(static_cast<double>(g_q.matchId)));
+	Json map = Json::MakeObject();
+	map.Set("name", Json::MakeString(g_q.ticket.map.name));
+	body.Set("map", map);
+	body.Set("contentKey", Json::MakeString(g_q.ticket.contentKey));
+	body.Set("startedAt", Json::MakeNumber(static_cast<double>(g_q.ticket.startedAt)));
+	body.Set("durationMs", Json::MakeNumber(static_cast<double>(played)));
+	body.Set("endedBy", Json::MakeString("surrender"));
+	Json players = Json::MakeArray();
+	auto player = [](const std::string &id, int team, const char *result) {
+		Json p = Json::MakeObject();
+		p.Set("steamId", Json::MakeString(id));
+		p.Set("team", Json::MakeNumber(team));
+		p.Set("result", Json::MakeString(result));
+		return p;
+	};
+	players.arr.push_back(player(OwnId(), 1, "left"));
+	players.arr.push_back(player(other->steamId, 2, "win"));
+	body.Set("players", players);
+	body.Set("hashes", Json::MakeArray());
+	g_q.abandoning = true;
+	LogI("league", "ranked: giving up match %lld after %lld s of its game", static_cast<long long>(g_q.matchId), static_cast<long long>(played / 1000));
+	SafeThread(SurrenderThread, g_q.gen, g_q.matchId, body.Dump()).detach();
+}
+
 void LeagueMatchAbandon(bool automatic)
 {
 	std::lock_guard<std::mutex> lock(g_mx);

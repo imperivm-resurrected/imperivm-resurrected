@@ -3742,5 +3742,9 @@ extern const TrRow kTrRows[] = {
 	{"You weren't ready in time: the match was called off, you lose 10 Glory and can't search for a few minutes.", "No estabas listo a tiempo: partida cancelada, pierdes 10 de Gloria y no puedes buscar durante unos minutos.", "Non eri pronto in tempo: partita annullata, perdi 10 di Gloria e non puoi cercare per qualche minuto."},
 	{"Nobody was ready in time: the match was called off and you can't search for a few minutes.", "Nadie estaba listo a tiempo: partida cancelada y no puedes buscar durante unos minutos.", "Nessuno era pronto in tempo: partita annullata e non puoi cercare per qualche minuto."},
 	{"Play against a bot (test)", "Jugar contra un bot (prueba)", "Gioca contro un bot (prova)"},
+	{"Give up the match", "Rendirse", "Arrendersi"},
+	{"Giving up...", "Rindiéndose...", "Resa in corso..."},
+	{"If you can't go back to the game, give it up: it counts as a loss and your opponent wins.", "Si no puedes volver a la partida, ríndete: cuenta como derrota y tu rival gana.", "Se non puoi tornare alla partita, arrenditi: conta come sconfitta e vince il tuo avversario."},
+	{"You gave up the match: it counts as a loss and your opponent wins.", "Te has rendido: cuenta como derrota y tu rival gana.", "Ti sei arreso: conta come sconfitta e vince il tuo avversario."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

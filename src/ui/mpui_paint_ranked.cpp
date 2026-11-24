@@ -611,15 +611,24 @@ bool PaintRankCard(Painter &p, const State &st, const HubLayout &h, const League
 		}
 		if ((v.phase == LeagueRankedPhase::Ready || v.phase == LeagueRankedPhase::Playing) && !inRoom) {
 			p.Button(ix, y + cardH - 196, iw, 56, "Go to the room", kRankedAct, kRkRoom, mx, my, !st.connecting, true);
-			const bool canCallOff = v.ticketLoaded && LeagueTicketAbandonable(v.ticket) && !v.abandoning;
-			Ghost(p, ix, y + cardH - 128, iw, 44, v.abandoning ? "Cancelling..." : "Cancel match", kRkAbandon, canCallOff, mx, my);
-			p.Font(3);
-			// The server's rule: whether cancelling now locks this player out of the queue for a while.
-			const bool costs = v.ticketLoaded && LeagueAbandonCosts(v.ticket, v.me.steamId, now);
-			p.TextWrapped(ix, y + cardH - 72, iw, 44,
-				costs ? "Cancelling now counts as declining: you couldn't search for a few minutes."
-					  : "If the room won't open, press it again or cancel the match: that doesn't count against you.",
-				pal::caption);
+			// A 1v1 whose game started and closed on this player: they go back to it, or give it up (a loss, the opponent wins at once).
+			const bool started = v.ticketLoaded && v.ticket.startedAt && !LeagueQueueIsTeam(v.ticket.queue);
+			if (started) {
+				Ghost(p, ix, y + cardH - 128, iw, 44, v.abandoning ? "Giving up..." : "Give up the match", kRkSurrender, !v.abandoning, mx, my);
+				p.Font(3);
+				p.TextWrapped(ix, y + cardH - 72, iw, 44, "If you can't go back to the game, give it up: it counts as a loss and your opponent wins.", pal::caption);
+			}
+			else {
+				const bool canCallOff = v.ticketLoaded && LeagueTicketAbandonable(v.ticket) && !v.abandoning;
+				Ghost(p, ix, y + cardH - 128, iw, 44, v.abandoning ? "Cancelling..." : "Cancel match", kRkAbandon, canCallOff, mx, my);
+				p.Font(3);
+				// The server's rule: whether cancelling now locks this player out of the queue for a while.
+				const bool costs = v.ticketLoaded && LeagueAbandonCosts(v.ticket, v.me.steamId, now);
+				p.TextWrapped(ix, y + cardH - 72, iw, 44,
+					costs ? "Cancelling now counts as declining: you couldn't search for a few minutes."
+						  : "If the room won't open, press it again or cancel the match: that doesn't count against you.",
+					pal::caption);
+			}
 		}
 		return false;
 	}

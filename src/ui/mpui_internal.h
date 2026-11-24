@@ -129,6 +129,8 @@ enum RankedArg {
 	kRkPracticeBot,
 	// Back to the hub from the panel of a match being played.
 	kRkHidePanel,
+	// Giving up a 1v1 whose game closed on this player.
+	kRkSurrender,
 	kRkRow = 0x100, kRkDisputeHistory = 0x300,
 	kRkArgEnd = 0x400,
 };

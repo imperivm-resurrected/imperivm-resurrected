@@ -3734,5 +3734,9 @@
 {"en":"The match was called off: not everyone was ready in time. It doesn't count against you.","es":"Partida cancelada: no todos estaban listos a tiempo. No cuenta en tu contra.","it":"Partita annullata: non tutti erano pronti in tempo. Non conta contro di te."},
 {"en":"You weren't ready in time: the match was called off, you lose 10 Glory and can't search for a few minutes.","es":"No estabas listo a tiempo: partida cancelada, pierdes 10 de Gloria y no puedes buscar durante unos minutos.","it":"Non eri pronto in tempo: partita annullata, perdi 10 di Gloria e non puoi cercare per qualche minuto."},
 {"en":"Nobody was ready in time: the match was called off and you can't search for a few minutes.","es":"Nadie estaba listo a tiempo: partida cancelada y no puedes buscar durante unos minutos.","it":"Nessuno era pronto in tempo: partita annullata e non puoi cercare per qualche minuto."},
-{"en":"Play against a bot (test)","es":"Jugar contra un bot (prueba)","it":"Gioca contro un bot (prova)"}
+{"en":"Play against a bot (test)","es":"Jugar contra un bot (prueba)","it":"Gioca contro un bot (prova)"},
+{"en":"Give up the match","es":"Rendirse","it":"Arrendersi"},
+{"en":"Giving up...","es":"Rindiéndose...","it":"Resa in corso..."},
+{"en":"If you can't go back to the game, give it up: it counts as a loss and your opponent wins.","es":"Si no puedes volver a la partida, ríndete: cuenta como derrota y tu rival gana.","it":"Se non puoi tornare alla partita, arrenditi: conta come sconfitta e vince il tuo avversario."},
+{"en":"You gave up the match: it counts as a loss and your opponent wins.","es":"Te has rendido: cuenta como derrota y tu rival gana.","it":"Ti sei arreso: conta come sconfitta e vince il tuo avversario."}
 ]

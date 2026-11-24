@@ -316,6 +316,8 @@ void LeagueRankedRetryRoom();
 // Calls off the match before its game starts, when its room can't be made or joined: no Glory changes, and only whoever clearly
 // failed gets the lock (the server decides). `automatic` when the room's own retries gave up.
 void LeagueMatchAbandon(bool automatic);
+// A 1v1 whose game closed on this player and that they cannot go back to: given up, it is a loss and the opponent wins at once.
+void LeagueRankedSurrender();
 // The match's room is open on this computer: "I am in the room" goes to the server every 30 s, which is what tells a room that
 // worked for both players from one that did not.
 void LeagueRankedInRoom();

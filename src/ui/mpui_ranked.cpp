@@ -879,6 +879,7 @@ void RankedAction(int arg)
 		break;
 	case kRkCancel: LeagueQueueLeave(); break;
 	case kRkPracticeBot: LeagueRankedPracticeBot(); break;
+	case kRkSurrender: LeagueRankedSurrender(); break;
 	case kRkAccept: LeagueMatchAnswer(true); break;
 	case kRkDecline: LeagueMatchAnswer(false); break;
 	case kRkBoard:
