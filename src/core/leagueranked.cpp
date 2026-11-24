@@ -46,6 +46,7 @@ LeaguePlayerCard CardOf(const Json &j)
 	c.accepted = j.GetBool("accepted");
 	c.host = j.GetBool("host");
 	c.inRoom = j.GetBool("inRoom");
+	c.ready = j.GetBool("ready");
 	for (const char *key : {"wins", "losses", "glory", "place"}) {
 		const Json *v = j.Get(key);
 		c.standing = c.standing || (v && v->type == Json::Number);
@@ -360,6 +361,7 @@ bool LeagueParseMatch(const Json &j, LeagueMatchTicket &out)
 	out.readyAt = j.GetInt64("readyAt");
 	out.roomDueAt = j.GetInt64("roomDueAt");
 	out.startedAt = j.GetInt64("startedAt");
+	out.startBy = j.GetInt64("startBy");
 	out.abandonedBy = j.GetIdText("abandonedBy");
 	out.fault = j.GetIdText("fault");
 	if (const Json *players = j.Get("players"); players && players->type == Json::Array) {

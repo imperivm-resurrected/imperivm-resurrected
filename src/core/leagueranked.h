@@ -73,6 +73,8 @@ struct LeaguePlayerCard {
 	bool accepted = false, host = false;
 	// Said "I am in the room" in the last 90 s (only in the ticket).
 	bool inRoom = false;
+	// Ready in the match room, as the player last told the server.
+	bool ready = false;
 	// The record the found match and the ticket give of the opponent: wins, losses, Glory and place in the leaderboard (0 while
 	// unranked). `standing` is false when the server sent none of them.
 	bool standing = false;
@@ -154,6 +156,8 @@ struct LeagueMatchTicket {
 	// When both accepted, until when calling off a match without a room is the caller's fault (afterwards the host's), and when
 	// its game started (0 while it has not).
 	int64_t readyAt = 0, roomDueAt = 0, startedAt = 0;
+	// The room must start by then (a minute from its registration): whoever is not ready loses the match. 0 before the room.
+	int64_t startBy = 0;
 	// A match called off before its game (outcome "abandoned"): who called it off (a SteamID or "system") and who got the lock.
 	std::string abandonedBy, fault;
 	std::vector<LeaguePlayerCard> players;

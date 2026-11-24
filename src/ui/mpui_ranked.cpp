@@ -372,6 +372,8 @@ void RoomStep(const LeagueRankedView &v, DWORD now)
 	// The guest may be in the room before its data says what it is for.
 	if (g_s.room.id && (g_s.room.info.leagueTag == tag || g_s.room.id == LeagueTicketLobby(v.ticket))) {
 		LeagueRankedInRoom();
+		// Ready or not, from the panel or the room's own screen: the server gives the room a minute to start.
+		if (GameRoomActive() && !g_s.game.busy) LeagueRankedReady(LocalReady(g_s.game));
 		if (TeamTicket(v.ticket) && now - g_auto.teamAt > 1000) {
 			g_auto.teamAt = now;
 			SetOwnTeam(v);
@@ -565,7 +567,9 @@ std::string RankedPanelStatus(const State &st)
 	const int left = GameRoomCountdownLeftMs();
 	if (left > 0) return TrFmt("Starting in %s...", {std::to_string((left + 999) / 1000)});
 	if (left == 0) return Tr("Starting...");
-	if (!LocalReady(st.game)) return "";
+	// The room's minute to start, on the server's clock: whoever is not ready when it ends loses the match.
+	const int64_t startLeft = v.ticketLoaded && v.ticket.startBy ? std::max<int64_t>(0, v.ticket.startBy - LeagueServerNowMs()) : -1;
+	if (!LocalReady(st.game)) return startLeft >= 0 ? TrFmt("Press Ready: %s left", {LeagueClockText(startLeft + 999)}) : "";
 	// Some of the room's labels are translated already; the others are English keys.
 	const std::string waits = StartBlocker(st, st.game).label;
 	if (!waits.empty()) return Tr(waits);
@@ -1270,6 +1274,17 @@ void PaintSearch(Painter &p, const State &st)
 		p.raw = false;
 		p.Font(4);
 		p.TextCaps(mid - 74, ringY + 22, 148, 16, "seconds", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 2);
+	}
+	else if (live && v.ticketLoaded && v.ticket.startBy) {
+		// In the room, before its start countdown: the minute the server gives to be ready.
+		const int64_t startLeft = std::max<int64_t>(0, v.ticket.startBy - now);
+		PaintArc(p, mid, ringY, 66, 8, startLeft < 15000 ? pal::red : pal::warn, static_cast<float>(startLeft) / 60000.0f);
+		SelectObject(p.dc, BrandFont(BrandFace::Display, 66, p.s));
+		p.raw = true;
+		p.Text(mid - 74, ringY - 40, 148, 66, std::to_string((startLeft + 999) / 1000), pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.raw = false;
+		p.Font(4);
+		p.TextCaps(mid - 74, ringY + 22, 148, 16, "to be ready", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 2);
 	}
 	else p.Spinner(mid, ringY, 24, 6, GetTickCount());
 	PaintEvenness(p, v, false, mid - 140, cy + 200, 280);

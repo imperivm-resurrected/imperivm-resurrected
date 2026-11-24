@@ -3736,5 +3736,10 @@ extern const TrRow kTrRows[] = {
 	{"Accepted: waiting for the others...", "Aceptada: esperando a los demás...", "Accettata: in attesa degli altri..."},
 	{"Go back to the main menu to open Multiplayer.", "Vuelve al menú principal para abrir Multijugador.", "Torna al menu principale per aprire Multigiocatore."},
 	{"Go back to the main menu: Multiplayer opens by itself there, to choose your civilization and colour and enter the room.", "Vuelve al menú principal: allí se abre Multijugador solo para elegir civilización y color y entrar en la sala.", "Torna al menu principale: lì Multigiocatore si apre da solo per scegliere civiltà e colore ed entrare nella stanza."},
+	{"to be ready", "para estar listo", "per essere pronto"},
+	{"Press Ready: %s left", "Pulsa Listo: quedan %s", "Premi Pronto: restano %s"},
+	{"The match was called off: not everyone was ready in time. It doesn't count against you.", "Partida cancelada: no todos estaban listos a tiempo. No cuenta en tu contra.", "Partita annullata: non tutti erano pronti in tempo. Non conta contro di te."},
+	{"You weren't ready in time: the match was called off, you lose 10 Glory and can't search for a few minutes.", "No estabas listo a tiempo: partida cancelada, pierdes 10 de Gloria y no puedes buscar durante unos minutos.", "Non eri pronto in tempo: partita annullata, perdi 10 di Gloria e non puoi cercare per qualche minuto."},
+	{"Nobody was ready in time: the match was called off and you can't search for a few minutes.", "Nadie estaba listo a tiempo: partida cancelada y no puedes buscar durante unos minutos.", "Nessuno era pronto in tempo: partita annullata e non puoi cercare per qualche minuto."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

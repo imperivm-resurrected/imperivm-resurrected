@@ -96,6 +96,9 @@ struct Queue {
 	DWORD startedRetryAt = 0;
 	// The match's game is being played here: presence said it started, and the match is not polled until it ends.
 	bool inGame = false;
+	// Ready or not as last told to the server for the match readyFor (-1: not told, or to tell again).
+	int readyTold = -1;
+	int64_t readyFor = 0;
 };
 
 struct Board {
@@ -664,6 +667,22 @@ void Cancelled(const LeagueMatchTicket &t)
 		CalledOff(t);
 		return;
 	}
+	// The room's minute to start ran out (cancelUnstarted): whoever was not ready lost the match.
+	if (t.outcome == "timeout" && t.abandonedBy == "system") {
+		const std::string me = OwnId();
+		const LeaguePlayerCard *mine = LeagueTicketPlayer(t, me, false);
+		bool anyReady = false;
+		for (const LeaguePlayerCard &p : t.players) anyReady = anyReady || p.ready;
+		const bool meReady = mine && mine->ready;
+		LogI("league", "ranked: match %lld called off: its room did not start in a minute (%s)", static_cast<long long>(t.id),
+			meReady ? "this player was ready" : anyReady ? "this player was not ready" : "nobody was ready");
+		ToIdle(g_q);
+		g_q.calledOff = t.id;
+		if (meReady) SetNotice(g_q, "The match was called off: not everyone was ready in time. It doesn't count against you.", false);
+		else if (anyReady) SetNotice(g_q, "You weren't ready in time: the match was called off, you lose 10 Glory and can't search for a few minutes.", true);
+		else SetNotice(g_q, "Nobody was ready in time: the match was called off and you can't search for a few minutes.", true);
+		return;
+	}
 	const std::string me = OwnId();
 	const LeaguePlayerCard *mine = LeagueTicketPlayer(t, me, false);
 	const bool accepted = mine && mine->accepted;
@@ -857,13 +876,21 @@ void AbandonThread(unsigned gen, int64_t id, bool automatic)
 	LeagueMeRefresh(true);
 }
 
-void PresenceThread(int64_t id, bool started)
+// `ready`: -1 says nothing of it, 0 not ready, 1 ready in the match room (the room's minute to start goes by it, cancelUnstarted).
+void PresenceThread(int64_t id, bool started, int ready)
 {
 	Json body = Json::MakeObject();
 	if (started) body.Set("started", Json::MakeBool(true));
+	if (ready >= 0) body.Set("ready", Json::MakeBool(ready == 1));
 	const Answer a = Call("POST", MatchPath(id, "/presence"), body.Dump(), true);
 	const bool ok = a.r.Ok();
 	if (ok && started) LogI("league", "ranked: the server knows the game of match %lld started", static_cast<long long>(id));
+	if (ok && ready >= 0) LogI("league", "ranked: the server knows this player is %s in match %lld", ready ? "ready" : "not ready", static_cast<long long>(id));
+	if (!ok && ready >= 0) {
+		std::lock_guard<std::mutex> lock(g_mx);
+		// Told again at the next change or check.
+		if (id == g_q.matchId) g_q.readyTold = -1;
+	}
 	if (!ok) LogD("league", "ranked: the presence in match %lld was not taken (%s)", static_cast<long long>(id), a.r.Describe().c_str());
 	std::lock_guard<std::mutex> lock(g_mx);
 	const DWORD now = GetTickCount();
@@ -1130,7 +1157,7 @@ void RankedGameStarted(int64_t matchId)
 		if (g_q.startedDone || g_q.startedBusy || (g_q.startedFails && static_cast<int>(GetTickCount() - g_q.startedRetryAt) < 0)) return;
 		g_q.startedBusy = true;
 	}
-	SafeThread(PresenceThread, matchId, true).detach();
+	SafeThread(PresenceThread, matchId, true, -1).detach();
 }
 
 }
@@ -1547,7 +1574,18 @@ void LeagueRankedInRoom()
 	const DWORD now = GetTickCount();
 	if (g_q.presenceNext && static_cast<int>(now - g_q.presenceNext) < 0) return;
 	g_q.presenceNext = now + kPresenceMs;
-	SafeThread(PresenceThread, g_q.matchId, false).detach();
+	SafeThread(PresenceThread, g_q.matchId, false, -1).detach();
+}
+
+void LeagueRankedReady(bool ready)
+{
+	std::lock_guard<std::mutex> lock(g_mx);
+	if ((g_q.phase != LeagueRankedPhase::Ready && g_q.phase != LeagueRankedPhase::Playing) || !g_q.matchId) return;
+	const int value = ready ? 1 : 0;
+	if (g_q.readyTold == value && g_q.readyFor == g_q.matchId) return;
+	g_q.readyTold = value;
+	g_q.readyFor = g_q.matchId;
+	SafeThread(PresenceThread, g_q.matchId, false, value).detach();
 }
 
 void LeagueRankedResultSeen()

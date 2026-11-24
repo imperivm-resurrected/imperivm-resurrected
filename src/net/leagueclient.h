@@ -317,6 +317,8 @@ void LeagueMatchAbandon(bool automatic);
 // The match's room is open on this computer: "I am in the room" goes to the server every 30 s, which is what tells a room that
 // worked for both players from one that did not.
 void LeagueRankedInRoom();
+// The player is ready in the match room, or not: told to the server when it changes (the room has a minute to start).
+void LeagueRankedReady(bool ready);
 // The player closed the result screen.
 void LeagueRankedResultSeen();
 void LeagueRankedClearNotice();
