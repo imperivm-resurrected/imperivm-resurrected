@@ -19,8 +19,9 @@ struct ZoomMapTimer {
 };
 // The timers of the picture of the big map drawn last; on the game thread, when the picture is handed to the screen.
 std::vector<ZoomMapTimer> ZoomViewTimers();
-// Writes the timers on the picture handed to the screen (32-bit, w x h, the game's coordinates); on the render thread.
-void ZoomViewDrawTimers(uint32_t *buf, int w, int h, const std::vector<ZoomMapTimer> &timers);
+// Writes the timers on the picture handed to the screen (32-bit, w x h, the game's coordinates) in the typeface `face`; on the render
+// thread.
+void ZoomViewDrawTimers(uint32_t *buf, int w, int h, const std::vector<ZoomMapTimer> &timers, const wchar_t *face);
 bool ZoomViewHandleMouse(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 void ZoomViewGameTick();
 // The point of the open zoom map under (x, y), in the view coordinates the game's location messages carry.

@@ -431,16 +431,17 @@ std::vector<ZoomMapTimer> ZoomViewTimers()
 	return g_timers;
 }
 
-void ZoomViewDrawTimers(uint32_t *buf, int w, int h, const std::vector<ZoomMapTimer> &timers)
+void ZoomViewDrawTimers(uint32_t *buf, int w, int h, const std::vector<ZoomMapTimer> &timers, const wchar_t *face)
 {
-	if (!buf || w <= 0 || h <= 0 || timers.empty()) return;
+	if (!buf || w <= 0 || h <= 0 || timers.empty() || !face) return;
 	// One small GDI bitmap for every label, kept between frames; only the render thread draws them.
 	static HDC dc = nullptr;
 	static HBITMAP bmp = nullptr;
 	static uint32_t *bits = nullptr;
 	static HFONT font = nullptr;
 	static int fontPx = 0;
-	constexpr int kCanvasW = 128, kCanvasH = 48;
+	static std::wstring fontFace;
+	constexpr int kCanvasW = 192, kCanvasH = 72;
 	if (!dc) {
 		dc = CreateCompatibleDC(nullptr);
 		if (!dc) return;
@@ -460,51 +461,82 @@ void ZoomViewDrawTimers(uint32_t *buf, int w, int h, const std::vector<ZoomMapTi
 		SelectObject(dc, bmp);
 		SetBkMode(dc, TRANSPARENT);
 	}
-	const int px = std::clamp(h / 54, 12, 22);
-	if (!font || px != fontPx) {
+	const int px = std::clamp(h / 44, 14, 30);
+	// The face is part of the key: a font made before the brand's were registered is another one, and would stay.
+	if (!font || px != fontPx || fontFace != face) {
 		SelectObject(dc, GetStockObject(DEFAULT_GUI_FONT));
 		if (font) DeleteObject(font);
+		// Grey antialiasing: the image is scaled to the screen later, and ClearType's coloured edges would show.
 		font = CreateFontW(-px, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-			ANTIALIASED_QUALITY, DEFAULT_PITCH, L"Segoe UI");
+			ANTIALIASED_QUALITY, DEFAULT_PITCH, face);
 		fontPx = px;
+		fontFace = face;
 		if (!font) return;
 	}
 	SelectObject(dc, font);
-	// The game's colours: parchment on dark bronze, a thin warm border.
-	const COLORREF face = RGB(25, 20, 16), edge = RGB(120, 96, 58), ink = RGB(252, 229, 169);
-	constexpr int kAlpha = 235;
+	SetTextColor(dc, RGB(255, 255, 255));
+	TEXTMETRICW tm = {};
+	GetTextMetricsW(dc, &tm);
+	// No box: white figures in a dark rim, with a soft shadow under it, read on grass, sand and snow alike.
+	const int rim = px >= 22 ? 2 : 1, drop = std::max(1, px / 12), pad = rim + 1;
+	constexpr int kInkR = 0xf1, kInkG = 0xee, kInkB = 0xe8, kRimR = 0x0c, kRimG = 0x0b, kRimB = 0x0a, kRimAlpha = 225, kDropAlpha = 90;
+	std::vector<uint8_t> ink, edge;
 	for (const ZoomMapTimer &t : timers) {
 		char text[16];
 		RespawnTimeText(t.seconds, t.approximate, text);
 		const int length = static_cast<int>(strlen(text));
 		SIZE size = {};
 		if (!GetTextExtentPoint32A(dc, text, length, &size)) continue;
-		const int bw = std::min(kCanvasW, static_cast<int>(size.cx) + 10), bh = std::min(kCanvasH, static_cast<int>(size.cy) + 2);
+		// Figures have no descent: the label ends at the baseline, which sits on the timer's point.
+		const int bw = std::min(kCanvasW, static_cast<int>(size.cx) + 2 * pad), bh = std::min(kCanvasH, static_cast<int>(tm.tmAscent) + 2 * pad + drop);
 		const int left = t.x - bw / 2, top = t.y - bh;
 		if (left + bw <= 0 || top + bh <= 0 || left >= w || top >= h) continue;
 		GdiFlush();
+		for (int y = 0; y < bh; ++y) memset(bits + static_cast<size_t>(y) * kCanvasW, 0, static_cast<size_t>(bw) * 4);
+		TextOutA(dc, pad, pad, text, length);
+		GdiFlush();
+		const size_t n = static_cast<size_t>(bw) * bh;
+		ink.assign(n, 0);
+		edge.assign(n, 0);
+		for (int y = 0; y < bh; ++y) {
+			for (int x = 0; x < bw; ++x) ink[static_cast<size_t>(y) * bw + x] = static_cast<uint8_t>(bits[y * kCanvasW + x] & 0xff);
+		}
 		for (int y = 0; y < bh; ++y) {
 			for (int x = 0; x < bw; ++x) {
-				const bool border = x == 0 || y == 0 || x == bw - 1 || y == bh - 1;
-				const COLORREF c = border ? edge : face;
-				bits[y * kCanvasW + x] = (GetRValue(c) << 16) | (GetGValue(c) << 8) | GetBValue(c);
+				int best = 0;
+				for (int dy = -rim; dy <= rim && best < 255; ++dy) {
+					const int sy = y + dy;
+					if (sy < 0 || sy >= bh) continue;
+					for (int dx = -rim; dx <= rim; ++dx) {
+						const int sx = x + dx;
+						if (sx < 0 || sx >= bw || (rim > 1 && std::abs(dx) == rim && std::abs(dy) == rim)) continue;
+						best = std::max<int>(best, ink[static_cast<size_t>(sy) * bw + sx]);
+					}
+				}
+				edge[static_cast<size_t>(y) * bw + x] = static_cast<uint8_t>(best);
 			}
 		}
-		SetTextColor(dc, ink);
-		RECT r = {0, 0, bw, bh};
-		DrawTextA(dc, text, length, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-		GdiFlush();
+		auto mix = [](uint32_t d, int r, int g, int b, int a) {
+			const int dr = (d >> 16) & 255, dg = (d >> 8) & 255, db = d & 255;
+			return (static_cast<uint32_t>(dr + (r - dr) * a / 255) << 16) | (static_cast<uint32_t>(dg + (g - dg) * a / 255) << 8) |
+				static_cast<uint32_t>(db + (b - db) * a / 255);
+		};
 		for (int y = 0; y < bh; ++y) {
 			const int ty = top + y;
 			if (ty < 0 || ty >= h) continue;
 			for (int x = 0; x < bw; ++x) {
 				const int tx = left + x;
 				if (tx < 0 || tx >= w) continue;
-				const uint32_t src = bits[y * kCanvasW + x];
+				const size_t i = static_cast<size_t>(y) * bw + x;
+				const int shadow = y >= drop ? edge[i - static_cast<size_t>(drop) * bw] * kDropAlpha / 255 : 0;
+				const int rimA = edge[i] * kRimAlpha / 255, inkA = ink[i];
+				if (!shadow && !rimA) continue;
 				uint32_t &dst = buf[static_cast<size_t>(ty) * w + tx];
-				const uint32_t rb = ((src & 0xff00ff) * kAlpha + (dst & 0xff00ff) * (255 - kAlpha)) >> 8;
-				const uint32_t g = ((src & 0x00ff00) * kAlpha + (dst & 0x00ff00) * (255 - kAlpha)) >> 8;
-				dst = 0xff000000u | (rb & 0xff00ff) | (g & 0x00ff00);
+				uint32_t c = dst;
+				if (shadow) c = mix(c, kRimR, kRimG, kRimB, shadow);
+				if (rimA) c = mix(c, kRimR, kRimG, kRimB, rimA);
+				if (inkA) c = mix(c, kInkR, kInkG, kInkB, inkA);
+				dst = 0xff000000u | c;
 			}
 		}
 	}

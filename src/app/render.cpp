@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 THIONG
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
+#define NOMINMAX
 #include <windows.h>
 #include <d3d11.h>
 #include <d3dcompiler.h>
@@ -42,6 +43,7 @@
 #include "net/rejoin.h"
 #include "net/spectator.h"
 #include "ui/savesui.h"
+#include "ui/uikit.h"
 #include "hooks/media.h"
 #include "app/overlay.h"
 #include "game/cheats.h"
@@ -447,6 +449,12 @@ void DrawImage(Gpu &g)
 	g.ctx->Draw(4, 0);
 }
 
+// What is written on the game's own picture (timers, keys on its buttons) is in the interface's typeface, or Windows' without it.
+const wchar_t *GameOverlayFace()
+{
+	return ui::LoadBrandFonts() ? ui::pal::kFontUi : ui::pal::kFontUiFallback;
+}
+
 void CopyGameFrame(std::vector<uint32_t> &image, int &fw, int &fh)
 {
 	std::vector<ZoomMapTimer> timers;
@@ -458,8 +466,8 @@ void CopyGameFrame(std::vector<uint32_t> &image, int &fw, int &fh)
 		timers = g_frameTimers;
 	}
 	image = g_clean;
-	ZoomViewDrawTimers(image.data(), fw, fh, timers);
-	ControlsDrawBarKeys(image.data(), fw, fh);
+	ZoomViewDrawTimers(image.data(), fw, fh, timers, GameOverlayFace());
+	ControlsDrawBarKeys(image.data(), fw, fh, GameOverlayFace());
 }
 
 // A video frame, the game's image when it changed or a video just ended, or the same image again when the letters of the
@@ -499,8 +507,8 @@ bool TakeNewFrame(bool video, bool wasVideo, std::vector<uint32_t> &image, int &
 	if (taken) {
 		// Outside the lock: only the changed part was copied under it, and the game thread doesn't wait for the whole image.
 		image = g_clean;
-		ZoomViewDrawTimers(image.data(), fw, fh, timers);
-		ControlsDrawBarKeys(image.data(), fw, fh);
+		ZoomViewDrawTimers(image.data(), fw, fh, timers, GameOverlayFace());
+		ControlsDrawBarKeys(image.data(), fw, fh, GameOverlayFace());
 	}
 	return taken;
 }

@@ -1175,11 +1175,13 @@ void PaintOrdersBanner(Painter &p, const State &st, const Layout &l, const Banne
 		const int x = exX + i * (bs + gap);
 		p.RoundRect(x, exY, bs, bs, 6, pal::lineStrong);
 		p.RoundRect(x + 1, exY + 1, bs - 2, bs - 2, 5, pal::hairline);
-		p.Fill(x + 10, exY + 14, bs - 18, bs - 20, pal::lineStrong);
-		p.Fill(x + 2, exY + 2, 15, 15, pal::edgeHot);
-		p.Fill(x + 3, exY + 3, 13, 13, pal::panel);
-		SelectObject(p.dc, KeyFont(p.s));
-		p.Text(x + 3, exY + 3, 13, 13, std::string(1, letters[i]), pal::body, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		// As in the game: the icon, and the key on a plate at the bottom centre of the button.
+		const int plateW = 16, plateH = 13, plateX = x + (bs - plateW) / 2, plateY = exY + bs - plateH - 2;
+		p.Fill(x + 10, exY + 5, bs - 20, plateY - exY - 8, pal::lineStrong);
+		p.RoundRect(plateX, plateY, plateW, plateH, 5, pal::edgeHot);
+		p.RoundRect(plateX + 1, plateY + 1, plateW - 2, plateH - 2, 4, pal::bg);
+		SelectObject(p.dc, BrandFont(BrandFace::BodyBold, 10, p.s));
+		p.Text(plateX, plateY, plateW, plateH, std::string(1, letters[i]), pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 	}
 	p.Font(3);
 	if (st.grid) {

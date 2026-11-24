@@ -83,7 +83,8 @@ std::string ControlsGridKeys();
 std::string ControlsSnapshot();
 void ControlsRestore(const std::string &snapshot);
 void ControlsGameTick();
-void ControlsDrawBarKeys(uint32_t *buf, int w, int h);
+// The key of each button of the bars, on a plate at its bottom centre, in the typeface `face`; on the render thread.
+void ControlsDrawBarKeys(uint32_t *buf, int w, int h, const wchar_t *face);
 bool ControlsBarKeysChanged();
 bool ControlsBarLetters();
 void ControlsSetBarLetters(bool on);

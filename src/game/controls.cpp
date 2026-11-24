@@ -14,10 +14,12 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <map>
 #include <mutex>
 #include <cstring>
 #include <string>
+#include <tuple>
 #include <vector>
 #include "addr/engine.h"
 #include "addr/state.h"
@@ -1671,8 +1673,9 @@ void ComputeBarKeys()
 	g_barTick = now;
 }
 
-void ControlsDrawBarKeys(uint32_t *buf, int w, int h)
+void ControlsDrawBarKeys(uint32_t *buf, int w, int h, const wchar_t *face)
 {
+	if (!face) return;
 	std::vector<BarKey> keys;
 	{
 		std::lock_guard<std::mutex> lock(g_barMx);
@@ -1685,40 +1688,66 @@ void ControlsDrawBarKeys(uint32_t *buf, int w, int h)
 	static HDC dc = nullptr;
 	static HBITMAP bmp = nullptr;
 	static uint32_t *bits = nullptr;
-	static int bw = 0, bh = 0;
-	static HFONT font = nullptr;
-	static int fontPx = 0;
-	// Each badge drawn once by GDI and kept by its label and size (which set its box and font), and drawn again only when the language
-	// changes its text; every image then only blends it. Only the render thread draws them.
-	struct Badge {
+	static int cw = 0, ch = 0;
+	// One font per size, made in the face asked: one made before the brand's were registered would be another face for good.
+	static std::map<int, HFONT> fonts;
+	static std::wstring fontFace;
+	// Each plate drawn once and kept by its label and button size, premultiplied with its coverage in the top byte, and drawn again only
+	// when the language changes its text; every image then only blends it. Only the render thread draws them.
+	struct Plate {
 		std::string text;
+		int w = 0, h = 0;
 		std::vector<uint32_t> pixels;
 	};
-	static std::map<std::pair<std::string, int>, Badge> badges;
+	static std::map<std::tuple<std::string, int, int>, Plate> plates;
+	if (fontFace != face) {
+		if (dc) SelectObject(dc, GetStockObject(DEFAULT_GUI_FONT));
+		for (auto &f : fonts) DeleteObject(f.second);
+		fonts.clear();
+		plates.clear();
+		fontFace = face;
+	}
 	for (const BarKey &k : keys) {
-		const int side = std::max(12, std::min(26, static_cast<int>((k.r.bottom - k.r.top) * 0.36f)));
-		const int tw = std::max(side, static_cast<int>(side * (0.5f + 0.42f * k.label.size()))), th = side;
+		const int bw = k.r.right - k.r.left, bh = k.r.bottom - k.r.top;
+		if (bw < 8 || bh < 8) continue;
+		// Low on the button, so the icon's middle stays clear.
+		const int th = std::clamp(static_cast<int>(bh * 0.31f + 0.5f), 13, 24);
 		const std::string label = Tr(k.label);
-		if (badges.size() > 256) badges.clear();
-		Badge &badge = badges[std::make_pair(k.label, side)];
-		if (badge.pixels.size() != static_cast<size_t>(tw) * th || badge.text != label) {
-			if (!dc || tw > bw || th > bh) {
-				if (!dc) {
-					dc = CreateCompatibleDC(nullptr);
-					if (!dc) return;
-				}
+		if (plates.size() > 256) plates.clear();
+		Plate &plate = plates[std::make_tuple(k.label, th, bw)];
+		if (plate.pixels.empty() || plate.text != label) {
+			const int px = std::max(10, static_cast<int>(th * 0.74f + 0.5f));
+			HFONT &font = fonts[px];
+			if (!font) {
+				// Grey antialiasing: the image is scaled to the screen later, and ClearType's coloured edges would show.
+				font = CreateFontW(-px, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+					ANTIALIASED_QUALITY, DEFAULT_PITCH, face);
+				if (!font) continue;
+			}
+			int wl = MultiByteToWideChar(CP_UTF8, 0, label.c_str(), -1, nullptr, 0);
+			std::wstring wtext(wl > 0 ? wl - 1 : 0, L'\0');
+			if (wl > 1) MultiByteToWideChar(CP_UTF8, 0, label.c_str(), -1, &wtext[0], wl);
+			if (!dc) {
+				dc = CreateCompatibleDC(nullptr);
+				if (!dc) return;
+			}
+			SelectObject(dc, font);
+			SIZE size = {};
+			GetTextExtentPoint32W(dc, wtext.c_str(), static_cast<int>(wtext.size()), &size);
+			const int tw = std::min(bw - 2, std::max(th + 2, static_cast<int>(size.cx) + th * 2 / 3));
+			if (tw <= 0) continue;
+			if (!bits || tw > cw || th > ch) {
 				SelectObject(dc, GetStockObject(DEFAULT_GUI_FONT));
-				fontPx = 0;
 				if (bmp) {
 					SelectObject(dc, CreateCompatibleBitmap(dc, 1, 1));
 					DeleteObject(bmp);
 					bmp = nullptr;
 				}
 				bits = nullptr;
-				bw = bh = 0;
+				cw = ch = 0;
 				BITMAPINFO bi = {};
 				bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
-				bi.bmiHeader.biWidth = std::max(tw, 64);
+				bi.bmiHeader.biWidth = std::max(tw, 96);
 				bi.bmiHeader.biHeight = -std::max(th, 32);
 				bi.bmiHeader.biPlanes = 1;
 				bi.bmiHeader.biBitCount = 32;
@@ -1730,47 +1759,73 @@ void ControlsDrawBarKeys(uint32_t *buf, int w, int h)
 				HGDIOBJ old = SelectObject(dc, bmp);
 				if (old && old != bmp) DeleteObject(old);
 				SetBkMode(dc, TRANSPARENT);
-				bw = std::max(tw, 64);
-				bh = std::max(th, 32);
+				cw = std::max(tw, 96);
+				ch = std::max(th, 32);
+				SelectObject(dc, font);
 			}
-			const int px = std::max(9, static_cast<int>(side * 0.78f));
-			if (!font || px != fontPx) {
-				SelectObject(dc, GetStockObject(DEFAULT_GUI_FONT));
-				if (font) DeleteObject(font);
-				font = CreateFontW(-px, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-					ANTIALIASED_QUALITY, DEFAULT_PITCH, L"Segoe UI");
-				fontPx = px;
-			}
-			RECT r = {0, 0, tw, th};
-			HBRUSH edge = CreateSolidBrush(RGB(90, 85, 80)), face = CreateSolidBrush(RGB(24, 21, 19));
-			FillRect(dc, &r, edge);
-			RECT in = {1, 1, tw - 1, th - 1};
-			FillRect(dc, &in, face);
-			DeleteObject(edge);
-			DeleteObject(face);
-			SelectObject(dc, font);
-			SetTextColor(dc, RGB(241, 238, 232));
-			int wl = MultiByteToWideChar(CP_UTF8, 0, label.c_str(), -1, nullptr, 0);
-			std::wstring wtext(wl > 0 ? wl - 1 : 0, L'\0');
-			if (wl > 1) MultiByteToWideChar(CP_UTF8, 0, label.c_str(), -1, &wtext[0], wl);
-			DrawTextW(dc, wtext.c_str(), static_cast<int>(wtext.size()), &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 			GdiFlush();
-			badge.text = label;
-			badge.pixels.resize(static_cast<size_t>(tw) * th);
-			for (int y = 0; y < th; y++) memcpy(&badge.pixels[static_cast<size_t>(y) * tw], bits + static_cast<size_t>(y) * bw, static_cast<size_t>(tw) * 4);
+			for (int y = 0; y < th; y++) memset(bits + static_cast<size_t>(y) * cw, 0, static_cast<size_t>(tw) * 4);
+			// The capitals' middle on the plate's: from the cap height above the baseline down to it.
+			TEXTMETRICW tm = {};
+			GetTextMetricsW(dc, &tm);
+			OUTLINETEXTMETRICW otm = {};
+			otm.otmSize = sizeof(otm);
+			int capH = static_cast<int>(tm.tmAscent - tm.tmInternalLeading) * 7 / 10;
+			if (GetOutlineTextMetricsW(dc, sizeof(otm), &otm) && otm.otmsCapEmHeight > 0 && static_cast<LONG>(otm.otmsCapEmHeight) <= tm.tmAscent) {
+				capH = static_cast<int>(otm.otmsCapEmHeight);
+			}
+			SetTextColor(dc, RGB(255, 255, 255));
+			const int textX = (tw - static_cast<int>(size.cx)) / 2, textY = (th - capH + 1) / 2 - (static_cast<int>(tm.tmAscent) - capH);
+			RECT clip = {0, 0, tw, th};
+			ExtTextOutW(dc, textX, textY, ETO_CLIPPED, &clip, wtext.c_str(), static_cast<UINT>(wtext.size()), nullptr);
+			GdiFlush();
+			// The interface's plate: its dark panel with a light rim, rounded; the key in its white.
+			constexpr int kFaceR = 0x12, kFaceG = 0x11, kFaceB = 0x10, kFaceAlpha = 230, kRimR = 0x5a, kRimG = 0x55, kRimB = 0x50;
+			constexpr int kInkR = 0xf1, kInkG = 0xee, kInkB = 0xe8;
+			const float radius = std::min(th * 0.5f, 5.0f);
+			auto inside = [&](float px0, float py0, float inset) {
+				const float hw = tw * 0.5f - inset, hh = th * 0.5f - inset, r = std::max(0.0f, radius - inset);
+				const float qx = std::fabs(px0 - tw * 0.5f) - (hw - r), qy = std::fabs(py0 - th * 0.5f) - (hh - r);
+				const float ox = std::max(qx, 0.0f), oy = std::max(qy, 0.0f);
+				const float d = std::sqrt(ox * ox + oy * oy) + std::min(std::max(qx, qy), 0.0f) - r;
+				return std::clamp(0.5f - d, 0.0f, 1.0f);
+			};
+			plate.text = label;
+			plate.w = tw;
+			plate.h = th;
+			plate.pixels.assign(static_cast<size_t>(tw) * th, 0);
+			for (int y = 0; y < th; y++) {
+				for (int x = 0; x < tw; x++) {
+					const float outer = inside(x + 0.5f, y + 0.5f, 0), inner = inside(x + 0.5f, y + 0.5f, 1);
+					const float fa = outer * kFaceAlpha / 255.0f, ra = std::max(0.0f, outer - inner);
+					const float ta = (bits[static_cast<size_t>(y) * cw + x] & 0xff) / 255.0f * outer;
+					float r = kFaceR * fa, g = kFaceG * fa, b = kFaceB * fa, a = fa;
+					r = kRimR * ra + r * (1 - ra);
+					g = kRimG * ra + g * (1 - ra);
+					b = kRimB * ra + b * (1 - ra);
+					a = ra + a * (1 - ra);
+					r = kInkR * ta + r * (1 - ta);
+					g = kInkG * ta + g * (1 - ta);
+					b = kInkB * ta + b * (1 - ta);
+					a = ta + a * (1 - ta);
+					const auto byte = [](float v) { return static_cast<uint32_t>(std::clamp(v + 0.5f, 0.0f, 255.0f)); };
+					plate.pixels[static_cast<size_t>(y) * tw + x] = (byte(a * 255) << 24) | (byte(r) << 16) | (byte(g) << 8) | byte(b);
+				}
+			}
 		}
-		const int ox = k.r.left + 2, oy = k.r.top + 2;
-		for (int y = 0; y < th; y++) {
+		const int ox = k.r.left + (bw - plate.w) / 2, oy = k.r.bottom - plate.h - 2;
+		for (int y = 0; y < plate.h; y++) {
 			const int ty = oy + y;
 			if (ty < 0 || ty >= h) continue;
-			for (int x = 0; x < tw; x++) {
+			for (int x = 0; x < plate.w; x++) {
 				const int tx = ox + x;
 				if (tx < 0 || tx >= w) continue;
-				const uint32_t src = badge.pixels[static_cast<size_t>(y) * tw + x];
+				const uint32_t src = plate.pixels[static_cast<size_t>(y) * plate.w + x];
+				const uint32_t a = src >> 24;
+				if (!a) continue;
 				uint32_t &dst = buf[static_cast<size_t>(ty) * w + tx];
-				const uint32_t a = 225;
-				const uint32_t rb = ((src & 0xff00ff) * a + (dst & 0xff00ff) * (255 - a)) >> 8;
-				const uint32_t g = ((src & 0x00ff00) * a + (dst & 0x00ff00) * (255 - a)) >> 8;
+				const uint32_t rb = (src & 0xff00ff) + ((((dst & 0xff00ff) * (255 - a)) >> 8) & 0xff00ff);
+				const uint32_t g = (src & 0x00ff00) + ((((dst & 0x00ff00) * (255 - a)) >> 8) & 0x00ff00);
 				dst = 0xff000000u | (rb & 0xff00ff) | (g & 0x00ff00);
 			}
 		}
