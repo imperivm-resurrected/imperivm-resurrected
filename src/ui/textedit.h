@@ -275,8 +275,9 @@ inline int EditIndexAt(const FieldGeom &g, const std::string &t, int mouseX)
 inline void PaintEditField(Painter &p, int x, int y, int w, int h, const std::string &text, const std::string &placeholder,
 	bool focused, bool secret, const EditState &es, int action)
 {
-	p.Fill(x, y, w, h, focused ? pal::raised : pal::bg);
-	p.Frame(x, y, w, h, focused ? pal::redText : pal::lineStrong);
+	// A block like the buttons beside it, with no border until it takes the keyboard.
+	p.Fill(x, y, w, h, pal::well);
+	if (focused) p.Frame(x, y, w, h, pal::redText);
 	p.Font(0);
 	std::vector<int> bytes;
 	for (int i = 0;; i = NextCp(text, i)) {

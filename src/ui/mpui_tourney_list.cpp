@@ -260,21 +260,20 @@ int PaintSubTabs(Painter &p, const Ui &u, const TourneyListsView &lists, int x, 
 		UseFace(p, BrandFace::UiStrong, 13);
 		const int textW = p.CapsWidth(tabs[i].label, 2);
 		const std::string n = tabs[i].count ? std::to_string(tabs[i].count) : std::string();
-		const int countW = n.empty() ? 0 : 12 + static_cast<int>(n.size()) * 8;
-		const int w = textW + (countW ? countW + 8 : 0);
-		const bool on = u.filter == i, hot = p.Hover(x, y, w, h, mx, my);
-		p.TextCaps(x, y, textW + 2, h - 10, tabs[i].label, on || hot ? pal::text : pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
+		const int countW = n.empty() ? 0 : static_cast<int>(n.size()) * 8 + 2;
+		const int w = 18 + textW + (countW ? countW + 8 : 0) + 18;
+		const bool on = u.filter == i, hot = !on && p.Hover(x, y, w, h, mx, my);
+		p.WellSegment(x, y, w, h, on, hot);
+		p.TextCaps(x + 18, y, textW + 2, h, tabs[i].label, on || hot ? pal::text : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
 		if (countW) {
-			p.Fill(x + textW + 8, y + (h - 10 - 20) / 2, countW, 20, pal::button);
-			UseFace(p, BrandFace::Ui, 12);
+			UseFace(p, BrandFace::Ui, 13);
 			p.raw = true;
-			p.Text(x + textW + 8, y + (h - 10 - 20) / 2, countW, 20, n, pal::body, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			p.Text(x + 18 + textW + 8, y, countW + 4, h, n, on ? pal::redText : pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 			p.raw = false;
 		}
-		if (on) p.Fill(x, y + h - 2, w, 2, pal::red);
-		else p.AddHit(x, y, w, h, kTourney, ArgOf(kSubFilter, i));
+		if (!on) p.AddHit(x, y, w, h, kTourney, ArgOf(kSubFilter, i));
 		end = x + w;
-		x += w + 28;
+		x += w - 1;
 	}
 	return end;
 }
@@ -728,7 +727,7 @@ void PaintListScreen(Painter &p, const State &st, const Ui &u, PaintOut &out)
 	const int featH = l.roomy ? 232 : 200;
 	PaintFeatured(p, st, Featured(lists), mine, m, top, mainW, featH);
 	const int tabsY = top + featH + (l.roomy ? 24 : 16);
-	const int tabsEnd = PaintSubTabs(p, u, lists, m, tabsY, 40, mx, my);
+	const int tabsEnd = PaintSubTabs(p, u, lists, m, tabsY - 2, 40, mx, my);
 	int tableY = tabsY + 40 + 14;
 	// The cup buttons share the tabs' row while they fit beside them, and go on a row of their own when they don't.
 	if (PaintCupButtons(p, mine, m + mainW, tabsY - 2, 40, mx, my, true) >= tabsEnd + 24) PaintCupButtons(p, mine, m + mainW, tabsY - 2, 40, mx, my);

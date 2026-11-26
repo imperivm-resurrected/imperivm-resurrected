@@ -1085,15 +1085,13 @@ void SetTipText(const std::string &text, int x, int y)
 	SetTip(text, x, y);
 }
 
-// A choice of two side by side: the one in use has the lighter fill and the red rule under it.
+// A choice of two side by side, as one bar: the one in use lit inside it.
 void PaintSeg(Painter &p, int x, int y, int w, int h, const std::string &label, bool on, bool enabled, int action, int arg, int mx, int my)
 {
 	const bool hov = enabled && p.Hover(x, y, w, h, mx, my);
-	p.Fill(x, y, w, h, on ? pal::selected : hov ? pal::raised : pal::field);
-	p.Frame(x, y, w, h, pal::edge);
-	if (on) p.Fill(x + 1, y + h - 3, w - 2, 3, pal::red);
+	p.WellSegment(x, y, w, h, on, hov && !on);
 	p.Font(4);
-	p.Text(x + 8, y, w - 16, h, label, !enabled ? pal::disabled : on ? pal::text : pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	p.Text(x + 8, y, w - 16, h, label, !enabled ? pal::disabled : on || hov ? pal::text : pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	if (enabled && !on) p.AddHit(x, y, w, h, action, arg);
 }
 
@@ -1444,14 +1442,14 @@ void PaintInstalled(Painter &p, const State &st)
 			const int icon = iconOf(k), half = padX / 2;
 			const int w = p.CapsWidth(label, 1) + padX + icon;
 			const bool hov = p.Hover(tx, cardY, w, stripH, mx, my);
-			const COLORREF c = k == kStateProblems ? pal::bad : on || hov ? pal::text : pal::caption;
+			p.WellSegment(tx, cardY + 6, w, stripH - 12, on, hov && !on);
+			const COLORREF c = k == kStateProblems ? pal::bad : on || hov ? pal::text : pal::textDim;
 			if (k == kStateProblems) PaintAlertIcon(p, tx + half, cardY + (stripH - 16) / 2, true, 16);
 			if (k == kStateConflicts) PaintBolt(p, tx + half + 2, cardY + (stripH - 16) / 2, 16, pal::warn);
 			p.TextCaps(tx + half + icon, cardY, w - half - icon, stripH, label, c, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1);
-			if (on) p.Fill(tx + half - 6, cardY + stripH - 3, w - padX + 12, 3, pal::red);
-			if (brief && icon && p.Hover(tx, cardY, w, stripH, mx, my)) SetTip(names[k], tx, cardY + stripH);
+			if (brief && icon && hov) SetTip(names[k], tx, cardY + stripH);
 			p.AddHit(tx, cardY, w, stripH, kStateFilter, k);
-			tx += w;
+			tx += w - 1;
 		}
 	}
 
