@@ -92,11 +92,11 @@ struct TierRow {
 const TierRow kTiers[] = {
 	{LeagueTier::Recruit, "recluta", "recruit", "Recruit"},
 	{LeagueTier::Legionary, "legionario", "legionary", "Legionary"},
-	{LeagueTier::Signifer, "signifero", "signifer", "Signifer"},
+	{LeagueTier::Signifer, "signifero", "signifer", "Optio"},
 	{LeagueTier::Centurion, "centurion", "centurion", "Centurion"},
 	{LeagueTier::Tribune, "tribuno", "tribune", "Tribune"},
 	{LeagueTier::Legate, "legado", "legate", "Legate"},
-	{LeagueTier::Praetorian, "pretoriano", "praetorian", "Praetorian"},
+	{LeagueTier::Praetorian, "pretoriano", "praetorian", "Consul"},
 	{LeagueTier::Imperator, "imperator", "imperator", "Imperator"},
 };
 
@@ -240,6 +240,14 @@ const char *LeagueTierId(LeagueTier t)
 {
 	for (const TierRow &r : kTiers) {
 		if (r.tier == t) return r.id;
+	}
+	return "";
+}
+
+const char *LeagueTierServerId(LeagueTier t)
+{
+	for (const TierRow &r : kTiers) {
+		if (r.tier == t) return r.english;
 	}
 	return "";
 }

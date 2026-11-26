@@ -29,6 +29,8 @@ constexpr int kLeagueTierCount = 8;
 LeagueTier LeagueTierFromJson(const Json *v);
 LeagueTier LeagueTierFromId(const std::string &id);
 const char *LeagueTierId(LeagueTier t);
+// The id the league server uses ("signifer"); it does not follow the rank's shown name.
+const char *LeagueTierServerId(LeagueTier t);
 // The English name, the key of its translation.
 const char *LeagueTierName(LeagueTier t);
 bool LeagueTierHasDivisions(LeagueTier t);

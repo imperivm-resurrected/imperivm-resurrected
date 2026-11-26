@@ -68,7 +68,7 @@ int ParaRaw(Painter &p, int x, int y, int w, const std::string &text, COLORREF c
 	return h;
 }
 
-// The Glory a rank asks for: its hundreds for the six with divisions, the least Glory of the elite for Praetorian and Imperator.
+// The Glory a rank asks for: its hundreds for the six with divisions, the least Glory of the elite for Consul and Imperator.
 std::string RangeText(LeagueTier tier)
 {
 	const int from = LeagueTierGloryFrom(tier);
@@ -118,7 +118,7 @@ int PaintKeepsBody(Painter &p, const State &st, const LeagueRanked &rk, int ix, 
 	ty += 14;
 	p.Font(3);
 	ty += Para(p, ix, ty, iw,
-			  "Praetorian and Imperator go by the place in the leaderboard when the season closes, with 25 games in the season and one in its last "
+			  "Consul and Imperator go by the place in the leaderboard when the season closes, with 25 games in the season and one in its last "
 			  "10 days.",
 			  pal::caption) +
 		10;
@@ -234,7 +234,7 @@ void PaintRankLadder(Painter &p, int x, int y, int w, int h, LeagueTier mine)
 	PaintSectionLabel(p, ix, y + 16, iw, 22, "The ranks of the league");
 	p.Font(3);
 	const int introH = Para(p, ix, y + 48, iw,
-		"Six ranks of three divisions, III to I, of 100 Glory each. Above them, Praetorian and Imperator go by the place in the leaderboard.",
+		"Six ranks of three divisions, III to I, of 100 Glory each. Above them, Consul and Imperator go by the place in the leaderboard.",
 		pal::textDim);
 	const int listY = y + 48 + introH + 14;
 	const int rowH = std::max(40, std::min(80, (y + h - 12 - listY) / kLeagueTierCount));

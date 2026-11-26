@@ -68,7 +68,7 @@ void Tiers()
 	CHECK_EQ(TierNumber(LeagueTierFromJson(&numbers.arr[8])), TierNumber(LeagueTier::None));
 	CHECK_EQ(TierNumber(LeagueTierFromJson(nullptr)), TierNumber(LeagueTier::None));
 	CHECK_EQ(std::string(LeagueTierId(LeagueTier::Signifer)), std::string("signifero"));
-	CHECK_EQ(std::string(LeagueTierName(LeagueTier::Praetorian)), std::string("Praetorian"));
+	CHECK_EQ(std::string(LeagueTierName(LeagueTier::Praetorian)), std::string("Consul"));
 	CHECK_EQ(std::string(LeagueTierName(LeagueTier::None)), std::string("Unranked"));
 	CHECK(LeagueTierHasDivisions(LeagueTier::Legate));
 	CHECK(!LeagueTierHasDivisions(LeagueTier::Praetorian));

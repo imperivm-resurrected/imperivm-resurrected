@@ -501,8 +501,7 @@ Json TourneyRequirementsJson(const TourneyRequirements &r)
 {
 	Json j = Json::MakeObject();
 	j.Set("minGames", Json::MakeNumber(r.minGames));
-	// The league's tier ids are the English names ("signifer"), not LeagueTierId's Spanish ones.
-	j.Set("maxTier", TourneyMaxTierValid(r.maxTier) ? Json::MakeString(Lower(LeagueTierName(r.maxTier))) : Json());
+	j.Set("maxTier", TourneyMaxTierValid(r.maxTier) ? Json::MakeString(LeagueTierServerId(r.maxTier)) : Json());
 	return j;
 }
 

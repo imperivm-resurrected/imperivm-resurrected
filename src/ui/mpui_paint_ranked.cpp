@@ -999,7 +999,7 @@ void PaintSeasonRewards(Painter &p, const State &st, const HubLayout &h, const L
 	if (today.placing || today.nextTier == LeagueTier::None) next.clear();
 	else if (!LeagueTierHasDivisions(today.nextTier)) {
 		next = Tr(today.nextTier == LeagueTier::Imperator ? "Imperator goes to the best 10 when the season closes."
-														   : "Praetorian goes to the best 50 when the season closes.");
+														   : "Consul goes to the best 50 when the season closes.");
 	}
 	else {
 		next = TrFmt("%s Glory to %s", {std::to_string(today.gloryToNext), Tr(LeagueTierName(today.nextTier))});
