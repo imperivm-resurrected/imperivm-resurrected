@@ -1002,10 +1002,8 @@ void PaintSegments(Painter &p, int x, int y, int w, const std::vector<std::strin
 		const int bw = i == n - 1 ? x + w - bx : widths[i] + extra / n;
 		const bool on = i == selected;
 		const bool hot = !on && p.Hover(bx, y, bw, kSegH, mx, my);
-		if (on) p.Fill(bx, y, bw, kSegH, pal::text);
-		else p.Fill(bx, y, bw, kSegH, hot ? pal::buttonHover : pal::field);
-		p.Frame(bx, y, bw, kSegH, on ? pal::text : hot ? pal::edgeHot : pal::edge);
-		p.Text(bx + 2, y, bw - 4, kSegH, labels[i], on ? pal::onLight : pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.WellSegment(bx, y, bw, kSegH, on, hot);
+		p.Text(bx + 2, y, bw - 4, kSegH, labels[i], on || hot ? pal::text : pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		if (!on) p.AddHit(bx, y, bw, kSegH, action, args && i < static_cast<int>(args->size()) ? (*args)[i] : i);
 		bx += bw - 1;
 	}
@@ -1508,8 +1506,7 @@ ChipStrip ChipStripOf(Painter &p, const View &v, const Card &c, const std::vecto
 void PaintChipArrow(Painter &p, const View &v, int x, int y, int dir, bool enabled)
 {
 	const bool hot = enabled && p.Hover(x, y, kChipArrowW, kSegH, v.mouseX, v.mouseY);
-	p.Fill(x, y, kChipArrowW, kSegH, hot ? pal::buttonHover : pal::field);
-	p.Frame(x, y, kChipArrowW, kSegH, hot ? pal::edgeHot : pal::edge);
+	p.Well(x, y, kChipArrowW, kSegH, hot);
 	const COLORREF ink = enabled ? pal::text : pal::disabled;
 	const int ax = x + (kChipArrowW - 7) / 2, ay = y + (kSegH - 11) / 2;
 	if (dir < 0) p.ArrowLeft(ax, ay, 7, 11, ink);
@@ -1533,9 +1530,8 @@ void PaintCivChips(Painter &p, const View &v, const ChipStrip &s, int shown)
 		if (bx + bw <= s.viewX || bx >= s.viewX + s.viewW) continue;
 		const bool on = s.races[i] == shown;
 		const bool hot = !on && p.Hover(bx, s.y, bw, kSegH, v.mouseX, v.mouseY);
-		p.Fill(bx, s.y, bw, kSegH, on ? pal::text : hot ? pal::buttonHover : pal::field);
-		p.Frame(bx, s.y, bw, kSegH, on ? pal::text : hot ? pal::edgeHot : pal::edge);
-		TextAsIs(p, bx + 4, s.y, bw - 8, kSegH, s.labels[i], on ? pal::onLight : pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.WellSegment(bx, s.y, bw, kSegH, on, hot);
+		TextAsIs(p, bx + 4, s.y, bw - 8, kSegH, s.labels[i], on || hot ? pal::text : pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		if (!on) p.AddHit(bx, s.y, bw, kSegH, kActCiv, s.races[i]);
 	}
 }

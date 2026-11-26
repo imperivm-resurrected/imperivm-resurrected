@@ -304,8 +304,7 @@ int PaintFilter(Painter &p, int x, int y, int h, const std::string &label, bool 
 	p.raw = true;
 	const int w = p.TextWidth(label) + (cycle ? 44 : 28);
 	const bool hot = p.Hover(x, y, w, h, mx, my);
-	if (on) p.Fill(x, y, w, h, pal::selected);
-	p.Frame(x, y, w, h, on || hot ? pal::edgeHot : pal::edge);
+	p.Well(x, y, w, h, on || hot);
 	p.Text(x + 14, y, w - 28, h, label, on || hot ? pal::text : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 	p.raw = false;
 	if (cycle) {

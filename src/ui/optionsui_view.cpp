@@ -262,11 +262,9 @@ void PaintRow(Painter &p, const Metrics &m, const Row &r, const View &v, int x, 
 			const int bx = sx + static_cast<int>(i) * segW;
 			const bool on = static_cast<int>(i) == r.selected;
 			const bool hot = !on && p.Hover(bx, controlY, segW, segH, v.mouseX, v.mouseY);
-			if (on) p.Fill(bx, controlY, segW, segH, pal::text);
-			else p.Fill(bx, controlY, segW, segH, hot ? pal::button : pal::bg);
-			p.Frame(bx, controlY, segW, segH, on ? pal::text : pal::edge);
+			p.WellSegment(bx, controlY, segW, segH, on, hot);
 			p.Font(0);
-			p.Text(bx, controlY, segW, segH, r.items[i], on ? pal::onLight : pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			p.Text(bx, controlY, segW, segH, r.items[i], on || hot ? pal::text : pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 			if (!on) p.AddHit(bx, controlY, segW, segH, kActSegment, r.id << 4 | static_cast<int>(i));
 		}
 		break;

@@ -93,11 +93,9 @@ bool Shown(const View &v, const StatsPlayerInfo &info)
 void Chip(Painter &p, int x, int y, int w, int h, const std::string &label, bool active, int action, int arg, const View &v)
 {
 	const bool hot = !active && p.Hover(x, y, w, h, v.mouseX, v.mouseY);
-	if (active) p.Fill(x, y, w, h, pal::red);
-	else p.Fill(x, y, w, h, hot ? pal::button : pal::bg);
-	p.Frame(x, y, w, h, active ? pal::redText : hot ? pal::edgeHot : pal::edge);
+	p.WellSegment(x, y, w, h, active, hot);
 	p.Font(3);
-	p.Text(x + 4, y, w - 8, h, label, pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	p.Text(x + 4, y, w - 8, h, label, active || hot ? pal::text : pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	if (!active) p.AddHit(x, y, w, h, action, arg);
 }
 

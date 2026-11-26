@@ -952,10 +952,9 @@ void PaintDifficulty(Painter &p, const Box &b, const View &v)
 		const int sx = b.x + b.w * i / count, sw = b.x + b.w * (i + 1) / count - sx;
 		const bool on = i == g.difficulty;
 		const bool hot = !on && p.Hover(sx, y, sw, kSegmentH, v.mouseX, v.mouseY);
-		p.Fill(sx, y, sw, kSegmentH, on ? pal::text : hot ? pal::button : pal::field);
-		p.Frame(sx, y, sw, kSegmentH, on ? pal::text : hot ? pal::edgeHot : pal::edge);
+		p.WellSegment(sx, y, sw, kSegmentH, on, hot);
 		p.Font(on ? 1 : 0);
-		Raw(p, sx + 2, y, sw - 4, kSegmentH, g.difficulties[i], on ? pal::onLight : pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		Raw(p, sx + 2, y, sw - 4, kSegmentH, g.difficulties[i], on || hot ? pal::text : pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		if (!on) p.AddHit(sx, y, sw, kSegmentH, kActDifficulty, i);
 	}
 }

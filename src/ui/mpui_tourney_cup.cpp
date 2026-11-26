@@ -211,8 +211,8 @@ void Segments(Form &c, int x, int y, int w, int h, const std::vector<Seg> &segs)
 		const Seg &s = segs[static_cast<size_t>(i)];
 		const int cw = i + 1 == n ? x + w - cx : (w - gap * (n - 1)) * std::max(1, s.weight) / weights;
 		const bool enabled = s.enabled && !c.locked, hot = enabled && !s.on && p.Hover(cx, y, cw, h, c.mx, c.my);
-		p.Fill(cx, y, cw, h, s.on ? (c.locked ? pal::button : pal::text) : hot ? pal::button : pal::field);
-		const COLORREF ink = s.on ? (c.locked ? pal::textDim : pal::onLight) : !enabled ? pal::disabled : hot ? pal::text : pal::textDim;
+		p.WellSegment(cx, y, cw, h, s.on, hot);
+		const COLORREF ink = s.on ? (c.locked ? pal::textDim : pal::text) : !enabled ? pal::disabled : hot ? pal::text : pal::textDim;
 		UseFace(p, BrandFace::UiStrong, 15);
 		if (s.soon) {
 			p.Text(cx + 4, y + 3, cw - 8, h / 2 + 2, s.label, ink, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);

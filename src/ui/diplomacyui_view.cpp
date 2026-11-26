@@ -144,8 +144,7 @@ void PaintPlayerCard(Painter &p, const View &v, int index, int x, int y, int w, 
 			const std::string label = Tr(m.label);
 			const int bw = p.TextWidth(label) + 18, bx = right - bw, by = y + 12;
 			const bool hot = p.Hover(bx, by, bw, 24, v.mouseX, v.mouseY);
-			p.Fill(bx, by, bw, 24, m.muted ? pal::selected : hot ? pal::button : pal::bg);
-			p.Frame(bx, by, bw, 24, m.muted ? pal::redText : hot ? pal::edgeHot : pal::edge);
+			p.Well(bx, by, bw, 24, hot);
 			p.Text(bx, by, bw, 24, label, m.muted ? pal::redText : pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 			if (m.muted) p.Line(bx + 6, by + 12, bx + bw - 6, by + 12, pal::redText, 1);
 			p.AddHit(bx, by, bw, 24, m.action, index);

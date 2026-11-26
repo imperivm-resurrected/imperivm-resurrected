@@ -539,10 +539,9 @@ void PaintFacetPanel(Painter &p, const PanelLayout &l, const CatalogFilter &f, c
 	}
 	for (const Chip &c : chips) {
 		const bool hov = c.enabled && p.Hover(c.x, c.y, c.w, chipH, mx, my);
-		p.Fill(c.x, c.y, c.w, chipH, c.on ? (hov ? pal::red : pal::red) : (hov ? pal::button : pal::field));
-		p.Frame(c.x, c.y, c.w, chipH, c.on ? pal::text : hov ? pal::edgeHot : c.enabled ? pal::edge : pal::lineStrong);
+		p.WellSegment(c.x, c.y, c.w, chipH, c.on, hov);
 		p.Font(c.on ? 1 : 0);
-		p.Text(c.x, c.y, c.w, chipH, c.text, c.on ? pal::text : c.enabled ? pal::text : pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.Text(c.x, c.y, c.w, chipH, c.text, c.on || hov ? pal::text : c.enabled ? pal::textDim : pal::disabled, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		if (c.enabled) p.AddHit(c.x, c.y, c.w, chipH, toggleAction, c.arg);
 	}
 	const int n = CatalogFilterSize(f);

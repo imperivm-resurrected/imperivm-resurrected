@@ -53,8 +53,7 @@ void Ghost(Painter &p, int x, int y, int w, int h, const std::string &label, int
 {
 	const bool hot = enabled && p.Hover(x, y, w, h, mx, my);
 	const bool down = enabled && p.pressAction == kRankedAct && p.pressArg == arg;
-	if (down) p.Fill(x, y, w, h, pal::raised);
-	p.Frame(x, y, w, h, !enabled ? pal::hairline : hot || down ? pal::edgeHot : pal::edge);
+	p.Well(x, y, w, h, hot || down);
 	Caps(p, x, y, w, h, label, !enabled ? pal::disabled : hot || down ? pal::text : pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 	if (enabled) p.AddHit(x, y, w, h, kRankedAct, arg);
 }
@@ -68,8 +67,7 @@ void Chip(Painter &p, int x, int y, int w, int h, const std::string &text, COLOR
 void Segment(Painter &p, int x, int y, int w, int h, const std::string &label, bool on, int arg, int mx, int my, int spacing)
 {
 	const bool hot = !on && p.Hover(x, y, w, h, mx, my);
-	if (on) p.Fill(x, y, w, h, pal::selected);
-	p.Frame(x, y, w, h, on || hot ? pal::edgeHot : pal::edge);
+	p.WellSegment(x, y, w, h, on, hot);
 	Caps(p, x, y, w, h, label, on || hot ? pal::text : pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE, spacing);
 	if (!on) p.AddHit(x, y, w, h, kRankedAct, arg);
 }
@@ -78,7 +76,7 @@ void SummaryButton(Painter &p, int x, int y, int w, int mx, int my, UINT align)
 {
 	const bool hot = p.Hover(x, y, w, 44, mx, my);
 	const COLORREF ink = hot ? pal::text : pal::textDim;
-	p.Frame(x, y, w, 44, hot ? pal::edgeHot : pal::edge);
+	p.Well(x, y, w, 44, hot);
 	if (w < 100) PaintBackArrow(p, x + (w - 14) / 2, y + 22, ink);
 	else {
 		PaintBackArrow(p, x + 18, y + 22, ink);

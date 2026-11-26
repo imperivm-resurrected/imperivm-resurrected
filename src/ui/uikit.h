@@ -109,6 +109,8 @@ constexpr COLORREF text = RGB(0xf1, 0xee, 0xe8), body = RGB(0xd9, 0xd6, 0xcf), t
 // red fills things; redText is the red that reads on dark backgrounds, the brand red fails contrast for small text.
 constexpr COLORREF red = RGB(0xc4, 0x16, 0x1c), redPressed = RGB(0x9c, 0x10, 0x16), redText = RGB(0xe3, 0x47, 0x4c);
 constexpr COLORREF ok = RGB(0x8c, 0xc8, 0x78), bad = redText, warn = RGB(0xe6, 0xbe, 0x5a);
+// The secondary buttons, tabs and segments: a dark block with no border, lighter under the mouse and when chosen.
+constexpr COLORREF well = RGB(0x22, 0x1e, 0x1b), wellHover = RGB(0x2e, 0x29, 0x25), wellOn = RGB(0x3a, 0x33, 0x2e);
 // Every typeface of the interface; a different family only needs to change here. The brand's ship in
 // imperivm-resurrected\fonts (LoadBrandFonts); the second of each pair is Windows' own, for when they are missing.
 // Archivo's static SemiBold is a family of its own for GDI ("Archivo SemiBold", regular weight).
@@ -555,6 +557,15 @@ struct Painter {
 		if ((font == 0 || font == 1) && CapsWidth(label, 1) > w - 16) Font(4);
 		TextCaps(x, y, w, h, label, !enabled ? pal::disabled : strong ? pal::onRed : pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 1);
 		if (enabled) AddHit(x, y, w, h, action, arg);
+	}
+	// A secondary button's block: lit whole under the mouse or while pressed.
+	void Well(int x, int y, int w, int h, bool hot) { Fill(x, y, w, h, hot ? pal::wellHover : pal::well); }
+	// A tab or segment's block: the chosen one, and the one under the mouse, lit inside it, so a row of them reads as one bar.
+	void WellSegment(int x, int y, int w, int h, bool on, bool hot)
+	{
+		Fill(x, y, w, h, pal::well);
+		const int in = h >= 36 ? 4 : 2;
+		if (on || hot) Fill(x + in, y + in, w - 2 * in, h - 2 * in, on ? pal::wellOn : pal::wellHover);
 	}
 };
 

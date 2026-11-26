@@ -531,7 +531,7 @@ void PaintList(Painter &p, const State &st)
 	struct TabLook {
 		int pad, spacing, gap, countPad, end;
 	};
-	const TabLook roomy = {18, 2, 8, 14, 12}, tight = {12, 1, 6, 10, 8};
+	const TabLook roomy = {18, 2, 8, 0, 18}, tight = {12, 1, 6, 0, 12};
 	auto tabWidth = [&](int t, const TabLook &k, int &textW, int &countW) {
 		SelectObject(p.dc, BrandFont(BrandFace::UiStrong, 13, p.s));
 		textW = p.CapsWidth(kTabs[t].label, k.spacing);
@@ -563,16 +563,13 @@ void PaintList(Painter &p, const State &st)
 		const int w = tabWidth(t, look, textW, countW);
 		const std::string n = std::to_string(count);
 		const bool hot = !on && p.Hover(fx, toolY, w, kToolH, mx, my);
-		if (on) p.Fill(fx, toolY, w, kToolH, pal::selected);
-		p.Frame(fx, toolY, w, kToolH, on ? pal::edgeHot : hot ? pal::edgeHot : pal::edge);
-		if (on) p.Fill(fx, toolY + kToolH - 2, w, 2, pal::red);
+		p.WellSegment(fx, toolY, w, kToolH, on, hot);
 		SelectObject(p.dc, BrandFont(BrandFace::UiStrong, 13, p.s));
 		p.TextCaps(fx + look.pad, toolY, textW + 2, kToolH, kTabs[t].label, on || hot ? pal::text : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE, look.spacing);
 		const int cx = fx + look.pad + textW + look.gap;
-		p.Fill(cx, toolY + (kToolH - 22) / 2, countW, 22, count && on ? pal::red : pal::button);
 		SelectObject(p.dc, BrandFont(BrandFace::Ui, 13, p.s));
 		p.raw = true;
-		p.Text(cx, toolY + (kToolH - 22) / 2, countW, 22, n, count ? pal::text : pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.Text(cx, toolY, countW, kToolH, n, on && count ? pal::redText : pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 		p.raw = false;
 		if (!on) p.AddHit(fx, toolY, w, kToolH, kRoomFilter, kTabs[t].filter);
 		fx += w - 1;

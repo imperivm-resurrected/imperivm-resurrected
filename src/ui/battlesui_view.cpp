@@ -261,10 +261,9 @@ void PaintSegment(Painter &p, int x, int y, int w, const BattlesSnapshot &s, boo
 		const int bx = x + i * segW, bw = i == n - 1 ? w - i * segW : segW;
 		const bool on = i == s.difficulty;
 		const bool hot = enabled && !on && p.Hover(bx, y, bw, kSegmentH, v.mouseX, v.mouseY);
-		p.Fill(bx, y, bw, kSegmentH, on ? pal::text : hot ? pal::button : pal::field);
-		p.Frame(bx, y, bw, kSegmentH, on ? pal::text : hot ? pal::edgeHot : pal::edge);
+		p.WellSegment(bx, y, bw, kSegmentH, on, hot);
 		p.Font(on ? 1 : 0);
-		p.Text(bx + 2, y, bw - 4, kSegmentH, s.difficulties[i], on ? pal::onLight : enabled ? pal::text : pal::disabled, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(bx + 2, y, bw - 4, kSegmentH, s.difficulties[i], on ? pal::text : enabled ? pal::textDim : pal::disabled, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		// The difficulties of a great battle are easy, normal and hard, in that order: the medal says which ones were won.
 		if (i < won && i < 3) PaintMedal(p, bx + 8, y + (kSegmentH - 16) / 2, 16, i + 1);
 		if (enabled && !on) p.AddHit(bx, y, bw, kSegmentH, kActDifficulty, i);

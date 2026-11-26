@@ -45,7 +45,7 @@ Verdict VerdictOf(const LeagueRankedOutcome &o)
 void ArrowGhost(Painter &p, int x, int y, int w, int h, const std::string &label, int arg, bool arrow, int mx, int my)
 {
 	const bool hot = p.Hover(x, y, w, h, mx, my);
-	p.Frame(x, y, w, h, hot ? pal::edgeHot : pal::edge);
+	p.Well(x, y, w, h, hot);
 	const COLORREF ink = hot ? pal::text : pal::textDim;
 	p.Font(4);
 	const int tw = p.CapsWidth(label, 2), tx = x + (w - tw - (arrow ? kBackArrowW : 0)) / 2;

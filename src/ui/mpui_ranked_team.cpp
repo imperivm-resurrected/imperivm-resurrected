@@ -74,8 +74,7 @@ void FitGhost(Painter &p, int x, int y, int w, int h, const std::string &label, 
 {
 	const bool hot = enabled && p.Hover(x, y, w, h, mx, my);
 	const bool down = enabled && p.pressAction == kRankedAct && p.pressArg == arg;
-	if (down) p.Fill(x, y, w, h, pal::raised);
-	p.Frame(x, y, w, h, !enabled ? pal::hairline : hot || down ? pal::edgeHot : pal::edge);
+	p.Well(x, y, w, h, hot || down);
 	FitCaps(p, x + 8, y, w - 16, h, label, !enabled ? pal::disabled : hot || down ? pal::text : pal::textDim, DT_CENTER);
 	if (enabled) p.AddHit(x, y, w, h, kRankedAct, arg);
 }

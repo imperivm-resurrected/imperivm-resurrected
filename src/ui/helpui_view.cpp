@@ -1133,8 +1133,7 @@ void NavButton(Painter &p, int x, int y, bool left, bool enabled, int action, co
 	const int w = 34, h = kBarH;
 	const bool hot = enabled && p.Hover(x, y, w, h, v.mouseX, v.mouseY);
 	const bool down = enabled && p.pressAction == action;
-	p.Fill(x, y, w, h, !enabled ? pal::field : down || hot ? pal::buttonHover : pal::button);
-	p.Frame(x, y, w, h, !enabled ? pal::hairline : hot ? pal::edgeHot : pal::edge);
+	p.Well(x, y, w, h, hot || down);
 	const COLORREF c = !enabled ? pal::disabled : pal::text;
 	if (left) p.ArrowLeft(x + 12, y + 8, 9, 12, c);
 	else p.ArrowRight(x + 13, y + 8, 9, 12, c);

@@ -1161,10 +1161,10 @@ void PaintSegments(Painter &p, int x, int y, int w, int h, const std::vector<std
 	for (int i = 0; i < n; i++) {
 		const int cw = i + 1 == n ? x + w - cx : (w - gap * (n - 1)) / n;
 		const bool on = i == selected, hot = !on && p.Hover(cx, y, cw, h, mx, my);
-		p.Fill(cx, y, cw, h, on ? pal::text : hot ? pal::button : pal::field);
+		p.WellSegment(cx, y, cw, h, on, hot);
 		UseFace(p, BrandFace::UiStrong, 15);
 		p.raw = true;
-		p.Text(cx + 4, y, cw - 8, h, labels[static_cast<size_t>(i)], on ? pal::onLight : hot ? pal::text : pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(cx + 4, y, cw - 8, h, labels[static_cast<size_t>(i)], on || hot ? pal::text : pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.raw = false;
 		if (!on && i < static_cast<int>(args.size())) p.AddHit(cx, y, cw, h, kTourney, args[static_cast<size_t>(i)]);
 		cx += cw + gap;

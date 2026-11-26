@@ -686,13 +686,13 @@ void PaintSwissStrip(Painter &p, Ctx &c, int x, int y, int w, int selected)
 	for (int i = 0; i < n; i++) {
 		const int cx = x + i * (cw + gap);
 		const bool on = i == selected, open = i == 0 || i <= paired, hot = open && !on && p.Hover(cx, y, cw, h, c.mx, c.my), current = i && i == live;
-		p.Fill(cx, y, cw, h, on ? pal::text : hot ? pal::button : pal::field);
+		p.WellSegment(cx, y, cw, h, on, hot);
 		const std::string label = i ? TrFmt("Round %s", {std::to_string(i)}) : Tr("Standings");
 		UseFace(p, BrandFace::UiStrong, 15);
 		p.raw = true;
 		const int dot = current ? 14 : 0, tw = std::min(cw - 16 - dot, p.TextWidth(label) + 2), tx = cx + (cw - tw - dot) / 2;
 		if (current) p.Shape(tx, y + h / 2 - 4, 8, 8, InUnitEllipse, pal::red);
-		p.Text(tx + dot, y, tw, h, label, on ? pal::onLight : !open ? pal::disabled : hot || current ? pal::text : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(tx + dot, y, tw, h, label, on ? pal::text : !open ? pal::disabled : hot || current ? pal::text : pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.raw = false;
 		if (current && !on) p.Fill(cx, y + h - 2, cw, 2, pal::red);
 		if (open && !on) p.AddHit(cx, y, cw, h, kTourney, ArgOf(kSubPageTab, i ? kRoundTab + i : 0));

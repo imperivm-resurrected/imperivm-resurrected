@@ -291,8 +291,7 @@ void PaintGhostButton(Painter &p, int x, int y, int w, int h, const std::string 
 {
 	const bool hot = enabled && p.Hover(x, y, w, h, mx, my);
 	const bool down = enabled && p.pressAction == action && p.pressArg == arg;
-	if (down) p.Fill(x, y, w, h, pal::raised);
-	p.Frame(x, y, w, h, !enabled ? pal::hairline : hot || down ? pal::edgeHot : pal::edge);
+	p.Well(x, y, w, h, hot || down);
 	const COLORREF ink = !enabled ? pal::disabled : hot || down ? pal::text : pal::textDim;
 	p.Font(4);
 	// A long label in a narrow button closes its letter spacing, and is shortened only if it still doesn't fit.
