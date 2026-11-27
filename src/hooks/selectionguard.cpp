@@ -44,16 +44,25 @@ int GoneObjects(char *selection)
 // map it left, the world is rebuilt but the effective selection still lists the handles of the old one; by then a handle
 // may belong to a script object or to freed memory (a "Query" string where the vtable should be), and
 // CSelectionManager::ApplySelection calls its virtual functions to clear the "selected" flag: a crash.
+// IsKindOf is slot 1 of the object's virtual base, which the pointer at +4 locates, as the game casts: slot 1 of the object's own table
+// is another function for some classes, Serialize for buildings (CVXBuilding::Serialize, 004e0eb0) and heroes (CVXHero::Serialize,
+// 0052f8b0). Called there with the class name, they took the name for a save stream and crashed in CVXPersistSection (00681c50) each
+// time the view was built again with a hero or a building selected (a rejoin's reload, a new window size), or wrote over memory.
 bool IsSelectedMapObject(char *object, unsigned short handle)
 {
 	__try {
 		if (*reinterpret_cast<unsigned short *>(object + kObjectHandle) != handle) return false;
-		// A virtual table lives in gbr.exe's .rdata and its functions in its .text; slot 1 is IsKindOf.
-		const uintptr_t vtable = *reinterpret_cast<uintptr_t *>(object);
+		// Virtual tables live in gbr.exe's .rdata and their functions in its .text.
+		const uintptr_t bases = *reinterpret_cast<uintptr_t *>(object + 4);
+		if (bases < addr::kGameRdataBegin || bases >= addr::kGameRdataEnd) return false;
+		const int offset = reinterpret_cast<const int *>(bases)[1];
+		if (offset < 0 || offset > 0x10000) return false;
+		char *base = object + 4 + offset;
+		const uintptr_t vtable = *reinterpret_cast<uintptr_t *>(base);
 		if (vtable < addr::kGameRdataBegin || vtable >= addr::kGameRdataEnd) return false;
 		const uintptr_t isKindOf = reinterpret_cast<uintptr_t *>(vtable)[1];
 		if (isKindOf < addr::kGameTextBegin || isKindOf >= addr::kGameTextEnd) return false;
-		return reinterpret_cast<IsKindOf_t>(isKindOf)(object, nullptr, *reinterpret_cast<const char **>(addr::kMapObjClassName)) != nullptr;
+		return reinterpret_cast<IsKindOf_t>(isKindOf)(base, nullptr, *reinterpret_cast<const char **>(addr::kMapObjClassName)) != nullptr;
 	}
 	__except (EXCEPTION_EXECUTE_HANDLER) {
 		return false;
