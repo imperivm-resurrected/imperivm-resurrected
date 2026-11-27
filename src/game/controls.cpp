@@ -118,7 +118,7 @@ const Action kActions[] = {
 	{"replay_hide_ui", kPageMod, "Replay: hide the game interface", "to watch the game without bars", 'H', kCtrl, kMod, kRuleShortcut},
 	{"replay_collapse_bar", kPageMod, "Replay: collapse the control bar", "", 'B', kCtrl, kMod, kRuleShortcut},
 	{"cheats_panel", kPageMod, "Cheats: open or close the panel", "only if the game allows cheats", 'T', kCtrl, kMod, kRuleShortcut},
-	{"ping_location", kPageMod, "Ping location", "marks the point under the cursor for your allies", 'G', kCtrl, kMod, kRuleShortcut},
+	{"ping_location", kPageMod, "Ping location", "marks the point under the cursor for your allies", 0, 0, kMod, kRuleShortcut},
 	{"ping_attack", kPageMod, "Ping: attack here", "the point under the cursor, with the swords", 0, 0, kMod, kRuleShortcut},
 	{"ping_danger", kPageMod, "Ping: danger", "the point under the cursor, with the red flag", 0, 0, kMod, kRuleShortcut},
 	{"ally_colors", kPageMod, "Ally and enemy colors", "each side in its own colour, only on your screen", 'G', kAlt, kMod, kRuleShortcut},
