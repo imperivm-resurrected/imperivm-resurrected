@@ -107,7 +107,9 @@ int PaintPlayerColumn(Painter &p, int cx, int y, int h, int w, uint64_t id, cons
 	const PatronInfo patron = id ? PatronOf(id) : PatronInfo();
 	// The laurel about as tall as the capitals and level with them; the name in the tier's colour with its sweep of light.
 	const int laurel = patron.tier != PatronTier::None ? (h >= 400 ? 52 : 44) : 0, laurelRoom = laurel ? laurel + 8 : 0;
-	const int room = LeagueBadgeRoom(badge), most = std::max(40, std::min(560, w - room - laurelRoom));
+	// The vexillum or phalera after the name, about as tall as its capitals: the 20 px of the rows' names would be lost by these.
+	const int badgeMost = h >= 400 ? 48 : 40, room = badge.Shown() ? badgeMost + 10 : 0;
+	const int most = std::max(40, std::min(560, w - room - laurelRoom));
 	int size = h >= 400 ? 64 : 52;
 	UseDisplay(p, size);
 	p.raw = true;
@@ -115,7 +117,8 @@ int PaintPlayerColumn(Painter &p, int cx, int y, int h, int w, uint64_t id, cons
 		size -= 4;
 		UseDisplay(p, size);
 	}
-	const int nameW = std::min(most, p.CapsWidth(name, 1) + 4), left = cx - (laurelRoom + nameW + room) / 2;
+	const int badgeSize = std::min(badgeMost, size * 3 / 4), badgeRoom = badge.Shown() ? badgeSize + 10 : 0;
+	const int nameW = std::min(most, p.CapsWidth(name, 1) + 4), left = cx - (laurelRoom + nameW + badgeRoom) / 2;
 	if (laurel) {
 		// In capitals, as the other names of the page.
 		std::wstring wide = W(name);
@@ -129,7 +132,11 @@ int PaintPlayerColumn(Painter &p, int cx, int y, int h, int w, uint64_t id, cons
 	// The name opens the player's Steam profile (the hit only: the column is drawn without the pointer).
 	if ((id >> 32) == 0x01100001ULL) p.AddHit(left + laurelRoom, cy + 8, nameW, 50, kSteamProfile, static_cast<int>(static_cast<uint32_t>(id)));
 	p.raw = false;
-	if (badge.Shown()) DrawLeagueBadge(p, left + laurelRoom + nameW + kLeagueBadgeGap, cy + 23, kLeagueBadgeSize, badge);
+	if (badge.Shown()) {
+		const int bx = left + laurelRoom + nameW + 10, by = cy + (66 - badgeSize) / 2 + 1;
+		DrawLeagueBadge(p, bx, by, badgeSize, badge);
+		DrawLeagueBadgeCount(p, bx, by, badgeSize, badge);
+	}
 	cy += 72;
 	p.Font(0);
 	p.raw = true;
