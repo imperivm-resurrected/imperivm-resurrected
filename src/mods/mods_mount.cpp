@@ -2,6 +2,7 @@
 // Copyright (C) 2026 THIONG
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include <windows.h>
+#include <mutex>
 #include <set>
 #include <algorithm>
 #include "MinHook.h"
@@ -14,6 +15,7 @@
 #include "addr/engine.h"
 #include "hooks/media.h"
 #include "mods/hidefiles.h"
+#include "mods/menuart.h"
 #include "mods/vfs.h"
 
 #include "mods/mods_internal.h"
@@ -25,6 +27,14 @@ namespace {
 void *__fastcall RoOpen(void *self, void *edx, const char *path, unsigned mode, void *err)
 {
 	if (mode & 2) {
+		return nullptr;
+	}
+	// The main menu screen is always the game's: a pack's copy is passed over and the search goes on to the game's.
+	if (path && IsMenuShellFile(path)) {
+		static std::set<std::string> logged;
+		static std::mutex lock;
+		std::lock_guard<std::mutex> guard(lock);
+		if (logged.insert(Lower(path)).second) LogI("content", "main menu: a content pack's %s is not used, the game's is", path);
 		return nullptr;
 	}
 	typedef void *(__fastcall * Open_t)(void *, void *, const char *, unsigned, void *);

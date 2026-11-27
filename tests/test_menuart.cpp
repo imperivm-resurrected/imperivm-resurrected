@@ -199,8 +199,29 @@ static void Layout()
 	CHECK(!MenuLayoutIsFixed("[MainMenu]\nRectWH = 0, 0, 1366, 768\n", tmpl1920));
 }
 
+static void MenuShell()
+{
+	CHECK(IsMenuShellFile("menuini/mainmenu.ini"));
+	CHECK(IsMenuShellFile("Data\\Interface\\Menu\\MAINMENU.INI"));
+	CHECK(IsMenuShellFile("data/interface/menu/mainmenu_scrolling.ini"));
+	CHECK(IsMenuShellFile("DATA/INTERFACE/MENU/MenuBack.ini"));
+	CHECK(IsMenuShellFile("menuini/menuback_scrolling.ini"));
+	CHECK(IsMenuShellFile("CurrentLang/MenuBackground.bmp"));
+	CHECK(IsMenuShellFile("currentlang/menubackgroundimperivm.bmp"));
+	// The other menus, their pieces and the pack's texts stay the pack's.
+	CHECK(!IsMenuShellFile("menuini/mpmenu.ini"));
+	CHECK(!IsMenuShellFile("menuini/template.ini"));
+	CHECK(!IsMenuShellFile("ui/menu/button.bmp"));
+	CHECK(!IsMenuShellFile("currentlang/tips.xml"));
+	CHECK(!IsMenuShellFile("currentlang/credits.txt"));
+	CHECK(!IsMenuShellFile("mainmenu.ini"));
+	CHECK(!IsMenuShellFile("maps/menu/mainmenu.bmp"));
+	CHECK(!IsMenuShellFile(""));
+}
+
 int main()
 {
+	MenuShell();
 	Shrink();
 	Cover();
 	Enlarge();

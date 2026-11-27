@@ -14,4 +14,9 @@ bool WidenBarRects(std::string &ini, int from, int to);
 
 bool MenuLayoutIsFixed(const std::string &mainMenu, const std::string &tmpl);
 
+// The files of the game's main menu screen: its layout (mainmenu*.ini), the background shared by the menus (menuback*.ini) and the
+// pictures of that background (CurrentLang/MenuBackground*.bmp). The mod draws its own main menu over that screen, so they are always
+// the game's: a content pack's copy would add its own panels (tips, logos, credits) and background under it. Any spelling of the path.
+bool IsMenuShellFile(const std::string &path);
+
 bool FitFullFrameImages(std::string &ini, const std::function<std::string(const std::string &image)> &fit);

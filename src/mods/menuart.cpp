@@ -386,3 +386,21 @@ bool FitFullFrameImages(std::string &ini, const std::function<std::string(const 
 	ini = out;
 	return true;
 }
+
+bool IsMenuShellFile(const std::string &path)
+{
+	std::string p = path;
+	for (char &c : p) c = c == '\\' ? '/' : static_cast<char>(tolower(static_cast<unsigned char>(c)));
+	const size_t slash = p.find_last_of('/');
+	if (slash == std::string::npos || slash == 0) return false;
+	const size_t dirStart = p.find_last_of('/', slash - 1);
+	const std::string dir = p.substr(dirStart == std::string::npos ? 0 : dirStart + 1, slash - (dirStart == std::string::npos ? 0 : dirStart + 1));
+	const std::string leaf = p.substr(slash + 1);
+	auto is = [&](const char *start, const char *ext) {
+		const size_t n = strlen(start), e = strlen(ext);
+		return leaf.size() >= n + e && leaf.compare(0, n, start) == 0 && leaf.compare(leaf.size() - e, e, ext) == 0;
+	};
+	if (dir == "menu" || dir == "menuini") return is("mainmenu", ".ini") || is("menuback", ".ini");
+	if (dir == "currentlang") return is("menubackground", ".bmp");
+	return false;
+}

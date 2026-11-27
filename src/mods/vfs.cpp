@@ -780,12 +780,13 @@ void *__cdecl OpenImpl(const char *path, unsigned mode, void *err)
 	if (reading && VfsIsHidden(rel)) return g_origOpen(("mods/_hidden/" + rel).c_str(), mode, err);
 	void *f = nullptr;
 	std::string opened = path;
-	if (reading) {
+	const bool menuShell = reading && IsMenuShellFile(rel);
+	if (reading && !menuShell) {
 		if (const std::string *chosen = ModsChosenFile(rel)) {
 			if ((f = g_origOpen(chosen->c_str(), mode, err)) != nullptr) opened = *chosen;
 		}
 	}
-	if (!f && reading && rel.compare(0, 12, "currentlang/") == 0) {
+	if (!f && reading && !menuShell && rel.compare(0, 12, "currentlang/") == 0) {
 		const std::string alt = LangLooseFile(rel);
 		if (!alt.empty() && (f = g_origOpen(alt.c_str(), mode, err)) != nullptr) opened = alt;
 	}
@@ -795,7 +796,7 @@ void *__cdecl OpenImpl(const char *path, unsigned mode, void *err)
 		std::string builtin;
 		if (BuiltinFilePath(rel, builtin)) f = g_origOpen(builtin.c_str(), mode, err);
 	}
-	if (!f && reading && rel.compare(0, 5, "mods/") != 0) {
+	if (!f && reading && !menuShell && rel.compare(0, 5, "mods/") != 0) {
 		for (const std::string &dir : ModsMountedDirs()) {
 			std::string disk = dir + "\\" + rel;
 			std::replace(disk.begin(), disk.end(), '/', '\\');
