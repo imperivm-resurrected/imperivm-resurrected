@@ -346,7 +346,7 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 	WakeGameThread();
 	r.End(255);
 	// Asked before the lock: it takes it.
-	const bool hiddenRoom = TourneyRoomHidden(st) || RankedRoomHidden(st);
+	const bool hiddenRoom = TourneyRoomHidden(st) || RankedRoomHidden(st) || RankedRoomLeaving(st);
 	std::lock_guard<std::mutex> lock(g_lock);
 	g_s.hits = std::move(r.hits);
 	g_s.paneAreas = OverlayActive(st) ? std::vector<PaneArea>() : std::move(r.panes);

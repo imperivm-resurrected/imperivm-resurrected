@@ -57,6 +57,15 @@ typedef void(__fastcall *SelectExclusive_t)(void *list, void *edx, unsigned inde
 typedef int(__fastcall *PickerOnShow_t)(void *picker);
 
 ThisOnly_t g_origOnShow = nullptr;
+typedef int(__cdecl *ClickSound_t)(void *msg);
+ClickSound_t g_origClickSound = nullptr;
+std::atomic<bool> g_quietClicks{false};
+
+int __cdecl HookClickSound(void *msg)
+{
+	if (g_quietClicks.load()) return 1;
+	return g_origClickSound(msg);
+}
 ThisOnly_t g_origDtor = nullptr;
 
 void *g_dlg = nullptr;
@@ -1577,6 +1586,7 @@ void GameRoomInstall(bool knownExe)
 		HookFunction(addr::kCreateSettings, &HookCreateSettings, &g_origCreateSettings) &&
 		HookFunction(addr::kRefreshOptions, &HookRefreshOptions, &g_origRefreshOptions);
 	if (ok) HookFunction(addr::kCreateWorldCore, &HookCreateWorldCore, &g_origCreateWorldCore);
+	if (!HookFunction(addr::kUiClickSound, &HookClickSound, &g_origClickSound)) LogW("room", "the league rooms keep the click of their buttons");
 	LogAt(ok ? kLogInfo : kLogError, "room", "interface: %s", ok ? "connected to the mod's interface" : "could NOT hook");
 }
 
@@ -1727,6 +1737,11 @@ int GameRoomCountdownLeftMs()
 {
 	std::lock_guard<std::mutex> lock(g_countdown.mx);
 	return g_countdown.clock.LeftMs(GetTickCount());
+}
+
+void GameRoomSetQuietClicks(bool on)
+{
+	if (g_quietClicks.exchange(on) != on) LogD("room", "buttons' click sound %s", on ? "off (a league room)" : "on");
 }
 
 void GameRoomSetAutoStart(bool on)

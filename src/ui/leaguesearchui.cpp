@@ -62,7 +62,7 @@ bool Shown(const State &s)
 	return Searching(s) || (Matched(s) && s.matchId != s.hiddenMatch);
 }
 
-// The pill at the top centre: spinner, what is searched, the time, and the cross that ends it (not for the partner of a duo).
+// The pill at the top centre: spinner, what is searched, the time, and the cross that ends it (for both of a duo).
 void PaintPill(Painter &p, const State &st, int x, int y)
 {
 	const int mx = st.mouseX, my = st.mouseY;
@@ -70,7 +70,7 @@ void PaintPill(Painter &p, const State &st, int x, int y)
 	p.Frame(x, y, kPillW, kPillH, pal::edge);
 	p.Fill(x, y, 3, kPillH, pal::red);
 	p.Spinner(x + 26, y + kPillH / 2, 9, 4, GetTickCount());
-	const bool cross = !st.partnerSearch;
+	const bool cross = true;
 	const int textW = kPillW - 46 - (cross ? 44 : 12) - 86;
 	p.Font(4);
 	p.TextCaps(x + 46, y, textW, kPillH, st.partnerSearch ? "Your partner is searching" : LeagueQueueIsTeam(st.queue) ? "Searching 2 vs 2" : "Searching 1 vs 1",

@@ -2614,7 +2614,6 @@ extern const TrRow kTrRows[] = {
 	{"Search for a match  2 vs 2", "Buscar partida  2 contra 2", "Cerca partita  2 contro 2"},
 	{"Searching for a match  2 vs 2", "Buscando partida  2 contra 2", "Ricerca partita  2 contro 2"},
 	{"Your partner is searching", "Tu compañero está buscando", "Il tuo compagno sta cercando"},
-	{"Only the leader of your duo can cancel the search.", "Solo el líder de tu dúo puede cancelar la búsqueda.", "Solo il capo del tuo duo può annullare la ricerca."},
 	{"With %s", "Con %s", "Con %s"},
 	{"Against %s and %s", "Contra %s y %s", "Contro %s e %s"},
 	{"Against the other team", "Contra el otro equipo", "Contro l'altra squadra"},

@@ -450,11 +450,21 @@ void PaintSearchTeam(Painter &p, const State &st)
 		p.raw = false;
 		FitCaps(p, mid - 70, ringY + 22, 140, 16, Tr("seconds"), pal::caption, DT_CENTER);
 	}
-	else {
-		p.Spinner(mid, ringY, 22, 6, GetTickCount());
+	else if (live && (left == 0 || st.startingCover || st.inOnlineGame)) {
 		// The room's countdown ran out: the game is loading, not counting again.
-		if (live && (left == 0 || st.startingCover || st.inOnlineGame)) FitCaps(p, mid - 70, ringY + 38, 140, 16, Tr("Starting..."), pal::caption, DT_CENTER);
+		p.Spinner(mid, ringY, 22, 6, GetTickCount());
+		FitCaps(p, mid - 70, ringY + 38, 140, 16, Tr("Starting..."), pal::caption, DT_CENTER);
 	}
+	else if (live && v.ticketLoaded && v.ticket.startBy) {
+		// In the room, before its start countdown: the minute the server gives to be ready, as in the duel's panel.
+		const int64_t startLeft = std::max<int64_t>(0, v.ticket.startBy - now);
+		PaintArc(p, mid, ringY, 62, 8, startLeft < 15000 ? pal::red : pal::warn, static_cast<float>(startLeft) / 60000.0f);
+		Display(p, 62);
+		p.raw = true;
+		p.Text(mid - 70, ringY - 31, 140, 62, std::to_string((startLeft + 999) / 1000), pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		p.raw = false;
+	}
+	else p.Spinner(mid, ringY, 22, 6, GetTickCount());
 	PaintEvenness(p, v, true, mid - 128, ringY + 82, 256);
 	p.Font(3);
 	// Once all accepted no line under the ring: its number and the cards say it all.

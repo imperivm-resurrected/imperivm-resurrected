@@ -1319,7 +1319,7 @@ namespace mpui_impl {
 void PaintScreen(Painter &p, const State &st)
 {
 	const bool linkOffer = LinkOfferShown(st);
-	const bool hiddenRoom = TourneyRoomHidden(st) || RankedRoomHidden(st);
+	const bool hiddenRoom = TourneyRoomHidden(st) || RankedRoomHidden(st) || RankedRoomLeaving(st);
 	p.noHover = st.dropOpen || st.passPrompt || st.syncConfirm || st.syncPhase || st.searching || st.connecting || st.recoverAsk ||
 		RejoinClientActive() || RejoinClientFailed() || (st.game.active && st.game.picker && !hiddenRoom) || linkOffer;
 	if (st.game.active && !hiddenRoom) {
@@ -1367,6 +1367,6 @@ void PaintScreen(Painter &p, const State &st)
 	// over it while the room is joined or the game starts.
 	const bool cupRoom = st.view == kViewTournaments && st.room.id && !st.room.info.spectate && TourneyMatchOfTag(st.room.info.leagueTag) != 0;
 	// The same for the panel of a ranked match, which says how its room is made and entered.
-	if (!cupRoom && !RankedPanelOpen(st) && (st.connecting || (st.room.id && !st.game.active && !st.syncPhase && !st.syncConfirm && !st.gameClosedAt))) PaintConnecting(p, st);
+	if (!cupRoom && !RankedPanelOpen(st) && !RankedRoomLeaving(st) && (st.connecting || (st.room.id && !st.game.active && !st.syncPhase && !st.syncConfirm && !st.gameClosedAt))) PaintConnecting(p, st);
 }
 }

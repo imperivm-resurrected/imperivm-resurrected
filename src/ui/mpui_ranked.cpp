@@ -646,6 +646,15 @@ bool RankedRoomHidden(const State &st)
 	return st.game.active && RankedPanelOpen(st);
 }
 
+bool RankedRoomLeaving(const State &st)
+{
+	if (!st.room.id || st.room.info.spectate || st.room.info.leagueTag.compare(0, 7, "ranked:") != 0) return false;
+	const LeagueRankedView &v = st.ranked.view;
+	const bool live = (v.phase == LeagueRankedPhase::Ready || v.phase == LeagueRankedPhase::Playing) && v.matchId &&
+		st.room.info.leagueTag == LeagueRankedRoomTag(v.matchId);
+	return !live;
+}
+
 int RankedRoomStateOf(const State &st, uint64_t id)
 {
 	if (TourneyIsTestBot(id)) return st.room.id && st.game.active ? 2 : 0;
@@ -1212,6 +1221,8 @@ void RankedGameThreadTick()
 		LeagueDuoLeave();
 	}
 	RoomStep(v, now);
+	// A league's room (a ranked match's, a cup's) has its buttons pressed by the mod: none of those presses clicks. Not in the game.
+	GameRoomSetQuietClicks(!InGame() && (matchLive || (g_s.room.id && !g_s.room.info.spectate && !g_s.room.info.leagueTag.empty())));
 	// Back in the menu after a ranked game, the result opens by itself.
 	RankedScreen &r = g_s.ranked;
 	if (v.result.state != LeagueResultState::None && v.result.game.matchId != r.resultMatch && !r.resultOpen && !InGame() &&
@@ -1248,10 +1259,10 @@ void PaintRankedPill(Painter &p, const State &st, int right, int left)
 		int clockW = std::max(p.TextWidth("00:00"), p.TextWidth(clock)) + 8;
 		p.raw = false;
 		// The spinner, the label, the time and the cross: the label shortens and goes, then the time, then the cross, before the pill
-		// would cover the tabs beside it. The partner of a duo has no cross: only the leader stops the search.
+		// would cover the tabs beside it.
 		p.Font(4);
 		const bool team = LeagueQueueIsTeam(v.searchQueue);
-		bool cross = !v.partnerSearch;
+		bool cross = true;
 		if (46 + clockW + (cross ? 44 : 16) > room) clockW = 0;
 		if (46 + clockW + (cross ? 44 : 16) > room) cross = false;
 		const int fixed = 46 + clockW + (cross ? 44 : clockW ? 16 : 0);

@@ -146,6 +146,9 @@ int GameRoomCountdownLeftMs();
 void GameRoomPalette(uint32_t out[12]);
 // Off by default: the host only counts down once the interface turns it on.
 void GameRoomSetAutoStart(bool on);
+// While on, the menus' click sound is not played: in a league's room the mod presses the room's buttons itself (civilization, team,
+// the AI's seats, the options), and each press clicked.
+void GameRoomSetQuietClicks(bool on);
 // Called on the game thread, from GameRoomTick, with no lock of the room held: true while the game must not start (players
 // still joining or downloading, a saved game being placed...). Pass nullptr to remove it.
 void GameRoomSetStartGate(bool (*blocked)());

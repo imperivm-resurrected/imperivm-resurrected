@@ -151,10 +151,23 @@ void PaintDelta(Painter &p, const LeagueHistoryGame &g, int x, int y, int w, int
 	}
 }
 
-// "Rome vs Carthage", a "?" for a civilization the reports did not give.
+// "Rome vs Carthage" (in 2v2 "Rome vs Carthage and Egypt"), a "?" for a civilization the reports did not give.
 std::string CivsText(const LeagueHistoryGame &g)
 {
-	return (g.myCiv.empty() ? std::string("?") : CivText(g.myCiv)) + " " + Tr("vs") + " " + (g.opponentCiv.empty() ? std::string("?") : CivText(g.opponentCiv));
+	auto civ = [](const std::string &c) { return c.empty() ? std::string("?") : CivText(c); };
+	std::string theirs = civ(g.opponentCiv);
+	if (g.opponentCivs.size() >= 2) theirs = TrFmt("%s and %s", {civ(g.opponentCivs[0]), civ(g.opponentCivs[1])});
+	else if (g.opponentCivs.size() == 1 && g.opponentCiv.empty()) theirs = civ(g.opponentCivs[0]);
+	return civ(g.myCiv) + " " + Tr("vs") + " " + theirs;
+}
+
+bool AnyCiv(const LeagueHistoryGame &g)
+{
+	if (!g.myCiv.empty() || !g.opponentCiv.empty()) return true;
+	for (const std::string &c : g.opponentCivs) {
+		if (!c.empty()) return true;
+	}
+	return false;
 }
 
 // "Livia and Brennus": both opponents of a 2v2 game.
@@ -169,7 +182,7 @@ std::string OpponentsText(const LeagueHistoryGame &g)
 std::string GameFacts(const LeagueHistoryGame &g)
 {
 	std::string facts = g.map.name.empty() ? std::string() : LeagueMapText(g.map.name);
-	if (!g.myCiv.empty() || !g.opponentCiv.empty()) facts += (facts.empty() ? "" : "  \xC2\xB7  ") + CivsText(g);
+	if (AnyCiv(g)) facts += (facts.empty() ? "" : "  \xC2\xB7  ") + CivsText(g);
 	if (g.durationMs) facts += (facts.empty() ? "" : "  \xC2\xB7  ") + TrFmt("%s min", {std::to_string(g.durationMs / 60000)});
 	return facts;
 }
@@ -504,12 +517,8 @@ bool PaintRankCard(Painter &p, const State &st, const HubLayout &h, const League
 		ly += 28;
 		const int cancelY = y + cardH - 118, bottom = cancelY - 10;
 		if (v.window.present) ly = PaintSearchWindow(p, v.window, LeagueMeRanked(me.me, v.searchQueue), ix, ly + 8, iw, bottom) + 8;
-		// The partner of a duo follows the leader's search: only the leader cancels it.
-		if (v.partnerSearch) {
-			p.Font(0);
-			p.TextWrapped(ix, cancelY, iw, 48, "Only the leader of your duo can cancel the search.", pal::body);
-		}
-		else Ghost(p, ix, cancelY, iw, 48, "Cancel search", kRkCancel, v.phase == LeagueRankedPhase::Searching, mx, my);
+		// Either player of a duo stops its search, for both.
+		Ghost(p, ix, cancelY, iw, 48, "Cancel search", kRkCancel, v.phase == LeagueRankedPhase::Searching, mx, my);
 		// The staging server offers practice bots, to try a match alone: the game's AI plays them.
 		if (v.practiceBot) {
 			Ghost(p, ix, cardH + y - 60, iw, 40, LeagueQueueIsTeam(v.searchQueue) ? "Play with bots (test)" : "Play against a bot (test)", kRkPracticeBot, true, mx, my);
@@ -1809,7 +1818,7 @@ void PaintHistory(Painter &p, const State &st)
 		std::string map = g.map.name.empty() ? std::string("\xE2\x80\x94") : LeagueMapText(g.map.name);
 		if (!g.map.size.empty()) map += "  \xC2\xB7  " + LeagueMapText(g.map.size);
 		RawText(p, m + cols[2].x, ry, cols[2].w, rowH, map, pal::body);
-		const std::string civs = g.myCiv.empty() && g.opponentCiv.empty() ? std::string("\xE2\x80\x94") : CivsText(g);
+		const std::string civs = !AnyCiv(g) ? std::string("\xE2\x80\x94") : CivsText(g);
 		RawText(p, m + cols[3].x, ry, cols[3].w, rowH, civs, pal::body);
 		RawText(p, m + cols[4].x, ry, cols[4].w, rowH, g.durationMs ? TrFmt("%s min", {std::to_string(g.durationMs / 60000)}) : std::string("\xE2\x80\x94"), pal::body);
 		p.Font(3);

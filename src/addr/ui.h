@@ -35,6 +35,8 @@ inline constexpr uintptr_t kTextGetTextA = 0x0066e370;
 inline constexpr uintptr_t kGetTextUtf8 = 0x0066e3b0;
 inline constexpr uintptr_t kSetTextUtf8 = 0x00670570;
 inline constexpr uintptr_t kPumpMessages = 0x00676960;
+// The menus' listener that plays Sounds/UI/click.wav on every click message (cdecl, one argument: the message).
+inline constexpr uintptr_t kUiClickSound = 0x006b0d10;
 inline constexpr uintptr_t kOnCommandClicked = 0x006b3500;
 inline constexpr uintptr_t kOnHotkeyChar = 0x006b3620;
 inline constexpr uintptr_t kCmdBarRebuild = 0x006b3d60;

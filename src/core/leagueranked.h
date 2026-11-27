@@ -287,6 +287,8 @@ struct LeagueHistoryGame {
 	LeaguePlayerCard partner;
 	std::vector<LeaguePlayerCard> opponents;
 	std::string myCiv, opponentCiv, endedBy;
+	// 2v2: each opponent's civilization, in the order of `opponents` (empty where no report named it).
+	std::vector<std::string> opponentCivs;
 	LeagueGameResult result = LeagueGameResult::Pending;
 	// The Glory it gave: none until it counts, nor for the game that ended the placement (`placed`).
 	bool hasDelta = false;

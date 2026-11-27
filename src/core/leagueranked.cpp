@@ -617,7 +617,9 @@ bool LeagueParseHistoryGame(const Json &m, LeagueHistoryGame &g)
 	if (const Json *p = m.Get("partner"); p && p->type == Json::Object) g.partner = CardOf(*p);
 	if (const Json *list = m.Get("opponents"); list && list->type == Json::Array) {
 		for (const Json &o : list->arr) {
-			if (o.type == Json::Object) g.opponents.push_back(CardOf(o));
+			if (o.type != Json::Object) continue;
+			g.opponents.push_back(CardOf(o));
+			g.opponentCivs.push_back(o.GetString("civ"));
 		}
 	}
 	if (g.opponent.steamId.empty() && g.opponent.name.empty() && !g.opponents.empty()) g.opponent = g.opponents.front();

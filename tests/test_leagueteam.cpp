@@ -151,11 +151,15 @@ void StatsHistoryErrors()
 	// A 2v2 game of the history names the partner and both opponents.
 	LeagueHistoryGame g;
 	CHECK(LeagueParseHistoryGame(Parse(R"({"id":"12","playedAt":1000,"durationMs":1500000,"result":"win","gloryDelta":18,
-		"partner":{"steamId":"2","name":"Tulia"},"opponents":[{"steamId":"3","name":"Livia","tier":"signifer","division":1},
-		{"steamId":"4","name":"Brennus","tier":null,"division":null}]})"),
+		"partner":{"steamId":"2","name":"Tulia"},"opponents":[{"steamId":"3","name":"Livia","tier":"signifer","division":1,"civ":"egypt"},
+		{"steamId":"4","name":"Brennus","tier":null,"division":null,"civ":null}]})"),
 		g));
 	CHECK_EQ(g.partner.name, std::string("Tulia"));
 	CHECK_EQ(static_cast<unsigned>(g.opponents.size()), 2u);
+	// Each opponent's civilization, empty where no report named it.
+	CHECK_EQ(static_cast<unsigned>(g.opponentCivs.size()), 2u);
+	CHECK_EQ(g.opponentCivs[0], std::string("egypt"));
+	CHECK(g.opponentCivs[1].empty());
 	CHECK_EQ(TierNumber(g.opponents[0].tier), TierNumber(LeagueTier::Signifer));
 	CHECK_EQ(g.opponent.name, std::string("Livia"));
 	// A duel's has neither.

@@ -768,6 +768,8 @@ StartBlock RankedStartBlocker(const State &st, const GameRoomSnapshot &g);
 bool RankedPanelOpen(const State &st);
 // The room of the ranked match is under its panel: its own screen is not shown.
 bool RankedRoomHidden(const State &st);
+// A ranked room whose match is over or called off: it is only being left, and nothing of it is shown meanwhile.
+bool RankedRoomLeaving(const State &st);
 // The player pressed Ready (or Not ready) on the room's own screen: the ranked panel keeps it as theirs.
 void RankedReadyPressed();
 // The bottom of the panel while the match's room is made and played from it: the civilization and colour, Ready, Cancel match and the room's

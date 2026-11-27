@@ -1662,8 +1662,8 @@ void LeagueQueueLeave()
 {
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
+		// Either player of a duo stops its search, for both.
 		if (g_q.phase != LeagueRankedPhase::Searching && g_q.phase != LeagueRankedPhase::Joining) return;
-		if (g_q.partnerSearch) return;
 		ToIdle(g_q);
 		g_q.notice.clear();
 	}
