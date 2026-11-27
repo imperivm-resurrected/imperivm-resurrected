@@ -38,6 +38,11 @@ const BuiltinText kPatches[] = {
 		"\t\t\tif(!.Attack(u)) .GotoAttack(u, 5000, true, 2500);\n"
 		"\t\t\twhile(!.Attack(u))\n",
 		"f9e76d98893e61b9a4bdfef000482251182259ca704c594826e7b96915e79a5a"},
+	{"data/subai/settlement_behavior_ambient.vs",
+		"@replace if(MapSize >= 32000)\n"
+		"// The game left the villages and forums of large maps (32768) without their villagers and hens, to save the CPU of 2006.\n"
+		"if(false)\n",
+		"98577660d8073bc7738acdcc8abc4cafebf8ef085aeb5c88c4f07a60a17d7f10"},
 	{"data/subai/sneak_behavior.vs",
 		"@replace if (.TimeWithoutAttack >= 20000)\n"
 		"\t// Units of players with I1NoSneak set (the converted Imperivm I campaign) never hid on their own in their game.\n"
