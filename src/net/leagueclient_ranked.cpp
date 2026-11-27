@@ -1584,6 +1584,18 @@ void LeagueQueueJoin()
 	const LeagueMeView me = LeagueMeState();
 	const std::string contentKey = SteamOwnGameplayKey();
 	const LeagueDuoRole role = LeagueDuoOwnRole();
+	{
+		// A 1 vs 1 search ends the duo: its friend is told, and nobody waits for a 2v2 that will not come.
+		bool soloSearch = false;
+		{
+			std::lock_guard<std::mutex> lock(g_mx);
+			soloSearch = g_q.phase == LeagueRankedPhase::Idle && !g_q.busy && !LeagueQueueIsTeam(g_sel);
+		}
+		if (soloSearch && role != LeagueDuoRole::Solo) {
+			LogI("league", "duo: a 1 vs 1 search ends it");
+			LeagueDuoLeave();
+		}
+	}
 	std::lock_guard<std::mutex> lock(g_mx);
 	if (g_q.phase != LeagueRankedPhase::Idle || g_q.busy) return;
 	const std::string queue = g_sel;

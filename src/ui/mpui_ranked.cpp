@@ -1204,6 +1204,13 @@ void RankedGameThreadTick()
 		LeagueQueueLeave();
 		ModUiToast("The ranked search stopped because you entered a game or a room.");
 	}
+	// A duo is for the league's 2v2 only: another room or game (a normal room, a skirmish, a cup) ends it. Its own match, found or played,
+	// does not, nor does the result of the last one.
+	const bool duoMatch = matchLive || v.phase == LeagueRankedPhase::Found || v.phase == LeagueRankedPhase::Accepted;
+	if ((InGame() || GameRoomActive()) && !duoMatch && v.result.state == LeagueResultState::None && LeagueDuoOwnRole() != LeagueDuoRole::Solo) {
+		LogI("league", "duo: another room or game started; the duo ends");
+		LeagueDuoLeave();
+	}
 	RoomStep(v, now);
 	// Back in the menu after a ranked game, the result opens by itself.
 	RankedScreen &r = g_s.ranked;
