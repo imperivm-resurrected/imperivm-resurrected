@@ -712,9 +712,10 @@ bool PaintRankCard(Painter &p, const State &st, const HubLayout &h, const League
 			popY = duoY - 30;
 		}
 	}
-	// The season's mods take the line over the button, and who is around goes over them when there is room.
+	// The season's mods take the line over the button only when something is to be done (or being done) about them; who is around goes
+	// over them when there is room.
 	bool modsShown = false;
-	if (modsRuled) {
+	if (modsRuled && (!modsOk || !prep.line.empty())) {
 		const int modsY = popY;
 		popY -= 26;
 		if (modsY >= freeY - 8 && modsY + 22 <= buttonY - 4) {

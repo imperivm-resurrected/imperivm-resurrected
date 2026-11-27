@@ -821,19 +821,19 @@ void Cancelled(const LeagueMatchTicket &t)
 		const bool follow = g_q.partnerSearch;
 		ToIdle(g_q);
 		if (!accepted) {
-			SetNotice(g_q, "You did not accept the match in time: you can't search for a few minutes.", true);
+			SetNotice(g_q, "You did not accept in time.", true);
 			return;
 		}
 		if (partnerLate) {
-			SetNotice(g_q, TrFmt("%s did not accept the match: your duo leaves the queue.", {partner->name.empty() ? Tr("Your partner") : partner->name}), false);
+			SetNotice(g_q, TrFmt("%s did not accept.", {partner->name.empty() ? Tr("Your partner") : partner->name}), false);
 			return;
 		}
 		g_q.phase = LeagueRankedPhase::Searching;
 		g_q.queue = kLeagueQueueTeam;
 		g_q.partnerSearch = follow;
 		g_q.nextPoll = 0;
-		SetNotice(g_q, declinedByOther ? "A player declined the match. You are back at the head of the queue."
-									   : "A player did not accept in time. You are back at the head of the queue.",
+		SetNotice(g_q, declinedByOther ? "A player declined. Still searching."
+									   : "A player did not accept. Still searching.",
 			false);
 		return;
 	}
@@ -841,13 +841,13 @@ void Cancelled(const LeagueMatchTicket &t)
 		ToIdle(g_q);
 		g_q.phase = LeagueRankedPhase::Searching;
 		g_q.nextPoll = 0;
-		SetNotice(g_q, declinedByOther ? "Your opponent declined the match. You are back at the head of the queue."
-									   : "Your opponent did not accept in time. You are back at the head of the queue.",
+		SetNotice(g_q, declinedByOther ? "Your opponent declined. Still searching."
+									   : "Your opponent did not accept. Still searching.",
 			false);
 		return;
 	}
 	ToIdle(g_q);
-	SetNotice(g_q, "You did not accept the match in time: you can't search for a few minutes.", true);
+	SetNotice(g_q, "You did not accept in time.", true);
 }
 
 void PollMatchThread(unsigned gen, int64_t id)

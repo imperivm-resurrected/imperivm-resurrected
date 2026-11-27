@@ -32,9 +32,11 @@
 #include "mods/mods.h"
 #include "net/leagueclient.h"
 #include "net/rejoin.h"
+#include "net/patrons.h"
 #include "net/steamnet.h"
 #include "ui/leaguemapthumb.h"
 #include "ui/leaguemodsprep.h"
+#include "ui/leaguerewards.h"
 #include "ui/leagueui.h"
 #include "ui/modui.h"
 #include "ui/profileui.h"
@@ -43,6 +45,7 @@
 #include "ui/mpui_league_room.h"
 #include "ui/mpui_ranked_kit.h"
 #include "ui/mpui_tourney.h"
+#include "ui/patronui.h"
 
 using namespace mpui_impl;
 
@@ -531,7 +534,10 @@ void TakeStanding(LeaguePlayerCard &into, const LeaguePlayerCard &from)
 }
 
 // One side of the match found: avatar, name, record, emblem, rank, Glory and place, and whether they accepted.
-void PaintSide(Painter &p, int x, int y, int w, int h, uint64_t id, const std::string &name, const LeaguePlayerCard &card, bool you, const char *chip, bool ok)
+// A player's side of the panel: their picture in their season's frame, the patron's laurel, the name (their Steam profile on a click)
+// with the vexillum or phalera they wear after it, the record, and the rank.
+void PaintSide(Painter &p, int x, int y, int w, int h, uint64_t id, const std::string &name, const LeaguePlayerCard &card, bool you, const char *chip, bool ok,
+	int mx, int my)
 {
 	const LeagueTier tier = card.tier;
 	p.Fill(x, y, w, h, pal::raised);
@@ -541,14 +547,31 @@ void PaintSide(Painter &p, int x, int y, int w, int h, uint64_t id, const std::s
 	const int cw = std::min(w / 2, std::max(96, p.CapsWidth(chip, 1) + 28));
 	Chip(p, x + w - 20 - cw, y + 20, cw, 26, chip, ok ? pal::ok : pal::textDim, ok ? RGB(0x2a, 0x36, 0x24) : pal::hairline);
 	const int av = 88, tx = x + 24 + av + 18;
-	Avatar(p, x + 24, y + 24, av, id, name);
-	p.Frame(x + 24, y + 24, av, av, you ? pal::red : pal::edge);
+	const LeagueFrame frame = id ? PlayerFrameOf(id) : LeagueFrame();
+	if (frame.Shown()) PaintFramedAvatar(p, x + 24, y + 24, av, id, name, frame);
+	else {
+		Avatar(p, x + 24, y + 24, av, id, name);
+		p.Frame(x + 24, y + 24, av, av, you ? pal::red : pal::edge);
+	}
+	const PatronInfo patron = id ? PatronOf(id) : PatronInfo();
+	const LeagueBadge badge = id ? PlayerBadgeOf(id) : LeagueBadge();
+	const int laurel = patron.tier != PatronTier::None ? PatronLaurelSize(patron.tier) : 0;
+	const int nx = tx + (laurel ? laurel + 6 : 0), ny = y + 54, nh = 32;
+	const UINT fmt = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS;
 	SelectObject(p.dc, BrandFont(BrandFace::Body, 24, p.s));
 	p.raw = true;
-	const int nameW = std::max(40, std::min(x + w - 20 - cw - 12 - tx - (you ? 52 : 0), p.TextWidth(name) + 4));
-	p.Text(tx, y + 54, nameW, 32, name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	const int nameW = std::max(40, std::min(x + w - 20 - cw - 12 - nx - (you ? 52 : 0) - LeagueBadgeRoom(badge), p.TextWidth(name) + 4));
+	if (laurel) {
+		const int ly = ny + (nh - laurel) / 2;
+		DrawPatron(p, tx, ly, laurel, nx, ny, nameW, nh, name, patron.tier, fmt);
+		PatronHotspot(p, tx, ly, laurel, patron, mx, my, kPatronLink);
+	}
+	else p.Text(nx, ny, nameW, nh, name, pal::text, fmt);
+	DrawBadgeAfterName(p, nx, ny, nameW, nh, name, badge, mx, my, id);
+	SteamProfileHotspot(p, nx, ny, nameW, nh, name, id, mx, my);
+	const int nameEnd = nx + std::min(nameW, p.TextWidth(name)) + LeagueBadgeRoom(badge);
 	p.raw = false;
-	if (you) Chip(p, tx + nameW + 10, y + 60, 40, 20, "You", pal::textDim, pal::hairline);
+	if (you) Chip(p, nameEnd + 10, y + 60, 40, 20, "You", pal::textDim, pal::hairline);
 	p.Font(3);
 	if (card.standing) {
 		p.raw = true;
@@ -1294,12 +1317,12 @@ void PaintSearch(Painter &p, const State &st)
 	const uint64_t otherId = _strtoui64(o.steamId.c_str(), nullptr, 10);
 	if (live) {
 		const int meIn = RankedRoomStateOf(st, SteamOwnId()), otherIn = RankedRoomStateOf(st, otherId);
-		PaintSide(p, dx + 32, cy, cardW, cardH, SteamOwnId(), st.player, mine, true, RoomChip(meIn), meIn > 0);
-		PaintSide(p, dx + dw - 32 - cardW, cy, cardW, cardH, otherId, otherName, o, false, RoomChip(otherIn), otherIn > 0);
+		PaintSide(p, dx + 32, cy, cardW, cardH, SteamOwnId(), st.player, mine, true, RoomChip(meIn), meIn > 0, st.mouseX, st.mouseY);
+		PaintSide(p, dx + dw - 32 - cardW, cy, cardW, cardH, otherId, otherName, o, false, RoomChip(otherIn), otherIn > 0, st.mouseX, st.mouseY);
 	}
 	else {
-		PaintSide(p, dx + 32, cy, cardW, cardH, SteamOwnId(), st.player, mine, true, accepted ? "Accepted" : "Pending", accepted);
-		PaintSide(p, dx + dw - 32 - cardW, cy, cardW, cardH, otherId, otherName, o, false, otherAccepted ? "Accepted" : "Pending", otherAccepted);
+		PaintSide(p, dx + 32, cy, cardW, cardH, SteamOwnId(), st.player, mine, true, accepted ? "Accepted" : "Pending", accepted, st.mouseX, st.mouseY);
+		PaintSide(p, dx + dw - 32 - cardW, cy, cardW, cardH, otherId, otherName, o, false, otherAccepted ? "Accepted" : "Pending", otherAccepted, st.mouseX, st.mouseY);
 	}
 
 	// The countdown to answer, in the middle, on the server's clock.
