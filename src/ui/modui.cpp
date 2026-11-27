@@ -413,10 +413,7 @@ void FocusField(int field)
 void SetStatus(const std::string &s)
 {
 	if (s.empty()) return;
-	g_s.toast = s;
-	g_s.toastErr = false;
-	g_s.toastLen = 6000;
-	g_s.toastUntil = GetTickCount() + g_s.toastLen;
+	SetToast(s, false, 6000);
 	LogI("ui", "notice: %s", TrSource(s).c_str());
 }
 
@@ -846,13 +843,31 @@ bool ModUiIsOpen()
 	return g_s.open;
 }
 
+namespace modui_impl {
+namespace {
+std::mutex g_toastLock;
+ToastNow g_toast;
+}
+
+void SetToast(const std::string &text, bool error, DWORD len)
+{
+	std::lock_guard<std::mutex> lock(g_toastLock);
+	g_toast.text = text;
+	g_toast.error = error;
+	g_toast.len = len;
+	g_toast.until = GetTickCount() + len;
+}
+
+ToastNow CurrentToast()
+{
+	std::lock_guard<std::mutex> lock(g_toastLock);
+	return g_toast;
+}
+}
+
 void ModUiToast(const std::string &text, bool error)
 {
-	std::lock_guard<std::mutex> lock(g_lock);
-	g_s.toast = text;
-	g_s.toastErr = error;
-	g_s.toastLen = error ? 10000 : 6000;
-	g_s.toastUntil = GetTickCount() + g_s.toastLen;
+	modui_impl::SetToast(text, error, error ? 10000 : 6000);
 	LogI("ui", "notice: %s", TrSource(text).c_str());
 }
 

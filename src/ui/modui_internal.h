@@ -24,6 +24,16 @@
 #include "mods/mods.h"
 
 namespace modui_impl {
+
+// The notice at the bottom has a lock of its own: raised while this screen's lock was held (a control of the replay, a cheat), it took
+// that lock a second time on the same thread, which threw and lost the click.
+struct ToastNow {
+	std::string text;
+	DWORD until = 0, len = 6000;
+	bool error = false;
+};
+void SetToast(const std::string &text, bool error, DWORD len);
+ToastNow CurrentToast();
 using namespace ui;
 
 // The size the toasts, cards and restart questions are scaled for; the content screen itself fills the whole screen (PanelLayout).
@@ -148,6 +158,7 @@ struct State {
 	bool busy = false;
 	int mouseX = -1, mouseY = -1;
 	std::vector<Hit> hits;
+	// The notice at the bottom as the frame draws it, copied from CurrentToast: it is kept apart, under its own lock.
 	std::string toast;
 	DWORD toastUntil = 0;
 	DWORD toastLen = 6000;

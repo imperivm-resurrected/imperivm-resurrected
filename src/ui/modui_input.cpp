@@ -81,7 +81,7 @@ void FieldKey(UINT msg, WPARAM wp)
 }
 }
 
-bool ModUiHandleCornerMessage(UINT msg, WPARAM wp, LPARAM lp)
+static bool HandleCornerLocked(UINT msg, WPARAM wp, LPARAM lp, int &specAfter)
 {
 	const bool keyMsg = msg == WM_KEYDOWN || msg == WM_KEYUP || msg == WM_CHAR;
 	const bool otherUi = keyMsg && (SavesUiIsOpen() || MpUiIsOpen());
@@ -137,7 +137,7 @@ bool ModUiHandleCornerMessage(UINT msg, WPARAM wp, LPARAM lp)
 					g_spec.dragFrac = std::max(0.0, std::min(1.0, (pt.x - g_spec.btn[5].left) / static_cast<double>(std::max<LONG>(1, g_spec.btn[5].right - g_spec.btn[5].left))));
 				}
 				else {
-					SpectatorControl(i == 6 ? 5 : i == 7 ? 6 : i == 8 ? 7 : i);
+					specAfter = i == 6 ? 5 : i == 7 ? 6 : i == 8 ? 7 : i;
 				}
 				g_spec.swallowUp = true;
 				return true;
@@ -239,6 +239,16 @@ bool ModUiHandleCornerMessage(UINT msg, WPARAM wp, LPARAM lp)
 		}
 	}
 	return false;
+}
+
+bool ModUiHandleCornerMessage(UINT msg, WPARAM wp, LPARAM lp)
+{
+	// A control of the replay may show a notice, which takes this screen's lock: taken twice by one thread, the lock threw and the click
+	// was lost. It runs once the lock is let go.
+	int specAfter = -1;
+	const bool taken = HandleCornerLocked(msg, wp, lp, specAfter);
+	if (specAfter >= 0) SpectatorControl(specAfter);
+	return taken;
 }
 
 bool ModUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)

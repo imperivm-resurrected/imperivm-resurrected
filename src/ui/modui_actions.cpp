@@ -487,10 +487,7 @@ void DoAction(int action, int arg)
 		for (size_t i = 0; i < problems.size() && i < 5; i++) text += (i ? "\n" : "") + problems[i];
 		if (problems.size() > 5) text += "\n(" + Tr("and ") + std::to_string(problems.size() - 5) + Tr(" more)");
 		if (!text.empty()) {
-			g_s.toast = text;
-			g_s.toastErr = true;
-			g_s.toastLen = 12000;
-			g_s.toastUntil = GetTickCount() + g_s.toastLen;
+			SetToast(text, true, 12000);
 		}
 		break;
 	}

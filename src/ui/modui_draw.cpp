@@ -22,9 +22,10 @@ bool ModUiNeedsDraw()
 	const bool inGame = *reinterpret_cast<void **>(addr::kGame) != nullptr;
 	SpectatorState spState;
 	const bool menu = !inGame && MpUiMainMenuVisible() && !MpUiIsOpen() && !SavesUiIsOpen() && !ControlsUiNeedsDraw();
+	const ToastNow toast = CurrentToast();
 	std::lock_guard<std::mutex> lock(g_lock);
 	g_icon.shown = menu && !g_s.open;
-	return g_s.open || (!g_s.toast.empty() && static_cast<int>(g_s.toastUntil - GetTickCount()) > 0) || DlStatus().active || g_icon.shown || SpectatorViewing() || SpectatorControls(spState) || CheatsPanelAvailable();
+	return g_s.open || (!toast.text.empty() && static_cast<int>(toast.until - GetTickCount()) > 0) || DlStatus().active || g_icon.shown || SpectatorViewing() || SpectatorControls(spState) || CheatsPanelAvailable();
 }
 
 void ModUiDraw(uint32_t *buf, int w, int h)
@@ -71,12 +72,13 @@ void ModUiDraw(uint32_t *buf, int w, int h)
 		}
 		// Closed, only the toast is drawn from the state: the mod list and the catalogue it keeps are not copied on every pass.
 		if (g_s.open) st = g_s;
-		else {
-			st.toast = g_s.toast;
-			st.toastUntil = g_s.toastUntil;
-			st.toastLen = g_s.toastLen;
-			st.toastErr = g_s.toastErr;
-		}
+	}
+	{
+		const ToastNow toast = CurrentToast();
+		st.toast = toast.text;
+		st.toastUntil = toast.until;
+		st.toastLen = toast.len;
+		st.toastErr = toast.error;
 	}
 	const float s = FitScale(w, h, kDesignW, kDesignH, 24);
 	if (st.open) {
