@@ -91,8 +91,10 @@ struct View {
 	int rankCount = 0;
 	int metric = kMetricKills, chartMode = kModeAll, chartRange = kRange20;
 	int outcome = kOutcomeAll, historyScroll = 0;
-	// The civilization of the civilizations tab (kCivAll for every one), and the queue of the league tab's chart of Glory (0 the duel).
-	int civ = kCivAll, gloryQueue = 0;
+	// The civilization of the civilizations tab (kCivAll for every one).
+	int civ = kCivAll;
+	// The league tab's chart of Glory: the queues hidden (bit 0 the duel, bit 1 the pairs) and its window (7 days, 30 days, the season).
+	int gloryHidden = 0, gloryRange = 2;
 	// The civilization was just chosen, or the tab opened: its chip is scrolled into view once the row is painted.
 	bool revealCiv = false;
 	// The position in the selected card's games of the one opened in the history, or -1.
@@ -108,7 +110,7 @@ struct View {
 enum Action {
 	kActNone = 0, kActPick, kActUse, kActBack, kActPatron, kActMetric, kActChartMode, kActChartRange, kActOutcome, kActBar, kActGame,
 	kActHistory, kActLeague, kActLeagueClose, kActLeagueLink, kActLeagueOpen, kActLeagueCancel, kActLeagueUnlink, kActLeagueBadge,
-	kActLeagueFrame, kActLeagueTitle, kActTab, kActCiv, kActGloryQueue, kActCivScroll,
+	kActLeagueFrame, kActLeagueTitle, kActTab, kActCiv, kActGloryQueue, kActGloryRange, kActCivScroll,
 };
 
 constexpr int kTabGeneral = 0, kTabLeague = 1, kTabCivs = 2;

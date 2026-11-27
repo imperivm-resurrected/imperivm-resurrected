@@ -489,6 +489,7 @@ void Act(View &v, int action, int arg, Command &cmd)
 		case kActTab:
 		case kActCiv:
 		case kActGloryQueue:
+		case kActGloryRange:
 		case kActMetric:
 		case kActChartMode:
 		case kActChartRange:
@@ -544,7 +545,11 @@ void Act(View &v, int action, int arg, Command &cmd)
 		v.historyScroll = 0;
 		v.revealCiv = true;
 		break;
-	case kActGloryQueue: v.gloryQueue = arg ? 1 : 0; break;
+	case kActGloryQueue:
+		// One line always stays.
+		if ((v.gloryHidden ^ (arg ? 2 : 1)) != 3) v.gloryHidden ^= arg ? 2 : 1;
+		break;
+	case kActGloryRange: v.gloryRange = std::max(0, std::min(arg, 2)); break;
 	case kActMetric: v.metric = std::max(0, std::min(arg, kMetricCount - 1)); break;
 	case kActChartMode: v.chartMode = arg; break;
 	case kActChartRange: v.chartRange = arg; break;

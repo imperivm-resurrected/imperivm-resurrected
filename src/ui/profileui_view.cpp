@@ -1752,6 +1752,17 @@ std::string DayText(int64_t atMs)
 std::string SignedText(int value) { return (value > 0 ? "+" : value < 0 ? "\xE2\x88\x92" : "") + Grouped(static_cast<uint64_t>(value < 0 ? -value : value)); }
 
 // The Glory after each game of the season once placed, as a line over round steps of Glory; the queue is chosen when both were played.
+// The duel in the orange of the match statistics' own line, the pairs in the league's red.
+const COLORREF kGloryInk[2] = {RGB(0xe8, 0xa4, 0x5c), RGB(0xd9, 0x4a, 0x4a)};
+
+struct GloryDot {
+	float x = 0;
+	int y = 0, glory = 0, game = 0;
+	int64_t at = 0;
+	// The Glory the player came into the window with, from a game before it: the line starts there, the dot is not a game.
+	bool carried = false;
+};
+
 void PaintGloryChart(Painter &p, const View &v, int x, int y, int w, int h, Tip &tip)
 {
 	PaintGlassCard(p, x, y, w, h);
@@ -1761,20 +1772,11 @@ void PaintGloryChart(Painter &p, const View &v, int x, int y, int w, int h, Tip 
 		PaintSkeleton(p, ix, y + 64, iw, std::max(0, h - 110));
 		return;
 	}
-	const bool has1 = !v.me.ranked.gloryHistory.empty(), has2 = !v.me.ranked2v2.gloryHistory.empty();
-	const bool second = has2 && (!has1 || v.gloryQueue == 1);
-	if (has1 && has2) {
-		const std::vector<std::string> queues = Translated({"1 vs 1", "2 vs 2"});
-		const int segW = SegmentsWidth(p, queues);
-		PaintSegments(p, ix + iw - segW, y + 12, segW, queues, second ? 1 : 0, kActGloryQueue, v.mouseX, v.mouseY);
-	}
-	else if (has1 || has2) {
-		p.Font(3);
-		p.Text(ix + iw / 2, y + 16, iw - iw / 2, 22, second ? "2 vs 2" : "1 vs 1", pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-	}
-	const LeagueRanked &rk = second ? v.me.ranked2v2 : v.me.ranked;
-	const std::vector<LeagueGloryPoint> &points = rk.gloryHistory;
-	if (points.empty()) {
+	const LeagueRanked *ranks[2] = {&v.me.ranked, &v.me.ranked2v2};
+	static const char *const kQueueNames[2] = {"1 vs 1", "2 vs 2"};
+	const bool has[2] = {!ranks[0]->gloryHistory.empty(), !ranks[1]->gloryHistory.empty()};
+	if (!has[0] && !has[1]) {
+		const LeagueRanked &rk = *ranks[0];
 		// A server before the history sends nothing to tell.
 		if (!rk.gloryKnown) {
 			p.Font(1);
@@ -1787,10 +1789,95 @@ void PaintGloryChart(Painter &p, const View &v, int x, int y, int w, int h, Tip 
 			placing && !v.pub.on ? "Once your placement games are over, your Glory after each ranked game of the season shows here." : "No ranked games this season yet.", kMuted);
 		return;
 	}
-	const LeagueGloryAxis axis = LeagueGloryAxisOf(points);
+	// A queue stays hidden only while the other one shows.
+	bool shown[2] = {has[0] && !(v.gloryHidden & 1), has[1] && !(v.gloryHidden & 2)};
+	if (!shown[0] && !shown[1]) shown[has[0] ? 0 : 1] = true;
+
+	// The games are placed by their day, so that both queues share the line of time; a server that sent no days spreads them evenly.
+	bool dated = true;
+	int64_t first = INT64_MAX, last = 0;
+	for (int q = 0; q < 2; q++) {
+		if (!shown[q]) continue;
+		for (const LeagueGloryPoint &pt : ranks[q]->gloryHistory) dated = dated && pt.at > 0;
+		first = std::min(first, ranks[q]->gloryHistory.front().at);
+		last = std::max(last, ranks[q]->gloryHistory.back().at);
+	}
+	constexpr int64_t kDayMs = 86400000;
+	int64_t from = first, to = last;
+	if (dated && v.gloryRange < 2) {
+		to = std::max(last, static_cast<int64_t>(std::time(nullptr)) * 1000);
+		from = std::max(first, to - (v.gloryRange == 0 ? 7 : 30) * kDayMs);
+	}
+	if (dated) {
+		const std::vector<std::string> ranges = Translated({"7 days", "30 days", "Whole season"});
+		const int segW = SegmentsWidth(p, ranges);
+		PaintSegments(p, ix + iw - segW, y + 12, segW, ranges, v.gloryRange, kActGloryRange, v.mouseX, v.mouseY);
+	}
+
+	std::vector<GloryDot> series[2];
+	std::vector<LeagueGloryPoint> inWindow;
+	for (int q = 0; q < 2; q++) {
+		if (!shown[q]) continue;
+		const std::vector<LeagueGloryPoint> &all = ranks[q]->gloryHistory;
+		for (int i = 0; i < static_cast<int>(all.size()); i++) {
+			if (dated && all[i].at < from) {
+				if (i + 1 < static_cast<int>(all.size()) && all[i + 1].at >= from) {
+					GloryDot d;
+					d.glory = all[i].glory;
+					d.at = from;
+					d.game = i;
+					d.carried = true;
+					series[q].push_back(d);
+					inWindow.push_back({from, all[i].glory});
+				}
+				continue;
+			}
+			GloryDot d;
+			d.glory = all[i].glory;
+			d.at = all[i].at;
+			d.game = i;
+			series[q].push_back(d);
+			inWindow.push_back(all[i]);
+		}
+	}
+
+	// The legend says which line is which queue and what each won or lost in the window; a click hides or shows one.
+	p.Font(3);
+	int lx = ix;
+	const int legendY = y + 42;
+	const int mx = MouseX(p, v), my = MouseY(p, v);
+	for (int q = 0; q < 2; q++) {
+		if (!has[q]) continue;
+		const std::string name = Tr(kQueueNames[q]);
+		std::string change;
+		int delta = 0;
+		if (series[q].size() > 1) {
+			delta = series[q].back().glory - series[q].front().glory;
+			change = SignedText(delta);
+		}
+		const int nameW = p.TextWidth(name), changeW = change.empty() ? 0 : RawWidth(p, change) + 8;
+		const int itemW = 22 + nameW + changeW;
+		const bool toggles = has[0] && has[1];
+		const bool hot = toggles && p.Hover(lx - 4, legendY - 2, itemW + 8, 22, v.mouseX, v.mouseY);
+		if (shown[q]) p.Fill(lx, legendY + 8, 14, 3, kGloryInk[q]);
+		else p.Frame(lx, legendY + 7, 14, 5, kGloryInk[q]);
+		p.Text(lx + 22, legendY - 2, nameW + 2, 22, kQueueNames[q], shown[q] || hot ? pal::text : kMuted, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+		if (!change.empty() && shown[q]) {
+			TextAsIs(p, lx + 22 + nameW + 8, legendY - 2, changeW, 22, change, delta > 0 ? pal::ok : delta < 0 ? pal::bad : kMuted, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+		}
+		if (toggles) p.AddHit(lx - 4, legendY - 2, itemW + 8, 22, kActGloryQueue, q);
+		lx += itemW + 24;
+	}
+
+	if (inWindow.empty()) {
+		p.Font(1);
+		p.Text(ix, y + 70, iw, std::max(0, h - 110), kDash, kMuted, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+		return;
+	}
+	const LeagueGloryAxis axis = LeagueGloryAxisOf(inWindow);
 	p.Font(3);
 	const int labelW = RawWidth(p, Grouped(static_cast<uint64_t>(axis.high))) + 12;
-	const int px = ix + labelW, pw = ix + iw - px - 6, py = y + 66, ph = y + h - 46 - py;
+	const int px = ix + labelW, pw = ix + iw - px - 6, py = y + 76, ph = y + h - 40 - py;
 	if (ph < 40 || pw < 40) return;
 	const int span = std::max(1, axis.high - axis.low);
 	for (int g = axis.low; g <= axis.high; g += std::max(1, axis.step)) {
@@ -1798,52 +1885,78 @@ void PaintGloryChart(Painter &p, const View &v, int x, int y, int w, int h, Tip 
 		p.Fill(px, gy, pw, 1, g == axis.low ? pal::lineStrong : kRule);
 		TextAsIs(p, ix, gy - 10, labelW - 10, 20, Grouped(static_cast<uint64_t>(g)), pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 	}
-	const std::vector<LeagueChartDot> dots = LeagueGloryDots(points, axis, px, py, pw, ph);
-	const int n = static_cast<int>(dots.size());
-	const COLORREF ink = rk.tier != LeagueTier::None ? LeagueTierInk(rk.tier) : pal::redText;
-	const int mx = MouseX(p, v), my = MouseY(p, v);
-	int hovered = -1;
-	if (!p.noHover && mx >= px - 10 && mx <= px + pw + 10 && my >= py - 10 && my <= py + ph + 10) {
+	for (int q = 0; q < 2; q++) {
+		const int n = static_cast<int>(series[q].size());
 		for (int i = 0; i < n; i++) {
-			if (hovered < 0 || std::abs(dots[i].x - mx) < std::abs(dots[hovered].x - mx)) hovered = i;
+			GloryDot &d = series[q][i];
+			if (!dated) d.x = n == 1 ? px + pw / 2.0f : px + static_cast<float>(pw) * i / (n - 1);
+			else d.x = to > from ? px + static_cast<float>(pw) * static_cast<float>(d.at - from) / static_cast<float>(to - from) : px + pw / 2.0f;
+			const int value = std::max(axis.low, std::min(axis.high, d.glory));
+			d.y = py + ph - static_cast<int>(static_cast<int64_t>(ph) * (value - axis.low) / span);
 		}
 	}
-	if (hovered >= 0) p.Fill(dots[hovered].x, py, 1, ph, pal::hairline);
-	// Drawn as the match statistics draw theirs: one smooth line, and a dot only where the player stands now.
+
+	int hoveredQ = -1, hovered = -1;
+	if (!p.noHover && mx >= px - 10 && mx <= px + pw + 10 && my >= py - 10 && my <= py + ph + 10) {
+		float best = 0;
+		for (int q = 0; q < 2; q++) {
+			for (int i = 0; i < static_cast<int>(series[q].size()); i++) {
+				const GloryDot &d = series[q][i];
+				if (d.carried) continue;
+				const float dx = d.x - mx, dy = static_cast<float>(d.y - my) / 3;
+				const float dist = dx * dx + dy * dy;
+				if (hovered < 0 || dist < best) {
+					best = dist;
+					hoveredQ = q;
+					hovered = i;
+				}
+			}
+		}
+	}
+	if (hovered >= 0) p.Fill(static_cast<int>(series[hoveredQ][hovered].x), py, 1, ph, pal::hairline);
+
+	// Drawn as the match statistics draw theirs: one smooth line per queue, and a dot only where the player stands now.
 	Surface surface;
 	if (surface.Open(p.dc)) {
 		const float width = 2.6f * p.s;
-		for (int i = 1; i < n; i++) surface.Segment(dots[i - 1].x * p.s, dots[i - 1].y * p.s, dots[i].x * p.s, dots[i].y * p.s, width, ink);
-		surface.Segment(dots[n - 1].x * p.s, dots[n - 1].y * p.s, dots[n - 1].x * p.s, dots[n - 1].y * p.s, width * 2.2f, ink);
+		for (int q = 0; q < 2; q++) {
+			const std::vector<GloryDot> &s = series[q];
+			for (size_t i = 1; i < s.size(); i++) surface.Segment(s[i - 1].x * p.s, s[i - 1].y * p.s, s[i].x * p.s, s[i].y * p.s, width, kGloryInk[q]);
+			if (!s.empty() && !s.back().carried) surface.Segment(s.back().x * p.s, s.back().y * p.s, s.back().x * p.s, s.back().y * p.s, width * 2.2f, kGloryInk[q]);
+		}
 	}
 	if (hovered >= 0) {
-		p.Ellipse(dots[hovered].x - 7, dots[hovered].y - 7, 15, 15, pal::text);
-		p.Ellipse(dots[hovered].x - 5, dots[hovered].y - 5, 11, 11, ink);
+		const GloryDot &d = series[hoveredQ][hovered];
+		const int cx = static_cast<int>(d.x + 0.5f);
+		p.Ellipse(cx - 7, d.y - 7, 15, 15, pal::text);
+		p.Ellipse(cx - 5, d.y - 5, 11, 11, kGloryInk[hoveredQ]);
 	}
+
 	p.Font(3);
-	const int footY = y + h - 36;
-	TextAsIs(p, ix, footY, iw / 2, 22, GamesText(n), kMuted);
-	const int change = points.back().glory - points.front().glory;
-	if (n > 1) {
-		TextAsIs(p, ix + iw / 2, footY, iw - iw / 2, 22, TrFmt("%s since placement", {SignedText(change)}), change > 0 ? pal::ok : change < 0 ? pal::bad : kMuted,
-			DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	const int footY = y + h - 34;
+	if (dated) {
+		TextAsIs(p, px, footY, pw / 2, 22, DayText(from), kMuted, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+		if (to > from) TextAsIs(p, px + pw / 2, footY, pw - pw / 2, 22, DayText(to), kMuted, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 	}
+
 	if (hovered >= 0) {
-		const LeagueGloryPoint &pt = points[hovered];
-		std::string head = TrFmt("Game %s", {std::to_string(hovered + 1)});
-		const std::string day = DayText(pt.at);
+		const GloryDot &d = series[hoveredQ][hovered];
+		const std::vector<LeagueGloryPoint> &all = ranks[hoveredQ]->gloryHistory;
+		std::string head = TrFmt("Game %s", {std::to_string(d.game + 1)});
+		if (shown[0] && shown[1]) head = Tr(kQueueNames[hoveredQ]) + "  \xC2\xB7  " + head;
+		const std::string day = DayText(d.at);
 		if (!day.empty()) head += "  \xC2\xB7  " + day;
 		tip.lines.push_back({head, pal::text});
-		std::string line = TrFmt("%s Glory", {Grouped(static_cast<uint64_t>(pt.glory))});
+		std::string line = TrFmt("%s Glory", {Grouped(static_cast<uint64_t>(d.glory))});
 		COLORREF lineInk = pal::text;
-		if (hovered > 0) {
-			const int delta = pt.glory - points[hovered - 1].glory;
+		if (d.game > 0) {
+			const int delta = d.glory - all[d.game - 1].glory;
 			line += "  (" + SignedText(delta) + ")";
 			lineInk = delta > 0 ? pal::ok : delta < 0 ? pal::bad : pal::text;
 		}
 		tip.lines.push_back({line, lineInk});
-		tip.x = dots[hovered].x + 14;
-		tip.y = dots[hovered].y - 30;
+		tip.x = static_cast<int>(d.x) + 14;
+		tip.y = d.y - 30;
 	}
 }
 
