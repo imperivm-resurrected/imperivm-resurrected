@@ -1775,11 +1775,11 @@ void LeagueRankedReady(bool ready)
 void BotThread()
 {
 	const Answer a = Call("POST", "/v1/league/queue/bot", "{}", true);
-	if (a.r.Ok()) LogI("league", "ranked: the staging server's practice bot joins the search");
-	else LogW("league", "ranked: the practice bot was refused (%s)", a.r.Describe().c_str());
+	if (a.r.Ok()) LogI("league", "ranked: the staging server's practice bots join the search");
+	else LogW("league", "ranked: the practice bots were refused (%s)", a.r.Describe().c_str());
 	std::lock_guard<std::mutex> lock(g_mx);
 	if (!a.r.Ok()) g_q.botAsked = false;
-	// The next poll pairs the search with it.
+	// The next poll pairs the search with them.
 	else g_q.nextPoll = GetTickCount();
 }
 

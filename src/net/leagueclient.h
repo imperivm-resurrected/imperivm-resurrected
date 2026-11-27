@@ -223,7 +223,8 @@ struct LeagueRankedView {
 	// While searching: since when (server time, ms since 1970), how many search and the wait the server expects.
 	int64_t since = 0;
 	int searching = 0, estimateSec = 0;
-	// Searching 1 vs 1 on the staging server, which can put its practice bot against the search (LeagueRankedPracticeBot).
+	// Searching on the staging server, which can put its practice bots in the match (LeagueRankedPracticeBot): one against a 1v1,
+	// two against a 2v2 (and a third as the partner of one searching alone).
 	bool practiceBot = false;
 	// The Glory of the opponents the server takes now (no window from a server without it).
 	LeagueSearchWindow window;

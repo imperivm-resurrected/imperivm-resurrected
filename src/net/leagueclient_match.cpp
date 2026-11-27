@@ -523,17 +523,19 @@ bool BuildReport(const Match &m, LeagueReport &r, std::string &why)
 			LogW("league", "seat %d had an account that is not in the ranked match; the match's own is used", s.index);
 			s.steamId = 0;
 		}
-		// Against the staging server's practice bot the game's AI played its seat: that seat goes as the bot.
+		// Against the staging server's practice bots the game's AI played their seats: each seat goes as a bot, in a 2v2 one of its team.
 		for (const LeaguePlayerCard &p : ticket.players) {
 			const uint64_t bot = _strtoui64(p.steamId.c_str(), nullptr, 10);
 			if (!TourneyIsTestBot(bot)) continue;
+			LeagueSeat *seat = nullptr;
 			for (LeagueSeat &s : seats) {
 				if (s.human) continue;
-				s.human = true;
-				s.steamId = bot;
-				LogI("league", "the game's AI played the practice bot of ranked match %lld", static_cast<long long>(m.rankedId));
-				break;
+				if (!seat || (p.team > 0 && s.team == p.team && seat->team != p.team)) seat = &s;
 			}
+			if (!seat) continue;
+			seat->human = true;
+			seat->steamId = bot;
+			LogI("league", "the game's AI played a practice bot of ranked match %lld (team %d)", static_cast<long long>(m.rankedId), seat->team);
 		}
 		LeagueSeatsFromTicket(seats, ticket, SteamOwnId());
 	}

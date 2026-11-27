@@ -69,11 +69,19 @@ namespace {
 
 const int kOptMapType = 0x1000, kOptMapSize = 0x01000008;
 
-// A match against the staging server's practice bot: its seat is the game's AI in the host's room.
-bool BotTicket(const LeagueRankedView &v)
+// The staging server's practice bots of a match, by their side in a 2v2 (0 in a 1v1): their seats are the game's AI in the host's room.
+std::vector<int> BotSides(const LeagueRankedView &v)
 {
-	return v.ticketLoaded && TourneyIsTestBot(_strtoui64(v.opponent.steamId.c_str(), nullptr, 10));
+	std::vector<int> sides;
+	if (!v.ticketLoaded) return sides;
+	for (const LeaguePlayerCard &pl : v.ticket.players) {
+		if (TourneyIsTestBot(_strtoui64(pl.steamId.c_str(), nullptr, 10))) sides.push_back(pl.team);
+	}
+	if (sides.empty() && TourneyIsTestBot(_strtoui64(v.opponent.steamId.c_str(), nullptr, 10))) sides.push_back(0);
+	return sides;
 }
+
+bool BotTicket(const LeagueRankedView &v) { return !BotSides(v).empty(); }
 
 // What the game thread does for a ranked match: the room it made or tried to join, and when.
 struct RoomAuto {
@@ -449,18 +457,24 @@ void RoomStep(const LeagueRankedView &v, DWORD now)
 		if (now - g_auto.settingsAt > 1000) {
 			g_auto.settingsAt = now;
 			g_auto.roomHeld = ApplySettings(v.ticket);
-			// Against the staging server's practice bot the game's AI takes its seat, once the room has the league's options.
-			if (g_auto.roomHeld && BotTicket(v) && g_s.game.active && !g_s.game.busy) {
-				bool ai = false;
+			// Against the staging server's practice bots the game's AI takes their seats, once the room has the league's options; in a 2v2
+			// each one in its bot's team.
+			const std::vector<int> bots = BotSides(v);
+			if (g_auto.roomHeld && !bots.empty() && g_s.game.active && !g_s.game.busy) {
+				std::vector<int> ai;
 				int open = -1;
 				for (int i = 0; i < 8; i++) {
 					const GameRoomSlot &o = g_s.game.slots[static_cast<size_t>(i)];
-					ai = ai || (o.used && o.type == 1);
-					if (open < 0 && i != g_s.game.localSlot && o.type == 0) open = i;
+					if (o.used && o.type == 1) ai.push_back(i);
+					else if (open < 0 && i != g_s.game.localSlot && o.type == 0) open = i;
 				}
-				if (!ai && open >= 0) {
+				if (ai.size() < bots.size() && open >= 0) {
 					GameRoomSetSlotType(open, 1);
-					LogI("league", "ranked match %lld: the game's AI takes the practice bot's seat (%d)", static_cast<long long>(v.matchId), open + 1);
+					LogI("league", "ranked match %lld: the game's AI takes a practice bot's seat (%d)", static_cast<long long>(v.matchId), open + 1);
+				}
+				for (size_t k = 0; k < ai.size() && k < bots.size(); k++) {
+					const GameRoomSlot &o = g_s.game.slots[static_cast<size_t>(ai[k])];
+					if (bots[k] > 0 && bots[k] < g_s.game.teamChoices && o.team != bots[k]) GameRoomSetTeam(ai[k], bots[k]);
 				}
 			}
 		}
