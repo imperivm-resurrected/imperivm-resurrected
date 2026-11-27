@@ -1850,7 +1850,9 @@ void GameRoomSetTeam(int slot, int team)
 			LogW("room", "team of slot %d not changed: only its player, or the host for an AI, can change it", slot + 1);
 			return;
 		}
-		if (shell && *reinterpret_cast<int *>(d + 0x78)) {
+		// The native rows lock while the local player is ready; an AI's seat the host keeps for the league (a practice bot's team) is set
+		// anyway, or a host ready before it was would leave the bot with no team and the room would never start.
+		if (shell && *reinterpret_cast<int *>(d + 0x78) && !(host && type == 1 && !local)) {
 			LogD("room", "team of slot %d not changed: the rows are locked while you are ready", slot + 1);
 			return;
 		}
