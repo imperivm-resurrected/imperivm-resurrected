@@ -3751,5 +3751,8 @@
 {"en":"On the cup's page, drag a player onto another to swap them.","es":"En la página de la copa, arrastra un jugador sobre otro para cambiarlos.","it":"Nella pagina della coppa, trascina un giocatore su un altro per scambiarli."},
 {"en":"That player is no longer in the first round.","es":"Ese jugador ya no está en la primera ronda.","it":"Quel giocatore non è più nel primo turno."},
 {"en":"The cup changed meanwhile: try again.","es":"La copa ha cambiado mientras tanto: vuelve a intentarlo.","it":"La coppa è cambiata nel frattempo: riprova."},
-{"en":"Chosen by the organizer","es":"La elige quien organiza","it":"Le sceglie chi organizza"}
+{"en":"Chosen by the organizer","es":"La elige quien organiza","it":"Le sceglie chi organizza"},
+{"en":"You run this tournament","es":"Gestionas este torneo","it":"Gestisci questo torneo"},
+{"en":"Players have signed up: the mode can no longer change.","es":"Ya se ha apuntado gente: el modo ya no puede cambiar.","it":"Ci sono già iscritti: la modalità non può più cambiare."},
+{"en":"An official tournament is cancelled from the league's web panel.","es":"Un torneo oficial se cancela desde el panel web de la liga.","it":"Un torneo ufficiale si annulla dal pannello web della lega."}
 ]

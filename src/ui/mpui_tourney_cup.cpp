@@ -147,7 +147,7 @@ struct Form {
 	const TourneyMineView &mine;
 	Look k;
 	int mx = 0, my = 0;
-	bool locked = false, measure = false, editing = false;
+	bool locked = false, measure = false, editing = false, official = false;
 	int64_t now = 0;
 	// The pane the form scrolls in: the text fields clip on their own and take it away.
 	int vx = 0, vy = 0, vw = 0, vh = 0;
@@ -816,6 +816,8 @@ int CalendarRight(Form &c, int x, int y, int w)
 					  "the room wins; a match nobody played comes to you to settle, and if you don't within 24 hours, both are out.")
 				 : Tr("Whoever is not in the room by then loses the match, and the other goes through."));
 	at += Problem(c, x, at, w, {TourneyCupProblem::Noshow}) + c.k.rowGap;
+	// An official tournament keeps the requirements the panel gave it.
+	if (c.official) return at - y;
 	const int half = (w - 16) / 2;
 	if (!c.measure) {
 		PaintCaps(p, x, at, half, c.k.labelH, Tr("Minimum online games"), pal::caption);
@@ -841,6 +843,7 @@ int AccessBlock(Form &c, int x, int y, int w)
 	const TourneyCupForm &f = c.f;
 	Painter &p = c.p;
 	int at = y;
+	if (c.official) return 0;
 	at += Label(c, x, at, w, Tr("Access"));
 	const int half = (w - 16) / 2;
 	Option(c, x, at, half, c.k.optionH, !f.isPrivate, true, Tr("Open cup"), Tr("It shows in the list: anyone can sign up."), std::string(), false, CupArg(kCupPrivate, 0));
@@ -1100,10 +1103,12 @@ void PaintSummary(Painter &p, const State &st, const Ui &u, const std::vector<To
 		mapsBrief += "\n" + series;
 	}
 	rows.push_back({Tr("Maps"), maps, mapsBrief, 6});
-	rows.push_back({Tr("Requirements"), RequirementsText(f.requirements), RequirementsText(f.requirements), 2});
-	const std::string access = Tr(f.isPrivate ? "Private: only with its code" : "Open: it shows in the list") + " \xC2\xB7 " +
-		Tr(teams ? "your team signs up from its page" : f.play ? "you play too" : "you only organise it");
-	rows.push_back({Tr("Access"), access, access, 2});
+	if (!(u.cupEditId && u.cupEditOfficial)) {
+		rows.push_back({Tr("Requirements"), RequirementsText(f.requirements), RequirementsText(f.requirements), 2});
+		const std::string access = Tr(f.isPrivate ? "Private: only with its code" : "Open: it shows in the list") + " \xC2\xB7 " +
+			Tr(teams ? "your team signs up from its page" : f.play ? "you play too" : "you only organise it");
+		rows.push_back({Tr("Access"), access, access, 2});
+	}
 	int need = 0;
 	for (const Row &r : rows) need += SummaryRow(p, x + pad, 0, iw, r.name, r.full, r.lines, false);
 	// Each name over its value when there is room; on a short screen each name beside a line of its value.
@@ -1529,9 +1534,17 @@ void PaintCreateScreen(Painter &p, const State &st, const Ui &u, PaintOut &out)
 	if (editing && u.cupLocked) {
 		problems.erase(std::remove_if(problems.begin(), problems.end(), [](TourneyCupProblem q) { return q != TourneyCupProblem::DescriptionLong; }), problems.end());
 	}
+	// An official tournament keeps the panel's limits: a start weeks away, a longer check-in or name, the requirements it was made with.
+	if (editing && u.cupEditOfficial) {
+		const auto panel = [](TourneyCupProblem q) {
+			return q == TourneyCupProblem::StartLate || q == TourneyCupProblem::Checkin || q == TourneyCupProblem::Noshow || q == TourneyCupProblem::Series ||
+				q == TourneyCupProblem::NameLong || q == TourneyCupProblem::DescriptionLong || q == TourneyCupProblem::Requirements;
+		};
+		problems.erase(std::remove_if(problems.begin(), problems.end(), panel), problems.end());
+	}
 	const auto mineView = LeagueTourneyMine();
 	const TourneyMineView &mine = *mineView;
-	const bool selfUnmet = !(editing && u.cupLocked) && u.cup.play && u.cup.mode != TourneyMode::Teams && CupUnmet(u.cup.requirements, mine) != TourneyUnmet::None;
+	const bool selfUnmet = !(editing && (u.cupLocked || u.cupEditOfficial)) && u.cup.play && u.cup.mode != TourneyMode::Teams && CupUnmet(u.cup.requirements, mine) != TourneyUnmet::None;
 	const int m = l.margin, inner = l.w - 2 * m, top = l.top, bottom = l.h - m;
 	const int sideW = std::max(360, std::min(440, inner * 26 / 100)), gap = l.roomy ? kCardGap : 24, paneW = inner - sideW - gap, barW = 16;
 	p.raw = true;
@@ -1540,6 +1553,7 @@ void PaintCreateScreen(Painter &p, const State &st, const Ui &u, PaintOut &out)
 	c.my = st.mouseY;
 	c.locked = editing && u.cupLocked;
 	c.editing = editing;
+	c.official = editing && u.cupEditOfficial;
 	c.now = now;
 	c.vx = m;
 	c.vy = top;

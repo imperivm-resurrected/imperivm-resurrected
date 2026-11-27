@@ -348,6 +348,10 @@ void Community()
 	CHECK(m.organize.known);
 	CHECK(!m.organize.allowed);
 	CHECK_EQ(m.organize.GamesMissing(), 7);
+	CHECK(!m.organize.staff);
+	TourneyMine dev;
+	CHECK(TourneyParseMine(Parse(R"({"organize":{"allowed":true,"gamesPlayed":40,"gamesNeeded":10,"active":null,"staff":true},"organized":[]})"), dev));
+	CHECK(dev.organize.staff);
 	CHECK(Same(m.organize.activeId, 7));
 	CHECK_EQ(m.organize.activeSlug, std::string("copa-del-barrio"));
 	CHECK_EQ(static_cast<int>(m.organized.size()), 2);

@@ -584,7 +584,7 @@ void PaintEntrantColumn(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut
 		// Before the draw the organizer takes a player off from their row, on hovering it.
 		const bool own = e.steamId == SteamOwnId() || TourneyMemberOf(e.members, SteamOwnId());
 		const bool before = d.status == TourneyStatus::Signup || d.status == TourneyStatus::Checkin;
-		const bool removable = IsOrganizer(d) && before && !own && (e.status == TourneyEntryStatus::Signed || e.status == TourneyEntryStatus::Waitlist) &&
+		const bool removable = CanManage(d) && before && !own && (e.status == TourneyEntryStatus::Signed || e.status == TourneyEntryStatus::Waitlist) &&
 			ry >= top && ry + rowH <= top + viewH;
 		const bool busy = removable && LeagueTourneyBusy(TourneyOp::RemoveEntry, e.entryId);
 		const bool offer = removable && (busy || p.Hover(x, ry, w, rowH, c.mx, c.my));
@@ -1673,11 +1673,14 @@ int PaintOrganizerCard(Painter &p, Ctx &c, int x, int y, int w)
 	const TourneyDisputesView &open = c.disputes;
 	const int disputes = open.loaded ? static_cast<int>(open.disputes.size()) : own ? own->openDisputes : 0;
 	const bool on = d.status == TourneyStatus::Signup || d.status == TourneyStatus::Checkin || d.status == TourneyStatus::Running;
-	const int codeH = d.isPrivate && !code.empty() ? 96 : 0, buttons = !on ? 0 : d.status == TourneyStatus::Running ? (disputes ? 2 : 1) : 2;
+	// An official tournament is cancelled from the league's panel: a developer's card has no Cancel.
+	const bool official = d.official;
+	const int codeH = d.isPrivate && !code.empty() ? 96 : 0;
+	const int buttons = !on ? 0 : d.status == TourneyStatus::Running ? (disputes ? 1 : 0) + (official ? 0 : 1) : 2;
 	const int h = 20 + 26 + codeH + 64 + buttons * 50 + 10;
 	PaintGlassCard(p, x, y, w, h);
 	p.Fill(x, y, 4, h, pal::red);
-	PaintCaps(p, x + pad, y + 20, bw, 20, "You organise this cup", pal::redText);
+	PaintCaps(p, x + pad, y + 20, bw, 20, official ? "You run this tournament" : "You organise this cup", pal::redText);
 	int cy = y + 50;
 	if (codeH) {
 		PaintCaps(p, x + pad, cy, bw, 18, "Invitation code", pal::caption);
@@ -1736,10 +1739,13 @@ int PaintOrganizerCard(Painter &p, Ctx &c, int x, int y, int w)
 	}
 	if (on) {
 		const std::string cancel = Tr(cancelling ? "Cancelling..." : "Cancel the cup");
-		if (d.status == TourneyStatus::Running) PaintSecondButton(p, x + pad, cy, bw, 40, cancel, ArgOf(kSubCancelCup, d.id), !cancelling, mx, my);
+		const bool editing = LeagueTourneyBusy(TourneyOp::Edit, d.id);
+		if (official) {
+			if (d.status != TourneyStatus::Running) PaintSecondButton(p, x + pad, cy, bw, 40, Tr("Edit"), ArgOf(kSubEdit, d.id), !editing, mx, my);
+		}
+		else if (d.status == TourneyStatus::Running) PaintSecondButton(p, x + pad, cy, bw, 40, cancel, ArgOf(kSubCancelCup, d.id), !cancelling, mx, my);
 		else {
 			const int half = (bw - 10) / 2;
-			const bool editing = LeagueTourneyBusy(TourneyOp::Edit, d.id);
 			PaintSecondButton(p, x + pad, cy, half, 40, Tr("Edit"), ArgOf(kSubEdit, d.id), !editing && !cancelling, mx, my);
 			PaintSecondButton(p, x + pad + half + 10, cy, bw - half - 10, 40, cancel, ArgOf(kSubCancelCup, d.id), !cancelling, mx, my);
 		}
@@ -1806,7 +1812,7 @@ int PaintPrizesCard(Painter &p, const TourneyDetail &d, int x, int y, int w)
 
 bool TourneyCanArrange(const TourneyDetail &d)
 {
-	return !d.firstRound.empty() && (d.status == TourneyStatus::Signup || d.status == TourneyStatus::Checkin) && IsOrganizer(d);
+	return !d.firstRound.empty() && (d.status == TourneyStatus::Signup || d.status == TourneyStatus::Checkin) && CanManage(d);
 }
 
 bool PaintPageHeader(Painter &p, const State &st, const HeaderUi &u)
@@ -1883,7 +1889,7 @@ void PaintPageScreen(Painter &p, const State &st, const Ui &u, PaintOut &out)
 	const int sideW = std::max(320, std::min(400, inner * 22 / 100)), mainW = inner - sideW - kCardGap, sx = m + mainW + kCardGap;
 	PaintGlassCard(p, m, y, mainW, bottom - y);
 	const int ix = m + 24, iy = y + 18, iw = mainW - 48, ih = bottom - y - 36;
-	const bool organizer = IsOrganizer(page.detail), swiss = TourneyIsSwiss(page.detail);
+	const bool organizer = CanManage(page.detail), swiss = TourneyIsSwiss(page.detail);
 	if (organizer) c.disputes = LeagueTourneyDisputes(page.detail.id);
 	const bool bracketTab = u.pageTab == 0 || u.pageTab >= kRoundTab;
 	// What scrolls out of the card is not drawn and can't be clicked through the header, the banner or the side column.

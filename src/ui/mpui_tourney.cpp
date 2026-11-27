@@ -998,6 +998,8 @@ std::string ResultText(const TourneyOpResult &r)
 	if (e == "not_linked") return Tr("Link your league account first.");
 	if (e == "not_your_pick") return Tr("It is not your turn to choose the map.");
 	if (e == "not_in_bracket") return Tr("That player is no longer in the first round.");
+	if (e == "mode_locked") return Tr("Players have signed up: the mode can no longer change.");
+	if (e == "panel_only") return Tr("An official tournament is cancelled from the league's web panel.");
 	if (e == "changed") return Tr("The cup changed meanwhile: try again.");
 	if (e == "pick_closed") return Tr("The time to choose is over: the map was drawn.");
 	if (e == "closed") return Tr("Sign-up for this tournament is closed.");
@@ -1105,6 +1107,12 @@ const TourneySummary *Featured(const TourneyListsView &lists)
 bool IsOrganizer(const TourneySummary &t)
 {
 	return !t.official && t.organizer.steamId && t.organizer.steamId == SteamOwnId();
+}
+
+bool CanManage(const TourneySummary &t)
+{
+	if (!t.official) return IsOrganizer(t);
+	return LeagueTourneyMine()->mine.organize.staff;
 }
 
 std::string OrganizerText(const TourneySummary &t)
@@ -1684,7 +1692,7 @@ void TourneyAction(int arg)
 	case kSubEdit: {
 		const auto page = LeagueTourneyPage(u.slug, 60000);
 		const TourneyDetail &d = page->detail;
-		if (!page->loaded || d.id != value || !IsOrganizer(d)) break;
+		if (!page->loaded || d.id != value || !CanManage(d)) break;
 		if (d.status != TourneyStatus::Signup && d.status != TourneyStatus::Checkin) {
 			Toast("The cup is being played or is over: it can't change any more.");
 			break;
@@ -1692,7 +1700,8 @@ void TourneyAction(int arg)
 		u.cup = TourneyCupFormOf(d);
 		u.cupEditId = d.id;
 		u.cupEditSlug = d.slug;
-		u.cupLocked = TourneyCupLocked(d);
+		u.cupLocked = !d.official && TourneyCupLocked(d);
+		u.cupEditOfficial = d.official;
 		u.cupError.clear();
 		u.cupErrorSlug.clear();
 		u.formScroll = 0;

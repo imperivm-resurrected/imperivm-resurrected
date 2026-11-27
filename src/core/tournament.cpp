@@ -1202,6 +1202,7 @@ bool TourneyParseMine(const Json &j, TourneyMine &out)
 		g.allowed = o->GetBool("allowed");
 		g.gamesPlayed = o->GetInt("gamesPlayed");
 		g.gamesNeeded = o->GetInt("gamesNeeded");
+		g.staff = o->GetBool("staff");
 		if (const Json *a = o->Get("active"); a && a->type == Json::Object) {
 			g.activeId = Int64(*a, "id");
 			g.activeSlug = Text(*a, "slug");

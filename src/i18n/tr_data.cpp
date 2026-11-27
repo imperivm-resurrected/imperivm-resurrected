@@ -3759,5 +3759,8 @@ extern const TrRow kTrRows[] = {
 	{"That player is no longer in the first round.", "Ese jugador ya no está en la primera ronda.", "Quel giocatore non è più nel primo turno."},
 	{"The cup changed meanwhile: try again.", "La copa ha cambiado mientras tanto: vuelve a intentarlo.", "La coppa è cambiata nel frattempo: riprova."},
 	{"Chosen by the organizer", "La elige quien organiza", "Le sceglie chi organizza"},
+	{"You run this tournament", "Gestionas este torneo", "Gestisci questo torneo"},
+	{"Players have signed up: the mode can no longer change.", "Ya se ha apuntado gente: el modo ya no puede cambiar.", "Ci sono già iscritti: la modalità non può più cambiare."},
+	{"An official tournament is cancelled from the league's web panel.", "Un torneo oficial se cancela desde el panel web de la liga.", "Un torneo ufficiale si annulla dal pannello web della lega."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

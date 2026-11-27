@@ -470,6 +470,8 @@ struct TourneyInvite {
 // Whether the player may make a community cup, and the one they organise now (sign-up, check-in or being played).
 struct TourneyOrganize {
 	bool known = false, allowed = false;
+	// A developer of the team: they run the official tournaments from the game as an organizer runs a cup.
+	bool staff = false;
 	int gamesPlayed = 0, gamesNeeded = 0;
 	int64_t activeId = 0;
 	std::string activeSlug;

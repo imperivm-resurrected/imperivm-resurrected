@@ -213,10 +213,11 @@ struct Ui {
 	// The cup being made, what the server answered against it, and the cup the player already organises when that was the answer.
 	TourneyCupForm cup;
 	std::string cupError, cupErrorSlug;
-	// The cup being changed instead (0 when making one), its slug, and whether only its description can change by now.
+	// The cup being changed instead (0 when making one), its slug, and whether only its description can change by now. An official
+	// tournament changed by a developer has no access, organizer's place or requirements in the form, and the panel's limits.
 	int64_t cupEditId = 0;
 	std::string cupEditSlug;
-	bool cupLocked = false;
+	bool cupLocked = false, cupEditOfficial = false;
 	// The form's scroll, and where its three sections start in it.
 	int formScroll = 0;
 	int sectionTop[3] = {};
@@ -495,6 +496,8 @@ int64_t UtcMs(int64_t localMs);
 std::string LongDayText(int64_t ms);
 // The player organises this cup.
 bool IsOrganizer(const TourneySummary &t);
+// Who runs the cup from the game: its organizer, and for an official tournament the team's developers.
+bool CanManage(const TourneySummary &t);
 // A cup paired by hand before its draw, on its organizer's screen: its players are dragged onto each other in the first round.
 bool TourneyCanArrange(const TourneyDetail &d);
 // "By Furio", "You organise it"; empty for an official tournament.
