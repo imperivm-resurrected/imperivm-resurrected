@@ -15,6 +15,7 @@
 #include "game/civs.h"
 #include "core/crashlog.h"
 #include "game/gameroom.h"
+#include "game/diplomacyrules.h"
 #include "game/gamelayout.h"
 #include "game/gamemodes.h"
 #include "hooks/gamefiles.h"
@@ -1292,21 +1293,29 @@ long __fastcall HookEnvGetInt(void *env, void *edx, const char *key)
 typedef void(__fastcall *ThisVoid_t)(void *self);
 ThisVoid_t g_origDiplomacyExecute = nullptr, g_origDiplomacyApply = nullptr;
 
+// CVXDiplomacyChange (004e5f80): +0xc the player who grants, +0x10 the one granted (-1: allied victory, +0x18), +0x14 the permissions.
+// Locked, the diplomacy keeps only its ceasefire: changing it mid-game was the exploit (training a hero on a stronger ally, a forum
+// saved by a sudden peace), while shared control, supplies and vision stay each player's to give. Every computer runs the command
+// with the same rule, so all of them keep the same ceasefire.
 void __fastcall HookDiplomacyExecute(void *cmd)
 {
-	if ((ModRulesActive() & kRuleLockDiplomacy) && *reinterpret_cast<int *>(static_cast<char *>(cmd) + 0x10) != -1) {
-		LogW("room", "rules: diplomacy change of player %d ignored (diplomacy locked)", *reinterpret_cast<int *>(static_cast<char *>(cmd) + 0xc));
-		return;
+	char *c = static_cast<char *>(cmd);
+	const int from = *reinterpret_cast<int *>(c + 0xc), to = *reinterpret_cast<int *>(c + 0x10);
+	char *game = *reinterpret_cast<char **>(addr::kGame);
+	if ((ModRulesActive() & kRuleLockDiplomacy) && game && from >= 0 && from < 16 && to >= 0 && to < 16) {
+		const unsigned now = Field<unsigned>(layout::PlayerAt(game, from), layout::kPlayerDiplomacy + to * 4);
+		unsigned &asked = *reinterpret_cast<unsigned *>(c + 0x14);
+		const unsigned kept = (asked & ~diplomacy::kCeasefire) | (now & diplomacy::kCeasefire);
+		if (kept != asked) {
+			LogW("room", "rules: player %d's ceasefire towards player %d kept as it was (ceasefire locked)", from, to);
+			asked = kept;
+		}
 	}
 	g_origDiplomacyExecute(cmd);
 }
 
 void __fastcall HookDiplomacyApply(void *dlg)
 {
-	if (ModRulesActive() & kRuleLockDiplomacy) {
-		UiToast("Diplomacy is locked in this game.");
-		return;
-	}
 	g_origDiplomacyApply(dlg);
 }
 

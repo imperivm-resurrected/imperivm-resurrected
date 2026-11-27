@@ -334,7 +334,7 @@ void PaintOptionsCard(Painter &p, const State &st, int x, int y, int w, int h)
 		checkRow(0x10a7, "Bonuses", "Disable bonuses", true, "At the start, each player picks a boost: gold or a level 12 hero.");
 		if (!load) ruleRow(kRuleBlindPick, "Hide civilizations", false, "In the room nobody sees the others' civilization, only their own.");
 		ruleRow(kRuleFreeAttach, "Free unit attachment", true, "Troops of another civilization can be placed under a hero's command (as in Alternative mode).");
-		ruleRow(kRuleLockDiplomacy, "Lock diplomacy", true, "Alliances can't be changed during the game.");
+		ruleRow(kRuleLockDiplomacy, "Lock diplomacy", true, "The ceasefire can't be changed during the game.");
 		ruleRow(kRuleCheats, "Allow cheats", true, "Players can open the cheats panel during the game.");
 		// Stored the other way round, so that rooms and saves of older builds allow them.
 		grid.Toggle("Respawn timers", (g.rules & kRuleNoTimers) == 0, canEdit, kGRuleToggle, static_cast<int>(kRuleNoTimers),

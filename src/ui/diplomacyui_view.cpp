@@ -100,13 +100,15 @@ void PaintSegments(Painter &p, const View &v, int index, int x, int y, int w, Pr
 	for (int i = 0; i < 4; i++) {
 		const int sx = x + i * segW, sw = i == 3 ? w - segW * 3 : segW;
 		const bool active = i == current, custom = i == kPresetCustom;
-		const bool clickable = !v.locked && !custom && !active;
+		// Locked, only a preset that keeps the ceasefire as it is.
+		const bool keeps = custom || (diplomacy::PresetFlags(static_cast<Preset>(i)) & diplomacy::kCeasefire) == (v.cards[index].mine & diplomacy::kCeasefire);
+		const bool clickable = !custom && !active && (!v.locked || keeps);
 		const bool hot = clickable && p.Hover(sx, y, sw, kSegH, v.mouseX, v.mouseY);
 		if (active) p.Fill(sx, y, sw, kSegH, v.locked ? pal::lineStrong : pal::red);
 		else p.Fill(sx, y, sw, kSegH, hot ? pal::buttonHover : pal::field);
 		if (i > 0) p.Fill(sx, y + 1, 1, kSegH - 2, pal::hairline);
 		p.Font(active ? 1 : 0);
-		const COLORREF c = active ? (v.locked ? pal::text : pal::onRed) : custom || v.locked ? pal::disabled : pal::textDim;
+		const COLORREF c = active ? (v.locked ? pal::text : pal::onRed) : !clickable ? pal::disabled : pal::textDim;
 		p.Text(sx, y, sw, kSegH, kPresetLabels[i], c, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		if (clickable) p.AddHit(sx, y, sw, kSegH, kActPreset, index * kArgStride + i);
 	}
@@ -164,14 +166,15 @@ void PaintPlayerCard(Painter &p, const View &v, int index, int x, int y, int w, 
 
 	const std::string text = StatusText(c, status);
 	if (IsOffer(status)) {
-		const int by = y + kStatusY, bw = iw, accW = v.locked ? 0 : 96;
+		const bool canAccept = !v.locked || (diplomacy::Offered(c.mine, c.theirs) & ~diplomacy::kCeasefire) != 0;
+		const int by = y + kStatusY, bw = iw, accW = canAccept ? 96 : 0;
 		p.Fill(ix, by, bw, kStatusH, pal::selected);
 		p.Frame(ix, by, bw, kStatusH, pal::redText);
 		p.Diamond(ix + 14, by + kStatusH / 2, 5, pal::redText);
 		p.Font(1);
 		p.Text(ix + 28, by, bw - 40 - accW, kStatusH, text, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		Raw(p, false);
-		if (!v.locked) p.Button(ix + bw - accW - 4, by + 4, accW, kStatusH - 8, "Accept", kActAccept, index, v.mouseX, v.mouseY, true, true);
+		if (canAccept) p.Button(ix + bw - accW - 4, by + 4, accW, kStatusH - 8, "Accept", kActAccept, index, v.mouseX, v.mouseY, true, true);
 	}
 	else {
 		p.Diamond(ix + 6, y + kStatusY + kStatusH / 2, 5, StatusColor(status));
@@ -198,7 +201,7 @@ void PaintPlayerCard(Painter &p, const View &v, int index, int x, int y, int w, 
 		}
 		p.Font(0);
 		p.Text(ix + 4, ry, iw - kColW * 2 - 4, kTableRowH, perm.label, pal::text);
-		const bool on = (c.mine & perm.bit) != 0, enabled = !v.locked;
+		const bool on = (c.mine & perm.bit) != 0, enabled = !v.locked || perm.bit != diplomacy::kCeasefire;
 		const int size = 18, cx = youX + (kColW - size) / 2, cy = ry + (kTableRowH - size) / 2;
 		PaintCheck(p, cx, cy, size, on, enabled, enabled && rowHot && p.Hover(youX, ry, kColW, kTableRowH, v.mouseX, v.mouseY));
 		if (enabled) p.AddHit(youX, ry, kColW, kTableRowH, kActToggle, index * kArgStride + i);
@@ -243,7 +246,7 @@ void PaintDiplomacy(Painter &p, const View &v)
 	PaintWindowHeading(p, kPanelW, "Diplomacy", "Choose what you give each player; what they give you is their choice.");
 	if (v.locked) {
 		p.Font(4);
-		p.Text(kPad, kCardsTop - 4, kPanelW - kPad * 2, kNoticeH - 6, "Diplomacy is locked in this game: you can look but not change it.", pal::redText,
+		p.Text(kPad, kCardsTop - 4, kPanelW - kPad * 2, kNoticeH - 6, "The ceasefire is locked in this game.", pal::redText,
 			DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 	}
 
@@ -275,8 +278,8 @@ void PaintDiplomacy(Painter &p, const View &v)
 
 	constexpr int btnW = 150, btnH = 42, btnGap = 12;
 	const int bx = kPanelW - kPad - btnW;
-	p.Button(bx - btnW - btnGap, fy + (kFooterH - btnH) / 2, btnW, btnH, v.locked ? "Close" : "Cancel", kActCancel, 0, v.mouseX, v.mouseY);
-	p.Button(bx, fy + (kFooterH - btnH) / 2, btnW, btnH, "Apply", kActApply, 0, v.mouseX, v.mouseY, !v.locked, true);
+	p.Button(bx - btnW - btnGap, fy + (kFooterH - btnH) / 2, btnW, btnH, "Cancel", kActCancel, 0, v.mouseX, v.mouseY);
+	p.Button(bx, fy + (kFooterH - btnH) / 2, btnW, btnH, "Apply", kActApply, 0, v.mouseX, v.mouseY, true, true);
 	PaintTip(p, tip, h);
 }
 

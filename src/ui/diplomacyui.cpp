@@ -71,23 +71,30 @@ Command CommandFor(const View &v, int action, int arg)
 	const int index = arg / kArgStride, sub = arg % kArgStride;
 	const bool validCard = index >= 0 && index < static_cast<int>(v.cards.size());
 	switch (action) {
-	case kActPreset:
-		if (!validCard || v.locked || sub >= diplomacy::kPresetCustom) break;
-		cmd = {Command::kSetMine, index, diplomacy::PresetFlags(static_cast<diplomacy::Preset>(sub))};
+	// Locked, the ceasefire stays as it is: a preset only when it keeps it, the other permissions one by one.
+	case kActPreset: {
+		if (!validCard || sub >= diplomacy::kPresetCustom) break;
+		const unsigned flags = diplomacy::PresetFlags(static_cast<diplomacy::Preset>(sub));
+		if (v.locked && (flags & diplomacy::kCeasefire) != (v.cards[index].mine & diplomacy::kCeasefire)) break;
+		cmd = {Command::kSetMine, index, flags};
 		break;
+	}
 	case kActToggle:
-		if (!validCard || v.locked || sub >= 4) break;
+		if (!validCard || sub >= 4 || (v.locked && kBits[sub] == diplomacy::kCeasefire)) break;
 		cmd = {Command::kSetMine, index, v.cards[index].mine ^ kBits[sub]};
 		break;
-	case kActAccept:
-		if (arg < 0 || arg >= static_cast<int>(v.cards.size()) || v.locked) break;
-		cmd = {Command::kSetMine, arg, v.cards[arg].mine | diplomacy::Offered(v.cards[arg].mine, v.cards[arg].theirs)};
+	case kActAccept: {
+		if (arg < 0 || arg >= static_cast<int>(v.cards.size())) break;
+		unsigned offered = diplomacy::Offered(v.cards[arg].mine, v.cards[arg].theirs);
+		if (v.locked) offered &= ~diplomacy::kCeasefire;
+		if (offered) cmd = {Command::kSetMine, arg, v.cards[arg].mine | offered};
 		break;
+	}
 	case kActAllied:
 		if (!v.locked) cmd = {Command::kSetAllied, 0, 0, !v.alliedVictory};
 		break;
 	case kActApply:
-		if (!v.locked) cmd.kind = Command::kApply;
+		cmd.kind = Command::kApply;
 		break;
 	case kActCancel: cmd.kind = Command::kCancel; break;
 	case kActMuteChat:
@@ -263,7 +270,7 @@ bool DiplomacyUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		else if (wp == VK_RETURN && g_enterArmed) {
 			g_enterArmed = false;
 			std::lock_guard<std::mutex> lock(g_lock);
-			if (!g_s.view.locked) cmd.kind = Command::kApply;
+			cmd.kind = Command::kApply;
 		}
 		else consumed = false;
 		break;
