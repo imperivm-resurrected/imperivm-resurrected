@@ -448,7 +448,11 @@ void PaintSearchTeam(Painter &p, const State &st)
 		p.raw = false;
 		FitCaps(p, mid - 70, ringY + 22, 140, 16, Tr("seconds"), pal::caption, DT_CENTER);
 	}
-	else p.Spinner(mid, ringY, 22, 6, GetTickCount());
+	else {
+		p.Spinner(mid, ringY, 22, 6, GetTickCount());
+		// The room's countdown ran out: the game is loading, not counting again.
+		if (live && (left == 0 || st.startingCover || st.inOnlineGame)) FitCaps(p, mid - 70, ringY + 38, 140, 16, Tr("Starting..."), pal::caption, DT_CENTER);
+	}
 	PaintEvenness(p, v, true, mid - 128, ringY + 82, 256);
 	p.Font(3);
 	// Once all accepted no line under the ring: its number and the cards say it all.

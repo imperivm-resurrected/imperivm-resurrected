@@ -190,7 +190,7 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 				for (const GameRoomSlot &s : snap.slots) {
 					if (s.used && s.local && s.ready) {
 						lastUnready = GetTickCount();
-						GameRoomToggleReady();
+						GameRoomToggleReady("scenario changed");
 						LogI("room", "the host changed the scenario; you are not ready until you have it");
 						break;
 					}

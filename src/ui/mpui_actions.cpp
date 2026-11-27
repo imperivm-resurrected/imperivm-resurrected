@@ -402,7 +402,8 @@ void DoAction(int action, int arg)
 		GameRoomSlot &me = g_s.game.slots[g_s.game.localSlot & 7];
 		me.ready = !me.ready;
 		Predict(kPredReady, g_s.game.localSlot & 7, me.ready);
-		GameRoomToggleReady();
+		GameRoomToggleReady("the room screen");
+		RankedReadyPressed();
 		break;
 	}
 	case kGStart: {

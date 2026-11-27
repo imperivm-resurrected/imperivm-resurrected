@@ -234,7 +234,7 @@ LeagueSlotStep LeagueSlotKeepStep(LeagueSlotKeep &k, int race, int color, uint32
 		if (k.unreadied) return LeagueSlotStep::Working;
 		k.unreadied = true;
 		Predict(kPredReady, slot, 0);
-		GameRoomToggleReady();
+		GameRoomToggleReady("slot change");
 		return LeagueSlotStep::Unreadied;
 	}
 	if (now - k.setAt < 600) return LeagueSlotStep::Working;

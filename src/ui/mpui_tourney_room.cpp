@@ -132,7 +132,7 @@ bool ApplyTourneyTeam(RoomLock &k)
 		k.teamUnready = true;
 		s.ready = false;
 		Predict(kPredReady, slot, 0);
-		GameRoomToggleReady();
+		GameRoomToggleReady("cup slot change");
 		ModUiToast("The tournament puts you in your team: get ready again.");
 		return false;
 	}

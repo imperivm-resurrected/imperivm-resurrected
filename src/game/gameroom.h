@@ -131,7 +131,8 @@ void GameRoomCycleTeam(int slot);
 // player is ready in a network room: the same rows the native team button allows.
 void GameRoomSetTeam(int slot, int team);
 void GameRoomSetBonus(int slot, int index);
-void GameRoomToggleReady();
+// `why` goes to the log: every change of ready is a click on the same button, so a stale reading flips it the wrong way.
+void GameRoomToggleReady(const char *why);
 void GameRoomStart();
 
 // Start countdown of a network room (Steam or local network). When every human is ready (AIs count as ready), nothing is

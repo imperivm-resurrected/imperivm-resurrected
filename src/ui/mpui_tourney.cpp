@@ -634,7 +634,7 @@ void StepInRoom(const TourneyNext &next)
 		k.readySent = true;
 		if (!LocalReady(g_s.game)) {
 			Predict(kPredReady, slot, 1);
-			GameRoomToggleReady();
+			GameRoomToggleReady("cup auto-ready");
 			LogI("league", "tournament match %lld: the player is made ready", static_cast<long long>(match));
 		}
 	}
@@ -1767,7 +1767,7 @@ void TourneyAction(int arg)
 		// Ready and not ready: after this, the player's own choice; the mod does not make them ready again.
 		u.lock.readySent = true;
 		Predict(kPredReady, g_s.game.localSlot, LocalReady(g_s.game) ? 0 : 1);
-		GameRoomToggleReady();
+		GameRoomToggleReady("cup match page");
 		break;
 	}
 	case kSubCupSection:

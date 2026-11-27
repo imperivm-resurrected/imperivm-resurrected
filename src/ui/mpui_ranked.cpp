@@ -89,9 +89,9 @@ struct RoomAuto {
 	DWORD lastRead = 0;
 	unsigned foundSerial = 0;
 	int64_t match = 0;
-	DWORD createdAt = 0, joinAt = 0, kickAt = 0, settingsAt = 0, teamAt = 0, invitedAt = 0;
+	DWORD createdAt = 0, joinAt = 0, kickAt = 0, settingsAt = 0, teamAt = 0;
 	int createTries = 0, joinTries = 0;
-	uint64_t joinLobby = 0, invitedLobby = 0;
+	uint64_t joinLobby = 0;
 	bool warned = false, settingsLogged = false, mapWarned = false, textWarned = false;
 	// The room's retries gave up and the match was called off; the called-off match whose room this computer left.
 	bool abandoned = false;
@@ -107,6 +107,11 @@ struct RoomAuto {
 	LeagueSlotKeep slot;
 	bool readySent = false, roomHeld = false;
 	int rearms = 0;
+	// Ready is only ever the player's: whether they pressed the panel's button in this room, the last state logged, and the readies
+	// that came without it, taken back (a few times at most).
+	bool pressed = false;
+	int lastReady = -1, undone = 0;
+	DWORD undoneAt = 0;
 	// The players whose Steam invitation is not told (SteamQuietInvitesFrom).
 	std::vector<uint64_t> quiet;
 };
@@ -263,7 +268,7 @@ void SetOwnTeam(const LeagueRankedView &v)
 	if (slot.team == side) return;
 	if (LocalReady(g)) {
 		if (Due(-3)) {
-			GameRoomToggleReady();
+			GameRoomToggleReady("ranked team change");
 			// The panel makes the player ready again once they are in their team; a few times at most, or a team the game won't keep loops.
 			if (g_auto.rearms < 6) {
 				g_auto.rearms++;
@@ -353,10 +358,26 @@ void PanelStep(const LeagueRankedView &v, DWORD now)
 		g_auto.slot = LeagueSlotKeep();
 		g_auto.readySent = false;
 		g_auto.rearms = 0;
+		g_auto.pressed = false;
+		g_auto.lastReady = -1;
+		g_auto.undone = 0;
 		LogI("league", "ranked: the room of match %lld waits under its panel", static_cast<long long>(v.matchId));
 	}
 	const int slot = g_s.game.localSlot;
 	if (g_s.game.busy || g_s.inOnlineGame || slot < 0 || slot > 7 || !g_s.game.slots[static_cast<size_t>(slot)].used || now - g_auto.shownAt < 800) return;
+	const bool ready = LocalReady(g_s.game);
+	if (g_auto.lastReady != (ready ? 1 : 0)) {
+		g_auto.lastReady = ready ? 1 : 0;
+		LogI("league", "ranked match %lld: this player is %s", static_cast<long long>(v.matchId), ready ? "ready" : "not ready");
+	}
+	if (ready && !g_auto.pressed && g_auto.undone < 3 && GameRoomCountdownLeftMs() != 0 && now - g_auto.undoneAt > 1500) {
+		g_auto.undone++;
+		g_auto.undoneAt = now;
+		LogW("league", "ranked match %lld: this player became ready without pressing Ready; taken back", static_cast<long long>(v.matchId));
+		Predict(kPredReady, slot, 0);
+		GameRoomToggleReady("ranked: a ready the player did not press");
+		return;
+	}
 	int race = -1, color = -1;
 	uint32_t rgb = 0;
 	LeagueSideChoice(race, color, rgb);
@@ -425,27 +446,8 @@ void RoomStep(const LeagueRankedView &v, DWORD now)
 		PanelStep(v, now);
 		if (!v.host || !OwnsRoom()) return;
 		LeagueRankedRoomOpened(g_s.room.id);
-		// The room is private: only the invited enter. A player who lost the connection or closed the game comes back with a new session, which
-		// the first invitation does not let in, so whoever of the match is missing is invited again every few seconds.
-		bool missing = false;
-		for (const LeaguePlayerCard &pl : v.ticket.players) {
-			const uint64_t id = _strtoui64(pl.steamId.c_str(), nullptr, 10);
-			if (!id || id == SteamOwnId() || TourneyIsTestBot(id)) continue;
-			bool in = false;
-			for (const OnlineMember &m : g_s.room.members) in = in || m.id == id;
-			missing = missing || !in;
-		}
-		if (g_auto.invitedLobby != g_s.room.id || (missing && now - g_auto.invitedAt > 8000)) {
-			if (g_auto.invitedLobby == g_s.room.id) LogI("league", "ranked match %lld: a player of the match is not in the room; invited again", static_cast<long long>(v.matchId));
-			g_auto.invitedLobby = g_s.room.id;
-			g_auto.invitedAt = now;
-			// Every other player of the ticket: in a 2v2 the partner and both opponents.
-			const std::string own = std::to_string(SteamOwnId());
-			for (const LeaguePlayerCard &pl : v.ticket.players) {
-				const uint64_t id = _strtoui64(pl.steamId.c_str(), nullptr, 10);
-				if (pl.steamId != own && !TourneyIsTestBot(id)) SteamInviteToRoom(id);
-			}
-		}
+		// Nobody is invited through Steam: the room is unlisted, not private, and each player of the match enters it by the id the league
+		// gives them (a Steam invitation showed every one of them Steam's own invitation too). Whoever else comes in is put out.
 		if (now - g_auto.kickAt > 1000) {
 			g_auto.kickAt = now;
 			for (const OnlineMember &m : g_s.room.members) {
@@ -632,6 +634,11 @@ bool RankedPanelOpen(const State &st)
 	if (!st.room.id) return !st.game.active;
 	if (st.room.info.spectate) return false;
 	return st.room.info.leagueTag == LeagueRankedRoomTag(v.matchId) || (v.ticketLoaded && st.room.id == LeagueTicketLobby(v.ticket));
+}
+
+void RankedReadyPressed()
+{
+	g_auto.pressed = true;
 }
 
 bool RankedRoomHidden(const State &st)
@@ -971,8 +978,9 @@ void RankedAction(int arg)
 		g_auto.readyAt = now;
 		// From now on ready or not is the player's own choice: the panel does not make them ready again.
 		g_auto.readySent = true;
+		g_auto.pressed = true;
 		Predict(kPredReady, g_s.game.localSlot, LocalReady(g_s.game) ? 0 : 1);
-		GameRoomToggleReady();
+		GameRoomToggleReady("ranked panel button");
 		break;
 	}
 	case kRkHidePanel:
@@ -1358,6 +1366,12 @@ void PaintSearch(Painter &p, const State &st)
 		p.Font(4);
 		p.TextCaps(mid - 74, ringY + 22, 148, 16, "seconds", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 2);
 	}
+	else if (live && (left == 0 || st.startingCover || st.inOnlineGame)) {
+		// The room's countdown ran out: the game is loading, not counting again.
+		p.Spinner(mid, ringY, 24, 6, GetTickCount());
+		p.Font(4);
+		p.TextCaps(mid - 74, ringY + 40, 148, 16, "Starting...", pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE, 2);
+	}
 	else if (live && v.ticketLoaded && v.ticket.startBy) {
 		// In the room, before its start countdown: the minute the server gives to be ready.
 		const int64_t startLeft = std::max<int64_t>(0, v.ticket.startBy - now);
@@ -1450,6 +1464,13 @@ StartBlock RankedStartBlocker(const State &st, const GameRoomSnapshot &g)
 		const int side = id ? LeagueSideOf(teams, std::to_string(id)) : 0;
 		if (side && s.team != side) return {"Setting the teams...", Tr("Wait a moment: each player is being put in their team.")};
 	}
+	// The practice bots' seats too: as many of the game's AI in each team as the league has bots on that side.
+	int botsBySide[3] = {}, aiByTeam[3] = {};
+	for (const int side : BotSides(v)) botsBySide[side > 0 && side < 3 ? side : 0]++;
+	for (const GameRoomSlot &s : g.slots) {
+		if (s.used && s.type == 1) aiByTeam[s.team > 0 && s.team < 3 ? s.team : 0]++;
+	}
+	if (aiByTeam[1] != botsBySide[1] || aiByTeam[2] != botsBySide[2]) return {"Setting the teams...", Tr("Wait a moment: each player is being put in their team.")};
 	return {};
 }
 

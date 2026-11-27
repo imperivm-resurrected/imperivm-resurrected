@@ -1907,8 +1907,9 @@ void GameRoomSetBonus(int slot, int index)
 	});
 }
 
-void GameRoomToggleReady()
+void GameRoomToggleReady(const char *why)
 {
+	LogI("room", "ready button pressed (%s)", why);
 	Queue([] { Click(Button(g_dlg, 0x9008)); });
 }
 
