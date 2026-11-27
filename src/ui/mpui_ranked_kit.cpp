@@ -199,7 +199,7 @@ std::array<MatchFact, 6> MatchFacts(const LeagueRoomSettings &s)
 {
 	return {{
 		{"Preset", s.preset.empty() || s.preset == "competitive" ? Tr("Competitive") : s.preset},
-		{"No fog of war", YesNo(s.fog < 0 ? -1 : !s.fog)},
+		{"No fog", YesNo(s.fog < 0 ? -1 : !s.fog)},
 		{"Explored map", YesNo(s.explored)},
 		{"Civilizations", s.hideCivs == 1 ? Tr("Hidden until the game") : Tr("Visible")},
 		{"Diplomacy", s.diplomacy == "locked" ? Tr("Locked") : s.diplomacy.empty() ? std::string("\xE2\x80\x94") : Tr("Free")},

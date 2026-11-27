@@ -1446,6 +1446,8 @@ void PaintInstalled(Painter &p, const State &st)
 			const COLORREF c = k == kStateProblems ? pal::bad : on || hov ? pal::text : pal::textDim;
 			if (k == kStateProblems) PaintAlertIcon(p, tx + half, cardY + (stripH - 16) / 2, true, 16);
 			if (k == kStateConflicts) PaintBolt(p, tx + half + 2, cardY + (stripH - 16) / 2, 16, pal::warn);
+			// The icon's "!" leaves its own type selected: the label is measured, and written, in the small one.
+			p.Font(4);
 			p.TextCaps(tx + half + icon, cardY, w - half - icon, stripH, label, c, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 1);
 			if (brief && icon && hov) SetTip(names[k], tx, cardY + stripH);
 			p.AddHit(tx, cardY, w, stripH, kStateFilter, k);

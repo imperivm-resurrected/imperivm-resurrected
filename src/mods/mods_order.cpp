@@ -235,7 +235,7 @@ ModIssues IssuesOf(const ModProfile &p, const std::vector<ModInfo> &all, const s
 		for (const ModInfo &a : all) {
 			if (SameId(a.id, d.id)) installed = true;
 		}
-		if (!dep) out.problems.push_back(Tr("Needs \"") + d.id + "\"" + (installed ? Tr(" (enable it)") : Tr(" (it is not installed)")));
+		if (!dep) out.problems.push_back(Tr("Needs \"") + d.id + "\"" + (installed ? std::string() : Tr(" (it is not installed)")));
 		else if (!VersionMatches(dep->version, d.version)) out.problems.push_back(Tr("Needs ") + d.id + " " + d.version + Tr(" (you have ") + dep->version + ")");
 	}
 	std::vector<std::string> reported;

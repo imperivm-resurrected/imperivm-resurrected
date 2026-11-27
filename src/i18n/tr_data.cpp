@@ -317,7 +317,6 @@ extern const TrRow kTrRows[] = {
 	{"Civilization ", "Civilización ", "Civiltà "},
 	{"Specialty ", "Especialidad ", "Specialità "},
 	{"Needs \"", "Necesita \"", "Richiede \""},
-	{" (enable it)", " (actívalo)", " (attivalo)"},
 	{" (it is not installed)", " (no está instalado)", " (non installato)"},
 	{"Needs ", "Necesita ", "Richiede "},
 	{"Not compatible with ", "No es compatible con ", "Non compatibile con "},
