@@ -96,8 +96,6 @@ void TimesAndPixels()
 	CHECK_EQ(std::string(text), std::string("4:05"));
 	RespawnTimeText(598, true, text);
 	CHECK_EQ(std::string(text), std::string("~9:58"));
-	CHECK_EQ(RespawnMarkColor(kRespawnWater, true), 0x23ffu);
-	CHECK_EQ(RespawnMarkColor(kRespawnWater, false), (0x23ffu >> 1) & 0x3def);
 	int pixel = -1;
 	CHECK(RespawnProjectAxis(2000, 0, 4000, 140, 3580, pixel));
 	CHECK_EQ(pixel, 1860);

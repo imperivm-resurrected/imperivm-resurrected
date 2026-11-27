@@ -176,35 +176,11 @@ void CaptureGeometry(void *self, void *surface)
 
 void PreviewBox(int x0, int y0, int x1, int y1, bool force);
 
-// The times of the respawn timers drawn on the last picture of the big map, in its screen coordinates; the overlay writes them.
+// The times of the respawn timers over their sites on the last picture of the big map, in its screen coordinates; the overlay writes
+// them, and nothing else marks the site.
 std::vector<ZoomMapTimer> g_timers;
 
-void MarkBlock(void *surface, int left, int top, int right, int bottom, unsigned color)
-{
-	left = std::max(left, g_geo.left);
-	top = std::max(top, g_geo.top);
-	right = std::min(right, g_geo.right);
-	bottom = std::min(bottom, g_geo.bottom);
-	if (left <= right && top <= bottom) FillEdge(surface, left, top, right, bottom, color);
-}
-
-// Four corners around the site, so that its own icon stays visible inside the mark.
-void DrawSiteMark(void *surface, int x, int y, int radius, unsigned color)
-{
-	const unsigned shade = 0x0421;
-	const int arm = std::max(5, radius / 2);
-	for (int dy : {-1, 1}) {
-		for (int dx : {-1, 1}) {
-			const int cx = x + dx * radius, cy = y + dy * radius, hx = cx - dx * arm, hy = cy - dy * arm;
-			MarkBlock(surface, std::min(cx, hx) - 2, cy - 2, std::max(cx, hx) + 2, cy + 2, shade);
-			MarkBlock(surface, cx - 2, std::min(cy, hy) - 2, cx + 2, std::max(cy, hy) + 2, shade);
-			MarkBlock(surface, std::min(cx, hx), cy - 1, std::max(cx, hx), cy + 1, color);
-			MarkBlock(surface, cx - 1, std::min(cy, hy), cx + 1, std::max(cy, hy), color);
-		}
-	}
-}
-
-void DrawRespawnMarks(void *surface)
+void DrawRespawnTimers()
 {
 	g_timers.clear();
 	const std::vector<RespawnMark> &marks = RespawnMarks();
@@ -223,7 +199,6 @@ void DrawRespawnMarks(void *surface)
 		if (!ZoomProjectedToPixel(mark.x, projectedY, pixel)) continue;
 		int x = 0, y = 0;
 		if (!RespawnProjectAxis(pixel[0], 0, w - 1, g_geo.left, g_geo.right, x) || !RespawnProjectAxis(pixel[1], 0, h - 1, g_geo.top, g_geo.bottom, y)) continue;
-		DrawSiteMark(surface, x, y, radius, RespawnMarkColor(mark.kind, mark.stocked));
 		const unsigned left = mark.stocked ? 0 : RespawnSecondsUntil(mark.due, clock);
 		if (!left) continue;
 		ZoomMapTimer t;
@@ -242,7 +217,7 @@ void __fastcall HookZoomDraw(void *self, void *edx, void *surface, int unused)
 	__try {
 		// The chat's map ping reads the geometry too, so it is kept with the extras turned off.
 		CaptureGeometry(self, surface);
-		DrawRespawnMarks(surface);
+		DrawRespawnTimers();
 		if (!ExtrasEnabled()) return;
 		QuickIconsDraw(surface, g_geo.winX, g_geo.winY);
 		if (g_drag.dragging) PreviewBox(g_drag.startX, g_drag.startY, g_drag.curX, g_drag.curY, false);

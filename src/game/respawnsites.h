@@ -98,18 +98,6 @@ inline void RespawnTimeText(unsigned seconds, bool approximate, char (&out)[16])
 	snprintf(out, sizeof(out), "%s%u:%02u", approximate ? "~" : "", seconds / 60, seconds % 60);
 }
 
-// The colour of a site's mark, RGB555: green mushrooms, blue water, gold ruins; the same darker while it is empty.
-inline unsigned RespawnMarkColor(RespawnKind kind, bool stocked)
-{
-	unsigned c = 0x7fff;
-	switch (kind) {
-	case kRespawnMushrooms: c = 0x7ee8; break;
-	case kRespawnWater: c = 0x23ff; break;
-	case kRespawnRuin: c = 0x6dff; break;
-	default: break;
-	}
-	return stocked ? c : (c >> 1) & 0x3def;
-}
 
 // A value of [begin, end] on a pixel of [left, right]; false outside.
 inline bool RespawnProjectAxis(int value, int begin, int end, int left, int right, int &pixel)
