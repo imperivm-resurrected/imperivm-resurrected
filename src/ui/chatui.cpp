@@ -673,8 +673,8 @@ bool OnZoomClick(int x, int y)
 	return true;
 }
 
-// The default place is above the command bar, right of the game's notification column; a saved place is a share of the screen.
-ChatAnchor PlaceOf(const State &s, int w, int h, int &maxWidth)
+// The default place: above the command bar, right of the game's notification column.
+ChatAnchor DefaultPlace(const State &s, int w, int h)
 {
 	const ChatMatch &m = s.match;
 	const int viewLeft = m.haveView ? std::max(0, m.viewLeft) : 0;
@@ -682,6 +682,18 @@ ChatAnchor PlaceOf(const State &s, int w, int h, int &maxWidth)
 	ChatAnchor a;
 	a.left = viewLeft + kLeftInset;
 	a.bottom = barTop - kBottomMargin;
+	return a;
+}
+
+// A drag that ends this close to the default place puts the panel back on it.
+const int kSnapHome = 12;
+
+// The default place, or the one the player dragged it to as a share of the screen.
+ChatAnchor PlaceOf(const State &s, int w, int h, int &maxWidth)
+{
+	const ChatMatch &m = s.match;
+	const int barTop = m.haveBar ? m.barTop : m.haveView ? std::min(h, m.viewBottom) : h - 54;
+	ChatAnchor a = DefaultPlace(s, w, h);
 	maxWidth = (m.haveView ? std::min(w, m.viewRight) : w) - a.left - 16;
 	const int width = ChatWidth(w, h, maxWidth);
 	const Config &c = GetConfig();
@@ -695,6 +707,7 @@ ChatAnchor PlaceOf(const State &s, int w, int h, int &maxWidth)
 bool HandleDrag(UINT msg, WPARAM wp, LPARAM lp)
 {
 	ChatAnchor end;
+	bool snapped = false;
 	{
 		std::lock_guard<std::mutex> lock(g_lock);
 		if (!g_s.dragging) return false;
@@ -703,20 +716,32 @@ bool HandleDrag(UINT msg, WPARAM wp, LPARAM lp)
 		const bool released = msg == WM_LBUTTONUP || (msg == WM_MOUSEMOVE && !(wp & MK_LBUTTON));
 		if (msg == WM_MOUSEMOVE || msg == WM_LBUTTONUP) g_s.live = {at.x - g_s.grab.x, at.y - g_s.grab.y};
 		if (!released) return msg == WM_MOUSEMOVE ? false : msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST;
-		g_s.dragging = false;
 		// A click on the strip without a drag (one half of a double click) keeps the place: saving it in thousandths moved it a pixel.
 		if (std::abs(at.x - g_s.lastGripAt.x) <= 3 && std::abs(at.y - g_s.lastGripAt.y) <= 3) {
+			g_s.dragging = false;
 			if (msg == WM_LBUTTONUP) g_swallowLeftUp = false;
 			return msg == WM_LBUTTONUP;
 		}
+		// Where the drag left it, read while it is still a drag: afterwards the place would be the saved one, or the default.
 		int maxWidth = 0;
 		end = PlaceOf(g_s, g_frameW, g_frameH, maxWidth);
+		g_s.dragging = false;
+		const ChatAnchor home = DefaultPlace(g_s, g_frameW, g_frameH);
+		snapped = std::abs(end.left - home.left) <= kSnapHome && std::abs(end.bottom - home.bottom) <= kSnapHome;
 	}
 	Config &c = MutableConfig();
-	c.chatX = ChatToPermille(end.left, g_frameW);
-	c.chatY = ChatToPermille(end.bottom, g_frameH);
-	SaveConfig();
-	LogI("ui", "chat: position saved at %d,%d of %dx%d (%d,%d thousandths)", end.left, end.bottom, g_frameW, g_frameH, c.chatX, c.chatY);
+	if (snapped) {
+		// Dropped back on its default place: it is the default again, not a share of the screen a pixel off it.
+		c.chatX = c.chatY = -1;
+		SaveConfig();
+		LogI("ui", "chat: dropped on its default place");
+	}
+	else {
+		c.chatX = ChatToPermille(end.left, g_frameW);
+		c.chatY = ChatToPermille(end.bottom, g_frameH);
+		SaveConfig();
+		LogI("ui", "chat: position saved at %d,%d of %dx%d (%d,%d thousandths)", end.left, end.bottom, g_frameW, g_frameH, c.chatX, c.chatY);
+	}
 	if (msg == WM_LBUTTONUP) g_swallowLeftUp = false;
 	return msg == WM_LBUTTONUP;
 }

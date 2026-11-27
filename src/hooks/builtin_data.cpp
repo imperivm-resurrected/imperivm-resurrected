@@ -46,8 +46,8 @@ const BuiltinText kPatches[] = {
 	{"data/vxnotifications.xml",
 		"<patch>\n"
 		"\t<add select=\"/notifications\">\n"
-		"\t\t<notification id=\"mod ping attack\" category=\"none\" anim=\"UI/Icons/Notifications/battle.rle\" text=\"Attack here\" title=\"Attack here\" sound=\"Sounds/Notifications/unit attacked.wav\" activetime=\"8000\" duration=\"8000\" suspendradius=\"1000\" framechangetime=\"100\" icon=\"gameres/infobar/common/military.bmp\"/>\n"
-		"\t\t<notification id=\"mod ping danger\" category=\"none\" anim=\"UI/Icons/Notifications/flag_red.rle\" text=\"Danger\" title=\"Danger\" sound=\"Sounds/Notifications/building attacked.wav\" activetime=\"8000\" duration=\"8000\" suspendradius=\"1000\" icon=\"gameres/infobar/common/military.bmp\"/>\n"
+		"\t\t<notification id=\"mod ping attack\" category=\"none\" anim=\"UI/Icons/Notifications/battle.rle\" text=\"Attack here\" title=\"Attack here\" sound=\"Sounds/Notifications/unit attacked.wav\" activetime=\"8000\" duration=\"8000\" suspendradius=\"1\" framechangetime=\"100\" icon=\"gameres/infobar/common/military.bmp\"/>\n"
+		"\t\t<notification id=\"mod ping danger\" category=\"none\" anim=\"UI/Icons/Notifications/flag_red.rle\" text=\"Danger\" title=\"Danger\" sound=\"Sounds/Notifications/building attacked.wav\" activetime=\"8000\" duration=\"8000\" suspendradius=\"1\" icon=\"gameres/infobar/common/military.bmp\"/>\n"
 		"\t</add>\n"
 		"</patch>\n",
 		nullptr},

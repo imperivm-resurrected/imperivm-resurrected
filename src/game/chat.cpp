@@ -346,8 +346,9 @@ bool NewestNode(int type, Mark &m)
 	}
 }
 
-// After a notification of a ping: the newest state of its type is the mark (a nearby one may have been refreshed instead, which
-// renews it). A sender keeps at most kPingMarksPerSender marks; the oldest gives way.
+// After a notification of a ping: the newest state of its type is the mark. The mod's ping types have a suspend radius of 1, so a
+// ping near another is a mark of its own: with the game's 1000, NotifGroup::Notify renewed the older one and moved it to the new
+// point. A sender keeps at most kPingMarksPerSender marks; the oldest gives way.
 void TrackMark(int type, int sender, int x, int y)
 {
 	Mark m;
