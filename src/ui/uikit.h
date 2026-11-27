@@ -175,6 +175,48 @@ inline bool BlendCoverage(HDC dc, const RECT &r, const std::vector<uint8_t> &mas
 	return ok;
 }
 
+// Antialiased, which GDI lines are not: the canvas is a DIB and each pixel near the line takes its share of the colour.
+struct Surface {
+	uint32_t *bits = nullptr;
+	int w = 0, h = 0, stride = 0;
+	bool Open(HDC dc)
+	{
+		GdiFlush();
+		DIBSECTION section = {};
+		if (GetObject(GetCurrentObject(dc, OBJ_BITMAP), sizeof(section), &section) != sizeof(section) || !section.dsBm.bmBits) return false;
+		w = section.dsBm.bmWidth;
+		h = section.dsBm.bmHeight;
+		stride = section.dsBm.bmWidthBytes / 4;
+		// Every Canvas is top-down; GetObject reports a positive height for those too, so it cannot say.
+		bits = static_cast<uint32_t *>(section.dsBm.bmBits);
+		return true;
+	}
+	void Blend(int x, int y, COLORREF c, float a)
+	{
+		if (x < 0 || y < 0 || x >= w || y >= h) return;
+		uint32_t &px = bits[static_cast<ptrdiff_t>(y) * stride + x];
+		const int k = static_cast<int>(a * 255);
+		const int b = px & 255, g = px >> 8 & 255, r = px >> 16 & 255;
+		px = (px & 0xff000000u) | ((r + (GetRValue(c) - r) * k / 255) << 16) | ((g + (GetGValue(c) - g) * k / 255) << 8) | (b + (GetBValue(c) - b) * k / 255);
+	}
+	void Segment(float x0, float y0, float x1, float y1, float width, COLORREF c)
+	{
+		const float half = width / 2, reach = half + 1;
+		const int left = static_cast<int>(std::floor(std::min(x0, x1) - reach)), right = static_cast<int>(std::ceil(std::max(x0, x1) + reach));
+		const int top = static_cast<int>(std::floor(std::min(y0, y1) - reach)), bottom = static_cast<int>(std::ceil(std::max(y0, y1) + reach));
+		const float dx = x1 - x0, dy = y1 - y0, length2 = dx * dx + dy * dy;
+		for (int y = top; y <= bottom; y++) {
+			for (int x = left; x <= right; x++) {
+				const float px = x + 0.5f - x0, py = y + 0.5f - y0;
+				const float t = length2 > 0 ? std::max(0.0f, std::min(1.0f, (px * dx + py * dy) / length2)) : 0.0f;
+				const float ex = px - t * dx, ey = py - t * dy;
+				const float cover = half + 0.5f - std::sqrt(ex * ex + ey * ey);
+				if (cover > 0) Blend(x, y, c, std::min(1.0f, cover));
+			}
+		}
+	}
+};
+
 struct Painter {
 	HDC dc;
 	float s;
