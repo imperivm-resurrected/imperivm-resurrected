@@ -382,6 +382,10 @@ void TakeResults()
 			if (r.ok && LeagueTourneyPage(g_tourney.slug, 60000)->detail.Teams()) Toast("The team is out of the cup.");
 			else Toast(ResultText(r), !r.ok);
 			break;
+		// The swap shows in the first round: only a refusal is told.
+		case TourneyOp::Seeds:
+			if (!r.ok) Toast(ResultText(r), true);
+			break;
 		default: Toast(ResultText(r), !r.ok); break;
 		}
 	}
@@ -993,6 +997,8 @@ std::string ResultText(const TourneyOpResult &r)
 	}
 	if (e == "not_linked") return Tr("Link your league account first.");
 	if (e == "not_your_pick") return Tr("It is not your turn to choose the map.");
+	if (e == "not_in_bracket") return Tr("That player is no longer in the first round.");
+	if (e == "changed") return Tr("The cup changed meanwhile: try again.");
 	if (e == "pick_closed") return Tr("The time to choose is over: the map was drawn.");
 	if (e == "closed") return Tr("Sign-up for this tournament is closed.");
 	if (e == "suspended" && r.who == "partner") return TrFmt("Two no-shows in 30 days: your partner can sign up for official tournaments again from %s.", {WhenText(r.until)});
@@ -2088,6 +2094,13 @@ bool TourneyPanDown(POINT at, const std::vector<ui::Hit> &hits)
 {
 	Ui &u = g_tourney;
 	if (u.screen != kScreenPage || TourneyDialogOver(u) || CoveredByScreen()) return false;
+	// A player of a first round paired by hand: taken, to be dropped onto another.
+	if (const ui::Hit *hit = ui::TopHitAt(hits, at); hit && hit->action == kTourney && (hit->arg >> 24) == kSubSeed) {
+		u.seedDrag = hit->arg & 0xFFFFFF;
+		u.seedFrom = at;
+		u.seedMoved = false;
+		return true;
+	}
 	int mode = -1;
 	if (u.pan.valid && PtInRect(&u.pan.thumb, at) && !ui::TopHitAt(hits, at)) mode = 1;
 	else if (u.bracketArea.valid && PtInRect(&u.bracketArea.r, at) && (u.bracketArea.max > 0 || u.bracketArea.maxX > 0) && !ui::TopHitAt(hits, at)) mode = 0;
@@ -2103,6 +2116,11 @@ bool TourneyPanDown(POINT at, const std::vector<ui::Hit> &hits)
 void TourneyPanMove(POINT at, WPARAM buttons)
 {
 	Ui &u = g_tourney;
+	if (u.seedDrag) {
+		if (!(buttons & MK_LBUTTON)) u.seedDrag = 0;
+		else if (std::abs(at.x - u.seedFrom.x) > 4 || std::abs(at.y - u.seedFrom.y) > 4) u.seedMoved = true;
+		return;
+	}
 	if (!u.panning) return;
 	// The release can happen where the window doesn't hear it.
 	if (!(buttons & MK_LBUTTON)) {
@@ -2120,9 +2138,20 @@ void TourneyPanMove(POINT at, WPARAM buttons)
 	u.bracketY = std::max(0, std::min(u.bracketArea.max, u.panStartY - dy));
 }
 
-void TourneyPanUp()
+void TourneyPanUp(POINT at, const std::vector<ui::Hit> &hits)
 {
-	g_tourney.panning = false;
+	Ui &u = g_tourney;
+	u.panning = false;
+	if (!u.seedDrag) return;
+	const int64_t from = u.seedDrag;
+	const bool moved = u.seedMoved;
+	u.seedDrag = 0;
+	u.seedMoved = false;
+	const ui::Hit *hit = ui::TopHitAt(hits, at);
+	const int64_t to = hit && hit->action == kTourney && (hit->arg >> 24) == kSubSeed ? (hit->arg & 0xFFFFFF) : 0;
+	if (!moved || !to || to == from) return;
+	const auto page = LeagueTourneyPage(u.slug, 60000);
+	if (page->loaded && TourneyCanArrange(page->detail)) LeagueTourneySwapSeeds(page->detail.id, from, to);
 }
 
 bool TourneyScrollTo(int bar, int pos)

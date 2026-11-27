@@ -319,6 +319,16 @@ struct TourneyStanding {
 	std::vector<TourneyMember> members;
 };
 
+// A match of the first round of a cup paired by its organizer, as it would be drawn now: its entries, 0 for a bye.
+struct TourneyPreviewMatch {
+	int64_t a = 0, b = 0;
+	bool operator==(const TourneyPreviewMatch &o) const { return a == o.a && b == o.b; }
+};
+// [{a, b}...]: the first round of a cup paired by its organizer; false when it is not a list.
+bool TourneyParseFirstRound(const Json *v, std::vector<TourneyPreviewMatch> &out);
+// The seeds of a bracket of `size` places by place, top to bottom: 1 v 16, 8 v 9, 4 v 13...
+std::vector<int> TourneySeedOrder(int size);
+
 // GET /v1/tournaments/:slug.
 struct TourneyDetail : TourneySummary {
 	// The rounds of the bracket: of the winners' bracket in a double elimination, every round planned in a Swiss tournament.
@@ -333,6 +343,8 @@ struct TourneyDetail : TourneySummary {
 	std::vector<TourneyStanding> standings;
 	// The staging server lets any player fill the cup with test bots before it starts.
 	bool testBots = false;
+	// Paired by its organizer, before the draw: the first round as it would be drawn now.
+	std::vector<TourneyPreviewMatch> firstRound;
 };
 bool TourneyParseDetail(const Json &j, TourneyDetail &out);
 // The match at a round and a position (both counted within its part of the tournament).
@@ -659,11 +671,14 @@ constexpr int kTourneyCodeLength = 6;
 std::string TourneyTidyCode(const std::string &typed);
 bool TourneyCodeValid(const std::string &code);
 
+// How the first round is paired: by the ladder, at random, or by the organizer on the cup's page (not with the teams drawn).
+enum class TourneySeeding { Rating, Random, Manual };
+
 // What a player chooses to make a community cup (POST /v1/tournaments) or to change it (PATCH /v1/tournaments/:id).
 struct TourneyCupForm {
 	std::string name, description;
 	int maxEntries = 8, minEntries = 4, bestOf = 1, finalBestOf = 3;
-	bool randomSeeding = false;
+	TourneySeeding seeding = TourneySeeding::Rating;
 	// One per round from the first, the last one repeated.
 	std::vector<TourneyMap> maps;
 	int64_t startsAt = 0;

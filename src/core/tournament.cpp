@@ -703,12 +703,42 @@ bool TourneySeriesOver(const std::vector<TourneyGame> &games, int bestOf)
 	return a >= need || b >= need;
 }
 
+bool TourneyParseFirstRound(const Json *v, std::vector<TourneyPreviewMatch> &out)
+{
+	out.clear();
+	if (!v || v->type != Json::Array) return false;
+	for (const Json &m : v->arr) {
+		if (m.type != Json::Object) continue;
+		TourneyPreviewMatch x;
+		x.a = Int64(m, "a");
+		x.b = Int64(m, "b");
+		if (x.a || x.b) out.push_back(x);
+	}
+	return true;
+}
+
+std::vector<int> TourneySeedOrder(int size)
+{
+	std::vector<int> order = {1};
+	while (static_cast<int>(order.size()) < size && order.size() < 1024) {
+		const int n = static_cast<int>(order.size()) * 2;
+		std::vector<int> next;
+		for (int s : order) {
+			next.push_back(s);
+			next.push_back(n + 1 - s);
+		}
+		order = std::move(next);
+	}
+	return order;
+}
+
 bool TourneyParseDetail(const Json &j, TourneyDetail &out)
 {
 	out = TourneyDetail();
 	if (!TourneyParseSummary(j, out)) return false;
 	out.rounds = j.GetInt("rounds");
 	out.testBots = j.GetBool("testBots");
+	TourneyParseFirstRound(j.Get("firstRound"), out.firstRound);
 	const int sentRounds = out.rounds;
 	int counted = 0;
 	if (const Json *list = j.Get("entries"); list && list->type == Json::Array) {
@@ -1814,7 +1844,9 @@ Json TourneyCupJson(const TourneyCupForm &f, bool edit)
 	body.Set("finalBestOf", Json::MakeNumber(f.format == TourneyFormat::Swiss ? f.bestOf : f.finalBestOf));
 	body.Set("pace", Json::MakeString(TourneyPaceId(f.pace)));
 	body.Set("roundDays", f.pace == TourneyPace::Rounds ? Json::MakeNumber(f.roundDays) : Json());
-	body.Set("seeding", Json::MakeString(f.randomSeeding ? "random" : "rating"));
+	// Teams drawn when the check-in closes can't be paired before.
+	const bool manual = f.seeding == TourneySeeding::Manual && !(f.mode == TourneyMode::Teams && f.teamDraw);
+	body.Set("seeding", Json::MakeString(manual ? "manual" : f.seeding == TourneySeeding::Random ? "random" : "rating"));
 	Json maps = Json::MakeArray();
 	for (const TourneyMap &m : f.maps) maps.arr.push_back(TourneyMapJson(m));
 	body.Set("maps", maps);
@@ -1877,7 +1909,7 @@ TourneyCupForm TourneyCupFormOf(const TourneyDetail &d)
 	f.teamDraw = d.teamDraw;
 	f.bestOf = d.bestOf;
 	f.finalBestOf = d.finalBestOf;
-	f.randomSeeding = Lower(d.seeding) == "random";
+	f.seeding = Lower(d.seeding) == "random" ? TourneySeeding::Random : Lower(d.seeding) == "manual" ? TourneySeeding::Manual : TourneySeeding::Rating;
 	// What the list's view has too, read as the summary's.
 	const TourneySummary &summary = d;
 	f.format = TourneyFormatOf(summary);

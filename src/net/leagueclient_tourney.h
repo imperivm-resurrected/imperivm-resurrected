@@ -56,6 +56,8 @@ enum class TourneyOp {
 	Concede,
 	// A staging cup filled with test bots before it starts, by the cup.
 	Bots,
+	// Two entries of a cup paired by its organizer swapped in the first round, by the cup.
+	Seeds,
 };
 
 // The answer to something the player did.
@@ -143,6 +145,8 @@ void LeagueTourneyCancel(int64_t tournament);
 void LeagueTourneyCheckinNow(int64_t tournament);
 void LeagueTourneyStartNow(int64_t tournament);
 void LeagueTourneyRemoveEntry(int64_t tournament, int64_t entry);
+// The organizer of a cup paired by hand swaps two entries' places in the first round.
+void LeagueTourneySwapSeeds(int64_t tournament, int64_t a, int64_t b);
 enum class TourneyVerdict { GameToA, GameToB, Replay, WalkoverToA, WalkoverToB, WalkoverNobody };
 void LeagueTourneyResolve(int64_t match, TourneyVerdict verdict);
 

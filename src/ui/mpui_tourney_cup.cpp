@@ -535,17 +535,26 @@ int RulesRight(Form &c, int x, int y, int w)
 	at += Problem(c, x, at, w, {TourneyCupProblem::Series}) + c.k.rowGap;
 	at += Label(c, x, at, w, Tr("Pairings"));
 	at += Hint(c, x, at, w, Tr("Who meets whom in the first round.")) + 8;
+	// Teams drawn when the check-in closes can't be paired before: by hand is not offered then.
+	const bool byHand = !(f.mode == TourneyMode::Teams && f.teamDraw), manual = byHand && f.seeding == TourneySeeding::Manual;
+	const bool rating = f.seeding == TourneySeeding::Rating || (f.seeding == TourneySeeding::Manual && !byHand);
 	if (f.mode == TourneyMode::Teams) {
-		Option(c, x, at, w, c.k.optionH, !f.randomSeeding, true, Tr("By 2v2 Glory"), Tr("The average of both players' 2v2 Glory, or 1v1 without it."), Tr("Recommended"),
+		Option(c, x, at, w, c.k.optionH, rating, true, Tr("By 2v2 Glory"), Tr("The average of both players' 2v2 Glory, or 1v1 without it."), Tr("Recommended"),
 			false, CupArg(kCupSeeding, 0));
 	}
 	else {
-		Option(c, x, at, w, c.k.optionH, !f.randomSeeding, true, Tr("By Glory"), Tr("The best of the ranked leaderboard don't meet early."), Tr("Recommended"), false,
+		Option(c, x, at, w, c.k.optionH, rating, true, Tr("By Glory"), Tr("The best of the ranked leaderboard don't meet early."), Tr("Recommended"), false,
 			CupArg(kCupSeeding, 0));
 	}
 	at += c.k.optionH + 8;
-	Option(c, x, at, w, c.k.optionH, f.randomSeeding, true, Tr("At random"), Tr("The bracket is drawn by lot."), std::string(), false, CupArg(kCupSeeding, 1));
+	Option(c, x, at, w, c.k.optionH, f.seeding == TourneySeeding::Random, true, Tr("At random"), Tr("The bracket is drawn by lot."), std::string(), false, CupArg(kCupSeeding, 1));
 	at += c.k.optionH;
+	if (byHand) {
+		at += 8;
+		Option(c, x, at, w, c.k.optionH, manual, true, Tr("Chosen by you"), Tr("On the cup's page, drag a player onto another to swap them."), std::string(), false,
+			CupArg(kCupSeeding, 2));
+		at += c.k.optionH;
+	}
 	return at - y;
 }
 
@@ -1293,7 +1302,7 @@ void ApplyCupSetting(TourneyCupForm &f, int setting, int choice, int64_t nowMs)
 	case kCupFinal:
 		if (choice == 1 || choice == 3 || choice == 5) f.finalBestOf = choice;
 		break;
-	case kCupSeeding: f.randomSeeding = choice != 0; break;
+	case kCupSeeding: f.seeding = choice == 2 ? TourneySeeding::Manual : choice == 1 ? TourneySeeding::Random : TourneySeeding::Rating; break;
 	case kCupCheckin:
 		if (choice == 15 || choice == 30) f.checkinMinutes = choice;
 		break;

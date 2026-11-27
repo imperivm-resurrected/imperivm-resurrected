@@ -127,6 +127,7 @@ const char *OpName(TourneyOp op)
 	case TourneyOp::CancelTeam: return "team cancellation";
 	case TourneyOp::Concede: return "game given up";
 	case TourneyOp::Bots: return "fill with test bots";
+	case TourneyOp::Seeds: return "first round pairing";
 	default: return "resolution";
 	}
 }
@@ -342,6 +343,7 @@ void Run(TourneyOp op, int64_t id, std::string method, std::string path, std::st
 	const bool parsed = !r.body.empty() && Json::Parse(r.body, j);
 	TourneyDetail found;
 	TourneyCreated created;
+	std::vector<TourneyPreviewMatch> firstRound;
 	if (!out.ok) {
 		const TourneyRefusal no = parsed ? TourneyParseRefusal(j) : TourneyRefusal();
 		out.error = r.failure == "not linked" ? "not_linked" : no.code;
@@ -391,6 +393,11 @@ void Run(TourneyOp op, int64_t id, std::string method, std::string path, std::st
 	else if (op == TourneyOp::Bots && parsed) {
 		out.added = j.GetInt("added");
 		LogI("league", "%d test bots joined the cup %lld", out.added, static_cast<long long>(id));
+	}
+	else if (op == TourneyOp::Seeds && !(parsed && TourneyParseFirstRound(j.Get("firstRound"), firstRound))) {
+		out.ok = false;
+		out.error = "bad_answer";
+		LogW("league", "the league swapped the players of cup %lld but its answer could not be read", static_cast<long long>(id));
 	}
 	else if (op == TourneyOp::Pick && parsed) {
 		out.map = TourneyMapFromJson(j.Get("map"));
@@ -442,6 +449,13 @@ void Run(TourneyOp op, int64_t id, std::string method, std::string path, std::st
 			std::vector<TourneyInvite> &invites = v.mine.invites;
 			invites.erase(std::remove_if(invites.begin(), invites.end(), [id](const TourneyInvite &i) { return i.tournamentId == id; }), invites.end());
 		});
+	}
+	// The first round as the league has it now shows at once, before the page is read again.
+	if (out.ok && op == TourneyOp::Seeds) {
+		for (auto &p : g_pages) {
+			if (p.second.view->detail.id != id) continue;
+			ChangeView(p.second.view, [&firstRound](TourneyPageView &v) { v.detail.firstRound = firstRound; });
+		}
 	}
 	if (out.ok && op == TourneyOp::Create) RememberCode(created.slug, created.id, created.inviteCode);
 	if (out.ok && op == TourneyOp::Edit) {
@@ -886,6 +900,17 @@ void LeagueTourneyStartNow(int64_t tournament)
 void LeagueTourneyRemoveEntry(int64_t tournament, int64_t entry)
 {
 	Start(TourneyOp::RemoveEntry, entry, "DELETE", TourneyPath(tournament, "/entries/") + std::to_string(entry));
+}
+
+void LeagueTourneySwapSeeds(int64_t tournament, int64_t a, int64_t b)
+{
+	Json body = Json::MakeObject();
+	Json swap = Json::MakeArray();
+	swap.arr.push_back(Json::MakeNumber(static_cast<double>(a)));
+	swap.arr.push_back(Json::MakeNumber(static_cast<double>(b)));
+	body.Set("swap", swap);
+	LogI("league", "cup %lld: entries %lld and %lld swapped in the first round", static_cast<long long>(tournament), static_cast<long long>(a), static_cast<long long>(b));
+	Start(TourneyOp::Seeds, tournament, "POST", TourneyPath(tournament, "/seeds"), body.Dump());
 }
 
 void LeagueTourneyResolve(int64_t match, TourneyVerdict verdict)

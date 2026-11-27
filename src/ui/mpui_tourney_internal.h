@@ -50,6 +50,8 @@ enum Sub {
 	kSubPrepareMods,
 	// The staging server only: the cup's free places filled with test bots (by its id).
 	kSubFillBots,
+	// A cup paired by hand: a player of its first round taken to be dropped onto another (by the entry).
+	kSubSeed,
 };
 
 // What kSubCupSet changes in the form: the high bits of its value; the low 16 are the choice.
@@ -188,6 +190,10 @@ struct Ui {
 	int bracketZoom = 100;
 	bool panning = false;
 	int panMode = 0, panStartX = 0, panStartY = 0;
+	// A cup paired by its organizer: the entry taken from the first round, where, and whether it has been dragged yet.
+	int64_t seedDrag = 0;
+	POINT seedFrom = {};
+	bool seedMoved = false;
 	POINT panFrom = {};
 	BracketPanGeom pan;
 	// The page's side column (organizer, status, maps...) when it is taller than the screen, and how tall it was last painted.
@@ -489,6 +495,8 @@ int64_t UtcMs(int64_t localMs);
 std::string LongDayText(int64_t ms);
 // The player organises this cup.
 bool IsOrganizer(const TourneySummary &t);
+// A cup paired by hand before its draw, on its organizer's screen: its players are dragged onto each other in the first round.
+bool TourneyCanArrange(const TourneyDetail &d);
 // "By Furio", "You organise it"; empty for an official tournament.
 std::string OrganizerText(const TourneySummary &t);
 // "12 min", "3 h", "45 s": how long the server asks to wait.

@@ -43,7 +43,36 @@ struct Ctx {
 	const TourneyNext *next = nullptr;
 	// The cup's disputes, read once a frame for its organizer only.
 	TourneyDisputesView disputes;
+	// Paired by its organizer, before the draw: whether they can move its players, and the one being dragged.
+	bool arrange = false;
+	int64_t dragging = 0;
 };
+
+// The card of an entry of a first round paired by hand.
+TourneyCard PreviewCard(const TourneyDetail &d, int64_t entryId, int seed)
+{
+	TourneyCard card;
+	const TourneyEntrant *e = entryId ? TourneyEntrantOf(d, entryId) : nullptr;
+	if (!e) return card;
+	card.entryId = e->entryId;
+	card.steamId = e->steamId;
+	card.name = e->name;
+	card.seed = seed;
+	card.members = e->members;
+	return card;
+}
+
+// A player of a first round paired by hand, on the organizer's screen: taken to be dragged, and where it can be dropped.
+void ArrangeHit(Painter &p, const Ctx &c, int64_t entryId, int x, int y, int w, int h)
+{
+	if (!c.arrange || !entryId) return;
+	if (c.dragging == entryId) p.Frame(x, y, w, h, pal::red);
+	else if (c.dragging && p.Hover(x, y, w, h, c.mx, c.my)) {
+		p.Frame(x, y, w, h, pal::warn);
+		p.Frame(x + 1, y + 1, w - 2, h - 2, pal::warn);
+	}
+	p.AddHit(x, y, w, h, kTourney, ArgOf(kSubSeed, entryId));
+}
 
 // The players' Steam ids, for their badges; the ones without an id are left out.
 void AddIds(Ctx &c, const std::vector<TourneyMember> &players)
@@ -156,6 +185,7 @@ void PaintSide(Painter &p, Ctx &c, const TourneyMatch &m, const TourneyCard &car
 		p.Text(sx, y, scoreW, h, text, won ? pal::text : lost ? pal::redText : pal::caption, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 		p.raw = false;
 	}
+	ArrangeHit(p, c, card.entryId, x, y, w, h);
 }
 
 // What is happening in a match, over its box or beside its pairing: live, its room open for this player, under review or a no-show; empty
@@ -431,6 +461,12 @@ void PaintBracketPreview(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOu
 {
 	TourneyDetail s = c.d;
 	s.rounds = TourneyFullRounds(std::max(2, std::max(c.d.maxEntries, static_cast<int>(c.d.entrants.size()))));
+	// Paired by hand: the bracket of the places the first round takes now.
+	const int pairs = static_cast<int>(c.d.firstRound.size());
+	if (pairs) {
+		s.rounds = 1;
+		while ((1 << s.rounds) < 2 * pairs) s.rounds++;
+	}
 	s.matches.clear();
 	s.entrants.clear();
 	for (int r = 1; r <= s.rounds; r++) {
@@ -443,10 +479,72 @@ void PaintBracketPreview(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOu
 			s.matches.push_back(m);
 		}
 	}
+	// Paired by hand: the first round as it would be drawn now, each place with its seed.
+	if (pairs) {
+		const std::vector<int> seeds = TourneySeedOrder(1 << s.rounds);
+		for (TourneyMatch &m : s.matches) {
+			if (m.round != 1 || m.position >= pairs) continue;
+			const TourneyPreviewMatch &pm = c.d.firstRound[m.position];
+			m.a = PreviewCard(c.d, pm.a, seeds[2 * m.position]);
+			m.b = PreviewCard(c.d, pm.b, seeds[2 * m.position + 1]);
+			if (!(m.a.Present() && m.b.Present())) {
+				m.status = TourneyMatchStatus::Bye;
+				m.winner = m.a.Present() ? m.a.entryId : m.b.entryId;
+			}
+		}
+		s.entrants = c.d.entrants;
+	}
 	Ctx sc{c.st, c.u, s, c.mine};
 	sc.mx = c.mx;
 	sc.my = c.my;
+	sc.arrange = c.arrange;
+	sc.dragging = c.dragging;
 	PaintBracket(p, sc, x, y, w, h, out);
+}
+
+void PaintPairing(Painter &p, Ctx &c, const TourneyMatch &m, int table, int x, int y, int w, int h);
+
+// A Swiss paired by hand, before the draw: its first round as it would be drawn now, by table.
+void PaintFirstPairings(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out)
+{
+	const TourneyDetail &d = c.d;
+	UseFace(p, BrandFace::UiStrong, 15);
+	p.raw = true;
+	p.TextCaps(x, y, w, 26, TrFmt("Round %s of %s", {"1", std::to_string(TourneySwissTotalRounds(d))}), pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE, 2);
+	p.raw = false;
+	const int top = y + 42, rowH = 64, viewH = h - 42;
+	const int rows = static_cast<int>(d.firstRound.size()) * rowH - 8, maxY = std::max(0, rows - viewH), sy = std::min(c.u.bracketY, maxY);
+	SetScrollArea(p, out.bracketArea, x, top, w, viewH, maxY);
+	ClipArea view(p, x, top, w, viewH);
+	int ry = top - sy, table = 0;
+	for (const TourneyPreviewMatch &pm : d.firstRound) {
+		TourneyMatch m;
+		m.round = 1;
+		m.position = table;
+		m.bracket = TourneyBracket::Swiss;
+		m.bestOf = d.bestOf;
+		m.a = PreviewCard(d, pm.a, 0);
+		m.b = PreviewCard(d, pm.b, 0);
+		m.status = m.a.Present() && m.b.Present() ? TourneyMatchStatus::Pending : TourneyMatchStatus::Bye;
+		PaintPairing(p, c, m, ++table, x, ry, w, rowH - 8);
+		ry += rowH;
+	}
+	view.End();
+	if (maxY > 0) PaintScrollbar(p, kBarBracketY, x + w + 8, top, viewH, {sy, maxY, viewH}, c.st.dropBar, c.mx, c.my);
+}
+
+// The player being dragged, under the mouse.
+void PaintDragged(Painter &p, const Ctx &c)
+{
+	const TourneyEntrant *e = c.dragging ? TourneyEntrantOf(c.d, c.dragging) : nullptr;
+	if (!e || p.s <= 0) return;
+	const int x = static_cast<int>((c.mx - p.ox) / p.s) + 14, y = static_cast<int>((c.my - p.oy) / p.s) + 10, w = 240, h = 36;
+	p.Fill(x, y, w, h, pal::selected);
+	p.Frame(x, y, w, h, pal::red);
+	UseFace(p, BrandFace::UiStrong, 15);
+	p.raw = true;
+	p.Text(x + 12, y, w - 24, h, e->name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	p.raw = false;
 }
 
 // The players beside the bracket: seed, name, and how they stand (signed up, checked in, still in, knocked out) or their place.
@@ -856,6 +954,7 @@ void PaintPairing(Painter &p, Ctx &c, const TourneyMatch &m, int table, int x, i
 	if (bye) {
 		const TourneyCard &who = m.a.Present() ? m.a : m.b;
 		if (!who.Present()) return;
+		ArrangeHit(p, c, who.entryId, x + row.tableW + 1, y, w - row.tableW - 1, h);
 		const std::vector<TourneyMember> players = TourneyPlayersOf(who);
 		const int discsW = c.d.Teams() ? PaintSideDiscs(p, x + row.left, y + (h - 32) / 2, 32, players) : 32;
 		if (!c.d.Teams()) PaintPlayerDisc(p, x + row.left, y + (h - 32) / 2, 32, who.steamId, who.name);
@@ -886,6 +985,8 @@ void PaintPairing(Painter &p, Ctx &c, const TourneyMatch &m, int table, int x, i
 	const int scoreW = row.scoreW, left = x + row.left, right = x + row.right, scoreX = x + row.scoreX;
 	PaintPairingSide(p, c, m, m.a, false, left, scoreX - 14, y, h);
 	PaintPairingSide(p, c, m, m.b, true, scoreX + scoreW + 14, right, y, h);
+	ArrangeHit(p, c, m.a.entryId, x + row.tableW + 1, y, scoreX - x - row.tableW - 1, h);
+	ArrangeHit(p, c, m.b.entryId, scoreX + scoreW, y, x + w - scoreX - scoreW, h);
 	p.Fill(scoreX, y + 8, scoreW, h - 16, over ? pal::button : pal::field);
 	std::string score = "\xE2\x80\x93";
 	if (m.status == TourneyMatchStatus::Walkover) score = m.winner == m.a.entryId ? "W \xE2\x80\x93 0" : m.winner == m.b.entryId ? "0 \xE2\x80\x93 W" : "0 \xE2\x80\x93 0";
@@ -1078,7 +1179,7 @@ void PaintRules(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out)
 	}
 	else row(Tr("Series"), TrFmt("Best of %s; the final, best of %s", {std::to_string(d.bestOf), std::to_string(d.finalBestOf)}));
 	row(Tr("Seeding"), Tr(d.seeding == "random" ? "Drawn at random"
-			: d.seeding == "manual"					 ? "Set by the organisers"
+			: d.seeding == "manual"					 ? (d.official ? "Set by the organisers" : "Chosen by the organizer")
 			: d.Teams()								 ? "By both players' average 2v2 Glory (1v1 without it), frozen when the check-in closes"
 													 : "By the ranked leaderboard, frozen when the check-in closes"));
 	if (byRounds) {
@@ -1703,6 +1804,11 @@ int PaintPrizesCard(Painter &p, const TourneyDetail &d, int x, int y, int w)
 
 }
 
+bool TourneyCanArrange(const TourneyDetail &d)
+{
+	return !d.firstRound.empty() && (d.status == TourneyStatus::Signup || d.status == TourneyStatus::Checkin) && IsOrganizer(d);
+}
+
 bool PaintPageHeader(Painter &p, const State &st, const HeaderUi &u)
 {
 	const int mx = st.mouseX, my = st.mouseY;
@@ -1765,6 +1871,8 @@ void PaintPageScreen(Painter &p, const State &st, const Ui &u, PaintOut &out)
 	if (const TourneyEntrant *e = TourneyEntrantBySteamId(page.detail, SteamOwnId())) c.me = e->entryId;
 	if (mine.mine.next.present && mine.mine.next.tournamentId == page.detail.id) c.next = &mine.mine.next;
 	// The page may know before the player's tournaments that the match is over (they are read apart): it is not theirs to play then.
+	c.arrange = TourneyCanArrange(page.detail);
+	c.dragging = c.arrange && u.seedMoved ? u.seedDrag : 0;
 	if (c.next) {
 		const TourneyMatch *shown = MatchById(page.detail, c.next->match);
 		if ((shown && TourneyMatchOver(shown->status)) || page.detail.status == TourneyStatus::Finished || page.detail.status == TourneyStatus::Cancelled) c.next = nullptr;
@@ -1785,7 +1893,8 @@ void PaintPageScreen(Painter &p, const State &st, const Ui &u, PaintOut &out)
 	(void)bracketTab;
 	// The organizer's tab is gone: its disputes are in the log's tab.
 	if (tab == kOrganizerTab) tab = 0;
-	if ((tab == 0 || tab >= kRoundTab) && swiss) {
+	const bool pairing = page.detail.matches.empty() && !page.detail.firstRound.empty();
+	if ((tab == 0 || tab >= kRoundTab) && swiss && !pairing) {
 		if (page.detail.matches.empty()) {
 			PaintEntrants(p, c, ix, iy, iw - 20, ih, out);
 		}
@@ -1796,7 +1905,8 @@ void PaintPageScreen(Painter &p, const State &st, const Ui &u, PaintOut &out)
 		const int listW = std::max(240, std::min(320, iw * 24 / 100)), gap = 36, bx = ix + listW + gap, bw = iw - listW - gap;
 		PaintEntrantColumn(p, c, ix, iy, listW, ih, out);
 		p.Fill(ix + listW + gap / 2, iy, 1, ih, pal::hairline);
-		if (page.detail.matches.empty()) PaintBracketPreview(p, c, bx, iy, bw, ih, out);
+		if (page.detail.matches.empty() && swiss) PaintFirstPairings(p, c, bx, iy, bw, ih, out);
+		else if (page.detail.matches.empty()) PaintBracketPreview(p, c, bx, iy, bw, ih, out);
 		else if (TourneyIsDouble(page.detail)) PaintDoubleBracket(p, c, bx, iy, bw, ih, out);
 		else PaintBracket(p, c, bx, iy, bw, ih, out);
 	}
@@ -1827,6 +1937,7 @@ void PaintPageScreen(Painter &p, const State &st, const Ui &u, PaintOut &out)
 		if (room > (TourneyByRounds(page.detail) ? 174 : 150)) sy += PaintProgressCard(p, c, sx, sy, sideW) + 12;
 		if (page.detail.official && bottom - (sy + sideScroll) > 120) sy += PaintPrizesCard(p, page.detail, sx, sy, sideW) + 12;
 	}
+	PaintDragged(p, c);
 	out.pageSideH = sy + sideScroll - y - 12;
 	if (sideMax > 0) {
 		PaintScrollbar(p, kBarPageSide, sx + sideW + std::max(4, (m - 6) / 2 - 3), y, sideH, {sideScroll, sideMax, sideH}, st.dropBar, c.mx, c.my);

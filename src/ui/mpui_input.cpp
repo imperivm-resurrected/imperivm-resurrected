@@ -211,7 +211,7 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		g_s.colorDrag = 0;
 		g_s.resizeCol = -1;
 		g_s.dropBar = ScrollDrag();
-		TourneyPanUp();
+		TourneyPanUp({static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))}, g_s.hits);
 		ListUp(g_s.pick);
 		ListUp(g_s.opt);
 		ListUp(g_s.detail);

@@ -521,7 +521,7 @@ void CupForm()
 	CHECK(maps && maps->type == Json::Array && maps->arr.size() == 2);
 	CHECK(maps && maps->arr.size() == 2 && maps->arr[1].GetString("name") == "island" && maps->arr[1].GetString("size") == "small");
 	f.description = " Una tarde ";
-	f.randomSeeding = true;
+	f.seeding = TourneySeeding::Random;
 	f.isPrivate = true;
 	f.play = false;
 	f.contentKey = "c35f0a1b2c3d4e5f";
@@ -811,7 +811,7 @@ void CupFull()
 	CHECK_EQ(edit.name, std::string("Copa de novatos"));
 	CHECK_EQ(edit.checkinMinutes, 15);
 	CHECK_EQ(edit.noshowMinutes, 20);
-	CHECK(edit.isPrivate && edit.play && edit.randomSeeding);
+	CHECK(edit.isPrivate && edit.play && edit.seeding == TourneySeeding::Random);
 	CHECK_EQ(edit.bestOf, 3);
 	CHECK_EQ(edit.finalBestOf, 5);
 	CHECK_EQ(static_cast<int>(edit.maps.size()), 3);
@@ -1373,6 +1373,28 @@ void Bracket()
 
 }
 
+// A cup paired by its organizer: the first round the page shows before the draw, and the seeds of its places.
+void FirstRound()
+{
+	TourneyDetail d;
+	CHECK(TourneyParseDetail(Parse(R"({"id":3,"slug":"a-mano","status":"signup","seeding":"manual","firstRound":[{"a":11,"b":null},{"a":14,"b":15},{"a":12,"b":13}]})"), d));
+	CHECK_EQ(d.firstRound.size(), static_cast<size_t>(3));
+	CHECK(d.firstRound[0] == (TourneyPreviewMatch{11, 0}));
+	CHECK(d.firstRound[1] == (TourneyPreviewMatch{14, 15}));
+	TourneyDetail none;
+	CHECK(TourneyParseDetail(Parse(R"({"id":4,"slug":"gloria","status":"signup"})"), none));
+	CHECK(none.firstRound.empty());
+	CHECK(TourneySeedOrder(8) == (std::vector<int>{1, 8, 4, 5, 2, 7, 3, 6}));
+	CHECK(TourneySeedOrder(2) == (std::vector<int>{1, 2}));
+	// The form sends "manual", but not with the teams drawn.
+	TourneyCupForm f;
+	f.seeding = TourneySeeding::Manual;
+	CHECK_EQ(TourneyCupJson(f).GetString("seeding"), std::string("manual"));
+	f.mode = TourneyMode::Teams;
+	f.teamDraw = true;
+	CHECK_EQ(TourneyCupJson(f).GetString("seeding"), std::string("rating"));
+}
+
 int main()
 {
 	Statuses();
@@ -1397,5 +1419,6 @@ int main()
 	ScenarioFit();
 	Clock();
 	Bracket();
+	FirstRound();
 	return test::Summary("tournament");
 }
