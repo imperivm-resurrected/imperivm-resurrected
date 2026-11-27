@@ -3754,10 +3754,10 @@ extern const TrRow kTrRows[] = {
 	{"Nobody ranked yet.", "Aún no hay nadie clasificado.", "Ancora nessuno in classifica."},
 	{"No open tournaments.", "No hay torneos abiertos.", "Nessun torneo aperto."},
 	{"No disputes.", "Sin disputas.", "Nessuna contestazione."},
-	{"Chosen by you", "Las eliges tú", "Le scegli tu"},
+	{"Chosen by you", "Los eliges tú", "Li scegli tu"},
 	{"On the cup's page, drag a player onto another to swap them.", "En la página de la copa, arrastra un jugador sobre otro para cambiarlos.", "Nella pagina della coppa, trascina un giocatore su un altro per scambiarli."},
 	{"That player is no longer in the first round.", "Ese jugador ya no está en la primera ronda.", "Quel giocatore non è più nel primo turno."},
 	{"The cup changed meanwhile: try again.", "La copa ha cambiado mientras tanto: vuelve a intentarlo.", "La coppa è cambiata nel frattempo: riprova."},
-	{"Chosen by the organizer", "Las elige quien organiza", "Le sceglie chi organizza"},
+	{"Chosen by the organizer", "La elige quien organiza", "Le sceglie chi organizza"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);
