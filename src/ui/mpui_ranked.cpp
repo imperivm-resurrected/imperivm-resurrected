@@ -560,7 +560,7 @@ void PaintSide(Painter &p, int x, int y, int w, int h, uint64_t id, const std::s
 	const UINT fmt = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS;
 	SelectObject(p.dc, BrandFont(BrandFace::Body, 24, p.s));
 	p.raw = true;
-	const int nameW = std::max(40, std::min(x + w - 20 - cw - 12 - nx - (you ? 52 : 0) - LeagueBadgeRoom(badge), p.TextWidth(name) + 4));
+	const int nameW = std::max(40, std::min(x + w - 20 - nx - LeagueBadgeRoom(badge), p.TextWidth(name) + 4));
 	if (laurel) {
 		const int ly = ny + (nh - laurel) / 2;
 		DrawPatron(p, tx, ly, laurel, nx, ny, nameW, nh, name, patron.tier, fmt);
@@ -569,9 +569,7 @@ void PaintSide(Painter &p, int x, int y, int w, int h, uint64_t id, const std::s
 	else p.Text(nx, ny, nameW, nh, name, pal::text, fmt);
 	DrawBadgeAfterName(p, nx, ny, nameW, nh, name, badge, mx, my, id);
 	SteamProfileHotspot(p, nx, ny, nameW, nh, name, id, mx, my);
-	const int nameEnd = nx + std::min(nameW, p.TextWidth(name)) + LeagueBadgeRoom(badge);
 	p.raw = false;
-	if (you) Chip(p, nameEnd + 10, y + 60, 40, 20, "You", pal::textDim, pal::hairline);
 	p.Font(3);
 	if (card.standing) {
 		p.raw = true;
