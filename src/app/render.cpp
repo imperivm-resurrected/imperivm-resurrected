@@ -526,6 +526,18 @@ struct UiNeeds {
 	}
 };
 
+// Whether a screen of the mod covers the game's own: the menu screens it draws in place of the game's dialogs.
+bool CoversGameScreen(const UiNeeds &n)
+{
+	return n.mainMenu || n.battles || n.conquest || n.mp || n.saves || n.options || n.profile || n.credits || (n.mods && ModUiIsOpen());
+}
+
+// Going from one of those screens to the next, the game is a moment behind: its dialog for the new screen is made, and drawn, after
+// the mod's screen has gone. The picture on screen is the last one the mod drew until another screen of the mod draws, or the game
+// has drawn twice since (its new screen, whatever covers it), and never longer than this.
+const DWORD kHandOverMaxMs = 1500;
+const int kHandOverGameFrames = 2;
+
 UiNeeds QueryUiNeeds()
 {
 	UiNeeds n;
@@ -600,6 +612,9 @@ DWORD WINAPI RenderThread(LPVOID)
 	DWORD lastUiDraw = 0;
 	bool movieBlack = false;
 	bool wasVideo = false;
+	bool coveredBefore = false, handingOver = false;
+	DWORD handOverSince = 0;
+	int handOverFrames = 0;
 	const auto loop = [&] {
 		while (g_running) {
 			const bool vsync = GetConfig().vsync;
@@ -651,6 +666,31 @@ DWORD WINAPI RenderThread(LPVOID)
 			const bool overlay = GetConfig().showPerf || GetConfig().showNet;
 			const UiNeeds needs = QueryUiNeeds();
 			if (newFrame && !needs.mp) MpUiObserveFrame(local.data(), fw, fh);
+			const bool covered = !video && CoversGameScreen(needs);
+			if (coveredBefore && !covered && !video) {
+				handingOver = true;
+				handOverSince = now;
+				handOverFrames = 0;
+			}
+			coveredBefore = covered;
+			if (handingOver) {
+				if (newFrame) handOverFrames++;
+				if (covered || video || !gpu.tex || fw != gpu.texW || fh != gpu.texH || handOverFrames >= kHandOverGameFrames ||
+					now - handOverSince >= kHandOverMaxMs) {
+					handingOver = false;
+					// What shows next is drawn afresh from the game's latest picture.
+					uiWasOn = true;
+				}
+				else {
+					// The texture keeps the last picture the mod drew.
+					FitBackBuffer(gpu);
+					PlaceImage(gpu, fw, fh);
+					DrawImage(gpu);
+					if (gpu.swap->Present(vsync ? 1 : 0, 0) == DXGI_STATUS_OCCLUDED) Sleep(50);
+					if (!vsync) Sleep(5);
+					continue;
+				}
+			}
 			const bool ui = !video && needs.Any();
 			// The credits and the sliding submenu move on their own: they are drawn on every pass, at the pace of the screen.
 			if (ui && (newFrame || needs.credits || needs.animating || now - lastUiDraw >= 33)) {

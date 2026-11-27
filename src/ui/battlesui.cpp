@@ -4,6 +4,9 @@
 #include "ui/battlesui.h"
 
 #include <algorithm>
+#include <deque>
+#include <set>
+#include <thread>
 #include <cstdio>
 #include <iterator>
 #include <map>
@@ -175,11 +178,6 @@ std::shared_ptr<const BattleImage> PackPicture(const BattleCampaignPack &pack)
 	return nullptr;
 }
 
-// A picture of the mod's folder (imperivm-resurrected\<folder>\<file>), read once: the same picture keeps its blurred backdrop between
-// frames. Null when the file is missing.
-// The covers read while the screen is open; let go when it closes.
-std::map<std::string, std::shared_ptr<const BattleImage>> g_modCovers;
-
 // The widest a cover is drawn: the adventure's picture, about 1519 pixels wide on a 2160-line screen. The covers are kept that wide,
 // not at their file's size (1387x1134, some 6 MB each in memory).
 int CoverWidthDrawn()
@@ -188,54 +186,142 @@ int CoverWidthDrawn()
 	return (lines * 1519 + 2159) / 2160 + 16;
 }
 
-// `expected` false: a missing file is no fault (a conquest without a cover of the mod).
-std::shared_ptr<const BattleImage> ModCover(const char *folder, const std::string &file, bool expected = true)
+// The mod's covers, read and shrunk on a thread of their own: some twenty pictures of 1387x1134 held the game's thread for a long
+// moment when the screen opened. They stay a minute after it closes, so going back and forth reads them once.
+struct CoverCache {
+	std::mutex mx;
+	std::map<std::string, std::shared_ptr<const BattleImage>> ready;
+	std::set<std::string> failed, queued;
+	std::deque<std::pair<std::string, std::wstring>> todo;
+	bool working = false;
+	uint32_t generation = 0;
+};
+CoverCache g_covers;
+DWORD g_coversLeftAt = 0;
+const DWORD kCoversKeepMs = 60000;
+
+void CoverWorker()
 {
-	std::map<std::string, std::shared_ptr<const BattleImage>> &covers = g_modCovers;
-	const std::string key = std::string(folder) + "/" + file;
-	const auto known = covers.find(key);
-	if (known != covers.end()) return known->second;
-	std::shared_ptr<const BattleImage> &slot = covers[key];
-	Picture pic;
-	const std::string name(folder);
-	if (!LoadPicture(ModArtFile(std::wstring(name.begin(), name.end()).c_str(), std::wstring(file.begin(), file.end()).c_str()), pic)) {
-		if (expected) LogW("ui", "adventure screen: the cover %s is missing or unreadable", key.c_str());
-		return nullptr;
+	for (;;) {
+		std::pair<std::string, std::wstring> job;
+		uint32_t generation = 0;
+		{
+			std::lock_guard<std::mutex> lock(g_covers.mx);
+			if (g_covers.todo.empty()) {
+				g_covers.working = false;
+				return;
+			}
+			job = std::move(g_covers.todo.front());
+			g_covers.todo.pop_front();
+			generation = g_covers.generation;
+		}
+		Picture pic;
+		std::shared_ptr<const BattleImage> img;
+		if (LoadPicture(job.second, pic)) {
+			BattleImage full;
+			full.w = pic.w;
+			full.h = pic.h;
+			full.bgra = std::move(pic.px);
+			img = std::make_shared<const BattleImage>(ShrinkBattleImage(std::move(full), CoverWidthDrawn()));
+		}
+		else LogW("ui", "adventure screen: the cover %s is unreadable", job.first.c_str());
+		{
+			std::lock_guard<std::mutex> lock(g_covers.mx);
+			if (generation != g_covers.generation) continue;
+			g_covers.queued.erase(job.first);
+			if (img) g_covers.ready[job.first] = img;
+			else g_covers.failed.insert(job.first);
+		}
+		// The menus draw only when something changes: the screen asks for a frame to show the cover.
+		UiWakeGameThread();
 	}
-	BattleImage full;
-	full.w = pic.w;
-	full.h = pic.h;
-	full.bgra = std::move(pic.px);
-	slot = std::make_shared<const BattleImage>(ShrinkBattleImage(std::move(full), CoverWidthDrawn()));
-	return slot;
+}
+
+void ForgetCovers()
+{
+	std::lock_guard<std::mutex> lock(g_covers.mx);
+	g_covers.generation++;
+	g_covers.ready.clear();
+	g_covers.failed.clear();
+	g_covers.queued.clear();
+	g_covers.todo.clear();
+}
+
+// A cover of the mod's folder (imperivm-resurrected\<folder>\<file>): the picture once read, else null, with `pending` set while it is
+// being read (`first` puts it before the others). `expected` false: a missing file is no fault (a conquest without a cover of the mod).
+std::shared_ptr<const BattleImage> ModCover(const char *folder, const std::string &file, bool expected = true, bool *pending = nullptr, bool first = false)
+{
+	const std::string key = std::string(folder) + "/" + file;
+	const std::string name(folder);
+	bool start = false;
+	{
+		std::lock_guard<std::mutex> lock(g_covers.mx);
+		const auto known = g_covers.ready.find(key);
+		if (known != g_covers.ready.end()) return known->second;
+		if (g_covers.failed.count(key)) return nullptr;
+		if (!g_covers.queued.count(key)) {
+			const std::wstring path = ModArtFile(std::wstring(name.begin(), name.end()).c_str(), std::wstring(file.begin(), file.end()).c_str());
+			if (GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) {
+				g_covers.failed.insert(key);
+				if (expected) LogW("ui", "adventure screen: the cover %s is missing", key.c_str());
+				return nullptr;
+			}
+			g_covers.queued.insert(key);
+			if (first) g_covers.todo.emplace_front(key, path);
+			else g_covers.todo.emplace_back(key, path);
+		}
+		else if (first) {
+			for (auto it = g_covers.todo.begin(); it != g_covers.todo.end(); ++it) {
+				if (it->first != key) continue;
+				auto job = std::move(*it);
+				g_covers.todo.erase(it);
+				g_covers.todo.push_front(std::move(job));
+				break;
+			}
+		}
+		if (pending) *pending = true;
+		start = !g_covers.working;
+		g_covers.working = true;
+	}
+	if (start) std::thread(CoverWorker).detach();
+	return nullptr;
 }
 
 // The mod's own cover of an adventure: the one of its Imperivm I or II campaign, or the remastered one of a great battle or challenge.
 // Null for the others, which keep the game's picture.
-std::shared_ptr<const BattleImage> ModCoverOf(const std::string &adventurePath)
+std::shared_ptr<const BattleImage> ModCoverOf(const std::string &adventurePath, bool *pending = nullptr, bool first = false)
 {
 	const std::string campaign = BattleCampaignCoverOf(adventurePath);
-	if (!campaign.empty()) return ModCover("campaigns", campaign);
+	if (!campaign.empty()) return ModCover("campaigns", campaign, true, pending, first);
 	const std::string great = BattleRemasteredCoverOf(adventurePath);
-	return great.empty() ? nullptr : ModCover("adventures", great);
+	return great.empty() ? nullptr : ModCover("adventures", great, true, pending, first);
 }
 
 // The mod's own cover of a conquest: imperivm-resurrected\conquest\<conquest>\cover.jpg (or .png), under the key its painted map is
 // found by. Null without one, and the conquest keeps the game's picture.
-std::shared_ptr<const BattleImage> ConquestCoverOf(const std::string &conquestPath)
+std::shared_ptr<const BattleImage> ConquestCoverOf(const std::string &conquestPath, bool *pending = nullptr, bool first = false)
 {
 	const std::string key = ConquestKeyOf(conquestPath);
 	if (key.empty()) return nullptr;
 	for (const char *name : {"cover.jpg", "cover.png"}) {
-		if (std::shared_ptr<const BattleImage> img = ModCover("conquest", key + "\\" + name, false)) return img;
+		bool waiting = false;
+		if (std::shared_ptr<const BattleImage> img = ModCover("conquest", key + "\\" + name, false, &waiting, first)) return img;
+		if (waiting) {
+			if (pending) *pending = true;
+			return nullptr;
+		}
 	}
 	return nullptr;
 }
 
+// A card's picture: the mod's cover, the game's picture for an adventure without one, and none while the mod's is being read (the
+// game's would show for a moment before it).
 std::shared_ptr<const BattleImage> AdventureCover(const std::string &adventurePath)
 {
-	std::shared_ptr<const BattleImage> img = ModCoverOf(adventurePath);
-	return img ? img : BattlesAdventureImage(adventurePath);
+	bool pending = false;
+	std::shared_ptr<const BattleImage> img = ModCoverOf(adventurePath, &pending);
+	if (img || pending) return img;
+	return BattlesAdventureImage(adventurePath);
 }
 
 // The campaigns of Imperivm I and II and the great battles show the mod's covers instead of the game's pictures: on their cards
@@ -264,7 +350,10 @@ void UseModCovers(BattlesSnapshot &s)
 	}
 	if (s.selList >= 0 && s.selIndex >= 0) {
 		const std::string &path = s.lists[s.selList][s.selIndex].path;
-		if (std::shared_ptr<const BattleImage> img = s.tab == kBattlesTabConquests ? ConquestCoverOf(path) : ModCoverOf(path)) s.image = img;
+		bool pending = false;
+		// The chosen one is read before the cards'.
+		std::shared_ptr<const BattleImage> img = s.tab == kBattlesTabConquests ? ConquestCoverOf(path, &pending, true) : ModCoverOf(path, &pending, true);
+		if (img || pending) s.image = img;
 	}
 }
 
@@ -755,14 +844,19 @@ void BattlesUiGameTick()
 	// The screen comes back as it was after the intro.
 	if (BattlesIntroPlaying()) return;
 	if (!BattlesScreenWanted()) {
+		if (!g_coversLeftAt) g_coversLeftAt = GetTickCount() | 1;
+		else if (GetTickCount() - g_coversLeftAt >= kCoversKeepMs) {
+			ForgetCovers();
+			g_coversLeftAt = 0;
+		}
 		g_saves = SavesCache();
-		g_modCovers.clear();
 		g_savesWasOpen = false;
 		g_modsWasOpen = false;
 		std::lock_guard<std::mutex> lock(g_lock);
 		if (g_s.active) g_s = State();
 		return;
 	}
+	g_coversLeftAt = 0;
 	// A game deleted or renamed on the load screen, opened from here, must not stay on the overview.
 	const bool savesOpen = SavesUiNeedsDraw();
 	if (g_savesWasOpen && !savesOpen) g_saves.rescan = true;
