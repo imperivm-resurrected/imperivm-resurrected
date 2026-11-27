@@ -1812,7 +1812,8 @@ int PaintPrizesCard(Painter &p, const TourneyDetail &d, int x, int y, int w)
 
 bool TourneyCanArrange(const TourneyDetail &d)
 {
-	return !d.firstRound.empty() && (d.status == TourneyStatus::Signup || d.status == TourneyStatus::Checkin) && CanManage(d);
+	return !d.firstRound.empty() && (d.status == TourneyStatus::Signup || d.status == TourneyStatus::Checkin) && CanManage(d) &&
+		!LeagueTourneyBusy(TourneyOp::Seeds, d.id);
 }
 
 bool PaintPageHeader(Painter &p, const State &st, const HeaderUi &u)

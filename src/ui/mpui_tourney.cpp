@@ -999,6 +999,7 @@ std::string ResultText(const TourneyOpResult &r)
 	if (e == "not_your_pick") return Tr("It is not your turn to choose the map.");
 	if (e == "not_in_bracket") return Tr("That player is no longer in the first round.");
 	if (e == "mode_locked") return Tr("Players have signed up: the mode can no longer change.");
+	if (e == "too_many_signed") return Tr("More players have signed up than that: take some off first.");
 	if (e == "panel_only") return Tr("An official tournament is cancelled from the league's web panel.");
 	if (e == "changed") return Tr("The cup changed meanwhile: try again.");
 	if (e == "pick_closed") return Tr("The time to choose is over: the map was drawn.");
