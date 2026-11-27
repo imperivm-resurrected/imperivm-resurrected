@@ -715,6 +715,33 @@ void OptionsUiGameTick()
 	if (due) Refresh();
 }
 
+std::vector<std::string> OptionsUiPageTitles()
+{
+	std::vector<std::string> titles;
+	for (const Page &page : BuildPages(ViewValues())) titles.push_back(page.title);
+	return titles;
+}
+
+void OptionsUiShowPage(int page)
+{
+	std::lock_guard<std::mutex> lock(g_lock);
+	if (!g_s.dlg || g_s.closedAt) return;
+	g_s.view.page = page;
+	g_s.view.dropId = 0;
+	g_s.view.scroll.Reset();
+}
+
+void OptionsUiBack()
+{
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		if (!g_s.dlg || g_s.closedAt) return;
+	}
+	Command cmd;
+	cmd.action = kActCancel;
+	Execute(cmd);
+}
+
 bool OptionsUiNeedsDraw()
 {
 	void *dlg = OptionsDialogOpen();

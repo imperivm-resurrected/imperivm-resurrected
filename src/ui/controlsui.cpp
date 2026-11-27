@@ -15,6 +15,7 @@
 #include "addr/state.h"
 #include "game/controls.h"
 #include "ui/controlsui.h"
+#include "ui/optionsui.h"
 #include "ui/fullscreen.h"
 #include "ui/keycaps.h"
 #include "ui/screenkit.h"
@@ -86,8 +87,10 @@ Layout LayoutFor(bool full, int w, int h)
 enum Action {
 	kNone = 0, kClose, kNav, kCell, kRowReset, kSearchField, kClearSearch, kSwap, kAssignAnyway,
 	kCancelPending, kModeLetter, kModePosition, kUndo, kViewList, kViewKeys, kKbKey, kKbLayer, kKbGo,
-	kBarLetters, kCopyConfig, kPasteConfig, kBoxMode, kPingMode, kResetAll, kResetAllYes,
+	kBarLetters, kCopyConfig, kPasteConfig, kBoxMode, kPingMode, kResetAll, kResetAllYes, kOptionsTab,
 };
+// What the options do once the screen closed as their tab: nothing, Back, or the tab of that page.
+const int kNoAfter = -1, kAfterBack = -2;
 const int kSearchAction = 7301;
 
 struct Ref {
@@ -135,6 +138,10 @@ struct State {
 	RECT panel = {};
 	// As the last frame was drawn: the rows' heights, and so the scroll, follow it.
 	bool full = false;
+	// Opened as the last tab of the options: their header and tabs, and what they do after it closes.
+	bool inOptions = false;
+	std::vector<std::string> optionTabs;
+	int after = kNoAfter;
 };
 
 std::mutex g_lock;
@@ -1051,6 +1058,15 @@ void ControlsUiOpen()
 	LogD("controls", "screen open (%d rows)", static_cast<int>(g_s.rows.size()));
 }
 
+void ControlsUiOpenInOptions()
+{
+	const std::vector<std::string> tabs = OptionsUiPageTitles();
+	ControlsUiOpen();
+	std::lock_guard<std::mutex> lock(g_lock);
+	g_s.inOptions = true;
+	g_s.optionTabs = tabs;
+}
+
 bool ControlsUiNeedsDraw()
 {
 	std::lock_guard<std::mutex> lock(g_lock);
@@ -1062,7 +1078,15 @@ namespace {
 void PaintHeader(Painter &p, const State &st, const Layout &l, int mx, int my)
 {
 	const bool keyboard = st.view == 1;
-	const std::vector<TabSpec> views = {{"List", kViewList, 0, !keyboard, true}, {"Keyboard", kViewKeys, 0, keyboard, true}};
+	std::vector<TabSpec> views = {{"List", kViewList, 0, !keyboard, true}, {"Keyboard", kViewKeys, 0, keyboard, true}};
+	// As the options' last tab, the header is theirs: List and Keyboard go to the foot.
+	const char *title = "Controls";
+	if (st.inOptions) {
+		title = "Options";
+		views.clear();
+		for (size_t i = 0; i < st.optionTabs.size(); i++) views.push_back({st.optionTabs[i], kOptionsTab, static_cast<int>(i), false, true});
+		views.push_back({"Controls", kNone, 0, true, true});
+	}
 	int searchX = 0, searchY = 0, searchW = 0, searchH = 0;
 	if (l.full) {
 		UseScreenFonts(p);
@@ -1072,7 +1096,7 @@ void PaintHeader(Painter &p, const State &st, const Layout &l, int mx, int my)
 		searchH = kHeaderButtonH;
 		searchX = right - 16 - searchW;
 		searchY = sl.margin;
-		PaintScreenTitle(p, sl, "Controls", views, searchX - 16, mx, my);
+		PaintScreenTitle(p, sl, title, views, searchX - 16, mx, my);
 		PaintScreenInfo(p, sl, keyboard ? "Hover over a key to see what it does; click it to pin it." : "Click a key to change it; right-click it to remove it.");
 	}
 	else {
@@ -1081,7 +1105,7 @@ void PaintHeader(Painter &p, const State &st, const Layout &l, int mx, int my)
 		searchH = 30;
 		searchX = kW - 24 - searchW;
 		searchY = 22;
-		PaintWindowHeading(p, kW, "Controls", std::string(), views, searchX - 12, mx, my, l.top - 6);
+		PaintWindowHeading(p, kW, title, std::string(), views, searchX - 12, mx, my, l.top - 6);
 	}
 	PaintEditField(p, searchX, searchY, searchW, searchH, st.search, "Search action or key", st.searchFocus, false, st.edit, kSearchAction);
 	if (!st.search.empty()) {
@@ -1310,6 +1334,22 @@ ListOut PaintListView(Painter &p, const State &st, const Layout &l, int mx, int 
 	return out;
 }
 
+// List and Keyboard side by side, ending at right, as the options' own segments; returns where they start.
+int PaintViewSwitch(Painter &p, const State &st, int right, int y, int h, int segW, int mx, int my)
+{
+	const char *const labels[] = {"List", "Keyboard"};
+	const int x = right - 2 * segW;
+	for (int i = 0; i < 2; i++) {
+		const int bx = x + i * segW;
+		const bool on = st.view == i, hot = !on && p.Hover(bx, y, segW, h, mx, my);
+		p.WellSegment(bx, y, segW, h, on, hot);
+		p.Font(0);
+		p.Text(bx, y, segW, h, labels[i], on || hot ? pal::text : pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		if (!on) p.AddHit(bx, y, segW, h, i ? kViewKeys : kViewList, 0);
+	}
+	return x;
+}
+
 void PaintFooter(Painter &p, const State &st, const Layout &l, int mx, int my)
 {
 	const int fy = l.footerY, by = l.buttonY, bh = l.buttonH;
@@ -1320,7 +1360,9 @@ void PaintFooter(Painter &p, const State &st, const Layout &l, int mx, int my)
 		p.Button(bx, by, bw, bh, "Export", kCopyConfig, 0, mx, my);
 		p.Button(bx + bw + gap, by, bw, bh, "Import", kPasteConfig, 0, mx, my);
 		p.Button(bx + (bw + gap) * 2, by, bw, bh, "Reset all", kResetAll, 0, mx, my);
-		if (canUndo) p.Button(l.listX + l.listW + l.pad - bw, by, bw, bh, "Undo", kUndo, 0, mx, my);
+		int right = l.listX + l.listW + l.pad;
+		if (st.inOptions) right = PaintViewSwitch(p, st, right, by, bh, 150, mx, my) - gap;
+		if (canUndo) p.Button(right - bw, by, bw, bh, "Undo", kUndo, 0, mx, my);
 	}
 	else {
 		p.Fill(16, fy + 2, kW - 32, 1, pal::hairline);
@@ -1328,8 +1370,10 @@ void PaintFooter(Painter &p, const State &st, const Layout &l, int mx, int my)
 		p.Button(24 + 96 + 8, by, 96, bh, "Import", kPasteConfig, 0, mx, my, true, false, 4);
 		p.Button(24 + (96 + 8) * 2, by, p.ButtonWidth("Reset all", 110), bh, "Reset all", kResetAll, 0, mx, my, true, false, 4);
 		p.Button(kW - 24 - 130, by, 130, bh, "Close", kClose, 0, mx, my, true, true);
+		int right = kW - 24 - 130 - 12;
+		if (st.inOptions) right = PaintViewSwitch(p, st, right, by, bh, 96, mx, my) - 12;
 		const int undoW = p.ButtonWidth("Undo", 110);
-		if (canUndo) p.Button(kW - 24 - 130 - 12 - undoW, by, undoW, bh, "Undo", kUndo, 0, mx, my, true, false, 4);
+		if (canUndo) p.Button(right - undoW, by, undoW, bh, "Undo", kUndo, 0, mx, my, true, false, 4);
 	}
 }
 
@@ -1544,6 +1588,13 @@ void SetGrid(State &st, bool on)
 	SetStatus(st, text, false);
 }
 
+// Closed by Back, Close or Escape: as the options' last tab, the options close with it, as their own Back does.
+void Leave(State &st)
+{
+	st.open = false;
+	if (st.inOptions) st.after = kAfterBack;
+}
+
 void Activate(State &st, int action, int arg, POINT pt)
 {
 	if (action == kSearchAction) action = kSearchField;
@@ -1581,7 +1632,11 @@ void Activate(State &st, int action, int arg, POINT pt)
 	if (st.capture.row >= 0 && !sameCell) st.capture = Ref();
 	switch (action) {
 	case kClose:
+		Leave(st);
+		break;
+	case kOptionsTab:
 		st.open = false;
+		st.after = arg;
 		break;
 	case kNav:
 		st.page = arg;
@@ -1780,9 +1835,8 @@ void KeyActivate(State &st, bool space)
 
 }
 
-bool ControlsUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
+static bool HandleLocked(UINT msg, WPARAM wp, LPARAM lp)
 {
-	if (msg == WM_INPUTLANGCHANGE) ControlsNoteLayout();
 	std::lock_guard<std::mutex> lock(g_lock);
 	State &st = g_s;
 	if (!st.open) return false;
@@ -1892,7 +1946,7 @@ bool ControlsUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 			}
 			else if (st.confirmResetAll) st.confirmResetAll = false;
 			else if (!st.search.empty()) ClearSearch(st);
-			else st.open = false;
+			else Leave(st);
 		}
 		return true;
 	case WM_CHAR:
@@ -1926,4 +1980,27 @@ bool ControlsUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 	default:
 		return false;
 	}
+}
+
+bool ControlsUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
+{
+	// The press that closed the screen as an options tab: its release must not reach the menu under the options.
+	static bool swallowUp = false;
+	if (msg == WM_LBUTTONUP && swallowUp) {
+		swallowUp = false;
+		return true;
+	}
+	if (msg == WM_INPUTLANGCHANGE) ControlsNoteLayout();
+	const bool consumed = HandleLocked(msg, wp, lp);
+	int after = kNoAfter;
+	{
+		std::lock_guard<std::mutex> lock(g_lock);
+		after = g_s.after;
+		g_s.after = kNoAfter;
+	}
+	if (after == kNoAfter) return consumed;
+	if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK) swallowUp = true;
+	if (after == kAfterBack) OptionsUiBack();
+	else OptionsUiShowPage(after);
+	return true;
 }

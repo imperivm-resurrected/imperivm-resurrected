@@ -7,6 +7,8 @@
 #include <cstdint>
 
 void ControlsUiOpen();
+// The same screen as the options' last tab: their header and tabs, and their Back.
+void ControlsUiOpenInOptions();
 bool ControlsUiNeedsDraw();
 void ControlsUiDraw(uint32_t *buf, int w, int h);
 bool ControlsUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp);
