@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "addr/engine.h"
@@ -106,6 +107,35 @@ unsigned RespawnDue(const void *site, unsigned clock)
 	return 0;
 }
 
+// The handle table keeps, in a slot no object uses any more, the pointer of the one that was there: an object deleted, or the whole
+// world before a load or a new match, whose memory may be gone. Read blindly, such a slot faulted and the timers went off for the rest of
+// the game. A slot counts only when its memory is readable (each region asked once a pass) and the object at it names that
+// very slot, as a living object does.
+std::vector<std::pair<uintptr_t, uintptr_t>> g_readable;
+
+bool Readable(const char *p, std::size_t size)
+{
+	const uintptr_t from = reinterpret_cast<uintptr_t>(p), to = from + size;
+	for (const auto &r : g_readable) {
+		if (from >= r.first && to <= r.second) return true;
+	}
+	MEMORY_BASIC_INFORMATION mbi = {};
+	if (!VirtualQuery(p, &mbi, sizeof(mbi)) || mbi.State != MEM_COMMIT || (mbi.Protect & (PAGE_GUARD | PAGE_NOACCESS)) ||
+		!(mbi.Protect & (PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE))) {
+		return false;
+	}
+	const uintptr_t base = reinterpret_cast<uintptr_t>(mbi.BaseAddress), end = base + mbi.RegionSize;
+	if (to > end) return false;
+	if (g_readable.size() < 4096) g_readable.push_back({base, end});
+	return true;
+}
+
+RespawnKind LivingKindOf(const char *object, unsigned slot)
+{
+	if (!Readable(object, 0x40) || Read<unsigned short>(object, 8) != static_cast<unsigned short>(slot)) return kRespawnNone;
+	return KindOf(object);
+}
+
 // Samples every site the handle table holds; counts the discovered sites seen with their item again.
 void Observe(const void *player, unsigned clock)
 {
@@ -113,10 +143,12 @@ void Observe(const void *player, unsigned clock)
 	typedef const void *(__thiscall * GetItem_t)(const void *, int);
 	unsigned back = 0;
 	g_marks.clear();
+	// Asked again on each pass: memory freed since the last one is not taken for readable.
+	g_readable.clear();
 	const auto table = reinterpret_cast<const char *const *>(addr::kHandleTable);
 	for (unsigned i = 0; i < kObjectSlots; ++i) {
 		const char *site = table[i];
-		const RespawnKind kind = site ? KindOf(site) : kRespawnNone;
+		const RespawnKind kind = site ? LivingKindOf(site, i) : kRespawnNone;
 		RespawnSiteState &state = g_sites[i];
 		if (kind == kRespawnNone) {
 			if (state.site) state = RespawnSiteState();
@@ -151,6 +183,7 @@ void Observe(const void *player, unsigned clock)
 
 void Forget()
 {
+	g_readable.clear();
 	g_haveClasses = false;
 	g_sites.fill(RespawnSiteState());
 	g_marks.clear();
