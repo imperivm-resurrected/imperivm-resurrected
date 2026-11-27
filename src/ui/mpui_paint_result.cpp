@@ -12,14 +12,18 @@
 #include "core/leagueseasons.h"
 #include "core/leagueranked.h"
 #include "core/leagueteam.h"
+#include "core/tournament.h"
 #include "game/civs.h"
 #include "game/profiles.h"
 #include "i18n/tr.h"
 #include "net/leagueclient.h"
+#include "net/patrons.h"
 #include "net/steamnet.h"
 #include "ui/leaguemapthumb.h"
 #include "ui/leaguemastery.h"
+#include "ui/leaguerewards.h"
 #include "ui/leagueui.h"
+#include "ui/patronui.h"
 
 #include "ui/mpui_internal.h"
 #include "ui/mpui_ranked_kit.h"
@@ -383,6 +387,38 @@ int PaintMasteryUp(Painter &p, const LeagueMasteryChange &mc, int x, int y, int 
 	return h;
 }
 
+// A player's avatar (in their frame, when it shows) and name as the league shows them everywhere: the donor's laurel, the emblem they
+// chose after the name, and their Steam profile on a click. A practice bot has none of them.
+void PaintPlayerAvatar(Painter &p, int x, int y, int size, uint64_t id, const std::string &name)
+{
+	const LeagueFrame frame = id && !TourneyIsTestBot(id) ? PlayerFrameOf(id) : LeagueFrame();
+	if (frame.Shown() && size >= 36) PaintFramedAvatar(p, x, y, size, id, name, frame);
+	else if (!PaintAvatar(p, x, y, size, id)) p.Fill(x, y, size, size, pal::hairline);
+}
+
+void PaintPlayerName(Painter &p, const State &st, int x, int y, int w, int h, uint64_t id, const std::string &name)
+{
+	const UINT fmt = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS;
+	const bool person = id && !TourneyIsTestBot(id);
+	const PatronInfo patron = person ? PatronOf(id) : PatronInfo();
+	const LeagueBadge badge = person ? PlayerBadgeOf(id) : LeagueBadge();
+	const int laurel = patron.tier != PatronTier::None ? std::min(h, PatronLaurelSize(patron.tier)) : 0;
+	const int nx = x + (laurel ? laurel + 4 : 0);
+	p.raw = true;
+	const int nameW = std::max(20, std::min(x + w - nx - LeagueBadgeRoom(badge), p.TextWidth(name) + 4));
+	if (laurel) {
+		const int ly = y + (h - laurel) / 2;
+		DrawPatron(p, x, ly, laurel, nx, y, nameW, h, name, patron.tier, fmt);
+		PatronHotspot(p, x, ly, laurel, patron, st.mouseX, st.mouseY, kPatronLink);
+	}
+	else p.Text(nx, y, nameW, h, name, pal::text, fmt);
+	if (person) {
+		DrawBadgeAfterName(p, nx, y, nameW, h, name, badge, st.mouseX, st.mouseY, id);
+		SteamProfileHotspot(p, nx, y, nameW, h, name, id, st.mouseX, st.mouseY);
+	}
+	p.raw = false;
+}
+
 void PaintSummary(Painter &p, const State &st, const LeagueMeView &me, int x, int y, int w, int h)
 {
 	const LeagueRankedView &v = st.ranked.view;
@@ -408,7 +444,7 @@ void PaintSummary(Painter &p, const State &st, const LeagueMeView &me, int x, in
 		// Each team under its result: this player with the partner, and the two opponents.
 		// The name, then what happened to them or, failing that, their civilization.
 		auto member = [&](int sx, int ry, uint64_t id, const std::string &name, const char *mark) {
-			if (!PaintAvatar(p, sx, ry + 2, 22, id)) p.Fill(sx, ry + 2, 22, 22, pal::hairline);
+			PaintPlayerAvatar(p, sx, ry + 2, 22, id, name);
 			const std::string civ = mark || !id ? std::string() : CivOfPlayer(g, std::to_string(id));
 			p.Font(3);
 			p.raw = true;
@@ -416,7 +452,7 @@ void PaintSummary(Painter &p, const State &st, const LeagueMeView &me, int x, in
 			const int rightW = right.empty() ? 0 : std::min(half / 2, p.TextWidth(right) + 12);
 			p.raw = false;
 			p.Font(0);
-			RawText(p, sx + 30, ry, half - 30 - rightW, 26, name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			PaintPlayerName(p, st, sx + 30, ry, half - 30 - rightW, 26, id, name);
 			if (rightW) {
 				p.Font(3);
 				RawText(p, sx + half - rightW, ry, rightW, 26, right, mark ? pal::bad : pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
@@ -444,9 +480,9 @@ void PaintSummary(Painter &p, const State &st, const LeagueMeView &me, int x, in
 	else {
 		// The name, then the outcome and the civilization played.
 		auto side = [&](int sx, uint64_t id, const std::string &name, bool won) {
-			if (!PaintAvatar(p, sx, py + 8, 36, id)) p.Fill(sx, py + 8, 36, 36, pal::hairline);
+			PaintPlayerAvatar(p, sx, py + 8, 36, id, name);
 			p.Font(1);
-			RawText(p, sx + 48, py + 2, half - 48, 26, name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			PaintPlayerName(p, st, sx + 48, py + 2, half - 48, 26, id, name);
 			p.Font(3);
 			const std::string outcome = Tr(won ? "Winner" : "Defeated");
 			p.raw = true;
