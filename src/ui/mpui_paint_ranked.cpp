@@ -363,9 +363,8 @@ void PaintQueueLine(Painter &p, const LeagueRankedView &v, const LeagueDuoView &
 			line = TrFmt("Waiting for %s to accept your invitation.", {name});
 			ink = pal::warn;
 		}
-		else if (duo.role == LeagueDuoRole::Leader) line = TrFmt("You search for your duo with %s.", {name});
 		else if (duo.role == LeagueDuoRole::Member) line = TrFmt("%s leads your duo and searches for both of you.", {name});
-		RawText(p, x, y, w, 22, line, ink, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		if (!line.empty()) RawText(p, x, y, w, 22, line, ink, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		return;
 	}
 }
@@ -681,19 +680,10 @@ bool PaintRankCard(Painter &p, const State &st, const HubLayout &h, const League
 	const LeagueModsPrepView prep = LeagueModsPrepState("ranked");
 	const bool canSearch = v.linked && v.seasonLoaded && v.season.active && ban.until <= now && v.phase == LeagueRankedPhase::Idle && queueOpen &&
 		(role == LeagueDuoRole::Solo || role == LeagueDuoRole::Leader) && modsOk;
-	// In 2v2 the duo sits over the button, where the player looks before searching, if it fits under the figures.
+	// In 2v2 the duo has its own card on the right, searching or not: it never moves from one side to the other.
 	const int buttonY = y + cardH - 108, freeY = peakY + 30;
-	bool duoHere = false;
+	const bool duoHere = false;
 	int popY = std::max(freeY, y + cardH - 138);
-	if (team) {
-		const int duoH = RankedDuoHeight(duo, buttonY - 12 - freeY);
-		if (freeY + duoH <= buttonY - 12) {
-			duoHere = true;
-			const int duoY = buttonY - 12 - duoH;
-			PaintRankedDuo(p, st, duo, x, duoY, w, duoH, true);
-			popY = duoY - 30;
-		}
-	}
 	// The season's mods take the line over the button only when something is to be done (or being done) about them; who is around goes
 	// over them when there is room.
 	bool modsShown = false;
@@ -1095,8 +1085,7 @@ void PaintHub(Painter &p, const State &st)
 		PaintMiniBoard(p, st, h, h.cardY, h.cardH);
 		return;
 	}
-	// While searching, or on a screen too short for it in the card, the duo goes over the leaderboard, which keeps room for a few rows
-	// and the player's own.
+	// The duo goes over the leaderboard, which keeps room for a few rows and the player's own.
 	const int duoH = RankedDuoHeight(duo, h.cardH - kGap - kMiniBoardMinH);
 	PaintRankedDuo(p, st, duo, h.rightX, h.cardY, h.rightW, duoH);
 	PaintMiniBoard(p, st, h, h.cardY + duoH + kGap, h.cardH - duoH - kGap);

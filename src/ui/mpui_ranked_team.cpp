@@ -164,13 +164,14 @@ std::string LeftText(int64_t until)
 
 // A player of a 2v2 match found: avatar, name and who they are to this player, their record, and their rank with the Glory, and whether
 // they accepted (or `state`, as the room has them, once the match is played from the panel; `accepted` is then whether it is good).
-void PaintTeamCard(Painter &p, int x, int y, int w, int h, const LeaguePlayerCard &c, bool you, bool partner, bool accepted, const char *state = nullptr)
+void PaintTeamCard(Painter &p, const State &st, int x, int y, int w, int h, const LeaguePlayerCard &c, bool you, bool partner, bool accepted,
+	const char *state = nullptr)
 {
 	p.Fill(x, y, w, h, pal::raised);
 	p.Frame(x, y, w, h, you ? pal::edgeHot : pal::hairline);
 	const std::string name = !c.name.empty() ? c.name : Tr("Player");
 	const int av = 48;
-	Avatar(p, x + 16, y + 14, av, IdOf(c.steamId), name);
+	PaintPlayerAvatar(p, x + 16, y + 14, av, IdOf(c.steamId), name);
 	if (you) p.Frame(x + 16, y + 14, av, av, pal::red);
 	// The marks after the name: who it is to this player, and a duo.
 	std::vector<std::pair<std::string, COLORREF>> marks;
@@ -182,10 +183,8 @@ void PaintTeamCard(Painter &p, int x, int y, int w, int h, const LeaguePlayerCar
 	const int nx = x + 16 + av + 14, nw = x + w - 16 - nx;
 	Body(p, 20);
 	p.raw = true;
-	const int nameW = std::max(40, std::min(nw - marksW, p.TextWidth(name) + 4));
-	p.Text(nx, y + 12, nameW, 28, name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	p.raw = false;
-	int mx = nx + nameW + 6;
+	int mx = PaintPlayerName(p, st, nx, y + 12, nw - marksW, 28, IdOf(c.steamId), name) + 6;
 	for (const auto &m : marks) {
 		const int cw = ChipWidth(p, m.first, 44);
 		if (mx + cw > x + w - 16) break;
@@ -199,18 +198,21 @@ void PaintTeamCard(Painter &p, int x, int y, int w, int h, const LeaguePlayerCar
 	// The rank and its Glory on the left, the answer on the right.
 	const std::string answer = Tr(state ? state : accepted ? "Accepted" : "Pending");
 	const int chipW = ChipWidth(p, answer, accepted ? 104 : 96), chipH = 26;
-	const int emblem = 40, ry = y + 78;
-	DrawLeagueEmblem(p, x + 14, ry + (h - 78 - emblem) / 2 - 2, emblem, c.tier);
+	// The emblem, the rank (with its standing under it) and the answer, each centred in the card's lower part.
+	const int emblem = 40, lowY = y + 71, lowH = h - 71;
+	const bool standing = c.standing && c.tier != LeagueTier::None;
+	const int ry = lowY + (lowH - (standing ? 48 : 28)) / 2;
+	DrawLeagueEmblem(p, x + 14, lowY + (lowH - emblem) / 2, emblem, c.tier);
 	const int rx = x + 14 + emblem + 10, rw = x + w - 16 - chipW - 12 - rx;
 	Display(p, 26);
 	p.raw = true;
 	p.TextCaps(rx, ry, rw, 28, RankOrPlacement(c.tier, c.division), Ink(c.tier), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS, 1);
 	p.raw = false;
-	if (c.standing && c.tier != LeagueTier::None) {
+	if (standing) {
 		p.Font(3);
 		RawText(p, rx, ry + 28, rw, 20, StandingText(c), pal::body);
 	}
-	FitChip(p, x + w - 16 - chipW, ry + (h - 78 - chipH) / 2, chipW, chipH, answer, accepted ? pal::ok : pal::textDim,
+	FitChip(p, x + w - 16 - chipW, lowY + (lowH - chipH) / 2, chipW, chipH, answer, accepted ? pal::ok : pal::textDim,
 		accepted ? RGB(0x2a, 0x36, 0x24) : pal::hairline);
 }
 
@@ -271,20 +273,20 @@ void PaintRankedDuo(Painter &p, const State &st, const LeagueDuoView &duo, int x
 		// The friend: invited and waiting for their answer, or the other member of the duo.
 		const LeaguePartyMember &f = duo.partner;
 		const std::string name = !f.name.empty() ? f.name : Tr("Your friend");
-		Avatar(p, ix, ry + 6, 44, IdOf(f.steamId), name);
+		PaintPlayerAvatar(p, ix, ry + 6, 44, IdOf(f.steamId), name);
 		const char *leave = duo.role == LeagueDuoRole::Waiting ? "Cancel the invitation" : "Leave the duo";
 		const int bw = std::min(iw * 2 / 5, CapsWidth(p, Tr(leave), 2) + 32);
 		// Leaving the duo stops its search: the partner who follows the leader's may, the leader cancels theirs first.
 		FitGhost(p, ix + iw - bw, ry + 10, bw, 36, Tr(leave), kRkDuoLeave, !duo.busy && (v.partnerSearch || !searching), mx, my);
 		const int tx = ix + 56, tw = iw - 56 - bw - 12;
 		Body(p, 18);
-		RawText(p, tx, ry + 4, tw, 26, name, pal::text);
-		std::string line;
-		if (duo.role == LeagueDuoRole::Waiting) line = duo.party.expiresAt > 0 ? TrFmt("Invited  \xC2\xB7  expires in %s", {LeftText(duo.party.expiresAt)}) : Tr("Invited");
-		else if (duo.role == LeagueDuoRole::Leader) line = Tr("You search for both");
-		else line = Tr("Leader: searches for both");
-		p.Font(3);
-		RawText(p, tx, ry + 30, tw, 20, line, duo.role == LeagueDuoRole::Waiting ? pal::warn : pal::caption);
+		// Only an invitation still waiting says something under the name: who searches is the search card's.
+		const bool waiting = duo.role == LeagueDuoRole::Waiting;
+		PaintPlayerName(p, st, tx, waiting ? ry + 4 : ry + 15, tw, 26, IdOf(f.steamId), name);
+		if (waiting) {
+			p.Font(3);
+			RawText(p, tx, ry + 30, tw, 20, duo.party.expiresAt > 0 ? TrFmt("Invited  \xC2\xB7  expires in %s", {LeftText(duo.party.expiresAt)}) : Tr("Invited"), pal::warn);
+		}
 	}
 	ry += kDuoRowH;
 	// The invitations got: who sends it and how long it lasts, Accept and Decline; as many as the panel holds, and how many more.
@@ -420,9 +422,9 @@ void PaintSearchTeam(Painter &p, const State &st)
 			acceptedCount += ok ? 1 : 0;
 			if (live) {
 				const int in = RankedRoomStateOf(st, IdOf(c.steamId));
-				PaintTeamCard(p, x, y, colW, cardH, c, you, t == mine && !you, in > 0, in == 2 ? "Ready" : in == 1 ? "In the room" : "Not in the room yet");
+				PaintTeamCard(p, st, x, y, colW, cardH, c, you, t == mine && !you, in > 0, in == 2 ? "Ready" : in == 1 ? "In the room" : "Not in the room yet");
 			}
-			else PaintTeamCard(p, x, y, colW, cardH, c, you, t == mine && !you, ok);
+			else PaintTeamCard(p, st, x, y, colW, cardH, c, you, t == mine && !you, ok);
 		}
 	};
 	column(mine, dx + 32);
