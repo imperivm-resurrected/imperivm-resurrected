@@ -578,29 +578,49 @@ BOOL WINAPI HookGetCursorPos(LPPOINT pt)
 	return ok;
 }
 
+// Where the game's picture is on the screen now: the client area, or the scaled image inside it.
+RECT GameImageOnScreen()
+{
+	RECT r = {};
+	g_origGetClientRect(g_gameWnd, &r);
+	MapWindowPoints(g_gameWnd, nullptr, reinterpret_cast<POINT *>(&r), 2);
+	if (!Scaling()) return r;
+	float s, ox, oy;
+	Mapping(s, ox, oy);
+	return {static_cast<LONG>(r.left + ox), static_cast<LONG>(r.top + oy), static_cast<LONG>(r.left + ox + g_logW * s), static_cast<LONG>(r.top + oy + g_logH * s)};
+}
+
+// The game shuts the cursor in the window it had when it started, and the mod moves the window to its monitor right after: kept as
+// asked, the cursor stayed shut in the other monitor, with no game in it. The clip follows the window as it is now, holds only while
+// the game is in front (another window brought forward lets the cursor go), and coming back to the game puts the cursor in it.
+void TrapCursor(const RECT *asked, bool active)
+{
+	if (!g_gameWnd || Windowed() || !GetConfig().trapMouse || (!active && GetForegroundWindow() != g_gameWnd) || IsIconic(g_gameWnd)) {
+		g_origClipCursor(nullptr);
+		return;
+	}
+	const RECT image = GameImageOnScreen();
+	RECT p = image;
+	if (!asked || !IntersectRect(&p, asked, &image)) p = image;
+	POINT at = {};
+	// Out of the game (on another monitor at the start, or before Alt+Tab): from the middle, not stuck at the nearest edge, which scrolls.
+	if (g_origGetCursorPos(&at) && !PtInRect(&p, at)) {
+		SetCursorPos((p.left + p.right) / 2, (p.top + p.bottom) / 2);
+		LogI("display", "the cursor, at %ld,%ld, out of the game in front: to its middle", at.x, at.y);
+	}
+	static int logged = 0;
+	if (logged++ < 5) {
+		LogD("display", "mouse limited to %ld,%ld-%ld,%ld (the game asked for %s)", p.left, p.top, p.right, p.bottom, asked ? "an area" : "its window");
+	}
+	g_origClipCursor(&p);
+}
+
 BOOL WINAPI HookClipCursor(const RECT *rc)
 {
 	g_gameClips = rc != nullptr;
-	if (rc && (Windowed() || !GetConfig().trapMouse)) {
-		return g_origClipCursor(nullptr);
-	}
-	if (rc && Scaling()) {
-		float s, ox, oy;
-		Mapping(s, ox, oy);
-		POINT origin = {0, 0};
-		ClientToScreen(g_gameWnd, &origin);
-		const RECT image = {static_cast<LONG>(origin.x + ox), static_cast<LONG>(origin.y + oy), static_cast<LONG>(origin.x + ox + g_logW * s),
-			static_cast<LONG>(origin.y + oy + g_logH * s)};
-		RECT p = image;
-		if (!IntersectRect(&p, rc, &image)) p = image;
-		static int logged = 0;
-		if (logged++ < 5) {
-			LogD("display", "mouse limited to %ld,%ld-%ld,%ld (the game asked for %ld,%ld-%ld,%ld)", p.left, p.top, p.right, p.bottom, rc->left, rc->top, rc->right,
-				rc->bottom);
-		}
-		return g_origClipCursor(&p);
-	}
-	return g_origClipCursor(rc);
+	if (!rc || !g_gameWnd) return g_origClipCursor(rc);
+	TrapCursor(rc, false);
+	return TRUE;
 }
 
 LRESULT CALLBACK GameWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
@@ -609,15 +629,14 @@ LRESULT CALLBACK GameWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 	if (msg == WM_DESTROY) DisplayRestoreMonitor();
 	if (msg == WM_SIZE || msg == WM_MOVE || msg == WM_DISPLAYCHANGE || msg == WM_DPICHANGED) {
 		if (msg != WM_MOVE) LogGeometry("window changed");
-		// The game clips the cursor to the window it has when it starts; the mod resizes the window right after, or moves it to the
-		// monitor chosen in the settings at the same size, and the clip would keep the old place (the cursor stuck on the other
-		// monitor) until the game clips again.
-		if (g_gameClips && GetForegroundWindow() == hwnd) {
-			RECT r;
-			g_origGetClientRect(hwnd, &r);
-			MapWindowPoints(hwnd, nullptr, reinterpret_cast<POINT *>(&r), 2);
-			HookClipCursor(&r);
-		}
+		// The window moved to its monitor or changed size: the clip goes with it (or is let go while the game is not in front).
+		if (g_gameClips) TrapCursor(nullptr, false);
+	}
+	// In front again (Alt+Tab, a click, the start on the other monitor): the cursor is shut in the game, from its middle if it was
+	// out; behind another window, it is free.
+	if (msg == WM_ACTIVATEAPP && g_gameClips) {
+		if (wp) TrapCursor(nullptr, true);
+		else g_origClipCursor(nullptr);
 	}
 	if (msg == WM_DISPLAYCHANGE) {
 		ForgetTargetDevice();
@@ -766,15 +785,7 @@ void DisplayApplySettings(bool windowModeChanged)
 			PlaceWindow();
 		}
 	}
-	if (Windowed() || !GetConfig().trapMouse) {
-		g_origClipCursor(nullptr);
-	}
-	else {
-		RECT r;
-		g_origGetClientRect(g_gameWnd, &r);
-		MapWindowPoints(g_gameWnd, nullptr, reinterpret_cast<POINT *>(&r), 2);
-		g_origClipCursor(&r);
-	}
+	TrapCursor(nullptr, false);
 }
 
 void DisplaySetWindowHandler(DisplayWindowHandler handler)
