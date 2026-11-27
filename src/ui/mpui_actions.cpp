@@ -115,6 +115,9 @@ void DoAction(int action, int arg)
 		}
 		// Under a cup match's page its room stays: back moves within the tournaments' screens, the room is left only from itself.
 		if (g_s.game.active && TourneyRoomHiddenHeld(g_s)) TourneyBack();
+		else if (g_s.game.active && RankedRoomLocked(g_s)) {
+			// A ranked match's room is not left: it starts, or the match is called off and closes it.
+		}
 		else if (g_s.game.active) LeaveGameRoom();
 		else if (g_s.connecting || (g_s.room.id && !g_s.game.active)) {
 			DoAction(kLeave, 0);

@@ -845,7 +845,8 @@ void PaintRoomHeader(Painter &p, const State &st, const RoomFacts &f, const Room
 
 	std::vector<GhostButton> buttons;
 	if (g.online && st.room.id && !RankedRoomLocked(st)) buttons.push_back({"Invite", kInvite, false, !RoomHasNoSeat(st)});
-	buttons.push_back({"Leave", kGCancel, true, true});
+	// A ranked match's room has no way out: it starts, or its minute runs out and the match is called off, which closes it.
+	if (!RankedRoomLocked(st)) buttons.push_back({"Leave", kGCancel, true, true});
 	std::string tourneyNote;
 	const int buttonsLeft = PaintTourneyRoomStatus(p, st, PaintHeaderActions(p, l, buttons, mx, my), l.margin, tourneyNote);
 	PaintScreenTitle(p, l, title, {{"Game", kGTab, 1, st.roomTab == 1, true}, {"Room", kGTab, 0, st.roomTab != 1, true}}, buttonsLeft, mx, my);
