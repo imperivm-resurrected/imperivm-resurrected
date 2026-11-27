@@ -468,24 +468,6 @@ int PaintSearchWindow(Painter &p, const LeagueSearchWindow &win, const LeagueRan
 	return labelsY + labelsH;
 }
 
-// The content the search was let in with: the mounted profile, which the season's queue checked. The y after it.
-int PaintSearchContent(Painter &p, int x, int y, int w)
-{
-	p.Fill(x, y, w, 1, pal::hairline);
-	const int ry = y + 8, rh = 26;
-	p.Font(0);
-	p.Text(x, ry, w / 3, rh, "Content", pal::caption, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-	const std::string label = ModsProfileLabel(ModsMountedProfile().name);
-	p.raw = true;
-	const int lw = std::min(p.TextWidth(label) + 2, w - w / 3 - 20);
-	p.Text(x + w - lw, ry, lw, rh, label, pal::ok, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-	p.raw = false;
-	const int tx = x + w - lw - 18, ty = ry + rh / 2;
-	p.Line(tx, ty, tx + 4, ty + 4, pal::ok, 2);
-	p.Line(tx + 4, ty + 4, tx + 12, ty - 5, pal::ok, 2);
-	return ry + rh;
-}
-
 // The player's card on the left. In 2v2 the duo goes in it too, over the search button, when it fits there; returns whether it did.
 bool PaintRankCard(Painter &p, const State &st, const HubLayout &h, const LeagueMeView &me, const LeagueDuoView &duo)
 {
@@ -523,8 +505,6 @@ bool PaintRankCard(Painter &p, const State &st, const HubLayout &h, const League
 		ly += 28;
 		const int cancelY = y + cardH - 118, bottom = cancelY - 10;
 		if (v.window.present) ly = PaintSearchWindow(p, v.window, LeagueMeRanked(me.me, v.searchQueue), ix, ly + 8, iw, bottom) + 8;
-		p.Font(3);
-		if (ly + 34 <= bottom) PaintSearchContent(p, ix, ly, iw);
 		// The partner of a duo follows the leader's search: only the leader cancels it.
 		if (v.partnerSearch) {
 			p.Font(0);
