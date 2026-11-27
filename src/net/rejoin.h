@@ -25,6 +25,9 @@ std::string RejoinClientStatus();
 bool RejoinClientFailed();
 void RejoinClientDismiss();
 bool RejoinBusy();
+// The host of a game this player left on purpose turned them away for good (the AI keeps their army), after that game started (`started`,
+// seconds since 1970, the room's "t0"): the list does not offer to go back to it. A later game of the same host is offered again.
+bool RejoinRefusedSince(uint64_t host, long long started);
 bool RejoinReloading();
 // This computer is bringing a player who dropped back into its game.
 bool RejoinHosting();

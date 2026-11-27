@@ -4,6 +4,7 @@
 #include "ui/textedit.h"
 #include "MinHook.h"
 #include "core/names.h"
+#include "net/rejoin.h"
 #include "ui/modui.h"
 
 #include "ui/mpui_internal.h"
@@ -127,7 +128,7 @@ void CheckRecover()
 
 bool CanReturnToGame(const State &st, const OnlineLobby &g)
 {
-	if (!g.playing || g.specOnly || g.kickedMe || g.myNumber <= 0 || !g.owner) return false;
+	if (!g.playing || g.specOnly || g.kickedMe || g.myNumber <= 0 || !g.owner || RejoinRefusedSince(g.owner, g.started)) return false;
 	if (g.slots.empty()) return true;
 	for (const OnlineSlot &s : g.slots) {
 		if (s.type == 3 && PlayerNameMatches(s.name, st.player)) return true;

@@ -3,6 +3,11 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #define NOMINMAX
 #include <windows.h>
+
+#include <ctime>
+#include <map>
+#include <mutex>
+#include <string>
 #include "MinHook.h"
 #include "core/config.h"
 #include "core/log.h"
@@ -18,6 +23,10 @@
 #include "core/uiport.h"
 
 using namespace rejoin_impl;
+
+namespace {
+void NoteRefusal(uint64_t host, const std::string &why);
+}
 
 namespace {
 bool g_hooksReady = false;
@@ -158,6 +167,8 @@ void RejoinGameThreadTickInner()
 					std::string why = m.data;
 					if (why.compare(0, strlen(kDenyBusy), kDenyBusy) == 0) why.erase(0, strlen(kDenyBusy));
 					if (why.compare(0, strlen(kDenyOut), kDenyOut) == 0) why.erase(0, strlen(kDenyOut));
+					// "Left, and the AI has your army" or "away too long": no asking again for that game.
+					if (m.type == kRjDeny) NoteRefusal(m.peer, why);
 					BackFail(why);
 				}
 			}
@@ -321,6 +332,26 @@ void RejoinClientDismiss()
 		ResetRole();
 		SetStatus("");
 	}
+}
+
+namespace {
+std::mutex g_refusedMx;
+// Per host, when it last turned this player away for good.
+std::map<uint64_t, long long> g_refused;
+
+void NoteRefusal(uint64_t host, const std::string &why)
+{
+	if (!host || why.find("AI") == std::string::npos) return;
+	std::lock_guard<std::mutex> lock(g_refusedMx);
+	g_refused[host] = static_cast<long long>(time(nullptr));
+}
+}
+
+bool RejoinRefusedSince(uint64_t host, long long started)
+{
+	std::lock_guard<std::mutex> lock(g_refusedMx);
+	const auto it = g_refused.find(host);
+	return it != g_refused.end() && it->second >= started;
 }
 
 bool RejoinBusy()
