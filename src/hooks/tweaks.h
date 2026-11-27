@@ -35,6 +35,8 @@ void TweaksModeSwitched();
 void TweaksResolutionTick();
 void TweaksFrameTick();
 bool TweaksOnlyHumanOnline(void *game);
+// A match with other humans in it (a network game): its size must not change, or this computer alone would build the match's view again.
+bool TweaksOthersInMatch();
 // Pauses or resumes the match at once, without the game's pause notice: only for a player alone in it, whose pause no one else follows.
 void TweaksSetPausedQuietly(void *game, bool paused);
 bool TweaksGamePaused(void *game);

@@ -137,6 +137,24 @@ void NoteWindowState(UINT msg, WPARAM wp)
 	}
 }
 
+// A window made bigger or smaller has the game take the new size, and taking it builds the match's view again: in a network game this
+// computer alone did it, once with a fault halfway that lost a shared timer, and the game desynced. With other humans in the match the
+// game keeps its size and the picture is scaled to the window; minimizing, and coming back to the same size, still reach it.
+bool KeepMatchSize(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
+{
+	if (msg != WM_SIZE || wp == SIZE_MINIMIZED || !TweaksOthersInMatch()) return false;
+	int w = 0, h = 0;
+	DisplayGetLogicalSize(hwnd, w, h);
+	if (w <= 0 || h <= 0 || (LOWORD(lp) == w && HIWORD(lp) == h)) return false;
+	static DWORD logged = 0;
+	if (GetTickCount() - logged > 5000) {
+		logged = GetTickCount();
+		LogI("display", "window now %ux%u in a match with other players: the game stays at %dx%d and the picture is scaled", LOWORD(lp), HIWORD(lp), w, h);
+	}
+	InvalidateRect(hwnd, nullptr, FALSE);
+	return true;
+}
+
 LRESULT GameWindowHandler(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
 	if (msg == kMsgMpUiWake) {
@@ -152,6 +170,7 @@ LRESULT GameWindowHandler(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 	if (GameInputTakes(hwnd, msg, wp, lp, result)) return result;
 	if (DisplayMessageTakes(hwnd, msg, wp, lp)) return 0;
 	NoteWindowState(msg, wp);
+	if (KeepMatchSize(hwnd, msg, wp, lp)) return 0;
 	return DisplayForwardMessage(hwnd, msg, wp, lp);
 }
 

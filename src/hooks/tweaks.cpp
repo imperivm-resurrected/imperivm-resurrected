@@ -725,6 +725,11 @@ void TweaksWindowActive(bool active)
 	}
 }
 
+bool TweaksOthersInMatch()
+{
+	return OthersInMatch();
+}
+
 bool TweaksOnlyHumanOnline(void *game)
 {
 	return OnlyHumanOnline(static_cast<char *>(game));
