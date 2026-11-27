@@ -1795,8 +1795,7 @@ void PaintGloryChart(Painter &p, const View &v, int x, int y, int w, int h, Tip 
 	const int span = std::max(1, axis.high - axis.low);
 	for (int g = axis.low; g <= axis.high; g += std::max(1, axis.step)) {
 		const int gy = py + ph - static_cast<int>(static_cast<int64_t>(ph) * (g - axis.low) / span);
-		if (g == axis.low) p.Fill(px, gy, pw, 1, pal::lineStrong);
-		else DashedH(p, px, gy, pw, kRule);
+		p.Fill(px, gy, pw, 1, g == axis.low ? pal::lineStrong : kRule);
 		TextAsIs(p, ix, gy - 10, labelW - 10, 20, Grouped(static_cast<uint64_t>(g)), pal::caption, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 	}
 	const std::vector<LeagueChartDot> dots = LeagueGloryDots(points, axis, px, py, pw, ph);
@@ -1810,15 +1809,16 @@ void PaintGloryChart(Painter &p, const View &v, int x, int y, int w, int h, Tip 
 		}
 	}
 	if (hovered >= 0) p.Fill(dots[hovered].x, py, 1, ph, pal::hairline);
-	for (int i = 1; i < n; i++) p.Line(dots[i - 1].x, dots[i - 1].y, dots[i].x, dots[i].y, ink, 2);
-	// Every game gets its dot while they stay apart; the last one, where the player stands, always.
-	const bool every = n <= 1 || pw / (n - 1) >= 8;
-	for (int i = 0; i < n; i++) {
-		const bool big = i == n - 1 || i == hovered;
-		if (!every && !big) continue;
-		const int d = big ? 11 : 7;
-		if (i == hovered) p.Ellipse(dots[i].x - d / 2 - 2, dots[i].y - d / 2 - 2, d + 4, d + 4, pal::text);
-		p.Ellipse(dots[i].x - d / 2, dots[i].y - d / 2, d, d, ink);
+	// Drawn as the match statistics draw theirs: one smooth line, and a dot only where the player stands now.
+	Surface surface;
+	if (surface.Open(p.dc)) {
+		const float width = 2.6f * p.s;
+		for (int i = 1; i < n; i++) surface.Segment(dots[i - 1].x * p.s, dots[i - 1].y * p.s, dots[i].x * p.s, dots[i].y * p.s, width, ink);
+		surface.Segment(dots[n - 1].x * p.s, dots[n - 1].y * p.s, dots[n - 1].x * p.s, dots[n - 1].y * p.s, width * 2.2f, ink);
+	}
+	if (hovered >= 0) {
+		p.Ellipse(dots[hovered].x - 7, dots[hovered].y - 7, 15, 15, pal::text);
+		p.Ellipse(dots[hovered].x - 5, dots[hovered].y - 5, 11, 11, ink);
 	}
 	p.Font(3);
 	const int footY = y + h - 36;
