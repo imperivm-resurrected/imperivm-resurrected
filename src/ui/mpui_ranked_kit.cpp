@@ -17,9 +17,13 @@
 #include "core/leagueranked.h"
 #include "core/leagueseasons.h"
 #include "core/leagueteam.h"
+#include "core/tournament.h"
 #include "i18n/tr.h"
 #include "net/leagueclient.h"
+#include "net/patrons.h"
+#include "ui/leaguerewards.h"
 #include "ui/leagueui.h"
+#include "ui/patronui.h"
 
 #include "ui/mpui_internal.h"
 #include "ui/mpui_ranked_kit.h"
@@ -242,6 +246,40 @@ std::string TimeText(int64_t ms)
 	char buf[16];
 	sprintf_s(buf, "%02d:%02d", local.tm_hour, local.tm_min);
 	return buf;
+}
+
+
+// A player's avatar (in their frame, when it shows) and name as the league shows them everywhere: the donor's laurel, the emblem they
+// chose after the name, and their Steam profile on a click. A practice bot has none of them.
+void PaintPlayerAvatar(Painter &p, int x, int y, int size, uint64_t id, const std::string &name)
+{
+	const LeagueFrame frame = id && !TourneyIsTestBot(id) ? PlayerFrameOf(id) : LeagueFrame();
+	if (frame.Shown() && size >= 36) PaintFramedAvatar(p, x, y, size, id, name, frame);
+	else if (!PaintAvatar(p, x, y, size, id)) p.Fill(x, y, size, size, pal::hairline);
+}
+
+int PaintPlayerName(Painter &p, const State &st, int x, int y, int w, int h, uint64_t id, const std::string &name)
+{
+	const UINT fmt = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS;
+	const bool person = id && !TourneyIsTestBot(id);
+	const PatronInfo patron = person ? PatronOf(id) : PatronInfo();
+	const LeagueBadge badge = person ? PlayerBadgeOf(id) : LeagueBadge();
+	const int laurel = patron.tier != PatronTier::None ? std::min(h, PatronLaurelSize(patron.tier)) : 0;
+	const int nx = x + (laurel ? laurel + 4 : 0);
+	p.raw = true;
+	const int nameW = std::max(20, std::min(x + w - nx - LeagueBadgeRoom(badge), p.TextWidth(name) + 4));
+	if (laurel) {
+		const int ly = y + (h - laurel) / 2;
+		DrawPatron(p, x, ly, laurel, nx, y, nameW, h, name, patron.tier, fmt);
+		PatronHotspot(p, x, ly, laurel, patron, st.mouseX, st.mouseY, kPatronLink);
+	}
+	else p.Text(nx, y, nameW, h, name, pal::text, fmt);
+	if (person) {
+		DrawBadgeAfterName(p, nx, y, nameW, h, name, badge, st.mouseX, st.mouseY, id);
+		SteamProfileHotspot(p, nx, y, nameW, h, name, id, st.mouseX, st.mouseY);
+	}
+	p.raw = false;
+	return nx + nameW + (person ? LeagueBadgeRoom(badge) : 0);
 }
 
 }

@@ -12,18 +12,14 @@
 #include "core/leagueseasons.h"
 #include "core/leagueranked.h"
 #include "core/leagueteam.h"
-#include "core/tournament.h"
 #include "game/civs.h"
 #include "game/profiles.h"
 #include "i18n/tr.h"
 #include "net/leagueclient.h"
-#include "net/patrons.h"
 #include "net/steamnet.h"
 #include "ui/leaguemapthumb.h"
 #include "ui/leaguemastery.h"
-#include "ui/leaguerewards.h"
 #include "ui/leagueui.h"
-#include "ui/patronui.h"
 
 #include "ui/mpui_internal.h"
 #include "ui/mpui_ranked_kit.h"
@@ -385,38 +381,6 @@ int PaintMasteryUp(Painter &p, const LeagueMasteryChange &mc, int x, int y, int 
 	p.Font(3);
 	if (!m.Top()) RawText(p, tx, y + 50, tw, 18, LeagueMasteryNextText(m), pal::caption);
 	return h;
-}
-
-// A player's avatar (in their frame, when it shows) and name as the league shows them everywhere: the donor's laurel, the emblem they
-// chose after the name, and their Steam profile on a click. A practice bot has none of them.
-void PaintPlayerAvatar(Painter &p, int x, int y, int size, uint64_t id, const std::string &name)
-{
-	const LeagueFrame frame = id && !TourneyIsTestBot(id) ? PlayerFrameOf(id) : LeagueFrame();
-	if (frame.Shown() && size >= 36) PaintFramedAvatar(p, x, y, size, id, name, frame);
-	else if (!PaintAvatar(p, x, y, size, id)) p.Fill(x, y, size, size, pal::hairline);
-}
-
-void PaintPlayerName(Painter &p, const State &st, int x, int y, int w, int h, uint64_t id, const std::string &name)
-{
-	const UINT fmt = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS;
-	const bool person = id && !TourneyIsTestBot(id);
-	const PatronInfo patron = person ? PatronOf(id) : PatronInfo();
-	const LeagueBadge badge = person ? PlayerBadgeOf(id) : LeagueBadge();
-	const int laurel = patron.tier != PatronTier::None ? std::min(h, PatronLaurelSize(patron.tier)) : 0;
-	const int nx = x + (laurel ? laurel + 4 : 0);
-	p.raw = true;
-	const int nameW = std::max(20, std::min(x + w - nx - LeagueBadgeRoom(badge), p.TextWidth(name) + 4));
-	if (laurel) {
-		const int ly = y + (h - laurel) / 2;
-		DrawPatron(p, x, ly, laurel, nx, y, nameW, h, name, patron.tier, fmt);
-		PatronHotspot(p, x, ly, laurel, patron, st.mouseX, st.mouseY, kPatronLink);
-	}
-	else p.Text(nx, y, nameW, h, name, pal::text, fmt);
-	if (person) {
-		DrawBadgeAfterName(p, nx, y, nameW, h, name, badge, st.mouseX, st.mouseY, id);
-		SteamProfileHotspot(p, nx, y, nameW, h, name, id, st.mouseX, st.mouseY);
-	}
-	p.raw = false;
 }
 
 void PaintSummary(Painter &p, const State &st, const LeagueMeView &me, int x, int y, int w, int h)

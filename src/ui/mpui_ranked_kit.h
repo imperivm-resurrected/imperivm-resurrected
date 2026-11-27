@@ -26,6 +26,11 @@ void RawText(Painter &p, int x, int y, int w, int h, const std::string &text, CO
 // An outlined button whose click is the ranked action `arg`; a disabled one takes no click.
 void Ghost(Painter &p, int x, int y, int w, int h, const std::string &label, int arg, bool enabled, int mx, int my);
 void Chip(Painter &p, int x, int y, int w, int h, const std::string &text, COLORREF ink, COLORREF back);
+// A player's avatar (in their frame, when it shows, from 36 up) and their name with the donor's laurel, the emblem they show and their
+// Steam profile on a click; none of that for a practice bot. The name takes the font already chosen.
+void PaintPlayerAvatar(Painter &p, int x, int y, int size, uint64_t id, const std::string &name);
+// Returns the x where the name and its emblem end.
+int PaintPlayerName(Painter &p, const State &st, int x, int y, int w, int h, uint64_t id, const std::string &name);
 // A button of a bar that picks one of a few, lit while it is the one on, which takes no click.
 void Segment(Painter &p, int x, int y, int w, int h, const std::string &label, bool on, int arg, int mx, int my, int spacing = 2);
 // "Summary", the tool bar's button back to the hub, 44 tall: only its arrow when it is narrower than 100.
