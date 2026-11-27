@@ -437,13 +437,13 @@ std::vector<Page> BuildPages(const Values &v)
 		if (nature.value < 1) nature.value = std::max(1, Scroll(v, kEffectsVolume));
 		page.left.push_back({"Volume", {Slider(v, "General volume", kMasterVolume, 0, 100), ToggleSlider(v, "Music", kMusicOn, kMusicVolume, 1, 100),
 			ToggleSlider(v, "Sound effects", kEffectsOn, kEffectsVolume, 1, 100), nature, ToggleSlider(v, "Unit speech", kSpeechOn, kSpeechVolume, 1, 100),
-			ToggleSlider(v, "Conversations", kConversationsOn, kConversationVolume, 1, 100), ToggleSlider(v, "Cutscenes", kMovieOn, kMovieVolume, 0, 100)}});
+			ToggleSlider(v, "Conversations", kConversationsOn, kConversationVolume, 1, 100), ToggleSlider(v, "Cutscenes", kMovieOn, kMovieVolume, 0, 100),
+			ToggleSlider(v, "Alerts", kAlerts, kAlertVolume, 1, 100)}});
 		page.right.push_back({"Output", {Combo(v, "Device", kOutputDevice)}});
-		// The online alerts in one place: whether they sound and how loud, and the horn of a match found among them.
-		Row horn = Toggle(v, "Sound when a match is found", kMatchFoundSound, "Ranked and cups: a horn, also with the game in the background");
+		// The online alerts (chat, invitations, the horn of a match found) sound and are set with the other volumes; the horn goes with them.
+		Row horn = Toggle(v, "Sound when a match is found", kMatchFoundSound);
 		horn.enabled = Check(v, kAlerts);
-		page.right.push_back({"Behaviour", {Toggle(v, "Mute in the background", kMuteBackground),
-			ToggleSlider(v, "Chat and invitation alerts", kAlerts, kAlertVolume, 1, 100), horn}});
+		page.right.push_back({"Behaviour", {Toggle(v, "Mute in the background", kMuteBackground), horn}});
 		pages.push_back(page);
 	}
 	{
