@@ -106,7 +106,21 @@ enum Field { kNoField, kChatField, kNameField, kPassField, kJoinPassField, kSear
 
 enum { kPredTeam, kPredRace, kPredAi, kPredReady, kPredOptSel, kPredOptVal, kPredColor };
 
-enum { kDropRace, kDropAi, kDropOption, kDropColor, kDropSlot, kDropSites, kDropModOption, kDropPreset, kDropPlayers, kDropProfile, kDropVisibility, kDropSaveGame, kDropSpectators, kDropPickSort, kDropBonus, kDropTeam, kDropTourney, kDropRankedSeason };
+enum { kDropRace, kDropAi, kDropOption, kDropColor, kDropSlot, kDropSites, kDropModOption, kDropPreset, kDropPlayers, kDropProfile, kDropVisibility, kDropSaveGame, kDropSpectators, kDropPickSort, kDropBonus, kDropTeam, kDropTourney, kDropRankedSeason, kDropSpeed };
+
+// The room's game speeds: the percent shown, and the options' slider value the game takes (-1 the normal speed). The game turns the slider
+// into a pace with value * 0x8fd / 100 + 700, where 1000 is the normal speed.
+struct SpeedChoice {
+	int percent, value;
+};
+const SpeedChoice kSpeedChoices[] = {{100, -1}, {120, 22}, {140, 30}, {160, 39}, {180, 48}, {200, 57}, {250, 78}, {300, 100}};
+const int kSpeedChoiceCount = static_cast<int>(sizeof(kSpeedChoices) / sizeof(kSpeedChoices[0]));
+// The percent of a game speed as the room has it (-1 the normal speed).
+inline int SpeedPercent(int value)
+{
+	if (value < 1) return 100;
+	return ((value * 0x8fd / 100 + 700) / 10 + 2) / 5 * 5;
+}
 
 // The argument of kGDropOpen: the kind in the low bits and the slot or option index above them.
 const int kDropKindBits = 5, kDropKindMask = (1 << kDropKindBits) - 1;

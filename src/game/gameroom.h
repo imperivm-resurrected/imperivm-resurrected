@@ -112,6 +112,11 @@ void GameRoomKick(int slot);
 void GameRoomPlayerLeft(const std::string &name);
 void GameRoomSetSiteFlags(unsigned bits);
 void GameRoomSetRules(unsigned bits);
+// The speed the room's game is played at, for every player: -1 the normal speed, 1 to 100 the options' slider; kRoomSpeedProfile leaves the
+// host's own (the profile's game speed, as the game takes it).
+constexpr int kRoomSpeedProfile = -2;
+void GameRoomSetSpeed(int value);
+int GameRoomSpeed();
 // A ranked or cup room, host or guest, until it closes: the player's own options for normal games are kept aside. Nothing of the room
 // is written to imperivm-mod.ini or read from it, and the profile's last room (player.ini), which the game overwrites when the game
 // starts or the player leaves, is put back and saved when the room closes.

@@ -3759,5 +3759,6 @@
 {"en":"Give your team a name of %s to %s characters.","es":"Ponle a tu equipo un nombre de %s a %s caracteres.","it":"Dai alla tua squadra un nome da %s a %s caratteri."},
 {"en":"Follow","es":"Seguir","it":"Segui"},
 {"en":"There's no chat while you watch a game.","es":"No hay chat mientras ves una partida.","it":"Non c'è chat mentre guardi una partita."},
-{"en":"It was saved with an earlier version of Imperivm Resurrected: it loads, but some rules may play differently.","es":"Se guardó con una versión anterior de Imperivm Resurrected: se puede cargar, pero algunas reglas pueden jugarse distinto.","it":"È stata salvata con una versione precedente di Imperivm Resurrected: si può caricare, ma alcune regole possono comportarsi diversamente."}
+{"en":"It was saved with an earlier version of Imperivm Resurrected: it loads, but some rules may play differently.","es":"Se guardó con una versión anterior de Imperivm Resurrected: se puede cargar, pero algunas reglas pueden jugarse distinto.","it":"È stata salvata con una versione precedente di Imperivm Resurrected: si può caricare, ma alcune regole possono comportarsi diversamente."},
+{"en":"The speed the game starts at, for every player. During the game it is changed as always.","es":"La velocidad a la que empieza la partida, para todos los jugadores. Durante la partida se cambia como siempre.","it":"La velocità con cui inizia la partita, per tutti i giocatori. Durante la partita si cambia come sempre."}
 ]

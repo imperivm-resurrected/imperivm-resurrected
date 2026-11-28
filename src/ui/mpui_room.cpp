@@ -516,7 +516,8 @@ bool RoomActionFrozen(const GameRoomSnapshot &g, int action, int arg)
 	case kGDropOpen: {
 		const int kind = arg & kDropKindMask, slot = (arg >> kDropKindBits) & 7;
 		if (kind == kDropRace || kind == kDropBonus || kind == kDropColor || kind == kDropTeam) return SlotFrozen(g, g.slots[slot]);
-		if (kind == kDropOption || kind == kDropPreset || kind == kDropSites || kind == kDropModOption || kind == kDropSpectators || kind == kDropSlot) {
+		if (kind == kDropOption || kind == kDropPreset || kind == kDropSites || kind == kDropModOption || kind == kDropSpectators || kind == kDropSlot ||
+			kind == kDropSpeed) {
 			return g.host && LocalReady(g);
 		}
 		return false;

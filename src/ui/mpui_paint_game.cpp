@@ -322,6 +322,8 @@ void PaintOptionsCard(Painter &p, const State &st, int x, int y, int w, int h)
 		comboRow(0x1003, "Limit", "Limit");
 		comboRow(0x1004, "Population", "Population");
 		comboRow(0x1005, "Starting gold", "Starting gold");
+		grid.Combo("Game speed", std::to_string(SpeedPercent(g.gameSpeed)) + " %", g.gameSpeed != -1, canEdit && !RankedRoomLocked(st), kDropSpeed, 0,
+			"The speed the game starts at, for every player. During the game it is changed as always.");
 		if (g.online) {
 			grid.Combo("Spectators", SpectatorChoice(st), false, host && canEdit, kDropSpectators, 0,
 				host ? "Who can watch the game without playing, and with how much delay. It can be changed while the room is open."

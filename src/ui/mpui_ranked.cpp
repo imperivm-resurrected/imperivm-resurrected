@@ -731,7 +731,7 @@ bool RankedRoomAction(int action, int arg)
 	case kFieldRoomName: return true;
 	case kGDropOpen: {
 		const int kind = arg & kDropKindMask;
-		return kind == kDropOption || kind == kDropPreset || kind == kDropSites || kind == kDropModOption || kind == kDropSpectators ||
+		return kind == kDropOption || kind == kDropPreset || kind == kDropSites || kind == kDropModOption || kind == kDropSpectators || kind == kDropSpeed ||
 			kind == kDropSlot || kind == kDropTeam || kind == kDropAi;
 	}
 	default: return false;

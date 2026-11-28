@@ -270,6 +270,12 @@ void DoAction(int action, int arg)
 		else if (g_s.dropKind == kDropTourney) {
 			TourneyDropPick(idx, arg);
 		}
+		else if (g_s.dropKind == kDropSpeed) {
+			if (arg >= 0 && arg < kSpeedChoiceCount) {
+				g_s.game.gameSpeed = kSpeedChoices[arg].value;
+				GameRoomSetSpeed(kSpeedChoices[arg].value);
+			}
+		}
 		else if (g_s.dropKind == kDropRankedSeason) {
 			RankedSeasonPick(arg);
 		}

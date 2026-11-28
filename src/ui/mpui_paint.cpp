@@ -1080,6 +1080,15 @@ std::vector<std::string> DropItems(const State &st, int &sel)
 		return st.tourneyDropItems;
 	}
 	if (st.dropKind == kDropRankedSeason) return RankedSeasonItems(st, sel);
+	if (st.dropKind == kDropSpeed) {
+		std::vector<std::string> items;
+		sel = -1;
+		for (int i = 0; i < kSpeedChoiceCount; i++) {
+			items.push_back(std::to_string(kSpeedChoices[i].percent) + " %");
+			if (kSpeedChoices[i].percent == SpeedPercent(st.game.gameSpeed)) sel = i;
+		}
+		return items;
+	}
 	if (st.dropKind == kDropVisibility) {
 		sel = st.createVisibility;
 		return {"Public", "Password protected", "Friends only", "Local network"};

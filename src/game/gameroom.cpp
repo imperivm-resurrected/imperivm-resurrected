@@ -1166,6 +1166,7 @@ int __fastcall HookApplyToGame(void *self, void *edx, char *opts)
 			LogI("room", "the room had the game speed %d of the host's profile; it is played at the normal speed", speed);
 			speed = -1;
 		}
+		else if (!g_lockOn && GameRoomSpeed() != kRoomSpeedProfile) speed = GameRoomSpeed();
 		if (!NetMultiplayerSaveLoading()) GameModeApplyOptions(opts);
 		LogApplied(opts);
 	}
@@ -2008,6 +2009,33 @@ void GameRoomSetSiteFlags(unsigned bits)
 		typedef void(__fastcall *OnApply_t)(void *opts);
 		if (opts) reinterpret_cast<OnApply_t>(addr::kOnApplyOptions)(opts);
 		LogD("room", "neutral sites removed 0x%x", g_siteFlags);
+	});
+}
+
+namespace {
+// Read from the settings the first time it is asked.
+int g_roomSpeed = -3;
+}
+
+int GameRoomSpeed()
+{
+	if (g_roomSpeed == -3) {
+		const int saved = GameRoomLoadSetting("GameSpeed", kRoomSpeedProfile);
+		g_roomSpeed = saved == -1 || (saved >= 1 && saved <= 100) ? saved : kRoomSpeedProfile;
+	}
+	return g_roomSpeed;
+}
+
+void GameRoomSetSpeed(int value)
+{
+	Queue([value] {
+		if (g_lockOn) return;
+		g_roomSpeed = value == -1 || (value >= 1 && value <= 100) ? value : kRoomSpeedProfile;
+		if (!g_prefsKept) GameRoomSaveSetting("GameSpeed", g_roomSpeed);
+		void *opts = *reinterpret_cast<void **>(addr::kGameOptionsDialog);
+		typedef void(__fastcall *OnApply_t)(void *opts);
+		if (opts) reinterpret_cast<OnApply_t>(addr::kOnApplyOptions)(opts);
+		LogI("room", "game speed %d", g_roomSpeed);
 	});
 }
 
