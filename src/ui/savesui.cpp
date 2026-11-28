@@ -553,6 +553,17 @@ void UpdatePlayers(State &st)
 	const SaveRec *r = FindRec(st, st.selPath);
 	if (!r || r->kind != kSaveStrategy) return;
 	st.info = MpSaveReadInfo(r->vfsPath);
+	// A replay is no save the game can read: its players are the ones the mod noted beside it when it was written.
+	if (!st.info.valid && !r->players.empty()) {
+		st.info.valid = true;
+		for (const SavePlayer &sp : r->players) {
+			MpSavePlayer p;
+			p.name = sp.name;
+			p.color555 = sp.color555;
+			p.type = sp.ai ? 1 : 3;
+			st.info.players.push_back(p);
+		}
+	}
 }
 
 void SetPrimary(State &st, const std::string &path, const std::string &group)
@@ -1253,7 +1264,7 @@ std::string PlayTimeText(int secs)
 {
 	const int h = secs / 3600, m = secs % 3600 / 60;
 	if (h > 0) return std::to_string(h) + " h " + (m < 10 ? "0" : "") + std::to_string(m) + Tr(" min");
-	return m > 0 ? std::to_string(m) + Tr(" min") : "less than 1 min";
+	return m > 0 ? std::to_string(m) + Tr(" min") : Tr("less than 1 min");
 }
 
 std::string MapLabel(const MpSaveInfo &info, const SaveRec &rec)
@@ -1331,7 +1342,10 @@ DetailLines DetailLinesOf(State &st, const SaveRec &rec)
 	add(mc.inactive.size() == 1 ? "You need to enable 1 content pack:" : Tr("You need to enable ") + std::to_string(mc.inactive.size()) + Tr(" content packs:"), mc.inactive, pal::redText);
 	add("Another version or different files:", mc.other, pal::redText);
 	add(rec.mods.empty() ? "It was saved without additional content. You have enabled:" : "It was saved without this content you have enabled:", mc.extra, pal::redText);
-	if (d.mods.empty() && mc.warn) d.mods.push_back({"The content of this game does not match the one you have enabled.", pal::redText, false});
+	// Nothing missing, nothing else enabled, the same versions: the rules differ because an update of the mod changed them since.
+	if (d.mods.empty() && mc.warn) {
+		d.mods.push_back({"It was saved with an earlier version of Imperivm Resurrected: it loads, but some rules may play differently.", pal::warn, false});
+	}
 	return d;
 }
 

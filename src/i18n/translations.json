@@ -1114,7 +1114,6 @@
 {"en":"  ·  missing content","es":"  ·  falta contenido","it":"  ·  contenuti mancanti"},
 {"en":"  ·  different content","es":"  ·  contenido distinto","it":"  ·  contenuti diversi"},
 {"en":"Content","es":"Contenido","it":"Contenuti"},
-{"en":"The content of this game does not match the one you have enabled.","es":"El contenido de esta partida no coincide con el que tienes activo.","it":"I contenuti di questa partita non corrispondono a quelli che hai attivi."},
 {"en":"Content that will be enabled:","es":"Contenido que se activa:","it":"Contenuti che si attivano:"},
 {"en":"CONTENT","es":"CONTENIDO","it":"CONTENUTI"},
 {"en":"The game will restart without additional content.","es":"El juego se reiniciará sin contenido adicional.","it":"Il gioco verrà riavviato senza contenuti aggiuntivi."},
@@ -3759,5 +3758,6 @@
 {"en":"For example: Legio IX Hispana","es":"Por ejemplo: Legio IX Hispana","it":"Per esempio: Legio IX Hispana"},
 {"en":"Give your team a name of %s to %s characters.","es":"Ponle a tu equipo un nombre de %s a %s caracteres.","it":"Dai alla tua squadra un nome da %s a %s caratteri."},
 {"en":"Follow","es":"Seguir","it":"Segui"},
-{"en":"There's no chat while you watch a game.","es":"No hay chat mientras ves una partida.","it":"Non c'è chat mentre guardi una partita."}
+{"en":"There's no chat while you watch a game.","es":"No hay chat mientras ves una partida.","it":"Non c'è chat mentre guardi una partita."},
+{"en":"It was saved with an earlier version of Imperivm Resurrected: it loads, but some rules may play differently.","es":"Se guardó con una versión anterior de Imperivm Resurrected: se puede cargar, pero algunas reglas pueden jugarse distinto.","it":"È stata salvata con una versione precedente di Imperivm Resurrected: si può caricare, ma alcune regole possono comportarsi diversamente."}
 ]

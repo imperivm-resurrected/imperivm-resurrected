@@ -141,6 +141,21 @@ void ModsOnSaveWritten(const std::string &gamePath, bool online)
 	}
 	j.Set("mods", mods);
 	if (const int secs = SaveLibGameSeconds(); secs >= 0) j.Set("seconds", Json::MakeNumber(secs));
+	// Who played, for a replay's card: the game cannot read its players back from it as it does from a save.
+	{
+		std::vector<SavePlayer> players;
+		if (SaveLibPlayers(players)) {
+			Json arr = Json::MakeArray();
+			for (const SavePlayer &p : players) {
+				Json e = Json::MakeObject();
+				e.Set("name", Json::MakeString(p.name));
+				e.Set("color", Json::MakeNumber(p.color555));
+				if (p.ai) e.Set("ai", Json::MakeBool(true));
+				arr.arr.push_back(e);
+			}
+			j.Set("players", arr);
+		}
+	}
 	{
 		int states[8];
 		if (SaveLibPlayerStates(states)) {

@@ -18,6 +18,13 @@ struct SaveMod {
 	bool oldGameplay = false;
 };
 
+// A player of the game, as the mod notes it beside a save or a replay.
+struct SavePlayer {
+	std::string name;
+	int color555 = 0;
+	bool ai = false;
+};
+
 struct SaveRec {
 	std::string name;
 	std::string campaign;
@@ -37,6 +44,7 @@ struct SaveRec {
 	std::vector<SaveMod> mods;
 	int playSeconds = -1;
 	std::vector<int> playerStates;
+	std::vector<SavePlayer> players;
 	bool hasThumb = false;
 };
 
@@ -55,6 +63,8 @@ void SaveLibPruneAutosaves(const std::string &profile, const std::string &sessio
 std::map<std::string, std::string> SaveLibLoadGameNames(const std::string &profile);
 bool SaveLibSetGameName(const std::string &profile, const std::string &key, const std::string &name);
 
+// The players of the game being played (the first 8 that play), for the note beside a save or a replay.
+bool SaveLibPlayers(std::vector<SavePlayer> &out);
 void SaveSessionBegin();
 void SaveSessionOnLoad(const std::string &rel);
 void SaveSessionIgnoreLoads(bool ignore);

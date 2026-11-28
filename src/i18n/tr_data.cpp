@@ -1121,7 +1121,6 @@ extern const TrRow kTrRows[] = {
 	{"  ·  missing content", "  ·  falta contenido", "  ·  contenuti mancanti"},
 	{"  ·  different content", "  ·  contenido distinto", "  ·  contenuti diversi"},
 	{"Content", "Contenido", "Contenuti"},
-	{"The content of this game does not match the one you have enabled.", "El contenido de esta partida no coincide con el que tienes activo.", "I contenuti di questa partita non corrispondono a quelli che hai attivi."},
 	{"Content that will be enabled:", "Contenido que se activa:", "Contenuti che si attivano:"},
 	{"CONTENT", "CONTENIDO", "CONTENUTI"},
 	{"The game will restart without additional content.", "El juego se reiniciará sin contenido adicional.", "Il gioco verrà riavviato senza contenuti aggiuntivi."},
@@ -3767,5 +3766,6 @@ extern const TrRow kTrRows[] = {
 	{"Give your team a name of %s to %s characters.", "Ponle a tu equipo un nombre de %s a %s caracteres.", "Dai alla tua squadra un nome da %s a %s caratteri."},
 	{"Follow", "Seguir", "Segui"},
 	{"There's no chat while you watch a game.", "No hay chat mientras ves una partida.", "Non c'è chat mentre guardi una partita."},
+	{"It was saved with an earlier version of Imperivm Resurrected: it loads, but some rules may play differently.", "Se guardó con una versión anterior de Imperivm Resurrected: se puede cargar, pero algunas reglas pueden jugarse distinto.", "È stata salvata con una versione precedente di Imperivm Resurrected: si può caricare, ma alcune regole possono comportarsi diversamente."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

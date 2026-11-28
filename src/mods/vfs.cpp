@@ -857,6 +857,10 @@ void *__cdecl OpenImpl(const char *path, unsigned mode, void *err)
 	}
 	const bool saveFile = rel.size() > 4 && (rel.compare(rel.size() - 4, 4, ".snr") == 0 ||
 		rel.compare(rel.size() - 4, 4, ".adv") == 0 || rel.compare(rel.size() - 4, 4, ".con") == 0);
+	// A replay written gets its note too (its time, its players, its content); the spectator's own working replays don't.
+	const bool replayFile = rel.size() > 4 && rel.compare(rel.size() - 4, 4, ".dmo") == 0 && rel.find("/Spectator/") == std::string::npos &&
+		rel.compare(0, 6, "packs/") != 0 && rel.compare(0, 12, "currentgame/") != 0;
+	if (f && replayFile && !reading) ModsOnSaveWritten(rel, GameIsMultiplayer());
 	if (f && saveFile && rel.compare(0, 6, "packs/") != 0 && rel.compare(0, 12, "currentgame/") != 0) {
 		if (!reading) {
 			ModsOnSaveWritten(rel, GameIsMultiplayer());

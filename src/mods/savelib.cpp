@@ -154,6 +154,15 @@ std::vector<size_t> ScanDir(const std::string &profile, bool onlineFolder, std::
 			if (const Json *states = j.Get("states")) {
 				for (const Json &e : states->arr) r.playerStates.push_back(static_cast<int>(e.num));
 			}
+			if (const Json *players = j.Get("players")) {
+				for (const Json &e : players->arr) {
+					SavePlayer p;
+					p.name = e.GetString("name");
+					p.color555 = static_cast<int>(e.GetNumber("color", 0));
+					p.ai = e.GetBool("ai", false);
+					if (!p.name.empty()) r.players.push_back(p);
+				}
+			}
 			if (const Json *mods = j.Get("mods")) {
 				for (const Json &e : mods->arr) {
 					SaveMod m;
@@ -450,6 +459,50 @@ int SaveLibGameSeconds()
 	__except (EXCEPTION_EXECUTE_HANDLER) {
 		return -1;
 	}
+}
+
+namespace {
+struct RawPlayer {
+	char name[65];
+	int color555;
+	bool ai;
+};
+
+// The players that play among the first 8, read under __try: CVXPlayer (game/gamelayout.h) +0x64 plays, +0x88 its AI, +0x90 its name (a
+// std::string), +0x314 its colour (RGB555).
+int ReadRawPlayers(RawPlayer out[8])
+{
+	int n = 0;
+	__try {
+		const char *game = *reinterpret_cast<char *const *>(addr::kGame);
+		if (!game) return 0;
+		for (int i = 0; i < 8; i++) {
+			const char *pl = game + 0x12cc + i * 800;
+			if (!*reinterpret_cast<const int *>(pl + 0x64)) continue;
+			const unsigned size = *reinterpret_cast<const unsigned *>(pl + 0xa4), capacity = *reinterpret_cast<const unsigned *>(pl + 0xa8);
+			if (size == 0 || size > 64) continue;
+			const char *text = capacity >= 16 ? *reinterpret_cast<const char *const *>(pl + 0x94) : pl + 0x94;
+			memcpy(out[n].name, text, size);
+			out[n].name[size] = 0;
+			out[n].color555 = static_cast<int>(*reinterpret_cast<const unsigned *>(pl + 0x314) & 0x7fff);
+			out[n].ai = *reinterpret_cast<void *const *>(pl + 0x88) != nullptr;
+			n++;
+		}
+		return n;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return 0;
+	}
+}
+}
+
+bool SaveLibPlayers(std::vector<SavePlayer> &out)
+{
+	out.clear();
+	RawPlayer raw[8] = {};
+	const int n = ReadRawPlayers(raw);
+	for (int i = 0; i < n; i++) out.push_back({raw[i].name, raw[i].color555, raw[i].ai});
+	return !out.empty();
 }
 
 bool SaveLibPlayerStates(int out[8])
