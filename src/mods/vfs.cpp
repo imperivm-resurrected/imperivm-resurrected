@@ -14,7 +14,9 @@
 #include "MinHook.h"
 #include "hooks/hookcount.h"
 #include "hooks/builtinfixes.h"
+#include "hooks/displaymode.h"
 #include "core/config.h"
+#include "core/imagefit.h"
 #include "core/sha256.h"
 #include "mods/lang.h"
 #include "mods/menuart.h"
@@ -78,16 +80,27 @@ void MakeDirsFor(const std::string &file)
 	}
 }
 
-// For a cache file that is trusted later just because it exists: one cut short would be served for good.
-bool WriteWholeFile(const std::string &path, const void *data, size_t size)
+// The 32-bit Steam game can write this cache through VirtualStore. Renaming a staging path in
+// Program Files can miss the redirected file, so validate the completed BMP before reusing it.
+bool CachedBmpExists(const std::string &path)
 {
-	const std::string tmp = path + ".tmp";
 	FILE *file = nullptr;
-	if (fopen_s(&file, tmp.c_str(), "wb") != 0 || !file) return false;
-	const bool written = fwrite(data, 1, size, file) == size;
-	if (fclose(file) == 0 && written && MoveFileExA(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING)) return true;
-	DeleteFileA(tmp.c_str());
-	return false;
+	if (fopen_s(&file, path.c_str(), "rb") != 0 || !file) return false;
+	unsigned char magic[2];
+	unsigned size = 0;
+	const bool ok = fread(magic, 1, sizeof(magic), file) == sizeof(magic) && magic[0] == 'B' && magic[1] == 'M' &&
+		fread(&size, sizeof(size), 1, file) == 1 && fseek(file, 0, SEEK_END) == 0 && size == static_cast<unsigned>(ftell(file)) && size >= 54;
+	fclose(file);
+	return ok;
+}
+
+bool WriteCachedBmp(const std::string &path, const std::vector<unsigned char> &bmp)
+{
+	MakeDirsFor(path);
+	FILE *file = nullptr;
+	if (fopen_s(&file, path.c_str(), "wb") != 0 || !file) return false;
+	const bool written = fwrite(bmp.data(), 1, bmp.size(), file) == bmp.size();
+	return fclose(file) == 0 && written;
 }
 
 bool ShouldDump(const std::string &rel)
@@ -421,11 +434,13 @@ std::string FitMenuArtNow(const std::string &image, int w, int h)
 	const std::string cache = "_cache/menu-art/" + HashString(std::string(raw.begin(), raw.end())).substr(0, 16) + "-" + std::to_string(w) + "x" +
 		std::to_string(h) + ".bmp";
 	const std::string out = DiskPath("imperivm-resurrected", cache);
-	if (GetFileAttributesA(out.c_str()) != INVALID_FILE_ATTRIBUTES) return "imperivm-resurrected/" + cache;
+	if (CachedBmpExists(out)) return "imperivm-resurrected/" + cache;
 	std::vector<unsigned char> fitted;
 	if (!ScaleBmpToCover(src, w, h, fitted)) return "";
-	MakeDirsFor(out);
-	if (!WriteWholeFile(out, fitted.data(), fitted.size())) return "";
+	if (!WriteCachedBmp(out, fitted)) {
+		LogW("display", "could not cache menu background %s at %dx%d", image.c_str(), w, h);
+		return "";
+	}
 	LogI("display", "menu background: %s fitted to the %dx%d screen", image.c_str(), w, h);
 	return "imperivm-resurrected/" + cache;
 }
@@ -468,8 +483,8 @@ std::string FittedMenuArt(const std::string &image, int w, int h)
 }
 
 // The bars of the game's interface (gameres/cmdbar/*.bmp, gameres/infobar/<people>/*.bmp) are pictures 2048 px wide:
-// a wider screen is left unpainted past them. They are served 4096 px wide, also for a later change of resolution.
-const int kWideBars = 4096;
+// Extend them to cover later increases of the canvas without reloading the interface.
+const int kWideBars = kMaxFrameSide;
 
 bool IsBarArt(const std::string &rel)
 {
@@ -484,7 +499,7 @@ void *OpenBarArt(void *original, const std::string &rel, const char *path, unsig
 {
 	int w = GetSystemMetrics(SM_CXSCREEN), h = GetSystemMetrics(SM_CYSCREEN);
 	TweaksIntendedResolution(w, h);
-	if (!original || w <= 2048 || w > kWideBars) return original;
+	if (!original || (w <= 2048 && !DisplayIsWindowed()) || w > kWideBars) return original;
 	static std::mutex lock;
 	static std::map<std::string, std::string> done;
 	std::lock_guard<std::mutex> guard(lock);
@@ -496,11 +511,11 @@ void *OpenBarArt(void *original, const std::string &rel, const char *path, unsig
 		const std::string cache = "_cache/bar-art/" + HashString(std::string(raw.begin(), raw.end())).substr(0, 16) + "-" + std::to_string(kWideBars) + ".bmp";
 		const std::string out = DiskPath("imperivm-resurrected", cache);
 		std::vector<unsigned char> wide;
-		bool ready = DiskFileExists(out);
+		bool ready = CachedBmpExists(out);
 		if (!ready && ExtendBarBmp(src, kWideBars, wide)) {
-			MakeDirsFor(out);
-			ready = WriteWholeFile(out, wide.data(), wide.size());
+			ready = WriteCachedBmp(out, wide);
 			if (ready) LogI("display", "interface bar: %s extended to %d px", rel.c_str(), kWideBars);
+			else LogW("display", "could not cache the extended interface bar %s", rel.c_str());
 		}
 		it = done.emplace(path, ready ? "imperivm-resurrected/" + cache : std::string()).first;
 		if (!ready) return g_origOpen(path, mode, err);
@@ -554,7 +569,7 @@ void *OpenBarIni(void *original, const std::string &rel, const char *path, unsig
 {
 	int w = GetSystemMetrics(SM_CXSCREEN), h = GetSystemMetrics(SM_CYSCREEN);
 	TweaksIntendedResolution(w, h);
-	if (!original || w <= 2048 || w > kWideBars) return original;
+	if (!original || (w <= 2048 && !DisplayIsWindowed()) || w > kWideBars) return original;
 	const std::vector<char> raw = ReadAllAndClose(original);
 	std::string text(raw.begin(), raw.end());
 	WidenBarRects(text, 2048, kWideBars);

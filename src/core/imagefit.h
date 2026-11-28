@@ -3,6 +3,8 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #pragma once
 
+inline constexpr int kMaxFrameSide = 8192;
+
 // How the game's image is enlarged to the window: Sharp keeps the pixels crisp with soft edges between them,
 // Smooth blends them, Pixel-exact only enlarges by whole steps and leaves a border.
 enum ImageScaling { kScaleSharp = 0, kScaleSmooth = 1, kScaleExact = 2 };

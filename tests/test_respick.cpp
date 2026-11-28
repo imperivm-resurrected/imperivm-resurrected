@@ -134,6 +134,40 @@ static void WindowSizes()
 	CHECK_EQ(KeepResolution(window, {1920, 1080}, {1920, 1080}), -1);
 }
 
+static void UltraWideAndCustomClients()
+{
+	const ResSize panel = {5120, 1440}, reduced = {3840, 1080};
+	const std::vector<ResSize> reported = {panel, reduced, panel, {2560, 1440}};
+	const auto modes = BuildResolutionList(reported, panel, {});
+	CHECK(Same(modes, {panel, reduced, {2560, 1440}}));
+	CHECK(Same(BuildResolutionList({reduced}, panel, {}), {panel, reduced}));
+	CHECK_EQ(PickStartResolution(modes, {}, {}, panel).index, 0);
+	CHECK_EQ(PickStartResolution(modes, panel, panel, panel).index, 0);
+	CHECK_EQ(PickStartResolution(modes, reduced, panel, panel).index, 1);
+	CHECK(Same(BuildResolutionList(reported, reduced, {}, true), modes));
+	CHECK(Same(BuildWindowResolutionList(reported, panel, {5104, 1353}), {reduced}));
+	CHECK(FrameSizeSupported({1440, 5120}));
+	CHECK(FrameSizeSupported({8192, 1152}));
+	CHECK(!FrameSizeSupported({8192, 1153}));
+	CHECK(!FrameSizeSupported({2147483647, 2147483647}));
+	for (ResSize client : {panel, reduced, ResSize{2017, 947}, ResSize{2558, 1360}, ResSize{1440, 2560}, ResSize{5097, 1361}}) {
+		const ResSize canvas = WindowFrameForClient(client);
+		CHECK(canvas.w == client.w && canvas.h == client.h);
+	}
+	for (ResSize client : {ResSize{2560, 720}, ResSize{800, 600}, ResSize{7680, 4320}, ResSize{4320, 7680}}) {
+		const ResSize canvas = WindowFrameForClient(client);
+		CHECK(FrameSizeSupported(canvas));
+		CHECK(canvas.w >= 1024 && canvas.h >= 768);
+		CHECK(std::abs(canvas.w * client.h - canvas.h * client.w) <= client.w + client.h);
+	}
+	CHECK_EQ(WindowFrameForClient({0, 0}).w, 0);
+	for (ResSize extreme : {ResSize{32767, 1}, ResSize{1, 32767}, ResSize{2147483647, 1}, ResSize{1, 2147483647}}) {
+		const ResSize canvas = WindowFrameForClient(extreme);
+		CHECK(FrameSizeSupported(canvas));
+		CHECK(canvas.w >= 1024 && canvas.h >= 768);
+	}
+}
+
 int main()
 {
 	Saved();
@@ -144,5 +178,6 @@ int main()
 	MonitorModes();
 	Monitor4k();
 	WindowSizes();
+	UltraWideAndCustomClients();
 	return test::Summary("respick");
 }

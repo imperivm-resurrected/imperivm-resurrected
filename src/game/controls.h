@@ -31,6 +31,7 @@ enum ModKey {
 bool ControlsModKeyPressed(int id, unsigned vk);
 bool ControlsMouseButton(unsigned msg, unsigned wp, unsigned &vk, bool &down);
 bool ControlsEatChar(unsigned msg, unsigned wp);
+bool ControlsMapHasFocus();
 // The command bar of the match on screen, in game pixels; false when it is not shown.
 bool ControlsCmdBarRect(int &left, int &top, int &right, int &bottom);
 

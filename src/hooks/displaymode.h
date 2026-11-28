@@ -21,6 +21,10 @@ void DisplayGetLogicalSize(HWND hwnd, int &w, int &h);
 BOOL DisplayRealClientRect(HWND hwnd, RECT *rc);
 
 void DisplayApplySettings(bool windowModeChanged);
+void DisplaySetResizeHandler(bool (*apply)(int width, int height));
+void DisplayHoldResize(bool hold);
+void DisplaySetWindowCursorCheck(bool (*active)());
+void DisplayRefreshWindowCursor();
 
 typedef LRESULT (*DisplayWindowHandler)(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 

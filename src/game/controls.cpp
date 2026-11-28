@@ -1924,6 +1924,11 @@ bool ControlsImport(const std::string &text)
 	return true;
 }
 
+bool ControlsMapHasFocus()
+{
+	return *reinterpret_cast<void **>(addr::kGame) && !InEditor() && MapViewFocused();
+}
+
 bool ControlsEatChar(unsigned msg, unsigned wp)
 {
 	if (msg == WM_KEYDOWN) {
