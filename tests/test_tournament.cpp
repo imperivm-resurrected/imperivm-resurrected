@@ -855,6 +855,28 @@ void Formats()
 	CHECK_EQ(TourneySwissRounds(6, 8), 6);
 	CHECK_EQ(TourneySwissRounds(2, 8), 3);
 	CHECK_EQ(TourneySwissRounds(7, 16), 4);
+	// A round robin: everyone against everyone, one resting each round when they are odd; played as a Swiss, with its own estimate.
+	CHECK(TourneyFormatFromId("roundrobin") == TourneyFormat::RoundRobin);
+	CHECK_EQ(std::string(TourneyFormatId(TourneyFormat::RoundRobin)), std::string("roundrobin"));
+	CHECK_EQ(TourneyRobinRounds(4), 3);
+	CHECK_EQ(TourneyRobinRounds(5), 5);
+	CHECK_EQ(TourneyRobinRounds(8), 7);
+	CHECK_EQ(TourneyRobinRounds(1), 0);
+	{
+		const TourneyEstimate e = TourneyEstimateFor(TourneyFormat::RoundRobin, 6, 1, 3, 0, 40);
+		CHECK_EQ(e.rounds, 5);
+		CHECK_EQ(e.series, 15);
+		CHECK_EQ(e.maxGames, 15);
+		TourneySummary robin;
+		robin.format = "roundrobin";
+		CHECK(TourneyIsSwiss(robin) && TourneyIsRoundRobin(robin));
+		TourneyCupForm form;
+		form.format = TourneyFormat::RoundRobin;
+		form.maxEntries = 16;
+		CHECK(HasProblem(TourneyCheckCup(form, 0), TourneyCupProblem::Places));
+		form.maxEntries = 8;
+		CHECK(!HasProblem(TourneyCheckCup(form, 0), TourneyCupProblem::Places));
+	}
 
 	std::vector<TourneySummary> list;
 	CHECK(TourneyParseList(Parse(R"({"tournaments":[{"id":7,"slug":"suizo","name":"Suizo de otono","status":"running","format":"swiss","swissRounds":null,

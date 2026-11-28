@@ -79,13 +79,18 @@ std::string PointsText(int points)
 	return points == 1 ? Tr("1 point") : TrFmt("%s points", {std::to_string(points)});
 }
 
+std::string StandingTieText(const TourneyDetail &d, const TourneyStanding &s)
+{
+	if (TourneyIsRoundRobin(d)) return TrFmt("Difference %s", {(s.gameDiff > 0 ? "+" : "") + std::to_string(s.gameDiff)});
+	return Tr("Buchholz") + " " + std::to_string(s.buchholz);
+}
+
 std::string ChampionLine(const TourneyDetail &d, const TourneyEntrant &champ)
 {
 	if (TourneyIsSwiss(d)) {
 		const TourneyStanding *s = TourneyStandingOf(d, champ.entryId);
 		if (!s) return std::string();
-		return PointsText(s->points) + " \xC2\xB7 " + std::to_string(s->wins) + "\xE2\x80\x93" + std::to_string(s->losses) + " \xC2\xB7 " + Tr("Buchholz") + " " +
-			std::to_string(s->buchholz);
+		return PointsText(s->points) + " \xC2\xB7 " + std::to_string(s->wins) + "\xE2\x80\x93" + std::to_string(s->losses) + " \xC2\xB7 " + StandingTieText(d, *s);
 	}
 	const TourneyMatch *decider = TourneyDecider(d), *final = decider;
 	if (TourneyIsDouble(d)) {

@@ -284,7 +284,7 @@ int PaintSubTabs(Painter &p, const Ui &u, const TourneyListsView &lists, int x, 
 bool Shown(const TourneySummary &t, const Ui &u, const TourneyMineView &mine)
 {
 	if ((u.listKind == 1 && !t.official) || (u.listKind == 2 && t.official)) return false;
-	const int format = TourneyIsSwiss(t) ? 3 : TourneyIsDouble(t) ? 2 : 1;
+	const int format = TourneyIsRoundRobin(t) ? 4 : TourneyIsSwiss(t) ? 3 : TourneyIsDouble(t) ? 2 : 1;
 	if (u.listFormat && u.listFormat != format) return false;
 	if (!u.listPlayable || u.filter != 0) return true;
 	const bool open = t.status == TourneyStatus::Signup || t.status == TourneyStatus::Checkin;
@@ -334,11 +334,11 @@ void PaintTable(Painter &p, const State &st, const Ui &u, const TourneyListsView
 	}
 	{
 		static const char *const kKinds[] = {"Official and community", "Official only", "Community only"};
-		static const char *const kFormats[] = {"All formats", "Single elimination", "Double elimination", "Swiss"};
+		static const char *const kFormats[] = {"All formats", "Single elimination", "Double elimination", "Swiss", "Round robin"};
 		int fx = x + 16;
 		const bool menu = st.dropOpen && st.dropKind == kDropTourney;
 		fx += PaintFilter(p, fx, y + 12, 32, Tr(kKinds[u.listKind % 3]), u.listKind != 0, true, kSubListKind, mx, my, menu && st.dropIndex == kCupMenuListKind) + 10;
-		fx += PaintFilter(p, fx, y + 12, 32, Tr(kFormats[u.listFormat % 4]), u.listFormat != 0, true, kSubListFormat, mx, my,
+		fx += PaintFilter(p, fx, y + 12, 32, Tr(kFormats[u.listFormat % 5]), u.listFormat != 0, true, kSubListFormat, mx, my,
 				  menu && st.dropIndex == kCupMenuListFormat) +
 			10;
 		if (u.filter == 0) PaintFilter(p, fx, y + 12, 32, Tr("Only the ones I can play"), u.listPlayable, false, kSubListPlayable, mx, my);
@@ -443,7 +443,7 @@ void PaintTable(Painter &p, const State &st, const Ui &u, const TourneyListsView
 		p.Font(0);
 		p.raw = true;
 		// The format's name alone: the column is narrow at 1280 x 720, and the mode is after the cup's name.
-		p.Text(cx[1], ry + 12, colW[1], 24, Tr(TourneyIsSwiss(t) ? "Swiss" : TourneyIsDouble(t) ? "Double elimination" : "Single elimination"), pal::body,
+		p.Text(cx[1], ry + 12, colW[1], 24, Tr(TourneyIsRoundRobin(t) ? "Round robin" : TourneyIsSwiss(t) ? "Swiss" : TourneyIsDouble(t) ? "Double elimination" : "Single elimination"), pal::body,
 			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.Text(cx[2], ry + 14, colW[2], 22, TrFmt(t.Teams() ? "%s of %s teams" : "%s of %s players", {std::to_string(t.entries), std::to_string(t.maxEntries)}), pal::body,
 			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);

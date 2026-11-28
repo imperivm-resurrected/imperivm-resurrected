@@ -166,8 +166,9 @@ enum class TourneyUnmet { None, Games, Tier };
 TourneyUnmet TourneyCheckRequirements(const TourneyRequirements &r, int gamesPlayed, LeagueTier tier);
 
 // How a tournament is played: single or double elimination, or Swiss rounds against rivals with the same points.
-enum class TourneyFormat { Single, Double, Swiss };
-// "single", "double" or "swiss"; unknown ids are single elimination, as the league's first tournaments.
+// A round robin (a "liguilla") is played as a Swiss, by rounds with a table, where everyone meets everyone once.
+enum class TourneyFormat { Single, Double, Swiss, RoundRobin };
+// "single", "double", "swiss" or "roundrobin"; unknown ids are single elimination, as the league's first tournaments.
 TourneyFormat TourneyFormatFromId(const std::string &id);
 const char *TourneyFormatId(TourneyFormat f);
 // Live, in one evening; or by rounds, each with a deadline some days away.
@@ -181,6 +182,10 @@ bool TourneyRoundDaysValid(int days);
 constexpr int kTourneySwissRoundsMin = 3, kTourneySwissRoundsMax = 6;
 // The rounds of a Swiss: the ones chosen (3 to 6), otherwise ceil(log2(players)).
 int TourneySwissRounds(int chosen, int players);
+// A round robin's rounds: everyone against everyone, one resting each round when they are odd.
+int TourneyRobinRounds(int players);
+// A round robin has at most this many places.
+constexpr int kTourneyRobinMaxEntries = 8;
 
 // The player who made a community cup; nobody for the official ones.
 struct TourneyOrganizer {
@@ -321,6 +326,9 @@ struct TourneyStanding {
 	uint64_t steamId = 0;
 	std::string name;
 	int points = 0, wins = 0, losses = 0, buchholz = 0, byes = 0, place = 0;
+	// A round robin's: 3 points a win, its ties by the games won minus lost (gameDiff) and the points of the opponents beaten, and
+	// its rests, which score nothing.
+	int gameDiff = 0, beaten = 0, rests = 0;
 	// A team's players, from the standing or else from its entry.
 	std::vector<TourneyMember> members;
 };
@@ -370,7 +378,9 @@ std::vector<const TourneyEntrant *> TourneyPlaced(const TourneyDetail &d, int pl
 
 // The formats of the tournament's `format`: anything that is not one of these is single elimination.
 bool TourneyIsDouble(const TourneySummary &t);
+// A Swiss or a round robin: rounds and a table instead of a bracket.
 bool TourneyIsSwiss(const TourneySummary &t);
+bool TourneyIsRoundRobin(const TourneySummary &t);
 // The rounds have a deadline of some days each instead of being played in one evening.
 bool TourneyByRounds(const TourneyDetail &d);
 // The rounds a Swiss tournament plays: as it was made, or as many as its players need, and never fewer than the ones paired.

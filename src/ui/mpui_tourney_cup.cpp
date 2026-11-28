@@ -82,6 +82,9 @@ std::string FormatLine(const TourneyCupForm &f)
 	if (f.format == TourneyFormat::Swiss) {
 		return TrFmt("Swiss, %s rounds", {std::to_string(TourneySwissRounds(f.swissRounds, f.maxEntries))}) + " \xC2\xB7 " + TrFmt("Bo%s", {std::to_string(f.bestOf)});
 	}
+	if (f.format == TourneyFormat::RoundRobin) {
+		return TrFmt("Round robin, %s rounds", {std::to_string(TourneyRobinRounds(f.maxEntries))}) + " \xC2\xB7 " + TrFmt("Bo%s", {std::to_string(f.bestOf)});
+	}
 	return Tr(f.format == TourneyFormat::Double ? "Double elimination" : "Single elimination") + " \xC2\xB7 " +
 		TrFmt("Bo%s, final Bo%s", {std::to_string(f.bestOf), std::to_string(f.finalBestOf)});
 }
@@ -258,6 +261,14 @@ void FormatIcon(Painter &p, int x, int y, TourneyFormat format, COLORREF ink, CO
 		join(24, 6, 22, 30, line);
 		slot(30, 12, 10, accent);
 		break;
+	case TourneyFormat::RoundRobin:
+		// The table of everyone against everyone: a square for each pair, the diagonal empty, the first row's in colour.
+		for (int row = 0; row < 4; ++row) {
+			for (int col = 0; col < 4; ++col) {
+				if (row != col) p.Fill(x + 6 + col * 7, y + 1 + row * 7, 5, 5, row == 0 ? accent : (row + col) % 2 ? ink : faint);
+			}
+		}
+		break;
 	case TourneyFormat::Swiss:
 		// A table of points: each player's slot and three rounds, won in full colour and lost faint; nobody leaves it.
 		for (int row = 0; row < 4; ++row) {
@@ -404,8 +415,9 @@ int FormatLeft(Form &c, int x, int y, int w)
 	at += c.k.rowGap;
 	at += Label(c, x, at, w, Tr(teams ? "Places (teams)" : "Places"));
 	Segments(c, x, at, w, c.k.fieldH,
-		{{"4", CupArg(kCupPlaces, 4), f.maxEntries == 4}, {"8", CupArg(kCupPlaces, 8), f.maxEntries == 8}, {"16", CupArg(kCupPlaces, 16), f.maxEntries == 16},
-			{"32", CupArg(kCupPlaces, 32), f.maxEntries == 32}});
+		{{"4", CupArg(kCupPlaces, 4), f.maxEntries == 4}, {"8", CupArg(kCupPlaces, 8), f.maxEntries == 8},
+			{"16", CupArg(kCupPlaces, 16), f.maxEntries == 16, f.format != TourneyFormat::RoundRobin},
+			{"32", CupArg(kCupPlaces, 32), f.maxEntries == 32, f.format != TourneyFormat::RoundRobin}});
 	at += c.k.fieldH + 8;
 	at += Hint(c, x, at, w,
 		TrFmt(teams && f.teamDraw ? "Twice as many players sign up. It starts with the teams drawn among those who have checked in, if there are at least %s; else it is cancelled on its own."
@@ -428,7 +440,8 @@ int FormatRight(Form &c, int x, int y, int w)
 	};
 	static const Def kDefs[] = {{TourneyFormat::Single, "Single elimination", "Whoever loses is out. The shortest and the easiest to follow."},
 		{TourneyFormat::Double, "Double elimination", "You are out after losing twice."},
-		{TourneyFormat::Swiss, "Swiss", "Nobody is out: rivals with your points."}};
+		{TourneyFormat::Swiss, "Swiss", "Nobody is out: rivals with your points."},
+		{TourneyFormat::RoundRobin, "Round robin", "Everyone plays everyone once, up to 8."}};
 	for (const Def &d : kDefs) {
 		TourneyCupForm as = f;
 		as.format = d.format;
@@ -524,9 +537,11 @@ int RulesRight(Form &c, int x, int y, int w)
 	at += Label(c, x, at, w, Tr("Rounds"));
 	Segments(c, x, at, w, c.k.fieldH, {{SeriesText(1), CupArg(kCupBestOf, 1), f.bestOf == 1}, {SeriesText(3), CupArg(kCupBestOf, 3), f.bestOf == 3}});
 	at += c.k.fieldH + c.k.rowGap;
-	if (f.format == TourneyFormat::Swiss) {
+	if (f.format == TourneyFormat::Swiss || f.format == TourneyFormat::RoundRobin) {
 		at += Label(c, x, at, w, Tr("Final"));
-		at += Hint(c, x, at, w, Tr("A Swiss has no final: whoever has the most points after the last round is the champion."));
+		at += Hint(c, x, at, w,
+			Tr(f.format == TourneyFormat::Swiss ? "A Swiss has no final: whoever has the most points after the last round is the champion."
+												: "A round robin has no final: whoever has the most points after the last round is the champion."));
 	}
 	else {
 		at += Label(c, x, at, w, Tr(f.format == TourneyFormat::Double ? "Grand final" : "Final"));
@@ -1281,6 +1296,7 @@ void ApplyCupSetting(TourneyCupForm &f, int setting, int choice, int64_t nowMs)
 	switch (setting) {
 	case kCupPlaces:
 		if (choice != 4 && choice != 8 && choice != 16 && choice != 32) break;
+		if (f.format == TourneyFormat::RoundRobin && choice > kTourneyRobinMaxEntries) break;
 		// The minimum follows the places: it is not asked.
 		f.minEntries = TourneyCupDefaultMinimum(choice);
 		f.maxEntries = choice;
@@ -1288,8 +1304,13 @@ void ApplyCupSetting(TourneyCupForm &f, int setting, int choice, int64_t nowMs)
 		break;
 	case kCupMinimum: f.minEntries = std::max(2, std::min(f.maxEntries, f.minEntries + (choice ? 1 : -1))); break;
 	case kCupFormat:
-		if (choice < static_cast<int>(TourneyFormat::Single) || choice > static_cast<int>(TourneyFormat::Swiss)) break;
+		if (choice < static_cast<int>(TourneyFormat::Single) || choice > static_cast<int>(TourneyFormat::RoundRobin)) break;
 		f.format = static_cast<TourneyFormat>(choice);
+		// A round robin of more would never end: its places come down to the most it takes.
+		if (f.format == TourneyFormat::RoundRobin && f.maxEntries > kTourneyRobinMaxEntries) {
+			f.maxEntries = kTourneyRobinMaxEntries;
+			f.minEntries = TourneyCupDefaultMinimum(f.maxEntries);
+		}
 		TourneyFitMaps(f.maps, TourneyCupMapRounds(f));
 		break;
 	case kCupSwissRounds:
@@ -1433,7 +1454,7 @@ std::string CupProblemText(TourneyCupProblem problem)
 	case TourneyCupProblem::NameShort: return Tr("The name needs at least 3 characters.");
 	case TourneyCupProblem::NameLong: return Tr("The name can have up to 40 characters.");
 	case TourneyCupProblem::DescriptionLong: return Tr("The description can have up to 200 characters.");
-	case TourneyCupProblem::Places: return Tr("Choose 4, 8, 16 or 32 places; a double elimination, up to 16.");
+	case TourneyCupProblem::Places: return Tr("Choose 4, 8, 16 or 32 places; a double elimination, up to 16; a round robin, up to 8.");
 	case TourneyCupProblem::Minimum: return Tr("The minimum goes from 2 to the number of places.");
 	case TourneyCupProblem::Format: return Tr("A Swiss plays 3 to 6 rounds, or the automatic count.");
 	case TourneyCupProblem::Series: return Tr("Choose the games of the rounds and of the final.");

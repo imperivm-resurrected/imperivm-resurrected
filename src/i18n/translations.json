@@ -3768,5 +3768,17 @@
 {"en":"Delete?","es":"¿Eliminar?","it":"Eliminare?"},
 {"en":"Speed %s","es":"Velocidad %s","it":"Velocità %s"},
 {"en":"Every game of the cup is played at it; nobody can change it during the game.","es":"Todas las partidas de la copa se juegan a esta velocidad; nadie puede cambiarla durante la partida.","it":"Tutte le partite della coppa si giocano a questa velocità; nessuno può cambiarla durante la partita."},
-{"en":"game speed %s","es":"velocidad %s","it":"velocità %s"}
+{"en":"game speed %s","es":"velocidad %s","it":"velocità %s"},
+{"en":"Round robin","es":"Liguilla","it":"Girone all'italiana"},
+{"en":"Round robin, %s rounds","es":"Liguilla, %s rondas","it":"Girone all'italiana, %s turni"},
+{"en":"Everyone plays everyone once, up to 8.","es":"Todos contra todos una vez, hasta 8.","it":"Tutti contro tutti una volta, fino a 8."},
+{"en":"A round robin has no final: whoever has the most points after the last round is the champion.","es":"Una liguilla no tiene final: quien tenga más puntos tras la última ronda es el campeón.","it":"Un girone all'italiana non ha finale: chi ha più punti dopo l'ultimo turno è il campione."},
+{"en":"Choose 4, 8, 16 or 32 places; a double elimination, up to 16; a round robin, up to 8.","es":"Elige 4, 8, 16 o 32 plazas; una doble eliminación, hasta 16; una liguilla, hasta 8.","it":"Scegli 4, 8, 16 o 32 posti; una doppia eliminazione, fino a 16; un girone all'italiana, fino a 8."},
+{"en":"Diff.","es":"Dif.","it":"Diff."},
+{"en":"Rests","es":"Descansos","it":"Riposi"},
+{"en":"Difference %s","es":"Diferencia %s","it":"Differenza %s"},
+{"en":"%s, everyone against everyone once","es":"%s, todos contra todos una vez","it":"%s, tutti contro tutti una volta"},
+{"en":"A win, 3 points; a loss, a no-show or a rest, 0","es":"Victoria, 3 puntos; derrota, no presentarse o descanso, 0","it":"Vittoria, 3 punti; sconfitta, assenza o riposo, 0"},
+{"en":"Head-to-head, then games won minus lost, then the points of the opponents beaten, then seed","es":"Enfrentamiento directo, luego partidas ganadas menos perdidas, luego los puntos de los rivales ganados, luego el cabeza de serie","it":"Scontro diretto, poi partite vinte meno perse, poi i punti degli avversari battuti, poi la testa di serie"},
+{"en":"You finished with %s, %s.","es":"Terminaste con %s, %s.","it":"Hai finito con %s, %s."}
 ]

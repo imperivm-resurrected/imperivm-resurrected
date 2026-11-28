@@ -1066,7 +1066,7 @@ void PaintPodium(Painter &p, const TourneyDetail &d, int m, int ry, int cw, int 
 		// Under the name: the Swiss points that placed them, else their seed; a shared third place says where it was lost.
 		std::string under = who.size() == 1 && who[0]->seed ? TrFmt("Seed %s", {std::to_string(who[0]->seed)}) : s.place == 3 && !TourneyIsDouble(d) ? Tr("Semifinals") : std::string();
 		if (const TourneyStanding *standing = who.size() == 1 && TourneyIsSwiss(d) ? TourneyStandingOf(d, who[0]->entryId) : nullptr) {
-			under = PointsText(standing->points) + " \xC2\xB7 " + Tr("Buchholz") + " " + std::to_string(standing->buchholz);
+			under = PointsText(standing->points) + " \xC2\xB7 " + StandingTieText(d, *standing);
 		}
 		// A team's players come first under its name.
 		if (who.size() == 1 && d.Teams()) {
@@ -1171,7 +1171,10 @@ void PaintOwnCup(Painter &p, const State &st, const TourneyDetail &d, int x3, in
 	if (const TourneyStanding *standing = me && TourneyIsSwiss(d) && d.status == TourneyStatus::Finished ? TourneyStandingOf(d, me->entryId) : nullptr) {
 		p.Font(0);
 		p.raw = true;
-		p.Text(x3 + pad, ry + 130, cw - 2 * pad, 24, TrFmt("You finished with %s and a Buchholz of %s.", {PointsText(standing->points), std::to_string(standing->buchholz)}), pal::body,
+		p.Text(x3 + pad, ry + 130, cw - 2 * pad, 24,
+			TourneyIsRoundRobin(d) ? TrFmt("You finished with %s, %s.", {PointsText(standing->points), StandingTieText(d, *standing)})
+								   : TrFmt("You finished with %s and a Buchholz of %s.", {PointsText(standing->points), std::to_string(standing->buchholz)}),
+			pal::body,
 			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.raw = false;
 	}

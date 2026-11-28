@@ -901,7 +901,8 @@ std::string StageText(TourneyStage stage, int round)
 
 std::string FormatText(const TourneySummary &t)
 {
-	return Tr(TourneyIsSwiss(t) ? "Swiss" : TourneyIsDouble(t) ? "Double elimination" : "Single elimination") + " \xC2\xB7 " + Tr(t.Teams() ? "2 vs 2" : "1 vs 1") +
+	return Tr(TourneyIsRoundRobin(t) ? "Round robin" : TourneyIsSwiss(t) ? "Swiss" : TourneyIsDouble(t) ? "Double elimination" : "Single elimination") + " \xC2\xB7 " +
+		Tr(t.Teams() ? "2 vs 2" : "1 vs 1") +
 		(t.teamDraw ? " \xC2\xB7 " + Tr("drawn teams") : std::string());
 }
 
@@ -1469,7 +1470,7 @@ void TourneyAction(int arg)
 			break;
 		}
 		g_s.tourneyDropItems = kind ? std::vector<std::string>{Tr("Official and community"), Tr("Official only"), Tr("Community only")}
-									: std::vector<std::string>{Tr("All formats"), Tr("Single elimination"), Tr("Double elimination"), Tr("Swiss")};
+									: std::vector<std::string>{Tr("All formats"), Tr("Single elimination"), Tr("Double elimination"), Tr("Swiss"), Tr("Round robin")};
 		g_s.tourneyDropSel = kind ? u.listKind : u.listFormat;
 		g_s.dropOpen = true;
 		g_s.dropKind = kDropTourney;

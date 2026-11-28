@@ -532,6 +532,7 @@ TourneyFormat TourneyFormatFromId(const std::string &id)
 	const std::string s = Lower(id);
 	if (s == "double") return TourneyFormat::Double;
 	if (s == "swiss") return TourneyFormat::Swiss;
+	if (s == "roundrobin") return TourneyFormat::RoundRobin;
 	return TourneyFormat::Single;
 }
 
@@ -540,6 +541,7 @@ const char *TourneyFormatId(TourneyFormat f)
 	switch (f) {
 	case TourneyFormat::Double: return "double";
 	case TourneyFormat::Swiss: return "swiss";
+	case TourneyFormat::RoundRobin: return "roundrobin";
 	default: return "single";
 	}
 }
@@ -629,6 +631,7 @@ int TourneyRoundCount(const TourneySummary &t)
 	const int players = t.entries > 1 ? t.entries : t.maxEntries;
 	switch (TourneyFormatOf(t)) {
 	case TourneyFormat::Swiss: return TourneySwissRounds(t.swissRounds, players);
+	case TourneyFormat::RoundRobin: return TourneyRobinRounds(players);
 	case TourneyFormat::Double: return 0;
 	default: return players > 1 ? TourneyRoundsFor(players) : 0;
 	}
@@ -844,6 +847,9 @@ bool TourneyParseDetail(const Json &j, TourneyDetail &out)
 			x.losses = whole(s, "losses");
 			x.buchholz = whole(s, "buchholz");
 			x.byes = whole(s, "byes");
+			x.gameDiff = whole(s, "gameDiff");
+			x.beaten = whole(s, "beaten");
+			x.rests = whole(s, "rests");
 			x.place = std::max(0, whole(s, "place"));
 			if (x.entryId || !x.name.empty()) out.standings.push_back(x);
 		}
@@ -959,7 +965,18 @@ bool TourneyIsDouble(const TourneySummary &t)
 
 bool TourneyIsSwiss(const TourneySummary &t)
 {
-	return Lower(t.format) == "swiss";
+	return Lower(t.format) == "swiss" || TourneyIsRoundRobin(t);
+}
+
+bool TourneyIsRoundRobin(const TourneySummary &t)
+{
+	return Lower(t.format) == "roundrobin";
+}
+
+int TourneyRobinRounds(int players)
+{
+	if (players < 2) return 0;
+	return players % 2 ? players : players - 1;
 }
 
 bool TourneyByRounds(const TourneyDetail &d)
@@ -970,6 +987,7 @@ bool TourneyByRounds(const TourneyDetail &d)
 int TourneySwissTotalRounds(const TourneyDetail &d)
 {
 	if (d.rounds > 0) return d.rounds;
+	if (TourneyIsRoundRobin(d)) return TourneyRobinRounds(d.entries);
 	return d.swissRounds > 0 ? d.swissRounds : TourneySwissRounds(0, d.entries);
 }
 
@@ -1779,7 +1797,9 @@ std::vector<TourneyCupProblem> TourneyCheckCup(const TourneyCupForm &f, int64_t 
 	if (TourneyTextLength(TourneyTrim(f.description)) > kTourneyCupDescriptionMax) out.push_back(TourneyCupProblem::DescriptionLong);
 	const bool places = f.maxEntries == 4 || f.maxEntries == 8 || f.maxEntries == 16 || f.maxEntries == 32;
 	// A double elimination of 32 would last far more than an evening: up to 16 places, as the league has it.
-	if (!places || (f.maxEntries > 16 && f.format == TourneyFormat::Double)) out.push_back(TourneyCupProblem::Places);
+	if (!places || (f.maxEntries > 16 && f.format == TourneyFormat::Double) || (f.maxEntries > kTourneyRobinMaxEntries && f.format == TourneyFormat::RoundRobin)) {
+		out.push_back(TourneyCupProblem::Places);
+	}
 	else if (f.minEntries < 2 || f.minEntries > f.maxEntries) out.push_back(TourneyCupProblem::Minimum);
 	if (f.format == TourneyFormat::Swiss && f.swissRounds != 0 && (f.swissRounds < kTourneySwissRoundsMin || f.swissRounds > kTourneySwissRoundsMax)) {
 		out.push_back(TourneyCupProblem::Format);
@@ -1851,8 +1871,8 @@ Json TourneyCupJson(const TourneyCupForm &f, bool edit)
 	const bool chosen = f.format == TourneyFormat::Swiss && f.swissRounds >= kTourneySwissRoundsMin && f.swissRounds <= kTourneySwissRoundsMax;
 	body.Set("swissRounds", chosen ? Json::MakeNumber(f.swissRounds) : Json());
 	body.Set("bestOf", Json::MakeNumber(f.bestOf));
-	// A Swiss has no final: its series are all the rounds'.
-	body.Set("finalBestOf", Json::MakeNumber(f.format == TourneyFormat::Swiss ? f.bestOf : f.finalBestOf));
+	// A Swiss or a round robin has no final: its series are all the rounds'.
+	body.Set("finalBestOf", Json::MakeNumber(f.format == TourneyFormat::Swiss || f.format == TourneyFormat::RoundRobin ? f.bestOf : f.finalBestOf));
 	body.Set("pace", Json::MakeString(TourneyPaceId(f.pace)));
 	body.Set("roundDays", f.pace == TourneyPace::Rounds ? Json::MakeNumber(f.roundDays) : Json());
 	// Teams drawn when the check-in closes can't be paired before.
@@ -1977,6 +1997,13 @@ TourneyEstimate TourneyEstimateFor(TourneyFormat format, int places, int bestOf,
 	if (places < 2) return e;
 	bestOf = std::max(1, bestOf);
 	finalBestOf = std::max(1, finalBestOf);
+	if (format == TourneyFormat::RoundRobin) {
+		e.rounds = TourneyRobinRounds(places);
+		e.series = places * (places - 1) / 2;
+		e.maxGames = e.series * bestOf;
+		e.minutes = gameMinutes * bestOf * e.rounds + 10 * (e.rounds - 1);
+		return e;
+	}
 	if (format == TourneyFormat::Swiss) {
 		e.rounds = TourneySwissRounds(swissRounds, places);
 		e.series = e.rounds * (places / 2);
@@ -2016,12 +2043,13 @@ bool TourneyCupLongLive(const TourneyCupForm &f)
 
 bool TourneyCupHasSeries(const TourneyCupForm &f)
 {
-	return f.bestOf > 1 || (f.format != TourneyFormat::Swiss && f.finalBestOf > 1);
+	return f.bestOf > 1 || (f.format != TourneyFormat::Swiss && f.format != TourneyFormat::RoundRobin && f.finalBestOf > 1);
 }
 
 int TourneyCupMapRounds(const TourneyCupForm &f)
 {
 	if (f.format == TourneyFormat::Swiss) return TourneySwissRounds(f.swissRounds, f.maxEntries);
+	if (f.format == TourneyFormat::RoundRobin) return TourneyRobinRounds(f.maxEntries);
 	return TourneyRoundsFor(f.maxEntries);
 }
 

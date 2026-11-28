@@ -298,6 +298,8 @@ int EntrantPlace(const TourneyDetail &d, const TourneyEntrant &e);
 // "Place 4 of 12".
 std::string PlacementText(const TourneyDetail &d, int placement);
 // The champion's line under their name: "Final: 2–1 against Escipión", "Grand final: 1–2, and 2–0 in the reset, against Varo",
+// What breaks a tie in the table: "Buchholz 9" in a Swiss, "Difference +3" in a round robin.
+std::string StandingTieText(const TourneyDetail &d, const TourneyStanding &s);
 // "4 points · 4–0 · Buchholz 9".
 std::string ChampionLine(const TourneyDetail &d, const TourneyEntrant &champ);
 // How long a cup lasted: "3 h 31 min", or "6 d 4 h" over days.

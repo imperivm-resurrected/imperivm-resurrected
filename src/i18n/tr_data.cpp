@@ -3776,5 +3776,17 @@ extern const TrRow kTrRows[] = {
 	{"Speed %s", "Velocidad %s", "Velocità %s"},
 	{"Every game of the cup is played at it; nobody can change it during the game.", "Todas las partidas de la copa se juegan a esta velocidad; nadie puede cambiarla durante la partida.", "Tutte le partite della coppa si giocano a questa velocità; nessuno può cambiarla durante la partita."},
 	{"game speed %s", "velocidad %s", "velocità %s"},
+	{"Round robin", "Liguilla", "Girone all'italiana"},
+	{"Round robin, %s rounds", "Liguilla, %s rondas", "Girone all'italiana, %s turni"},
+	{"Everyone plays everyone once, up to 8.", "Todos contra todos una vez, hasta 8.", "Tutti contro tutti una volta, fino a 8."},
+	{"A round robin has no final: whoever has the most points after the last round is the champion.", "Una liguilla no tiene final: quien tenga más puntos tras la última ronda es el campeón.", "Un girone all'italiana non ha finale: chi ha più punti dopo l'ultimo turno è il campione."},
+	{"Choose 4, 8, 16 or 32 places; a double elimination, up to 16; a round robin, up to 8.", "Elige 4, 8, 16 o 32 plazas; una doble eliminación, hasta 16; una liguilla, hasta 8.", "Scegli 4, 8, 16 o 32 posti; una doppia eliminazione, fino a 16; un girone all'italiana, fino a 8."},
+	{"Diff.", "Dif.", "Diff."},
+	{"Rests", "Descansos", "Riposi"},
+	{"Difference %s", "Diferencia %s", "Differenza %s"},
+	{"%s, everyone against everyone once", "%s, todos contra todos una vez", "%s, tutti contro tutti una volta"},
+	{"A win, 3 points; a loss, a no-show or a rest, 0", "Victoria, 3 puntos; derrota, no presentarse o descanso, 0", "Vittoria, 3 punti; sconfitta, assenza o riposo, 0"},
+	{"Head-to-head, then games won minus lost, then the points of the opponents beaten, then seed", "Enfrentamiento directo, luego partidas ganadas menos perdidas, luego los puntos de los rivales ganados, luego el cabeza de serie", "Scontro diretto, poi partite vinte meno perse, poi i punti degli avversari battuti, poi la testa di serie"},
+	{"You finished with %s, %s.", "Terminaste con %s, %s.", "Hai finito con %s, %s."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

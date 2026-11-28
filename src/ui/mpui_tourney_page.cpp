@@ -817,8 +817,9 @@ void PaintStandings(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &ou
 	if (form) PaintCaps(p, formX, y, formW, 20, "Rounds", pal::caption, center);
 	PaintCaps(p, ptsX, y, numW, 20, "Points", pal::caption, center);
 	PaintCaps(p, wlX, y, numW, 20, "W\xE2\x80\x93L", pal::caption, center);
-	PaintCaps(p, buchX, y, col.buchholzW, 20, "Buchholz", pal::caption, center);
-	PaintCaps(p, byesX, y, numW, 20, "Byes", pal::caption, center);
+	const bool robin = TourneyIsRoundRobin(d);
+	PaintCaps(p, buchX, y, col.buchholzW, 20, robin ? "Diff." : "Buchholz", pal::caption, center);
+	PaintCaps(p, byesX, y, numW, 20, robin ? "Rests" : "Byes", pal::caption, center);
 	// A team's row holds its name over its players.
 	const int foot = over ? 30 : 54, top = y + 30, rowH = teams ? 56 : 46, viewH = h - 30 - foot;
 	if (d.standings.empty()) {
@@ -890,8 +891,9 @@ void PaintStandings(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &ou
 		p.Text(ptsX, ry, numW, rowH, std::to_string(s.points), pal::text, center);
 		UseFace(p, BrandFace::Body, 16);
 		p.Text(wlX, ry, numW, rowH, std::to_string(s.wins) + "\xE2\x80\x93" + std::to_string(s.losses), pal::body, center);
-		p.Text(buchX, ry, col.buchholzW, rowH, std::to_string(s.buchholz), pal::body, center);
-		p.Text(byesX, ry, numW, rowH, std::to_string(s.byes), s.byes ? pal::body : pal::caption, center);
+		const int tie = robin ? s.gameDiff : s.buchholz, idle = robin ? s.rests : s.byes;
+		p.Text(buchX, ry, col.buchholzW, rowH, (robin && tie > 0 ? "+" : "") + std::to_string(tie), pal::body, center);
+		p.Text(byesX, ry, numW, rowH, std::to_string(idle), idle ? pal::body : pal::caption, center);
 		p.raw = false;
 		ry += rowH;
 	}
@@ -1166,7 +1168,13 @@ void PaintRules(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out)
 		row(Tr("Teams"), Tr("A captain and the partner they invite; if either withdraws, the team withdraws"));
 		row(Tr("Check-in and room"), Tr("Either player checks the team in; side A's captain opens the room"));
 	}
-	if (swiss) {
+	if (TourneyIsRoundRobin(d)) {
+		row(Tr("Rounds"), TrFmt("%s, everyone against everyone once", {std::to_string(TourneySwissTotalRounds(d))}));
+		row(Tr("Points"), Tr("A win, 3 points; a loss, a no-show or a rest, 0"));
+		row(Tr("Ties"), Tr("Head-to-head, then games won minus lost, then the points of the opponents beaten, then seed"));
+		row(Tr("Series"), TrFmt("Best of %s", {std::to_string(d.bestOf)}));
+	}
+	else if (swiss) {
 		row(Tr("Rounds"), TrFmt("%s, each between players on the same points, without repeating an opponent", {std::to_string(TourneySwissTotalRounds(d))}));
 		row(Tr("Points"), Tr("A win or a bye, 1 point; a loss or a no-show, 0"));
 		row(Tr("Ties"), Tr("Buchholz (the points of the opponents met), then head-to-head, then seed"));
