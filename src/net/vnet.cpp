@@ -24,12 +24,14 @@ namespace {
 
 typedef hostent *(WSAAPI *Gethostbyname_t)(const char *);
 typedef int(WSAAPI *Sendto_t)(SOCKET, const char *, int, int, const sockaddr *, int);
+typedef int(WSAAPI *Bind_t)(SOCKET, const sockaddr *, int);
 typedef int(WSAAPI *WSASendTo_t)(SOCKET, LPWSABUF, DWORD, LPDWORD, DWORD, const sockaddr *, int, LPWSAOVERLAPPED,
 	LPWSAOVERLAPPED_COMPLETION_ROUTINE);
 
 Gethostbyname_t g_origGethostbyname = nullptr;
 Sendto_t g_origSendto = nullptr;
 WSASendTo_t g_origWSASendTo = nullptr;
+Bind_t g_origBind = nullptr;
 
 std::mutex g_lock;
 int g_myK = 0;
@@ -52,6 +54,18 @@ bool g_wsaReady = false;
 
 const uint16_t kGamePorts[] = {40444, 40445, 40447};
 
+// Windows lets the game's wildcard socket and our per-peer sockets share a game port; Wine (Linux) only does if both set SO_REUSEADDR.
+bool RunningUnderWine()
+{
+	return GetProcAddress(GetModuleHandleA("ntdll.dll"), "wine_get_version") != nullptr;
+}
+
+void AllowSharedPort(SOCKET s)
+{
+	BOOL on = TRUE;
+	setsockopt(s, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char *>(&on), sizeof(on));
+}
+
 uint32_t VirtualIp(int k)
 {
 	return (127u << 24) | (77u << 16) | static_cast<uint32_t>(k & 0xffff);
@@ -61,6 +75,7 @@ SOCKET OpenEndpoint(int k, uint16_t port)
 {
 	SOCKET s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 	if (s == INVALID_SOCKET) return s;
+	if (RunningUnderWine()) AllowSharedPort(s);
 	sockaddr_in a = {};
 	a.sin_family = AF_INET;
 	a.sin_port = htons(port);
@@ -235,6 +250,20 @@ int WSAAPI HookWSASendTo(SOCKET s, LPWSABUF bufs, DWORD count, LPDWORD sent, DWO
 	return g_origWSASendTo(s, bufs, count, sent, flags, to, tolen, ov, done);
 }
 
+int WSAAPI HookBind(SOCKET s, const sockaddr *a, int len)
+{
+	if (a && len >= static_cast<int>(sizeof(sockaddr_in)) && a->sa_family == AF_INET) {
+		const uint16_t port = ntohs(reinterpret_cast<const sockaddr_in *>(a)->sin_port);
+		int type = 0, typeLen = sizeof(type);
+		if (getsockopt(s, SOL_SOCKET, SO_TYPE, reinterpret_cast<char *>(&type), &typeLen) == 0 && type == SOCK_DGRAM) {
+			for (uint16_t gamePort : kGamePorts) {
+				if (gamePort == port) AllowSharedPort(s);
+			}
+		}
+	}
+	return g_origBind(s, a, len);
+}
+
 bool HookExport(HMODULE m, const char *name, void *detour, void **orig)
 {
 	void *target = reinterpret_cast<void *>(GetProcAddress(m, name));
@@ -251,6 +280,11 @@ void VnetInstallHooks(bool knownExe)
 		HookExport(ws, "gethostbyname", reinterpret_cast<void *>(&HookGethostbyname), reinterpret_cast<void **>(&g_origGethostbyname)) &&
 		HookExport(ws, "sendto", reinterpret_cast<void *>(&HookSendto), reinterpret_cast<void **>(&g_origSendto)) &&
 		HookExport(ws, "WSASendTo", reinterpret_cast<void *>(&HookWSASendTo), reinterpret_cast<void **>(&g_origWSASendTo));
+	if (ok && RunningUnderWine()) {
+		if (!HookExport(ws, "bind", reinterpret_cast<void *>(&HookBind), reinterpret_cast<void **>(&g_origBind))) {
+			LogW("net", "virtual network: bind could NOT be hooked; the game may fail to open its game ports under Wine");
+		}
+	}
 	LogAt(ok ? kLogInfo : kLogError, "net", "virtual network: %s", ok ? "ready" : "Network functions could NOT be hooked");
 }
 
