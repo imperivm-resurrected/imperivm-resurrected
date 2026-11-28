@@ -554,7 +554,8 @@ void UpdatePlayers(State &st)
 	if (!r || r->kind != kSaveStrategy) return;
 	st.info = MpSaveReadInfo(r->vfsPath);
 	// A replay is no save the game can read: its players are the ones the mod noted beside it when it was written.
-	if (!st.info.valid && !r->players.empty()) {
+	if ((!st.info.valid || st.info.players.empty()) && !r->players.empty()) {
+		st.info = MpSaveInfo();
 		st.info.valid = true;
 		for (const SavePlayer &sp : r->players) {
 			MpSavePlayer p;
@@ -1381,8 +1382,9 @@ void PaintDetailBody(Painter &p, State &st, const View &v)
 		st.modList = ListState();
 	}
 	st.modGeom = ListGeom();
-	const DetailLines lines = DetailLinesOf(st, *rec);
+	DetailLines lines = DetailLinesOf(st, *rec);
 	const int x = dx + 12, w = dw - 24, playerRowH = l.full ? 24 : 20, modRowH = l.line;
+	lines.mods = ListWrap(p, lines.mods, w - 12, 3);
 	const int playersH = st.info.valid ? PaintPlayers(p, st.info, rec->playerStates, x, 0, w, INT_MAX, playerRowH, false) : 0;
 	// Everything under the thumbnail, then the thumbnail: on a short card it gives up height (down to about a quarter of the card) before
 	// the rest has to scroll.

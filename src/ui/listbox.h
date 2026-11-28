@@ -51,23 +51,62 @@ inline void ScrollbarPaint(Painter &p, int tx, int ty, int th, int total, int vi
 	geom.thumb = r;
 }
 
+// The lines as rows of `w`: a line too long for one goes on over the next rows, cut between words, its text already translated.
+inline std::vector<ListLine> ListWrap(Painter &p, const std::vector<ListLine> &lines, int w, int font)
+{
+	std::vector<ListLine> out;
+	const bool raw = p.raw;
+	for (const ListLine &l : lines) {
+		p.Font(l.heading ? 1 : font);
+		const std::string text = raw ? l.text : Tr(l.text);
+		const int avail = std::max(40, w - (l.heading ? 0 : 6));
+		p.raw = true;
+		if (p.TextWidth(text) <= avail) {
+			out.push_back({text, l.color, l.heading});
+			continue;
+		}
+		std::string current;
+		for (size_t i = 0; i <= text.size();) {
+			size_t j = text.find(' ', i);
+			if (j == std::string::npos) j = text.size();
+			const std::string piece = text.substr(i, j - i);
+			const std::string longer = current.empty() ? piece : current + " " + piece;
+			if (!current.empty() && p.TextWidth(longer) > avail) {
+				out.push_back({current, l.color, l.heading});
+				current = piece;
+			}
+			else current = longer;
+			i = j + 1;
+		}
+		if (!current.empty()) out.push_back({current, l.color, l.heading});
+	}
+	p.raw = raw;
+	return out;
+}
+
 inline void ListPaint(Painter &p, int x, int y, int w, int h, const std::vector<ListLine> &lines, ListState &st, ListGeom &geom, int font = 0,
 	int rowH = 22, int mx = -10000, int my = -10000)
 {
-	const int total = static_cast<int>(lines.size());
 	const int visible = std::max(1, (h - 4) / rowH);
+	// Wrapped to the room there is; again narrower when that makes it scroll.
+	std::vector<ListLine> rows = ListWrap(p, lines, w - 12, font);
+	if (ListMaxScroll(static_cast<int>(rows.size()), visible) > 0) rows = ListWrap(p, lines, w - 24, font);
+	const int total = static_cast<int>(rows.size());
 	const int maxScroll = ListMaxScroll(total, visible);
 	st.scroll = std::max(0, std::min(st.scroll, maxScroll));
 	const bool bar = maxScroll > 0;
 	p.Fill(x, y, w, h, pal::bg);
 	p.Frame(x, y, w, h, pal::lineStrong);
 	const int textW = w - 12 - (bar ? 12 : 0);
+	const bool raw = p.raw;
+	p.raw = true;
 	for (int i = 0; i < visible && st.scroll + i < total; i++) {
-		const ListLine &l = lines[st.scroll + i];
+		const ListLine &l = rows[st.scroll + i];
 		p.Font(l.heading ? 1 : font);
 		p.Text(x + 8 + (l.heading ? 0 : 6), y + 2 + i * rowH, textW - (l.heading ? 0 : 6), rowH, l.text, l.color,
 			DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 	}
+	p.raw = raw;
 	geom = ListGeom();
 	RECT a = p.R(x, y, w, h);
 	OffsetRect(&a, p.ox, p.oy);

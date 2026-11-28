@@ -412,6 +412,25 @@ struct Painter {
 		RECT r = R(x, y, w, h);
 		SetTextColor(dc, c);
 		std::wstring ws = W(raw ? t : Tr(t));
+		// A line too long for its box, in a box with room for more: on the lines it needs, placed as the single line would have been,
+		// instead of cut with "...".
+		if ((fmt & DT_SINGLELINE) && !ws.empty()) {
+			SIZE sz = {};
+			TEXTMETRICW tm = {};
+			GetTextExtentPoint32W(dc, ws.c_str(), static_cast<int>(ws.size()), &sz);
+			GetTextMetricsW(dc, &tm);
+			if (sz.cx > r.right - r.left && tm.tmHeight > 0 && r.bottom - r.top >= 2 * tm.tmHeight) {
+				const UINT wrap = (fmt & ~(DT_SINGLELINE | DT_VCENTER | DT_BOTTOM)) | DT_WORDBREAK | DT_NOPREFIX;
+				RECT calc = r;
+				DrawTextW(dc, ws.c_str(), static_cast<int>(ws.size()), &calc, wrap | DT_CALCRECT);
+				const LONG th = std::min(calc.bottom - calc.top, r.bottom - r.top);
+				RECT at = r;
+				if (fmt & DT_VCENTER) at.top += (r.bottom - r.top - th) / 2;
+				else if (fmt & DT_BOTTOM) at.top = r.bottom - th;
+				DrawTextW(dc, ws.c_str(), static_cast<int>(ws.size()), &at, wrap | DT_END_ELLIPSIS);
+				return;
+			}
+		}
 		DrawTextW(dc, ws.c_str(), static_cast<int>(ws.size()), &r, fmt | DT_NOPREFIX | DT_END_ELLIPSIS);
 	}
 	// Uppercase, with the letter spacing a plain DrawText cannot align on its own.
