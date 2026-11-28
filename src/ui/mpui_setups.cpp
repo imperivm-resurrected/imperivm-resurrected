@@ -192,7 +192,7 @@ std::vector<RoomSetup> ReadRoomSetups()
 		s.rules = static_cast<unsigned>(j.GetInt64("rules"));
 		s.sites = static_cast<unsigned>(j.GetInt64("sites"));
 		const int speed = j.GetInt("speed", kRoomSpeedProfile);
-		s.speed = speed == -1 || (speed >= 1 && speed <= 100) ? speed : kRoomSpeedProfile;
+		s.speed = speed == -1 || (speed >= kRoomSpeedMin && speed <= kRoomSpeedMax) ? speed : kRoomSpeedProfile;
 		s.teamColors = j.GetBool("teamColors");
 		const Json *opts = j.Get("options");
 		for (size_t i = 0; opts && opts->type == Json::Array && i < opts->arr.size(); i++) {
@@ -380,7 +380,7 @@ std::string SetupSummary(const RoomSetup &s)
 		if (!text(0x01000008).empty()) parts.push_back(text(0x01000008));
 	}
 	if (!text(0x1002).empty()) parts.push_back(text(0x1002));
-	if (s.speed != kRoomSpeedProfile) parts.push_back(TrFmt("Speed %s", {std::to_string(SpeedPercent(s.speed)) + " %"}));
+	if (s.speed >= kRoomSpeedMin) parts.push_back(TrFmt("Speed %s", {std::to_string(SpeedPercent(s.speed)) + " %"}));
 	std::string out;
 	for (const std::string &part : parts) out += (out.empty() ? "" : "  \xC2\xB7  ") + part;
 	return out;

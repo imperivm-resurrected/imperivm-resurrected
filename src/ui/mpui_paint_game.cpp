@@ -340,8 +340,10 @@ void PaintOptionsCard(Painter &p, const State &st, int x, int y, int w, int h)
 		comboRow(0x1005, "Starting gold", "Starting gold");
 		{
 			const bool held = st.speedDrag || (st.speedHeld && GetTickCount() - st.speedHeld < 1500);
-			const int value = held ? st.speedTry : g.gameSpeed >= 1 ? g.gameSpeed : kNormalSpeedValue, percent = SpeedPercent(value);
-			grid.Slider("Game speed", value, percent, percent != 100, canEdit && !g.optionsLocked, kGSpeedSlider,
+			const int pace = held ? SpeedPace(st.speedTry) : g.gameSpeed >= kRoomSpeedMin ? g.gameSpeed : g.normalSpeed;
+			const int percent = SpeedPercent(pace);
+			grid.Slider("Game speed", held ? st.speedTry : SpeedSlider(pace), percent, percent != SpeedPercent(g.normalSpeed), canEdit && !g.optionsLocked,
+				kGSpeedSlider,
 				"The speed the game starts at, for every player. During the game it is changed as always.");
 		}
 		if (g.online) {

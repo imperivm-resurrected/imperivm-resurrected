@@ -221,11 +221,12 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		g_s.edit.dragging = false;
 		g_s.mouseDown = false;
 		g_s.colorDrag = 0;
-		// The speed is given to the room when the slider is let go; the exact normal speed near its place.
+		// The speed is given to the room when the slider is let go; at the game's normal speed the room leaves it to the game.
 		if (g_s.speedDrag) {
 			g_s.speedDrag = false;
 			g_s.speedHeld = GetTickCount();
-			const int value = SpeedPercent(g_s.speedTry) == 100 ? -1 : g_s.speedTry;
+			const int pace = SpeedPace(g_s.speedTry);
+			const int value = SpeedPercent(pace) == SpeedPercent(g_s.game.normalSpeed) ? -1 : pace;
 			g_s.game.gameSpeed = value;
 			GameRoomSetSpeed(value);
 		}

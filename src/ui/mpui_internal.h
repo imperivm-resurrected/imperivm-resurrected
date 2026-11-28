@@ -112,22 +112,30 @@ enum { kPredTeam, kPredRace, kPredAi, kPredReady, kPredOptSel, kPredOptVal, kPre
 
 enum { kDropRace, kDropAi, kDropOption, kDropColor, kDropSlot, kDropSites, kDropModOption, kDropPreset, kDropPlayers, kDropProfile, kDropVisibility, kDropSaveGame, kDropSpectators, kDropPickSort, kDropBonus, kDropTeam, kDropTourney, kDropRankedSeason };
 
-// The room's game speed is the options' slider, 1 to 100 (-1 the normal speed): the game turns it into a pace with
-// value * 0x8fd / 100 + 700, where 1000 is the normal speed. The percent shown for it:
-inline int SpeedPercent(int value)
+// The room's game speed is a pace (gameroom.h); its slider is the options' one, 1 to 100, which the game turns into a pace with
+// value * 0x8fd / 100 + 700 and reads back rounding to the nearest step.
+inline int SpeedPace(int slider)
 {
-	if (value < 1) return 100;
-	return ((value * 0x8fd / 100 + 700) / 10 + 2) / 5 * 5;
+	const int pace = slider * 0x8fd / 100 + 700;
+	return pace < kRoomSpeedMin ? kRoomSpeedMin : pace > kRoomSpeedMax ? kRoomSpeedMax : pace;
 }
-// The slider's place of the normal speed.
-constexpr int kNormalSpeedValue = 13;
+inline int SpeedSlider(int pace)
+{
+	const int value = ((pace - 700) * 100 + 0x8fd / 2) / 0x8fd;
+	return value < 1 ? 1 : value > 100 ? 100 : value;
+}
+// The percent shown for a pace, as the options show it.
+inline int SpeedPercent(int pace)
+{
+	return (pace / 10 + 2) / 5 * 5;
+}
 // The room's speed slider takes the mouse this far on each side of its track.
 constexpr int kSpeedSliderPad = 6;
 // The slider's value under x, in the room speed slider's hit.
 inline int SpeedAt(const RECT &r, int x)
 {
 	const int w = (r.right - r.left) - 2 * kSpeedSliderPad;
-	if (w <= 0) return kNormalSpeedValue;
+	if (w <= 0) return 1;
 	const int at = x - r.left - kSpeedSliderPad;
 	return 1 + ((at < 0 ? 0 : at > w ? w : at) * 99 + w / 2) / w;
 }
@@ -327,7 +335,7 @@ struct State {
 	// The speed slider, while dragged and for a moment after it is let go (until the room has the new speed): its hit and its value.
 	bool speedDrag = false;
 	RECT speedRect = {};
-	int speedTry = kNormalSpeedValue;
+	int speedTry = 1;
 	DWORD speedHeld = 0;
 	OnlineRoom room;
 	bool loading = false;

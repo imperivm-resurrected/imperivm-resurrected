@@ -93,8 +93,10 @@ struct GameRoomSnapshot {
 	// The last scenario offered to the selector that the game refused (not for multiplayer, or unreadable): its path.
 	std::string pickerRefused;
 	std::vector<BonusDef> bonuses;
-	// The game's speed in the room's options (+0x5c, from the profile's gamespeed): -1 is the normal speed.
+	// The game's speed in the room's options (+0x5c, from the profile's gamespeed): the match's pace, kRoomSpeedMin to kRoomSpeedMax
+	// (1000 is real time), or -1 for the game's normal one, normalSpeed (GamePlay/NormalSpeed, 1400 in the game's own data).
 	int gameSpeed = -1;
+	int normalSpeed = 1400;
 	// GameRoomLockOptions holds the room.
 	bool optionsLocked = false;
 };
@@ -112,9 +114,10 @@ void GameRoomKick(int slot);
 void GameRoomPlayerLeft(const std::string &name);
 void GameRoomSetSiteFlags(unsigned bits);
 void GameRoomSetRules(unsigned bits);
-// The speed the room's game is played at, for every player: -1 the normal speed, 1 to 100 the options' slider; kRoomSpeedProfile leaves the
-// host's own (the profile's game speed, as the game takes it).
+// The speed the room's game is played at, for every player: -1 the game's normal speed, or the pace, kRoomSpeedMin to kRoomSpeedMax (the
+// options' slider goes over the same); kRoomSpeedProfile leaves the host's own (the profile's game speed, as the game takes it).
 constexpr int kRoomSpeedProfile = -2;
+constexpr int kRoomSpeedMin = 700, kRoomSpeedMax = 3000;
 void GameRoomSetSpeed(int value);
 int GameRoomSpeed();
 // A ranked or cup room, host or guest, until it closes: the player's own options for normal games are kept aside. Nothing of the room

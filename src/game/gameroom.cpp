@@ -85,6 +85,23 @@ unsigned g_lockRules = 0, g_lockSites = 0;
 // SaveLocalPlayerPrefs (006dabc0) overwrites it with the room's, and saves player.ini, when the game starts and when the player leaves.
 const size_t kProfileRoomOffset = 0xc8, kProfileRoomSize = 0xec;
 const size_t kOptGameSpeed = 0x5c;
+
+// GamePlay/NormalSpeed of the game's data: the pace of a match whose room leaves its speed at -1 (CVXGame::CreateWorldCore, 00526833).
+int NormalSpeed()
+{
+	typedef const char *(__fastcall *IniGetInt_t)(void *ini, void *edx, const char *section, const char *key, int *out);
+	void *ini = *reinterpret_cast<void **>(addr::kConstIni);
+	int pace = 0;
+	if (ini) {
+		__try {
+			if (reinterpret_cast<IniGetInt_t>(addr::kHashIniGetInt)(ini, nullptr, "GamePlay", "NormalSpeed", &pace) != nullptr) pace = 0;
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER) {
+			pace = 0;
+		}
+	}
+	return pace >= kRoomSpeedMin && pace <= kRoomSpeedMax ? pace : 1400;
+}
 char g_keptProfileRoom[kProfileRoomSize];
 void *g_keptProfileOf = nullptr;
 typedef void *(__fastcall *ProfileSave_t)(void *profile, void *edx, const char *path);
@@ -799,6 +816,7 @@ void TakeSnapshot()
 			s.siteFlags = bits & kSiteMask;
 			s.rules = (s.host ? g_ruleFlags : bits) & kRuleMask;
 			s.gameSpeed = ro ? *reinterpret_cast<const int *>(ro + kOptGameSpeed) : -1;
+			s.normalSpeed = NormalSpeed();
 			s.optionsLocked = g_lockOn;
 			s.randomMap = ro ? *reinterpret_cast<const int *>(ro + 0x18) != 0 : *reinterpret_cast<int *>(static_cast<char *>(g_dlg) + 0x9c) != 0;
 			if (ro) s.mode.assign(ro + 0x60, strnlen(ro + 0x60, 0x20));
@@ -1167,6 +1185,11 @@ int __fastcall HookApplyToGame(void *self, void *edx, char *opts)
 			speed = -1;
 		}
 		else if (!g_lockOn && GameRoomSpeed() != kRoomSpeedProfile) speed = GameRoomSpeed();
+		// Builds of 2026-11-28 saved the options' slider (1 to 100) in the profile, which the game would take as the pace.
+		if (speed != -1 && (speed < kRoomSpeedMin || speed > kRoomSpeedMax)) {
+			LogW("room", "the room had the game speed %d, not a pace: it is played at the normal speed", speed);
+			speed = -1;
+		}
 		if (!NetMultiplayerSaveLoading()) GameModeApplyOptions(opts);
 		LogApplied(opts);
 	}
@@ -2021,7 +2044,7 @@ int GameRoomSpeed()
 {
 	if (g_roomSpeed == -3) {
 		const int saved = GameRoomLoadSetting("GameSpeed", kRoomSpeedProfile);
-		g_roomSpeed = saved == -1 || (saved >= 1 && saved <= 100) ? saved : kRoomSpeedProfile;
+		g_roomSpeed = saved == -1 || (saved >= kRoomSpeedMin && saved <= kRoomSpeedMax) ? saved : kRoomSpeedProfile;
 	}
 	return g_roomSpeed;
 }
@@ -2030,7 +2053,7 @@ void GameRoomSetSpeed(int value)
 {
 	Queue([value] {
 		if (g_lockOn) return;
-		g_roomSpeed = value == -1 || (value >= 1 && value <= 100) ? value : kRoomSpeedProfile;
+		g_roomSpeed = value == -1 || (value >= kRoomSpeedMin && value <= kRoomSpeedMax) ? value : kRoomSpeedProfile;
 		if (!g_prefsKept) GameRoomSaveSetting("GameSpeed", g_roomSpeed);
 		void *opts = *reinterpret_cast<void **>(addr::kGameOptionsDialog);
 		typedef void(__fastcall *OnApply_t)(void *opts);
