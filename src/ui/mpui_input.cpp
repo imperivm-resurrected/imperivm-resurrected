@@ -91,6 +91,7 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 			FieldGeom geom;
 			if (FieldGet(ActionOfField(g_s.focus), geom)) g_s.edit.caret = EditIndexAt(geom, FocusedText(), g_s.mouseX);
 		}
+		if (g_s.speedDrag && g_s.mouseDown) g_s.speedTry = SpeedAt(g_s.speedRect, g_s.mouseX);
 		if (g_s.colorDrag && g_s.mouseDown) {
 			g_s.colorTry = colorwheel::Pick(g_s.colorDrag == kGColorValue, g_s.colorRect, g_s.mouseX, g_s.mouseY, g_s.colorTry);
 		}
@@ -143,6 +144,11 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 					break;
 				}
 				DoAction(h.action, h.arg);
+				if (h.action == kGSpeedSlider && g_s.speedDrag) {
+					g_s.speedRect = h.r;
+					g_s.speedTry = SpeedAt(h.r, pt.x);
+					break;
+				}
 				if (msg == WM_LBUTTONDBLCLK && h.action == kSelect && g_s.ready) {
 					const std::vector<int> vis = Visible(g_s);
 					if (g_s.selected >= 0 && g_s.selected < static_cast<int>(vis.size())) {
@@ -169,6 +175,12 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 	}
 	case WM_MOUSEWHEEL: {
 		if (LinkOfferShown(g_s)) return true;
+		if (g_s.setupDialog == kSetupOpenLoad) {
+			const int most = std::max(0, static_cast<int>(g_s.setups.size()) - kSetupRows);
+			g_s.setupScroll = std::max(0, std::min(most, g_s.setupScroll - GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA));
+			return true;
+		}
+		if (g_s.setupDialog) return true;
 		if (g_s.syncConfirm) {
 			ListWheel(g_s.syncList, g_s.syncGeom, POINT{g_s.mouseX, g_s.mouseY}, GET_WHEEL_DELTA_WPARAM(wp));
 			return true;
@@ -209,6 +221,14 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		g_s.edit.dragging = false;
 		g_s.mouseDown = false;
 		g_s.colorDrag = 0;
+		// The speed is given to the room when the slider is let go; the exact normal speed near its place.
+		if (g_s.speedDrag) {
+			g_s.speedDrag = false;
+			g_s.speedHeld = GetTickCount();
+			const int value = SpeedPercent(g_s.speedTry) == 100 ? -1 : g_s.speedTry;
+			g_s.game.gameSpeed = value;
+			GameRoomSetSpeed(value);
+		}
 		g_s.resizeCol = -1;
 		g_s.dropBar = ScrollDrag();
 		TourneyPanUp({static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))}, g_s.hits);
@@ -243,7 +263,7 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		else if (g_s.passPrompt && wp == VK_ESCAPE) {
 			DoAction(kPassCancel, 0);
 		}
-		else if (g_s.setupPrompt && (wp == VK_ESCAPE || (wp == VK_RETURN && g_s.tabAction < 0))) {
+		else if (g_s.setupDialog && (wp == VK_ESCAPE || (wp == VK_RETURN && g_s.tabAction < 0 && g_s.setupDialog == kSetupOpenSave))) {
 			DoAction(wp == VK_ESCAPE ? kSetupCancel : kSetupSave, 0);
 		}
 		else if (LinkOfferShown(g_s) && (wp == VK_ESCAPE || (wp == VK_RETURN && g_s.tabAction < 0))) {

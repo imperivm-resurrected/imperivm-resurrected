@@ -123,6 +123,22 @@ struct OptionGrid {
 		}
 		Next();
 	}
+	// A slider of 1 to 100, shown as `percent`; its drag is mpui_input's.
+	void Slider(const char *label, int value, int percent, bool special, bool enabled, int action, const char *cellHelp)
+	{
+		Hover(cellHelp);
+		const int cx = CellX(), boxW = std::min(240, colW / 2 + 24), boxX = cx + colW - boxW, valueW = 58, sw = boxW - valueW;
+		p.Font(3);
+		p.Text(cx, y, boxX - cx - 8, kCellH, label, pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		if (Shown(kCellH)) {
+			const bool hot = enabled && (st.speedDrag || p.Hover(boxX - kSpeedSliderPad, y, sw + 2 * kSpeedSliderPad, kCellH, st.mouseX, st.mouseY));
+			PaintSlider(p, boxX, y + kCellH / 2 - 10, sw, 20, (value - 1) / 99.0f, enabled, hot);
+			p.Font(special ? 1 : 0);
+			p.Text(boxX + sw + 6, y, valueW - 6, kCellH, std::to_string(percent) + " %", enabled ? pal::text : pal::textDim, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+			if (enabled) p.AddHit(boxX - kSpeedSliderPad, y + 4, sw + 2 * kSpeedSliderPad, kCellH - 8, action, 0);
+		}
+		Next();
+	}
 	void Toggle(const char *label, bool on, bool enabled, int action, int arg, const char *cellHelp)
 	{
 		const bool hov = Hover(cellHelp) && enabled;
@@ -291,9 +307,7 @@ void PaintOptionsCard(Painter &p, const State &st, int x, int y, int w, int h)
 				bool enabled;
 				return gameValue(id, key, index, enabled);
 			});
-			const int setup = MatchRoomSetup(st);
-			grid.Combo("Preset", setup >= 0 ? st.setups[setup].name : std::string(preset >= 0 ? kPresets[preset].name : "Custom setup"),
-				setup >= 0 || preset != 0, canEdit, kDropPreset, 0,
+			grid.Combo("Preset", preset >= 0 ? kPresets[preset].name : "Custom setup", preset != 0, canEdit, kDropPreset, 0,
 				"Classic: like the original game. Competitive: 5000 gold, normal population, no bonuses, unexplored map with fog and diplomacy locked. Various: 10000 gold, high population, with bonuses, explored map and no fog. Competitive and Various also turn on shared control.");
 		}
 		comboRow(0x1000, "Map type", "Map type");
@@ -324,8 +338,12 @@ void PaintOptionsCard(Painter &p, const State &st, int x, int y, int w, int h)
 		comboRow(0x1003, "Limit", "Limit");
 		comboRow(0x1004, "Population", "Population");
 		comboRow(0x1005, "Starting gold", "Starting gold");
-		grid.Combo("Game speed", std::to_string(SpeedPercent(g.gameSpeed)) + " %", g.gameSpeed != -1, canEdit && !RankedRoomLocked(st), kDropSpeed, 0,
-			"The speed the game starts at, for every player. During the game it is changed as always.");
+		{
+			const bool held = st.speedDrag || (st.speedHeld && GetTickCount() - st.speedHeld < 1500);
+			const int value = held ? st.speedTry : g.gameSpeed >= 1 ? g.gameSpeed : kNormalSpeedValue, percent = SpeedPercent(value);
+			grid.Slider("Game speed", value, percent, percent != 100, canEdit && !g.optionsLocked, kGSpeedSlider,
+				"The speed the game starts at, for every player. During the game it is changed as always.");
+		}
 		if (g.online) {
 			grid.Combo("Spectators", SpectatorChoice(st), false, host && canEdit, kDropSpectators, 0,
 				host ? "Who can watch the game without playing, and with how much delay. It can be changed while the room is open."
@@ -383,10 +401,19 @@ void PaintOptionsCard(Painter &p, const State &st, int x, int y, int w, int h)
 		g_optGeomOut = geom;
 	}
 	p.Fill(x + 20, listBottom, w - 40, 1, pal::hairline);
+	int helpW = w - 56;
+	if (host && !load && !RankedRoomLocked(st) && !g.optionsLocked) {
+		const int bh = 32, by = listBottom + (kHelpH - bh) / 2;
+		const int saveW = p.ButtonWidth("Save setup", 120, 1), loadW = p.ButtonWidth("Load setup", 120, 1);
+		const int saveX = x + w - 28 - saveW, loadX = saveX - 10 - loadW;
+		p.Button(loadX, by, loadW, bh, "Load setup", kSetupOpenLoad, 0, mx, my, canEdit && !st.setups.empty());
+		p.Button(saveX, by, saveW, bh, "Save setup", kSetupOpenSave, 0, mx, my);
+		helpW = loadX - 16 - (x + 28);
+	}
 	p.Font(3);
 	const std::string help = grid.help ? std::string(grid.help) : !host && g.online ? std::string("Only the host can change the options.") : std::string();
-	p.Clip(x + 20, listBottom + 2, w - 40, kHelpH - 4);
-	p.TextWrapped(x + 28, listBottom + 8, w - 56, kHelpH - 10, help, pal::textDim);
+	p.Clip(x + 20, listBottom + 2, helpW + 8, kHelpH - 4);
+	p.TextWrapped(x + 28, listBottom + 8, helpW, kHelpH - 10, help, pal::textDim);
 	p.Unclip();
 }
 }

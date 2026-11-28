@@ -63,7 +63,7 @@ void MpUiGameThreadTick()
 				LogI("lobby", "game room ready");
 				g_s.setups = ReadRoomSetups();
 				g_s.setupApply = SetupApply();
-				g_s.setupPrompt = false;
+				g_s.setupDialog = 0;
 				g_s.createSave = -1;
 				g_s.roomTab = 0;
 				g_s.teamColors = false;
@@ -331,8 +331,9 @@ void MpUiGameThreadTick()
 		else if (g_s.gameWasActive) {
 			g_s.gameWasActive = false;
 			g_s.setupApply.on = false;
-			if (g_s.setupPrompt && g_s.focus == kSetupNameField) g_s.focus = kNoField;
-			g_s.setupPrompt = false;
+			if (g_s.focus == kSetupNameField) g_s.focus = kNoField;
+			g_s.setupDialog = 0;
+			g_s.speedDrag = false;
 			g_s.closedRoomGen = g_s.lastRoomGen;
 			g_s.gameClosedAt = GetTickCount();
 			g_s.closedByUser = g_s.leftByUser;

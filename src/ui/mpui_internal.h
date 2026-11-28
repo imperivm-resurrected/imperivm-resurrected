@@ -64,8 +64,10 @@ enum Action {
 	kGColorCustom, kGColorWheel, kGColorValue, kGColorUse, kGColorBack,
 	// The list's filter tabs: the filter is the argument.
 	kRoomFilter,
-	// The host's saved room setups: the name field of the dialog that saves one, and its buttons.
-	kFieldSetupName, kSetupSave, kSetupDelete, kSetupCancel,
+	// The host's saved room setups: the dialogs that save one (with its name field) and load one, and their buttons.
+	kSetupOpenSave, kSetupOpenLoad, kFieldSetupName, kSetupSave, kSetupLoad, kSetupDelete, kSetupCancel,
+	// The room's game speed: pressed on its slider, which is then dragged (mpui_input).
+	kGSpeedSlider,
 };
 
 typedef int(__cdecl *HostGame_t)(int, unsigned, int);
@@ -108,21 +110,29 @@ enum Field { kNoField, kChatField, kNameField, kPassField, kJoinPassField, kSear
 
 enum { kPredTeam, kPredRace, kPredAi, kPredReady, kPredOptSel, kPredOptVal, kPredColor };
 
-enum { kDropRace, kDropAi, kDropOption, kDropColor, kDropSlot, kDropSites, kDropModOption, kDropPreset, kDropPlayers, kDropProfile, kDropVisibility, kDropSaveGame, kDropSpectators, kDropPickSort, kDropBonus, kDropTeam, kDropTourney, kDropRankedSeason, kDropSpeed };
+enum { kDropRace, kDropAi, kDropOption, kDropColor, kDropSlot, kDropSites, kDropModOption, kDropPreset, kDropPlayers, kDropProfile, kDropVisibility, kDropSaveGame, kDropSpectators, kDropPickSort, kDropBonus, kDropTeam, kDropTourney, kDropRankedSeason };
 
-// The room's game speeds: the percent shown, and the options' slider value the game takes (-1 the normal speed). The game turns the slider
-// into a pace with value * 0x8fd / 100 + 700, where 1000 is the normal speed.
-struct SpeedChoice {
-	int percent, value;
-};
-const SpeedChoice kSpeedChoices[] = {{100, -1}, {120, 22}, {140, 30}, {160, 39}, {180, 48}, {200, 57}, {250, 78}, {300, 100}};
-const int kSpeedChoiceCount = static_cast<int>(sizeof(kSpeedChoices) / sizeof(kSpeedChoices[0]));
-// The percent of a game speed as the room has it (-1 the normal speed).
+// The room's game speed is the options' slider, 1 to 100 (-1 the normal speed): the game turns it into a pace with
+// value * 0x8fd / 100 + 700, where 1000 is the normal speed. The percent shown for it:
 inline int SpeedPercent(int value)
 {
 	if (value < 1) return 100;
 	return ((value * 0x8fd / 100 + 700) / 10 + 2) / 5 * 5;
 }
+// The slider's place of the normal speed.
+constexpr int kNormalSpeedValue = 13;
+// The room's speed slider takes the mouse this far on each side of its track.
+constexpr int kSpeedSliderPad = 6;
+// The slider's value under x, in the room speed slider's hit.
+inline int SpeedAt(const RECT &r, int x)
+{
+	const int w = (r.right - r.left) - 2 * kSpeedSliderPad;
+	if (w <= 0) return kNormalSpeedValue;
+	const int at = x - r.left - kSpeedSliderPad;
+	return 1 + ((at < 0 ? 0 : at > w ? w : at) * 99 + w / 2) / w;
+}
+// The rows the dialog that loads a setup shows at once.
+constexpr int kSetupRows = 7;
 
 // The argument of kGDropOpen: the kind in the low bits and the slot or option index above them.
 const int kDropKindBits = 5, kDropKindMask = (1 << kDropKindBits) - 1;
@@ -308,9 +318,17 @@ struct State {
 	bool passWatch = false;
 	// The host's saved setups, read when the room opens; the dialog that saves one, and the one being put in the room.
 	std::vector<RoomSetup> setups;
-	bool setupPrompt = false;
+	// 0, or the dialog open: kSetupOpenSave or kSetupOpenLoad. In the second, the first row shown and the row whose delete asks again.
+	int setupDialog = 0;
+	int setupScroll = 0;
+	int setupDeleteAsk = -1;
 	std::string setupInput;
 	SetupApply setupApply;
+	// The speed slider, while dragged and for a moment after it is let go (until the room has the new speed): its hit and its value.
+	bool speedDrag = false;
+	RECT speedRect = {};
+	int speedTry = kNormalSpeedValue;
+	DWORD speedHeld = 0;
 	OnlineRoom room;
 	bool loading = false;
 	bool ready = false;
@@ -865,6 +883,7 @@ void DeleteRoomSetup(State &st, const std::string &name);
 void StartRoomSetup(State &st, const RoomSetup &s);
 void StepRoomSetup(State &st, const GameRoomSnapshot &g);
 void PaintSetupPrompt(Painter &p, const State &st);
+void PaintSetupLoad(Painter &p, const State &st);
 extern std::vector<uint32_t> g_bg;
 bool MainMenuOnTop();
 void WakeGameThread();

@@ -2415,6 +2415,9 @@ bool TourneyBlocksAction(int action, int arg)
 	switch (action) {
 	case kGRuleToggle:
 	case kGSiteToggle:
+	case kGSpeedSlider:
+	case kSetupOpenLoad:
+	case kSetupLoad:
 	case kGOptToggle: blocked = true; break;
 	// The room's selector, while the tournament picks its scenario in it.
 	case kPickRow:
@@ -2426,8 +2429,7 @@ bool TourneyBlocksAction(int action, int arg)
 			const int id = index >= 0 && index < static_cast<int>(g_s.game.options.size()) ? g_s.game.options[index].id : 0;
 			blocked = !(g_tourney.lock.mapAllowed && (id == 0x1000 || id == 0x01000008));
 		}
-		else blocked = kind == kDropPreset || kind == kDropSites || kind == kDropModOption || kind == kDropSpectators || kind == kDropSlot || kind == kDropTeam ||
-			kind == kDropSpeed;
+		else blocked = kind == kDropPreset || kind == kDropSites || kind == kDropModOption || kind == kDropSpectators || kind == kDropSlot || kind == kDropTeam;
 		break;
 	}
 	// A 1v1 has no teams to choose: two in one would be allies.

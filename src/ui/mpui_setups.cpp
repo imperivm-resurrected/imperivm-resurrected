@@ -356,9 +356,69 @@ void PaintSetupPrompt(Painter &p, const State &st)
 	const std::string name = SetupName(st.setupInput);
 	bool exists = false;
 	for (const RoomSetup &s : st.setups) exists = exists || s.name == name;
-	std::vector<DialogButton> buttons;
-	if (exists) buttons.push_back({"Delete", kSetupDelete});
-	buttons.push_back({"Save", kSetupSave, 0, true, !name.empty()});
-	buttons.push_back({"Cancel", kSetupCancel});
-	DialogButtons(p, d, buttons, mx, my);
+	DialogButtons(p, d, {{exists ? "Overwrite" : "Save", kSetupSave, 0, true, !name.empty()}, {"Cancel", kSetupCancel}}, mx, my);
+}
+
+namespace {
+// The map, the size, the mode and the speed of a setup, as the room's lists had them when it was saved.
+std::string SetupSummary(const RoomSetup &s)
+{
+	auto text = [&s](int id) {
+		for (const RoomSetupOption &so : s.options) {
+			if (so.id == id && !so.checkbox) return so.text;
+		}
+		return std::string();
+	};
+	std::vector<std::string> parts;
+	if (!s.scenario.empty()) {
+		std::string file = FileOf(s.scenario);
+		if (file.size() > 5 && _stricmp(file.c_str() + file.size() - 5, ".bfhp") == 0) file.resize(file.size() - 5);
+		parts.push_back(file);
+	}
+	else if (s.random) {
+		if (!text(kMapTypeOption).empty()) parts.push_back(MapTypeLabel(text(kMapTypeOption)));
+		if (!text(0x01000008).empty()) parts.push_back(text(0x01000008));
+	}
+	if (!text(0x1002).empty()) parts.push_back(text(0x1002));
+	if (s.speed != kRoomSpeedProfile) parts.push_back(TrFmt("Speed %s", {std::to_string(SpeedPercent(s.speed)) + " %"}));
+	std::string out;
+	for (const std::string &part : parts) out += (out.empty() ? "" : "  \xC2\xB7  ") + part;
+	return out;
+}
+}
+
+void PaintSetupLoad(Painter &p, const State &st)
+{
+	const int mx = st.mouseX, my = st.mouseY, rowH = 54;
+	const int n = static_cast<int>(st.setups.size()), shown = std::max(1, std::min(kSetupRows, n));
+	const Dialog d = DialogBegin(p, st.viewW, st.viewH, 680, 60 + shown * rowH + 14 + 56, "Load setup");
+	const int current = MatchRoomSetup(st), first = std::max(0, std::min(st.setupScroll, n - kSetupRows));
+	const int delW = p.ButtonWidth(st.setupDeleteAsk >= 0 ? "Delete?" : "Delete", 104, 1), loadW = p.ButtonWidth("Load", 104, 1);
+	const int delX = d.x + d.w - d.pad - delW, loadX = delX - 8 - loadW, textW = loadX - d.BodyX() - 16;
+	int ry = d.BodyTop();
+	for (int i = first; i < n && i < first + kSetupRows; i++, ry += rowH) {
+		const RoomSetup &s = st.setups[i];
+		if (p.Hover(d.x + 1, ry, d.w - 2, rowH, mx, my)) p.Fill(d.x + 1, ry + 1, d.w - 2, rowH - 2, pal::selected);
+		// The one the room has now.
+		if (i == current) p.Fill(d.x + 1, ry + 8, 3, rowH - 16, pal::red);
+		const bool raw = p.raw;
+		p.raw = true;
+		p.Font(1);
+		p.Text(d.BodyX(), ry + 6, textW, 24, s.name, pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Font(3);
+		p.Text(d.BodyX(), ry + 29, textW, 20, SetupSummary(s), pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.raw = raw;
+		const int bh = 32, by = ry + (rowH - bh) / 2;
+		p.Button(loadX, by, loadW, bh, "Load", kSetupLoad, i, mx, my, true, true);
+		p.Button(delX, by, delW, bh, st.setupDeleteAsk == i ? "Delete?" : "Delete", kSetupDelete, i, mx, my, true, false);
+		if (i + 1 < n && i + 1 < first + kSetupRows) p.Fill(d.BodyX(), ry + rowH - 1, d.BodyW(), 1, pal::hairline);
+	}
+	// More than the dialog shows: where the rows shown are among them (the wheel moves them).
+	if (n > kSetupRows) {
+		const int trackY = d.BodyTop(), trackH = shown * rowH, barH = std::max(24, trackH * kSetupRows / n);
+		const int barY = trackY + (trackH - barH) * first / (n - kSetupRows);
+		p.Fill(d.x + d.w - 8, trackY, 3, trackH, pal::field);
+		p.Fill(d.x + d.w - 8, barY, 3, barH, pal::edgeHot);
+	}
+	DialogButtons(p, d, {{"Close", kSetupCancel}}, mx, my);
 }

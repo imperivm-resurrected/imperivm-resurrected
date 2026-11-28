@@ -110,7 +110,7 @@ void DoAction(int action, int arg)
 			DoAction(kPassCancel, 0);
 			break;
 		}
-		if (g_s.setupPrompt) {
+		if (g_s.setupDialog) {
 			DoAction(kSetupCancel, 0);
 			break;
 		}
@@ -175,6 +175,18 @@ void DoAction(int action, int arg)
 		g_s.joinPassInput.clear();
 		g_s.focus = kNoField;
 		break;
+	case kSetupOpenSave: {
+		const int current = MatchRoomSetup(g_s);
+		g_s.setupInput = current >= 0 ? g_s.setups[current].name : std::string();
+		g_s.setupDialog = kSetupOpenSave;
+		FocusField(kSetupNameField);
+		break;
+	}
+	case kSetupOpenLoad:
+		g_s.setupDialog = kSetupOpenLoad;
+		g_s.setupScroll = 0;
+		g_s.setupDeleteAsk = -1;
+		break;
 	case kFieldSetupName: FocusField(kSetupNameField); break;
 	case kSetupSave: {
 		const std::string name = SetupName(g_s.setupInput);
@@ -183,22 +195,34 @@ void DoAction(int action, int arg)
 			break;
 		}
 		SaveRoomSetup(g_s, name);
-		g_s.setupPrompt = false;
+		g_s.setupDialog = 0;
 		g_s.setupInput.clear();
 		g_s.focus = kNoField;
 		break;
 	}
+	case kSetupLoad:
+		if (arg >= 0 && arg < static_cast<int>(g_s.setups.size())) StartRoomSetup(g_s, g_s.setups[arg]);
+		g_s.setupDialog = 0;
+		break;
+	// The first click asks again on the same button.
 	case kSetupDelete:
-		DeleteRoomSetup(g_s, SetupName(g_s.setupInput));
-		g_s.setupPrompt = false;
-		g_s.setupInput.clear();
-		g_s.focus = kNoField;
+		if (g_s.setupDeleteAsk != arg) {
+			g_s.setupDeleteAsk = arg;
+			break;
+		}
+		g_s.setupDeleteAsk = -1;
+		if (arg >= 0 && arg < static_cast<int>(g_s.setups.size())) DeleteRoomSetup(g_s, g_s.setups[arg].name);
+		g_s.setupScroll = std::max(0, std::min(g_s.setupScroll, static_cast<int>(g_s.setups.size()) - kSetupRows));
+		if (g_s.setups.empty()) g_s.setupDialog = 0;
 		break;
 	case kSetupCancel:
-		g_s.setupPrompt = false;
+		g_s.setupDialog = 0;
+		g_s.setupDeleteAsk = -1;
 		g_s.setupInput.clear();
-		g_s.focus = kNoField;
+		if (g_s.focus == kSetupNameField) g_s.focus = kNoField;
 		break;
+	// Not blocked by the room: the drag is the slider's (mpui_input).
+	case kGSpeedSlider: g_s.speedDrag = true; break;
 	case kJoin: {
 		const std::vector<int> vis = Visible(g_s);
 		if (g_s.selected >= 0 && g_s.selected < static_cast<int>(vis.size())) {
@@ -297,12 +321,6 @@ void DoAction(int action, int arg)
 		}
 		else if (g_s.dropKind == kDropTourney) {
 			TourneyDropPick(idx, arg);
-		}
-		else if (g_s.dropKind == kDropSpeed) {
-			if (arg >= 0 && arg < kSpeedChoiceCount) {
-				g_s.game.gameSpeed = kSpeedChoices[arg].value;
-				GameRoomSetSpeed(kSpeedChoices[arg].value);
-			}
 		}
 		else if (g_s.dropKind == kDropRankedSeason) {
 			RankedSeasonPick(arg);
@@ -405,14 +423,6 @@ void DoAction(int action, int arg)
 					setCheck(0x100a, pr.sharedControl);
 				}
 				LogI("room", "preset %s", pr.name);
-			}
-			// After the presets, the host's saved setups and the item that saves this one.
-			else if (arg - kPresetCount >= 0 && arg - kPresetCount < static_cast<int>(g_s.setups.size())) StartRoomSetup(g_s, g_s.setups[arg - kPresetCount]);
-			else if (arg - kPresetCount == static_cast<int>(g_s.setups.size())) {
-				const int current = MatchRoomSetup(g_s);
-				g_s.setupInput = current >= 0 ? g_s.setups[current].name : std::string();
-				g_s.setupPrompt = true;
-				FocusField(kSetupNameField);
 			}
 		}
 		else if (g_s.dropKind == kDropSlot) {
