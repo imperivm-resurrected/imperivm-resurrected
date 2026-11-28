@@ -15,7 +15,6 @@
 
 #include "ui/textedit.h"
 #include "MinHook.h"
-#include "core/league.h"
 #include "core/names.h"
 #include "core/tournament.h"
 #include "game/mappreview.h"
@@ -23,7 +22,6 @@
 #include "net/spectator.h"
 
 #include "ui/fullscreen.h"
-#include "ui/leaguemapthumb.h"
 #include "ui/leagueui.h"
 #include "ui/leaguerewards.h"
 #include "ui/mpui_internal.h"
@@ -944,8 +942,8 @@ void PaintMapThumb(Painter &p, const State &st, int x, int y, int size, bool mar
 			PaintDisc(p, cx, cy, 5.0f, c, c);
 		}
 	}
-	// A random map: the drawing of its type's land, as the league and the cups show it.
-	else if (g.randomMap) PaintLeagueMapThumb(p, x, y, size, LeagueMapFromOptions(g.optionsText, std::string()).name);
+	// A random map: the die the cups' map chooser shows for one.
+	else if (g.randomMap) PaintScenarioThumb(p, std::string(), x, y, size, false);
 	else {
 		p.Fill(x + 1, y + 1, size - 2, size - 2, pal::raised);
 		p.Diamond(x + size / 2, y + size / 2 - 4, 4, pal::caption);
