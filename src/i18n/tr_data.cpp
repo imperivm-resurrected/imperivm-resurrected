@@ -3492,7 +3492,6 @@ extern const TrRow kTrRows[] = {
 	{"you are out of that game: you were defeated or surrendered", "ya no estás en esa partida: te derrotaron o te rendiste", "non sei più in quella partita: sei stato sconfitto o ti sei arreso"},
 	{"Couldn't reload the game: %s. The game goes on.", "No se pudo recargar la partida: %s. La partida sigue.", "Impossibile ricaricare la partita: %s. La partita continua."},
 	{"Share profile", "Compartir perfil", "Condividi profilo"},
-	{"Follow: nobody", "Seguir: nadie", "Segui: nessuno"},
 	{"%s (paused)", "%s (en pausa)", "%s (in pausa)"},
 	{"Follow the player again", "Volver a seguir al jugador", "Segui di nuovo il giocatore"},
 	{"Follow a player's view: each click picks the next one", "Seguir la vista de un jugador: cada clic elige el siguiente", "Segui la visuale di un giocatore: ogni clic sceglie il successivo"},
@@ -3766,5 +3765,6 @@ extern const TrRow kTrRows[] = {
 	{"Team name", "Nombre del equipo", "Nome della squadra"},
 	{"For example: Legio IX Hispana", "Por ejemplo: Legio IX Hispana", "Per esempio: Legio IX Hispana"},
 	{"Give your team a name of %s to %s characters.", "Ponle a tu equipo un nombre de %s a %s caracteres.", "Dai alla tua squadra un nome da %s a %s caratteri."},
+	{"Follow", "Seguir", "Segui"},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

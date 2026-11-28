@@ -410,7 +410,8 @@ struct DiscordIconState {
 };
 extern DiscordIconState g_icon;
 struct SpectatorBarState {
-	RECT btn[9] = {};
+	// The bar's controls; 9 to 12 are the four speeds.
+	RECT btn[13] = {};
 	RECT bar = {};
 	bool barShown = false;
 	bool swallowUp = false;

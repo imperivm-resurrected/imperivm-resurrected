@@ -109,8 +109,9 @@ void DrawSpectatorBar(uint32_t *buf, int W, int H, float s, int topY)
 	const bool collapsed = st.collapsed;
 	const bool pinned = st.broadcast && st.atLive;
 	const unsigned shownCur = pinned ? st.total : st.cur;
+	const bool following = st.canFollow && st.follow >= 0;
 	const float barH = collapsed ? 40 * s : 58 * s;
-	const float barW = collapsed ? 150 * s : std::min(static_cast<float>(W) - 24, (st.broadcast ? 1080.0f : 790.0f) * s);
+	const float barW = collapsed ? (following ? 214 : 196) * s : std::min(static_cast<float>(W) - 24, (st.broadcast ? 1150.0f : 880.0f) * s);
 	float bx = static_cast<float>(posX * W - barW / 2), by =posTop >= 0 ? static_cast<float>(posTop * H) : static_cast<float>(topY);
 	bx = std::max(4.0f, std::min(static_cast<float>(W) - barW - 4, std::floor(bx)));
 	by = std::max(2.0f, std::min(static_cast<float>(H) - barH - 4, by));
@@ -136,16 +137,40 @@ void DrawSpectatorBar(uint32_t *buf, int W, int H, float s, int topY)
 
 	RectF rCollapse{bx + pad, cy - 13 * s, 26 * s, 26 * s};
 	RectF rBack, rPlay, rFwd, rSpeed, rUi, rLive, rFollow, rCur, rTotal, rTrack;
+	RectF rSpeeds[4];
+	// A slash over an icon: a thin quad of two triangles.
+	auto slash = [&](float x0, float y0, float x1, float y1, float th, COLORREF c) {
+		const float dx = x1 - x0, dy = y1 - y0, l = std::max(0.001f, std::sqrt(dx * dx + dy * dy)), nx = -dy / l * th / 2, ny = dx / l * th / 2;
+		FillTriangle(buf, W, H, x0 + nx, y0 + ny, x1 + nx, y1 + ny, x1 - nx, y1 - ny, c, 1.0f);
+		FillTriangle(buf, W, H, x0 + nx, y0 + ny, x1 - nx, y1 - ny, x0 - nx, y0 - ny, c, 1.0f);
+	};
 	std::string tipFor;
 	std::vector<ControlKey> tipKeys;
 	float tipX = bx;
 
 	if (collapsed) {
-		rCollapse = {bx + pad, cy - 13 * s, barW - pad * 2, 26 * s};
+		rCollapse = {bx, by, barW, barH};
 		const bool h = rCollapse.Has(mx, my);
-		button(rCollapse, false, false, h);
-		arrow(rCollapse.x + 16 * s, cy, 12 * s, false, label);
-		DrawLabel(buf, W, H, ClockText(shownCur), rCollapse.x + 30 * s, rCollapse.y, rCollapse.w - 36 * s, rCollapse.h, DT_LEFT, label, 1.0f);
+		if (h) FillRound(buf, W, H, bx + line, by + line, barW - 2 * line, barH - 2 * line, rad, btnHot, 1.0f);
+		float x = bx + pad;
+		if (st.paused) FillTriangle(buf, W, H, x, cy - 7 * s, x, cy + 7 * s, x + 11 * s, cy, label, 1.0f);
+		else {
+			FillRound(buf, W, H, x, cy - 7 * s, 4 * s, 14 * s, 1.0f * s, label, 1.0f);
+			FillRound(buf, W, H, x + 7 * s, cy - 7 * s, 4 * s, 14 * s, 1.0f * s, label, 1.0f);
+		}
+		x += 22 * s;
+		DrawLabel(buf, W, H, ClockText(shownCur), x, by, 48 * s, barH, DT_RIGHT, pal::text, 1.0f);
+		x += 52 * s;
+		DrawLabel(buf, W, H, L"/ " + ClockText(st.total), x, by, 64 * s, barH, DT_LEFT, pal::textDim, 1.0f);
+		float rx = bx + barW - pad;
+		arrow(rx - 6 * s, cy, 12 * s, false, label);
+		rx -= 22 * s;
+		if (following) FillDisc(buf, W, H, rx - 5 * s, cy, 5 * s, RGB((st.followRgb >> 16) & 0xff, (st.followRgb >> 8) & 0xff, st.followRgb & 0xff), 1.0f);
+		// The progress, a line along the pill's foot.
+		const double frac = st.total ? std::min(1.0, static_cast<double>(shownCur) / st.total) : 0.0;
+		const float lx = bx + rad, lw = barW - 2 * rad, ly = by + barH - 4 * s;
+		FillRound(buf, W, H, lx, ly, lw, 2 * s, 1.0f * s, pal::bg, 1.0f);
+		if (frac > 0) FillRound(buf, W, H, lx, ly, std::max(2 * s, static_cast<float>(lw * frac)), 2 * s, 1.0f * s, pal::redText, 1.0f);
 		if (h) { tipFor = "Show the bar"; tipKeys = {ControlsModKey(kModKeySpecBar)}; tipX = rCollapse.x; }
 	}
 	else {
@@ -167,7 +192,8 @@ void DrawSpectatorBar(uint32_t *buf, int W, int H, float s, int topY)
 		}
 		rUi = {rx - 40 * s, cy - pillH / 2, 40 * s, pillH};
 		rx -= rUi.w + gap;
-		rSpeed = {rx - 52 * s, cy - pillH / 2, 52 * s, pillH};
+		rSpeed = {rx - 4 * 36 * s, cy - pillH / 2, 4 * 36 * s, pillH};
+		for (int k = 0; k < 4; k++) rSpeeds[k] = {rSpeed.x + k * 36 * s, rSpeed.y, 36 * s, pillH};
 		rx -= rSpeed.w + gap * 1.5f;
 		const float lab = 50 * s;
 		rCur = {x, cy - 12 * s, lab, 24 * s};
@@ -207,27 +233,43 @@ void DrawSpectatorBar(uint32_t *buf, int W, int H, float s, int topY)
 				FillRound(buf, W, H, cx + 2 * s, cy - 8 * s, 5 * s, 16 * s, 1.0f * s, label, 1.0f);
 			}
 		}
-		button(rSpeed, false, st.speed > 1, hSpeed);
-		{
-			wchar_t text[12];
-			swprintf_s(text, L"×%d", st.speed);
-			DrawLabel(buf, W, H, text, rSpeed.x, rSpeed.y, rSpeed.w, rSpeed.h, DT_CENTER, st.broadcast && st.atLive ? pal::textDim : label, 1.0f);
+		// The speeds side by side, the one in use in red; faster ones are dim at the live edge.
+		FillRound(buf, W, H, rSpeed.x, rSpeed.y, rSpeed.w, rSpeed.h, rad, btn, 1.0f);
+		for (int k = 0; k < 4; k++) {
+			const int v = 1 << k;
+			const bool on = st.speed == v, hot = !on && rSpeeds[k].Has(mx, my);
+			if (on || hot) FillRound(buf, W, H, rSpeeds[k].x, rSpeeds[k].y, rSpeeds[k].w, rSpeeds[k].h, rad, on ? strong : btnHot, 1.0f);
+			wchar_t text[8];
+			swprintf_s(text, L"%d×", v);
+			const bool dim = !on && v > st.speed && st.broadcast && st.atLive;
+			DrawLabel(buf, W, H, text, rSpeeds[k].x, rSpeeds[k].y, rSpeeds[k].w, rSpeeds[k].h, DT_CENTER, on ? pal::onRed : dim ? pal::textDim : label, 1.0f);
 		}
-		button(rUi, false, st.uiHidden, hUi);
-		DrawLabel(buf, W, H, L"UI", rUi.x, rUi.y, rUi.w, rUi.h, DT_CENTER, label, 1.0f);
+		// The game's interface: an eye, struck through while it is hidden.
+		button(rUi, false, false, hUi);
+		{
+			const float eyeW = 20 * s, eyeH = eyeW * 0.5172f, ex = rUi.x + (rUi.w - eyeW) / 2, ey = cy - eyeH / 2;
+			FillShape(buf, W, H, EyeShape(), ex, ey, eyeW, st.uiHidden ? pal::textDim : label, 1.0f);
+			if (st.uiHidden) slash(ex, ey - 2 * s, ex + eyeW, ey + eyeH + 2 * s, 2.0f * s, label);
+		}
+		// Following: the player's colour and name; nobody, a sight and the word.
 		if (st.canFollow) {
 			button(rFollow, false, st.follow >= 0 && !st.followPaused, hFollow);
-			float tx = rFollow.x + 10 * s;
+			float tx = rFollow.x + 12 * s;
 			std::string text;
-			if (st.follow < 0) text = Tr("Follow: nobody");
+			if (st.follow < 0) {
+				StrokeRound(buf, W, H, tx, cy - 7 * s, 14 * s, 14 * s, 7 * s, 1.5f * s, label, 1.0f);
+				FillDisc(buf, W, H, tx + 7 * s, cy, 2.5f * s, label, 1.0f);
+				tx += 22 * s;
+				text = Tr("Follow");
+			}
 			else {
 				const COLORREF dot = RGB((st.followRgb >> 16) & 0xff, (st.followRgb >> 8) & 0xff, st.followRgb & 0xff);
-				FillDisc(buf, W, H, tx + 5 * s, cy, 5 * s, dot, 1.0f);
-				tx += 16 * s;
+				FillDisc(buf, W, H, tx + 6 * s, cy, 6 * s, dot, 1.0f);
+				tx += 20 * s;
 				const std::string name = st.followName.empty() ? Tr("Player") : st.followName;
 				text = st.followPaused ? TrFmt("%s (paused)", {name}) : name;
 			}
-			DrawLabel(buf, W, H, ::W(text), tx, rFollow.y, rFollow.x + rFollow.w - 8 * s - tx, rFollow.h, DT_LEFT | DT_END_ELLIPSIS, label, 1.0f);
+			DrawLabel(buf, W, H, ::W(text), tx, rFollow.y, rFollow.x + rFollow.w - 10 * s - tx, rFollow.h, DT_LEFT | DT_END_ELLIPSIS, label, 1.0f);
 		}
 
 		if (st.broadcast) {
@@ -267,7 +309,7 @@ void DrawSpectatorBar(uint32_t *buf, int W, int H, float s, int topY)
 			else if (hBack) { tipFor = "Back 10 s"; tipKeys = {ControlsModKey(kModKeySpecBack)}; tipX = rBack.x; }
 			else if (hPlay) { tipFor = st.paused ? "Resume" : "Pause"; tipKeys = {ControlsModKey(kModKeySpecPause)}; tipX = rPlay.x; }
 			else if (hFwd) { tipFor = "Forward 10 s"; tipKeys = {ControlsModKey(kModKeySpecForward)}; tipX = rFwd.x; }
-			else if (hSpeed) { tipFor = "Speed: click, or"; tipKeys = {ControlsModKey(kModKeySpecFaster), ControlsModKey(kModKeySpecSlower)}; tipX = rSpeed.x - 120 * s; }
+			else if (hSpeed) { tipFor = "Speed"; tipKeys = {ControlsModKey(kModKeySpecFaster), ControlsModKey(kModKeySpecSlower)}; tipX = rSpeed.x - 40 * s; }
 			else if (hUi) { tipFor = st.uiHidden ? "Show the game interface" : "Hide the game interface"; tipKeys = {ControlsModKey(kModKeySpecUi)}; tipX = rUi.x - 100 * s; }
 			else if (hLive) { tipFor = st.ended ? "Leave to the menu" : "Jump to live"; tipKeys = {ControlsModKey(kModKeySpecLive)}; tipX = rLive.x - 40 * s; }
 			else if (hFollow) {
@@ -283,13 +325,13 @@ void DrawSpectatorBar(uint32_t *buf, int W, int H, float s, int topY)
 	}
 	std::lock_guard<std::mutex> lock(g_lock);
 	auto store = [&](int i, const RectF &r) { g_spec.btn[i] = {static_cast<LONG>(r.x), static_cast<LONG>(r.y), static_cast<LONG>(r.x + r.w), static_cast<LONG>(r.y + r.h)}; };
-	for (int i = 0; i < 9; i++) g_spec.btn[i] = RECT{};
+	for (int i = 0; i < 13; i++) g_spec.btn[i] = RECT{};
 	if (collapsed) {
 		store(7, rCollapse);
 	}
 	else {
 		store(0, rPlay);
-		store(1, rSpeed);
+		for (int k = 0; k < 4; k++) store(9 + k, rSpeeds[k]);
 		store(2, rBack);
 		store(3, rFwd);
 		if (st.broadcast) store(4, rLive);

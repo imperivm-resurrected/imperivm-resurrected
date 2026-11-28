@@ -34,6 +34,8 @@ struct SpectatorState {
 	uint32_t followRgb = 0;
 };
 bool SpectatorControls(SpectatorState &out);
+// 0 pause, 1 the next speed, 2 and 3 ten seconds back and forward, 4 live, 5 the game's interface, 6 the bar, 7 the next player to follow,
+// 8 to 11 the speed ×1, ×2, ×4 or ×8.
 void SpectatorControl(int id);
 void SpectatorBarPos(double &centerX, double &top, int mode);
 void SpectatorSeekFraction(double fraction);

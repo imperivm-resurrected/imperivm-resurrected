@@ -130,14 +130,14 @@ static bool HandleCornerLocked(UINT msg, WPARAM wp, LPARAM lp, int &specAfter)
 	if (g_spec.barShown && (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONUP)) {
 		const POINT pt = {static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))};
 		if (msg == WM_LBUTTONDOWN) {
-			for (int i = 0; i < 9; i++) {
+			for (int i = 0; i < 13; i++) {
 				if (g_spec.btn[i].right <= g_spec.btn[i].left || !PtInRect(&g_spec.btn[i], pt)) continue;
 				if (i == 5) {
 					g_spec.drag = true;
 					g_spec.dragFrac = std::max(0.0, std::min(1.0, (pt.x - g_spec.btn[5].left) / static_cast<double>(std::max<LONG>(1, g_spec.btn[5].right - g_spec.btn[5].left))));
 				}
 				else {
-					specAfter = i == 6 ? 5 : i == 7 ? 6 : i == 8 ? 7 : i;
+					specAfter = i >= 9 ? 8 + (i - 9) : i == 6 ? 5 : i == 7 ? 6 : i == 8 ? 7 : i;
 				}
 				g_spec.swallowUp = true;
 				return true;

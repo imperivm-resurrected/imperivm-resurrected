@@ -1766,6 +1766,11 @@ void SpectatorControl(int id)
 	else if (id == 7 && g_ctl.broadcast) {
 		g_followAsk++;
 	}
+	else if (id >= 8 && id <= 11) {
+		const int want = 1 << (id - 8);
+		if (want > g_ctl.speed && AtLiveEdge()) UiToast("You are at the live edge: you can only speed up when you are behind");
+		else g_ctl.speed = want;
+	}
 
 }
 
