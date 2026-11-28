@@ -728,6 +728,9 @@ enum class TourneyCupProblem {
 };
 // Some game of the cup is a series (best of 3, or 5 in a final): the rounds', or the final's outside a Swiss, which has no final.
 bool TourneyCupHasSeries(const TourneyCupForm &f);
+// Whether the form offers pairing the first round by hand: an elimination, without teams drawn at the check-in (a Swiss pairs its
+// rounds by points and a round robin has everyone meet everyone).
+bool TourneyCupPairsByHand(const TourneyCupForm &f);
 // The rounds a cup's form gives a map to: a Swiss's rounds, the rounds of an elimination's bracket (its winners' in a double one).
 int TourneyCupMapRounds(const TourneyCupForm &f);
 // What the server would refuse in the form, in the order of the form; none when it can be sent. `types` gives the sizes of a cup of teams.

@@ -557,8 +557,8 @@ int RulesRight(Form &c, int x, int y, int w)
 	at += Problem(c, x, at, w, {TourneyCupProblem::Series}) + c.k.rowGap;
 	at += Label(c, x, at, w, Tr("Pairings"));
 	at += Hint(c, x, at, w, Tr("Who meets whom in the first round.")) + 8;
-	// Teams drawn when the check-in closes can't be paired before: by hand is not offered then.
-	const bool byHand = !(f.mode == TourneyMode::Teams && f.teamDraw), manual = byHand && f.seeding == TourneySeeding::Manual;
+	// By hand only in an elimination, and not with teams drawn when the check-in closes, which can't be paired before.
+	const bool byHand = TourneyCupPairsByHand(f), manual = byHand && f.seeding == TourneySeeding::Manual;
 	const bool rating = f.seeding == TourneySeeding::Rating || (f.seeding == TourneySeeding::Manual && !byHand);
 	if (f.mode == TourneyMode::Teams) {
 		Option(c, x, at, w, c.k.optionH, rating, true, Tr("By 2v2 Glory"), Tr("The average of both players' 2v2 Glory, or 1v1 without it."), Tr("Recommended"),

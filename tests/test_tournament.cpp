@@ -876,6 +876,14 @@ void Formats()
 		CHECK(HasProblem(TourneyCheckCup(form, 0), TourneyCupProblem::Places));
 		form.maxEntries = 8;
 		CHECK(!HasProblem(TourneyCheckCup(form, 0), TourneyCupProblem::Places));
+		// Only an elimination is paired by hand.
+		CHECK(!TourneyCupPairsByHand(form));
+		form.format = TourneyFormat::Swiss;
+		CHECK(!TourneyCupPairsByHand(form));
+		form.format = TourneyFormat::Double;
+		CHECK(TourneyCupPairsByHand(form));
+		form.format = TourneyFormat::Single;
+		CHECK(TourneyCupPairsByHand(form));
 	}
 
 	std::vector<TourneySummary> list;

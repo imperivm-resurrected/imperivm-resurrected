@@ -973,6 +973,11 @@ bool TourneyIsRoundRobin(const TourneySummary &t)
 	return Lower(t.format) == "roundrobin";
 }
 
+bool TourneyCupPairsByHand(const TourneyCupForm &f)
+{
+	return (f.format == TourneyFormat::Single || f.format == TourneyFormat::Double) && !(f.mode == TourneyMode::Teams && f.teamDraw);
+}
+
 int TourneyRobinRounds(int players)
 {
 	if (players < 2) return 0;
@@ -1876,7 +1881,7 @@ Json TourneyCupJson(const TourneyCupForm &f, bool edit)
 	body.Set("pace", Json::MakeString(TourneyPaceId(f.pace)));
 	body.Set("roundDays", f.pace == TourneyPace::Rounds ? Json::MakeNumber(f.roundDays) : Json());
 	// Teams drawn when the check-in closes can't be paired before.
-	const bool manual = f.seeding == TourneySeeding::Manual && !(f.mode == TourneyMode::Teams && f.teamDraw);
+	const bool manual = f.seeding == TourneySeeding::Manual && TourneyCupPairsByHand(f);
 	body.Set("seeding", Json::MakeString(manual ? "manual" : f.seeding == TourneySeeding::Random ? "random" : "rating"));
 	Json maps = Json::MakeArray();
 	for (const TourneyMap &m : f.maps) maps.arr.push_back(TourneyMapJson(m));
