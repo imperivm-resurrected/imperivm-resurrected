@@ -25,6 +25,7 @@ namespace {
 // TorneoCuadro's colours that the palette does not have.
 const COLORREF kLinePath = RGB(0x7a, 0x75, 0x6e), kGold = RGB(0xe0, 0xb5, 0x4a), kGoldDark = RGB(0x8a, 0x6a, 0x22);
 const COLORREF kSilver = RGB(0xc9, 0xce, 0xd4), kBronze = RGB(0xcf, 0x8a, 0x55), kWinBack = RGB(0x3c, 0x5a, 0x32);
+const COLORREF kLossBack = RGB(0x5e, 0x2a, 0x26);
 // The champion's place after the last match's line.
 const int kChampW = 150;
 // The page's tab of a Swiss round: kRoundTab + the round. The bracket's tab (0) is the Swiss standings.
@@ -909,6 +910,117 @@ void PaintStandings(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &ou
 	p.raw = false;
 }
 
+// The match of a round robin between two entries; null while it is not paired.
+const TourneyMatch *RobinMatch(const TourneyDetail &d, int64_t a, int64_t b)
+{
+	for (const TourneyMatch &m : d.matches) {
+		if (m.bracket == TourneyBracket::Swiss && m.Has(a) && m.Has(b)) return &m;
+	}
+	return nullptr;
+}
+
+// A round robin's table: everyone in a row and, in the same order, in a column; each square is the match of the row against the column,
+// green won and red lost with the games of the series from the row's side, framed while it is to be played and a dot while it is being
+// played. Then the points, wins and losses and the games won minus lost.
+void PaintCrossTable(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out)
+{
+	const TourneyDetail &d = c.d;
+	const bool over = d.status == TourneyStatus::Finished, teams = d.Teams();
+	const int n = static_cast<int>(d.standings.size()), statW = 76, stats = 3 * statW, placeW = 50;
+	const int cell = std::max(34, std::min(60, n ? (w - placeW - 220 - stats - 16) / n : 60));
+	const int nameX = x + placeW, cellsX = x + w - stats - n * cell, nameW = std::max(80, cellsX - 16 - nameX), statsX = x + w - stats;
+	const UINT center = DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS;
+	p.raw = true;
+	PaintCaps(p, x + 14, y, 40, 20, "#", pal::caption);
+	for (int i = 0; i < n; i++) PaintCaps(p, cellsX + i * cell, y, cell, 20, std::to_string(i + 1), pal::caption, center);
+	p.raw = false;
+	PaintCaps(p, nameX, y, nameW, 20, teams ? "Team" : "Player", pal::caption);
+	PaintCaps(p, statsX, y, statW, 20, "Points", pal::caption, center);
+	PaintCaps(p, statsX + statW, y, statW, 20, "W\xE2\x80\x93L", pal::caption, center);
+	PaintCaps(p, statsX + 2 * statW, y, statW, 20, "Diff.", pal::caption, center);
+	const int foot = over ? 30 : 54, top = y + 30, rowH = teams ? 56 : 46, viewH = h - 30 - foot;
+	if (d.standings.empty()) {
+		p.Font(0);
+		p.Text(x, top + 10, w, 30, "The standings show once the first round is paired.", pal::textDim);
+		return;
+	}
+	const int maxY = std::max(0, n * rowH - viewH), sy = std::min(c.u.bracketY, maxY);
+	SetScrollArea(p, out.bracketArea, x, top, w, viewH, maxY);
+	ClipArea view(p, x, top, w, viewH);
+	int ry = top - sy;
+	for (int r = 0; r < n; r++, ry += rowH) {
+		const TourneyStanding &s = d.standings[r];
+		const bool mine = c.me && s.entryId == c.me;
+		if (mine) {
+			p.Fill(x, ry, w, rowH, pal::selected);
+			p.Fill(x, ry, 3, rowH, pal::red);
+		}
+		p.Fill(x, ry, w, 1, pal::hairline);
+		const bool podium = over && s.place >= 1 && s.place <= 3;
+		UseDisplay(p, 24);
+		p.raw = true;
+		p.Text(x + 14, ry, placeW - 14, rowH, s.place ? std::to_string(s.place) : std::string("-"), !podium ? pal::textDim : s.place == 1 ? kGold : s.place == 2 ? kSilver : kBronze,
+			DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+		p.raw = false;
+		const std::vector<TourneyMember> players = !s.members.empty() ? s.members : std::vector<TourneyMember>{{s.steamId, s.name, -1}};
+		int nx = nameX + (teams ? PaintSideDiscs(p, nameX, ry + (rowH - 26) / 2, 26, players) : 28) + 12;
+		if (!teams) PaintPlayerDisc(p, nameX, ry + 9, 28, s.steamId, s.name);
+		if (podium && d.official) {
+			DrawLeaguePhalera(p, nx, ry + (rowH - 22) / 2, 22, s.place == 1 ? LeagueMetal::Gold : s.place == 2 ? LeagueMetal::Silver : LeagueMetal::Bronze);
+			nx += 30;
+		}
+		const int room = nameW - (nx - nameX);
+		if (teams) {
+			UseFace(p, mine ? BrandFace::UiStrong : BrandFace::Body, 17);
+			p.raw = true;
+			p.Text(nx, ry, room, rowH, s.name, mine ? pal::redText : pal::text, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+			p.raw = false;
+		}
+		else PaintName(p, nx, ry, room, rowH, s.name, s.steamId, mine ? pal::redText : pal::text, c.mx, c.my);
+		AddIds(c, players);
+		for (int col = 0; col < n; col++) {
+			const int cx = cellsX + col * cell + 3, cy = ry + (rowH - (cell - 6)) / 2, cs = cell - 6;
+			if (col == r) {
+				p.Fill(cx, cy, cs, cs, pal::raised);
+				continue;
+			}
+			const TourneyMatch *m = RobinMatch(d, s.entryId, d.standings[col].entryId);
+			if (!m) {
+				p.Frame(cx, cy, cs, cs, pal::hairline);
+				continue;
+			}
+			if (!TourneyMatchOver(m->status)) {
+				p.Frame(cx, cy, cs, cs, m->status == TourneyMatchStatus::Live ? pal::red : pal::edgeHot);
+				if (m->status == TourneyMatchStatus::Live) p.Shape(cx + cs / 2 - 4, cy + cs / 2 - 4, 8, 8, InUnitEllipse, pal::red);
+				continue;
+			}
+			const bool won = m->winner == s.entryId, sideA = m->a.entryId == s.entryId;
+			p.Fill(cx, cy, cs, cs, won ? kWinBack : kLossBack);
+			// A series played says its games; one decided without playing it, nothing.
+			const int ours = sideA ? m->scoreA : m->scoreB, theirs = sideA ? m->scoreB : m->scoreA;
+			if (ours + theirs > 0) {
+				UseFace(p, BrandFace::UiStrong, 15);
+				p.raw = true;
+				p.Text(cx, cy, cs, cs, std::to_string(ours) + "\xE2\x80\x93" + std::to_string(theirs), pal::text, center);
+				p.raw = false;
+			}
+		}
+		UseDisplay(p, 24);
+		p.raw = true;
+		p.Text(statsX, ry, statW, rowH, std::to_string(s.points), pal::text, center);
+		UseFace(p, BrandFace::Body, 16);
+		p.Text(statsX + statW, ry, statW, rowH, std::to_string(s.wins) + "\xE2\x80\x93" + std::to_string(s.losses), pal::body, center);
+		p.Text(statsX + 2 * statW, ry, statW, rowH, (s.gameDiff > 0 ? "+" : "") + std::to_string(s.gameDiff), pal::body, center);
+		p.raw = false;
+	}
+	view.End();
+	if (maxY > 0) PaintScrollbar(p, kBarBracketY, x + w + 8, top, viewH, {sy, maxY, viewH}, c.st.dropBar, c.mx, c.my);
+	if (!over) {
+		p.Font(3);
+		p.Text(x, y + h - foot + 8, w, 22, "Provisional until the last round is over.", pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	}
+}
+
 // A side of a Swiss pairing: the disc next to the score and the name away from it, with the points the player had before the round.
 void PaintPairingSide(Painter &p, Ctx &c, const TourneyMatch &m, const TourneyCard &card, bool right, int x1, int x2, int y, int h)
 {
@@ -1049,6 +1161,7 @@ void PaintSwiss(Painter &p, Ctx &c, int x, int y, int w, int h, PaintOut &out)
 	const int round = c.u.pageTab >= kRoundTab ? std::min(c.u.pageTab - kRoundTab, SwissPaired(c.d)) : 0;
 	PaintSwissStrip(p, c, x, y, w + 20, round);
 	if (round > 0) PaintSwissRound(p, c, round, x, y + 60, w, h - 60, out);
+	else if (TourneyIsRoundRobin(c.d)) PaintCrossTable(p, c, x, y + 60, w, h - 60, out);
 	else PaintStandings(p, c, x, y + 60, w, h - 60, out);
 }
 
