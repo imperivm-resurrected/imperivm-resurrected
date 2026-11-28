@@ -160,6 +160,8 @@ inline constexpr uintptr_t kBuildColorShadeTable = 0x00607ea0;
 inline constexpr uintptr_t kLoadRleFile = 0x0060ca20;
 inline constexpr uintptr_t kCreateEntityImage = 0x0060cb20;
 inline constexpr uintptr_t kZoomMapHide = 0x0060e5a0;
+// CVXZoomMap::DrawLinkArrows: the dotted line, with its arrow, between a settlement and the one it supplies (the map lists them).
+inline constexpr uintptr_t kZoomMapDrawLinks = 0x006124f0;
 inline constexpr uintptr_t kZoomMapOnDraw = 0x00612fc0;
 inline constexpr uintptr_t kZoomFogOverlay = 0x006154a0;
 inline constexpr uintptr_t kRebuild = 0x00616c40;

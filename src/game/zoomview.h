@@ -22,6 +22,17 @@ std::vector<ZoomMapTimer> ZoomViewTimers();
 // Writes the timers on the picture handed to the screen (32-bit, w x h, the game's coordinates) in the typeface `face`; on the render
 // thread.
 void ZoomViewDrawTimers(uint32_t *buf, int w, int h, const std::vector<ZoomMapTimer> &timers, const wchar_t *face);
+// A supply route of the big map: from the settlement that sends to the one supplied, in the picture's coordinates, in the colour of the
+// sender's owner (0xRRGGBB).
+struct ZoomRoute {
+	float ax = 0, ay = 0, bx = 0, by = 0;
+	uint32_t rgb = 0;
+};
+// The routes of the picture of the big map drawn last; on the game thread, as the timers.
+std::vector<ZoomRoute> ZoomViewRoutes();
+// Draws them on the picture handed to the screen: an arc with dots that flow to the settlement supplied, moving with `nowMs`; on the
+// render thread.
+void ZoomViewDrawRoutes(uint32_t *buf, int w, int h, const std::vector<ZoomRoute> &routes, unsigned nowMs);
 bool ZoomViewHandleMouse(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 void ZoomViewGameTick();
 // The point of the open zoom map under (x, y), in the view coordinates the game's location messages carry.

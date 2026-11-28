@@ -5,18 +5,22 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <string>
 #include <vector>
 
+#include "addr/engine.h"
+#include "addr/script.h"
 #include "addr/state.h"
 #include "addr/ui.h"
 #include "addr/world.h"
 #include "core/config.h"
 #include "core/log.h"
 #include "game/controls.h"
+#include "game/diplomacyrules.h"
 #include "game/gamelayout.h"
 #include "game/mapfog.h"
 #include "game/quickicons.h"
@@ -36,6 +40,11 @@ typedef unsigned(__fastcall *Height_t)(void *map, void *edx, unsigned *position)
 
 ZoomDraw_t g_origDraw = nullptr;
 bool g_failed = false;
+typedef void(__fastcall *DrawLinks_t)(void *self, void *edx, void *surface);
+typedef int *(__fastcall *ObjectPos_t)(void *object, void *edx, int *out);
+DrawLinks_t g_origDrawLinks = nullptr;
+// The routes are the mod's once they could be read; an error gives the game's dotted lines back.
+bool g_routesFailed = false;
 
 struct Geometry {
 	bool valid = false;
@@ -176,6 +185,86 @@ void CaptureGeometry(void *self, void *surface)
 
 void PreviewBox(int x0, int y0, int x1, int y1, bool force);
 
+std::vector<ZoomRoute> g_routes;
+
+// A map object's position in the world: its slot 0x3c, as the game's own route drawing asks it, called only when its table and the
+// function are the game's.
+bool ObjectPosition(char *object, int &x, int &y)
+{
+	const uintptr_t vtable = *reinterpret_cast<uintptr_t *>(object);
+	if (vtable < addr::kGameRdataBegin || vtable >= addr::kGameRdataEnd) return false;
+	const uintptr_t fn = reinterpret_cast<uintptr_t *>(vtable)[0x3c / 4];
+	if (fn < addr::kGameTextBegin || fn >= addr::kGameTextEnd) return false;
+	int out[4] = {};
+	const int *p = reinterpret_cast<ObjectPos_t>(fn)(object, nullptr, out);
+	if (!p) return false;
+	x = p[0];
+	y = p[1];
+	return true;
+}
+
+// A world point on the picture of the big map, as the respawn timers are placed.
+bool WorldToPicture(void *map, int wx, int wy, int w, int h, float &x, float &y)
+{
+	unsigned position[] = {static_cast<unsigned>(wx), static_cast<unsigned>(wy)};
+	const unsigned height = reinterpret_cast<Height_t>(addr::kGetHeightAt)(map, nullptr, position);
+	const int projectedY = ((wy * 0xb5) >> 8) - static_cast<int>(height);
+	int pixel[2] = {};
+	if (!ZoomProjectedToPixel(wx, projectedY, pixel)) return false;
+	int px = 0, py = 0;
+	if (!RespawnProjectAxis(pixel[0], 0, w - 1, g_geo.left, g_geo.right, px) || !RespawnProjectAxis(pixel[1], 0, h - 1, g_geo.top, g_geo.bottom, py)) return false;
+	x = static_cast<float>(px);
+	y = static_cast<float>(py);
+	return true;
+}
+
+// The settlements that supply another, as CVXZoomMap::DrawLinkArrows (006124f0) finds them: the sender's owner shares its control with
+// this player, the sender's supply (+0x5c) names an entry (+0x38) whose settlement (+0xc) is another one, still standing (+0x8c, its
+// building), whose owner the sender has a ceasefire with.
+void CollectRoutes()
+{
+	g_routes.clear();
+	if (g_routesFailed || OtherUiOpen()) return;
+	char *map = *reinterpret_cast<char **>(addr::kMap);
+	char *game = *reinterpret_cast<char **>(addr::kGame);
+	int w = 0, h = 0;
+	if (!map || !game || !ZoomBitmapSize(&w, &h)) return;
+	char *local = layout::LocalPlayer(game);
+	if (!local) return;
+	const int viewer = Field<int>(local, layout::kPlayerId);
+	if (viewer < 0 || viewer >= layout::kPlayerCount) return;
+	char **table = reinterpret_cast<char **>(addr::kHandleTable);
+	auto handle = [table](char *object, size_t offset) { return table[*reinterpret_cast<unsigned short *>(object + offset)]; };
+	char **it = *reinterpret_cast<char ***>(map + 0x4c), **end = *reinterpret_cast<char ***>(map + 0x50);
+	for (int n = 0; it && it != end && n < 1024; ++it, ++n) {
+		char *from = *it;
+		if (!from) continue;
+		char *owner = *reinterpret_cast<char **>(from + 0x90);
+		if (!owner || !(Field<unsigned>(owner, layout::kPlayerDiplomacy + viewer * 4) & diplomacy::kControl)) continue;
+		char *building = handle(from, 0x8c), *supply = handle(from, 0x5c);
+		if (!building || !supply) continue;
+		char *entry = handle(supply, 0x38);
+		char *to = entry ? handle(entry, 0xc) : nullptr;
+		if (!to || to == from) continue;
+		char *toBuilding = handle(to, 0x8c), *toOwner = *reinterpret_cast<char **>(to + 0x90);
+		if (!toBuilding || !toOwner) continue;
+		const int toId = Field<int>(toOwner, layout::kPlayerId);
+		if (toId < 0 || toId >= layout::kPlayerCount || !(Field<unsigned>(owner, layout::kPlayerDiplomacy + toId * 4) & diplomacy::kCeasefire)) continue;
+		int ax = 0, ay = 0, bx = 0, by = 0;
+		if (!ObjectPosition(building, ax, ay) || !ObjectPosition(toBuilding, bx, by)) continue;
+		ZoomRoute r;
+		if (!WorldToPicture(map, ax, ay, w, h, r.ax, r.ay) || !WorldToPicture(map, bx, by, w, h, r.bx, r.by)) continue;
+		r.rgb = Rgb555ToRgb(Field<unsigned>(owner, layout::kPlayerColor) & 0x7fff);
+		g_routes.push_back(r);
+	}
+}
+
+// The game's dotted line gives way to the mod's arc while it can read the routes.
+void __fastcall HookDrawLinks(void *self, void *edx, void *surface)
+{
+	if (g_failed || g_routesFailed) g_origDrawLinks(self, edx, surface);
+}
+
 // The times of the respawn timers over their sites on the last picture of the big map, in its screen coordinates; the overlay writes
 // them, and nothing else marks the site.
 std::vector<ZoomMapTimer> g_timers;
@@ -218,6 +307,14 @@ void __fastcall HookZoomDraw(void *self, void *edx, void *surface, int unused)
 		// The chat's map ping reads the geometry too, so it is kept with the extras turned off.
 		CaptureGeometry(self, surface);
 		DrawRespawnTimers();
+		__try {
+			CollectRoutes();
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER) {
+			g_routes.clear();
+			g_routesFailed = true;
+			LogE("game", "zoom map: ERROR reading the supply routes; the game draws them again");
+		}
 		if (!ExtrasEnabled()) return;
 		QuickIconsDraw(surface, g_geo.winX, g_geo.winY);
 		if (g_drag.dragging) PreviewBox(g_drag.startX, g_drag.startY, g_drag.curX, g_drag.curY, false);
@@ -406,6 +503,101 @@ std::vector<ZoomMapTimer> ZoomViewTimers()
 	return g_timers;
 }
 
+std::vector<ZoomRoute> ZoomViewRoutes()
+{
+	if (g_failed || g_routesFailed || !ZoomOpen()) return {};
+	return g_routes;
+}
+
+namespace {
+// A disc of radius r at (cx, cy) blended into the picture with `alpha`, its edge smoothed over a pixel.
+void BlendDisc(uint32_t *buf, int w, int h, float cx, float cy, float r, uint32_t rgb, float alpha)
+{
+	const int x0 = std::max(0, static_cast<int>(std::floor(cx - r - 1))), x1 = std::min(w - 1, static_cast<int>(std::ceil(cx + r + 1)));
+	const int y0 = std::max(0, static_cast<int>(std::floor(cy - r - 1))), y1 = std::min(h - 1, static_cast<int>(std::ceil(cy + r + 1)));
+	const int sr = (rgb >> 16) & 0xff, sg = (rgb >> 8) & 0xff, sb = rgb & 0xff;
+	for (int y = y0; y <= y1; ++y) {
+		for (int x = x0; x <= x1; ++x) {
+			const float dx = x + 0.5f - cx, dy = y + 0.5f - cy;
+			const float cover = std::max(0.0f, std::min(1.0f, r + 0.5f - std::sqrt(dx * dx + dy * dy))) * alpha;
+			if (cover <= 0.0f) continue;
+			uint32_t &d = buf[static_cast<size_t>(y) * w + x];
+			const int dr = (d >> 16) & 0xff, dg = (d >> 8) & 0xff, db = d & 0xff;
+			const int a = static_cast<int>(cover * 256);
+			d = 0xff000000u | static_cast<uint32_t>(dr + ((sr - dr) * a >> 8)) << 16 | static_cast<uint32_t>(dg + ((sg - dg) * a >> 8)) << 8 |
+				static_cast<uint32_t>(db + ((sb - db) * a >> 8));
+		}
+	}
+}
+
+uint32_t Lighter(uint32_t rgb, int toWhite)
+{
+	const int r = (rgb >> 16) & 0xff, g = (rgb >> 8) & 0xff, b = rgb & 0xff;
+	return static_cast<uint32_t>(r + (255 - r) * toWhite / 100) << 16 | static_cast<uint32_t>(g + (255 - g) * toWhite / 100) << 8 |
+		static_cast<uint32_t>(b + (255 - b) * toWhite / 100);
+}
+}
+
+void ZoomViewDrawRoutes(uint32_t *buf, int w, int h, const std::vector<ZoomRoute> &routes, unsigned nowMs)
+{
+	if (!buf || w <= 0 || h <= 0) return;
+	// Clear of the settlement's ring the game draws, and the dots that flow: their gap and their speed, in the picture's pixels.
+	const float kRing = std::max(9.0f, h / 70.0f), kGap = 13.0f, kSpeed = 26.0f;
+	for (const ZoomRoute &r : routes) {
+		const float dx = r.bx - r.ax, dy = r.by - r.ay, len = std::sqrt(dx * dx + dy * dy);
+		if (len < 2 * kRing + 6) continue;
+		// A gentle arc: its control point off the middle by a sixth of the length, always to the same side of the way it goes.
+		const float mx = (r.ax + r.bx) / 2 - dy / len * len / 6, my = (r.ay + r.by) / 2 + dx / len * len / 6;
+		auto at = [&](float t, float &x, float &y) {
+			const float u = 1 - t;
+			x = u * u * r.ax + 2 * u * t * mx + t * t * r.bx;
+			y = u * u * r.ay + 2 * u * t * my + t * t * r.by;
+		};
+		// The arc's points a pixel or two apart, with the length walked to each.
+		const int steps = std::max(16, static_cast<int>(len / 2));
+		std::vector<float> px(steps + 1), py(steps + 1), walked(steps + 1);
+		for (int i = 0; i <= steps; ++i) {
+			at(static_cast<float>(i) / steps, px[i], py[i]);
+			walked[i] = i ? walked[i - 1] + std::hypot(px[i] - px[i - 1], py[i] - py[i - 1]) : 0.0f;
+		}
+		const float total = walked[steps], start = kRing, stop = total - kRing - 4;
+		if (stop <= start) continue;
+		auto point = [&](float d, float &x, float &y) {
+			const auto k = std::lower_bound(walked.begin(), walked.end(), d) - walked.begin();
+			const int i = static_cast<int>(std::max<std::ptrdiff_t>(1, std::min<std::ptrdiff_t>(k, steps)));
+			const float seg = std::max(0.001f, walked[i] - walked[i - 1]), f = (d - walked[i - 1]) / seg;
+			x = px[i - 1] + (px[i] - px[i - 1]) * f;
+			y = py[i - 1] + (py[i] - py[i - 1]) * f;
+		};
+		// The track, faint, in the owner's colour.
+		for (float d = start; d <= stop; d += 1.5f) {
+			float x = 0, y = 0;
+			point(d, x, y);
+			BlendDisc(buf, w, h, x, y, 1.6f, r.rgb, 0.45f);
+		}
+		// The dots that flow to the settlement supplied.
+		const uint32_t light = Lighter(r.rgb, 55);
+		const float phase = std::fmod(nowMs / 1000.0f * kSpeed, kGap);
+		for (float d = start + phase; d <= stop - 6; d += kGap) {
+			float x = 0, y = 0;
+			point(d, x, y);
+			BlendDisc(buf, w, h, x, y, 2.4f, 0x000000, 0.35f);
+			BlendDisc(buf, w, h, x, y, 1.9f, light, 0.95f);
+		}
+		// Its head: a chevron of discs at the end, along the arc's last direction.
+		float ex = 0, ey = 0, qx = 0, qy = 0;
+		point(stop, ex, ey);
+		point(stop - 6, qx, qy);
+		const float hx = ex - qx, hy = ey - qy, hl = std::max(0.001f, std::hypot(hx, hy)), ux = hx / hl, uy = hy / hl;
+		for (int side = -1; side <= 1; side += 2) {
+			for (int k = 0; k <= 4; ++k) {
+				const float back = k * 1.6f;
+				BlendDisc(buf, w, h, ex - ux * back + side * -uy * back, ey - uy * back + side * ux * back, 1.5f, light, 0.95f);
+			}
+		}
+	}
+}
+
 void ZoomViewDrawTimers(uint32_t *buf, int w, int h, const std::vector<ZoomMapTimer> &timers, const wchar_t *face)
 {
 	if (!buf || w <= 0 || h <= 0 || timers.empty() || !face) return;
@@ -589,6 +781,10 @@ void InstallZoomView(bool knownExe)
 {
 	if (!knownExe) return;
 	const bool ok = HookFunction(addr::kZoomMapOnDraw, &HookZoomDraw, &g_origDraw);
+	if (!HookFunction(addr::kZoomMapDrawLinks, &HookDrawLinks, &g_origDrawLinks)) {
+		g_routesFailed = true;
+		LogW("game", "zoom map: could not hook the supply routes' drawing; the game's dotted lines stay");
+	}
 	const bool hideOk = HookFunction(addr::kZoomMapHide, &HookZoomHide, &g_origHide);
 	if (!hideOk) LogW("game", "zoom map: could not hook Hide; a box selection in progress is ended when the map stops being drawn");
 	if (!ok) g_failed = true;

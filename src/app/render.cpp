@@ -69,6 +69,7 @@ SetDIBitsToDevice_t g_origSetDIBitsToDevice = nullptr;
 std::mutex g_frameLock;
 // The respawn timers of the big map on g_frame, taken with it (game/zoomview.h).
 std::vector<ZoomMapTimer> g_frameTimers;
+std::vector<ZoomRoute> g_frameRoutes;
 std::vector<uint32_t> g_frame;
 int g_frameW = 0, g_frameH = 0;
 bool g_frameDirty = false;
@@ -459,14 +460,17 @@ const wchar_t *GameOverlayFace()
 void CopyGameFrame(std::vector<uint32_t> &image, int &fw, int &fh)
 {
 	std::vector<ZoomMapTimer> timers;
+	std::vector<ZoomRoute> routes;
 	{
 		std::lock_guard<std::mutex> lock(g_frameLock);
 		fw = g_frameW;
 		fh = g_frameH;
 		SyncCleanLocked();
 		timers = g_frameTimers;
+		routes = g_frameRoutes;
 	}
 	image = g_clean;
+	ZoomViewDrawRoutes(image.data(), fw, fh, routes, GetTickCount());
 	ZoomViewDrawTimers(image.data(), fw, fh, timers, GameOverlayFace());
 	ControlsDrawBarKeys(image.data(), fw, fh, GameOverlayFace());
 }
@@ -484,6 +488,7 @@ bool TakeNewFrame(bool video, bool wasVideo, std::vector<uint32_t> &image, int &
 	}
 	bool taken = false;
 	std::vector<ZoomMapTimer> timers;
+	std::vector<ZoomRoute> routes;
 	{
 		std::lock_guard<std::mutex> lock(g_frameLock);
 		if (g_frameDirty || wasVideo) {
@@ -491,6 +496,7 @@ bool TakeNewFrame(bool video, bool wasVideo, std::vector<uint32_t> &image, int &
 			fh = g_frameH;
 			SyncCleanLocked();
 			timers = g_frameTimers;
+			routes = g_frameRoutes;
 			g_frameDirty = false;
 			taken = true;
 		}
@@ -502,12 +508,14 @@ bool TakeNewFrame(bool video, bool wasVideo, std::vector<uint32_t> &image, int &
 			fh = g_frameH;
 			SyncCleanLocked();
 			timers = g_frameTimers;
+			routes = g_frameRoutes;
 			taken = true;
 		}
 	}
 	if (taken) {
 		// Outside the lock: only the changed part was copied under it, and the game thread doesn't wait for the whole image.
 		image = g_clean;
+		ZoomViewDrawRoutes(image.data(), fw, fh, routes, GetTickCount());
 		ZoomViewDrawTimers(image.data(), fw, fh, timers, GameOverlayFace());
 		ControlsDrawBarKeys(image.data(), fw, fh, GameOverlayFace());
 	}
@@ -782,6 +790,7 @@ int WINAPI HookSetDIBitsToDevice(HDC hdc, int xDest, int yDest, DWORD w, DWORD h
 	DisplayAttachWindow(hwnd);
 	// Read on the game thread, which drew the big map; outside the lock, as it takes the game's state.
 	std::vector<ZoomMapTimer> timers = ZoomViewTimers();
+	std::vector<ZoomRoute> routes = ZoomViewRoutes();
 	int cw = 0, ch = 0;
 	DisplayGetLogicalSize(hwnd, cw, ch);
 	{
@@ -796,6 +805,7 @@ int WINAPI HookSetDIBitsToDevice(HDC hdc, int xDest, int yDest, DWORD w, DWORD h
 		if (!frozen) {
 			AddFrameChange(BlitToFrame(bmi, bits, xDest, yDest, static_cast<int>(w), static_cast<int>(h), xSrc, ySrc));
 			g_frameTimers.swap(timers);
+			g_frameRoutes.swap(routes);
 		}
 		g_frameDirty = true;
 	}
