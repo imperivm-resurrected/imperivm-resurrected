@@ -113,8 +113,8 @@ void DrawSpectatorBar(uint32_t *buf, int W, int H, float s, int topY)
 	const float barH = collapsed ? 34 * s : 58 * s;
 	const float barW = collapsed ? (following ? 188 : 172) * s : std::min(static_cast<float>(W) - 24, (st.broadcast ? 1150.0f : 880.0f) * s);
 	float bx = static_cast<float>(posX * W - barW / 2), by =posTop >= 0 ? static_cast<float>(posTop * H) : static_cast<float>(topY);
-	bx = std::max(4.0f, std::min(static_cast<float>(W) - barW - 4, std::floor(bx)));
-	by = std::max(2.0f, std::min(static_cast<float>(H) - barH - 4, by));
+	bx = std::max(0.0f, std::min(static_cast<float>(W) - barW, std::floor(bx)));
+	by = std::max(0.0f, std::min(static_cast<float>(H) - barH, by));
 	const float cy = by + barH / 2;
 
 	const float mx = static_cast<float>(mouse.x), my = static_cast<float>(mouse.y);
@@ -150,8 +150,8 @@ void DrawSpectatorBar(uint32_t *buf, int W, int H, float s, int topY)
 
 	if (collapsed) {
 		// Play and pause on the left, the chevron that opens the bar on the right; the rest of the pill drags it.
-		rPlay = {bx + 4 * s, by + 4 * s, 26 * s, barH - 8 * s};
-		rCollapse = {bx + barW - 30 * s, by + 4 * s, 26 * s, barH - 8 * s};
+		rPlay = {bx + 4 * s, by + 3 * s, 26 * s, barH - 11 * s};
+		rCollapse = {bx + barW - 30 * s, by + 3 * s, 26 * s, barH - 11 * s};
 		const bool h = rCollapse.Has(mx, my), hPlay = rPlay.Has(mx, my);
 		if (h) FillRound(buf, W, H, rCollapse.x, rCollapse.y, rCollapse.w, rCollapse.h, rad, btnHot, 1.0f);
 		if (hPlay) FillRound(buf, W, H, rPlay.x, rPlay.y, rPlay.w, rPlay.h, rad, btnHot, 1.0f);
