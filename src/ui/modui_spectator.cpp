@@ -110,8 +110,8 @@ void DrawSpectatorBar(uint32_t *buf, int W, int H, float s, int topY)
 	const bool pinned = st.broadcast && st.atLive;
 	const unsigned shownCur = pinned ? st.total : st.cur;
 	const bool following = st.canFollow && st.follow >= 0;
-	const float barH = collapsed ? 40 * s : 58 * s;
-	const float barW = collapsed ? (following ? 214 : 196) * s : std::min(static_cast<float>(W) - 24, (st.broadcast ? 1150.0f : 880.0f) * s);
+	const float barH = collapsed ? 34 * s : 58 * s;
+	const float barW = collapsed ? (following ? 188 : 172) * s : std::min(static_cast<float>(W) - 24, (st.broadcast ? 1150.0f : 880.0f) * s);
 	float bx = static_cast<float>(posX * W - barW / 2), by =posTop >= 0 ? static_cast<float>(posTop * H) : static_cast<float>(topY);
 	bx = std::max(4.0f, std::min(static_cast<float>(W) - barW - 4, std::floor(bx)));
 	by = std::max(2.0f, std::min(static_cast<float>(H) - barH - 4, by));
@@ -149,20 +149,24 @@ void DrawSpectatorBar(uint32_t *buf, int W, int H, float s, int topY)
 	float tipX = bx;
 
 	if (collapsed) {
-		// The chevron opens the bar; the rest of the pill drags it, as the bar's own background does.
-		rCollapse = {bx + barW - 34 * s, by + 4 * s, 30 * s, barH - 8 * s};
-		const bool h = rCollapse.Has(mx, my);
+		// Play and pause on the left, the chevron that opens the bar on the right; the rest of the pill drags it.
+		rPlay = {bx + 4 * s, by + 4 * s, 26 * s, barH - 8 * s};
+		rCollapse = {bx + barW - 30 * s, by + 4 * s, 26 * s, barH - 8 * s};
+		const bool h = rCollapse.Has(mx, my), hPlay = rPlay.Has(mx, my);
 		if (h) FillRound(buf, W, H, rCollapse.x, rCollapse.y, rCollapse.w, rCollapse.h, rad, btnHot, 1.0f);
-		float x = bx + pad;
-		if (st.paused) FillTriangle(buf, W, H, x, cy - 7 * s, x, cy + 7 * s, x + 11 * s, cy, label, 1.0f);
-		else {
-			FillRound(buf, W, H, x, cy - 7 * s, 4 * s, 14 * s, 1.0f * s, label, 1.0f);
-			FillRound(buf, W, H, x + 7 * s, cy - 7 * s, 4 * s, 14 * s, 1.0f * s, label, 1.0f);
+		if (hPlay) FillRound(buf, W, H, rPlay.x, rPlay.y, rPlay.w, rPlay.h, rad, btnHot, 1.0f);
+		{
+			const float px = rPlay.x + rPlay.w / 2;
+			if (st.paused) FillTriangle(buf, W, H, px - 4 * s, cy - 6 * s, px - 4 * s, cy + 6 * s, px + 6 * s, cy, label, 1.0f);
+			else {
+				FillRound(buf, W, H, px - 5 * s, cy - 6 * s, 3.5f * s, 12 * s, 1.0f * s, label, 1.0f);
+				FillRound(buf, W, H, px + 1.5f * s, cy - 6 * s, 3.5f * s, 12 * s, 1.0f * s, label, 1.0f);
+			}
 		}
-		x += 22 * s;
-		DrawLabel(buf, W, H, ClockText(shownCur), x, by, 48 * s, barH, DT_RIGHT, pal::text, 1.0f);
-		x += 52 * s;
-		DrawLabel(buf, W, H, L"/ " + ClockText(st.total), x, by, 64 * s, barH, DT_LEFT, pal::textDim, 1.0f);
+		float x = rPlay.x + rPlay.w + 4 * s;
+		DrawLabel(buf, W, H, ClockText(shownCur), x, by, 42 * s, barH, DT_RIGHT, pal::text, 1.0f);
+		x += 46 * s;
+		DrawLabel(buf, W, H, L"/ " + ClockText(st.total), x, by, 58 * s, barH, DT_LEFT, pal::textDim, 1.0f);
 		arrow(rCollapse.x + rCollapse.w / 2, cy, 12 * s, false, label);
 		float rx = rCollapse.x - 6 * s;
 		if (following) FillDisc(buf, W, H, rx - 5 * s, cy, 5 * s, RGB((st.followRgb >> 16) & 0xff, (st.followRgb >> 8) & 0xff, st.followRgb & 0xff), 1.0f);
@@ -172,6 +176,7 @@ void DrawSpectatorBar(uint32_t *buf, int W, int H, float s, int topY)
 		FillRound(buf, W, H, lx, ly, lw, 2 * s, 1.0f * s, pal::bg, 1.0f);
 		if (frac > 0) FillRound(buf, W, H, lx, ly, std::max(2 * s, static_cast<float>(lw * frac)), 2 * s, 1.0f * s, pal::redText, 1.0f);
 		if (h) { tipFor = "Show the bar"; tipKeys = {ControlsModKey(kModKeySpecBar)}; tipX = rCollapse.x; }
+		else if (hPlay) { tipFor = st.paused ? "Resume" : "Pause"; tipKeys = {ControlsModKey(kModKeySpecPause)}; tipX = rPlay.x; }
 	}
 	else {
 		float x = rCollapse.x + rCollapse.w + gap;
@@ -327,6 +332,7 @@ void DrawSpectatorBar(uint32_t *buf, int W, int H, float s, int topY)
 	auto store = [&](int i, const RectF &r) { g_spec.btn[i] = {static_cast<LONG>(r.x), static_cast<LONG>(r.y), static_cast<LONG>(r.x + r.w), static_cast<LONG>(r.y + r.h)}; };
 	for (int i = 0; i < 13; i++) g_spec.btn[i] = RECT{};
 	if (collapsed) {
+		store(0, rPlay);
 		store(7, rCollapse);
 	}
 	else {

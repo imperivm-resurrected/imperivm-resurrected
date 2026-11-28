@@ -1697,7 +1697,8 @@ void SpectatorBarPos(double &centerX, double &top, int mode)
 		return;
 	}
 	cx = std::max(0.0, std::min(1.0, centerX));
-	ty = top < 0 ? -1.0 : std::min(1.0, top);
+	// Dragged over the top it stays at the top; only a bar never moved takes the default place (-1).
+	ty = std::max(0.0, std::min(1.0, top));
 	if (mode == 2) {
 		char text[32];
 		snprintf(text, sizeof(text), "%.4f", cx);
