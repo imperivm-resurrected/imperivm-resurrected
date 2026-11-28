@@ -150,29 +150,32 @@ void DrawSpectatorBar(uint32_t *buf, int W, int H, float s, int topY)
 
 	if (collapsed) {
 		// Play and pause on the left, the chevron that opens the bar on the right; the rest of the pill drags it.
-		rPlay = {bx + 4 * s, by + 3 * s, 26 * s, barH - 11 * s};
-		rCollapse = {bx + barW - 30 * s, by + 3 * s, 26 * s, barH - 11 * s};
+		// Over the progress line at its foot, the content, centred: the buttons as far from its top as from the line.
+		const float contentH = barH - 3 * s, mid = by + contentH / 2;
+		rPlay = {bx + 4 * s, by + 4 * s, 26 * s, contentH - 8 * s};
+		rCollapse = {bx + barW - 30 * s, by + 4 * s, 26 * s, contentH - 8 * s};
 		const bool h = rCollapse.Has(mx, my), hPlay = rPlay.Has(mx, my);
 		if (h) FillRound(buf, W, H, rCollapse.x, rCollapse.y, rCollapse.w, rCollapse.h, rad, btnHot, 1.0f);
 		if (hPlay) FillRound(buf, W, H, rPlay.x, rPlay.y, rPlay.w, rPlay.h, rad, btnHot, 1.0f);
 		{
 			const float px = rPlay.x + rPlay.w / 2;
-			if (st.paused) FillTriangle(buf, W, H, px - 4 * s, cy - 6 * s, px - 4 * s, cy + 6 * s, px + 6 * s, cy, label, 1.0f);
+			const float py = rPlay.y + rPlay.h / 2;
+			if (st.paused) FillTriangle(buf, W, H, px - 4 * s, py - 6 * s, px - 4 * s, py + 6 * s, px + 6 * s, py, label, 1.0f);
 			else {
-				FillRound(buf, W, H, px - 5 * s, cy - 6 * s, 3.5f * s, 12 * s, 1.0f * s, label, 1.0f);
-				FillRound(buf, W, H, px + 1.5f * s, cy - 6 * s, 3.5f * s, 12 * s, 1.0f * s, label, 1.0f);
+				FillRound(buf, W, H, px - 4.75f * s, py - 6 * s, 3.5f * s, 12 * s, 1.0f * s, label, 1.0f);
+				FillRound(buf, W, H, px + 1.25f * s, py - 6 * s, 3.5f * s, 12 * s, 1.0f * s, label, 1.0f);
 			}
 		}
 		float x = rPlay.x + rPlay.w + 4 * s;
-		DrawLabel(buf, W, H, ClockText(shownCur), x, by, 42 * s, barH, DT_RIGHT, pal::text, 1.0f);
+		DrawLabel(buf, W, H, ClockText(shownCur), x, by, 42 * s, contentH, DT_RIGHT, pal::text, 1.0f);
 		x += 46 * s;
-		DrawLabel(buf, W, H, L"/ " + ClockText(st.total), x, by, 58 * s, barH, DT_LEFT, pal::textDim, 1.0f);
-		arrow(rCollapse.x + rCollapse.w / 2, cy, 12 * s, false, label);
+		DrawLabel(buf, W, H, L"/ " + ClockText(st.total), x, by, 58 * s, contentH, DT_LEFT, pal::textDim, 1.0f);
+		arrow(rCollapse.x + rCollapse.w / 2, mid, 12 * s, false, label);
 		float rx = rCollapse.x - 6 * s;
-		if (following) FillDisc(buf, W, H, rx - 5 * s, cy, 5 * s, RGB((st.followRgb >> 16) & 0xff, (st.followRgb >> 8) & 0xff, st.followRgb & 0xff), 1.0f);
+		if (following) FillDisc(buf, W, H, rx - 5 * s, mid, 5 * s, RGB((st.followRgb >> 16) & 0xff, (st.followRgb >> 8) & 0xff, st.followRgb & 0xff), 1.0f);
 		// The progress, a line along the pill's foot.
 		const double frac = st.total ? std::min(1.0, static_cast<double>(shownCur) / st.total) : 0.0;
-		const float lx = bx + rad, lw = barW - 2 * rad, ly = by + barH - 4 * s;
+		const float lx = bx + rad, lw = barW - 2 * rad, ly = by + contentH;
 		FillRound(buf, W, H, lx, ly, lw, 2 * s, 1.0f * s, pal::bg, 1.0f);
 		if (frac > 0) FillRound(buf, W, H, lx, ly, std::max(2 * s, static_cast<float>(lw * frac)), 2 * s, 1.0f * s, pal::redText, 1.0f);
 		if (h) { tipFor = "Show the bar"; tipKeys = {ControlsModKey(kModKeySpecBar)}; tipX = rCollapse.x; }
