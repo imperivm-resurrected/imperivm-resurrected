@@ -243,6 +243,9 @@ bool MpUiHandleMessage(UINT msg, WPARAM wp, LPARAM lp)
 		else if (g_s.passPrompt && wp == VK_ESCAPE) {
 			DoAction(kPassCancel, 0);
 		}
+		else if (g_s.setupPrompt && (wp == VK_ESCAPE || (wp == VK_RETURN && g_s.tabAction < 0))) {
+			DoAction(wp == VK_ESCAPE ? kSetupCancel : kSetupSave, 0);
+		}
 		else if (LinkOfferShown(g_s) && (wp == VK_ESCAPE || (wp == VK_RETURN && g_s.tabAction < 0))) {
 			DoAction(wp == VK_ESCAPE ? kLinkOfferNo : kLinkOfferYes, 0);
 		}

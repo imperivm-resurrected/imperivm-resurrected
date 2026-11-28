@@ -3768,5 +3768,9 @@ extern const TrRow kTrRows[] = {
 	{"There's no chat while you watch a game.", "No hay chat mientras ves una partida.", "Non c'è chat mentre guardi una partita."},
 	{"It was saved with an earlier version of Imperivm Resurrected: it loads, but some rules may play differently.", "Se guardó con una versión anterior de Imperivm Resurrected: se puede cargar, pero algunas reglas pueden jugarse distinto.", "È stata salvata con una versione precedente di Imperivm Resurrected: si può caricare, ma alcune regole possono comportarsi diversamente."},
 	{"The speed the game starts at, for every player. During the game it is changed as always.", "La velocidad a la que empieza la partida, para todos los jugadores. Durante la partida se cambia como siempre.", "La velocità con cui inizia la partita, per tutti i giocatori. Durante la partita si cambia come sempre."},
+	{"Save this setup...", "Guardar esta configuración…", "Salva questa configurazione…"},
+	{"Save setup", "Guardar configuración", "Salva configurazione"},
+	{"Setup name", "Nombre de la configuración", "Nome della configurazione"},
+	{"You don't have the scenario \"%s\"", "No tienes el escenario \"%s\"", "Non hai lo scenario \"%s\""},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

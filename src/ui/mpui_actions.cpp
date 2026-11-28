@@ -110,6 +110,10 @@ void DoAction(int action, int arg)
 			DoAction(kPassCancel, 0);
 			break;
 		}
+		if (g_s.setupPrompt) {
+			DoAction(kSetupCancel, 0);
+			break;
+		}
 		if (g_s.syncConfirm) {
 			g_s.syncConfirm = false;
 			break;
@@ -169,6 +173,30 @@ void DoAction(int action, int arg)
 		g_s.passPrompt = false;
 		g_s.passShow = false;
 		g_s.joinPassInput.clear();
+		g_s.focus = kNoField;
+		break;
+	case kFieldSetupName: FocusField(kSetupNameField); break;
+	case kSetupSave: {
+		const std::string name = SetupName(g_s.setupInput);
+		if (name.empty()) {
+			FocusField(kSetupNameField);
+			break;
+		}
+		SaveRoomSetup(g_s, name);
+		g_s.setupPrompt = false;
+		g_s.setupInput.clear();
+		g_s.focus = kNoField;
+		break;
+	}
+	case kSetupDelete:
+		DeleteRoomSetup(g_s, SetupName(g_s.setupInput));
+		g_s.setupPrompt = false;
+		g_s.setupInput.clear();
+		g_s.focus = kNoField;
+		break;
+	case kSetupCancel:
+		g_s.setupPrompt = false;
+		g_s.setupInput.clear();
 		g_s.focus = kNoField;
 		break;
 	case kJoin: {
@@ -377,6 +405,14 @@ void DoAction(int action, int arg)
 					setCheck(0x100a, pr.sharedControl);
 				}
 				LogI("room", "preset %s", pr.name);
+			}
+			// After the presets, the host's saved setups and the item that saves this one.
+			else if (arg - kPresetCount >= 0 && arg - kPresetCount < static_cast<int>(g_s.setups.size())) StartRoomSetup(g_s, g_s.setups[arg - kPresetCount]);
+			else if (arg - kPresetCount == static_cast<int>(g_s.setups.size())) {
+				const int current = MatchRoomSetup(g_s);
+				g_s.setupInput = current >= 0 ? g_s.setups[current].name : std::string();
+				g_s.setupPrompt = true;
+				FocusField(kSetupNameField);
 			}
 		}
 		else if (g_s.dropKind == kDropSlot) {
@@ -852,6 +888,7 @@ std::string &FocusedText()
 	case kSearchField: return g_s.searchInput;
 	case kPickSearchField: return g_s.pickSearch;
 	case kRoomNameField: return g_s.roomNameInput;
+	case kSetupNameField: return g_s.setupInput;
 	case kTourneyField:
 	case kCupNameField:
 	case kCupDescriptionField:
@@ -870,7 +907,8 @@ int FieldOfAction(int action)
 		: action == kFieldJoinPass ? kJoinPassField : action == kFieldSearch ? kSearchField
 		: action == kFieldPickSearch ? kPickSearchField : action == kFieldRoomName ? kRoomNameField : action == kFieldTourney ? kTourneyField : action == kFieldCupName ? kCupNameField
 		: action == kFieldCupDescription ? kCupDescriptionField : action == kFieldCupCode ? kCupCodeField : action == kFieldRanked ? kRankedField
-		: action == kFieldTeamName ? kTeamNameField : action == kFieldTeamSearch ? kTeamSearchField : action == kFieldCupTime ? kCupTimeField : kNoField;
+		: action == kFieldTeamName ? kTeamNameField : action == kFieldTeamSearch ? kTeamSearchField : action == kFieldCupTime ? kCupTimeField
+		: action == kFieldSetupName ? kSetupNameField : kNoField;
 }
 
 int ActionOfField(int field)
@@ -879,7 +917,8 @@ int ActionOfField(int field)
 		: field == kJoinPassField ? kFieldJoinPass : field == kSearchField ? kFieldSearch
 		: field == kPickSearchField ? kFieldPickSearch : field == kRoomNameField ? kFieldRoomName : field == kTourneyField ? kFieldTourney : field == kCupNameField ? kFieldCupName
 		: field == kCupDescriptionField ? kFieldCupDescription : field == kCupCodeField ? kFieldCupCode : field == kRankedField ? kFieldRanked
-		: field == kTeamNameField ? kFieldTeamName : field == kTeamSearchField ? kFieldTeamSearch : field == kCupTimeField ? kFieldCupTime : -1;
+		: field == kTeamNameField ? kFieldTeamName : field == kTeamSearchField ? kFieldTeamSearch : field == kCupTimeField ? kFieldCupTime
+		: field == kSetupNameField ? kFieldSetupName : -1;
 }
 
 void FocusField(int field)
@@ -928,7 +967,7 @@ void FieldKey(UINT msg, WPARAM wp)
 {
 	std::string &text = FocusedText();
 	const int field = g_s.focus;
-	const size_t limit = TourneyOwnsField(field) ? TourneyFieldBytes(field) : 200;
+	const size_t limit = TourneyOwnsField(field) ? TourneyFieldBytes(field) : field == kSetupNameField ? 48 : 200;
 	if (msg == WM_CHAR) {
 		const bool typed = EditChar(text, g_s.edit, wp, limit);
 		if (typed && g_s.focus == kPickSearchField) g_s.pick.scroll = 0;
@@ -944,6 +983,7 @@ void FieldKey(UINT msg, WPARAM wp)
 		else if (g_s.focus == kPickSearchField) DoAction(kPickOk, 0);
 		else if (g_s.focus == kChatField) DoAction(kChatSend, 0);
 		else if (g_s.focus == kJoinPassField) DoAction(kPassOk, 0);
+		else if (g_s.focus == kSetupNameField) DoAction(kSetupSave, 0);
 		else if (TourneyOwnsField(g_s.focus)) TourneyFieldEnter(g_s.focus);
 		else if (g_s.focus == kRankedField) RankedFieldEnter();
 		else if (g_s.focus == kRoomNameField) {
@@ -953,7 +993,8 @@ void FieldKey(UINT msg, WPARAM wp)
 		else g_s.focus = kNoField;
 	}
 	else if (wp == VK_ESCAPE) {
-		if (g_s.focus == kPickSearchField && !g_s.pickSearch.empty()) {
+		if (g_s.focus == kSetupNameField) DoAction(kSetupCancel, 0);
+		else if (g_s.focus == kPickSearchField && !g_s.pickSearch.empty()) {
 			g_s.pickSearch.clear();
 			g_s.edit = EditState();
 		}

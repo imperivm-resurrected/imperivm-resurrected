@@ -152,7 +152,7 @@ void MpUiObserveFrame(const uint32_t *buf, int w, int h)
 
 bool OverlayActive(const State &st)
 {
-	if (st.game.active) return st.dropOpen || (st.game.picker && !SaveMapPicking(st));
+	if (st.game.active) return st.dropOpen || st.setupPrompt || (st.game.picker && !SaveMapPicking(st));
 	return st.dropOpen || st.searching || st.connecting || st.passPrompt || st.syncConfirm || st.syncPhase || st.recoverAsk ||
 		RejoinClientActive() || RejoinClientFailed() || (st.room.id && st.room.info.spectate) ||
 		(st.room.id && !st.gameClosedAt);

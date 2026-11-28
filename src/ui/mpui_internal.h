@@ -64,6 +64,8 @@ enum Action {
 	kGColorCustom, kGColorWheel, kGColorValue, kGColorUse, kGColorBack,
 	// The list's filter tabs: the filter is the argument.
 	kRoomFilter,
+	// The host's saved room setups: the name field of the dialog that saves one, and its buttons.
+	kFieldSetupName, kSetupSave, kSetupDelete, kSetupCancel,
 };
 
 typedef int(__cdecl *HostGame_t)(int, unsigned, int);
@@ -102,7 +104,7 @@ extern JoinFlowState g_flow;
 enum View { kViewList, kViewRanked, kViewCreate, kViewTournaments };
 
 enum Field { kNoField, kChatField, kNameField, kPassField, kJoinPassField, kSearchField, kPickSearchField, kRoomNameField, kTourneyField, kCupNameField, kCupDescriptionField, kCupCodeField, kRankedField,
-	kTeamNameField, kTeamSearchField, kCupTimeField };
+	kTeamNameField, kTeamSearchField, kCupTimeField, kSetupNameField };
 
 enum { kPredTeam, kPredRace, kPredAi, kPredReady, kPredOptSel, kPredOptVal, kPredColor };
 
@@ -252,6 +254,39 @@ struct ProfileSummary {
 extern ListGeom g_createModsGeomOut;
 std::vector<ListLine> BuildModLines(const std::vector<ModRow> &rows, const std::string &emptyText);
 int PaintLinesInline(Painter &p, const std::vector<ListLine> &lines, int x, int y, int w, int rowH);
+// A room setup the player saved (imperivm-setups.json in the game's folder): its map, the game's options, the rules, the removed sites, the
+// speed and the team colours.
+struct RoomSetupOption {
+	int id = 0;
+	bool checkbox = false;
+	bool value = false;
+	// A list's choice: its text in the language it was saved in, the league's id of the item where there is one, and its place.
+	std::string text, key;
+	int sel = -1;
+};
+
+struct RoomSetup {
+	std::string name;
+	// A random map (its type is among the options), or the scenario's path; neither leaves the room's map as it is.
+	bool random = false;
+	std::string scenario;
+	std::vector<RoomSetupOption> options;
+	unsigned rules = 0, sites = 0;
+	int speed = kRoomSpeedProfile;
+	bool teamColors = false;
+};
+
+// A setup being put in the room (StepRoomSetup).
+struct SetupApply {
+	bool on = false;
+	RoomSetup setup;
+	bool mapDone = false;
+	int mapTries = 0, pick = -1, tries = 0;
+	std::string offered;
+	DWORD tick = 0;
+	std::map<int, int> tried;
+};
+
 struct State {
 	bool open = false;
 	int view = kViewList;
@@ -271,6 +306,11 @@ struct State {
 	bool passPrompt = false;
 	OnlineLobby passLobby;
 	bool passWatch = false;
+	// The host's saved setups, read when the room opens; the dialog that saves one, and the one being put in the room.
+	std::vector<RoomSetup> setups;
+	bool setupPrompt = false;
+	std::string setupInput;
+	SetupApply setupApply;
 	OnlineRoom room;
 	bool loading = false;
 	bool ready = false;
@@ -814,6 +854,17 @@ struct HostAfterGameState {
 };
 extern HostAfterGameState g_hostAfter;
 void StepSaveMap(const GameRoomSnapshot &snap);
+std::vector<RoomSetup> ReadRoomSetups();
+// The typed name without the spaces around it.
+std::string SetupName(const std::string &typed);
+// The saved setup the host's room has now, or -1.
+int MatchRoomSetup(const State &st);
+// Under that name: one already saved with it is replaced.
+void SaveRoomSetup(State &st, const std::string &name);
+void DeleteRoomSetup(State &st, const std::string &name);
+void StartRoomSetup(State &st, const RoomSetup &s);
+void StepRoomSetup(State &st, const GameRoomSnapshot &g);
+void PaintSetupPrompt(Painter &p, const State &st);
 extern std::vector<uint32_t> g_bg;
 bool MainMenuOnTop();
 void WakeGameThread();

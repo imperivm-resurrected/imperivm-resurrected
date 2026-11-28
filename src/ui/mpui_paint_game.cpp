@@ -291,7 +291,9 @@ void PaintOptionsCard(Painter &p, const State &st, int x, int y, int w, int h)
 				bool enabled;
 				return gameValue(id, key, index, enabled);
 			});
-			grid.Combo("Preset", preset >= 0 ? kPresets[preset].name : "Custom setup", preset != 0, canEdit, kDropPreset, 0,
+			const int setup = MatchRoomSetup(st);
+			grid.Combo("Preset", setup >= 0 ? st.setups[setup].name : std::string(preset >= 0 ? kPresets[preset].name : "Custom setup"),
+				setup >= 0 || preset != 0, canEdit, kDropPreset, 0,
 				"Classic: like the original game. Competitive: 5000 gold, normal population, no bonuses, unexplored map with fog and diplomacy locked. Various: 10000 gold, high population, with bonuses, explored map and no fog. Competitive and Various also turn on shared control.");
 		}
 		comboRow(0x1000, "Map type", "Map type");

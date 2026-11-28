@@ -1318,7 +1318,7 @@ void PaintScreen(Painter &p, const State &st)
 {
 	const bool linkOffer = LinkOfferShown(st);
 	const bool hiddenRoom = TourneyRoomHidden(st) || RankedRoomHidden(st) || RankedRoomLeaving(st);
-	p.noHover = st.dropOpen || st.passPrompt || st.syncConfirm || st.syncPhase || st.searching || st.connecting || st.recoverAsk ||
+	p.noHover = st.dropOpen || st.passPrompt || st.setupPrompt || st.syncConfirm || st.syncPhase || st.searching || st.connecting || st.recoverAsk ||
 		RejoinClientActive() || RejoinClientFailed() || (st.game.active && st.game.picker && !hiddenRoom) || linkOffer;
 	if (st.game.active && !hiddenRoom) {
 		PaintGameRoom(p, st);
@@ -1328,6 +1328,10 @@ void PaintScreen(Painter &p, const State &st)
 			return;
 		}
 		PaintDropList(p, st);
+		if (st.setupPrompt) {
+			UseSharedFonts(p);
+			PaintSetupPrompt(p, st);
+		}
 		return;
 	}
 	UseScreenFonts(p);
