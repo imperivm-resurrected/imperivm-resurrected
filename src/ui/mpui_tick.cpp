@@ -303,7 +303,7 @@ void MpUiGameThreadTick()
 			g_s.gameClosedAt = GetTickCount();
 			g_s.closedByUser = g_s.leftByUser;
 			g_s.leftByUser = false;
-			if (!g_s.gameWasOnline && g_s.closedByUser) g_s.open = false;
+			if ((!g_s.gameWasOnline || g_s.lan) && g_s.closedByUser) g_s.open = false;
 			else if (!g_s.closedByUser) g_s.startingCover = true;
 		}
 		// When the game gives up on starting a match it opens a menu instead: the lobby online, the main menu otherwise (CVXUIMultiplayerGame::StartGame).
@@ -321,7 +321,8 @@ void MpUiGameThreadTick()
 			g_s.startingCover = false;
 			if (playing) {
 				g_s.open = false;
-				if (g_s.gameWasOnline) {
+				// A local network game has no Steam room: nothing to show in Steam, record for a return or report.
+				if (g_s.gameWasOnline && !g_s.lan) {
 					SteamSetPlaying(true);
 					g_s.inOnlineGame = true;
 					g_s.classicPending = false;
@@ -339,12 +340,12 @@ void MpUiGameThreadTick()
 				}
 			}
 			else {
-				if (g_s.gameWasOnline) {
+				if (g_s.gameWasOnline && !g_s.lan) {
 					if (g_s.closedRoomGen) SteamLeaveLobby(g_s.closedRoomGen);
 					g_s.closedRoomGen = 0;
 					if (!g_s.closedByUser) g_s.open = true;
 				}
-				if (!g_s.gameWasOnline && wasCovering) g_s.open = false;
+				if ((!g_s.gameWasOnline || g_s.lan) && wasCovering) g_s.open = false;
 				MpSaveSetPendingLoad("");
 			}
 			LogI("lobby", "game room closed (%s)", playing ? "the game starts" : g_s.gameWasOnline ? "out of the room, to the list" : "back to the menu");
@@ -402,7 +403,7 @@ void MpUiGameThreadTick()
 			if (g_s.leftByUser) {
 				roomId = gameHost = 0;
 			}
-			else if (active && g_s.game.online && !g_s.inOnlineGame && !g_s.room.id && roomId) {
+			else if (active && g_s.game.online && !g_s.inOnlineGame && !g_s.room.id && roomId && !g_s.lan) {
 				LogI("lobby", "the Steam lobby closed before starting; out of the game room");
 				g_s.classicPending = false;
 				roomId = gameHost = 0;

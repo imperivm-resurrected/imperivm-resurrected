@@ -515,7 +515,10 @@ void PaintList(Painter &p, const State &st)
 	LobbyLayout l = LobbyLayoutFor(st.viewW, st.viewH);
 	const int m = l.margin, toolY = l.toolY;
 	// The filters as tabs with their counts: every room, those that can be joined, the games that can be watched and the friends'.
-	const int refreshW = std::max(GhostButtonWidth(p, "Refresh", false), GhostButtonWidth(p, "Searching...", false));
+	// Beside Refresh, the game's own local network (without Steam); the layout counts both as one.
+	const int lanW = GhostButtonWidth(p, "Local network", false), lanGap = 8;
+	const int refreshOnlyW = std::max(GhostButtonWidth(p, "Refresh", false), GhostButtonWidth(p, "Searching...", false));
+	const int refreshW = refreshOnlyW + lanGap + lanW;
 	const int refreshX = m + l.tableW - refreshW;
 	static const struct {
 		int filter;
@@ -582,7 +585,9 @@ void PaintList(Painter &p, const State &st)
 		PaintField(p, st, m, toolY + kToolH + kToolGap, std::min(420, l.tableW), kToolH, st.searchInput, "Search room, host or map...", st.focus == kSearchField,
 			kFieldSearch);
 	}
-	PaintGhostButton(p, refreshX, toolY, refreshW, kToolH, st.loading ? "Searching..." : "Refresh", kRefresh, false, st.ready && !st.loading, mx, my);
+	PaintGhostButton(p, refreshX, toolY, lanW, kToolH, "Local network", kLanOpen, false, true, mx, my);
+	PaintGhostButton(p, refreshX + lanW + lanGap, toolY, refreshOnlyW, kToolH, st.loading ? "Searching..." : "Refresh", kRefresh, false, st.ready && !st.loading,
+		mx, my);
 	// Over the room's card, the main action: making a room.
 	p.Button(l.w - m - l.detailW, toolY, l.detailW, kToolH, "Create a room", kCreate, 0, mx, my, true, true);
 

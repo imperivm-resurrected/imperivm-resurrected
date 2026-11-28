@@ -135,6 +135,16 @@ void DoAction(int action, int arg)
 		}
 		break;
 	case kRefresh: SteamRefreshLobbies(); break;
+	case kLanOpen:
+		// The main menu's Multiplayer opens the game's own screen once (classicPending); the virtual network is off without a Steam room,
+		// so the game's local network is the real one.
+		LogI("lobby", "opening the game's own local network screen");
+		g_s.open = false;
+		g_s.lan = true;
+		g_s.classicPending = true;
+		g_s.classicPendingAt = GetTickCount();
+		g_flow.backToMain = false;
+		break;
 	case kSort:
 		if (g_s.sortCol == arg) g_s.sortDesc = !g_s.sortDesc;
 		else {
@@ -942,6 +952,7 @@ void FieldKey(UINT msg, WPARAM wp)
 void OpenMpMenu(bool checkRecover)
 {
 	g_s.open = true;
+	g_s.lan = false;
 	g_s.view = kViewList;
 	g_s.mods = ModsList();
 	g_s.profiles = ModsProfileNames();
