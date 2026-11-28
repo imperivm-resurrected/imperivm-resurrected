@@ -24,6 +24,8 @@ struct LeagueRoomRequest {
 	std::string diplomacy;
 	// The time of year of a random map: 0 spring, 1 autumn, 2 winter. A scenario keeps its own.
 	int climate = -1;
+	// The game speed in percent of real time (70 to 300); -1 the game's normal speed.
+	int speed = -1;
 };
 LeagueRoomRequest LeagueRoomRequestOf(const LeagueRoomSettings &s);
 LeagueRoomRequest LeagueRoomRequestOf(const TourneySettings &s);
@@ -47,7 +49,7 @@ struct LeagueRoomOptions {
 	int climate = 0;
 	// The content's own room options at their defaults.
 	bool contentDefaults = true;
-	// The game's speed in the room's options (+0x5c): -1 is the normal speed of GamePlay/NormalSpeed.
+	// The game's speed in the room's options (+0x5c): the pace (700 to 3000), or -1 for the normal speed of GamePlay/NormalSpeed.
 	int gameSpeed = -1;
 };
 

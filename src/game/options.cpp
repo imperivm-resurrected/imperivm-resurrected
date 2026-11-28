@@ -9,6 +9,7 @@
 
 #include "game/options.h"
 #include "game/gamehook.h"
+#include "game/gameroom.h"
 #include "core/config.h"
 #include "hooks/displaymode.h"
 #include "mods/lang.h"
@@ -505,11 +506,50 @@ void OptionsWriteCombo(int id, int index)
 	if (combo) reinterpret_cast<ComboSetSelected_t>(addr::kComboSetSelected)(combo, nullptr, index, 1);
 }
 
+namespace {
+bool (*g_speedFixed)() = nullptr;
+typedef int(__cdecl *ApplyGameOptions_t)(int *block);
+ApplyGameOptions_t g_origApplyGameOptions = nullptr;
+// TVXGameSettings +0xd98, the room's game speed: -1 or a pace.
+const size_t kSettingsRoomSpeed = 0xd98;
+
+// ApplyGameOptions (006e7ff0) sends the options' speed to the game being played only while the room's speed is -1: a room that chose
+// one would hold it for the whole game. A normal room's is only the one the game starts at, and the options change it as with -1; a
+// league or cup game keeps its own, also when its room left it at -1. The room's speed is put back once applied.
+int __cdecl HookApplyGameOptions(int *block)
+{
+	char *settings = *reinterpret_cast<char **>(addr::kGameSettings);
+	if (!settings || !*reinterpret_cast<void **>(addr::kGame)) return g_origApplyGameOptions(block);
+	int &roomSpeed = *reinterpret_cast<int *>(settings + kSettingsRoomSpeed);
+	const int kept = roomSpeed;
+	if (OptionsSpeedFixed()) {
+		if (roomSpeed == -1) roomSpeed = 0;
+	}
+	// An adventure's own speed stays as the game holds it.
+	else if (GameRoomGameRunning()) roomSpeed = -1;
+	const int r = g_origApplyGameOptions(block);
+	roomSpeed = kept;
+	return r;
+}
+}
+
+void OptionsSetSpeedFixedQuery(bool (*fixed)())
+{
+	g_speedFixed = fixed;
+}
+
+bool OptionsSpeedFixed()
+{
+	return *reinterpret_cast<void **>(addr::kGame) && g_speedFixed && g_speedFixed();
+}
+
 void InstallOptionsHooks(bool knownExe)
 {
 	if (!knownExe) {
 		return;
 	}
+	if (!HookAt(addr::kApplyGameOptions, reinterpret_cast<void *>(&HookApplyGameOptions), reinterpret_cast<void **>(&g_origApplyGameOptions), "ApplyGameOptions"))
+		LogW("options", "the game speed of a normal room stays as the game holds it");
 	bool ok = HookAt(addr::kPopulateControls, reinterpret_cast<void *>(&HookPopulateControls),
 				  reinterpret_cast<void **>(&g_origPopulate), "CVXUIOptions::PopulateControls") &&
 		HookAt(addr::kOptionsOnMessage, reinterpret_cast<void *>(&HookOnMessage), reinterpret_cast<void **>(&g_origOnMessage),

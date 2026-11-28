@@ -243,6 +243,7 @@ Values ReadNative()
 		v.scrolls[id] = OptionsReadScroll(id, 0);
 		v.disabled[id] = !OptionsControlEnabled(id);
 	}
+	if (OptionsSpeedFixed()) v.disabled[kGameSpeed] = true;
 	for (int id : kNativeCombos) {
 		v.combos[id] = OptionsReadCombo(id);
 		v.items[id] = OptionsComboItems(id);

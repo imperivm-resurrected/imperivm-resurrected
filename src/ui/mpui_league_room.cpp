@@ -158,7 +158,7 @@ bool Due(int id)
 void Send(const Step &s, const LeagueRoomOptions &want, GameRoomSnapshot &g)
 {
 	if (s.id == kLockStep) {
-		GameRoomLockOptions(RulesOf(want, g.rules), want.allSites ? 0u : kSiteMask);
+		GameRoomLockOptions(RulesOf(want, g.rules), want.allSites ? 0u : kSiteMask, want.gameSpeed);
 		return;
 	}
 	for (GameRoomOption &o : g.options) {

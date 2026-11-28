@@ -44,6 +44,7 @@ LeagueRoomRequest LeagueRoomRequestOf(const TourneySettings &s)
 	r.cheats = 0;
 	r.timers = s.timers;
 	r.diplomacy = s.diplomacy;
+	r.speed = s.speed;
 	return r;
 }
 
@@ -113,6 +114,7 @@ LeagueRoomOptions LeagueRoomOptionsFor(const LeagueRoomRequest &r)
 	o.cheats = r.cheats == 1;
 	o.timers = r.timers != 0;
 	o.climate = r.climate >= 0 && r.climate <= 2 ? r.climate : 0;
+	o.gameSpeed = r.speed >= 70 && r.speed <= 300 ? r.speed * 10 : -1;
 	return o;
 }
 

@@ -6,6 +6,10 @@
 #include <vector>
 
 void InstallOptionsHooks(bool knownExe);
+// What tells that the game being played is a league or cup one (the league's client, given by the app): its speed is the room's for the
+// whole game, which the options cannot change.
+void OptionsSetSpeedFixedQuery(bool (*fixed)());
+bool OptionsSpeedFixed();
 
 // The game's options dialog stays open under the mod's screen and keeps doing the work: these read and change its controls.
 // Null when it is not open. Everything but this call belongs on the game thread.

@@ -117,6 +117,8 @@ struct TourneySettings {
 	std::string diplomacy;
 	// Seconds behind the game; 0 without spectators; -1 when the tournament does not say.
 	int specDelay = -1;
+	// The speed of every game, in percent of real time as the options show it (TourneySpeedValid); -1 the game's normal speed.
+	int speed = -1;
 };
 TourneySettings TourneySettingsFromJson(const Json *v);
 Json TourneySettingsJson(const TourneySettings &s);
@@ -126,6 +128,8 @@ struct TourneyRoomRules {
 	bool hideCivs = false, fog = true, explored = false, lockedDiplomacy = true;
 	// The respawn timers of the big map; a cup that says nothing allows them.
 	bool timers = true;
+	// TourneySettings::speed, -1 when it is not one a cup can choose.
+	int speed = -1;
 };
 // A preset's own fog, map and diplomacy: competitive with fog, unexplored and locked; classic the same but free; various without fog,
 // explored and free.
@@ -135,6 +139,8 @@ TourneyRoomRules TourneyRulesOf(const TourneySettings &s);
 int TourneySpecDelay(const TourneySettings &s);
 // The spectators' delays a cup can choose: none, 60, 120 or 300 s.
 bool TourneySpecDelayValid(int seconds);
+// The game speeds a cup can choose besides the normal one: 170, 200, 250 or 300 %.
+bool TourneySpeedValid(int percent);
 // A new cup's: competitive, civilizations hidden, spectators 120 s behind, and the preset's fog, map and diplomacy.
 TourneySettings TourneyCupDefaultSettings();
 // The settings with every switch written, as the cup's form keeps them.

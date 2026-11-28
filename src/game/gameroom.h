@@ -127,12 +127,14 @@ void GameRoomKeepPlayerPrefs();
 // The host of a ranked or cup room, until it closes (GameRoomKeepPlayerPrefs included): every time the room's options are applied
 // they carry these rules (kRuleMask) and removed sites (kSiteMask), and the normal game speed. GameRoomSetRules and
 // GameRoomSetSiteFlags change nothing meanwhile.
-void GameRoomLockOptions(unsigned rules, unsigned sites);
+void GameRoomLockOptions(unsigned rules, unsigned sites, int speed = -1);
 int GameRoomLoadSetting(const char *key, int def);
 void GameRoomSaveSetting(const char *key, int value);
 void GameRoomRefreshChoices();
 
 void GameRulesOnGameStart();
+// A game started from the multiplayer room (a saved game loaded in it, or rejoined) is being played.
+bool GameRoomGameRunning();
 void GameRulesOnGameEnd();
 void GameRoomCycleTeam(int slot);
 // Team 0 is no team, 1..teamChoices-1 a team. Only the slot's own player, or the host for an AI, and not while the local

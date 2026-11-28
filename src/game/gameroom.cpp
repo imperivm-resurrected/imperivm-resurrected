@@ -81,6 +81,8 @@ std::atomic<bool> g_keepAsked{false};
 bool g_prefsKept = false;
 bool g_lockOn = false;
 unsigned g_lockRules = 0, g_lockSites = 0;
+// The locked room's game speed: a pace, or -1 for the game's normal one.
+int g_lockSpeed = -1;
 // CPlayerProfile +0xc8: the last room's TVXMultiGameOptions (0xec bytes of ints and char arrays), which the next room starts from.
 // SaveLocalPlayerPrefs (006dabc0) overwrites it with the room's, and saves player.ini, when the game starts and when the player leaves.
 const size_t kProfileRoomOffset = 0xc8, kProfileRoomSize = 0xec;
@@ -1180,9 +1182,9 @@ int __fastcall HookApplyToGame(void *self, void *edx, char *opts)
 		flags = (flags & ~(kSiteMask | kRuleMask)) | (random ? sites : 0) | (rules & (random ? ~0u : ~kSeasonBits));
 		// OnApply (006f6320) publishes this block after ApplyToGame; its +0x5c becomes the game's speed (TVXGameSettings +0xd98).
 		int &speed = *reinterpret_cast<int *>(opts + kOptGameSpeed);
-		if (g_lockOn && speed != -1) {
-			LogI("room", "the room had the game speed %d of the host's profile; it is played at the normal speed", speed);
-			speed = -1;
+		if (g_lockOn && speed != g_lockSpeed) {
+			LogI("room", "the room had the game speed %d; it is played at the league's, %d", speed, g_lockSpeed);
+			speed = g_lockSpeed;
 		}
 		else if (!g_lockOn && GameRoomSpeed() != kRoomSpeedProfile) speed = GameRoomSpeed();
 		// Builds of 2026-11-28 saved the options' slider (1 to 100) in the profile, which the game would take as the pace.
@@ -1199,6 +1201,8 @@ int __fastcall HookApplyToGame(void *self, void *edx, char *opts)
 unsigned g_pendingRules = 0;
 DWORD g_pendingRulesTick = 0;
 bool g_gameRunning = false;
+// The game being played came from the room.
+bool g_roomGame = false;
 
 unsigned PeekGameRules()
 {
@@ -2094,23 +2098,25 @@ void GameRoomKeepPlayerPrefs()
 	Queue([] { KeepPrefsNow(); });
 }
 
-void GameRoomLockOptions(unsigned rules, unsigned sites)
+void GameRoomLockOptions(unsigned rules, unsigned sites, int speed)
 {
-	Queue([rules, sites] {
+	const int pace = speed >= kRoomSpeedMin && speed <= kRoomSpeedMax ? speed : -1;
+	Queue([rules, sites, pace] {
 		KeepPrefsNow();
 		if (!reinterpret_cast<IntThis_t>(addr::kIsHostOrOffline)(g_dlg)) return;
 		const unsigned r = rules & kRuleMask, s = sites & kSiteMask;
 		const char *ro = reinterpret_cast<const char *>(reinterpret_cast<GetGameOptions_t>(addr::kGetGameOptions)(g_dlg));
 		const int speed = ro ? *reinterpret_cast<const int *>(ro + kOptGameSpeed) : -1;
-		const bool same = g_lockOn && g_lockRules == r && g_lockSites == s && speed == -1;
+		const bool same = g_lockOn && g_lockRules == r && g_lockSites == s && g_lockSpeed == pace && speed == pace;
 		g_lockOn = true;
+		g_lockSpeed = pace;
 		g_lockRules = g_ruleFlags = r;
 		g_lockSites = g_siteFlags = s;
 		if (same) return;
 		void *opts = *reinterpret_cast<void **>(addr::kGameOptionsDialog);
 		typedef void(__fastcall *OnApply_t)(void *opts);
 		if (opts) reinterpret_cast<OnApply_t>(addr::kOnApplyOptions)(opts);
-		LogI("room", "the league's rules 0x%x and removed sites 0x%x are locked in the room", r, s);
+		LogI("room", "the league's rules 0x%x, removed sites 0x%x and game speed %d are locked in the room", r, s, pace);
 	});
 }
 
@@ -2139,14 +2145,21 @@ void GameRulesOnGameStart()
 		source = "Steam lobby (rejoining the game)";
 	}
 	g_pendingRulesTick = 0;
+	g_roomGame = strcmp(source, "none") != 0;
 	ModRulesSetActive(rules);
 	LogI("room", "game rules: 0x%x (%s)", rules, source);
+}
+
+bool GameRoomGameRunning()
+{
+	return g_gameRunning && g_roomGame;
 }
 
 void GameRulesOnGameEnd()
 {
 	CrashLogLoadingEnd();
 	g_gameRunning = false;
+	g_roomGame = false;
 	ModRulesSetActive(0);
 	if (!g_pendingRulesTick || static_cast<int>(GetTickCount() - g_pendingRulesTick) > 5000) g_pendingRulesTick = 0;
 }

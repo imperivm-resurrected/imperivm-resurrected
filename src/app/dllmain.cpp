@@ -40,6 +40,7 @@
 #include "game/credits.h"
 #include "game/greatbattles.h"
 #include "game/options.h"
+#include "net/leagueclient.h"
 #include "game/profiles.h"
 #include "hooks/dmshim.h"
 #include "hooks/audio.h"
@@ -260,6 +261,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 		StartSteamOnline();
 		StartDiscordPresence();
 		InstallOptionsHooks(knownExe);
+		OptionsSetSpeedFixedQuery(&LeagueMatchDropRules);
 		InstallGameMenuHooks(knownExe);
 		InstallGameStats(knownExe);
 		InstallProfileHooks(knownExe);

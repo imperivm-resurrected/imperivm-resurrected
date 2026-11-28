@@ -497,6 +497,13 @@ int RulesLeft(Form &c, int x, int y, int w)
 	at += Switch(c, x, at, w, r.explored, Tr("Map explored from the start"), kCupExplored) + 4;
 	at += Switch(c, x, at, w, r.lockedDiplomacy, Tr("Diplomacy locked"), kCupDiplomacy) + 4;
 	at += Switch(c, x, at, w, r.timers, Tr("Respawn timers"), kCupTimers);
+	at += c.k.rowGap;
+	at += Label(c, x, at, w, Tr("Game speed"));
+	Segments(c, x, at, w, c.k.fieldH,
+		{{Tr("Normal"), CupArg(kCupSpeed, 0), r.speed < 0}, {"170 %", CupArg(kCupSpeed, 170), r.speed == 170}, {"200 %", CupArg(kCupSpeed, 200), r.speed == 200},
+			{"250 %", CupArg(kCupSpeed, 250), r.speed == 250}, {"300 %", CupArg(kCupSpeed, 300), r.speed == 300}});
+	at += c.k.fieldH + 8;
+	at += Hint(c, x, at, w, Tr("Every game of the cup is played at it; nobody can change it during the game."));
 	at += Problem(c, x, at, w, {TourneyCupProblem::Settings});
 	return at - y;
 }
@@ -1323,6 +1330,7 @@ void ApplyCupSetting(TourneyCupForm &f, int setting, int choice, int64_t nowMs)
 		fresh.preset = TourneyPresetId(preset);
 		fresh.hideCivs = s.hideCivs;
 		fresh.timers = s.timers;
+		fresh.speed = s.speed;
 		fresh.specDelay = TourneySpecDelay(s);
 		s = TourneyExplicitSettings(fresh);
 		break;
@@ -1332,6 +1340,7 @@ void ApplyCupSetting(TourneyCupForm &f, int setting, int choice, int64_t nowMs)
 	case kCupExplored: s.explored = choice ? 1 : 0; break;
 	case kCupDiplomacy: s.diplomacy = choice ? "locked" : "free"; break;
 	case kCupTimers: s.timers = choice ? 1 : 0; break;
+	case kCupSpeed: s.speed = TourneySpeedValid(choice) ? choice : -1; break;
 	case kCupSpectators:
 		if (TourneySpecDelayValid(choice)) s.specDelay = choice;
 		break;
@@ -1505,6 +1514,7 @@ std::string RulesText(const TourneySettings &s)
 	return Tr(preset) + " \xC2\xB7 " + Tr(r.hideCivs ? "civilizations hidden" : "civilizations visible") + " \xC2\xB7 " + Tr(r.fog ? "fog" : "no fog") + " \xC2\xB7 " +
 		Tr(r.explored ? "map explored" : "map unexplored") + " \xC2\xB7 " + Tr(r.lockedDiplomacy ? "diplomacy locked" : "free diplomacy") + " \xC2\xB7 " +
 		Tr(r.timers ? "respawn timers" : "no respawn timers") + " \xC2\xB7 " +
+		(r.speed > 0 ? TrFmt("game speed %s", {std::to_string(r.speed) + " %"}) + " \xC2\xB7 " : std::string()) +
 		(delay ? TrFmt("spectators %s s behind", {std::to_string(delay)}) : Tr("no spectators"));
 }
 

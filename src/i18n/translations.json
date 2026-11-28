@@ -3766,5 +3766,7 @@
 {"en":"You don't have the scenario \"%s\"","es":"No tienes el escenario \"%s\"","it":"Non hai lo scenario \"%s\""},
 {"en":"Load setup","es":"Cargar configuración","it":"Carica configurazione"},
 {"en":"Delete?","es":"¿Eliminar?","it":"Eliminare?"},
-{"en":"Speed %s","es":"Velocidad %s","it":"Velocità %s"}
+{"en":"Speed %s","es":"Velocidad %s","it":"Velocità %s"},
+{"en":"Every game of the cup is played at it; nobody can change it during the game.","es":"Todas las partidas de la copa se juegan a esta velocidad; nadie puede cambiarla durante la partida.","it":"Tutte le partite della coppa si giocano a questa velocità; nessuno può cambiarla durante la partita."},
+{"en":"game speed %s","es":"velocidad %s","it":"velocità %s"}
 ]

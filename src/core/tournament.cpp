@@ -413,6 +413,7 @@ TourneySettings TourneySettingsFromJson(const Json *v)
 	const std::string diplomacy = Lower(Text(*v, "diplomacy"));
 	if (diplomacy == "locked" || diplomacy == "free") s.diplomacy = diplomacy;
 	if (const Json *delay = v->Get("specDelay"); delay && delay->type == Json::Number) s.specDelay = std::max(0, static_cast<int>(delay->num));
+	if (const Json *speed = v->Get("speed"); speed && speed->type == Json::Number && TourneySpeedValid(static_cast<int>(speed->num))) s.speed = static_cast<int>(speed->num);
 	return s;
 }
 
@@ -427,6 +428,8 @@ Json TourneySettingsJson(const TourneySettings &s)
 	j.Set("diplomacy", Json::MakeString(r.lockedDiplomacy ? "locked" : "free"));
 	j.Set("specDelay", Json::MakeNumber(TourneySpecDelay(s)));
 	if (s.timers >= 0) j.Set("timers", Json::MakeBool(s.timers != 0));
+	// 0 is the normal speed, said so that a cup changed back to it does not keep the one it had.
+	j.Set("speed", Json::MakeNumber(r.speed > 0 ? r.speed : 0));
 	return j;
 }
 
@@ -448,6 +451,7 @@ TourneyRoomRules TourneyRulesOf(const TourneySettings &s)
 	if (s.explored >= 0) r.explored = s.explored != 0;
 	if (!s.diplomacy.empty()) r.lockedDiplomacy = s.diplomacy == "locked";
 	if (s.timers >= 0) r.timers = s.timers != 0;
+	r.speed = TourneySpeedValid(s.speed) ? s.speed : -1;
 	return r;
 }
 
@@ -456,6 +460,11 @@ int TourneySpecDelay(const TourneySettings &s)
 	if (s.specDelay < 0) return 120;
 	if (s.specDelay == 0) return 0;
 	return std::max(30, std::min(600, s.specDelay));
+}
+
+bool TourneySpeedValid(int percent)
+{
+	return percent == 170 || percent == 200 || percent == 250 || percent == 300;
 }
 
 bool TourneySpecDelayValid(int seconds)
@@ -481,6 +490,7 @@ TourneySettings TourneyExplicitSettings(const TourneySettings &s)
 	out.explored = r.explored ? 1 : 0;
 	out.diplomacy = r.lockedDiplomacy ? "locked" : "free";
 	out.timers = r.timers ? 1 : 0;
+	out.speed = r.speed;
 	out.specDelay = TourneySpecDelay(s);
 	return out;
 }
