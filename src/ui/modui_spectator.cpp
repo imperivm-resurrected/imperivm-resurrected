@@ -149,9 +149,10 @@ void DrawSpectatorBar(uint32_t *buf, int W, int H, float s, int topY)
 	float tipX = bx;
 
 	if (collapsed) {
-		rCollapse = {bx, by, barW, barH};
+		// The chevron opens the bar; the rest of the pill drags it, as the bar's own background does.
+		rCollapse = {bx + barW - 34 * s, by + 4 * s, 30 * s, barH - 8 * s};
 		const bool h = rCollapse.Has(mx, my);
-		if (h) FillRound(buf, W, H, bx + line, by + line, barW - 2 * line, barH - 2 * line, rad, btnHot, 1.0f);
+		if (h) FillRound(buf, W, H, rCollapse.x, rCollapse.y, rCollapse.w, rCollapse.h, rad, btnHot, 1.0f);
 		float x = bx + pad;
 		if (st.paused) FillTriangle(buf, W, H, x, cy - 7 * s, x, cy + 7 * s, x + 11 * s, cy, label, 1.0f);
 		else {
@@ -162,9 +163,8 @@ void DrawSpectatorBar(uint32_t *buf, int W, int H, float s, int topY)
 		DrawLabel(buf, W, H, ClockText(shownCur), x, by, 48 * s, barH, DT_RIGHT, pal::text, 1.0f);
 		x += 52 * s;
 		DrawLabel(buf, W, H, L"/ " + ClockText(st.total), x, by, 64 * s, barH, DT_LEFT, pal::textDim, 1.0f);
-		float rx = bx + barW - pad;
-		arrow(rx - 6 * s, cy, 12 * s, false, label);
-		rx -= 22 * s;
+		arrow(rCollapse.x + rCollapse.w / 2, cy, 12 * s, false, label);
+		float rx = rCollapse.x - 6 * s;
 		if (following) FillDisc(buf, W, H, rx - 5 * s, cy, 5 * s, RGB((st.followRgb >> 16) & 0xff, (st.followRgb >> 8) & 0xff, st.followRgb & 0xff), 1.0f);
 		// The progress, a line along the pill's foot.
 		const double frac = st.total ? std::min(1.0, static_cast<double>(shownCur) / st.total) : 0.0;
