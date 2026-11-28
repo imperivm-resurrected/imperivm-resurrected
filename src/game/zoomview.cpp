@@ -542,7 +542,7 @@ void ZoomViewDrawRoutes(uint32_t *buf, int w, int h, const std::vector<ZoomRoute
 {
 	if (!buf || w <= 0 || h <= 0) return;
 	// Clear of the settlement's ring the game draws, and the dots that flow: their gap and their speed, in the picture's pixels.
-	const float kRing = std::max(9.0f, h / 70.0f), kGap = 13.0f, kSpeed = 26.0f;
+	const float kRing = std::max(9.0f, h / 70.0f), kGap = 13.0f, kSpeed = 18.0f;
 	for (const ZoomRoute &r : routes) {
 		const float dx = r.bx - r.ax, dy = r.by - r.ay, len = std::sqrt(dx * dx + dy * dy);
 		if (len < 2 * kRing + 6) continue;
@@ -560,7 +560,7 @@ void ZoomViewDrawRoutes(uint32_t *buf, int w, int h, const std::vector<ZoomRoute
 			at(static_cast<float>(i) / steps, px[i], py[i]);
 			walked[i] = i ? walked[i - 1] + std::hypot(px[i] - px[i - 1], py[i] - py[i - 1]) : 0.0f;
 		}
-		const float total = walked[steps], start = kRing, stop = total - kRing - 4;
+		const float total = walked[steps], start = kRing, stop = total - kRing;
 		if (stop <= start) continue;
 		auto point = [&](float d, float &x, float &y) {
 			const auto k = std::lower_bound(walked.begin(), walked.end(), d) - walked.begin();
@@ -578,22 +578,11 @@ void ZoomViewDrawRoutes(uint32_t *buf, int w, int h, const std::vector<ZoomRoute
 		// The dots that flow to the settlement supplied.
 		const uint32_t light = Lighter(r.rgb, 55);
 		const float phase = std::fmod(nowMs / 1000.0f * kSpeed, kGap);
-		for (float d = start + phase; d <= stop - 6; d += kGap) {
+		for (float d = start + phase; d <= stop; d += kGap) {
 			float x = 0, y = 0;
 			point(d, x, y);
 			BlendDisc(buf, w, h, x, y, 2.4f, 0x000000, 0.35f);
 			BlendDisc(buf, w, h, x, y, 1.9f, light, 0.95f);
-		}
-		// Its head: a slim chevron at the end, its arms close to the line.
-		float ex = 0, ey = 0, qx = 0, qy = 0;
-		point(stop, ex, ey);
-		point(stop - 6, qx, qy);
-		const float hx = ex - qx, hy = ey - qy, hl = std::max(0.001f, std::hypot(hx, hy)), ux = hx / hl, uy = hy / hl;
-		for (int side = -1; side <= 1; side += 2) {
-			for (float back = 0; back <= 7.0f; back += 0.8f) {
-				const float spread = back * 0.45f;
-				BlendDisc(buf, w, h, ex - ux * back + side * -uy * spread, ey - uy * back + side * ux * spread, 1.1f, light, 0.95f);
-			}
 		}
 	}
 }
