@@ -546,8 +546,8 @@ void ZoomViewDrawRoutes(uint32_t *buf, int w, int h, const std::vector<ZoomRoute
 	for (const ZoomRoute &r : routes) {
 		const float dx = r.bx - r.ax, dy = r.by - r.ay, len = std::sqrt(dx * dx + dy * dy);
 		if (len < 2 * kRing + 6) continue;
-		// A gentle arc: its control point off the middle by a sixth of the length, always to the same side of the way it goes.
-		const float mx = (r.ax + r.bx) / 2 - dy / len * len / 6, my = (r.ay + r.by) / 2 + dx / len * len / 6;
+		// Straight, from one settlement to the other.
+		const float mx = (r.ax + r.bx) / 2, my = (r.ay + r.by) / 2;
 		auto at = [&](float t, float &x, float &y) {
 			const float u = 1 - t;
 			x = u * u * r.ax + 2 * u * t * mx + t * t * r.bx;
@@ -584,15 +584,15 @@ void ZoomViewDrawRoutes(uint32_t *buf, int w, int h, const std::vector<ZoomRoute
 			BlendDisc(buf, w, h, x, y, 2.4f, 0x000000, 0.35f);
 			BlendDisc(buf, w, h, x, y, 1.9f, light, 0.95f);
 		}
-		// Its head: a chevron of discs at the end, along the arc's last direction.
+		// Its head: a slim chevron at the end, its arms close to the line.
 		float ex = 0, ey = 0, qx = 0, qy = 0;
 		point(stop, ex, ey);
 		point(stop - 6, qx, qy);
 		const float hx = ex - qx, hy = ey - qy, hl = std::max(0.001f, std::hypot(hx, hy)), ux = hx / hl, uy = hy / hl;
 		for (int side = -1; side <= 1; side += 2) {
-			for (int k = 0; k <= 4; ++k) {
-				const float back = k * 1.6f;
-				BlendDisc(buf, w, h, ex - ux * back + side * -uy * back, ey - uy * back + side * ux * back, 1.5f, light, 0.95f);
+			for (float back = 0; back <= 7.0f; back += 0.8f) {
+				const float spread = back * 0.45f;
+				BlendDisc(buf, w, h, ex - ux * back + side * -uy * spread, ey - uy * back + side * ux * spread, 1.1f, light, 0.95f);
 			}
 		}
 	}
