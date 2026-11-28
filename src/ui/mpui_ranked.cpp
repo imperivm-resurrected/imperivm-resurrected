@@ -801,7 +801,7 @@ void PaintRankedContent(Painter &p, const State &st)
 	const RankedScreen &r = st.ranked;
 	const std::string label = r.contentProfile.empty() ? std::string() : ModsProfileLabel(r.contentProfile);
 	const std::string name = !r.contentName.empty() ? r.contentName : label;
-	std::string text = Tr("This season is played with other gameplay content. Change your content profile to search.");
+	std::string text = Tr("This season uses other content: change your content profile.");
 	if (!name.empty() && r.contentSwitchable) {
 		text = TrFmt("This season is played with \"%s\". Your content profile \"%s\" has it: switch to it and the search starts.", {name, label});
 	}

@@ -608,7 +608,7 @@ struct TourneyCreated {
 bool TourneyParseCreated(const Json &j, TourneyCreated &out);
 
 // A team's name, which is optional: the league names a team after its players when it has none.
-constexpr int kTourneyTeamNameMax = 24;
+constexpr int kTourneyTeamNameMin = 3, kTourneyTeamNameMax = 24;
 // POST /v1/tournaments/:id/entries of a cup of teams: {partner, teamName?, code?}, the name trimmed and left out when empty, as the code.
 Json TourneyTeamEntryJson(uint64_t partner, const std::string &teamName, const std::string &code);
 

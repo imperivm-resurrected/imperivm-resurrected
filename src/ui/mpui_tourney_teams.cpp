@@ -16,6 +16,7 @@
 #include "i18n/tr.h"
 #include "net/leagueclient.h"
 #include "net/leagueclient_tourney.h"
+#include "net/patrons.h"
 #include "net/steamnet.h"
 #include "ui/modui.h"
 #include "ui/mpui_tourney_internal.h"
@@ -182,6 +183,12 @@ void PaintTeamDialog(Painter &p, const State &st, const Ui &u, PaintOut &out)
 	p.Frame(bx, listY, bw, listH, pal::lineStrong);
 	const int viewRows = std::max(1, (listH - 4) / rowH), count = static_cast<int>(friends.size());
 	const int maxScroll = std::max(0, count - viewRows), scroll = std::max(0, std::min(u.teamScroll, maxScroll));
+	{
+		std::vector<uint64_t> shown;
+		for (int r = 0; r < viewRows && scroll + r < count; r++) shown.push_back(friends[static_cast<size_t>(scroll + r)].id);
+		PatronsWatch(shown);
+	}
+	const std::string league = Tr("League");
 	p.Clip(bx + 1, listY + 1, bw - 2, listH - 2);
 	for (int r = 0; r < viewRows && scroll + r < count; r++) {
 		const SteamFriendInfo &f = friends[static_cast<size_t>(scroll + r)];
@@ -191,9 +198,13 @@ void PaintTeamDialog(Painter &p, const State &st, const Ui &u, PaintOut &out)
 		else if (hot) p.Fill(bx + 2, ry, bw - 4, rowH, pal::raised);
 		if (on) p.Fill(bx + 2, ry, 3, rowH, pal::red);
 		PaintPlayerDisc(p, bx + 14, ry + 8, 36, f.id, f.name);
-		const int tx = bx + 14 + 36 + 14, stateW = f.inGame ? std::min(200, bw / 3) : 0, tw = bx + bw - 24 - stateW - tx;
+		// Who has the league account a team needs.
+		const bool linked = PlayerLinkedOf(f.id) || PlayerBadgeOf(f.id).kind != LeagueBadgeKind::None || PlayerFrameOf(f.id).Shown();
+		const int tagW = linked ? TagWidth(p, league) + 12 : 0;
+		const int tx = bx + 14 + 36 + 14, stateW = f.inGame ? std::min(200, bw / 3) : 0, tw = bx + bw - 24 - stateW - tagW - tx;
 		UseFace(p, on ? BrandFace::UiStrong : BrandFace::Body, 17);
 		p.Text(tx, ry, tw, rowH, f.name, on ? pal::text : pal::body, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		if (linked) PaintTag(p, bx + bw - 24 - stateW - tagW, ry + (rowH - 22) / 2, league, RGB(0x30, 0x1a, 0x1a), pal::redText);
 		if (f.inGame) {
 			const int sx = bx + bw - 24 - stateW;
 			p.Shape(sx, ry + rowH / 2 - 4, 8, 8, InUnitEllipse, pal::ok);
@@ -214,18 +225,17 @@ void PaintTeamDialog(Painter &p, const State &st, const Ui &u, PaintOut &out)
 	out.teamRows = friends;
 	if (maxScroll > 0) PaintScrollbar(p, kBarFriends, bx + bw - 10, listY + 2, listH - 4, {scroll, maxScroll, viewRows}, st.dropBar, mx, my);
 
-	// The team's name, optional: the league names the team after both players without one.
+	// The team's name: the cup's views show it.
 	const int n = TourneyTextLength(TourneyTrim(u.teamName));
-	PaintCaps(p, bx, labelY, bw - 80, 20, Tr("Team name (optional)"), pal::caption);
+	PaintCaps(p, bx, labelY, bw - 80, 20, Tr("Team name"), pal::caption);
 	p.Font(3);
 	p.Text(bx + bw - 80, labelY, 80, 20, std::to_string(n) + "/" + std::to_string(kTourneyTeamNameMax), n > kTourneyTeamNameMax ? pal::bad : pal::caption,
 		DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
-	// A team without a name is named after its players, as the cup's views show it.
-	const std::string placeholder = u.teamPartner ? TrFmt("%s and %s", {st.player, u.teamPartnerName}) : Tr("Without one, your two names");
-	PaintEditField(p, bx, fieldY, bw, 44, u.teamName, placeholder, st.focus == kTeamNameField, false, st.edit, kFieldTeamName);
+	PaintEditField(p, bx, fieldY, bw, 44, u.teamName, Tr("For example: Legio IX Hispana"), st.focus == kTeamNameField, false, st.edit, kFieldTeamName);
+	const bool named = n >= kTourneyTeamNameMin && n <= kTourneyTeamNameMax;
 	const bool busy = LeagueTourneyBusy(TourneyOp::SignUp, u.teamCup);
 	DialogButtons(p, d,
-		{{Tr(busy ? "Sending..." : "Send the invitation"), kTourney, ArgOf(kSubTeamSend, 0), true, !busy && u.teamPartner != 0 && LeagueLinked()},
+		{{Tr(busy ? "Sending..." : "Send the invitation"), kTourney, ArgOf(kSubTeamSend, 0), true, !busy && u.teamPartner != 0 && named && LeagueLinked()},
 			{Tr("Cancel"), kTourney, ArgOf(kSubTeamCancel, 0)}},
 		mx, my);
 	p.raw = false;

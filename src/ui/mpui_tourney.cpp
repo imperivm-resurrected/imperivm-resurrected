@@ -2288,6 +2288,12 @@ void TourneyFieldEnter(int field)
 			u.teamError = Tr("Your partner has to be another player.");
 			return;
 		}
+		const int named = TourneyTextLength(TourneyTrim(u.teamName));
+		if (named < kTourneyTeamNameMin || named > kTourneyTeamNameMax) {
+			u.teamError = TrFmt("Give your team a name of %s to %s characters.", {std::to_string(kTourneyTeamNameMin), std::to_string(kTourneyTeamNameMax)});
+			FocusField(kTeamNameField);
+			return;
+		}
 		u.teamError.clear();
 		LogI("league", "signing a team up for the cup %lld", static_cast<long long>(u.teamCup));
 		LeagueTourneySignUpTeam(u.teamCup, u.teamPartner, u.teamName);

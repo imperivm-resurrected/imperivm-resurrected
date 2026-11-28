@@ -364,7 +364,9 @@ void PaintQueueLine(Painter &p, const LeagueRankedView &v, const LeagueDuoView &
 		return;
 	}
 	if (!v.notice.empty()) {
-		p.Text(x, y, w, 22, v.notice, v.noticeBad ? pal::bad : pal::ok, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		const COLORREF ink = v.noticeBad ? pal::bad : pal::ok;
+		if (p.Measure(w, v.notice) <= 24) p.Text(x, y, w, 22, v.notice, ink, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		else p.Text(x, y - 7, w, 40, v.notice, ink, DT_CENTER | DT_WORDBREAK | DT_END_ELLIPSIS);
 		return;
 	}
 	if (LeagueQueueIsTeam(v.queue)) {
@@ -515,14 +517,17 @@ bool PaintRankCard(Painter &p, const State &st, const HubLayout &h, const League
 		int ly = clockY + clockH;
 		RawText(p, x, ly, w, 24, wait, pal::body, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		ly += 28;
-		const int cancelY = y + cardH - 118, bottom = cancelY - 10;
+		// The staging server offers practice bots, to try a match alone: the game's AI plays them, over the button.
+		const int cancelY = y + cardH - 108, botY = cancelY - 50, bottom = (v.practiceBot ? botY : cancelY) - 10;
 		if (v.window.present) ly = PaintSearchWindow(p, v.window, LeagueMeRanked(me.me, v.searchQueue), ix, ly + 8, iw, bottom) + 8;
-		// Either player of a duo stops its search, for both.
-		Ghost(p, ix, cancelY, iw, 48, "Cancel search", kRkCancel, v.phase == LeagueRankedPhase::Searching, mx, my);
-		// The staging server offers practice bots, to try a match alone: the game's AI plays them.
 		if (v.practiceBot) {
-			Ghost(p, ix, cardH + y - 60, iw, 40, LeagueQueueIsTeam(v.searchQueue) ? "Play with bots (test)" : "Play against a bot (test)", kRkPracticeBot, true, mx, my);
+			Ghost(p, ix, botY, iw, 40, LeagueQueueIsTeam(v.searchQueue) ? "Play with bots (test)" : "Play against a bot (test)", kRkPracticeBot, true, mx, my);
 		}
+		// Either player of a duo stops its search, for both.
+		p.fonts[5] = BrandFont(BrandFace::Display, 34, p.s);
+		p.Button(ix, cancelY, iw, 64, "Cancel search", kRankedAct, kRkCancel, mx, my, v.phase == LeagueRankedPhase::Searching, true, 5);
+		// What went wrong, under it.
+		if (!v.notice.empty()) PaintQueueLine(p, v, duo, 0, ix, y + cardH - 38, iw);
 		return false;
 	}
 

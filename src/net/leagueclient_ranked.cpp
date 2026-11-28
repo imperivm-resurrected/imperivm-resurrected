@@ -583,7 +583,7 @@ void ResumeMatch(int64_t matchId)
 	// room, and a second game of it, again.
 	if (ReportedHere(matchId)) {
 		if (g_q.phase != LeagueRankedPhase::Idle) ToIdle(g_q);
-		SetNotice(g_q, "Your last ranked game is waiting for the league's result: you can search once it is settled.", false);
+		SetNotice(g_q, "Your last ranked game is waiting for its result.", false);
 		LogI("league", "ranked: match %lld was reported from here; the server has not settled it yet, so it is not followed again", static_cast<long long>(matchId));
 		return;
 	}
@@ -639,7 +639,7 @@ void JoinThread(unsigned gen, std::string contentKey, std::string queue)
 				SetNotice(g_q, TrFmt("Your Steam account is new: the ranked queue opens for it in %s days.", {std::to_string(left)}), true);
 			}
 			else if (code == "wrong_content") {
-				SetNotice(g_q, "This season is played with other gameplay content. Change your content profile to search.", true);
+				SetNotice(g_q, "This season uses other content: change your content profile.", true);
 				g_q.contentKey = a.error.contentKey;
 				g_q.contentName = a.error.contentName;
 				g_q.wrongContent++;
@@ -659,7 +659,7 @@ void JoinThread(unsigned gen, std::string contentKey, std::string queue)
 					true);
 			}
 			else if (code == "rank_gap") SetNotice(g_q, "You are too far apart in 2 vs 2 to play as a duo.", true);
-			else if (a.r.status == 429) SetNotice(g_q, "You searched too often: wait a few seconds and search again.", false);
+			else if (a.r.status == 429) SetNotice(g_q, "Wait a few seconds to search again.", true);
 			else SetNotice(g_q, FailureNotice(a), true);
 			LogW("league", "ranked: could not enter the queue (%s)", a.r.Describe().c_str());
 		}
@@ -779,7 +779,7 @@ void CalledOff(const LeagueMatchTicket &t)
 			true);
 	}
 	else if (!t.fault.empty()) SetNotice(g_q, "The match was called off and it doesn't count against you. You can search again.", false);
-	else SetNotice(g_q, "The match was called off before it started. Nobody is penalised: you can search again.", false);
+	else SetNotice(g_q, "The match was called off before it started. Nobody is penalised.", false);
 }
 
 // Under g_mx: the ticket says the match was called off. Whoever had accepted goes back to the head of the queue.
@@ -800,9 +800,9 @@ void Cancelled(const LeagueMatchTicket &t)
 			meReady ? "this player was ready" : anyReady ? "this player was not ready" : "nobody was ready");
 		ToIdle(g_q);
 		g_q.calledOff = t.id;
-		if (meReady) SetNotice(g_q, "The match was called off: not everyone was ready in time. It doesn't count against you.", false);
-		else if (anyReady) SetNotice(g_q, "You weren't ready in time: the match was called off, you lose 10 Glory and can't search for a few minutes.", true);
-		else SetNotice(g_q, "Nobody was ready in time: the match was called off and you can't search for a few minutes.", true);
+		if (meReady) SetNotice(g_q, "The match was called off: not everyone was ready. It doesn't count.", false);
+		else if (anyReady) SetNotice(g_q, "You weren't ready in time: you lose 10 Glory and wait a few minutes.", true);
+		else SetNotice(g_q, "Nobody was ready in time: you can't search for a few minutes.", true);
 		return;
 	}
 	const std::string me = OwnId();
