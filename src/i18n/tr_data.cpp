@@ -3766,5 +3766,6 @@ extern const TrRow kTrRows[] = {
 	{"For example: Legio IX Hispana", "Por ejemplo: Legio IX Hispana", "Per esempio: Legio IX Hispana"},
 	{"Give your team a name of %s to %s characters.", "Ponle a tu equipo un nombre de %s a %s caracteres.", "Dai alla tua squadra un nome da %s a %s caratteri."},
 	{"Follow", "Seguir", "Segui"},
+	{"There's no chat while you watch a game.", "No hay chat mientras ves una partida.", "Non c'è chat mentre guardi una partita."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

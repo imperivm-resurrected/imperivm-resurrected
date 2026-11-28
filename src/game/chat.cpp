@@ -156,6 +156,7 @@ ChatMatch Build(const RawMatch &raw)
 	const bool zoomMap = ZoomViewOpen();
 	m.onScreen = raw.shown || zoomMap;
 	m.playing = m.onScreen && !raw.demo && raw.local >= 0 && raw.local < 16;
+	m.watching = m.onScreen && raw.demo;
 	m.severalHumans = raw.severalHumans;
 	m.local = raw.local;
 	m.alive = raw.localState == layout::kStatePlaying;

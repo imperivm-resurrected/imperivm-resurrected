@@ -281,6 +281,11 @@ bool OnOpen(bool withLocation)
 {
 	if (!ChatFloating() || OtherScreenOpen()) return false;
 	const ChatMatch m = ChatReadMatch();
+	// Watching a replay or a game as a spectator, the game's old chat window would open, to write to nobody: it stays closed.
+	if (m.watching) {
+		ModUiToast("There's no chat while you watch a game.");
+		return true;
+	}
 	if (!m.playing) return false;
 	const bool everyone = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
 	int count = 0;

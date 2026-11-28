@@ -3758,5 +3758,6 @@
 {"en":"Team name","es":"Nombre del equipo","it":"Nome della squadra"},
 {"en":"For example: Legio IX Hispana","es":"Por ejemplo: Legio IX Hispana","it":"Per esempio: Legio IX Hispana"},
 {"en":"Give your team a name of %s to %s characters.","es":"Ponle a tu equipo un nombre de %s a %s caracteres.","it":"Dai alla tua squadra un nome da %s a %s caratteri."},
-{"en":"Follow","es":"Seguir","it":"Segui"}
+{"en":"Follow","es":"Seguir","it":"Segui"},
+{"en":"There's no chat while you watch a game.","es":"No hay chat mientras ves una partida.","it":"Non c'è chat mentre guardi una partita."}
 ]

@@ -28,6 +28,8 @@ struct ChatMatch {
 	bool playing = false;
 	// A match or a replay on screen, where received lines are shown.
 	bool onScreen = false;
+	// A replay or a game watched as a spectator on screen: nobody to write to.
+	bool watching = false;
 	// The local player is still in the match: not defeated and has not surrendered.
 	bool alive = false;
 	bool severalHumans = false;
