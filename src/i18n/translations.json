@@ -3755,5 +3755,6 @@
 {"en":"You run this tournament","es":"Gestionas este torneo","it":"Gestisci questo torneo"},
 {"en":"Players have signed up: the mode can no longer change.","es":"Ya se ha apuntado gente: el modo ya no puede cambiar.","it":"Ci sono già iscritti: la modalità non può più cambiare."},
 {"en":"An official tournament is cancelled from the league's web panel.","es":"Un torneo oficial se cancela desde el panel web de la liga.","it":"Un torneo ufficiale si annulla dal pannello web della lega."},
-{"en":"More players have signed up than that: take some off first.","es":"Hay más gente apuntada que plazas: quita a alguien primero.","it":"Ci sono più iscritti dei posti: togli prima qualcuno."}
+{"en":"More players have signed up than that: take some off first.","es":"Hay más gente apuntada que plazas: quita a alguien primero.","it":"Ci sono più iscritti dei posti: togli prima qualcuno."},
+{"en":"Tournament 2v2","es":"Torneo 2v2","it":"Torneo 2v2"}
 ]

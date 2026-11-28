@@ -21,6 +21,7 @@
 #include "core/guard.h"
 #include "core/league.h"
 #include "core/leaguemaps.h"
+#include "core/leagueteam.h"
 #include "core/log.h"
 #include "core/tournament.h"
 #include "game/civs.h"
@@ -280,7 +281,8 @@ void CreateRoom(const TourneyClaim &claim)
 	const std::string own = teams && !n.team.name.empty() ? n.team.name : g_s.player;
 	s.name = n.match == f.match && !n.name.empty() ? n.name + " \xC2\xB7 " + stage + " \xC2\xB7 " + TrFmt("%s vs %s", {own, n.opponent.name}) : Tr("Tournament match");
 	s.map = claim.map.Known() ? MapText(claim.map) : std::string("Chosen in the room");
-	s.mode = "Tournament";
+	// A match of teams says so in the room's data, the same on every computer: its team plays as a ranked 2v2's.
+	s.mode = teams ? kLeagueTeamCupRoomMode : "Tournament";
 	s.maxPlayers = teams ? 4 : 2;
 	s.visibility = 0;
 	s.specDelay = TourneySpecDelay(claim.settings);

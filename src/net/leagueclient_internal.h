@@ -121,8 +121,10 @@ struct TeamSeat {
 };
 struct TeamGame {
 	int64_t matchId = 0;
-	// A ranked 2v2: the partner's vote to surrender. Any game under the drop rules has the drops' notices.
+	// A ranked 2v2 or a cup game of teams: the partner's vote to surrender. Any game under the drop rules has the drops' notices.
 	bool team = false;
+	// Ranked: no surrender before minute 5.
+	bool ranked = false;
 	uint32_t clockMs = 0;
 	bool decided = false;
 	// The drop rules gave the game to this side: every player of the other side left it for good.

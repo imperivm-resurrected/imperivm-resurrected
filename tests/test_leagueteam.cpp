@@ -292,6 +292,9 @@ void Vote()
 	CHECK(LeagueSurrenderOnPress(kLeagueSurrenderFromMs, false, false) == LeagueSurrenderStep::Alone);
 	CHECK(LeagueSurrenderOnPress(kLeagueSurrenderFromMs, true, false) == LeagueSurrenderStep::Propose);
 	CHECK(LeagueSurrenderOnPress(kLeagueSurrenderFromMs, true, true) == LeagueSurrenderStep::Pending);
+	// A cup game of teams asks the partner from the start.
+	CHECK(LeagueSurrenderOnPress(0, true, false, false) == LeagueSurrenderStep::Propose);
+	CHECK(LeagueSurrenderOnPress(0, false, false, false) == LeagueSurrenderStep::Alone);
 
 	LeagueVote v;
 	CHECK_EQ(static_cast<int>(LeagueVoteLeftMs(v, 0)), 0);

@@ -17,6 +17,8 @@ constexpr const char *kLeagueQueueDuel = "1v1";
 constexpr const char *kLeagueQueueTeam = "2v2";
 // The "mode" the host's Steam room of a ranked 2v2 publishes: every computer reads it before the game, so they all treat its drops alike.
 constexpr const char *kLeagueTeamRoomMode = "Ranked 2v2";
+// The room of a cup match of teams: its team plays as a ranked 2v2's does (the partner's vote to surrender, the drops' notices).
+constexpr const char *kLeagueTeamCupRoomMode = "Tournament 2v2";
 // "2v2" for the team queue, "1v1" for anything else (the server's ids; empty is the duel).
 std::string LeagueQueueId(const std::string &queue);
 bool LeagueQueueIsTeam(const std::string &queue);
@@ -100,7 +102,7 @@ uint32_t LeagueTeamDropLeftMs(uint32_t leftAtMs, uint32_t clockMs);
 // does the team surrender. A player whose partner is gone surrenders at once.
 constexpr int64_t kLeagueVoteMs = 30000;
 enum class LeagueSurrenderStep { TooEarly, Alone, Propose, Pending };
-LeagueSurrenderStep LeagueSurrenderOnPress(uint32_t gameMs, bool partnerHere, bool voteOpen);
+LeagueSurrenderStep LeagueSurrenderOnPress(uint32_t gameMs, bool partnerHere, bool voteOpen, bool ranked = true);
 
 // A vote as the game's messages left it: who proposed it (the game's player index), when (the game's clock, the same on every computer at
 // that tick) and whether it is still open.

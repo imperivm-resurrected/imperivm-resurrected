@@ -233,9 +233,10 @@ uint32_t LeagueTeamDropLeftMs(uint32_t leftAtMs, uint32_t clockMs)
 	return gone >= kLeagueTeamDropWaitMs ? 0 : kLeagueTeamDropWaitMs - gone;
 }
 
-LeagueSurrenderStep LeagueSurrenderOnPress(uint32_t gameMs, bool partnerHere, bool voteOpen)
+LeagueSurrenderStep LeagueSurrenderOnPress(uint32_t gameMs, bool partnerHere, bool voteOpen, bool ranked)
 {
-	if (!LeagueSurrenderAllowed(true, gameMs)) return LeagueSurrenderStep::TooEarly;
+	// A cup game can be given up from the start, as a cup's 1v1.
+	if (!LeagueSurrenderAllowed(ranked, gameMs)) return LeagueSurrenderStep::TooEarly;
 	if (!partnerHere) return LeagueSurrenderStep::Alone;
 	return voteOpen ? LeagueSurrenderStep::Pending : LeagueSurrenderStep::Propose;
 }

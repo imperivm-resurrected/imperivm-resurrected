@@ -88,6 +88,8 @@ struct Match {
 	bool tagged = false;
 	std::set<int> quitters;
 	int64_t rankedId = 0;
+	// The match a team's vote belongs to: the ranked match, or the cup's.
+	int64_t teamId = 0;
 	// The game's record of this player as last read, for the result screen: the game is gone when it is shown.
 	GameRecordFacts facts;
 	bool factsRead = false;
@@ -663,8 +665,9 @@ void LeagueMatchPlaying(const LeagueMatchInfo &info)
 	int64_t matchId = 0;
 	const bool ranked = LeagueParseRoomTag(info.roomTag, kind, matchId) && kind == LeagueMatchKind::Ranked;
 	if (ranked) RankedGameStarted(matchId);
-	// By the room's data only: whether the AI plays for a player who drops has to be the same on every computer.
-	const bool team = ranked && info.team;
+	// By the room's data only: whether the AI plays for a player who drops has to be the same on every computer. A cup game of teams
+	// plays as a ranked 2v2.
+	const bool team = info.team && (ranked || kind == LeagueMatchKind::Tournament);
 	const bool dropRules = ranked || kind == LeagueMatchKind::Tournament;
 	std::lock_guard<std::mutex> lock(g_mx);
 	if (!g_match.active || g_match.info.lobby != info.lobby) {
@@ -676,10 +679,11 @@ void LeagueMatchPlaying(const LeagueMatchInfo &info)
 		g_match.team = team;
 		g_match.dropRules = dropRules;
 		g_match.rankedId = ranked ? matchId : 0;
+		g_match.teamId = team ? matchId : 0;
 		g_rankedNow = ranked;
 		g_teamNow = team;
 		g_dropNow = dropRules;
-		LogI("league", "recording the online game%s (%s)", team ? ", a ranked 2v2" : "", LeagueLinked() ? "it will be reported" : "the account is not linked, so it won't be reported");
+		LogI("league", "recording the online game%s (%s)", team ? (ranked ? ", a ranked 2v2" : ", a cup game of teams") : "", LeagueLinked() ? "it will be reported" : "the account is not linked, so it won't be reported");
 		NoteTaggedGame(g_match, kind);
 		return;
 	}
@@ -695,6 +699,7 @@ void LeagueMatchPlaying(const LeagueMatchInfo &info)
 	}
 	if (team && !m.team) {
 		m.team = true;
+		m.teamId = matchId;
 		g_teamNow = true;
 	}
 	if (dropRules && !m.dropRules) {
@@ -867,7 +872,8 @@ bool MatchTeamGame(TeamGame &out)
 	if (!g_match.active || !g_match.dropRules) return false;
 	out = TeamGame();
 	out.team = g_match.team;
-	out.matchId = g_match.rankedId;
+	out.ranked = g_match.ranked;
+	out.matchId = g_match.teamId;
 	out.clockMs = g_match.clockMs;
 	out.decided = g_match.decided || g_match.desync;
 	out.dropWon = g_match.dropDecided && !g_match.desync;

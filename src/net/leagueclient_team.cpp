@@ -272,7 +272,7 @@ LeagueSurrenderAsk LeagueSurrenderPress()
 	LeagueSurrenderStep step = LeagueSurrenderStep::TooEarly;
 	{
 		std::lock_guard<std::mutex> lock(g_mx);
-		step = LeagueSurrenderOnPress(g.clockMs, PartnerHere(g), g_vote.vote.open);
+		step = LeagueSurrenderOnPress(g.clockMs, PartnerHere(g), g_vote.vote.open, g.ranked);
 	}
 	switch (step) {
 	case LeagueSurrenderStep::TooEarly: return LeagueSurrenderAsk::TooEarly;
