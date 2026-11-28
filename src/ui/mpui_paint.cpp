@@ -434,7 +434,8 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis, 
 	p.Fill(dx + 1, dy + dh - 76 - returnRoom, dw - 2, 1, pal::hairline);
 	const int bx = dx + 24, bw = dw - 48, bh = 52, by = dy + dh - 64;
 	if (canReturn) p.Button(bx, by - returnRoom, bw, bh, "Return to the game", kReturnGame, 0, mx, my, st.ready && !RejoinBusy(), true);
-	const std::string label = g.kickedMe ? "You were kicked from the room" : g.playing ? "Game in progress" : full ? "Room full" : same ? "Join" : missing.empty() ? "Restart and join" : "Download and join";
+	// A room of the local network has no content to download: its host's content profile is checked when joining.
+	const std::string label = g.kickedMe ? "You were kicked from the room" : g.playing ? "Game in progress" : full ? "Room full" : same || g.lan ? "Join" : missing.empty() ? "Restart and join" : "Download and join";
 	if (TourneyLobbyWatchOnly(g)) {
 		// Only its two players enter the room of a tournament match; anyone else watches it once it starts.
 		if (g.playing && g.specLobby) p.Button(bx, by, bw, bh, "Watch the game", kSpectate, 0, mx, my, st.ready, true);
@@ -448,7 +449,7 @@ void PaintLobbyDetail(Painter &p, const State &st, const std::vector<int> &vis, 
 		p.Button(bx, by, bw, bh, "Watch the game", kSpectate, 0, mx, my, st.ready, !canReturn);
 	}
 	else if (!canReturn) {
-		p.Button(bx, by, bw, bh, label, kJoin, 0, mx, my, !g.playing && !full && !g.kickedMe && st.ready, true);
+		p.Button(bx, by, bw, bh, label, kJoin, 0, mx, my, !g.playing && !full && !g.kickedMe && (st.ready || g.lan), true);
 	}
 }
 }
@@ -515,15 +516,12 @@ void PaintList(Painter &p, const State &st)
 	LobbyLayout l = LobbyLayoutFor(st.viewW, st.viewH);
 	const int m = l.margin, toolY = l.toolY;
 	// The filters as tabs with their counts: every room, those that can be joined, the games that can be watched and the friends'.
-	// Beside Refresh, the game's own local network (without Steam); the layout counts both as one.
-	const int lanW = GhostButtonWidth(p, "Local network", false), lanGap = 8;
-	const int refreshOnlyW = std::max(GhostButtonWidth(p, "Refresh", false), GhostButtonWidth(p, "Searching...", false));
-	const int refreshW = refreshOnlyW + lanGap + lanW;
+	const int refreshW = std::max(GhostButtonWidth(p, "Refresh", false), GhostButtonWidth(p, "Searching...", false));
 	const int refreshX = m + l.tableW - refreshW;
 	static const struct {
 		int filter;
 		const char *label;
-	} kTabs[] = {{0, "Every room"}, {6, "Open to join"}, {7, "Live"}, {1, "Friends'"}};
+	} kTabs[] = {{0, "Every room"}, {6, "Open to join"}, {7, "Live"}, {1, "Friends'"}, {8, "Local network"}};
 	const int kTabCount = static_cast<int>(sizeof(kTabs) / sizeof(kTabs[0]));
 	int counts[kTabCount] = {};
 	for (const OnlineLobby &g : st.lobbies) {
@@ -585,9 +583,7 @@ void PaintList(Painter &p, const State &st)
 		PaintField(p, st, m, toolY + kToolH + kToolGap, std::min(420, l.tableW), kToolH, st.searchInput, "Search room, host or map...", st.focus == kSearchField,
 			kFieldSearch);
 	}
-	PaintGhostButton(p, refreshX, toolY, lanW, kToolH, "Local network", kLanOpen, false, true, mx, my);
-	PaintGhostButton(p, refreshX + lanW + lanGap, toolY, refreshOnlyW, kToolH, st.loading ? "Searching..." : "Refresh", kRefresh, false, st.ready && !st.loading,
-		mx, my);
+	PaintGhostButton(p, refreshX, toolY, refreshW, kToolH, st.loading ? "Searching..." : "Refresh", kRefresh, false, st.ready && !st.loading, mx, my);
 	// Over the room's card, the main action: making a room.
 	p.Button(l.w - m - l.detailW, toolY, l.detailW, kToolH, "Create a room", kCreate, 0, mx, my, true, true);
 
@@ -751,8 +747,12 @@ void PaintList(Painter &p, const State &st)
 				std::string content = main ? main->name : Tr("Original game");
 				if (g.mods.size() > 1) content += " +" + std::to_string(g.mods.size() - 1);
 				COLORREF dot = pal::ok;
-				const std::vector<OnlineMod> missing = MissingMods(st, g);
-				if (!missing.empty()) {
+				const std::vector<OnlineMod> missing = g.lan ? std::vector<OnlineMod>() : MissingMods(st, g);
+				if (g.lan) {
+					content = Tr("Local network");
+					if (!g.gameplayKey.empty() && !st.ownKey.empty() && g.gameplayKey != st.ownKey) dot = pal::bad;
+				}
+				else if (!missing.empty()) {
 					uint64_t bytes = 0;
 					for (const OnlineMod &mod : missing) bytes += mod.bytes;
 					dot = pal::bad;
@@ -859,9 +859,10 @@ void PaintCreate(Painter &p, const State &st)
 	p.Text(lx, y, 190, fieldH, "Players", pal::textDim);
 	Combo(p, st, fx, y, 240, fieldH, std::to_string(st.createPlayers) + Tr(" players"), kDropPlayers, 0, true);
 	y += step;
-	static const char *const kVisibility[] = {"Public", "Password protected", "Friends only"};
+	static const char *const kVisibility[] = {"Public", "Password protected", "Friends only", "Local network"};
 	p.Text(lx, y, 190, fieldH, "Visibility", pal::textDim);
-	Combo(p, st, fx, y, fw, fieldH, kVisibility[st.createVisibility % 3], kDropVisibility, 0, true);
+	Combo(p, st, fx, y, fw, fieldH, kVisibility[st.createVisibility % 4], kDropVisibility, 0, true);
+	const bool lan = st.createVisibility == 3;
 	y += step;
 	if (st.createVisibility == 1) {
 		p.Font(0);
@@ -873,8 +874,8 @@ void PaintCreate(Painter &p, const State &st)
 	}
 	p.Font(0);
 	p.Text(lx, y, 190, fieldH, "Game", pal::textDim);
-	Combo(p, st, fx, y, fw, fieldH, st.createSave >= 0 && st.createSave < static_cast<int>(st.saves.size()) ? SaveLabel(st.saves[st.createSave]) : "New game",
-		kDropSaveGame, 0, !st.saves.empty());
+	Combo(p, st, fx, y, fw, fieldH, !lan && st.createSave >= 0 && st.createSave < static_cast<int>(st.saves.size()) ? SaveLabel(st.saves[st.createSave]) : "New game",
+		kDropSaveGame, 0, !st.saves.empty() && !lan);
 	y += step;
 	p.Font(0);
 	p.Text(lx, y, 190, fieldH, "Content", pal::textDim);
@@ -888,7 +889,7 @@ void PaintCreate(Painter &p, const State &st)
 		ListPaint(p, fx, y, fw, rows * rowH + 8, lines, ls, g_createModsGeomOut, 3, rowH);
 		y += rows * rowH + 16;
 	}
-	if (st.createSave >= 0 && st.createSave < static_cast<int>(st.saves.size())) {
+	if (!lan && st.createSave >= 0 && st.createSave < static_cast<int>(st.saves.size())) {
 		const ModNeeds &needs = CreateSaveNeeds(st.saves[st.createSave].vfsPath, st.createProfile);
 		if (!needs.Satisfied()) {
 			y += 4;
@@ -902,7 +903,7 @@ void PaintCreate(Painter &p, const State &st)
 	}
 	const bool restart = st.createProfile != ModsMountedProfile().name;
 	const int bw = 360, bh = 52, by = std::max(y + 16, y0 + h - 28 - bh);
-	p.Button(x + (w - bw) / 2, by, bw, bh, restart ? "Restart with this content" : "Create room", kCreateOk, 0, mx, my, st.ready || restart, true);
+	p.Button(x + (w - bw) / 2, by, bw, bh, restart ? "Restart with this content" : "Create room", kCreateOk, 0, mx, my, st.ready || restart || lan, true);
 }
 
 ListGeom g_syncGeomOut;
@@ -1081,7 +1082,7 @@ std::vector<std::string> DropItems(const State &st, int &sel)
 	if (st.dropKind == kDropRankedSeason) return RankedSeasonItems(st, sel);
 	if (st.dropKind == kDropVisibility) {
 		sel = st.createVisibility;
-		return {"Public", "Password protected", "Friends only"};
+		return {"Public", "Password protected", "Friends only", "Local network"};
 	}
 	if (st.dropKind == kDropSpectators) {
 		sel = st.createSpec == 5 ? 4 : st.createSpec == 4 ? 5 : st.createSpec;

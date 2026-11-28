@@ -3,8 +3,11 @@
 // Part of Imperivm Resurrected. GPL-3.0-or-later license with an exception for Steamworks: see LICENSE and ADDITIONAL-PERMISSION.md.
 #include "ui/textedit.h"
 #include "MinHook.h"
+#include "core/log.h"
 #include "core/names.h"
+#include "net/lanbeacon.h"
 #include "net/rejoin.h"
+#include "net/vnet.h"
 #include "ui/modui.h"
 
 #include "ui/mpui_internal.h"
@@ -247,6 +250,50 @@ void TryJoin(const OnlineLobby &g, const std::string &password, bool watch)
 	g_s.joinCheck.since = GetTickCount();
 	g_s.joinCheck.serial = SteamLobbyDataSerial(g.id);
 	SteamRequestLobbyData(g.id);
+}
+
+void LanJoin(const OnlineLobby &g)
+{
+	if (g.maxPlayers && g.players >= g.maxPlayers) {
+		ModUiToast("Room full");
+		return;
+	}
+	const std::string mismatch = SteamVersionMismatch(g.version, g.rulesLevel, g.build);
+	if (!mismatch.empty()) {
+		ModUiToast(mismatch, true);
+		return;
+	}
+	if (g_s.ownKey.empty()) g_s.ownKey = SteamOwnGameplayKey();
+	if (!g.gameplayKey.empty() && !g_s.ownKey.empty() && g.gameplayKey != g_s.ownKey) {
+		ModUiToast("That room is played with other content: use its host's content profile to join.", true);
+		return;
+	}
+	// The game's old screen searches the network behind the mod's, as it does for a Steam room; the search asks this host only, so the
+	// one game it finds is this room's.
+	LogI("lobby", "joining the local network room \"%s\" of %s", g.name.c_str(), g.host.c_str());
+	VnetSetLanTarget(g.lanIp);
+	g_s.lan = true;
+	DoAction(kEnterGame, 0);
+}
+
+void AddLanRooms(std::vector<OnlineLobby> &lobbies)
+{
+	for (const LanHeard &h : LanBeaconRooms()) {
+		OnlineLobby g;
+		g.lan = true;
+		g.lanIp = h.ip;
+		g.id = kLanLobbyIdBase | h.ip;
+		g.name = h.room.name;
+		g.host = h.room.host;
+		g.optionsText = h.room.options;
+		g.version = h.room.version;
+		g.rulesLevel = h.room.rulesLevel;
+		g.build = h.room.build;
+		g.gameplayKey = h.room.gameplayKey;
+		g.players = h.room.players;
+		g.maxPlayers = h.room.maxPlayers;
+		lobbies.push_back(g);
+	}
 }
 
 void TrySpectate(const OnlineLobby &g, const std::string &password)

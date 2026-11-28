@@ -9,10 +9,15 @@
 #include "hooks/alerts.h"
 #include "ui/modui.h"
 #include "mods/modoptions.h"
+#include "core/buildid.h"
+#include "core/version.h"
+#include "net/lanbeacon.h"
 #include "net/netdrop.h"
+#include "net/nettune.h"
 #include "net/rejoin.h"
 #include "game/gamelayout.h"
 #include "net/spectator.h"
+#include "net/vnet.h"
 #include "addr/state.h"
 #include "addr/ui.h"
 
@@ -66,6 +71,28 @@ void MpUiGameThreadTick()
 			g_s.connecting = false;
 			g_s.gameWasActive = true;
 			const GameRoomSnapshot snap = GameRoomGet();
+			VnetSetLanTarget(0);
+			if (g_s.lan && snap.host && !g_s.lanRoomName.empty()) {
+				GameRoomRename(g_s.lanRoomName);
+				g_s.lanRoomName.clear();
+			}
+			// The host of a room of the local network tells the network about it once a second, for the room lists of the others.
+			if (g_s.lan && snap.host && snap.online && !g_s.room.id && !snap.busy && GetTickCount() - g_s.lanAnnouncedAt >= 1000) {
+				g_s.lanAnnouncedAt = GetTickCount();
+				LanRoom r;
+				r.name = snap.roomName;
+				r.host = snap.localSlot >= 0 && snap.localSlot < 8 && !snap.slots[snap.localSlot].name.empty() ? snap.slots[snap.localSlot].name : g_s.player;
+				r.options = snap.optionsText;
+				r.version = ModVersionText();
+				r.rulesLevel = NetRulesLevel();
+				r.build = BuildSha256();
+				r.gameplayKey = SteamOwnGameplayKey();
+				for (const GameRoomSlot &rs : snap.slots) {
+					if (rs.used && rs.type == 3) r.players++;
+					if (rs.exists && ((rs.used && rs.type == 3) || (!rs.used && rs.type == 0))) r.maxPlayers++;
+				}
+				if (!r.name.empty() && r.maxPlayers >= 2) LanBeaconAnnounce(r);
+			}
 			if (!g_s.leftByUser) g_s.gameWasOnline = snap.online;
 			static DWORD foodForcedAt = 0;
 			if (snap.host && !snap.busy && g_s.hostSave.name.empty() && GetTickCount() - foodForcedAt > 1000) {
@@ -303,7 +330,7 @@ void MpUiGameThreadTick()
 			g_s.gameClosedAt = GetTickCount();
 			g_s.closedByUser = g_s.leftByUser;
 			g_s.leftByUser = false;
-			if ((!g_s.gameWasOnline || g_s.lan) && g_s.closedByUser) g_s.open = false;
+			if (!g_s.gameWasOnline && g_s.closedByUser) g_s.open = false;
 			else if (!g_s.closedByUser) g_s.startingCover = true;
 		}
 		// When the game gives up on starting a match it opens a menu instead: the lobby online, the main menu otherwise (CVXUIMultiplayerGame::StartGame).
@@ -321,15 +348,17 @@ void MpUiGameThreadTick()
 			g_s.startingCover = false;
 			if (playing) {
 				g_s.open = false;
-				// A local network game has no Steam room: nothing to show in Steam, record for a return or report.
-				if (g_s.gameWasOnline && !g_s.lan) {
-					SteamSetPlaying(true);
+				if (g_s.gameWasOnline) {
 					g_s.inOnlineGame = true;
 					g_s.classicPending = false;
-					RecordOnlineGame(g_s.room);
-					LeagueMatchPlaying(LeagueInfoOfRoom(SteamCurrentRoom()));
-					g_s.leagueTick = GetTickCount();
-					NetDropReset();
+					// A game of the local network has no Steam room: nothing to show in Steam, to come back to or to report.
+					if (!g_s.lan) {
+						SteamSetPlaying(true);
+						RecordOnlineGame(g_s.room);
+						LeagueMatchPlaying(LeagueInfoOfRoom(SteamCurrentRoom()));
+						g_s.leagueTick = GetTickCount();
+						NetDropReset();
+					}
 					// The game is loaded while the player is somewhere else: called back to it.
 					AlertPlayer(PlayerAlert::GameStarts);
 				}
@@ -340,12 +369,12 @@ void MpUiGameThreadTick()
 				}
 			}
 			else {
-				if (g_s.gameWasOnline && !g_s.lan) {
+				if (g_s.gameWasOnline) {
 					if (g_s.closedRoomGen) SteamLeaveLobby(g_s.closedRoomGen);
 					g_s.closedRoomGen = 0;
 					if (!g_s.closedByUser) g_s.open = true;
 				}
-				if ((!g_s.gameWasOnline || g_s.lan) && wasCovering) g_s.open = false;
+				if (!g_s.gameWasOnline && wasCovering) g_s.open = false;
 				MpSaveSetPendingLoad("");
 			}
 			LogI("lobby", "game room closed (%s)", playing ? "the game starts" : g_s.gameWasOnline ? "out of the room, to the list" : "back to the menu");

@@ -18,3 +18,6 @@ void VnetDeliver(uint64_t from, const void *data, int len);
 void VnetLogStats();
 int VnetSilenceMs(uint64_t peer);
 bool VnetHasPeer(uint64_t peer);
+// Joining a room of the local network (IPv4, network order; 0 when done): the game's search for games, a broadcast, goes to that host
+// only, so the one game its old screen finds is that room's.
+void VnetSetLanTarget(uint32_t ip);

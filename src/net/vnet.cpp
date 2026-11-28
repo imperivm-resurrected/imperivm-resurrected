@@ -173,6 +173,18 @@ bool IsBroadcast(const sockaddr *to, int tolen)
 	return reinterpret_cast<const sockaddr_in *>(to)->sin_addr.s_addr == INADDR_BROADCAST;
 }
 
+std::atomic<uint32_t> g_lanTarget{0};
+
+// A broadcast while joining a room of the local network goes to its host only.
+bool LanTargeted(const sockaddr *to, int tolen, sockaddr_in &out)
+{
+	const uint32_t target = g_lanTarget.load();
+	if (!target || !IsBroadcast(to, tolen)) return false;
+	out = *reinterpret_cast<const sockaddr_in *>(to);
+	out.sin_addr.s_addr = target;
+	return true;
+}
+
 std::vector<int> PeerNumbers()
 {
 	std::lock_guard<std::mutex> lock(g_lock);
@@ -194,6 +206,8 @@ int WSAAPI HookSendto(SOCKET s, const char *buf, int len, int flags, const socka
 			}
 			return len;
 		}
+		sockaddr_in host;
+		if (LanTargeted(to, tolen, host)) return g_origSendto(s, buf, len, flags, reinterpret_cast<sockaddr *>(&host), sizeof(host));
 	}
 	return g_origSendto(s, buf, len, flags, to, tolen);
 }
@@ -215,6 +229,8 @@ int WSAAPI HookWSASendTo(SOCKET s, LPWSABUF bufs, DWORD count, LPDWORD sent, DWO
 			a.sin_addr.s_addr = htonl(VirtualIp(peers[0]));
 			return g_origWSASendTo(s, bufs, count, sent, flags, reinterpret_cast<sockaddr *>(&a), sizeof(a), ov, done);
 		}
+		sockaddr_in host;
+		if (LanTargeted(to, tolen, host)) return g_origWSASendTo(s, bufs, count, sent, flags, reinterpret_cast<sockaddr *>(&host), sizeof(host), ov, done);
 	}
 	return g_origWSASendTo(s, bufs, count, sent, flags, to, tolen, ov, done);
 }
@@ -257,6 +273,14 @@ void VnetSetPeers(int myK, const std::vector<std::pair<uint64_t, int>> &peers)
 	}
 	g_myK = myK;
 	g_peers = next;
+}
+
+void VnetSetLanTarget(uint32_t ip)
+{
+	if (g_lanTarget.exchange(ip) == ip) return;
+	const unsigned char *b = reinterpret_cast<const unsigned char *>(&ip);
+	if (ip) LogI("net", "virtual network: the search for games asks only %u.%u.%u.%u", b[0], b[1], b[2], b[3]);
+	else LogD("net", "virtual network: the search for games goes to the whole local network again");
 }
 
 bool VnetHasPeer(uint64_t peer)

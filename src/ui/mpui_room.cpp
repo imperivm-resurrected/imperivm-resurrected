@@ -18,6 +18,7 @@
 #include "game/civs.h"
 #include "core/log.h"
 #include "net/leagueclient.h"
+#include "net/vnet.h"
 
 using namespace mpui_impl;
 
@@ -669,6 +670,7 @@ bool SlotChangeBlocked(int slot, int newType)
 
 void AbortJoin()
 {
+	VnetSetLanTarget(0);
 	g_autoJoin.active = false;
 	g_autoJoin.selected = 0;
 	g_s.connecting = false;

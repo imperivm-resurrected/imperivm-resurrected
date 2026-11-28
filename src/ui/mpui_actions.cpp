@@ -12,6 +12,7 @@
 #include "ui/modui.h"
 #include "mods/modoptions.h"
 #include "net/rejoin.h"
+#include "net/vnet.h"
 
 #include "ui/mainmenuui.h"
 #include "ui/mpui_internal.h"
@@ -135,16 +136,6 @@ void DoAction(int action, int arg)
 		}
 		break;
 	case kRefresh: SteamRefreshLobbies(); break;
-	case kLanOpen:
-		// The main menu's Multiplayer opens the game's own screen once (classicPending); the virtual network is off without a Steam room,
-		// so the game's local network is the real one.
-		LogI("lobby", "opening the game's own local network screen");
-		g_s.open = false;
-		g_s.lan = true;
-		g_s.classicPending = true;
-		g_s.classicPendingAt = GetTickCount();
-		g_flow.backToMain = false;
-		break;
 	case kSort:
 		if (g_s.sortCol == arg) g_s.sortDesc = !g_s.sortDesc;
 		else {
@@ -183,7 +174,9 @@ void DoAction(int action, int arg)
 	case kJoin: {
 		const std::vector<int> vis = Visible(g_s);
 		if (g_s.selected >= 0 && g_s.selected < static_cast<int>(vis.size())) {
-			TryJoin(g_s.lobbies[vis[g_s.selected]], g_s.joinPassInput);
+			const OnlineLobby &g = g_s.lobbies[vis[g_s.selected]];
+			if (g.lan) LanJoin(g);
+			else TryJoin(g, g_s.joinPassInput);
 		}
 		break;
 	}
@@ -272,7 +265,7 @@ void DoAction(int action, int arg)
 			g_s.createSave = arg - 1;
 		}
 		else if (g_s.dropKind == kDropVisibility) {
-			g_s.createVisibility = std::max(0, std::min(2, arg));
+			g_s.createVisibility = std::max(0, std::min(3, arg));
 		}
 		else if (g_s.dropKind == kDropTourney) {
 			TourneyDropPick(idx, arg);
@@ -726,6 +719,8 @@ void DoAction(int action, int arg)
 		g_s.syncPhase = 0;
 		break;
 	case kCreateOk: {
+		// A room of the local network is a new game: a saved one goes through Steam.
+		if (g_s.createVisibility == 3) g_s.createSave = -1;
 		if (g_s.createSave >= 0 && g_s.createSave < static_cast<int>(g_s.saves.size())) {
 			const SaveEntry &save = g_s.saves[g_s.createSave];
 			const ModNeeds needs = ModsNeededFor(save.vfsPath, g_s.createProfile);
@@ -756,10 +751,29 @@ void DoAction(int action, int arg)
 				-1, profileMods, "Content that will be loaded:");
 			break;
 		}
+		// The game's own local network: no Steam room. Its old screen hosts behind the mod's, as it does for a Steam room once the lobby exists.
+		if (g_s.createVisibility == 3) {
+			g_s.lan = true;
+			g_s.lanRoomName = g_s.nameInput.empty() ? Tr("Game of ") + g_s.player : g_s.nameInput;
+			g_s.lanAnnouncedAt = 0;
+			g_s.hostSave = SaveEntry();
+			g_s.hostSavePublished = false;
+			g_s.roomLimit = g_s.createPlayers;
+			g_s.view = kViewList;
+			g_s.connecting = true;
+			g_s.connectStart = GetTickCount();
+			g_s.classicPending = GetTickCount() - g_flow.lastLobbyUpdate >= 1000;
+			g_s.classicPendingAt = GetTickCount();
+			g_flow.backToMain = false;
+			g_flow.hostPending = true;
+			LogI("lobby", "creating a room of the local network: \"%s\" for %d players", g_s.lanRoomName.c_str(), g_s.createPlayers);
+			break;
+		}
 		if (!g_s.ready) {
 			ModUiToast(Tr("Online is not available: ") + g_s.status);
 			break;
 		}
+		g_s.lan = false;
 		OnlineCreateSettings s;
 		s.name = g_s.nameInput.empty() ? Tr("Game of ") + g_s.player : g_s.nameInput;
 		s.map = "Chosen in the room";
@@ -953,6 +967,7 @@ void OpenMpMenu(bool checkRecover)
 {
 	g_s.open = true;
 	g_s.lan = false;
+	VnetSetLanTarget(0);
 	g_s.view = kViewList;
 	g_s.mods = ModsList();
 	g_s.profiles = ModsProfileNames();

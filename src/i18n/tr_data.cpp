@@ -3764,5 +3764,6 @@ extern const TrRow kTrRows[] = {
 	{"An official tournament is cancelled from the league's web panel.", "Un torneo oficial se cancela desde el panel web de la liga.", "Un torneo ufficiale si annulla dal pannello web della lega."},
 	{"More players have signed up than that: take some off first.", "Hay más gente apuntada que plazas: quita a alguien primero.", "Ci sono più iscritti dei posti: togli prima qualcuno."},
 	{"Tournament 2v2", "Torneo 2v2", "Torneo 2v2"},
+	{"That room is played with other content: use its host's content profile to join.", "Esa sala se juega con otro contenido: usa el perfil de contenido de su anfitrión para entrar.", "Quella stanza si gioca con altri contenuti: usa il profilo di contenuti del suo host per entrare."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

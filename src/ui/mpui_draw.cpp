@@ -8,6 +8,7 @@
 #include "MinHook.h"
 #include "core/log.h"
 #include "ui/modui.h"
+#include "net/lanbeacon.h"
 #include "net/rejoin.h"
 #include "net/spectator.h"
 #include "net/leagueclient_tourney.h"
@@ -171,8 +172,12 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 		g_s.status = SteamOnlineStatus();
 		g_s.loading = SteamLobbiesLoading();
 		g_s.lobbies = SteamLobbies();
+		// The rooms of the game's own local network, beside Steam's, while the list is on screen.
+		if (g_s.view == kViewList && !g_s.game.active) AddLanRooms(g_s.lobbies);
+		else LanBeaconStop();
 		if (g_s.view == kViewList && !g_s.game.active) FollowSelectedRoom();
 		g_s.room = SteamCurrentRoom();
+		if (g_s.room.id) g_s.lan = false;
 		SyncTick();
 		if (LeagueModsPrepReady()) {
 			// The game restarts for the league's mods only when that cuts nothing off: no room, search, match or tournament game on.
@@ -223,7 +228,7 @@ void MpUiDraw(uint32_t *buf, int w, int h)
 		if (g_s.ownKey.empty()) g_s.ownKey = SteamOwnGameplayKey();
 		if (g_s.view == kViewList && g_s.ready && !g_s.room.id && !g_s.joinCheck.id && GetTickCount() - g_s.selectedPoll > 2500) {
 			const std::vector<int> vis = Visible(g_s);
-			if (g_s.selected >= 0 && g_s.selected < static_cast<int>(vis.size())) {
+			if (g_s.selected >= 0 && g_s.selected < static_cast<int>(vis.size()) && !g_s.lobbies[vis[g_s.selected]].lan) {
 				g_s.selectedPoll = GetTickCount();
 				SteamRequestLobbyData(g_s.lobbies[vis[g_s.selected]].id);
 			}

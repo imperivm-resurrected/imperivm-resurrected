@@ -129,6 +129,7 @@ bool RoomInFilter(const OnlineLobby &g, int filter)
 	if (filter == 1 && !friendly) return false;
 	if (filter == 6 && (g.playing || g.players >= g.maxPlayers)) return false;
 	if (filter == 7 && !(g.playing && g.specLobby)) return false;
+	if (filter == 8 && !g.lan) return false;
 	return true;
 }
 

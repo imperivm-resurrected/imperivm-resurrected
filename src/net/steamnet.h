@@ -27,8 +27,14 @@ struct OnlineSlot {
 	std::string name;
 };
 
+// The ids the room list gives the rooms of the local network: no Steam lobby has them.
+constexpr uint64_t kLanLobbyIdBase = 0x4C414E0000000000ull;
+
 struct OnlineLobby {
 	uint64_t id = 0;
+	// A room of the game's own local network (lanbeacon.h), without Steam: its host's IPv4 (network order). Its id is kLanLobbyIdBase + it.
+	bool lan = false;
+	uint32_t lanIp = 0;
 	bool kickedMe = false;
 	std::string name, host, map, mode;
 	std::string gameplayKey;

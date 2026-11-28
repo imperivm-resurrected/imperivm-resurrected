@@ -64,8 +64,6 @@ enum Action {
 	kGColorCustom, kGColorWheel, kGColorValue, kGColorUse, kGColorBack,
 	// The list's filter tabs: the filter is the argument.
 	kRoomFilter,
-	// The game's own local network, without Steam: its screens as the original game has them.
-	kLanOpen,
 };
 
 typedef int(__cdecl *HostGame_t)(int, unsigned, int);
@@ -289,9 +287,11 @@ struct State {
 	bool readySeen = false;
 	std::string readyConfig;
 	bool gameWasOnline = false;
-	// The player went to the game's own local network (kLanOpen): its rooms have no Steam lobby, and leaving one goes back to the
-	// game's local network screen, not to the list. Until the mod's menu opens again.
+	// The room being made or joined is one of the game's own local network, without Steam: the game's old screen does it behind the
+	// mod's, as for a Steam room. The name the host gave it, set once the room is open; when its announcement was last sent.
 	bool lan = false;
+	std::string lanRoomName;
+	DWORD lanAnnouncedAt = 0;
 	DWORD gameClosedAt = 0;
 	struct Predicted {
 		int kind;
@@ -501,6 +501,9 @@ void CheckRecover();
 bool CanReturnToGame(const State &st, const OnlineLobby &g);
 void TryJoinNow(const OnlineLobby &g, const std::string &password, bool watch = false);
 void TryJoin(const OnlineLobby &g, const std::string &password, bool watch = false);
+// A room of the local network: joined through the game's old screen, behind the mod's; and the rooms heard, added to the list.
+void LanJoin(const OnlineLobby &g);
+void AddLanRooms(std::vector<OnlineLobby> &lobbies);
 void TrySpectate(const OnlineLobby &g, const std::string &password);
 extern ListGeom g_pickGeomOut;
 
