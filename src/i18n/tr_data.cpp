@@ -3788,5 +3788,7 @@ extern const TrRow kTrRows[] = {
 	{"A win, 3 points; a loss, a no-show or a rest, 0", "Victoria, 3 puntos; derrota, no presentarse o descanso, 0", "Vittoria, 3 punti; sconfitta, assenza o riposo, 0"},
 	{"Head-to-head, then games won minus lost, then the points of the opponents beaten, then seed", "Enfrentamiento directo, luego partidas ganadas menos perdidas, luego los puntos de los rivales ganados, luego el cabeza de serie", "Scontro diretto, poi partite vinte meno perse, poi i punti degli avversari battuti, poi la testa di serie"},
 	{"You finished with %s, %s.", "Terminaste con %s, %s.", "Hai finito con %s, %s."},
+	{"Activate and play", "Activar y jugar", "Attiva e gioca"},
+	{"The game restarts once to load it.", "El juego se reinicia una vez para cargarla.", "Il gioco si riavvia una volta per caricarla."},
 };
 extern const int kTrCount = sizeof(kTrRows) / sizeof(kTrRows[0]);

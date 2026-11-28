@@ -493,15 +493,15 @@ void PaintDetail(Painter &p, int x, int y, int w, int h, const View &v, PaintOut
 			}
 			return;
 		}
-		// The campaign is in the mods folder, but the content profile in use leaves it out.
+		// The campaign is in the mods folder, but the content profile in use leaves it out: one click mounts it alone and restarts.
 		const int cy = y + h / 2;
 		p.Font(2);
 		TextAsIs(p, x + kPad, cy - 70, w - kPad * 2, 32, Upper("Not active"), pal::text, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.Font(0);
-		p.Text(x + kPad, cy - 34, w - kPad * 2, 24, "Activate it in Additional content", pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+		p.Text(x + kPad, cy - 34, w - kPad * 2, 24, "The game restarts once to load it.", pal::textDim, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 		p.Font(1);
-		const int bw = std::max(220, p.TextWidth("Additional content") + 48);
-		p.Button(x + (w - bw) / 2, cy + 8, bw, kButtonH, "Additional content", kActContent, 0, v.mouseX, v.mouseY, !s.starting && !v.loading, true);
+		const int bw = std::max(220, p.TextWidth("Activate and play") + 48);
+		p.Button(x + (w - bw) / 2, cy + 8, bw, kButtonH, "Activate and play", kActPureSwitch, s.tab, v.mouseX, v.mouseY, !s.starting && !v.loading, true);
 		return;
 	}
 	const BattleTitle title = SplitBattleTitle(BattleTitleWithoutGame(s.lists[s.selList][s.selIndex].title));
@@ -875,7 +875,8 @@ void PaintCampaignCard(Painter &p, int x, int y, int w, int h, int tab, int slot
 		const std::string done = v.done[tab] >= 0 ? "  \xC2\xB7  " + TrFmt("%s% done", {std::to_string(v.done[tab])}) : std::string();
 		TextAsIs(p, tx, y + h - 36, tw, 24, CountText(tab, n) + done, pal::textDim);
 	}
-	else if (v.packs[tab].installed) p.Text(tx, y + h - 36, tw, 24, "Activate it in Additional content", pal::textDim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	// Downloaded but not in the content in use: one click mounts the campaign alone and restarts the game (PlayPureCampaign).
+	else if (v.packs[tab].installed) p.Button(tx, y + h - 36, tw, 28, "Activate and play", kActPureSwitch, tab, v.mouseX, v.mouseY, enabled, true);
 	if (v.savedInTab[tab] > 0 && !offer) {
 		p.Font(4);
 		const std::string badge = Tr("In progress");
