@@ -530,6 +530,34 @@ void BlendDisc(uint32_t *buf, int w, int h, float cx, float cy, float r, uint32_
 	}
 }
 
+// A triangle blended into the picture with `alpha`, its edges smoothed over a pixel: each pixel covered as far as it is inside all three.
+void BlendTriangle(uint32_t *buf, int w, int h, float ax, float ay, float bx, float by, float cx, float cy, uint32_t rgb, float alpha)
+{
+	const float area = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+	if (std::fabs(area) < 0.01f) return;
+	const float sign = area > 0 ? 1.0f : -1.0f;
+	auto inside = [sign](float x0, float y0, float x1, float y1, float px, float py) {
+		const float l = std::max(0.001f, std::hypot(x1 - x0, y1 - y0));
+		return sign * ((x1 - x0) * (py - y0) - (y1 - y0) * (px - x0)) / l;
+	};
+	const int x0 = std::max(0, static_cast<int>(std::floor(std::min({ax, bx, cx}) - 1))), x1 = std::min(w - 1, static_cast<int>(std::ceil(std::max({ax, bx, cx}) + 1)));
+	const int y0 = std::max(0, static_cast<int>(std::floor(std::min({ay, by, cy}) - 1))), y1 = std::min(h - 1, static_cast<int>(std::ceil(std::max({ay, by, cy}) + 1)));
+	const int sr = (rgb >> 16) & 0xff, sg = (rgb >> 8) & 0xff, sb = rgb & 0xff;
+	for (int y = y0; y <= y1; ++y) {
+		for (int x = x0; x <= x1; ++x) {
+			const float pxc = x + 0.5f, pyc = y + 0.5f;
+			const float d = std::min({inside(ax, ay, bx, by, pxc, pyc), inside(bx, by, cx, cy, pxc, pyc), inside(cx, cy, ax, ay, pxc, pyc)});
+			const float cover = std::max(0.0f, std::min(1.0f, d + 0.5f)) * alpha;
+			if (cover <= 0.0f) continue;
+			uint32_t &dst = buf[static_cast<size_t>(y) * w + x];
+			const int dr = (dst >> 16) & 0xff, dg = (dst >> 8) & 0xff, db = dst & 0xff;
+			const int a = static_cast<int>(cover * 256);
+			dst = 0xff000000u | static_cast<uint32_t>(dr + ((sr - dr) * a >> 8)) << 16 | static_cast<uint32_t>(dg + ((sg - dg) * a >> 8)) << 8 |
+				static_cast<uint32_t>(db + ((sb - db) * a >> 8));
+		}
+	}
+}
+
 uint32_t Lighter(uint32_t rgb, int toWhite)
 {
 	const int r = (rgb >> 16) & 0xff, g = (rgb >> 8) & 0xff, b = rgb & 0xff;
@@ -542,7 +570,8 @@ void ZoomViewDrawRoutes(uint32_t *buf, int w, int h, const std::vector<ZoomRoute
 {
 	if (!buf || w <= 0 || h <= 0) return;
 	// Clear of the settlement's ring the game draws, and the dots that flow: their gap and their speed, in the picture's pixels.
-	const float kRing = std::max(9.0f, h / 70.0f), kGap = 13.0f, kSpeed = 18.0f;
+	// The head: a slim arrow, as long as it is wide twice over, with a dark rim so it reads on any ground.
+	const float kRing = std::max(9.0f, h / 70.0f), kGap = 13.0f, kSpeed = 13.0f, kHeadLong = 10.0f, kHeadHalf = 4.0f;
 	for (const ZoomRoute &r : routes) {
 		const float dx = r.bx - r.ax, dy = r.by - r.ay, len = std::sqrt(dx * dx + dy * dy);
 		if (len < 2 * kRing + 6) continue;
@@ -560,7 +589,7 @@ void ZoomViewDrawRoutes(uint32_t *buf, int w, int h, const std::vector<ZoomRoute
 			at(static_cast<float>(i) / steps, px[i], py[i]);
 			walked[i] = i ? walked[i - 1] + std::hypot(px[i] - px[i - 1], py[i] - py[i - 1]) : 0.0f;
 		}
-		const float total = walked[steps], start = kRing, stop = total - kRing;
+		const float total = walked[steps], start = kRing, tip = total - kRing, stop = tip - kHeadLong * 0.7f;
 		if (stop <= start) continue;
 		auto point = [&](float d, float &x, float &y) {
 			const auto k = std::lower_bound(walked.begin(), walked.end(), d) - walked.begin();
@@ -578,12 +607,24 @@ void ZoomViewDrawRoutes(uint32_t *buf, int w, int h, const std::vector<ZoomRoute
 		// The dots that flow to the settlement supplied.
 		const uint32_t light = Lighter(r.rgb, 55);
 		const float phase = std::fmod(nowMs / 1000.0f * kSpeed, kGap);
-		for (float d = start + phase; d <= stop; d += kGap) {
+		for (float d = start + phase; d <= stop - 4; d += kGap) {
 			float x = 0, y = 0;
 			point(d, x, y);
 			BlendDisc(buf, w, h, x, y, 2.4f, 0x000000, 0.35f);
 			BlendDisc(buf, w, h, x, y, 1.9f, light, 0.95f);
 		}
+		// The head, its point on the edge of the settlement supplied.
+		float ex = 0, ey = 0, qx = 0, qy = 0;
+		point(tip, ex, ey);
+		point(tip - kHeadLong, qx, qy);
+		const float ux = (ex - qx) / kHeadLong, uy = (ey - qy) / kHeadLong;
+		auto head = [&](float grow, uint32_t rgb, float alpha) {
+			const float l = kHeadLong + grow * 1.6f, hw = kHeadHalf + grow;
+			const float tx = ex + ux * grow, ty = ey + uy * grow, bx = tx - ux * l, by = ty - uy * l;
+			BlendTriangle(buf, w, h, tx, ty, bx - uy * hw, by + ux * hw, bx + uy * hw, by - ux * hw, rgb, alpha);
+		};
+		head(1.2f, 0x000000, 0.4f);
+		head(0.0f, light, 1.0f);
 	}
 }
 
